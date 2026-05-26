@@ -95,6 +95,10 @@ module = [
     "fastapi.*",
     "structlog.*",
     "pydantic_settings.*",
+    "sqlalchemy.*",
+    "alembic.*",
+    "dotenv.*",
+    "asyncpg.*",
 ]
 ignore_missing_imports = true
 
