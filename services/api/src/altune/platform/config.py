@@ -5,10 +5,10 @@ Env vars override defaults. .env loaded in development.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 from uuid import UUID  # noqa: TC003  # pydantic needs runtime access for UUID field validation
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Env = Literal["development", "test", "production"]
@@ -44,9 +44,19 @@ class Settings(BaseSettings):
     )
 
     # Multi-tenancy — per ADR-0004. Single hardcoded user for v1 dev/test.
-    # The prod-startup guard refuses to construct Settings when env=production
-    # AND this is set; that's enforced in a model_validator in a follow-on slice.
     hardcoded_user_id: UUID | None = Field(
         default=None,
         description="UUID for the dev single-user mode. Must be unset in production.",
     )
+
+    @model_validator(mode="after")
+    def _refuse_hardcoded_user_in_production(self) -> Self:
+        # AIDEV-WARNING: ADR-0004 prod-startup guard. The hardcoded dev user id
+        # silently leaking into a production deploy is the worst failure mode
+        # this codebase has — tenant rows would attribute to the wrong identity
+        # and be invisible to the real user. Cheap check; catastrophic prevent.
+        if self.env == "production" and self.hardcoded_user_id is not None:
+            raise ValueError(
+                "HARDCODED_USER_ID must not be set when ENV=production (ADR-0004)"
+            )
+        return self
