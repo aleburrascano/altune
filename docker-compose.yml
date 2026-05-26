@@ -1,0 +1,33 @@
+# Local development infrastructure.
+#
+# Production runs on a separate Supabase project (per ADR-0003); this compose
+# file is for dev + manual API exercise only. testcontainers-python spins
+# ephemeral Postgres instances for integration tests and does NOT use this
+# compose file.
+#
+# Bring up:    docker compose up -d
+# Tear down:   docker compose down
+# Wipe data:   docker compose down -v
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: altune-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: altune
+      POSTGRES_PASSWORD: altune_dev
+      POSTGRES_DB: altune
+    ports:
+      - "5432:5432"
+    volumes:
+      - altune-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U altune -d altune"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  altune-postgres-data:
+    name: altune-postgres-data
