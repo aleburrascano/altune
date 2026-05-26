@@ -1,0 +1,2 @@
+# shared/ui — Design system: tokens, theme, primitives (Button, Text, etc.).
+# Items here must be used by 2+ features (YAGNI guard).

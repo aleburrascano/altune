@@ -1,0 +1,8 @@
+# notes/
+
+Permanent doc store — not subject to the 30-day brainstorm TTL.
+
+Use for:
+- Graduated brainstorms you want to preserve beyond the TTL.
+- Personal/private working notes (don't put secrets here; gitignore covers .env not docs/).
+- Reference material specific to this project that doesn't fit a spec, ADR, or solution.

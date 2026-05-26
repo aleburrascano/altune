@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git tag:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(pnpm:*)",
+      "Bash(uv:*)",
+      "Bash(python:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(mypy:*)",
+      "Bash(tsc:*)",
+      "Bash(eslint:*)",
+      "Bash(expo:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/session-start-common-ground.sh" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/user-prompt-skill-activator.sh" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/pre-tool-file-guard.sh" },
+          { "type": "command", "command": "bash .claude/hooks/pre-tool-tdd-guard.sh" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/post-tool-typecheck.sh" },
+          { "type": "command", "command": "bash .claude/hooks/post-tool-lint.sh" },
+          { "type": "command", "command": "bash .claude/hooks/post-tool-test-changed.sh" },
+          { "type": "command", "command": "bash .claude/hooks/post-tool-check-comment-churn.sh" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/post-tool-commit-doc-drift.sh" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/stop-self-review.sh" },
+          { "type": "command", "command": "bash .claude/hooks/stop-terminology-drift.sh" },
+          { "type": "command", "command": "bash .claude/hooks/stop-compound-learning-prompt.sh" }
+        ]
+      }
+    ]
+  },
+  "model": {
+    "default": "claude-opus-4-7"
+  },
+  "agentStatusLine": false,
+  "autoMemoryEnabled": true
+}

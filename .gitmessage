@@ -1,0 +1,17 @@
+# <type>(<scope>): <short summary, imperative, no period>
+#
+# Types:   feat | fix | refactor | chore | docs | test | perf | style | ci | revert
+# Scopes:  feature slice (library, playback, catalog, metadata, ...)
+#          OR layer (domain, application, adapters, platform)
+#          OR cross-cutting (mobile, api, docs, deps, tooling, claude-md)
+#
+# Body (why > what):
+# Explain *why* this change is needed. The diff shows what changed.
+# Reference specs/ADRs/solutions when relevant: see docs/specs/<name>/spec.md
+#
+# Footer (optional):
+# Refs: #issue, ADR-NNNN
+# BREAKING CHANGE: <description>
+#
+# Do NOT include AI co-author lines (Co-Authored-By: Claude/AI/Anthropic).
+# The commit-msg hook will strip them automatically.

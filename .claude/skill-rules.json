@@ -1,0 +1,70 @@
+{
+  "// description": "Rules consulted by user-prompt-skill-activator.sh. When a prompt or cwd matches, the hook injects 'skill X is applicable' as additionalContext. Claude may auto-invoke. Append `--skip` in prompt to suppress for the turn.",
+  "rules": [
+    {
+      "if_prompt_matches": "(?i)\\b(spec|specify|specs?\\s+(out|for)|requirements?\\s+for|design\\s+a\\s+feature)\\b",
+      "suggest": "feature-spec",
+      "reason": "user is describing a new feature; spec it first"
+    },
+    {
+      "if_prompt_matches": "(?i)\\b(plan|how\\s+should\\s+we\\s+build|break\\s+(this|it)\\s+down|implementation\\s+strategy)\\b",
+      "suggest": "feature-plan",
+      "reason": "user wants implementation breakdown after a spec exists"
+    },
+    {
+      "if_prompt_matches": "(?i)\\b(should\\s+we\\s+use|x\\s+vs\\s+y|which\\s+(library|framework|database|tool)|evaluate|compare\\s+(options|libraries|tools)|what\\s+(database|auth|stack))\\b",
+      "suggest": "brainstorm-tech-choice",
+      "reason": "user is weighing technology / library choices"
+    },
+    {
+      "if_prompt_matches": "(?i)\\b(implement|build\\s+the|add\\s+the|let'?s\\s+(code|write))\\b",
+      "suggest": "tdd-red-green-refactor",
+      "reason": "user is moving to implementation; enforce RED-GREEN-REFACTOR"
+    },
+    {
+      "if_prompt_matches": "(?i)\\b(verify|make\\s+sure|test\\s+that|is\\s+(this|it)\\s+working|did\\s+(that|this)\\s+break|run\\s+(the\\s+)?tests?)\\b",
+      "suggest": "verify-end-to-end",
+      "reason": "user wants confirmation that the change works"
+    },
+    {
+      "if_prompt_matches": "(?i)\\b(review|pre[- ]?merge|code\\s+review|sign\\s+off)\\b",
+      "suggest": "code-review-6-aspect",
+      "reason": "user wants a pre-merge multi-aspect review"
+    },
+    {
+      "if_prompt_matches": "(?i)\\b(decided|decision\\s+to|we'?re\\s+going\\s+with|instead\\s+of|chose\\s+to|adopt(ed|ing))\\b",
+      "suggest": "adr-write",
+      "reason": "user just made an architectural decision; record it"
+    },
+    {
+      "if_prompt_matches": "(?i)\\b(learned|gotcha|surprised|root\\s+cause|capture\\s+this|so\\s+the\\s+lesson\\s+is)\\b",
+      "suggest": "compound-learning",
+      "reason": "user wants to record an institutional lesson"
+    },
+    {
+      "if_prompt_matches": "(?i)\\b(what\\s+(do|are)\\s+(you|we)\\s+assume|surface\\s+assumptions|common\\s+ground)\\b",
+      "suggest": "common-ground",
+      "reason": "user wants Claude's hidden assumptions surfaced"
+    },
+    {
+      "if_prompt_matches": "(?i)\\b(commit|stage\\s+and\\s+commit|ship\\s+this|land\\s+(this|it))\\b",
+      "suggest": "git-commit",
+      "reason": "user wants a properly formatted Conventional Commit"
+    },
+    {
+      "if_prompt_matches": "(?i)\\b(audit\\s+(the\\s+)?docs|stale\\s+docs|clean\\s+up\\s+(brainstorms|docs))\\b",
+      "suggest": "audit-docs",
+      "reason": "user wants doc hygiene sweep"
+    },
+    {
+      "if_cwd_matches": ".*[\\\\/]apps[\\\\/]mobile[\\\\/]src[\\\\/]features[\\\\/].*",
+      "suggest_skills": ["feature-spec", "feature-plan", "tdd-red-green-refactor"],
+      "reason": "working inside a feature slice"
+    },
+    {
+      "if_cwd_matches": ".*[\\\\/]services[\\\\/]api[\\\\/]src[\\\\/]altune[\\\\/](domain|application)[\\\\/].*",
+      "suggest_skills": ["tdd-red-green-refactor", "domain-modeler"],
+      "reason": "working in domain/application layer — vault DDD lookups and TDD discipline apply"
+    }
+  ]
+}

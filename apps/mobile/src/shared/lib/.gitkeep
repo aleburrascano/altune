@@ -1,0 +1,2 @@
+# shared/lib — Pure utility functions (no React, no API calls).
+# Items here must be used by 2+ features.

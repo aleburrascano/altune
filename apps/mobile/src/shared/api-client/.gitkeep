@@ -1,0 +1,2 @@
+# shared/api-client — Generated/typed HTTP client + interceptors (auth, retry, error mapping).
+# Lands when the first feature needs backend calls; until then, empty.
