@@ -79,7 +79,7 @@ Altune is a solo-built music manager intended for production-grade quality. The 
 
 ## Deferred decisions (separate ADRs needed when triggered)
 
-- ADR-NNNN: **persistence** — Postgres vs. SQLite vs. cloud-managed. Trigger: first feature needing durable state.
+- ~~ADR-NNNN: **persistence**~~ — resolved by [ADR-0003](0003-persistence-stack.md): SQLAlchemy 2.0 async + asyncpg + Alembic; Postgres 16 in Docker for dev (with testcontainers); new Supabase project for prod.
 - ADR-NNNN: **authentication** — Supabase vs. FastAPI-Users vs. external IdP. Trigger: first feature needing user identity.
 - ADR-NNNN: **background work** — async tasks vs. Celery vs. simple queue. Trigger: first feature needing scheduled or deferred work.
 - ADR-NNNN: **mobile state library** — React Query alone vs. + Zustand/Jotai. Trigger: shared client state that hooks can't handle cleanly.
