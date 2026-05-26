@@ -1,0 +1,6 @@
+# brainstorms/
+
+Exploratory option-weighing for tech / pattern / approach choices. Created by /brainstorm-tech-choice.
+
+Files in this directory auto-prune at 30 days untouched + not graduated to a docs/specs/ or docs/adr/.
+To keep a brainstorm permanently, move it to docs/notes/.

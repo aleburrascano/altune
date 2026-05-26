@@ -1,0 +1,4 @@
+# Static assets: splash, icons, fonts.
+# Add real icon.png, splash.png, adaptive-icon.png, favicon.png before `expo start`.
+# Use Expo's default placeholders if you just want to boot:
+#   npx create-expo-app --template default tmp-app && cp tmp-app/assets/* ./

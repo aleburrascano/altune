@@ -1,0 +1,47 @@
+module.exports = {
+  extends: ['@commitlint/config-conventional'],
+  rules: {
+    'type-enum': [
+      2,
+      'always',
+      ['feat', 'fix', 'refactor', 'chore', 'docs', 'test', 'perf', 'style', 'ci', 'revert'],
+    ],
+    'scope-empty': [2, 'never'],
+    'scope-enum': [
+      2,
+      'always',
+      [
+        // Layer scopes (backend hexagonal split)
+        'domain',
+        'application',
+        'adapters',
+        'platform',
+        // Cross-cutting
+        'mobile',
+        'api',
+        'docs',
+        'adr',
+        'spec',
+        'solutions',
+        'claude-md',
+        'rules',
+        'skills',
+        'agents',
+        'hooks',
+        'deps',
+        'tooling',
+        'ci',
+        'release',
+        // Feature scopes — extend as features get created via /feature-spec
+        // (the feature-spec skill appends new scopes here automatically)
+      ],
+    ],
+    'subject-case': [2, 'always', 'lower-case'],
+    'subject-empty': [2, 'never'],
+    'subject-full-stop': [2, 'never', '.'],
+    'header-max-length': [2, 'always', 72],
+    'body-max-line-length': [1, 'always', 100],
+    'body-leading-blank': [2, 'always'],
+    'footer-leading-blank': [2, 'always'],
+  },
+};

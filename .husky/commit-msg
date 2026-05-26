@@ -1,0 +1,34 @@
+#!/usr/bin/env sh
+# commit-msg: 1) strip AI attribution lines  2) run commitlint
+# Installed by husky on `npm install` via the `prepare` script.
+
+MSG_FILE="$1"
+
+# 1. Strip AI co-author lines (Claude / Anthropic / generic AI / emoji-generated footers)
+if [ -f "$MSG_FILE" ]; then
+  # Use Python for cross-platform sed-equivalent
+  python - "$MSG_FILE" <<'PYEOF'
+import re, sys, pathlib
+
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+
+patterns = [
+    r'(?im)^Co-Authored-By:.*(Claude|Anthropic|AI|🤖).*$\n?',
+    r'(?im)^\s*🤖.*Generated.*$\n?',
+    r'(?im)^.*Generated with.*Claude Code.*$\n?',
+    r'(?im)^.*Generated with.*Anthropic.*$\n?',
+]
+for p in patterns:
+    text = re.sub(p, '', text)
+
+# Collapse 3+ consecutive blank lines to 2
+text = re.sub(r'\n{3,}', '\n\n', text)
+path.write_text(text, encoding="utf-8")
+PYEOF
+fi
+
+# 2. Run commitlint (only if node_modules present)
+if [ -d node_modules/@commitlint ]; then
+  npx --no -- commitlint --edit "$MSG_FILE"
+fi

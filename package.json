@@ -1,0 +1,21 @@
+{
+  "name": "altune",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Altune — music manager. Workspace root.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "prepare": "husky",
+    "lint:commits": "commitlint --from=HEAD~10 --to=HEAD --verbose"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0",
+    "husky": "^9.1.6"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
