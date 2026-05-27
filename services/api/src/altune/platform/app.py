@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from altune import __version__
+from altune.adapters.inbound.http.catalog.router import router as catalog_router
 from altune.platform.config import Settings
 from altune.platform.db import check_database, create_engine, create_sessionmaker
 from altune.platform.logging import configure_logging, get_logger
@@ -43,6 +44,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         create_app), DB init is skipped and the /health endpoint reports
         db=not_configured. This lets the app boot for type-only / smoke tests.
         """
+        # Settings on app.state for FastAPI deps (current_user_id) per ADR-0004.
+        app.state.settings = cfg
         if cfg.database_url is not None:
             engine = create_engine(cfg.database_url)
             app.state.engine = engine
@@ -70,6 +73,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.include_router(catalog_router)
 
     # fastapi.* is in mypy ignore_missing_imports; the per-file hook flags this
     # decorator as untyped while the full-project mypy resolves it fine. Covering
