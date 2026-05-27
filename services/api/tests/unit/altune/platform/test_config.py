@@ -1,12 +1,12 @@
-"""Settings parses persistence, env, and hardcoded user id fields.
+"""Settings parses persistence + env fields under the post-ADR-0006 posture.
 
-Companion ADRs: 0003 (persistence stack), 0004 (multi-tenancy posture).
-The prod-startup guard is exercised in test_startup_guard.py (slice 6).
+Companion ADRs: 0003 (persistence stack), 0006 (Supabase Auth, which
+supersedes 0004's hardcoded-user-id posture). Settings now requires
+exactly one of SUPABASE_JWT_{SECRET,JWKS_URL}; the XOR validator is
+exercised in test_settings_supabase_xor.py.
 """
 
 from __future__ import annotations
-
-from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
@@ -25,7 +25,6 @@ def _clean(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in (
         "DATABASE_URL",
         "ENV",
-        "HARDCODED_USER_ID",
         "SUPABASE_PROJECT_URL",
         "SUPABASE_JWT_AUD",
         "SUPABASE_JWT_SECRET",
@@ -41,7 +40,6 @@ def test_settings_defaults_when_env_unset(monkeypatch: pytest.MonkeyPatch) -> No
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.database_url is None
     assert s.env == "development"
-    assert s.hardcoded_user_id is None
 
 
 @pytest.mark.unit
@@ -65,21 +63,5 @@ def test_settings_env_accepts_allowed_values(monkeypatch: pytest.MonkeyPatch, va
 def test_settings_env_rejects_unknown_value(monkeypatch: pytest.MonkeyPatch) -> None:
     _clean(monkeypatch)
     monkeypatch.setenv("ENV", "staging")  # not in the Literal
-    with pytest.raises(ValidationError):
-        Settings(_env_file=None)  # type: ignore[call-arg]
-
-
-@pytest.mark.unit
-def test_settings_hardcoded_user_id_parses_uuid(monkeypatch: pytest.MonkeyPatch) -> None:
-    _clean(monkeypatch)
-    monkeypatch.setenv("HARDCODED_USER_ID", "00000000-0000-0000-0000-000000000001")
-    s = Settings(_env_file=None)  # type: ignore[call-arg]
-    assert s.hardcoded_user_id == UUID("00000000-0000-0000-0000-000000000001")
-
-
-@pytest.mark.unit
-def test_settings_hardcoded_user_id_rejects_garbage(monkeypatch: pytest.MonkeyPatch) -> None:
-    _clean(monkeypatch)
-    monkeypatch.setenv("HARDCODED_USER_ID", "not-a-uuid")
     with pytest.raises(ValidationError):
         Settings(_env_file=None)  # type: ignore[call-arg]
