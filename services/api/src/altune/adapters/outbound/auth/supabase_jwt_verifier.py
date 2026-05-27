@@ -71,22 +71,30 @@ class SupabaseJwtVerifier:
                 raw_bearer,
                 key=key,
                 algorithms=["RS256", "ES256"],
-                options={
-                    # Slice 3b adds iss/aud claim validation; Slice 3a only
-                    # validates signature + sub. exp is enforced because pyjwt
-                    # checks it by default; leeway is 30s symmetric.
-                    "verify_aud": False,
-                    "verify_iss": False,
-                    "require": ["sub"],
-                },
+                audience=self._aud,
+                issuer=self._iss,
+                options={"require": ["sub", "iss", "aud", "exp"]},
                 leeway=_LEEWAY_SECONDS,
             )
         except jwt.exceptions.InvalidSignatureError as exc:
             raise InvalidTokenError(TokenRejectReason.SIGNATURE_INVALID) from exc
         except jwt.exceptions.ExpiredSignatureError as exc:
             raise InvalidTokenError(TokenRejectReason.EXPIRED) from exc
+        except jwt.exceptions.InvalidIssuerError as exc:
+            raise InvalidTokenError(TokenRejectReason.CLAIM_INVALID_ISS) from exc
+        except jwt.exceptions.InvalidAudienceError as exc:
+            raise InvalidTokenError(TokenRejectReason.CLAIM_INVALID_AUD) from exc
         except jwt.exceptions.MissingRequiredClaimError as exc:
-            raise InvalidTokenError(TokenRejectReason.CLAIM_INVALID_SUB) from exc
+            # Map sub-specific to CLAIM_INVALID_SUB; iss/aud to their own;
+            # exp missing falls through to MALFORMED.
+            claim = getattr(exc, "claim", "")
+            if claim == "sub":
+                raise InvalidTokenError(TokenRejectReason.CLAIM_INVALID_SUB) from exc
+            if claim == "iss":
+                raise InvalidTokenError(TokenRejectReason.CLAIM_INVALID_ISS) from exc
+            if claim == "aud":
+                raise InvalidTokenError(TokenRejectReason.CLAIM_INVALID_AUD) from exc
+            raise InvalidTokenError(TokenRejectReason.MALFORMED) from exc
         except jwt.exceptions.InvalidTokenError as exc:
             raise InvalidTokenError(TokenRejectReason.MALFORMED) from exc
 
