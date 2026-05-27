@@ -2,7 +2,7 @@
 
 > Spec for `view-library` — version 1, drafted 2026-05-26.
 > Authors: solo + Claude.
-> Status: Ready-for-plan (clarify-gate passed after two spec-reviewer rounds, 2026-05-26).
+> Status: Shipped (all 11 slices + ADR-0005 committed 2026-05-27 — see commits 527747b through 838b95b).
 
 ## Problem
 

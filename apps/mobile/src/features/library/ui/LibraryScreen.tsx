@@ -2,8 +2,8 @@
  * LibraryScreen — paginated track list with designed empty + error states.
  *
  * The state-machine decision (which sub-view to render) lives in
- * `../state.ts` so it can be unit-tested without pulling React Native into
- * jest.
+ * `../state.ts` so it can be unit-tested as a pure function — the JSX
+ * branches just consume the decision.
  *
  * AC mapping:
  * - AC#1: FlatList renders title + artist per row, server-ordered.

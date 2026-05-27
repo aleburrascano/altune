@@ -5,9 +5,9 @@
  * decisions (which testID renders, which state is "designed" per AC#5/AC#6);
  * the JSX wrapping is straightforward.
  *
- * AIDEV-NOTE: RNTL-based component tests (rendering, retry click handling)
- * are deferred until the jest-expo workspace blocker is resolved (see
- * jest.config.js).
+ * RNTL component tests (rendering empty/error/list, retry click handling)
+ * can land now that jest-expo's preset works; deferred as its own follow-up
+ * spec.
  */
 
 import { _viewForState } from '../state';

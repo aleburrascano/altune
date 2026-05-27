@@ -7,9 +7,9 @@
  * for AC#1) and React Query's own contract for `useInfiniteQuery` +
  * `getNextPageParam` is tested by their library.
  *
- * AIDEV-NOTE: When the jest-expo / RN testing setup is fixed (see
- * jest.config.js docstring), a complementary integration-style hook test
- * with renderHook can be added without breaking these.
+ * A complementary renderHook integration test can be added now that
+ * jest-expo's preset works (apps/mobile/.npmrc forces nested install so
+ * jest-expo + react-native are siblings); deferred as its own follow-up.
  */
 
 import { _flattenPages, _nextOffsetFromPage } from '../hooks/useLibrary';
