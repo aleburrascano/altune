@@ -35,10 +35,24 @@ def build_token_verifier(cfg: Settings) -> SupabaseJwtVerifier:
 
         def _http_provider() -> dict[str, object]:
             import httpx
+            import structlog
 
-            response = httpx.get(jwks_url, timeout=10.0)
-            response.raise_for_status()
-            return dict(response.json())
+            log = structlog.get_logger(__name__)
+            try:
+                response = httpx.get(jwks_url, timeout=10.0)
+                response.raise_for_status()
+                return dict(response.json())
+            except Exception as exc:
+                # AIDEV-NOTE: boot tolerates a bad JWKS URL (logs warning,
+                # returns empty cache). Every JWT verification will then
+                # fail loudly with SIGNATURE_INVALID. This keeps test envs
+                # bootable when the fixture URL doesn't resolve.
+                log.warning(
+                    "auth.jwks_fetch_failed",
+                    jwks_url=jwks_url,
+                    error_type=type(exc).__name__,
+                )
+                return {"keys": []}
 
         return SupabaseJwtVerifier(
             iss_expected=iss_expected,
