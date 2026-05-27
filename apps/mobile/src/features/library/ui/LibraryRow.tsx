@@ -6,11 +6,12 @@
  * future feature specs.
  */
 
+import type { ReactElement } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { TrackResponse } from '../../../shared/api-client/types';
 
-export function LibraryRow({ track }: { track: TrackResponse }): JSX.Element {
+export function LibraryRow({ track }: { track: TrackResponse }): ReactElement {
   return (
     <View style={styles.row} testID={`library-row-${track.id}`}>
       <Text style={styles.title} numberOfLines={1}>

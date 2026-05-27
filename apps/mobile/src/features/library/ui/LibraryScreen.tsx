@@ -14,6 +14,7 @@
  *   testID="library-retry".
  */
 
+import type { ReactElement } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -32,7 +33,7 @@ import type { TrackResponse } from '../../../shared/api-client/types';
 const _renderRow: ListRenderItem<TrackResponse> = ({ item }) => <LibraryRow track={item} />;
 const _keyExtractor = (track: TrackResponse): string => track.id;
 
-export function LibraryScreen(): JSX.Element {
+export function LibraryScreen(): ReactElement {
   const state = useLibrary();
   const view = _viewForState(state);
 
