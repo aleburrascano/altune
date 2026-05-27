@@ -117,6 +117,7 @@ markers = [
     "unit: fast unit tests, no I/O",
     "integration: tests using testcontainers or real-ish dependencies",
     "e2e: full-stack tests against running server",
+    "contract: shared port-contract tests parametrized over multiple adapter implementations",
     "slow: marker for slow tests (deselect with -m 'not slow')",
 ]
 asyncio_mode = "auto"
