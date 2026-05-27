@@ -1,0 +1,39 @@
+# AC#4 — session persists across an app restart.
+#
+# Flow: launch fresh, sign in with the fixture user, kill the app, relaunch,
+# assert the first user-facing route is /library (NOT /sign-in). Per the
+# tool-neutral observable in the spec, we check the post-launch element
+# instead of inspecting transient renders during boot.
+#
+# Fixture credentials come from .env.local — see e2e/README.md.
+appId: com.altune.mobile
+env:
+  E2E_FIXTURE_EMAIL: ${E2E_FIXTURE_EMAIL}
+  E2E_FIXTURE_PASSWORD: ${E2E_FIXTURE_PASSWORD}
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: "sign-in-screen"
+- tapOn:
+    id: "email-input"
+- inputText: ${E2E_FIXTURE_EMAIL}
+- tapOn:
+    id: "password-input"
+- inputText: ${E2E_FIXTURE_PASSWORD}
+- tapOn:
+    id: "submit-button"
+# After successful sign-in, root layout routes to /library.
+- assertVisible:
+    text: "Library"
+    timeout: 15000
+# Force-close the app and relaunch — session should persist via expo-secure-store.
+- killApp
+- launchApp
+# AC#4 observable: first user-facing element after relaunch is the library,
+# not the sign-in screen. The splash may flash briefly during session restore.
+- assertVisible:
+    text: "Library"
+    timeout: 15000
+- assertNotVisible:
+    id: "sign-in-screen"
