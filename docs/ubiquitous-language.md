@@ -28,11 +28,12 @@ When `/feature-spec` or domain modeling introduces a new term:
 
 ## Glossary
 
-_(empty — populated as the domain model develops)_
+### Canonical (terms with corresponding code)
 
-Sample entries (will be replaced by real domain terms as features land):
+- **Track** — a single audio recording with metadata (title, artist, optional album, optional duration). Aggregate root of the **catalog** bounded context. Identity is a `TrackId` (UUID); equality and hashing are by id. Owned by a user (`UserId`). Defined in `services/api/src/altune/domain/catalog/track.py`. Introduced by spec `docs/specs/view-library/spec.md`.
 
-- **Track** — a single audio recording with metadata (title, artist, duration). Immutable identity within the catalog context.
+### Future (illustrative — to be added when the spec that introduces them ships)
+
 - **Artist** — a creator of tracks. Identified by name + optional disambiguator (year, MBID).
 - **Album** — a grouping of tracks released together by an artist.
 - **Library** — a user's personal collection. Each user has exactly one library. The library references tracks from the catalog; it does not own them.
@@ -40,8 +41,6 @@ Sample entries (will be replaced by real domain terms as features land):
 - **Queue** — the runtime playback sequence. Ephemeral by default; persisted only when saved as a Playlist.
 - **Play** — the event of a track being listened to (registered at threshold, e.g., 30s or 50% of duration).
 - **Favorite** — a user-applied boolean marker on a track within their library.
-
-(These are illustrative — they get added when the spec for the relevant feature is written, not preemptively.)
 
 ---
 
@@ -63,3 +62,9 @@ _(empty — populated when context divergence happens)_
 - **Implementation leakage** — "TrackRow" or "TrackDTO" in glossary. Those are infrastructure, not domain.
 - **Vague entries** — "User: a person who uses the app." Useless. If a term is in the glossary, it earns its place with a precise definition.
 - **Stale entries** — terms that were once in the code but were renamed/removed. Delete or mark deprecated.
+
+## Banned terms
+
+Terms that **must not** appear in altune code (caught by the `terminology-drift` hook and by code review):
+
+- **Song** — synonym of `Track`. The legacy `music-manager` used "song" as its primary noun (`songs` table, `Song` class). altune uses `Track` exclusively. The forthcoming `migrate-songs-v1` spec is the one place "song" appears, and only as the *name of the source data* during the import — never as a type or column in altune.
