@@ -26,7 +26,14 @@ export class ApiError extends Error {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBase}${path}`, init);
+  // AIDEV-NOTE: ngrok-skip-browser-warning header bypasses ngrok free-tier's
+  // abuse-prevention interstitial page. Harmless when the URL isn't ngrok.
+  // Drop this when we move off ngrok or upgrade to a paid plan.
+  const headers = {
+    'ngrok-skip-browser-warning': '1',
+    ...(init?.headers ?? {}),
+  };
+  const response = await fetch(`${apiBase}${path}`, { ...init, headers });
   if (!response.ok) {
     throw new ApiError(response.status, `API ${path} returned ${response.status}`);
   }
