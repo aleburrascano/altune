@@ -17,6 +17,7 @@ module.exports = {
   ...preset,
   rootDir: __dirname,
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
+  setupFiles: [...(preset.setupFiles ?? []), '<rootDir>/jest/setup-env.js'],
   moduleNameMapper: {
     ...(preset.moduleNameMapper ?? {}),
     '^@/(.*)$': '<rootDir>/src/$1',
