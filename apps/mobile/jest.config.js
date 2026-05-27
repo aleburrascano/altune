@@ -1,35 +1,31 @@
 /**
  * Jest config for the mobile workspace.
  *
- * Bypasses jest-expo's preset because the workspace hoist places jest-expo at
- * the root while react-native ends up under apps/mobile/node_modules; Node's
- * resolution then can't satisfy jest-expo's internal `require('react-native/
- * jest-preset')`. For the API client + hook tests (slices 8-9) we don't need
- * RN's transforms at all — they're pure TypeScript. Slice 10's component
- * test will need RN; that's where we revisit this and either fix the hoist
- * or switch to a per-project nested install.
+ * Uses jest-expo's preset for RN-aware test transforms. For the preset to
+ * resolve its internal `require('react-native/jest-preset')`, jest-expo and
+ * react-native must live in the same node_modules tree — which they do
+ * because apps/mobile/.npmrc forces nested install for this workspace. If
+ * you change that .npmrc, this preset will likely break again.
  *
- * AIDEV-WARNING: don't add tests that import from 'react-native' under this
- * config without first re-enabling the jest-expo preset (and resolving the
- * hoist issue).
+ * Path aliases (`@/`, `@features/`, `@shared/`) are mapped here for jest;
+ * babel.config.js handles them for Metro at build time.
  */
 
+const preset = require('jest-expo/jest-preset');
+
 module.exports = {
-  testEnvironment: 'node',
+  ...preset,
   rootDir: __dirname,
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
-  transform: {
-    '^.+\\.tsx?$': [
-      'babel-jest',
-      {
-        // Bypass the app's babel.config.js (which loads babel-preset-expo +
-        // module-resolver — not installed at runtime in this jest path).
-        configFile: false,
-        babelrc: false,
-        presets: [require.resolve('@babel/preset-typescript')],
-        plugins: [require.resolve('@babel/plugin-transform-modules-commonjs')],
-      },
-    ],
+  moduleNameMapper: {
+    ...(preset.moduleNameMapper ?? {}),
+    '^@/(.*)$': '<rootDir>/src/$1',
+    '^@features/(.*)$': '<rootDir>/src/features/$1',
+    '^@shared/(.*)$': '<rootDir>/src/shared/$1',
+    // babel-preset-expo rewrites `process.env.EXPO_PUBLIC_*` reads as
+    // `require('expo/virtual/env').EXPO_PUBLIC_*` for the Metro bundle; that
+    // virtual module doesn't exist outside Metro. Mock it in jest with the
+    // file below so the real process.env is exposed to test code.
+    '^expo/virtual/env$': '<rootDir>/jest/expo-virtual-env.js',
   },
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
 };
