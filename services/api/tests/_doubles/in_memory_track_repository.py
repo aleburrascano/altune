@@ -2,10 +2,12 @@
 
 Default choice for unit-testing use cases per .claude/rules/tests.md:
 "Fake — working implementation simpler than production". Matches the SQL
-contract: ordering by ``(added_at DESC, id DESC)``, user-scoped.
+contract: ordering by ``(added_at DESC, id DESC)``, user-scoped, paginated
+by ``limit`` / ``offset``.
 
-STUB: GREEN commit fills in filtering, sorting, and pagination. Currently
-returns an empty page so the RED tests fail.
+The shared-port-contract test (Slice 5b) runs the same scenarios against
+this fake AND the SqlAlchemyTrackRepository to catch any drift between
+the two implementations.
 """
 
 from __future__ import annotations
@@ -29,5 +31,11 @@ class InMemoryTrackRepository:
         limit: int,
         offset: int,
     ) -> tuple[Sequence[Track], int]:
-        # STUB
-        return (), 0
+        # Filter by user, then sort (added_at DESC, id DESC) by sorting the
+        # tuple (added_at, id_value) ascending and reversing — id.value is a
+        # UUID, which is lexicographically comparable.
+        user_tracks = [t for t in self._tracks if t.user_id == user_id]
+        user_tracks.sort(key=lambda t: (t.added_at, t.id.value), reverse=True)
+        total = len(user_tracks)
+        page = tuple(user_tracks[offset : offset + limit])
+        return page, total
