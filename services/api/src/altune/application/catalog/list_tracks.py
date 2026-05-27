@@ -11,9 +11,6 @@ Telemetry section. The HTTP inbound adapter emits ``http_get_tracks_request``
 separately so the inbound and use-case sides are independently traceable
 (the hardcoded-user_id scenario from ADR-0004 is the most likely failure
 mode and demands independent observability).
-
-STUB: GREEN commit implements the real has_more derivation. Currently
-returns an empty output regardless of repository contents.
 """
 
 from __future__ import annotations
@@ -52,11 +49,22 @@ class ListTracks:
         self._tracks = tracks
 
     async def execute(self, input: ListTracksInput) -> ListTracksOutput:
-        # STUB
-        return ListTracksOutput(
-            items=(),
-            total=0,
+        items, total = await self._tracks.list_for_user(
+            input.user_id, input.limit, input.offset
+        )
+        has_more = (input.offset + len(items)) < total
+        log.info(
+            "tracks_listed",
+            user_id=str(input.user_id),
             limit=input.limit,
             offset=input.offset,
-            has_more=False,
+            returned_count=len(items),
+            total=total,
+        )
+        return ListTracksOutput(
+            items=tuple(items),
+            total=total,
+            limit=input.limit,
+            offset=input.offset,
+            has_more=has_more,
         )
