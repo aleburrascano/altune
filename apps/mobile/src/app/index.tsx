@@ -1,33 +1,9 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Redirect } from 'expo-router';
 
-// AIDEV-NOTE: Placeholder home screen. Replaced when the first feature with a home
-// route lands. Keep here until then so `expo start` boots cleanly during scaffold verification.
+// AIDEV-NOTE: Until there's a real home screen (search, recent plays, etc.),
+// `/` lands on the library — the only user-visible feature in v1.
+// Replace with a real home component when more features land.
 
 export default function HomeScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Altune</Text>
-      <Text style={styles.subtitle}>Scaffold v0.0.0 — no features yet.</Text>
-    </View>
-  );
+  return <Redirect href="/library" />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    backgroundColor: '#000',
-  },
-  title: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: '#888',
-    fontSize: 14,
-  },
-});
