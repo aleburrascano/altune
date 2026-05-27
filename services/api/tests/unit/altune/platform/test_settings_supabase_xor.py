@@ -33,7 +33,6 @@ def _clean(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in (
         "DATABASE_URL",
         "ENV",
-        "HARDCODED_USER_ID",
         "SUPABASE_PROJECT_URL",
         "SUPABASE_JWT_AUD",
         "SUPABASE_JWT_SECRET",
