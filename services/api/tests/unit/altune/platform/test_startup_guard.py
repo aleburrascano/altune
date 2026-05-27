@@ -16,8 +16,23 @@ _DEV_UUID = "00000000-0000-0000-0000-000000000001"
 
 
 def _clean(monkeypatch: pytest.MonkeyPatch) -> None:
-    for var in ("DATABASE_URL", "ENV", "HARDCODED_USER_ID"):
+    """Drop env vars; set a minimum Supabase config baseline.
+
+    Per ADR-0006 (auth-integration spec, AC#13), Settings requires one of
+    SUPABASE_JWT_{SECRET,JWKS_URL}. These tests focus on the prod-startup guard,
+    not the JWT mode — set a fixture JWKS URL so Settings construction succeeds.
+    """
+    for var in (
+        "DATABASE_URL",
+        "ENV",
+        "HARDCODED_USER_ID",
+        "SUPABASE_PROJECT_URL",
+        "SUPABASE_JWT_AUD",
+        "SUPABASE_JWT_SECRET",
+        "SUPABASE_JWT_JWKS_URL",
+    ):
         monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("SUPABASE_JWT_JWKS_URL", "https://fixture.supabase.co/auth/v1/keys")
 
 
 @pytest.mark.unit

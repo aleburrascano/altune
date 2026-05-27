@@ -15,9 +15,24 @@ from altune.platform.config import Settings
 
 
 def _clean(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Drop env vars this test module cares about so .env / parent env can't bleed in."""
-    for var in ("DATABASE_URL", "ENV", "HARDCODED_USER_ID"):
+    """Drop env vars this module cares about; set the minimum Supabase config baseline.
+
+    Per ADR-0006 (auth-integration spec, AC#13), Settings requires exactly one of
+    SUPABASE_JWT_{SECRET,JWKS_URL}. Tests in this module are not about JWT mode —
+    they set a fixture JWKS URL here so construction succeeds without repeating
+    boilerplate in every test.
+    """
+    for var in (
+        "DATABASE_URL",
+        "ENV",
+        "HARDCODED_USER_ID",
+        "SUPABASE_PROJECT_URL",
+        "SUPABASE_JWT_AUD",
+        "SUPABASE_JWT_SECRET",
+        "SUPABASE_JWT_JWKS_URL",
+    ):
         monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("SUPABASE_JWT_JWKS_URL", "https://fixture.supabase.co/auth/v1/keys")
 
 
 @pytest.mark.unit
@@ -39,9 +54,7 @@ def test_settings_loads_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("value", ["development", "test", "production"])
-def test_settings_env_accepts_allowed_values(
-    monkeypatch: pytest.MonkeyPatch, value: str
-) -> None:
+def test_settings_env_accepts_allowed_values(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
     _clean(monkeypatch)
     monkeypatch.setenv("ENV", value)
     s = Settings(_env_file=None)  # type: ignore[call-arg]

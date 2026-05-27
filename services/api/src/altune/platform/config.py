@@ -44,9 +44,34 @@ class Settings(BaseSettings):
     )
 
     # Multi-tenancy — per ADR-0004. Single hardcoded user for v1 dev/test.
+    # Slice 8 of auth-integration retires this field; the prod-startup guard
+    # is removed at the same time (its replacement is the natural-401 from
+    # token verification once SupabaseJwtVerifier is wired).
     hardcoded_user_id: UUID | None = Field(
         default=None,
         description="UUID for the dev single-user mode. Must be unset in production.",
+    )
+
+    # Supabase Auth — per ADR-0006 (auth-integration spec, AC#13). The verifier
+    # at adapters/outbound/auth/supabase_jwt_verifier.py consumes these. Exactly
+    # one of supabase_jwt_secret (HS256) or supabase_jwt_jwks_url (JWKS) must be
+    # set at runtime; the XOR validator below enforces this independent of env.
+    supabase_project_url: str | None = Field(
+        default=None,
+        description="Supabase project URL, e.g. https://<ref>.supabase.co. Used as the JWT iss base.",
+    )
+    supabase_jwt_aud: str = Field(
+        default="authenticated",
+        description="Expected aud claim on the JWT. Supabase default is 'authenticated'.",
+    )
+    supabase_jwt_secret: str | None = Field(
+        default=None,
+        description="HS256 shared secret. Mutually exclusive with supabase_jwt_jwks_url.",
+    )
+    supabase_jwt_jwks_url: str | None = Field(
+        default=None,
+        description="JWKS endpoint URL, e.g. https://<ref>.supabase.co/auth/v1/keys. "
+        "Mutually exclusive with supabase_jwt_secret.",
     )
 
     @model_validator(mode="after")
@@ -56,7 +81,24 @@ class Settings(BaseSettings):
         # this codebase has — tenant rows would attribute to the wrong identity
         # and be invisible to the real user. Cheap check; catastrophic prevent.
         if self.env == "production" and self.hardcoded_user_id is not None:
+            raise ValueError("HARDCODED_USER_ID must not be set when ENV=production (ADR-0004)")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_supabase_jwt_mode_xor(self) -> Self:
+        # AIDEV-NOTE: ADR-0006 (auth-integration, AC#13). Exactly one verification
+        # mode must be configured — both set is ambiguous (which key wins?); neither
+        # set means the verifier cannot be constructed. Enforced unconditionally
+        # (independent of env) so misconfiguration fails fast at startup.
+        has_secret = self.supabase_jwt_secret is not None
+        has_jwks = self.supabase_jwt_jwks_url is not None
+        if has_secret and has_jwks:
             raise ValueError(
-                "HARDCODED_USER_ID must not be set when ENV=production (ADR-0004)"
+                "SUPABASE_JWT_SECRET and SUPABASE_JWT_JWKS_URL are mutually exclusive; "
+                "set exactly one (per ADR-0006)"
+            )
+        if not has_secret and not has_jwks:
+            raise ValueError(
+                "Either SUPABASE_JWT_SECRET or SUPABASE_JWT_JWKS_URL must be set (per ADR-0006)"
             )
         return self
