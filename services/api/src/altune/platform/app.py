@@ -89,6 +89,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(catalog_router)
 
+    # Register exception handlers (InvalidTokenError → 401, etc.).
+    from altune.adapters.inbound.http.exception_handlers import (
+        register_exception_handlers,
+    )
+
+    register_exception_handlers(app)
+
     # fastapi.* is in mypy ignore_missing_imports; the per-file hook flags this
     # decorator as untyped while the full-project mypy resolves it fine. Covering
     # both with the dual-code ignore so neither lane breaks.
