@@ -20,7 +20,7 @@ jest.mock('../hooks/useSession', () => ({
   useSession: () => mockSessionState,
 }));
 
-const mockRedirect = jest.fn(({ href }: { href: string }) => null);
+const mockRedirect = jest.fn((_props: { href: string }) => null);
 jest.mock('expo-router', () => ({
   Redirect: (props: { href: string }) => mockRedirect(props),
 }));
