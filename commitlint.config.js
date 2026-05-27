@@ -35,6 +35,7 @@ module.exports = {
         // Feature scopes — extend as features get created via /feature-spec
         // (the feature-spec skill appends new scopes here automatically)
         'view-library',
+        'auth-integration',
       ],
     ],
     'subject-case': [2, 'always', 'lower-case'],
