@@ -44,13 +44,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         create_app), DB init is skipped and the /health endpoint reports
         db=not_configured. This lets the app boot for type-only / smoke tests.
         """
-        # Settings on app.state for FastAPI deps (current_user_id) per ADR-0004.
+        # Settings on app.state for FastAPI deps (current_user_id) per ADR-0006.
         app.state.settings = cfg
+        # TokenVerifier on app.state — current_user_id reads this. Construct
+        # eagerly so misconfiguration fails at boot, not on first authenticated
+        # request. The wiring lives in platform/wiring.py to keep this module's
+        # import graph stable under the per-file mypy hook.
+        from altune.platform.wiring import build_token_verifier
+
+        app.state.token_verifier = build_token_verifier(cfg)
         if cfg.database_url is not None:
             engine = create_engine(cfg.database_url)
             app.state.engine = engine
             app.state.sessionmaker = create_sessionmaker(engine)
             log.info("db_initialized")
+        log.info(
+            "auth.startup_config_validated",
+            verifier_mode="jwks" if cfg.supabase_jwt_jwks_url else "hs256",
+            iss_expected=cfg.supabase_project_url,
+            aud_expected=cfg.supabase_jwt_aud,
+        )
         try:
             yield
         finally:
