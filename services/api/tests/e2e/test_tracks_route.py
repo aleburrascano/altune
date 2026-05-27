@@ -24,6 +24,7 @@ from altune.domain.catalog.track import Track
 from altune.domain.catalog.track_id import TrackId
 from altune.domain.shared.user_id import UserId
 from altune.platform.app import create_app
+from altune.platform.auth import current_user_id
 from altune.platform.config import Settings
 
 if TYPE_CHECKING:
@@ -89,13 +90,20 @@ def _seed(url: str, tracks: list[Track]) -> None:
 
 
 def _client_for(url: str, user: UserId) -> TestClient:
+    # Post-Slice-4: current_user_id no longer reads settings.hardcoded_user_id;
+    # it reads the Authorization header via the TokenVerifier. Use FastAPI's
+    # dependency_overrides to substitute the user identity without minting a
+    # real JWT (the same seam Slice 7's isolation e2e uses).
     settings = Settings(  # type: ignore[call-arg]
         _env_file=None,
         database_url=url,
-        hardcoded_user_id=user.value,
         env="test",
+        supabase_project_url="https://fixture.supabase.co",
+        supabase_jwt_jwks_url="https://fixture.supabase.co/auth/v1/keys",
     )
-    return TestClient(create_app(settings=settings))
+    app = create_app(settings=settings)
+    app.dependency_overrides[current_user_id] = lambda: user
+    return TestClient(app)
 
 
 @pytest.mark.e2e
