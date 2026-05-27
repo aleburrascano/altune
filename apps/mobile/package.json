@@ -10,7 +10,9 @@
     "web": "expo start --web",
     "tsc": "tsc --noEmit",
     "test": "jest",
-    "e2e": "echo 'TODO: wire Maestro or Detox here when first e2e lands'"
+    "e2e": "echo 'Use npm run e2e:auth or npm run e2e:hello — see apps/mobile/e2e/README.md'",
+    "e2e:hello": "maestro test e2e/_hello.yaml",
+    "e2e:auth": "maestro test e2e/auth-session-persistence.yaml"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",

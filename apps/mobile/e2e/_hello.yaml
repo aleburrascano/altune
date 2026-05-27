@@ -1,0 +1,8 @@
+# Maestro smoke flow — launches the app and confirms anything renders.
+# Use this to verify the e2e harness wiring (CLI installed, simulator/
+# emulator booted, app installed) before running behavioral flows.
+appId: com.altune.mobile  # AIDEV-NOTE: update to match your prebuild bundle id
+---
+- launchApp
+- assertVisible:
+    text: ".*"
