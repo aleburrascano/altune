@@ -1,24 +1,28 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AuthGate } from '../features/auth/ui/AuthGate';
+
 // AIDEV-NOTE: ADR-0005 — single QueryClientProvider at the Expo Router root.
 // Every feature's hooks (useLibrary, etc.) inherit this client.
+// ADR-0006 — root is auth-aware via AuthGate: splash while loading, redirect
+// to /sign-in when signed-out, mount the app tree when signed-in.
 
 export default function RootLayout() {
-  // useState ensures a single QueryClient instance survives re-renders;
-  // creating it inline would re-instantiate on every render and trash the cache.
   const [queryClient] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } })
+    () => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } }),
   );
 
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
         <StatusBar style="auto" />
-        <Stack screenOptions={{ headerShown: false }} />
+        <AuthGate>
+          <Slot />
+        </AuthGate>
       </SafeAreaProvider>
     </QueryClientProvider>
   );
