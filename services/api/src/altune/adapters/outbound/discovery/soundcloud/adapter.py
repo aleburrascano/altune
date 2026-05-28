@@ -86,9 +86,25 @@ class SoundCloudSearchAdapter:
         )
 
     async def lookup_by_url(self, url: str) -> SearchResult | None:
-        # Filled in at Slice 35.
-        _ = url
-        return None
+        """Resolve a soundcloud.com track URL via yt-dlp's single-URL extraction."""
+        try:
+            info = await self.extractor(url.strip())
+        except Exception:
+            _log.exception("soundcloud lookup_by_url failed")
+            return None
+        if not isinstance(info, dict):
+            return None
+        # If yt-dlp returns a playlist-shape dict for a single URL, pick the first entry.
+        if "entries" in info:
+            entries = info.get("entries") or []
+            for entry in entries:
+                if entry is None:
+                    continue
+                translated = _translate_one_entry(entry)
+                if translated is not None:
+                    return translated
+            return None
+        return _translate_one_entry(info)
 
 
 def _translate_entries(

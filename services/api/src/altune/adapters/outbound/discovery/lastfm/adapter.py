@@ -9,6 +9,7 @@ Returns tracks only in v1; album.search / artist.search land later.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -115,9 +116,52 @@ class LastFmSearchAdapter:
         )
 
     async def lookup_by_url(self, url: str) -> SearchResult | None:
-        # Filled in at Slice 36.
-        _ = url
-        return None
+        """Resolve https://www.last.fm/music/<Artist>/_/<Track> to a single result."""
+        match = re.match(
+            r"^https?://(?:www\.)?last\.fm/music/([^/]+)/_/([^/?#]+)",
+            url.strip(),
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        artist = match.group(1).replace("+", " ").replace("%20", " ")
+        track = match.group(2).replace("+", " ").replace("%20", " ")
+        params = {
+            "method": "track.getInfo",
+            "artist": artist,
+            "track": track,
+            "api_key": self.api_key,
+            "format": "json",
+        }
+        try:
+            response = await self.client.get(self.base_url, params=params)
+        except Exception:
+            _log.exception("lastfm lookup_by_url request failed")
+            return None
+        if response.status_code != 200:
+            return None
+        try:
+            payload = response.json()
+        except ValueError:
+            return None
+        track_data = payload.get("track") if isinstance(payload, dict) else None
+        if not isinstance(track_data, dict):
+            return None
+        # Adapt track.getInfo shape to track.search shape.
+        return _translate_one_track(
+            {
+                "name": track_data.get("name"),
+                "artist": (track_data.get("artist") or {}).get("name")
+                if isinstance(track_data.get("artist"), dict)
+                else track_data.get("artist"),
+                "url": track_data.get("url"),
+                "mbid": track_data.get("mbid"),
+                "image": track_data.get("album", {}).get("image")
+                if isinstance(track_data.get("album"), dict)
+                else None,
+                "listeners": track_data.get("listeners"),
+            }
+        )
 
 
 def _translate_tracks(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...]:

@@ -9,6 +9,7 @@ v1 supports tracks only; later slices add artist/album/playlist endpoints.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -103,9 +104,29 @@ class DeezerSearchAdapter:
         )
 
     async def lookup_by_url(self, url: str) -> SearchResult | None:
-        # Filled in at Slice 33.
-        _ = url
-        return None
+        """Resolve a Deezer URL like https://www.deezer.com/track/<id> to a single result."""
+        match = re.match(
+            r"^https?://(?:www\.)?deezer\.com/(?:[a-z]{2}/)?track/(\d+)",
+            url.strip(),
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        track_id = match.group(1)
+        try:
+            response = await self.client.get(f"{self.base_url}/track/{track_id}")
+        except Exception:
+            _log.exception("deezer lookup_by_url request failed")
+            return None
+        if response.status_code != 200:
+            return None
+        try:
+            entry = response.json()
+        except ValueError:
+            return None
+        if not isinstance(entry, dict) or entry.get("error"):
+            return None
+        return _translate_one_track(entry)
 
 
 def _translate_tracks(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...]:

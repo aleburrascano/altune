@@ -15,6 +15,7 @@ once we've decided whether the extra payload is worth it.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -114,9 +115,32 @@ class MusicBrainzSearchAdapter:
         )
 
     async def lookup_by_url(self, url: str) -> SearchResult | None:
-        # Filled in at Slice 34.
-        _ = url
-        return None
+        """Resolve https://musicbrainz.org/recording/<mbid> to a single result."""
+        match = re.match(
+            r"^https?://(?:www\.)?musicbrainz\.org/recording/([0-9a-f-]{36})",
+            url.strip(),
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        mbid = match.group(1)
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/recording/{mbid}",
+                params={"fmt": "json", "inc": "artist-credits+releases"},
+            )
+        except Exception:
+            _log.exception("musicbrainz lookup_by_url request failed")
+            return None
+        if response.status_code != 200:
+            return None
+        try:
+            entry = response.json()
+        except ValueError:
+            return None
+        if not isinstance(entry, dict):
+            return None
+        return _translate_one_recording(entry)
 
 
 def _translate_recordings(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...]:
