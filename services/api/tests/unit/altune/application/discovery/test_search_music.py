@@ -309,6 +309,71 @@ async def test_search_music_passes_through_rate_limited_status_from_adapter() ->
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_search_music_skips_provider_when_breaker_open() -> None:
+    # Drive the deezer breaker open with 5 raised exceptions, then verify
+    # the next call short-circuits with CIRCUIT_OPEN before the provider
+    # is even invoked.
+    broken = InMemorySearchProvider(name="deezer", raises=RuntimeError("boom"))
+    history = InMemorySearchHistoryRepository()
+    use_case = SearchMusic(providers=[broken], history_repo=history)
+    for _ in range(5):
+        await use_case.execute(
+            SearchMusicInput(
+                raw_query="q",
+                user_id=_USER,
+                kinds=frozenset({ResultKind.TRACK}),
+            )
+        )
+    # Replace `raises` with a canned response that would normally be OK;
+    # if the breaker correctly short-circuits, this canned data is never
+    # consumed and the status is CIRCUIT_OPEN.
+    broken.raises = None
+    broken.canned = (_result(ProviderName.DEEZER),)
+    output = await use_case.execute(
+        SearchMusicInput(
+            raw_query="q",
+            user_id=_USER,
+            kinds=frozenset({ResultKind.TRACK}),
+        )
+    )
+    assert output.providers[0].status is ProviderStatus.CIRCUIT_OPEN
+    assert output.providers[0].result_count == 0
+    assert output.results == ()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_music_rate_limited_does_not_count_toward_breaker() -> None:
+    # 10 consecutive rate_limited responses; breaker must stay closed
+    # (rate-limited is a calling-pattern signal, not a provider-health one).
+    rate_limited = InMemorySearchProvider(name="deezer", status=ProviderStatus.RATE_LIMITED)
+    history = InMemorySearchHistoryRepository()
+    use_case = SearchMusic(providers=[rate_limited], history_repo=history)
+    for _ in range(10):
+        output = await use_case.execute(
+            SearchMusicInput(
+                raw_query="q",
+                user_id=_USER,
+                kinds=frozenset({ResultKind.TRACK}),
+            )
+        )
+        assert output.providers[0].status is ProviderStatus.RATE_LIMITED
+    # Switch to success; breaker should not have tripped, so the call goes
+    # through immediately.
+    rate_limited.status = ProviderStatus.OK
+    rate_limited.canned = (_result(ProviderName.DEEZER),)
+    final = await use_case.execute(
+        SearchMusicInput(
+            raw_query="q",
+            user_id=_USER,
+            kinds=frozenset({ResultKind.TRACK}),
+        )
+    )
+    assert final.providers[0].status is ProviderStatus.OK
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_search_music_passes_through_error_status_from_adapter() -> None:
     # Adapter returned ERROR (e.g. 5xx); the use case must preserve it as
     # ERROR (distinct from a raised exception, though both map to ERROR).

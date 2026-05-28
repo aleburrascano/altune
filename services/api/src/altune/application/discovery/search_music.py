@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from altune.application.discovery.circuit_breaker import CircuitBreaker
 from altune.application.discovery.dedup import dedup_and_rank
 from altune.application.discovery.normalize import normalize_for_match
 from altune.domain.discovery.provider_status import ProviderStatus
@@ -80,7 +81,14 @@ class HistoryPersistRingBufferConfig:
 
 @dataclass
 class SearchMusic:
-    """Use case: fan out to providers (one v1 spine), dedup + rank, persist history."""
+    """Use case: fan out to providers, dedup + rank, persist history.
+
+    A per-provider CircuitBreaker is built lazily on first use (keyed by
+    provider.name) and persists across requests for the lifetime of the
+    SearchMusic instance. Wiring keeps the same SearchMusic instance live
+    across requests (constructed once in the lifespan) so breakers don't
+    reset every request.
+    """
 
     providers: Sequence[SearchProvider]
     history_repo: SearchHistoryRepository
@@ -88,6 +96,12 @@ class SearchMusic:
         default_factory=HistoryPersistRingBufferConfig
     )
     per_source_timeout_s: float = _DEFAULT_PER_SOURCE_TIMEOUT_S
+    _breakers: dict[str, CircuitBreaker] = field(default_factory=dict, init=False)
+
+    def _breaker_for(self, provider_name: str) -> CircuitBreaker:
+        if provider_name not in self._breakers:
+            self._breakers[provider_name] = CircuitBreaker(name=provider_name)
+        return self._breakers[provider_name]
 
     async def execute(self, request: SearchMusicInput) -> SearchMusicOutput:
         query_norm = normalize_for_match(request.raw_query)
@@ -142,6 +156,17 @@ class SearchMusic:
         request: SearchMusicInput,
     ) -> tuple[ProviderStatusSummary, tuple[SearchResult, ...]]:
         """Call one provider; convert exceptions to status — never raises."""
+        breaker = self._breaker_for(provider.name)
+        if not breaker.should_call():
+            return (
+                ProviderStatusSummary(
+                    provider_name=provider.name,
+                    status=ProviderStatus.CIRCUIT_OPEN,
+                    result_count=0,
+                    latency_ms=0,
+                ),
+                (),
+            )
         start = time.perf_counter()
         try:
             resp = await asyncio.wait_for(
@@ -149,6 +174,11 @@ class SearchMusic:
                 timeout=self.per_source_timeout_s,
             )
             latency_ms = int((time.perf_counter() - start) * 1000)
+            # OK -> success; ERROR -> failure; RATE_LIMITED -> ignored.
+            if resp.status is ProviderStatus.OK:
+                breaker.record_success()
+            elif resp.status is ProviderStatus.ERROR:
+                breaker.record_failure()
             summary = ProviderStatusSummary(
                 provider_name=resp.provider_name,
                 status=resp.status,
@@ -159,6 +189,7 @@ class SearchMusic:
             return summary, results
         except TimeoutError:
             latency_ms = int((time.perf_counter() - start) * 1000)
+            breaker.record_failure()
             return (
                 ProviderStatusSummary(
                     provider_name=provider.name,
@@ -171,6 +202,7 @@ class SearchMusic:
         except Exception:
             latency_ms = int((time.perf_counter() - start) * 1000)
             _log.exception("provider %s raised during search", provider.name)
+            breaker.record_failure()
             return (
                 ProviderStatusSummary(
                     provider_name=provider.name,
