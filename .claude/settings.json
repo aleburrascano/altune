@@ -78,9 +78,6 @@
       }
     ]
   },
-  "model": {
-    "default": "claude-opus-4-7"
-  },
   "agentStatusLine": false,
   "autoMemoryEnabled": true
 }
