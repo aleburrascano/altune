@@ -25,8 +25,9 @@ You are the docs lens. Single concern: do the docs accurately reflect the code a
 - Existing terms used inconsistently with their glossary definition → flag.
 
 ### Nested CLAUDE.md
-- Substantial changes to a feature folder → its nested `CLAUDE.md` should be regenerated (or has been by `update-nested-claude-md`).
-- New file in feature folder → does the AUTO-MAINTAINED block list it? (Will after next regeneration.)
+- Touched feature or bounded-context dir has NO `CLAUDE.md` → 🚨 Blocking. Run `/update-nested-claude-md <dir>`. (The `stop-claude-md-hygiene` hook will also block Stop on this.)
+- Touched feature or bounded-context dir has a `CLAUDE.md` older than its source files (compare `git log -1 --format=%ct -- <dir> ':(exclude)<dir>/CLAUDE.md'` vs `git log -1 --format=%ct -- <dir>/CLAUDE.md`) → 🚨 Blocking. Run `/update-nested-claude-md <dir>` to refresh.
+- New file in a mobile feature folder not listed in the AUTO-MAINTAINED block (backend dirs intentionally have no AUTO-MAINTAINED block — skip there) → ⚠️ Should fix.
 
 ### AIDEV anchors
 - Removed `# AIDEV-NOTE:` / `# AIDEV-DECISION:` / `# AIDEV-WARNING:` without explicit reason → 🚨 blocking. These are durable; don't strip.
