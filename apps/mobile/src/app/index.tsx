@@ -5,5 +5,5 @@ import { Redirect } from 'expo-router';
 // Replace with a real home component when more features land.
 
 export default function HomeScreen() {
-  return <Redirect href="/library" />;
+  return <Redirect href="/discover" />;
 }
