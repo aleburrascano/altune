@@ -28,25 +28,34 @@ import {
 import { LibraryRow } from './LibraryRow';
 import { useLibrary } from '../hooks/useLibrary';
 import { _viewForState } from '../state';
+import { SignOutButton } from '../../auth/ui/SignOutButton';
 import type { TrackResponse } from '../../../shared/api-client/types';
 
 const _renderRow: ListRenderItem<TrackResponse> = ({ item }) => <LibraryRow track={item} />;
 const _keyExtractor = (track: TrackResponse): string => track.id;
 
+function _LibraryHeader(): ReactElement {
+  return (
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>Library</Text>
+      <SignOutButton />
+    </View>
+  );
+}
+
 export function LibraryScreen(): ReactElement {
   const state = useLibrary();
   const view = _viewForState(state);
 
+  let body: ReactElement;
   if (view === 'loading') {
-    return (
+    body = (
       <View style={styles.center} testID="library-loading">
         <ActivityIndicator color="#fff" />
       </View>
     );
-  }
-
-  if (view === 'error') {
-    return (
+  } else if (view === 'error') {
+    body = (
       <View style={styles.center} testID="library-error">
         <Text style={styles.errorText}>Couldn&apos;t load your library.</Text>
         <TouchableOpacity
@@ -58,19 +67,15 @@ export function LibraryScreen(): ReactElement {
         </TouchableOpacity>
       </View>
     );
-  }
-
-  if (view === 'empty') {
-    return (
+  } else if (view === 'empty') {
+    body = (
       <View style={styles.center} testID="library-empty">
         <Text style={styles.emptyText}>Your library is empty.</Text>
         <Text style={styles.emptyHint}>Tracks you add will show up here.</Text>
       </View>
     );
-  }
-
-  return (
-    <View style={styles.list}>
+  } else {
+    body = (
       <FlatList
         data={state.items}
         keyExtractor={_keyExtractor}
@@ -78,6 +83,13 @@ export function LibraryScreen(): ReactElement {
         onEndReached={state.hasNextPage ? state.fetchNextPage : undefined}
         onEndReachedThreshold={0.5}
       />
+    );
+  }
+
+  return (
+    <View style={styles.list}>
+      <_LibraryHeader />
+      {body}
     </View>
   );
 }
@@ -86,6 +98,21 @@ const styles = StyleSheet.create({
   list: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#222',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '600',
   },
   center: {
     flex: 1,
