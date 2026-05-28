@@ -1,10 +1,7 @@
 /**
- * AuthGate — branches on useSession's SessionState (Slice 10, AC#6).
- *
- * Verifies three transitions:
- * - loading → renders the splash node (testID="auth-splash")
- * - signed-out → renders an expo-router Redirect to /sign-in
- * - signed-in → renders children
+ * AuthGate — branches on useSession's SessionState + the current route's
+ * segment so it doesn't redirect signed-out users when they're already
+ * inside the (auth) group (Slice 10, AC#6).
  */
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { render } from '@testing-library/react-native';
@@ -16,6 +13,7 @@ type SessionState =
   | { status: 'signed-out' };
 
 let mockSessionState: SessionState = { status: 'loading' };
+let mockSegments: string[] = [];
 jest.mock('../hooks/useSession', () => ({
   useSession: () => mockSessionState,
 }));
@@ -23,10 +21,12 @@ jest.mock('../hooks/useSession', () => ({
 const mockRedirect = jest.fn((_props: { href: string }) => null);
 jest.mock('expo-router', () => ({
   Redirect: (props: { href: string }) => mockRedirect(props),
+  useSegments: () => mockSegments,
 }));
 
 beforeEach(() => {
   mockRedirect.mockClear();
+  mockSegments = [];
 });
 
 describe('AuthGate', () => {
@@ -41,8 +41,9 @@ describe('AuthGate', () => {
     expect(getByTestId('auth-splash')).toBeTruthy();
   });
 
-  it('redirects to /sign-in when signed-out', () => {
+  it('redirects signed-out users to /sign-in when NOT already in (auth)', () => {
     mockSessionState = { status: 'signed-out' };
+    mockSegments = ['(app)']; // any non-(auth) group
     const { AuthGate } = require('../ui/AuthGate');
     render(
       <AuthGate>
@@ -52,8 +53,34 @@ describe('AuthGate', () => {
     expect(mockRedirect).toHaveBeenCalledWith({ href: '/sign-in' });
   });
 
-  it('renders children when signed-in', () => {
+  it('does NOT redirect signed-out users who are already in the (auth) group', () => {
+    mockSessionState = { status: 'signed-out' };
+    mockSegments = ['(auth)', 'sign-in'];
+    const { AuthGate } = require('../ui/AuthGate');
+    const { getByTestId } = render(
+      <AuthGate>
+        <Text testID="auth-child">Auth Child</Text>
+      </AuthGate>,
+    );
+    expect(mockRedirect).not.toHaveBeenCalled();
+    expect(getByTestId('auth-child')).toBeTruthy();
+  });
+
+  it('redirects signed-in users out of (auth) group to /library', () => {
     mockSessionState = { status: 'signed-in', session: { access_token: 'abc' } };
+    mockSegments = ['(auth)', 'sign-in'];
+    const { AuthGate } = require('../ui/AuthGate');
+    render(
+      <AuthGate>
+        <Text testID="auth-child">Auth Child</Text>
+      </AuthGate>,
+    );
+    expect(mockRedirect).toHaveBeenCalledWith({ href: '/library' });
+  });
+
+  it('renders children for signed-in users outside (auth)', () => {
+    mockSessionState = { status: 'signed-in', session: { access_token: 'abc' } };
+    mockSegments = ['library'];
     const { AuthGate } = require('../ui/AuthGate');
     const { getByTestId } = render(
       <AuthGate>
