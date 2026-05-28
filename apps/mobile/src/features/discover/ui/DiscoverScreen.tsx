@@ -1,24 +1,28 @@
 /**
- * DiscoverScreen — paginated multi-source search with designed states.
+ * DiscoverScreen — paginated multi-source search with designed states (ADR-0008).
  *
- * Slice 46. State machine in ../state.ts; testIDs per AC#20:
- *   discover-loading, discover-empty-no-query (+ discover-history-row-<i>),
- *   discover-results, discover-zero-results,
- *   discover-full-error (+ discover-retry), discover-partial-banner.
+ * Slice 46. State machine in ../state.ts (untouched); testIDs per AC#20:
+ *   discover-search-input, discover-loading, discover-empty-no-query
+ *   (+ discover-history-row-<i>), discover-results, discover-partial-banner,
+ *   discover-zero-results, discover-full-error (+ discover-retry).
  */
 
 import type { ReactElement } from 'react';
 import { useState } from 'react';
+import { FlatList, StyleSheet, TextInput, View, type ListRenderItem } from 'react-native';
+
 import {
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
+  Button,
+  Card,
+  Chip,
+  Screen,
+  Skeleton,
   Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  type ListRenderItem,
-} from 'react-native';
+  fontFamily,
+  radius,
+  spacing,
+  useTheme,
+} from '@shared/ui';
 
 import { DiscoverRow } from './DiscoverRow';
 import { PartialBanner } from './PartialBanner';
@@ -27,21 +31,16 @@ import { useRecordClick } from '../hooks/useRecordClick';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { _shouldShowPartialBanner, _viewForState } from '../state';
 
-import type {
-  DiscoveryResult,
-  SearchHistoryItem,
-} from '../../../shared/api-client/discovery';
+import type { DiscoveryResult, SearchHistoryItem } from '../../../shared/api-client/discovery';
 
 const _renderResult =
-  (
-    onTap: (result: DiscoveryResult, position: number) => void,
-  ): ListRenderItem<DiscoveryResult> =>
-  ({ item, index }) =>
-    <DiscoverRow result={item} position={index} onPress={onTap} />;
+  (onTap: (result: DiscoveryResult, position: number) => void): ListRenderItem<DiscoveryResult> =>
+  ({ item, index }) => <DiscoverRow result={item} position={index} onPress={onTap} />;
 
-const _historyKey = (item: SearchHistoryItem): string => item.query_norm;
+const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
 export function DiscoverScreen(): ReactElement {
+  const theme = useTheme();
   const [committedQuery, setCommittedQuery] = useState('');
   const [inputValue, setInputValue] = useState('');
   const search = useDiscoverSearch(committedQuery);
@@ -74,75 +73,95 @@ export function DiscoverScreen(): ReactElement {
   let body: ReactElement;
   if (view === 'loading') {
     body = (
-      <View style={styles.center} testID="discover-loading">
-        <ActivityIndicator color="#fff" />
+      <View testID="discover-loading" style={styles.list}>
+        {SKELETON_ROWS.map((i) => (
+          <Card key={i} style={styles.skeletonCard}>
+            <View style={styles.skeletonRow}>
+              <Skeleton width={52} height={52} radius={radius.md} />
+              <View style={styles.skeletonText}>
+                <Skeleton width="70%" height={14} />
+                <Skeleton width="40%" height={12} />
+              </View>
+            </View>
+          </Card>
+        ))}
       </View>
     );
   } else if (view === 'full-error') {
     body = (
-      <View style={styles.center} testID="discover-full-error">
-        <Text style={styles.errorText}>Search failed.</Text>
-        <TouchableOpacity
+      <View testID="discover-full-error" style={styles.center}>
+        <Text variant="title">Search failed</Text>
+        <Text variant="label" tone="secondary" style={styles.centerSub}>
+          Something went wrong. Try again.
+        </Text>
+        <Button
           testID="discover-retry"
-          style={styles.retryButton}
+          label="Retry"
           onPress={() => setCommittedQuery((q) => (q ? `${q} ` : q).trim() || q)}
-        >
-          <Text style={styles.retryText}>Retry</Text>
-        </TouchableOpacity>
+        />
       </View>
     );
   } else if (view === 'zero-results') {
     body = (
-      <View style={styles.center} testID="discover-zero-results">
-        <Text style={styles.emptyText}>No matches.</Text>
+      <View testID="discover-zero-results" style={styles.center}>
+        <Text variant="title">No matches</Text>
+        <Text variant="label" tone="secondary" style={styles.centerSub}>
+          Try a different search.
+        </Text>
       </View>
     );
   } else if (view === 'empty-no-query') {
+    const items = history.data?.items ?? [];
     body = (
-      <View testID="discover-empty-no-query" style={styles.history}>
-        <Text style={styles.sectionHeader}>Recent searches</Text>
-        <FlatList
-          data={history.data?.items ?? []}
-          keyExtractor={_historyKey}
-          renderItem={({ item, index }) => (
-            <TouchableOpacity
-              testID={`discover-history-row-${index}`}
-              style={styles.historyRow}
-              onPress={() => onHistoryTap(item)}
-            >
-              <Text style={styles.historyText} numberOfLines={1}>
-                {item.query.length > 40 ? `${item.query.slice(0, 40)}…` : item.query}
-              </Text>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            <Text style={styles.historyEmpty}>Search music to get started.</Text>
-          }
-        />
+      <View testID="discover-empty-no-query" style={styles.list}>
+        <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
+          RECENT SEARCHES
+        </Text>
+        {items.length === 0 ? (
+          <Text variant="body" tone="secondary">
+            Search music to get started.
+          </Text>
+        ) : (
+          <View style={styles.chipCloud}>
+            {items.map((item, index) => (
+              <Chip
+                key={item.query_norm}
+                testID={`discover-history-row-${index}`}
+                label={item.query.length > 40 ? `${item.query.slice(0, 40)}…` : item.query}
+                onPress={() => onHistoryTap(item)}
+              />
+            ))}
+          </View>
+        )}
       </View>
     );
   } else {
     body = (
-      <View testID="discover-results" style={styles.resultsContainer}>
-        {_shouldShowPartialBanner(search.data) && search.data && (
+      <View testID="discover-results" style={styles.results}>
+        {_shouldShowPartialBanner(search.data) && search.data ? (
           <PartialBanner providers={search.data.providers} />
-        )}
+        ) : null}
         <FlatList
           data={search.data?.results ?? []}
           keyExtractor={(r) => `${r.kind}-${r.title}-${r.subtitle ?? ''}`}
           renderItem={_renderResult(onResultTap)}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
         />
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <Screen>
       <View style={styles.header}>
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            { backgroundColor: theme.color.surface1, color: theme.color.textPrimary },
+          ]}
           placeholder="Search music"
-          placeholderTextColor="#666"
+          placeholderTextColor={theme.color.textTertiary}
           value={inputValue}
           onChangeText={setInputValue}
           onSubmitEditing={onSubmit}
@@ -153,57 +172,27 @@ export function DiscoverScreen(): ReactElement {
         />
       </View>
       {body}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#000' },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#222',
-  },
+  header: { paddingTop: spacing.sm, paddingBottom: spacing.md },
   input: {
-    backgroundColor: '#1f1f1f',
-    color: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    fontSize: 15,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontFamily: fontFamily.bodyRegular,
+    fontSize: 16,
   },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  errorText: { color: '#fff', fontSize: 16, marginBottom: 16 },
-  retryButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    backgroundColor: '#1f1f1f',
-  },
-  retryText: { color: '#fff', fontSize: 14, fontWeight: '500' },
-  emptyText: { color: '#fff', fontSize: 18, fontWeight: '500' },
-  history: { flex: 1, paddingTop: 16 },
-  sectionHeader: {
-    color: '#888',
-    fontSize: 12,
-    textTransform: 'uppercase',
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  historyRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#222',
-  },
-  historyText: { color: '#fff', fontSize: 14 },
-  historyEmpty: { color: '#888', fontSize: 14, padding: 16 },
-  resultsContainer: { flex: 1 },
+  list: { flex: 1, paddingTop: spacing.sm },
+  results: { flex: 1 },
+  listContent: { paddingTop: spacing.sm, paddingBottom: spacing.xl },
+  skeletonCard: { marginBottom: spacing.sm },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  skeletonText: { flex: 1, gap: spacing.sm },
+  sectionHeader: { marginBottom: spacing.md, letterSpacing: 1 },
+  chipCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
+  centerSub: { marginTop: spacing.xs, marginBottom: spacing.lg },
 });

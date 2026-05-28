@@ -1,12 +1,13 @@
 /**
- * PartialBanner — small banner shown above results when any provider failed.
+ * PartialBanner — shown above results when any provider failed (ADR-0008).
  *
- * Slice 46. testID = "discover-partial-banner". Does NOT replace the
- * results — it sits as a sibling so partial responses still show data.
+ * testID = "discover-partial-banner" (preserved). Sits as a SIBLING of the
+ * results — it never replaces them, so partial responses still show data.
  */
 
 import type { ReactElement } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+
+import { Banner, spacing } from '@shared/ui';
 
 import type { DiscoveryProviderInfo } from '../../../shared/api-client/discovery';
 
@@ -20,17 +21,8 @@ export function PartialBanner({ providers }: PartialBannerProps): ReactElement {
     .map((p) => p.provider)
     .join(', ');
   return (
-    <View style={styles.banner} testID="discover-partial-banner">
-      <Text style={styles.text}>Some sources are unavailable: {unavailable}</Text>
-    </View>
+    <Banner testID="discover-partial-banner" tone="warning" style={{ marginBottom: spacing.sm }}>
+      {`Some sources are unavailable: ${unavailable}`}
+    </Banner>
   );
 }
-
-const styles = StyleSheet.create({
-  banner: {
-    backgroundColor: '#3a2a00',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-  },
-  text: { color: '#ffcb6b', fontSize: 12 },
-});
