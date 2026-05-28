@@ -47,9 +47,7 @@ class SqlAlchemyTrackRepository:
         # per-request snapshot semantics; concurrent writes can shift `total` between
         # paged calls in production. v1 has no writers, so academic.
         count_stmt = (
-            select(func.count())
-            .select_from(TrackRow)
-            .where(TrackRow.user_id == user_id.value)
+            select(func.count()).select_from(TrackRow).where(TrackRow.user_id == user_id.value)
         )
 
         page_result = await self._session.execute(page_stmt)

@@ -7,6 +7,7 @@ Logs are JSON in production, key-value pretty in development.
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import structlog
 
@@ -35,4 +36,6 @@ def configure_logging(level: str = "INFO", *, json: bool = False) -> None:
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     """Return a configured structlog logger."""
-    return structlog.get_logger(name)
+    # structlog.get_logger is typed as Any in the upstream stubs; cast restores
+    # the bound-logger contract for callers.
+    return cast("structlog.stdlib.BoundLogger", structlog.get_logger(name))

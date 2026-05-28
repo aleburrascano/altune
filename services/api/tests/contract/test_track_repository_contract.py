@@ -81,9 +81,7 @@ async def sqlalchemy_session(postgres_url: str) -> AsyncIterator[AsyncSession]:
 
 
 @pytest.fixture(params=["in_memory", "sqlalchemy"])
-async def seed_repo(
-    request: pytest.FixtureRequest, sqlalchemy_session: AsyncSession
-) -> SeedRepo:
+async def seed_repo(request: pytest.FixtureRequest, sqlalchemy_session: AsyncSession) -> SeedRepo:
     """Returns an async callable that seeds the given tracks and yields a configured repo."""
     if request.param == "in_memory":
 
