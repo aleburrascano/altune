@@ -31,6 +31,8 @@ When `/feature-spec` or domain modeling introduces a new term:
 ### Canonical (terms with corresponding code)
 
 - **Track** — a single audio recording with metadata (title, artist, optional album, optional duration). Aggregate root of the **catalog** bounded context. Identity is a `TrackId` (UUID); equality and hashing are by id. Owned by a user (`UserId`). Defined in `services/api/src/altune/domain/catalog/track.py`. Introduced by spec `docs/specs/view-library/spec.md`.
+- **ResultKind** — discriminator on a `SearchResult` indicating what kind of music it represents: `artist`, `album`, `track`, or `playlist`. Wire-serialized as a lowercase string. Defined in `services/api/src/altune/domain/discovery/result_kind.py`. Introduced by spec `docs/specs/discover-music-v1/spec.md`.
+- **Confidence** — three-level enum on a `SearchResult` indicating how confident the dedup engine is that the merged entry refers to one canonical recording: `high` (ISRC match or JW ≥ 0.92), `medium` (JW ∈ [0.85, 0.92) with per-source-prior tie-break), `low` (standalone provider result). Comparable: `HIGH > MEDIUM > LOW`. Defined in `services/api/src/altune/domain/discovery/confidence.py`. Introduced by spec `docs/specs/discover-music-v1/spec.md`.
 
 ### Future (illustrative — to be added when the spec that introduces them ships)
 
