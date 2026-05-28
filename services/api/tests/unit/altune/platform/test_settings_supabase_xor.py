@@ -25,7 +25,7 @@ from pydantic import ValidationError
 from altune.platform.config import Settings  # type: ignore[import-not-found]
 
 _JWKS_URL = "https://fixture.supabase.co/auth/v1/keys"
-_SECRET = "fixture-shared-secret"  # noqa: S105  # fixture string, not a real secret
+_SECRET = "fixture-shared-secret"  # fixture string, not a real secret
 
 
 def _clean(monkeypatch: pytest.MonkeyPatch) -> None:
