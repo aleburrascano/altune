@@ -1,8 +1,8 @@
 # discover-music-v1
 
-> Spec for `discover-music-v1` — version 1, drafted 2026-05-27.
+> Spec for `discover-music-v1` — version 1, drafted 2026-05-27, shipped 2026-05-28.
 > Authors: solo + Claude.
-> Status: Clarify-gated (spec-reviewer revise-then-approve, 4 BLOCK + relevant SHOULD-ADDRESS resolved in-pass 2026-05-27).
+> Status: Shipped.
 
 ## Problem
 
