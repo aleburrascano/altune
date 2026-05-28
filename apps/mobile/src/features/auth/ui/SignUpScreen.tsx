@@ -1,3 +1,4 @@
+import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
@@ -9,8 +10,17 @@ const styles = {
     padding: 24,
     justifyContent: 'center' as const,
     gap: 12,
+    backgroundColor: '#fff',
   },
-  input: { borderWidth: 1, borderColor: '#888', padding: 12, borderRadius: 6 },
+  title: { fontSize: 24, fontWeight: '600' as const, color: '#111' },
+  input: {
+    borderWidth: 1,
+    borderColor: '#888',
+    padding: 12,
+    borderRadius: 6,
+    color: '#111',
+    backgroundColor: '#fff',
+  },
   button: {
     backgroundColor: '#222',
     padding: 14,
@@ -28,12 +38,13 @@ export function SignUpScreen() {
 
   return (
     <View testID="sign-up-screen" style={styles.container}>
-      <Text style={{ fontSize: 24, fontWeight: '600' }}>Create an account</Text>
+      <Text style={styles.title}>Create an account</Text>
       <TextInput
         testID="email-input"
         value={email}
         onChangeText={setEmail}
         placeholder="Email"
+        placeholderTextColor="#888"
         autoCapitalize="none"
         keyboardType="email-address"
         style={styles.input}
@@ -43,6 +54,7 @@ export function SignUpScreen() {
         value={password}
         onChangeText={setPassword}
         placeholder="Password"
+        placeholderTextColor="#888"
         secureTextEntry
         style={styles.input}
       />
@@ -54,6 +66,9 @@ export function SignUpScreen() {
       >
         <Text style={styles.buttonText}>{state.kind === 'pending' ? 'Creating…' : 'Sign up'}</Text>
       </Pressable>
+      <Link href="/sign-in" testID="link-to-sign-in">
+        <Text style={{ color: '#06f', textAlign: 'center' }}>Have an account? Sign in</Text>
+      </Link>
       {state.kind === 'error' && (
         <Text testID="auth-error" style={styles.error}>
           Sign up failed. Check your details and try again.
