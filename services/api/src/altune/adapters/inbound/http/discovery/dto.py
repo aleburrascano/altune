@@ -68,3 +68,14 @@ class DiscoverySearchHistoryResponse(BaseModel):
 
     items: list[SearchHistoryItemDto]
     total: int
+
+
+class DiscoveryClickRequest(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    query_norm: str
+    kind: str
+    title: str
+    subtitle: str | None = None
+    position: int
+    confidence: str

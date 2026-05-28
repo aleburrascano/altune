@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from altune.adapters.inbound.http.discovery.dto import (
     CacheDto,
+    DiscoveryClickRequest,
     DiscoverySearchHistoryResponse,
     DiscoverySearchResponse,
     ProviderStatusDto,
@@ -25,10 +26,12 @@ from altune.application.discovery.list_search_history import (
     ListSearchHistory,
     ListSearchHistoryInput,
 )
+from altune.application.discovery.record_click import RecordClick, RecordClickInput
 from altune.application.discovery.search_music import (
     SearchMusic,
     SearchMusicInput,
 )
+from altune.domain.discovery.confidence import Confidence
 from altune.domain.discovery.result_kind import ResultKind
 from altune.domain.shared.user_id import UserId  # noqa: TC001
 from altune.platform.auth import current_user_id
@@ -177,3 +180,48 @@ async def get_discovery_search_history(
         ],
         total=output.total,
     )
+
+
+@router.post("/clicks", status_code=202)
+async def post_discovery_click(
+    request: Request,
+    body: DiscoveryClickRequest,
+    user_id: UserId = Depends(current_user_id),  # noqa: B008
+) -> None:
+    # Validate kind + confidence at the application boundary.
+    try:
+        kind = ResultKind(body.kind)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid kind: {body.kind}") from exc
+    try:
+        confidence = Confidence(body.confidence)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"invalid confidence: {body.confidence}"
+        ) from exc
+    if body.position < 0:
+        raise HTTPException(status_code=422, detail="position must be non-negative")
+    sessionmaker = getattr(request.app.state, "sessionmaker", None)
+    if sessionmaker is None:
+        # No DB configured (smoke env); accept-and-drop.
+        return None
+    from altune.adapters.outbound.persistence.discovery.search_click_repository import (
+        SqlAlchemySearchClickRepository,
+    )
+
+    async with sessionmaker() as session:
+        repo = SqlAlchemySearchClickRepository(session)
+        use_case = RecordClick(click_repo=repo)
+        await use_case.execute(
+            RecordClickInput(
+                user_id=user_id,
+                query_norm=body.query_norm,
+                kind=kind,
+                title=body.title,
+                subtitle=body.subtitle,
+                position=body.position,
+                confidence=confidence,
+            )
+        )
+        await session.commit()
+    return None
