@@ -5,9 +5,9 @@ Env vars override defaults. .env loaded in development.
 
 from __future__ import annotations
 
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Env = Literal["development", "test", "production"]
@@ -31,8 +31,23 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:8081", "http://localhost:19006"],
-        description="Comma-separated list (parsed by pydantic-settings).",
+        description="Comma-separated list of origin URLs (parsed by the validator below).",
     )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_cors_origins(cls, value: Any) -> Any:
+        # AIDEV-NOTE: pydantic-settings v2 expects JSON for complex types by
+        # default — a bare comma-separated string in .env crashes with a
+        # JSONDecodeError. Accept either form: real list (default), JSON-encoded
+        # list, or comma-separated string.
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("["):
+                # Let pydantic try to JSON-parse it.
+                return stripped
+            return [item.strip() for item in stripped.split(",") if item.strip()]
+        return value
 
     # Persistence — per ADR-0003. Optional at field level so unit tests can
     # construct Settings without provisioning a DB; consumers (db.py engine
@@ -60,7 +75,8 @@ class Settings(BaseSettings):
     )
     supabase_jwt_jwks_url: str | None = Field(
         default=None,
-        description="JWKS endpoint URL, e.g. https://<ref>.supabase.co/auth/v1/keys. "
+        description="JWKS endpoint URL, e.g. "
+        "https://<ref>.supabase.co/auth/v1/.well-known/jwks.json. "
         "Mutually exclusive with supabase_jwt_secret.",
     )
 

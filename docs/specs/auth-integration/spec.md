@@ -175,7 +175,7 @@ Supabase defaults to *email confirmation required*. For altune v1 we **disable e
 
 ## Risks / open questions
 
-- **Risk: JWT verification mode is wrong for the long term.** HS256 with a shared secret cannot rotate keys without coordinated deploys; if Supabase rotates the project signing key (manually triggered, but possible), all in-flight sessions break and the backend stops accepting valid tokens until the secret env is updated and the app redeployed. Mitigation: tentatively pick **JWKS** in the plan. Supabase exposes JWKS at `<project>.supabase.co/auth/v1/keys`; the verifier caches keys with a sane TTL (e.g., 1h) and re-fetches on `kid` mismatch. The shared-secret path remains a fallback; the spec mandates one of the two but does not lock the choice here.
+- **Risk: JWT verification mode is wrong for the long term.** HS256 with a shared secret cannot rotate keys without coordinated deploys; if Supabase rotates the project signing key (manually triggered, but possible), all in-flight sessions break and the backend stops accepting valid tokens until the secret env is updated and the app redeployed. Mitigation: tentatively pick **JWKS** in the plan. Supabase exposes JWKS at `<project>.supabase.co/auth/v1/.well-known/jwks.json`; the verifier caches keys with a sane TTL (e.g., 1h) and re-fetches on `kid` mismatch. The shared-secret path remains a fallback; the spec mandates one of the two but does not lock the choice here.
 
 - **Risk: clock skew between altune backend and Supabase issuing servers** causes valid tokens to be rejected. Mitigation: 30 seconds of `exp` leeway, applied symmetrically (see Design considerations / JWT verification shape).
 
