@@ -5,10 +5,10 @@ Env vars override defaults. .env loaded in development.
 
 from __future__ import annotations
 
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 Env = Literal["development", "test", "production"]
 
@@ -29,7 +29,12 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0")  # noqa: S104  # binding to all interfaces is intentional in dev
     port: int = Field(default=8000)
 
-    cors_origins: list[str] = Field(
+    # AIDEV-NOTE: NoDecode tells pydantic-settings NOT to JSON-decode the env
+    # value before passing it to the field validator. Without this, a bare
+    # comma-separated string in .env crashes the env source's prepare step
+    # with JSONDecodeError BEFORE the @field_validator below ever runs. With
+    # NoDecode, the raw string reaches the validator and we split it.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:8081", "http://localhost:19006"],
         description="Comma-separated list of origin URLs (parsed by the validator below).",
     )
@@ -37,15 +42,14 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_cors_origins(cls, value: Any) -> Any:
-        # AIDEV-NOTE: pydantic-settings v2 expects JSON for complex types by
-        # default — a bare comma-separated string in .env crashes with a
-        # JSONDecodeError. Accept either form: real list (default), JSON-encoded
-        # list, or comma-separated string.
+        # Accept: real list (default / explicit list), JSON-encoded list
+        # ([\"a\",\"b\"]), or a comma-separated string.
         if isinstance(value, str):
             stripped = value.strip()
             if stripped.startswith("["):
-                # Let pydantic try to JSON-parse it.
-                return stripped
+                import json
+
+                return json.loads(stripped)
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
 
