@@ -91,47 +91,20 @@ class SearchMusic:
 
     async def execute(self, request: SearchMusicInput) -> SearchMusicOutput:
         query_norm = normalize_for_match(request.raw_query)
+
+        # Fan out across providers in parallel via asyncio.gather. Each
+        # task converts its own exceptions (timeout/cancel/other) into a
+        # ProviderStatusSummary so a single failure can't cancel siblings.
+        # gather(..., return_exceptions=False) is safe because every task
+        # catches its own exceptions.
+        tasks = [self._call_provider(provider, request) for provider in self.providers]
+        per_provider = await asyncio.gather(*tasks)
         summaries: list[ProviderStatusSummary] = []
         gathered: list[SearchResult] = []
-        for provider in self.providers:
-            start = time.perf_counter()
-            try:
-                resp = await asyncio.wait_for(
-                    provider.search(request.raw_query, request.kinds, request.limit),
-                    timeout=self.per_source_timeout_s,
-                )
-                latency_ms = int((time.perf_counter() - start) * 1000)
-                summaries.append(
-                    ProviderStatusSummary(
-                        provider_name=resp.provider_name,
-                        status=resp.status,
-                        result_count=len(resp.results),
-                        latency_ms=latency_ms,
-                    )
-                )
-                if resp.status is ProviderStatus.OK:
-                    gathered.extend(resp.results)
-            except TimeoutError:
-                latency_ms = int((time.perf_counter() - start) * 1000)
-                summaries.append(
-                    ProviderStatusSummary(
-                        provider_name=provider.name,
-                        status=ProviderStatus.TIMEOUT,
-                        result_count=0,
-                        latency_ms=latency_ms,
-                    )
-                )
-            except Exception:
-                latency_ms = int((time.perf_counter() - start) * 1000)
-                _log.exception("provider %s raised during search", provider.name)
-                summaries.append(
-                    ProviderStatusSummary(
-                        provider_name=provider.name,
-                        status=ProviderStatus.ERROR,
-                        result_count=0,
-                        latency_ms=latency_ms,
-                    )
-                )
+        for summary, results in per_provider:
+            summaries.append(summary)
+            if summary.status is ProviderStatus.OK:
+                gathered.extend(results)
 
         merged = dedup_and_rank(gathered)
         partial = any(s.status is not ProviderStatus.OK for s in summaries)
@@ -162,3 +135,48 @@ class SearchMusic:
             providers=tuple(summaries),
             partial=partial,
         )
+
+    async def _call_provider(
+        self,
+        provider: SearchProvider,
+        request: SearchMusicInput,
+    ) -> tuple[ProviderStatusSummary, tuple[SearchResult, ...]]:
+        """Call one provider; convert exceptions to status — never raises."""
+        start = time.perf_counter()
+        try:
+            resp = await asyncio.wait_for(
+                provider.search(request.raw_query, request.kinds, request.limit),
+                timeout=self.per_source_timeout_s,
+            )
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            summary = ProviderStatusSummary(
+                provider_name=resp.provider_name,
+                status=resp.status,
+                result_count=len(resp.results),
+                latency_ms=latency_ms,
+            )
+            results = resp.results if resp.status is ProviderStatus.OK else ()
+            return summary, results
+        except TimeoutError:
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            return (
+                ProviderStatusSummary(
+                    provider_name=provider.name,
+                    status=ProviderStatus.TIMEOUT,
+                    result_count=0,
+                    latency_ms=latency_ms,
+                ),
+                (),
+            )
+        except Exception:
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            _log.exception("provider %s raised during search", provider.name)
+            return (
+                ProviderStatusSummary(
+                    provider_name=provider.name,
+                    status=ProviderStatus.ERROR,
+                    result_count=0,
+                    latency_ms=latency_ms,
+                ),
+                (),
+            )

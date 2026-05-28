@@ -97,9 +97,7 @@ async def test_search_music_returns_partial_on_one_provider_timeout() -> None:
     ok = InMemorySearchProvider(name="deezer", canned=(_result(ProviderName.DEEZER),))
     slow = _SlowProvider()
     history = InMemorySearchHistoryRepository()
-    use_case = SearchMusic(
-        providers=[ok, slow], history_repo=history, per_source_timeout_s=0.05
-    )
+    use_case = SearchMusic(providers=[ok, slow], history_repo=history, per_source_timeout_s=0.05)
 
     output = await use_case.execute(
         SearchMusicInput(
@@ -201,3 +199,125 @@ async def test_search_music_returns_200_when_history_insert_raises() -> None:
 
 
 _NOW = datetime(2026, 5, 27, 12, 0, tzinfo=UTC)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_music_calls_providers_in_parallel_not_serially() -> None:
+    # Three providers each delay 0.1s. If serial, total >= 0.3s. If
+    # parallel via asyncio.gather, total ~= 0.1s. We assert < 0.25s with
+    # generous headroom for scheduler jitter.
+    delay = 0.1
+    p_a = InMemorySearchProvider(
+        name="a", canned=(_result(ProviderName.DEEZER, ext_id="a"),), delay_s=delay
+    )
+    p_b = InMemorySearchProvider(
+        name="b", canned=(_result(ProviderName.MUSICBRAINZ, ext_id="b"),), delay_s=delay
+    )
+    p_c = InMemorySearchProvider(
+        name="c", canned=(_result(ProviderName.LASTFM, ext_id="c"),), delay_s=delay
+    )
+    history = InMemorySearchHistoryRepository()
+    use_case = SearchMusic(
+        providers=[p_a, p_b, p_c], history_repo=history, per_source_timeout_s=1.0
+    )
+
+    loop = asyncio.get_event_loop()
+    start = loop.time()
+    output = await use_case.execute(
+        SearchMusicInput(
+            raw_query="parallel",
+            user_id=_USER,
+            kinds=frozenset({ResultKind.TRACK}),
+        )
+    )
+    elapsed = loop.time() - start
+
+    assert elapsed < 0.25, f"providers ran serially (elapsed={elapsed:.3f}s)"
+    assert output.partial is False
+    assert {s.provider_name for s in output.providers} == {"a", "b", "c"}
+
+
+def _distinct_result(
+    provider: ProviderName, title: str, subtitle: str, ext_id: str
+) -> SearchResult:
+    """Result variant with distinct subtitle so dedup doesn't merge across providers."""
+    return SearchResult(
+        kind=ResultKind.TRACK,
+        title=title,
+        subtitle=subtitle,
+        image_url=None,
+        confidence=Confidence.LOW,
+        sources=(SourceRef(provider=provider, external_id=ext_id, url=f"https://x/{ext_id}"),),
+        extras={},
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_music_one_failure_does_not_cancel_sibling_providers() -> None:
+    # If one provider raises mid-flight, the others must still complete
+    # and contribute results (TaskGroup-style cancellation would cancel
+    # siblings; asyncio.gather with per-task try/except does not).
+    ok_a = InMemorySearchProvider(
+        name="a",
+        canned=(_distinct_result(ProviderName.DEEZER, "Apple Pie", "Mom's Kitchen", "a"),),
+    )
+    broken = InMemorySearchProvider(name="broken", raises=RuntimeError("boom"))
+    ok_c = InMemorySearchProvider(
+        name="c",
+        canned=(_distinct_result(ProviderName.LASTFM, "Cherry Bombs", "Some DJ", "c"),),
+    )
+    history = InMemorySearchHistoryRepository()
+    use_case = SearchMusic(
+        providers=[ok_a, broken, ok_c], history_repo=history, per_source_timeout_s=1.0
+    )
+
+    output = await use_case.execute(
+        SearchMusicInput(
+            raw_query="q",
+            user_id=_USER,
+            kinds=frozenset({ResultKind.TRACK}),
+        )
+    )
+
+    statuses = {s.provider_name: s.status for s in output.providers}
+    assert statuses["a"] is ProviderStatus.OK
+    assert statuses["broken"] is ProviderStatus.ERROR
+    assert statuses["c"] is ProviderStatus.OK
+    titles = {r.title for r in output.results}
+    assert titles == {"Apple Pie", "Cherry Bombs"}
+    assert output.partial is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_music_passes_through_rate_limited_status_from_adapter() -> None:
+    # Adapter returned RATE_LIMITED (e.g. 429); the use case must preserve
+    # the distinct status (not collapse it into ERROR).
+    rate_limited = InMemorySearchProvider(name="deezer", status=ProviderStatus.RATE_LIMITED)
+    history = InMemorySearchHistoryRepository()
+    use_case = SearchMusic(providers=[rate_limited], history_repo=history)
+
+    output = await use_case.execute(
+        SearchMusicInput(raw_query="q", user_id=_USER, kinds=frozenset({ResultKind.TRACK}))
+    )
+    assert output.providers[0].status is ProviderStatus.RATE_LIMITED
+    assert output.providers[0].result_count == 0
+    assert output.partial is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_music_passes_through_error_status_from_adapter() -> None:
+    # Adapter returned ERROR (e.g. 5xx); the use case must preserve it as
+    # ERROR (distinct from a raised exception, though both map to ERROR).
+    error_provider = InMemorySearchProvider(name="deezer", status=ProviderStatus.ERROR)
+    history = InMemorySearchHistoryRepository()
+    use_case = SearchMusic(providers=[error_provider], history_repo=history)
+
+    output = await use_case.execute(
+        SearchMusicInput(raw_query="q", user_id=_USER, kinds=frozenset({ResultKind.TRACK}))
+    )
+    assert output.providers[0].status is ProviderStatus.ERROR
+    assert output.partial is True
