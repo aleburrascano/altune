@@ -28,6 +28,7 @@ If no relevant vault note: `"vault returned no matches for <topic>"` — proceed
    - What user problem does this solve? (1 sentence)
    - What's explicitly *out* of scope?
    - What existing feature/bounded context does this touch or sit next to?
+   Then state the **minimal tier**: the smallest end-to-end version that delivers the value, and list what infra/resilience/scale is deferred to post-launch. Default solo/pre-launch features to minimal — heavy infra needs a one-line "needed now because …" or it's deferred.
 2. **Decide folder name**. Kebab-case, ≤25 chars, matches a bounded context or sits cleanly under one. Confirm with user.
 3. **Create directory** `docs/specs/<feat>/` and copy `docs/specs/_template/spec.md` → `docs/specs/<feat>/spec.md`.
 4. **Fill the spec** from the template — see `resources/template-fields.md` for guidance on each section.
@@ -39,6 +40,7 @@ If no relevant vault note: `"vault returned no matches for <topic>"` — proceed
 
 - **Problem** — the user pain in 2–4 sentences. No solutions yet.
 - **User value** — what changes for the user when this ships.
+- **Scope tier / MVP cut** — the minimal shippable version; what infra is deferred to post-launch. Solo/pre-launch defaults to minimal. ACs cover the minimal tier only.
 - **Acceptance criteria** — testable, numbered. Each one is a future test name.
 - **Out of scope** — explicit non-goals.
 - **Design considerations** — vault references + relevant patterns; high-level approach (e.g., "this is a CQRS read path; writes already exist in catalog context").
@@ -51,6 +53,7 @@ If no relevant vault note: `"vault returned no matches for <topic>"` — proceed
 - Specs that describe implementation ("we'll use SQLAlchemy with a join…"). The spec is *what + why*, not *how*. How lives in the plan.
 - Specs without testable acceptance criteria ("works well", "is fast"). Quantify or omit.
 - Multi-thousand-word specs. Decompose into multiple features.
+- **Enterprise infra before launch.** Caching, multi-provider scatter-gather, dedup engines, circuit breakers, rate limiting, telemetry alerts in a pre-launch solo app. Default these to the "Deferred to post-launch" tier unless there's a concrete "needed now because …". Shipping user value to measure beats de-risking scale that may never arrive.
 - Speccing during a session also dedicated to implementation. Specs are stage 1; if you're spec'ing, you're spec'ing — implementation is a separate session.
 
 ## Resources

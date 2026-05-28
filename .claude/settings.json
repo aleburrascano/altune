@@ -79,5 +79,10 @@
     ]
   },
   "agentStatusLine": false,
-  "autoMemoryEnabled": true
+  "autoMemoryEnabled": true,
+  "env": {
+    "CLAUDE_SKIP_TYPECHECK_CHANGED": "1",
+    "CLAUDE_SKIP_TEST_CHANGED": "1",
+    "CLAUDE_SKIP_LANGCHECK": "1"
+  }
 }

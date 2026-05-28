@@ -12,6 +12,16 @@
 
 <What changes for the user when this ships? Concrete, observable.>
 
+## Scope tier / MVP cut
+
+Right-size to the project stage. **Default for this solo, pre-launch app: the minimal tier** — the smallest end-to-end version that delivers the User value above. Infra/resilience/scale patterns (caching, multi-provider scatter-gather, dedup engines, circuit breakers, rate limiting, background jobs, telemetry alerts) are **deferred to post-launch by default**; pull one into this spec only with a concrete "needed now because …".
+
+- **Minimal (ship this):** <smallest slice a user can actually use, end-to-end>
+- **Deferred to post-launch:** <infra / resilience / scale concerns explicitly NOT in this spec>
+- **Justified exceptions:** <any deferred item pulled back into scope — each with "needed now because …", or "none">
+
+The Acceptance criteria below cover the **minimal tier only**.
+
 ## Acceptance criteria
 
 Each one is testable. Each one will become at least one automated test.

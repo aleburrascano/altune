@@ -10,6 +10,7 @@ The disciplined loop for adding a feature. Each step has a backing skill that au
 4. Per slice (loop):
    /tdd-red-green-refactor   → failing test → minimum impl → green → refactor
 5. /verify-end-to-end        → typecheck · lint · unit · integration · slice-affecting e2e
+   ↳ /run                    → launch the app, confirm the slice renders/runs (catches crashes/blank screens TDD misses)
 6. /code-review-6-aspect     → 6 parallel subagents on the diff
 7. (resolve findings; back to step 5 if needed)
 8. /update-nested-claude-md  → every touched feature / context dir has a fresh CLAUDE.md (Stop-hook enforced)
@@ -32,7 +33,9 @@ The skill **queries the software-architecture-design vault MCP first** to surfac
 
 After draft: `spec-reviewer` subagent runs the clarify-gate. Resolve blocking findings before proceeding.
 
-Spec includes: Problem · User value · Acceptance criteria · Out of scope · Design considerations · Dependencies · Risks · Telemetry.
+Spec includes: Problem · User value · **Scope tier (MVP cut)** · Acceptance criteria · Out of scope · Design considerations · Dependencies · Risks · Telemetry.
+
+The **Scope tier** forces a right-sizing decision: for this solo, pre-launch app, default to the *minimal* version that delivers user value and defer infra (caching, multi-provider, dedup, circuit breakers, telemetry alerts) to post-launch unless there's a concrete "needed now because …". This is the single biggest lever on total feature time — it keeps a feature from ballooning into a multi-week build before the app has users.
 
 ### 2. /feature-plan <name>
 
@@ -41,6 +44,8 @@ Reads the spec. Decomposes into **vertical slices**, 2–5 minutes each, with fi
 The skill **queries the vault** for relevant patterns; lifts anti-patterns into the plan's Risks section.
 
 `plan-reviewer` subagent grades slice quality. Resolve blocking findings.
+
+**Lighter lane:** for a *small* feature (minimal tier, <~10 acceptance criteria, no new bounded context or external dependency), skip the `plan-reviewer` gate — decompose into slices inline and go straight to TDD. Reserve the full plan-reviewer roundtrip for genuinely complex features (multi-context, new dependency, >~10 ACs).
 
 ### 3. EnterPlanMode
 
@@ -61,6 +66,12 @@ The `pre-tool-tdd-guard` hook blocks writes to production code in `src/` if no c
 Runs the layered verification stack: typecheck → lint → unit → integration → e2e (scoped to affected slice). Reports actual output per phase. Never claims "passed" without showing output.
 
 If anything fails, fix and re-run. Do not proceed.
+
+### 5.5 /run (launch the app)
+
+Tests being green is **not** the same as the app working. TDD verifies units and integration in isolation; it does not catch wiring, imports, runtime, or render errors — exactly the "didn't run / blank screen" failures that otherwise only surface when you open the app manually.
+
+Before declaring the slice/feature done, run `/run` to launch the app and confirm the slice actually renders and behaves. One command — not a new review pass. If it crashes or shows nothing, fix before code review.
 
 ### 6. /code-review-6-aspect
 
