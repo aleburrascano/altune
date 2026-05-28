@@ -30,6 +30,10 @@ dependency consumes the JWT this feature obtains via Supabase.
 - **Error UI** uses `testID="auth-error"` per AC#3. The exact wording is
   intentionally NOT asserted in tests — see the user-enumeration Risk in
   the spec.
+- **UI consumes the design system** (`@shared/ui`, ADR-0008): screens are
+  dark, built from `Screen` / `Text` / `Button` / `Wordmark`. They import
+  primitives **directly** (`@shared/ui/primitives/Button`), not the barrel,
+  so the rendered component tests don't transitively load `expo-image`.
 
 ## SSR caveat
 

@@ -1,5 +1,9 @@
 import { Redirect, useSegments } from 'expo-router';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+
+import { Text } from '@shared/ui/primitives/Text';
+import { Wordmark } from '@shared/ui/primitives/Wordmark';
+import { spacing, useTheme } from '@shared/ui/theme';
 
 import { useSession } from '../hooks/useSession';
 
@@ -16,19 +20,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const inAuthGroup = segments[0] === '(auth)';
 
   if (session.status === 'loading') {
-    return (
-      <View
-        testID="auth-splash"
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#fff',
-        }}
-      >
-        <Text style={{ color: '#111' }}>Loading…</Text>
-      </View>
-    );
+    return <AuthSplash />;
   }
 
   if (session.status === 'signed-out' && !inAuthGroup) {
@@ -40,4 +32,25 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>;
+}
+
+function AuthSplash() {
+  const theme = useTheme();
+  return (
+    <View
+      testID="auth-splash"
+      style={{
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.md,
+        backgroundColor: theme.color.canvas,
+      }}
+    >
+      <Wordmark size={44} />
+      <Text variant="label" tone="tertiary">
+        Loading…
+      </Text>
+    </View>
+  );
 }
