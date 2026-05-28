@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, Self
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, RedisDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 Env = Literal["development", "test", "production"]
@@ -83,6 +83,50 @@ class Settings(BaseSettings):
         "https://<ref>.supabase.co/auth/v1/.well-known/jwks.json. "
         "Mutually exclusive with supabase_jwt_secret.",
     )
+
+    # Discovery — per ADR-0007 (discover-music-v1). Provider credentials +
+    # cache infra. SoundCloud is via yt-dlp (no env vars) per the ADR's
+    # 2026-05-27 strategy revision (Artist Pro requirement blocked the
+    # official Developer API path).
+    #
+    # All fields are Optional with None default — matches the database_url
+    # and supabase_* precedent. Unit tests can construct Settings without
+    # provisioning the discovery stack; consumers (cache adapter, provider
+    # adapters) fail fast at startup if their required setting is None.
+    redis_url: RedisDsn | None = Field(
+        default=None,
+        description="Redis URL for the discovery query cache. "
+        "Example: redis://localhost:6379/0. Per ADR-0007.",
+    )
+    musicbrainz_user_agent: str | None = Field(
+        default=None,
+        description="MusicBrainz API User-Agent header. When set, MUST include a contact "
+        "form URL or email per https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting. "
+        "Example: 'altune/0.1 ( mailto:dev@altune.test )'.",
+    )
+    lastfm_api_key: SecretStr | None = Field(
+        default=None,
+        description="Last.fm API key for the discovery adapter. Obtain via "
+        "https://www.last.fm/api/account/create.",
+    )
+
+    @field_validator("musicbrainz_user_agent")
+    @classmethod
+    def _validate_musicbrainz_user_agent_has_contact(cls, value: str | None) -> str | None:
+        # AIDEV-NOTE: MB throttles to 1 req/s for User-Agents without contact
+        # info; ~50 req/s for registered ones. The contact form OR email is
+        # the only path to the higher rate budget; failing fast here keeps
+        # the rate-limit-pressure-in-production failure mode visible at startup.
+        # Validator skipped when value is None (consumer validates presence).
+        if value is None:
+            return value
+        if "@" not in value and "http" not in value.lower():
+            raise ValueError(
+                "MUSICBRAINZ_USER_AGENT must contain a contact form URL or email "
+                "(e.g. 'altune/0.1 ( mailto:dev@altune.test )') — per MB's "
+                "rate-limit policy."
+            )
+        return value
 
     @model_validator(mode="after")
     def _validate_supabase_jwt_mode_xor(self) -> Self:
