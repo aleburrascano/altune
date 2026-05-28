@@ -41,12 +41,13 @@ When `/feature-spec` or domain modeling introduces a new term:
 - **SearchClick** — per-user persisted click on a discovery result, aggregate root of the click-tracking surface. Identity is a `SearchClickId` (UUID). Carries `(user_id, query_norm, result_signature, position, confidence, clicked_at)`. Position is non-negative. Sliding-window dedup is a repository concern (slice 40). Defined in `services/api/src/altune/domain/discovery/search_click.py`. Introduced by spec `docs/specs/discover-music-v1/spec.md`.
 - **SearchPerformed** / **ResultClicked** — discovery domain events (past-tense, immutable, carry `occurred_at`). Emitted to logs v1; future analytics persistence specs may consume them. Defined in `services/api/src/altune/domain/discovery/events.py`. Introduced by spec `docs/specs/discover-music-v1/spec.md`.
 
+- **Artist** — a creator of tracks, surfaced in the discovery context as a `SearchResult` with `kind = ResultKind.ARTIST` carrying name in `title`, optional disambiguator in `extras` (year/MBID). Promoted from Future to Canonical by `discover-music-v1`. A future spec may extract `Artist` into its own value object once a write-side library surface (subscribe-to-artist, etc.) needs identity beyond `(provider, external_id)`.
+- **Album** — a grouping of tracks released together by an artist, surfaced as a `SearchResult` with `kind = ResultKind.ALBUM` carrying title + artist subtitle + year in `extras`. Promoted from Future to Canonical by `discover-music-v1`. Becomes its own type when a future spec needs distinct identity (e.g., track-album navigation).
+- **Playlist** — an ordered, named sequence of tracks, surfaced as a `SearchResult` with `kind = ResultKind.PLAYLIST` carrying curator name as subtitle. Promoted from Future to Canonical by `discover-music-v1`. The legacy-`music-manager` notion of "user playlist within their own library" remains future scope; v1 only surfaces playlists discoverable on external providers.
+
 ### Future (illustrative — to be added when the spec that introduces them ships)
 
-- **Artist** — a creator of tracks. Identified by name + optional disambiguator (year, MBID).
-- **Album** — a grouping of tracks released together by an artist.
 - **Library** — a user's personal collection. Each user has exactly one library. The library references tracks from the catalog; it does not own them.
-- **Playlist** — an ordered, named subsequence of tracks within a user's library. User-curated. Not the same as a Queue.
 - **Queue** — the runtime playback sequence. Ephemeral by default; persisted only when saved as a Playlist.
 - **Play** — the event of a track being listened to (registered at threshold, e.g., 30s or 50% of duration).
 - **Favorite** — a user-applied boolean marker on a track within their library.
