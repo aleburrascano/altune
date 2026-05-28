@@ -1,23 +1,29 @@
 /**
- * Single track row in the library list.
+ * Single track row in the library list (ADR-0008 restyle).
  *
- * Title (primary) + artist (secondary), per the spec's AC#1. Album, duration,
- * and album art are deliberately absent in v1 — they earn their place in
- * future feature specs.
+ * Title (primary) + artist (secondary), per spec AC#1. testID
+ * `library-row-<track-id>` preserved. Album, duration, and album art are
+ * deliberately absent in v1 — they earn their place in future specs.
  */
 
 import type { ReactElement } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+
+import { Text, spacing, useTheme } from '@shared/ui';
 
 import type { TrackResponse } from '../../../shared/api-client/types';
 
 export function LibraryRow({ track }: { track: TrackResponse }): ReactElement {
+  const theme = useTheme();
   return (
-    <View style={styles.row} testID={`library-row-${track.id}`}>
-      <Text style={styles.title} numberOfLines={1}>
+    <View
+      testID={`library-row-${track.id}`}
+      style={[styles.row, { borderBottomColor: theme.color.border }]}
+    >
+      <Text variant="bodyStrong" numberOfLines={1}>
         {track.title}
       </Text>
-      <Text style={styles.artist} numberOfLines={1}>
+      <Text variant="label" tone="secondary" numberOfLines={1} style={styles.artist}>
         {track.artist}
       </Text>
     </View>
@@ -26,19 +32,8 @@ export function LibraryRow({ track }: { track: TrackResponse }): ReactElement {
 
 const styles = StyleSheet.create({
   row: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#222',
   },
-  title: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  artist: {
-    color: '#888',
-    fontSize: 13,
-  },
+  artist: { marginTop: 2 },
 });
