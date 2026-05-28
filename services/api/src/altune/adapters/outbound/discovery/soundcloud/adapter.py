@@ -92,8 +92,6 @@ class SoundCloudSearchAdapter:
         except Exception:
             _log.exception("soundcloud lookup_by_url failed")
             return None
-        if not isinstance(info, dict):
-            return None
         # If yt-dlp returns a playlist-shape dict for a single URL, pick the first entry.
         if "entries" in info:
             entries = info.get("entries") or []
