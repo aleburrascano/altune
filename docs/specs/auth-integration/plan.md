@@ -1,7 +1,7 @@
 # auth-integration — implementation plan
 
 Spec: [docs/specs/auth-integration/spec.md](spec.md)
-Status: Ready (plan-reviewer pass 2 approved 2026-05-27 — approve-as-is). Awaiting user sign-off via EnterPlanMode before TDD begins.
+Status: Shipped 2026-05-28. All 20 slices landed (Slice 14b folded into 14a's cache-clear assertion). ADR-0006 supersedes ADR-0004. /verify-end-to-end ceremony green. See git log between d23247c and HEAD for the per-slice trail.
 
 ## Slices
 
