@@ -1,13 +1,10 @@
-# mypy: warn_unused_ignores = False, disable_error_code = "no-any-return,untyped-decorator,type-arg,import-not-found"
+# mypy: warn_unused_ignores = False, disable_error_code = "no-any-return,untyped-decorator,type-arg,import-not-found,call-arg"
 """Slice 47 — full e2e happy-path for GET /v1/discovery/search.
 
-Spins up an in-process FastAPI app with respx-mocked providers + a
-real testcontainers Postgres for the history table. Verifies the merged
-response shape end-to-end, the partial-failure matrix per AC#5/5a/5b,
-and that history rows are persisted across the round-trip.
-
-Skipped automatically when Docker is unavailable (testcontainers raises
-DockerException at fixture setup).
+Spins testcontainers Postgres, runs alembic, constructs the FastAPI
+app with respx-mocked providers, and drives the route via sync
+TestClient (which runs the lifespan). Auth is bypassed via
+dependency_overrides per the pattern in test_tracks_route.py.
 """
 
 from __future__ import annotations
@@ -16,48 +13,56 @@ import json
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
-from uuid import uuid4
+from uuid import UUID
 
 import httpx
 import pytest
 import respx
+from fastapi.testclient import TestClient
 from testcontainers.postgres import PostgresContainer
 
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Iterator
+from altune.domain.shared.user_id import UserId
+from altune.platform.app import create_app
+from altune.platform.auth import current_user_id
+from altune.platform.config import Settings
 
-    from fastapi import FastAPI
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 _FIXTURES = Path(__file__).resolve().parents[3] / "integration" / "fixtures" / "discovery"
+_USER = UserId(UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
 
 
 @pytest.fixture(scope="module")
-def postgres_url() -> Iterator[str]:
+def upgraded_postgres_url() -> Iterator[str]:
+    """Spin Postgres + run alembic head (sync). Skip when Docker is down."""
     try:
-        with PostgresContainer("postgres:16-alpine") as container:
-            raw = container.get_connection_url()
-            yield raw.replace("+psycopg2", "+asyncpg").replace("+psycopg", "+asyncpg")
+        container = PostgresContainer("postgres:16-alpine")
+        container.start()
     except Exception as exc:
         pytest.skip(f"Docker unavailable: {exc}")
+    try:
+        raw = container.get_connection_url()
+        asyncpg_url = raw.replace("+psycopg2", "+asyncpg").replace(
+            "+psycopg", "+asyncpg"
+        )
+        from alembic import command
+        from alembic.config import Config
 
-
-@pytest.fixture
-async def app(postgres_url: str) -> AsyncIterator[FastAPI]:
-    # Override DATABASE_URL + run alembic so the schema exists.
-    os.environ["DATABASE_URL"] = postgres_url
-    from alembic import command
-    from alembic.config import Config
-
-    cfg = Config(str(Path(__file__).resolve().parents[4] / "alembic.ini"))
-    cfg.set_main_option("sqlalchemy.url", postgres_url)
-    command.upgrade(cfg, "head")
-
-    from altune.platform.app import create_app
-    from altune.platform.config import Settings
-
-    settings = Settings(_env_file=None)  # type: ignore[call-arg]
-    app = create_app(settings)
-    yield app
+        prior = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = asyncpg_url
+        try:
+            cfg = Config(str(Path(__file__).resolve().parents[4] / "alembic.ini"))
+            cfg.set_main_option("sqlalchemy.url", asyncpg_url)
+            command.upgrade(cfg, "head")
+            yield asyncpg_url
+        finally:
+            if prior is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = prior
+    finally:
+        container.stop()
 
 
 @pytest.fixture
@@ -65,41 +70,93 @@ def deezer_payload() -> dict:
     return json.loads((_FIXTURES / "deezer" / "track_search.json").read_text(encoding="utf-8"))
 
 
+def _client_for(url: str) -> TestClient:
+    settings = Settings(
+        _env_file=None,
+        database_url=url,
+        env="test",
+        supabase_project_url="https://fixture.supabase.co",
+        supabase_jwt_jwks_url="https://fixture.supabase.co/auth/v1/keys",
+    )
+    app = create_app(settings=settings)
+    app.dependency_overrides[current_user_id] = lambda: _USER
+    return TestClient(app)
+
+
 @pytest.mark.e2e
-@pytest.mark.asyncio
-@respx.mock
-async def test_search_round_trip_returns_merged_response(
-    app: FastAPI,
+def test_search_round_trip_returns_merged_shape(
+    upgraded_postgres_url: str,
     deezer_payload: dict,
 ) -> None:
-    # Mock Deezer; MB / Last.fm / SC will return errors (skipped or empty).
-    respx.get("https://api.deezer.com/search/track").mock(
-        return_value=httpx.Response(200, json=deezer_payload)
-    )
-    respx.get("https://musicbrainz.org/ws/2/recording").mock(
-        return_value=httpx.Response(200, json={"recordings": []})
-    )
-    respx.get("https://ws.audioscrobbler.com/2.0/").mock(
-        return_value=httpx.Response(403, text="no api key configured")
-    )
-
-    # Build a fresh JWT for the request — tests in this repo use the same
-    # SUPABASE_JWT_JWKS_URL fixture from conftest. We bypass auth by setting
-    # a hardcoded user. Test endpoint covers shape; auth happy-path is
-    # covered in tests/e2e/test_tracks_isolation_post_auth.py.
-    user_id = uuid4()
-    headers = {"Authorization": f"Bearer test-{user_id}"}
-
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get(
-            "/v1/discovery/search",
-            params={"q": "the beatles", "limit": "5"},
-            headers=headers,
+    with respx.mock(assert_all_called=False) as router:
+        router.get("https://api.deezer.com/search/track").mock(
+            return_value=httpx.Response(200, json=deezer_payload)
+        )
+        router.get("https://musicbrainz.org/ws/2/recording").mock(
+            return_value=httpx.Response(200, json={"recordings": []})
+        )
+        router.get("https://ws.audioscrobbler.com/2.0/").mock(
+            return_value=httpx.Response(403, text="no api key configured")
         )
 
-    # Without a real JWT we get 401; this test demonstrates the route is
-    # registered + reachable. A full auth flow lives in the auth-integration
-    # e2e tests; this slice verifies the merged-response shape via unit
-    # tests instead.
-    assert response.status_code in {200, 401}
+        with _client_for(upgraded_postgres_url) as client:
+            response = client.get(
+                "/v1/discovery/search",
+                params={"q": "the beatles", "limit": "5"},
+            )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["query"] == "the beatles"
+    assert payload["query_norm"] == "beatles"
+    # Deezer returned 5 results; cap to limit=5 after dedup.
+    assert len(payload["results"]) > 0
+    # Providers tuple must surface per-provider statuses.
+    provider_names = {p["provider"] for p in payload["providers"]}
+    assert "deezer" in provider_names
+    # AC#5: partial=True when any provider is not ok.
+    if any(p["status"] != "ok" for p in payload["providers"]):
+        assert payload["partial"] is True
+
+
+@pytest.mark.e2e
+def test_search_history_endpoint_returns_persisted_query(
+    upgraded_postgres_url: str,
+    deezer_payload: dict,
+) -> None:
+    with respx.mock(assert_all_called=False) as router:
+        router.get("https://api.deezer.com/search/track").mock(
+            return_value=httpx.Response(200, json=deezer_payload)
+        )
+        router.get("https://musicbrainz.org/ws/2/recording").mock(
+            return_value=httpx.Response(200, json={"recordings": []})
+        )
+        router.get("https://ws.audioscrobbler.com/2.0/").mock(
+            return_value=httpx.Response(403, text="")
+        )
+
+        with _client_for(upgraded_postgres_url) as client:
+            client.get("/v1/discovery/search", params={"q": "stones", "limit": "5"})
+            history = client.get("/v1/discovery/search-history")
+
+    assert history.status_code == 200
+    payload = history.json()
+    assert payload["total"] >= 1
+    queries = {item["query"] for item in payload["items"]}
+    assert "stones" in queries
+
+
+@pytest.mark.e2e
+def test_search_returns_422_for_empty_q(upgraded_postgres_url: str) -> None:
+    with _client_for(upgraded_postgres_url) as client:
+        response = client.get("/v1/discovery/search", params={"q": ""})
+    assert response.status_code == 422
+
+
+@pytest.mark.e2e
+def test_search_returns_422_for_limit_above_50(upgraded_postgres_url: str) -> None:
+    with _client_for(upgraded_postgres_url) as client:
+        response = client.get(
+            "/v1/discovery/search", params={"q": "beatles", "limit": "100"}
+        )
+    assert response.status_code == 422
