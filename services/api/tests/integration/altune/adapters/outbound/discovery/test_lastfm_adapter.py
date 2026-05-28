@@ -16,11 +16,7 @@ from altune.domain.discovery.provider_status import ProviderStatus
 from altune.domain.discovery.result_kind import ResultKind
 
 _FIXTURE = (
-    Path(__file__).resolve().parents[4]
-    / "fixtures"
-    / "discovery"
-    / "lastfm"
-    / "track_search.json"
+    Path(__file__).resolve().parents[4] / "fixtures" / "discovery" / "lastfm" / "track_search.json"
 )
 
 _API_KEY = "fixture-api-key"
@@ -42,9 +38,7 @@ async def test_lastfm_adapter_translates_track_search(
     )
     async with httpx.AsyncClient() as client:
         adapter = LastFmSearchAdapter(client=client, api_key=_API_KEY)
-        resp = await adapter.search(
-            "let it be", frozenset({ResultKind.TRACK}), limit=5
-        )
+        resp = await adapter.search("let it be", frozenset({ResultKind.TRACK}), limit=5)
     assert route.called
     request_url = str(route.calls.last.request.url)
     assert "api_key=fixture-api-key" in request_url
@@ -150,8 +144,6 @@ async def test_lastfm_adapter_maps_500_to_error() -> None:
 async def test_lastfm_adapter_returns_empty_for_non_track_kinds() -> None:
     async with httpx.AsyncClient() as client:
         adapter = LastFmSearchAdapter(client=client, api_key=_API_KEY)
-        resp = await adapter.search(
-            "q", frozenset({ResultKind.ARTIST}), limit=5
-        )
+        resp = await adapter.search("q", frozenset({ResultKind.ARTIST}), limit=5)
     assert resp.status is ProviderStatus.OK
     assert resp.results == ()

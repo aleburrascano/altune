@@ -135,8 +135,7 @@ def _translate_one_track(entry: dict[str, Any]) -> SearchResult | None:
     url = entry.get("url")
     if not title or not artist_name or not url:
         _log.warning(
-            "provider_response_malformed provider=lastfm kind=track "
-            "missing=name|artist|url"
+            "provider_response_malformed provider=lastfm kind=track missing=name|artist|url"
         )
         return None
     image_url = _largest_image(entry.get("image"))
