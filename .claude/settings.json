@@ -72,7 +72,8 @@
         "hooks": [
           { "type": "command", "command": "bash .claude/hooks/stop-self-review.sh" },
           { "type": "command", "command": "bash .claude/hooks/stop-terminology-drift.sh" },
-          { "type": "command", "command": "bash .claude/hooks/stop-compound-learning-prompt.sh" }
+          { "type": "command", "command": "bash .claude/hooks/stop-compound-learning-prompt.sh" },
+          { "type": "command", "command": "bash .claude/hooks/stop-claude-md-hygiene.sh" }
         ]
       }
     ]

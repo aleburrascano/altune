@@ -12,9 +12,10 @@ The disciplined loop for adding a feature. Each step has a backing skill that au
 5. /verify-end-to-end        → typecheck · lint · unit · integration · slice-affecting e2e
 6. /code-review-6-aspect     → 6 parallel subagents on the diff
 7. (resolve findings; back to step 5 if needed)
-8. /adr-write                → if architectural decisions emerged
-9. /compound-learning        → if patterns / mistakes worth capturing
-10. /git-commit              → Conventional Commits, no AI co-author
+8. /update-nested-claude-md  → every touched feature / context dir has a fresh CLAUDE.md (Stop-hook enforced)
+9. /adr-write                → if architectural decisions emerged
+10. /compound-learning       → if patterns / mistakes worth capturing
+11. /git-commit              → Conventional Commits, no AI co-author
 ```
 
 ## Step-by-step
@@ -69,15 +70,23 @@ If 🚨 Block items exist: address them, re-run from step 5.
 
 ### 7. Iterate steps 5–6 until clean.
 
-### 8. /adr-write (if applicable)
+### 8. /update-nested-claude-md (auto-enforced)
+
+Every feature/context dir the work touched must have a present and fresh `CLAUDE.md` before the session can end. The `stop-claude-md-hygiene` Stop hook gates this — it blocks Stop with `decision: block` whenever a touched dir is missing a `CLAUDE.md` or has one older than the dir's source files.
+
+When the hook fires, run `/update-nested-claude-md <dir>` for each flagged path (mobile feature → AUTO-MAINTAINED block regen; backend bounded-context → hand-written sections from classes / Protocols / `# AIDEV-*` anchors), commit (`docs(claude-md): ...`), then end the session again.
+
+Override only when justified: add `[ALLOW-CLAUDE-MD-DRIFT: <reason>]` to the most recent commit body. The override is logged to `.claude/claude-md-drift.log`.
+
+### 9. /adr-write (if applicable)
 
 If the feature involved architectural decisions (new pattern, library, layer boundary change), draft an ADR. User reviews, approves, commits.
 
-### 9. /compound-learning (if applicable)
+### 10. /compound-learning (if applicable)
 
 If something surprised you that future-you would also hit, capture it in `docs/solutions/`. Routine work doesn't need an entry — skip silently.
 
-### 10. /git-commit (or commit per slice)
+### 11. /git-commit (or commit per slice)
 
 Conventional Commits with proper scope. The `.husky/commit-msg` hook strips AI attribution; commitlint validates format.
 
@@ -88,7 +97,8 @@ If commits piled up during the feature (one per slice), there's nothing to do he
 After commits:
 - `post-tool-commit-doc-drift` hook checks if changed code touched expected docs (spec for changed feature, glossary for new domain terms). Warns; never blocks. Override via `[ALLOW-DRIFT: <reason>]` in commit body.
 - `stop-terminology-drift` hook scans changed domain files for new class names not in `docs/ubiquitous-language.md`.
-- `/update-nested-claude-md` skill regenerates feature `CLAUDE.md` auto-maintained block after every 3rd commit affecting that folder. Auto-commits.
+- `stop-claude-md-hygiene` hook **blocks Stop** (hard gate, not a warning) if any touched feature or backend bounded-context dir is missing `CLAUDE.md` or has one older than its source files. Override via `[ALLOW-CLAUDE-MD-DRIFT: <reason>]` in commit body; logged to `.claude/claude-md-drift.log`.
+- `/update-nested-claude-md` skill regenerates feature `CLAUDE.md` auto-maintained block (mobile) or refreshes hand-written backend bounded-context CLAUDE.md. Fires automatically from the hook above when missing/stale; legacy trigger of "every 3rd commit affecting a feature folder" still active as a mid-feature refresh signal. Auto-commits.
 
 ## When the loop is overkill
 
