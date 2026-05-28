@@ -98,7 +98,7 @@ Explicit non-goals. Each is a future spec when its time comes.
 - **Spotify, Apple Music, YouTube Data API, Bandcamp, Discogs as sources.** All out per ADR-0007 alternatives table.
 - **NSFW / explicit-content filtering.** v1 passes through provider responses; future spec if user reports demand it.
 - **Saved searches.** Search history is persisted (last 50, show 10); "pin this search as a saved one" is a future spec.
-- **User-OAuth flows on mobile** for SoundCloud or Last.fm. v1 uses server-side client-credentials (SC) / API-key (Last.fm) — no per-user redirect.
+- **User-OAuth flows on mobile** for SoundCloud or Last.fm. SoundCloud doesn't even need server-side auth per ADR-0007's strategy revision (yt-dlp scsearch); Last.fm uses an API key. No per-user redirect either way.
 - **Mobile UX surface choice** (tab vs modal vs persistent search bar) — chosen during the spec's plan / by `ux-reviewer`, not gated by this spec. AC#20 is testID-driven and surface-agnostic.
 
 ## Design considerations
@@ -225,7 +225,7 @@ What this feature requires that must already exist or be built first:
 - **External services**:
   - Deezer public API (no auth)
   - MusicBrainz API (User-Agent registration + contact email required)
-  - SoundCloud Developer API (app registration → `client_id` + `client_secret`, client-credentials OAuth flow)
+  - SoundCloud public web surface via **yt-dlp** `scsearch:` extraction — no API key, no Artist Pro account required (per ADR-0007's strategy revision; matches the legacy `music-manager` approach). Tracks only.
   - Last.fm API (account registration → `LASTFM_API_KEY`)
   - Redis (Upstash free-tier likely for prod)
   - Postgres (already used by `view-library`)
@@ -240,7 +240,8 @@ What this feature requires that must already exist or be built first:
 
 ## Risks / open questions
 
-- **Risk: SoundCloud OAuth client-credentials gotcha.** SoundCloud's developer-app registration was historically intermittently closed; if registration takes longer than expected to obtain credentials, slice work that depends on the SC adapter is blocked. Mitigation: the pre-spec checklist explicitly captures app registration as Step 1; the SC adapter can be slice-deferred if needed without affecting the other 3 providers in scatter-gather (the 4-source design tolerates one missing source).
+- **Risk: SoundCloud via yt-dlp ToS posture + brittleness.** yt-dlp extracts SoundCloud's public web pages without an API contract; SoundCloud could change their HTML at any time and break the adapter. Mitigation: per-source circuit breaker (AC#6) keeps yt-dlp failures from cascading; the legacy `music-manager` shipped with this exact approach for >18 months without incident; if/when SoundCloud blocks scraping or the user obtains an Artist Pro account, the adapter is one file to swap (the `SearchProvider` port stays identical).
+- **Risk: yt-dlp tracks-only narrows v1 playlist coverage to Deezer-only.** SoundCloud's `scset:` / `scuser:` extractors are not in v1 scope. The result-type matrix retains all 4 kinds (artist + album + track + playlist) — but playlists have one provider (Deezer) instead of two. Mitigation: explicit note in the result-type matrix.
 - **Risk: MusicBrainz rate limiting cuts in.** Default rate is 1 req/s per IP; a registered User-Agent unlocks ~50 req/s (per [VERIFIED:WebSearch] "for user-agents associated with certain applications, MusicBrainz allows through (on average) 50 requests per second"). Mitigation: the `MUSICBRAINZ_USER_AGENT` setting carries the registered string + contact email; tested in adapter integration tests via header inspection.
 - **Risk: scatter-gather budget too tight at p95.** 1500ms per-source / 2000ms total assumes parallel execution; if a single provider's tail-latency dominates, p95 of total latency degrades. Mitigation: telemetry from AC#5's `latency_ms` per-provider lets us tune the budget; v1 ships with 1500/2000 and we adjust in a no-spec config change if telemetry calls for it.
 - **Risk: Redis outage blocks search.** Locked design says cache-miss-falls-through-to-live-provider, so Redis-down means uncached search (slower, rate-limit-pressured), not failed search. Mitigation: the `QueryCache` adapter's read-path treats Redis errors as cache-miss and logs `cache_unavailable`; verified by an integration test that kills the testcontainers Redis mid-test.

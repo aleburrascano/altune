@@ -72,7 +72,7 @@ Candidates considered + verdict:
 |---|---|---|
 | **Deezer** | **In v1** | Free public API, no auth for search, 50 req/5s, full result-type breadth (artists, albums, tracks, playlists). |
 | **MusicBrainz** | **In v1** | Free, canonical metadata + ISRC + MBID for disambiguation. User-Agent required, 1 req/s default. |
-| **SoundCloud** | **In v1** | Client-credentials OAuth (search-only; no user redirect v1). The leak/unreleased surface. |
+| **SoundCloud** | **In v1, via yt-dlp** | None (yt-dlp `scsearch:` extraction). The leak/unreleased surface. Tracks only. |
 | **Last.fm** | **In v1** | Free with API key. Complementary metadata (artist tags, similar artists, listener counts). |
 | Discogs | Deferred | Heavy MB overlap; auth setup + 25–60 req/min doesn't pay back. |
 | Spotify | Out | Paywall constraint (per user; verify if search-only-free changes the calculus in a future revisit). |
@@ -86,7 +86,7 @@ Candidates considered + verdict:
 
 **Locked:** Deezer + MusicBrainz + SoundCloud + Last.fm.
 
-**SoundCloud OAuth nuance:** Client Credentials flow (app-level token, no user redirect) suffices for v1 search-only. The token is held server-side. User-OAuth flows wait for the future "save-this-leak-to-my-SC-likes" spec.
+**SoundCloud strategy revision (2026-05-27):** the original brainstorm specified client-credentials OAuth via the SoundCloud Developer API. On registration attempt the dev portal required an **Artist Pro** subscription, blocking solo-developer access entirely. Switched to **yt-dlp's `scsearch:` extraction** — the same path the legacy `music-manager` shipped with [VERIFIED:Read@C:\Users\Alessandro\music-manager\backend\providers\soundcloud_provider.py#L66-L68]. Consequences: no SoundCloud env vars; new runtime dep `yt-dlp`; result-type narrowed to **tracks only** (no `scset:` / `scuser:` extractors in scope v1; playlists become Deezer-only); adapter runs in `asyncio.to_thread` because yt-dlp is sync. Per-source prior stays 0.65; no ISRC available so JW is the only dedup signal for SC.
 
 **Per-source priors (used in the confidence tie-breaker, see §3.3):**
 - MusicBrainz 0.95 — MBID-canonical
@@ -354,7 +354,7 @@ v1 has no feature flags; rollback = redeploy prior build. New tables (`discovery
 
 ## 5. Operational pre-spec checklist (for ADR-0007 Implementation notes)
 
-1. Register the altune SoundCloud developer app → `client_id` + `client_secret` for server-side `.env`.
+1. ~~Register the altune SoundCloud developer app~~ — superseded; SoundCloud via yt-dlp (per the strategy revision above) requires no registration.
 2. Register a Last.fm API account → `LASTFM_API_KEY` (and `LASTFM_SHARED_SECRET` reserved for future write endpoints).
 3. Choose prod Redis host (Upstash free-tier likely) → `REDIS_URL` for prod env.
 4. Confirm MusicBrainz registered User-Agent string format + contact email.
@@ -381,7 +381,7 @@ v1 has no feature flags; rollback = redeploy prior build. New tables (`discovery
 | Caching | Redis, ADR-level, per-source TTL, cache post-ACL shape, version-prefix invalidation |
 | Bounded context | `discovery`; spec name `discover-music-v1` |
 | Result types v1 | Artist + Album + Single (Track) + Playlist |
-| SoundCloud auth | Client-credentials flow (no user redirect v1) |
+| SoundCloud auth | yt-dlp `scsearch:` extraction (no API key, tracks-only; revised 2026-05-27 due to Artist Pro gating) |
 | API endpoint | `GET /v1/discovery/search?q=&kinds=&limit=25`; `POST /v1/discovery/clicks` |
 | Query normalization | 8-step rule list in §3.6 |
 | Response shape | `sources: []` + `extras: {}` + `providers: []` + reserved `preview_url: null` |

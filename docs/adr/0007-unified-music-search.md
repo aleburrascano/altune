@@ -4,6 +4,7 @@
 - **Date:** 2026-05-27
 - **Deciders:** solo + Claude
 - **Context tags:** [arch, tech-stack, pattern, layer, dependency]
+- **Revisions:** 2026-05-27 — SoundCloud auth strategy switched from client-credentials OAuth to **yt-dlp `scsearch`** extraction after discovering that SoundCloud's Developer API now gates registration behind an Artist Pro subscription. The yt-dlp path is the same one the legacy `music-manager` shipped with [VERIFIED:Read@C:\Users\Alessandro\music-manager\backend\providers\soundcloud_provider.py#L21-L43]. Trade-offs in §"SoundCloud strategy revision" below.
 
 ## Context
 
@@ -73,11 +74,29 @@ Implement a new `discovery` bounded context whose `SearchMusic` use case fans ou
 - **ISRC + JW + per-source-priors as the dedup contract.** Reversible to embeddings or other models adapter-internally (the use case sees `SearchResult.confidence` only). Cheap.
 - **Raw `query_norm` in logs.** Reversal = log redaction pass + retroactive log pruning, plus an updated privacy stance. Cheap if done before scale; nontrivial after.
 
+## SoundCloud strategy revision (2026-05-27)
+
+The original decision specified SoundCloud's Developer API + client-credentials OAuth. On account-registration attempt, the developer portal required an **Artist Pro** subscription (a paid producer/musician tier), which is not available to solo non-artist developers. Without Artist Pro, the official API path is blocked entirely — not just rate-limited.
+
+Resolution: switch to **yt-dlp's `scsearch:` extraction** — the same approach the legacy `music-manager` shipped with [VERIFIED:Read@C:\Users\Alessandro\music-manager\backend\providers\soundcloud_provider.py#L66-L68] (`ydl.extract_info(f"scsearch{limit}:{query}", download=False)`). yt-dlp handles SoundCloud's public web surface natively; no API key, no OAuth.
+
+Consequences of the revision:
+
+- **No SoundCloud env vars.** `SOUNDCLOUD_CLIENT_ID` / `SOUNDCLOUD_CLIENT_SECRET` removed from the env contract. One fewer operational dependency.
+- **New runtime dep**: `yt-dlp`. Used for `SearchProvider.search()` on SoundCloud only; no download/streaming.
+- **Result-type narrowing**: yt-dlp's `scsearch:` returns **tracks only**. SoundCloud's per-kind coverage in v1 contracts from `{tracks, sets/playlists, user pages/artists, partial albums}` to **tracks only**. Result-type matrix updated. Playlists in v1 are now Deezer-only; future SoundCloud spec can add `scset:` / `scuser:` if/when Artist Pro becomes feasible or yt-dlp adds those extractors.
+- **Async wrapping**: yt-dlp is synchronous. The adapter must run extraction in `asyncio.to_thread` (per `services/api/CLAUDE.md`'s "CPU-bound work in `asyncio.to_thread`" rule) so the scatter-gather TaskGroup's event loop isn't blocked.
+- **Bulkhead concern**: the per-source `httpx.AsyncClient` bulkhead does NOT protect against a slow yt-dlp call — `asyncio.to_thread` uses a shared thread pool. Mitigation: the per-source `asyncio.wait_for(1500ms)` timeout still bounds the worst case, and the per-source circuit breaker (5 fails / 30s) trips yt-dlp out of the rotation under sustained failure.
+- **ToS posture**: yt-dlp extraction operates against SoundCloud's public web pages. Legal/ToS posture is the same as the legacy `music-manager` (which shipped without incident); documented as a known risk in this ADR. If/when an Artist Pro path becomes feasible, swap is one new ACL adapter; the use case sees no change.
+- **Result confidence**: the per-source prior for SoundCloud stays at **0.65** (uploader-as-artist is fuzzy regardless of access path). yt-dlp output lacks ISRC, so dedup via ISRC is impossible for SC; JW similarity on `(uploader, title)` is the only dedup signal — matches the original brainstorm's stance.
+
+The bullets below in "Decision" + the alternatives table reflect the revised strategy.
+
 ## Implementation notes
 
 Pre-spec operational checklist (must be done before Slice 1 of the feature spec):
 
-1. Register the altune SoundCloud developer app → capture `client_id` + `client_secret` for server-side `.env`.
+1. ~~Register the altune SoundCloud developer app~~ — superseded; SoundCloud via yt-dlp requires no registration (revision 2026-05-27).
 2. Register a Last.fm API account → capture `LASTFM_API_KEY` (and reserve `LASTFM_SHARED_SECRET` for future write endpoints).
 3. Choose the prod Redis host (Upstash free-tier likely; the 10k commands/day cap is comfortably above solo + small friends pool) → capture `REDIS_URL` for prod env.
 4. Confirm MusicBrainz registered User-Agent string format + contact email.
@@ -86,13 +105,14 @@ Pre-spec operational checklist (must be done before Slice 1 of the feature spec)
 New runtime dependencies the spec will add via `uv add`:
 - `redis>=5.0` (native asyncio via `redis.asyncio.Redis`)
 - `rapidfuzz` (similarity library; adapter-internal)
+- `yt-dlp` (SoundCloud search via `scsearch:` extraction — see strategy revision)
 - `respx` confirmed as a dev dependency for adapter integration tests.
 
 Settings additions (`platform/config.py`):
 - `redis_url: RedisDsn`
-- `soundcloud_client_id: SecretStr`, `soundcloud_client_secret: SecretStr`
 - `lastfm_api_key: SecretStr`
 - `musicbrainz_user_agent: str` (validated to contain a contact form per MB's requirement)
+- ~~`soundcloud_client_id` / `soundcloud_client_secret`~~ — removed per the strategy revision
 
 `docker-compose.yml`: add `redis:7-alpine` service with a healthcheck.
 
@@ -112,7 +132,7 @@ services/api/src/altune/
     └── outbound/discovery/
         ├── deezer/                       # ACL adapter (no auth)
         ├── musicbrainz/                  # ACL adapter (User-Agent required)
-        ├── soundcloud/                   # ACL adapter (client-credentials OAuth)
+        ├── soundcloud/                   # ACL adapter (yt-dlp scsearch via asyncio.to_thread)
         ├── lastfm/                       # ACL adapter (API key in querystring)
         └── cache/redis_cache.py          # QueryCache implementation
 ```
