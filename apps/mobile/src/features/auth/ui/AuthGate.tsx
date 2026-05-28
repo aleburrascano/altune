@@ -12,9 +12,14 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <View
         testID="auth-splash"
-        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#fff',
+        }}
       >
-        <Text>Loading…</Text>
+        <Text style={{ color: '#111' }}>Loading…</Text>
       </View>
     );
   }
