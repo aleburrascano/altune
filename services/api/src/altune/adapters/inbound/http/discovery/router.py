@@ -14,10 +14,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from altune.adapters.inbound.http.discovery.dto import (
     CacheDto,
+    DiscoverySearchHistoryResponse,
     DiscoverySearchResponse,
     ProviderStatusDto,
+    SearchHistoryItemDto,
     SearchResultDto,
     SourceDto,
+)
+from altune.application.discovery.list_search_history import (
+    ListSearchHistory,
+    ListSearchHistoryInput,
 )
 from altune.application.discovery.search_music import (
     SearchMusic,
@@ -66,16 +72,37 @@ async def get_discovery_search(
         limit=limit,
     )
     providers = getattr(request.app.state, "discovery_providers", ())
-    history_repo = request.app.state.discovery_history_repo
-    use_case = SearchMusic(providers=providers, history_repo=history_repo)
-    output = await use_case.execute(
-        SearchMusicInput(
-            raw_query=q,
-            user_id=user_id,
-            kinds=kinds_set,
-            limit=limit,
+    cache = getattr(request.app.state, "discovery_cache", None)
+    sessionmaker = getattr(request.app.state, "sessionmaker", None)
+    if sessionmaker is not None:
+        from altune.adapters.outbound.persistence.discovery.search_history_repository import (
+            SqlAlchemySearchHistoryRepository,
         )
-    )
+
+        async with sessionmaker() as session:
+            repo = SqlAlchemySearchHistoryRepository(session)
+            use_case = SearchMusic(providers=providers, history_repo=repo, cache=cache)
+            output = await use_case.execute(
+                SearchMusicInput(
+                    raw_query=q,
+                    user_id=user_id,
+                    kinds=kinds_set,
+                    limit=limit,
+                )
+            )
+            await session.commit()
+    else:
+        # Fallback path for environments without persistence (tests, smoke).
+        history_repo = request.app.state.discovery_history_repo
+        use_case = SearchMusic(providers=providers, history_repo=history_repo, cache=cache)
+        output = await use_case.execute(
+            SearchMusicInput(
+                raw_query=q,
+                user_id=user_id,
+                kinds=kinds_set,
+                limit=limit,
+            )
+        )
     return DiscoverySearchResponse(
         query=output.query,
         query_norm=output.query_norm,
@@ -109,4 +136,44 @@ async def get_discovery_search(
         ],
         partial=output.partial,
         cache=CacheDto(hit=output.cache_hit, fetched_at=output.cache_fetched_at),
+    )
+
+
+@router.get(
+    "/search-history",
+    response_model=DiscoverySearchHistoryResponse,
+)
+async def get_discovery_search_history(
+    request: Request,
+    user_id: UserId = Depends(current_user_id),  # noqa: B008
+    limit: int = Query(10, ge=1, le=50),
+) -> DiscoverySearchHistoryResponse:
+    sessionmaker = getattr(request.app.state, "sessionmaker", None)
+    if sessionmaker is not None:
+        from altune.adapters.outbound.persistence.discovery.search_history_repository import (
+            SqlAlchemySearchHistoryRepository,
+        )
+
+        async with sessionmaker() as session:
+            repo = SqlAlchemySearchHistoryRepository(session)
+            use_case = ListSearchHistory(history_repo=repo)
+            output = await use_case.execute(
+                ListSearchHistoryInput(user_id=user_id, limit=limit)
+            )
+    else:
+        history_repo = request.app.state.discovery_history_repo
+        use_case = ListSearchHistory(history_repo=history_repo)
+        output = await use_case.execute(
+            ListSearchHistoryInput(user_id=user_id, limit=limit)
+        )
+    return DiscoverySearchHistoryResponse(
+        items=[
+            SearchHistoryItemDto(
+                query=e.query,
+                query_norm=e.query_norm,
+                executed_at=e.executed_at,
+            )
+            for e in output.items
+        ],
+        total=output.total,
     )

@@ -53,3 +53,18 @@ class DiscoverySearchResponse(BaseModel):
     providers: list[ProviderStatusDto]
     partial: bool
     cache: CacheDto
+
+
+class SearchHistoryItemDto(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    query: str
+    query_norm: str
+    executed_at: datetime
+
+
+class DiscoverySearchHistoryResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    items: list[SearchHistoryItemDto]
+    total: int
