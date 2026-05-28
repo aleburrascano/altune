@@ -1,0 +1,25 @@
+# discovery HTTP router — bounded-context local rules
+
+Three endpoints: `GET /v1/discovery/search`, `GET /v1/discovery/search-history`, `POST /v1/discovery/clicks`. Wire shape per spec §3.7 [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\docs\specs\discover-music-v1\spec.md#L233-L262]. Router is a thin shell — validate, build the per-request repo from `sessionmaker`, call the use case, serialize the output DTO.
+
+## Key terms
+
+- **`DiscoverySearchResponse`** — Pydantic v2 frozen model mirroring the wire contract. Holds `results: list[SearchResultDto]`, `providers: list[ProviderStatusDto]`, `partial: bool`, `cache: CacheDto`.
+- **`DiscoveryClickRequest`** — request body for `POST /clicks`. Fields validated by Pydantic + explicit `ResultKind` / `Confidence` parsing at the handler boundary (raises HTTPException 422 on invalid).
+- **`current_user_id` dependency** — same auth dep as catalog (ADR-0006 / `platform/auth.py`). Resolves the Supabase JWT to a `UserId`. 401 on missing/invalid token is the natural protection.
+
+## Patterns specific here
+
+- **Per-request session via `request.app.state.sessionmaker`** [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\services\api\src\altune\adapters\inbound\http\discovery\router.py#L75-L80]. Falls back to `request.app.state.discovery_history_repo` (in-memory placeholder) when `sessionmaker` is unset (smoke / unit-test env).
+- **`SearchMusic` is constructed fresh per request.** Trade-off documented in [application/discovery/CLAUDE.md](../../../../application/discovery/CLAUDE.md): circuit breakers reset every request in v1. Future refactor moves breakers to app.state.
+- **`POST /v1/discovery/clicks` returns 202** (Accepted, no body) per AC#15. Persistence is awaited before the 202 — fire-and-forget *from the caller's perspective*, deterministic from the server's.
+- **Validation matrix on `GET /search`**: `q` min_length=1 max_length=200 (422 on empty), `limit` ge=1 le=50 (422 outside), `kinds` parsed by `_parse_kinds` which raises HTTPException 422 on invalid values [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\services\api\src\altune\adapters\inbound\http\discovery\router.py#L40-L52].
+- **No HTTPException for click validation either** — `kind` and `confidence` parsing raises HTTPException 422 explicitly when the enum cast fails.
+- **No business logic in the router.** Translation between domain `SearchResult` and `SearchResultDto` happens in the handler body but is purely mechanical field-by-field copy. If the wire shape diverges from the domain, that mapping grows here.
+
+## Known gotchas
+
+- **`# mypy: ignore_errors = True`** at the top of [router.py](router.py) silences the per-file mypy hook's noise on fastapi / sqlalchemy / structlog imports. Batch mypy resolves them via `[[tool.mypy.overrides]]`.
+- **Lifespan must run for `app.state` to be populated.** The e2e tests use `with TestClient(app) as client:` (context manager triggers lifespan); a plain `httpx.AsyncClient` against `ASGITransport(app=app)` does NOT trigger lifespan and will crash on `app.state.token_verifier` access.
+- **Per-request import of `SqlAlchemySearchHistoryRepository` / `SqlAlchemySearchClickRepository`** — done inside the handler to avoid SQLAlchemy import overhead in environments that don't use persistence. Same pattern as `platform/wiring.py`'s lazy imports.
+- **DTO field order is the wire contract.** The Pydantic models in [dto.py](dto.py) declare `kind, title, subtitle, image_url, confidence, sources, extras` in that order — match the spec §3.7 sample JSON exactly. Mobile's typed client mirrors this [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\apps\mobile\src\shared\api-client\discovery.ts#L22-L36].
