@@ -34,8 +34,8 @@ Brainstorm: [docs/brainstorms/2026-05-27-unified-music-search.md](../../brainsto
 
 These are setup actions, not engineering slices — they have no failing tests because they have no production code. Complete them before Slice 1.
 
-- **C1: Provider account registrations.** Register the altune SoundCloud developer app (capture `client_id` + `client_secret`); register a Last.fm API account (capture `LASTFM_API_KEY`); choose the prod Redis host (Upstash free-tier likely; capture `REDIS_URL`); finalize MusicBrainz User-Agent string + contact email. Commit `services/api/.env.example` placeholders. Commit: `chore(discover-music-v1): document discovery provider env vars`.
-- **C2: Add runtime deps.** `uv add redis rapidfuzz` (confirm `respx` already a dev dep). Verify: `uv run python -c "from redis.asyncio import Redis; from rapidfuzz import fuzz; print('ok')"`. Commit: `chore(deps): add redis + rapidfuzz for discover-music-v1`.
+- **C1: Provider account registrations.** ~~Register the altune SoundCloud developer app~~ (superseded — see ADR-0007 strategy revision; SoundCloud via yt-dlp needs no registration); register a Last.fm API account (capture `LASTFM_API_KEY`); choose the prod Redis host (Upstash free-tier likely; capture `REDIS_URL`); finalize MusicBrainz User-Agent string + contact email. Commit `services/api/.env.example` placeholders. Commit: `chore(discover-music-v1): document discovery provider env vars`.
+- **C2: Add runtime deps.** `uv add redis rapidfuzz yt-dlp` (confirm `respx` already a dev dep). Verify: `uv run python -c "from redis.asyncio import Redis; from rapidfuzz import fuzz; import yt_dlp; print('ok')"`. Commit: `chore(deps): add redis + rapidfuzz + yt-dlp for discover-music-v1`.
 - **C3: Add `redis:7-alpine` to `docker-compose.yml`.** With healthcheck + port 6379. Verify: `docker compose up -d redis && docker compose ps redis` shows `(healthy)` within 10s. Commit: `chore(tooling): add redis service to local docker-compose`.
 - **C4: Capture provider fixtures.** One-shot live call against each of the 4 providers (one query per (provider, kind) — e.g., `the beatles` against Deezer track-search, MB recording-search, SC track-search, Last.fm track.search) → freeze the JSON into `tests/integration/fixtures/discovery/<provider>/<kind>.json`. Used by `respx`-mocked adapter integration tests. Commit: `test(discover-music-v1): freeze provider fixtures for respx mocking`.
 
@@ -51,8 +51,6 @@ These are setup actions, not engineering slices — they have no failing tests b
 - Failing tests first (named, parameterized over fields):
   - `test_settings_accepts_well_formed_redis_url`
   - `test_settings_rejects_malformed_redis_url`
-  - `test_settings_soundcloud_client_id_is_secret_str_and_round_trips`
-  - `test_settings_soundcloud_client_secret_is_secret_str_and_round_trips`
   - `test_settings_lastfm_api_key_is_secret_str_and_round_trips`
   - `test_settings_rejects_musicbrainz_user_agent_without_contact_form_or_email`
 - Verify: `uv run pytest tests/unit/altune/platform/test_config.py -v`
@@ -276,18 +274,18 @@ These are setup actions, not engineering slices — they have no failing tests b
 - Verify: `uv run pytest tests/integration/altune/adapters/outbound/discovery/lastfm/ -v`
 - Commit: `feat(adapters): add Last.fm ACL adapter`
 
-#### Slice 21: `SoundCloudSearchAdapter` (ACL) + client-credentials OAuth + token refresh on 401
-- Acceptance: AC#1, AC#19, ADR-0007 client-credentials flow
+#### Slice 21: `SoundCloudSearchAdapter` (ACL) via yt-dlp `scsearch:` in `asyncio.to_thread`
+- Acceptance: AC#1 (SC tracks in `sources[]`), AC#19 (tolerant reader on yt-dlp entries), ADR-0007 strategy revision
 - Files:
-  - `services/api/src/altune/adapters/outbound/discovery/soundcloud/oauth.py` — token acquisition + in-memory caching
-  - `services/api/src/altune/adapters/outbound/discovery/soundcloud/adapter.py`
+  - `services/api/src/altune/adapters/outbound/discovery/soundcloud/adapter.py` — wraps `yt_dlp.YoutubeDL.extract_info(f"scsearch{limit}:{query}")` in `asyncio.to_thread`; translates yt-dlp entries to `SearchResult` with `uploader|channel|uploader_id` as artist, no ISRC, `confidence: low` baseline (per-source prior 0.65). Matches the legacy adapter's translation shape [VERIFIED:Read@C:\Users\Alessandro\music-manager\backend\providers\soundcloud_provider.py#L91-L100].
 - Failing tests first:
-  - `test_soundcloud_oauth_fetches_token_via_client_credentials`
-  - `test_soundcloud_adapter_attaches_bearer_token`
-  - `test_soundcloud_adapter_refreshes_token_on_401_and_retries_once`
-  - `test_soundcloud_adapter_translates_track_search`
+  - `test_soundcloud_adapter_extracts_via_scsearch_prefix`
+  - `test_soundcloud_adapter_falls_back_through_uploader_channel_uploader_id_for_artist`
+  - `test_soundcloud_adapter_picks_largest_thumbnail`
+  - `test_soundcloud_adapter_drops_yt_dlp_entries_missing_required_fields_and_logs`
+  - `test_soundcloud_adapter_runs_in_to_thread_does_not_block_event_loop`
 - Verify: `uv run pytest tests/integration/altune/adapters/outbound/discovery/soundcloud/ -v`
-- Commit: `feat(adapters): add SoundCloud ACL adapter with client-credentials oauth`
+- Commit: `feat(adapters): add SoundCloud ACL adapter via yt-dlp scsearch`
 
 #### Slice 22a: Scatter-gather fan-out across 4 providers via `asyncio.TaskGroup` (B6 part 1)
 - Acceptance: AC#1 (4 providers in flight in parallel)
@@ -605,7 +603,7 @@ Lifted from spec's Risks section + vault anti-patterns + slice-planning observat
 - **Vault anti-pattern (Circuit Breaker):** silent state changes (Closed → Open → Half-Open) make incidents hard to diagnose. Mitigation: Slice 25 emits `circuit_breaker_state_change` log events as part of the breaker contract.
 - **Vault anti-pattern (Vertical Slice Architecture):** the "horizontal layer" trap — committing "all of domain" then "all of application" then "all of adapters" — would push the feature's first end-to-end demo to the last day. Mitigation: spine ships at Slice 17 (Deezer one-provider); each subsequent slice extends a working spine. Phase 2 has six consecutive domain slices that look horizontal but are unblocking the spine (defensible because each domain type is independently testable and consumed in Slice 14 / Slice 16).
 - **Slice 22b risk (TaskGroup cancellation):** `asyncio.TaskGroup`'s behavior when a child raises is to cancel siblings — we want siblings to complete normally and collect partial-results. The implementation must convert per-task exceptions into `ProviderStatus.{TIMEOUT,ERROR,RATE_LIMITED}` results inside the task body (try/except), NOT let them bubble. Slice 22b's tests explicitly cover the "1 of 4 raises mid-flight" scenario.
-- **Slice 21 risk (SoundCloud OAuth refresh):** client-credentials tokens expire; the adapter must refresh transparently on 401 and retry once. Failure to refresh = silent provider outage in production. Slice 21's tests cover the refresh-on-401 path.
+- **Slice 21 risk (yt-dlp brittleness + sync wrapping):** yt-dlp is synchronous and depends on SoundCloud's public web surface — both the adapter's `asyncio.to_thread` discipline AND its tolerance to HTML-shape drift matter. The per-source circuit breaker (Slice 25) and per-source `wait_for(1500ms)` (Slice 22b) are the safety net; under sustained yt-dlp failure the breaker trips SC out of the rotation without affecting other providers. ToS posture is the same as the legacy `music-manager` (no incident in >18 months of operation).
 - **Slice 30 risk (mixed-warm cache):** two opposite common bugs — (a) "any cached source counts as full hit" and (b) "any expired source forces refetch of all". Slice 30 names both as explicit failing tests so the implementer can't accidentally pick the wrong branch.
 - **Slice 40 risk (sliding-window idempotency race):** two concurrent identical POSTs may both find no recent row and both insert. v1 stance: app-level race acceptable (rare, low harm); future spec adds a unique partial index with `ON CONFLICT DO NOTHING` if telemetry shows duplicates.
 - **Slice 46 risk (partial-banner UX subtlety):** AC#20 specifies `results + partial-banner` siblings, not `partial-error` instead of results. Slice 44's pure helper pins this precisely; Slice 46's component test asserts both nodes render simultaneously.
