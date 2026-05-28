@@ -97,6 +97,7 @@ def build_discovery_providers(
             def _sync_extract():  # type: ignore[no-untyped-def]
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     return ydl.extract_info(sc_query, download=False) or {}
+
             return await asyncio.to_thread(_sync_extract)
 
         return _extract
