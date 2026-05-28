@@ -36,6 +36,7 @@ module.exports = {
         // (the feature-spec skill appends new scopes here automatically)
         'view-library',
         'auth-integration',
+        'discover-music-v1',
       ],
     ],
     'subject-case': [2, 'always', 'lower-case'],
