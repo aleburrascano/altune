@@ -50,9 +50,7 @@ def _make_fixture_extractor(
 async def test_soundcloud_adapter_translates_scsearch_entries() -> None:
     payload = _load_fixture()
     adapter = SoundCloudSearchAdapter(extractor=_make_fixture_extractor(payload))
-    resp = await adapter.search(
-        "the beatles let it be", frozenset({ResultKind.TRACK}), limit=5
-    )
+    resp = await adapter.search("the beatles let it be", frozenset({ResultKind.TRACK}), limit=5)
     assert resp.provider_name == "soundcloud"
     assert resp.status is ProviderStatus.OK
     assert len(resp.results) == 5
@@ -137,9 +135,7 @@ async def test_soundcloud_adapter_returns_empty_for_non_track_kinds() -> None:
         raise AssertionError("extractor should not be called for non-track kinds")
 
     adapter = SoundCloudSearchAdapter(extractor=_never_called)
-    resp = await adapter.search(
-        "q", frozenset({ResultKind.ARTIST, ResultKind.ALBUM}), limit=5
-    )
+    resp = await adapter.search("q", frozenset({ResultKind.ARTIST, ResultKind.ALBUM}), limit=5)
     assert resp.status is ProviderStatus.OK
     assert resp.results == ()
 
