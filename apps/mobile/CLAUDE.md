@@ -4,9 +4,10 @@ Universal coding discipline → `~/.claude/CLAUDE.md`. Project constitution → 
 
 ## Stack
 
-- Expo SDK 51+ with new architecture enabled (`newArchEnabled: true` in `app.json`).
-- Expo Router (file-based routing, `app/` directory).
-- React 18, React Native 0.74.
+- Expo SDK 54 with new architecture enabled (`newArchEnabled: true` in `app.json`).
+- Expo Router (file-based routing, `app/` directory); tabbed shell under `app/(tabs)/`.
+- React 19, React Native 0.81.
+- Design system: token-based `shared/ui` (ADR-0008) — plain `StyleSheet` + typed tokens + `useTheme`, `react-native-reanimated` for motion. Dark-only in v1.
 
 ## Routing
 
