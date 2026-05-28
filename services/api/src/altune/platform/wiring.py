@@ -33,12 +33,17 @@ def build_discovery_providers(
     Returns (clients, providers) so the lifespan can close clients on shutdown.
     V1 ships with Deezer only; later slices add MusicBrainz, Last.fm, SoundCloud.
     """
+    import asyncio
+
     import httpx
 
     from altune.adapters.outbound.discovery.deezer.adapter import DeezerSearchAdapter
     from altune.adapters.outbound.discovery.lastfm.adapter import LastFmSearchAdapter
     from altune.adapters.outbound.discovery.musicbrainz.adapter import (
         MusicBrainzSearchAdapter,
+    )
+    from altune.adapters.outbound.discovery.soundcloud.adapter import (
+        SoundCloudSearchAdapter,
     )
 
     clients: list = []
@@ -69,6 +74,34 @@ def build_discovery_providers(
                 api_key=cfg.lastfm_api_key.get_secret_value(),
             )
         )
+
+    # SoundCloud via yt-dlp (ADR-0007 strategy revision). The extractor
+    # wraps yt-dlp.YoutubeDL.extract_info in asyncio.to_thread because
+    # yt-dlp is sync. extract_flat='in_playlist' + ignoreerrors=True is
+    # required to avoid the per-track 404 cascade observed during the C4
+    # fixture capture.
+    def _make_yt_dlp_extractor():  # type: ignore[no-untyped-def]
+        import yt_dlp
+
+        opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": "in_playlist",
+            "skip_download": True,
+            "ignoreerrors": True,
+            "socket_timeout": 10,
+            "retries": 0,
+        }
+
+        async def _extract(sc_query: str):  # type: ignore[no-untyped-def]
+            def _sync_extract():  # type: ignore[no-untyped-def]
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    return ydl.extract_info(sc_query, download=False) or {}
+            return await asyncio.to_thread(_sync_extract)
+
+        return _extract
+
+    providers.append(SoundCloudSearchAdapter(extractor=_make_yt_dlp_extractor()))
 
     return tuple(clients), tuple(providers)
 
