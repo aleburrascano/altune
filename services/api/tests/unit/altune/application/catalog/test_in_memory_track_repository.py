@@ -59,8 +59,12 @@ async def test_in_memory_repo_lists_only_current_user_tracks_in_correct_order() 
 @pytest.mark.unit
 async def test_in_memory_repo_orders_with_id_desc_tiebreaker_on_same_added_at() -> None:
     same_time = _BASE
-    track_low_id = _track(user=_USER_A, id_hex="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", added=same_time)
-    track_high_id = _track(user=_USER_A, id_hex="ffffffff-ffff-ffff-ffff-ffffffffffff", added=same_time)
+    track_low_id = _track(
+        user=_USER_A, id_hex="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", added=same_time
+    )
+    track_high_id = _track(
+        user=_USER_A, id_hex="ffffffff-ffff-ffff-ffff-ffffffffffff", added=same_time
+    )
     repo = InMemoryTrackRepository([track_low_id, track_high_id])
 
     items, _ = await repo.list_for_user(_USER_A, limit=50, offset=0)
@@ -113,7 +117,9 @@ async def test_in_memory_repo_returns_total_across_all_user_pages_not_just_page_
 
 @pytest.mark.unit
 async def test_in_memory_repo_returns_empty_when_user_has_no_tracks() -> None:
-    repo = InMemoryTrackRepository([_track(user=_USER_B, id_hex="11111111-1111-1111-1111-111111111111")])
+    repo = InMemoryTrackRepository(
+        [_track(user=_USER_B, id_hex="11111111-1111-1111-1111-111111111111")]
+    )
 
     items, total = await repo.list_for_user(_USER_A, limit=50, offset=0)
 

@@ -26,9 +26,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     """Wire each domain/application exception type to its HTTP shape."""
 
     @app.exception_handler(InvalidTokenError)
-    async def _invalid_token_handler(
-        request: Request, exc: InvalidTokenError
-    ) -> JSONResponse:
+    async def _invalid_token_handler(request: Request, exc: InvalidTokenError) -> JSONResponse:
         _ = request  # unused; signature matches FastAPI's handler shape
         return JSONResponse(
             status_code=401,

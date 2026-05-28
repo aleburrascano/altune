@@ -88,9 +88,7 @@ async def test_verifier_refreshes_jwks_on_unknown_kid(
         calls["n"] += 1
         return jwks_states[idx]
 
-    verifier = SupabaseJwtVerifier(
-        iss_expected=_ISS, aud_expected=_AUD, jwks_provider=provider
-    )
+    verifier = SupabaseJwtVerifier(iss_expected=_ISS, aud_expected=_AUD, jwks_provider=provider)
     token = _sign(key_b, kid="kid-b")
 
     result = await verifier.verify(token)
@@ -133,9 +131,7 @@ async def test_verifier_emits_jwks_refreshed_event_on_refresh(
     # capture_logs so this test isn't order-dependent on prior tests that may
     # have triggered configure_logging() via create_app().
     structlog.reset_defaults()
-    verifier = SupabaseJwtVerifier(
-        iss_expected=_ISS, aud_expected=_AUD, jwks_provider=provider
-    )
+    verifier = SupabaseJwtVerifier(iss_expected=_ISS, aud_expected=_AUD, jwks_provider=provider)
     token = _sign(key_b, kid="kid-b")
     with structlog.testing.capture_logs() as logs:
         await verifier.verify(token)
@@ -160,9 +156,7 @@ async def test_verifier_does_not_refetch_when_kid_is_cached(
         calls["n"] += 1
         return jwks
 
-    verifier = SupabaseJwtVerifier(
-        iss_expected=_ISS, aud_expected=_AUD, jwks_provider=provider
-    )
+    verifier = SupabaseJwtVerifier(iss_expected=_ISS, aud_expected=_AUD, jwks_provider=provider)
     token = _sign(key_a, kid="kid-a")
 
     # Verify the same token three times — kid is cached, no extra fetches.

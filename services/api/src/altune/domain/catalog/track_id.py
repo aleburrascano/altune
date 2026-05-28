@@ -21,9 +21,7 @@ class TrackId:
 
     def __post_init__(self) -> None:
         if not isinstance(self.value, UUID):
-            raise TypeError(
-                f"TrackId.value must be a uuid.UUID, got {type(self.value).__name__}"
-            )
+            raise TypeError(f"TrackId.value must be a uuid.UUID, got {type(self.value).__name__}")
 
     def __str__(self) -> str:
         return str(self.value)

@@ -49,9 +49,7 @@ class ListTracks:
         self._tracks = tracks
 
     async def execute(self, input: ListTracksInput) -> ListTracksOutput:
-        items, total = await self._tracks.list_for_user(
-            input.user_id, input.limit, input.offset
-        )
+        items, total = await self._tracks.list_for_user(input.user_id, input.limit, input.offset)
         has_more = (input.offset + len(items)) < total
         log.info(
             "tracks_listed",

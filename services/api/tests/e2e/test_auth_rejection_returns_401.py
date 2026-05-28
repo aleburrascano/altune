@@ -88,7 +88,9 @@ def app_with_fixture_verifier(trusted_key: Any) -> Any:
 
 
 @pytest.mark.e2e
-def test_get_tracks_returns_401_without_authorization_header(app_with_fixture_verifier: Any) -> None:
+def test_get_tracks_returns_401_without_authorization_header(
+    app_with_fixture_verifier: Any,
+) -> None:
     with TestClient(app_with_fixture_verifier) as client:
         response = client.get("/v1/tracks")
     assert response.status_code == 401

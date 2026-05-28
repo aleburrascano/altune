@@ -69,9 +69,7 @@ def private_key() -> RSAPrivateKey:
 @pytest.fixture
 def verifier(private_key: RSAPrivateKey) -> SupabaseJwtVerifier:
     jwks = _make_jwks(private_key)
-    return SupabaseJwtVerifier(
-        iss_expected=_ISS, aud_expected=_AUD, jwks_provider=lambda: jwks
-    )
+    return SupabaseJwtVerifier(iss_expected=_ISS, aud_expected=_AUD, jwks_provider=lambda: jwks)
 
 
 @pytest.mark.integration
