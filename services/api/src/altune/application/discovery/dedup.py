@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from rapidfuzz.distance import JaroWinkler
+from rapidfuzz.distance import JaroWinkler  # type: ignore[import-not-found,unused-ignore]
 
 from altune.application.discovery.normalize import normalize_for_match
 from altune.domain.discovery.confidence import Confidence
