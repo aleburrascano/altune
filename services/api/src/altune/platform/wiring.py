@@ -36,6 +36,7 @@ def build_discovery_providers(
     import httpx
 
     from altune.adapters.outbound.discovery.deezer.adapter import DeezerSearchAdapter
+    from altune.adapters.outbound.discovery.lastfm.adapter import LastFmSearchAdapter
     from altune.adapters.outbound.discovery.musicbrainz.adapter import (
         MusicBrainzSearchAdapter,
     )
@@ -56,6 +57,18 @@ def build_discovery_providers(
         )
         clients.append(mb_client)
         providers.append(MusicBrainzSearchAdapter(client=mb_client))
+
+    # Last.fm: skip when API key not configured. Without it the API rejects
+    # every call with a 403; skipping is cheaper than spamming.
+    if cfg.lastfm_api_key is not None:
+        lastfm_client = httpx.AsyncClient(timeout=10.0)
+        clients.append(lastfm_client)
+        providers.append(
+            LastFmSearchAdapter(
+                client=lastfm_client,
+                api_key=cfg.lastfm_api_key.get_secret_value(),
+            )
+        )
 
     return tuple(clients), tuple(providers)
 
