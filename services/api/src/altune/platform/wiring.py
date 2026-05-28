@@ -35,14 +35,29 @@ def build_discovery_providers(
     """
     import httpx
 
-    from altune.adapters.outbound.discovery.deezer.adapter import (  # noqa: F401
-        DeezerSearchAdapter,
+    from altune.adapters.outbound.discovery.deezer.adapter import DeezerSearchAdapter
+    from altune.adapters.outbound.discovery.musicbrainz.adapter import (
+        MusicBrainzSearchAdapter,
     )
 
-    _ = cfg  # Settings consumed by future providers (UA, api_key)
+    clients: list = []
+    providers: list = []
+
     deezer_client = httpx.AsyncClient(timeout=10.0)
-    deezer = DeezerSearchAdapter(client=deezer_client)
-    return (deezer_client,), (deezer,)
+    clients.append(deezer_client)
+    providers.append(DeezerSearchAdapter(client=deezer_client))
+
+    # MusicBrainz: skip when UA not configured. MB throttles unregistered
+    # User-Agents to 1 req/s and may 503; we'd rather omit it than spam.
+    if cfg.musicbrainz_user_agent:
+        mb_client = httpx.AsyncClient(
+            timeout=10.0,
+            headers={"User-Agent": cfg.musicbrainz_user_agent},
+        )
+        clients.append(mb_client)
+        providers.append(MusicBrainzSearchAdapter(client=mb_client))
+
+    return tuple(clients), tuple(providers)
 
 
 def build_discovery_history_repo() -> object:
