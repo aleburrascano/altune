@@ -25,6 +25,8 @@ class InMemorySearchProvider:
     status: ProviderStatus = ProviderStatus.OK
     latency_ms: int = 0
     url_lookup: dict[str, SearchResult] = field(default_factory=dict)
+    delay_s: float = 0.0  # cooperatively sleep before responding (for parallelism tests)
+    raises: BaseException | None = None  # if set, search() raises this
 
     async def search(
         self,
@@ -33,6 +35,12 @@ class InMemorySearchProvider:
         limit: int,
     ) -> ProviderSearchResponse:
         _ = (query, kinds, limit)
+        if self.delay_s > 0:
+            import asyncio
+
+            await asyncio.sleep(self.delay_s)
+        if self.raises is not None:
+            raise self.raises
         return ProviderSearchResponse(
             provider_name=self.name,
             status=self.status,
