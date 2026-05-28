@@ -19,7 +19,43 @@ from typing import TYPE_CHECKING
 from altune.adapters.outbound.auth.supabase_jwt_verifier import SupabaseJwtVerifier
 
 if TYPE_CHECKING:
+    import httpx
+
+    from altune.application.discovery.ports import SearchProvider
     from altune.platform.config import Settings
+
+
+def build_discovery_providers(
+    cfg: Settings,
+) -> tuple[tuple[httpx.AsyncClient, ...], tuple[SearchProvider, ...]]:
+    """Construct discovery provider adapters with per-source AsyncClients.
+
+    Returns (clients, providers) so the lifespan can close clients on shutdown.
+    V1 ships with Deezer only; later slices add MusicBrainz, Last.fm, SoundCloud.
+    """
+    import httpx
+
+    from altune.adapters.outbound.discovery.deezer.adapter import (  # noqa: F401
+        DeezerSearchAdapter,
+    )
+
+    _ = cfg  # Settings consumed by future providers (UA, api_key)
+    deezer_client = httpx.AsyncClient(timeout=10.0)
+    deezer = DeezerSearchAdapter(client=deezer_client)
+    return (deezer_client,), (deezer,)
+
+
+def build_discovery_history_repo() -> object:
+    """Build the discovery history repository.
+
+    Slice 37 swaps this for SqlAlchemySearchHistoryRepository. V1 uses an
+    in-memory fake so the endpoint demos end-to-end before persistence lands.
+    """
+    from tests._doubles.in_memory_search_history_repository import (
+        InMemorySearchHistoryRepository,
+    )
+
+    return InMemorySearchHistoryRepository()
 
 
 def build_token_verifier(cfg: Settings) -> SupabaseJwtVerifier:
