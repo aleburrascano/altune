@@ -1,12 +1,15 @@
 /**
- * DiscoverRow — single search-result entry.
+ * DiscoverRow — the signature art-forward result card.
  *
- * Slice 46. testID = `discover-row-<signature>` where signature is the
- * server-computed result_signature (or a fallback hash of title+subtitle).
+ * Slice 46 + ADR-0008. testID = `discover-row-<kind>-<position>` (preserved).
+ * Art leads; title/subtitle stack; kind chip; trailing confidence dot + source
+ * count. High-confidence multi-source results get the subtle verified glow.
  */
 
 import type { ReactElement } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, View } from 'react-native';
+
+import { Artwork, Card, Chip, ConfidenceDot, Row, Text, spacing } from '@shared/ui';
 
 import type { DiscoveryResult } from '../../../shared/api-client/discovery';
 
@@ -18,45 +21,41 @@ export type DiscoverRowProps = {
 
 export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): ReactElement {
   const testId = `discover-row-${result.kind}-${position}`;
+  const verified = result.confidence === 'high' && result.sources.length > 1;
+
   return (
-    <TouchableOpacity
-      style={styles.row}
+    <Pressable
       testID={testId}
       onPress={() => onPress(result, position)}
+      style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
     >
-      <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={1}>
-          {result.title}
-        </Text>
-        {result.subtitle !== null && (
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {result.subtitle}
+      <Card active={verified} style={{ marginBottom: spacing.sm }}>
+        <Row
+          leading={<Artwork uri={result.image_url} size={52} accessibilityLabel={result.title} />}
+          trailing={
+            <View style={{ alignItems: 'flex-end', gap: 4 }}>
+              <ConfidenceDot level={result.confidence} />
+              {result.sources.length > 1 ? (
+                <Text variant="caption" tone="tertiary">
+                  {result.sources.length}
+                </Text>
+              ) : null}
+            </View>
+          }
+        >
+          <Text variant="bodyStrong" numberOfLines={1}>
+            {result.title}
           </Text>
-        )}
-        <View style={styles.metaRow}>
-          <Text style={styles.kind}>{result.kind}</Text>
-          <Text style={styles.confidence}>· {result.confidence}</Text>
-          {result.sources.length > 1 && (
-            <Text style={styles.multiSource}>· {result.sources.length} sources</Text>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
+          {result.subtitle !== null ? (
+            <Text variant="label" tone="secondary" numberOfLines={1} style={{ marginTop: 2 }}>
+              {result.subtitle}
+            </Text>
+          ) : null}
+          <View style={{ marginTop: 6, alignSelf: 'flex-start' }}>
+            <Chip label={result.kind.toUpperCase()} />
+          </View>
+        </Row>
+      </Card>
+    </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#222',
-  },
-  body: { flexDirection: 'column' },
-  title: { color: '#fff', fontSize: 16, fontWeight: '500' },
-  subtitle: { color: '#aaa', fontSize: 13, marginTop: 2 },
-  metaRow: { flexDirection: 'row', marginTop: 4 },
-  kind: { color: '#888', fontSize: 11, textTransform: 'uppercase' },
-  confidence: { color: '#888', fontSize: 11, marginLeft: 4 },
-  multiSource: { color: '#5fa3ff', fontSize: 11, marginLeft: 4 },
-});

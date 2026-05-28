@@ -51,7 +51,7 @@ Mobile screen for the unified music search surface. Submit-only `TextInput` at t
 
 ### Public API surface
 
-- `DiscoverScreen` (default export of [ui/DiscoverScreen.tsx](ui/DiscoverScreen.tsx)) — consumed by `apps/mobile/src/app/discover.tsx` (Expo Router page).
+- `DiscoverScreen` (default export of [ui/DiscoverScreen.tsx](ui/DiscoverScreen.tsx)) — consumed by `apps/mobile/src/app/(tabs)/discover.tsx` (Expo Router tab page).
 - `_viewForState`, `_shouldShowPartialBanner` — exported for unit testing; not consumed by other features.
 
 ### Dependencies on other features / shared
@@ -59,6 +59,7 @@ Mobile screen for the unified music search surface. Submit-only `TextInput` at t
 - `@shared/api-client/discovery` — `searchDiscovery`, `listSearchHistory`, `recordClick` + wire types.
 - `@shared/api-client/index` — `apiFetch` underlying transport (transitively).
 - `@tanstack/react-query` — `useQuery` + `useMutation`, via the root `QueryClientProvider`.
+- `@shared/ui` — design-system primitives (ADR-0008): the result row is the art-forward `Card` (`Artwork` + `ConfidenceDot` + verified glow on high-confidence multi-source); states use `Skeleton` / `Chip` / `Banner` / `Button`.
 - No cross-feature imports (vertical-slice rule preserved).
 
 ### Test files
