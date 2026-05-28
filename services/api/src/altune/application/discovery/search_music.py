@@ -17,6 +17,7 @@ from uuid import uuid4
 from altune.application.discovery.circuit_breaker import CircuitBreaker
 from altune.application.discovery.dedup import dedup_and_rank
 from altune.application.discovery.normalize import normalize_for_match
+from altune.application.discovery.url_router import match_provider
 from altune.domain.discovery.provider_status import ProviderStatus
 from altune.domain.discovery.search_history_entry import (
     SearchHistoryEntry,
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
         SearchHistoryRepository,
         SearchProvider,
     )
+    from altune.domain.discovery.provider import ProviderName
     from altune.domain.discovery.result_kind import ResultKind
     from altune.domain.discovery.search_result import SearchResult
     from altune.domain.shared.user_id import UserId
@@ -120,6 +122,13 @@ class SearchMusic:
     async def execute(self, request: SearchMusicInput) -> SearchMusicOutput:
         query_norm = normalize_for_match(request.raw_query)
 
+        # URL-paste short-circuit (AC#10): if the query is a supported
+        # provider URL, route to that provider's lookup_by_url. Unsupported
+        # URLs (AC#10a) fall through to text scatter-gather below.
+        url_provider = match_provider(request.raw_query)
+        if url_provider is not None:
+            return await self._execute_url_lookup(request, query_norm, url_provider)
+
         # Fan out across providers in parallel via asyncio.gather. Each
         # task converts its own exceptions into a ProviderStatusSummary
         # so a single failure can't cancel siblings.
@@ -171,6 +180,50 @@ class SearchMusic:
             cache_hit=cache_hit,
             cache_fetched_at=cache_fetched_at,
         )
+
+    async def _execute_url_lookup(
+        self,
+        request: SearchMusicInput,
+        query_norm: str,
+        url_provider: ProviderName,
+    ) -> SearchMusicOutput:
+        """Short-circuit URL-paste path: call one provider's lookup_by_url."""
+        target = next((p for p in self.providers if p.name == url_provider.value), None)
+        result: SearchResult | None = None
+        if target is not None:
+            try:
+                result = await target.lookup_by_url(request.raw_query)
+            except Exception:
+                _log.exception("provider %s lookup_by_url raised", target.name)
+                result = None
+        await self._persist_history(request, query_norm)
+        return SearchMusicOutput(
+            query=request.raw_query,
+            query_norm=query_norm,
+            results=(result,) if result is not None else (),
+            providers=(),
+            partial=False,
+        )
+
+    async def _persist_history(self, request: SearchMusicInput, query_norm: str) -> None:
+        """Best-effort history persist; failures are logged + swallowed."""
+        try:
+            entry = SearchHistoryEntry(
+                id=SearchHistoryEntryId(uuid4()),
+                user_id=request.user_id,
+                query=request.raw_query,
+                query_norm=query_norm,
+                executed_at=datetime.now(UTC),
+                result_clicked_signature=None,
+            )
+            await self.history_repo.insert(entry)
+            await self.history_repo.trim_to_n(request.user_id, self.history_config.keep_n)
+        except Exception:
+            _log.exception(
+                "search_history_persist_failed user=%s query_norm=%s",
+                request.user_id,
+                query_norm,
+            )
 
     async def _call_provider_with_cache(
         self,
