@@ -374,6 +374,117 @@ async def test_search_music_rate_limited_does_not_count_toward_breaker() -> None
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_search_music_full_warm_cache_hits_skip_live_calls() -> None:
+    # Pre-warm the cache for both providers; live providers would raise
+    # if called. The cache hit must skip them entirely.
+    from datetime import timedelta as _td
+
+    from tests._doubles.in_memory_query_cache import InMemoryQueryCache
+
+    cache = InMemoryQueryCache()
+    cached_result = _result(ProviderName.DEEZER, title="Cached Deezer Track", ext_id="d1")
+    await cache.set(
+        provider="deezer",
+        query_norm="beatles",
+        kinds=frozenset({ResultKind.TRACK}),
+        results=(cached_result,),
+        ttl=_td(seconds=60),
+    )
+    landmine = InMemorySearchProvider(name="deezer", raises=RuntimeError("should not be called"))
+    history = InMemorySearchHistoryRepository()
+    use_case = SearchMusic(providers=[landmine], history_repo=history, cache=cache)
+
+    output = await use_case.execute(
+        SearchMusicInput(
+            raw_query="the beatles",
+            user_id=_USER,
+            kinds=frozenset({ResultKind.TRACK}),
+        )
+    )
+
+    assert output.cache_hit is True
+    assert output.cache_fetched_at is not None
+    assert output.providers[0].status is ProviderStatus.OK
+    assert output.providers[0].latency_ms == 0
+    assert output.results[0].title == "Cached Deezer Track"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_music_cache_miss_writes_to_cache_after_live_call() -> None:
+    from tests._doubles.in_memory_query_cache import InMemoryQueryCache
+
+    cache = InMemoryQueryCache()
+    live = InMemorySearchProvider(
+        name="deezer",
+        canned=(_result(ProviderName.DEEZER, title="Live Track", ext_id="L1"),),
+    )
+    history = InMemorySearchHistoryRepository()
+    use_case = SearchMusic(providers=[live], history_repo=history, cache=cache)
+
+    output = await use_case.execute(
+        SearchMusicInput(
+            raw_query="the beatles",
+            user_id=_USER,
+            kinds=frozenset({ResultKind.TRACK}),
+        )
+    )
+
+    assert output.cache_hit is False
+    # The cache must now contain the result.
+    stored = await cache.get("deezer", "beatles", frozenset({ResultKind.TRACK}))
+    assert stored is not None
+    cached_results, _ = stored
+    assert cached_results[0].title == "Live Track"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_music_mixed_warm_uses_cache_for_warm_live_for_expired() -> None:
+    # One provider's entry is cached; the other has none. Both run; the
+    # cached one returns instantly with latency_ms=0; the other does a
+    # live call.
+    from datetime import timedelta as _td
+
+    from tests._doubles.in_memory_query_cache import InMemoryQueryCache
+
+    cache = InMemoryQueryCache()
+    await cache.set(
+        provider="deezer",
+        query_norm="beatles",
+        kinds=frozenset({ResultKind.TRACK}),
+        results=(_result(ProviderName.DEEZER, title="Cached Deezer", ext_id="cD"),),
+        ttl=_td(seconds=60),
+    )
+    deezer_landmine = InMemorySearchProvider(
+        name="deezer", raises=RuntimeError("warm; should not be called")
+    )
+    mb_live = InMemorySearchProvider(
+        name="musicbrainz",
+        canned=(_result(ProviderName.MUSICBRAINZ, title="Live MB", ext_id="L_mb"),),
+    )
+    history = InMemorySearchHistoryRepository()
+    use_case = SearchMusic(providers=[deezer_landmine, mb_live], history_repo=history, cache=cache)
+
+    output = await use_case.execute(
+        SearchMusicInput(
+            raw_query="the beatles",
+            user_id=_USER,
+            kinds=frozenset({ResultKind.TRACK}),
+        )
+    )
+
+    statuses = {s.provider_name: s for s in output.providers}
+    assert statuses["deezer"].latency_ms == 0  # cache served
+    assert statuses["musicbrainz"].status is ProviderStatus.OK
+    assert output.cache_hit is True
+    # mb result is now also cached.
+    mb_stored = await cache.get("musicbrainz", "beatles", frozenset({ResultKind.TRACK}))
+    assert mb_stored is not None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_search_music_passes_through_error_status_from_adapter() -> None:
     # Adapter returned ERROR (e.g. 5xx); the use case must preserve it as
     # ERROR (distinct from a raised exception, though both map to ERROR).

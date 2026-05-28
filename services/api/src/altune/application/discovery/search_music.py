@@ -10,7 +10,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -24,9 +24,10 @@ from altune.domain.discovery.search_history_entry import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from altune.application.discovery.ports import (
+        QueryCache,
         SearchHistoryRepository,
         SearchProvider,
     )
@@ -37,6 +38,14 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 _DEFAULT_PER_SOURCE_TIMEOUT_S = 1.5
+
+# Per-source default TTLs from ADR-0007 §3.4.
+_DEFAULT_TTLS = {
+    "musicbrainz": timedelta(hours=24),
+    "lastfm": timedelta(hours=12),
+    "deezer": timedelta(hours=6),
+    "soundcloud": timedelta(hours=1),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +105,8 @@ class SearchMusic:
         default_factory=HistoryPersistRingBufferConfig
     )
     per_source_timeout_s: float = _DEFAULT_PER_SOURCE_TIMEOUT_S
+    cache: QueryCache | None = None
+    cache_ttls: Mapping[str, timedelta] = field(default_factory=lambda: dict(_DEFAULT_TTLS))
     _breakers: dict[str, CircuitBreaker] = field(default_factory=dict, init=False)
 
     def _breaker_for(self, provider_name: str) -> CircuitBreaker:
@@ -103,25 +114,34 @@ class SearchMusic:
             self._breakers[provider_name] = CircuitBreaker(name=provider_name)
         return self._breakers[provider_name]
 
+    def _ttl_for(self, provider_name: str) -> timedelta:
+        return self.cache_ttls.get(provider_name, timedelta(hours=1))
+
     async def execute(self, request: SearchMusicInput) -> SearchMusicOutput:
         query_norm = normalize_for_match(request.raw_query)
 
         # Fan out across providers in parallel via asyncio.gather. Each
-        # task converts its own exceptions (timeout/cancel/other) into a
-        # ProviderStatusSummary so a single failure can't cancel siblings.
-        # gather(..., return_exceptions=False) is safe because every task
-        # catches its own exceptions.
-        tasks = [self._call_provider(provider, request) for provider in self.providers]
+        # task converts its own exceptions into a ProviderStatusSummary
+        # so a single failure can't cancel siblings.
+        tasks = [
+            self._call_provider_with_cache(provider, request, query_norm)
+            for provider in self.providers
+        ]
         per_provider = await asyncio.gather(*tasks)
         summaries: list[ProviderStatusSummary] = []
         gathered: list[SearchResult] = []
-        for summary, results in per_provider:
+        cache_hit_fetched_ats: list[datetime] = []
+        for summary, results, cache_fetched_at in per_provider:
             summaries.append(summary)
             if summary.status is ProviderStatus.OK:
                 gathered.extend(results)
+            if cache_fetched_at is not None:
+                cache_hit_fetched_ats.append(cache_fetched_at)
 
         merged = dedup_and_rank(gathered)
         partial = any(s.status is not ProviderStatus.OK for s in summaries)
+        cache_hit = bool(cache_hit_fetched_ats)
+        cache_fetched_at = min(cache_hit_fetched_ats) if cache_hit_fetched_ats else None
 
         # Persist history best-effort; never fail the search on persist error.
         try:
@@ -148,7 +168,61 @@ class SearchMusic:
             results=merged,
             providers=tuple(summaries),
             partial=partial,
+            cache_hit=cache_hit,
+            cache_fetched_at=cache_fetched_at,
         )
+
+    async def _call_provider_with_cache(
+        self,
+        provider: SearchProvider,
+        request: SearchMusicInput,
+        query_norm: str,
+    ) -> tuple[ProviderStatusSummary, tuple[SearchResult, ...], datetime | None]:
+        """Cache-check first; fall through to live call on miss.
+
+        Returns (summary, results, cache_fetched_at). cache_fetched_at is
+        non-None iff this provider served from cache.
+        """
+        if self.cache is not None:
+            try:
+                cached = await self.cache.get(provider.name, query_norm, request.kinds)
+            except Exception:
+                _log.warning(
+                    "cache_unavailable provider=%s — falling through to live",
+                    provider.name,
+                    exc_info=True,
+                )
+                cached = None
+            if cached is not None:
+                results, fetched_at = cached
+                return (
+                    ProviderStatusSummary(
+                        provider_name=provider.name,
+                        status=ProviderStatus.OK,
+                        result_count=len(results),
+                        latency_ms=0,
+                    ),
+                    results,
+                    fetched_at,
+                )
+        summary, results = await self._call_provider(provider, request)
+        # Write to cache only on OK live calls.
+        if self.cache is not None and summary.status is ProviderStatus.OK and results:
+            try:
+                await self.cache.set(
+                    provider.name,
+                    query_norm,
+                    request.kinds,
+                    results,
+                    self._ttl_for(provider.name),
+                )
+            except Exception:
+                _log.warning(
+                    "cache_unavailable op=set provider=%s",
+                    provider.name,
+                    exc_info=True,
+                )
+        return summary, results, None
 
     async def _call_provider(
         self,
