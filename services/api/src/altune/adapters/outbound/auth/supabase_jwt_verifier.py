@@ -23,7 +23,7 @@ from uuid import UUID
 
 import jwt  # type: ignore[import-not-found]
 import structlog  # type: ignore[import-not-found]
-from jwt.algorithms import RSAAlgorithm  # type: ignore[import-not-found]
+from jwt.algorithms import ECAlgorithm, RSAAlgorithm  # type: ignore[import-not-found]
 
 from altune.application.auth.exceptions import (  # type: ignore[import-not-found]
     InvalidTokenError,
@@ -117,12 +117,24 @@ class SupabaseJwtVerifier:
         if kid is None:
             raise InvalidTokenError(TokenRejectReason.SIGNATURE_INVALID)
         if kid in self._jwks_by_kid:
-            return RSAAlgorithm.from_jwk(self._jwks_by_kid[kid])
+            return self._jwk_to_key(self._jwks_by_kid[kid])
         # Cache miss — refresh once and look again. If still missing, the
         # token's kid is unknown to the trusted JWKS — reject.
         self._refresh_cache()
         if kid in self._jwks_by_kid:
-            return RSAAlgorithm.from_jwk(self._jwks_by_kid[kid])
+            return self._jwk_to_key(self._jwks_by_kid[kid])
+        raise InvalidTokenError(TokenRejectReason.SIGNATURE_INVALID)
+
+    @staticmethod
+    def _jwk_to_key(jwk: dict[str, Any]) -> Any:
+        # AIDEV-NOTE: dispatch on kty so ES256 (Supabase's new default per
+        # 2024+ rotation) works alongside legacy RS256 projects. ADR-0006
+        # called for both; the original implementation hard-coded RSA.
+        kty = jwk.get("kty")
+        if kty == "RSA":
+            return RSAAlgorithm.from_jwk(jwk)
+        if kty == "EC":
+            return ECAlgorithm.from_jwk(jwk)
         raise InvalidTokenError(TokenRejectReason.SIGNATURE_INVALID)
 
     def _refresh_cache(self) -> None:

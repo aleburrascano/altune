@@ -126,7 +126,10 @@ def build_token_verifier(cfg: Settings) -> SupabaseJwtVerifier:
     JWKS mode is the v1 default (ADR-0006). HS256 mode is a future fallback;
     Settings' XOR validator guarantees exactly one is configured.
     """
-    iss_expected = cfg.supabase_project_url or ""
+    # AIDEV-NOTE: Supabase JWTs carry iss=<project_url>/auth/v1 (mirrors the
+    # JWKS URL convention iss + "/.well-known/jwks.json"). ADR-0006 omitted
+    # the suffix; tokens were rejected with CLAIM_INVALID_ISS until fixed.
+    iss_expected = (cfg.supabase_project_url or "").rstrip("/") + "/auth/v1"
 
     if cfg.supabase_jwt_jwks_url is not None:
         jwks_url = cfg.supabase_jwt_jwks_url
