@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from altune import __version__
 from altune.adapters.inbound.http.catalog.router import router as catalog_router
+from altune.adapters.inbound.http.discovery.router import router as discovery_router
 from altune.platform.config import Settings
 from altune.platform.db import check_database, create_engine, create_sessionmaker
 from altune.platform.logging import configure_logging, get_logger
@@ -58,6 +59,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.engine = engine
             app.state.sessionmaker = create_sessionmaker(engine)
             log.info("db_initialized")
+        # Discovery wiring (per ADR-0007). httpx.AsyncClient per provider for
+        # bulkhead isolation. Production SqlAlchemy repos land in slice 37;
+        # v1 uses InMemory placeholders so the endpoint demos end-to-end.
+        from altune.platform.wiring import (
+            build_discovery_history_repo,
+            build_discovery_providers,
+        )
+
+        discovery_clients, discovery_providers = build_discovery_providers(cfg)
+        app.state.discovery_clients = discovery_clients
+        app.state.discovery_providers = discovery_providers
+        app.state.discovery_history_repo = build_discovery_history_repo()
         log.info(
             "auth.startup_config_validated",
             verifier_mode="jwks" if cfg.supabase_jwt_jwks_url else "hs256",
@@ -71,6 +84,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if stored_engine is not None:
                 await stored_engine.dispose()
                 log.info("db_disposed")
+            for client in getattr(app.state, "discovery_clients", ()):
+                await client.aclose()
 
     app = FastAPI(
         title="Altune API",
@@ -88,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.include_router(catalog_router)
+    app.include_router(discovery_router)
 
     # Register exception handlers (InvalidTokenError → 401, etc.).
     from altune.adapters.inbound.http.exception_handlers import (
