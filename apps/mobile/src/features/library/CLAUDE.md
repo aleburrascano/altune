@@ -43,12 +43,13 @@ Mobile screen that renders the current user's track library as a paginated, infi
 
 ### Public API surface
 
-- `LibraryScreen` (default export) — consumed by `apps/mobile/src/app/library.tsx` (Expo Router page) and via `apps/mobile/src/app/index.tsx` redirect.
+- `LibraryScreen` (default export) — consumed by `apps/mobile/src/app/(tabs)/library.tsx` (Expo Router tab page). `app/index.tsx` now redirects to `/discover` (the default tab), not here.
 - `useLibrary()` — re-usable by future features that show track lists (deep-link previews, etc.).
 
 ### Dependencies on other features / shared
 
 - `@shared/api-client/tracks` — `getTracks` typed function.
+- `@shared/ui` — design-system primitives (ADR-0008): `Screen`, `Text` (header `displayL` title), `Button` (retry), `Skeleton` (loading rows). Rows are text-forward (no album art in v1).
 - `@shared/api-client/types` — `TrackResponse`, `ListTracksResponse` wire types.
 - `@tanstack/react-query` — via the root `QueryClientProvider` in `src/app/_layout.tsx`.
 - No cross-feature imports (per vertical-slice rule).
