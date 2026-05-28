@@ -2,7 +2,7 @@
 
 > Spec for `auth-integration` — version 1, drafted 2026-05-27.
 > Authors: solo + Claude.
-> Status: Ready-for-plan (clarify-gate passed 2026-05-27, reviewer pass 2).
+> Status: Shipped (2026-05-28, all 13 ACs covered; /verify-end-to-end green; 114 tests + 1 documented skip).
 
 ## Problem
 
