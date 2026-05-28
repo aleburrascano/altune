@@ -103,6 +103,8 @@ module = [
     "alembic.*",
     "dotenv.*",
     "asyncpg.*",
+    "rapidfuzz.*",
+    "yt_dlp.*",
 ]
 ignore_missing_imports = true
 
