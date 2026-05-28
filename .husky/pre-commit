@@ -2,8 +2,10 @@
 # pre-commit: lightweight checks before commit.
 # Note: full verification belongs in /verify-end-to-end (slower); pre-commit stays fast.
 
-# 1. Prevent commits of files matching obviously sensitive patterns
-SENSITIVE="$(git diff --cached --name-only 2>/dev/null | grep -E '(^|/)\.env($|\.)|(^|/)secrets/|\.(pem|key|p12|pfx)$' || true)"
+# 1. Prevent commits of files matching obviously sensitive patterns.
+#    Exempt .env.example — it's the project's documented env contract per
+#    ADR-0006 + docs/architecture.md and is intentionally checked in.
+SENSITIVE="$(git diff --cached --name-only 2>/dev/null | grep -E '(^|/)\.env($|\.)|(^|/)secrets/|\.(pem|key|p12|pfx)$' | grep -Ev '(^|/)\.env\.example$' || true)"
 if [ -n "$SENSITIVE" ]; then
   echo "❌ pre-commit: refusing to commit sensitive files:"
   echo "$SENSITIVE"
