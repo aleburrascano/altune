@@ -27,4 +27,4 @@ Three endpoints: `GET /v1/discovery/search`, `GET /v1/discovery/search-history`,
 ## discover-music-v2 update
 
 - **Kinds default to `{artist, album, track}`** (playlist removed; `_ALL_KINDS` derives from the enum).
-- **Artwork back-fill is wired here:** the handler picks the Deezer adapter out of `app.state.discovery_providers` and passes it as `SearchMusic(artwork_resolver=...)` so art-less results get covers filled.
+- **Artwork back-fill is wired here:** the handler passes `app.state.discovery_artwork_resolver` (a `ChainedArtworkResolver`: Deezer → TheAudioDB, built in `platform/app.py`) into `SearchMusic(artwork_resolver=...)`. Falls back to the Deezer adapter from `discovery_providers` when app.state has no resolver (tests).
