@@ -76,3 +76,12 @@ Secondary guards: expanded `tests/eval/` (artist-name, underground, song, album,
 ## Verification plan
 
 `/run` the app; search a mainstream artist, an underground artist, a song, an album, "che rest in bass", and a nonsense string; confirm headline correctness, covers filling, and popularity-sane ordering. `scripts/ranking_eval.py` for raw ranking; new enrichment unit tests for the back-fill.
+
+## Shipped vs deferred (2026-05-29)
+
+**Shipped:** two-phase enrichment architecture; uniform popularity (Last.fm getInfo, all kinds) + rerank; own-identity relevance (uniform headline, no favoritism); MBID-join dedup; Cover Art Archive covers for MB albums (by release-group MBID, no extra call); record-type + karaoke/tribute/compilation demotion; hi-res iTunes artwork (1000px). All green (unit/integration/e2e), live-verified.
+
+**Deferred — deliberate quality calls, not omissions:**
+- **Fielded queries** (`artist:"x" track:"y"`): a single search box gives no reliable artist↔title boundary; guessing it would hurt more than help. Own-identity relevance + enrichment handle single-string queries well. Revisit only if/when the UI offers structured input.
+- **MusicBrainz `score` blend**: the audit showed it saturates at 100 for junk on broad/fuzzy queries; our `token_sort` own-identity relevance is cleaner. Not worth the noise.
+- **TheAudioDB-by-MBID artist art**: the name-keyed `ArtworkResolver` chain (Deezer → TheAudioDB) already covers artist art; MBID-keyed lookup is a marginal precision gain.
