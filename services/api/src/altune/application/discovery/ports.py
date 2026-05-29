@@ -61,6 +61,23 @@ class SearchProvider(Protocol):
 
 
 @runtime_checkable
+class ArtworkResolver(Protocol):
+    """Best-effort cover-art back-fill for results a provider returned art-less.
+
+    Used by SearchMusic to enrich merged results whose image_url is None
+    (MusicBrainz items, iTunes artists). Returns an image URL or None; never
+    raises (the search must not fail because art lookup failed).
+    """
+
+    async def resolve_artwork(
+        self,
+        kind: ResultKind,
+        title: str,
+        subtitle: str | None,
+    ) -> str | None: ...
+
+
+@runtime_checkable
 class QueryCache(Protocol):
     """Per-source post-ACL SearchResult cache.
 

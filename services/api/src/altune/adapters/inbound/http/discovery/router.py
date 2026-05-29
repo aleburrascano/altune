@@ -76,6 +76,9 @@ async def get_discovery_search(
     )
     providers = getattr(request.app.state, "discovery_providers", ())
     cache = getattr(request.app.state, "discovery_cache", None)
+    # Reuse the Deezer adapter (no-auth, has artwork) to back-fill covers for
+    # art-less results (MusicBrainz items, iTunes artists).
+    artwork_resolver = next((p for p in providers if getattr(p, "name", None) == "deezer"), None)
     sessionmaker = getattr(request.app.state, "sessionmaker", None)
     if sessionmaker is not None:
         from altune.adapters.outbound.persistence.discovery.search_history_repository import (
@@ -84,7 +87,12 @@ async def get_discovery_search(
 
         async with sessionmaker() as session:
             repo = SqlAlchemySearchHistoryRepository(session)
-            use_case = SearchMusic(providers=providers, history_repo=repo, cache=cache)
+            use_case = SearchMusic(
+                providers=providers,
+                history_repo=repo,
+                cache=cache,
+                artwork_resolver=artwork_resolver,
+            )
             output = await use_case.execute(
                 SearchMusicInput(
                     raw_query=q,
@@ -97,7 +105,12 @@ async def get_discovery_search(
     else:
         # Fallback path for environments without persistence (tests, smoke).
         history_repo = request.app.state.discovery_history_repo
-        use_case = SearchMusic(providers=providers, history_repo=history_repo, cache=cache)
+        use_case = SearchMusic(
+            providers=providers,
+            history_repo=history_repo,
+            cache=cache,
+            artwork_resolver=artwork_resolver,
+        )
         output = await use_case.execute(
             SearchMusicInput(
                 raw_query=q,
@@ -160,15 +173,11 @@ async def get_discovery_search_history(
         async with sessionmaker() as session:
             repo = SqlAlchemySearchHistoryRepository(session)
             use_case = ListSearchHistory(history_repo=repo)
-            output = await use_case.execute(
-                ListSearchHistoryInput(user_id=user_id, limit=limit)
-            )
+            output = await use_case.execute(ListSearchHistoryInput(user_id=user_id, limit=limit))
     else:
         history_repo = request.app.state.discovery_history_repo
         use_case = ListSearchHistory(history_repo=history_repo)
-        output = await use_case.execute(
-            ListSearchHistoryInput(user_id=user_id, limit=limit)
-        )
+        output = await use_case.execute(ListSearchHistoryInput(user_id=user_id, limit=limit))
     return DiscoverySearchHistoryResponse(
         items=[
             SearchHistoryItemDto(
