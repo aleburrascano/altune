@@ -34,3 +34,9 @@ Use cases + ports for the unified music search. `SearchMusic` is the load-bearin
 - **Sort key:** relevance-band (`token_sort_ratio`, 0.1 buckets) → popularity → RRF → multi-source → prior → alpha. No kind hierarchy (best relevance×popularity wins any kind, so a song query headlines the song).
 - **Popularity** rides in `extras["popularity"]` (0–1), max'd across sources in `_merge`. Deezer `rank`/`nb_fan` + Last.fm `listeners`, log-normalized; absent for iTunes/MB.
 - **Cover-art back-fill.** `ArtworkResolver` port (`ports.py`); `SearchMusic._enrich_artwork` fills `image_url` for the top art-less results best-effort via the resolver (Deezer adapter). Never fails the search.
+
+## discover-music-v3 update
+
+- **Two-phase: search locates, enrichment scores.** After `fuse_and_rank`, `SearchMusic._enrich` runs a bounded (top `_ENRICH_LIMIT`=25), concurrency-capped (`_ENRICH_CONCURRENCY`=8), best-effort pass that back-fills a UNIFORM popularity onto every result via the `PopularityResolver` (Last.fm `getInfo` play counts, keyed by artist+title) + cover art via `ArtworkResolver`. Then `rerank(results, query_norm)` re-sorts (relevance-band → popularity → multi-source → prior → alpha; no RRF post-merge). This makes an iTunes/MB-only artist rank on the same basis as a Deezer one — no source favoritism.
+- **Relevance is own-identity** (`_relevance_score`): artist by name, track/album by "artist title"/title. No bare artist-field match → an exact name headlines its artist (mainstream or underground), a title headlines its song. Uniform.
+- **Ports**: `PopularityResolver` (Last.fm), `ArtworkResolver` (Deezer/TheAudioDB chain). Both best-effort, never fail the search.
