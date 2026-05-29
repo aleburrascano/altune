@@ -67,3 +67,11 @@ Mobile screen for the unified music search surface. Submit-only `TextInput` at t
 - [__tests__/state.test.ts](__tests__/state.test.ts) — 7 tests on `_viewForState` (all five view-state branches) + `_shouldShowPartialBanner` (banner-on / banner-off / undefined-data).
 
 <!-- AUTO-MAINTAINED:END -->
+
+## discover-music-v2 update
+
+Rebuilt into a Spotify-style sectioned UI:
+- **Filter chips** `All · Albums · Songs · Artists` (no Playlists). `All` is the blended view: a **Top Result** card (`discover-top-result`, = `results[0]`), then per-kind sections (≤10 each, `discover-see-all-<kind>`); a kind chip filters to a flat list of that kind.
+- **Dynamic section order** via `_sectionOrder(results)` — the kind whose strongest member ranks earliest shows first (song query → Songs first). New pure helpers in [state.ts](state.ts): `_groupByKind`, `_topResult`, `_sectionOrder`, `_cap` (+ tests).
+- **Confidence badge removed** — `ConfidenceDot` and the verified glow are gone from `DiscoverRow`; rows are circular-art for artists, square-art for albums/tracks. Confidence is no longer shown anywhere.
+- The mobile client sends no `kinds` param, so the API returns all three kinds by default.

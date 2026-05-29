@@ -26,3 +26,11 @@ Use cases + ports for the unified music search. `SearchMusic` is the load-bearin
 - **`from __future__ import annotations` + dataclass field types in TYPE_CHECKING** can trip ruff's I001 / TC003 lint when the import is only used in a field annotation. Keep `Sequence`, `Mapping`, `QueryCache`, `ProviderName`, `SearchProvider`, `SearchHistoryRepository`, `SearchResult` etc. in the `TYPE_CHECKING` block — they resolve at runtime via string annotations.
 - **`fuse_and_rank` uses `rapidfuzz.distance.JaroWinkler`** which mypy lacks stubs for; the `rapidfuzz.*` override in pyproject.toml handles this in batch mypy but per-file mypy hook will complain. Tolerate.
 - **JW boundary cases**: 0.85 (merge with MEDIUM), 0.92 (merge with HIGH). Test parametrization explicitly hits 0.84 / 0.85 / 0.91 / 0.92 — don't simplify those tests away.
+
+## discover-music-v2 update
+
+- **Multi-kind search.** The use case requests `{artist, album, track}` (playlist removed). `fuse_and_rank` takes per-(provider) groups and ranks across kinds.
+- **Parameter-free match gate** in `dedup.py` (`_passes_gate`): a result is kept only if it shares ≥1 content token (stopwords excluded) with the query. Replaced the old tunable relevance floor — no threshold to calibrate.
+- **Sort key:** relevance-band (`token_sort_ratio`, 0.1 buckets) → popularity → RRF → multi-source → prior → alpha. No kind hierarchy (best relevance×popularity wins any kind, so a song query headlines the song).
+- **Popularity** rides in `extras["popularity"]` (0–1), max'd across sources in `_merge`. Deezer `rank`/`nb_fan` + Last.fm `listeners`, log-normalized; absent for iTunes/MB.
+- **Cover-art back-fill.** `ArtworkResolver` port (`ports.py`); `SearchMusic._enrich_artwork` fills `image_url` for the top art-less results best-effort via the resolver (Deezer adapter). Never fails the search.

@@ -28,3 +28,10 @@ Providers: `deezer/`, `musicbrainz/`, `soundcloud/`, `lastfm/`, and `itunes/` (a
 - **SC fixture uses `t500x500` as the largest-by-width thumbnail**, NOT the `original` entry — the `original` thumbnail in yt-dlp output has no `width`, only `preference`. Tests assert `t500x500 in image_url`.
 - **MusicBrainz now requests `inc=isrcs`** (ADR-0007 ranking-overhaul addendum) — `extras["isrc"]` is the first entry of the recording's `isrcs[]` array, or `None` when the recording has no ISRC. This revives the canonical cross-source ISRC merge with Deezer/iTunes; previously MB omitted ISRC and dedup fell back to JW only.
 - **`# mypy: warn_unused_ignores = False`** is at the top of every adapter to silence the per-file mypy hook's noise about httpx / sqlalchemy stubs that the batch mypy resolves correctly.
+
+## discover-music-v2 update
+
+- **Album + artist search.** Deezer/iTunes/MusicBrainz/Last.fm each fan out to their album + artist endpoints concurrently inside one `search()` call (per-kind dispatch); SoundCloud stays tracks-only. Each carries an internal per-fetch HTTP-error mapping (e.g. `_DeezerHTTPError`).
+- **Popularity** written to `extras["popularity"]`: Deezer track `rank` / artist `nb_fan`, Last.fm `listeners`, log-normalized. iTunes/MB carry none.
+- **`DeezerSearchAdapter.resolve_artwork(kind, title, subtitle)`** implements the `ArtworkResolver` port — best-effort cover lookup (no-auth) used to back-fill art-less results (MB items, iTunes artists). Never raises.
+- **Known quality issue (open):** Last.fm `artist.search` returns crowd-scrobbled junk "artists" that are really track/beat titles. Pending decision to drop Last.fm from artist search.

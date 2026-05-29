@@ -23,3 +23,8 @@ Three endpoints: `GET /v1/discovery/search`, `GET /v1/discovery/search-history`,
 - **Lifespan must run for `app.state` to be populated.** The e2e tests use `with TestClient(app) as client:` (context manager triggers lifespan); a plain `httpx.AsyncClient` against `ASGITransport(app=app)` does NOT trigger lifespan and will crash on `app.state.token_verifier` access.
 - **Per-request import of `SqlAlchemySearchHistoryRepository` / `SqlAlchemySearchClickRepository`** — done inside the handler to avoid SQLAlchemy import overhead in environments that don't use persistence. Same pattern as `platform/wiring.py`'s lazy imports.
 - **DTO field order is the wire contract.** The Pydantic models in [dto.py](dto.py) declare `kind, title, subtitle, image_url, confidence, sources, extras` in that order — match the spec §3.7 sample JSON exactly. Mobile's typed client mirrors this [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\apps\mobile\src\shared\api-client\discovery.ts#L22-L36].
+
+## discover-music-v2 update
+
+- **Kinds default to `{artist, album, track}`** (playlist removed; `_ALL_KINDS` derives from the enum).
+- **Artwork back-fill is wired here:** the handler picks the Deezer adapter out of `app.state.discovery_providers` and passes it as `SearchMusic(artwork_resolver=...)` so art-less results get covers filled.
