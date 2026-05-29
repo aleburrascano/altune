@@ -105,6 +105,33 @@ def _popularity(result: SearchResult) -> float:
     return 0.0
 
 
+# Low-quality release markers (in the normalized title) + record types that
+# should sink below the real thing within a relevance band.
+_JUNK_TITLE_MARKERS = (
+    "karaoke",
+    "tribute",
+    "made famous",
+    "in the style of",
+    "instrumental version",
+    "backing track",
+    "8 bit",
+    "8bit",
+    "lullaby",
+)
+_DEMOTED_RECORD_TYPES = frozenset({"compilation"})
+
+
+def _is_demoted(result: SearchResult) -> bool:
+    """True for karaoke/tribute/compilation-style results that should rank below
+    the genuine article within the same relevance band. Checks the RAW title
+    (normalize strips bracketed '(Karaoke Version)' suffixes)."""
+    title = result.title.lower()
+    if any(marker in title for marker in _JUNK_TITLE_MARKERS):
+        return True
+    record_type = result.extras.get("record_type")
+    return isinstance(record_type, str) and record_type.lower() in _DEMOTED_RECORD_TYPES
+
+
 def _content_tokens(text: str) -> set[str]:
     """Significant tokens of normalized text: length >= 2, minus stopwords."""
     return {t for t in text.split() if len(t) >= 2 and t not in _STOPWORDS}
@@ -159,12 +186,24 @@ def _merge(a: SearchResult, b: SearchResult, confidence: Confidence) -> SearchRe
     )
 
 
+def _mbid_of(result: SearchResult) -> str | None:
+    val = result.extras.get("mbid")
+    if isinstance(val, str) and val:
+        return val
+    return None
+
+
 def _try_merge(a: SearchResult, b: SearchResult) -> SearchResult | None:
     """Return merged result, or None if they shouldn't merge."""
     if a.kind is not b.kind:
         return None
     isrc_a, isrc_b = _isrc_of(a), _isrc_of(b)
     if isrc_a and isrc_b and isrc_a == isrc_b:
+        return _merge(a, b, Confidence.HIGH)
+    # MusicBrainz ID is a high-confidence cross-source identity (MB + Last.fm
+    # carry it); merge on an exact MBID match before falling back to JW.
+    mbid_a, mbid_b = _mbid_of(a), _mbid_of(b)
+    if mbid_a and mbid_b and mbid_a == mbid_b:
         return _merge(a, b, Confidence.HIGH)
     sim = JaroWinkler.similarity(_signature(a), _signature(b))
     if a.kind is ResultKind.ARTIST:
@@ -289,18 +328,20 @@ def fuse_and_rank(
         rel = _relevance_score(result, query_norm)
         scored.append(_Scored(result=result, relevance=rel, rrf=rrf))
 
-    def _key(item: _Scored) -> tuple[float, float, float, int, float, str, str]:
+    def _key(item: _Scored) -> tuple[float, int, float, float, int, float, str, str]:
         # The best relevance x popularity match wins, of ANY kind — so a song
         # query headlines the song, an artist query the artist, an album query
         # the album. Relevance (banded to 0.1) leads; popularity orders within a
         # band; then cross-provider agreement (RRF), multi-source, prior, alpha.
         # NO fixed kind hierarchy (it buried songs under artists/albums).
         band = round(item.relevance, 1)
+        demoted = 1 if _is_demoted(item.result) else 0  # clean (0) sorts before junk (1)
         popularity = _popularity(item.result)
         multi_source = 1 if len(_providers_of(item.result)) > 1 else 0
         prior = _winning_prior(item.result)
         return (
             -band,
+            demoted,
             -popularity,
             -item.rrf,
             -multi_source,
@@ -321,11 +362,20 @@ def rerank(results: Sequence[SearchResult], query_norm: str) -> tuple[SearchResu
     only reorders.
     """
 
-    def _key(result: SearchResult) -> tuple[float, float, int, float, str, str]:
+    def _key(result: SearchResult) -> tuple[float, int, float, int, float, str, str]:
         band = round(_relevance_score(result, query_norm), 1)
+        demoted = 1 if _is_demoted(result) else 0
         popularity = _popularity(result)
         multi_source = 1 if len(_providers_of(result)) > 1 else 0
         prior = _winning_prior(result)
-        return (-band, -popularity, -multi_source, -prior, result.subtitle or "", result.title)
+        return (
+            -band,
+            demoted,
+            -popularity,
+            -multi_source,
+            -prior,
+            result.subtitle or "",
+            result.title,
+        )
 
     return tuple(sorted(results, key=_key))

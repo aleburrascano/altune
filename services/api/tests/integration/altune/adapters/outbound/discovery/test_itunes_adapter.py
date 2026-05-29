@@ -70,9 +70,9 @@ async def test_itunes_adapter_upscales_artwork(
     async with httpx.AsyncClient() as client:
         adapter = ITunesSearchAdapter(client=client)
         resp = await adapter.search("africa", frozenset({ResultKind.TRACK}), limit=5)
-    # 100x100bb upscaled to 600x600bb.
+    # 100x100bb upscaled to 1000x1000bb.
     assert resp.results[0].image_url is not None
-    assert "600x600bb" in resp.results[0].image_url
+    assert "1000x1000bb" in resp.results[0].image_url
     assert "100x100" not in resp.results[0].image_url
 
 
@@ -170,7 +170,7 @@ async def test_itunes_adapter_translates_album_and_artist_search() -> None:
     assert album.extras["isrc"] is None
     assert album.extras["preview_url"] is None
     assert album.image_url is not None
-    assert "600x600bb" in album.image_url
+    assert "1000x1000bb" in album.image_url
     assert album.sources[0].external_id == "401185795"
     # iTunes has no popularity field.
     assert "popularity" not in album.extras

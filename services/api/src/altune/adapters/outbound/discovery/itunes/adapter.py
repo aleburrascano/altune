@@ -130,10 +130,11 @@ def _translate_artists(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...
 
 
 def _upscale_artwork(artwork_url: str | None) -> str | None:
-    """iTunes returns a 100x100 thumbnail; request a larger render."""
+    """iTunes returns a 100x100 thumbnail; request a larger render (1000px is
+    the sweet spot — the CDN clamps above 3000)."""
     if not artwork_url:
         return None
-    return artwork_url.replace("100x100", "600x600")
+    return artwork_url.replace("100x100", "1000x1000")
 
 
 def _translate_one_track(entry: dict[str, Any]) -> SearchResult | None:
@@ -185,6 +186,7 @@ def _translate_one_album(entry: dict[str, Any]) -> SearchResult | None:
     extras: dict[str, object] = {
         "isrc": None,
         "track_count": entry.get("trackCount"),
+        "record_type": entry.get("collectionType"),  # Album / Single / EP / Compilation
         "preview_url": None,
     }
     return SearchResult(

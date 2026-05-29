@@ -229,6 +229,7 @@ def _translate_one_album(entry: dict[str, Any]) -> SearchResult | None:
     extras: dict[str, object] = {
         "isrc": None,
         "track_count": entry.get("nb_tracks"),
+        "record_type": entry.get("record_type"),  # album / single / ep / compilation
         "preview_url": None,
     }
     return SearchResult(
