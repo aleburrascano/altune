@@ -64,27 +64,23 @@ def test_exact_match_beats_alphabetical_tiebreak() -> None:
 
 @pytest.mark.unit
 def test_rrf_rewards_provider_native_top_rank() -> None:
-    # With equal query relevance, the result a provider ranked higher wins.
-    # Distinct titles so they don't merge.
-    top = _r(title="Bohemian Rhapsody", subtitle="Queen", provider=ProviderName.DEEZER, ext_id="a")
-    lower = _r(title="Radio Gaga", subtitle="Queen", provider=ProviderName.DEEZER, ext_id="b")
-    ranked = fuse_and_rank([(top, lower)], query_norm="queen")
-    assert [r.title for r in ranked] == ["Bohemian Rhapsody", "Radio Gaga"]
+    # Equal relevance (same title => band 1.0 via title match), distinct artists
+    # so they don't merge. The one the provider ranked higher wins on RRF.
+    top = _r(title="Anthem", subtitle="Alpha", provider=ProviderName.DEEZER, ext_id="a")
+    lower = _r(title="Anthem", subtitle="Omega", provider=ProviderName.DEEZER, ext_id="b")
+    ranked = fuse_and_rank([(top, lower)], query_norm="anthem")
+    assert [r.subtitle for r in ranked] == ["Alpha", "Omega"]
 
 
 @pytest.mark.unit
 def test_multi_source_agreement_outranks_single_source_at_equal_relevance() -> None:
-    # Both results match the query equally; the one multiple providers agree on
-    # accrues more RRF and ranks first. Distinct titles so they stay separate.
-    agreed_d = _r(
-        title="Bohemian Rhapsody", subtitle="Queen", provider=ProviderName.DEEZER, ext_id="d"
-    )
-    agreed_l = _r(
-        title="Bohemian Rhapsody", subtitle="Queen", provider=ProviderName.LASTFM, ext_id="l"
-    )
-    solo = _r(title="Radio Gaga", subtitle="Queen", provider=ProviderName.SOUNDCLOUD, ext_id="s")
-    ranked = fuse_and_rank([(agreed_d,), (agreed_l,), (solo,)], query_norm="queen")
-    assert ranked[0].title == "Bohemian Rhapsody"
+    # Both match equally (band 1.0 via title). The agreed-upon one (2 providers)
+    # accrues more RRF and ranks first; the solo one stays separate (distinct artist).
+    agreed_d = _r(title="Anthem", subtitle="Alpha", provider=ProviderName.DEEZER, ext_id="d")
+    agreed_l = _r(title="Anthem", subtitle="Alpha", provider=ProviderName.LASTFM, ext_id="l")
+    solo = _r(title="Anthem", subtitle="Omega", provider=ProviderName.SOUNDCLOUD, ext_id="s")
+    ranked = fuse_and_rank([(agreed_d,), (agreed_l,), (solo,)], query_norm="anthem")
+    assert ranked[0].subtitle == "Alpha"
     assert len(ranked[0].sources) == 2
 
 
@@ -119,11 +115,11 @@ def test_artist_only_query_surfaces_artist_track() -> None:
     assert ranked[0].subtitle == "Queen"
 
 
-def _pop_result(*, title: str, popularity: float, ext_id: str) -> SearchResult:
+def _pop_result(*, title: str, subtitle: str, popularity: float, ext_id: str) -> SearchResult:
     return SearchResult(
         kind=ResultKind.TRACK,
         title=title,
-        subtitle="Queen",
+        subtitle=subtitle,
         image_url=None,
         confidence=Confidence.LOW,
         sources=(
@@ -135,13 +131,13 @@ def _pop_result(*, title: str, popularity: float, ext_id: str) -> SearchResult:
 
 @pytest.mark.unit
 def test_popularity_outranks_agreement_within_a_relevance_band() -> None:
-    # Both match the query ("queen") equally (band 1.0 via artist). The obscure
-    # one sits at the provider's rank 0 (better RRF); the popular one at rank 1.
-    # Popularity is above RRF in the sort key, so the popular one still wins.
-    obscure = _pop_result(title="Radio Ga Ga", popularity=0.1, ext_id="b")
-    popular = _pop_result(title="Bohemian Rhapsody", popularity=0.9, ext_id="a")
-    ranked = fuse_and_rank([(obscure, popular)], query_norm="queen")
-    assert ranked[0].title == "Bohemian Rhapsody"
+    # Both match equally (band 1.0 via the shared title), distinct artists so no
+    # merge. The obscure one sits at provider rank 0 (better RRF); the popular one
+    # at rank 1. Popularity is above RRF in the sort key, so the popular one wins.
+    obscure = _pop_result(title="Anthem", subtitle="Omega", popularity=0.1, ext_id="b")
+    popular = _pop_result(title="Anthem", subtitle="Alpha", popularity=0.9, ext_id="a")
+    ranked = fuse_and_rank([(obscure, popular)], query_norm="anthem")
+    assert ranked[0].subtitle == "Alpha"
 
 
 @pytest.mark.unit

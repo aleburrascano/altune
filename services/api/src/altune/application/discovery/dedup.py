@@ -195,30 +195,29 @@ def _as_low_confidence(result: SearchResult) -> SearchResult:
 def _relevance_score(result: SearchResult, query_norm: str) -> float:
     """Continuous query-relevance in [0, 1] — the primary ranking signal.
 
-    Graded token-sort similarity (rapidfuzz) between the normalized query and
-    both the title and the `"<artist> <title>"` form; the better of the two
-    wins. `token_sort_ratio` (not `token_set_ratio`) is deliberate:
-    token_set_ratio returns 100 whenever the title is a *subset* of the query,
-    so every same-title result ("Africa — Toto", "Africa — Kidjo", …) would
-    tie at 100. token_sort_ratio penalizes missing/extra tokens, so a 3-of-4
-    match scores above a 2-of-4 match — the discrimination the floor and the
-    band rely on. An empty query (unit tests asserting merge only) scores 0.
+    Scored against the result's OWN IDENTITY (uniform, no kind favoritism):
+    an artist by its name (`title`); a track/album by its `"<artist> <title>"`
+    form (or the title alone, whichever matches better). We deliberately do NOT
+    score a track by a bare artist-field match — otherwise a song would tie its
+    own artist at band 1.0 on an artist-name query, letting a hit song steal the
+    headline from the artist. With own-identity scoring, any exact artist name
+    headlines that artist (mainstream or underground) and any title headlines
+    its song. Its songs still appear (kept by the token gate), just below.
+
+    `token_sort_ratio` (not `token_set_ratio`) is deliberate: token_set returns
+    100 whenever the title is a subset of the query, so every same-title result
+    would tie at 100. token_sort penalizes missing/extra tokens. Empty query
+    (merge-only unit tests) scores 0.
     """
     query = query_norm.strip()
     if not query:
         return 0.0
     title = normalize_for_match(result.title)
-    subtitle = normalize_for_match(result.subtitle or "")
-    combined = f"{subtitle} {title}".strip()
-    # Match against title, artist, and "artist title" — the best wins. Matching
-    # the artist field alone is what makes an artist-only query ("queen") return
-    # that artist's tracks instead of being dropped by the floor.
-    best = max(
-        fuzz.token_sort_ratio(query, title),
-        fuzz.token_sort_ratio(query, subtitle),
-        fuzz.token_sort_ratio(query, combined),
-    )
-    return float(best) / 100.0
+    candidates = [fuzz.token_sort_ratio(query, title)]
+    if result.subtitle:
+        combined = f"{normalize_for_match(result.subtitle)} {title}".strip()
+        candidates.append(fuzz.token_sort_ratio(query, combined))
+    return float(max(candidates)) / 100.0
 
 
 def _providers_of(result: SearchResult) -> set[ProviderName]:
