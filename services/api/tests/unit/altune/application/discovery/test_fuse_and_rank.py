@@ -170,3 +170,30 @@ def test_more_popular_match_headlines_regardless_of_kind() -> None:
 @pytest.mark.unit
 def test_empty_input_returns_empty_tuple() -> None:
     assert fuse_and_rank([], query_norm="anything") == ()
+
+
+@pytest.mark.unit
+def test_karaoke_and_compilation_results_are_demoted_within_band() -> None:
+    # Same title => same relevance band; the karaoke/compilation versions sink
+    # below the genuine album.
+    real = SearchResult(
+        kind=ResultKind.ALBUM, title="Anthem", subtitle="The Band", image_url=None,
+        confidence=Confidence.LOW,
+        sources=(SourceRef(provider=ProviderName.DEEZER, external_id="r", url="https://x/r"),),
+        extras={"record_type": "album"},
+    )
+    karaoke = SearchResult(
+        kind=ResultKind.ALBUM, title="Anthem (Karaoke Version)", subtitle="Karaoke Allstars",
+        image_url=None, confidence=Confidence.LOW,
+        sources=(SourceRef(provider=ProviderName.ITUNES, external_id="k", url="https://x/k"),),
+        extras={"record_type": "album"},
+    )
+    comp = SearchResult(
+        kind=ResultKind.ALBUM, title="Anthem", subtitle="Various", image_url=None,
+        confidence=Confidence.LOW,
+        sources=(SourceRef(provider=ProviderName.MUSICBRAINZ, external_id="c", url="https://x/c"),),
+        extras={"record_type": "Compilation"},
+    )
+    ranked = fuse_and_rank([(karaoke,), (comp,), (real,)], query_norm="anthem")
+    assert ranked[0].title == "Anthem"
+    assert ranked[0].subtitle == "The Band"  # the clean album, not the compilation

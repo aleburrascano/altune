@@ -42,6 +42,7 @@ _log = logging.getLogger(__name__)
 _BASE_URL = "https://musicbrainz.org/ws/2"
 _RECORDING_URL_TPL = "https://musicbrainz.org/recording/{mbid}"
 _RELEASE_GROUP_URL_TPL = "https://musicbrainz.org/release-group/{mbid}"
+_COVER_ART_TPL = "https://coverartarchive.org/release-group/{mbid}/front-500"
 _ARTIST_URL_TPL = "https://musicbrainz.org/artist/{mbid}"
 
 
@@ -252,12 +253,16 @@ def _translate_one_release_group(entry: dict[str, Any]) -> SearchResult | None:
         "isrc": None,
         "preview_url": None,
         "year": year,
+        "record_type": entry.get("primary-type"),  # Album / Single / EP / Compilation
+        "mbid": mbid,  # release-group MBID — cross-source dedup key
     }
     return SearchResult(
         kind=ResultKind.ALBUM,
         title=title,
         subtitle=artist_name,
-        image_url=None,
+        # Cover Art Archive serves art by release-group MBID (307 → image, 404
+        # when none). No extra MB call — the MBID is already in hand.
+        image_url=_COVER_ART_TPL.format(mbid=mbid),
         confidence=Confidence.LOW,
         sources=(
             SourceRef(
