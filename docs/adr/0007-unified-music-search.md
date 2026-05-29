@@ -4,7 +4,7 @@
 - **Date:** 2026-05-27
 - **Deciders:** solo + Claude
 - **Context tags:** [arch, tech-stack, pattern, layer, dependency]
-- **Revisions:** 2026-05-27 — SoundCloud auth strategy switched from client-credentials OAuth to **yt-dlp `scsearch`** extraction after discovering that SoundCloud's Developer API now gates registration behind an Artist Pro subscription. The yt-dlp path is the same one the legacy `music-manager` shipped with [VERIFIED:Read@C:\Users\Alessandro\music-manager\backend\providers\soundcloud_provider.py#L21-L43]. Trade-offs in §"SoundCloud strategy revision" below.
+- **Revisions:** 2026-05-27 — SoundCloud auth strategy switched from client-credentials OAuth to **yt-dlp `scsearch`** extraction after discovering that SoundCloud's Developer API now gates registration behind an Artist Pro subscription. The yt-dlp path is the same one the legacy `music-manager` shipped with [VERIFIED:Read@C:\Users\Alessandro\music-manager\backend\providers\soundcloud_provider.py#L21-L43]. Trade-offs in §"SoundCloud strategy revision" below. · 2026-05-28 — **Ranking overhaul**: relevance-first ranking (RRF + exact-match boost), confidence demoted to a display-only badge, **iTunes** added as a 5th provider, MusicBrainz ISRC revived (`inc=isrcs`), and a ranking-eval harness added. See §"Ranking-overhaul addendum" below.
 
 ## Context
 
@@ -91,6 +91,28 @@ Consequences of the revision:
 - **Result confidence**: the per-source prior for SoundCloud stays at **0.65** (uploader-as-artist is fuzzy regardless of access path). yt-dlp output lacks ISRC, so dedup via ISRC is impossible for SC; JW similarity on `(uploader, title)` is the only dedup signal — matches the original brainstorm's stance.
 
 The bullets below in "Decision" + the alternatives table reflect the revised strategy.
+
+## Ranking-overhaul addendum (2026-05-28)
+
+Shipped discovery search felt broken: the obviously-correct match for a query surfaced *mid-list*, not at the top. Root cause: the original ranking sort was `{confidence DESC → multi-source DESC → prior DESC → alpha}` — **no term measured relevance to the query**, and it discarded each provider's own relevance ordering. Confidence (a dedup-agreement signal) was conflated with relevance and used as the primary sort key, so agreed-upon-but-less-relevant entries outranked the canonical hit. Separately, the ISRC dedup signal was effectively dead: MusicBrainz omitted ISRC, leaving Deezer as the only ISRC-bearing source with no partner to match.
+
+This addendum revises three ADR-0007-locked decisions:
+
+1. **Ranking model → relevance-first.** Replace the confidence-primary sort with a **continuous query-relevance score** as the primary key, with cross-provider agreement (RRF) as a secondary corroboration tiebreak and a **relevance floor** that excludes non-matches.
+   - *Relevance* `rel = max(token_set_ratio(query, title), token_set_ratio(query, "artist title")) / 100` (rapidfuzz, graded 0–1). Banded to 0.1 for the sort so near-equal relevance lets agreement decide.
+   - *RRF* `Σ 1/(60 + best_rank)` over **distinct providers** (each provider once, at its best rank — same-provider duplicates can't inflate score or confidence).
+   - *Floor* `REL_FLOOR` (initial 0.50, eval-calibrated): results below it are dropped, so an unsatisfiable query returns real matches or zero-results, not provider-rank noise.
+   - Sort key: relevance-band DESC → RRF DESC → distinct-multi-source DESC → prior DESC → alpha.
+   - **Confidence becomes display-only** (trust badge; a same-provider-only merge stays LOW since there's no independent agreement). Implemented as `fuse_and_rank(per_provider, query_norm)` in `application/discovery/dedup.py`; the use case passes per-provider groups. Merge semantics (ISRC/JW collapse, canonical representative) unchanged.
+   - **Why not RRF-primary + binary boost** (the first cut, rejected): RRF is rank *fusion*, not relevance *measurement* — it trusts each provider's position, so for queries a provider can't satisfy it promotes that provider's fuzzy fallbacks. A binary "all query tokens present" boost gave partial matches (the common case) zero credit, leaving RRF + prior to rank noise (observed: "Under Pressure" ranked #1 for `che rest in bass`). The first eval set hid this by testing only clean artist+title queries (false MRR 1.00).
+
+2. **Source set → add iTunes (5th provider).** The **iTunes Search API** (`https://itunes.apple.com/search`) is free and requires no auth — a *different* API from the paid Apple Music API rejected above (the "Apple Music as a source" row referred to the $99/yr developer-program API). iTunes carries no ISRC but adds strong relevance, artwork (100×100 upscaled to 600×600), and preview URLs (filling the reserved `extras.preview_url`). Per-source prior 0.85 (commercial catalog, like Deezer); cache TTL 12h. ~20 calls/min, covered by the per-source cache. SoundCloud is retained for now; pruning is a future, data-driven call once the eval harness shows each provider's contribution.
+
+3. **Revive ISRC.** MusicBrainz recording search now requests `inc=isrcs`; the first ISRC populates `extras["isrc"]`, restoring the canonical high-precision cross-source merge with Deezer/iTunes.
+
+**Measurement.** A deterministic ranking-eval harness lands at `services/api/tests/eval/` (golden query set → MRR + top-3 hit-rate, regression-guarded in CI) plus `scripts/ranking_eval.py` for live spot-checks. The golden set is **expanded beyond clean "artist + title" queries** to include partial (title-only / artist-only), misspelled, ambiguous (many same-title artists), and unsatisfiable/nonsense queries, with a **no-junk invariant** (every returned result for an unsatisfiable query clears `REL_FLOOR`). This is the success metric ADR-0007 §Consequences called for ("search accuracy is measurable") — and the expanded set exists specifically because the first happy-path-only set reported a false MRR 1.00 while live `che rest in bass` still surfaced an irrelevant #1. Before/after numbers on the expanded set are recorded with the implementation.
+
+**Reversibility.** All three are adapter/application-internal — the `GET /v1/discovery/search` response shape is unchanged (still `sources: []` + `confidence` + `extras: {}`), so mobile and downstream specs are unaffected. RRF constants and boost magnitudes are tunable; iTunes is one adapter behind the existing `SearchProvider` port.
 
 ## Implementation notes
 
