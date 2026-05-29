@@ -17,3 +17,4 @@ class ProviderName(Enum):
     SOUNDCLOUD = "soundcloud"
     LASTFM = "lastfm"
     ITUNES = "itunes"
+    THEAUDIODB = "theaudiodb"

@@ -46,6 +46,7 @@ def build_discovery_providers(
     from altune.adapters.outbound.discovery.soundcloud.adapter import (
         SoundCloudSearchAdapter,
     )
+    from altune.adapters.outbound.discovery.theaudiodb.adapter import TheAudioDBSearchAdapter
 
     clients: list = []
     providers: list = []
@@ -58,6 +59,12 @@ def build_discovery_providers(
     itunes_client = httpx.AsyncClient(timeout=10.0)
     clients.append(itunes_client)
     providers.append(ITunesSearchAdapter(client=itunes_client))
+
+    # TheAudioDB: free (key "123"). Artist-only search + high-quality artwork
+    # used to back-fill art-less results. Own AsyncClient for bulkhead.
+    theaudiodb_client = httpx.AsyncClient(timeout=10.0)
+    clients.append(theaudiodb_client)
+    providers.append(TheAudioDBSearchAdapter(client=theaudiodb_client))
 
     # MusicBrainz: skip when UA not configured. MB throttles unregistered
     # User-Agents to 1 req/s and may 503; we'd rather omit it than spam.

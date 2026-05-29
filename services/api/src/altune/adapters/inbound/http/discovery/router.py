@@ -76,9 +76,12 @@ async def get_discovery_search(
     )
     providers = getattr(request.app.state, "discovery_providers", ())
     cache = getattr(request.app.state, "discovery_cache", None)
-    # Reuse the Deezer adapter (no-auth, has artwork) to back-fill covers for
-    # art-less results (MusicBrainz items, iTunes artists).
-    artwork_resolver = next((p for p in providers if getattr(p, "name", None) == "deezer"), None)
+    # Cover-art back-fill for art-less results (MusicBrainz items, iTunes
+    # artists). Prefer the wired chained resolver (Deezer -> TheAudioDB); fall
+    # back to the Deezer adapter when app.state has no resolver (e.g. tests).
+    artwork_resolver = getattr(request.app.state, "discovery_artwork_resolver", None) or next(
+        (p for p in providers if getattr(p, "name", None) == "deezer"), None
+    )
     sessionmaker = getattr(request.app.state, "sessionmaker", None)
     if sessionmaker is not None:
         from altune.adapters.outbound.persistence.discovery.search_history_repository import (
