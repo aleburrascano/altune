@@ -58,10 +58,7 @@ async def _run(query: str, limit: int) -> None:
         srcs = "+".join(s.provider.value for s in r.sources)
         pop = r.extras.get("popularity")
         pop_s = f"pop={pop:.2f}" if isinstance(pop, (int, float)) else "pop=-"
-        print(
-            f"  #{i:<2} [{r.kind.value:<6}] {r.title} — {r.subtitle}  "
-            f"({pop_s}; {srcs})"
-        )
+        print(f"  #{i:<2} [{r.kind.value:<6}] {r.title} — {r.subtitle}  ({pop_s}; {srcs})")
 
 
 def main() -> None:

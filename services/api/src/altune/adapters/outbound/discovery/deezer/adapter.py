@@ -130,6 +130,38 @@ class DeezerSearchAdapter:
             return None
         return _translate_one_track(entry)
 
+    async def resolve_artwork(
+        self,
+        kind: ResultKind,
+        title: str,
+        subtitle: str | None,
+    ) -> str | None:
+        """Best-effort cover-art lookup for an art-less result. Never raises."""
+        if kind is ResultKind.ARTIST:
+            endpoint, query = "artist", title
+        elif kind is ResultKind.ALBUM:
+            endpoint, query = "album", f"{subtitle or ''} {title}".strip()
+        else:
+            endpoint, query = "track", f"{subtitle or ''} {title}".strip()
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/search/{endpoint}", params={"q": query, "limit": 1}
+            )
+            if response.status_code != 200:
+                return None
+            data = response.json().get("data") or []
+        except Exception:
+            return None
+        if not data or not isinstance(data[0], dict):
+            return None
+        entry = data[0]
+        if kind is ResultKind.ARTIST:
+            return entry.get("picture_xl") or entry.get("picture_big")
+        if kind is ResultKind.ALBUM:
+            return entry.get("cover_xl") or entry.get("cover_big")
+        album = entry.get("album") or {}
+        return album.get("cover_xl") or album.get("cover_big")
+
 
 class _DeezerHTTPError(Exception):
     """Internal: a per-endpoint HTTP failure mapped to a ProviderStatus."""

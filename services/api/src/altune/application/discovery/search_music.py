@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from altune.application.discovery.ports import (
+        ArtworkResolver,
         QueryCache,
         SearchHistoryRepository,
         SearchProvider,
@@ -40,6 +41,10 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 _DEFAULT_PER_SOURCE_TIMEOUT_S = 1.5
+
+# Cap cover-art back-fill to the results we're likely to show, so enrichment
+# can't fan out an unbounded number of lookups.
+_ART_ENRICH_LIMIT = 30
 
 # Per-source default TTLs from ADR-0007 §3.4.
 _DEFAULT_TTLS = {
@@ -110,6 +115,7 @@ class SearchMusic:
     per_source_timeout_s: float = _DEFAULT_PER_SOURCE_TIMEOUT_S
     cache: QueryCache | None = None
     cache_ttls: Mapping[str, timedelta] = field(default_factory=lambda: dict(_DEFAULT_TTLS))
+    artwork_resolver: ArtworkResolver | None = None
     _breakers: dict[str, CircuitBreaker] = field(default_factory=dict, init=False)
 
     def _breaker_for(self, provider_name: str) -> CircuitBreaker:
@@ -119,6 +125,36 @@ class SearchMusic:
 
     def _ttl_for(self, provider_name: str) -> timedelta:
         return self.cache_ttls.get(provider_name, timedelta(hours=1))
+
+    async def _enrich_artwork(self, results: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:
+        """Best-effort cover-art back-fill for art-less results (top N only).
+
+        MusicBrainz items and iTunes artists come back without artwork; fill
+        them via the resolver (Deezer). Never fails the search — resolver
+        errors are swallowed and the result keeps its empty art.
+        """
+        resolver = self.artwork_resolver
+        if resolver is None:
+            return results
+        art_less = [
+            (i, r) for i, r in enumerate(results[:_ART_ENRICH_LIMIT]) if r.image_url is None
+        ]
+        if not art_less:
+            return results
+
+        async def _resolve_one(result: SearchResult) -> str | None:
+            try:
+                return await resolver.resolve_artwork(result.kind, result.title, result.subtitle)
+            except Exception:
+                _log.warning("artwork_resolve_failed kind=%s", result.kind, exc_info=True)
+                return None
+
+        urls = await asyncio.gather(*(_resolve_one(r) for _, r in art_less))
+        enriched = list(results)
+        for (index, result), url in zip(art_less, urls, strict=True):
+            if url:
+                enriched[index] = replace(result, image_url=url)
+        return tuple(enriched)
 
     async def execute(self, request: SearchMusicInput) -> SearchMusicOutput:
         query_norm = normalize_for_match(request.raw_query)
@@ -151,6 +187,7 @@ class SearchMusic:
                 cache_hit_fetched_ats.append(cache_fetched_at)
 
         merged = fuse_and_rank(groups, query_norm)
+        merged = await self._enrich_artwork(merged)
         partial = any(s.status is not ProviderStatus.OK for s in summaries)
         cache_hit = bool(cache_hit_fetched_ats)
         cache_fetched_at = min(cache_hit_fetched_ats) if cache_hit_fetched_ats else None

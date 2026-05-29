@@ -500,3 +500,43 @@ async def test_search_music_passes_through_error_status_from_adapter() -> None:
     )
     assert output.providers[0].status is ProviderStatus.ERROR
     assert output.partial is True
+
+
+class _FakeArtworkResolver:
+    """Stub ArtworkResolver that always returns a fixed cover URL."""
+
+    async def resolve_artwork(
+        self, kind: ResultKind, title: str, subtitle: str | None
+    ) -> str | None:
+        _ = (kind, title, subtitle)
+        return "https://art.example/cover.jpg"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_music_backfills_artwork_for_artless_results() -> None:
+    artless = SearchResult(
+        kind=ResultKind.TRACK,
+        title="Rest in Bass",
+        subtitle="Che",
+        image_url=None,
+        confidence=Confidence.LOW,
+        sources=(
+            SourceRef(provider=ProviderName.MUSICBRAINZ, external_id="mb", url="https://x/mb"),
+        ),
+        extras={},
+    )
+    provider = InMemorySearchProvider(name="musicbrainz", canned=(artless,))
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        artwork_resolver=_FakeArtworkResolver(),
+    )
+    output = await use_case.execute(
+        SearchMusicInput(
+            raw_query="rest in bass che",
+            user_id=_USER,
+            kinds=frozenset({ResultKind.TRACK}),
+        )
+    )
+    assert output.results[0].image_url == "https://art.example/cover.jpg"
