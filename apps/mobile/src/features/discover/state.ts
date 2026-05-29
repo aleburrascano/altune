@@ -90,6 +90,30 @@ export function _topResult(results: DiscoveryResult[]): DiscoveryResult | null {
   return results[0] ?? null;
 }
 
+export type SectionKey = 'album' | 'song' | 'artist';
+
+const _sectionKeyOf = (kind: DiscoveryResult['kind']): SectionKey =>
+  kind === 'track' ? 'song' : kind;
+
+/**
+ * Order the blended-view sections by which kind best matches the query: the
+ * section whose strongest member appears earliest in the globally-ranked
+ * results[] comes first. So a song query shows Songs first, an artist query
+ * Artists first. Kinds with no results are omitted.
+ */
+export function _sectionOrder(results: DiscoveryResult[]): SectionKey[] {
+  const order: SectionKey[] = [];
+  const seen = new Set<SectionKey>();
+  for (const result of results) {
+    const key = _sectionKeyOf(result.kind);
+    if (!seen.has(key)) {
+      seen.add(key);
+      order.push(key);
+    }
+  }
+  return order;
+}
+
 /** First `cap` items — used to cap each section in the blended view. */
 export function _cap<T>(items: T[], cap: number = SECTION_CAP): T[] {
   return items.slice(0, cap);

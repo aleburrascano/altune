@@ -41,11 +41,13 @@ import {
   SECTION_CAP,
   _cap,
   _groupByKind,
+  _sectionOrder,
   _shouldShowPartialBanner,
   _topResult,
   _viewForState,
 } from '../state';
 
+import type { SectionKey } from '../state';
 import type {
   DiscoveryKind,
   DiscoveryResult,
@@ -269,19 +271,25 @@ function BlendedResults({
   const top = _topResult(results);
   const { albums, songs, artists } = _groupByKind(results);
 
-  const sections: ReadonlyArray<{
-    kind: DiscoveryKind;
-    title: string;
-    items: DiscoveryResult[];
-  }> = [
-    { kind: 'album', title: 'Albums', items: albums },
-    { kind: 'track', title: 'Songs', items: songs },
-    { kind: 'artist', title: 'Artists', items: artists },
-  ];
+  const byKind: Record<
+    DiscoveryKind,
+    { title: string; sectionKey: SectionKey; items: DiscoveryResult[] }
+  > = {
+    album: { title: 'Albums', sectionKey: 'album', items: albums },
+    track: { title: 'Songs', sectionKey: 'song', items: songs },
+    artist: { title: 'Artists', sectionKey: 'artist', items: artists },
+  };
+  // Order containers by which kind best matches the query (the kind whose
+  // strongest member ranks earliest), so a song query shows Songs first.
+  const order = _sectionOrder(results);
+  const sections = (['album', 'track', 'artist'] as const)
+    .map((kind) => ({ kind, ...byKind[kind] }))
+    .filter((s) => s.items.length > 0)
+    .sort((a, b) => order.indexOf(a.sectionKey) - order.indexOf(b.sectionKey));
 
   return (
     <FlatList
-      data={sections.filter((s) => s.items.length > 0)}
+      data={sections}
       keyExtractor={(s) => s.kind}
       ListHeaderComponent={
         top !== null ? <TopResultCard result={top} onPress={onResultTap} /> : null
