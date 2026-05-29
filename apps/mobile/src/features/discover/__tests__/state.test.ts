@@ -2,7 +2,14 @@
  * State machine helpers for the discover feature — slice 44.
  */
 
-import { _cap, _groupByKind, _shouldShowPartialBanner, _topResult, _viewForState } from '../state';
+import {
+  _cap,
+  _groupByKind,
+  _sectionOrder,
+  _shouldShowPartialBanner,
+  _topResult,
+  _viewForState,
+} from '../state';
 
 import type {
   DiscoveryKind,
@@ -191,5 +198,29 @@ describe('_cap', () => {
 
   it('returns all items when fewer than the cap', () => {
     expect(_cap([1, 2, 3], 10)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('_sectionOrder', () => {
+  it('orders sections by the kind whose best member ranks earliest', () => {
+    // A song query: a track ranks first, so Songs (song) leads, then albums.
+    const results = [
+      _result('track', 'Creep'),
+      _result('album', 'Creep EP'),
+      _result('track', 'Creep (Live)'),
+      _result('artist', 'Creep'),
+    ];
+    expect(_sectionOrder(results)).toEqual(['song', 'album', 'artist']);
+  });
+
+  it('omits kinds with no results', () => {
+    expect(_sectionOrder([_result('artist', 'Che'), _result('album', 'Rest in Bass')])).toEqual([
+      'artist',
+      'album',
+    ]);
+  });
+
+  it('returns empty for no results', () => {
+    expect(_sectionOrder([])).toEqual([]);
   });
 });
