@@ -125,6 +125,7 @@ markers = [
     "e2e: full-stack tests against running server",
     "contract: shared port-contract tests parametrized over multiple adapter implementations",
     "slow: marker for slow tests (deselect with -m 'not slow')",
+    "eval: ranking-quality evaluation harness (deterministic golden set; MRR / top-3)",
 ]
 asyncio_mode = "auto"
 
