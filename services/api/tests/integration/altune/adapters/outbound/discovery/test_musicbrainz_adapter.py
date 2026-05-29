@@ -114,9 +114,86 @@ async def test_musicbrainz_adapter_maps_500_to_error() -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_musicbrainz_adapter_returns_empty_for_non_track_kinds() -> None:
+@respx.mock
+async def test_musicbrainz_adapter_translates_release_group_search() -> None:
+    payload = {
+        "release-groups": [
+            {
+                "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "title": "Let It Be",
+                "artist-credit": [{"name": "The Beatles"}],
+                "first-release-date": "1970-05-08",
+            },
+            {
+                "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                "title": "Undated Album",
+                "artist-credit": [{"name": "Someone"}],
+            },
+        ]
+    }
+    respx.get("https://musicbrainz.org/ws/2/release-group").mock(
+        return_value=httpx.Response(200, json=payload)
+    )
     async with httpx.AsyncClient() as client:
         adapter = MusicBrainzSearchAdapter(client=client)
-        resp = await adapter.search("q", frozenset({ResultKind.ARTIST, ResultKind.ALBUM}), limit=5)
+        resp = await adapter.search("let it be", frozenset({ResultKind.ALBUM}), limit=5)
+    assert resp.status is ProviderStatus.OK
+    assert len(resp.results) == 2
+    first = resp.results[0]
+    assert first.kind is ResultKind.ALBUM
+    assert first.title == "Let It Be"
+    assert first.subtitle == "The Beatles"
+    assert first.image_url is None
+    assert first.extras["year"] == "1970"
+    assert first.extras["isrc"] is None
+    assert first.extras["preview_url"] is None
+    assert first.sources[0].provider is ProviderName.MUSICBRAINZ
+    assert first.sources[0].external_id == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    assert first.sources[0].url == (
+        "https://musicbrainz.org/release-group/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    )
+    assert "popularity" not in first.extras
+    # Missing first-release-date → year None.
+    assert resp.results[1].extras["year"] is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock
+async def test_musicbrainz_adapter_translates_artist_search() -> None:
+    payload = {
+        "artists": [
+            {"id": "cccccccc-cccc-cccc-cccc-cccccccccccc", "name": "The Beatles"},
+        ]
+    }
+    respx.get("https://musicbrainz.org/ws/2/artist").mock(
+        return_value=httpx.Response(200, json=payload)
+    )
+    async with httpx.AsyncClient() as client:
+        adapter = MusicBrainzSearchAdapter(client=client)
+        resp = await adapter.search("the beatles", frozenset({ResultKind.ARTIST}), limit=5)
+    assert resp.status is ProviderStatus.OK
+    assert len(resp.results) == 1
+    first = resp.results[0]
+    assert first.kind is ResultKind.ARTIST
+    assert first.title == "The Beatles"
+    assert first.subtitle is None
+    assert first.image_url is None
+    assert first.extras["isrc"] is None
+    assert first.extras["preview_url"] is None
+    assert "popularity" not in first.extras
+    assert first.sources[0].provider is ProviderName.MUSICBRAINZ
+    assert first.sources[0].external_id == "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    assert first.sources[0].url == (
+        "https://musicbrainz.org/artist/cccccccc-cccc-cccc-cccc-cccccccccccc"
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_musicbrainz_adapter_returns_empty_for_no_kinds() -> None:
+    async with httpx.AsyncClient() as client:
+        adapter = MusicBrainzSearchAdapter(client=client)
+        resp = await adapter.search("q", frozenset(), limit=5)
     assert resp.status is ProviderStatus.OK
     assert resp.results == ()

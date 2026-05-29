@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from altune.application.discovery.circuit_breaker import CircuitBreaker
-from altune.application.discovery.dedup import dedup_and_rank
+from altune.application.discovery.dedup import fuse_and_rank
 from altune.application.discovery.normalize import normalize_for_match
 from altune.application.discovery.url_router import match_provider
 from altune.domain.discovery.provider_status import ProviderStatus
@@ -45,6 +45,7 @@ _DEFAULT_PER_SOURCE_TIMEOUT_S = 1.5
 _DEFAULT_TTLS = {
     "musicbrainz": timedelta(hours=24),
     "lastfm": timedelta(hours=12),
+    "itunes": timedelta(hours=12),
     "deezer": timedelta(hours=6),
     "soundcloud": timedelta(hours=1),
 }
@@ -138,16 +139,18 @@ class SearchMusic:
         ]
         per_provider = await asyncio.gather(*tasks)
         summaries: list[ProviderStatusSummary] = []
-        gathered: list[SearchResult] = []
+        # Keep each provider's results as its own group, in that provider's
+        # native relevance order, so fuse_and_rank can apply RRF across lists.
+        groups: list[tuple[SearchResult, ...]] = []
         cache_hit_fetched_ats: list[datetime] = []
         for summary, results, cache_fetched_at in per_provider:
             summaries.append(summary)
             if summary.status is ProviderStatus.OK:
-                gathered.extend(results)
+                groups.append(results)
             if cache_fetched_at is not None:
                 cache_hit_fetched_ats.append(cache_fetched_at)
 
-        merged = dedup_and_rank(gathered)
+        merged = fuse_and_rank(groups, query_norm)
         partial = any(s.status is not ProviderStatus.OK for s in summaries)
         cache_hit = bool(cache_hit_fetched_ats)
         cache_fetched_at = min(cache_hit_fetched_ats) if cache_hit_fetched_ats else None

@@ -6,8 +6,8 @@ Pure-Python domain types for the unified music search feature [VERIFIED:Read@c:\
 
 - **SearchResult** — aggregate; carries `(kind, title, subtitle?, image_url?, confidence, sources: tuple[SourceRef, ...], extras: Mapping[str, object])`. Multi-source-merged results carry multiple `SourceRef`s. Invariants: title non-empty, sources tuple non-empty (enforced in `__post_init__`).
 - **ResultKind** — `artist | album | track | playlist` enum [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\services\api\src\altune\domain\discovery\result_kind.py]. Wire-serialized lowercase.
-- **Confidence** — three-level enum with custom `__gt__`/`__lt__` ordering (HIGH > MEDIUM > LOW) [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\services\api\src\altune\domain\discovery\confidence.py#L22-L40].
-- **ProviderName** — `DEEZER | MUSICBRAINZ | SOUNDCLOUD | LASTFM` enum.
+- **Confidence** — three-level enum with custom `__gt__`/`__lt__` ordering (HIGH > MEDIUM > LOW) [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\services\api\src\altune\domain\discovery\confidence.py#L22-L40]. **Display-only** since the ADR-0007 ranking-overhaul addendum — the ordering operators remain for assertions/badges but ranking uses relevance (`fuse_and_rank`), not confidence.
+- **ProviderName** — `DEEZER | MUSICBRAINZ | SOUNDCLOUD | LASTFM | ITUNES` enum (iTunes added by the ranking-overhaul addendum).
 - **ProviderStatus** — `OK | TIMEOUT | ERROR | RATE_LIMITED | CIRCUIT_OPEN`. Maps adapter behaviors per AC#5/5a/5b/6.
 - **SearchHistoryEntry** / **SearchClick** — aggregate roots for the two persistence surfaces. Identity is the `*Id` value object; equality by id (catalog/track.py precedent).
 

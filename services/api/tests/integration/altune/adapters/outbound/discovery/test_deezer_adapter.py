@@ -53,7 +53,9 @@ async def test_deezer_adapter_translates_track_search_response(
     assert first.sources[0].provider is ProviderName.DEEZER
     assert first.extras["isrc"] == "GBAYE0601713"
     assert first.extras["duration_seconds"] == 243
-    assert first.extras["preview_url"] is None
+    # discover-music-v2: preview + popularity are now populated.
+    assert isinstance(first.extras["preview_url"], str)
+    assert isinstance(first.extras["popularity"], float)
 
 
 @pytest.mark.integration
@@ -110,11 +112,55 @@ async def test_deezer_adapter_maps_5xx_to_error() -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_deezer_adapter_returns_empty_for_non_track_kinds() -> None:
+@respx.mock
+async def test_deezer_adapter_translates_albums_and_artists() -> None:
+    # discover-music-v2: album + artist search alongside tracks.
+    respx.get("https://api.deezer.com/search/album").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": 1261474,
+                        "title": "REST IN BASS",
+                        "artist": {"name": "Che"},
+                        "link": "https://www.deezer.com/album/1261474",
+                        "cover_xl": "https://x/cover.jpg",
+                        "nb_tracks": 18,
+                    }
+                ]
+            },
+        )
+    )
+    respx.get("https://api.deezer.com/search/artist").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": 99,
+                        "name": "Che",
+                        "link": "https://www.deezer.com/artist/99",
+                        "picture_xl": "https://x/pic.jpg",
+                        "nb_fan": 250000,
+                    }
+                ]
+            },
+        )
+    )
     async with httpx.AsyncClient() as client:
         adapter = DeezerSearchAdapter(client=client)
         resp = await adapter.search(
-            "q", frozenset({ResultKind.ARTIST, ResultKind.ALBUM}), limit=5
+            "che rest in bass", frozenset({ResultKind.ALBUM, ResultKind.ARTIST}), limit=5
         )
     assert resp.status is ProviderStatus.OK
-    assert resp.results == ()
+    kinds = {r.kind for r in resp.results}
+    assert kinds == {ResultKind.ALBUM, ResultKind.ARTIST}
+    album = next(r for r in resp.results if r.kind is ResultKind.ALBUM)
+    assert album.title == "REST IN BASS"
+    assert album.subtitle == "Che"
+    assert album.extras["track_count"] == 18
+    artist = next(r for r in resp.results if r.kind is ResultKind.ARTIST)
+    assert artist.title == "Che"
+    assert artist.subtitle is None
+    assert isinstance(artist.extras["popularity"], float)

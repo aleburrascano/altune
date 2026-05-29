@@ -1,7 +1,7 @@
-"""ResultKind — discoverable music shape per AC#1 wire contract.
+"""ResultKind — discoverable music shape.
 
-Four members: artist, album, track, playlist. Per ADR-0007's locked
-result-type breadth.
+Three members: artist, album, track. Playlists were removed in
+discover-music-v2 (the user dropped playlist scope entirely).
 """
 
 from __future__ import annotations
@@ -15,4 +15,3 @@ class ResultKind(Enum):
     ARTIST = "artist"
     ALBUM = "album"
     TRACK = "track"
-    PLAYLIST = "playlist"

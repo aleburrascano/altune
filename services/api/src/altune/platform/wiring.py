@@ -38,6 +38,7 @@ def build_discovery_providers(
     import httpx
 
     from altune.adapters.outbound.discovery.deezer.adapter import DeezerSearchAdapter
+    from altune.adapters.outbound.discovery.itunes.adapter import ITunesSearchAdapter
     from altune.adapters.outbound.discovery.lastfm.adapter import LastFmSearchAdapter
     from altune.adapters.outbound.discovery.musicbrainz.adapter import (
         MusicBrainzSearchAdapter,
@@ -52,6 +53,11 @@ def build_discovery_providers(
     deezer_client = httpx.AsyncClient(timeout=10.0)
     clients.append(deezer_client)
     providers.append(DeezerSearchAdapter(client=deezer_client))
+
+    # iTunes Search API: free, no auth. Own AsyncClient for bulkhead isolation.
+    itunes_client = httpx.AsyncClient(timeout=10.0)
+    clients.append(itunes_client)
+    providers.append(ITunesSearchAdapter(client=itunes_client))
 
     # MusicBrainz: skip when UA not configured. MB throttles unregistered
     # User-Agents to 1 req/s and may 503; we'd rather omit it than spam.

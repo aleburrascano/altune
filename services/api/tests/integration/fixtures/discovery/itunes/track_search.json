@@ -1,0 +1,44 @@
+{
+  "resultCount": 3,
+  "results": [
+    {
+      "wrapperType": "track",
+      "kind": "song",
+      "trackId": 401185800,
+      "artistName": "TOTO",
+      "collectionName": "Toto IV",
+      "trackName": "Africa",
+      "trackViewUrl": "https://music.apple.com/us/album/africa/401185795?i=401185800",
+      "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/abc/100x100bb.jpg",
+      "previewUrl": "https://audio-ssl.itunes.apple.com/preview/africa.m4a",
+      "trackTimeMillis": 295893,
+      "primaryGenreName": "Rock"
+    },
+    {
+      "wrapperType": "track",
+      "kind": "song",
+      "trackId": 724239566,
+      "artistName": "Weezer",
+      "collectionName": "Pacific Daydream",
+      "trackName": "Africa",
+      "trackViewUrl": "https://music.apple.com/us/album/africa/724239561?i=724239566",
+      "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/def/100x100bb.jpg",
+      "previewUrl": "https://audio-ssl.itunes.apple.com/preview/africa-weezer.m4a",
+      "trackTimeMillis": 233000,
+      "primaryGenreName": "Alternative"
+    },
+    {
+      "wrapperType": "track",
+      "kind": "song",
+      "trackId": 900000001,
+      "artistName": "Angelique Kidjo",
+      "collectionName": "Remain in Light",
+      "trackName": "Africa",
+      "trackViewUrl": "https://music.apple.com/us/album/africa/900000000?i=900000001",
+      "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/ghi/100x100bb.jpg",
+      "previewUrl": "https://audio-ssl.itunes.apple.com/preview/africa-kidjo.m4a",
+      "trackTimeMillis": 270000,
+      "primaryGenreName": "Worldwide"
+    }
+  ]
+}
