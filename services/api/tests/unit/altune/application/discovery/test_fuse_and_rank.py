@@ -126,7 +126,9 @@ def _pop_result(*, title: str, popularity: float, ext_id: str) -> SearchResult:
         subtitle="Queen",
         image_url=None,
         confidence=Confidence.LOW,
-        sources=(SourceRef(provider=ProviderName.DEEZER, external_id=ext_id, url=f"https://x/{ext_id}"),),
+        sources=(
+            SourceRef(provider=ProviderName.DEEZER, external_id=ext_id, url=f"https://x/{ext_id}"),
+        ),
         extras={"popularity": popularity},
     )
 
@@ -143,21 +145,30 @@ def test_popularity_outranks_agreement_within_a_relevance_band() -> None:
 
 
 @pytest.mark.unit
-def test_artist_headlines_over_equally_relevant_track() -> None:
-    # An artist-name query: the artist and a track by that artist both match at
-    # band 1.0; kind-priority (Artist > Track) makes the artist the Top Result.
-    artist = SearchResult(
+def test_more_popular_match_headlines_regardless_of_kind() -> None:
+    # A song query: an obscure artist whose NAME equals the query must not
+    # headline over the popular song. Best relevance x popularity wins, any kind.
+    obscure_artist = SearchResult(
         kind=ResultKind.ARTIST,
-        title="Queen",
+        title="Creep",
         subtitle=None,
         image_url=None,
         confidence=Confidence.LOW,
         sources=(SourceRef(provider=ProviderName.DEEZER, external_id="ar", url="https://x/ar"),),
-        extras={},
+        extras={"popularity": 0.2},
     )
-    track = _r(title="Bohemian Rhapsody", subtitle="Queen", provider=ProviderName.DEEZER, ext_id="t")
-    ranked = fuse_and_rank([(track, artist)], query_norm="queen")
-    assert ranked[0].kind is ResultKind.ARTIST
+    popular_song = SearchResult(
+        kind=ResultKind.TRACK,
+        title="Creep",
+        subtitle="Radiohead",
+        image_url=None,
+        confidence=Confidence.LOW,
+        sources=(SourceRef(provider=ProviderName.DEEZER, external_id="tr", url="https://x/tr"),),
+        extras={"popularity": 0.95},
+    )
+    ranked = fuse_and_rank([(obscure_artist,), (popular_song,)], query_norm="creep")
+    assert ranked[0].kind is ResultKind.TRACK
+    assert ranked[0].subtitle == "Radiohead"
 
 
 @pytest.mark.unit
