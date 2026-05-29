@@ -28,3 +28,4 @@ Three endpoints: `GET /v1/discovery/search`, `GET /v1/discovery/search-history`,
 
 - **Kinds default to `{artist, album, track}`** (playlist removed; `_ALL_KINDS` derives from the enum).
 - **Artwork back-fill is wired here:** the handler passes `app.state.discovery_artwork_resolver` (a `ChainedArtworkResolver`: Deezer → TheAudioDB, built in `platform/app.py`) into `SearchMusic(artwork_resolver=...)`. Falls back to the Deezer adapter from `discovery_providers` when app.state has no resolver (tests).
+- **Popularity back-fill wired here** (discover-music-v3): the handler passes `app.state.discovery_popularity_resolver` (the Last.fm adapter, which has the api_key) into `SearchMusic(popularity_resolver=...)`; falls back to the lastfm provider in the list for tests.
