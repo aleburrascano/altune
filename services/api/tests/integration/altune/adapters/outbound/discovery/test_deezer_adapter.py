@@ -16,11 +16,7 @@ from altune.domain.discovery.provider_status import ProviderStatus
 from altune.domain.discovery.result_kind import ResultKind
 
 _FIXTURE = (
-    Path(__file__).resolve().parents[4]
-    / "fixtures"
-    / "discovery"
-    / "deezer"
-    / "track_search.json"
+    Path(__file__).resolve().parents[4] / "fixtures" / "discovery" / "deezer" / "track_search.json"
 )
 
 
@@ -40,9 +36,7 @@ async def test_deezer_adapter_translates_track_search_response(
     )
     async with httpx.AsyncClient() as client:
         adapter = DeezerSearchAdapter(client=client)
-        resp = await adapter.search(
-            "the beatles let it be", frozenset({ResultKind.TRACK}), limit=5
-        )
+        resp = await adapter.search("the beatles let it be", frozenset({ResultKind.TRACK}), limit=5)
     assert resp.provider_name == "deezer"
     assert resp.status is ProviderStatus.OK
     assert len(resp.results) == 5
@@ -64,7 +58,12 @@ async def test_deezer_adapter_translates_track_search_response(
 async def test_deezer_adapter_drops_malformed_track() -> None:
     bad_payload = {
         "data": [
-            {"id": 1, "title": None, "artist": {"name": "X"}, "link": "https://x/1"},  # missing title
+            {
+                "id": 1,
+                "title": None,
+                "artist": {"name": "X"},
+                "link": "https://x/1",
+            },  # missing title
             {
                 "id": 2,
                 "title": "Good Track",

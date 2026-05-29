@@ -76,7 +76,9 @@ class TheAudioDBSearchAdapter:
 
     async def _fetch(self, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
         start = time.perf_counter()
-        response = await self.client.get(f"{self.base_url}/{self.api_key}/{endpoint}", params=params)
+        response = await self.client.get(
+            f"{self.base_url}/{self.api_key}/{endpoint}", params=params
+        )
         latency_ms = int((time.perf_counter() - start) * 1000)
         if response.status_code == 429:
             raise _TheAudioDBHTTPError(ProviderStatus.RATE_LIMITED, latency_ms)
@@ -140,8 +142,7 @@ def _translate_one_artist(entry: dict[str, Any]) -> SearchResult | None:
     artist_id = entry.get("idArtist")
     if not name or artist_id is None:
         _log.warning(
-            "provider_response_malformed provider=theaudiodb kind=artist "
-            "missing=strArtist|idArtist"
+            "provider_response_malformed provider=theaudiodb kind=artist missing=strArtist|idArtist"
         )
         return None
     extras: dict[str, object] = {"isrc": None, "preview_url": None}

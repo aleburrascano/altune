@@ -274,9 +274,7 @@ def _translate_one_artist(entry: dict[str, Any]) -> SearchResult | None:
     name = entry.get("name")
     mbid = entry.get("id")
     if not name or not mbid:
-        _log.warning(
-            "provider_response_malformed provider=musicbrainz kind=artist missing=name|id"
-        )
+        _log.warning("provider_response_malformed provider=musicbrainz kind=artist missing=name|id")
         return None
     extras: dict[str, object] = {"isrc": None, "preview_url": None}
     return SearchResult(

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from altune.application.discovery.circuit_breaker import CircuitBreaker
-from altune.application.discovery.dedup import fuse_and_rank
+from altune.application.discovery.dedup import fuse_and_rank, rerank
 from altune.application.discovery.normalize import normalize_for_match
 from altune.application.discovery.url_router import match_provider
 from altune.domain.discovery.provider_status import ProviderStatus
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from altune.application.discovery.ports import (
         ArtworkResolver,
+        PopularityResolver,
         QueryCache,
         SearchHistoryRepository,
         SearchProvider,
@@ -42,9 +43,10 @@ _log = logging.getLogger(__name__)
 
 _DEFAULT_PER_SOURCE_TIMEOUT_S = 1.5
 
-# Cap cover-art back-fill to the results we're likely to show, so enrichment
-# can't fan out an unbounded number of lookups.
-_ART_ENRICH_LIMIT = 30
+# Bound enrichment (popularity + artwork) to the results we're likely to show,
+# and cap concurrency so we stay within provider rate limits.
+_ENRICH_LIMIT = 25
+_ENRICH_CONCURRENCY = 8
 
 # Per-source default TTLs from ADR-0007 §3.4.
 _DEFAULT_TTLS = {
@@ -116,6 +118,7 @@ class SearchMusic:
     cache: QueryCache | None = None
     cache_ttls: Mapping[str, timedelta] = field(default_factory=lambda: dict(_DEFAULT_TTLS))
     artwork_resolver: ArtworkResolver | None = None
+    popularity_resolver: PopularityResolver | None = None
     _breakers: dict[str, CircuitBreaker] = field(default_factory=dict, init=False)
 
     def _breaker_for(self, provider_name: str) -> CircuitBreaker:
@@ -126,35 +129,54 @@ class SearchMusic:
     def _ttl_for(self, provider_name: str) -> timedelta:
         return self.cache_ttls.get(provider_name, timedelta(hours=1))
 
-    async def _enrich_artwork(self, results: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:
-        """Best-effort cover-art back-fill for art-less results (top N only).
+    async def _enrich(self, results: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:
+        """Bounded, concurrency-capped, best-effort enrichment of the top results.
 
-        MusicBrainz items and iTunes artists come back without artwork; fill
-        them via the resolver (Deezer). Never fails the search — resolver
-        errors are swallowed and the result keeps its empty art.
+        Back-fills a UNIFORM popularity (Last.fm getInfo, keyed by artist+title)
+        onto every top result regardless of which provider surfaced it, plus a
+        cover for art-less results. Never fails the search — resolver errors are
+        swallowed and the result is left unchanged.
         """
-        resolver = self.artwork_resolver
-        if resolver is None:
+        pop_resolver = self.popularity_resolver
+        art_resolver = self.artwork_resolver
+        if pop_resolver is None and art_resolver is None:
             return results
-        art_less = [
-            (i, r) for i, r in enumerate(results[:_ART_ENRICH_LIMIT]) if r.image_url is None
-        ]
-        if not art_less:
+        top = results[:_ENRICH_LIMIT]
+        if not top:
             return results
+        sem = asyncio.Semaphore(_ENRICH_CONCURRENCY)
 
-        async def _resolve_one(result: SearchResult) -> str | None:
-            try:
-                return await resolver.resolve_artwork(result.kind, result.title, result.subtitle)
-            except Exception:
-                _log.warning("artwork_resolve_failed kind=%s", result.kind, exc_info=True)
-                return None
+        async def _one(result: SearchResult) -> SearchResult:
+            async with sem:
+                extras = dict(result.extras)
+                image_url = result.image_url
+                changed = False
+                if pop_resolver is not None:
+                    try:
+                        pop = await pop_resolver.resolve_popularity(
+                            result.kind, result.title, result.subtitle
+                        )
+                    except Exception:
+                        pop = None
+                    if pop is not None:
+                        # Uniform Last.fm scale replaces the native popularity so
+                        # all results are comparable on the same basis.
+                        extras["popularity"] = pop
+                        changed = True
+                if art_resolver is not None and result.image_url is None:
+                    try:
+                        url = await art_resolver.resolve_artwork(
+                            result.kind, result.title, result.subtitle
+                        )
+                    except Exception:
+                        url = None
+                    if url:
+                        image_url = url
+                        changed = True
+                return replace(result, extras=extras, image_url=image_url) if changed else result
 
-        urls = await asyncio.gather(*(_resolve_one(r) for _, r in art_less))
-        enriched = list(results)
-        for (index, result), url in zip(art_less, urls, strict=True):
-            if url:
-                enriched[index] = replace(result, image_url=url)
-        return tuple(enriched)
+        enriched = await asyncio.gather(*(_one(r) for r in top))
+        return (*enriched, *results[_ENRICH_LIMIT:])
 
     async def execute(self, request: SearchMusicInput) -> SearchMusicOutput:
         query_norm = normalize_for_match(request.raw_query)
@@ -187,7 +209,10 @@ class SearchMusic:
                 cache_hit_fetched_ats.append(cache_fetched_at)
 
         merged = fuse_and_rank(groups, query_norm)
-        merged = await self._enrich_artwork(merged)
+        merged = await self._enrich(merged)
+        # Enrichment changed popularity (a sort key), so re-rank when it ran.
+        if self.popularity_resolver is not None:
+            merged = rerank(merged, query_norm)
         partial = any(s.status is not ProviderStatus.OK for s in summaries)
         cache_hit = bool(cache_hit_fetched_ats)
         cache_fetched_at = min(cache_hit_fetched_ats) if cache_hit_fetched_ats else None

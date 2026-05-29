@@ -310,3 +310,22 @@ def fuse_and_rank(
         )
 
     return tuple(item.result for item in sorted(scored, key=_key))
+
+
+def rerank(results: Sequence[SearchResult], query_norm: str) -> tuple[SearchResult, ...]:
+    """Re-sort already-merged results after enrichment changed their popularity.
+
+    Same ordering as `fuse_and_rank` minus the RRF term (provider-native ranks
+    aren't retained post-merge): relevance-band → popularity → multi-source
+    (agreement proxy) → prior → alpha. Results are assumed already gated; this
+    only reorders.
+    """
+
+    def _key(result: SearchResult) -> tuple[float, float, int, float, str, str]:
+        band = round(_relevance_score(result, query_norm), 1)
+        popularity = _popularity(result)
+        multi_source = 1 if len(_providers_of(result)) > 1 else 0
+        prior = _winning_prior(result)
+        return (-band, -popularity, -multi_source, -prior, result.subtitle or "", result.title)
+
+    return tuple(sorted(results, key=_key))

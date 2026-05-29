@@ -28,7 +28,5 @@ class ListSearchHistory:
     history_repo: SearchHistoryRepository
 
     async def execute(self, request: ListSearchHistoryInput) -> ListSearchHistoryOutput:
-        items = await self.history_repo.list_distinct_recent(
-            request.user_id, request.limit
-        )
+        items = await self.history_repo.list_distinct_recent(request.user_id, request.limit)
         return ListSearchHistoryOutput(items=items, total=len(items))

@@ -35,6 +35,10 @@ _log = logging.getLogger(__name__)
 
 _BASE_URL = "https://ws.audioscrobbler.com/2.0/"
 
+# Global Last.fm play counts reach ~10^10; log10 of that ≈ 10, so dividing by
+# 10 maps playcount → roughly [0, 1].
+_PLAYCOUNT_MAX_LOG10 = 10.0
+
 
 def _log_norm(value: object, max_log10: float) -> float | None:
     """Log-normalize a popularity count to [0, 1]; None if absent/invalid."""
@@ -69,9 +73,13 @@ class LastFmSearchAdapter:
         # Fan out to each requested kind's method concurrently; combine.
         plan: list[_KindPlan] = []
         if ResultKind.TRACK in kinds:
-            plan.append(_KindPlan("track.search", "track", "trackmatches", "track", _translate_tracks))
+            plan.append(
+                _KindPlan("track.search", "track", "trackmatches", "track", _translate_tracks)
+            )
         if ResultKind.ALBUM in kinds:
-            plan.append(_KindPlan("album.search", "album", "albummatches", "album", _translate_albums))
+            plan.append(
+                _KindPlan("album.search", "album", "albummatches", "album", _translate_albums)
+            )
         # ARTIST search is intentionally NOT queried on Last.fm: its artist DB is
         # crowd-scrobbled and riddled with mislabeled beat/track titles posing as
         # artists (e.g. "Free for Profit Che + Rest in Bass"). Cleaner artist
@@ -190,6 +198,53 @@ class LastFmSearchAdapter:
                 "listeners": track_data.get("listeners"),
             }
         )
+
+    async def resolve_popularity(
+        self,
+        kind: ResultKind,
+        title: str,
+        subtitle: str | None,
+    ) -> float | None:
+        """Uniform popularity via Last.fm getInfo play counts. Never raises.
+
+        Keyed by (artist, title) — which we hold post-search — so it back-fills
+        popularity for any result regardless of which provider surfaced it.
+        """
+        if kind is ResultKind.ARTIST:
+            params = {"method": "artist.getInfo", "artist": title}
+            path: tuple[str, ...] = ("artist", "stats", "playcount")
+        elif kind is ResultKind.ALBUM:
+            if not subtitle:
+                return None
+            params = {"method": "album.getInfo", "artist": subtitle, "album": title}
+            path = ("album", "playcount")
+        else:
+            if not subtitle:
+                return None
+            params = {"method": "track.getInfo", "artist": subtitle, "track": title}
+            path = ("track", "playcount")
+        params |= {"api_key": self.api_key, "format": "json", "autocorrect": "1"}
+        try:
+            response = await self.client.get(self.base_url, params=params)
+            if response.status_code != 200:
+                return None
+            data = response.json()
+        except Exception:
+            return None
+        if not isinstance(data, dict) or "error" in data:
+            return None
+        node: Any = data
+        for key in path:
+            node = node.get(key) if isinstance(node, dict) else None
+            if node is None:
+                return None
+        try:
+            playcount = int(node)
+        except (TypeError, ValueError):
+            return None
+        if playcount <= 0:
+            return None
+        return min(1.0, math.log10(playcount + 1.0) / _PLAYCOUNT_MAX_LOG10)
 
 
 @dataclass

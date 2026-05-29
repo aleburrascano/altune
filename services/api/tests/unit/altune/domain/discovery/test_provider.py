@@ -26,9 +26,17 @@ def test_provider_name_has_six_members() -> None:
 
 @pytest.mark.unit
 def test_source_ref_is_frozen_and_compares_by_value() -> None:
-    a = SourceRef(provider=ProviderName.DEEZER, external_id="3135556", url="https://deezer.com/track/3135556")
-    b = SourceRef(provider=ProviderName.DEEZER, external_id="3135556", url="https://deezer.com/track/3135556")
-    c = SourceRef(provider=ProviderName.MUSICBRAINZ, external_id="abc", url="https://musicbrainz.org/recording/abc")
+    a = SourceRef(
+        provider=ProviderName.DEEZER, external_id="3135556", url="https://deezer.com/track/3135556"
+    )
+    b = SourceRef(
+        provider=ProviderName.DEEZER, external_id="3135556", url="https://deezer.com/track/3135556"
+    )
+    c = SourceRef(
+        provider=ProviderName.MUSICBRAINZ,
+        external_id="abc",
+        url="https://musicbrainz.org/recording/abc",
+    )
     assert a == b
     assert a != c
     assert hash(a) == hash(b)

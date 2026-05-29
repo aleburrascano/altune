@@ -31,9 +31,7 @@ def _make_result(provider: ProviderName, ext_id: str = "1") -> SearchResult:
         subtitle="The Beatles",
         image_url=None,
         confidence=Confidence.HIGH,
-        sources=(
-            SourceRef(provider=provider, external_id=ext_id, url=f"https://x/{ext_id}"),
-        ),
+        sources=(SourceRef(provider=provider, external_id=ext_id, url=f"https://x/{ext_id}"),),
         extras={"isrc": "GBAYE0601477", "duration_seconds": 243},
     )
 

@@ -78,6 +78,24 @@ class ArtworkResolver(Protocol):
 
 
 @runtime_checkable
+class PopularityResolver(Protocol):
+    """Best-effort cross-source popularity back-fill, keyed by (artist, title).
+
+    Used by SearchMusic to enrich every top result with a uniform popularity
+    signal (e.g. Last.fm getInfo play counts), regardless of which provider
+    surfaced it — so mainstream and underground rank on the same basis.
+    Returns a normalized value in [0, 1], or None when unknown. Never raises.
+    """
+
+    async def resolve_popularity(
+        self,
+        kind: ResultKind,
+        title: str,
+        subtitle: str | None,
+    ) -> float | None: ...
+
+
+@runtime_checkable
 class QueryCache(Protocol):
     """Per-source post-ACL SearchResult cache.
 
