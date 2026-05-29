@@ -7,7 +7,7 @@
 
 import { apiFetch } from './index';
 
-export type DiscoveryKind = 'artist' | 'album' | 'track' | 'playlist';
+export type DiscoveryKind = 'artist' | 'album' | 'track';
 export type DiscoveryConfidence = 'high' | 'medium' | 'low';
 export type DiscoveryProviderStatus =
   | 'ok'
