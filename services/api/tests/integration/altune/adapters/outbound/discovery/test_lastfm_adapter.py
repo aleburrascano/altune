@@ -144,9 +144,10 @@ async def test_lastfm_adapter_maps_500_to_error() -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 @respx.mock
-async def test_lastfm_adapter_translates_albums_and_artists() -> None:
-    # discover-music-v2: album + artist search alongside tracks. All kinds hit
-    # the same base URL, so branch the mock on the `method` query param.
+async def test_lastfm_adapter_translates_albums_but_never_artists() -> None:
+    # discover-music-v2: Last.fm serves albums (+ tracks) but NOT artists — its
+    # artist.search DB is crowd-scrobbled junk. Even when ARTIST is requested,
+    # the adapter must not call artist.search nor return artist results.
     album_payload = {
         "results": {
             "albummatches": {
@@ -165,31 +166,13 @@ async def test_lastfm_adapter_translates_albums_and_artists() -> None:
             }
         }
     }
-    artist_payload = {
-        "results": {
-            "artistmatches": {
-                "artist": [
-                    {
-                        "name": "Che",
-                        "listeners": "250000",
-                        "url": "https://www.last.fm/music/Che",
-                        "mbid": "artist-mbid-1",
-                        "image": [
-                            {"#text": "https://x/artist-small.png", "size": "small"},
-                            {"#text": "https://x/artist-xl.png", "size": "extralarge"},
-                        ],
-                    }
-                ]
-            }
-        }
-    }
+    called_methods: list[str] = []
 
     def _by_method(request: httpx.Request) -> httpx.Response:
-        method = request.url.params.get("method")
+        method = request.url.params.get("method") or ""
+        called_methods.append(method)
         if method == "album.search":
             return httpx.Response(200, json=album_payload)
-        if method == "artist.search":
-            return httpx.Response(200, json=artist_payload)
         return httpx.Response(200, json={"results": {}})
 
     respx.get("https://ws.audioscrobbler.com/2.0/").mock(side_effect=_by_method)
@@ -199,22 +182,12 @@ async def test_lastfm_adapter_translates_albums_and_artists() -> None:
             "che rest in bass", frozenset({ResultKind.ALBUM, ResultKind.ARTIST}), limit=5
         )
     assert resp.status is ProviderStatus.OK
-    kinds = {r.kind for r in resp.results}
-    assert kinds == {ResultKind.ALBUM, ResultKind.ARTIST}
+    assert "artist.search" not in called_methods  # never queried
+    assert {r.kind for r in resp.results} == {ResultKind.ALBUM}
 
-    album = next(r for r in resp.results if r.kind is ResultKind.ALBUM)
+    album = resp.results[0]
     assert album.title == "REST IN BASS"
     assert album.subtitle == "Che"
     assert album.image_url == "https://x/album-xl.png"
     assert album.sources[0].provider is ProviderName.LASTFM
     assert album.sources[0].external_id == "album-mbid-1"
-    assert album.extras["isrc"] is None
-    assert album.extras["preview_url"] is None
-    assert "popularity" not in album.extras
-
-    artist = next(r for r in resp.results if r.kind is ResultKind.ARTIST)
-    assert artist.title == "Che"
-    assert artist.subtitle is None
-    assert artist.image_url == "https://x/artist-xl.png"
-    assert artist.sources[0].provider is ProviderName.LASTFM
-    assert isinstance(artist.extras["popularity"], float)

@@ -72,10 +72,11 @@ class LastFmSearchAdapter:
             plan.append(_KindPlan("track.search", "track", "trackmatches", "track", _translate_tracks))
         if ResultKind.ALBUM in kinds:
             plan.append(_KindPlan("album.search", "album", "albummatches", "album", _translate_albums))
-        if ResultKind.ARTIST in kinds:
-            plan.append(
-                _KindPlan("artist.search", "artist", "artistmatches", "artist", _translate_artists)
-            )
+        # ARTIST search is intentionally NOT queried on Last.fm: its artist DB is
+        # crowd-scrobbled and riddled with mislabeled beat/track titles posing as
+        # artists (e.g. "Free for Profit Che + Rest in Bass"). Cleaner artist
+        # entities come from iTunes / MusicBrainz / Deezer. Last.fm stays for
+        # tracks (+ its listeners popularity) and albums. (discover-music-v2)
         if not plan:
             return ProviderSearchResponse(
                 provider_name=self.name,
@@ -218,10 +219,6 @@ def _translate_albums(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...]
     return tuple(r for e in entries if (r := _translate_one_album(e)) is not None)
 
 
-def _translate_artists(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...]:
-    return tuple(r for e in entries if (r := _translate_one_artist(e)) is not None)
-
-
 def _translate_one_track(entry: dict[str, Any]) -> SearchResult | None:
     title = entry.get("name")
     artist_name = entry.get("artist")
@@ -283,33 +280,6 @@ def _translate_one_album(entry: dict[str, Any]) -> SearchResult | None:
             SourceRef(
                 provider=ProviderName.LASTFM,
                 external_id=entry.get("mbid") or url,
-                url=url,
-            ),
-        ),
-        extras=extras,
-    )
-
-
-def _translate_one_artist(entry: dict[str, Any]) -> SearchResult | None:
-    name = entry.get("name")
-    url = entry.get("url")
-    if not name or not url:
-        _log.warning("provider_response_malformed provider=lastfm kind=artist missing=name|url")
-        return None
-    extras: dict[str, object] = {"isrc": None, "preview_url": None}
-    pop = _log_norm(entry.get("listeners"), 7.0)  # listener counts reach ~1e7.
-    if pop is not None:
-        extras["popularity"] = pop
-    return SearchResult(
-        kind=ResultKind.ARTIST,
-        title=name,
-        subtitle=None,
-        image_url=_largest_image(entry.get("image")),
-        confidence=Confidence.LOW,
-        sources=(
-            SourceRef(
-                provider=ProviderName.LASTFM,
-                external_id=entry.get("mbid") or url or name,
                 url=url,
             ),
         ),
