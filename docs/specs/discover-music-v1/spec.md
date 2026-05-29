@@ -16,7 +16,7 @@ Open the altune mobile app, tap the search surface, type a query, and see a rank
 
 Each AC is testable and will become at least one automated test.
 
-1. **AC#1 (read happy path, merged ranked list)** — Given an authenticated user issues `GET /v1/discovery/search?q=the+beatles&kinds=artist,album,track,playlist&limit=25`, when all 4 providers respond within the per-source budget, then the response is HTTP 200 with body shape `{query, query_norm, results: [...], providers: [...], partial: false, cache: {hit: false, fetched_at: <iso>}}`, with `results.length ≤ 50` (post-dedup) ordered by the multi-criteria sort {confidence DESC → multi-source agreement DESC → per-source prior DESC → alpha on `(subtitle, title)`}.
+1. **AC#1 (read happy path, merged ranked list)** — Given an authenticated user issues `GET /v1/discovery/search?q=the+beatles&kinds=artist,album,track,playlist&limit=25`, when all providers respond within the per-source budget, then the response is HTTP 200 with body shape `{query, query_norm, results: [...], providers: [...], partial: false, cache: {hit: false, fetched_at: <iso>}}`, with `results.length ≤ 50` (post-dedup, post-relevance-floor) ordered **relevance-first** by the multi-criteria sort {relevance-band DESC → RRF agreement DESC → multi-source DESC → per-source prior DESC → alpha on `(subtitle, title)`} (see "Ranking within the response"). Results below the relevance floor are excluded; confidence is a display badge, not a sort term.
 
 2. **AC#2 (ISRC-collapse: results sharing ISRC merge into one)** — Given two providers return results with the same ISRC for the same query, when the response is built, then there is exactly one result entry with both providers in its `sources: []` array, `confidence: "high"`, and `extras.isrc` populated. Asserted by a unit test on the dedup logic using `InMemorySearchProvider`s with overlapping ISRCs.
 
@@ -192,20 +192,35 @@ Query normalization rules (lives in `application/discovery/normalize.py`):
 7. Collapse punctuation + whitespace (`&` → `and`; strip apostrophes/periods/commas; collapse spaces)
 8. Trim
 
-Confidence model (per ADR-0007):
+Confidence model (per ADR-0007; **display-only** since the ranking-overhaul addendum):
 
 - `ISRC-matched` (two providers report same ISRC) → `high`
 - `JW ≥ 0.92` on normalized `(artist, title)` → `high`
 - `JW ∈ [0.85, 0.92)` + winning per-source prior tie-breaker → `medium`
 - Otherwise (provider's standalone result) → `low`
 
-Per-source priors (tie-breaker only): MB 0.95, Deezer 0.85, Last.fm 0.80, SoundCloud 0.65.
+Confidence is a **trust badge** the client renders (e.g. the verified glow); it is **not** a sort term. Provider agreement now raises *rank* via RRF (below), which is what confidence was previously — and wrongly — trying to do.
 
-Ranking within the response (multi-criteria sort, in order):
-1. `confidence` DESC (high > medium > low) — three-level enum, not continuous score
-2. **Multi-source boolean** DESC — `len(sources) > 1` evaluated as boolean True > False. A 4-source result and a 2-source result tie at this level (both True); a 1-source result ranks below. This is intentional: tier-2 is "did multiple providers agree?" not "how many."
-3. Per-source-prior of the *winning* source DESC (the source whose title was chosen as canonical per the AC#3 representative-selection rule)
-4. Alphabetical on `(subtitle, title)`
+Per-source priors (tie-breaker only): MB 0.95, Deezer 0.85, iTunes 0.85, Last.fm 0.80, SoundCloud 0.65.
+
+Ranking within the response — **relevance-first** (ranking-overhaul addendum to ADR-0007; supersedes the original confidence-primary sort):
+
+The primary key is a **continuous query-relevance score**, not provider agreement. Agreement (RRF) corroborates *within* a relevance band; it is not the primary signal. A **relevance floor** drops results that don't actually match the query, so an unsatisfiable query yields the few real matches (or the zero-results state, AC#20) rather than provider-rank noise.
+
+- **Relevance score** `rel ∈ [0,1]` = `max(token_set_ratio(query_norm, title_norm), token_set_ratio(query_norm, "<artist> <title>"_norm)) / 100`. Graded (rapidfuzz `token_set_ratio`), so partial/extra-token and word-order differences score proportionally — not all-or-nothing. (Replaces the old binary exact-match boost, which gave a 3-of-4-token match the same zero credit as a 0-token match.)
+- **Relevance floor** `REL_FLOOR` (initial **0.50**, calibrated via the eval set): results with `rel < REL_FLOOR` are excluded from the response. If nothing clears the floor → zero-results.
+- **RRF** = `Σ 1/(60 + best_rank)` over the **distinct providers** that returned the merged result (each provider once, at its best rank — a provider returning the same track twice cannot inflate it).
+
+Sort key (DESC unless noted):
+1. **Relevance band** = `round(rel, 1)` — bucketed to 0.1 so near-equal relevance lets agreement decide.
+2. **RRF** — cross-provider corroboration within the band.
+3. **Multi-source** — distinct provider count > 1 (True > False).
+4. Per-source-prior of the *winning* source (canonical-representative source per AC#3).
+5. Alphabetical on `(subtitle, title)`.
+
+Ranking quality is regression-guarded by the deterministic eval harness in `services/api/tests/eval/`. The golden set **must include partial (title-only / artist-only), misspelled, ambiguous (many same-title artists), and unsatisfiable/nonsense queries** — not only clean "artist + title" queries — so the metrics can't report a false 1.00 by exercising only the happy path. Metrics: MRR + top-3 hit-rate for queries with a known canonical; plus a **no-junk invariant** for unsatisfiable queries (every returned result clears `REL_FLOOR`). `services/api/scripts/ranking_eval.py` runs against live providers for ad-hoc spot-checks.
+
+Sources (ranking-overhaul addendum adds **iTunes** as a 5th provider): Deezer, MusicBrainz (now with `inc=isrcs` so it carries ISRC), SoundCloud (yt-dlp), Last.fm, **iTunes** (free no-auth Search API — distinct from the paid Apple Music API ADR-0007 rejected; no ISRC, but strong relevance + artwork + preview URLs).
 
 Not a Backend for Frontend [vault: wiki/concepts/Backend for Frontend Pattern.md]. Single REST API serves single mobile client; promotion to BFF stays deferred per [docs/specs/view-library/spec.md](../view-library/spec.md)'s precedent.
 
