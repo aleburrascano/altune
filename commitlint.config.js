@@ -37,6 +37,7 @@ module.exports = {
         'view-library',
         'auth-integration',
         'discover-music-v1',
+        'discover-music-v2',
       ],
     ],
     'subject-case': [2, 'always', 'lower-case'],
