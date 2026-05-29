@@ -76,7 +76,9 @@ def test_dedup_merges_isrc_matched_into_high_confidence() -> None:
 
 @pytest.mark.unit
 def test_dedup_collapses_jw_above_92_into_high() -> None:
-    a = _r(title="Let It Be", subtitle="The Beatles", provider=ProviderName.MUSICBRAINZ, ext_id="mb")
+    a = _r(
+        title="Let It Be", subtitle="The Beatles", provider=ProviderName.MUSICBRAINZ, ext_id="mb"
+    )
     b = _r(title="Let It Be", subtitle="The Beatles", provider=ProviderName.DEEZER, ext_id="dz")
     merged = _merge(a, b)
     assert len(merged) == 1

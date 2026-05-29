@@ -99,9 +99,7 @@ def test_settings_accepts_musicbrainz_user_agent_with_contact_url(
 ) -> None:
     _clean_with_baseline(monkeypatch)
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
-    monkeypatch.setenv(
-        "MUSICBRAINZ_USER_AGENT", "altune/0.1 ( https://altune.example/contact )"
-    )
+    monkeypatch.setenv("MUSICBRAINZ_USER_AGENT", "altune/0.1 ( https://altune.example/contact )")
     monkeypatch.setenv("LASTFM_API_KEY", "fixture-key")
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert s.musicbrainz_user_agent is not None

@@ -191,3 +191,33 @@ async def test_lastfm_adapter_translates_albums_but_never_artists() -> None:
     assert album.image_url == "https://x/album-xl.png"
     assert album.sources[0].provider is ProviderName.LASTFM
     assert album.sources[0].external_id == "album-mbid-1"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock
+async def test_lastfm_resolve_popularity_from_getinfo() -> None:
+    # getInfo play counts are the uniform popularity signal (keyed by artist+title).
+    respx.get("https://ws.audioscrobbler.com/2.0/").mock(
+        return_value=httpx.Response(
+            200, json={"track": {"name": "Creep", "playcount": "61244353", "listeners": "4114888"}}
+        )
+    )
+    async with httpx.AsyncClient() as client:
+        adapter = LastFmSearchAdapter(client=client, api_key=_API_KEY)
+        pop = await adapter.resolve_popularity(ResultKind.TRACK, "Creep", "Radiohead")
+    assert pop is not None
+    assert 0.0 < pop <= 1.0  # log-normalized playcount
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock
+async def test_lastfm_resolve_popularity_none_on_error_body() -> None:
+    respx.get("https://ws.audioscrobbler.com/2.0/").mock(
+        return_value=httpx.Response(200, json={"error": 6, "message": "Track not found"})
+    )
+    async with httpx.AsyncClient() as client:
+        adapter = LastFmSearchAdapter(client=client, api_key=_API_KEY)
+        pop = await adapter.resolve_popularity(ResultKind.TRACK, "Nope", "Nobody")
+    assert pop is None

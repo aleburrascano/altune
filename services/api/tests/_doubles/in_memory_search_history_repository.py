@@ -28,9 +28,7 @@ class InMemorySearchHistoryRepository:
     async def list_distinct_recent(
         self, user_id: UserId, limit: int
     ) -> tuple[SearchHistoryEntry, ...]:
-        rows = sorted(
-            self._rows.get(user_id, []), key=lambda r: r.executed_at, reverse=True
-        )
+        rows = sorted(self._rows.get(user_id, []), key=lambda r: r.executed_at, reverse=True)
         seen: set[str] = set()
         out: list[SearchHistoryEntry] = []
         for r in rows:

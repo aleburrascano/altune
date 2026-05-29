@@ -33,8 +33,6 @@ class InMemorySearchClickRepository:
         if candidates:
             most_recent = max(candidates, key=lambda r: r.clicked_at)
             if click.clicked_at - most_recent.clicked_at < window:
-                return ClickInsertOutcome(
-                    inserted=False, deduped_against_id=most_recent.id.value
-                )
+                return ClickInsertOutcome(inserted=False, deduped_against_id=most_recent.id.value)
         self._rows.append(click)
         return ClickInsertOutcome(inserted=True, deduped_against_id=None)

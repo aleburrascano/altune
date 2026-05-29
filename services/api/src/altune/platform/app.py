@@ -82,6 +82,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             and isinstance(p, ArtworkResolver)
         ]
         app.state.discovery_artwork_resolver = ChainedArtworkResolver(resolvers=_art_chain)
+        # Uniform popularity back-fill: the Last.fm adapter (has the api_key)
+        # implements PopularityResolver via getInfo play counts.
+        from altune.application.discovery.ports import PopularityResolver
+
+        app.state.discovery_popularity_resolver = next(
+            (
+                p
+                for p in discovery_providers
+                if getattr(p, "name", None) == "lastfm" and isinstance(p, PopularityResolver)
+            ),
+            None,
+        )
         app.state.discovery_history_repo = build_discovery_history_repo()
         log.info(
             "auth.startup_config_validated",

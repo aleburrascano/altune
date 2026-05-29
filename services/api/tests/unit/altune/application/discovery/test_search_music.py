@@ -540,3 +540,51 @@ async def test_search_music_backfills_artwork_for_artless_results() -> None:
         )
     )
     assert output.results[0].image_url == "https://art.example/cover.jpg"
+
+
+class _FakePopularityResolver:
+    """Stub PopularityResolver returning a fixed popularity per subtitle."""
+
+    def __init__(self, by_subtitle: dict[str, float]) -> None:
+        self._by_subtitle = by_subtitle
+
+    async def resolve_popularity(
+        self, kind: ResultKind, title: str, subtitle: str | None
+    ) -> float | None:
+        _ = (kind, title)
+        return self._by_subtitle.get(subtitle or "")
+
+
+def _track(subtitle: str, ext_id: str) -> SearchResult:
+    return SearchResult(
+        kind=ResultKind.TRACK,
+        title="Anthem",
+        subtitle=subtitle,
+        image_url="https://x/art.jpg",
+        confidence=Confidence.LOW,
+        sources=(
+            SourceRef(provider=ProviderName.DEEZER, external_id=ext_id, url=f"https://x/{ext_id}"),
+        ),
+        extras={"popularity": 0.5},
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_music_enriches_popularity_and_reranks() -> None:
+    # Two equally-relevant tracks (same title => band 1.0, distinct artists =>
+    # no merge). The resolver makes "Omega" far more popular, so after the
+    # enrichment pass + rerank it overtakes "Alpha".
+    provider = InMemorySearchProvider(
+        name="deezer", canned=(_track("Alpha", "a"), _track("Omega", "b"))
+    )
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        popularity_resolver=_FakePopularityResolver({"Alpha": 0.1, "Omega": 0.9}),
+    )
+    output = await use_case.execute(
+        SearchMusicInput(raw_query="anthem", user_id=_USER, kinds=frozenset({ResultKind.TRACK}))
+    )
+    assert output.results[0].subtitle == "Omega"
+    assert output.results[0].extras["popularity"] == 0.9

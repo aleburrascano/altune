@@ -43,9 +43,7 @@ def upgraded_postgres_url() -> Iterator[str]:
         pytest.skip(f"Docker unavailable: {exc}")
     try:
         raw = container.get_connection_url()
-        asyncpg_url = raw.replace("+psycopg2", "+asyncpg").replace(
-            "+psycopg", "+asyncpg"
-        )
+        asyncpg_url = raw.replace("+psycopg2", "+asyncpg").replace("+psycopg", "+asyncpg")
         from alembic import command
         from alembic.config import Config
 
@@ -156,7 +154,5 @@ def test_search_returns_422_for_empty_q(upgraded_postgres_url: str) -> None:
 @pytest.mark.e2e
 def test_search_returns_422_for_limit_above_50(upgraded_postgres_url: str) -> None:
     with _client_for(upgraded_postgres_url) as client:
-        response = client.get(
-            "/v1/discovery/search", params={"q": "beatles", "limit": "100"}
-        )
+        response = client.get("/v1/discovery/search", params={"q": "beatles", "limit": "100"})
     assert response.status_code == 422

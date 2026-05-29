@@ -68,7 +68,5 @@ class RecordClick:
             confidence=request.confidence,
             clicked_at=datetime.now(UTC),
         )
-        outcome = await self.click_repo.insert_if_outside_window(
-            click, self.window_seconds
-        )
+        outcome = await self.click_repo.insert_if_outside_window(click, self.window_seconds)
         return RecordClickOutput(outcome=outcome, result_signature=signature)

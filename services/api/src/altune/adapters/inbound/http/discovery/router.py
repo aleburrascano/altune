@@ -82,6 +82,10 @@ async def get_discovery_search(
     artwork_resolver = getattr(request.app.state, "discovery_artwork_resolver", None) or next(
         (p for p in providers if getattr(p, "name", None) == "deezer"), None
     )
+    # Uniform popularity back-fill via Last.fm getInfo (wired in app.py).
+    popularity_resolver = getattr(request.app.state, "discovery_popularity_resolver", None) or next(
+        (p for p in providers if getattr(p, "name", None) == "lastfm"), None
+    )
     sessionmaker = getattr(request.app.state, "sessionmaker", None)
     if sessionmaker is not None:
         from altune.adapters.outbound.persistence.discovery.search_history_repository import (
@@ -95,6 +99,7 @@ async def get_discovery_search(
                 history_repo=repo,
                 cache=cache,
                 artwork_resolver=artwork_resolver,
+                popularity_resolver=popularity_resolver,
             )
             output = await use_case.execute(
                 SearchMusicInput(
@@ -113,6 +118,7 @@ async def get_discovery_search(
             history_repo=history_repo,
             cache=cache,
             artwork_resolver=artwork_resolver,
+            popularity_resolver=popularity_resolver,
         )
         output = await use_case.execute(
             SearchMusicInput(

@@ -132,7 +132,9 @@ async def test_theaudiodb_adapter_maps_429_to_rate_limited() -> None:
 @pytest.mark.asyncio
 @respx.mock
 async def test_theaudiodb_resolve_artwork_artist_returns_thumb() -> None:
-    payload = {"artists": [{"idArtist": "1", "strArtist": "X", "strArtistThumb": "https://x/a.jpg"}]}
+    payload = {
+        "artists": [{"idArtist": "1", "strArtist": "X", "strArtistThumb": "https://x/a.jpg"}]
+    }
     respx.get(_SEARCH_URL).mock(return_value=httpx.Response(200, json=payload))
     async with httpx.AsyncClient() as client:
         adapter = TheAudioDBSearchAdapter(client=client)
@@ -158,7 +160,12 @@ async def test_theaudiodb_resolve_artwork_album_returns_thumb() -> None:
 async def test_theaudiodb_resolve_artwork_track_falls_back_to_album_thumb() -> None:
     payload = {
         "track": [
-            {"idTrack": "1", "strTrack": "T", "strTrackThumb": None, "strAlbumThumb": "https://x/t.jpg"}
+            {
+                "idTrack": "1",
+                "strTrack": "T",
+                "strTrackThumb": None,
+                "strAlbumThumb": "https://x/t.jpg",
+            }
         ]
     }
     respx.get(_TRACK_URL).mock(return_value=httpx.Response(200, json=payload))
