@@ -56,18 +56,33 @@ _RRF_K = 60
 # calibrated magnitude — there is no threshold to tune.
 _STOPWORDS = frozenset(
     {
-        "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with",
-        "at", "by", "feat", "ft", "featuring", "vs", "x", "is", "it", "my",
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "of",
+        "to",
+        "in",
+        "on",
+        "for",
+        "with",
+        "at",
+        "by",
+        "feat",
+        "ft",
+        "featuring",
+        "vs",
+        "x",
+        "is",
+        "it",
+        "my",
     }
 )
 
 # Artist names dedup at a stricter similarity than tracks/albums (a bare name
 # has little text, so a loose threshold over-merges distinct artists).
 _JW_ARTIST = 0.92
-
-# Headline kind-priority within a relevance band (Artist > Album > Track), so an
-# artist-name query tops the artist and an album-name query tops the album.
-_KIND_RANK = {ResultKind.ARTIST: 2, ResultKind.ALBUM: 1, ResultKind.TRACK: 0}
 
 
 def _isrc_of(result: SearchResult) -> str | None:
@@ -274,20 +289,18 @@ def fuse_and_rank(
         rel = _relevance_score(result, query_norm)
         scored.append(_Scored(result=result, relevance=rel, rrf=rrf))
 
-    def _key(item: _Scored) -> tuple[float, int, float, float, int, float, str, str]:
-        # PRIMARY: relevance, banded to 0.1. Within a band, kind-priority
-        # (Artist > Album > Track) decides the headline on near-equal relevance —
-        # so an artist-name query tops the artist, not one of their tracks. Then
-        # popularity, cross-provider agreement (RRF), multi-source, prior, alpha.
-        # Negate so higher values sort FIRST ascending.
+    def _key(item: _Scored) -> tuple[float, float, float, int, float, str, str]:
+        # The best relevance x popularity match wins, of ANY kind — so a song
+        # query headlines the song, an artist query the artist, an album query
+        # the album. Relevance (banded to 0.1) leads; popularity orders within a
+        # band; then cross-provider agreement (RRF), multi-source, prior, alpha.
+        # NO fixed kind hierarchy (it buried songs under artists/albums).
         band = round(item.relevance, 1)
-        kind_rank = _KIND_RANK[item.result.kind]
         popularity = _popularity(item.result)
         multi_source = 1 if len(_providers_of(item.result)) > 1 else 0
         prior = _winning_prior(item.result)
         return (
             -band,
-            -kind_rank,
             -popularity,
             -item.rrf,
             -multi_source,
