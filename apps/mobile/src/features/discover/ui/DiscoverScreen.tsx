@@ -1,20 +1,28 @@
 /**
- * DiscoverScreen — paginated multi-source search with designed states (ADR-0008).
+ * DiscoverScreen — Spotify-style sectioned multi-kind search (discover-music-v2).
  *
- * Slice 46. State machine in ../state.ts (untouched); testIDs per AC#20:
- *   discover-search-input, discover-loading, discover-empty-no-query
- *   (+ discover-history-row-<i>), discover-results, discover-partial-banner,
- *   discover-zero-results, discover-full-error (+ discover-retry).
+ * Filter chips (All · Albums · Songs · Artists) sit atop the results. "All" is a
+ * blended view: a prominent Top Result card, then capped Albums / Songs / Artists
+ * sections with "See all" affordances. A kind chip filters to a flat list of that
+ * kind. Confidence is no longer displayed anywhere.
+ *
+ * TestIDs preserved + extended: discover-search-input, discover-loading,
+ * discover-empty-no-query (+ discover-history-row-<i>), discover-results,
+ * discover-partial-banner, discover-zero-results, discover-full-error
+ * (+ discover-retry), discover-row-<kind>-<position>, discover-filter-<all|album|track|artist>,
+ * discover-top-result.
  */
 
 import type { ReactElement } from 'react';
-import { useState } from 'react';
-import { FlatList, StyleSheet, TextInput, View, type ListRenderItem } from 'react-native';
+import { useEffect, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import {
+  Artwork,
   Button,
   Card,
   Chip,
+  Row,
   Screen,
   Skeleton,
   Text,
@@ -29,13 +37,29 @@ import { PartialBanner } from './PartialBanner';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { useRecordClick } from '../hooks/useRecordClick';
 import { useSearchHistory } from '../hooks/useSearchHistory';
-import { _shouldShowPartialBanner, _viewForState } from '../state';
+import {
+  SECTION_CAP,
+  _cap,
+  _groupByKind,
+  _shouldShowPartialBanner,
+  _topResult,
+  _viewForState,
+} from '../state';
 
-import type { DiscoveryResult, SearchHistoryItem } from '../../../shared/api-client/discovery';
+import type {
+  DiscoveryKind,
+  DiscoveryResult,
+  SearchHistoryItem,
+} from '../../../shared/api-client/discovery';
 
-const _renderResult =
-  (onTap: (result: DiscoveryResult, position: number) => void): ListRenderItem<DiscoveryResult> =>
-  ({ item, index }) => <DiscoverRow result={item} position={index} onPress={onTap} />;
+type ResultsFilter = 'all' | DiscoveryKind;
+
+const FILTER_CHIPS: ReadonlyArray<{ filter: ResultsFilter; label: string; testID: string }> = [
+  { filter: 'all', label: 'All', testID: 'discover-filter-all' },
+  { filter: 'album', label: 'Albums', testID: 'discover-filter-album' },
+  { filter: 'track', label: 'Songs', testID: 'discover-filter-track' },
+  { filter: 'artist', label: 'Artists', testID: 'discover-filter-artist' },
+];
 
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
@@ -43,9 +67,15 @@ export function DiscoverScreen(): ReactElement {
   const theme = useTheme();
   const [committedQuery, setCommittedQuery] = useState('');
   const [inputValue, setInputValue] = useState('');
+  const [filter, setFilter] = useState<ResultsFilter>('all');
   const search = useDiscoverSearch(committedQuery);
   const history = useSearchHistory();
   const click = useRecordClick();
+
+  // Reset to the blended "All" view on every newly committed query.
+  useEffect(() => {
+    setFilter('all');
+  }, [committedQuery]);
 
   const view = _viewForState({
     query: committedQuery,
@@ -136,18 +166,22 @@ export function DiscoverScreen(): ReactElement {
       </View>
     );
   } else {
+    const results = search.data?.results ?? [];
     body = (
       <View testID="discover-results" style={styles.results}>
         {_shouldShowPartialBanner(search.data) && search.data ? (
           <PartialBanner providers={search.data.providers} />
         ) : null}
-        <FlatList
-          data={search.data?.results ?? []}
-          keyExtractor={(r) => `${r.kind}-${r.title}-${r.subtitle ?? ''}`}
-          renderItem={_renderResult(onResultTap)}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
+        <FilterChips active={filter} onSelect={setFilter} />
+        {filter === 'all' ? (
+          <BlendedResults
+            results={results}
+            onResultTap={onResultTap}
+            onSeeAll={setFilter}
+          />
+        ) : (
+          <FilteredResults kind={filter} results={results} onResultTap={onResultTap} />
+        )}
       </View>
     );
   }
@@ -176,6 +210,163 @@ export function DiscoverScreen(): ReactElement {
   );
 }
 
+function FilterChips({
+  active,
+  onSelect,
+}: {
+  active: ResultsFilter;
+  onSelect: (filter: ResultsFilter) => void;
+}): ReactElement {
+  return (
+    <View style={styles.chipRow}>
+      {FILTER_CHIPS.map(({ filter, label, testID }) => (
+        <Chip
+          key={filter}
+          testID={testID}
+          label={label}
+          selected={active === filter}
+          onPress={() => onSelect(filter)}
+        />
+      ))}
+    </View>
+  );
+}
+
+/** A flat, full list of a single kind (chip != all). */
+function FilteredResults({
+  kind,
+  results,
+  onResultTap,
+}: {
+  kind: DiscoveryKind;
+  results: DiscoveryResult[];
+  onResultTap: (result: DiscoveryResult, position: number) => void;
+}): ReactElement {
+  const items = results.filter((r) => r.kind === kind);
+  return (
+    <FlatList
+      data={items}
+      keyExtractor={(r) => `${r.kind}-${r.title}-${r.subtitle ?? ''}`}
+      renderItem={({ item, index }) => (
+        <DiscoverRow result={item} position={index} onPress={onResultTap} />
+      )}
+      contentContainerStyle={styles.listContent}
+      showsVerticalScrollIndicator={false}
+    />
+  );
+}
+
+/** Top Result card + capped Albums / Songs / Artists sections (chip == all). */
+function BlendedResults({
+  results,
+  onResultTap,
+  onSeeAll,
+}: {
+  results: DiscoveryResult[];
+  onResultTap: (result: DiscoveryResult, position: number) => void;
+  onSeeAll: (filter: ResultsFilter) => void;
+}): ReactElement {
+  const top = _topResult(results);
+  const { albums, songs, artists } = _groupByKind(results);
+
+  const sections: ReadonlyArray<{
+    kind: DiscoveryKind;
+    title: string;
+    items: DiscoveryResult[];
+  }> = [
+    { kind: 'album', title: 'Albums', items: albums },
+    { kind: 'track', title: 'Songs', items: songs },
+    { kind: 'artist', title: 'Artists', items: artists },
+  ];
+
+  return (
+    <FlatList
+      data={sections.filter((s) => s.items.length > 0)}
+      keyExtractor={(s) => s.kind}
+      ListHeaderComponent={
+        top !== null ? <TopResultCard result={top} onPress={onResultTap} /> : null
+      }
+      renderItem={({ item: section }) => (
+        <View style={styles.section}>
+          <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
+            {section.title.toUpperCase()}
+          </Text>
+          {_cap(section.items).map((result, index) => (
+            <DiscoverRow
+              key={`${result.kind}-${result.title}-${result.subtitle ?? ''}`}
+              result={result}
+              position={index}
+              onPress={onResultTap}
+            />
+          ))}
+          {section.items.length > SECTION_CAP ? (
+            <Pressable
+              testID={`discover-see-all-${section.kind}`}
+              onPress={() => onSeeAll(section.kind)}
+              style={({ pressed }) => [styles.seeAll, pressed ? { opacity: 0.7 } : null]}
+            >
+              <Text variant="label" tone="accent">
+                See all {section.title.toLowerCase()}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      )}
+      contentContainerStyle={styles.listContent}
+      showsVerticalScrollIndicator={false}
+    />
+  );
+}
+
+/** Larger, prominent card for the single highest-ranked result. */
+function TopResultCard({
+  result,
+  onPress,
+}: {
+  result: DiscoveryResult;
+  onPress: (result: DiscoveryResult, position: number) => void;
+}): ReactElement {
+  const isArtist = result.kind === 'artist';
+  const kindLabel = isArtist ? 'Artist' : result.kind === 'album' ? 'Album' : 'Song';
+  return (
+    <View style={styles.topResultWrap}>
+      <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
+        TOP RESULT
+      </Text>
+      <Pressable
+        testID="discover-top-result"
+        onPress={() => onPress(result, 0)}
+        style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
+      >
+        <Card>
+          <Row
+            leading={
+              <Artwork
+                uri={result.image_url}
+                size={88}
+                radius={isArtist ? radius.full : radius.lg}
+                accessibilityLabel={result.title}
+              />
+            }
+          >
+            <Text variant="title" numberOfLines={2}>
+              {result.title}
+            </Text>
+            {result.subtitle !== null ? (
+              <Text variant="body" tone="secondary" numberOfLines={1} style={{ marginTop: 2 }}>
+                {result.subtitle}
+              </Text>
+            ) : null}
+            <Text variant="caption" tone="tertiary" style={{ marginTop: spacing.sm }}>
+              {kindLabel}
+            </Text>
+          </Row>
+        </Card>
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   header: { paddingTop: spacing.sm, paddingBottom: spacing.md },
   input: {
@@ -192,7 +383,16 @@ const styles = StyleSheet.create({
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   skeletonText: { flex: 1, gap: spacing.sm },
   sectionHeader: { marginBottom: spacing.md, letterSpacing: 1 },
+  chipRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
+    flexWrap: 'wrap',
+  },
   chipCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  section: { marginBottom: spacing.lg },
+  topResultWrap: { marginBottom: spacing.lg },
+  seeAll: { paddingVertical: spacing.sm, alignSelf: 'flex-start' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
   centerSub: { marginTop: spacing.xs, marginBottom: spacing.lg },
 });

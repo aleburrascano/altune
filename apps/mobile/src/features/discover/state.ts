@@ -6,7 +6,7 @@
  * can import without RN transform overhead.
  */
 
-import type { DiscoverySearchResponse } from '../../shared/api-client/discovery';
+import type { DiscoveryResult, DiscoverySearchResponse } from '../../shared/api-client/discovery';
 
 export type DiscoverView =
   | 'loading'
@@ -54,4 +54,43 @@ export function _shouldShowPartialBanner(
     return false;
   }
   return data.partial || data.providers.some((p) => p.status !== 'ok');
+}
+
+/** Max items shown per kind-section in the blended "All" view. */
+export const SECTION_CAP = 10;
+
+export type GroupedResults = {
+  albums: DiscoveryResult[];
+  songs: DiscoveryResult[];
+  artists: DiscoveryResult[];
+};
+
+/**
+ * Partition results by kind, preserving the backend's ranking order within
+ * each kind. Tracks land in `songs` (the UI label for `kind === 'track'`).
+ */
+export function _groupByKind(results: DiscoveryResult[]): GroupedResults {
+  const albums: DiscoveryResult[] = [];
+  const songs: DiscoveryResult[] = [];
+  const artists: DiscoveryResult[] = [];
+  for (const result of results) {
+    if (result.kind === 'album') {
+      albums.push(result);
+    } else if (result.kind === 'track') {
+      songs.push(result);
+    } else {
+      artists.push(result);
+    }
+  }
+  return { albums, songs, artists };
+}
+
+/** The single highest-ranked entry (backend ranks results[0] first), or null. */
+export function _topResult(results: DiscoveryResult[]): DiscoveryResult | null {
+  return results[0] ?? null;
+}
+
+/** First `cap` items — used to cap each section in the blended view. */
+export function _cap<T>(items: T[], cap: number = SECTION_CAP): T[] {
+  return items.slice(0, cap);
 }

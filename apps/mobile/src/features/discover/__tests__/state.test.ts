@@ -2,9 +2,23 @@
  * State machine helpers for the discover feature — slice 44.
  */
 
-import { _shouldShowPartialBanner, _viewForState } from '../state';
+import { _cap, _groupByKind, _shouldShowPartialBanner, _topResult, _viewForState } from '../state';
 
-import type { DiscoverySearchResponse } from '../../../shared/api-client/discovery';
+import type {
+  DiscoveryKind,
+  DiscoveryResult,
+  DiscoverySearchResponse,
+} from '../../../shared/api-client/discovery';
+
+const _result = (kind: DiscoveryKind, title: string): DiscoveryResult => ({
+  kind,
+  title,
+  subtitle: null,
+  image_url: null,
+  confidence: 'low',
+  sources: [],
+  extras: {},
+});
 
 const _empty = (): DiscoverySearchResponse => ({
   query: 'q',
@@ -129,5 +143,53 @@ describe('_shouldShowPartialBanner', () => {
       ],
     };
     expect(_shouldShowPartialBanner(data)).toBe(true);
+  });
+});
+
+describe('_groupByKind', () => {
+  it('returns empty buckets for empty input', () => {
+    expect(_groupByKind([])).toEqual({ albums: [], songs: [], artists: [] });
+  });
+
+  it('partitions by kind, tracks landing in songs', () => {
+    const grouped = _groupByKind([
+      _result('artist', 'Che'),
+      _result('album', 'Rest in Bass'),
+      _result('track', 'Some Song'),
+    ]);
+    expect(grouped.albums.map((r) => r.title)).toEqual(['Rest in Bass']);
+    expect(grouped.songs.map((r) => r.title)).toEqual(['Some Song']);
+    expect(grouped.artists.map((r) => r.title)).toEqual(['Che']);
+  });
+
+  it('preserves backend order within each kind', () => {
+    const grouped = _groupByKind([
+      _result('album', 'A1'),
+      _result('album', 'A2'),
+      _result('album', 'A3'),
+    ]);
+    expect(grouped.albums.map((r) => r.title)).toEqual(['A1', 'A2', 'A3']);
+  });
+});
+
+describe('_topResult', () => {
+  it('returns null for empty input', () => {
+    expect(_topResult([])).toBeNull();
+  });
+
+  it('returns the first entry (backend-ranked top result)', () => {
+    const top = _result('album', 'Rest in Bass');
+    expect(_topResult([top, _result('track', 'Other')])).toBe(top);
+  });
+});
+
+describe('_cap', () => {
+  it('returns at most `cap` items, preserving order', () => {
+    const items = Array.from({ length: 15 }, (_, i) => i);
+    expect(_cap(items, 10)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+
+  it('returns all items when fewer than the cap', () => {
+    expect(_cap([1, 2, 3], 10)).toEqual([1, 2, 3]);
   });
 });
