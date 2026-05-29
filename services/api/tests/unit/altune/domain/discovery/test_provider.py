@@ -12,14 +12,15 @@ from altune.domain.discovery.source_ref import SourceRef
 
 
 @pytest.mark.unit
-def test_provider_name_has_five_members() -> None:
-    # iTunes added by the ADR-0007 ranking-overhaul addendum (2026-05-28).
+def test_provider_name_has_six_members() -> None:
+    # iTunes + TheAudioDB added by discover-music-v2.
     assert {m.value for m in ProviderName} == {
         "deezer",
         "musicbrainz",
         "soundcloud",
         "lastfm",
         "itunes",
+        "theaudiodb",
     }
 
 

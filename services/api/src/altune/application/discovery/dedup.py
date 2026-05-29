@@ -38,6 +38,7 @@ _PRIORS: dict[ProviderName, float] = {
     ProviderName.DEEZER: 0.85,
     ProviderName.ITUNES: 0.85,
     ProviderName.LASTFM: 0.80,
+    ProviderName.THEAUDIODB: 0.78,
     ProviderName.SOUNDCLOUD: 0.65,
 }
 

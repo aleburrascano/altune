@@ -70,6 +70,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         discovery_clients, discovery_providers = build_discovery_providers(cfg)
         app.state.discovery_clients = discovery_clients
         app.state.discovery_providers = discovery_providers
+        # Cover-art back-fill: chain Deezer (broad) then TheAudioDB (better art),
+        # both of which implement ArtworkResolver.
+        from altune.adapters.outbound.discovery.artwork import ChainedArtworkResolver
+        from altune.application.discovery.ports import ArtworkResolver
+
+        _art_chain = [
+            p
+            for p in discovery_providers
+            if getattr(p, "name", None) in ("deezer", "theaudiodb")
+            and isinstance(p, ArtworkResolver)
+        ]
+        app.state.discovery_artwork_resolver = ChainedArtworkResolver(resolvers=_art_chain)
         app.state.discovery_history_repo = build_discovery_history_repo()
         log.info(
             "auth.startup_config_validated",
