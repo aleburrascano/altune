@@ -6,17 +6,20 @@ Per ADR-0007 source set + AC#1 sources-array shape.
 from __future__ import annotations
 
 import pytest
+
 from altune.domain.discovery.provider import ProviderName
 from altune.domain.discovery.source_ref import SourceRef
 
 
 @pytest.mark.unit
-def test_provider_name_has_four_members() -> None:
+def test_provider_name_has_five_members() -> None:
+    # iTunes added by the ADR-0007 ranking-overhaul addendum (2026-05-28).
     assert {m.value for m in ProviderName} == {
         "deezer",
         "musicbrainz",
         "soundcloud",
         "lastfm",
+        "itunes",
     }
 
 

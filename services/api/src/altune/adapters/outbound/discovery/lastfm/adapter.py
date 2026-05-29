@@ -1,14 +1,18 @@
 # mypy: warn_unused_ignores = False
 """Last.fm search ACL adapter.
 
-Slice 20. Translates Last.fm's track.search response to SearchResult.
+Translates Last.fm's track/album/artist .search responses to SearchResult.
 Requires an API key on the querystring (api_key param) — never logged.
-Returns tracks only in v1; album.search / artist.search land later.
+discover-music-v2 adds album + artist search alongside tracks; one `search()`
+call fans out to the requested kinds concurrently. Last.fm carries popularity
+(track/artist `listeners`), log-normalized into `extras["popularity"]`.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -23,6 +27,8 @@ from altune.domain.discovery.search_result import SearchResult
 from altune.domain.discovery.source_ref import SourceRef
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import httpx
 
 _log = logging.getLogger(__name__)
@@ -30,9 +36,21 @@ _log = logging.getLogger(__name__)
 _BASE_URL = "https://ws.audioscrobbler.com/2.0/"
 
 
+def _log_norm(value: object, max_log10: float) -> float | None:
+    """Log-normalize a popularity count to [0, 1]; None if absent/invalid."""
+    if isinstance(value, str):
+        try:
+            value = int(value)
+        except ValueError:
+            return None
+    if not isinstance(value, (int, float)) or value <= 0:
+        return None
+    return min(1.0, math.log10(float(value) + 1.0) / max_log10)
+
+
 @dataclass
 class LastFmSearchAdapter:
-    """Adapter for Last.fm's track.search API."""
+    """Adapter for Last.fm's track/album/artist .search API."""
 
     client: httpx.AsyncClient
     api_key: str
@@ -48,24 +66,35 @@ class LastFmSearchAdapter:
         kinds: frozenset[ResultKind],
         limit: int,
     ) -> ProviderSearchResponse:
-        if ResultKind.TRACK not in kinds:
+        # Fan out to each requested kind's method concurrently; combine.
+        plan: list[_KindPlan] = []
+        if ResultKind.TRACK in kinds:
+            plan.append(_KindPlan("track.search", "track", "trackmatches", "track", _translate_tracks))
+        if ResultKind.ALBUM in kinds:
+            plan.append(_KindPlan("album.search", "album", "albummatches", "album", _translate_albums))
+        if ResultKind.ARTIST in kinds:
+            plan.append(
+                _KindPlan("artist.search", "artist", "artistmatches", "artist", _translate_artists)
+            )
+        if not plan:
             return ProviderSearchResponse(
                 provider_name=self.name,
                 status=ProviderStatus.OK,
                 results=(),
                 latency_ms=0,
             )
+
         start = time.perf_counter()
-        params = {
-            "method": "track.search",
-            "track": query,
-            "api_key": self.api_key,
-            "format": "json",
-            "limit": str(limit),
-        }
         try:
-            response = await self.client.get(self.base_url, params=params)
+            payloads = await asyncio.gather(*(self._fetch(p, query, limit) for p in plan))
             latency_ms = int((time.perf_counter() - start) * 1000)
+        except _LastFmHTTPError as exc:
+            return ProviderSearchResponse(
+                provider_name=self.name,
+                status=exc.status,
+                results=(),
+                latency_ms=exc.latency_ms,
+            )
         except Exception:
             _log.exception("lastfm search request failed")
             return ProviderSearchResponse(
@@ -75,45 +104,43 @@ class LastFmSearchAdapter:
                 latency_ms=int((time.perf_counter() - start) * 1000),
             )
 
-        if response.status_code == 429:
-            return ProviderSearchResponse(
-                provider_name=self.name,
-                status=ProviderStatus.RATE_LIMITED,
-                results=(),
-                latency_ms=latency_ms,
-            )
-        if response.status_code >= 400:
-            return ProviderSearchResponse(
-                provider_name=self.name,
-                status=ProviderStatus.ERROR,
-                results=(),
-                latency_ms=latency_ms,
-            )
+        results: list[SearchResult] = []
+        for p, payload in zip(plan, payloads, strict=True):
+            results_node = payload.get("results") or {}
+            matches = results_node.get(p.matches_key) or {}
+            entries = matches.get(p.entry_key) or []
+            if isinstance(entries, dict):
+                # Last.fm returns a bare dict (not a list) when there's exactly one match.
+                entries = [entries]
+            results.extend(p.translate(entries))
+        return ProviderSearchResponse(
+            provider_name=self.name,
+            status=ProviderStatus.OK,
+            results=tuple(results),
+            latency_ms=latency_ms,
+        )
 
+    async def _fetch(self, plan: _KindPlan, query: str, limit: int) -> dict[str, Any]:
+        start = time.perf_counter()
+        params = {
+            "method": plan.method,
+            plan.query_param: query,
+            "api_key": self.api_key,
+            "format": "json",
+            "limit": str(limit),
+        }
+        response = await self.client.get(self.base_url, params=params)
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        if response.status_code == 429:
+            raise _LastFmHTTPError(ProviderStatus.RATE_LIMITED, latency_ms)
+        if response.status_code >= 400:
+            raise _LastFmHTTPError(ProviderStatus.ERROR, latency_ms)
         try:
             payload = response.json()
         except ValueError:
             _log.warning("lastfm returned non-json body")
-            return ProviderSearchResponse(
-                provider_name=self.name,
-                status=ProviderStatus.ERROR,
-                results=(),
-                latency_ms=latency_ms,
-            )
-
-        results_node = payload.get("results") or {}
-        track_matches = results_node.get("trackmatches") or {}
-        entries = track_matches.get("track") or []
-        if isinstance(entries, dict):
-            # Last.fm returns a bare dict (not a list) when there's exactly one match.
-            entries = [entries]
-        results = _translate_tracks(entries)
-        return ProviderSearchResponse(
-            provider_name=self.name,
-            status=ProviderStatus.OK,
-            results=results,
-            latency_ms=latency_ms,
-        )
+            raise _LastFmHTTPError(ProviderStatus.ERROR, latency_ms) from None
+        return payload if isinstance(payload, dict) else {}
 
     async def lookup_by_url(self, url: str) -> SearchResult | None:
         """Resolve https://www.last.fm/music/<Artist>/_/<Track> to a single result."""
@@ -164,13 +191,35 @@ class LastFmSearchAdapter:
         )
 
 
+@dataclass
+class _KindPlan:
+    """Per-kind fetch + translate plan for one Last.fm search method."""
+
+    method: str
+    query_param: str
+    matches_key: str
+    entry_key: str
+    translate: Callable[[list[dict[str, Any]]], tuple[SearchResult, ...]]
+
+
+class _LastFmHTTPError(Exception):
+    """Internal: a per-method HTTP failure mapped to a ProviderStatus."""
+
+    def __init__(self, status: ProviderStatus, latency_ms: int) -> None:
+        self.status = status
+        self.latency_ms = latency_ms
+
+
 def _translate_tracks(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...]:
-    out: list[SearchResult] = []
-    for entry in entries:
-        translated = _translate_one_track(entry)
-        if translated is not None:
-            out.append(translated)
-    return tuple(out)
+    return tuple(r for e in entries if (r := _translate_one_track(e)) is not None)
+
+
+def _translate_albums(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...]:
+    return tuple(r for e in entries if (r := _translate_one_album(e)) is not None)
+
+
+def _translate_artists(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...]:
+    return tuple(r for e in entries if (r := _translate_one_artist(e)) is not None)
 
 
 def _translate_one_track(entry: dict[str, Any]) -> SearchResult | None:
@@ -196,6 +245,9 @@ def _translate_one_track(entry: dict[str, Any]) -> SearchResult | None:
         "listeners": listeners,
         "preview_url": None,
     }
+    pop = _log_norm(listeners, 7.0)  # listener counts reach ~1e7.
+    if pop is not None:
+        extras["popularity"] = pop
     return SearchResult(
         kind=ResultKind.TRACK,
         title=title,
@@ -206,6 +258,58 @@ def _translate_one_track(entry: dict[str, Any]) -> SearchResult | None:
             SourceRef(
                 provider=ProviderName.LASTFM,
                 external_id=entry.get("mbid") or url,
+                url=url,
+            ),
+        ),
+        extras=extras,
+    )
+
+
+def _translate_one_album(entry: dict[str, Any]) -> SearchResult | None:
+    title = entry.get("name")
+    artist_name = entry.get("artist")
+    url = entry.get("url")
+    if not title or not url:
+        _log.warning("provider_response_malformed provider=lastfm kind=album missing=name|url")
+        return None
+    extras: dict[str, object] = {"isrc": None, "preview_url": None}
+    return SearchResult(
+        kind=ResultKind.ALBUM,
+        title=title,
+        subtitle=artist_name or None,
+        image_url=_largest_image(entry.get("image")),
+        confidence=Confidence.LOW,
+        sources=(
+            SourceRef(
+                provider=ProviderName.LASTFM,
+                external_id=entry.get("mbid") or url,
+                url=url,
+            ),
+        ),
+        extras=extras,
+    )
+
+
+def _translate_one_artist(entry: dict[str, Any]) -> SearchResult | None:
+    name = entry.get("name")
+    url = entry.get("url")
+    if not name or not url:
+        _log.warning("provider_response_malformed provider=lastfm kind=artist missing=name|url")
+        return None
+    extras: dict[str, object] = {"isrc": None, "preview_url": None}
+    pop = _log_norm(entry.get("listeners"), 7.0)  # listener counts reach ~1e7.
+    if pop is not None:
+        extras["popularity"] = pop
+    return SearchResult(
+        kind=ResultKind.ARTIST,
+        title=name,
+        subtitle=None,
+        image_url=_largest_image(entry.get("image")),
+        confidence=Confidence.LOW,
+        sources=(
+            SourceRef(
+                provider=ProviderName.LASTFM,
+                external_id=entry.get("mbid") or url or name,
                 url=url,
             ),
         ),

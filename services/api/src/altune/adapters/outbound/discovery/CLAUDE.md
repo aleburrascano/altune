@@ -1,6 +1,8 @@
 # discovery outbound adapters — bounded-context local rules
 
-ACL adapters for the four discovery providers + the Redis cache adapter. Each provider folder is one adapter implementing `SearchProvider` from [application/discovery/ports.py](../../../application/discovery/ports.py). The cache adapter implements `QueryCache`. None of these import each other — siblings coordinate only through the use case.
+ACL adapters for the discovery providers + the Redis cache adapter. Each provider folder is one adapter implementing `SearchProvider` from [application/discovery/ports.py](../../../application/discovery/ports.py). The cache adapter implements `QueryCache`. None of these import each other — siblings coordinate only through the use case.
+
+Providers: `deezer/`, `musicbrainz/`, `soundcloud/`, `lastfm/`, and `itunes/` (added by the ADR-0007 ranking-overhaul addendum — free no-auth iTunes Search API; `https://itunes.apple.com/search?term=&media=music&entity=song`; maps `trackName/artistName/trackId/trackViewUrl`, upscales `artworkUrl100` `100x100`→`600x600bb`, populates `extras.preview_url`; **no ISRC**; `lookup_by_url` returns None since iTunes isn't in the v1 URL-paste set).
 
 ## Key terms
 
@@ -24,5 +26,5 @@ ACL adapters for the four discovery providers + the Redis cache adapter. Each pr
 - **MB User-Agent is non-optional** — without a registered UA with contact info, MB throttles to 1 req/s and may 503. Wiring constructs MB's `AsyncClient` with the UA header from `Settings.musicbrainz_user_agent`; wiring skips MB entirely if UA is unset (rather than spamming the public default).
 - **Last.fm response shape returns `track` as dict (not list) when there's exactly one result.** The adapter normalizes this to a list before iterating [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\services\api\src\altune\adapters\outbound\discovery\lastfm\adapter.py#L105-L108].
 - **SC fixture uses `t500x500` as the largest-by-width thumbnail**, NOT the `original` entry — the `original` thumbnail in yt-dlp output has no `width`, only `preference`. Tests assert `t500x500 in image_url`.
-- **`extras["isrc"]` is `None` for MusicBrainz adapter** [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\services\api\src\altune\adapters\outbound\discovery\musicbrainz\adapter.py#L154-L155] — MB recording search doesn't include ISRC inline; enabling `inc=isrcs` is a future enhancement. Without it, cross-source dedup with Deezer falls back to JW similarity instead of canonical ISRC match.
+- **MusicBrainz now requests `inc=isrcs`** (ADR-0007 ranking-overhaul addendum) — `extras["isrc"]` is the first entry of the recording's `isrcs[]` array, or `None` when the recording has no ISRC. This revives the canonical cross-source ISRC merge with Deezer/iTunes; previously MB omitted ISRC and dedup fell back to JW only.
 - **`# mypy: warn_unused_ignores = False`** is at the top of every adapter to silence the per-file mypy hook's noise about httpx / sqlalchemy stubs that the batch mypy resolves correctly.

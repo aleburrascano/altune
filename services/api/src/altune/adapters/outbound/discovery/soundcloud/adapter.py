@@ -6,8 +6,9 @@ yt-dlp is sync; the adapter takes an async extractor callable so:
 - Production wiring wraps yt-dlp in asyncio.to_thread (see platform/wiring.py)
 - Tests inject a fake extractor that returns the captured fixture directly
 
-Returns tracks only — yt-dlp scsearch is track-specific; SC playlists/
-artists land in future specs if Artist Pro access ever materializes.
+Returns tracks only — yt-dlp scsearch is track-specific; SoundCloud stays
+tracks-only even in discover-music-v2 (album/artist search isn't available
+via scsearch).
 """
 
 from __future__ import annotations

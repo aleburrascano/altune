@@ -259,14 +259,17 @@ async def test_search_music_one_failure_does_not_cancel_sibling_providers() -> N
     # If one provider raises mid-flight, the others must still complete
     # and contribute results (TaskGroup-style cancellation would cancel
     # siblings; asyncio.gather with per-task try/except does not).
+    # Both surviving results share the queried artist so they clear the
+    # relevance floor — the floor is exercised elsewhere; this test is about
+    # sibling survival when one provider raises.
     ok_a = InMemorySearchProvider(
         name="a",
-        canned=(_distinct_result(ProviderName.DEEZER, "Apple Pie", "Mom's Kitchen", "a"),),
+        canned=(_distinct_result(ProviderName.DEEZER, "Apple Pie", "The Band", "a"),),
     )
     broken = InMemorySearchProvider(name="broken", raises=RuntimeError("boom"))
     ok_c = InMemorySearchProvider(
         name="c",
-        canned=(_distinct_result(ProviderName.LASTFM, "Cherry Bombs", "Some DJ", "c"),),
+        canned=(_distinct_result(ProviderName.LASTFM, "Cherry Bombs", "The Band", "c"),),
     )
     history = InMemorySearchHistoryRepository()
     use_case = SearchMusic(
@@ -275,7 +278,7 @@ async def test_search_music_one_failure_does_not_cancel_sibling_providers() -> N
 
     output = await use_case.execute(
         SearchMusicInput(
-            raw_query="q",
+            raw_query="the band",
             user_id=_USER,
             kinds=frozenset({ResultKind.TRACK}),
         )

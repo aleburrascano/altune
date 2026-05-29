@@ -1,23 +1,30 @@
-"""dedup_and_rank — ISRC + JW merge + multi-criteria ranking.
+"""Merge + rank discovery results.
 
-Per ADR-0007 + discover-music-v1 spec §3.3 + §3.13. Pure function over
-a sequence of SearchResults. ISRC-match collapses entries to HIGH; JW
->= 0.92 on normalized (artist|title) collapses to HIGH; JW in
-[0.85, 0.92) collapses to MEDIUM; otherwise entries stay separate
-(as LOW). Per-source priors break ties and choose canonical
-representative; final ordering is confidence DESC -> multi-source bool
-DESC -> winning-prior DESC -> alpha (subtitle, title).
+Per ADR-0007 (revised) + discover-music-v1 spec. The MERGE step is
+unchanged: ISRC-match collapses entries to HIGH; JW >= 0.92 on normalized
+(artist|title) collapses to HIGH; JW in [0.85, 0.92) collapses to MEDIUM;
+otherwise entries stay separate (as LOW). Per-source priors choose the
+canonical representative of a merged entry.
+
+The RANK step is relevance-first (`fuse_and_rank`): a parameter-free match
+gate drops results that share no content word with the query, then the
+survivors sort by relevance-band → popularity → cross-provider agreement
+(RRF) → prior → alpha. `confidence` is NOT a sort term and is no longer
+displayed; it is retained only for telemetry.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from rapidfuzz import fuzz  # type: ignore[import-not-found,unused-ignore]
 from rapidfuzz.distance import JaroWinkler  # type: ignore[import-not-found,unused-ignore]
 
 from altune.application.discovery.normalize import normalize_for_match
 from altune.domain.discovery.confidence import Confidence
 from altune.domain.discovery.provider import ProviderName
+from altune.domain.discovery.result_kind import ResultKind
 from altune.domain.discovery.search_result import SearchResult
 
 if TYPE_CHECKING:
@@ -29,12 +36,38 @@ if TYPE_CHECKING:
 _PRIORS: dict[ProviderName, float] = {
     ProviderName.MUSICBRAINZ: 0.95,
     ProviderName.DEEZER: 0.85,
+    ProviderName.ITUNES: 0.85,
     ProviderName.LASTFM: 0.80,
     ProviderName.SOUNDCLOUD: 0.65,
 }
 
 _JW_HIGH = 0.92
 _JW_MEDIUM = 0.85
+
+# Reciprocal Rank Fusion constant. 60 is the value from the original RRF
+# paper (Cormack et al.); it damps the gap between adjacent ranks so a
+# provider's #1 and #2 don't dominate every other provider's whole list.
+_RRF_K = 60
+
+# Match gate (parameter-free, replaces the old tunable relevance floor): a
+# result is kept only if it shares at least one CONTENT token with the query.
+# Content tokens are normalized query tokens of length >= 2 minus these common
+# stopwords. This is definitional ("share a word or you're not a match"), not a
+# calibrated magnitude — there is no threshold to tune.
+_STOPWORDS = frozenset(
+    {
+        "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with",
+        "at", "by", "feat", "ft", "featuring", "vs", "x", "is", "it", "my",
+    }
+)
+
+# Artist names dedup at a stricter similarity than tracks/albums (a bare name
+# has little text, so a loose threshold over-merges distinct artists).
+_JW_ARTIST = 0.92
+
+# Headline kind-priority within a relevance band (Artist > Album > Track), so an
+# artist-name query tops the artist and an album-name query tops the album.
+_KIND_RANK = {ResultKind.ARTIST: 2, ResultKind.ALBUM: 1, ResultKind.TRACK: 0}
 
 
 def _isrc_of(result: SearchResult) -> str | None:
@@ -46,6 +79,32 @@ def _isrc_of(result: SearchResult) -> str | None:
 
 def _winning_prior(result: SearchResult) -> float:
     return max(_PRIORS.get(s.provider, 0.0) for s in result.sources)
+
+
+def _popularity(result: SearchResult) -> float:
+    """Normalized popularity in [0, 1], or 0 when no source carries it."""
+    val = result.extras.get("popularity")
+    if isinstance(val, (int, float)):
+        return float(val)
+    return 0.0
+
+
+def _content_tokens(text: str) -> set[str]:
+    """Significant tokens of normalized text: length >= 2, minus stopwords."""
+    return {t for t in text.split() if len(t) >= 2 and t not in _STOPWORDS}
+
+
+def _passes_gate(result: SearchResult, query_norm: str) -> bool:
+    """Keep a result only if it shares >= 1 content token with the query.
+
+    Parameter-free match gate (no tunable threshold). If the query has no
+    content tokens (all stopwords/short), don't gate — let everything through.
+    """
+    query_tokens = _content_tokens(query_norm)
+    if not query_tokens:
+        return True
+    text = f"{normalize_for_match(result.subtitle or '')} {normalize_for_match(result.title)}"
+    return bool(query_tokens & _content_tokens(text))
 
 
 def _signature(result: SearchResult) -> str:
@@ -67,8 +126,12 @@ def _merge(a: SearchResult, b: SearchResult, confidence: Confidence) -> SearchRe
             continue
         seen.add(key)
         sources.append(s)
-    # Merge extras with canonical winning on conflict.
+    # Merge extras with canonical winning on conflict, EXCEPT popularity, which
+    # takes the max across sources (any provider that knows it's popular counts).
     extras = {**other.extras, **canonical.extras}
+    pop = max(_popularity(a), _popularity(b))
+    if pop > 0:
+        extras["popularity"] = pop
     return SearchResult(
         kind=canonical.kind,
         title=canonical.title,
@@ -88,6 +151,9 @@ def _try_merge(a: SearchResult, b: SearchResult) -> SearchResult | None:
     if isrc_a and isrc_b and isrc_a == isrc_b:
         return _merge(a, b, Confidence.HIGH)
     sim = JaroWinkler.similarity(_signature(a), _signature(b))
+    if a.kind is ResultKind.ARTIST:
+        # Artists merge only on a strict name match (no subtitle to disambiguate).
+        return _merge(a, b, Confidence.HIGH) if sim >= _JW_ARTIST else None
     if sim >= _JW_HIGH:
         return _merge(a, b, Confidence.HIGH)
     if sim >= _JW_MEDIUM:
@@ -110,30 +176,124 @@ def _as_low_confidence(result: SearchResult) -> SearchResult:
     )
 
 
-def _rank_key(result: SearchResult) -> tuple[int, int, float, str, str]:
-    confidence_rank = {Confidence.HIGH: 2, Confidence.MEDIUM: 1, Confidence.LOW: 0}[
-        result.confidence
-    ]
-    multi_source = 1 if len(result.sources) > 1 else 0
-    prior = _winning_prior(result)
-    # Negate so higher values sort FIRST when ascending.
-    return (-confidence_rank, -multi_source, -prior, result.subtitle or "", result.title)
+def _relevance_score(result: SearchResult, query_norm: str) -> float:
+    """Continuous query-relevance in [0, 1] — the primary ranking signal.
+
+    Graded token-sort similarity (rapidfuzz) between the normalized query and
+    both the title and the `"<artist> <title>"` form; the better of the two
+    wins. `token_sort_ratio` (not `token_set_ratio`) is deliberate:
+    token_set_ratio returns 100 whenever the title is a *subset* of the query,
+    so every same-title result ("Africa — Toto", "Africa — Kidjo", …) would
+    tie at 100. token_sort_ratio penalizes missing/extra tokens, so a 3-of-4
+    match scores above a 2-of-4 match — the discrimination the floor and the
+    band rely on. An empty query (unit tests asserting merge only) scores 0.
+    """
+    query = query_norm.strip()
+    if not query:
+        return 0.0
+    title = normalize_for_match(result.title)
+    subtitle = normalize_for_match(result.subtitle or "")
+    combined = f"{subtitle} {title}".strip()
+    # Match against title, artist, and "artist title" — the best wins. Matching
+    # the artist field alone is what makes an artist-only query ("queen") return
+    # that artist's tracks instead of being dropped by the floor.
+    best = max(
+        fuzz.token_sort_ratio(query, title),
+        fuzz.token_sort_ratio(query, subtitle),
+        fuzz.token_sort_ratio(query, combined),
+    )
+    return float(best) / 100.0
 
 
-def dedup_and_rank(results: Sequence[SearchResult]) -> tuple[SearchResult, ...]:
-    """Merge ISRC- or JW-similar entries; rank per ADR-0007 §3.13."""
-    if not results:
-        return ()
-    merged: list[SearchResult] = []
-    for incoming in results:
-        candidate = _as_low_confidence(incoming)
-        absorbed = False
-        for i, existing in enumerate(merged):
-            attempt = _try_merge(existing, candidate)
-            if attempt is not None:
-                merged[i] = attempt
-                absorbed = True
-                break
-        if not absorbed:
-            merged.append(candidate)
-    return tuple(sorted(merged, key=_rank_key))
+def _providers_of(result: SearchResult) -> set[ProviderName]:
+    return {s.provider for s in result.sources}
+
+
+@dataclass
+class _Ranked:
+    """A merged result tracking each contributing provider's best (lowest) rank."""
+
+    result: SearchResult
+    best_rank: dict[ProviderName, int]
+
+
+@dataclass
+class _Scored:
+    """A finalized result with its query-relevance and RRF agreement scores."""
+
+    result: SearchResult
+    relevance: float
+    rrf: float
+
+
+def fuse_and_rank(
+    per_provider: Sequence[Sequence[SearchResult]],
+    query_norm: str,
+) -> tuple[SearchResult, ...]:
+    """Merge across providers and rank relevance-first.
+
+    Each inner sequence is one provider's results in that provider's native
+    relevance order (position 0 = best). A parameter-free **match gate**
+    (`_passes_gate`) drops results sharing no content word with the query.
+    Survivors sort by: relevance-band (0.1) → popularity → cross-provider
+    agreement (RRF, `Σ 1/(_RRF_K + best_rank)` over *distinct* providers, so a
+    provider returning the same item twice can't inflate it) → multi-source →
+    prior → alpha.
+
+    Confidence is computed (cross-provider corroboration; same-provider-only
+    merge stays LOW) for telemetry only — it neither sorts nor displays.
+    """
+    accumulated: list[_Ranked] = []
+    for group in per_provider:
+        for rank, incoming in enumerate(group):
+            candidate = _as_low_confidence(incoming)
+            cand_providers = _providers_of(candidate)
+            for entry in accumulated:
+                attempt = _try_merge(entry.result, candidate)
+                if attempt is not None:
+                    entry.result = attempt
+                    for provider in cand_providers:
+                        prev = entry.best_rank.get(provider)
+                        entry.best_rank[provider] = rank if prev is None else min(prev, rank)
+                    break
+            else:
+                accumulated.append(
+                    _Ranked(result=candidate, best_rank=dict.fromkeys(cand_providers, rank))
+                )
+
+    scored: list[_Scored] = []
+    for entry in accumulated:
+        rrf = sum(1.0 / (_RRF_K + rank) for rank in entry.best_rank.values())
+        result = entry.result
+        if len(_providers_of(result)) < 2 and result.confidence is not Confidence.LOW:
+            # Same-provider-only merge: demote to LOW (no cross-source agreement).
+            result = _as_low_confidence(result)
+        if query_norm.strip() and not _passes_gate(result, query_norm):
+            # Shares no content word with the query — not a match. Parameter-free.
+            continue
+        rel = _relevance_score(result, query_norm)
+        scored.append(_Scored(result=result, relevance=rel, rrf=rrf))
+
+    def _key(item: _Scored) -> tuple[float, int, float, float, int, float, str, str]:
+        # PRIMARY: relevance, banded to 0.1. Within a band, kind-priority
+        # (Artist > Album > Track) decides the headline on near-equal relevance —
+        # so an artist-name query tops the artist, not one of their tracks. Then
+        # popularity, cross-provider agreement (RRF), multi-source, prior, alpha.
+        # Negate so higher values sort FIRST ascending.
+        band = round(item.relevance, 1)
+        kind_rank = _KIND_RANK[item.result.kind]
+        popularity = _popularity(item.result)
+        multi_source = 1 if len(_providers_of(item.result)) > 1 else 0
+        prior = _winning_prior(item.result)
+        return (
+            -band,
+            -kind_rank,
+            -popularity,
+            -item.rrf,
+            -multi_source,
+            -prior,
+            item.result.subtitle or "",
+            item.result.title,
+        )
+
+    return tuple(item.result for item in sorted(scored, key=_key))
