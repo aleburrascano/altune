@@ -152,6 +152,38 @@ def _content_tokens(text: str) -> set[str]:
     return {t for t in text.split() if len(t) >= 2 and t not in _STOPWORDS}
 
 
+def _genuine_split_exists(results: Sequence[SearchResult], query_tokens: set[str]) -> bool:
+    """True when some result splits the query into song (title) + artist (subtitle).
+
+    A genuine "song by artist" result has a title that is a STRICT subset of the
+    query's content tokens and an artist whose tokens, together with the title,
+    EXACTLY cover the query (song-tokens union artist-tokens == query). The coverage
+    requirement is what makes this safe on a bare-title query: there the artist
+    is absent from the query, so no split covers it and nothing is flagged — a
+    real "Song / Artist" entry on a title-only search is never a bootleg. A
+    spurious partial match (some result whose artist happens to be one query
+    word) also fails coverage and can't trigger the rule.
+    """
+    for r in results:
+        title_t = _content_tokens(normalize_for_match(r.title))
+        artist_t = _content_tokens(normalize_for_match(r.subtitle or ""))
+        if title_t and artist_t and title_t < query_tokens and (title_t | artist_t) == query_tokens:
+            return True
+    return False
+
+
+def _is_bootleg(result: SearchResult, query_tokens: set[str], genuine_split: bool) -> bool:
+    """True for a title-stuffed re-upload: the whole query sits in the TITLE and
+    the artist field is foreign to the query (a junk label), while a genuine
+    song/artist split exists in the same result set. Demoted within the band so
+    the real recording wins even when the bootleg out-pops it."""
+    if not genuine_split or not query_tokens:
+        return False
+    title_t = _content_tokens(normalize_for_match(result.title))
+    artist_t = _content_tokens(normalize_for_match(result.subtitle or ""))
+    return query_tokens <= title_t and bool(artist_t) and artist_t.isdisjoint(query_tokens)
+
+
 def _passes_gate(result: SearchResult, query_norm: str) -> bool:
     """Keep a result only if it shares >= 1 content token with the query.
 
@@ -359,7 +391,11 @@ def fuse_and_rank(
         rel = _relevance_score(result, query_norm)
         scored.append(_Scored(result=result, relevance=rel, rrf=rrf))
 
-    def _key(item: _Scored) -> tuple[float, int, float, float, int, float, str, str]:
+    query_tokens = _content_tokens(query_norm)
+    split = _genuine_split_exists([s.result for s in scored], query_tokens)
+    bootleg_ids = {id(s.result) for s in scored if _is_bootleg(s.result, query_tokens, split)}
+
+    def _key(item: _Scored) -> tuple[float, int, int, float, float, int, float, str, str]:
         # The best relevance x popularity match wins, of ANY kind — so a song
         # query headlines the song, an artist query the artist, an album query
         # the album. Relevance (banded to 0.1) leads; popularity orders within a
@@ -367,12 +403,14 @@ def fuse_and_rank(
         # NO fixed kind hierarchy (it buried songs under artists/albums).
         band = round(item.relevance, 1)
         demoted = 1 if _is_demoted(item.result) else 0  # clean (0) sorts before junk (1)
+        bootleg = 1 if id(item.result) in bootleg_ids else 0  # foreign-artist re-uploads sink
         popularity = _popularity(item.result)
         multi_source = 1 if len(_providers_of(item.result)) > 1 else 0
         prior = _winning_prior(item.result)
         return (
             -band,
             demoted,
+            bootleg,
             -popularity,
             -item.rrf,
             -multi_source,
@@ -393,15 +431,21 @@ def rerank(results: Sequence[SearchResult], query_norm: str) -> tuple[SearchResu
     only reorders.
     """
 
-    def _key(result: SearchResult) -> tuple[float, int, float, int, float, str, str]:
+    query_tokens = _content_tokens(query_norm)
+    split = _genuine_split_exists(results, query_tokens)
+    bootleg_ids = {id(r) for r in results if _is_bootleg(r, query_tokens, split)}
+
+    def _key(result: SearchResult) -> tuple[float, int, int, float, int, float, str, str]:
         band = round(_relevance_score(result, query_norm), 1)
         demoted = 1 if _is_demoted(result) else 0
+        bootleg = 1 if id(result) in bootleg_ids else 0
         popularity = _popularity(result)
         multi_source = 1 if len(_providers_of(result)) > 1 else 0
         prior = _winning_prior(result)
         return (
             -band,
             demoted,
+            bootleg,
             -popularity,
             -multi_source,
             -prior,
