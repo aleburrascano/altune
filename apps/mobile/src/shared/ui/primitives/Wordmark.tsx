@@ -7,7 +7,7 @@ export type WordmarkProps = {
   size?: number;
 };
 
-/** The Altune wordmark: lowercase "altune" in Space Grotesk + an indigo dot. */
+/** The Altune wordmark: lowercase "altune" in Plus Jakarta Sans + a cobalt dot. */
 export function Wordmark({ size = 28 }: WordmarkProps) {
   const theme = useTheme();
   const dot = Math.max(4, Math.round(size * 0.13));

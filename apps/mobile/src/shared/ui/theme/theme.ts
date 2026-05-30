@@ -18,7 +18,6 @@ export type ThemeColors = {
   accent: string;
   accentPressed: string;
   accentTint: string;
-  accentGlow: string;
   /** Foreground (text/icon) color on top of an accent fill. */
   onAccent: string;
   confHigh: string;

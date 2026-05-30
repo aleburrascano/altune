@@ -1,7 +1,7 @@
 import { palette } from './palette';
 import type { Theme } from './theme';
 
-/** The shipped v1 theme — "Midnight Studio". */
+/** The shipped v1 theme — refreshed dark identity (cobalt on lifted charcoal). */
 export const darkTheme: Theme = {
   scheme: 'dark',
   color: {
@@ -13,10 +13,9 @@ export const darkTheme: Theme = {
     textPrimary: palette.white,
     textSecondary: palette.gray400,
     textTertiary: palette.gray600,
-    accent: palette.indigo,
-    accentPressed: palette.indigoPressed,
-    accentTint: palette.indigoTint,
-    accentGlow: palette.indigoGlow,
+    accent: palette.cobalt,
+    accentPressed: palette.cobaltPressed,
+    accentTint: palette.cobaltTint,
     onAccent: palette.pureWhite,
     confHigh: palette.green,
     confMed: palette.amber,
@@ -24,6 +23,6 @@ export const darkTheme: Theme = {
     warning: palette.amber,
     danger: palette.red,
     success: palette.green,
-    heroGradient: [palette.indigo, palette.magenta],
+    heroGradient: [palette.cobalt, palette.cobaltSoft],
   },
 };
