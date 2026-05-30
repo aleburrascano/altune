@@ -125,3 +125,43 @@ async def test_in_memory_repo_returns_empty_when_user_has_no_tracks() -> None:
 
     assert items == ()
     assert total == 0
+
+
+@pytest.mark.unit
+async def test_in_memory_add_persists_new_track_and_returns_created_true() -> None:
+    repo = InMemoryTrackRepository()
+    track = _track(user=_USER_A, id_hex="11111111-1111-1111-1111-111111111111", title="New")
+
+    persisted, created = await repo.add(track)
+
+    assert created is True
+    assert persisted.id == track.id
+    _, total = await repo.list_for_user(_USER_A, limit=10, offset=0)
+    assert total == 1
+
+
+@pytest.mark.unit
+async def test_in_memory_add_returns_existing_and_created_false_on_duplicate() -> None:
+    first = _track(user=_USER_A, id_hex="11111111-1111-1111-1111-111111111111", title="Dup")
+    repo = InMemoryTrackRepository([first])
+    # Same natural key (case-insensitive title, same artist/album), different id.
+    again = _track(user=_USER_A, id_hex="22222222-2222-2222-2222-222222222222", title="dup")
+
+    persisted, created = await repo.add(again)
+
+    assert created is False
+    assert persisted.id == first.id  # existing returned, not the new one
+    _, total = await repo.list_for_user(_USER_A, limit=10, offset=0)
+    assert total == 1
+
+
+@pytest.mark.unit
+async def test_in_memory_add_same_title_different_users_both_created() -> None:
+    repo = InMemoryTrackRepository(
+        [_track(user=_USER_A, id_hex="11111111-1111-1111-1111-111111111111", title="Same")]
+    )
+    other_user = _track(user=_USER_B, id_hex="22222222-2222-2222-2222-222222222222", title="Same")
+
+    _, created = await repo.add(other_user)
+
+    assert created is True
