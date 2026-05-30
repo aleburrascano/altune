@@ -66,4 +66,21 @@ describe('DetailScreen', () => {
     expect(queryByTestId('detail-info-isrc')).toBeNull();
     expect(queryByTestId('detail-info-popularity')).toBeNull();
   });
+
+  it('shows the tracklist placeholder and no save button for an album', () => {
+    setDetailHandoff(_result({ kind: 'album', subtitle: 'The Weeknd', extras: {} }));
+    const { DetailScreen } = require('../ui/DetailScreen');
+    const { getByTestId, queryByTestId } = render(<DetailScreen />);
+    expect(getByTestId('detail-tracklist-placeholder')).toBeTruthy();
+    expect(queryByTestId('detail-track-info')).toBeNull();
+    expect(queryByTestId('detail-save')).toBeNull();
+  });
+
+  it('shows the discography placeholder and no save button for an artist', () => {
+    setDetailHandoff(_result({ kind: 'artist', subtitle: null, extras: {} }));
+    const { DetailScreen } = require('../ui/DetailScreen');
+    const { getByTestId, queryByTestId } = render(<DetailScreen />);
+    expect(getByTestId('detail-discography-placeholder')).toBeTruthy();
+    expect(queryByTestId('detail-save')).toBeNull();
+  });
 });
