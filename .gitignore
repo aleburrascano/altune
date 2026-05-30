@@ -61,3 +61,7 @@ CLAUDE.local.md
 # ---- Build artifacts ----
 *.tgz
 *.zip
+
+# ---- Discovery eval harness run artifacts (keep library.json snapshot) ----
+services/api/scripts/discovery_eval/data/report_*.md
+services/api/scripts/discovery_eval/data/report_*.json
