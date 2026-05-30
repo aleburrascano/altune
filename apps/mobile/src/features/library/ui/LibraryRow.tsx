@@ -26,6 +26,16 @@ export function LibraryRow({ track }: { track: TrackResponse }): ReactElement {
       <Text variant="label" tone="secondary" numberOfLines={1} style={styles.artist}>
         {track.artist}
       </Text>
+      {track.acquisition_status === 'pending' ? (
+        <Text
+          testID={`library-row-pending-${track.id}`}
+          variant="caption"
+          tone="tertiary"
+          style={styles.pending}
+        >
+          Pending
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -36,4 +46,5 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   artist: { marginTop: 2 },
+  pending: { marginTop: spacing.xs },
 });
