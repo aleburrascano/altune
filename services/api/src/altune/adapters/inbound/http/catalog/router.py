@@ -56,6 +56,8 @@ async def get_tracks(
                 album=t.album,
                 duration_seconds=t.duration_seconds,
                 added_at=t.added_at,
+                acquisition_status=t.acquisition_status.value,
+                artwork_url=t.artwork_url,
             )
             for t in output.items
         ],
@@ -104,4 +106,6 @@ async def create_track(
         album=t.album,
         duration_seconds=t.duration_seconds,
         added_at=t.added_at,
+        acquisition_status=t.acquisition_status.value,
+        artwork_url=t.artwork_url,
     )

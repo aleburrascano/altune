@@ -201,6 +201,17 @@ def test_post_tracks_creates_201_then_dedupes_200(migrated_db: str) -> None:
 
 
 @pytest.mark.e2e
+def test_list_tracks_includes_acquisition_status(fresh_db: str) -> None:
+    _seed(fresh_db, [_track(user=_USER_A, id_hex="44444444-4444-4444-4444-444444444444")])
+    with _client_for(fresh_db, _USER_A) as client:
+        response = client.get("/v1/tracks")
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["acquisition_status"] == "pending"
+    assert item["artwork_url"] is None
+
+
+@pytest.mark.e2e
 def test_get_tracks_isolates_users(fresh_db: str) -> None:
     _seed(
         fresh_db,
