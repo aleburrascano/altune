@@ -19,6 +19,8 @@ from sqlalchemy.dialects.postgresql import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from altune.adapters.outbound.persistence.base import Base
+from altune.domain.catalog.acquisition_status import AcquisitionStatus
+from altune.domain.catalog.dedup import dedup_key
 from altune.domain.catalog.track import Track
 from altune.domain.catalog.track_id import TrackId
 from altune.domain.shared.user_id import UserId
@@ -34,6 +36,12 @@ class TrackRow(Base):
     album: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     added_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    artwork_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    acquisition_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
+    # AIDEV-NOTE: dedup_key is persistence-only — the natural key behind the
+    # UNIQUE(user_id, dedup_key) idempotency constraint. It is NOT a domain
+    # field; it is derived from title/artist/album via the domain normalizer.
+    dedup_key: Mapped[str] = mapped_column(Text, nullable=False)
 
     def to_domain(self) -> Track:
         return Track(
@@ -44,6 +52,8 @@ class TrackRow(Base):
             album=self.album,
             duration_seconds=self.duration_seconds,
             added_at=self.added_at,
+            artwork_url=self.artwork_url,
+            acquisition_status=AcquisitionStatus(self.acquisition_status),
         )
 
     @classmethod
@@ -56,4 +66,7 @@ class TrackRow(Base):
             album=track.album,
             duration_seconds=track.duration_seconds,
             added_at=track.added_at,
+            artwork_url=track.artwork_url,
+            acquisition_status=track.acquisition_status.value,
+            dedup_key=dedup_key(track.title, track.artist, track.album),
         )
