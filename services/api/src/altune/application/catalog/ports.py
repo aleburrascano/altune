@@ -42,3 +42,17 @@ class TrackRepository(Protocol):
         spec's Design Considerations.
         """
         ...
+
+    async def add(self, track: Track) -> tuple[Track, bool]:
+        """Persist a new track, or return the existing one on a dedup hit.
+
+        Returns ``(persisted_track, created)``. ``created`` is ``False`` when a
+        track with the same natural key already exists for the user (the dedup
+        key is computed over user_id + normalized title/artist/album): the
+        existing track is returned and no duplicate row is written.
+
+        Idempotency is enforced by the ``UNIQUE(user_id, dedup_key)`` constraint
+        in the SQL adapter, not by a read-then-write check (which would race).
+        Introduced by `docs/specs/view-result-detail/spec.md` (AC#5, AC#7).
+        """
+        ...
