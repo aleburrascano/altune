@@ -15,6 +15,7 @@ displayed; it is retained only for telemetry.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -106,27 +107,41 @@ def _popularity(result: SearchResult) -> float:
 
 
 # Low-quality release markers (in the normalized title) + record types that
-# should sink below the real thing within a relevance band.
+# should sink below the real thing within a relevance band. Covers, karaoke,
+# tributes, chiptune emulations and instrumental re-uploads frequently embed
+# the real artist's name in their TITLE, so they normalize to the full query
+# and land in the genuine track's relevance band — demotion is what keeps the
+# real recording on top there.
 _JUNK_TITLE_MARKERS = (
     "karaoke",
     "tribute",
     "made famous",
+    "originally performed",
+    "performed by",
     "in the style of",
-    "instrumental version",
     "backing track",
     "8 bit",
     "8bit",
+    "8-bit",
+    "16-bit",
     "lullaby",
+)
+# Single-word markers matched on a word boundary so they don't fire inside an
+# unrelated word (e.g. "cover" must not match "Undercover").
+_JUNK_TITLE_WORD_RE = re.compile(
+    r"\b(cover|arrangement|instrumental|emulation|orgel)\b", re.IGNORECASE
 )
 _DEMOTED_RECORD_TYPES = frozenset({"compilation"})
 
 
 def _is_demoted(result: SearchResult) -> bool:
-    """True for karaoke/tribute/compilation-style results that should rank below
-    the genuine article within the same relevance band. Checks the RAW title
-    (normalize strips bracketed '(Karaoke Version)' suffixes)."""
+    """True for karaoke/tribute/cover/compilation-style results that should rank
+    below the genuine article within the same relevance band. Checks the RAW
+    title (normalize strips bracketed '(Karaoke Version)' suffixes)."""
     title = result.title.lower()
     if any(marker in title for marker in _JUNK_TITLE_MARKERS):
+        return True
+    if _JUNK_TITLE_WORD_RE.search(title):
         return True
     record_type = result.extras.get("record_type")
     return isinstance(record_type, str) and record_type.lower() in _DEMOTED_RECORD_TYPES
@@ -256,6 +271,22 @@ def _relevance_score(result: SearchResult, query_norm: str) -> float:
     if result.subtitle:
         combined = f"{normalize_for_match(result.subtitle)} {title}".strip()
         candidates.append(fuzz.token_sort_ratio(query, combined))
+    # Also score on CONTENT tokens (stopwords/articles dropped) so the genuine
+    # recording isn't penalized a whole relevance band for an article mismatch:
+    # normalize strips the leading "The" from "The Weeknd", so a query like
+    # "blinding lights the weeknd" wouldn't fully match the artist's content
+    # while a copycat whose bare title embeds the query would. Comparing content
+    # tokens makes "<song> the <artist>" and "<song> <artist>" score alike; the
+    # demotion tiebreak then keeps the genuine track above the copycat. Only
+    # ever RAISES the score (it's a max), never lowers it.
+    query_content = _content_tokens(query)
+    if query_content:
+        query_c = " ".join(sorted(query_content))
+        title_c = " ".join(sorted(_content_tokens(title)))
+        candidates.append(fuzz.token_sort_ratio(query_c, title_c))
+        if result.subtitle:
+            combined_c = " ".join(sorted(_content_tokens(combined)))
+            candidates.append(fuzz.token_sort_ratio(query_c, combined_c))
     return float(max(candidates)) / 100.0
 
 
