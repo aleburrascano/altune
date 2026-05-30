@@ -105,8 +105,15 @@ export function DetailScreen(): ReactElement {
 function TrackDetailBody({ result }: { result: DiscoveryResult }): ReactElement {
   const save = useSaveTrack();
   const rows = trackInfoRows(result.extras);
+  // AC#9: a Track requires a non-empty artist. When the result has no subtitle
+  // (artist), that invariant can't be met — disable Save rather than POST an
+  // invalid body.
+  const canSave = result.subtitle !== null && result.subtitle.length > 0;
 
   const onSave = (): void => {
+    if (!canSave) {
+      return;
+    }
     save.mutate(toCreateTrackRequest(result));
   };
 
@@ -124,7 +131,7 @@ function TrackDetailBody({ result }: { result: DiscoveryResult }): ReactElement 
         testID="detail-save"
         label={save.isSuccess ? 'Saved' : 'Save to Library'}
         onPress={onSave}
-        disabled={save.isPending || save.isSuccess}
+        disabled={!canSave || save.isPending || save.isSuccess}
         loading={save.isPending}
         haptic
         style={styles.save}

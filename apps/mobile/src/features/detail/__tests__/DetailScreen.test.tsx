@@ -111,4 +111,13 @@ describe('DetailScreen', () => {
       }),
     );
   });
+
+  it('disables Save (no POST) when the track has no artist', async () => {
+    setDetailHandoff(_result({ subtitle: null }));
+    const { getByTestId } = renderDetail();
+    fireEvent.press(getByTestId('detail-save'));
+    expect(getByTestId('detail-save').props.accessibilityState?.disabled).toBe(true);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockCreateTrack).not.toHaveBeenCalled();
+  });
 });
