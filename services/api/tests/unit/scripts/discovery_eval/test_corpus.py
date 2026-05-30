@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from scripts.discovery_eval.corpus import (
+    EvalQuery,
     LibraryTrack,
     build_corpus,
     messy,
@@ -22,7 +23,7 @@ def _track(
     return LibraryTrack(title=title, artist=artist, album=album, album_artist=artist, genre="Rock")
 
 
-def _by_category(track: LibraryTrack) -> dict[str, object]:
+def _by_category(track: LibraryTrack) -> dict[str, EvalQuery]:
     return {q.category: q for q in variants_for(track, source="library")}
 
 
@@ -90,3 +91,15 @@ def test_build_corpus_is_deterministic_for_a_seed() -> None:
     first = [q.query for q in build_corpus(tracks, max_queries=25, seed=11)]
     second = [q.query for q in build_corpus(tracks, max_queries=25, seed=11)]
     assert first == second
+
+
+def test_build_corpus_spans_categories_when_tracks_exceed_cap() -> None:
+    # Regression: with far more tracks than the cap, the corpus must still span
+    # multiple categories — not be exhausted by track_exact (one per track).
+    tracks = [
+        _track(title=f"Song {i} Two Three", artist=f"Artist {i}", album=f"Album {i}")
+        for i in range(500)
+    ]
+    corpus = build_corpus(tracks, max_queries=21, seed=3)
+    categories = {q.category for q in corpus}
+    assert len(categories) >= 5
