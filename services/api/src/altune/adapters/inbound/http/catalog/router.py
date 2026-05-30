@@ -10,11 +10,19 @@ the response is built from domain Track values.
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 
-from altune.adapters.inbound.http.catalog.dto import ListTracksResponse, TrackResponse
+from altune.adapters.inbound.http.catalog.dto import (
+    CreateTrackRequest,
+    ListTracksResponse,
+    TrackResponse,
+)
 from altune.adapters.outbound.persistence.catalog.track_repository import (
     SqlAlchemyTrackRepository,
+)
+from altune.application.catalog.add_track_to_library import (
+    AddTrackToLibrary,
+    AddTrackToLibraryInput,
 )
 from altune.application.catalog.list_tracks import ListTracks, ListTracksInput
 from altune.domain.shared.user_id import UserId  # noqa: TC001  # FastAPI runtime annotation
@@ -55,4 +63,45 @@ async def get_tracks(
         limit=output.limit,
         offset=output.offset,
         has_more=output.has_more,
+    )
+
+
+@router.post("/tracks", response_model=TrackResponse, status_code=201)  # type: ignore[untyped-decorator, unused-ignore]
+async def create_track(
+    body: CreateTrackRequest,
+    response: Response,
+    request: Request,
+    user_id: UserId = Depends(current_user_id),  # noqa: B008  # FastAPI dependency injection idiom
+) -> TrackResponse:
+    log.info("http_post_tracks_request", user_id=str(user_id), title=body.title)
+    sessionmaker = request.app.state.sessionmaker
+    async with sessionmaker() as session:
+        repo = SqlAlchemyTrackRepository(session)
+        use_case = AddTrackToLibrary(repo)
+        output = await use_case.execute(
+            AddTrackToLibraryInput(
+                user_id=user_id,
+                title=body.title,
+                artist=body.artist,
+                album=body.album,
+                duration_seconds=body.duration_seconds,
+                artwork_url=body.artwork_url,
+            )
+        )
+        await session.commit()
+    if not output.created:
+        # Dedup hit: the save was idempotent, so signal 200 (not 201) and emit
+        # the dedup-hit telemetry (spec Telemetry S6). No event was emitted.
+        response.status_code = 200
+        log.info(
+            "http_post_tracks_dedup_hit", user_id=str(user_id), track_id=str(output.track.id.value)
+        )
+    t = output.track
+    return TrackResponse(
+        id=t.id.value,
+        title=t.title,
+        artist=t.artist,
+        album=t.album,
+        duration_seconds=t.duration_seconds,
+        added_at=t.added_at,
     )

@@ -12,6 +12,14 @@ from uuid import UUID  # noqa: TC003  # pydantic resolves at runtime
 from pydantic import BaseModel, ConfigDict
 
 
+class CreateTrackRequest(BaseModel):
+    title: str
+    artist: str
+    album: str | None = None
+    duration_seconds: int | None = None
+    artwork_url: str | None = None
+
+
 class TrackResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 

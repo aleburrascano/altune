@@ -8,11 +8,15 @@ route via FastAPI's sync TestClient context manager so the lifespan runs.
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -145,6 +149,55 @@ def test_get_tracks_422_for_out_of_range_query(fresh_db: str, query: str) -> Non
     with _client_for(fresh_db, _USER_A) as client:
         response = client.get(f"/v1/tracks{query}")
     assert response.status_code == 422
+
+
+@pytest.fixture(scope="module")
+def migrated_db() -> Iterator[str]:
+    """Own container migrated via alembic — carries UNIQUE(user_id, dedup_key).
+
+    The POST path uses ON CONFLICT (user_id, dedup_key), which needs the real
+    constraint. Base.metadata.create_all (the `fresh_db` route) intentionally
+    omits it so the read-path tests can seed several arbitrary rows per user, so
+    the write-path test gets an isolated migrated schema instead. env.py prefers
+    os.environ["DATABASE_URL"], so the container URL must be pushed there.
+    """
+    with PostgresContainer("postgres:16-alpine") as container:
+        raw = container.get_connection_url()
+        async_url = raw.replace("+psycopg2", "+asyncpg").replace("+psycopg", "+asyncpg")
+        prior = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = async_url
+        try:
+            root = Path(__file__).resolve().parents[1]
+            cfg = Config(str(root.parent / "alembic.ini"))
+            cfg.set_main_option("script_location", str(root.parent / "migrations"))
+            cfg.set_main_option("sqlalchemy.url", async_url)
+            command.upgrade(cfg, "head")
+            yield async_url
+        finally:
+            if prior is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = prior
+
+
+@pytest.mark.e2e
+def test_post_tracks_creates_201_then_dedupes_200(migrated_db: str) -> None:
+    body = {
+        "title": "Midnight City",
+        "artist": "M83",
+        "album": "Hurry Up, We're Dreaming",
+        "duration_seconds": 244,
+        "artwork_url": "https://img.example/mc.jpg",
+    }
+    with _client_for(migrated_db, _USER_A) as client:
+        first = client.post("/v1/tracks", json=body)
+        # Case-insensitive natural key → second POST is a dedup hit, 200 + same id.
+        second = client.post("/v1/tracks", json={**body, "title": "midnight city", "artist": "m83"})
+
+    assert first.status_code == 201
+    assert second.status_code == 200
+    assert first.json()["id"] == second.json()["id"]
+    assert first.json()["title"] == "Midnight City"
 
 
 @pytest.mark.e2e
