@@ -8,6 +8,7 @@ Covers spec AC#5, AC#7.
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
