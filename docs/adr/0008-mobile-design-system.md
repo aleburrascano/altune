@@ -1,9 +1,15 @@
 # ADR-0008: Token-based mobile design system ("Midnight Studio")
 
-- **Status:** Accepted
+- **Status:** Accepted (visual identity superseded by ADR-0009, 2026-05-30)
 - **Date:** 2026-05-28
 - **Deciders:** solo + Claude
 - **Context tags:** [pattern, dependency]
+
+> **Update (2026-05-30):** The *visual identity* below — the "Midnight Studio" palette (`#0B0B0F` /
+> Electric Indigo `#5B6CFF`), Space Grotesk, glow elevation, and the floating glass `GlassTabBar` —
+> was refreshed by **ADR-0009** (Cobalt `#2D5BFF` on lifted charcoal `#121214`, Plus Jakarta Sans,
+> a docked `TabBar`, no glow). The token-based **architecture** of this ADR is unchanged and still
+> in force; only the applied look changed.
 
 > **Update (2026-05-28):** Motion was initially built on `react-native-reanimated` v4. It crashed at startup in **Expo Go** — Reanimated 4's `react-native-worklets` TurboModule is not present in the Expo Go runtime (`installTurboModule` throws). Because the chosen motion is minimal (press-scale + shimmer), we **dropped reanimated and reimplemented motion with React Native's built-in `Animated`** (zero native modules, Expo-Go-safe). The sections below reflect that final decision.
 
