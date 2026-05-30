@@ -1,11 +1,11 @@
 # discover — feature-local context
 
-Mobile screen for the unified music search surface. Submit-only `TextInput` at the top, five-state body below ([state.ts](state.ts) `_viewForState` drives the switch), partial-failure banner sits as a sibling of results, empty-no-query renders the user's last-10 distinct searches via [useSearchHistory.ts](hooks/useSearchHistory.ts). Shipped under spec `docs/specs/discover-music-v1/spec.md` + ADR-0007.
+Mobile screen for the unified music search surface. A greeting + "Discover" title sit above a submit-only `TextInput`; five-state body below ([state.ts](state.ts) `_viewForState` drives the switch); empty-no-query renders the user's last-10 distinct searches via [useSearchHistory.ts](hooks/useSearchHistory.ts). Shipped under spec `docs/specs/discover-music-v1/spec.md` + ADR-0007; restyled per ADR-0009 (the provider-failure banner was removed — partial results render normally without it).
 
 ## Key terms
 
-- **DiscoverView** — five-state union: `loading | empty-no-query | results | zero-results | full-error`. Lives in [state.ts](state.ts). Mirror of the AC#20 testID set. The five states are mutually exclusive; the partial-result banner is NOT a state — it composes alongside `results` (per ADR-0007 spec §3.7).
-- **`partial` flag** — server-emitted; true when any provider's `status !== 'ok'`. Gates [PartialBanner.tsx](ui/PartialBanner.tsx). NOT an error condition — `results` still renders when `partial: true`.
+- **DiscoverView** — five-state union: `loading | empty-no-query | results | zero-results | full-error`. Lives in [state.ts](state.ts). Mirror of the AC#20 testID set. The five states are mutually exclusive.
+- **`partial` flag** — server-emitted; true when any provider's `status !== 'ok'`. Still present on the wire but **no longer surfaced** in the UI (the banner was removed in ADR-0009); `results` renders normally regardless.
 - **`result_signature`** — server-computed stable hash `(kind, normalized title, normalized subtitle)`. Used as the testID suffix and as the click-tracking dedup key. We never compute it client-side; we echo what the wire returns. (Confirmed via spec §"result_signature definition".)
 - **Submit-only trigger** — `TextInput.onSubmitEditing` is the only path that commits a query into the query state. Tapping a history row also commits. As-you-type is the v1.1 fast-follow (locked in ADR-0007).
 
@@ -18,8 +18,7 @@ Mobile screen for the unified music search surface. Submit-only `TextInput` at t
 - **TestIDs are load-bearing** for AC#20:
   - `discover-loading` — initial-load spinner
   - `discover-empty-no-query` + `discover-history-row-<idx>` — empty state with history rows
-  - `discover-results` — results container (wraps PartialBanner + FlatList)
-  - `discover-partial-banner` — sibling banner; appears only when `_shouldShowPartialBanner` returns true
+  - `discover-results` — results container (filter chips + FlatList)
   - `discover-zero-results` — 0 results returned from a non-empty query
   - `discover-full-error` + `discover-retry` — fetch failure with retry button
   - `discover-search-input` — the TextInput itself
@@ -41,30 +40,29 @@ Mobile screen for the unified music search surface. Submit-only `TextInput` at t
 
 ### Files
 
-- [state.ts](state.ts) — pure `_viewForState` + `_shouldShowPartialBanner` helpers; no RN imports so jest runs without RN transform.
+- [state.ts](state.ts) — pure `_viewForState` + blended-view helpers (`_groupByKind`, `_topResult`, `_sectionOrder`, `_cap`); no RN imports so jest runs without RN transform.
 - [hooks/useDiscoverSearch.ts](hooks/useDiscoverSearch.ts) — `useQuery<DiscoverySearchResponse>` keyed on trimmed query; `enabled` only when query non-empty.
 - [hooks/useSearchHistory.ts](hooks/useSearchHistory.ts) — `useQuery<DiscoverySearchHistoryResponse>`; powers empty-no-query state's history list.
 - [hooks/useRecordClick.ts](hooks/useRecordClick.ts) — `useMutation<void, Error, ClickPayload>`; swallows errors (best-effort telemetry).
 - [ui/DiscoverScreen.tsx](ui/DiscoverScreen.tsx) — entrypoint; owns `inputValue` + `committedQuery`; switches on `_viewForState` output.
 - [ui/DiscoverRow.tsx](ui/DiscoverRow.tsx) — single result row; testID `discover-row-<kind>-<position>`.
-- [ui/PartialBanner.tsx](ui/PartialBanner.tsx) — warning banner above results when any provider not `ok`.
 
 ### Public API surface
 
 - `DiscoverScreen` (default export of [ui/DiscoverScreen.tsx](ui/DiscoverScreen.tsx)) — consumed by `apps/mobile/src/app/(tabs)/discover.tsx` (Expo Router tab page).
-- `_viewForState`, `_shouldShowPartialBanner` — exported for unit testing; not consumed by other features.
+- `_viewForState` + blended-view helpers — exported for unit testing; not consumed by other features.
 
 ### Dependencies on other features / shared
 
 - `@shared/api-client/discovery` — `searchDiscovery`, `listSearchHistory`, `recordClick` + wire types.
 - `@shared/api-client/index` — `apiFetch` underlying transport (transitively).
 - `@tanstack/react-query` — `useQuery` + `useMutation`, via the root `QueryClientProvider`.
-- `@shared/ui` — design-system primitives (ADR-0008): the result row is the art-forward `Card` (`Artwork` + `ConfidenceDot` + verified glow on high-confidence multi-source); states use `Skeleton` / `Chip` / `Banner` / `Button`.
+- `@shared/ui` — design-system primitives (ADR-0008 / ADR-0009): the result row is the art-forward `Card` (`Artwork` + title/subtitle; no confidence, no glow); states use `Skeleton` / `Chip` / `Button`.
 - No cross-feature imports (vertical-slice rule preserved).
 
 ### Test files
 
-- [__tests__/state.test.ts](__tests__/state.test.ts) — 7 tests on `_viewForState` (all five view-state branches) + `_shouldShowPartialBanner` (banner-on / banner-off / undefined-data).
+- [__tests__/state.test.ts](__tests__/state.test.ts) — `_viewForState` (all five view-state branches) + blended-view helpers (`_groupByKind`, `_topResult`, `_sectionOrder`, `_cap`).
 
 <!-- AUTO-MAINTAINED:END -->
 
