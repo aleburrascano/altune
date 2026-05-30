@@ -54,4 +54,16 @@ describe('DetailScreen', () => {
     render(<DetailScreen />);
     expect(mockRedirect).toHaveBeenCalledWith({ href: '/discover' });
   });
+
+  it('renders track info rows for present extras and omits absent keys', () => {
+    setDetailHandoff(
+      _result({ extras: { duration_seconds: 244, album: 'After Hours' } }),
+    );
+    const { DetailScreen } = require('../ui/DetailScreen');
+    const { getByTestId, queryByTestId } = render(<DetailScreen />);
+    expect(getByTestId('detail-info-duration')).toBeTruthy();
+    expect(getByTestId('detail-info-album')).toBeTruthy();
+    expect(queryByTestId('detail-info-isrc')).toBeNull();
+    expect(queryByTestId('detail-info-popularity')).toBeNull();
+  });
 });
