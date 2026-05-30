@@ -13,6 +13,7 @@
  * discover-top-result.
  */
 
+import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -36,6 +37,7 @@ import { DiscoverRow } from './DiscoverRow';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { useRecordClick } from '../hooks/useRecordClick';
 import { useSearchHistory } from '../hooks/useSearchHistory';
+import { stashHandoffForDetail } from '../tap';
 import {
   SECTION_CAP,
   _cap,
@@ -65,6 +67,7 @@ const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();
+  const router = useRouter();
   const [committedQuery, setCommittedQuery] = useState('');
   const [inputValue, setInputValue] = useState('');
   const [filter, setFilter] = useState<ResultsFilter>('all');
@@ -90,6 +93,8 @@ export function DiscoverScreen(): ReactElement {
     setCommittedQuery(item.query);
   };
   const onResultTap = (result: DiscoveryResult, position: number): void => {
+    // Click tracking stays fire-and-forget (best-effort telemetry, ADR-0007);
+    // we do NOT await it before navigating.
     click.mutate({
       query_norm: search.data?.query_norm ?? committedQuery,
       kind: result.kind,
@@ -98,6 +103,7 @@ export function DiscoverScreen(): ReactElement {
       position,
       confidence: result.confidence,
     });
+    router.push(stashHandoffForDetail(result));
   };
 
   let body: ReactElement;

@@ -20,7 +20,7 @@ import { Screen } from '@shared/ui/primitives/Screen';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-import { getDetailHandoff } from '../detail-handoff';
+import { getDetailHandoff } from '@shared/lib/detail-handoff';
 
 const HERO_SIZE = 200;
 

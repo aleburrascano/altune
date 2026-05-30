@@ -17,7 +17,7 @@ jest.mock('expo-router', () => ({
   Redirect: (props: { href: string }) => mockRedirect(props),
 }));
 
-import { clearDetailHandoff, setDetailHandoff } from '../detail-handoff';
+import { clearDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';
 import type { DiscoveryResult } from '../../../shared/api-client/discovery';
 
 function _result(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
