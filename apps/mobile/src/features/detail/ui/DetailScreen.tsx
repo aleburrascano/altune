@@ -22,6 +22,8 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
 
+import { trackInfoRows } from '../extras';
+
 const HERO_SIZE = 200;
 
 function _kindLabel(kind: 'artist' | 'album' | 'track'): string {
@@ -72,6 +74,19 @@ export function DetailScreen(): ReactElement {
           {_kindLabel(result.kind)}
         </Text>
       </View>
+
+      {result.kind === 'track' ? (
+        <View testID="detail-track-info" style={styles.info}>
+          {trackInfoRows(result.extras).map((row) => (
+            <View key={row.key} testID={`detail-info-${row.key}`} style={styles.infoRow}>
+              <Text variant="label" tone="tertiary">
+                {row.label}
+              </Text>
+              <Text variant="body">{row.value}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -81,4 +96,11 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', paddingTop: spacing.lg, gap: spacing.sm },
   title: { textAlign: 'center', marginTop: spacing.lg },
   kind: { marginTop: spacing.xs },
+  info: { marginTop: spacing['2xl'], gap: spacing.md },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
 });
