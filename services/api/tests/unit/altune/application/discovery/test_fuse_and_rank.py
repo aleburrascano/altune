@@ -72,6 +72,54 @@ def test_rrf_rewards_provider_native_top_rank() -> None:
     assert [r.subtitle for r in ranked] == ["Alpha", "Omega"]
 
 
+def _pop(result: SearchResult, popularity: float) -> SearchResult:
+    return SearchResult(
+        kind=result.kind,
+        title=result.title,
+        subtitle=result.subtitle,
+        image_url=result.image_url,
+        confidence=result.confidence,
+        sources=result.sources,
+        extras={**result.extras, "popularity": popularity},
+    )
+
+
+@pytest.mark.unit
+def test_cover_and_arrangement_results_are_demoted_below_the_genuine_track() -> None:
+    # The reported failure: a user types "<song> <artist>" and copycat uploads
+    # that embed the artist in their TITLE (so they normalize to the full query
+    # and land in the same relevance band) outrank the genuine recording —
+    # even when the copycat carries higher popularity. Markers like "(Piano
+    # Arrangement)" / "Originally Performed By" / "(Drum Cover)" must demote
+    # them below the real track within the band.
+    genuine = _pop(
+        _r(
+            title="Blinding Lights", subtitle="The Weeknd", provider=ProviderName.DEEZER, ext_id="g"
+        ),
+        0.5,
+    )
+    piano = _pop(
+        _r(
+            title="Blinding Lights The Weeknd (Piano Arrangement)",
+            subtitle="Piano Off",
+            provider=ProviderName.DEEZER,
+            ext_id="p",
+        ),
+        0.9,  # higher popularity than the genuine track — demotion must still win
+    )
+    performed = _pop(
+        _r(
+            title="Blinding Lights (Originally Performed by The Weeknd)",
+            subtitle="Sunfly House Band",
+            provider=ProviderName.DEEZER,
+            ext_id="o",
+        ),
+        0.8,
+    )
+    ranked = fuse_and_rank([(piano, performed, genuine)], query_norm="blinding lights the weeknd")
+    assert ranked[0].subtitle == "The Weeknd"
+
+
 @pytest.mark.unit
 def test_multi_source_agreement_outranks_single_source_at_equal_relevance() -> None:
     # Both match equally (band 1.0 via title). The agreed-upon one (2 providers)
@@ -177,19 +225,28 @@ def test_karaoke_and_compilation_results_are_demoted_within_band() -> None:
     # Same title => same relevance band; the karaoke/compilation versions sink
     # below the genuine album.
     real = SearchResult(
-        kind=ResultKind.ALBUM, title="Anthem", subtitle="The Band", image_url=None,
+        kind=ResultKind.ALBUM,
+        title="Anthem",
+        subtitle="The Band",
+        image_url=None,
         confidence=Confidence.LOW,
         sources=(SourceRef(provider=ProviderName.DEEZER, external_id="r", url="https://x/r"),),
         extras={"record_type": "album"},
     )
     karaoke = SearchResult(
-        kind=ResultKind.ALBUM, title="Anthem (Karaoke Version)", subtitle="Karaoke Allstars",
-        image_url=None, confidence=Confidence.LOW,
+        kind=ResultKind.ALBUM,
+        title="Anthem (Karaoke Version)",
+        subtitle="Karaoke Allstars",
+        image_url=None,
+        confidence=Confidence.LOW,
         sources=(SourceRef(provider=ProviderName.ITUNES, external_id="k", url="https://x/k"),),
         extras={"record_type": "album"},
     )
     comp = SearchResult(
-        kind=ResultKind.ALBUM, title="Anthem", subtitle="Various", image_url=None,
+        kind=ResultKind.ALBUM,
+        title="Anthem",
+        subtitle="Various",
+        image_url=None,
         confidence=Confidence.LOW,
         sources=(SourceRef(provider=ProviderName.MUSICBRAINZ, external_id="c", url="https://x/c"),),
         extras={"record_type": "Compilation"},
