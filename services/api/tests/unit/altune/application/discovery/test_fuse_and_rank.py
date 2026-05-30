@@ -121,6 +121,65 @@ def test_cover_and_arrangement_results_are_demoted_below_the_genuine_track() -> 
 
 
 @pytest.mark.unit
+def test_bootleg_with_foreign_artist_is_demoted_when_genuine_split_exists() -> None:
+    # Bootleg re-upload: the real artist is crammed into the TITLE and the
+    # artist field holds a junk label ("Pancadao GD Som"). It carries no
+    # karaoke/cover marker and out-pops the genuine track — common for
+    # underground catalogue where the genuine has ~0 popularity. Because a
+    # genuine song/artist split ("Blinding Lights" / "The Weeknd") is present,
+    # the foreign-artist title-stuffer must sink below it.
+    genuine = _pop(
+        _r(
+            title="Blinding Lights", subtitle="The Weeknd", provider=ProviderName.DEEZER, ext_id="g"
+        ),
+        0.3,
+    )
+    bootleg = _pop(
+        _r(
+            title="Blinding Lights The Weeknd",
+            subtitle="Pancadao GD Som",
+            provider=ProviderName.DEEZER,
+            ext_id="b",
+        ),
+        0.9,  # out-pops the genuine — only the bootleg rule can demote it
+    )
+    ranked = fuse_and_rank([(bootleg, genuine)], query_norm="blinding lights the weeknd")
+    assert ranked[0].subtitle == "The Weeknd"
+
+
+@pytest.mark.unit
+def test_title_only_query_does_not_treat_real_artist_as_foreign() -> None:
+    # Guard against the obvious false positive: for a title-only query the
+    # artist is legitimately absent from the query. With no genuine song/artist
+    # split present, nothing should be flagged a bootleg.
+    real = _pop(
+        _r(title="Bohemian Rhapsody", subtitle="Queen", provider=ProviderName.DEEZER, ext_id="r"),
+        0.9,
+    )
+    ranked = fuse_and_rank([(real,)], query_norm="bohemian rhapsody")
+    assert ranked[0].subtitle == "Queen"
+
+
+@pytest.mark.unit
+def test_bare_title_query_does_not_demote_genuine_as_bootleg() -> None:
+    # Bare-title query "blinding lights": the genuine artist (The Weeknd) is
+    # legitimately absent from the query. A coincidental result must NOT form a
+    # split that gets the genuine flagged a bootleg — coverage guards this.
+    genuine = _pop(
+        _r(
+            title="Blinding Lights", subtitle="The Weeknd", provider=ProviderName.DEEZER, ext_id="g"
+        ),
+        0.9,
+    )
+    noise = _pop(
+        _r(title="Lights", subtitle="Lights", provider=ProviderName.LASTFM, ext_id="n"),
+        0.2,
+    )
+    ranked = fuse_and_rank([(genuine, noise)], query_norm="blinding lights")
+    assert ranked[0].subtitle == "The Weeknd"
+
+
+@pytest.mark.unit
 def test_multi_source_agreement_outranks_single_source_at_equal_relevance() -> None:
     # Both match equally (band 1.0 via title). The agreed-upon one (2 providers)
     # accrues more RRF and ranks first; the solo one stays separate (distinct artist).
