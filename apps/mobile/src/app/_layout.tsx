@@ -1,15 +1,20 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from '@expo-google-fonts/inter';
-import { SpaceGrotesk_500Medium, SpaceGrotesk_600SemiBold } from '@expo-google-fonts/space-grotesk';
+import {
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+} from '@expo-google-fonts/plus-jakarta-sans';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
+import * as NavigationBar from 'expo-navigation-bar';
 import { Slot } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthGate } from '../features/auth/ui/AuthGate';
-import { ThemeProvider } from '../shared/ui/theme';
+import { ThemeProvider, darkTheme } from '../shared/ui/theme';
 
 // AIDEV-NOTE: ADR-0005 — single QueryClientProvider at the Expo Router root.
 // Every feature's hooks (useLibrary, etc.) inherit this client.
@@ -26,8 +31,8 @@ export default function RootLayout() {
   );
 
   const [fontsLoaded, fontError] = useFonts({
-    SpaceGrotesk_500Medium,
-    SpaceGrotesk_600SemiBold,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
     Inter_400Regular,
     Inter_500Medium,
     Inter_600SemiBold,
@@ -38,6 +43,27 @@ export default function RootLayout() {
       void SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  // AIDEV-NOTE: Android paints the OS navigation bar light by default and
+  // repaints it on resume (SDK 54 edge-to-edge), flashing white over our dark
+  // UI. Force dark + light buttons on mount AND every time the app returns to
+  // the foreground — the re-assert on 'active' is what kills the resume flash.
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    const applyDarkNavBar = (): void => {
+      void NavigationBar.setBackgroundColorAsync(darkTheme.color.canvas);
+      void NavigationBar.setButtonStyleAsync('light');
+    };
+    applyDarkNavBar();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        applyDarkNavBar();
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   if (!fontsLoaded && !fontError) {
     return null;
