@@ -1,6 +1,11 @@
 # view-library — feature-local context
 
-Mobile screen that renders the current user's track library as a paginated, infinite-scroll list with designed empty + error states. Reads the catalog API (`GET /v1/tracks`); no writes in v1.
+Mobile screen that renders the current user's track library as a paginated, infinite-scroll list with designed empty + error states. Reads the catalog API (`GET /v1/tracks`). The library is read-only here, but the `view-result-detail` save flow writes into this feature's `['library']` React Query cache optimistically (see `features/detail/save-cache.ts`).
+
+## view-result-detail update
+
+- **`LibraryRow` shows a `Pending` marker** (testID `library-row-pending-<id>`) when `track.acquisition_status === 'pending'` — a saved track whose audio hasn't been acquired yet. Omitted for any other status.
+- `TrackResponse` gained `acquisition_status` + `artwork_url` (shared type); the row only consumes `acquisition_status`.
 
 ## Key terms
 

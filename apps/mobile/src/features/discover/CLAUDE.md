@@ -73,3 +73,8 @@ Rebuilt into a Spotify-style sectioned UI:
 - **Dynamic section order** via `_sectionOrder(results)` — the kind whose strongest member ranks earliest shows first (song query → Songs first). New pure helpers in [state.ts](state.ts): `_groupByKind`, `_topResult`, `_sectionOrder`, `_cap` (+ tests).
 - **Confidence badge removed** — `ConfidenceDot` and the verified glow are gone from `DiscoverRow`; rows are circular-art for artists, square-art for albums/tracks. Confidence is no longer shown anywhere.
 - The mobile client sends no `kinds` param, so the API returns all three kinds by default.
+
+## view-result-detail update
+
+- **Tapping a result opens the detail screen.** `onResultTap` calls `stashHandoffForDetail(result)` (in [tap.ts](tap.ts)) to stash the result into the shared `@shared/lib/detail-handoff`, then `router.push('/detail')`. The click-tracking mutation stays fire-and-forget and is **not** awaited before navigating.
+- `tap.ts` is a pure helper (matches the `state.ts` pattern) so the navigation seam is unit-testable without rendering the screen — see [__tests__/tap.test.ts](__tests__/tap.test.ts).
