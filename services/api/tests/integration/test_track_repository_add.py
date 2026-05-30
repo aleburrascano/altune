@@ -37,12 +37,28 @@ _BASE = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)
 def _pg_url() -> Iterator[str]:
     with PostgresContainer("postgres:16-alpine") as pg:
         url = pg.get_connection_url()
+        # env.py prefers os.environ["DATABASE_URL"] (it load_dotenv()s a stray
+        # .env), so the container URL MUST be pushed there — cfg.set_main_option
+        # alone is silently overridden and the upgrade runs against the wrong DB.
+        # Mirrors test_catalog_migration_dedup.py. The async driver is required
+        # because env.py builds an async engine.
+        async_url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://").replace(
+            "postgresql://", "postgresql+asyncpg://"
+        )
         root = Path(__file__).resolve().parents[2]
         cfg = Config(str(root / "alembic.ini"))
         cfg.set_main_option("script_location", str(root / "migrations"))
-        cfg.set_main_option("sqlalchemy.url", url)
-        command.upgrade(cfg, "head")
-        yield url
+        cfg.set_main_option("sqlalchemy.url", async_url)
+        prior = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = async_url
+        try:
+            command.upgrade(cfg, "head")
+            yield url
+        finally:
+            if prior is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = prior
 
 
 @pytest_asyncio.fixture
