@@ -50,6 +50,7 @@ build/
 *.key
 
 # ---- Claude / local ----
+.superpowers/
 CLAUDE.local.md
 .claude/settings.local.json
 .claude/hooks.log
