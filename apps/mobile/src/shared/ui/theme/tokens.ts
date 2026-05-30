@@ -1,9 +1,8 @@
 /**
- * Theme-independent scales: spacing, radius, typography, motion, elevation.
+ * Theme-independent scales: spacing, radius, typography, motion.
  * Colors live in the theme (see theme.ts / darkTheme.ts) — these never change
  * between light and dark.
  */
-import type { ViewStyle } from 'react-native';
 
 /** 4pt spacing scale. */
 export const spacing = {
@@ -33,8 +32,8 @@ export const radius = {
  * we set `fontFamily` (never `fontWeight`) to avoid faux-bolding.
  */
 export const fontFamily = {
-  displaySemiBold: 'SpaceGrotesk_600SemiBold',
-  displayMedium: 'SpaceGrotesk_500Medium',
+  displaySemiBold: 'PlusJakartaSans_700Bold',
+  displayMedium: 'PlusJakartaSans_600SemiBold',
   bodyRegular: 'Inter_400Regular',
   bodyMedium: 'Inter_500Medium',
   bodySemiBold: 'Inter_600SemiBold',
@@ -51,10 +50,10 @@ export type TypographyVariant =
 
 export const typography: Record<
   TypographyVariant,
-  { fontFamily: string; fontSize: number; lineHeight: number }
+  { fontFamily: string; fontSize: number; lineHeight: number; letterSpacing?: number }
 > = {
-  displayXl: { fontFamily: fontFamily.displaySemiBold, fontSize: 34, lineHeight: 40 },
-  displayL: { fontFamily: fontFamily.displaySemiBold, fontSize: 28, lineHeight: 34 },
+  displayXl: { fontFamily: fontFamily.displaySemiBold, fontSize: 34, lineHeight: 40, letterSpacing: -0.5 },
+  displayL: { fontFamily: fontFamily.displaySemiBold, fontSize: 28, lineHeight: 34, letterSpacing: -0.5 },
   title: { fontFamily: fontFamily.displayMedium, fontSize: 20, lineHeight: 26 },
   body: { fontFamily: fontFamily.bodyRegular, fontSize: 16, lineHeight: 22 },
   bodyStrong: { fontFamily: fontFamily.bodySemiBold, fontSize: 16, lineHeight: 22 },
@@ -68,17 +67,3 @@ export const duration = {
   base: 200,
   slow: 320,
 } as const;
-
-/**
- * Soft accent "glow" for active/elevated surfaces — no hard drop shadows.
- * iOS renders the colored shadow; Android falls back to a neutral elevation.
- */
-export function glowStyle(color: string): ViewStyle {
-  return {
-    shadowColor: color,
-    shadowOpacity: 1,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 8,
-  };
-}
