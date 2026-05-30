@@ -39,6 +39,8 @@ function _track(id: string): TrackResponse {
     album: null,
     duration_seconds: null,
     added_at: '2026-05-01T12:00:00Z',
+    acquisition_status: 'pending',
+    artwork_url: null,
   };
 }
 
