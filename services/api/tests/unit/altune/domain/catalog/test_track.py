@@ -13,6 +13,7 @@ from uuid import UUID
 
 import pytest
 
+from altune.domain.catalog.acquisition_status import AcquisitionStatus
 from altune.domain.catalog.track import Track
 from altune.domain.catalog.track_id import TrackId
 from altune.domain.shared.user_id import UserId
@@ -94,3 +95,32 @@ def test_track_hash_matches_equality() -> None:
     track_b = _valid_track(title="Song B")  # same id as track_a
     assert hash(track_a) == hash(track_b)
     assert {track_a, track_b} == {track_a}
+
+
+@pytest.mark.unit
+def test_track_defaults_acquisition_status_to_pending() -> None:
+    track = _valid_track()
+    assert track.acquisition_status is AcquisitionStatus.PENDING
+
+
+@pytest.mark.unit
+def test_track_artwork_url_defaults_to_none() -> None:
+    track = _valid_track()
+    assert track.artwork_url is None
+
+
+@pytest.mark.unit
+def test_track_accepts_explicit_artwork_url_and_status() -> None:
+    track = Track(
+        id=_TRACK_ID_A,
+        user_id=_USER_ID,
+        title="Song",
+        artist="Artist",
+        album=None,
+        duration_seconds=None,
+        added_at=_ADDED,
+        artwork_url="https://img.example/cover.jpg",
+        acquisition_status=AcquisitionStatus.PENDING,
+    )
+    assert track.artwork_url == "https://img.example/cover.jpg"
+    assert track.acquisition_status is AcquisitionStatus.PENDING
