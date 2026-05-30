@@ -29,6 +29,8 @@ class TrackResponse(BaseModel):
     album: str | None
     duration_seconds: int | None
     added_at: datetime
+    acquisition_status: str
+    artwork_url: str | None
 
 
 class ListTracksResponse(BaseModel):
