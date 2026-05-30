@@ -9,9 +9,9 @@ Covers spec AC#5, AC#7.
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
@@ -28,6 +28,9 @@ from altune.domain.catalog.acquisition_status import AcquisitionStatus
 from altune.domain.catalog.track import Track
 from altune.domain.catalog.track_id import TrackId
 from altune.domain.shared.user_id import UserId
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Iterator
 
 _USER = UserId(UUID("00000000-0000-0000-0000-0000000000c3"))
 _BASE = datetime(2026, 5, 1, 12, 0, tzinfo=UTC)

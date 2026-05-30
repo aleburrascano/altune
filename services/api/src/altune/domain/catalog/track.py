@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime  # noqa: TC003  # used as runtime annotation by dataclass
 
-from altune.domain.catalog.acquisition_status import AcquisitionStatus  # noqa: TC001
+from altune.domain.catalog.acquisition_status import AcquisitionStatus
 from altune.domain.catalog.track_id import TrackId  # noqa: TC001
 from altune.domain.shared.user_id import UserId  # noqa: TC001
 
