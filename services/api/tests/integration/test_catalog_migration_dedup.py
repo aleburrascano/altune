@@ -1,48 +1,81 @@
-"""Integration test: catalog acquisition+dedup migration applies on real Postgres.
+# mypy: warn_unused_ignores = False
+"""view-result-detail catalog migration applies cleanly + creates expected schema.
 
 Spins a throwaway Postgres via testcontainers, runs `alembic upgrade head`, and
 asserts the `tracks` table gained the acquisition/dedup columns and the
 UNIQUE(user_id, dedup_key) constraint behind spec AC#7.
+
+Mirrors tests/integration/test_discovery_migrations.py: alembic's env.py prefers
+os.environ["DATABASE_URL"] (it calls load_dotenv at import), so the container URL
+MUST be pushed there — config.set_main_option alone is silently overridden by a
+stray .env, which makes the upgrade run against the wrong DB. Schema inspection
+uses raw asyncpg (no psycopg2 in this project).
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+import asyncpg
 import pytest
-import sqlalchemy as sa
-from sqlalchemy import create_engine
-from testcontainers.postgres import PostgresContainer
+from alembic import command  # type: ignore[import-not-found]
+from alembic.config import Config  # type: ignore[import-not-found]
+from testcontainers.postgres import PostgresContainer  # type: ignore[import-not-found]
 
-from alembic import command
-from alembic.config import Config
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 @pytest.fixture(scope="module")
-def _pg_url() -> Iterator[str]:
-    with PostgresContainer("postgres:16-alpine") as pg:
-        yield pg.get_connection_url()
+def upgraded_to_head() -> Iterator[str]:
+    with PostgresContainer("postgres:16-alpine") as container:
+        raw = container.get_connection_url()
+        asyncpg_url = raw.replace("+psycopg2", "+asyncpg").replace("+psycopg", "+asyncpg")
+        prior = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = asyncpg_url
+        try:
+            config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+            config.set_main_option("sqlalchemy.url", asyncpg_url)
+            command.upgrade(config, "head")
+            yield asyncpg_url
+        finally:
+            if prior is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = prior
 
 
-def _alembic_config(db_url: str) -> Config:
-    root = Path(__file__).resolve().parents[2]
-    cfg = Config(str(root / "alembic.ini"))
-    cfg.set_main_option("script_location", str(root / "migrations"))
-    cfg.set_main_option("sqlalchemy.url", db_url)
-    return cfg
+def _raw_url(asyncpg_url: str) -> str:
+    return asyncpg_url.replace("postgresql+asyncpg://", "postgresql://")
 
 
 @pytest.mark.integration
-def test_catalog_migration_adds_acquisition_columns_and_unique_dedup_index(_pg_url: str) -> None:
-    command.upgrade(_alembic_config(_pg_url), "head")
+@pytest.mark.asyncio
+async def test_catalog_migration_adds_acquisition_columns(upgraded_to_head: str) -> None:
+    conn = await asyncpg.connect(_raw_url(upgraded_to_head))
+    try:
+        rows = await conn.fetch(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = $1",
+            "tracks",
+        )
+    finally:
+        await conn.close()
+    columns = {row["column_name"] for row in rows}
+    assert {"artwork_url", "acquisition_status", "dedup_key"}.issubset(columns)
 
-    engine = create_engine(_pg_url)
-    with engine.connect() as conn:
-        insp = sa.inspect(conn)
-        cols = {c["name"] for c in insp.get_columns("tracks")}
-        assert {"artwork_url", "acquisition_status", "dedup_key"}.issubset(cols)
 
-        constraint_names = {uc["name"] for uc in insp.get_unique_constraints("tracks")}
-        index_names = {ix["name"] for ix in insp.get_indexes("tracks")}
-        assert "uq_tracks_user_dedup" in (constraint_names | index_names)
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_catalog_migration_adds_unique_dedup_constraint(upgraded_to_head: str) -> None:
+    conn = await asyncpg.connect(_raw_url(upgraded_to_head))
+    try:
+        rows = await conn.fetch(
+            "SELECT conname FROM pg_constraint WHERE conrelid = $1::regclass AND contype = 'u'",
+            "tracks",
+        )
+    finally:
+        await conn.close()
+    names = {row["conname"] for row in rows}
+    assert "uq_tracks_user_dedup" in names
