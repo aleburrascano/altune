@@ -8,6 +8,7 @@ the Postgres adapter call this one function, so they dedup identically.
 from __future__ import annotations
 
 import pytest
+
 from altune.domain.catalog.dedup import dedup_key
 
 
