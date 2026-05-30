@@ -10,6 +10,7 @@ from __future__ import annotations
 # (not just by mypy), so the names used inside Mapped[] — UUID, datetime —
 # must be importable at module scope, NOT hidden under TYPE_CHECKING.
 from datetime import datetime  # noqa: TC003  # see AIDEV-NOTE above
+from typing import Any
 from uuid import UUID  # noqa: TC003  # see AIDEV-NOTE above
 
 from sqlalchemy import TIMESTAMP, Integer, Text
@@ -24,6 +25,17 @@ from altune.domain.catalog.dedup import dedup_key
 from altune.domain.catalog.track import Track
 from altune.domain.catalog.track_id import TrackId
 from altune.domain.shared.user_id import UserId
+
+
+def _dedup_key_default(context: Any) -> str:
+    # AIDEV-NOTE: column-level default so ANY insert that omits dedup_key
+    # (e.g. raw TrackRow construction in tests) still satisfies the NOT NULL
+    # column and the UNIQUE(user_id, dedup_key) idempotency constraint.
+    # from_domain() sets it explicitly; this is the safety net. `context` is a
+    # SQLAlchemy DefaultExecutionContext — typed Any to avoid importing the
+    # internal interface.
+    params = context.get_current_parameters()
+    return dedup_key(params["title"], params["artist"], params.get("album"))
 
 
 class TrackRow(Base):
@@ -41,7 +53,7 @@ class TrackRow(Base):
     # AIDEV-NOTE: dedup_key is persistence-only — the natural key behind the
     # UNIQUE(user_id, dedup_key) idempotency constraint. It is NOT a domain
     # field; it is derived from title/artist/album via the domain normalizer.
-    dedup_key: Mapped[str] = mapped_column(Text, nullable=False)
+    dedup_key: Mapped[str] = mapped_column(Text, nullable=False, default=_dedup_key_default)
 
     def to_domain(self) -> Track:
         return Track(

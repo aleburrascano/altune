@@ -31,8 +31,9 @@ class SqlAlchemyTrackRepository:
 
     async def add(self, track: Track) -> tuple[Track, bool]:
         # Natural idempotency: INSERT ... ON CONFLICT (user_id, dedup_key) DO
-        # NOTHING. rowcount tells us whether this insert won (created) or hit an
-        # existing row; either way we SELECT the canonical row back to return it.
+        # NOTHING RETURNING id. A returned id means we inserted (created); an
+        # empty result means the row already existed. Either way we SELECT the
+        # canonical row back to return it.
         key = dedup_key(track.title, track.artist, track.album)
         insert_stmt = (
             pg_insert(TrackRow)
@@ -49,9 +50,10 @@ class SqlAlchemyTrackRepository:
                 dedup_key=key,
             )
             .on_conflict_do_nothing(index_elements=["user_id", "dedup_key"])
+            .returning(TrackRow.id)
         )
-        result = await self._session.execute(insert_stmt)
-        created = result.rowcount == 1
+        inserted = await self._session.execute(insert_stmt)
+        created = inserted.scalar_one_or_none() is not None
 
         existing = await self._session.execute(
             select(TrackRow).where(
