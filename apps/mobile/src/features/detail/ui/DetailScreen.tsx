@@ -16,13 +16,18 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { Banner } from '@shared/ui/primitives/Banner';
+import { Button } from '@shared/ui/primitives/Button';
 import { Screen } from '@shared/ui/primitives/Screen';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { trackInfoRows } from '../extras';
+import { useSaveTrack } from '../hooks/useSaveTrack';
+import { toCreateTrackRequest } from '../save-cache';
 
 const HERO_SIZE = 200;
 
@@ -75,18 +80,7 @@ export function DetailScreen(): ReactElement {
         </Text>
       </View>
 
-      {result.kind === 'track' ? (
-        <View testID="detail-track-info" style={styles.info}>
-          {trackInfoRows(result.extras).map((row) => (
-            <View key={row.key} testID={`detail-info-${row.key}`} style={styles.infoRow}>
-              <Text variant="label" tone="tertiary">
-                {row.label}
-              </Text>
-              <Text variant="body">{row.value}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
+      {result.kind === 'track' ? <TrackDetailBody result={result} /> : null}
 
       {result.kind === 'album' ? (
         <View testID="detail-tracklist-placeholder" style={styles.placeholder}>
@@ -107,6 +101,43 @@ export function DetailScreen(): ReactElement {
   );
 }
 
+/** Track body: info rows + an optimistic Save-to-library action. */
+function TrackDetailBody({ result }: { result: DiscoveryResult }): ReactElement {
+  const save = useSaveTrack();
+  const rows = trackInfoRows(result.extras);
+
+  const onSave = (): void => {
+    save.mutate(toCreateTrackRequest(result));
+  };
+
+  return (
+    <View testID="detail-track-info" style={styles.info}>
+      {rows.map((row) => (
+        <View key={row.key} testID={`detail-info-${row.key}`} style={styles.infoRow}>
+          <Text variant="label" tone="tertiary">
+            {row.label}
+          </Text>
+          <Text variant="body">{row.value}</Text>
+        </View>
+      ))}
+      <Button
+        testID="detail-save"
+        label={save.isSuccess ? 'Saved' : 'Save to Library'}
+        onPress={onSave}
+        disabled={save.isPending || save.isSuccess}
+        loading={save.isPending}
+        haptic
+        style={styles.save}
+      />
+      {save.isError ? (
+        <Banner testID="detail-save-error" tone="danger">
+          Couldn’t save this track. Try again.
+        </Banner>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   back: { paddingVertical: spacing.md, alignSelf: 'flex-start' },
   hero: { alignItems: 'center', paddingTop: spacing.lg, gap: spacing.sm },
@@ -120,4 +151,5 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
   },
   placeholder: { marginTop: spacing['2xl'], alignItems: 'center' },
+  save: { marginTop: spacing.lg },
 });
