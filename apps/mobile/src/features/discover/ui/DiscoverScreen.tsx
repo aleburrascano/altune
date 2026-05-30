@@ -33,7 +33,6 @@ import {
 } from '@shared/ui';
 
 import { DiscoverRow } from './DiscoverRow';
-import { PartialBanner } from './PartialBanner';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { useRecordClick } from '../hooks/useRecordClick';
 import { useSearchHistory } from '../hooks/useSearchHistory';
@@ -42,7 +41,6 @@ import {
   _cap,
   _groupByKind,
   _sectionOrder,
-  _shouldShowPartialBanner,
   _topResult,
   _viewForState,
 } from '../state';
@@ -171,9 +169,6 @@ export function DiscoverScreen(): ReactElement {
     const results = search.data?.results ?? [];
     body = (
       <View testID="discover-results" style={styles.results}>
-        {_shouldShowPartialBanner(search.data) && search.data ? (
-          <PartialBanner providers={search.data.providers} />
-        ) : null}
         <FilterChips active={filter} onSelect={setFilter} />
         {filter === 'all' ? (
           <BlendedResults
@@ -190,6 +185,14 @@ export function DiscoverScreen(): ReactElement {
 
   return (
     <Screen>
+      <View style={styles.titleBlock}>
+        <Text variant="label" tone="tertiary">
+          {_greeting()}
+        </Text>
+        <Text variant="displayL" style={styles.title}>
+          Discover
+        </Text>
+      </View>
       <View style={styles.header}>
         <TextInput
           style={[
@@ -210,6 +213,18 @@ export function DiscoverScreen(): ReactElement {
       {body}
     </Screen>
   );
+}
+
+/** Time-of-day greeting above the Discover title. */
+function _greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) {
+    return 'Good morning';
+  }
+  if (hour < 18) {
+    return 'Good afternoon';
+  }
+  return 'Good evening';
 }
 
 function FilterChips({
@@ -376,7 +391,9 @@ function TopResultCard({
 }
 
 const styles = StyleSheet.create({
-  header: { paddingTop: spacing.sm, paddingBottom: spacing.md },
+  titleBlock: { paddingTop: spacing.sm },
+  title: { marginTop: spacing.xs },
+  header: { paddingTop: spacing.md, paddingBottom: spacing.md },
   input: {
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,

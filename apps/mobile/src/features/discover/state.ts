@@ -46,16 +46,6 @@ export function _viewForState(state: DiscoverHookState): DiscoverView {
   return 'results';
 }
 
-/** True iff any provider on the response is non-OK — gates the partial banner. */
-export function _shouldShowPartialBanner(
-  data: DiscoverySearchResponse | undefined,
-): boolean {
-  if (data === undefined) {
-    return false;
-  }
-  return data.partial || data.providers.some((p) => p.status !== 'ok');
-}
-
 /** Max items shown per kind-section in the blended "All" view. */
 export const SECTION_CAP = 10;
 

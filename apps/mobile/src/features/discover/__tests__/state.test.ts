@@ -2,14 +2,7 @@
  * State machine helpers for the discover feature — slice 44.
  */
 
-import {
-  _cap,
-  _groupByKind,
-  _sectionOrder,
-  _shouldShowPartialBanner,
-  _topResult,
-  _viewForState,
-} from '../state';
+import { _cap, _groupByKind, _sectionOrder, _topResult, _viewForState } from '../state';
 
 import type {
   DiscoveryKind,
@@ -107,49 +100,6 @@ describe('_viewForState', () => {
         error: null,
       }),
     ).toBe('results');
-  });
-});
-
-describe('_shouldShowPartialBanner', () => {
-  it('returns false when data is undefined', () => {
-    expect(_shouldShowPartialBanner(undefined)).toBe(false);
-  });
-
-  it('returns false when all providers are ok', () => {
-    const data: DiscoverySearchResponse = {
-      ..._empty(),
-      providers: [
-        {
-          provider: 'deezer',
-          status: 'ok',
-          result_count: 1,
-          latency_ms: 100,
-        },
-      ],
-    };
-    expect(_shouldShowPartialBanner(data)).toBe(false);
-  });
-
-  it('returns true when any provider is not ok', () => {
-    const data: DiscoverySearchResponse = {
-      ..._empty(),
-      partial: true,
-      providers: [
-        {
-          provider: 'deezer',
-          status: 'ok',
-          result_count: 1,
-          latency_ms: 100,
-        },
-        {
-          provider: 'soundcloud',
-          status: 'timeout',
-          result_count: 0,
-          latency_ms: 1500,
-        },
-      ],
-    };
-    expect(_shouldShowPartialBanner(data)).toBe(true);
   });
 });
 
