@@ -1,12 +1,11 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { BlurView } from 'expo-blur';
 import { Compass, Library as LibraryIcon } from 'lucide-react-native';
 import type { ComponentType } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '../primitives/Text';
-import { radius, spacing } from '../theme/tokens';
+import { spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 
 type IconComponent = ComponentType<{ size?: number; color?: string }>;
@@ -16,11 +15,10 @@ const ICONS: Record<string, IconComponent> = {
   library: LibraryIcon,
 };
 
-// AIDEV-NOTE: ADR-0008 — floating glass bottom bar, rendered by the (tabs)
-// navigator via its `tabBar` prop. iOS gets a real BlurView; Android falls back
-// to a solid surface (BlurView is unreliable there). A future mini-player can
-// mount in the gap ABOVE this bar without changing the tab logic.
-export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+// AIDEV-NOTE: docked tab bar — flush to the bottom edge, hairline top border,
+// active tab marked by a 2px accent indicator (no pill, no glass blur). The
+// gap above this bar still hosts a future mini-player without touching the tabs.
+export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -54,10 +52,12 @@ export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProp
         style={styles.tab}
       >
         <View
-          style={[styles.iconPill, focused ? { backgroundColor: theme.color.accentTint } : null]}
-        >
-          <Icon size={22} color={color} />
-        </View>
+          style={[
+            styles.indicator,
+            { backgroundColor: focused ? theme.color.accent : 'transparent' },
+          ]}
+        />
+        <Icon size={22} color={color} />
         <Text variant="caption" style={{ color, marginTop: 2 }}>
           {label}
         </Text>
@@ -68,41 +68,26 @@ export function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProp
   const bottomPad = insets.bottom > 0 ? insets.bottom : spacing.md;
 
   return (
-    <View style={[styles.container, { paddingBottom: bottomPad }]}>
-      {/* AIDEV-NOTE: future mini-player docks in the space above this bar. */}
-      {Platform.OS === 'ios' ? (
-        <BlurView
-          tint="dark"
-          intensity={40}
-          style={[styles.bar, { borderColor: theme.color.border }]}
-        >
-          {items}
-        </BlurView>
-      ) : (
-        <View
-          style={[
-            styles.bar,
-            { backgroundColor: theme.color.surface2, borderColor: theme.color.border },
-          ]}
-        >
-          {items}
-        </View>
-      )}
+    <View
+      style={[
+        styles.bar,
+        {
+          backgroundColor: theme.color.canvas,
+          borderTopColor: theme.color.border,
+          paddingBottom: bottomPad,
+        },
+      ]}
+    >
+      {items}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: spacing.lg,
-    backgroundColor: 'transparent',
-  },
   bar: {
     flexDirection: 'row',
-    borderRadius: radius.xl,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: spacing.sm,
   },
   tab: {
     flex: 1,
@@ -110,9 +95,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: spacing.xs,
   },
-  iconPill: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 2,
-    borderRadius: radius.full,
+  indicator: {
+    width: 28,
+    height: 2,
+    borderRadius: 2,
+    marginBottom: spacing.sm,
   },
 });
