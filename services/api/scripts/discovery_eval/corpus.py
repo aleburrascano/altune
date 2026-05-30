@@ -31,6 +31,10 @@ _STRIP = re.compile(r"['.,]", flags=re.UNICODE)
 _PUNCT = re.compile(r"[^\w\s]", flags=re.UNICODE)
 _WS = re.compile(r"\s+")
 
+# Upper bound on what variants_for can emit (5 base + album + partial); used to
+# bound the sampled track count so a small cap still spans every category.
+_MAX_VARIANTS_PER_TRACK = 7
+
 
 @dataclass(frozen=True, slots=True)
 class LibraryTrack:
@@ -127,9 +131,15 @@ def build_corpus(
     Diversifies by artist, then interleaves categories (one variant per track
     in round-robin) so a small cap still spans every category rather than
     exhausting all variants of the first few tracks.
+
+    The track count is bounded to ~`max_queries / variants-per-track` BEFORE
+    interleaving: otherwise the first column (track_exact, one per track) alone
+    fills the cap when there are more tracks than `max_queries`, and no other
+    category ever appears.
     """
     ordered = _stratify(tracks, seed)
-    per_track = [variants_for(tr, source) for tr in ordered]
+    n_tracks = max(1, -(-max_queries // _MAX_VARIANTS_PER_TRACK))  # ceil division
+    per_track = [variants_for(tr, source) for tr in ordered[:n_tracks]]
     interleaved: list[EvalQuery] = [
         q for column in zip_longest(*per_track) for q in column if q is not None
     ]
