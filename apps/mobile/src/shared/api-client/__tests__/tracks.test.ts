@@ -1,11 +1,12 @@
 /**
- * getTracks contract — types come back as declared, errors surface.
+ * getTracks + createTrack contract — types come back as declared, errors surface.
  *
- * Slice 8 of view-library. RED: stub returns empty; GREEN wires real fetch.
+ * Slice 8 of view-library (getTracks). createTrack added by view-result-detail
+ * slice 10. RED: stub returns empty; GREEN wires real fetch.
  */
 
 import { ApiError } from '../index';
-import { getTracks } from '../tracks';
+import { createTrack, getTracks } from '../tracks';
 import type { ListTracksResponse, TrackResponse } from '../types';
 
 const _SAMPLE_TRACK: TrackResponse = {
@@ -15,6 +16,8 @@ const _SAMPLE_TRACK: TrackResponse = {
   album: 'After Hours',
   duration_seconds: 200,
   added_at: '2026-05-01T12:00:00Z',
+  acquisition_status: 'pending',
+  artwork_url: null,
 };
 
 const _SAMPLE_RESPONSE: ListTracksResponse = {
@@ -68,5 +71,42 @@ describe('getTracks', () => {
   it('throws ApiError on non-2xx response', async () => {
     mockFetchStatus(500);
     await expect(getTracks({ limit: 50, offset: 0 })).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe('createTrack', () => {
+  it('posts mapped body to /v1/tracks', async () => {
+    mockFetchOk(_SAMPLE_TRACK);
+    const result = await createTrack({
+      title: 'Blinding Lights',
+      artist: 'The Weeknd',
+      album: 'After Hours',
+      duration_seconds: 200,
+      artwork_url: null,
+    });
+    expect(result.id).toBe(_SAMPLE_TRACK.id);
+    expect(result.acquisition_status).toBe('pending');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = (fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/v1/tracks');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      title: 'Blinding Lights',
+      artist: 'The Weeknd',
+      album: 'After Hours',
+    });
+  });
+
+  it('throws ApiError on non-2xx response', async () => {
+    mockFetchStatus(400);
+    await expect(
+      createTrack({
+        title: 'x',
+        artist: 'y',
+        album: null,
+        duration_seconds: null,
+        artwork_url: null,
+      }),
+    ).rejects.toBeInstanceOf(ApiError);
   });
 });
