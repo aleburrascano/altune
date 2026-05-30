@@ -87,6 +87,22 @@ export function DetailScreen(): ReactElement {
           ))}
         </View>
       ) : null}
+
+      {result.kind === 'album' ? (
+        <View testID="detail-tracklist-placeholder" style={styles.placeholder}>
+          <Text variant="body" tone="tertiary">
+            Tracklist coming soon
+          </Text>
+        </View>
+      ) : null}
+
+      {result.kind === 'artist' ? (
+        <View testID="detail-discography-placeholder" style={styles.placeholder}>
+          <Text variant="body" tone="tertiary">
+            Discography coming soon
+          </Text>
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -103,4 +119,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.lg,
   },
+  placeholder: { marginTop: spacing['2xl'], alignItems: 'center' },
 });
