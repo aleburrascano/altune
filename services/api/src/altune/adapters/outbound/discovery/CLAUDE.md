@@ -39,3 +39,12 @@ Providers: `deezer/`, `musicbrainz/`, `soundcloud/`, `lastfm/`, and `itunes/` (a
 - **`artwork.py::ChainedArtworkResolver`** tries resolvers in order (Deezer → TheAudioDB), skipping Deezer's empty-artist placeholder (`d41d8cd9…` md5-of-empty) so it falls through to TheAudioDB's better art.
 - **`LastFmSearchAdapter.resolve_popularity(kind, title, subtitle)`** (discover-music-v3) implements `PopularityResolver` via `track/album/artist.getInfo` play counts (log-normalized, `_PLAYCOUNT_MAX_LOG10`). This is the uniform cross-source popularity signal — `*.search` has no playcount. Never raises.
 - **v3 signals**: album adapters set `extras["record_type"]` (Deezer `record_type` / iTunes `collectionType` / MB `primary-type`) for demotion. MB release-group results carry `extras["mbid"]` + a **Cover Art Archive** `image_url` (`coverartarchive.org/release-group/<mbid>/front-500`, 307→image or 404, no extra call). iTunes artwork upscales to 1000px.
+
+## view-result-detail catalog browse (AC#14-20)
+
+- **`AlbumContentProvider` / `ArtistContentProvider`** — new port protocols; Deezer, MusicBrainz, Last.fm adapters implement both.
+- **Deezer**: `/album/{id}/tracks`, `/artist/{id}/top`, `/artist/{id}/albums`. Most complete — returns image_url, duration, track_position.
+- **MusicBrainz**: two-step for album tracks (release-group → first release → recordings via `inc=recordings`). Artist: `recording?artist={mbid}&limit=N` for top tracks, `release-group?artist={mbid}` for albums. No popularity.
+- **Last.fm**: `album.getInfo` (has tracks in response), `artist.getTopTracks`, `artist.getTopAlbums`. Parses mbid from URL to extract artist/album names for the API calls.
+- **iTunes / TheAudioDB**: skipped (no ID-based content lookups in free tier).
+- **Return shape**: `ContentFetchResponse(provider_name, status, items: tuple[SearchResult, ...], latency_ms)`. Items carry `extras["track_position"]` (1-indexed) and `extras["duration_seconds"]` where available.

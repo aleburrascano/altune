@@ -21,6 +21,13 @@ Use cases + ports for the unified music search. `SearchMusic` is the load-bearin
 - **`url_router.match_provider(query)` is the only URL-detection gate.** SearchMusic's `_execute_url_lookup` is called when match returns a provider; unsupported hosts fall through to scatter-gather text search (AC#10a).
 - **History persist is best-effort.** Wrapped in try/except; failures log `search_history_persist_failed` and the search still returns 200.
 
+## view-result-detail catalog browse (AC#14-20)
+
+- **`GetAlbumTracks`** — single-provider fetch, no scatter-gather. Takes `{provider, external_id, limit}`, calls `AlbumContentProvider.get_album_tracks`. Returns `ContentFetchResponse` (provider_name, status, items, latency_ms). Unknown provider → ERROR status, empty items.
+- **`GetArtistTopTracks` / `GetArtistAlbums`** — same pattern, calls `ArtistContentProvider.get_artist_top_tracks` / `get_artist_albums`. Default limits 5 / 10.
+- **`ContentFetchResponse`** — wire output shape for all content-fetch use cases. Mirrors `ProviderSearchResponse` structure (items are `SearchResult` tuples).
+- **`AlbumContentProvider` / `ArtistContentProvider`** — port `Protocol`s. Deezer, MusicBrainz, Last.fm implement; iTunes/TheAudioDB skipped (no ID lookups). Adapters translate per-provider DTOs → `SearchResult` same as search.
+
 ## Known gotchas
 
 - **`from __future__ import annotations` + dataclass field types in TYPE_CHECKING** can trip ruff's I001 / TC003 lint when the import is only used in a field annotation. Keep `Sequence`, `Mapping`, `QueryCache`, `ProviderName`, `SearchProvider`, `SearchHistoryRepository`, `SearchResult` etc. in the `TYPE_CHECKING` block — they resolve at runtime via string annotations.
