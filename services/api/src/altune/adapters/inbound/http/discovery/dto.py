@@ -79,3 +79,14 @@ class DiscoveryClickRequest(BaseModel):
     subtitle: str | None = None
     position: int
     confidence: str
+
+
+class ContentFetchResponseDto(BaseModel):
+    """Response from album/artist content fetch (AC#14-20)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    items: list[SearchResultDto]
+    provider: str
+    status: str
+    latency_ms: int
