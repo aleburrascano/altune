@@ -247,7 +247,12 @@ class MusicBrainzSearchAdapter:
         try:
             response = await self.client.get(
                 f"{self.base_url}/recording",
-                params={"artist": external_id, "fmt": "json", "limit": str(limit)},
+                params={
+                    "artist": external_id,
+                    "fmt": "json",
+                    "limit": str(limit),
+                    "inc": "artist-credits",
+                },
             )
             latency_ms = int((time.perf_counter() - start) * 1000)
             if response.status_code == 429 or response.status_code == 503:
