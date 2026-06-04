@@ -1,6 +1,6 @@
 # detail — feature-local context
 
-Read-only detail screen for a tapped discovery result (`view-result-detail` spec). Fed by an in-memory handoff — no per-item backend fetch. A track can be saved to the library with an optimistic UI; album/artist show placeholder bodies and no Save. Lateral navigation (AC#11-13) allows tapping artist/album names to browse related content.
+Read-only detail screen for a tapped discovery result (`view-result-detail` spec). Fed by an in-memory handoff — no per-item backend fetch. A track can be saved to the library with an optimistic UI. Album detail shows tracklist fetched from provider API; artist detail shows top tracks + albums. Lateral navigation (AC#11-13) allows tapping artist/album names to browse related content; content items are tappable to navigate deeper (AC#14-20).
 
 ## Key terms
 
@@ -15,10 +15,16 @@ Read-only detail screen for a tapped discovery result (`view-result-detail` spec
 - **`extras` is an untyped wire map.** Every key is narrowed before use; absent/empty values are omitted. Track keys verified against the deezer/itunes/musicbrainz/soundcloud adapters: `duration_seconds`, `album`, `isrc`, `popularity`.
 - **Save guarded by the Track artist invariant** — when `result.subtitle` (artist) is null the Save button is disabled and `onSave` short-circuits (no invalid POST).
 - **Lateral navigation via search** — `useLateralNav` hook searches for artist/album by name (`searchDiscovery` with `limit: 1`) and navigates via `router.replace('/detail')` (not push) to keep the back stack shallow. Artist name is tappable on track/album detail; album row is tappable on track detail when `extras['album']` exists.
+- **Album content fetch** — `useAlbumTracks` hook calls `getAlbumTracks(provider, externalId)` using the first source from the album's `sources[]`. React Query cached per `(provider, external_id)` with 30min staleTime. Track rows are tappable → navigate to track detail.
+- **Artist content fetch** — `useArtistContent` hook fetches top tracks (limit 5) and albums (limit 10) in parallel via `getArtistTopTracks` / `getArtistAlbums`. Same caching strategy. Top tracks rendered as a list; albums as horizontal scroll.
 
 ## TestIDs (load-bearing)
 
-`detail-header`, `detail-back`, `detail-artist-link` (tappable artist name), `detail-track-info`, `detail-info-<key>` (duration/album/isrc/popularity — album is tappable), `detail-save`, `detail-save-error`, `detail-tracklist-placeholder` (album), `detail-discography-placeholder` (artist).
+**Track detail:** `detail-header`, `detail-back`, `detail-artist-link` (tappable artist name), `detail-track-info`, `detail-info-<key>` (duration/album/isrc/popularity — album is tappable), `detail-save`, `detail-save-error`.
+
+**Album detail:** `detail-tracklist-loading`, `detail-tracklist-error`, `detail-tracklist-empty`, `detail-tracklist` (success), `detail-track-<n>` (each track row, 0-indexed).
+
+**Artist detail:** `detail-artist-content` (container), `detail-top-tracks-loading`, `detail-top-tracks-error`, `detail-top-track-<n>` (each top track), `detail-albums-loading`, `detail-albums-error`, `detail-album-<n>` (each album card).
 
 ## Routing
 
@@ -28,7 +34,7 @@ Read-only detail screen for a tapped discovery result (`view-result-detail` spec
 
 - `@shared/lib/detail-handoff` — the discover↔detail seam.
 - `@shared/api-client/tracks` (`createTrack`) + `types` (`CreateTrackRequest`, `TrackResponse`).
-- `@shared/api-client/discovery` (`DiscoveryResult`).
+- `@shared/api-client/discovery` (`DiscoveryResult`, `getAlbumTracks`, `getArtistTopTracks`, `getArtistAlbums`, `ContentFetchResponse`).
 - `@tanstack/react-query` — `useSaveTrack` mutation, via the root `QueryClientProvider`.
 - `@shared/ui/primitives/*` — `Screen`, `Text`, `Artwork`, `Button`, `Banner`.
 - No cross-feature imports (vertical-slice rule).
