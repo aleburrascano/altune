@@ -45,4 +45,4 @@ Read-only detail screen for a tapped discovery result (`view-result-detail` spec
 - `__tests__/save-cache.test.ts` — optimistic cache transforms + request mapping.
 - `__tests__/useSaveTrack.test.ts` — optimistic insert + rollback against a real QueryClient.
 - `__tests__/useLateralNav.test.ts` — search-and-navigate for lateral browsing.
-- `__tests__/DetailScreen.test.tsx` — header, redirect, per-kind bodies, Save press + disable, lateral navigation links.
+- `__tests__/DetailScreen.test.tsx` — header, redirect, per-kind bodies, Save press + disable, lateral navigation links, catalog browse mocks.
