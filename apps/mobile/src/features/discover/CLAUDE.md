@@ -13,6 +13,7 @@ Mobile screen for the unified music search surface. A greeting + "Discover" titl
 
 - **State machine lives in `state.ts` as a pure function**, same as `library/state.ts`. `_viewForState` takes `{query, isLoading, data, error}` and returns the view literal. Tests assert the helper directly; the JSX branches in `DiscoverScreen.tsx` are trivial wrappers. Reason: same as library — jest-expo + RNTL is painful for full screens; pure helpers stay testable regardless.
 - **`onSubmitEditing` commits `inputValue` to `committedQuery`** — the React Query hook keys on `committedQuery`, so changing `inputValue` mid-typing does NOT refire. Submit-only by construction.
+- **Search state persists across navigation** — `@shared/lib/search-state` holds the last query/input so navigating detail→back preserves the search. State is initialized from this module on mount and synced on every change.
 - **Click tracking is fire-and-forget.** `useRecordClick` wraps `useMutation`; errors are swallowed in `onError`. The user never sees a click-failure toast — telemetry being best-effort is intentional per ADR-0007 §3.12.
 - **History row text truncates at 40 chars** with a `…` suffix client-side. Full query is preserved in the server's `discovery_search_history.query` column; the truncation is purely visual.
 - **TestIDs are load-bearing** for AC#20:
