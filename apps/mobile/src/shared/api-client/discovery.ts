@@ -103,3 +103,57 @@ export async function recordClick(payload: ClickPayload): Promise<void> {
     body: JSON.stringify(payload),
   });
 }
+
+// --- Catalog browse (AC#14-20) ---
+
+export type ContentFetchResponse = {
+  items: DiscoveryResult[];
+  provider: string;
+  status: DiscoveryProviderStatus;
+  latency_ms: number;
+};
+
+export async function getAlbumTracks(
+  provider: string,
+  externalId: string,
+  limit?: number,
+): Promise<ContentFetchResponse> {
+  const qs = new URLSearchParams();
+  if (limit !== undefined) {
+    qs.set('limit', String(limit));
+  }
+  const query = qs.toString();
+  return apiFetch<ContentFetchResponse>(
+    `/v1/discovery/albums/${provider}/${encodeURIComponent(externalId)}/tracks${query ? `?${query}` : ''}`,
+  );
+}
+
+export async function getArtistTopTracks(
+  provider: string,
+  externalId: string,
+  limit?: number,
+): Promise<ContentFetchResponse> {
+  const qs = new URLSearchParams();
+  if (limit !== undefined) {
+    qs.set('limit', String(limit));
+  }
+  const query = qs.toString();
+  return apiFetch<ContentFetchResponse>(
+    `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/top-tracks${query ? `?${query}` : ''}`,
+  );
+}
+
+export async function getArtistAlbums(
+  provider: string,
+  externalId: string,
+  limit?: number,
+): Promise<ContentFetchResponse> {
+  const qs = new URLSearchParams();
+  if (limit !== undefined) {
+    qs.set('limit', String(limit));
+  }
+  const query = qs.toString();
+  return apiFetch<ContentFetchResponse>(
+    `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/albums${query ? `?${query}` : ''}`,
+  );
+}

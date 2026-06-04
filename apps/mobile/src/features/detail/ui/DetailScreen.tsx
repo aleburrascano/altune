@@ -13,7 +13,7 @@
 
 import { Redirect, useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Banner } from '@shared/ui/primitives/Banner';
@@ -22,10 +22,12 @@ import { Screen } from '@shared/ui/primitives/Screen';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-import { getDetailHandoff } from '@shared/lib/detail-handoff';
+import { getDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { trackInfoRows } from '../extras';
+import { formatDuration, trackInfoRows } from '../extras';
+import { useAlbumTracks } from '../hooks/useAlbumTracks';
+import { useArtistContent } from '../hooks/useArtistContent';
 import { useLateralNav } from '../hooks/useLateralNav';
 import { useSaveTrack } from '../hooks/useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
@@ -106,21 +108,9 @@ export function DetailScreen(): ReactElement {
         <TrackDetailBody result={result} lateralNav={lateralNav} />
       ) : null}
 
-      {result.kind === 'album' ? (
-        <View testID="detail-tracklist-placeholder" style={styles.placeholder}>
-          <Text variant="body" tone="tertiary">
-            Tracklist coming soon
-          </Text>
-        </View>
-      ) : null}
+      {result.kind === 'album' ? <AlbumDetailBody result={result} /> : null}
 
-      {result.kind === 'artist' ? (
-        <View testID="detail-discography-placeholder" style={styles.placeholder}>
-          <Text variant="body" tone="tertiary">
-            Discography coming soon
-          </Text>
-        </View>
-      ) : null}
+      {result.kind === 'artist' ? <ArtistDetailBody result={result} /> : null}
     </Screen>
   );
 }
@@ -209,6 +199,211 @@ function TrackDetailBody({
   );
 }
 
+/** Album body: track list fetched from provider API. */
+function AlbumDetailBody({ result }: { result: DiscoveryResult }): ReactElement {
+  const router = useRouter();
+  const source = result.sources[0];
+  const { tracks, isLoading, isError, refetch } = useAlbumTracks({
+    provider: source?.provider ?? '',
+    externalId: source?.external_id ?? '',
+    enabled: source !== undefined,
+  });
+
+  const onTrackPress = (track: DiscoveryResult): void => {
+    setDetailHandoff(track);
+    router.replace('/detail');
+  };
+
+  if (isLoading) {
+    return (
+      <View testID="detail-tracklist-loading" style={styles.placeholder}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View testID="detail-tracklist-error" style={styles.placeholder}>
+        <Text variant="body" tone="danger">
+          Couldn't load tracks.
+        </Text>
+        <Button label="Retry" onPress={() => refetch()} style={styles.retryButton} />
+      </View>
+    );
+  }
+
+  if (tracks.length === 0) {
+    return (
+      <View testID="detail-tracklist-empty" style={styles.placeholder}>
+        <Text variant="body" tone="tertiary">
+          No tracks found.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView testID="detail-tracklist" style={styles.trackList}>
+      {tracks.map((track, index) => {
+        const position =
+          typeof track.extras['track_position'] === 'number'
+            ? track.extras['track_position']
+            : index + 1;
+        const duration =
+          typeof track.extras['duration_seconds'] === 'number'
+            ? formatDuration(track.extras['duration_seconds'])
+            : null;
+        return (
+          <Pressable
+            key={track.sources[0]?.external_id ?? index}
+            testID={`detail-track-${index}`}
+            onPress={() => onTrackPress(track)}
+            style={({ pressed }) => [styles.trackRow, pressed ? { opacity: 0.6 } : null]}
+          >
+            <Text variant="label" tone="tertiary" style={styles.trackPosition}>
+              {position}
+            </Text>
+            <View style={styles.trackInfo}>
+              <Text variant="body" numberOfLines={1}>
+                {track.title}
+              </Text>
+              {track.subtitle ? (
+                <Text variant="label" tone="secondary" numberOfLines={1}>
+                  {track.subtitle}
+                </Text>
+              ) : null}
+            </View>
+            {duration ? (
+              <Text variant="label" tone="tertiary">
+                {duration}
+              </Text>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/** Artist body: top tracks + albums fetched from provider API. */
+function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement {
+  const router = useRouter();
+  const source = result.sources[0];
+  const {
+    topTracks,
+    albums,
+    isLoadingTracks,
+    isLoadingAlbums,
+    isErrorTracks,
+    isErrorAlbums,
+    refetchTracks,
+    refetchAlbums,
+  } = useArtistContent({
+    provider: source?.provider ?? '',
+    externalId: source?.external_id ?? '',
+    enabled: source !== undefined,
+  });
+
+  const onTrackPress = (track: DiscoveryResult): void => {
+    setDetailHandoff(track);
+    router.replace('/detail');
+  };
+
+  const onAlbumPress = (album: DiscoveryResult): void => {
+    setDetailHandoff(album);
+    router.replace('/detail');
+  };
+
+  return (
+    <ScrollView testID="detail-artist-content" style={styles.artistContent}>
+      {/* Popular Tracks Section */}
+      <Text variant="label" tone="secondary" style={styles.sectionTitle}>
+        Popular Tracks
+      </Text>
+      {isLoadingTracks ? (
+        <View testID="detail-top-tracks-loading" style={styles.sectionLoading}>
+          <ActivityIndicator />
+        </View>
+      ) : isErrorTracks ? (
+        <View testID="detail-top-tracks-error" style={styles.sectionError}>
+          <Text variant="body" tone="danger">
+            Couldn't load tracks.
+          </Text>
+          <Button label="Retry" onPress={() => refetchTracks()} style={styles.retryButton} />
+        </View>
+      ) : topTracks.length === 0 ? (
+        <Text variant="body" tone="tertiary" style={styles.emptySection}>
+          No tracks found.
+        </Text>
+      ) : (
+        topTracks.map((track, index) => (
+          <Pressable
+            key={track.sources[0]?.external_id ?? index}
+            testID={`detail-top-track-${index}`}
+            onPress={() => onTrackPress(track)}
+            style={({ pressed }) => [styles.trackRow, pressed ? { opacity: 0.6 } : null]}
+          >
+            <Artwork
+              uri={track.image_url}
+              size={40}
+              radius={radius.sm}
+              accessibilityLabel={track.title}
+            />
+            <View style={styles.trackInfo}>
+              <Text variant="body" numberOfLines={1}>
+                {track.title}
+              </Text>
+            </View>
+          </Pressable>
+        ))
+      )}
+
+      {/* Albums Section */}
+      <Text variant="label" tone="secondary" style={[styles.sectionTitle, styles.albumsSection]}>
+        Albums
+      </Text>
+      {isLoadingAlbums ? (
+        <View testID="detail-albums-loading" style={styles.sectionLoading}>
+          <ActivityIndicator />
+        </View>
+      ) : isErrorAlbums ? (
+        <View testID="detail-albums-error" style={styles.sectionError}>
+          <Text variant="body" tone="danger">
+            Couldn't load albums.
+          </Text>
+          <Button label="Retry" onPress={() => refetchAlbums()} style={styles.retryButton} />
+        </View>
+      ) : albums.length === 0 ? (
+        <Text variant="body" tone="tertiary" style={styles.emptySection}>
+          No albums found.
+        </Text>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumsScroll}>
+          {albums.map((album, index) => (
+            <Pressable
+              key={album.sources[0]?.external_id ?? index}
+              testID={`detail-album-${index}`}
+              onPress={() => onAlbumPress(album)}
+              style={({ pressed }) => [styles.albumCard, pressed ? { opacity: 0.6 } : null]}
+            >
+              <Artwork
+                uri={album.image_url}
+                size={120}
+                radius={radius.md}
+                accessibilityLabel={album.title}
+              />
+              <Text variant="label" numberOfLines={2} style={styles.albumTitle}>
+                {album.title}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+    </ScrollView>
+  );
+}
+
 const styles = StyleSheet.create({
   back: { paddingVertical: spacing.md, alignSelf: 'flex-start' },
   hero: { alignItems: 'center', paddingTop: spacing.lg, gap: spacing.sm },
@@ -223,4 +418,25 @@ const styles = StyleSheet.create({
   },
   placeholder: { marginTop: spacing['2xl'], alignItems: 'center' },
   save: { marginTop: spacing.lg },
+  // Album tracklist styles
+  trackList: { marginTop: spacing.lg },
+  trackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    gap: spacing.md,
+  },
+  trackPosition: { width: 24, textAlign: 'center' },
+  trackInfo: { flex: 1 },
+  retryButton: { marginTop: spacing.sm },
+  // Artist content styles
+  artistContent: { marginTop: spacing.lg },
+  sectionTitle: { marginBottom: spacing.sm },
+  sectionLoading: { paddingVertical: spacing.lg, alignItems: 'center' },
+  sectionError: { paddingVertical: spacing.md, alignItems: 'center' },
+  emptySection: { paddingVertical: spacing.md },
+  albumsSection: { marginTop: spacing.xl },
+  albumsScroll: { marginHorizontal: -spacing.lg },
+  albumCard: { width: 120, marginLeft: spacing.lg },
+  albumTitle: { marginTop: spacing.xs, textAlign: 'center' },
 });
