@@ -11,6 +11,7 @@ export default function TabsLayout() {
     <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
       <Tabs.Screen name="discover" options={{ title: 'Discover' }} />
       <Tabs.Screen name="library" options={{ title: 'Library' }} />
+      <Tabs.Screen name="detail" options={{ href: null }} />
     </Tabs>
   );
 }

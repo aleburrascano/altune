@@ -33,6 +33,8 @@ import {
   useTheme,
 } from '@shared/ui';
 
+import { getSearchState, setSearchState } from '@shared/lib/search-state';
+
 import { DiscoverRow } from './DiscoverRow';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { useRecordClick } from '../hooks/useRecordClick';
@@ -68,12 +70,18 @@ const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const [committedQuery, setCommittedQuery] = useState('');
-  const [inputValue, setInputValue] = useState('');
+  const savedState = getSearchState();
+  const [committedQuery, setCommittedQuery] = useState(savedState.query);
+  const [inputValue, setInputValue] = useState(savedState.inputValue);
   const [filter, setFilter] = useState<ResultsFilter>('all');
   const search = useDiscoverSearch(committedQuery);
   const history = useSearchHistory();
   const click = useRecordClick();
+
+  // Persist search state for back-navigation.
+  useEffect(() => {
+    setSearchState(committedQuery, inputValue);
+  }, [committedQuery, inputValue]);
 
   // Reset to the blended "All" view on every newly committed query.
   useEffect(() => {

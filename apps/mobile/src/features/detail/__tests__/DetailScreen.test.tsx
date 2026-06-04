@@ -40,9 +40,9 @@ const mockGetArtistAlbums = jest.fn(() =>
 );
 jest.mock('../../../shared/api-client/discovery', () => ({
   searchDiscovery: (params: unknown) => mockSearchDiscovery(params),
-  getAlbumTracks: (...args: unknown[]) => mockGetAlbumTracks(...args),
-  getArtistTopTracks: (...args: unknown[]) => mockGetArtistTopTracks(...args),
-  getArtistAlbums: (...args: unknown[]) => mockGetArtistAlbums(...args),
+  getAlbumTracks: () => mockGetAlbumTracks(),
+  getArtistTopTracks: () => mockGetArtistTopTracks(),
+  getArtistAlbums: () => mockGetArtistAlbums(),
 }));
 
 import { clearDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';

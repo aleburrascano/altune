@@ -59,8 +59,8 @@ export function DetailScreen(): ReactElement {
     }
   };
 
-  return (
-    <Screen testID="detail-header">
+  const heroContent = (
+    <>
       <Pressable
         testID="detail-back"
         onPress={() => router.back()}
@@ -103,14 +103,30 @@ export function DetailScreen(): ReactElement {
           {_kindLabel(result.kind)}
         </Text>
       </View>
+    </>
+  );
 
-      {result.kind === 'track' ? (
+  // Track detail: no scroll needed (content is short)
+  if (result.kind === 'track') {
+    return (
+      <Screen testID="detail-header">
+        {heroContent}
         <TrackDetailBody result={result} lateralNav={lateralNav} />
-      ) : null}
+      </Screen>
+    );
+  }
 
-      {result.kind === 'album' ? <AlbumDetailBody result={result} /> : null}
-
-      {result.kind === 'artist' ? <ArtistDetailBody result={result} /> : null}
+  // Album/Artist detail: single scroll for hero + content
+  return (
+    <Screen testID="detail-header">
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {heroContent}
+        {result.kind === 'album' ? <AlbumDetailBody result={result} /> : null}
+        {result.kind === 'artist' ? <ArtistDetailBody result={result} /> : null}
+      </ScrollView>
     </Screen>
   );
 }
@@ -244,7 +260,7 @@ function AlbumDetailBody({ result }: { result: DiscoveryResult }): ReactElement 
   }
 
   return (
-    <ScrollView testID="detail-tracklist" style={styles.trackList}>
+    <View testID="detail-tracklist" style={styles.trackList}>
       {tracks.map((track, index) => {
         const position =
           typeof track.extras['track_position'] === 'number'
@@ -275,14 +291,14 @@ function AlbumDetailBody({ result }: { result: DiscoveryResult }): ReactElement 
               ) : null}
             </View>
             {duration ? (
-              <Text variant="label" tone="tertiary">
+              <Text variant="label" tone="tertiary" style={styles.trackDuration}>
                 {duration}
               </Text>
             ) : null}
           </Pressable>
         );
       })}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -316,7 +332,7 @@ function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement
   };
 
   return (
-    <ScrollView testID="detail-artist-content" style={styles.artistContent}>
+    <View testID="detail-artist-content" style={styles.artistContent}>
       {/* Popular Tracks Section */}
       <Text variant="label" tone="secondary" style={styles.sectionTitle}>
         Popular Tracks
@@ -400,11 +416,12 @@ function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement
           ))}
         </ScrollView>
       )}
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollContent: { paddingBottom: spacing['2xl'] },
   back: { paddingVertical: spacing.md, alignSelf: 'flex-start' },
   hero: { alignItems: 'center', paddingTop: spacing.lg, gap: spacing.sm },
   title: { textAlign: 'center', marginTop: spacing.lg },
@@ -428,6 +445,7 @@ const styles = StyleSheet.create({
   },
   trackPosition: { width: 24, textAlign: 'center' },
   trackInfo: { flex: 1 },
+  trackDuration: { marginRight: spacing.sm },
   retryButton: { marginTop: spacing.sm },
   // Artist content styles
   artistContent: { marginTop: spacing.lg },

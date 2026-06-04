@@ -30,15 +30,7 @@ export function trackInfoRows(extras: Record<string, unknown>): InfoRow[] {
     rows.push({ key: 'album', label: 'Album', value: album });
   }
 
-  const isrc = extras['isrc'];
-  if (typeof isrc === 'string' && isrc.length > 0) {
-    rows.push({ key: 'isrc', label: 'ISRC', value: isrc });
-  }
-
-  const popularity = extras['popularity'];
-  if (typeof popularity === 'number' && Number.isFinite(popularity)) {
-    rows.push({ key: 'popularity', label: 'Popularity', value: `${Math.round(popularity * 100)}%` });
-  }
+  // ISRC and popularity removed — not user-facing (Spotify doesn't show them)
 
   return rows;
 }
