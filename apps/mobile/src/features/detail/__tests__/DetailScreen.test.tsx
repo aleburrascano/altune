@@ -1,5 +1,5 @@
-/**
- * DetailScreen — header from handoff, empty-handoff redirect, per-kind bodies,
+﻿/**
+ * DetailScreen â€” header from handoff, empty-handoff redirect, per-kind bodies,
  * and the optimistic Save action (view-result-detail slices 11-16).
  *
  * expo-image and expo-router are mocked (Artwork -> expo-image and the router
@@ -29,8 +29,20 @@ jest.mock('../../../shared/api-client/tracks', () => ({
 }));
 
 const mockSearchDiscovery = jest.fn();
+const mockGetAlbumTracks = jest.fn(() =>
+  Promise.resolve({ items: [], provider: 'deezer', status: 'ok', latency_ms: 50 }),
+);
+const mockGetArtistTopTracks = jest.fn(() =>
+  Promise.resolve({ items: [], provider: 'deezer', status: 'ok', latency_ms: 50 }),
+);
+const mockGetArtistAlbums = jest.fn(() =>
+  Promise.resolve({ items: [], provider: 'deezer', status: 'ok', latency_ms: 50 }),
+);
 jest.mock('../../../shared/api-client/discovery', () => ({
   searchDiscovery: (params: unknown) => mockSearchDiscovery(params),
+  getAlbumTracks: (...args: unknown[]) => mockGetAlbumTracks(...args),
+  getArtistTopTracks: (...args: unknown[]) => mockGetArtistTopTracks(...args),
+  getArtistAlbums: (...args: unknown[]) => mockGetArtistAlbums(...args),
 }));
 
 import { clearDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';
@@ -89,7 +101,7 @@ describe('DetailScreen', () => {
   it('shows the tracklist placeholder and no save button for an album', () => {
     setDetailHandoff(_result({ kind: 'album', subtitle: 'The Weeknd', extras: {} }));
     const { getByTestId, queryByTestId } = renderDetail();
-    expect(getByTestId('detail-tracklist-placeholder')).toBeTruthy();
+    expect(getByTestId('detail-tracklist-empty')).toBeTruthy();
     expect(queryByTestId('detail-track-info')).toBeNull();
     expect(queryByTestId('detail-save')).toBeNull();
   });
@@ -97,7 +109,7 @@ describe('DetailScreen', () => {
   it('shows the discography placeholder and no save button for an artist', () => {
     setDetailHandoff(_result({ kind: 'artist', subtitle: null, extras: {} }));
     const { getByTestId, queryByTestId } = renderDetail();
-    expect(getByTestId('detail-discography-placeholder')).toBeTruthy();
+    expect(getByTestId('detail-artist-content')).toBeTruthy();
     expect(queryByTestId('detail-save')).toBeNull();
   });
 
