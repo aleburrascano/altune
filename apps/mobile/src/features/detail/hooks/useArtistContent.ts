@@ -13,6 +13,16 @@ import {
   type DiscoveryResult,
 } from '@shared/api-client/discovery';
 
+function sortByReleaseDateDesc(albums: DiscoveryResult[]): DiscoveryResult[] {
+  return [...albums].sort((a, b) => {
+    const dateA = a.extras['release_date'];
+    const dateB = b.extras['release_date'];
+    if (typeof dateA !== 'string') return 1;
+    if (typeof dateB !== 'string') return -1;
+    return dateB.localeCompare(dateA);
+  });
+}
+
 type UseArtistContentParams = {
   provider: string;
   externalId: string;
@@ -49,9 +59,11 @@ export function useArtistContent({
     staleTime: 1000 * 60 * 30, // 30 minutes
   });
 
+  const rawAlbums = albumsQuery.data?.items ?? [];
+
   return {
     topTracks: tracksQuery.data?.items ?? [],
-    albums: albumsQuery.data?.items ?? [],
+    albums: sortByReleaseDateDesc(rawAlbums),
     isLoadingTracks: tracksQuery.isLoading,
     isLoadingAlbums: albumsQuery.isLoading,
     isErrorTracks: tracksQuery.isError || tracksQuery.data?.status === 'error',
