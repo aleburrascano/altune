@@ -1,6 +1,6 @@
 # discovery HTTP router — bounded-context local rules
 
-Three endpoints: `GET /v1/discovery/search`, `GET /v1/discovery/search-history`, `POST /v1/discovery/clicks`. Wire shape per spec §3.7 [VERIFIED:Read@c:\Users\Alessandro\Desktop\altune\docs\specs\discover-music-v1\spec.md#L233-L262]. Router is a thin shell — validate, build the per-request repo from `sessionmaker`, call the use case, serialize the output DTO.
+Six endpoints: `GET /v1/discovery/search`, `GET /v1/discovery/search-history`, `POST /v1/discovery/clicks`, plus catalog-browse routes `GET /v1/discovery/albums/{provider}/{external_id}/tracks`, `GET /v1/discovery/artists/{provider}/{external_id}/top-tracks`, `GET /v1/discovery/artists/{provider}/{external_id}/albums` (AC#14-20). Router is a thin shell — validate, build the per-request repo from `sessionmaker`, call the use case, serialize the output DTO.
 
 ## Key terms
 
@@ -29,3 +29,10 @@ Three endpoints: `GET /v1/discovery/search`, `GET /v1/discovery/search-history`,
 - **Kinds default to `{artist, album, track}`** (playlist removed; `_ALL_KINDS` derives from the enum).
 - **Artwork back-fill is wired here:** the handler passes `app.state.discovery_artwork_resolver` (a `ChainedArtworkResolver`: Deezer → TheAudioDB, built in `platform/app.py`) into `SearchMusic(artwork_resolver=...)`. Falls back to the Deezer adapter from `discovery_providers` when app.state has no resolver (tests).
 - **Popularity back-fill wired here** (discover-music-v3): the handler passes `app.state.discovery_popularity_resolver` (the Last.fm adapter, which has the api_key) into `SearchMusic(popularity_resolver=...)`; falls back to the lastfm provider in the list for tests.
+
+## view-result-detail catalog browse (AC#14-20)
+
+- **`GET /albums/{provider}/{external_id}/tracks`** — single-provider album tracklist fetch. Filters `discovery_providers` to those implementing `AlbumContentProvider` (has `get_album_tracks`). Returns `ContentFetchResponseDto` (items, provider, status, latency_ms). Unknown provider → ERROR status.
+- **`GET /artists/{provider}/{external_id}/top-tracks`** / **`GET /artists/{provider}/{external_id}/albums`** — same pattern for artist content. Default limits 5 / 10.
+- **`ContentFetchResponseDto`** — Pydantic v2 frozen model: `items: list[SearchResultDto]`, `provider: str`, `status: str`, `latency_ms: int`. Reuses `SearchResultDto` for item shape.
+- **`_result_to_dto` helper** — factored from the search handler; converts domain `SearchResult` to wire `SearchResultDto`.
