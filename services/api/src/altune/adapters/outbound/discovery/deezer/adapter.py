@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from altune.application.discovery.ports import ProviderSearchResponse
+from altune.application.discovery.ports import ContentFetchResponse, ProviderSearchResponse
 from altune.domain.discovery.confidence import Confidence
 from altune.domain.discovery.provider import ProviderName
 from altune.domain.discovery.provider_status import ProviderStatus
@@ -162,6 +162,80 @@ class DeezerSearchAdapter:
         album = entry.get("album") or {}
         return album.get("cover_xl") or album.get("cover_big")
 
+    # --- Catalog browse methods (AC#14-20) ---
+
+    async def get_album_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch tracks from an album by Deezer album ID."""
+        start = time.perf_counter()
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/album/{external_id}/tracks", params={"limit": limit}
+            )
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            if response.status_code == 429:
+                return ContentFetchResponse(self.name, ProviderStatus.RATE_LIMITED, (), latency_ms)
+            if response.status_code >= 400:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            payload = response.json()
+            if not isinstance(payload, dict) or payload.get("error"):
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            data = payload.get("data") or []
+            tracks = _translate_album_tracks(data, external_id)
+            return ContentFetchResponse(self.name, ProviderStatus.OK, tracks, latency_ms)
+        except Exception:
+            _log.exception("deezer get_album_tracks failed")
+            return ContentFetchResponse(
+                self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
+            )
+
+    async def get_artist_top_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch top tracks from an artist by Deezer artist ID."""
+        start = time.perf_counter()
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/artist/{external_id}/top", params={"limit": limit}
+            )
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            if response.status_code == 429:
+                return ContentFetchResponse(self.name, ProviderStatus.RATE_LIMITED, (), latency_ms)
+            if response.status_code >= 400:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            payload = response.json()
+            if not isinstance(payload, dict) or payload.get("error"):
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            data = payload.get("data") or []
+            tracks = _translate_tracks(data)
+            return ContentFetchResponse(self.name, ProviderStatus.OK, tracks, latency_ms)
+        except Exception:
+            _log.exception("deezer get_artist_top_tracks failed")
+            return ContentFetchResponse(
+                self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
+            )
+
+    async def get_artist_albums(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch albums from an artist by Deezer artist ID."""
+        start = time.perf_counter()
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/artist/{external_id}/albums", params={"limit": limit}
+            )
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            if response.status_code == 429:
+                return ContentFetchResponse(self.name, ProviderStatus.RATE_LIMITED, (), latency_ms)
+            if response.status_code >= 400:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            payload = response.json()
+            if not isinstance(payload, dict) or payload.get("error"):
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            data = payload.get("data") or []
+            albums = _translate_artist_albums(data, external_id)
+            return ContentFetchResponse(self.name, ProviderStatus.OK, albums, latency_ms)
+        except Exception:
+            _log.exception("deezer get_artist_albums failed")
+            return ContentFetchResponse(
+                self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
+            )
+
 
 class _DeezerHTTPError(Exception):
     """Internal: a per-endpoint HTTP failure mapped to a ProviderStatus."""
@@ -263,3 +337,75 @@ def _translate_one_artist(entry: dict[str, Any]) -> SearchResult | None:
         sources=(SourceRef(provider=ProviderName.DEEZER, external_id=str(artist_id), url=link),),
         extras=extras,
     )
+
+
+def _translate_album_tracks(
+    entries: list[dict[str, Any]], album_id: str
+) -> tuple[SearchResult, ...]:
+    """Translate /album/{id}/tracks response — tracks don't have album object."""
+    results: list[SearchResult] = []
+    for i, entry in enumerate(entries):
+        title = entry.get("title")
+        artist = entry.get("artist") or {}
+        artist_name = artist.get("name")
+        track_id = entry.get("id")
+        link = entry.get("link")
+        if not title or not artist_name or track_id is None or not link:
+            continue
+        extras: dict[str, object] = {
+            "isrc": entry.get("isrc"),
+            "duration_seconds": entry.get("duration"),
+            "track_position": entry.get("track_position") or (i + 1),
+            "preview_url": entry.get("preview") or None,
+        }
+        pop = _log_norm(entry.get("rank"), 6.0)
+        if pop is not None:
+            extras["popularity"] = pop
+        results.append(
+            SearchResult(
+                kind=ResultKind.TRACK,
+                title=title,
+                subtitle=artist_name,
+                image_url=None,  # album tracks don't include album art; caller can provide
+                confidence=Confidence.HIGH,  # from a known album
+                sources=(
+                    SourceRef(provider=ProviderName.DEEZER, external_id=str(track_id), url=link),
+                ),
+                extras=extras,
+            )
+        )
+    return tuple(results)
+
+
+def _translate_artist_albums(
+    entries: list[dict[str, Any]], artist_id: str
+) -> tuple[SearchResult, ...]:
+    """Translate /artist/{id}/albums response — albums don't have artist object."""
+    results: list[SearchResult] = []
+    for entry in entries:
+        title = entry.get("title")
+        album_id = entry.get("id")
+        link = entry.get("link")
+        if not title or album_id is None or not link:
+            continue
+        extras: dict[str, object] = {
+            "isrc": None,
+            "track_count": entry.get("nb_tracks"),
+            "record_type": entry.get("record_type"),
+            "release_date": entry.get("release_date"),
+            "preview_url": None,
+        }
+        results.append(
+            SearchResult(
+                kind=ResultKind.ALBUM,
+                title=title,
+                subtitle=None,  # artist is the parent context, not included per album
+                image_url=entry.get("cover_xl") or entry.get("cover_big"),
+                confidence=Confidence.HIGH,  # from a known artist
+                sources=(
+                    SourceRef(provider=ProviderName.DEEZER, external_id=str(album_id), url=link),
+                ),
+                extras=extras,
+            )
+        )
+    return tuple(results)

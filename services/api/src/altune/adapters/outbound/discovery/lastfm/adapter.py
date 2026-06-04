@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from altune.application.discovery.ports import ProviderSearchResponse
+from altune.application.discovery.ports import ContentFetchResponse, ProviderSearchResponse
 from altune.domain.discovery.confidence import Confidence
 from altune.domain.discovery.provider import ProviderName
 from altune.domain.discovery.provider_status import ProviderStatus
@@ -246,6 +246,160 @@ class LastFmSearchAdapter:
             return None
         return min(1.0, math.log10(playcount + 1.0) / _PLAYCOUNT_MAX_LOG10)
 
+    # --- Catalog browse methods (AC#14-20) ---
+
+    async def get_album_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch tracks from an album via album.getInfo.
+
+        Last.fm external_id is either an MBID or a URL. We need artist+album names.
+        For simplicity, we parse the URL format: https://www.last.fm/music/Artist/Album
+        """
+        start = time.perf_counter()
+        # Parse the URL to extract artist and album
+        match = re.match(
+            r"^https?://(?:www\.)?last\.fm/music/([^/]+)/([^/?#]+)",
+            external_id.strip(),
+            re.IGNORECASE,
+        )
+        if match is None:
+            # If it's an MBID, we can't use album.getInfo without artist/album names
+            return ContentFetchResponse(
+                self.name,
+                ProviderStatus.ERROR,
+                (),
+                int((time.perf_counter() - start) * 1000),
+            )
+        artist = match.group(1).replace("+", " ").replace("%20", " ")
+        album = match.group(2).replace("+", " ").replace("%20", " ")
+
+        try:
+            params = {
+                "method": "album.getInfo",
+                "artist": artist,
+                "album": album,
+                "api_key": self.api_key,
+                "format": "json",
+            }
+            response = await self.client.get(self.base_url, params=params)
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            if response.status_code == 429:
+                return ContentFetchResponse(self.name, ProviderStatus.RATE_LIMITED, (), latency_ms)
+            if response.status_code >= 400:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            data = response.json()
+            if not isinstance(data, dict) or "error" in data:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            album_data = data.get("album") or {}
+            tracks_data = album_data.get("tracks") or {}
+            entries = tracks_data.get("track") or []
+            if isinstance(entries, dict):
+                entries = [entries]
+            tracks = _translate_album_tracks(entries[:limit], artist)
+            return ContentFetchResponse(self.name, ProviderStatus.OK, tracks, latency_ms)
+        except Exception:
+            _log.exception("lastfm get_album_tracks failed")
+            return ContentFetchResponse(
+                self.name,
+                ProviderStatus.ERROR,
+                (),
+                int((time.perf_counter() - start) * 1000),
+            )
+
+    async def get_artist_top_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch top tracks from an artist via artist.getTopTracks."""
+        start = time.perf_counter()
+        # Parse the URL to extract artist name
+        match = re.match(
+            r"^https?://(?:www\.)?last\.fm/music/([^/?#]+)",
+            external_id.strip(),
+            re.IGNORECASE,
+        )
+        if match is None:
+            # If it's an MBID, we can try using it directly
+            artist_param = {"mbid": external_id}
+        else:
+            artist = match.group(1).replace("+", " ").replace("%20", " ")
+            artist_param = {"artist": artist}
+
+        try:
+            params = {
+                "method": "artist.getTopTracks",
+                **artist_param,
+                "api_key": self.api_key,
+                "format": "json",
+                "limit": str(limit),
+            }
+            response = await self.client.get(self.base_url, params=params)
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            if response.status_code == 429:
+                return ContentFetchResponse(self.name, ProviderStatus.RATE_LIMITED, (), latency_ms)
+            if response.status_code >= 400:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            data = response.json()
+            if not isinstance(data, dict) or "error" in data:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            toptracks = data.get("toptracks") or {}
+            entries = toptracks.get("track") or []
+            if isinstance(entries, dict):
+                entries = [entries]
+            tracks = _translate_artist_top_tracks(entries)
+            return ContentFetchResponse(self.name, ProviderStatus.OK, tracks, latency_ms)
+        except Exception:
+            _log.exception("lastfm get_artist_top_tracks failed")
+            return ContentFetchResponse(
+                self.name,
+                ProviderStatus.ERROR,
+                (),
+                int((time.perf_counter() - start) * 1000),
+            )
+
+    async def get_artist_albums(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch albums from an artist via artist.getTopAlbums."""
+        start = time.perf_counter()
+        # Parse the URL to extract artist name
+        match = re.match(
+            r"^https?://(?:www\.)?last\.fm/music/([^/?#]+)",
+            external_id.strip(),
+            re.IGNORECASE,
+        )
+        if match is None:
+            artist_param = {"mbid": external_id}
+        else:
+            artist = match.group(1).replace("+", " ").replace("%20", " ")
+            artist_param = {"artist": artist}
+
+        try:
+            params = {
+                "method": "artist.getTopAlbums",
+                **artist_param,
+                "api_key": self.api_key,
+                "format": "json",
+                "limit": str(limit),
+            }
+            response = await self.client.get(self.base_url, params=params)
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            if response.status_code == 429:
+                return ContentFetchResponse(self.name, ProviderStatus.RATE_LIMITED, (), latency_ms)
+            if response.status_code >= 400:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            data = response.json()
+            if not isinstance(data, dict) or "error" in data:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            topalbums = data.get("topalbums") or {}
+            entries = topalbums.get("album") or []
+            if isinstance(entries, dict):
+                entries = [entries]
+            albums = _translate_artist_albums(entries)
+            return ContentFetchResponse(self.name, ProviderStatus.OK, albums, latency_ms)
+        except Exception:
+            _log.exception("lastfm get_artist_albums failed")
+            return ContentFetchResponse(
+                self.name,
+                ProviderStatus.ERROR,
+                (),
+                int((time.perf_counter() - start) * 1000),
+            )
+
 
 @dataclass
 class _KindPlan:
@@ -357,3 +511,128 @@ def _largest_image(images: list[dict[str, Any]] | None) -> str | None:
         if text:
             return str(text)
     return None
+
+
+def _translate_album_tracks(entries: list[dict[str, Any]], artist: str) -> tuple[SearchResult, ...]:
+    """Translate tracks from album.getInfo response."""
+    results: list[SearchResult] = []
+    for i, entry in enumerate(entries):
+        title = entry.get("name")
+        url = entry.get("url")
+        if not title or not url:
+            continue
+        duration_raw = entry.get("duration")
+        try:
+            duration = int(duration_raw) if duration_raw else None
+        except (TypeError, ValueError):
+            duration = None
+        extras: dict[str, object] = {
+            "isrc": None,
+            "duration_seconds": duration,
+            "track_position": entry.get("@attr", {}).get("rank", i + 1),
+            "mbid": entry.get("mbid") or None,
+            "preview_url": None,
+        }
+        results.append(
+            SearchResult(
+                kind=ResultKind.TRACK,
+                title=title,
+                subtitle=artist,
+                image_url=None,  # album tracks don't have individual images
+                confidence=Confidence.HIGH,  # from a known album
+                sources=(
+                    SourceRef(
+                        provider=ProviderName.LASTFM,
+                        external_id=entry.get("mbid") or url,
+                        url=url,
+                    ),
+                ),
+                extras=extras,
+            )
+        )
+    return tuple(results)
+
+
+def _translate_artist_top_tracks(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...]:
+    """Translate tracks from artist.getTopTracks response."""
+    results: list[SearchResult] = []
+    for entry in entries:
+        title = entry.get("name")
+        url = entry.get("url")
+        artist_data = entry.get("artist") or {}
+        artist_name = artist_data.get("name") if isinstance(artist_data, dict) else str(artist_data)
+        if not title or not url or not artist_name:
+            continue
+        listeners_raw = entry.get("listeners") or entry.get("playcount")
+        try:
+            listeners = int(listeners_raw) if listeners_raw else None
+        except (TypeError, ValueError):
+            listeners = None
+        extras: dict[str, object] = {
+            "isrc": None,
+            "duration_seconds": None,
+            "mbid": entry.get("mbid") or None,
+            "listeners": listeners,
+            "preview_url": None,
+        }
+        pop = _log_norm(listeners, 7.0)
+        if pop is not None:
+            extras["popularity"] = pop
+        results.append(
+            SearchResult(
+                kind=ResultKind.TRACK,
+                title=title,
+                subtitle=artist_name,
+                image_url=_largest_image(entry.get("image")),
+                confidence=Confidence.HIGH,  # from a known artist
+                sources=(
+                    SourceRef(
+                        provider=ProviderName.LASTFM,
+                        external_id=entry.get("mbid") or url,
+                        url=url,
+                    ),
+                ),
+                extras=extras,
+            )
+        )
+    return tuple(results)
+
+
+def _translate_artist_albums(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...]:
+    """Translate albums from artist.getTopAlbums response."""
+    results: list[SearchResult] = []
+    for entry in entries:
+        title = entry.get("name")
+        url = entry.get("url")
+        artist_data = entry.get("artist") or {}
+        artist_name = artist_data.get("name") if isinstance(artist_data, dict) else None
+        if not title or not url:
+            continue
+        playcount_raw = entry.get("playcount")
+        try:
+            playcount = int(playcount_raw) if playcount_raw else None
+        except (TypeError, ValueError):
+            playcount = None
+        extras: dict[str, object] = {"isrc": None, "preview_url": None}
+        if playcount:
+            pop = _log_norm(playcount, _PLAYCOUNT_MAX_LOG10)
+            if pop is not None:
+                extras["popularity"] = pop
+        results.append(
+            SearchResult(
+                kind=ResultKind.ALBUM,
+                title=title,
+                subtitle=artist_name,
+                image_url=_largest_image(entry.get("image")),
+                confidence=Confidence.HIGH,  # from a known artist
+                sources=(
+                    SourceRef(
+                        provider=ProviderName.LASTFM,
+                        external_id=entry.get("mbid") or url,
+                        url=url,
+                    ),
+                ),
+                extras=extras,
+            )
+        )
+    return tuple(results)

@@ -155,3 +155,61 @@ class SearchClickRepository(Protocol):
         click: SearchClick,
         window_seconds: int,
     ) -> ClickInsertOutcome: ...
+
+
+# --- Catalog browse ports (view-result-detail extension, AC#14-20) ---
+
+
+@dataclass(frozen=True, slots=True)
+class ContentFetchResponse:
+    """Response from album/artist content fetch.
+
+    Status indicates the outcome; items is empty for non-OK statuses.
+    """
+
+    provider_name: str
+    status: ProviderStatus
+    items: tuple[SearchResult, ...]
+    latency_ms: int
+
+
+@runtime_checkable
+class AlbumContentProvider(Protocol):
+    """Fetch tracks from an album by provider + external ID.
+
+    Adapter implementations live in adapters/outbound/discovery/<source>/.
+    Supports Deezer, MusicBrainz, Last.fm; iTunes/TheAudioDB skipped (no ID lookups).
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    async def get_album_tracks(
+        self,
+        external_id: str,
+        limit: int,
+    ) -> ContentFetchResponse: ...
+
+
+@runtime_checkable
+class ArtistContentProvider(Protocol):
+    """Fetch top tracks and albums from an artist by provider + external ID.
+
+    Adapter implementations live in adapters/outbound/discovery/<source>/.
+    Supports Deezer, MusicBrainz, Last.fm; iTunes/TheAudioDB skipped.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    async def get_artist_top_tracks(
+        self,
+        external_id: str,
+        limit: int,
+    ) -> ContentFetchResponse: ...
+
+    async def get_artist_albums(
+        self,
+        external_id: str,
+        limit: int,
+    ) -> ContentFetchResponse: ...

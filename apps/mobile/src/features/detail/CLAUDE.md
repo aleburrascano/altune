@@ -1,6 +1,6 @@
 # detail — feature-local context
 
-Read-only detail screen for a tapped discovery result (`view-result-detail` spec). Fed by an in-memory handoff — no per-item backend fetch. A track can be saved to the library with an optimistic UI; album/artist show placeholder bodies and no Save.
+Read-only detail screen for a tapped discovery result (`view-result-detail` spec). Fed by an in-memory handoff — no per-item backend fetch. A track can be saved to the library with an optimistic UI; album/artist show placeholder bodies and no Save. Lateral navigation (AC#11-13) allows tapping artist/album names to browse related content.
 
 ## Key terms
 
@@ -14,10 +14,11 @@ Read-only detail screen for a tapped discovery result (`view-result-detail` spec
 - **Optimistic save.** `useSaveTrack` prepends a pending placeholder to the `['library']` infinite-query cache on mutate, rolls back to the snapshot on error, and invalidates on settle so a dedup hit reconciles to the server row. Cache transforms are pure (`save-cache.ts`).
 - **`extras` is an untyped wire map.** Every key is narrowed before use; absent/empty values are omitted. Track keys verified against the deezer/itunes/musicbrainz/soundcloud adapters: `duration_seconds`, `album`, `isrc`, `popularity`.
 - **Save guarded by the Track artist invariant** — when `result.subtitle` (artist) is null the Save button is disabled and `onSave` short-circuits (no invalid POST).
+- **Lateral navigation via search** — `useLateralNav` hook searches for artist/album by name (`searchDiscovery` with `limit: 1`) and navigates via `router.replace('/detail')` (not push) to keep the back stack shallow. Artist name is tappable on track/album detail; album row is tappable on track detail when `extras['album']` exists.
 
 ## TestIDs (load-bearing)
 
-`detail-header`, `detail-back`, `detail-track-info`, `detail-info-<key>` (duration/album/isrc/popularity), `detail-save`, `detail-save-error`, `detail-tracklist-placeholder` (album), `detail-discography-placeholder` (artist).
+`detail-header`, `detail-back`, `detail-artist-link` (tappable artist name), `detail-track-info`, `detail-info-<key>` (duration/album/isrc/popularity — album is tappable), `detail-save`, `detail-save-error`, `detail-tracklist-placeholder` (album), `detail-discography-placeholder` (artist).
 
 ## Routing
 
@@ -37,4 +38,5 @@ Read-only detail screen for a tapped discovery result (`view-result-detail` spec
 - `__tests__/extras.test.ts` — `trackInfoRows` / `formatDuration`.
 - `__tests__/save-cache.test.ts` — optimistic cache transforms + request mapping.
 - `__tests__/useSaveTrack.test.ts` — optimistic insert + rollback against a real QueryClient.
-- `__tests__/DetailScreen.test.tsx` — header, redirect, per-kind bodies, Save press + disable.
+- `__tests__/useLateralNav.test.ts` — search-and-navigate for lateral browsing.
+- `__tests__/DetailScreen.test.tsx` — header, redirect, per-kind bodies, Save press + disable, lateral navigation links.

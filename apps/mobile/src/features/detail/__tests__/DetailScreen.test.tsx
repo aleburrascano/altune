@@ -28,6 +28,11 @@ jest.mock('../../../shared/api-client/tracks', () => ({
   getTracks: jest.fn(),
 }));
 
+const mockSearchDiscovery = jest.fn();
+jest.mock('../../../shared/api-client/discovery', () => ({
+  searchDiscovery: (params: unknown) => mockSearchDiscovery(params),
+}));
+
 import { clearDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';
 import type { DiscoveryResult } from '../../../shared/api-client/discovery';
 
@@ -119,5 +124,56 @@ describe('DetailScreen', () => {
     expect(getByTestId('detail-save').props.accessibilityState?.disabled).toBe(true);
     await new Promise((r) => setTimeout(r, 0));
     expect(mockCreateTrack).not.toHaveBeenCalled();
+  });
+
+  // AC#11: Track-to-artist lateral navigation
+  it('shows tappable artist link on track detail', () => {
+    setDetailHandoff(_result({ subtitle: 'M83' }));
+    const { getByTestId } = renderDetail();
+    expect(getByTestId('detail-artist-link')).toBeTruthy();
+  });
+
+  it('searches for artist when artist link is tapped', async () => {
+    mockSearchDiscovery.mockResolvedValueOnce({ results: [] });
+    setDetailHandoff(_result({ subtitle: 'M83' }));
+    const { getByTestId } = renderDetail();
+    fireEvent.press(getByTestId('detail-artist-link'));
+    await waitFor(() =>
+      expect(mockSearchDiscovery).toHaveBeenCalledWith({ q: 'M83', kinds: ['artist'], limit: 1 }),
+    );
+  });
+
+  // AC#12: Track-to-album lateral navigation
+  it('shows tappable album row when extras has album', () => {
+    setDetailHandoff(_result({ extras: { album: 'Hurry Up, We\'re Dreaming' } }));
+    const { getByTestId } = renderDetail();
+    expect(getByTestId('detail-info-album')).toBeTruthy();
+  });
+
+  it('searches for album when album row is tapped', async () => {
+    mockSearchDiscovery.mockResolvedValueOnce({ results: [] });
+    setDetailHandoff(_result({ subtitle: 'M83', extras: { album: 'Hurry Up' } }));
+    const { getByTestId } = renderDetail();
+    fireEvent.press(getByTestId('detail-info-album'));
+    await waitFor(() =>
+      expect(mockSearchDiscovery).toHaveBeenCalledWith({
+        q: 'Hurry Up M83',
+        kinds: ['album'],
+        limit: 1,
+      }),
+    );
+  });
+
+  // AC#13: Album-to-artist lateral navigation
+  it('shows tappable artist link on album detail', () => {
+    setDetailHandoff(_result({ kind: 'album', subtitle: 'The Weeknd' }));
+    const { getByTestId } = renderDetail();
+    expect(getByTestId('detail-artist-link')).toBeTruthy();
+  });
+
+  it('does not show artist link on artist detail (no lateral nav to self)', () => {
+    setDetailHandoff(_result({ kind: 'artist', subtitle: null }));
+    const { queryByTestId } = renderDetail();
+    expect(queryByTestId('detail-artist-link')).toBeNull();
   });
 });

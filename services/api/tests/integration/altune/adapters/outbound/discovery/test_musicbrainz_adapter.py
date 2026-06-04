@@ -145,8 +145,7 @@ async def test_musicbrainz_adapter_translates_release_group_search() -> None:
     assert first.subtitle == "The Beatles"
     # discover-music-v3: album art served by Cover Art Archive via the MBID.
     assert first.image_url == (
-        "https://coverartarchive.org/release-group/"
-        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/front-500"
+        "https://coverartarchive.org/release-group/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/front-500"
     )
     assert first.extras["mbid"] == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     assert first.extras["year"] == "1970"

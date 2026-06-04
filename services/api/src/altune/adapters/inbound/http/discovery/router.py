@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from altune.adapters.inbound.http.discovery.dto import (
     CacheDto,
+    ContentFetchResponseDto,
     DiscoveryClickRequest,
     DiscoverySearchHistoryResponse,
     DiscoverySearchResponse,
@@ -243,3 +244,137 @@ async def post_discovery_click(
         )
         await session.commit()
     return None
+
+
+# --- Catalog browse routes (AC#14-20) ---
+
+
+def _result_to_dto(r: "SearchResult") -> SearchResultDto:
+    """Convert a domain SearchResult to wire DTO."""
+    from altune.domain.discovery.search_result import SearchResult  # noqa: F811
+
+    return SearchResultDto(
+        kind=r.kind.value,
+        title=r.title,
+        subtitle=r.subtitle,
+        image_url=r.image_url,
+        confidence=r.confidence.value,
+        sources=[
+            SourceDto(
+                provider=s.provider.value,
+                external_id=s.external_id,
+                url=s.url,
+            )
+            for s in r.sources
+        ],
+        extras=dict(r.extras),
+    )
+
+
+@router.get(
+    "/albums/{provider}/{external_id}/tracks",
+    response_model=ContentFetchResponseDto,
+)
+async def get_album_tracks(
+    request: Request,
+    provider: str,
+    external_id: str,
+    _user_id: UserId = Depends(current_user_id),  # noqa: B008
+    limit: int = Query(50, ge=1, le=100),
+) -> ContentFetchResponseDto:
+    """Fetch tracks from an album by provider + external ID (AC#14)."""
+    from altune.application.discovery.get_album_tracks import (
+        GetAlbumTracks,
+        GetAlbumTracksInput,
+    )
+    from altune.application.discovery.ports import AlbumContentProvider
+
+    # Build provider map from app.state.discovery_providers
+    providers = getattr(request.app.state, "discovery_providers", ())
+    content_providers: dict[str, AlbumContentProvider] = {
+        p.name: p for p in providers if hasattr(p, "get_album_tracks")
+    }
+
+    use_case = GetAlbumTracks(providers=content_providers)
+    output = await use_case.execute(
+        GetAlbumTracksInput(provider=provider, external_id=external_id, limit=limit)
+    )
+
+    return ContentFetchResponseDto(
+        items=[_result_to_dto(r) for r in output.items],
+        provider=output.provider_name,
+        status=output.status.value,
+        latency_ms=output.latency_ms,
+    )
+
+
+@router.get(
+    "/artists/{provider}/{external_id}/top-tracks",
+    response_model=ContentFetchResponseDto,
+)
+async def get_artist_top_tracks(
+    request: Request,
+    provider: str,
+    external_id: str,
+    _user_id: UserId = Depends(current_user_id),  # noqa: B008
+    limit: int = Query(5, ge=1, le=20),
+) -> ContentFetchResponseDto:
+    """Fetch top tracks from an artist by provider + external ID (AC#17)."""
+    from altune.application.discovery.get_artist_content import (
+        GetArtistTopTracks,
+        GetArtistTopTracksInput,
+    )
+    from altune.application.discovery.ports import ArtistContentProvider
+
+    providers = getattr(request.app.state, "discovery_providers", ())
+    content_providers: dict[str, ArtistContentProvider] = {
+        p.name: p for p in providers if hasattr(p, "get_artist_top_tracks")
+    }
+
+    use_case = GetArtistTopTracks(providers=content_providers)
+    output = await use_case.execute(
+        GetArtistTopTracksInput(provider=provider, external_id=external_id, limit=limit)
+    )
+
+    return ContentFetchResponseDto(
+        items=[_result_to_dto(r) for r in output.items],
+        provider=output.provider_name,
+        status=output.status.value,
+        latency_ms=output.latency_ms,
+    )
+
+
+@router.get(
+    "/artists/{provider}/{external_id}/albums",
+    response_model=ContentFetchResponseDto,
+)
+async def get_artist_albums(
+    request: Request,
+    provider: str,
+    external_id: str,
+    _user_id: UserId = Depends(current_user_id),  # noqa: B008
+    limit: int = Query(10, ge=1, le=50),
+) -> ContentFetchResponseDto:
+    """Fetch albums from an artist by provider + external ID (AC#18)."""
+    from altune.application.discovery.get_artist_content import (
+        GetArtistAlbums,
+        GetArtistAlbumsInput,
+    )
+    from altune.application.discovery.ports import ArtistContentProvider
+
+    providers = getattr(request.app.state, "discovery_providers", ())
+    content_providers: dict[str, ArtistContentProvider] = {
+        p.name: p for p in providers if hasattr(p, "get_artist_albums")
+    }
+
+    use_case = GetArtistAlbums(providers=content_providers)
+    output = await use_case.execute(
+        GetArtistAlbumsInput(provider=provider, external_id=external_id, limit=limit)
+    )
+
+    return ContentFetchResponseDto(
+        items=[_result_to_dto(r) for r in output.items],
+        provider=output.provider_name,
+        status=output.status.value,
+        latency_ms=output.latency_ms,
+    )

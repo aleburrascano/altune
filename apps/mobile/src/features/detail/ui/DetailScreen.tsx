@@ -26,6 +26,7 @@ import { getDetailHandoff } from '@shared/lib/detail-handoff';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { trackInfoRows } from '../extras';
+import { useLateralNav } from '../hooks/useLateralNav';
 import { useSaveTrack } from '../hooks/useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
 
@@ -41,12 +42,20 @@ function _kindLabel(kind: 'artist' | 'album' | 'track'): string {
 export function DetailScreen(): ReactElement {
   const router = useRouter();
   const result = getDetailHandoff();
+  const lateralNav = useLateralNav();
 
   if (result === null) {
     return <Redirect href="/discover" />;
   }
 
   const isArtist = result.kind === 'artist';
+  const canNavToArtist = result.subtitle !== null && result.kind !== 'artist';
+
+  const onArtistPress = (): void => {
+    if (canNavToArtist && result.subtitle !== null) {
+      void lateralNav.navigateTo(result.subtitle, 'artist');
+    }
+  };
 
   return (
     <Screen testID="detail-header">
@@ -71,16 +80,31 @@ export function DetailScreen(): ReactElement {
           {result.title}
         </Text>
         {result.subtitle !== null ? (
-          <Text variant="body" tone="secondary" numberOfLines={1}>
-            {result.subtitle}
-          </Text>
+          canNavToArtist ? (
+            <Pressable
+              testID="detail-artist-link"
+              onPress={onArtistPress}
+              disabled={lateralNav.state === 'searching'}
+              style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
+            >
+              <Text variant="body" tone="accent" numberOfLines={1}>
+                {result.subtitle}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text variant="body" tone="secondary" numberOfLines={1}>
+              {result.subtitle}
+            </Text>
+          )
         ) : null}
         <Text variant="label" tone="tertiary" style={styles.kind}>
           {_kindLabel(result.kind)}
         </Text>
       </View>
 
-      {result.kind === 'track' ? <TrackDetailBody result={result} /> : null}
+      {result.kind === 'track' ? (
+        <TrackDetailBody result={result} lateralNav={lateralNav} />
+      ) : null}
 
       {result.kind === 'album' ? (
         <View testID="detail-tracklist-placeholder" style={styles.placeholder}>
@@ -101,8 +125,19 @@ export function DetailScreen(): ReactElement {
   );
 }
 
+type LateralNavHandle = {
+  navigateTo: (query: string, kind: 'artist' | 'album' | 'track') => Promise<void>;
+  state: 'idle' | 'searching';
+};
+
 /** Track body: info rows + an optimistic Save-to-library action. */
-function TrackDetailBody({ result }: { result: DiscoveryResult }): ReactElement {
+function TrackDetailBody({
+  result,
+  lateralNav,
+}: {
+  result: DiscoveryResult;
+  lateralNav: LateralNavHandle;
+}): ReactElement {
   const save = useSaveTrack();
   const rows = trackInfoRows(result.extras);
   // AC#9: a Track requires a non-empty artist. When the result has no subtitle
@@ -117,16 +152,45 @@ function TrackDetailBody({ result }: { result: DiscoveryResult }): ReactElement 
     save.mutate(toCreateTrackRequest(result));
   };
 
+  const albumName =
+    typeof result.extras['album'] === 'string' && result.extras['album'].length > 0
+      ? result.extras['album']
+      : null;
+
+  const onAlbumPress = (): void => {
+    if (albumName !== null && result.subtitle !== null) {
+      // Include artist for disambiguation: "Album Name Artist Name"
+      void lateralNav.navigateTo(`${albumName} ${result.subtitle}`, 'album');
+    }
+  };
+
   return (
     <View testID="detail-track-info" style={styles.info}>
-      {rows.map((row) => (
-        <View key={row.key} testID={`detail-info-${row.key}`} style={styles.infoRow}>
-          <Text variant="label" tone="tertiary">
-            {row.label}
-          </Text>
-          <Text variant="body">{row.value}</Text>
-        </View>
-      ))}
+      {rows.map((row) =>
+        row.key === 'album' && albumName !== null ? (
+          <Pressable
+            key={row.key}
+            testID="detail-info-album"
+            onPress={onAlbumPress}
+            disabled={lateralNav.state === 'searching'}
+            style={({ pressed }) => [styles.infoRow, pressed ? { opacity: 0.6 } : null]}
+          >
+            <Text variant="label" tone="tertiary">
+              {row.label}
+            </Text>
+            <Text variant="body" tone="accent">
+              {row.value}
+            </Text>
+          </Pressable>
+        ) : (
+          <View key={row.key} testID={`detail-info-${row.key}`} style={styles.infoRow}>
+            <Text variant="label" tone="tertiary">
+              {row.label}
+            </Text>
+            <Text variant="body">{row.value}</Text>
+          </View>
+        ),
+      )}
       <Button
         testID="detail-save"
         label={save.isSuccess ? 'Saved' : 'Save to Library'}
