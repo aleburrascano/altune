@@ -47,3 +47,49 @@ class ListTracksResponse(BaseModel):
     limit: int
     offset: int
     has_more: bool
+
+
+class CreatePlaylistRequest(BaseModel):
+    name: str
+
+
+class RenamePlaylistRequest(BaseModel):
+    name: str
+
+
+class AddTrackToPlaylistRequest(BaseModel):
+    track_id: UUID
+
+
+class ReorderTracksRequest(BaseModel):
+    track_ids: list[UUID]
+
+
+class PlaylistResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    name: str
+    track_count: int
+    preview_artwork_urls: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ListPlaylistsResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    items: list[PlaylistResponse]
+    total: int
+
+
+class PlaylistDetailResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    name: str
+    track_count: int
+    preview_artwork_urls: list[str]
+    created_at: datetime
+    updated_at: datetime
+    tracks: list[TrackResponse]
