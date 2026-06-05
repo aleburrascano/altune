@@ -5,7 +5,7 @@ FastAPI router for the catalog context. Thin shells: parse → call use case →
 ## Files
 
 - **router.py** — `APIRouter(prefix="/v1")`.
-  - `GET /tracks` → `ListTracks`. Paginated; `limit`/`offset` bounds give 422.
+  - `GET /tracks` → `ListTracks`. Paginated; `limit` (1–2000) / `offset` bounds give 422. Limit raised from 200 to 2000 for revamp-library-v1 client-side grouping.
   - `POST /tracks` → `AddTrackToLibrary`. Returns **201** on a fresh save, **200** on a dedup hit (set via the injected `Response`), with an `http_post_tracks_dedup_hit` log line as the dedup telemetry (spec Telemetry S6). Commits the session inside the handler (the use case is the unit-of-work boundary).
   - Both build `TrackResponse` from domain `Track` values — `TrackRow` never leaves the persistence layer.
 - **dto.py** — frozen Pydantic boundary models.
