@@ -12,7 +12,10 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from altune.domain.catalog.playlist import Playlist
+    from altune.domain.catalog.playlist_id import PlaylistId
     from altune.domain.catalog.track import Track
+    from altune.domain.catalog.track_id import TrackId
     from altune.domain.shared.user_id import UserId
 
 
@@ -55,4 +58,63 @@ class TrackRepository(Protocol):
         in the SQL adapter, not by a read-then-write check (which would race).
         Introduced by `docs/specs/view-result-detail/spec.md` (AC#5, AC#7).
         """
+        ...
+
+
+class PlaylistRepository(Protocol):
+    """Read+write port over the Playlist aggregate."""
+
+    async def create(self, playlist: Playlist) -> Playlist: ...
+
+    async def list_for_user(self, user_id: UserId) -> Sequence[Playlist]: ...
+
+    async def get_by_id(self, playlist_id: PlaylistId, user_id: UserId) -> Playlist | None: ...
+
+    async def get_with_tracks(
+        self,
+        playlist_id: PlaylistId,
+        user_id: UserId,
+    ) -> tuple[Playlist, Sequence[Track]] | None:
+        """Return the playlist with its full ordered Track objects."""
+        ...
+
+    async def update_name(
+        self, playlist_id: PlaylistId, user_id: UserId, name: str
+    ) -> Playlist | None: ...
+
+    async def delete(self, playlist_id: PlaylistId, user_id: UserId) -> bool: ...
+
+    async def add_track(
+        self,
+        playlist_id: PlaylistId,
+        user_id: UserId,
+        track_id: TrackId,
+    ) -> bool:
+        """Add a track at the end. Returns False if already present."""
+        ...
+
+    async def remove_track(
+        self,
+        playlist_id: PlaylistId,
+        user_id: UserId,
+        track_id: TrackId,
+    ) -> bool:
+        """Remove a track and compact positions. Returns False if not found."""
+        ...
+
+    async def reorder_tracks(
+        self,
+        playlist_id: PlaylistId,
+        user_id: UserId,
+        track_ids: Sequence[TrackId],
+    ) -> bool:
+        """Reassign positions 0..N-1 in the given order. Returns False if playlist not found."""
+        ...
+
+    async def get_preview_artwork(
+        self,
+        playlist_id: PlaylistId,
+        user_id: UserId,
+    ) -> Sequence[str]:
+        """Return up to 4 unique artwork URLs from the playlist's tracks."""
         ...

@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from altune import __version__
+from altune.adapters.inbound.http.catalog.playlist_router import router as playlist_router
 from altune.adapters.inbound.http.catalog.router import router as catalog_router
 from altune.adapters.inbound.http.discovery.router import router as discovery_router
 from altune.platform.config import Settings
@@ -127,6 +128,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.include_router(catalog_router)
+    app.include_router(playlist_router)
     app.include_router(discovery_router)
 
     # Register exception handlers (InvalidTokenError → 401, etc.).
