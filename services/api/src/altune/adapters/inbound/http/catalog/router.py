@@ -56,7 +56,7 @@ def _track_response(t: Track) -> TrackResponse:
 async def get_tracks(
     request: Request,
     user_id: UserId = Depends(current_user_id),  # noqa: B008  # FastAPI dependency injection idiom
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=2000),
     offset: int = Query(0, ge=0),
 ) -> ListTracksResponse:
     log.info("http_get_tracks_request", user_id=str(user_id), limit=limit, offset=offset)
