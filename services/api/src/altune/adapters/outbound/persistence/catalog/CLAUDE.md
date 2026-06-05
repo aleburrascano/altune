@@ -12,7 +12,7 @@ Postgres persistence for the catalog context. Implements the `application/catalo
   - `add(track)`: `INSERT ... ON CONFLICT (user_id, dedup_key) DO NOTHING RETURNING id`; an empty RETURNING means the row already existed (`created=False`). Either way it `SELECT`s the canonical row back. The dedup key is computed here via the domain `dedup_key(...)`.
   - `list_for_user(...)`: paged `WHERE user_id` ordered `(added_at DESC, id DESC)` + a `COUNT(*)` total.
 - **playlist_row.py** — `PlaylistRow` + `PlaylistTrackRow` SQLAlchemy models for `playlists` and `playlist_tracks` tables. `from_domain`/`to_domain` on `PlaylistRow`.
-- **playlist_repository.py** — `SqlAlchemyPlaylistRepository`. Full CRUD + track management (add, remove, reorder) + preview artwork (up to 4 URLs) + `get_track_count`. `list_for_user` returns playlists with empty tracks tuple (listing doesn't need them); track counts are queried separately via `get_track_count`.
+- **playlist_repository.py** — `SqlAlchemyPlaylistRepository`. Full CRUD + track management (add, remove, reorder) + preview artwork (up to 4 unique URLs, ordered by position, deduped in Python) + `get_track_count`. `list_for_user` returns playlists with empty tracks tuple (listing doesn't need them); track counts are queried separately via `get_track_count`.
 
 ## Gotchas
 
