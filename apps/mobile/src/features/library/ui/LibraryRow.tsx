@@ -9,9 +9,10 @@ import type { TrackResponse } from '../../../shared/api-client/types';
 type LibraryRowProps = {
   track: TrackResponse;
   onPress: () => void;
+  onLongPress?: () => void;
 };
 
-export function LibraryRow({ track, onPress }: LibraryRowProps): ReactElement {
+export function LibraryRow({ track, onPress, onLongPress }: LibraryRowProps): ReactElement {
   const theme = useTheme();
   const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
   const albumLabel = track.album != null ? ` · ${track.album}` : '';
@@ -26,6 +27,8 @@ export function LibraryRow({ track, onPress }: LibraryRowProps): ReactElement {
     <Pressable
       testID={`library-row-${track.id}`}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={400}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
       style={({ pressed }) => [

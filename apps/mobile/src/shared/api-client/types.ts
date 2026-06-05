@@ -39,3 +39,33 @@ export type ListTracksResponse = {
   offset: number;
   has_more: boolean;
 };
+
+export type PlaylistResponse = {
+  id: string;
+  name: string;
+  track_count: number;
+  preview_artwork_urls: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type ListPlaylistsResponse = {
+  items: PlaylistResponse[];
+  total: number;
+};
+
+export type PlaylistDetailResponse = PlaylistResponse & {
+  tracks: TrackResponse[];
+};
+
+export type CreatePlaylistRequest = {
+  name: string;
+};
+
+export type AddTrackToPlaylistRequest = {
+  track_id: string;
+};
+
+export type ReorderTracksRequest = {
+  track_ids: string[];
+};
