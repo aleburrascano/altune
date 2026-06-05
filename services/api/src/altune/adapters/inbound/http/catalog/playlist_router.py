@@ -58,10 +58,11 @@ async def _playlist_response(
     pl = await repo.get_by_id(playlist_id, user_id)
     assert pl is not None
     artwork = await repo.get_preview_artwork(playlist_id, user_id)
+    count = await repo.get_track_count(playlist_id)
     return PlaylistResponse(
         id=pl.id.value,
         name=pl.name,
-        track_count=len(pl.tracks),
+        track_count=count,
         preview_artwork_urls=list(artwork),
         created_at=pl.created_at,
         updated_at=pl.updated_at,
@@ -104,11 +105,12 @@ async def list_playlists(
         items: list[PlaylistResponse] = []
         for pl in output.items:
             artwork = await repo.get_preview_artwork(pl.id, user_id)
+            count = await repo.get_track_count(pl.id)
             items.append(
                 PlaylistResponse(
                     id=pl.id.value,
                     name=pl.name,
-                    track_count=len(pl.tracks),
+                    track_count=count,
                     preview_artwork_urls=list(artwork),
                     created_at=pl.created_at,
                     updated_at=pl.updated_at,
@@ -176,21 +178,23 @@ async def rename_playlist(
                 playlist_id=PlaylistId(playlist_id), user_id=user_id, name=body.name
             ),
         )
+        if result is None:
+            await session.commit()
+            response.status_code = 404
+            return PlaylistResponse(
+                id=playlist_id,
+                name="",
+                track_count=0,
+                preview_artwork_urls=[],
+                created_at=datetime_stub(),
+                updated_at=datetime_stub(),
+            )
+        count = await repo.get_track_count(result.id)
         await session.commit()
-    if result is None:
-        response.status_code = 404
-        return PlaylistResponse(
-            id=playlist_id,
-            name="",
-            track_count=0,
-            preview_artwork_urls=[],
-            created_at=datetime_stub(),
-            updated_at=datetime_stub(),
-        )
     return PlaylistResponse(
         id=result.id.value,
         name=result.name,
-        track_count=len(result.tracks),
+        track_count=count,
         preview_artwork_urls=[],
         created_at=result.created_at,
         updated_at=result.updated_at,
