@@ -1,9 +1,8 @@
-/**
+﻿/**
  * useLateralNav — search-and-navigate for lateral browsing (AC#11-13).
  */
 
 import { renderHook, act, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
 
 const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
@@ -19,8 +18,6 @@ const mockSetDetailHandoff = jest.fn();
 jest.mock('../../../shared/lib/detail-handoff', () => ({
   setDetailHandoff: (result: unknown) => mockSetDetailHandoff(result),
 }));
-
-jest.spyOn(Alert, 'alert');
 
 import { useLateralNav } from '../hooks/useLateralNav';
 
@@ -50,9 +47,10 @@ describe('useLateralNav', () => {
     expect(mockSearchDiscovery).toHaveBeenCalledWith({ q: 'M83', kinds: ['artist'], limit: 1 });
     expect(mockSetDetailHandoff).toHaveBeenCalledWith(artistResult);
     expect(mockReplace).toHaveBeenCalledWith('/detail');
+    expect(result.current.error).toBeNull();
   });
 
-  it('shows alert when no result found', async () => {
+  it('sets error when no result found', async () => {
     mockSearchDiscovery.mockResolvedValueOnce({ results: [] });
 
     const { result } = renderHook(() => useLateralNav());
@@ -61,12 +59,12 @@ describe('useLateralNav', () => {
       await result.current.navigateTo('Unknown Artist', 'artist');
     });
 
-    expect(Alert.alert).toHaveBeenCalledWith('Artist not found', 'Couldn\'t find "Unknown Artist".');
+    expect(result.current.error).toBe('Artist not found: "Unknown Artist"');
     expect(mockSetDetailHandoff).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it('shows Album label for album kind', async () => {
+  it('sets Album label in error for album kind', async () => {
     mockSearchDiscovery.mockResolvedValueOnce({ results: [] });
 
     const { result } = renderHook(() => useLateralNav());
@@ -75,7 +73,54 @@ describe('useLateralNav', () => {
       await result.current.navigateTo('Unknown Album', 'album');
     });
 
-    expect(Alert.alert).toHaveBeenCalledWith('Album not found', 'Couldn\'t find "Unknown Album".');
+    expect(result.current.error).toBe('Album not found: "Unknown Album"');
+  });
+
+  it('clears error on clearError call', async () => {
+    mockSearchDiscovery.mockResolvedValueOnce({ results: [] });
+
+    const { result } = renderHook(() => useLateralNav());
+
+    await act(async () => {
+      await result.current.navigateTo('Unknown Artist', 'artist');
+    });
+
+    expect(result.current.error).not.toBeNull();
+
+    act(() => {
+      result.current.clearError();
+    });
+
+    expect(result.current.error).toBeNull();
+  });
+
+  it('clears error when starting new navigation', async () => {
+    mockSearchDiscovery.mockResolvedValueOnce({ results: [] });
+
+    const { result } = renderHook(() => useLateralNav());
+
+    await act(async () => {
+      await result.current.navigateTo('Unknown Artist', 'artist');
+    });
+
+    expect(result.current.error).not.toBeNull();
+
+    const artistResult = {
+      kind: 'artist',
+      title: 'M83',
+      subtitle: null,
+      image_url: 'https://img.example/m83.jpg',
+      confidence: 'high',
+      sources: [{ provider: 'deezer', external_id: '123', url: 'https://deezer.com/artist/123' }],
+      extras: {},
+    };
+    mockSearchDiscovery.mockResolvedValueOnce({ results: [artistResult] });
+
+    await act(async () => {
+      await result.current.navigateTo('M83', 'artist');
+    });
+
+    expect(result.current.error).toBeNull();
   });
 
   it('tracks searching state during navigation', async () => {

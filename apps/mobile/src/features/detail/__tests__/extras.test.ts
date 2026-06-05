@@ -1,6 +1,8 @@
-/**
+﻿/**
  * trackInfoRows / formatDuration — present extras render in order; absent or
  * empty keys are omitted (view-result-detail slice 13, AC#3).
+ *
+ * Updated: ISRC and popularity removed from display per UX audit (not user-facing).
  */
 
 import { formatDuration, trackInfoRows } from '../extras';
@@ -14,7 +16,7 @@ describe('formatDuration', () => {
 });
 
 describe('trackInfoRows', () => {
-  it('returns duration, album, isrc, popularity in order when present', () => {
+  it('returns duration and album in order when present', () => {
     const rows = trackInfoRows({
       duration_seconds: 244,
       album: 'After Hours',
@@ -22,21 +24,19 @@ describe('trackInfoRows', () => {
       popularity: 0.72,
       preview_url: 'https://x',
     });
-    expect(rows.map((r) => r.key)).toEqual(['duration', 'album', 'isrc', 'popularity']);
+    expect(rows.map((r) => r.key)).toEqual(['duration', 'album']);
     expect(rows[0]?.value).toBe('4:04');
     expect(rows[1]?.value).toBe('After Hours');
-    expect(rows[2]?.value).toBe('USUG11904206');
-    expect(rows[3]?.value).toBe('72%');
   });
 
   it('omits absent, null, and empty values', () => {
     expect(trackInfoRows({})).toEqual([]);
-    expect(trackInfoRows({ duration_seconds: null, album: '', isrc: null })).toEqual([]);
+    expect(trackInfoRows({ duration_seconds: null, album: '' })).toEqual([]);
     expect(trackInfoRows({ duration_seconds: 0 })).toEqual([]);
   });
 
   it('keeps only the present subset', () => {
-    const rows = trackInfoRows({ album: 'Hurry Up', isrc: 'ABC123' });
-    expect(rows.map((r) => r.key)).toEqual(['album', 'isrc']);
+    const rows = trackInfoRows({ album: 'Hurry Up', duration_seconds: 180 });
+    expect(rows.map((r) => r.key)).toEqual(['duration', 'album']);
   });
 });

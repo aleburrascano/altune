@@ -8,7 +8,6 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { searchDiscovery, type DiscoveryKind } from '@shared/api-client/discovery';
@@ -19,11 +18,16 @@ type LateralNavState = 'idle' | 'searching';
 type UseLateralNavReturn = {
   navigateTo: (query: string, kind: DiscoveryKind) => Promise<void>;
   state: LateralNavState;
+  error: string | null;
+  clearError: () => void;
 };
 
 export function useLateralNav(): UseLateralNavReturn {
   const router = useRouter();
   const [state, setState] = useState<LateralNavState>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  const clearError = useCallback(() => setError(null), []);
 
   const navigateTo = useCallback(
     async (query: string, kind: DiscoveryKind): Promise<void> => {
@@ -31,6 +35,7 @@ export function useLateralNav(): UseLateralNavReturn {
         return;
       }
 
+      setError(null);
       setState('searching');
       try {
         const response = await searchDiscovery({ q: query, kinds: [kind], limit: 1 });
@@ -38,7 +43,7 @@ export function useLateralNav(): UseLateralNavReturn {
 
         if (result === undefined) {
           const kindLabel = kind === 'artist' ? 'Artist' : 'Album';
-          Alert.alert(`${kindLabel} not found`, `Couldn't find "${query}".`);
+          setError(`${kindLabel} not found: "${query}"`);
           return;
         }
 
@@ -51,5 +56,5 @@ export function useLateralNav(): UseLateralNavReturn {
     [router, state],
   );
 
-  return { navigateTo, state };
+  return { navigateTo, state, error, clearError };
 }

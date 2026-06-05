@@ -13,12 +13,22 @@ import {
   type DiscoveryResult,
 } from '@shared/api-client/discovery';
 
+function getReleaseSortKey(album: DiscoveryResult): string | null {
+  // Deezer uses release_date (YYYY-MM-DD), MB uses year (just YYYY)
+  const releaseDate = album.extras['release_date'];
+  if (typeof releaseDate === 'string') return releaseDate;
+  const year = album.extras['year'];
+  if (typeof year === 'string') return year;
+  if (typeof year === 'number') return String(year);
+  return null;
+}
+
 function sortByReleaseDateDesc(albums: DiscoveryResult[]): DiscoveryResult[] {
   return [...albums].sort((a, b) => {
-    const dateA = a.extras['release_date'];
-    const dateB = b.extras['release_date'];
-    if (typeof dateA !== 'string') return 1;
-    if (typeof dateB !== 'string') return -1;
+    const dateA = getReleaseSortKey(a);
+    const dateB = getReleaseSortKey(b);
+    if (dateA === null) return 1;
+    if (dateB === null) return -1;
     return dateB.localeCompare(dateA);
   });
 }
