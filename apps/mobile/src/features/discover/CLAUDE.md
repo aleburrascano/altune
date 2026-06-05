@@ -16,6 +16,8 @@ Mobile screen for the unified music search surface. A greeting + "Discover" titl
 - **Search state persists across navigation** — `@shared/lib/search-state` holds the last query/input so navigating detail→back preserves the search. State is initialized from this module on mount and synced on every change.
 - **Click tracking is fire-and-forget.** `useRecordClick` wraps `useMutation`; errors are swallowed in `onError`. The user never sees a click-failure toast — telemetry being best-effort is intentional per ADR-0007 §3.12.
 - **History row text truncates at 40 chars** with a `…` suffix client-side. Full query is preserved in the server's `discovery_search_history.query` column; the truncation is purely visual.
+- **Accessibility** — all tappable elements have `accessibilityRole="button"` + `accessibilityLabel`: result rows (`DiscoverRow`), Top Result card, "See all" links. Touch targets ≥44pt on "See all".
+- **Filtered empty state** — `FilteredResults` shows "No songs/albums/artists found" when the filtered kind has no results.
 - **TestIDs are load-bearing** for AC#20:
   - `discover-loading` — initial-load spinner
   - `discover-empty-no-query` + `discover-history-row-<idx>` — empty state with history rows
