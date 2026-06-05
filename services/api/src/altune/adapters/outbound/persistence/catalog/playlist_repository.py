@@ -219,12 +219,16 @@ class SqlAlchemyPlaylistRepository:
                 PlaylistTrackRow.playlist_id == playlist_id.value,
                 TrackRow.artwork_url.is_not(None),
             )
-            .distinct()
             .order_by(PlaylistTrackRow.position)
-            .limit(4)
         )
         result = await self._session.execute(stmt)
-        return [url for (url,) in result.all() if url is not None]
+        seen: set[str] = set()
+        urls: list[str] = []
+        for (url,) in result.all():
+            if url is not None and url not in seen and len(urls) < 4:
+                seen.add(url)
+                urls.append(url)
+        return urls
 
     async def _get_row(self, playlist_id: PlaylistId, user_id: UserId) -> PlaylistRow | None:
         stmt = select(PlaylistRow).where(
