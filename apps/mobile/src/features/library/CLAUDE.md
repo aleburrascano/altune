@@ -5,7 +5,7 @@ Mobile screen that renders the current user's track library as a paginated, infi
 ## view-result-detail update
 
 - **`LibraryRow` shows a `Pending` marker** (testID `library-row-pending-<id>`) when `track.acquisition_status === 'pending'` — a saved track whose audio hasn't been acquired yet. Omitted for any other status.
-- `TrackResponse` gained `acquisition_status` + `artwork_url` (shared type); the row only consumes `acquisition_status`.
+- `TrackResponse` gained `acquisition_status`, `artwork_url`, and extended metadata (`year`, `genre`, `track_number`, `album_artist`, `isrc`, `audio_ref`) via the `import-legacy-library` spec (shared type); the row only consumes `acquisition_status`.
 
 ## Key terms
 
