@@ -31,6 +31,12 @@ class TrackResponse(BaseModel):
     added_at: datetime
     acquisition_status: str
     artwork_url: str | None
+    year: int | None = None
+    genre: str | None = None
+    track_number: int | None = None
+    album_artist: str | None = None
+    isrc: str | None = None
+    audio_ref: str | None = None
 
 
 class ListTracksResponse(BaseModel):

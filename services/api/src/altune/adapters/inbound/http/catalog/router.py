@@ -25,11 +25,31 @@ from altune.application.catalog.add_track_to_library import (
     AddTrackToLibraryInput,
 )
 from altune.application.catalog.list_tracks import ListTracks, ListTracksInput
+from altune.domain.catalog.track import Track  # noqa: TC001  # used at runtime
 from altune.domain.shared.user_id import UserId  # noqa: TC001  # FastAPI runtime annotation
 from altune.platform.auth import current_user_id
 
 router = APIRouter(prefix="/v1", tags=["tracks"])
 log = structlog.get_logger(__name__)
+
+
+def _track_response(t: Track) -> TrackResponse:
+    return TrackResponse(
+        id=t.id.value,
+        title=t.title,
+        artist=t.artist,
+        album=t.album,
+        duration_seconds=t.duration_seconds,
+        added_at=t.added_at,
+        acquisition_status=t.acquisition_status.value,
+        artwork_url=t.artwork_url,
+        year=t.year,
+        genre=t.genre,
+        track_number=t.track_number,
+        album_artist=t.album_artist,
+        isrc=t.isrc,
+        audio_ref=t.audio_ref,
+    )
 
 
 @router.get("/tracks", response_model=ListTracksResponse)  # type: ignore[untyped-decorator, unused-ignore]
@@ -48,19 +68,7 @@ async def get_tracks(
             ListTracksInput(user_id=user_id, limit=limit, offset=offset)
         )
     return ListTracksResponse(
-        items=[
-            TrackResponse(
-                id=t.id.value,
-                title=t.title,
-                artist=t.artist,
-                album=t.album,
-                duration_seconds=t.duration_seconds,
-                added_at=t.added_at,
-                acquisition_status=t.acquisition_status.value,
-                artwork_url=t.artwork_url,
-            )
-            for t in output.items
-        ],
+        items=[_track_response(t) for t in output.items],
         total=output.total,
         limit=output.limit,
         offset=output.offset,
@@ -98,14 +106,4 @@ async def create_track(
         log.info(
             "http_post_tracks_dedup_hit", user_id=str(user_id), track_id=str(output.track.id.value)
         )
-    t = output.track
-    return TrackResponse(
-        id=t.id.value,
-        title=t.title,
-        artist=t.artist,
-        album=t.album,
-        duration_seconds=t.duration_seconds,
-        added_at=t.added_at,
-        acquisition_status=t.acquisition_status.value,
-        artwork_url=t.artwork_url,
-    )
+    return _track_response(output.track)

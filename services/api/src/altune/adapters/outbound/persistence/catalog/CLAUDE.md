@@ -4,7 +4,7 @@ Postgres persistence for the catalog context. Implements the `application/catalo
 
 ## Files
 
-- **track_row.py** — `TrackRow` SQLAlchemy model for the `tracks` table + `from_domain`/`to_domain`. Carries the new `view-result-detail` columns: `artwork_url`, `acquisition_status` (server_default `'pending'`), `dedup_key`.
+- **track_row.py** — `TrackRow` SQLAlchemy model for the `tracks` table + `from_domain`/`to_domain`. Carries: `artwork_url`, `acquisition_status` (server_default `'pending'`), `dedup_key`, and the `import-legacy-library` columns: `year`, `genre`, `track_number`, `album_artist`, `isrc`, `audio_ref` (all nullable).
   - `# AIDEV-NOTE:` `Mapped[T]` annotations resolve at runtime, so `UUID`/`datetime` are imported at module scope (NOT under `TYPE_CHECKING`).
   - `# AIDEV-NOTE:` `_dedup_key_default` is a column-level default that recomputes `dedup_key` from title/artist/album for any raw `TrackRow(...)` insert that omits it (e.g. test seeding) — `from_domain()` sets it explicitly; this is the safety net.
   - `# AIDEV-NOTE:` `dedup_key` is persistence-only — derived from the domain normalizer, never a `Track` field.

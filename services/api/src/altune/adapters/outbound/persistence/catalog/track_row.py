@@ -54,6 +54,12 @@ class TrackRow(Base):
     # UNIQUE(user_id, dedup_key) idempotency constraint. It is NOT a domain
     # field; it is derived from title/artist/album via the domain normalizer.
     dedup_key: Mapped[str] = mapped_column(Text, nullable=False, default=_dedup_key_default)
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    genre: Mapped[str | None] = mapped_column(Text, nullable=True)
+    track_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    album_artist: Mapped[str | None] = mapped_column(Text, nullable=True)
+    isrc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    audio_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def to_domain(self) -> Track:
         return Track(
@@ -66,6 +72,12 @@ class TrackRow(Base):
             added_at=self.added_at,
             artwork_url=self.artwork_url,
             acquisition_status=AcquisitionStatus(self.acquisition_status),
+            year=self.year,
+            genre=self.genre,
+            track_number=self.track_number,
+            album_artist=self.album_artist,
+            isrc=self.isrc,
+            audio_ref=self.audio_ref,
         )
 
     @classmethod
@@ -81,4 +93,10 @@ class TrackRow(Base):
             artwork_url=track.artwork_url,
             acquisition_status=track.acquisition_status.value,
             dedup_key=dedup_key(track.title, track.artist, track.album),
+            year=track.year,
+            genre=track.genre,
+            track_number=track.track_number,
+            album_artist=track.album_artist,
+            isrc=track.isrc,
+            audio_ref=track.audio_ref,
         )

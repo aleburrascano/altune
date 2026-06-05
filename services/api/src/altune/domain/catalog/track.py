@@ -12,6 +12,9 @@ Invariants enforced in __post_init__:
 - title is non-empty
 - artist is non-empty
 - duration_seconds, when present, is non-negative
+- year, when present, is positive
+- track_number, when present, is positive
+- audio_ref set ↔ acquisition_status = READY (bidirectional)
 """
 
 from __future__ import annotations
@@ -35,6 +38,12 @@ class Track:
     added_at: datetime
     artwork_url: str | None = None
     acquisition_status: AcquisitionStatus = AcquisitionStatus.PENDING
+    year: int | None = None
+    genre: str | None = None
+    track_number: int | None = None
+    album_artist: str | None = None
+    isrc: str | None = None
+    audio_ref: str | None = None
 
     def __post_init__(self) -> None:
         if not self.title:
@@ -43,6 +52,14 @@ class Track:
             raise ValueError("Track.artist must be non-empty")
         if self.duration_seconds is not None and self.duration_seconds < 0:
             raise ValueError("Track.duration_seconds must be non-negative when present")
+        if self.year is not None and self.year <= 0:
+            raise ValueError("Track.year must be positive when present")
+        if self.track_number is not None and self.track_number <= 0:
+            raise ValueError("Track.track_number must be positive when present")
+        if self.audio_ref is not None and self.acquisition_status is not AcquisitionStatus.READY:
+            raise ValueError("Track.audio_ref requires acquisition_status = READY")
+        if self.audio_ref is None and self.acquisition_status is AcquisitionStatus.READY:
+            raise ValueError("Track.acquisition_status = READY requires audio_ref to be set")
 
     def __eq__(self, other: object) -> bool:
         # AIDEV-NOTE: id-based equality is the entity rule from

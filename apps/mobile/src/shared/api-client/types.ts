@@ -14,8 +14,14 @@ export type TrackResponse = {
   album: string | null;
   duration_seconds: number | null;
   added_at: string; // ISO-8601
-  acquisition_status: string; // 'pending' in v1 (AcquisitionStatus, wire-lowercase)
+  acquisition_status: string; // 'pending' | 'ready' (AcquisitionStatus, wire-lowercase)
   artwork_url: string | null;
+  year: number | null;
+  genre: string | null;
+  track_number: number | null;
+  album_artist: string | null;
+  isrc: string | null;
+  audio_ref: string | null;
 };
 
 export type CreateTrackRequest = {
