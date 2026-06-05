@@ -2,15 +2,21 @@ import { useRouter } from 'expo-router';
 import { useCallback, useState, type ReactElement } from 'react';
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
+import { createPlaylist, getPlaylists } from '@shared/api-client/playlists';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { TrackResponse } from '@shared/api-client/types';
 import { Button, Chip, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 
+import { AddToPlaylistSheet } from '@shared/ui/AddToPlaylistSheet';
+
 import { AlbumCarousel } from './AlbumCarousel';
 import { ArtistCarousel } from './ArtistCarousel';
+import { CreatePlaylistModal } from './CreatePlaylistModal';
 import { LibraryRow } from './LibraryRow';
-import { PlaylistPlaceholder } from './PlaylistPlaceholder';
+import { PlaylistCarousel } from './PlaylistCarousel';
 import { ProfileSheet } from './ProfileSheet';
 import { useLibraryHome } from '../hooks/useLibraryHome';
 import type { AlbumGroup, ArtistGroup } from '../hooks/useLibraryGrouping';
@@ -170,6 +176,23 @@ export function LibraryScreen(): ReactElement {
   const [expanded, setExpanded] = useState<ExpandedSection>(null);
   const [sortKey, setSortKey] = useState<SortKey>('recent');
   const [profileVisible, setProfileVisible] = useState(false);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<TrackResponse | null>(null);
+
+  const queryClient = useQueryClient();
+  const playlistsQuery = useQuery({
+    queryKey: ['playlists'],
+    queryFn: getPlaylists,
+  });
+  const playlists = playlistsQuery.data?.items ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: (name: string) => createPlaylist({ name }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+      setCreateModalVisible(false);
+    },
+  });
 
   const email =
     sessionState.status === 'signed-in' ? (sessionState.session.user.email ?? '') : '';
@@ -311,7 +334,7 @@ export function LibraryScreen(): ReactElement {
           data={sorted}
           keyExtractor={(t) => t.id}
           renderItem={({ item }) => (
-            <LibraryRow track={item} onPress={() => navigateToTrack(item)} />
+            <LibraryRow track={item} onPress={() => navigateToTrack(item)} onLongPress={() => setAddToPlaylistTrack(item)} />
           )}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.expandedList}
@@ -449,7 +472,11 @@ export function LibraryScreen(): ReactElement {
         }
       >
         <SectionHeader title="Playlists" />
-        <PlaylistPlaceholder />
+        <PlaylistCarousel
+          playlists={playlists}
+          onPlaylistPress={(pl) => router.push(`/playlist/${pl.id}` as never)}
+          onCreatePress={() => setCreateModalVisible(true)}
+        />
 
         {state.recentTracks.length > 0 ? (
           <>
@@ -459,7 +486,7 @@ export function LibraryScreen(): ReactElement {
               testID="library-section-recent"
             />
             {state.recentTracks.map((track) => (
-              <LibraryRow key={track.id} track={track} onPress={() => navigateToTrack(track)} />
+              <LibraryRow key={track.id} track={track} onPress={() => navigateToTrack(track)} onLongPress={() => setAddToPlaylistTrack(track)} />
             ))}
           </>
         ) : null}
@@ -490,6 +517,18 @@ export function LibraryScreen(): ReactElement {
         visible={profileVisible}
         email={email}
         onClose={() => setProfileVisible(false)}
+      />
+      <CreatePlaylistModal
+        visible={createModalVisible}
+        onClose={() => setCreateModalVisible(false)}
+        onCreate={(name) => createMutation.mutate(name)}
+        loading={createMutation.isPending}
+      />
+      <AddToPlaylistSheet
+        visible={addToPlaylistTrack != null}
+        trackId={addToPlaylistTrack?.id ?? ''}
+        trackTitle={addToPlaylistTrack != null ? `${addToPlaylistTrack.title} — ${addToPlaylistTrack.artist}` : ''}
+        onClose={() => setAddToPlaylistTrack(null)}
       />
     </Screen>
   );
