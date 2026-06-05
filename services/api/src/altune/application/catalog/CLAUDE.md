@@ -11,7 +11,15 @@ Use cases + ports for the catalog context. Imports `domain/` + stdlib only; **ne
 ## Use cases (one file each)
 
 - **ListTracks** (`list_tracks.py`) — read path behind `GET /v1/tracks`.
-- **AddTrackToLibrary** (`add_track_to_library.py`) — write path behind `POST /v1/tracks`. Builds a `Track` (id = `uuid4()`, `added_at = now`, `acquisition_status = PENDING`), calls `repo.add`, and emits `TrackAddedToLibrary` to the logger **only when `created=True`**. Does not compute the dedup key (the repo's job) and never touches an ORM. `AddTrackToLibraryInput`/`Output` are frozen dataclasses; `Output` carries `(track, created)` so the HTTP layer can pick 201 vs 200.
+- **AddTrackToLibrary** (`add_track_to_library.py`) — write path behind `POST /v1/tracks`.
+- **CreatePlaylist** (`create_playlist.py`) — `POST /v1/playlists`.
+- **ListPlaylists** (`list_playlists.py`) — `GET /v1/playlists`.
+- **GetPlaylist** (`get_playlist.py`) — `GET /v1/playlists/:id` with full track list.
+- **RenamePlaylist** (`rename_playlist.py`) — `PATCH /v1/playlists/:id`.
+- **DeletePlaylist** (`delete_playlist.py`) — `DELETE /v1/playlists/:id`.
+- **AddTrackToPlaylist** (`add_track_to_playlist.py`) — `POST /v1/playlists/:id/tracks`.
+- **RemoveTrackFromPlaylist** (`remove_track_from_playlist.py`) — `DELETE /v1/playlists/:id/tracks/:track_id`.
+- **ReorderPlaylistTracks** (`reorder_playlist_tracks.py`) — `PATCH /v1/playlists/:id/tracks/reorder`.
 
 ## Conventions
 
