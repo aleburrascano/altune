@@ -17,3 +17,4 @@ class AcquisitionStatus(Enum):
     """Lifecycle of a saved track's audio acquisition."""
 
     PENDING = "pending"  # saved to library; audio not yet acquired
+    READY = "ready"  # audio acquired and available for streaming

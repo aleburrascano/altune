@@ -43,6 +43,12 @@ export function optimisticTrack(body: CreateTrackRequest, addedAt: string): Trac
     added_at: addedAt,
     acquisition_status: 'pending',
     artwork_url: body.artwork_url,
+    year: null,
+    genre: null,
+    track_number: null,
+    album_artist: null,
+    isrc: null,
+    audio_ref: null,
   };
 }
 

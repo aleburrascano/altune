@@ -34,6 +34,12 @@ const _aTrack: TrackResponse = {
   added_at: '2026-05-01T12:00:00Z',
   acquisition_status: 'pending',
   artwork_url: null,
+  year: null,
+  genre: null,
+  track_number: null,
+  album_artist: null,
+  isrc: null,
+  audio_ref: null,
 };
 
 describe('_viewForState', () => {

@@ -10,7 +10,7 @@ FastAPI router for the catalog context. Thin shells: parse → call use case →
   - Both build `TrackResponse` from domain `Track` values — `TrackRow` never leaves the persistence layer.
 - **dto.py** — frozen Pydantic boundary models.
   - `CreateTrackRequest(title, artist, album?, duration_seconds?, artwork_url?)` — POST body.
-  - `TrackResponse` — includes `acquisition_status` (`AcquisitionStatus.value`) + `artwork_url` so `pending` and cover art survive a library refetch.
+  - `TrackResponse` — includes `acquisition_status` (`AcquisitionStatus.value`), `artwork_url`, and the extended metadata fields (`year`, `genre`, `track_number`, `album_artist`, `isrc`, `audio_ref`) so full track data survives a library refetch.
   - `ListTracksResponse` — page envelope (`items`, `total`, `limit`, `offset`, `has_more`).
 
 ## Conventions
