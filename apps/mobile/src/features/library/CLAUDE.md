@@ -25,6 +25,10 @@ Mobile screen that renders the current user's track library as a paginated, infi
   Never rename these without updating `docs/specs/view-library/spec.md`.
 - **`items[].id` is the FlatList `keyExtractor`** — the server guarantees uniqueness per user per session. Don't switch to index keys.
 - **`ngrok-skip-browser-warning` header** is sent on every request (`shared/api-client/index.ts`). Required when the bundle is pointed at an ngrok-free tunnel for phone-on-LAN dev. Harmless against any other host. Drop when the API moves off ngrok in the dev loop.
+- **Pull-to-refresh** — `RefreshControl` on FlatList; `isRefetching` state from `useLibrary`.
+- **Pagination loading indicator** — `ListFooterComponent` shows spinner when `isFetchingNextPage`.
+- **Rows are tappable** — `LibraryRow` is now a `Pressable`; tapping navigates to detail screen via handoff. `accessibilityRole="button"` + combined label (title, artist, pending status).
+- **Empty state CTA** — "Discover Music" button navigates to `/discover`.
 
 ## Known gotchas
 
