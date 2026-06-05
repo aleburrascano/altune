@@ -18,6 +18,10 @@ Sectioned library home (revamp-library-v1 spec). Replaces the original flat Flat
 - `ui/ProfileSheet.tsx` — Modal bottom sheet with avatar, email, sign out.
 - `hooks/useLibraryHome.ts` — fetches all tracks (limit 2000) via `useQuery`, derives recent + groups.
 - `hooks/useLibraryGrouping.ts` — memoized client-side album/artist derivation. Pure functions `deriveAlbums` / `deriveArtists` exported for testing.
+- `ui/PlaylistCarousel.tsx` — horizontal FlatList of playlist cards with collage cover + "Create" button.
+- `ui/PlaylistCover.tsx` — 2x2 collage from up to 4 artwork URLs.
+- `ui/PlaylistDetailScreen.tsx` — playlist detail: cover, rename (tap name), delete, tracklist with per-track remove. Route: `/playlist/[id]`.
+- `ui/CreatePlaylistModal.tsx` — modal with text input for naming a new playlist.
 - `hooks/useLibrary.ts` — original paginated `useInfiniteQuery` hook (kept for potential future use in expanded Songs view).
 - `state.ts` — `_viewForState` pure helper (loading > error > empty > list).
 
