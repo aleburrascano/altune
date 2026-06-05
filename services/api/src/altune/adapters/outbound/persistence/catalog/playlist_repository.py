@@ -39,25 +39,16 @@ class SqlAlchemyPlaylistRepository:
         )
         result = await self._session.execute(stmt)
         rows = result.scalars().all()
+        return [row.to_domain() for row in rows]
 
-        playlists: list[Playlist] = []
-        for row in rows:
-            count_stmt = (
-                select(func.count())
-                .select_from(PlaylistTrackRow)
-                .where(PlaylistTrackRow.playlist_id == row.id)
-            )
-            count_result = await self._session.execute(count_stmt)
-            track_count = count_result.scalar() or 0
-            tracks = (
-                tuple(
-                    PlaylistTrack(track_id=TrackId(row.id), position=i) for i in range(track_count)
-                )
-                if track_count > 0
-                else ()
-            )
-            playlists.append(row.to_domain(tracks))
-        return playlists
+    async def get_track_count(self, playlist_id: PlaylistId) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(PlaylistTrackRow)
+            .where(PlaylistTrackRow.playlist_id == playlist_id.value)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar() or 0
 
     async def get_by_id(self, playlist_id: PlaylistId, user_id: UserId) -> Playlist | None:
         stmt = select(PlaylistRow).where(
