@@ -7,18 +7,33 @@
  */
 
 import type { ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { Text, spacing, useTheme } from '@shared/ui';
 
 import type { TrackResponse } from '../../../shared/api-client/types';
 
-export function LibraryRow({ track }: { track: TrackResponse }): ReactElement {
+type LibraryRowProps = {
+  track: TrackResponse;
+  onPress: () => void;
+};
+
+export function LibraryRow({ track, onPress }: LibraryRowProps): ReactElement {
   const theme = useTheme();
+  const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
+  const a11yLabel = `${track.title} by ${track.artist}${pendingLabel}`;
+
   return (
-    <View
+    <Pressable
       testID={`library-row-${track.id}`}
-      style={[styles.row, { borderBottomColor: theme.color.border }]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={a11yLabel}
+      style={({ pressed }) => [
+        styles.row,
+        { borderBottomColor: theme.color.border },
+        pressed ? styles.pressed : null,
+      ]}
     >
       <Text variant="bodyStrong" numberOfLines={1}>
         {track.title}
@@ -36,7 +51,7 @@ export function LibraryRow({ track }: { track: TrackResponse }): ReactElement {
           Pending
         </Text>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -45,6 +60,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  artist: { marginTop: 2 },
+  pressed: { opacity: 0.7 },
+  artist: { marginTop: spacing.xs },
   pending: { marginTop: spacing.xs },
 });

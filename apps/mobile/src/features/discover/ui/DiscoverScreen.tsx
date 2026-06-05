@@ -96,6 +96,12 @@ export function DiscoverScreen(): ReactElement {
   });
 
   const onSubmit = (): void => setCommittedQuery(inputValue.trim());
+  const onChangeText = (text: string): void => {
+    setInputValue(text);
+    if (text.trim() === '') {
+      setCommittedQuery('');
+    }
+  };
   const onHistoryTap = (item: SearchHistoryItem): void => {
     setInputValue(item.query);
     setCommittedQuery(item.query);
@@ -216,10 +222,11 @@ export function DiscoverScreen(): ReactElement {
           placeholder="Search music"
           placeholderTextColor={theme.color.textTertiary}
           value={inputValue}
-          onChangeText={setInputValue}
+          onChangeText={onChangeText}
           onSubmitEditing={onSubmit}
           returnKeyType="search"
           testID="discover-search-input"
+          accessibilityLabel="Search music"
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -274,6 +281,18 @@ function FilteredResults({
   onResultTap: (result: DiscoveryResult, position: number) => void;
 }): ReactElement {
   const items = results.filter((r) => r.kind === kind);
+  const kindLabel = kind === 'track' ? 'songs' : kind === 'album' ? 'albums' : 'artists';
+
+  if (items.length === 0) {
+    return (
+      <View testID="discover-filtered-empty" style={styles.filteredEmpty}>
+        <Text variant="body" tone="tertiary">
+          No {kindLabel} found.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <FlatList
       data={items}
@@ -340,6 +359,8 @@ function BlendedResults({
             <Pressable
               testID={`discover-see-all-${section.kind}`}
               onPress={() => onSeeAll(section.kind)}
+              accessibilityRole="button"
+              accessibilityLabel={`See all ${section.title.toLowerCase()}`}
               style={({ pressed }) => [styles.seeAll, pressed ? { opacity: 0.7 } : null]}
             >
               <Text variant="label" tone="accent">
@@ -373,6 +394,8 @@ function TopResultCard({
       <Pressable
         testID="discover-top-result"
         onPress={() => onPress(result, 0)}
+        accessibilityRole="button"
+        accessibilityLabel={`${result.title}${result.subtitle ? `, ${result.subtitle}` : ''}, ${kindLabel}`}
         style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
       >
         <Card>
@@ -431,7 +454,8 @@ const styles = StyleSheet.create({
   chipCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   section: { marginBottom: spacing.lg },
   topResultWrap: { marginBottom: spacing.lg },
-  seeAll: { paddingVertical: spacing.sm, alignSelf: 'flex-start' },
+  seeAll: { paddingVertical: spacing.md, alignSelf: 'flex-start', minHeight: 44 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
   centerSub: { marginTop: spacing.xs, marginBottom: spacing.lg },
+  filteredEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
 });

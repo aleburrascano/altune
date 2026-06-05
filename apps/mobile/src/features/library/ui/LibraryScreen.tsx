@@ -12,20 +12,73 @@
  * - AC#6: error state testID="library-error" + retry testID="library-retry".
  */
 
+import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { FlatList, StyleSheet, View, type ListRenderItem } from 'react-native';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
-import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
+import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 
 import { LibraryRow } from './LibraryRow';
 import { useLibrary } from '../hooks/useLibrary';
 import { _viewForState } from '../state';
 import { SignOutButton } from '../../auth/ui/SignOutButton';
 import type { TrackResponse } from '../../../shared/api-client/types';
+import { setDetailHandoff } from '@shared/lib/detail-handoff';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-const _renderRow: ListRenderItem<TrackResponse> = ({ item }) => <LibraryRow track={item} />;
 const _keyExtractor = (track: TrackResponse): string => track.id;
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5, 6, 7];
+
+type LibraryListProps = {
+  items: TrackResponse[];
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  isRefetching: boolean;
+  onEndReached: () => void;
+  onRefresh: () => void;
+  onTrackPress: (track: TrackResponse) => void;
+};
+
+function LibraryList({
+  items,
+  hasNextPage,
+  isFetchingNextPage,
+  isRefetching,
+  onEndReached,
+  onRefresh,
+  onTrackPress,
+}: LibraryListProps): ReactElement {
+  const theme = useTheme();
+
+  return (
+    <FlatList
+      data={items}
+      keyExtractor={_keyExtractor}
+      renderItem={({ item }) => (
+        <LibraryRow track={item} onPress={() => onTrackPress(item)} />
+      )}
+      onEndReached={hasNextPage ? onEndReached : undefined}
+      onEndReachedThreshold={0.5}
+      contentContainerStyle={styles.listContent}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefetching}
+          onRefresh={onRefresh}
+          tintColor={theme.color.accent}
+          colors={[theme.color.accent]}
+        />
+      }
+      ListFooterComponent={
+        isFetchingNextPage ? (
+          <View style={styles.footer}>
+            <ActivityIndicator color={theme.color.accent} />
+          </View>
+        ) : null
+      }
+    />
+  );
+}
 
 function _LibraryHeader(): ReactElement {
   return (
@@ -37,8 +90,23 @@ function _LibraryHeader(): ReactElement {
 }
 
 export function LibraryScreen(): ReactElement {
+  const router = useRouter();
   const state = useLibrary();
   const view = _viewForState(state);
+
+  const onTrackPress = (track: TrackResponse): void => {
+    const result: DiscoveryResult = {
+      kind: 'track',
+      title: track.title,
+      subtitle: track.artist,
+      image_url: track.artwork_url ?? null,
+      confidence: 'high',
+      sources: [],
+      extras: {},
+    };
+    setDetailHandoff(result);
+    router.push('/detail');
+  };
 
   let body: ReactElement;
   if (view === 'loading') {
@@ -59,7 +127,7 @@ export function LibraryScreen(): ReactElement {
         <Text variant="label" tone="secondary" style={styles.centerSub}>
           Check your connection and try again.
         </Text>
-        <Button testID="library-retry" label="Retry" onPress={state.fetchNextPage} />
+        <Button testID="library-retry" label="Retry" onPress={state.refetch} />
       </View>
     );
   } else if (view === 'empty') {
@@ -69,18 +137,19 @@ export function LibraryScreen(): ReactElement {
         <Text variant="label" tone="secondary" style={styles.centerSub}>
           Tracks you add will show up here.
         </Text>
+        <Button label="Discover Music" onPress={() => router.push('/discover')} />
       </View>
     );
   } else {
     body = (
-      <FlatList
-        data={state.items}
-        keyExtractor={_keyExtractor}
-        renderItem={_renderRow}
-        onEndReached={state.hasNextPage ? state.fetchNextPage : undefined}
-        onEndReachedThreshold={0.5}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
+      <LibraryList
+        items={state.items}
+        hasNextPage={state.hasNextPage}
+        isFetchingNextPage={state.isFetchingNextPage}
+        isRefetching={state.isRefetching}
+        onEndReached={state.fetchNextPage}
+        onRefresh={state.refetch}
+        onTrackPress={onTrackPress}
       />
     );
   }
@@ -106,4 +175,5 @@ const styles = StyleSheet.create({
   skeletonRow: { paddingVertical: spacing.md, gap: spacing.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
   centerSub: { marginTop: spacing.xs, marginBottom: spacing.lg, textAlign: 'center' },
+  footer: { paddingVertical: spacing.lg, alignItems: 'center' },
 });

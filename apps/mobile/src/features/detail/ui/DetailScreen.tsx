@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DetailScreen — read-only detail for a tapped discovery result.
  *
  * Fed by the in-memory handoff (no per-item backend fetch). The header (back
@@ -63,7 +63,15 @@ export function DetailScreen(): ReactElement {
     <>
       <Pressable
         testID="detail-back"
-        onPress={() => router.back()}
+        onPress={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/discover');
+          }
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
         style={({ pressed }) => [styles.back, pressed ? { opacity: 0.6 } : null]}
       >
         <Text variant="label" tone="accent">
@@ -87,6 +95,9 @@ export function DetailScreen(): ReactElement {
               testID="detail-artist-link"
               onPress={onArtistPress}
               disabled={lateralNav.state === 'searching'}
+              accessibilityRole="link"
+              accessibilityLabel={`View artist ${result.subtitle}`}
+              accessibilityHint="Opens artist detail"
               style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
             >
               <Text variant="body" tone="accent" numberOfLines={1}>
@@ -134,6 +145,8 @@ export function DetailScreen(): ReactElement {
 type LateralNavHandle = {
   navigateTo: (query: string, kind: 'artist' | 'album' | 'track') => Promise<void>;
   state: 'idle' | 'searching';
+  error: string | null;
+  clearError: () => void;
 };
 
 /** Track body: info rows + an optimistic Save-to-library action. */
@@ -179,6 +192,9 @@ function TrackDetailBody({
             testID="detail-info-album"
             onPress={onAlbumPress}
             disabled={lateralNav.state === 'searching'}
+            accessibilityRole="link"
+            accessibilityLabel={`View album ${row.value}`}
+            accessibilityHint="Opens album detail"
             style={({ pressed }) => [styles.infoRow, pressed ? { opacity: 0.6 } : null]}
           >
             <Text variant="label" tone="tertiary">
@@ -208,8 +224,21 @@ function TrackDetailBody({
       />
       {save.isError ? (
         <Banner testID="detail-save-error" tone="danger">
-          Couldn’t save this track. Try again.
+          Couldn't save this track. Tap Save to retry.
         </Banner>
+      ) : null}
+      {lateralNav.error !== null ? (
+        <Banner testID="detail-lateral-error" tone="danger">
+          {lateralNav.error}
+        </Banner>
+      ) : null}
+      {lateralNav.state === 'searching' ? (
+        <View style={styles.lateralLoading}>
+          <ActivityIndicator size="small" />
+          <Text variant="label" tone="secondary">
+            Searching...
+          </Text>
+        </View>
       ) : null}
     </View>
   );
@@ -244,7 +273,7 @@ function AlbumDetailBody({ result }: { result: DiscoveryResult }): ReactElement 
         <Text variant="body" tone="danger">
           Couldn't load tracks.
         </Text>
-        <Button label="Retry" onPress={() => refetch()} style={styles.retryButton} />
+        <Button testID="detail-tracklist-retry" label="Retry" onPress={() => refetch()} style={styles.retryButton} />
       </View>
     );
   }
@@ -270,11 +299,14 @@ function AlbumDetailBody({ result }: { result: DiscoveryResult }): ReactElement 
           typeof track.extras['duration_seconds'] === 'number'
             ? formatDuration(track.extras['duration_seconds'])
             : null;
+        const a11yLabel = `Track ${position}: ${track.title}${duration ? `, ${duration}` : ''}`;
         return (
           <Pressable
             key={track.sources[0]?.external_id ?? index}
             testID={`detail-track-${index}`}
             onPress={() => onTrackPress(track)}
+            accessibilityRole="button"
+            accessibilityLabel={a11yLabel}
             style={({ pressed }) => [styles.trackRow, pressed ? { opacity: 0.6 } : null]}
           >
             <Text variant="label" tone="tertiary" style={styles.trackPosition}>
@@ -302,10 +334,25 @@ function AlbumDetailBody({ result }: { result: DiscoveryResult }): ReactElement 
   );
 }
 
+/**
+ * Pick the best provider source for artist content.
+ * Prefers providers with popularity data: deezer > lastfm > musicbrainz.
+ */
+function _bestSourceForArtist(result: DiscoveryResult): { provider: string; external_id: string } | null {
+  const priority = ['deezer', 'lastfm', 'musicbrainz'];
+  for (const p of priority) {
+    const match = result.sources.find((s) => s.provider === p);
+    if (match) {
+      return { provider: match.provider, external_id: match.external_id };
+    }
+  }
+  return result.sources[0] ?? null;
+}
+
 /** Artist body: top tracks + albums fetched from provider API. */
 function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement {
   const router = useRouter();
-  const source = result.sources[0];
+  const source = _bestSourceForArtist(result);
   const {
     topTracks,
     albums,
@@ -318,7 +365,7 @@ function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement
   } = useArtistContent({
     provider: source?.provider ?? '',
     externalId: source?.external_id ?? '',
-    enabled: source !== undefined,
+    enabled: source !== null,
   });
 
   const onTrackPress = (track: DiscoveryResult): void => {
@@ -346,7 +393,7 @@ function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement
           <Text variant="body" tone="danger">
             Couldn't load tracks.
           </Text>
-          <Button label="Retry" onPress={() => refetchTracks()} style={styles.retryButton} />
+          <Button testID="detail-top-tracks-retry" label="Retry" onPress={() => refetchTracks()} style={styles.retryButton} />
         </View>
       ) : topTracks.length === 0 ? (
         <Text variant="body" tone="tertiary" style={styles.emptySection}>
@@ -358,6 +405,8 @@ function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement
             key={track.sources[0]?.external_id ?? index}
             testID={`detail-top-track-${index}`}
             onPress={() => onTrackPress(track)}
+            accessibilityRole="button"
+            accessibilityLabel={`Play ${track.title}`}
             style={({ pressed }) => [styles.trackRow, pressed ? { opacity: 0.6 } : null]}
           >
             <Artwork
@@ -388,32 +437,54 @@ function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement
           <Text variant="body" tone="danger">
             Couldn't load albums.
           </Text>
-          <Button label="Retry" onPress={() => refetchAlbums()} style={styles.retryButton} />
+          <Button testID="detail-albums-retry" label="Retry" onPress={() => refetchAlbums()} style={styles.retryButton} />
         </View>
       ) : albums.length === 0 ? (
         <Text variant="body" tone="tertiary" style={styles.emptySection}>
           No albums found.
         </Text>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumsScroll}>
-          {albums.map((album, index) => (
-            <Pressable
-              key={album.sources[0]?.external_id ?? index}
-              testID={`detail-album-${index}`}
-              onPress={() => onAlbumPress(album)}
-              style={({ pressed }) => [styles.albumCard, pressed ? { opacity: 0.6 } : null]}
-            >
-              <Artwork
-                uri={album.image_url}
-                size={120}
-                radius={radius.md}
-                accessibilityLabel={album.title}
-              />
-              <Text variant="label" numberOfLines={2} style={styles.albumTitle}>
-                {album.title}
-              </Text>
-            </Pressable>
-          ))}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.albumsScroll}
+          contentContainerStyle={styles.albumsScrollContent}
+        >
+          {albums.map((album, index) => {
+            // Deezer uses release_date (full), MB uses year (just 4 digits)
+            const releaseDate = album.extras['release_date'];
+            const yearExtra = album.extras['year'];
+            const year = typeof releaseDate === 'string'
+              ? releaseDate.slice(0, 4)
+              : typeof yearExtra === 'string' || typeof yearExtra === 'number'
+                ? String(yearExtra)
+                : null;
+            return (
+              <Pressable
+                key={album.sources[0]?.external_id ?? index}
+                testID={`detail-album-${index}`}
+                onPress={() => onAlbumPress(album)}
+                accessibilityRole="button"
+                accessibilityLabel={`Album: ${album.title}${year ? `, ${year}` : ''}`}
+                style={({ pressed }) => [styles.albumCard, pressed ? { opacity: 0.6 } : null]}
+              >
+                <Artwork
+                  uri={album.image_url}
+                  size={120}
+                  radius={radius.md}
+                  accessibilityLabel={album.title}
+                />
+                <Text variant="label" numberOfLines={2} style={styles.albumTitle}>
+                  {album.title}
+                </Text>
+                {year ? (
+                  <Text variant="caption" tone="tertiary">
+                    {year}
+                  </Text>
+                ) : null}
+              </Pressable>
+            );
+          })}
         </ScrollView>
       )}
     </View>
@@ -422,7 +493,7 @@ function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement
 
 const styles = StyleSheet.create({
   scrollContent: { paddingBottom: spacing['2xl'] },
-  back: { paddingVertical: spacing.md, alignSelf: 'flex-start' },
+  back: { paddingVertical: spacing.lg, alignSelf: 'flex-start', minHeight: 48 },
   hero: { alignItems: 'center', paddingTop: spacing.lg, gap: spacing.sm },
   title: { textAlign: 'center', marginTop: spacing.lg },
   kind: { marginTop: spacing.xs },
@@ -432,6 +503,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: spacing.lg,
+    minHeight: 48,
   },
   placeholder: { marginTop: spacing['2xl'], alignItems: 'center' },
   save: { marginTop: spacing.lg },
@@ -440,8 +512,9 @@ const styles = StyleSheet.create({
   trackRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     gap: spacing.md,
+    minHeight: 48,
   },
   trackPosition: { width: 24, textAlign: 'center' },
   trackInfo: { flex: 1 },
@@ -455,6 +528,14 @@ const styles = StyleSheet.create({
   emptySection: { paddingVertical: spacing.md },
   albumsSection: { marginTop: spacing.xl },
   albumsScroll: { marginHorizontal: -spacing.lg },
+  albumsScrollContent: { paddingRight: spacing.lg },
   albumCard: { width: 120, marginLeft: spacing.lg },
   albumTitle: { marginTop: spacing.xs, textAlign: 'center' },
+  lateralLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
 });
