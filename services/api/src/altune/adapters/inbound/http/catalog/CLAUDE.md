@@ -15,7 +15,7 @@ FastAPI router for the catalog context. Thin shells: parse → call use case →
   - Playlist DTOs: `CreatePlaylistRequest`, `RenamePlaylistRequest`, `AddTrackToPlaylistRequest`, `ReorderTracksRequest`, `PlaylistResponse`, `ListPlaylistsResponse`, `PlaylistDetailResponse`.
 - **playlist_router.py** — `APIRouter(prefix="/v1")` for playlist endpoints.
   - `POST /playlists` → 201 + PlaylistResponse.
-  - `GET /playlists` → ListPlaylistsResponse (with `preview_artwork_urls` per playlist).
+  - `GET /playlists` → ListPlaylistsResponse (with `preview_artwork_urls` + `track_count` per playlist, counts queried via `get_track_count`).
   - `GET /playlists/:id` → PlaylistDetailResponse (with full track list).
   - `PATCH /playlists/:id` → rename. `DELETE /playlists/:id` → 204.
   - `POST /playlists/:id/tracks` → add (409 if duplicate). `DELETE /playlists/:id/tracks/:track_id` → remove.
