@@ -4,9 +4,10 @@
 
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 
-const mockReplace = jest.fn();
+const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ replace: mockReplace }),
+  useRouter: () => ({ push: mockPush }),
+  useSegments: () => ['(tabs)', 'discover', 'detail'],
 }));
 
 const mockSearchDiscovery = jest.fn();
@@ -46,7 +47,7 @@ describe('useLateralNav', () => {
 
     expect(mockSearchDiscovery).toHaveBeenCalledWith({ q: 'M83', kinds: ['artist'], limit: 1 });
     expect(mockSetDetailHandoff).toHaveBeenCalledWith(artistResult);
-    expect(mockReplace).toHaveBeenCalledWith('/detail');
+    expect(mockPush).toHaveBeenCalledWith('/discover/detail');
     expect(result.current.error).toBeNull();
   });
 
@@ -61,7 +62,7 @@ describe('useLateralNav', () => {
 
     expect(result.current.error).toBe('Artist not found: "Unknown Artist"');
     expect(mockSetDetailHandoff).not.toHaveBeenCalled();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('sets Album label in error for album kind', async () => {
