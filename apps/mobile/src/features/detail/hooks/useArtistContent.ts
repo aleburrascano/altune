@@ -1,8 +1,10 @@
 /**
  * useArtistContent — fetch top tracks and albums from an artist.
  *
- * AC#17-18: Fetches both in parallel from the first source in the artist's
- * sources array. Cached per (provider, external_id) for the session.
+ * AC#16-18: Fans out to all providers in the artist's sources array for
+ * albums (multi-provider merge), and uses the best source for top tracks.
+ * Albums are deduped by normalized title (keep highest track_count),
+ * then sorted newest-first.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -11,10 +13,13 @@ import {
   getArtistAlbums,
   getArtistTopTracks,
   type DiscoveryResult,
+  type DiscoverySource,
 } from '@shared/api-client/discovery';
 
+const ALBUM_PROVIDERS = ['deezer', 'lastfm', 'musicbrainz'];
+const TRACK_PROVIDER_PRIORITY = ['deezer', 'lastfm', 'musicbrainz'];
+
 function getReleaseSortKey(album: DiscoveryResult): string | null {
-  // Deezer uses release_date (YYYY-MM-DD), MB uses year (just YYYY)
   const releaseDate = album.extras['release_date'];
   if (typeof releaseDate === 'string') return releaseDate;
   const year = album.extras['year'];
@@ -33,9 +38,38 @@ function sortByReleaseDateDesc(albums: DiscoveryResult[]): DiscoveryResult[] {
   });
 }
 
+function dedupAlbumsByTitle(albums: DiscoveryResult[]): DiscoveryResult[] {
+  const groups = new Map<string, DiscoveryResult>();
+  for (const album of albums) {
+    const key = album.title.toLowerCase().trim();
+    const existing = groups.get(key);
+    if (existing === undefined) {
+      groups.set(key, album);
+    } else {
+      const existingCount = typeof existing.extras['track_count'] === 'number' ? existing.extras['track_count'] : 0;
+      const newCount = typeof album.extras['track_count'] === 'number' ? album.extras['track_count'] : 0;
+      if (newCount > existingCount) {
+        groups.set(key, album);
+      }
+    }
+  }
+  return Array.from(groups.values());
+}
+
+function bestSourceForTracks(sources: DiscoverySource[]): DiscoverySource | null {
+  for (const p of TRACK_PROVIDER_PRIORITY) {
+    const match = sources.find((s) => s.provider === p);
+    if (match) return match;
+  }
+  return sources[0] ?? null;
+}
+
+function albumSources(sources: DiscoverySource[]): DiscoverySource[] {
+  return sources.filter((s) => ALBUM_PROVIDERS.includes(s.provider));
+}
+
 type UseArtistContentParams = {
-  provider: string;
-  externalId: string;
+  sources: DiscoverySource[];
   enabled?: boolean;
 };
 
@@ -51,33 +85,44 @@ type UseArtistContentReturn = {
 };
 
 export function useArtistContent({
-  provider,
-  externalId,
+  sources,
   enabled = true,
 }: UseArtistContentParams): UseArtistContentReturn {
+  const trackSource = bestSourceForTracks(sources);
+  const albSources = albumSources(sources);
+
   const tracksQuery = useQuery({
-    queryKey: ['artist-top-tracks', provider, externalId],
-    queryFn: () => getArtistTopTracks(provider, externalId, 5),
-    enabled,
-    staleTime: 1000 * 60 * 30, // 30 minutes
+    queryKey: ['artist-top-tracks', trackSource?.provider ?? '', trackSource?.external_id ?? ''],
+    queryFn: () => getArtistTopTracks(trackSource!.provider, trackSource!.external_id, 5),
+    enabled: enabled && trackSource !== null,
+    staleTime: 1000 * 60 * 30,
   });
 
   const albumsQuery = useQuery({
-    queryKey: ['artist-albums', provider, externalId],
-    queryFn: () => getArtistAlbums(provider, externalId, 10),
-    enabled,
-    staleTime: 1000 * 60 * 30, // 30 minutes
+    queryKey: ['artist-albums-multi', ...albSources.map((s) => `${s.provider}:${s.external_id}`)],
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        albSources.map((s) => getArtistAlbums(s.provider, s.external_id, 30)),
+      );
+      const allAlbums = results
+        .filter(
+          (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof getArtistAlbums>>> =>
+            r.status === 'fulfilled',
+        )
+        .flatMap((r) => r.value.items);
+      return dedupAlbumsByTitle(allAlbums);
+    },
+    enabled: enabled && albSources.length > 0,
+    staleTime: 1000 * 60 * 30,
   });
-
-  const rawAlbums = albumsQuery.data?.items ?? [];
 
   return {
     topTracks: tracksQuery.data?.items ?? [],
-    albums: sortByReleaseDateDesc(rawAlbums),
+    albums: sortByReleaseDateDesc(albumsQuery.data ?? []),
     isLoadingTracks: tracksQuery.isLoading,
     isLoadingAlbums: albumsQuery.isLoading,
     isErrorTracks: tracksQuery.isError || tracksQuery.data?.status === 'error',
-    isErrorAlbums: albumsQuery.isError || albumsQuery.data?.status === 'error',
+    isErrorAlbums: albumsQuery.isError,
     refetchTracks: tracksQuery.refetch,
     refetchAlbums: albumsQuery.refetch,
   };

@@ -337,25 +337,103 @@ function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResult; det
   );
 }
 
-/**
- * Pick the best provider source for artist content.
- * Prefers providers with popularity data: deezer > lastfm > musicbrainz.
- */
-function _bestSourceForArtist(result: DiscoveryResult): { provider: string; external_id: string } | null {
-  const priority = ['deezer', 'lastfm', 'musicbrainz'];
-  for (const p of priority) {
-    const match = result.sources.find((s) => s.provider === p);
-    if (match) {
-      return { provider: match.provider, external_id: match.external_id };
+const DISCOGRAPHY_SECTIONS: ReadonlyArray<{ type: string; label: string }> = [
+  { type: 'album', label: 'Albums' },
+  { type: 'single', label: 'Singles' },
+  { type: 'ep', label: 'EPs' },
+];
+
+function _albumYear(album: DiscoveryResult): string | null {
+  const releaseDate = album.extras['release_date'];
+  if (typeof releaseDate === 'string') return releaseDate.slice(0, 4);
+  const yearExtra = album.extras['year'];
+  if (typeof yearExtra === 'string' || typeof yearExtra === 'number') return String(yearExtra);
+  return null;
+}
+
+function DiscographySections({
+  albums,
+  onAlbumPress,
+}: {
+  albums: DiscoveryResult[];
+  onAlbumPress: (album: DiscoveryResult) => void;
+}): ReactElement {
+  const grouped = new Map<string, DiscoveryResult[]>();
+  for (const album of albums) {
+    const rawType = album.extras['record_type'];
+    const type = typeof rawType === 'string' ? rawType.toLowerCase() : 'album';
+    const bucket = type === 'compilation' ? 'album' : type;
+    const list = grouped.get(bucket);
+    if (list) {
+      list.push(album);
+    } else {
+      grouped.set(bucket, [album]);
     }
   }
-  return result.sources[0] ?? null;
+
+  return (
+    <>
+      {DISCOGRAPHY_SECTIONS.map((section) => {
+        const items = grouped.get(section.type);
+        if (!items || items.length === 0) return null;
+        return (
+          <View key={section.type} style={styles.albumsSection}>
+            <Text variant="label" tone="secondary" style={styles.sectionTitle}>
+              {section.label}
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.albumsScroll}
+              contentContainerStyle={styles.albumsScrollContent}
+            >
+              {items.map((album, index) => {
+                const year = _albumYear(album);
+                const trackCount = typeof album.extras['track_count'] === 'number'
+                  ? album.extras['track_count']
+                  : null;
+                return (
+                  <Pressable
+                    key={album.sources[0]?.external_id ?? index}
+                    testID={`detail-${section.type}-${index}`}
+                    onPress={() => onAlbumPress(album)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${section.label}: ${album.title}${year ? `, ${year}` : ''}${trackCount ? `, ${trackCount} tracks` : ''}`}
+                    style={({ pressed }) => [styles.albumCard, pressed ? { opacity: 0.6 } : null]}
+                  >
+                    <Artwork
+                      uri={album.image_url}
+                      size={120}
+                      radius={radius.md}
+                      accessibilityLabel={album.title}
+                    />
+                    <Text variant="label" numberOfLines={2} style={styles.albumTitle}>
+                      {album.title}
+                    </Text>
+                    {year ? (
+                      <Text variant="caption" tone="tertiary">
+                        {year}
+                      </Text>
+                    ) : null}
+                    {trackCount !== null ? (
+                      <Text variant="caption" tone="tertiary">
+                        {trackCount} tracks
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        );
+      })}
+    </>
+  );
 }
 
 /** Artist body: top tracks + albums fetched from provider API. */
 function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; detailRoute: string }): ReactElement {
   const router = useRouter();
-  const source = _bestSourceForArtist(result);
   const {
     topTracks,
     albums,
@@ -366,9 +444,8 @@ function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; de
     refetchTracks,
     refetchAlbums,
   } = useArtistContent({
-    provider: source?.provider ?? '',
-    externalId: source?.external_id ?? '',
-    enabled: source !== null,
+    sources: result.sources,
+    enabled: result.sources.length > 0,
   });
 
   const onTrackPress = (track: DiscoveryResult): void => {
@@ -427,76 +504,24 @@ function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; de
         ))
       )}
 
-      {/* Albums Section */}
-      <Text variant="label" tone="secondary" style={[styles.sectionTitle, styles.albumsSection]}>
-        Albums
-      </Text>
+      {/* Discography Sections — grouped by record_type */}
       {isLoadingAlbums ? (
-        <View testID="detail-albums-loading" style={styles.sectionLoading}>
+        <View testID="detail-albums-loading" style={[styles.sectionLoading, styles.albumsSection]}>
           <ActivityIndicator />
         </View>
       ) : isErrorAlbums ? (
-        <View testID="detail-albums-error" style={styles.sectionError}>
+        <View testID="detail-albums-error" style={[styles.sectionError, styles.albumsSection]}>
           <Text variant="body" tone="danger">
             Couldn't load albums.
           </Text>
           <Button testID="detail-albums-retry" label="Retry" onPress={() => refetchAlbums()} style={styles.retryButton} />
         </View>
       ) : albums.length === 0 ? (
-        <Text variant="body" tone="tertiary" style={styles.emptySection}>
+        <Text variant="body" tone="tertiary" style={[styles.emptySection, styles.albumsSection]}>
           No albums found.
         </Text>
       ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.albumsScroll}
-          contentContainerStyle={styles.albumsScrollContent}
-        >
-          {albums.map((album, index) => {
-            // Deezer uses release_date (full), MB uses year (just 4 digits)
-            const releaseDate = album.extras['release_date'];
-            const yearExtra = album.extras['year'];
-            const year = typeof releaseDate === 'string'
-              ? releaseDate.slice(0, 4)
-              : typeof yearExtra === 'string' || typeof yearExtra === 'number'
-                ? String(yearExtra)
-                : null;
-            const trackCount = typeof album.extras['track_count'] === 'number'
-              ? album.extras['track_count']
-              : null;
-            return (
-              <Pressable
-                key={album.sources[0]?.external_id ?? index}
-                testID={`detail-album-${index}`}
-                onPress={() => onAlbumPress(album)}
-                accessibilityRole="button"
-                accessibilityLabel={`Album: ${album.title}${year ? `, ${year}` : ''}${trackCount ? `, ${trackCount} tracks` : ''}`}
-                style={({ pressed }) => [styles.albumCard, pressed ? { opacity: 0.6 } : null]}
-              >
-                <Artwork
-                  uri={album.image_url}
-                  size={120}
-                  radius={radius.md}
-                  accessibilityLabel={album.title}
-                />
-                <Text variant="label" numberOfLines={2} style={styles.albumTitle}>
-                  {album.title}
-                </Text>
-                {year ? (
-                  <Text variant="caption" tone="tertiary">
-                    {year}
-                  </Text>
-                ) : null}
-                {trackCount !== null ? (
-                  <Text variant="caption" tone="tertiary">
-                    {trackCount} tracks
-                  </Text>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <DiscographySections albums={albums} onAlbumPress={onAlbumPress} />
       )}
     </View>
   );
