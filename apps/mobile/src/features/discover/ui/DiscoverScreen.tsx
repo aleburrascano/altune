@@ -15,7 +15,7 @@
 
 import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -105,12 +105,39 @@ export function DiscoverScreen(): ReactElement {
     error: search.error as Error | null,
   });
 
-  const onSubmit = (): void => setCommittedQuery(inputValue.trim());
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const DEBOUNCE_MS = 300;
+  const MIN_CHARS = 2;
+
+  const onSubmit = (): void => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setCommittedQuery(inputValue.trim());
+  };
   const onChangeText = (text: string): void => {
     setInputValue(text);
-    if (text.trim() === '') {
-      setCommittedQuery('');
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
     }
+    const trimmed = text.trim();
+    if (trimmed.length === 0) {
+      setCommittedQuery('');
+    } else if (trimmed.length >= MIN_CHARS) {
+      debounceRef.current = setTimeout(() => {
+        setCommittedQuery(trimmed);
+      }, DEBOUNCE_MS);
+    }
+  };
+  const onClear = (): void => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setInputValue('');
+    setCommittedQuery('');
   };
   const onHistoryTap = (item: SearchHistoryItem): void => {
     setInputValue(item.query);
@@ -224,22 +251,38 @@ export function DiscoverScreen(): ReactElement {
         </Text>
       </View>
       <View style={styles.header}>
-        <TextInput
-          style={[
-            styles.input,
-            { backgroundColor: theme.color.surface1, color: theme.color.textPrimary },
-          ]}
-          placeholder="Search music"
-          placeholderTextColor={theme.color.textTertiary}
-          value={inputValue}
-          onChangeText={onChangeText}
-          onSubmitEditing={onSubmit}
-          returnKeyType="search"
-          testID="discover-search-input"
-          accessibilityLabel="Search music"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={[
+              styles.input,
+              { backgroundColor: theme.color.surface1, color: theme.color.textPrimary },
+            ]}
+            placeholder="Search music"
+            placeholderTextColor={theme.color.textTertiary}
+            value={inputValue}
+            onChangeText={onChangeText}
+            onSubmitEditing={onSubmit}
+            returnKeyType="search"
+            testID="discover-search-input"
+            accessibilityLabel="Search music"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {inputValue.length > 0 ? (
+            <Pressable
+              testID="discover-clear-input"
+              onPress={onClear}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              style={({ pressed }) => [styles.clearButton, pressed ? { opacity: 0.5 } : null]}
+              hitSlop={8}
+            >
+              <Text variant="label" tone="secondary" style={styles.clearIcon}>
+                ✕
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
       {body}
     </Screen>
@@ -441,13 +484,25 @@ const styles = StyleSheet.create({
   titleBlock: { paddingTop: spacing.sm },
   title: { marginTop: spacing.xs },
   header: { paddingTop: spacing.md, paddingBottom: spacing.md },
+  inputWrapper: { position: 'relative' as const, justifyContent: 'center' as const },
   input: {
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
+    paddingRight: 44,
     paddingVertical: spacing.md,
     fontFamily: fontFamily.bodyRegular,
     fontSize: 16,
   },
+  clearButton: {
+    position: 'absolute' as const,
+    right: spacing.md,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  clearIcon: { fontSize: 14 },
   list: { flex: 1, paddingTop: spacing.sm },
   results: { flex: 1 },
   listContent: { paddingTop: spacing.sm, paddingBottom: spacing.xl },
