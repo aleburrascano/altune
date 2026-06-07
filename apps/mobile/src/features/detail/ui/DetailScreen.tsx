@@ -291,8 +291,26 @@ function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResult; det
     );
   }
 
+  const albumYear = _albumYear(result);
+  const totalDurationSec = tracks.reduce((sum, t) => {
+    const dur = t.extras['duration_seconds'];
+    return sum + (typeof dur === 'number' ? dur : 0);
+  }, 0);
+  const metaParts: string[] = [];
+  if (albumYear) metaParts.push(albumYear);
+  metaParts.push(`${tracks.length} track${tracks.length !== 1 ? 's' : ''}`);
+  if (totalDurationSec > 0) {
+    const totalMin = Math.floor(totalDurationSec / 60);
+    const hrs = Math.floor(totalMin / 60);
+    const mins = totalMin % 60;
+    metaParts.push(hrs > 0 ? `${hrs} hr ${mins} min` : `${mins} min`);
+  }
+
   return (
     <View testID="detail-tracklist" style={styles.trackList}>
+      <Text testID="detail-album-meta" variant="label" tone="secondary" style={styles.albumMeta}>
+        {metaParts.join(' · ')}
+      </Text>
       {tracks.map((track, index) => {
         const position =
           typeof track.extras['track_position'] === 'number'
@@ -545,6 +563,7 @@ const styles = StyleSheet.create({
   save: { marginTop: spacing.lg },
   // Album tracklist styles
   trackList: { marginTop: spacing.lg },
+  albumMeta: { marginBottom: spacing.md },
   trackRow: {
     flexDirection: 'row',
     alignItems: 'center',
