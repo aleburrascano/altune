@@ -467,6 +467,7 @@ function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; de
     refetchAlbums,
   } = useArtistContent({
     sources: result.sources,
+    artistName: result.title,
     enabled: result.sources.length > 0,
   });
 
