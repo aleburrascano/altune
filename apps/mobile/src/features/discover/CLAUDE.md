@@ -1,18 +1,19 @@
 # discover — feature-local context
 
-Mobile screen for the unified music search surface. A greeting + "Discover" title sit above a submit-only `TextInput`; five-state body below ([state.ts](state.ts) `_viewForState` drives the switch); empty-no-query renders the user's last-10 distinct searches via [useSearchHistory.ts](hooks/useSearchHistory.ts). Shipped under spec `docs/specs/discover-music-v1/spec.md` + ADR-0007; restyled per ADR-0009 (the provider-failure banner was removed — partial results render normally without it).
+Mobile screen for the unified music search surface. A greeting + "Discover" title sit above a `TextInput` with as-you-type debounce (300ms, 2+ chars) + enter-to-submit + clear (X) button; five-state body below ([state.ts](state.ts) `_viewForState` drives the switch); empty-no-query renders the user's last-10 distinct searches via [useSearchHistory.ts](hooks/useSearchHistory.ts). Shipped under spec `docs/specs/discover-music-v1/spec.md` + ADR-0007; restyled per ADR-0009; search UX + history fix per `docs/specs/discover-music-v4/spec.md`.
 
 ## Key terms
 
 - **DiscoverView** — five-state union: `loading | empty-no-query | results | zero-results | full-error`. Lives in [state.ts](state.ts). Mirror of the AC#20 testID set. The five states are mutually exclusive.
 - **`partial` flag** — server-emitted; true when any provider's `status !== 'ok'`. Still present on the wire but **no longer surfaced** in the UI (the banner was removed in ADR-0009); `results` renders normally regardless.
 - **`result_signature`** — server-computed stable hash `(kind, normalized title, normalized subtitle)`. Used as the testID suffix and as the click-tracking dedup key. We never compute it client-side; we echo what the wire returns. (Confirmed via spec §"result_signature definition".)
-- **Submit-only trigger** — `TextInput.onSubmitEditing` is the only path that commits a query into the query state. Tapping a history row also commits. As-you-type is the v1.1 fast-follow (locked in ADR-0007).
+- **Dual-trigger search** — as-you-type debounce (300ms, min 2 chars) auto-commits `inputValue` to `committedQuery`. Enter key bypasses debounce and commits immediately. Tapping a history row also commits. Clear (X) button resets both `inputValue` and `committedQuery`.
 
 ## Patterns specific here
 
 - **State machine lives in `state.ts` as a pure function**, same as `library/state.ts`. `_viewForState` takes `{query, isLoading, data, error}` and returns the view literal. Tests assert the helper directly; the JSX branches in `DiscoverScreen.tsx` are trivial wrappers. Reason: same as library — jest-expo + RNTL is painful for full screens; pure helpers stay testable regardless.
-- **`onSubmitEditing` commits `inputValue` to `committedQuery`** — the React Query hook keys on `committedQuery`, so changing `inputValue` mid-typing does NOT refire. Submit-only by construction.
+- **Debounce + submit** — `onChangeText` starts a 300ms debounce timer (cleared on each keystroke); `onSubmitEditing` clears the timer and commits immediately. The React Query hook keys on `committedQuery`. Clear (X) button clears both and returns to recent searches.
+- **History cache invalidation** — after a successful search, `['discovery', 'history']` query is invalidated so new searches appear as chips immediately (needed because the stack navigator keeps DiscoverScreen mounted).
 - **Search state persists across navigation** — `@shared/lib/search-state` holds the last query/input so navigating detail→back preserves the search. State is initialized from this module on mount and synced on every change.
 - **Click tracking is fire-and-forget.** `useRecordClick` wraps `useMutation`; errors are swallowed in `onError`. The user never sees a click-failure toast — telemetry being best-effort is intentional per ADR-0007 §3.12.
 - **History row text truncates at 40 chars** with a `…` suffix client-side. Full query is preserved in the server's `discovery_search_history.query` column; the truncation is purely visual.
@@ -79,5 +80,5 @@ Rebuilt into a Spotify-style sectioned UI:
 
 ## view-result-detail update
 
-- **Tapping a result opens the detail screen.** `onResultTap` calls `stashHandoffForDetail(result)` (in [tap.ts](tap.ts)) to stash the result into the shared `@shared/lib/detail-handoff`, then `router.push('/detail')`. The click-tracking mutation stays fire-and-forget and is **not** awaited before navigating.
+- **Tapping a result opens the detail screen.** `onResultTap` calls `stashHandoffForDetail(result)` (in [tap.ts](tap.ts)) to stash the result into the shared `@shared/lib/detail-handoff`, then `router.push('/discover/detail')`. The click-tracking mutation stays fire-and-forget and is **not** awaited before navigating.
 - `tap.ts` is a pure helper (matches the `state.ts` pattern) so the navigation seam is unit-testable without rendering the screen — see [__tests__/tap.test.ts](__tests__/tap.test.ts).
