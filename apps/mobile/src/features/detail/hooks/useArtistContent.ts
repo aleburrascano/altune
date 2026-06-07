@@ -16,8 +16,7 @@ import {
   type DiscoverySource,
 } from '@shared/api-client/discovery';
 
-const ALBUM_PROVIDERS = ['deezer', 'lastfm', 'musicbrainz'];
-const TRACK_PROVIDER_PRIORITY = ['deezer', 'lastfm', 'musicbrainz'];
+const CONTENT_PROVIDERS = ['deezer', 'lastfm', 'musicbrainz'] as const;
 
 function getReleaseSortKey(album: DiscoveryResult): string | null {
   const releaseDate = album.extras['release_date'];
@@ -56,22 +55,21 @@ function dedupAlbumsByTitle(albums: DiscoveryResult[]): DiscoveryResult[] {
   return Array.from(groups.values());
 }
 
-function bestSourceForTracks(sources: DiscoverySource[]): DiscoverySource | null {
-  for (const p of TRACK_PROVIDER_PRIORITY) {
-    const match = sources.find((s) => s.provider === p);
-    if (match) return match;
-  }
-  return sources[0] ?? null;
-}
-
-function albumSources(sources: DiscoverySource[]): DiscoverySource[] {
+function bestSourcePerProvider(
+  sources: DiscoverySource[],
+  providers: readonly string[],
+): DiscoverySource[] {
+  const result: DiscoverySource[] = [];
   const seen = new Set<string>();
-  return sources.filter((s) => {
-    if (!ALBUM_PROVIDERS.includes(s.provider)) return false;
-    if (seen.has(s.provider)) return false;
-    seen.add(s.provider);
-    return true;
-  });
+  for (const p of providers) {
+    if (seen.has(p)) continue;
+    const match = sources.find((s) => s.provider === p);
+    if (match) {
+      seen.add(p);
+      result.push(match);
+    }
+  }
+  return result;
 }
 
 type UseArtistContentParams = {
@@ -96,8 +94,8 @@ export function useArtistContent({
   artistName,
   enabled = true,
 }: UseArtistContentParams): UseArtistContentReturn {
-  const trackSource = bestSourceForTracks(sources);
-  const albSources = albumSources(sources);
+  const contentSources = bestSourcePerProvider(sources, CONTENT_PROVIDERS);
+  const trackSource = contentSources[0] ?? null;
   const scName = artistName.trim();
 
   const tracksQuery = useQuery({
@@ -108,20 +106,20 @@ export function useArtistContent({
   });
 
   const albumsQuery = useQuery({
-    queryKey: ['artist-albums-multi', ...albSources.map((s) => `${s.provider}:${s.external_id}`)],
+    queryKey: ['artist-albums-multi', ...contentSources.map((s) => `${s.provider}:${s.external_id}`)],
     queryFn: async () => {
       const results = await Promise.allSettled(
-        albSources.map((s) => getArtistAlbums(s.provider, s.external_id, 30)),
+        contentSources.map((s: DiscoverySource) => getArtistAlbums(s.provider, s.external_id, 30)),
       );
       const allAlbums = results
         .filter(
           (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof getArtistAlbums>>> =>
             r.status === 'fulfilled',
         )
-        .flatMap((r) => r.value.items);
+        .flatMap((r: PromiseFulfilledResult<Awaited<ReturnType<typeof getArtistAlbums>>>) => r.value.items);
       return dedupAlbumsByTitle(allAlbums);
     },
-    enabled: enabled && albSources.length > 0,
+    enabled: enabled && contentSources.length > 0,
     staleTime: 1000 * 60 * 30,
   });
 
