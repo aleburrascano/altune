@@ -18,10 +18,10 @@ Read-only detail screen for a tapped discovery result (`view-result-detail` spec
 - **Album content fetch** — `useAlbumTracks` hook calls `getAlbumTracks(provider, externalId)` using the first source from the album's `sources[]`. React Query cached per `(provider, external_id)` with 30min staleTime. Track rows are tappable → navigate to track detail.
 - **Artist content fetch (multi-provider)** — `useArtistContent` hook accepts the full `sources` array. Top tracks use the best single source (Deezer > Last.fm > MusicBrainz). Albums fan out to all sources in parallel via `Promise.allSettled`, then merge/dedup by lowercased title (keep highest `track_count`). Albums sorted by `release_date` or `year` descending.
 - **Discography sections** — `DiscographySections` component groups albums by `extras.record_type` into Albums, Singles, EPs (compilations grouped under Albums). Each section renders only if the artist has releases of that type. Each is a horizontal scroll row.
-- **Album metadata row** — `AlbumDetailBody` shows "year · N tracks · duration" between the hero and tracklist. Duration formatted as "1 hr 12 min" or "45 min".
+- **Album metadata footer** — `AlbumDetailBody` shows "year · N tracks · duration" as a centered footer below the tracklist. Duration formatted as "1 hr 12 min" or "45 min".
 - **Album card text** — left-aligned (no `textAlign: 'center'`), title wraps naturally, year + track count below.
 - **Single-scroll layout** — album and artist detail wrap hero + content in one `ScrollView` (no nested scroll). Track detail has no scroll (content is short). This prevents the nested-scroll UX antipattern where the user has to scroll in a small area.
-- **Back button safety** — `router.canGoBack()` checked before `router.back()`; if false, navigates to the tab root (`/discover` or `/library` via `useSegments`). Prevents GO_BACK error when detail is the root.
+- **Sticky back button** — the back button is rendered OUTSIDE the ScrollView so it stays visible when scrolling. `router.canGoBack()` checked before `router.back()`; if false, navigates to the tab root (`/discover` or `/library` via `useSegments`).
 - **Accessibility** — all tappable elements have `accessibilityRole` + `accessibilityLabel`: back button, artist/album links, track rows, album cards. Touch targets ≥48pt.
 
 ## TestIDs (load-bearing)
