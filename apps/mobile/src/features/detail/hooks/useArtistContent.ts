@@ -37,10 +37,18 @@ function sortByReleaseDateDesc(albums: DiscoveryResult[]): DiscoveryResult[] {
   });
 }
 
+function normalizeForDedup(title: string): string {
+  return title
+    .replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function dedupAlbumsByTitle(albums: DiscoveryResult[]): DiscoveryResult[] {
   const groups = new Map<string, DiscoveryResult>();
   for (const album of albums) {
-    const key = album.title.toLowerCase().trim();
+    const key = normalizeForDedup(album.title);
     const existing = groups.get(key);
     if (existing === undefined) {
       groups.set(key, album);
@@ -130,9 +138,20 @@ export function useArtistContent({
     staleTime: 1000 * 60 * 30,
   });
 
+  const otherProviderAlbums = albumsQuery.data ?? [];
+  const scAlbums = scAlbumsQuery.data?.items ?? [];
+
+  const backfilledScAlbums = scAlbums.map((sc) => {
+    if (sc.image_url) return sc;
+    const key = normalizeForDedup(sc.title);
+    const match = otherProviderAlbums.find((a) => normalizeForDedup(a.title) === key && a.image_url);
+    if (!match) return sc;
+    return { ...sc, image_url: match.image_url };
+  });
+
   const mergedAlbums = dedupAlbumsByTitle([
-    ...(albumsQuery.data ?? []),
-    ...(scAlbumsQuery.data?.items ?? []),
+    ...otherProviderAlbums,
+    ...backfilledScAlbums,
   ]);
 
   return {

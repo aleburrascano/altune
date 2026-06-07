@@ -70,7 +70,7 @@ def build_discovery_providers(
     # User-Agents to 1 req/s and may 503; we'd rather omit it than spam.
     if cfg.musicbrainz_user_agent:
         mb_client = httpx.AsyncClient(
-            timeout=10.0,
+            timeout=20.0,
             headers={"User-Agent": cfg.musicbrainz_user_agent},
         )
         clients.append(mb_client)
@@ -93,18 +93,19 @@ def build_discovery_providers(
     # yt-dlp is sync. extract_flat='in_playlist' + ignoreerrors=True is
     # required to avoid the per-track 404 cascade observed during the C4
     # fixture capture.
-    def _make_yt_dlp_extractor():  # type: ignore[no-untyped-def]
+    def _make_yt_dlp_extractor(*, flat: bool = True):  # type: ignore[no-untyped-def]
         import yt_dlp
 
-        opts = {
+        opts: dict[str, object] = {
             "quiet": True,
             "no_warnings": True,
-            "extract_flat": "in_playlist",
             "skip_download": True,
             "ignoreerrors": True,
             "socket_timeout": 10,
             "retries": 0,
         }
+        if flat:
+            opts["extract_flat"] = "in_playlist"
 
         async def _extract(sc_query: str):  # type: ignore[no-untyped-def]
             def _sync_extract():  # type: ignore[no-untyped-def]
@@ -115,7 +116,12 @@ def build_discovery_providers(
 
         return _extract
 
-    providers.append(SoundCloudSearchAdapter(extractor=_make_yt_dlp_extractor()))
+    providers.append(
+        SoundCloudSearchAdapter(
+            extractor=_make_yt_dlp_extractor(flat=True),
+            detail_extractor=_make_yt_dlp_extractor(flat=False),
+        )
+    )
 
     return tuple(clients), tuple(providers)
 

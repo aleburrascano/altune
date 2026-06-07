@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -40,7 +41,9 @@ class SoundCloudSearchAdapter:
     """Adapter for SoundCloud via yt-dlp scsearch + artist content extraction."""
 
     extractor: ScExtractor
+    detail_extractor: ScExtractor | None = None
     _username_cache: dict[str, str | None] = field(default_factory=dict, repr=False)
+    _set_url_cache: dict[str, str] = field(default_factory=dict, repr=False)
 
     @property
     def name(self) -> str:
@@ -149,7 +152,7 @@ class SoundCloudSearchAdapter:
             )
 
     async def get_artist_albums(self, external_id: str, limit: int) -> ContentFetchResponse:
-        """Fetch sets (playlists) from a SoundCloud profile as albums/EPs."""
+        """Fetch sets (playlists) from a SoundCloud profile as albums."""
         start = time.perf_counter()
         username = await self._resolve_username(external_id)
         if username is None:
@@ -160,10 +163,39 @@ class SoundCloudSearchAdapter:
             info = await self.extractor(f"https://soundcloud.com/{username}/sets")
             latency_ms = int((time.perf_counter() - start) * 1000)
             entries = info.get("entries") or []
+            for entry in entries:
+                if entry is None:
+                    continue
+                sc_id = entry.get("id")
+                url = entry.get("webpage_url") or entry.get("url")
+                if sc_id is not None and url:
+                    self._set_url_cache[str(sc_id)] = url
             albums = _translate_set_entries(entries)
             return ContentFetchResponse(self.name, ProviderStatus.OK, albums[:limit], latency_ms)
         except Exception:
             _log.exception("soundcloud get_artist_albums failed for %r", username)
+            return ContentFetchResponse(
+                self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
+            )
+
+    async def get_album_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch tracks from a SoundCloud set. external_id is the numeric set ID."""
+        start = time.perf_counter()
+        set_url = self._set_url_cache.get(external_id)
+        if set_url is None:
+            _log.warning("soundcloud set URL not cached for id=%s", external_id)
+            return ContentFetchResponse(
+                self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
+            )
+        extractor = self.detail_extractor or self.extractor
+        try:
+            info = await extractor(set_url)
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            entries = info.get("entries") or []
+            tracks = _translate_entries(entries)
+            return ContentFetchResponse(self.name, ProviderStatus.OK, tracks[:limit], latency_ms)
+        except Exception:
+            _log.exception("soundcloud get_album_tracks failed for %r", set_url)
             return ContentFetchResponse(
                 self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
             )
@@ -197,6 +229,9 @@ def _translate_set_entries(
     return tuple(out)
 
 
+_SET_NOISE_RE = re.compile(r"\b(playlist|mix|best\s+of|compilation)\b", re.IGNORECASE)
+
+
 def _translate_one_set_entry(entry: dict[str, Any]) -> SearchResult | None:
     """Translate a yt-dlp set/playlist entry to a SearchResult with kind=ALBUM."""
     title = entry.get("title")
@@ -207,6 +242,8 @@ def _translate_one_set_entry(entry: dict[str, Any]) -> SearchResult | None:
         _log.warning(
             "provider_response_malformed provider=soundcloud kind=set missing=title|id|url"
         )
+        return None
+    if _SET_NOISE_RE.search(title):
         return None
     image_url = _largest_thumbnail(entry.get("thumbnails"))
     playlist_count = entry.get("playlist_count")

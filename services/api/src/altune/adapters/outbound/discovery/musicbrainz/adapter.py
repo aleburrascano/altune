@@ -274,29 +274,42 @@ class MusicBrainzSearchAdapter:
 
     async def get_artist_albums(self, external_id: str, limit: int) -> ContentFetchResponse:
         """Fetch release-groups (albums) by artist MBID."""
+        import httpx as _httpx
+
         start = time.perf_counter()
-        try:
-            response = await self.client.get(
-                f"{self.base_url}/release-group",
-                params={"artist": external_id, "fmt": "json", "limit": str(limit)},
-            )
-            latency_ms = int((time.perf_counter() - start) * 1000)
-            if response.status_code == 429 or response.status_code == 503:
-                return ContentFetchResponse(self.name, ProviderStatus.RATE_LIMITED, (), latency_ms)
-            if response.status_code >= 400:
-                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
-            data = response.json()
-            release_groups = data.get("release-groups") or []
-            albums = _translate_release_groups(release_groups)
-            return ContentFetchResponse(self.name, ProviderStatus.OK, albums, latency_ms)
-        except Exception:
-            _log.exception("musicbrainz get_artist_albums failed")
-            return ContentFetchResponse(
-                self.name,
-                ProviderStatus.ERROR,
-                (),
-                int((time.perf_counter() - start) * 1000),
-            )
+        last_err: BaseException | None = None
+        for _attempt in range(2):
+            try:
+                response = await self.client.get(
+                    f"{self.base_url}/release-group",
+                    params={"artist": external_id, "fmt": "json", "limit": str(limit)},
+                )
+                latency_ms = int((time.perf_counter() - start) * 1000)
+                if response.status_code == 429 or response.status_code == 503:
+                    return ContentFetchResponse(
+                        self.name, ProviderStatus.RATE_LIMITED, (), latency_ms
+                    )
+                if response.status_code >= 400:
+                    return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+                data = response.json()
+                release_groups = data.get("release-groups") or []
+                albums = _translate_release_groups(release_groups)
+                return ContentFetchResponse(self.name, ProviderStatus.OK, albums, latency_ms)
+            except _httpx.ReadTimeout as exc:
+                _log.warning("musicbrainz get_artist_albums timeout (attempt %d)", _attempt + 1)
+                last_err = exc
+            except Exception:
+                _log.exception("musicbrainz get_artist_albums failed")
+                return ContentFetchResponse(
+                    self.name,
+                    ProviderStatus.ERROR,
+                    (),
+                    int((time.perf_counter() - start) * 1000),
+                )
+        _log.warning("musicbrainz get_artist_albums timed out after retry", exc_info=last_err)
+        return ContentFetchResponse(
+            self.name, ProviderStatus.TIMEOUT, (), int((time.perf_counter() - start) * 1000)
+        )
 
 
 class _MusicBrainzHTTPError(Exception):
@@ -384,13 +397,16 @@ def _translate_one_release_group(entry: dict[str, Any]) -> SearchResult | None:
             "provider_response_malformed provider=musicbrainz kind=release-group missing=title|id"
         )
         return None
+    primary_type = entry.get("primary-type")
+    if primary_type is None:
+        return None
     first_release_date = entry.get("first-release-date")
     year = first_release_date[:4] if first_release_date else None
     extras: dict[str, object] = {
         "isrc": None,
         "preview_url": None,
         "year": year,
-        "record_type": entry.get("primary-type"),  # Album / Single / EP / Compilation
+        "record_type": primary_type,  # Album / Single / EP / Compilation
         "mbid": mbid,  # release-group MBID — cross-source dedup key
     }
     return SearchResult(

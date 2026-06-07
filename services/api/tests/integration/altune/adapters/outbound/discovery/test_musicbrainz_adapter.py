@@ -121,12 +121,19 @@ async def test_musicbrainz_adapter_translates_release_group_search() -> None:
             {
                 "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 "title": "Let It Be",
+                "primary-type": "Album",
                 "artist-credit": [{"name": "The Beatles"}],
                 "first-release-date": "1970-05-08",
             },
             {
                 "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                 "title": "Undated Album",
+                "primary-type": "Single",
+                "artist-credit": [{"name": "Someone"}],
+            },
+            {
+                "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                "title": "Untyped Release",
                 "artist-credit": [{"name": "Someone"}],
             },
         ]
