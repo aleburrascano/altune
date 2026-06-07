@@ -65,7 +65,13 @@ function bestSourceForTracks(sources: DiscoverySource[]): DiscoverySource | null
 }
 
 function albumSources(sources: DiscoverySource[]): DiscoverySource[] {
-  return sources.filter((s) => ALBUM_PROVIDERS.includes(s.provider));
+  const seen = new Set<string>();
+  return sources.filter((s) => {
+    if (!ALBUM_PROVIDERS.includes(s.provider)) return false;
+    if (seen.has(s.provider)) return false;
+    seen.add(s.provider);
+    return true;
+  });
 }
 
 type UseArtistContentParams = {
