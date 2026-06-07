@@ -84,7 +84,7 @@ export function PlaylistDetailScreen(): ReactElement {
         },
       };
       setDetailHandoff(result);
-      router.push('/detail');
+      router.push('/library/detail');
     },
     [router],
   );

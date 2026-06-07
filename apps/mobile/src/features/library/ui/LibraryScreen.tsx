@@ -218,7 +218,7 @@ export function LibraryScreen(): ReactElement {
         },
       };
       setDetailHandoff(result);
-      router.push('/detail');
+      router.push('/library/detail');
     },
     [router],
   );
@@ -238,7 +238,7 @@ export function LibraryScreen(): ReactElement {
         },
       };
       setDetailHandoff(result);
-      router.push('/detail');
+      router.push('/library/detail');
     },
     [router],
   );
@@ -255,7 +255,7 @@ export function LibraryScreen(): ReactElement {
         extras: {},
       };
       setDetailHandoff(result);
-      router.push('/detail');
+      router.push('/library/detail');
     },
     [router],
   );
@@ -474,7 +474,7 @@ export function LibraryScreen(): ReactElement {
         <SectionHeader title="Playlists" />
         <PlaylistCarousel
           playlists={playlists}
-          onPlaylistPress={(pl) => router.push(`/playlist/${pl.id}` as never)}
+          onPlaylistPress={(pl) => router.push(`/library/playlist/${pl.id}` as never)}
           onCreatePress={() => setCreateModalVisible(true)}
         />
 

@@ -2,13 +2,12 @@
  * useLateralNav — search-and-navigate to a related artist or album.
  *
  * AC#11-13: From track/album detail, tapping artist or album name searches for
- * that entity and navigates to its detail. Uses router.replace (not push) to
- * keep the back stack shallow — back always returns to Discover, not through
- * a chain of detail screens.
+ * that entity and navigates to its detail. Uses router.push to build a proper
+ * back stack — back returns through the chain of detail screens.
  */
 
 import { useCallback, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useSegments } from 'expo-router';
 
 import { searchDiscovery, type DiscoveryKind } from '@shared/api-client/discovery';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
@@ -24,6 +23,8 @@ type UseLateralNavReturn = {
 
 export function useLateralNav(): UseLateralNavReturn {
   const router = useRouter();
+  const segments = useSegments();
+  const tabRoot = segments[1] === 'library' ? 'library' : 'discover';
   const [state, setState] = useState<LateralNavState>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -48,12 +49,12 @@ export function useLateralNav(): UseLateralNavReturn {
         }
 
         setDetailHandoff(result);
-        router.replace('/detail');
+        router.push(`/${tabRoot}/detail` as '/discover/detail');
       } finally {
         setState('idle');
       }
     },
-    [router, state],
+    [router, state, tabRoot],
   );
 
   return { navigateTo, state, error, clearError };

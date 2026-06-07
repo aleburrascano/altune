@@ -18,7 +18,8 @@ jest.mock('expo-image', () => ({ Image: () => null }));
 const mockBack = jest.fn();
 const mockRedirect = jest.fn((_props: { href: string }) => null);
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: mockBack, push: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({ back: mockBack, push: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
+  useSegments: () => ['(tabs)', 'discover', 'detail'],
   Redirect: (props: { href: string }) => mockRedirect(props),
 }));
 

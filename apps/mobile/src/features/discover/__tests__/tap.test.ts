@@ -31,7 +31,7 @@ describe('stashHandoffForDetail', () => {
   it('stashes the tapped result and returns the /detail route', () => {
     const result = _result();
     const route = stashHandoffForDetail(result);
-    expect(route).toBe('/detail');
+    expect(route).toBe('/discover/detail');
     expect(getDetailHandoff()).toBe(result);
   });
 });

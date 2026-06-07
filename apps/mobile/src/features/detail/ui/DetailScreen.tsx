@@ -11,7 +11,7 @@
  * expo-image dependency is mocked in the test.
  */
 
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useRouter, useSegments } from 'expo-router';
 import type { ReactElement } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -43,6 +43,9 @@ function _kindLabel(kind: 'artist' | 'album' | 'track'): string {
 
 export function DetailScreen(): ReactElement {
   const router = useRouter();
+  const segments = useSegments();
+  const tabRoot = segments[1] === 'library' ? 'library' : 'discover';
+  const detailRoute = `/${tabRoot}/detail` as const;
   const result = getDetailHandoff();
   const lateralNav = useLateralNav();
 
@@ -67,7 +70,7 @@ export function DetailScreen(): ReactElement {
           if (router.canGoBack()) {
             router.back();
           } else {
-            router.replace('/discover');
+            router.replace(`/${tabRoot}` as '/discover' | '/library');
           }
         }}
         accessibilityRole="button"
@@ -135,8 +138,8 @@ export function DetailScreen(): ReactElement {
         contentContainerStyle={styles.scrollContent}
       >
         {heroContent}
-        {result.kind === 'album' ? <AlbumDetailBody result={result} /> : null}
-        {result.kind === 'artist' ? <ArtistDetailBody result={result} /> : null}
+        {result.kind === 'album' ? <AlbumDetailBody result={result} detailRoute={detailRoute} /> : null}
+        {result.kind === 'artist' ? <ArtistDetailBody result={result} detailRoute={detailRoute} /> : null}
       </ScrollView>
     </Screen>
   );
@@ -245,7 +248,7 @@ function TrackDetailBody({
 }
 
 /** Album body: track list fetched from provider API. */
-function AlbumDetailBody({ result }: { result: DiscoveryResult }): ReactElement {
+function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResult; detailRoute: string }): ReactElement {
   const router = useRouter();
   const source = result.sources[0];
   const { tracks, isLoading, isError, refetch } = useAlbumTracks({
@@ -256,7 +259,7 @@ function AlbumDetailBody({ result }: { result: DiscoveryResult }): ReactElement 
 
   const onTrackPress = (track: DiscoveryResult): void => {
     setDetailHandoff(track);
-    router.replace('/detail');
+    router.push(detailRoute as '/discover/detail');
   };
 
   if (isLoading) {
@@ -350,7 +353,7 @@ function _bestSourceForArtist(result: DiscoveryResult): { provider: string; exte
 }
 
 /** Artist body: top tracks + albums fetched from provider API. */
-function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement {
+function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; detailRoute: string }): ReactElement {
   const router = useRouter();
   const source = _bestSourceForArtist(result);
   const {
@@ -370,12 +373,12 @@ function ArtistDetailBody({ result }: { result: DiscoveryResult }): ReactElement
 
   const onTrackPress = (track: DiscoveryResult): void => {
     setDetailHandoff(track);
-    router.replace('/detail');
+    router.push(detailRoute as '/discover/detail');
   };
 
   const onAlbumPress = (album: DiscoveryResult): void => {
     setDetailHandoff(album);
-    router.replace('/detail');
+    router.push(detailRoute as '/discover/detail');
   };
 
   return (
