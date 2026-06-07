@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 
 import {
   Artwork,
@@ -74,6 +75,7 @@ export function DiscoverScreen(): ReactElement {
   const [committedQuery, setCommittedQuery] = useState(savedState.query);
   const [inputValue, setInputValue] = useState(savedState.inputValue);
   const [filter, setFilter] = useState<ResultsFilter>('all');
+  const queryClient = useQueryClient();
   const search = useDiscoverSearch(committedQuery);
   const history = useSearchHistory();
   const click = useRecordClick();
@@ -82,6 +84,14 @@ export function DiscoverScreen(): ReactElement {
   useEffect(() => {
     setSearchState(committedQuery, inputValue);
   }, [committedQuery, inputValue]);
+
+  // Refresh history chips after a search completes (the backend inserts
+  // the query into search_history as a side-effect of the search call).
+  useEffect(() => {
+    if (search.data) {
+      void queryClient.invalidateQueries({ queryKey: ['discovery', 'history'] });
+    }
+  }, [search.data, queryClient]);
 
   // Reset to the blended "All" view on every newly committed query.
   useEffect(() => {
