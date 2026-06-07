@@ -24,7 +24,8 @@ Use cases + ports for the unified music search. `SearchMusic` is the load-bearin
 ## view-result-detail catalog browse (AC#14-20)
 
 - **`GetAlbumTracks`** — single-provider fetch, no scatter-gather. Takes `{provider, external_id, limit}`, calls `AlbumContentProvider.get_album_tracks`. Returns `ContentFetchResponse` (provider_name, status, items, latency_ms). Unknown provider → ERROR status, empty items.
-- **`GetArtistTopTracks` / `GetArtistAlbums`** — same pattern, calls `ArtistContentProvider.get_artist_top_tracks` / `get_artist_albums`. Default limits 5 / 10.
+- **`GetArtistTopTracks`** — same pattern, calls `ArtistContentProvider.get_artist_top_tracks`. Default limit 5.
+- **`GetArtistAlbums`** — same pattern but applies **title-normalized dedup** after the provider call (`_dedup_albums`): normalizes titles via `normalize_for_match`, groups by normalized title, keeps the version with the highest `track_count` in extras. Default limit 10. Multi-provider fan-out is handled client-side (mobile hook calls each provider and merges).
 - **`ContentFetchResponse`** — wire output shape for all content-fetch use cases. Mirrors `ProviderSearchResponse` structure (items are `SearchResult` tuples).
 - **`AlbumContentProvider` / `ArtistContentProvider`** — port `Protocol`s. Deezer, MusicBrainz, Last.fm implement; iTunes/TheAudioDB skipped (no ID lookups). Adapters translate per-provider DTOs → `SearchResult` same as search.
 

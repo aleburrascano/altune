@@ -20,7 +20,7 @@ Sectioned library home (revamp-library-v1 spec). Replaces the original flat Flat
 - `hooks/useLibraryGrouping.ts` — memoized client-side album/artist derivation. Pure functions `deriveAlbums` / `deriveArtists` exported for testing.
 - `ui/PlaylistCarousel.tsx` — horizontal FlatList of playlist cards with collage cover + "Create" button.
 - `ui/PlaylistCover.tsx` — 2x2 collage from up to 4 artwork URLs.
-- `ui/PlaylistDetailScreen.tsx` — playlist detail: cover, rename (tap name), delete, tracklist with per-track remove. Route: `/playlist/[id]`.
+- `ui/PlaylistDetailScreen.tsx` — playlist detail: cover, rename (tap name), delete, tracklist with per-track remove. Route: `/library/playlist/[id]`.
 - `ui/CreatePlaylistModal.tsx` — modal with text input for naming a new playlist.
 - `hooks/useLibrary.ts` — original paginated `useInfiniteQuery` hook (kept for potential future use in expanded Songs view).
 - `state.ts` — `_viewForState` pure helper (loading > error > empty > list).
@@ -30,7 +30,7 @@ Sectioned library home (revamp-library-v1 spec). Replaces the original flat Flat
 - **Client-side grouping** (AC#11): albums/artists derived from `TrackResponse[]` keyed by normalized album+artist / artist. No backend endpoint needed.
 - **In-place expand**: state variable `expanded: 'recent' | 'albums' | 'artists' | null` swaps the ScrollView sections for a full-screen FlatList with sort chips. "Collapse" returns to the sectioned home.
 - **Profile via Modal**: `ProfileSheet` uses RN `Modal` (portal-based) — no external dependency.
-- **Navigation to Detail**: library tracks/albums/artists build a `DiscoveryResult` and use the existing detail handoff pattern.
+- **Navigation to Detail**: library tracks/albums/artists build a `DiscoveryResult` and use the existing detail handoff pattern. Navigates to `/library/detail` (within the library tab's stack).
 
 ## Dependencies
 
