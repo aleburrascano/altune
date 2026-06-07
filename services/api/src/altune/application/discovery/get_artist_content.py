@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from altune.application.discovery.ports import ArtistContentProvider, ContentFetchResponse
+    from altune.domain.discovery.search_result import SearchResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,9 +50,27 @@ class GetArtistTopTracks:
         return await provider.get_artist_top_tracks(request.external_id, request.limit)
 
 
+def _dedup_albums(items: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:
+    """Deduplicate albums by normalized title, keeping the version with the most tracks."""
+    from altune.application.discovery.normalize import normalize_for_match
+
+    groups: dict[str, SearchResult] = {}
+    for item in items:
+        key = normalize_for_match(item.title)
+        existing = groups.get(key)
+        if existing is None:
+            groups[key] = item
+        else:
+            existing_count = existing.extras.get("track_count", 0)
+            new_count = item.extras.get("track_count", 0)
+            if isinstance(new_count, int) and isinstance(existing_count, int) and new_count > existing_count:
+                groups[key] = item
+    return tuple(groups.values())
+
+
 @dataclass
 class GetArtistAlbums:
-    """Fetch artist's albums from a single provider."""
+    """Fetch artist's albums from a single provider, deduped by title."""
 
     providers: dict[str, ArtistContentProvider]
 
@@ -68,4 +87,12 @@ class GetArtistAlbums:
                 latency_ms=0,
             )
 
-        return await provider.get_artist_albums(request.external_id, request.limit)
+        response = await provider.get_artist_albums(request.external_id, request.limit)
+        from altune.application.discovery.ports import ContentFetchResponse as CFR
+
+        return CFR(
+            provider_name=response.provider_name,
+            status=response.status,
+            items=_dedup_albums(response.items),
+            latency_ms=response.latency_ms,
+        )
