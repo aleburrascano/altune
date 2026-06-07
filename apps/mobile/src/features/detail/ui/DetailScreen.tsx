@@ -62,26 +62,28 @@ export function DetailScreen(): ReactElement {
     }
   };
 
+  const backButton = (
+    <Pressable
+      testID="detail-back"
+      onPress={() => {
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace(`/${tabRoot}` as '/discover' | '/library');
+        }
+      }}
+      accessibilityRole="button"
+      accessibilityLabel="Go back"
+      style={({ pressed }) => [styles.back, pressed ? { opacity: 0.6 } : null]}
+    >
+      <Text variant="label" tone="accent">
+        ‹ Back
+      </Text>
+    </Pressable>
+  );
+
   const heroContent = (
     <>
-      <Pressable
-        testID="detail-back"
-        onPress={() => {
-          if (router.canGoBack()) {
-            router.back();
-          } else {
-            router.replace(`/${tabRoot}` as '/discover' | '/library');
-          }
-        }}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-        style={({ pressed }) => [styles.back, pressed ? { opacity: 0.6 } : null]}
-      >
-        <Text variant="label" tone="accent">
-          ‹ Back
-        </Text>
-      </Pressable>
-
       <View style={styles.hero}>
         <Artwork
           uri={result.image_url}
@@ -124,15 +126,17 @@ export function DetailScreen(): ReactElement {
   if (result.kind === 'track') {
     return (
       <Screen testID="detail-header">
+        {backButton}
         {heroContent}
         <TrackDetailBody result={result} lateralNav={lateralNav} />
       </Screen>
     );
   }
 
-  // Album/Artist detail: single scroll for hero + content
+  // Album/Artist detail: single scroll for hero + content, sticky back button
   return (
     <Screen testID="detail-header">
+      {backButton}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -308,9 +312,6 @@ function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResult; det
 
   return (
     <View testID="detail-tracklist" style={styles.trackList}>
-      <Text testID="detail-album-meta" variant="label" tone="secondary" style={styles.albumMeta}>
-        {metaParts.join(' · ')}
-      </Text>
       {tracks.map((track, index) => {
         const position =
           typeof track.extras['track_position'] === 'number'
@@ -351,6 +352,9 @@ function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResult; det
           </Pressable>
         );
       })}
+      <Text testID="detail-album-meta" variant="label" tone="tertiary" style={styles.albumMeta}>
+        {metaParts.join(' · ')}
+      </Text>
     </View>
   );
 }
@@ -563,7 +567,7 @@ const styles = StyleSheet.create({
   save: { marginTop: spacing.lg },
   // Album tracklist styles
   trackList: { marginTop: spacing.lg },
-  albumMeta: { marginBottom: spacing.md },
+  albumMeta: { marginTop: spacing.lg, textAlign: 'center' as const },
   trackRow: {
     flexDirection: 'row',
     alignItems: 'center',
