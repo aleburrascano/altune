@@ -1,14 +1,12 @@
 # mypy: warn_unused_ignores = False
-"""SoundCloud search ACL adapter — yt-dlp strategy per ADR-0007 revision.
+"""SoundCloud search + artist content ACL adapter — yt-dlp strategy per ADR-0007.
 
-Slice 21. Translates yt-dlp scsearch results (entries[]) to SearchResult.
-yt-dlp is sync; the adapter takes an async extractor callable so:
+Translates yt-dlp scsearch results (entries[]) to SearchResult. Also
+implements ArtistContentProvider by extracting from user profile URLs
+(soundcloud.com/<username>/tracks and /sets). yt-dlp is sync; the adapter
+takes an async extractor callable so:
 - Production wiring wraps yt-dlp in asyncio.to_thread (see platform/wiring.py)
 - Tests inject a fake extractor that returns the captured fixture directly
-
-Returns tracks only — yt-dlp scsearch is track-specific; SoundCloud stays
-tracks-only even in discover-music-v2 (album/artist search isn't available
-via scsearch).
 """
 
 from __future__ import annotations
@@ -17,10 +15,10 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from altune.application.discovery.ports import ProviderSearchResponse
+from altune.application.discovery.ports import ContentFetchResponse, ProviderSearchResponse
 from altune.domain.discovery.confidence import Confidence
 from altune.domain.discovery.provider import ProviderName
 from altune.domain.discovery.provider_status import ProviderStatus
@@ -39,9 +37,10 @@ ScExtractor = Callable[[str], Awaitable[dict[str, Any]]]
 
 @dataclass
 class SoundCloudSearchAdapter:
-    """Adapter for SoundCloud via yt-dlp scsearch extraction."""
+    """Adapter for SoundCloud via yt-dlp scsearch + artist content extraction."""
 
     extractor: ScExtractor
+    _username_cache: dict[str, str | None] = field(default_factory=dict, repr=False)
 
     @property
     def name(self) -> str:
@@ -105,6 +104,70 @@ class SoundCloudSearchAdapter:
             return None
         return _translate_one_entry(info)
 
+    async def _resolve_username(self, artist_name: str) -> str | None:
+        """Resolve an artist name to a SoundCloud username via scsearch."""
+        cached = self._username_cache.get(artist_name)
+        if cached is not None or artist_name in self._username_cache:
+            return cached
+        try:
+            info = await self.extractor(f"scsearch1:{artist_name}")
+            entries = info.get("entries") or []
+            for entry in entries:
+                if entry is None:
+                    continue
+                uploader_url = entry.get("uploader_url")
+                if isinstance(uploader_url, str) and uploader_url:
+                    from urllib.parse import urlparse
+
+                    path = urlparse(uploader_url).path.strip("/")
+                    if path:
+                        self._username_cache[artist_name] = path
+                        return path
+        except Exception:
+            _log.warning("soundcloud username resolution failed for %r", artist_name)
+        self._username_cache[artist_name] = None
+        return None
+
+    async def get_artist_top_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch top tracks from a SoundCloud profile. external_id is the artist name."""
+        start = time.perf_counter()
+        username = await self._resolve_username(external_id)
+        if username is None:
+            return ContentFetchResponse(
+                self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
+            )
+        try:
+            info = await self.extractor(f"https://soundcloud.com/{username}/tracks")
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            entries = info.get("entries") or []
+            tracks = _translate_entries(entries)
+            return ContentFetchResponse(self.name, ProviderStatus.OK, tracks[:limit], latency_ms)
+        except Exception:
+            _log.exception("soundcloud get_artist_top_tracks failed for %r", username)
+            return ContentFetchResponse(
+                self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
+            )
+
+    async def get_artist_albums(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch sets (playlists) from a SoundCloud profile as albums/EPs."""
+        start = time.perf_counter()
+        username = await self._resolve_username(external_id)
+        if username is None:
+            return ContentFetchResponse(
+                self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
+            )
+        try:
+            info = await self.extractor(f"https://soundcloud.com/{username}/sets")
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            entries = info.get("entries") or []
+            albums = _translate_set_entries(entries)
+            return ContentFetchResponse(self.name, ProviderStatus.OK, albums[:limit], latency_ms)
+        except Exception:
+            _log.exception("soundcloud get_artist_albums failed for %r", username)
+            return ContentFetchResponse(
+                self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
+            )
+
 
 def _translate_entries(
     entries: list[dict[str, Any] | None],
@@ -119,6 +182,56 @@ def _translate_entries(
         if translated is not None:
             out.append(translated)
     return tuple(out)
+
+
+def _translate_set_entries(
+    entries: list[dict[str, Any] | None],
+) -> tuple[SearchResult, ...]:
+    out: list[SearchResult] = []
+    for entry in entries:
+        if entry is None:
+            continue
+        translated = _translate_one_set_entry(entry)
+        if translated is not None:
+            out.append(translated)
+    return tuple(out)
+
+
+def _translate_one_set_entry(entry: dict[str, Any]) -> SearchResult | None:
+    """Translate a yt-dlp set/playlist entry to a SearchResult with kind=ALBUM."""
+    title = entry.get("title")
+    uploader = entry.get("uploader") or entry.get("channel") or entry.get("uploader_id")
+    sc_id = entry.get("id")
+    url = entry.get("webpage_url") or entry.get("url")
+    if not title or sc_id is None or not url:
+        _log.warning(
+            "provider_response_malformed provider=soundcloud kind=set missing=title|id|url"
+        )
+        return None
+    image_url = _largest_thumbnail(entry.get("thumbnails"))
+    playlist_count = entry.get("playlist_count")
+    track_count: int | None = (
+        int(playlist_count) if isinstance(playlist_count, (int, float)) else None
+    )
+    extras: dict[str, object] = {
+        "record_type": "ep",
+        "track_count": track_count,
+    }
+    return SearchResult(
+        kind=ResultKind.ALBUM,
+        title=title,
+        subtitle=uploader,
+        image_url=image_url,
+        confidence=Confidence.LOW,
+        sources=(
+            SourceRef(
+                provider=ProviderName.SOUNDCLOUD,
+                external_id=str(sc_id),
+                url=url,
+            ),
+        ),
+        extras=extras,
+    )
 
 
 def _translate_one_entry(entry: dict[str, Any]) -> SearchResult | None:
