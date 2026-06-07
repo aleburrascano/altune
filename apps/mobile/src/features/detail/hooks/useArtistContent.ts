@@ -70,6 +70,7 @@ function albumSources(sources: DiscoverySource[]): DiscoverySource[] {
 
 type UseArtistContentParams = {
   sources: DiscoverySource[];
+  artistName: string;
   enabled?: boolean;
 };
 
@@ -86,10 +87,12 @@ type UseArtistContentReturn = {
 
 export function useArtistContent({
   sources,
+  artistName,
   enabled = true,
 }: UseArtistContentParams): UseArtistContentReturn {
   const trackSource = bestSourceForTracks(sources);
   const albSources = albumSources(sources);
+  const scName = artistName.trim();
 
   const tracksQuery = useQuery({
     queryKey: ['artist-top-tracks', trackSource?.provider ?? '', trackSource?.external_id ?? ''],
@@ -116,14 +119,26 @@ export function useArtistContent({
     staleTime: 1000 * 60 * 30,
   });
 
+  const scAlbumsQuery = useQuery({
+    queryKey: ['artist-albums-sc', scName],
+    queryFn: () => getArtistAlbums('soundcloud', scName, 30),
+    enabled: enabled && scName.length > 0,
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const mergedAlbums = dedupAlbumsByTitle([
+    ...(albumsQuery.data ?? []),
+    ...(scAlbumsQuery.data?.items ?? []),
+  ]);
+
   return {
     topTracks: tracksQuery.data?.items ?? [],
-    albums: sortByReleaseDateDesc(albumsQuery.data ?? []),
+    albums: sortByReleaseDateDesc(mergedAlbums),
     isLoadingTracks: tracksQuery.isLoading,
-    isLoadingAlbums: albumsQuery.isLoading,
+    isLoadingAlbums: albumsQuery.isLoading && scAlbumsQuery.isLoading,
     isErrorTracks: tracksQuery.isError || tracksQuery.data?.status === 'error',
-    isErrorAlbums: albumsQuery.isError,
+    isErrorAlbums: albumsQuery.isError && scAlbumsQuery.isError,
     refetchTracks: tracksQuery.refetch,
-    refetchAlbums: albumsQuery.refetch,
+    refetchAlbums: () => { albumsQuery.refetch(); scAlbumsQuery.refetch(); },
   };
 }
