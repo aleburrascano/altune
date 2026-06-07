@@ -462,13 +462,16 @@ function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; de
               : typeof yearExtra === 'string' || typeof yearExtra === 'number'
                 ? String(yearExtra)
                 : null;
+            const trackCount = typeof album.extras['track_count'] === 'number'
+              ? album.extras['track_count']
+              : null;
             return (
               <Pressable
                 key={album.sources[0]?.external_id ?? index}
                 testID={`detail-album-${index}`}
                 onPress={() => onAlbumPress(album)}
                 accessibilityRole="button"
-                accessibilityLabel={`Album: ${album.title}${year ? `, ${year}` : ''}`}
+                accessibilityLabel={`Album: ${album.title}${year ? `, ${year}` : ''}${trackCount ? `, ${trackCount} tracks` : ''}`}
                 style={({ pressed }) => [styles.albumCard, pressed ? { opacity: 0.6 } : null]}
               >
                 <Artwork
@@ -483,6 +486,11 @@ function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; de
                 {year ? (
                   <Text variant="caption" tone="tertiary">
                     {year}
+                  </Text>
+                ) : null}
+                {trackCount !== null ? (
+                  <Text variant="caption" tone="tertiary">
+                    {trackCount} tracks
                   </Text>
                 ) : null}
               </Pressable>
@@ -533,7 +541,7 @@ const styles = StyleSheet.create({
   albumsScroll: { marginHorizontal: -spacing.lg },
   albumsScrollContent: { paddingRight: spacing.lg },
   albumCard: { width: 120, marginLeft: spacing.lg },
-  albumTitle: { marginTop: spacing.xs, textAlign: 'center' },
+  albumTitle: { marginTop: spacing.xs },
   lateralLoading: {
     flexDirection: 'row',
     alignItems: 'center',
