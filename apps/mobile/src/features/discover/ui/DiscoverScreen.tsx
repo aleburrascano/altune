@@ -13,9 +13,11 @@
  * discover-top-result.
  */
 
+import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 
 import {
   Artwork,
@@ -32,10 +34,13 @@ import {
   useTheme,
 } from '@shared/ui';
 
+import { getSearchState, setSearchState } from '@shared/lib/search-state';
+
 import { DiscoverRow } from './DiscoverRow';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { useRecordClick } from '../hooks/useRecordClick';
 import { useSearchHistory } from '../hooks/useSearchHistory';
+import { stashHandoffForDetail } from '../tap';
 import {
   SECTION_CAP,
   _cap,
@@ -65,12 +70,29 @@ const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();
-  const [committedQuery, setCommittedQuery] = useState('');
-  const [inputValue, setInputValue] = useState('');
+  const router = useRouter();
+  const savedState = getSearchState();
+  const [committedQuery, setCommittedQuery] = useState(savedState.query);
+  const [inputValue, setInputValue] = useState(savedState.inputValue);
+  const [explicitSubmit, setExplicitSubmit] = useState(true);
   const [filter, setFilter] = useState<ResultsFilter>('all');
-  const search = useDiscoverSearch(committedQuery);
+  const queryClient = useQueryClient();
+  const search = useDiscoverSearch(committedQuery, explicitSubmit);
   const history = useSearchHistory();
   const click = useRecordClick();
+
+  // Persist search state for back-navigation.
+  useEffect(() => {
+    setSearchState(committedQuery, inputValue);
+  }, [committedQuery, inputValue]);
+
+  // Refresh history chips after a search completes (the backend inserts
+  // the query into search_history as a side-effect of the search call).
+  useEffect(() => {
+    if (search.data) {
+      void queryClient.invalidateQueries({ queryKey: ['discovery', 'history'] });
+    }
+  }, [search.data, queryClient]);
 
   // Reset to the blended "All" view on every newly committed query.
   useEffect(() => {
@@ -84,12 +106,50 @@ export function DiscoverScreen(): ReactElement {
     error: search.error as Error | null,
   });
 
-  const onSubmit = (): void => setCommittedQuery(inputValue.trim());
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const DEBOUNCE_MS = 300;
+  const MIN_CHARS = 2;
+
+  const onSubmit = (): void => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setExplicitSubmit(true);
+    setCommittedQuery(inputValue.trim());
+  };
+  const onChangeText = (text: string): void => {
+    setInputValue(text);
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    const trimmed = text.trim();
+    if (trimmed.length === 0) {
+      setCommittedQuery('');
+    } else if (trimmed.length >= MIN_CHARS) {
+      debounceRef.current = setTimeout(() => {
+        setExplicitSubmit(false);
+        setCommittedQuery(trimmed);
+      }, DEBOUNCE_MS);
+    }
+  };
+  const onClear = (): void => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    setInputValue('');
+    setCommittedQuery('');
+  };
   const onHistoryTap = (item: SearchHistoryItem): void => {
     setInputValue(item.query);
+    setExplicitSubmit(true);
     setCommittedQuery(item.query);
   };
   const onResultTap = (result: DiscoveryResult, position: number): void => {
+    // Click tracking stays fire-and-forget (best-effort telemetry, ADR-0007);
+    // we do NOT await it before navigating.
     click.mutate({
       query_norm: search.data?.query_norm ?? committedQuery,
       kind: result.kind,
@@ -98,6 +158,7 @@ export function DiscoverScreen(): ReactElement {
       position,
       confidence: result.confidence,
     });
+    router.push(stashHandoffForDetail(result));
   };
 
   let body: ReactElement;
@@ -194,21 +255,38 @@ export function DiscoverScreen(): ReactElement {
         </Text>
       </View>
       <View style={styles.header}>
-        <TextInput
-          style={[
-            styles.input,
-            { backgroundColor: theme.color.surface1, color: theme.color.textPrimary },
-          ]}
-          placeholder="Search music"
-          placeholderTextColor={theme.color.textTertiary}
-          value={inputValue}
-          onChangeText={setInputValue}
-          onSubmitEditing={onSubmit}
-          returnKeyType="search"
-          testID="discover-search-input"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={[
+              styles.input,
+              { backgroundColor: theme.color.surface1, color: theme.color.textPrimary },
+            ]}
+            placeholder="Search music"
+            placeholderTextColor={theme.color.textTertiary}
+            value={inputValue}
+            onChangeText={onChangeText}
+            onSubmitEditing={onSubmit}
+            returnKeyType="search"
+            testID="discover-search-input"
+            accessibilityLabel="Search music"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {inputValue.length > 0 ? (
+            <Pressable
+              testID="discover-clear-input"
+              onPress={onClear}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              style={({ pressed }) => [styles.clearButton, pressed ? { opacity: 0.5 } : null]}
+              hitSlop={8}
+            >
+              <Text variant="label" tone="secondary" style={styles.clearIcon}>
+                ✕
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
       {body}
     </Screen>
@@ -260,6 +338,18 @@ function FilteredResults({
   onResultTap: (result: DiscoveryResult, position: number) => void;
 }): ReactElement {
   const items = results.filter((r) => r.kind === kind);
+  const kindLabel = kind === 'track' ? 'songs' : kind === 'album' ? 'albums' : 'artists';
+
+  if (items.length === 0) {
+    return (
+      <View testID="discover-filtered-empty" style={styles.filteredEmpty}>
+        <Text variant="body" tone="tertiary">
+          No {kindLabel} found.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <FlatList
       data={items}
@@ -326,6 +416,8 @@ function BlendedResults({
             <Pressable
               testID={`discover-see-all-${section.kind}`}
               onPress={() => onSeeAll(section.kind)}
+              accessibilityRole="button"
+              accessibilityLabel={`See all ${section.title.toLowerCase()}`}
               style={({ pressed }) => [styles.seeAll, pressed ? { opacity: 0.7 } : null]}
             >
               <Text variant="label" tone="accent">
@@ -359,6 +451,8 @@ function TopResultCard({
       <Pressable
         testID="discover-top-result"
         onPress={() => onPress(result, 0)}
+        accessibilityRole="button"
+        accessibilityLabel={`${result.title}${result.subtitle ? `, ${result.subtitle}` : ''}, ${kindLabel}`}
         style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
       >
         <Card>
@@ -394,13 +488,25 @@ const styles = StyleSheet.create({
   titleBlock: { paddingTop: spacing.sm },
   title: { marginTop: spacing.xs },
   header: { paddingTop: spacing.md, paddingBottom: spacing.md },
+  inputWrapper: { position: 'relative' as const, justifyContent: 'center' as const },
   input: {
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
+    paddingRight: 44,
     paddingVertical: spacing.md,
     fontFamily: fontFamily.bodyRegular,
     fontSize: 16,
   },
+  clearButton: {
+    position: 'absolute' as const,
+    right: spacing.md,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  clearIcon: { fontSize: 14 },
   list: { flex: 1, paddingTop: spacing.sm },
   results: { flex: 1 },
   listContent: { paddingTop: spacing.sm, paddingBottom: spacing.xl },
@@ -417,7 +523,8 @@ const styles = StyleSheet.create({
   chipCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   section: { marginBottom: spacing.lg },
   topResultWrap: { marginBottom: spacing.lg },
-  seeAll: { paddingVertical: spacing.sm, alignSelf: 'flex-start' },
+  seeAll: { paddingVertical: spacing.md, alignSelf: 'flex-start', minHeight: 44 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
   centerSub: { marginTop: spacing.xs, marginBottom: spacing.lg },
+  filteredEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
 });

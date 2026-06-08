@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from altune.domain.catalog.dedup import dedup_key
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
@@ -24,6 +26,17 @@ if TYPE_CHECKING:
 class InMemoryTrackRepository:
     def __init__(self, tracks: Iterable[Track] = ()) -> None:
         self._tracks: list[Track] = list(tracks)
+
+    def _key(self, track: Track) -> tuple[object, str]:
+        return (track.user_id, dedup_key(track.title, track.artist, track.album))
+
+    async def add(self, track: Track) -> tuple[Track, bool]:
+        key = self._key(track)
+        for existing in self._tracks:
+            if self._key(existing) == key:
+                return existing, False
+        self._tracks.append(track)
+        return track, True
 
     async def list_for_user(
         self,

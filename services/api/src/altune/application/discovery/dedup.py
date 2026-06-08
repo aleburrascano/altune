@@ -216,9 +216,15 @@ def _merge(a: SearchResult, b: SearchResult, confidence: Confidence) -> SearchRe
             continue
         seen.add(key)
         sources.append(s)
-    # Merge extras with canonical winning on conflict, EXCEPT popularity, which
-    # takes the max across sources (any provider that knows it's popular counts).
-    extras = {**other.extras, **canonical.extras}
+    # Merge extras: canonical wins on conflict EXCEPT when canonical's value is
+    # None and other has a real value (prevents high-prior providers with sparse
+    # data from overwriting richer data). Popularity takes the max across sources.
+    # NOTE: album name stabilization is handled post-merge in fuse_and_rank via
+    # _album_lookup — the merge here uses the general rule (canonical wins).
+    extras = {**other.extras}
+    for k, v in canonical.extras.items():
+        if v is not None or k not in extras:
+            extras[k] = v
     pop = max(_popularity(a), _popularity(b))
     if pop > 0:
         extras["popularity"] = pop
@@ -360,6 +366,21 @@ def fuse_and_rank(
     Confidence is computed (cross-provider corroboration; same-provider-only
     merge stays LOW) for telemetry only — it neither sorts nor displays.
     """
+    # Pre-merge: capture the best album name per signature from raw provider
+    # results. Lower-prior providers (Deezer 0.85, iTunes 0.85) carry the
+    # primary commercial album name; MB (0.95) often returns a compilation.
+    _album_best: dict[str, tuple[str, float]] = {}  # sig → (album, prior)
+    for group in per_provider:
+        for result in group:
+            album = result.extras.get("album")
+            if not isinstance(album, str) or not album:
+                continue
+            sig = _signature(result)
+            prior = _winning_prior(result)
+            prev = _album_best.get(sig)
+            if prev is None or prior < prev[1]:
+                _album_best[sig] = (album, prior)
+
     accumulated: list[_Ranked] = []
     for group in per_provider:
         for rank, incoming in enumerate(group):
@@ -378,6 +399,22 @@ def fuse_and_rank(
                     _Ranked(result=candidate, best_rank=dict.fromkeys(cand_providers, rank))
                 )
 
+    # Post-merge: stabilize album names using the pre-merge lookup.
+    for entry in accumulated:
+        sig = _signature(entry.result)
+        best = _album_best.get(sig)
+        if best is not None and entry.result.extras.get("album") != best[0]:
+            extras = {**entry.result.extras, "album": best[0]}
+            entry.result = SearchResult(
+                kind=entry.result.kind,
+                title=entry.result.title,
+                subtitle=entry.result.subtitle,
+                image_url=entry.result.image_url,
+                confidence=entry.result.confidence,
+                sources=entry.result.sources,
+                extras=extras,
+            )
+
     scored: list[_Scored] = []
     for entry in accumulated:
         rrf = sum(1.0 / (_RRF_K + rank) for rank in entry.best_rank.values())
@@ -395,25 +432,23 @@ def fuse_and_rank(
     split = _genuine_split_exists([s.result for s in scored], query_tokens)
     bootleg_ids = {id(s.result) for s in scored if _is_bootleg(s.result, query_tokens, split)}
 
-    def _key(item: _Scored) -> tuple[float, int, int, float, float, int, float, str, str]:
-        # The best relevance x popularity match wins, of ANY kind — so a song
-        # query headlines the song, an artist query the artist, an album query
-        # the album. Relevance (banded to 0.1) leads; popularity orders within a
-        # band; then cross-provider agreement (RRF), multi-source, prior, alpha.
-        # NO fixed kind hierarchy (it buried songs under artists/albums).
+    def _key(item: _Scored) -> tuple[float, int, int, int, float, float, float, str, str]:
+        # Relevance (banded to 0.1) leads; within a band, multi-source
+        # agreement outranks popularity so originals appearing in 3+ providers
+        # beat single-source covers regardless of play counts.
         band = round(item.relevance, 1)
-        demoted = 1 if _is_demoted(item.result) else 0  # clean (0) sorts before junk (1)
-        bootleg = 1 if id(item.result) in bootleg_ids else 0  # foreign-artist re-uploads sink
-        popularity = _popularity(item.result)
+        demoted = 1 if _is_demoted(item.result) else 0
+        bootleg = 1 if id(item.result) in bootleg_ids else 0
         multi_source = 1 if len(_providers_of(item.result)) > 1 else 0
+        popularity = _popularity(item.result)
         prior = _winning_prior(item.result)
         return (
             -band,
             demoted,
             bootleg,
+            -multi_source,
             -popularity,
             -item.rrf,
-            -multi_source,
             -prior,
             item.result.subtitle or "",
             item.result.title,
@@ -435,19 +470,19 @@ def rerank(results: Sequence[SearchResult], query_norm: str) -> tuple[SearchResu
     split = _genuine_split_exists(results, query_tokens)
     bootleg_ids = {id(r) for r in results if _is_bootleg(r, query_tokens, split)}
 
-    def _key(result: SearchResult) -> tuple[float, int, int, float, int, float, str, str]:
+    def _key(result: SearchResult) -> tuple[float, int, int, int, float, float, str, str]:
         band = round(_relevance_score(result, query_norm), 1)
         demoted = 1 if _is_demoted(result) else 0
         bootleg = 1 if id(result) in bootleg_ids else 0
-        popularity = _popularity(result)
         multi_source = 1 if len(_providers_of(result)) > 1 else 0
+        popularity = _popularity(result)
         prior = _winning_prior(result)
         return (
             -band,
             demoted,
             bootleg,
-            -popularity,
             -multi_source,
+            -popularity,
             -prior,
             result.subtitle or "",
             result.title,

@@ -22,10 +22,11 @@ export function Chip({ label, onPress, selected = false, icon, testID }: ChipPro
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.xs,
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
         borderRadius: radius.full,
         backgroundColor: selected ? theme.color.accentTint : theme.color.surface2,
+        minHeight: 44,
       }}
     >
       {icon != null ? icon : null}
@@ -42,6 +43,7 @@ export function Chip({ label, onPress, selected = false, icon, testID }: ChipPro
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={label}
+        accessibilityState={{ selected }}
         hitSlop={8}
         style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
       >

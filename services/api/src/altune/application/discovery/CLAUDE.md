@@ -21,6 +21,14 @@ Use cases + ports for the unified music search. `SearchMusic` is the load-bearin
 - **`url_router.match_provider(query)` is the only URL-detection gate.** SearchMusic's `_execute_url_lookup` is called when match returns a provider; unsupported hosts fall through to scatter-gather text search (AC#10a).
 - **History persist is best-effort.** Wrapped in try/except; failures log `search_history_persist_failed` and the search still returns 200.
 
+## view-result-detail catalog browse (AC#14-20)
+
+- **`GetAlbumTracks`** — single-provider fetch, no scatter-gather. Takes `{provider, external_id, limit}`, calls `AlbumContentProvider.get_album_tracks`. Returns `ContentFetchResponse` (provider_name, status, items, latency_ms). Unknown provider → ERROR status, empty items.
+- **`GetArtistTopTracks`** — same pattern, calls `ArtistContentProvider.get_artist_top_tracks`. Default limit 5.
+- **`GetArtistAlbums`** — same pattern but applies **title-normalized dedup** after the provider call (`_dedup_albums`): normalizes titles via `normalize_for_match`, groups by normalized title, keeps the version with the highest `track_count` in extras. Default limit 10. Multi-provider fan-out is handled client-side (mobile hook calls each provider and merges).
+- **`ContentFetchResponse`** — wire output shape for all content-fetch use cases. Mirrors `ProviderSearchResponse` structure (items are `SearchResult` tuples).
+- **`AlbumContentProvider` / `ArtistContentProvider`** — port `Protocol`s. Deezer, MusicBrainz, Last.fm implement; iTunes/TheAudioDB skipped (no ID lookups). Adapters translate per-provider DTOs → `SearchResult` same as search.
+
 ## Known gotchas
 
 - **`from __future__ import annotations` + dataclass field types in TYPE_CHECKING** can trip ruff's I001 / TC003 lint when the import is only used in a field annotation. Keep `Sequence`, `Mapping`, `QueryCache`, `ProviderName`, `SearchProvider`, `SearchHistoryRepository`, `SearchResult` etc. in the `TYPE_CHECKING` block — they resolve at runtime via string annotations.
@@ -31,7 +39,7 @@ Use cases + ports for the unified music search. `SearchMusic` is the load-bearin
 
 - **Multi-kind search.** The use case requests `{artist, album, track}` (playlist removed). `fuse_and_rank` takes per-(provider) groups and ranks across kinds.
 - **Parameter-free match gate** in `dedup.py` (`_passes_gate`): a result is kept only if it shares ≥1 content token (stopwords excluded) with the query. Replaced the old tunable relevance floor — no threshold to calibrate.
-- **Sort key:** relevance-band (`token_sort_ratio`, 0.1 buckets) → popularity → RRF → multi-source → prior → alpha. No kind hierarchy (best relevance×popularity wins any kind, so a song query headlines the song).
+- **Sort key:** relevance-band (`token_sort_ratio`, 0.1 buckets) → demotion → bootleg → **multi-source → popularity** → RRF → prior → alpha. Multi-source agreement outranks popularity so originals appearing in 3+ providers beat single-source covers regardless of play counts (discovery-quality-v1). No kind hierarchy (best relevance×agreement wins any kind, so a song query headlines the song).
 - **Popularity** rides in `extras["popularity"]` (0–1), max'd across sources in `_merge`. Deezer `rank`/`nb_fan` + Last.fm `listeners`, log-normalized; absent for iTunes/MB.
 - **Cover-art back-fill.** `ArtworkResolver` port (`ports.py`); `SearchMusic._enrich_artwork` fills `image_url` for the top art-less results best-effort via the resolver (Deezer adapter). Never fails the search.
 
@@ -46,3 +54,10 @@ Use cases + ports for the unified music search. `SearchMusic` is the load-bearin
   - **Expanded demotion markers** — `_JUNK_TITLE_MARKERS` gained `originally performed / performed by / 8-bit / 16-bit`; single-word markers (`cover / arrangement / instrumental / emulation / orgel`) use `_JUNK_TITLE_WORD_RE` with `\b` boundaries so "cover" does NOT fire inside "Undercover". With the genuine now in the same band, demotion is what keeps it on top.
   - **Bootleg-artist demotion** (eval-driven): re-uploads with a *junk artist* subtitle (e.g. `"Blinding Lights The Weeknd" / "Pancadão GD Som"`) carry no marker but cram the real artist into the TITLE. `_is_bootleg` demotes a result whose title swallows the whole query while its artist is foreign to the query — but ONLY when `_genuine_split_exists` finds a real "song-title + queried-artist" split that **exactly covers** the query. The coverage requirement is load-bearing: it stops the rule firing on a bare-title query (where the real artist is legitimately absent) — so a genuine `Song / Artist` on a title-only search is never demoted. It's a tiebreak right after `demoted`, in both `fuse_and_rank` and `rerank`. Measured lift (mainstream, paced): overall hit@1 0.68→0.74, ranking-fail 0.16→0.10.
   - Reproduce/measure with the eval harness: `scripts/discovery_eval/` (batch) and `inspect_query.py` (single-query signal dump).
+
+## discovery-quality-v1 update
+
+- **Multi-source above popularity** (sort key reorder): in both `fuse_and_rank` and `rerank`, `multi_source` moved from position 6 to position 4 (before `popularity`). Originals that appear in 3+ providers outrank single-source covers regardless of play counts.
+- **Extras merge: non-None preference** — `_merge` now preserves non-None values from lower-prior sources when canonical has None, preventing MB (high prior, sparse data) from overwriting Deezer's richer extras.
+- **Album-name stabilization** — `fuse_and_rank` captures a pre-merge `_album_best` lookup mapping `(signature → album_name)` from the lowest-prior provider (Deezer 0.85 / iTunes 0.85 before MB 0.95). After merging, each accumulated result's `extras["album"]` is replaced with the best album name from this lookup. This prevents MB's often-wrong first-release title (compilations, regional variants) from overwriting Deezer's primary commercial album name. **Don't remove the post-merge stabilization step; without it, over-merging of MB recordings produces random album names.**
+- **`save_history` flag** — `SearchMusicInput.save_history` (default `True`) controls whether `_persist_history` runs. Debounced as-you-type queries from the mobile client pass `False` so intermediate partial queries don't bloat the search history chips.

@@ -1,63 +1,47 @@
 # view-library — feature-local context
 
-Mobile screen that renders the current user's track library as a paginated, infinite-scroll list with designed empty + error states. Reads the catalog API (`GET /v1/tracks`); no writes in v1.
+Sectioned library home (revamp-library-v1 spec). Replaces the original flat FlatList with a scrollable dashboard: Playlists (placeholder), Recently Added tracks, horizontal Album carousel, horizontal Artist carousel. Each section expands in-place with sort chips (Recent / A–Z / Year). Profile avatar in header opens a bottom sheet with email + sign out.
 
 ## Key terms
 
-- **Track** — single audio recording with title + artist (+ optional album, duration). Mirror of `services/api/src/altune/domain/catalog/Track`. Defined globally in `docs/ubiquitous-language.md`.
-- **`apiBase`** — the resolved API URL the bundle was built with. Comes from `EXPO_PUBLIC_API_URL` (Expo bakes env vars at bundle time, not runtime — restart `expo start --clear` after changing `.env`).
-- **`has_more`** — server-derived pagination terminal flag. When false, `useInfiniteQuery`'s `getNextPageParam` returns `undefined` and React Query stops calling the queryFn.
+- **Track** — single audio recording with title + artist (+ optional album, duration, artwork, year, genre, track_number, album_artist, isrc, audio_ref). Mirror of `services/api/src/altune/domain/catalog/Track`. Defined globally in `docs/ubiquitous-language.md`.
+- **AlbumGroup** / **ArtistGroup** — client-side groupings derived from library tracks by `album + album_artist` or `artist`. Not domain types — UI read-side concerns only.
+- **`apiBase`** — the resolved API URL the bundle was built with. Comes from `EXPO_PUBLIC_API_URL`.
 
-## Patterns specific here
+## Layout
 
-- **State machine lives in `state.ts` as a pure function** (`_viewForState`), separate from JSX. Loading > error > empty > list. Tests assert the helper directly; the JSX branches are trivial wrappers. Same pattern for `useLibrary.ts` (`_nextOffsetFromPage`, `_flattenPages`). Reason: jest-expo + RNTL was historically painful in this workspace; pure helpers stay testable regardless. See the AIDEV-NOTEs in those files.
-- **React Query is the only server-state mechanism** per ADR-0005. Hook is named `useLibrary` to match the convention `use<Feature>`. New screens that fetch data add a sibling hook here, not a `useState`+`useEffect` pair.
-- **TestIDs are load-bearing** for AC#5 / AC#6:
-  - `library-empty` — designed empty state
-  - `library-error` + `library-retry` — designed error state with retry
-  - `library-loading` — initial-load spinner
-  - `library-row-<track-id>` — each row
-  Never rename these without updating `docs/specs/view-library/spec.md`.
-- **`items[].id` is the FlatList `keyExtractor`** — the server guarantees uniqueness per user per session. Don't switch to index keys.
-- **`ngrok-skip-browser-warning` header** is sent on every request (`shared/api-client/index.ts`). Required when the bundle is pointed at an ngrok-free tunnel for phone-on-LAN dev. Harmless against any other host. Drop when the API moves off ngrok in the dev loop.
+- `ui/LibraryScreen.tsx` — sectioned home with expand/collapse state machine. Handles loading/error/empty states. Wires navigation to Detail screen for tracks, albums, artists.
+- `ui/LibraryRow.tsx` — rich track row: `Artwork` (48px) + title + artist · album + duration (M:SS).
+- `ui/AlbumCarousel.tsx` — horizontal FlatList of album covers with title + artist.
+- `ui/ArtistCarousel.tsx` — horizontal FlatList of circular artist avatars.
+- `ui/PlaylistPlaceholder.tsx` — dashed-border "Coming Soon" card.
+- `ui/ProfileSheet.tsx` — Modal bottom sheet with avatar, email, sign out.
+- `hooks/useLibraryHome.ts` — fetches all tracks (limit 2000) via `useQuery`, derives recent + groups.
+- `hooks/useLibraryGrouping.ts` — memoized client-side album/artist derivation. Pure functions `deriveAlbums` / `deriveArtists` exported for testing.
+- `ui/PlaylistCarousel.tsx` — horizontal FlatList of playlist cards with collage cover + "Create" button.
+- `ui/PlaylistCover.tsx` — 2x2 collage from up to 4 artwork URLs.
+- `ui/PlaylistDetailScreen.tsx` — playlist detail: cover, rename (tap name), delete, tracklist with per-track remove. Route: `/library/playlist/[id]`.
+- `ui/CreatePlaylistModal.tsx` — modal with text input for naming a new playlist.
+- `hooks/useLibrary.ts` — original paginated `useInfiniteQuery` hook (kept for potential future use in expanded Songs view).
+- `state.ts` — `_viewForState` pure helper (loading > error > empty > list).
 
-## Known gotchas
+## Patterns
 
-- **React 19 + RN 0.81 dropped the global `JSX` namespace.** Component return types are `ReactElement` (imported from 'react'), not `JSX.Element`. SDK 51 → 54 upgrade caught this.
-- **`EXPO_PUBLIC_API_URL` only applies at bundle build time.** Changing `.env` mid-session requires `npx expo start --clear`. Without `--clear`, Metro reuses the bundle with the stale URL — the symptom is "infinite loading spinner, no logs on the API".
-- **Android emulator can't reach `127.0.0.1` of the host** — use `10.0.2.2` instead. iOS simulator can. Physical iPhone via Expo Go needs the host LAN IP, and Windows Firewall must allow inbound on the API port (or use ngrok to bypass).
+- **Client-side grouping** (AC#11): albums/artists derived from `TrackResponse[]` keyed by normalized album+artist / artist. No backend endpoint needed.
+- **In-place expand**: state variable `expanded: 'recent' | 'albums' | 'artists' | null` swaps the ScrollView sections for a full-screen FlatList with sort chips. "Collapse" returns to the sectioned home.
+- **Profile via Modal**: `ProfileSheet` uses RN `Modal` (portal-based) — no external dependency.
+- **Navigation to Detail**: library tracks/albums/artists build a `DiscoveryResult` and use the existing detail handoff pattern. Navigates to `/library/detail` (within the library tab's stack).
 
-<!-- AUTO-MAINTAINED:BEGIN -->
-<!-- /update-nested-claude-md regenerates this block after every 3rd commit touching this folder.
-     Do not hand-edit this block — your changes will be lost on next regeneration.
-     Hand-edit above (Key terms / Patterns / Gotchas). -->
+## Dependencies
 
-## Auto-maintained
+- `@shared/ui` — Artwork, Row, Chip, Text, Button, Screen, Skeleton, spacing, useTheme.
+- `@shared/lib/format` — `formatDuration` (promoted from detail/extras.ts).
+- `@shared/lib/detail-handoff` — the discover↔detail seam.
+- `features/auth/hooks/useSession` — email for profile avatar.
+- `features/auth/hooks/useSignOut` — sign-out from profile sheet.
 
-### Files
+## Test files
 
-- `state.ts` — `_viewForState` pure helper deriving `'loading' | 'error' | 'empty' | 'list'` from hook state.
-- `hooks/useLibrary.ts` — `useInfiniteQuery` wrapper; `_nextOffsetFromPage` + `_flattenPages` helpers.
-- `ui/LibraryScreen.tsx` — entrypoint; switches on `_viewForState` output; FlatList for the happy path.
-- `ui/LibraryRow.tsx` — single track row (title + artist).
-
-### Public API surface
-
-- `LibraryScreen` (default export) — consumed by `apps/mobile/src/app/(tabs)/library.tsx` (Expo Router tab page). `app/index.tsx` now redirects to `/discover` (the default tab), not here.
-- `useLibrary()` — re-usable by future features that show track lists (deep-link previews, etc.).
-
-### Dependencies on other features / shared
-
-- `@shared/api-client/tracks` — `getTracks` typed function.
-- `@shared/ui` — design-system primitives (ADR-0008): `Screen`, `Text` (header `displayL` title), `Button` (retry), `Skeleton` (loading rows). Rows are text-forward (no album art in v1).
-- `@shared/api-client/types` — `TrackResponse`, `ListTracksResponse` wire types.
-- `@tanstack/react-query` — via the root `QueryClientProvider` in `src/app/_layout.tsx`.
-- No cross-feature imports (per vertical-slice rule).
-
-### Test files
-
-- `__tests__/useLibrary.test.ts` — pagination helpers (6 tests).
-- `__tests__/LibraryScreen.test.ts` — view state machine (6 tests).
-- (RNTL component tests deferred; see `jest.config.js` history if curious about the jest-expo blocker that's now resolved.)
-
-<!-- AUTO-MAINTAINED:END -->
+- `__tests__/LibraryRow.test.tsx` — row rendering.
+- `__tests__/LibraryScreen.test.ts` — screen state machine (may need updating for sectioned home).
+- `__tests__/useLibrary.test.ts` — pagination helpers.
