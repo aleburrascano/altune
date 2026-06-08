@@ -1,9 +1,9 @@
 ---
 name: compound-learning
 description: |
-  Fires from the Stop hook after non-trivial work (≥2 file edits, OR new file created, OR test added).
-  ALSO fires explicitly when user says "capture what we learned", "lesson here", "compound this",
-  "so the lesson is", "gotcha", "we should remember". Writes docs/solutions/YYYY-MM-DD-<slug>.md if a
+  Fires explicitly when user says "capture what we learned", "lesson here", "compound this",
+  "so the lesson is", "gotcha", "we should remember". Also suggested by the session-end-checklist
+  rule when non-trivial work happened. Writes docs/solutions/YYYY-MM-DD-<slug>.md if a
   pattern (not bug instance) is worth recording. Skips silently if nothing surprising happened.
 when_to_use: |
   Use at session end or after a debugging/refactor session. Skip if the session was routine boilerplate.

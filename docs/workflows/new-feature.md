@@ -13,7 +13,7 @@ The disciplined loop for adding a feature. Each step has a backing skill that au
    ↳ /run                    → launch the app, confirm the slice renders/runs (catches crashes/blank screens TDD misses)
 6. /code-review-6-aspect     → 6 parallel subagents on the diff
 7. (resolve findings; back to step 5 if needed)
-8. /update-nested-claude-md  → every touched feature / context dir has a fresh CLAUDE.md (Stop-hook enforced)
+8. /update-nested-claude-md  → every touched feature / context dir has a fresh CLAUDE.md (/git-commit enforced)
 9. /adr-write                → if architectural decisions emerged
 10. /compound-learning       → if patterns / mistakes worth capturing
 11. /git-commit              → Conventional Commits, no AI co-author
@@ -83,11 +83,11 @@ If 🚨 Block items exist: address them, re-run from step 5.
 
 ### 8. /update-nested-claude-md (auto-enforced)
 
-Every feature/context dir the work touched must have a present and fresh `CLAUDE.md` before the session can end. The `stop-claude-md-hygiene` Stop hook gates this — it blocks Stop with `decision: block` whenever a touched dir is missing a `CLAUDE.md` or has one older than the dir's source files.
+Every feature/context dir the work touched must have a present and fresh `CLAUDE.md` before committing. The `/git-commit` skill's pre-commit checks enforce this — they check each touched dir for missing or stale CLAUDE.md and run `/update-nested-claude-md <dir>` before proceeding.
 
-When the hook fires, run `/update-nested-claude-md <dir>` for each flagged path (mobile feature → AUTO-MAINTAINED block regen; backend bounded-context → hand-written sections from classes / Protocols / `# AIDEV-*` anchors), commit (`docs(claude-md): ...`), then end the session again.
+For each flagged path: mobile feature → AUTO-MAINTAINED block regen; backend bounded-context → hand-written sections from classes / Protocols / `# AIDEV-*` anchors. Commit with `docs(claude-md): ...`.
 
-Override only when justified: add `[ALLOW-CLAUDE-MD-DRIFT: <reason>]` to the most recent commit body. The override is logged to `.claude/claude-md-drift.log`.
+Override only when justified: add `[ALLOW-CLAUDE-MD-DRIFT: <reason>]` to the commit body. The override is logged to `.claude/claude-md-drift.log`.
 
 ### 9. /adr-write (if applicable)
 
@@ -107,9 +107,8 @@ If commits piled up during the feature (one per slice), there's nothing to do he
 
 After commits:
 - `post-tool-commit-doc-drift` hook checks if changed code touched expected docs (spec for changed feature, glossary for new domain terms). Warns; never blocks. Override via `[ALLOW-DRIFT: <reason>]` in commit body.
-- `stop-terminology-drift` hook scans changed domain files for new class names not in `docs/ubiquitous-language.md`.
-- `stop-claude-md-hygiene` hook **blocks Stop** (hard gate, not a warning) if any touched feature or backend bounded-context dir is missing `CLAUDE.md` or has one older than its source files. Override via `[ALLOW-CLAUDE-MD-DRIFT: <reason>]` in commit body; logged to `.claude/claude-md-drift.log`.
-- `/update-nested-claude-md` skill regenerates feature `CLAUDE.md` auto-maintained block (mobile) or refreshes hand-written backend bounded-context CLAUDE.md. Fires automatically from the hook above when missing/stale; legacy trigger of "every 3rd commit affecting a feature folder" still active as a mid-feature refresh signal. Auto-commits.
+- `/git-commit` skill pre-commit checks scan staged domain files for class names not in `docs/ubiquitous-language.md` and check touched feature/context dirs for missing or stale `CLAUDE.md`. Override CLAUDE.md hygiene via `[ALLOW-CLAUDE-MD-DRIFT: <reason>]` in commit body; logged to `.claude/claude-md-drift.log`.
+- `/update-nested-claude-md` skill regenerates feature `CLAUDE.md` auto-maintained block (mobile) or refreshes hand-written backend bounded-context CLAUDE.md. Invoked by `/git-commit` pre-commit checks when missing/stale. Auto-commits.
 
 ## When the loop is overkill
 
