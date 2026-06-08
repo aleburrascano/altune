@@ -45,7 +45,7 @@ describe('useLateralNav', () => {
       await result.current.navigateTo('M83', 'artist');
     });
 
-    expect(mockSearchDiscovery).toHaveBeenCalledWith({ q: 'M83', kinds: ['artist'], limit: 1 });
+    expect(mockSearchDiscovery).toHaveBeenCalledWith({ q: 'M83', kinds: ['artist'], limit: 1, saveHistory: false });
     expect(mockSetDetailHandoff).toHaveBeenCalledWith(artistResult);
     expect(mockPush).toHaveBeenCalledWith('/discover/detail');
     expect(result.current.error).toBeNull();
