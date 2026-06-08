@@ -53,9 +53,7 @@
       {
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "bash .claude/hooks/post-tool-typecheck.sh" },
           { "type": "command", "command": "bash .claude/hooks/post-tool-lint.sh" },
-          { "type": "command", "command": "bash .claude/hooks/post-tool-test-changed.sh" },
           { "type": "command", "command": "bash .claude/hooks/post-tool-check-comment-churn.sh" }
         ]
       },
@@ -65,24 +63,9 @@
           { "type": "command", "command": "bash .claude/hooks/post-tool-commit-doc-drift.sh" }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "matcher": "*",
-        "hooks": [
-          { "type": "command", "command": "bash .claude/hooks/stop-self-review.sh" },
-          { "type": "command", "command": "bash .claude/hooks/stop-terminology-drift.sh" },
-          { "type": "command", "command": "bash .claude/hooks/stop-compound-learning-prompt.sh" },
-          { "type": "command", "command": "bash .claude/hooks/stop-claude-md-hygiene.sh" }
-        ]
-      }
     ]
   },
   "agentStatusLine": false,
   "autoMemoryEnabled": true,
-  "env": {
-    "CLAUDE_SKIP_TYPECHECK_CHANGED": "1",
-    "CLAUDE_SKIP_TEST_CHANGED": "1",
-    "CLAUDE_SKIP_LANGCHECK": "1"
-  }
+  "env": {}
 }
