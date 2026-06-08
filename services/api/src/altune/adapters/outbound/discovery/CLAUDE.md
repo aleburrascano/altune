@@ -50,3 +50,5 @@ Providers: `deezer/`, `musicbrainz/`, `soundcloud/`, `lastfm/`, and `itunes/` (a
 - **Last.fm**: `album.getInfo` (has tracks in response), `artist.getTopTracks`, `artist.getTopAlbums`. Parses mbid from URL to extract artist/album names for the API calls.
 - **iTunes / TheAudioDB**: skipped (no ID-based content lookups in free tier).
 - **Return shape**: `ContentFetchResponse(provider_name, status, items: tuple[SearchResult, ...], latency_ms)`. Items carry `extras["track_position"]` (1-indexed) and `extras["duration_seconds"]` where available.
+- **MusicBrainz featured artists** — `_extract_featured_artists(credits)` returns names from `artist-credit[1:]` into `extras["featured_artists"]` on recordings. Only populated when the MB recording has multi-artist credits.
+- **SC resilience** — yt-dlp retries bumped to 2 (was 0), socket timeout 15s (was 10s). `get_artist_albums` retries once on empty entries before accepting empty. Diagnostic logging on username resolution failure and final set→album counts.
