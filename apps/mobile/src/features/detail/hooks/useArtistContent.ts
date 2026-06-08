@@ -45,6 +45,19 @@ function normalizeForDedup(title: string): string {
     .trim();
 }
 
+function _mergedSources(a: DiscoverySource[], b: DiscoverySource[]): DiscoverySource[] {
+  const seen = new Set(a.map((s) => `${s.provider}:${s.external_id}`));
+  const merged = [...a];
+  for (const s of b) {
+    const key = `${s.provider}:${s.external_id}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(s);
+    }
+  }
+  return merged;
+}
+
 function dedupAlbumsByTitle(albums: DiscoveryResult[]): DiscoveryResult[] {
   const groups = new Map<string, DiscoveryResult>();
   for (const album of albums) {
@@ -55,8 +68,11 @@ function dedupAlbumsByTitle(albums: DiscoveryResult[]): DiscoveryResult[] {
     } else {
       const existingCount = typeof existing.extras['track_count'] === 'number' ? existing.extras['track_count'] : 0;
       const newCount = typeof album.extras['track_count'] === 'number' ? album.extras['track_count'] : 0;
+      const merged = _mergedSources(existing.sources, album.sources);
       if (newCount > existingCount) {
-        groups.set(key, album);
+        groups.set(key, { ...album, sources: merged });
+      } else {
+        groups.set(key, { ...existing, sources: merged });
       }
     }
   }

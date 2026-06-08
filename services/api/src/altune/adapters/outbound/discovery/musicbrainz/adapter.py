@@ -481,6 +481,7 @@ def _translate_release_track(track: dict[str, Any], position: int) -> SearchResu
         return None
     length_ms = recording.get("length") or track.get("length")
     duration_seconds = int(length_ms / 1000) if isinstance(length_ms, int) else None
+    featured = _extract_featured_artists(credits)
     extras: dict[str, object] = {
         "isrc": None,
         "duration_seconds": duration_seconds,
@@ -488,6 +489,8 @@ def _translate_release_track(track: dict[str, Any], position: int) -> SearchResu
         "mbid": mbid,
         "preview_url": None,
     }
+    if featured:
+        extras["featured_artists"] = featured
     return SearchResult(
         kind=ResultKind.TRACK,
         title=title,

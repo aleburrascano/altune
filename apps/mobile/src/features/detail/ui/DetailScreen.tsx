@@ -217,6 +217,29 @@ function TrackDetailBody({
               {row.value}
             </Text>
           </Pressable>
+        ) : row.key === 'featuring' ? (
+          <View key={row.key} testID="detail-info-featuring" style={styles.infoRow}>
+            <Text variant="label" tone="tertiary">
+              {row.label}
+            </Text>
+            <View style={styles.featuredArtists}>
+              {row.value.split(', ').map((name, i) => (
+                <Pressable
+                  key={name}
+                  onPress={() => void lateralNav.navigateTo(name, 'artist')}
+                  disabled={lateralNav.state === 'searching'}
+                  accessibilityRole="link"
+                  accessibilityLabel={`View artist ${name}`}
+                >
+                  {({ pressed }) => (
+                    <Text variant="body" tone="accent" style={pressed ? { opacity: 0.6 } : undefined}>
+                      {i > 0 ? `, ${name}` : name}
+                    </Text>
+                  )}
+                </Pressable>
+              ))}
+            </View>
+          </View>
         ) : (
           <View key={row.key} testID={`detail-info-${row.key}`} style={styles.infoRow}>
             <Text variant="label" tone="tertiary">
@@ -257,6 +280,18 @@ function TrackDetailBody({
   );
 }
 
+function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
+  const base = track.subtitle ?? '';
+  const mbFeat = track.extras['featured_artists'];
+  if (Array.isArray(mbFeat) && mbFeat.length > 0) {
+    const names = mbFeat.filter((n): n is string => typeof n === 'string' && n.length > 0);
+    if (names.length > 0) return `${base}, ${names.join(', ')}`;
+  }
+  const parsed = extractFeaturedFromText(track.title, track.subtitle);
+  if (parsed) return `${base}, ${parsed}`;
+  return base;
+}
+
 /** Album body: track list fetched from provider API. */
 function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResult; detailRoute: string }): ReactElement {
   const router = useRouter();
@@ -264,11 +299,13 @@ function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResult; det
   const { tracks, isLoading, isError, refetch } = useAlbumTracks({
     provider: source?.provider ?? '',
     externalId: source?.external_id ?? '',
+    allSources: result.sources,
     enabled: source !== undefined,
   });
 
   const onTrackPress = (track: DiscoveryResult): void => {
-    setDetailHandoff(track);
+    const withArt = track.image_url ? track : { ...track, image_url: result.image_url };
+    setDetailHandoff(withArt);
     router.push(detailRoute as '/discover/detail');
   };
 
@@ -346,7 +383,7 @@ function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResult; det
               </Text>
               {track.subtitle ? (
                 <Text variant="label" tone="secondary" numberOfLines={1}>
-                  {track.subtitle}
+                  {_trackSubtitleWithFeaturing(track)}
                 </Text>
               ) : null}
             </View>
@@ -478,7 +515,8 @@ function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; de
   });
 
   const onTrackPress = (track: DiscoveryResult): void => {
-    setDetailHandoff(track);
+    const withArt = track.image_url ? track : { ...track, image_url: result.image_url };
+    setDetailHandoff(withArt);
     router.push(detailRoute as '/discover/detail');
   };
 
@@ -570,6 +608,7 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     minHeight: 48,
   },
+  featuredArtists: { flexDirection: 'row', flexWrap: 'wrap' },
   placeholder: { marginTop: spacing['2xl'], alignItems: 'center' },
   save: { marginTop: spacing.lg },
   // Album tracklist styles

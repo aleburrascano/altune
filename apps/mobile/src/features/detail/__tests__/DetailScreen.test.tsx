@@ -152,7 +152,7 @@ describe('DetailScreen', () => {
     const { getByTestId } = renderDetail();
     fireEvent.press(getByTestId('detail-artist-link'));
     await waitFor(() =>
-      expect(mockSearchDiscovery).toHaveBeenCalledWith({ q: 'M83', kinds: ['artist'], limit: 1 }),
+      expect(mockSearchDiscovery).toHaveBeenCalledWith({ q: 'M83', kinds: ['artist'], limit: 1, saveHistory: false }),
     );
   });
 
@@ -173,6 +173,7 @@ describe('DetailScreen', () => {
         q: 'Hurry Up M83',
         kinds: ['album'],
         limit: 1,
+        saveHistory: false,
       }),
     );
   });

@@ -165,7 +165,11 @@ class DeezerSearchAdapter:
     # --- Catalog browse methods (AC#14-20) ---
 
     async def get_album_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
-        """Fetch tracks from an album by Deezer album ID."""
+        """Fetch tracks from an album by Deezer album ID.
+
+        After the tracklist, fetches /track/{id} per track (concurrent, capped)
+        to get the contributors array for featured-artist display.
+        """
         start = time.perf_counter()
         try:
             response = await self.client.get(
@@ -181,12 +185,57 @@ class DeezerSearchAdapter:
                 return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
             data = payload.get("data") or []
             tracks = _translate_album_tracks(data, external_id)
+            tracks = await self._enrich_contributors(tracks)
+            latency_ms = int((time.perf_counter() - start) * 1000)
             return ContentFetchResponse(self.name, ProviderStatus.OK, tracks, latency_ms)
         except Exception:
             _log.exception("deezer get_album_tracks failed")
             return ContentFetchResponse(
                 self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
             )
+
+    async def _enrich_contributors(
+        self, tracks: tuple[SearchResult, ...]
+    ) -> tuple[SearchResult, ...]:
+        """Fetch /track/{id} per track to extract featured artists from contributors."""
+        import asyncio
+
+        sem = asyncio.Semaphore(5)
+
+        async def _fetch_one(track: SearchResult) -> SearchResult:
+            track_id = track.sources[0].external_id if track.sources else None
+            if track_id is None:
+                return track
+            async with sem:
+                try:
+                    resp = await self.client.get(f"{self.base_url}/track/{track_id}")
+                    if resp.status_code != 200:
+                        return track
+                    data = resp.json()
+                    contributors = data.get("contributors") or []
+                    primary = (data.get("artist") or {}).get("name", "").lower()
+                    featured = [
+                        c["name"]
+                        for c in contributors
+                        if isinstance(c.get("name"), str) and c["name"].lower() != primary
+                    ]
+                    if featured:
+                        extras = {**track.extras, "featured_artists": featured}
+                        return SearchResult(
+                            kind=track.kind,
+                            title=track.title,
+                            subtitle=track.subtitle,
+                            image_url=track.image_url,
+                            confidence=track.confidence,
+                            sources=track.sources,
+                            extras=extras,
+                        )
+                except Exception:
+                    _log.debug("deezer contributor fetch failed for track %s", track_id)
+            return track
+
+        enriched = await asyncio.gather(*(_fetch_one(t) for t in tracks))
+        return tuple(enriched)
 
     async def get_artist_top_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
         """Fetch top tracks from an artist by Deezer artist ID."""
