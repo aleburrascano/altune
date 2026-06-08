@@ -45,7 +45,7 @@ Providers: `deezer/`, `musicbrainz/`, `soundcloud/`, `lastfm/`, and `itunes/` (a
 ## view-result-detail catalog browse (AC#14-20)
 
 - **`AlbumContentProvider` / `ArtistContentProvider`** — new port protocols; Deezer, MusicBrainz, Last.fm adapters implement both.
-- **Deezer**: `/album/{id}/tracks`, `/artist/{id}/top`, `/artist/{id}/albums`. Most complete — returns image_url, duration, track_position.
+- **Deezer**: `/album/{id}/tracks` + per-track `/track/{id}` contributor enrichment (`_enrich_contributors`, 5-concurrent semaphore), `/artist/{id}/top`, `/artist/{id}/albums`. Most complete — returns image_url, duration, track_position, and featured artists from the contributors array.
 - **MusicBrainz**: two-step for album tracks (release-group → first release → recordings via `inc=recordings`). Artist: `recording?artist={mbid}&limit=N&inc=artist-credits` for top tracks (inc required — browse API omits artist-credit by default), `release-group?artist={mbid}` for albums. No popularity.
 - **Last.fm**: `album.getInfo` (has tracks in response), `artist.getTopTracks`, `artist.getTopAlbums`. Parses mbid from URL to extract artist/album names for the API calls.
 - **iTunes / TheAudioDB**: skipped (no ID-based content lookups in free tier).
