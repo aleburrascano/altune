@@ -26,7 +26,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from altune.application.discovery.ports import ProviderSearchResponse
+from altune.application.discovery.ports import ContentFetchResponse, ProviderSearchResponse
 from altune.domain.discovery.confidence import Confidence
 from altune.domain.discovery.provider import ProviderName
 from altune.domain.discovery.provider_status import ProviderStatus
@@ -161,6 +161,156 @@ class MusicBrainzSearchAdapter:
             return None
         return _translate_one_recording(entry)
 
+    # --- Catalog browse methods (AC#14-20) ---
+
+    async def get_album_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch tracks from an album by MusicBrainz release-group MBID.
+
+        Two-step: look up the release-group to get a release, then fetch recordings.
+        """
+        start = time.perf_counter()
+        try:
+            # Step 1: get releases for this release-group
+            rg_response = await self.client.get(
+                f"{self.base_url}/release-group/{external_id}",
+                params={"fmt": "json", "inc": "releases"},
+            )
+            if rg_response.status_code == 429 or rg_response.status_code == 503:
+                return ContentFetchResponse(
+                    self.name,
+                    ProviderStatus.RATE_LIMITED,
+                    (),
+                    int((time.perf_counter() - start) * 1000),
+                )
+            if rg_response.status_code >= 400:
+                return ContentFetchResponse(
+                    self.name,
+                    ProviderStatus.ERROR,
+                    (),
+                    int((time.perf_counter() - start) * 1000),
+                )
+            rg_data = rg_response.json()
+            releases = rg_data.get("releases") or []
+            if not releases:
+                return ContentFetchResponse(
+                    self.name,
+                    ProviderStatus.OK,
+                    (),
+                    int((time.perf_counter() - start) * 1000),
+                )
+
+            # Step 2: pick first release and fetch recordings
+            release_mbid = releases[0].get("id")
+            if not release_mbid:
+                return ContentFetchResponse(
+                    self.name,
+                    ProviderStatus.ERROR,
+                    (),
+                    int((time.perf_counter() - start) * 1000),
+                )
+
+            rel_response = await self.client.get(
+                f"{self.base_url}/release/{release_mbid}",
+                params={"fmt": "json", "inc": "recordings+artist-credits"},
+            )
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            if rel_response.status_code == 429 or rel_response.status_code == 503:
+                return ContentFetchResponse(self.name, ProviderStatus.RATE_LIMITED, (), latency_ms)
+            if rel_response.status_code >= 400:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            rel_data = rel_response.json()
+            media = rel_data.get("media") or []
+            tracks: list[SearchResult] = []
+            position = 0
+            for medium in media:
+                medium_tracks = medium.get("tracks") or []
+                for track in medium_tracks:
+                    if position >= limit:
+                        break
+                    result = _translate_release_track(track, position + 1)
+                    if result:
+                        tracks.append(result)
+                        position += 1
+            return ContentFetchResponse(self.name, ProviderStatus.OK, tuple(tracks), latency_ms)
+        except Exception:
+            _log.exception("musicbrainz get_album_tracks failed")
+            return ContentFetchResponse(
+                self.name,
+                ProviderStatus.ERROR,
+                (),
+                int((time.perf_counter() - start) * 1000),
+            )
+
+    async def get_artist_top_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch recordings by artist MBID. No popularity — just returns first N."""
+        start = time.perf_counter()
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/recording",
+                params={
+                    "artist": external_id,
+                    "fmt": "json",
+                    "limit": str(limit),
+                    "inc": "artist-credits",
+                },
+            )
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            if response.status_code == 429 or response.status_code == 503:
+                return ContentFetchResponse(self.name, ProviderStatus.RATE_LIMITED, (), latency_ms)
+            if response.status_code >= 400:
+                return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+            data = response.json()
+            recordings = data.get("recordings") or []
+            tracks = _translate_recordings(recordings)
+            return ContentFetchResponse(self.name, ProviderStatus.OK, tracks, latency_ms)
+        except Exception:
+            _log.exception("musicbrainz get_artist_top_tracks failed")
+            return ContentFetchResponse(
+                self.name,
+                ProviderStatus.ERROR,
+                (),
+                int((time.perf_counter() - start) * 1000),
+            )
+
+    async def get_artist_albums(self, external_id: str, limit: int) -> ContentFetchResponse:
+        """Fetch release-groups (albums) by artist MBID."""
+        import httpx as _httpx
+
+        start = time.perf_counter()
+        last_err: BaseException | None = None
+        for _attempt in range(2):
+            try:
+                response = await self.client.get(
+                    f"{self.base_url}/release-group",
+                    params={"artist": external_id, "fmt": "json", "limit": str(limit)},
+                )
+                latency_ms = int((time.perf_counter() - start) * 1000)
+                if response.status_code == 429 or response.status_code == 503:
+                    return ContentFetchResponse(
+                        self.name, ProviderStatus.RATE_LIMITED, (), latency_ms
+                    )
+                if response.status_code >= 400:
+                    return ContentFetchResponse(self.name, ProviderStatus.ERROR, (), latency_ms)
+                data = response.json()
+                release_groups = data.get("release-groups") or []
+                albums = _translate_release_groups(release_groups)
+                return ContentFetchResponse(self.name, ProviderStatus.OK, albums, latency_ms)
+            except _httpx.ReadTimeout as exc:
+                _log.warning("musicbrainz get_artist_albums timeout (attempt %d)", _attempt + 1)
+                last_err = exc
+            except Exception:
+                _log.exception("musicbrainz get_artist_albums failed")
+                return ContentFetchResponse(
+                    self.name,
+                    ProviderStatus.ERROR,
+                    (),
+                    int((time.perf_counter() - start) * 1000),
+                )
+        _log.warning("musicbrainz get_artist_albums timed out after retry", exc_info=last_err)
+        return ContentFetchResponse(
+            self.name, ProviderStatus.TIMEOUT, (), int((time.perf_counter() - start) * 1000)
+        )
+
 
 class _MusicBrainzHTTPError(Exception):
     """Internal: a per-endpoint HTTP failure mapped to a ProviderStatus."""
@@ -190,6 +340,19 @@ def _translate_artists(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...
     return tuple(r for e in entries if (r := _translate_one_artist(e)) is not None)
 
 
+def _extract_featured_artists(credits: list[dict[str, Any]]) -> list[str]:
+    """Extract featured/collaborating artists from MB artist-credit array.
+
+    Returns names of all credited artists beyond the primary (index 0).
+    """
+    featured: list[str] = []
+    for credit in credits[1:]:
+        name = credit.get("name")
+        if isinstance(name, str) and name:
+            featured.append(name)
+    return featured
+
+
 def _translate_one_recording(entry: dict[str, Any]) -> SearchResult | None:
     title = entry.get("title")
     mbid = entry.get("id")
@@ -211,13 +374,16 @@ def _translate_one_recording(entry: dict[str, Any]) -> SearchResult | None:
     duration_seconds = int(length_ms / 1000) if isinstance(length_ms, int) else None
     isrcs = entry.get("isrcs")
     isrc = isrcs[0] if isinstance(isrcs, list) and isrcs else None
+    featured = _extract_featured_artists(credits)
     extras: dict[str, object] = {
-        "isrc": isrc,  # from inc=isrcs; None when the recording has no ISRC
+        "isrc": isrc,
         "duration_seconds": duration_seconds,
         "album": album_title,
         "mbid": mbid,
         "preview_url": None,
     }
+    if featured:
+        extras["featured_artists"] = featured
     return SearchResult(
         kind=ResultKind.TRACK,
         title=title,
@@ -247,13 +413,16 @@ def _translate_one_release_group(entry: dict[str, Any]) -> SearchResult | None:
             "provider_response_malformed provider=musicbrainz kind=release-group missing=title|id"
         )
         return None
+    primary_type = entry.get("primary-type")
+    if primary_type is None:
+        return None
     first_release_date = entry.get("first-release-date")
     year = first_release_date[:4] if first_release_date else None
     extras: dict[str, object] = {
         "isrc": None,
         "preview_url": None,
         "year": year,
-        "record_type": entry.get("primary-type"),  # Album / Single / EP / Compilation
+        "record_type": primary_type,  # Album / Single / EP / Compilation
         "mbid": mbid,  # release-group MBID — cross-source dedup key
     }
     return SearchResult(
@@ -293,6 +462,46 @@ def _translate_one_artist(entry: dict[str, Any]) -> SearchResult | None:
                 provider=ProviderName.MUSICBRAINZ,
                 external_id=mbid,
                 url=_ARTIST_URL_TPL.format(mbid=mbid),
+            ),
+        ),
+        extras=extras,
+    )
+
+
+def _translate_release_track(track: dict[str, Any], position: int) -> SearchResult | None:
+    """Translate a track from a release's media array."""
+    recording = track.get("recording") or {}
+    title = recording.get("title") or track.get("title")
+    mbid = recording.get("id")
+    credits = recording.get("artist-credit") or track.get("artist-credit") or []
+    artist_name = None
+    if credits and isinstance(credits[0], dict):
+        artist_name = credits[0].get("name")
+    if not title or not mbid:
+        return None
+    length_ms = recording.get("length") or track.get("length")
+    duration_seconds = int(length_ms / 1000) if isinstance(length_ms, int) else None
+    featured = _extract_featured_artists(credits)
+    extras: dict[str, object] = {
+        "isrc": None,
+        "duration_seconds": duration_seconds,
+        "track_position": position,
+        "mbid": mbid,
+        "preview_url": None,
+    }
+    if featured:
+        extras["featured_artists"] = featured
+    return SearchResult(
+        kind=ResultKind.TRACK,
+        title=title,
+        subtitle=artist_name,
+        image_url=None,
+        confidence=Confidence.HIGH,  # from a known album
+        sources=(
+            SourceRef(
+                provider=ProviderName.MUSICBRAINZ,
+                external_id=mbid,
+                url=_RECORDING_URL_TPL.format(mbid=mbid),
             ),
         ),
         extras=extras,

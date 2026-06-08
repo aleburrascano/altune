@@ -11,11 +11,11 @@ import {
   type DiscoverySearchResponse,
 } from '../../../shared/api-client/discovery';
 
-export function useDiscoverSearch(query: string) {
+export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
   const trimmed = query.trim();
   return useQuery<DiscoverySearchResponse>({
     queryKey: ['discovery', 'search', trimmed],
-    queryFn: () => searchDiscovery({ q: trimmed }),
+    queryFn: () => searchDiscovery({ q: trimmed, saveHistory }),
     enabled: trimmed.length > 0,
   });
 }

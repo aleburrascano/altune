@@ -21,9 +21,12 @@ export type LibraryState = {
   items: TrackResponse[];
   total: number;
   isLoading: boolean;
+  isFetchingNextPage: boolean;
+  isRefetching: boolean;
   error: Error | null;
   hasNextPage: boolean;
   fetchNextPage: () => void;
+  refetch: () => void;
 };
 
 /**
@@ -59,10 +62,15 @@ export function useLibrary(): LibraryState {
     items: query.data ? _flattenPages(query.data.pages) : [],
     total: query.data?.pages[0]?.total ?? 0,
     isLoading: query.isLoading,
+    isFetchingNextPage: query.isFetchingNextPage,
+    isRefetching: query.isRefetching,
     error: query.error as Error | null,
     hasNextPage: query.hasNextPage,
     fetchNextPage: () => {
       void query.fetchNextPage();
+    },
+    refetch: () => {
+      void query.refetch();
     },
   };
 }

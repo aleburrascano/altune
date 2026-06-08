@@ -14,6 +14,22 @@ export type TrackResponse = {
   album: string | null;
   duration_seconds: number | null;
   added_at: string; // ISO-8601
+  acquisition_status: string; // 'pending' | 'ready' (AcquisitionStatus, wire-lowercase)
+  artwork_url: string | null;
+  year: number | null;
+  genre: string | null;
+  track_number: number | null;
+  album_artist: string | null;
+  isrc: string | null;
+  audio_ref: string | null;
+};
+
+export type CreateTrackRequest = {
+  title: string;
+  artist: string;
+  album: string | null;
+  duration_seconds: number | null;
+  artwork_url: string | null;
 };
 
 export type ListTracksResponse = {
@@ -22,4 +38,34 @@ export type ListTracksResponse = {
   limit: number;
   offset: number;
   has_more: boolean;
+};
+
+export type PlaylistResponse = {
+  id: string;
+  name: string;
+  track_count: number;
+  preview_artwork_urls: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type ListPlaylistsResponse = {
+  items: PlaylistResponse[];
+  total: number;
+};
+
+export type PlaylistDetailResponse = PlaylistResponse & {
+  tracks: TrackResponse[];
+};
+
+export type CreatePlaylistRequest = {
+  name: string;
+};
+
+export type AddTrackToPlaylistRequest = {
+  track_id: string;
+};
+
+export type ReorderTracksRequest = {
+  track_ids: string[];
 };

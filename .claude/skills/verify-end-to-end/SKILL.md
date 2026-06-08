@@ -5,9 +5,9 @@ description: |
   ALSO fires when the user says "verify", "make sure it works", "did that break anything", "test that",
   "run the tests", or any variant of "is X working". Runs typecheck + lint + unit + integration +
   slice-affecting e2e and reports each phase's actual output. Does NOT claim "works" without showing
-  test output. Also fires from the Stop hook self-review.
+  test output.
 when_to_use: |
-  Use after any non-trivial code change. Use before /code-review-6-aspect. Use as part of stop-self-review.
+  Use after any non-trivial code change. Use before /code-review-6-aspect. Use before /git-commit.
 ---
 
 # Verify end-to-end

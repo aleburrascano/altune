@@ -12,6 +12,14 @@ from uuid import UUID  # noqa: TC003  # pydantic resolves at runtime
 from pydantic import BaseModel, ConfigDict
 
 
+class CreateTrackRequest(BaseModel):
+    title: str
+    artist: str
+    album: str | None = None
+    duration_seconds: int | None = None
+    artwork_url: str | None = None
+
+
 class TrackResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -21,6 +29,14 @@ class TrackResponse(BaseModel):
     album: str | None
     duration_seconds: int | None
     added_at: datetime
+    acquisition_status: str
+    artwork_url: str | None
+    year: int | None = None
+    genre: str | None = None
+    track_number: int | None = None
+    album_artist: str | None = None
+    isrc: str | None = None
+    audio_ref: str | None = None
 
 
 class ListTracksResponse(BaseModel):
@@ -31,3 +47,49 @@ class ListTracksResponse(BaseModel):
     limit: int
     offset: int
     has_more: bool
+
+
+class CreatePlaylistRequest(BaseModel):
+    name: str
+
+
+class RenamePlaylistRequest(BaseModel):
+    name: str
+
+
+class AddTrackToPlaylistRequest(BaseModel):
+    track_id: UUID
+
+
+class ReorderTracksRequest(BaseModel):
+    track_ids: list[UUID]
+
+
+class PlaylistResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    name: str
+    track_count: int
+    preview_artwork_urls: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class ListPlaylistsResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    items: list[PlaylistResponse]
+    total: int
+
+
+class PlaylistDetailResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    id: UUID
+    name: str
+    track_count: int
+    preview_artwork_urls: list[str]
+    created_at: datetime
+    updated_at: datetime
+    tracks: list[TrackResponse]

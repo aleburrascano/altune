@@ -17,7 +17,9 @@ when_to_use: |
 1. **`git status`** — what's actually staged / unstaged. Confirm scope with user if unclear.
 2. **`/verify-end-to-end`** must have passed recently (or run it now if not).
 3. **No secrets** in the diff (`.env`, keys, tokens). The `pre-tool-file-guard` hook blocks these, but double-check.
-4. **No `Co-Authored-By: Claude` or AI attribution** in any message you draft. (Hook strips, but don't generate.)
+4. **Terminology drift** — If files under `services/api/src/altune/domain/` are staged, extract public class names (`class [A-Z]...`) and verify each appears in `docs/ubiquitous-language.md`. Flag missing terms; add them in the same commit.
+5. **CLAUDE.md hygiene** — For each touched feature dir (`apps/mobile/src/features/<feat>/`) or backend bounded-context dir (`services/api/src/altune/{domain,application,adapters}/<context>/`): if the dir has >=3 source files and either lacks a `CLAUDE.md` or has one older than its source files, run `/update-nested-claude-md <dir>` before committing. Override: `[ALLOW-CLAUDE-MD-DRIFT: <reason>]` in commit body.
+6. **No `Co-Authored-By: Claude` or AI attribution** in any message you draft. (Hook strips, but don't generate.)
 
 ## Message format
 

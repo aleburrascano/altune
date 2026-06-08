@@ -41,11 +41,14 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
   const testId = `discover-row-${result.kind}-${position}`;
   const isArtist = result.kind === 'artist';
   const secondary = _secondaryLine(result);
+  const a11yLabel = `${result.title}${secondary ? `, ${secondary}` : ''}`;
 
   return (
     <Pressable
       testID={testId}
       onPress={() => onPress(result, position)}
+      accessibilityRole="button"
+      accessibilityLabel={a11yLabel}
       style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
     >
       <Card style={{ marginBottom: spacing.sm }}>

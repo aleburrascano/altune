@@ -3,7 +3,7 @@
  */
 
 import { apiFetch } from './index';
-import type { ListTracksResponse } from './types';
+import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from './types';
 
 export async function getTracks(params: {
   limit: number;
@@ -14,4 +14,12 @@ export async function getTracks(params: {
     offset: String(params.offset),
   });
   return apiFetch<ListTracksResponse>(`/v1/tracks?${qs.toString()}`);
+}
+
+export async function createTrack(body: CreateTrackRequest): Promise<TrackResponse> {
+  return apiFetch<TrackResponse>('/v1/tracks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }

@@ -11,8 +11,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from altune.adapters.outbound.persistence.catalog.track_row import TrackRow
+from altune.domain.catalog.dedup import dedup_key
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -26,6 +28,41 @@ if TYPE_CHECKING:
 class SqlAlchemyTrackRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def add(self, track: Track) -> tuple[Track, bool]:
+        # Natural idempotency: INSERT ... ON CONFLICT (user_id, dedup_key) DO
+        # NOTHING RETURNING id. A returned id means we inserted (created); an
+        # empty result means the row already existed. Either way we SELECT the
+        # canonical row back to return it.
+        key = dedup_key(track.title, track.artist, track.album)
+        insert_stmt = (
+            pg_insert(TrackRow)
+            .values(
+                id=track.id.value,
+                user_id=track.user_id.value,
+                title=track.title,
+                artist=track.artist,
+                album=track.album,
+                duration_seconds=track.duration_seconds,
+                added_at=track.added_at,
+                artwork_url=track.artwork_url,
+                acquisition_status=track.acquisition_status.value,
+                dedup_key=key,
+            )
+            .on_conflict_do_nothing(index_elements=["user_id", "dedup_key"])
+            .returning(TrackRow.id)
+        )
+        inserted = await self._session.execute(insert_stmt)
+        created = inserted.scalar_one_or_none() is not None
+
+        existing = await self._session.execute(
+            select(TrackRow).where(
+                TrackRow.user_id == track.user_id.value,
+                TrackRow.dedup_key == key,
+            )
+        )
+        row = existing.scalar_one()
+        return row.to_domain(), created
 
     async def list_for_user(
         self,

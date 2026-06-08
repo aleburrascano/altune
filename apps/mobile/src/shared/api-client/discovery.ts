@@ -72,6 +72,7 @@ export async function searchDiscovery(params: {
   q: string;
   kinds?: DiscoveryKind[];
   limit?: number;
+  saveHistory?: boolean;
 }): Promise<DiscoverySearchResponse> {
   const qs = new URLSearchParams({ q: params.q });
   if (params.kinds && params.kinds.length > 0) {
@@ -79,6 +80,9 @@ export async function searchDiscovery(params: {
   }
   if (params.limit !== undefined) {
     qs.set('limit', String(params.limit));
+  }
+  if (params.saveHistory === false) {
+    qs.set('save_history', 'false');
   }
   return apiFetch<DiscoverySearchResponse>(`/v1/discovery/search?${qs.toString()}`);
 }
@@ -102,4 +106,58 @@ export async function recordClick(payload: ClickPayload): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+}
+
+// --- Catalog browse (AC#14-20) ---
+
+export type ContentFetchResponse = {
+  items: DiscoveryResult[];
+  provider: string;
+  status: DiscoveryProviderStatus;
+  latency_ms: number;
+};
+
+export async function getAlbumTracks(
+  provider: string,
+  externalId: string,
+  limit?: number,
+): Promise<ContentFetchResponse> {
+  const qs = new URLSearchParams();
+  if (limit !== undefined) {
+    qs.set('limit', String(limit));
+  }
+  const query = qs.toString();
+  return apiFetch<ContentFetchResponse>(
+    `/v1/discovery/albums/${provider}/${encodeURIComponent(externalId)}/tracks${query ? `?${query}` : ''}`,
+  );
+}
+
+export async function getArtistTopTracks(
+  provider: string,
+  externalId: string,
+  limit?: number,
+): Promise<ContentFetchResponse> {
+  const qs = new URLSearchParams();
+  if (limit !== undefined) {
+    qs.set('limit', String(limit));
+  }
+  const query = qs.toString();
+  return apiFetch<ContentFetchResponse>(
+    `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/top-tracks${query ? `?${query}` : ''}`,
+  );
+}
+
+export async function getArtistAlbums(
+  provider: string,
+  externalId: string,
+  limit?: number,
+): Promise<ContentFetchResponse> {
+  const qs = new URLSearchParams();
+  if (limit !== undefined) {
+    qs.set('limit', String(limit));
+  }
+  const query = qs.toString();
+  return apiFetch<ContentFetchResponse>(
+    `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/albums${query ? `?${query}` : ''}`,
+  );
 }

@@ -2,15 +2,14 @@
 name: update-nested-claude-md
 description: |
   Creates or refreshes nested CLAUDE.md for a feature folder OR a backend bounded-context layer.
-  Auto-fires when the `stop-claude-md-hygiene` Stop hook flags a touched dir as missing CLAUDE.md
-  or having a CLAUDE.md older than its source files. Legacy trigger: every 3rd commit affecting a
-  feature folder (kept as a mid-feature refresh signal). Mobile feature dirs use an AUTO-MAINTAINED
+  Invoked by the `/git-commit` skill's pre-commit checks when a touched dir is missing CLAUDE.md
+  or has a CLAUDE.md older than its source files. Mobile feature dirs use an AUTO-MAINTAINED
   block (regenerated, hand-written sections preserved). Backend bounded-context dirs are fully
   hand-written — no AUTO-MAINTAINED block — generated from the dir's classes / Protocols / AIDEV
   anchors. Auto-commits.
 when_to_use: |
-  Fires automatically on session end via the `stop-claude-md-hygiene` Stop hook gate. Manual
-  invocation: "regenerate nested CLAUDE.md for <dir>" — needed only to override the hook's <3-files
+  Fires from `/git-commit` pre-commit checks when touched dirs have missing or stale CLAUDE.md.
+  Manual invocation: "regenerate nested CLAUDE.md for <dir>" — needed to override the <3-files
   skip rule or to refresh without dir changes.
 ---
 
@@ -49,7 +48,7 @@ The skill handles two dir shapes — pick by the path:
 
 ## Multi-dir invocation
 
-When invoked by the `stop-claude-md-hygiene` Stop hook with multiple dirs flagged, process them sequentially. One commit per dir or one batch commit (`docs(claude-md): regenerate <list>`) — batch is preferred when ≥3 dirs touched.
+When invoked by `/git-commit` pre-commit checks with multiple dirs flagged, process them sequentially. One commit per dir or one batch commit (`docs(claude-md): regenerate <list>`) — batch is preferred when ≥3 dirs touched.
 
 ## What goes in the AUTO-MAINTAINED block
 
