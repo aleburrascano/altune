@@ -66,6 +66,7 @@ async def get_discovery_search(
     q: str = Query(..., min_length=1, max_length=200),
     kinds: str = Query(",".join(sorted(_ALL_KINDS))),
     limit: int = Query(25, ge=1, le=50),
+    save_history: bool = Query(True),
 ) -> DiscoverySearchResponse:
     kinds_set = _parse_kinds(kinds)
     log.info(
@@ -108,6 +109,7 @@ async def get_discovery_search(
                     user_id=user_id,
                     kinds=kinds_set,
                     limit=limit,
+                    save_history=save_history,
                 )
             )
             await session.commit()
@@ -249,9 +251,8 @@ async def post_discovery_click(
 # --- Catalog browse routes (AC#14-20) ---
 
 
-def _result_to_dto(r: "SearchResult") -> SearchResultDto:
+def _result_to_dto(r: SearchResult) -> SearchResultDto:
     """Convert a domain SearchResult to wire DTO."""
-    from altune.domain.discovery.search_result import SearchResult  # noqa: F811
 
     return SearchResultDto(
         kind=r.kind.value,
@@ -353,7 +354,7 @@ async def get_artist_albums(
     provider: str,
     external_id: str,
     _user_id: UserId = Depends(current_user_id),  # noqa: B008
-    limit: int = Query(10, ge=1, le=50),
+    limit: int = Query(10, ge=1, le=100),
 ) -> ContentFetchResponseDto:
     """Fetch albums from an artist by provider + external ID (AC#18)."""
     from altune.application.discovery.get_artist_content import (

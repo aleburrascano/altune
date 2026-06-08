@@ -117,7 +117,7 @@ export function useArtistContent({
     queryKey: ['artist-albums-multi', ...contentSources.map((s) => `${s.provider}:${s.external_id}`)],
     queryFn: async () => {
       const results = await Promise.allSettled(
-        contentSources.map((s: DiscoverySource) => getArtistAlbums(s.provider, s.external_id, 30)),
+        contentSources.map((s: DiscoverySource) => getArtistAlbums(s.provider, s.external_id, 100)),
       );
       const allAlbums = results
         .filter(
@@ -140,19 +140,15 @@ export function useArtistContent({
 
   const otherProviderAlbums = albumsQuery.data ?? [];
   const scAlbums = scAlbumsQuery.data?.items ?? [];
+  const allRaw = [...otherProviderAlbums, ...scAlbums];
 
-  const backfilledScAlbums = scAlbums.map((sc) => {
-    if (sc.image_url) return sc;
-    const key = normalizeForDedup(sc.title);
-    const match = otherProviderAlbums.find((a) => normalizeForDedup(a.title) === key && a.image_url);
-    if (!match) return sc;
-    return { ...sc, image_url: match.image_url };
+  const mergedAlbums = dedupAlbumsByTitle(allRaw).map((album) => {
+    if (album.image_url) return album;
+    const key = normalizeForDedup(album.title);
+    const donor = allRaw.find((a) => normalizeForDedup(a.title) === key && a.image_url);
+    if (!donor) return album;
+    return { ...album, image_url: donor.image_url };
   });
-
-  const mergedAlbums = dedupAlbumsByTitle([
-    ...otherProviderAlbums,
-    ...backfilledScAlbums,
-  ]);
 
   return {
     topTracks: tracksQuery.data?.items ?? [],

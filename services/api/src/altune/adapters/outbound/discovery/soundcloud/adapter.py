@@ -156,27 +156,40 @@ class SoundCloudSearchAdapter:
         start = time.perf_counter()
         username = await self._resolve_username(external_id)
         if username is None:
+            _log.warning("soundcloud get_artist_albums: username resolution failed for %r", external_id)
             return ContentFetchResponse(
                 self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
             )
-        try:
-            info = await self.extractor(f"https://soundcloud.com/{username}/sets")
-            latency_ms = int((time.perf_counter() - start) * 1000)
-            entries = info.get("entries") or []
-            for entry in entries:
-                if entry is None:
-                    continue
-                sc_id = entry.get("id")
-                url = entry.get("webpage_url") or entry.get("url")
-                if sc_id is not None and url:
-                    self._set_url_cache[str(sc_id)] = url
-            albums = _translate_set_entries(entries)
-            return ContentFetchResponse(self.name, ProviderStatus.OK, albums[:limit], latency_ms)
-        except Exception:
-            _log.exception("soundcloud get_artist_albums failed for %r", username)
-            return ContentFetchResponse(
-                self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
-            )
+        url = f"https://soundcloud.com/{username}/sets"
+        for attempt in range(2):
+            try:
+                info = await self.extractor(url)
+                entries = info.get("entries") or []
+                if entries or attempt > 0:
+                    break
+                _log.warning("soundcloud get_artist_albums: empty entries for %r, retrying", url)
+            except Exception:
+                if attempt > 0:
+                    _log.exception("soundcloud get_artist_albums failed for %r", url)
+                    return ContentFetchResponse(
+                        self.name,
+                        ProviderStatus.ERROR,
+                        (),
+                        int((time.perf_counter() - start) * 1000),
+                    )
+                _log.warning("soundcloud get_artist_albums: extraction error for %r, retrying", url)
+                entries = []
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        for entry in entries:
+            if entry is None:
+                continue
+            sc_id = entry.get("id")
+            entry_url = entry.get("webpage_url") or entry.get("url")
+            if sc_id is not None and entry_url:
+                self._set_url_cache[str(sc_id)] = entry_url
+        albums = _translate_set_entries(entries)
+        _log.info("soundcloud get_artist_albums: %d sets -> %d albums for %r", len(entries), len(albums), url)
+        return ContentFetchResponse(self.name, ProviderStatus.OK, albums[:limit], latency_ms)
 
     async def get_album_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
         """Fetch tracks from a SoundCloud set. external_id is the numeric set ID."""

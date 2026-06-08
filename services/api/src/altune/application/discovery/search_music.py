@@ -76,6 +76,7 @@ class SearchMusicInput:
     user_id: UserId
     kinds: frozenset[ResultKind]
     limit: int = 25
+    save_history: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,24 +218,25 @@ class SearchMusic:
         cache_hit = bool(cache_hit_fetched_ats)
         cache_fetched_at = min(cache_hit_fetched_ats) if cache_hit_fetched_ats else None
 
-        # Persist history best-effort; never fail the search on persist error.
-        try:
-            entry = SearchHistoryEntry(
-                id=SearchHistoryEntryId(uuid4()),
-                user_id=request.user_id,
-                query=request.raw_query,
-                query_norm=query_norm,
-                executed_at=datetime.now(UTC),
-                result_clicked_signature=None,
-            )
-            await self.history_repo.insert(entry)
-            await self.history_repo.trim_to_n(request.user_id, self.history_config.keep_n)
-        except Exception:
-            _log.exception(
-                "search_history_persist_failed user=%s query_norm=%s",
-                request.user_id,
-                query_norm,
-            )
+        # Persist history best-effort; skip for debounced as-you-type queries.
+        if request.save_history:
+            try:
+                entry = SearchHistoryEntry(
+                    id=SearchHistoryEntryId(uuid4()),
+                    user_id=request.user_id,
+                    query=request.raw_query,
+                    query_norm=query_norm,
+                    executed_at=datetime.now(UTC),
+                    result_clicked_signature=None,
+                )
+                await self.history_repo.insert(entry)
+                await self.history_repo.trim_to_n(request.user_id, self.history_config.keep_n)
+            except Exception:
+                _log.exception(
+                    "search_history_persist_failed user=%s query_norm=%s",
+                    request.user_id,
+                    query_norm,
+                )
 
         return SearchMusicOutput(
             query=request.raw_query,
@@ -261,7 +263,8 @@ class SearchMusic:
             except Exception:
                 _log.exception("provider %s lookup_by_url raised", target.name)
                 result = None
-        await self._persist_history(request, query_norm)
+        if request.save_history:
+            await self._persist_history(request, query_norm)
         return SearchMusicOutput(
             query=request.raw_query,
             query_norm=query_norm,

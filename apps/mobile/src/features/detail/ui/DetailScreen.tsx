@@ -25,7 +25,7 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 import { getDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { formatDuration, trackInfoRows } from '../extras';
+import { extractFeaturedFromText, formatDuration, trackInfoRows } from '../extras';
 import { useAlbumTracks } from '../hooks/useAlbumTracks';
 import { useArtistContent } from '../hooks/useArtistContent';
 import { useLateralNav } from '../hooks/useLateralNav';
@@ -166,6 +166,12 @@ function TrackDetailBody({
 }): ReactElement {
   const save = useSaveTrack();
   const rows = trackInfoRows(result.extras);
+  if (!rows.some((r) => r.key === 'featuring')) {
+    const parsed = extractFeaturedFromText(result.title, result.subtitle);
+    if (parsed) {
+      rows.push({ key: 'featuring', label: 'Featuring', value: parsed });
+    }
+  }
   // AC#9: a Track requires a non-empty artist. When the result has no subtitle
   // (artist), that invariant can't be met — disable Save rather than POST an
   // invalid body.
