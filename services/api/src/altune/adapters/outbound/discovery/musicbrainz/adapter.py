@@ -340,6 +340,19 @@ def _translate_artists(entries: list[dict[str, Any]]) -> tuple[SearchResult, ...
     return tuple(r for e in entries if (r := _translate_one_artist(e)) is not None)
 
 
+def _extract_featured_artists(credits: list[dict[str, Any]]) -> list[str]:
+    """Extract featured/collaborating artists from MB artist-credit array.
+
+    Returns names of all credited artists beyond the primary (index 0).
+    """
+    featured: list[str] = []
+    for credit in credits[1:]:
+        name = credit.get("name")
+        if isinstance(name, str) and name:
+            featured.append(name)
+    return featured
+
+
 def _translate_one_recording(entry: dict[str, Any]) -> SearchResult | None:
     title = entry.get("title")
     mbid = entry.get("id")
@@ -361,13 +374,16 @@ def _translate_one_recording(entry: dict[str, Any]) -> SearchResult | None:
     duration_seconds = int(length_ms / 1000) if isinstance(length_ms, int) else None
     isrcs = entry.get("isrcs")
     isrc = isrcs[0] if isinstance(isrcs, list) and isrcs else None
+    featured = _extract_featured_artists(credits)
     extras: dict[str, object] = {
-        "isrc": isrc,  # from inc=isrcs; None when the recording has no ISRC
+        "isrc": isrc,
         "duration_seconds": duration_seconds,
         "album": album_title,
         "mbid": mbid,
         "preview_url": None,
     }
+    if featured:
+        extras["featured_artists"] = featured
     return SearchResult(
         kind=ResultKind.TRACK,
         title=title,

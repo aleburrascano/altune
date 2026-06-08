@@ -74,9 +74,10 @@ export function DiscoverScreen(): ReactElement {
   const savedState = getSearchState();
   const [committedQuery, setCommittedQuery] = useState(savedState.query);
   const [inputValue, setInputValue] = useState(savedState.inputValue);
+  const [explicitSubmit, setExplicitSubmit] = useState(true);
   const [filter, setFilter] = useState<ResultsFilter>('all');
   const queryClient = useQueryClient();
-  const search = useDiscoverSearch(committedQuery);
+  const search = useDiscoverSearch(committedQuery, explicitSubmit);
   const history = useSearchHistory();
   const click = useRecordClick();
 
@@ -114,6 +115,7 @@ export function DiscoverScreen(): ReactElement {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
+    setExplicitSubmit(true);
     setCommittedQuery(inputValue.trim());
   };
   const onChangeText = (text: string): void => {
@@ -127,6 +129,7 @@ export function DiscoverScreen(): ReactElement {
       setCommittedQuery('');
     } else if (trimmed.length >= MIN_CHARS) {
       debounceRef.current = setTimeout(() => {
+        setExplicitSubmit(false);
         setCommittedQuery(trimmed);
       }, DEBOUNCE_MS);
     }
@@ -141,6 +144,7 @@ export function DiscoverScreen(): ReactElement {
   };
   const onHistoryTap = (item: SearchHistoryItem): void => {
     setInputValue(item.query);
+    setExplicitSubmit(true);
     setCommittedQuery(item.query);
   };
   const onResultTap = (result: DiscoveryResult, position: number): void => {

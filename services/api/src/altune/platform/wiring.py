@@ -101,8 +101,8 @@ def build_discovery_providers(
             "no_warnings": True,
             "skip_download": True,
             "ignoreerrors": True,
-            "socket_timeout": 10,
-            "retries": 0,
+            "socket_timeout": 15,
+            "retries": 2,
         }
         if flat:
             opts["extract_flat"] = "in_playlist"

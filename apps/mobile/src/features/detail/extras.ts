@@ -27,7 +27,28 @@ export function trackInfoRows(extras: Record<string, unknown>): InfoRow[] {
     rows.push({ key: 'album', label: 'Album', value: album });
   }
 
-  // ISRC and popularity removed — not user-facing (Spotify doesn't show them)
+  const featured = extras['featured_artists'];
+  if (Array.isArray(featured) && featured.length > 0) {
+    const names = featured.filter((n): n is string => typeof n === 'string' && n.length > 0);
+    if (names.length > 0) {
+      rows.push({ key: 'featuring', label: 'Featuring', value: names.join(', ') });
+    }
+  }
 
   return rows;
+}
+
+const _FEAT_RE = /(?:\(|\[)?\s*(?:feat\.?|ft\.?|featuring|with)\s+([^)\]]+?)(?:\)|\]|$)/i;
+
+export function extractFeaturedFromText(
+  title: string,
+  subtitle: string | null,
+): string | null {
+  for (const text of [title, subtitle ?? '']) {
+    const match = _FEAT_RE.exec(text);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+  return null;
 }
