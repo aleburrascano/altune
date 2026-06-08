@@ -7,7 +7,7 @@ Mobile screen for the unified music search surface. A greeting + "Discover" titl
 - **DiscoverView** — five-state union: `loading | empty-no-query | results | zero-results | full-error`. Lives in [state.ts](state.ts). Mirror of the AC#20 testID set. The five states are mutually exclusive.
 - **`partial` flag** — server-emitted; true when any provider's `status !== 'ok'`. Still present on the wire but **no longer surfaced** in the UI (the banner was removed in ADR-0009); `results` renders normally regardless.
 - **`result_signature`** — server-computed stable hash `(kind, normalized title, normalized subtitle)`. Used as the testID suffix and as the click-tracking dedup key. We never compute it client-side; we echo what the wire returns. (Confirmed via spec §"result_signature definition".)
-- **Dual-trigger search** — as-you-type debounce (300ms, min 2 chars) auto-commits `inputValue` to `committedQuery`. Enter key bypasses debounce and commits immediately. Tapping a history row also commits. Clear (X) button resets both `inputValue` and `committedQuery`.
+- **Dual-trigger search** — as-you-type debounce (300ms, min 2 chars) auto-commits `inputValue` to `committedQuery`. Enter key bypasses debounce and commits immediately. Tapping a history row also commits. Clear (X) button resets both `inputValue` and `committedQuery`. **Debounced queries pass `save_history=false`** so only explicit submits (enter key, history tap) persist to search history — prevents intermediate partial queries from bloating the history chips.
 
 ## Patterns specific here
 
