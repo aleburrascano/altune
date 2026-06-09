@@ -51,7 +51,7 @@ async def test_acquire_transitions_pending_to_ready() -> None:
     track = _pending_track()
     repo = InMemoryTrackRepository([track])
     searcher = FakeAudioSearcher({
-        "ytmsearch:Blinding Lights The Weeknd": [_GOOD_CANDIDATE],
+        "Blinding Lights The Weeknd": [_GOOD_CANDIDATE],
     })
     store = FakeAudioStore()
     use_case = AcquireTrackAudio(repo, searcher, store)
@@ -115,14 +115,14 @@ async def test_acquire_uses_isrc_tier_when_available() -> None:
     track = _pending_track(isrc="USAT12345678")
     repo = InMemoryTrackRepository([track])
     searcher = FakeAudioSearcher({
-        "ytmsearch:USAT12345678": [_GOOD_CANDIDATE],
+        "USAT12345678": [_GOOD_CANDIDATE],
     })
     store = FakeAudioStore()
     use_case = AcquireTrackAudio(repo, searcher, store)
 
     await use_case.execute(_TID, _UID)
 
-    assert searcher.queries[0] == "ytmsearch:USAT12345678"
+    assert searcher.queries[0] == "USAT12345678"
     result = await repo.get_by_id(_TID, _UID)
     assert result is not None
     assert result.acquisition_status is AcquisitionStatus.READY

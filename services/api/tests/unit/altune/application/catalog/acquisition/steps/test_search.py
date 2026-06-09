@@ -55,33 +55,33 @@ _GOOD = AudioCandidate(
 
 @pytest.mark.unit
 async def test_search_tries_isrc_tier_first() -> None:
-    searcher = FakeSearcher({"ytmsearch:US1234567890": [_GOOD]})
+    searcher = FakeSearcher({"US1234567890": [_GOOD]})
     step = SearchStep(searcher)
     ctx = AcquisitionContext(track=_track(isrc="US1234567890"))
 
     await step.execute(ctx)
 
-    assert searcher.queries[0] == "ytmsearch:US1234567890"
+    assert searcher.queries[0] == "US1234567890"
     assert len(ctx.candidates) > 0
 
 
 @pytest.mark.unit
 async def test_search_falls_through_on_empty_tier() -> None:
     searcher = FakeSearcher({
-        "ytmsearch:Blinding Lights The Weeknd": [_GOOD],
+        "Blinding Lights The Weeknd": [_GOOD],
     })
     step = SearchStep(searcher)
     ctx = AcquisitionContext(track=_track())
 
     await step.execute(ctx)
 
-    assert "ytmsearch:Blinding Lights The Weeknd" in searcher.queries
+    assert "Blinding Lights The Weeknd" in searcher.queries
 
 
 @pytest.mark.unit
 async def test_search_includes_album_tier() -> None:
     searcher = FakeSearcher({
-        "ytmsearch:Blinding Lights The Weeknd After Hours": [_GOOD],
+        "Blinding Lights The Weeknd After Hours": [_GOOD],
     })
     step = SearchStep(searcher)
     ctx = AcquisitionContext(track=_track(album="After Hours"))

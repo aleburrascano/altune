@@ -39,11 +39,11 @@ class SearchStep:
         assert isinstance(track, Track)
         tiers: list[str] = []
         if track.isrc:
-            tiers.append(f"ytmsearch:{track.isrc}")
-        tiers.append(f"ytmsearch:{track.title} {track.artist}")
+            tiers.append(f"{track.isrc}")
+        tiers.append(f"{track.title} {track.artist}")
         if track.album:
-            tiers.append(f"ytmsearch:{track.title} {track.artist} {track.album}")
-        tiers.append(f"ytsearch5:{track.title} {track.artist}")
+            tiers.append(f"{track.title} {track.artist} {track.album}")
+        tiers.append(f"{track.title} {track.artist} audio")
         return tiers
 
     async def rollback(self, ctx: AcquisitionContext) -> None:
