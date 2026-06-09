@@ -26,20 +26,21 @@ class YtDlpAudioSearcher:
         opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
-            "extract_flat": True,
-            "playlist_items": f"1:{limit}",
+            "default_search": "ytsearch",
+            "noplaylist": True,
         }
+        search_query = f"ytsearch{limit}:{query}"
         with yt_dlp.YoutubeDL(opts) as ydl:
             try:
-                info = ydl.extract_info(query, download=False)
+                info = ydl.extract_info(search_query, download=False)
             except Exception:
-                _logger.warning("ytdlp_search_failed", query=query, exc_info=True)
+                _logger.warning("ytdlp_search_failed", query=search_query, exc_info=True)
                 return []
 
         if info is None:
             return []
 
-        entries = info.get("entries", [info]) if "entries" in info else [info]
+        entries: list[dict[str, Any]] = info.get("entries", [])
         candidates: list[AudioCandidate] = []
         for entry in entries:
             if entry is None:
@@ -47,13 +48,13 @@ class YtDlpAudioSearcher:
             title = entry.get("title", "")
             artist = entry.get("artist") or entry.get("uploader") or entry.get("channel") or ""
             duration = entry.get("duration")
-            url = entry.get("url") or entry.get("webpage_url") or entry.get("id", "")
-            if title and url:
+            webpage_url = entry.get("webpage_url") or entry.get("url") or ""
+            if title and webpage_url:
                 candidates.append(AudioCandidate(
                     title=title,
                     artist=artist,
                     duration_seconds=int(duration) if duration else None,
-                    url=url,
+                    url=webpage_url,
                 ))
         return candidates
 
