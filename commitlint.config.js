@@ -40,6 +40,7 @@ module.exports = {
         'discover-music-v2',
         'discover-music-v3',
         'view-result-detail',
+        'acquire-track',
       ],
     ],
     'subject-case': [2, 'always', 'lower-case'],
