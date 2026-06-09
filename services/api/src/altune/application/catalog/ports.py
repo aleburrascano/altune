@@ -7,6 +7,8 @@ these interfaces, never the concrete adapters.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
@@ -17,6 +19,36 @@ if TYPE_CHECKING:
     from altune.domain.catalog.track import Track
     from altune.domain.catalog.track_id import TrackId
     from altune.domain.shared.user_id import UserId
+
+
+@dataclass(frozen=True, slots=True)
+class AudioCandidate:
+    """A candidate audio result from a search — metadata only, no download yet."""
+
+    title: str
+    artist: str
+    duration_seconds: int | None
+    url: str
+
+
+class AudioSearcher(Protocol):
+    """Search for audio candidates and download a selected one."""
+
+    async def search(self, query: str, limit: int = 5) -> list[AudioCandidate]:
+        """Search for audio by query string, return candidate metadata."""
+        ...
+
+    async def download(self, url: str, temp_dir: Path) -> Path:
+        """Download audio from URL to temp_dir, return path to the file."""
+        ...
+
+
+class AudioStore(Protocol):
+    """Persist audio files to permanent storage."""
+
+    async def store(self, source_path: Path, audio_ref: str) -> str:
+        """Move source_path to permanent storage at audio_ref. Return the ref."""
+        ...
 
 
 class TrackRepository(Protocol):
