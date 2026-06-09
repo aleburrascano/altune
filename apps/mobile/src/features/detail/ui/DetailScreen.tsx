@@ -307,8 +307,16 @@ function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResult; det
   });
 
   const onTrackPress = (track: DiscoveryResult): void => {
-    const withArt = track.image_url ? track : { ...track, image_url: result.image_url };
-    setDetailHandoff(withArt);
+    const enriched = {
+      ...track,
+      image_url: track.image_url ?? result.image_url,
+      extras: {
+        ...track.extras,
+        album: track.extras['album'] ?? result.title,
+        album_artist: track.extras['album_artist'] ?? result.subtitle,
+      },
+    };
+    setDetailHandoff(enriched);
     router.push(detailRoute as '/discover/detail');
   };
 
@@ -518,8 +526,11 @@ function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; de
   });
 
   const onTrackPress = (track: DiscoveryResult): void => {
-    const withArt = track.image_url ? track : { ...track, image_url: result.image_url };
-    setDetailHandoff(withArt);
+    const enriched = {
+      ...track,
+      image_url: track.image_url ?? result.image_url,
+    };
+    setDetailHandoff(enriched);
     router.push(detailRoute as '/discover/detail');
   };
 
