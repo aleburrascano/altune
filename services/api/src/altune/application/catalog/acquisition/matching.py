@@ -86,6 +86,10 @@ def metadata_rank(
     return 0.45 * ch + 0.25 * dur + 0.20 * cat + 0.10 * views
 
 
+def _is_topic_channel(channel: str) -> bool:
+    return channel.endswith("- Topic")
+
+
 def select_best_candidate(
     *,
     track_title: str,
@@ -93,13 +97,15 @@ def select_best_candidate(
     track_duration: int | None,
     candidates: list[AudioCandidate],
 ) -> AudioCandidate | None:
-    """Three-tier selection: metadata rank first, identity fallback second."""
+    """Three-tier selection: Topic channel first, metadata rank second, identity fallback third."""
     if not candidates:
         return None
 
     max_views = max((c.view_count for c in candidates), default=0)
 
-    scored: list[tuple[float, float, AudioCandidate]] = []
+    topic_candidates: list[tuple[float, AudioCandidate]] = []
+    other_candidates: list[tuple[float, float, AudioCandidate]] = []
+
     for c in candidates:
         ident = identity_score(track_title, track_artist, c.title)
         meta = metadata_rank(c, track_duration, max_views)
@@ -111,27 +117,34 @@ def select_best_candidate(
             candidate_views=c.view_count,
             identity_score=round(ident, 1),
             metadata_rank=round(meta, 3),
+            is_topic=_is_topic_channel(c.channel),
         )
         if ident < _IDENTITY_MIN:
             continue
-        scored.append((meta, ident, c))
+        if _is_topic_channel(c.channel):
+            topic_candidates.append((ident, c))
+        else:
+            other_candidates.append((meta, ident, c))
 
-    if not scored:
-        _logger.warning(
-            "no_candidates_passed",
-            track_title=track_title,
-            track_artist=track_artist,
-            total_candidates=len(candidates),
+    if topic_candidates:
+        topic_candidates.sort(key=lambda x: x[0], reverse=True)
+        best = topic_candidates[0][1]
+        _logger.info("candidate_selected", title=best.title, channel=best.channel, source="topic_channel")
+        return best
+
+    if other_candidates:
+        other_candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        best = other_candidates[0][2]
+        _logger.info(
+            "candidate_selected", title=best.title, channel=best.channel,
+            metadata_rank=round(other_candidates[0][0], 3), source="metadata_rank",
         )
-        return None
+        return best
 
-    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
-    best_meta, best_ident, best = scored[0]
-    _logger.info(
-        "candidate_selected",
-        title=best.title,
-        channel=best.channel,
-        metadata_rank=round(best_meta, 3),
-        identity_score=round(best_ident, 1),
+    _logger.warning(
+        "no_candidates_passed",
+        track_title=track_title,
+        track_artist=track_artist,
+        total_candidates=len(candidates),
     )
-    return best
+    return None
