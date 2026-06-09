@@ -7,6 +7,7 @@ ListTracks use case does the actual work. TrackRow never leaves this layer;
 the response is built from domain Track values.
 """
 
+
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 
@@ -146,3 +147,24 @@ def _schedule_acquisition(
         log.warning("acquisition_not_configured")
         return
     background_tasks.add_task(_run_acquisition, sessionmaker, searcher, store, track_id, user_id)
+
+
+@router.delete("/tracks/{track_id}", status_code=204)  # type: ignore[untyped-decorator, unused-ignore]
+async def delete_track(
+    track_id: UUID,
+    request: Request,
+    user_id: UserId = Depends(current_user_id),  # noqa: B008
+) -> Response:
+    from altune.domain.catalog.track_id import TrackId
+
+    log.info("http_delete_track_request", user_id=str(user_id), track_id=str(track_id))
+    sessionmaker = request.app.state.sessionmaker
+    async with sessionmaker() as session:
+        repo = SqlAlchemyTrackRepository(session)
+        deleted = await repo.delete(TrackId(track_id), user_id)
+        if deleted:
+            await session.commit()
+            log.info("track_deleted", user_id=str(user_id), track_id=str(track_id))
+        else:
+            log.info("track_delete_not_found", user_id=str(user_id), track_id=str(track_id))
+    return Response(status_code=204 if deleted else 404)

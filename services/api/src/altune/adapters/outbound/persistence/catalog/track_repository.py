@@ -62,6 +62,19 @@ class SqlAlchemyTrackRepository:
         await self._session.flush()
         return row.to_domain()
 
+    async def delete(self, track_id: TrackId, user_id: UserId) -> bool:
+        stmt = select(TrackRow).where(
+            TrackRow.id == track_id.value,
+            TrackRow.user_id == user_id.value,
+        )
+        result = await self._session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.flush()
+        return True
+
     async def add(self, track: Track) -> tuple[Track, bool]:
         # Natural idempotency: INSERT ... ON CONFLICT (user_id, dedup_key) DO
         # NOTHING RETURNING id. A returned id means we inserted (created); an
