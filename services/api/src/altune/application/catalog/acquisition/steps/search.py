@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from altune.application.catalog.acquisition.matching import select_best_candidate
-
 if TYPE_CHECKING:
     from altune.application.catalog.acquisition.context import AcquisitionContext
     from altune.application.catalog.ports import AudioSearcher
@@ -19,18 +17,13 @@ class SearchStep:
         assert ctx.track is not None
         track = ctx.track
         tiers = self._build_tiers(track)
+        seen_urls: set[str] = set()
         for query in tiers:
             candidates = await self._searcher.search(query, limit=5)
-            if candidates:
-                ctx.candidates.extend(candidates)
-                best = select_best_candidate(
-                    track_title=track.title,
-                    track_artist=track.artist,
-                    track_duration=track.duration_seconds,
-                    candidates=candidates,
-                )
-                if best is not None:
-                    break
+            for c in candidates:
+                if c.url not in seen_urls:
+                    ctx.candidates.append(c)
+                    seen_urls.add(c.url)
         return ctx
 
     def _build_tiers(self, track: object) -> list[str]:
