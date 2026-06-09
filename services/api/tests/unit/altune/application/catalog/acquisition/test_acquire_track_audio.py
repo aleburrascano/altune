@@ -87,7 +87,7 @@ async def test_acquire_skips_already_ready() -> None:
     track = _ready_track()
     repo = InMemoryTrackRepository([track])
     searcher = FakeAudioSearcher({})
-    store = FakeAudioStore()
+    store = FakeAudioStore(existing_refs={"user/artist/album/song.mp3"})
     use_case = AcquireTrackAudio(repo, searcher, store)
 
     await use_case.execute(_TID, _UID)

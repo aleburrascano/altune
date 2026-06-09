@@ -14,6 +14,9 @@ class FilesystemAudioStore:
     def __init__(self, base_dir: str) -> None:
         self._base = Path(base_dir)
 
+    def exists(self, audio_ref: str) -> bool:
+        return (self._base / audio_ref).exists()
+
     async def store(self, source_path: Path, audio_ref: str) -> str:
         dest = self._base / audio_ref
         dest.parent.mkdir(parents=True, exist_ok=True)
