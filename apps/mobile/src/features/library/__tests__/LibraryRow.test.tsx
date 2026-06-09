@@ -1,4 +1,4 @@
-﻿/**
+/**
  * LibraryRow — shows a pending marker while a saved track's audio is not yet
  * acquired (view-result-detail slice 17, AC#10).
  *
@@ -13,7 +13,7 @@ jest.mock('expo-image', () => ({ Image: () => null }));
 import { LibraryRow } from '../ui/LibraryRow';
 import type { TrackResponse } from '../../../shared/api-client/types';
 
-function _track(acquisitionStatus: string): TrackResponse {
+function _track(acquisitionStatus: string, failureReason: string | null = null): TrackResponse {
   return {
     id: 't1',
     title: 'Midnight City',
@@ -23,6 +23,7 @@ function _track(acquisitionStatus: string): TrackResponse {
     added_at: '2026-05-01T12:00:00Z',
     acquisition_status: acquisitionStatus,
     artwork_url: null,
+    failure_reason: failureReason,
     year: null,
     genre: null,
     track_number: null,
@@ -43,5 +44,22 @@ describe('LibraryRow', () => {
   it('omits the pending marker for any other status', () => {
     const { queryByTestId } = render(<LibraryRow track={_track('owned')} onPress={noop} />);
     expect(queryByTestId('library-row-pending-t1')).toBeNull();
+  });
+
+  it('shows error text when acquisition_status is failed', () => {
+    const { getByTestId } = render(
+      <LibraryRow track={_track('failed', 'no_match_found')} onPress={noop} />,
+    );
+    const failedEl = getByTestId('library-row-failed-t1');
+    expect(failedEl).toBeTruthy();
+    expect(failedEl.props.children).toBe('no_match_found');
+  });
+
+  it('shows fallback text when failed with no reason', () => {
+    const { getByTestId } = render(
+      <LibraryRow track={_track('failed')} onPress={noop} />,
+    );
+    const failedEl = getByTestId('library-row-failed-t1');
+    expect(failedEl.props.children).toBe('Acquisition failed');
   });
 });
