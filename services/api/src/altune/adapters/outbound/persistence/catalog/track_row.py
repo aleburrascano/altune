@@ -60,6 +60,7 @@ class TrackRow(Base):
     album_artist: Mapped[str | None] = mapped_column(Text, nullable=True)
     isrc: Mapped[str | None] = mapped_column(Text, nullable=True)
     audio_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def to_domain(self) -> Track:
         return Track(
@@ -78,6 +79,7 @@ class TrackRow(Base):
             album_artist=self.album_artist,
             isrc=self.isrc,
             audio_ref=self.audio_ref,
+            failure_reason=self.failure_reason,
         )
 
     @classmethod
@@ -99,4 +101,5 @@ class TrackRow(Base):
             album_artist=track.album_artist,
             isrc=track.isrc,
             audio_ref=track.audio_ref,
+            failure_reason=track.failure_reason,
         )
