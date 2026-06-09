@@ -52,12 +52,21 @@ class YtDlpAudioSearcher:
             artist = entry.get("artist") or entry.get("uploader") or entry.get("channel") or ""
             duration = entry.get("duration")
             webpage_url = entry.get("webpage_url") or entry.get("url") or ""
+            channel = entry.get("channel") or entry.get("uploader") or ""
+            raw_cats = entry.get("categories") or []
+            categories = tuple(c for c in raw_cats if isinstance(c, str))
+            view_count = int(entry.get("view_count") or 0)
+            follower_count = int(entry.get("channel_follower_count") or 0)
             if title and webpage_url:
                 candidates.append(AudioCandidate(
                     title=title,
                     artist=artist,
                     duration_seconds=int(duration) if duration else None,
                     url=webpage_url,
+                    channel=channel,
+                    categories=categories,
+                    view_count=view_count,
+                    channel_follower_count=follower_count,
                 ))
         return candidates
 
