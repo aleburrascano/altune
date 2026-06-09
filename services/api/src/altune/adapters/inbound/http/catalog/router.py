@@ -7,10 +7,8 @@ ListTracks use case does the actual work. TrackRow never leaves this layer;
 the response is built from domain Track values.
 """
 
-from __future__ import annotations
-
 import structlog
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 
 from altune.adapters.inbound.http.catalog.dto import (
     CreateTrackRequest,
@@ -25,8 +23,8 @@ from altune.application.catalog.add_track_to_library import (
     AddTrackToLibraryInput,
 )
 from altune.application.catalog.list_tracks import ListTracks, ListTracksInput
-from altune.domain.catalog.track import Track  # noqa: TC001  # used at runtime
-from altune.domain.shared.user_id import UserId  # noqa: TC001  # FastAPI runtime annotation
+from altune.domain.catalog.track import Track  # used at runtime
+from altune.domain.shared.user_id import UserId  # FastAPI runtime annotation
 from altune.platform.auth import current_user_id
 
 router = APIRouter(prefix="/v1", tags=["tracks"])
