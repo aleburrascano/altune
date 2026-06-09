@@ -82,6 +82,7 @@ async def create_track(
     body: CreateTrackRequest,
     response: Response,
     request: Request,
+    background_tasks: BackgroundTasks,
     user_id: UserId = Depends(current_user_id),  # noqa: B008  # FastAPI dependency injection idiom
 ) -> TrackResponse:
     log.info("http_post_tracks_request", user_id=str(user_id), title=body.title)
@@ -104,11 +105,46 @@ async def create_track(
             )
         )
         await session.commit()
-    if not output.created:
-        # Dedup hit: the save was idempotent, so signal 200 (not 201) and emit
-        # the dedup-hit telemetry (spec Telemetry S6). No event was emitted.
+    if output.created:
+        _schedule_acquisition(request, background_tasks, output.track.id, user_id)
+    else:
         response.status_code = 200
         log.info(
             "http_post_tracks_dedup_hit", user_id=str(user_id), track_id=str(output.track.id.value)
         )
     return _track_response(output.track)
+
+
+async def _run_acquisition(
+    sessionmaker: object,
+    searcher: object,
+    store: object,
+    track_id: object,
+    user_id: object,
+) -> None:
+    from altune.application.catalog.acquisition.acquire_track_audio import AcquireTrackAudio
+    from altune.domain.catalog.track_id import TrackId
+    from altune.domain.shared.user_id import UserId as UID
+
+    assert isinstance(track_id, TrackId)
+    assert isinstance(user_id, UID)
+    async with sessionmaker() as session:  # type: ignore[operator]
+        repo = SqlAlchemyTrackRepository(session)
+        use_case = AcquireTrackAudio(repo, searcher, store)  # type: ignore[arg-type]
+        await use_case.execute(track_id, user_id)
+        await session.commit()
+
+
+def _schedule_acquisition(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    track_id: object,
+    user_id: object,
+) -> None:
+    searcher = getattr(request.app.state, "audio_searcher", None)
+    store = getattr(request.app.state, "audio_store", None)
+    sessionmaker = getattr(request.app.state, "sessionmaker", None)
+    if searcher is None or store is None or sessionmaker is None:
+        log.warning("acquisition_not_configured")
+        return
+    background_tasks.add_task(_run_acquisition, sessionmaker, searcher, store, track_id, user_id)
