@@ -25,7 +25,7 @@ def test_title_gate_accepts_case_insensitive() -> None:
 
 @pytest.mark.unit
 def test_title_gate_rejects_below_085() -> None:
-    assert title_gate("Blinding Lights", "Blinding Nights Forever") is False
+    assert title_gate("Blinding Lights", "Bohemian Rhapsody") is False
 
 
 @pytest.mark.unit
