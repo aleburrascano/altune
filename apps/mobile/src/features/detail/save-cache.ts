@@ -22,6 +22,10 @@ const PAGE_SIZE = 50;
 export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackRequest {
   const album = result.extras['album'];
   const duration = result.extras['duration_seconds'];
+  const isrc = result.extras['isrc'];
+  const year = result.extras['year'];
+  const genre = result.extras['genre'];
+  const albumArtist = result.extras['album_artist'];
   return {
     title: result.title,
     artist: result.subtitle ?? '',
@@ -29,6 +33,10 @@ export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackReques
     duration_seconds:
       typeof duration === 'number' && Number.isFinite(duration) ? Math.floor(duration) : null,
     artwork_url: result.image_url,
+    isrc: typeof isrc === 'string' && isrc.length > 0 ? isrc : null,
+    year: typeof year === 'number' && Number.isFinite(year) ? year : null,
+    genre: typeof genre === 'string' && genre.length > 0 ? genre : null,
+    album_artist: typeof albumArtist === 'string' && albumArtist.length > 0 ? albumArtist : null,
   };
 }
 
@@ -43,11 +51,12 @@ export function optimisticTrack(body: CreateTrackRequest, addedAt: string): Trac
     added_at: addedAt,
     acquisition_status: 'pending',
     artwork_url: body.artwork_url,
-    year: null,
-    genre: null,
+    failure_reason: null,
+    year: body.year ?? null,
+    genre: body.genre ?? null,
     track_number: null,
-    album_artist: null,
-    isrc: null,
+    album_artist: body.album_artist ?? null,
+    isrc: body.isrc ?? null,
     audio_ref: null,
   };
 }
