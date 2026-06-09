@@ -18,3 +18,4 @@ class AcquisitionStatus(Enum):
 
     PENDING = "pending"  # saved to library; audio not yet acquired
     READY = "ready"  # audio acquired and available for streaming
+    FAILED = "failed"  # acquisition attempted and failed

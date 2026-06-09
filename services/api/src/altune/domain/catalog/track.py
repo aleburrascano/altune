@@ -44,6 +44,7 @@ class Track:
     album_artist: str | None = None
     isrc: str | None = None
     audio_ref: str | None = None
+    failure_reason: str | None = None
 
     def __post_init__(self) -> None:
         if not self.title:
@@ -60,6 +61,10 @@ class Track:
             raise ValueError("Track.audio_ref requires acquisition_status = READY")
         if self.audio_ref is None and self.acquisition_status is AcquisitionStatus.READY:
             raise ValueError("Track.acquisition_status = READY requires audio_ref to be set")
+        if self.acquisition_status is AcquisitionStatus.FAILED and not self.failure_reason:
+            raise ValueError("Track.acquisition_status = FAILED requires failure_reason")
+        if self.failure_reason and self.acquisition_status is not AcquisitionStatus.FAILED:
+            raise ValueError("Track.failure_reason requires acquisition_status = FAILED")
 
     def __eq__(self, other: object) -> bool:
         # AIDEV-NOTE: id-based equality is the entity rule from

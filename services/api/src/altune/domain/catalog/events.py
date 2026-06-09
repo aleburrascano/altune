@@ -51,3 +51,22 @@ class TrackRemovedFromPlaylist:
     track_id: TrackId
     user_id: UserId
     occurred_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class TrackAcquisitionCompleted:
+    """Audio acquisition succeeded — track transitioned to READY."""
+
+    track_id: TrackId
+    user_id: UserId
+    occurred_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class TrackAcquisitionFailed:
+    """Audio acquisition failed — track transitioned to FAILED."""
+
+    track_id: TrackId
+    user_id: UserId
+    reason: str
+    occurred_at: datetime
