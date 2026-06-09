@@ -7,6 +7,7 @@ candidate can't compensate for a wrong title with a correct duration.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 import structlog
@@ -23,11 +24,25 @@ _TITLE_THRESHOLD = 0.85
 _ARTIST_THRESHOLD = 0.70
 _DURATION_TOLERANCE_SECONDS = 15
 
+_ARTIST_TITLE_SEP = re.compile(r"^[^-–—]+ [-–—] ")
+_TRAILING_FEAT = re.compile(r"\s+feat\s+.*$", re.IGNORECASE)
+
+
+def _clean_youtube_title(title: str) -> str:
+    """Strip common YouTube title patterns: 'Artist - Title (Qualifier) ft. X'."""
+    cleaned = _ARTIST_TITLE_SEP.sub("", title)
+    cleaned = _TRAILING_FEAT.sub("", cleaned)
+    return cleaned.strip() or title
+
 
 def title_gate(track_title: str, candidate_title: str) -> bool:
     a = normalize_for_match(track_title)
-    b = normalize_for_match(candidate_title)
-    return JaroWinkler.normalized_similarity(a, b) >= _TITLE_THRESHOLD
+    b_raw = normalize_for_match(candidate_title)
+    b_cleaned = normalize_for_match(_clean_youtube_title(candidate_title))
+    return max(
+        JaroWinkler.normalized_similarity(a, b_raw),
+        JaroWinkler.normalized_similarity(a, b_cleaned),
+    ) >= _TITLE_THRESHOLD
 
 
 def artist_gate(track_artist: str, candidate_artist: str) -> bool:
@@ -55,8 +70,12 @@ def select_best_candidate(
     norm_artist = normalize_for_match(track_artist)
     for c in candidates:
         c_norm_title = normalize_for_match(c.title)
+        c_cleaned_title = normalize_for_match(_clean_youtube_title(c.title))
         c_norm_artist = normalize_for_match(c.artist)
-        title_jw = JaroWinkler.normalized_similarity(norm_title, c_norm_title)
+        title_jw = max(
+            JaroWinkler.normalized_similarity(norm_title, c_norm_title),
+            JaroWinkler.normalized_similarity(norm_title, c_cleaned_title),
+        )
         artist_jw = JaroWinkler.normalized_similarity(norm_artist, c_norm_artist)
         t_pass = title_jw >= _TITLE_THRESHOLD
         a_pass = artist_jw >= _ARTIST_THRESHOLD

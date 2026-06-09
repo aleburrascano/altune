@@ -111,6 +111,9 @@ async def create_track(
         log.info(
             "http_post_tracks_dedup_hit", user_id=str(user_id), track_id=str(output.track.id.value)
         )
+        if output.track.acquisition_status.value == "failed":
+            _schedule_acquisition(request, background_tasks, output.track.id, user_id)
+            log.info("acquisition_retry_for_failed", track_id=str(output.track.id.value))
     return _track_response(output.track)
 
 
