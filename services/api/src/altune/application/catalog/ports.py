@@ -50,6 +50,10 @@ class AudioStore(Protocol):
         """Move source_path to permanent storage at audio_ref. Return the ref."""
         ...
 
+    def exists(self, audio_ref: str) -> bool:
+        """Check if a stored file exists at audio_ref."""
+        ...
+
 
 class TrackRepository(Protocol):
     """A read+write port over the Track aggregate.

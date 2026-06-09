@@ -27,6 +27,8 @@ _DURATION_TOLERANCE_SECONDS = 15
 
 _AUDIO_KEYWORDS = {"audio", "official audio"}
 _VIDEO_KEYWORDS = {"video", "music video", "official video", "visualizer", "mv"}
+_CLEAN_KEYWORDS = {"clean", "censored", "clean version", "radio edit"}
+_EXPLICIT_KEYWORDS = {"explicit"}
 
 
 def identity_score(track_title: str, track_artist: str, candidate_title: str) -> float:
@@ -84,15 +86,26 @@ def select_best_candidate(
             total_candidates=len(candidates),
         )
         return None
-    passing.sort(key=lambda x: (_audio_preference(x[1].title), x[0]), reverse=True)
+    passing.sort(
+        key=lambda x: (_version_preference(x[1].title), x[0]),
+        reverse=True,
+    )
     return passing[0][1]
 
 
-def _audio_preference(title: str) -> int:
-    """Prefer audio-only uploads over music videos. 1=audio, 0=neutral, -1=video."""
+def _version_preference(title: str) -> int:
+    """Rank candidates by version quality. Higher = better.
+
+    Priority: explicit audio > audio > neutral > video > clean/censored.
+    """
     lower = title.lower()
+    score = 0
     if any(kw in lower for kw in _AUDIO_KEYWORDS):
-        return 1
+        score += 2
+    if any(kw in lower for kw in _EXPLICIT_KEYWORDS):
+        score += 1
     if any(kw in lower for kw in _VIDEO_KEYWORDS):
-        return -1
-    return 0
+        score -= 1
+    if any(kw in lower for kw in _CLEAN_KEYWORDS):
+        score -= 2
+    return score
