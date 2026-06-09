@@ -1,11 +1,14 @@
-"""Combined-identity match verification for audio acquisition.
+"""Three-tier source selection for audio acquisition.
 
-Uses token_sort_ratio on combined identity strings (artist + title) instead
-of field-by-field JW gates. This handles YouTube's "Artist - Title (Qualifier)
-ft. Guest" format naturally — token_sort_ratio is order-independent, so all
-the right words being present is what matters, not their position.
+Tier 1: ISRC deterministic lookup (handled by SearchStep)
+Tier 2: Structured metadata ranking (this module)
+Tier 3: Best-effort identity match (this module)
 
-See docs/solutions/design-patterns/2026-06-08-combined-identity-string-matching-over-field-gates.md
+No keyword banks. No title parsing heuristics. Ranking uses YouTube's
+own structured metadata fields (channel type, category, duration,
+view count) instead of scanning titles for "audio"/"video"/"clean".
+
+See docs/specs/acquire-track/design-v2-source-selection.md
 """
 
 from __future__ import annotations
@@ -22,22 +25,12 @@ if TYPE_CHECKING:
 
 _logger = structlog.get_logger(__name__)
 
-_IDENTITY_THRESHOLD = 70
-_DURATION_TOLERANCE_SECONDS = 15
-
-_AUDIO_KEYWORDS = {"audio", "official audio"}
-_VIDEO_KEYWORDS = {"video", "music video", "official video", "visualizer", "mv"}
-_CLEAN_KEYWORDS = {"clean", "censored", "clean version", "radio edit"}
-_EXPLICIT_KEYWORDS = {"explicit"}
+_IDENTITY_MIN = 60
+_DURATION_TIGHT = 3
+_DURATION_LOOSE = 15
 
 
 def identity_score(track_title: str, track_artist: str, candidate_title: str) -> float:
-    """Score a candidate against the track's combined identity.
-
-    Tries two forms and takes the max:
-    1. Combined: "artist title" vs candidate (catches YouTube's "Artist - Title" format)
-    2. Title-only: "title" vs candidate (catches cases where artist is in a separate field)
-    """
     combined = normalize_for_match(f"{track_artist} {track_title}")
     title_only = normalize_for_match(track_title)
     candidate_norm = normalize_for_match(candidate_title)
@@ -47,10 +40,50 @@ def identity_score(track_title: str, track_artist: str, candidate_title: str) ->
     )
 
 
-def duration_gate(expected: int | None, actual: int | None) -> bool:
+def _channel_score(channel: str) -> float:
+    """Score by channel type. Topic channels are auto-generated official audio."""
+    if channel.endswith("- Topic"):
+        return 1.0
+    lower = channel.lower()
+    if "vevo" in lower:
+        return 0.8
+    return 0.3
+
+
+def _category_score(categories: tuple[str, ...]) -> float:
+    if "Music" in categories:
+        return 1.0
+    return 0.2
+
+
+def _duration_score(expected: int | None, actual: int | None) -> float:
     if expected is None or actual is None:
-        return True
-    return abs(expected - actual) <= _DURATION_TOLERANCE_SECONDS
+        return 0.5
+    diff = abs(expected - actual)
+    if diff <= _DURATION_TIGHT:
+        return 1.0
+    if diff <= _DURATION_LOOSE:
+        return 0.5
+    return 0.0
+
+
+def _view_score(view_count: int, max_views: int) -> float:
+    if max_views == 0:
+        return 0.5
+    return min(view_count / max_views, 1.0)
+
+
+def metadata_rank(
+    candidate: AudioCandidate,
+    expected_duration: int | None,
+    max_views: int,
+) -> float:
+    """Composite metadata quality score (0.0 - 1.0). No keyword parsing."""
+    ch = _channel_score(candidate.channel)
+    cat = _category_score(candidate.categories)
+    dur = _duration_score(expected_duration, candidate.duration_seconds)
+    views = _view_score(candidate.view_count, max_views)
+    return 0.45 * ch + 0.25 * dur + 0.20 * cat + 0.10 * views
 
 
 def select_best_candidate(
@@ -60,25 +93,30 @@ def select_best_candidate(
     track_duration: int | None,
     candidates: list[AudioCandidate],
 ) -> AudioCandidate | None:
-    """Score all candidates by identity match, return the best above threshold."""
-    passing: list[tuple[float, AudioCandidate]] = []
+    """Three-tier selection: metadata rank first, identity fallback second."""
+    if not candidates:
+        return None
+
+    max_views = max((c.view_count for c in candidates), default=0)
+
+    scored: list[tuple[float, float, AudioCandidate]] = []
     for c in candidates:
-        score = identity_score(track_title, track_artist, c.title)
-        d_pass = duration_gate(track_duration, c.duration_seconds)
+        ident = identity_score(track_title, track_artist, c.title)
+        meta = metadata_rank(c, track_duration, max_views)
         _logger.info(
             "candidate_evaluated",
             candidate_title=c.title,
-            candidate_artist=c.artist,
+            candidate_channel=c.channel,
             candidate_duration=c.duration_seconds,
-            identity_score=round(score, 1),
-            duration_pass=d_pass,
+            candidate_views=c.view_count,
+            identity_score=round(ident, 1),
+            metadata_rank=round(meta, 3),
         )
-        if score < _IDENTITY_THRESHOLD:
+        if ident < _IDENTITY_MIN:
             continue
-        if not d_pass:
-            continue
-        passing.append((score, c))
-    if not passing:
+        scored.append((meta, ident, c))
+
+    if not scored:
         _logger.warning(
             "no_candidates_passed",
             track_title=track_title,
@@ -86,26 +124,14 @@ def select_best_candidate(
             total_candidates=len(candidates),
         )
         return None
-    passing.sort(
-        key=lambda x: (_version_preference(x[1].title), x[0]),
-        reverse=True,
+
+    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    best_meta, best_ident, best = scored[0]
+    _logger.info(
+        "candidate_selected",
+        title=best.title,
+        channel=best.channel,
+        metadata_rank=round(best_meta, 3),
+        identity_score=round(best_ident, 1),
     )
-    return passing[0][1]
-
-
-def _version_preference(title: str) -> int:
-    """Rank candidates by version quality. Higher = better.
-
-    Priority: explicit audio > audio > neutral > video > clean/censored.
-    """
-    lower = title.lower()
-    score = 0
-    if any(kw in lower for kw in _AUDIO_KEYWORDS):
-        score += 2
-    if any(kw in lower for kw in _EXPLICIT_KEYWORDS):
-        score += 1
-    if any(kw in lower for kw in _VIDEO_KEYWORDS):
-        score -= 1
-    if any(kw in lower for kw in _CLEAN_KEYWORDS):
-        score -= 2
-    return score
+    return best

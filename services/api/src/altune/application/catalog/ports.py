@@ -29,6 +29,10 @@ class AudioCandidate:
     artist: str
     duration_seconds: int | None
     url: str
+    channel: str = ""
+    categories: tuple[str, ...] = ()
+    view_count: int = 0
+    channel_follower_count: int = 0
 
 
 class AudioSearcher(Protocol):
