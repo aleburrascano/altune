@@ -110,6 +110,10 @@ class Settings(BaseSettings):
         "Required at runtime for audio acquisition; optional so unit tests "
         "can construct Settings without provisioning storage.",
     )
+    ffmpeg_location: str | None = Field(
+        default=None,
+        description="Path to ffmpeg binary directory. If unset, yt-dlp uses system PATH.",
+    )
 
     lastfm_api_key: SecretStr | None = Field(
         default=None,
