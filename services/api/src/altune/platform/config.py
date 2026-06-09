@@ -104,6 +104,13 @@ class Settings(BaseSettings):
         "form URL or email per https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting. "
         "Example: 'altune/0.1 ( mailto:dev@altune.test )'.",
     )
+    music_dir: str | None = Field(
+        default=None,
+        description="Base path for audio file storage, e.g. /mnt/oci-music. "
+        "Required at runtime for audio acquisition; optional so unit tests "
+        "can construct Settings without provisioning storage.",
+    )
+
     lastfm_api_key: SecretStr | None = Field(
         default=None,
         description="Last.fm API key for the discovery adapter. Obtain via "
