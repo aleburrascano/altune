@@ -126,6 +126,10 @@ describe('DetailScreen', () => {
         album: 'Hurry Up',
         duration_seconds: 244,
         artwork_url: 'https://img.example/mc.jpg',
+        isrc: null,
+        year: null,
+        genre: null,
+        album_artist: null,
       }),
     );
   });
