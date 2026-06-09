@@ -133,7 +133,7 @@ def select_best_candidate(
         return best
 
     if other_candidates:
-        other_candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        other_candidates.sort(key=lambda x: (x[1], x[0]), reverse=True)
         best = other_candidates[0][2]
         _logger.info(
             "candidate_selected", title=best.title, channel=best.channel,
