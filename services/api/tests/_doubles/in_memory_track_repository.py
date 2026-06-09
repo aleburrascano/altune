@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
     from altune.domain.catalog.track import Track
+    from altune.domain.catalog.track_id import TrackId
     from altune.domain.shared.user_id import UserId
 
 
@@ -29,6 +30,20 @@ class InMemoryTrackRepository:
 
     def _key(self, track: Track) -> tuple[object, str]:
         return (track.user_id, dedup_key(track.title, track.artist, track.album))
+
+    async def get_by_id(self, track_id: TrackId, user_id: UserId) -> Track | None:
+        for t in self._tracks:
+            if t.id == track_id and t.user_id == user_id:
+                return t
+        return None
+
+    async def update(self, track: Track) -> Track:
+        for i, existing in enumerate(self._tracks):
+            if existing.id == track.id:
+                self._tracks[i] = track
+                return track
+        msg = f"Track {track.id} not found"
+        raise ValueError(msg)
 
     async def add(self, track: Track) -> tuple[Track, bool]:
         key = self._key(track)
