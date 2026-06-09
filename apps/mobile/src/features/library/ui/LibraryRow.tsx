@@ -15,8 +15,9 @@ type LibraryRowProps = {
 export function LibraryRow({ track, onPress, onLongPress }: LibraryRowProps): ReactElement {
   const theme = useTheme();
   const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
+  const failedLabel = track.acquisition_status === 'failed' ? ', failed' : '';
   const albumLabel = track.album != null ? ` · ${track.album}` : '';
-  const a11yLabel = `${track.title} by ${track.artist}${albumLabel}${pendingLabel}`;
+  const a11yLabel = `${track.title} by ${track.artist}${albumLabel}${pendingLabel}${failedLabel}`;
 
   const duration =
     track.duration_seconds != null && track.duration_seconds > 0
@@ -66,6 +67,16 @@ export function LibraryRow({ track, onPress, onLongPress }: LibraryRowProps): Re
             Pending
           </Text>
         ) : null}
+        {track.acquisition_status === 'failed' ? (
+          <Text
+            testID={`library-row-failed-${track.id}`}
+            variant="caption"
+            tone="error"
+            style={styles.failed}
+          >
+            {track.failure_reason ?? 'Acquisition failed'}
+          </Text>
+        ) : null}
       </Row>
     </Pressable>
   );
@@ -80,4 +91,5 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   subtitle: { marginTop: 2 },
   pending: { marginTop: 2 },
+  failed: { marginTop: 2 },
 });
