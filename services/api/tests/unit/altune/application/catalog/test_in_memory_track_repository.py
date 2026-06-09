@@ -165,3 +165,70 @@ async def test_in_memory_add_same_title_different_users_both_created() -> None:
     _, created = await repo.add(other_user)
 
     assert created is True
+
+
+@pytest.mark.unit
+async def test_in_memory_get_by_id_returns_track() -> None:
+    track = _track(user=_USER_A, id_hex="11111111-1111-1111-1111-111111111111")
+    repo = InMemoryTrackRepository([track])
+
+    found = await repo.get_by_id(track.id, _USER_A)
+
+    assert found is not None
+    assert found.id == track.id
+
+
+@pytest.mark.unit
+async def test_in_memory_get_by_id_wrong_user_returns_none() -> None:
+    track = _track(user=_USER_A, id_hex="11111111-1111-1111-1111-111111111111")
+    repo = InMemoryTrackRepository([track])
+
+    found = await repo.get_by_id(track.id, _USER_B)
+
+    assert found is None
+
+
+@pytest.mark.unit
+async def test_in_memory_get_by_id_missing_returns_none() -> None:
+    repo = InMemoryTrackRepository()
+    missing_id = TrackId(UUID("99999999-9999-9999-9999-999999999999"))
+
+    found = await repo.get_by_id(missing_id, _USER_A)
+
+    assert found is None
+
+
+@pytest.mark.unit
+async def test_in_memory_update_replaces_track() -> None:
+    from altune.domain.catalog.acquisition_status import AcquisitionStatus
+
+    track = _track(user=_USER_A, id_hex="11111111-1111-1111-1111-111111111111")
+    repo = InMemoryTrackRepository([track])
+
+    updated = Track(
+        id=track.id,
+        user_id=track.user_id,
+        title=track.title,
+        artist=track.artist,
+        album=track.album,
+        duration_seconds=track.duration_seconds,
+        added_at=track.added_at,
+        audio_ref="user/artist/album/song.mp3",
+        acquisition_status=AcquisitionStatus.READY,
+    )
+    result = await repo.update(updated)
+
+    assert result.acquisition_status is AcquisitionStatus.READY
+    assert result.audio_ref == "user/artist/album/song.mp3"
+    found = await repo.get_by_id(track.id, _USER_A)
+    assert found is not None
+    assert found.audio_ref == "user/artist/album/song.mp3"
+
+
+@pytest.mark.unit
+async def test_in_memory_update_nonexistent_raises() -> None:
+    repo = InMemoryTrackRepository()
+    track = _track(user=_USER_A, id_hex="11111111-1111-1111-1111-111111111111")
+
+    with pytest.raises(ValueError, match=r"not found"):
+        await repo.update(track)
