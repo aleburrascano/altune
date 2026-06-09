@@ -14,12 +14,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import structlog
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from altune.application.auth.exceptions import InvalidTokenError
 
 if TYPE_CHECKING:
     from fastapi import FastAPI, Request
+
+_log = structlog.get_logger(__name__)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -33,3 +37,15 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={"detail": "invalid_token", "reason": exc.reason.value},
             headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
         )
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        _log.warning(
+            "http_validation_error",
+            path=request.url.path,
+            method=request.method,
+            errors=exc.errors(),
+        )
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
