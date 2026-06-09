@@ -18,6 +18,10 @@ class CreateTrackRequest(BaseModel):
     album: str | None = None
     duration_seconds: int | None = None
     artwork_url: str | None = None
+    isrc: str | None = None
+    year: int | None = None
+    genre: str | None = None
+    album_artist: str | None = None
 
 
 class TrackResponse(BaseModel):
@@ -37,6 +41,7 @@ class TrackResponse(BaseModel):
     album_artist: str | None = None
     isrc: str | None = None
     audio_ref: str | None = None
+    failure_reason: str | None = None
 
 
 class ListTracksResponse(BaseModel):

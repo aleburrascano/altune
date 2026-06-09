@@ -37,6 +37,10 @@ class AddTrackToLibraryInput:
     album: str | None
     duration_seconds: int | None
     artwork_url: str | None
+    isrc: str | None = None
+    year: int | None = None
+    genre: str | None = None
+    album_artist: str | None = None
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,10 @@ class AddTrackToLibrary:
             duration_seconds=input.duration_seconds,
             added_at=datetime.now(UTC),
             artwork_url=input.artwork_url,
+            isrc=input.isrc,
+            year=input.year,
+            genre=input.genre,
+            album_artist=input.album_artist,
         )
         persisted, created = await self._tracks.add(track)
         if created:
