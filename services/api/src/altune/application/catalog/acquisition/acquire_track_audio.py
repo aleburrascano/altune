@@ -47,9 +47,13 @@ class AcquireTrackAudio:
         if track is None:
             _logger.warning("acquire_track_not_found", track_id=str(track_id))
             return
-        if track.acquisition_status is not AcquisitionStatus.PENDING:
-            _logger.info("acquire_skip_not_pending", track_id=str(track_id), status=track.acquisition_status.value)
+        if track.acquisition_status is AcquisitionStatus.READY:
+            _logger.info("acquire_skip_already_ready", track_id=str(track_id))
             return
+        if track.acquisition_status is AcquisitionStatus.FAILED:
+            _logger.info("acquire_retrying_failed", track_id=str(track_id))
+            track = replace(track, acquisition_status=AcquisitionStatus.PENDING, failure_reason=None)
+            await self._tracks.update(track)
 
         _logger.info(
             "track_acquisition_started",
