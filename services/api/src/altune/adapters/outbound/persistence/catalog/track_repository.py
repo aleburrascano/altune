@@ -22,12 +22,45 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from altune.domain.catalog.track import Track
+    from altune.domain.catalog.track_id import TrackId
     from altune.domain.shared.user_id import UserId
 
 
 class SqlAlchemyTrackRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def get_by_id(self, track_id: TrackId, user_id: UserId) -> Track | None:
+        stmt = select(TrackRow).where(
+            TrackRow.id == track_id.value,
+            TrackRow.user_id == user_id.value,
+        )
+        result = await self._session.execute(stmt)
+        row = result.scalar_one_or_none()
+        return row.to_domain() if row else None
+
+    async def update(self, track: Track) -> Track:
+        stmt = select(TrackRow).where(TrackRow.id == track.id.value)
+        result = await self._session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if row is None:
+            msg = f"Track {track.id} not found"
+            raise ValueError(msg)
+        row.title = track.title
+        row.artist = track.artist
+        row.album = track.album
+        row.duration_seconds = track.duration_seconds
+        row.artwork_url = track.artwork_url
+        row.acquisition_status = track.acquisition_status.value
+        row.year = track.year
+        row.genre = track.genre
+        row.track_number = track.track_number
+        row.album_artist = track.album_artist
+        row.isrc = track.isrc
+        row.audio_ref = track.audio_ref
+        row.failure_reason = track.failure_reason
+        await self._session.flush()
+        return row.to_domain()
 
     async def add(self, track: Track) -> tuple[Track, bool]:
         # Natural idempotency: INSERT ... ON CONFLICT (user_id, dedup_key) DO
