@@ -59,6 +59,9 @@ CLAUDE.local.md
 .claude/projects/
 .claude/tasks/
 
+# ---- Local data (dev audio storage, DB files) ----
+.data/
+
 # ---- Build artifacts ----
 *.tgz
 *.zip
