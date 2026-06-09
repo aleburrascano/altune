@@ -49,6 +49,7 @@ def _track_response(t: Track) -> TrackResponse:
         album_artist=t.album_artist,
         isrc=t.isrc,
         audio_ref=t.audio_ref,
+        failure_reason=t.failure_reason,
     )
 
 
@@ -96,6 +97,10 @@ async def create_track(
                 album=body.album,
                 duration_seconds=body.duration_seconds,
                 artwork_url=body.artwork_url,
+                isrc=body.isrc,
+                year=body.year,
+                genre=body.genre,
+                album_artist=body.album_artist,
             )
         )
         await session.commit()
