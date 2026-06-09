@@ -14,6 +14,9 @@ _logger = structlog.get_logger(__name__)
 
 
 class YtDlpAudioSearcher:
+    def __init__(self, ffmpeg_location: str | None = None) -> None:
+        self._ffmpeg_location = ffmpeg_location
+
     async def search(self, query: str, limit: int = 5) -> list[AudioCandidate]:
         return await asyncio.to_thread(self._search_sync, query, limit)
 
@@ -73,6 +76,8 @@ class YtDlpAudioSearcher:
             "quiet": True,
             "no_warnings": True,
         }
+        if self._ffmpeg_location:
+            opts["ffmpeg_location"] = self._ffmpeg_location
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([url])
 
