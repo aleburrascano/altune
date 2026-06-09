@@ -23,8 +23,10 @@ class TagStep:
 
             try:
                 tags = ID3(ctx.temp_path)
+                tags.delete(ctx.temp_path)
             except ID3NoHeaderError:
-                tags = ID3()
+                pass
+            tags = ID3()
             tags.add(TIT2(encoding=3, text=[track.title]))
             tags.add(TPE1(encoding=3, text=[track.artist]))
             if track.album:
