@@ -82,6 +82,10 @@ class TrackRepository(Protocol):
         """Return a single track by id, scoped to the user. None if not found."""
         ...
 
+    async def delete(self, track_id: TrackId, user_id: UserId) -> bool:
+        """Delete a track by id, scoped to user. Returns True if deleted, False if not found."""
+        ...
+
     async def update(self, track: Track) -> Track:
         """Persist an updated Track instance (e.g., status transition).
 

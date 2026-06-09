@@ -37,6 +37,13 @@ class InMemoryTrackRepository:
                 return t
         return None
 
+    async def delete(self, track_id: TrackId, user_id: UserId) -> bool:
+        for i, t in enumerate(self._tracks):
+            if t.id == track_id and t.user_id == user_id:
+                self._tracks.pop(i)
+                return True
+        return False
+
     async def update(self, track: Track) -> Track:
         for i, existing in enumerate(self._tracks):
             if existing.id == track.id:

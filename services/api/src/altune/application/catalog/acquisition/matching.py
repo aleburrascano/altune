@@ -9,12 +9,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import structlog
 from rapidfuzz.distance import JaroWinkler
 
 from altune.application.discovery.normalize import normalize_for_match
 
 if TYPE_CHECKING:
     from altune.application.catalog.ports import AudioCandidate
+
+_logger = structlog.get_logger(__name__)
 
 _TITLE_THRESHOLD = 0.85
 _ARTIST_THRESHOLD = 0.70
@@ -48,19 +51,37 @@ def select_best_candidate(
 ) -> AudioCandidate | None:
     """Apply gates to all candidates, return the best passing one or None."""
     passing: list[tuple[float, AudioCandidate]] = []
+    norm_title = normalize_for_match(track_title)
+    norm_artist = normalize_for_match(track_artist)
     for c in candidates:
-        if not title_gate(track_title, c.title):
-            continue
-        if not artist_gate(track_artist, c.artist):
-            continue
-        if not duration_gate(track_duration, c.duration_seconds):
-            continue
-        score = JaroWinkler.normalized_similarity(
-            normalize_for_match(track_title),
-            normalize_for_match(c.title),
+        c_norm_title = normalize_for_match(c.title)
+        c_norm_artist = normalize_for_match(c.artist)
+        title_jw = JaroWinkler.normalized_similarity(norm_title, c_norm_title)
+        artist_jw = JaroWinkler.normalized_similarity(norm_artist, c_norm_artist)
+        t_pass = title_jw >= _TITLE_THRESHOLD
+        a_pass = artist_jw >= _ARTIST_THRESHOLD
+        d_pass = duration_gate(track_duration, c.duration_seconds)
+        _logger.info(
+            "candidate_evaluated",
+            candidate_title=c.title,
+            candidate_artist=c.artist,
+            candidate_duration=c.duration_seconds,
+            title_jw=round(title_jw, 3),
+            artist_jw=round(artist_jw, 3),
+            title_pass=t_pass,
+            artist_pass=a_pass,
+            duration_pass=d_pass,
         )
-        passing.append((score, c))
+        if not t_pass or not a_pass or not d_pass:
+            continue
+        passing.append((title_jw, c))
     if not passing:
+        _logger.warning(
+            "no_candidates_passed_gates",
+            track_title=track_title,
+            track_artist=track_artist,
+            total_candidates=len(candidates),
+        )
         return None
     passing.sort(key=lambda x: x[0], reverse=True)
     return passing[0][1]
