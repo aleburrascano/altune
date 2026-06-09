@@ -25,6 +25,9 @@ _logger = structlog.get_logger(__name__)
 _IDENTITY_THRESHOLD = 70
 _DURATION_TOLERANCE_SECONDS = 15
 
+_AUDIO_KEYWORDS = {"audio", "official audio"}
+_VIDEO_KEYWORDS = {"video", "music video", "official video", "visualizer", "mv"}
+
 
 def identity_score(track_title: str, track_artist: str, candidate_title: str) -> float:
     """Score a candidate against the track's combined identity.
@@ -81,5 +84,15 @@ def select_best_candidate(
             total_candidates=len(candidates),
         )
         return None
-    passing.sort(key=lambda x: x[0], reverse=True)
+    passing.sort(key=lambda x: (_audio_preference(x[1].title), x[0]), reverse=True)
     return passing[0][1]
+
+
+def _audio_preference(title: str) -> int:
+    """Prefer audio-only uploads over music videos. 1=audio, 0=neutral, -1=video."""
+    lower = title.lower()
+    if any(kw in lower for kw in _AUDIO_KEYWORDS):
+        return 1
+    if any(kw in lower for kw in _VIDEO_KEYWORDS):
+        return -1
+    return 0
