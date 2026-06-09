@@ -96,6 +96,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             None,
         )
         app.state.discovery_history_repo = build_discovery_history_repo()
+        # Audio acquisition wiring (acquire-track spec). Searcher + store on
+        # app.state so the POST /v1/tracks background task can access them.
+        if cfg.music_dir:
+            from altune.adapters.outbound.audio.filesystem_store import FilesystemAudioStore
+            from altune.adapters.outbound.audio.ytdlp_searcher import YtDlpAudioSearcher
+
+            app.state.audio_searcher = YtDlpAudioSearcher()
+            app.state.audio_store = FilesystemAudioStore(cfg.music_dir)
         log.info(
             "auth.startup_config_validated",
             verifier_mode="jwks" if cfg.supabase_jwt_jwks_url else "hs256",
