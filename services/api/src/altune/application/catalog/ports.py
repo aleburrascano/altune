@@ -46,6 +46,19 @@ class TrackRepository(Protocol):
         """
         ...
 
+    async def get_by_id(self, track_id: TrackId, user_id: UserId) -> Track | None:
+        """Return a single track by id, scoped to the user. None if not found."""
+        ...
+
+    async def update(self, track: Track) -> Track:
+        """Persist an updated Track instance (e.g., status transition).
+
+        The caller constructs a new frozen Track with the desired state;
+        the repository overwrites the persisted row. Raises ValueError
+        if the track does not exist.
+        """
+        ...
+
     async def add(self, track: Track) -> tuple[Track, bool]:
         """Persist a new track, or return the existing one on a dedup hit.
 
