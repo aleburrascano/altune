@@ -217,3 +217,86 @@ def test_track_accepts_audio_ref_with_ready_status() -> None:
     )
     assert track.audio_ref == "user-id/Artist/Album/Song.mp3"
     assert track.acquisition_status is AcquisitionStatus.READY
+
+
+@pytest.mark.unit
+def test_track_failed_requires_no_audio_ref() -> None:
+    with pytest.raises(ValueError, match=r"audio_ref requires"):
+        Track(
+            id=_TRACK_ID_A,
+            user_id=_USER_ID,
+            title="Song",
+            artist="Artist",
+            album=None,
+            duration_seconds=None,
+            added_at=_ADDED,
+            audio_ref="some/path.mp3",
+            acquisition_status=AcquisitionStatus.FAILED,
+            failure_reason="download_error",
+        )
+
+
+@pytest.mark.unit
+def test_track_failed_requires_failure_reason() -> None:
+    with pytest.raises(ValueError, match=r"failure_reason"):
+        Track(
+            id=_TRACK_ID_A,
+            user_id=_USER_ID,
+            title="Song",
+            artist="Artist",
+            album=None,
+            duration_seconds=None,
+            added_at=_ADDED,
+            acquisition_status=AcquisitionStatus.FAILED,
+        )
+
+
+@pytest.mark.unit
+def test_track_pending_rejects_failure_reason() -> None:
+    with pytest.raises(ValueError, match=r"failure_reason"):
+        Track(
+            id=_TRACK_ID_A,
+            user_id=_USER_ID,
+            title="Song",
+            artist="Artist",
+            album=None,
+            duration_seconds=None,
+            added_at=_ADDED,
+            acquisition_status=AcquisitionStatus.PENDING,
+            failure_reason="should not be here",
+        )
+
+
+@pytest.mark.unit
+def test_track_ready_rejects_failure_reason() -> None:
+    with pytest.raises(ValueError, match=r"failure_reason"):
+        Track(
+            id=_TRACK_ID_A,
+            user_id=_USER_ID,
+            title="Song",
+            artist="Artist",
+            album=None,
+            duration_seconds=None,
+            added_at=_ADDED,
+            audio_ref="some/path.mp3",
+            acquisition_status=AcquisitionStatus.READY,
+            failure_reason="should not be here",
+        )
+
+
+@pytest.mark.unit
+def test_track_accepts_failed_with_failure_reason() -> None:
+    track = Track(
+        id=_TRACK_ID_A,
+        user_id=_USER_ID,
+        title="Song",
+        artist="Artist",
+        album=None,
+        duration_seconds=None,
+        added_at=_ADDED,
+        acquisition_status=AcquisitionStatus.FAILED,
+        failure_reason="no_match_found",
+    )
+    assert track.acquisition_status is AcquisitionStatus.FAILED
+    assert track.failure_reason == "no_match_found"
+    assert track.audio_ref is None
