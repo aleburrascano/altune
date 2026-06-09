@@ -25,6 +25,10 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 import { getDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
+import { useQueryClient } from '@tanstack/react-query';
+import type { InfiniteData } from '@tanstack/react-query';
+import type { ListTracksResponse } from '@shared/api-client/types';
+
 import { extractFeaturedFromText, formatDuration, trackInfoRows } from '../extras';
 import { useAlbumTracks } from '../hooks/useAlbumTracks';
 import { useArtistContent } from '../hooks/useArtistContent';
@@ -165,6 +169,8 @@ function TrackDetailBody({
   lateralNav: LateralNavHandle;
 }): ReactElement {
   const save = useSaveTrack();
+  const queryClient = useQueryClient();
+  const alreadySaved = _isTrackInLibraryCache(queryClient, result.title, result.subtitle);
   const rows = trackInfoRows(result.extras);
   if (!rows.some((r) => r.key === 'featuring')) {
     const parsed = extractFeaturedFromText(result.title, result.subtitle);
@@ -172,9 +178,6 @@ function TrackDetailBody({
       rows.push({ key: 'featuring', label: 'Featuring', value: parsed });
     }
   }
-  // AC#9: a Track requires a non-empty artist. When the result has no subtitle
-  // (artist), that invariant can't be met — disable Save rather than POST an
-  // invalid body.
   const canSave = result.subtitle !== null && result.subtitle.length > 0;
 
   const onSave = (): void => {
@@ -251,9 +254,9 @@ function TrackDetailBody({
       )}
       <Button
         testID="detail-save"
-        label={save.isSuccess ? 'Saved' : 'Save to Library'}
+        label={alreadySaved || save.isSuccess ? 'Saved' : 'Save to Library'}
         onPress={onSave}
-        disabled={!canSave || save.isPending || save.isSuccess}
+        disabled={!canSave || save.isPending || save.isSuccess || alreadySaved}
         loading={save.isPending}
         haptic
         style={styles.save}
@@ -591,6 +594,22 @@ function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; de
         <DiscographySections albums={albums} onAlbumPress={onAlbumPress} />
       )}
     </View>
+  );
+}
+
+function _isTrackInLibraryCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  title: string,
+  artist: string | null,
+): boolean {
+  const data = queryClient.getQueryData<InfiniteData<ListTracksResponse>>(['library']);
+  if (!data) return false;
+  const normalTitle = title.toLowerCase().trim();
+  const normalArtist = (artist ?? '').toLowerCase().trim();
+  return data.pages.some((page) =>
+    page.items.some(
+      (t) => t.title.toLowerCase().trim() === normalTitle && t.artist.toLowerCase().trim() === normalArtist,
+    ),
   );
 }
 
