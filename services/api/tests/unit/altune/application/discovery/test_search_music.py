@@ -696,3 +696,93 @@ async def test_result_with_all_sources_unfetchable_filtered() -> None:
     titles = [r.title for r in output.results]
     assert "Good Song" in titles
     assert "Ghost Song" not in titles
+
+
+# --- _enrich_mbids: MB-source short-circuit (discovery rework follow-up) ---
+
+_CHE_MBID = "0a68f3b5-79c2-4f81-a7bc-ebc977602e86"
+
+
+def _artist_result(
+    title: str,
+    sources: tuple[SourceRef, ...],
+    extras: dict[str, object] | None = None,
+) -> SearchResult:
+    return SearchResult(
+        kind=ResultKind.ARTIST,
+        title=title,
+        subtitle=None,
+        image_url=None,
+        confidence=Confidence.LOW,
+        sources=sources,
+        extras=extras if extras is not None else {},
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_mbids_short_circuits_on_musicbrainz_source() -> None:
+    """An artist carrying a MB SourceRef gets its mbid from that source — no URL lookup."""
+    from tests._doubles.spy_mbid_resolver import SpyMbidResolver
+
+    artist = _artist_result(
+        "Che",
+        sources=(
+            SourceRef(
+                provider=ProviderName.DEEZER,
+                external_id="234701081",
+                url="https://www.deezer.com/artist/234701081",
+            ),
+            SourceRef(
+                provider=ProviderName.MUSICBRAINZ,
+                external_id=_CHE_MBID,
+                url=f"https://musicbrainz.org/artist/{_CHE_MBID}",
+            ),
+        ),
+    )
+    provider = InMemorySearchProvider(name="deezer", canned=(artist,))
+    resolver = SpyMbidResolver(canned="mbid-from-url-lookup-should-not-be-used")
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        mbid_resolver=resolver,
+    )
+
+    output = await use_case.execute(
+        SearchMusicInput(raw_query="che", user_id=_USER, kinds=frozenset({ResultKind.ARTIST}))
+    )
+
+    assert output.results[0].extras.get("mbid") == _CHE_MBID
+    assert resolver.calls == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_mbids_short_circuit_not_capped_at_three_artists() -> None:
+    """The free MB-source path applies to every artist; only URL lookups are capped."""
+    from tests._doubles.spy_mbid_resolver import SpyMbidResolver
+
+    artists = tuple(
+        _artist_result(
+            f"Artist {i}",
+            sources=(
+                SourceRef(
+                    provider=ProviderName.MUSICBRAINZ,
+                    external_id=f"mbid-{i}",
+                    url=f"https://musicbrainz.org/artist/mbid-{i}",
+                ),
+            ),
+        )
+        for i in range(4)
+    )
+    resolver = SpyMbidResolver()
+    use_case = SearchMusic(
+        providers=[],
+        history_repo=InMemorySearchHistoryRepository(),
+        mbid_resolver=resolver,
+    )
+
+    enriched = await use_case._enrich_mbids(artists)
+
+    assert [r.extras.get("mbid") for r in enriched] == [f"mbid-{i}" for i in range(4)]
+    assert resolver.calls == []
