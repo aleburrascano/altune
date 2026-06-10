@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -883,7 +884,7 @@ class _HintRecordingGeniusResolver:
         title: str,
         subtitle: str | None,
         *,
-        track_hints: tuple[str, ...] = (),
+        track_hints: Sequence[str] = (),
     ) -> str | None:
         _ = (kind, subtitle)
         self.calls.append((title, tuple(track_hints)))

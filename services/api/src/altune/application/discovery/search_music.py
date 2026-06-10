@@ -213,9 +213,7 @@ class SearchMusic:
             mbids = await asyncio.gather(*(_resolve_one(url) for _, url in candidates))
             for (i, _), mbid in zip(candidates, mbids, strict=True):
                 if mbid:
-                    enriched[i] = replace(
-                        enriched[i], extras={**enriched[i].extras, "mbid": mbid}
-                    )
+                    enriched[i] = replace(enriched[i], extras={**enriched[i].extras, "mbid": mbid})
         return tuple(enriched)
 
     async def _enrich(self, results: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:

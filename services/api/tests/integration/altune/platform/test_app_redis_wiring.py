@@ -49,7 +49,5 @@ def test_lifespan_with_redis_url_activates_cache_layer(redis_url: str) -> None:
     with TestClient(app):
         assert app.state.redis is not None
         assert isinstance(app.state.discovery_cache, RedisQueryCache)
-        assert isinstance(
-            app.state.discovery_content_validation_cache, RedisContentValidationCache
-        )
+        assert isinstance(app.state.discovery_content_validation_cache, RedisContentValidationCache)
         assert isinstance(app.state.discovery_fetch_success_store, RedisFetchSuccessStore)
