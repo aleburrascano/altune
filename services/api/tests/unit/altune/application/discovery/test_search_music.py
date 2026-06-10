@@ -1019,3 +1019,103 @@ async def test_enrich_swallows_hint_fetch_failure() -> None:
 
     assert genius.calls == [("Che", ())]
     assert output.results[0].image_url is None
+
+
+# --- _enrich: artwork outcome cache (discovery rework follow-up) ---
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_warm_artwork_cache_skips_resolvers() -> None:
+    from tests._doubles.in_memory_artwork_cache import InMemoryArtworkCache
+
+    genius = _HintRecordingGeniusResolver()
+    cache = InMemoryArtworkCache()
+    cache.seed(ResultKind.ARTIST, "Che", None, _CHE_MBID, "https://cached.example/che.jpg")
+    provider = InMemorySearchProvider(name="musicbrainz", canned=(_che_with_mb_source(),))
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        genius_resolver=genius,
+        artwork_cache=cache,
+    )
+
+    output = await use_case.execute(
+        SearchMusicInput(raw_query="che", user_id=_USER, kinds=frozenset({ResultKind.ARTIST}))
+    )
+
+    assert output.results[0].image_url == "https://cached.example/che.jpg"
+    assert genius.calls == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_warm_negative_artwork_cache_skips_resolvers() -> None:
+    from tests._doubles.in_memory_artwork_cache import InMemoryArtworkCache
+
+    genius = _HintRecordingGeniusResolver()
+    cache = InMemoryArtworkCache()
+    cache.seed(ResultKind.ARTIST, "Che", None, _CHE_MBID, None)
+    provider = InMemorySearchProvider(name="musicbrainz", canned=(_che_with_mb_source(),))
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        genius_resolver=genius,
+        artwork_cache=cache,
+    )
+
+    output = await use_case.execute(
+        SearchMusicInput(raw_query="che", user_id=_USER, kinds=frozenset({ResultKind.ARTIST}))
+    )
+
+    assert output.results[0].image_url is None
+    assert genius.calls == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_cold_artwork_cache_stores_waterfall_outcome() -> None:
+    from tests._doubles.fake_artist_track_title_source import FakeArtistTrackTitleSource
+    from tests._doubles.in_memory_artwork_cache import InMemoryArtworkCache
+
+    genius = _HintRecordingGeniusResolver()
+    titles = FakeArtistTrackTitleSource(titles=("agenda",))
+    cache = InMemoryArtworkCache()
+    provider = InMemorySearchProvider(name="musicbrainz", canned=(_che_with_mb_source(),))
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        genius_resolver=genius,
+        track_title_source=titles,
+        artwork_cache=cache,
+    )
+
+    await use_case.execute(
+        SearchMusicInput(raw_query="che", user_id=_USER, kinds=frozenset({ResultKind.ARTIST}))
+    )
+
+    assert cache.set_calls == [
+        (("artist", "Che", "", _CHE_MBID), "https://images.genius.com/che.jpg")
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_cold_artwork_cache_stores_negative_outcome() -> None:
+    from tests._doubles.in_memory_artwork_cache import InMemoryArtworkCache
+
+    genius = _HintRecordingGeniusResolver()  # fails without hints; no title source wired
+    cache = InMemoryArtworkCache()
+    provider = InMemorySearchProvider(name="musicbrainz", canned=(_che_with_mb_source(),))
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        genius_resolver=genius,
+        artwork_cache=cache,
+    )
+
+    await use_case.execute(
+        SearchMusicInput(raw_query="che", user_id=_USER, kinds=frozenset({ResultKind.ARTIST}))
+    )
+
+    assert cache.set_calls == [(("artist", "Che", "", _CHE_MBID), None)]
