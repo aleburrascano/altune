@@ -49,7 +49,9 @@ def _track(title: str, subtitle: str, ext_id: str, native_pop: float) -> SearchR
         subtitle=subtitle,
         image_url=None,
         confidence=Confidence.LOW,
-        sources=(SourceRef(provider=ProviderName.DEEZER, external_id=ext_id, url=f"https://x/{ext_id}"),),
+        sources=(
+            SourceRef(provider=ProviderName.DEEZER, external_id=ext_id, url=f"https://x/{ext_id}"),
+        ),
         extras={"popularity": native_pop},
     )
 
