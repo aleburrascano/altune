@@ -96,6 +96,7 @@ async def get_discovery_search(
     fanart_resolver = getattr(request.app.state, "discovery_fanart_resolver", None)
     genius_resolver = getattr(request.app.state, "discovery_genius_resolver", None)
     track_title_source = getattr(request.app.state, "discovery_track_title_source", None)
+    artwork_cache = getattr(request.app.state, "discovery_artwork_cache", None)
     sessionmaker = getattr(request.app.state, "sessionmaker", None)
     if sessionmaker is not None:
         from altune.adapters.outbound.persistence.discovery.search_history_repository import (
@@ -116,6 +117,7 @@ async def get_discovery_search(
                 fanart_resolver=fanart_resolver,
                 genius_resolver=genius_resolver,
                 track_title_source=track_title_source,
+                artwork_cache=artwork_cache,
             )
             output = await use_case.execute(
                 SearchMusicInput(
@@ -142,6 +144,7 @@ async def get_discovery_search(
             fanart_resolver=fanart_resolver,
             genius_resolver=genius_resolver,
             track_title_source=track_title_source,
+            artwork_cache=artwork_cache,
         )
         output = await use_case.execute(
             SearchMusicInput(
