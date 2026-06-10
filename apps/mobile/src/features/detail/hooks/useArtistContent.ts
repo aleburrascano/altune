@@ -136,7 +136,18 @@ export function useArtistContent({
   const dzFailed = deezerAlbumsQuery.isError || (dzData !== undefined && dzData.status !== 'ok');
 
   const mbAlbums = mbData?.status === 'ok' ? mbData.items : [];
-  const dzAlbums = dzData?.status === 'ok' ? dzData.items : [];
+  const dzAlbumsRaw = dzData?.status === 'ok' ? dzData.items : [];
+  // MB-authoritative discography: Deezer's artist entities can conflate
+  // several same-name artists (and its album entries carry no artist field
+  // to filter on). With a VERIFIED identity (mbid matches the MB source we
+  // queried) and a healthy MB list, Deezer only enriches title-matched
+  // albums — it contributes no new titles. Without that, the union stands.
+  const mbAuthoritative =
+    mbid !== null && mbSource?.external_id === mbid && mbAlbums.length > 0;
+  const mbTitleKeys = new Set(mbAlbums.map((a) => normalizeForDedup(a.title)));
+  const dzAlbums = mbAuthoritative
+    ? dzAlbumsRaw.filter((a) => mbTitleKeys.has(normalizeForDedup(a.title)))
+    : dzAlbumsRaw;
   const mergedAlbums = dedupAlbumsByTitle([...mbAlbums, ...dzAlbums]);
 
   const isLoadingAlbums = (mbSource !== null && mbAlbumsQuery.isLoading)
