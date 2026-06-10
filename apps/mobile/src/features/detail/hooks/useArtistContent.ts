@@ -126,21 +126,34 @@ export function useArtistContent({
     staleTime: 1000 * 60 * 30,
   });
 
-  const mbAlbums = mbAlbumsQuery.data?.items ?? [];
-  const dzAlbums = deezerAlbumsQuery.data?.items ?? [];
+  // The backend reports provider failures as HTTP 200 with status
+  // timeout/error and empty items — treat any non-ok payload as that
+  // provider's failure, and never surface its items.
+  const mbData = mbAlbumsQuery.data;
+  const dzData = deezerAlbumsQuery.data;
+  const tracksData = tracksQuery.data;
+  const mbFailed = mbAlbumsQuery.isError || (mbData !== undefined && mbData.status !== 'ok');
+  const dzFailed = deezerAlbumsQuery.isError || (dzData !== undefined && dzData.status !== 'ok');
+
+  const mbAlbums = mbData?.status === 'ok' ? mbData.items : [];
+  const dzAlbums = dzData?.status === 'ok' ? dzData.items : [];
   const mergedAlbums = dedupAlbumsByTitle([...mbAlbums, ...dzAlbums]);
 
   const isLoadingAlbums = (mbSource !== null && mbAlbumsQuery.isLoading)
     || (deezerSource !== null && deezerAlbumsQuery.isLoading);
-  const isErrorAlbums = (mbSource !== null && mbAlbumsQuery.isError)
-    && (deezerSource === null || deezerAlbumsQuery.isError);
+  const albumOutcomes = [
+    ...(mbSource !== null ? [mbFailed] : []),
+    ...(deezerSource !== null ? [dzFailed] : []),
+  ];
+  const isErrorAlbums = albumOutcomes.length > 0 && albumOutcomes.every(Boolean);
 
   return {
-    topTracks: tracksQuery.data?.items ?? [],
+    topTracks: tracksData?.status === 'ok' ? tracksData.items : [],
     albums: sortByReleaseDateDesc(mergedAlbums),
     isLoadingTracks: tracksQuery.isLoading,
     isLoadingAlbums,
-    isErrorTracks: tracksQuery.isError || tracksQuery.data?.status === 'error',
+    isErrorTracks:
+      tracksQuery.isError || (tracksData !== undefined && tracksData.status !== 'ok'),
     isErrorAlbums,
     refetchTracks: tracksQuery.refetch,
     refetchAlbums: () => { mbAlbumsQuery.refetch(); deezerAlbumsQuery.refetch(); },
