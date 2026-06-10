@@ -27,9 +27,7 @@ _NEGATIVE_TTL_SECONDS = 24 * 3600
 _NEGATIVE_SENTINEL = "__none__"
 
 
-def artwork_cache_key(
-    kind: ResultKind, title: str, subtitle: str | None, mbid: str | None
-) -> str:
+def artwork_cache_key(kind: ResultKind, title: str, subtitle: str | None, mbid: str | None) -> str:
     raw = f"{title}|{subtitle or ''}|{mbid or ''}"
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
     return f"{_KEY_PREFIX}:{kind.value}:{digest}"

@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     from altune.application.discovery.ports import MbidResolver
 
 
-
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Application factory.
 
