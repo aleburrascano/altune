@@ -116,6 +116,40 @@ class HintedArtworkResolver(Protocol):
     ) -> str | None: ...
 
 
+@dataclass(frozen=True, slots=True)
+class ArtworkCacheEntry:
+    """Cached final artwork outcome; url=None is a cached negative."""
+
+    url: str | None
+
+
+@runtime_checkable
+class ArtworkCache(Protocol):
+    """Cache of the final artwork-waterfall outcome per result.
+
+    A hit (positive or negative) skips the whole Fanart.tv -> Genius ->
+    Deezer/TheAudioDB waterfall on repeat searches. Errors degrade to a
+    miss; never raises.
+    """
+
+    async def get(
+        self,
+        kind: ResultKind,
+        title: str,
+        subtitle: str | None,
+        mbid: str | None,
+    ) -> ArtworkCacheEntry | None: ...
+
+    async def set(
+        self,
+        kind: ResultKind,
+        title: str,
+        subtitle: str | None,
+        mbid: str | None,
+        url: str | None,
+    ) -> None: ...
+
+
 @runtime_checkable
 class ArtistTrackTitleSource(Protocol):
     """Known-track-title lookup for an artist MBID (feeds the Genius hints).

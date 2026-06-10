@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 
     from altune.application.discovery.ports import (
         ArtistTrackTitleSource,
+        ArtworkCache,
+        ArtworkCacheEntry,
         ArtworkResolver,
         ContentValidationCache,
         HintedArtworkResolver,
@@ -134,6 +136,7 @@ class SearchMusic:
     fanart_resolver: MbidArtworkResolver | None = None
     genius_resolver: HintedArtworkResolver | None = None
     track_title_source: ArtistTrackTitleSource | None = None
+    artwork_cache: ArtworkCache | None = None
     _breakers: dict[str, CircuitBreaker] = field(default_factory=dict, init=False)
 
     def _breaker_for(self, provider_name: str) -> CircuitBreaker:
@@ -256,34 +259,47 @@ class SearchMusic:
                         changed = True
                 _EMPTY_ART_HASH = "d41d8cd98f00b204e9800998ecf8427e"
                 needs_art = result.image_url is None or _EMPTY_ART_HASH in (result.image_url or "")
-                try_fanart = needs_art or result.kind is ResultKind.ARTIST
-                if try_fanart and self.fanart_resolver is not None:
-                    mbid = extras.get("mbid") or result.extras.get("mbid")
-                    if isinstance(mbid, str) and mbid:
+                try_art = needs_art or result.kind is ResultKind.ARTIST
+                raw_mbid = extras.get("mbid") or result.extras.get("mbid")
+                art_mbid = raw_mbid if isinstance(raw_mbid, str) and raw_mbid else None
+                cached_art: ArtworkCacheEntry | None = None
+                if try_art and self.artwork_cache is not None:
+                    try:
+                        cached_art = await self.artwork_cache.get(
+                            result.kind, result.title, result.subtitle, art_mbid
+                        )
+                    except Exception:
+                        cached_art = None
+                if cached_art is not None:
+                    # Hit — positive applies the cached URL, negative skips the
+                    # waterfall (the providers' own art, if any, stands).
+                    if cached_art.url:
+                        image_url = cached_art.url
+                        changed = True
+                elif try_art:
+                    resolved_art: str | None = None
+                    if self.fanart_resolver is not None and art_mbid is not None:
                         try:
                             url = await self.fanart_resolver.resolve_artwork(
-                                result.kind, result.title, result.subtitle, mbid=mbid
+                                result.kind, result.title, result.subtitle, mbid=art_mbid
                             )
                         except Exception:
                             url = None
                         if url:
-                            image_url = url
+                            resolved_art = url
                             needs_art = False
-                            changed = True
-                if needs_art and self.genius_resolver is not None:
-                    genius = self.genius_resolver
-                    try:
-                        url = await genius.resolve_artwork(
-                            result.kind, result.title, result.subtitle
-                        )
-                    except Exception:
-                        url = None
-                    if url is None and result.kind is ResultKind.ARTIST:
-                        # Bare name search fails for short/common names — retry
-                        # with known-track titles pinned to the artist's MBID.
-                        hint_mbid = extras.get("mbid") or result.extras.get("mbid")
-                        if isinstance(hint_mbid, str) and hint_mbid:
-                            hints = await self._track_hints_for(hint_mbid)
+                    if needs_art and self.genius_resolver is not None:
+                        genius = self.genius_resolver
+                        try:
+                            url = await genius.resolve_artwork(
+                                result.kind, result.title, result.subtitle
+                            )
+                        except Exception:
+                            url = None
+                        if url is None and result.kind is ResultKind.ARTIST and art_mbid:
+                            # Bare name search fails for short/common names — retry
+                            # with known-track titles pinned to the artist's MBID.
+                            hints = await self._track_hints_for(art_mbid)
                             if hints:
                                 try:
                                     url = await genius.resolve_artwork(
@@ -294,23 +310,35 @@ class SearchMusic:
                                     )
                                 except Exception:
                                     url = None
-                    if url:
-                        image_url = url
-                        needs_art = False
+                        if url:
+                            resolved_art = url
+                            needs_art = False
+                    is_ambiguous_artist = (
+                        result.kind is ResultKind.ARTIST and len(result.title.split()) <= 1
+                    )
+                    if art_resolver is not None and needs_art and not is_ambiguous_artist:
+                        try:
+                            url = await art_resolver.resolve_artwork(
+                                result.kind, result.title, result.subtitle
+                            )
+                        except Exception:
+                            url = None
+                        if url:
+                            resolved_art = url
+                    if resolved_art is not None:
+                        image_url = resolved_art
                         changed = True
-                is_ambiguous_artist = (
-                    result.kind is ResultKind.ARTIST and len(result.title.split()) <= 1
-                )
-                if art_resolver is not None and needs_art and not is_ambiguous_artist:
-                    try:
-                        url = await art_resolver.resolve_artwork(
-                            result.kind, result.title, result.subtitle
-                        )
-                    except Exception:
-                        url = None
-                    if url:
-                        image_url = url
-                        changed = True
+                    if self.artwork_cache is not None:
+                        try:
+                            await self.artwork_cache.set(
+                                result.kind,
+                                result.title,
+                                result.subtitle,
+                                art_mbid,
+                                resolved_art,
+                            )
+                        except Exception:
+                            _log.warning("artwork_cache_set_failed", exc_info=True)
                 return replace(result, extras=extras, image_url=image_url) if changed else result
 
         enriched = await asyncio.gather(*(_one(r) for r in top))

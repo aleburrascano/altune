@@ -199,6 +199,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Content validation + fetch success (quality gates, Redis-backed).
         redis_client = getattr(app.state, "redis", None)
         if redis_client is not None:
+            from altune.adapters.outbound.discovery.cache.artwork_cache import (
+                RedisArtworkCache,
+            )
             from altune.adapters.outbound.discovery.cache.content_validation_cache import (
                 RedisContentValidationCache,
             )
@@ -210,9 +213,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 redis=redis_client
             )
             app.state.discovery_fetch_success_store = RedisFetchSuccessStore(redis=redis_client)
+            app.state.discovery_artwork_cache = RedisArtworkCache(redis=redis_client)
         else:
             app.state.discovery_content_validation_cache = None
             app.state.discovery_fetch_success_store = None
+            app.state.discovery_artwork_cache = None
         # Audio acquisition wiring (acquire-track spec). Searcher + store on
         # app.state so the POST /v1/tracks background task can access them.
         if cfg.music_dir:
