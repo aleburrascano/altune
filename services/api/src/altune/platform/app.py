@@ -23,6 +23,9 @@ from altune.platform.logging import configure_logging, get_logger
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from altune.application.discovery.ports import MbidResolver
+
+
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Application factory.
@@ -175,7 +178,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             None,
         )
         if mb_adapter is not None and hasattr(mb_adapter, "client"):
-            app.state.discovery_mbid_resolver = MusicBrainzMbidResolver(client=mb_adapter.client)
+            mbid_resolver: MbidResolver = MusicBrainzMbidResolver(client=mb_adapter.client)
+            if app.state.redis is not None:
+                from altune.adapters.outbound.discovery.cache.mbid_cache import (
+                    CachedMbidResolver,
+                )
+
+                mbid_resolver = CachedMbidResolver(inner=mbid_resolver, redis=app.state.redis)
+            app.state.discovery_mbid_resolver = mbid_resolver
         else:
             app.state.discovery_mbid_resolver = None
 
