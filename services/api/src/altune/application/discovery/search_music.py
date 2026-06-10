@@ -30,8 +30,11 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
     from altune.application.discovery.ports import (
+        ArtistTrackTitleSource,
         ArtworkResolver,
         ContentValidationCache,
+        HintedArtworkResolver,
+        MbidArtworkResolver,
         MbidResolver,
         PopularityResolver,
         QueryCache,
@@ -128,8 +131,9 @@ class SearchMusic:
     quality_scorer: QualityScorer | None = None
     content_validation_cache: ContentValidationCache | None = None
     mbid_resolver: MbidResolver | None = None
-    fanart_resolver: object | None = None
-    genius_resolver: ArtworkResolver | None = None
+    fanart_resolver: MbidArtworkResolver | None = None
+    genius_resolver: HintedArtworkResolver | None = None
+    track_title_source: ArtistTrackTitleSource | None = None
     _breakers: dict[str, CircuitBreaker] = field(default_factory=dict, init=False)
 
     def _breaker_for(self, provider_name: str) -> CircuitBreaker:
@@ -221,7 +225,12 @@ class SearchMusic:
         """
         pop_resolver = self.popularity_resolver
         art_resolver = self.artwork_resolver
-        if pop_resolver is None and art_resolver is None:
+        if (
+            pop_resolver is None
+            and art_resolver is None
+            and self.fanart_resolver is None
+            and self.genius_resolver is None
+        ):
             return results
         top = results[:_ENRICH_LIMIT]
         if not top:
@@ -262,12 +271,29 @@ class SearchMusic:
                             needs_art = False
                             changed = True
                 if needs_art and self.genius_resolver is not None:
+                    genius = self.genius_resolver
                     try:
-                        url = await self.genius_resolver.resolve_artwork(
+                        url = await genius.resolve_artwork(
                             result.kind, result.title, result.subtitle
                         )
                     except Exception:
                         url = None
+                    if url is None and result.kind is ResultKind.ARTIST:
+                        # Bare name search fails for short/common names — retry
+                        # with known-track titles pinned to the artist's MBID.
+                        hint_mbid = extras.get("mbid") or result.extras.get("mbid")
+                        if isinstance(hint_mbid, str) and hint_mbid:
+                            hints = await self._track_hints_for(hint_mbid)
+                            if hints:
+                                try:
+                                    url = await genius.resolve_artwork(
+                                        result.kind,
+                                        result.title,
+                                        result.subtitle,
+                                        track_hints=hints,
+                                    )
+                                except Exception:
+                                    url = None
                     if url:
                         image_url = url
                         needs_art = False
@@ -289,6 +315,19 @@ class SearchMusic:
 
         enriched = await asyncio.gather(*(_one(r) for r in top))
         return (*enriched, *results[_ENRICH_LIMIT:])
+
+    async def _track_hints_for(self, mbid: str) -> tuple[str, ...]:
+        """Top-track titles for the Genius hint retry; junk titles dropped."""
+        source = self.track_title_source
+        if source is None:
+            return ()
+        try:
+            response = await source.get_artist_top_tracks(mbid, 10)
+        except Exception:
+            _log.warning("track_hint_fetch_failed mbid=%s", mbid, exc_info=True)
+            return ()
+        titles = [r.title for r in response.items if any(c.isalnum() for c in r.title)]
+        return tuple(titles[:3])
 
     async def execute(self, request: SearchMusicInput) -> SearchMusicOutput:
         query_norm = normalize_for_match(request.raw_query)

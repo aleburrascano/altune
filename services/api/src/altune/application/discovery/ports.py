@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from altune.domain.discovery.content_validation_status import ContentValidationStatus  # noqa: TC001
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from datetime import datetime
     from uuid import UUID
 
@@ -77,6 +78,57 @@ class ArtworkResolver(Protocol):
         title: str,
         subtitle: str | None,
     ) -> str | None: ...
+
+
+@runtime_checkable
+class MbidArtworkResolver(Protocol):
+    """ArtworkResolver variant keyed by MusicBrainz ID (Fanart.tv).
+
+    Returns None without an mbid — name-based lookup is not supported.
+    Never raises.
+    """
+
+    async def resolve_artwork(
+        self,
+        kind: ResultKind,
+        title: str,
+        subtitle: str | None,
+        *,
+        mbid: str | None = None,
+    ) -> str | None: ...
+
+
+@runtime_checkable
+class HintedArtworkResolver(Protocol):
+    """ArtworkResolver variant accepting known-track-title hints (Genius).
+
+    For short/common artist names a bare name search surfaces songs by other
+    artists; "<artist> <known-track>" pins the right one. Never raises.
+    """
+
+    async def resolve_artwork(
+        self,
+        kind: ResultKind,
+        title: str,
+        subtitle: str | None,
+        *,
+        track_hints: Sequence[str] = (),
+    ) -> str | None: ...
+
+
+@runtime_checkable
+class ArtistTrackTitleSource(Protocol):
+    """Known-track-title lookup for an artist MBID (feeds the Genius hints).
+
+    Narrower than ArtistContentProvider on purpose (ISP): SearchMusic only
+    needs top-track titles, not the full content surface.
+    """
+
+    async def get_artist_top_tracks(
+        self,
+        external_id: str,
+        limit: int,
+    ) -> ContentFetchResponse: ...
 
 
 @runtime_checkable
