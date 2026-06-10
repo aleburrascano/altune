@@ -255,6 +255,12 @@ class SearchMusic:
                         # all results are comparable on the same basis.
                         extras["popularity"] = pop
                         changed = True
+                    elif extras.get("popularity"):
+                        # Uniform basis is strict: a native provider scale
+                        # (e.g. Deezer rank) must never compete with uniform
+                        # values — a lookup miss zeroes it instead.
+                        extras["popularity"] = 0.0
+                        changed = True
                 _EMPTY_ART_HASH = "d41d8cd98f00b204e9800998ecf8427e"
                 needs_art = result.image_url is None or _EMPTY_ART_HASH in (result.image_url or "")
                 try_art = needs_art or result.kind is ResultKind.ARTIST
