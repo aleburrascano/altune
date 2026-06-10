@@ -188,6 +188,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.discovery_mbid_resolver = mbid_resolver
         else:
             app.state.discovery_mbid_resolver = None
+        # MB doubles as the known-track-title source for the Genius hint
+        # retry (ArtistTrackTitleSource — it already implements
+        # get_artist_top_tracks via recording browse).
+        if mb_adapter is not None and hasattr(mb_adapter, "get_artist_top_tracks"):
+            app.state.discovery_track_title_source = mb_adapter
+        else:
+            app.state.discovery_track_title_source = None
 
         # Content validation + fetch success (quality gates, Redis-backed).
         redis_client = getattr(app.state, "redis", None)
