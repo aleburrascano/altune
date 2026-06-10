@@ -18,6 +18,7 @@ from altune.application.discovery.circuit_breaker import CircuitBreaker
 from altune.application.discovery.dedup import fuse_and_rank, rerank
 from altune.application.discovery.normalize import normalize_for_match
 from altune.application.discovery.url_router import match_provider
+from altune.domain.discovery.provider import ProviderName
 from altune.domain.discovery.provider_status import ProviderStatus
 from altune.domain.discovery.result_kind import ResultKind
 from altune.domain.discovery.search_history_entry import (
@@ -31,12 +32,12 @@ if TYPE_CHECKING:
     from altune.application.discovery.ports import (
         ArtworkResolver,
         ContentValidationCache,
+        MbidResolver,
         PopularityResolver,
         QueryCache,
         SearchHistoryRepository,
         SearchProvider,
     )
-    from altune.domain.discovery.provider import ProviderName
     from altune.domain.discovery.quality_score import QualityScore
     from altune.domain.discovery.search_result import SearchResult
 
@@ -164,40 +165,38 @@ class SearchMusic:
         return tuple(kept)
 
     async def _enrich_mbids(self, results: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:
-        """Resolve Deezer artist URLs to MBIDs for artist results that lack one.
+        """Backfill extras["mbid"] for artist results that lack one.
 
-        One lookup per artist, max 3 artists total. Only tries Deezer source
-        URLs (MB has the best Deezer link coverage). Skips MB/SC/iTunes URLs.
+        Free path first: an artist carrying a MusicBrainz SourceRef already
+        has its MBID as that source's external_id — no network call. Only
+        artists without an MB source fall back to the MB URL-lookup resolver
+        (one live call per artist, max 3, Deezer URLs only — MB has the best
+        Deezer link coverage).
         """
         resolver = self.mbid_resolver
-        if resolver is None:
-            return results
-        _MAX_ARTISTS = 3
-        artists_done = 0
+        max_lookups = 3
+        lookups_done = 0
         enriched: list[SearchResult] = list(results)
         for i, result in enumerate(results):
-            if artists_done >= _MAX_ARTISTS:
-                break
             if result.extras.get("mbid"):
                 continue
             if result.kind is not ResultKind.ARTIST:
                 continue
+            mb_src = next(
+                (s for s in result.sources if s.provider is ProviderName.MUSICBRAINZ), None
+            )
+            if mb_src is not None:
+                enriched[i] = replace(result, extras={**result.extras, "mbid": mb_src.external_id})
+                continue
+            if resolver is None or lookups_done >= max_lookups:
+                continue
             deezer_src = next((s for s in result.sources if "deezer.com" in s.url), None)
             if deezer_src is None:
                 continue
-            artists_done += 1
+            lookups_done += 1
             mbid = await resolver.resolve(deezer_src.url)
             if mbid:
-                extras = {**result.extras, "mbid": mbid}
-                enriched[i] = SearchResult(
-                    kind=result.kind,
-                    title=result.title,
-                    subtitle=result.subtitle,
-                    image_url=result.image_url,
-                    confidence=result.confidence,
-                    sources=result.sources,
-                    extras=extras,
-                )
+                enriched[i] = replace(result, extras={**result.extras, "mbid": mbid})
         return tuple(enriched)
 
     async def _enrich(self, results: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:
