@@ -22,11 +22,11 @@ from tests._doubles.in_memory_search_history_repository import (
 )
 
 from altune.application.discovery.dedup import (
-    _is_demoted,
     _popularity,
+    _providers_of,
     _relevance_score,
-    _winning_prior,
 )
+from altune.application.discovery.quality_scorer import is_demoted as _is_demoted
 from altune.application.discovery.normalize import normalize_for_match
 from altune.application.discovery.search_music import SearchMusic, SearchMusicInput
 from altune.domain.discovery.result_kind import ResultKind
@@ -67,13 +67,15 @@ async def _run(query: str, limit: int) -> None:
         f"providers: {[(p.provider_name, p.status.value, p.result_count) for p in out.providers]}"
     )
     print(
-        f"\n{'#':>2} {'kind':6} {'rel':>4} {'band':>4} {'pop':>4} {'dem':>3} {'prior':>5}  title — subtitle  [providers]"
+        f"\n{'#':>2} {'kind':6} {'rel':>4} {'band':>4} {'pop':>4} {'dem':>3} {'ms':>2} {'rrf':>6}  title — subtitle  [providers]"
     )
     for i, r in enumerate(out.results[:limit]):
         rel = _relevance_score(r, qn)
+        multi = 1 if len(_providers_of(r)) > 1 else 0
+        rrf = float(r.extras.get("_rrf", 0.0))
         print(
             f"{i:>2} {r.kind.value:6} {rel:>4.2f} {round(rel, 1):>4.1f} "
-            f"{_popularity(r):>4.2f} {int(_is_demoted(r)):>3} {_winning_prior(r):>5.2f}  "
+            f"{_popularity(r):>4.2f} {int(_is_demoted(r)):>3} {multi:>2} {rrf:>6.4f}  "
             f"{r.title} — {r.subtitle}  [{'+'.join(s.provider.value for s in r.sources)}]"
         )
 

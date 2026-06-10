@@ -109,7 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # implements PopularityResolver via getInfo play counts.
         from altune.application.discovery.ports import PopularityResolver
 
-        app.state.discovery_popularity_resolver = next(
+        _pop_resolver: PopularityResolver | None = next(
             (
                 p
                 for p in discovery_providers
@@ -117,6 +117,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
             None,
         )
+        if _pop_resolver is not None and app.state.redis is not None:
+            from altune.adapters.outbound.discovery.cache.popularity_cache import (
+                CachedPopularityResolver,
+            )
+
+            _pop_resolver = CachedPopularityResolver(inner=_pop_resolver, redis=app.state.redis)
+        app.state.discovery_popularity_resolver = _pop_resolver
         app.state.discovery_history_repo = build_discovery_history_repo()
 
         # Fanart.tv: MBID-based artist images (provider-expansion Phase 1).
