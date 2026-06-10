@@ -506,3 +506,33 @@ def _translate_release_track(track: dict[str, Any], position: int) -> SearchResu
         ),
         extras=extras,
     )
+
+
+@dataclass
+class MusicBrainzMbidResolver:
+    """Resolve a provider URL to an MBID via MB's /ws/2/url endpoint (AC#5)."""
+
+    client: httpx.AsyncClient
+    base_url: str = _BASE_URL
+
+    async def resolve(self, provider_url: str) -> str | None:
+        """Return the artist MBID linked to provider_url, or None."""
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/url",
+                params={"resource": provider_url, "fmt": "json", "inc": "artist-rels"},
+            )
+            if response.status_code in (404, 429, 503):
+                return None
+            response.raise_for_status()
+            data = response.json()
+            for rel in data.get("relations", []):
+                if rel.get("type") == "artist":
+                    artist = rel.get("artist", {})
+                    mbid = artist.get("id")
+                    if isinstance(mbid, str) and mbid:
+                        return mbid
+            return None
+        except Exception:
+            _log.warning("mbid_url_lookup_failed url=%s", provider_url, exc_info=True)
+            return None

@@ -1,90 +1,35 @@
-"""Merge + rank discovery results.
+"""Merge + rank discovery results — identifier-only merge.
 
-Per ADR-0007 (revised) + discover-music-v1 spec. The MERGE step is
-unchanged: ISRC-match collapses entries to HIGH; JW >= 0.92 on normalized
-(artist|title) collapses to HIGH; JW in [0.85, 0.92) collapses to MEDIUM;
-otherwise entries stay separate (as LOW). Per-source priors choose the
-canonical representative of a merged entry.
+Merge step: ISRC match or MBID match only. No text similarity, no duration
+matching, no keyword heuristics. Provider IDs are authoritative.
 
-The RANK step is relevance-first (`fuse_and_rank`): a parameter-free match
-gate drops results that share no content word with the query, then the
-survivors sort by relevance-band → popularity → cross-provider agreement
-(RRF) → prior → alpha. `confidence` is NOT a sort term and is no longer
-displayed; it is retained only for telemetry.
+Rank step: relevance-first (token_sort_ratio), then quality score, then
+popularity, then RRF agreement, then alphabetical.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from rapidfuzz import fuzz  # type: ignore[import-not-found,unused-ignore]
-from rapidfuzz.distance import JaroWinkler  # type: ignore[import-not-found,unused-ignore]
 
 from altune.application.discovery.normalize import normalize_for_match
+from altune.application.discovery.quality_scorer import is_demoted
 from altune.domain.discovery.confidence import Confidence
+from altune.domain.discovery.entity_resolution_tier import EntityResolutionTier
 from altune.domain.discovery.provider import ProviderName
-from altune.domain.discovery.result_kind import ResultKind
 from altune.domain.discovery.search_result import SearchResult
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
+    from altune.domain.discovery.quality_score import QualityScore
     from altune.domain.discovery.source_ref import SourceRef
 
-# Per-source priors per ADR-0007 §"per-source priors".
-_PRIORS: dict[ProviderName, float] = {
-    ProviderName.MUSICBRAINZ: 0.95,
-    ProviderName.DEEZER: 0.85,
-    ProviderName.ITUNES: 0.85,
-    ProviderName.LASTFM: 0.80,
-    ProviderName.THEAUDIODB: 0.78,
-    ProviderName.SOUNDCLOUD: 0.65,
-}
+    QualityScorer = Callable[[SearchResult], QualityScore]
 
-_JW_HIGH = 0.92
-_JW_MEDIUM = 0.85
-
-# Reciprocal Rank Fusion constant. 60 is the value from the original RRF
-# paper (Cormack et al.); it damps the gap between adjacent ranks so a
-# provider's #1 and #2 don't dominate every other provider's whole list.
 _RRF_K = 60
-
-# Match gate (parameter-free, replaces the old tunable relevance floor): a
-# result is kept only if it shares at least one CONTENT token with the query.
-# Content tokens are normalized query tokens of length >= 2 minus these common
-# stopwords. This is definitional ("share a word or you're not a match"), not a
-# calibrated magnitude — there is no threshold to tune.
-_STOPWORDS = frozenset(
-    {
-        "the",
-        "a",
-        "an",
-        "and",
-        "or",
-        "of",
-        "to",
-        "in",
-        "on",
-        "for",
-        "with",
-        "at",
-        "by",
-        "feat",
-        "ft",
-        "featuring",
-        "vs",
-        "x",
-        "is",
-        "it",
-        "my",
-    }
-)
-
-# Artist names dedup at a stricter similarity than tracks/albums (a bare name
-# has little text, so a loose threshold over-merges distinct artists).
-_JW_ARTIST = 0.92
 
 
 def _isrc_of(result: SearchResult) -> str | None:
@@ -94,120 +39,68 @@ def _isrc_of(result: SearchResult) -> str | None:
     return None
 
 
-def _winning_prior(result: SearchResult) -> float:
-    return max(_PRIORS.get(s.provider, 0.0) for s in result.sources)
+def _mbid_of(result: SearchResult) -> str | None:
+    val = result.extras.get("mbid")
+    if isinstance(val, str) and val:
+        return val
+    return None
 
 
 def _popularity(result: SearchResult) -> float:
-    """Normalized popularity in [0, 1], or 0 when no source carries it."""
     val = result.extras.get("popularity")
     if isinstance(val, (int, float)):
         return float(val)
     return 0.0
 
 
-# Low-quality release markers (in the normalized title) + record types that
-# should sink below the real thing within a relevance band. Covers, karaoke,
-# tributes, chiptune emulations and instrumental re-uploads frequently embed
-# the real artist's name in their TITLE, so they normalize to the full query
-# and land in the genuine track's relevance band — demotion is what keeps the
-# real recording on top there.
-_JUNK_TITLE_MARKERS = (
-    "karaoke",
-    "tribute",
-    "made famous",
-    "originally performed",
-    "performed by",
-    "in the style of",
-    "backing track",
-    "8 bit",
-    "8bit",
-    "8-bit",
-    "16-bit",
-    "lullaby",
-)
-# Single-word markers matched on a word boundary so they don't fire inside an
-# unrelated word (e.g. "cover" must not match "Undercover").
-_JUNK_TITLE_WORD_RE = re.compile(
-    r"\b(cover|arrangement|instrumental|emulation|orgel)\b", re.IGNORECASE
-)
-_DEMOTED_RECORD_TYPES = frozenset({"compilation"})
-
-
-def _is_demoted(result: SearchResult) -> bool:
-    """True for karaoke/tribute/cover/compilation-style results that should rank
-    below the genuine article within the same relevance band. Checks the RAW
-    title (normalize strips bracketed '(Karaoke Version)' suffixes)."""
-    title = result.title.lower()
-    if any(marker in title for marker in _JUNK_TITLE_MARKERS):
-        return True
-    if _JUNK_TITLE_WORD_RE.search(title):
-        return True
-    record_type = result.extras.get("record_type")
-    return isinstance(record_type, str) and record_type.lower() in _DEMOTED_RECORD_TYPES
-
-
-def _content_tokens(text: str) -> set[str]:
-    """Significant tokens of normalized text: length >= 2, minus stopwords."""
-    return {t for t in text.split() if len(t) >= 2 and t not in _STOPWORDS}
-
-
-def _genuine_split_exists(results: Sequence[SearchResult], query_tokens: set[str]) -> bool:
-    """True when some result splits the query into song (title) + artist (subtitle).
-
-    A genuine "song by artist" result has a title that is a STRICT subset of the
-    query's content tokens and an artist whose tokens, together with the title,
-    EXACTLY cover the query (song-tokens union artist-tokens == query). The coverage
-    requirement is what makes this safe on a bare-title query: there the artist
-    is absent from the query, so no split covers it and nothing is flagged — a
-    real "Song / Artist" entry on a title-only search is never a bootleg. A
-    spurious partial match (some result whose artist happens to be one query
-    word) also fails coverage and can't trigger the rule.
-    """
-    for r in results:
-        title_t = _content_tokens(normalize_for_match(r.title))
-        artist_t = _content_tokens(normalize_for_match(r.subtitle or ""))
-        if title_t and artist_t and title_t < query_tokens and (title_t | artist_t) == query_tokens:
-            return True
-    return False
-
-
-def _is_bootleg(result: SearchResult, query_tokens: set[str], genuine_split: bool) -> bool:
-    """True for a title-stuffed re-upload: the whole query sits in the TITLE and
-    the artist field is foreign to the query (a junk label), while a genuine
-    song/artist split exists in the same result set. Demoted within the band so
-    the real recording wins even when the bootleg out-pops it."""
-    if not genuine_split or not query_tokens:
-        return False
-    title_t = _content_tokens(normalize_for_match(result.title))
-    artist_t = _content_tokens(normalize_for_match(result.subtitle or ""))
-    return query_tokens <= title_t and bool(artist_t) and artist_t.isdisjoint(query_tokens)
-
-
-def _passes_gate(result: SearchResult, query_norm: str) -> bool:
-    """Keep a result only if it shares >= 1 content token with the query.
-
-    Parameter-free match gate (no tunable threshold). If the query has no
-    content tokens (all stopwords/short), don't gate — let everything through.
-    """
-    query_tokens = _content_tokens(query_norm)
-    if not query_tokens:
-        return True
-    text = f"{normalize_for_match(result.subtitle or '')} {normalize_for_match(result.title)}"
-    return bool(query_tokens & _content_tokens(text))
+def _completeness(result: SearchResult) -> int:
+    """Count of non-None metadata fields — used for canonical selection."""
+    count = 0
+    if result.image_url:
+        count += 1
+    if result.extras.get("isrc"):
+        count += 1
+    if result.extras.get("duration_seconds") is not None:
+        count += 1
+    if result.extras.get("album"):
+        count += 1
+    return count
 
 
 def _signature(result: SearchResult) -> str:
-    """Normalized (artist|title) key for JW comparison."""
+    """Normalized key for album-name stabilization."""
     title = normalize_for_match(result.title)
     subtitle = normalize_for_match(result.subtitle or "")
     return f"{subtitle}|{title}"
 
 
-def _merge(a: SearchResult, b: SearchResult, confidence: Confidence) -> SearchResult:
-    """Merge two results; higher per-source prior wins title/subtitle/extras."""
-    canonical, other = (a, b) if _winning_prior(a) >= _winning_prior(b) else (b, a)
-    # Dedup sources by (provider, external_id); preserve canonical's order.
+def _shares_word(result: SearchResult, query_norm: str) -> bool:
+    """True if the result shares at least one word (len >= 2) with the query."""
+    query_words = {w for w in query_norm.split() if len(w) >= 2}
+    if not query_words:
+        raw = query_norm.strip().split()
+        return any(
+            w in normalize_for_match(f"{result.subtitle or ''} {result.title}").split()
+            for w in raw
+            if w
+        )
+    text = normalize_for_match(f"{result.subtitle or ''} {result.title}")
+    text_words = {w for w in text.split() if len(w) >= 2}
+    return bool(query_words & text_words)
+
+
+def _providers_of(result: SearchResult) -> set[ProviderName]:
+    return {s.provider for s in result.sources}
+
+
+def _merge(
+    a: SearchResult,
+    b: SearchResult,
+    confidence: Confidence,
+    tier: EntityResolutionTier,
+) -> SearchResult:
+    """Merge two results; more complete metadata wins canonical selection."""
+    canonical, other = (a, b) if _completeness(a) >= _completeness(b) else (b, a)
     seen: set[tuple[ProviderName, str]] = set()
     sources: list[SourceRef] = []
     for s in (*canonical.sources, *other.sources):
@@ -216,11 +109,6 @@ def _merge(a: SearchResult, b: SearchResult, confidence: Confidence) -> SearchRe
             continue
         seen.add(key)
         sources.append(s)
-    # Merge extras: canonical wins on conflict EXCEPT when canonical's value is
-    # None and other has a real value (prevents high-prior providers with sparse
-    # data from overwriting richer data). Popularity takes the max across sources.
-    # NOTE: album name stabilization is handled post-merge in fuse_and_rank via
-    # _album_lookup — the merge here uses the general rule (canonical wins).
     extras = {**other.extras}
     for k, v in canonical.extras.items():
         if v is not None or k not in extras:
@@ -228,6 +116,7 @@ def _merge(a: SearchResult, b: SearchResult, confidence: Confidence) -> SearchRe
     pop = max(_popularity(a), _popularity(b))
     if pop > 0:
         extras["popularity"] = pop
+    extras["resolution_tier"] = tier.value
     return SearchResult(
         kind=canonical.kind,
         title=canonical.title,
@@ -239,38 +128,31 @@ def _merge(a: SearchResult, b: SearchResult, confidence: Confidence) -> SearchRe
     )
 
 
-def _mbid_of(result: SearchResult) -> str | None:
-    val = result.extras.get("mbid")
-    if isinstance(val, str) and val:
-        return val
-    return None
-
-
 def _try_merge(a: SearchResult, b: SearchResult) -> SearchResult | None:
-    """Return merged result, or None if they shouldn't merge."""
+    """Merge on shared identifiers first, then text similarity fallback.
+
+    MBID mismatch blocks merge (different real-world entities). Otherwise
+    ISRC > MBID > JW similarity (all kinds including artists).
+    """
     if a.kind is not b.kind:
         return None
     isrc_a, isrc_b = _isrc_of(a), _isrc_of(b)
     if isrc_a and isrc_b and isrc_a == isrc_b:
-        return _merge(a, b, Confidence.HIGH)
-    # MusicBrainz ID is a high-confidence cross-source identity (MB + Last.fm
-    # carry it); merge on an exact MBID match before falling back to JW.
+        return _merge(a, b, Confidence.HIGH, EntityResolutionTier.ISRC)
     mbid_a, mbid_b = _mbid_of(a), _mbid_of(b)
-    if mbid_a and mbid_b and mbid_a == mbid_b:
-        return _merge(a, b, Confidence.HIGH)
-    sim = JaroWinkler.similarity(_signature(a), _signature(b))
-    if a.kind is ResultKind.ARTIST:
-        # Artists merge only on a strict name match (no subtitle to disambiguate).
-        return _merge(a, b, Confidence.HIGH) if sim >= _JW_ARTIST else None
-    if sim >= _JW_HIGH:
-        return _merge(a, b, Confidence.HIGH)
-    if sim >= _JW_MEDIUM:
-        return _merge(a, b, Confidence.MEDIUM)
+    if mbid_a and mbid_b:
+        if mbid_a == mbid_b:
+            return _merge(a, b, Confidence.HIGH, EntityResolutionTier.MBID)
+        return None
+    sim = fuzz.token_sort_ratio(_signature(a), _signature(b)) / 100.0
+    if sim >= 0.85:
+        return _merge(
+            a, b, Confidence.HIGH if sim >= 0.92 else Confidence.MEDIUM, EntityResolutionTier.NONE
+        )
     return None
 
 
 def _as_low_confidence(result: SearchResult) -> SearchResult:
-    """Standalone results carry LOW confidence; merging overrides via _merge."""
     if result.confidence is Confidence.LOW:
         return result
     return SearchResult(
@@ -284,22 +166,18 @@ def _as_low_confidence(result: SearchResult) -> SearchResult:
     )
 
 
+def _content_words(text: str) -> set[str]:
+    """Words >= 2 chars for content-token relevance scoring."""
+    return {w for w in text.split() if len(w) >= 2}
+
+
 def _relevance_score(result: SearchResult, query_norm: str) -> float:
-    """Continuous query-relevance in [0, 1] — the primary ranking signal.
+    """Continuous query-relevance in [0, 1] via token_sort_ratio.
 
-    Scored against the result's OWN IDENTITY (uniform, no kind favoritism):
-    an artist by its name (`title`); a track/album by its `"<artist> <title>"`
-    form (or the title alone, whichever matches better). We deliberately do NOT
-    score a track by a bare artist-field match — otherwise a song would tie its
-    own artist at band 1.0 on an artist-name query, letting a hit song steal the
-    headline from the artist. With own-identity scoring, any exact artist name
-    headlines that artist (mainstream or underground) and any title headlines
-    its song. Its songs still appear (kept by the token gate), just below.
-
-    `token_sort_ratio` (not `token_set_ratio`) is deliberate: token_set returns
-    100 whenever the title is a subset of the query, so every same-title result
-    would tie at 100. token_sort penalizes missing/extra tokens. Empty query
-    (merge-only unit tests) scores 0.
+    Scores on both raw text and content words (>= 2 chars). The content-word
+    path handles article mismatches: "The Weeknd" normalizes to "weeknd",
+    so "blinding lights the weeknd" scores alike whether the article is
+    present or stripped. Only ever RAISES the score (it's a max candidate).
     """
     query = query_norm.strip()
     if not query:
@@ -309,41 +187,25 @@ def _relevance_score(result: SearchResult, query_norm: str) -> float:
     if result.subtitle:
         combined = f"{normalize_for_match(result.subtitle)} {title}".strip()
         candidates.append(fuzz.token_sort_ratio(query, combined))
-    # Also score on CONTENT tokens (stopwords/articles dropped) so the genuine
-    # recording isn't penalized a whole relevance band for an article mismatch:
-    # normalize strips the leading "The" from "The Weeknd", so a query like
-    # "blinding lights the weeknd" wouldn't fully match the artist's content
-    # while a copycat whose bare title embeds the query would. Comparing content
-    # tokens makes "<song> the <artist>" and "<song> <artist>" score alike; the
-    # demotion tiebreak then keeps the genuine track above the copycat. Only
-    # ever RAISES the score (it's a max), never lowers it.
-    query_content = _content_tokens(query)
-    if query_content:
-        query_c = " ".join(sorted(query_content))
-        title_c = " ".join(sorted(_content_tokens(title)))
+    query_cw = _content_words(query)
+    if query_cw:
+        query_c = " ".join(sorted(query_cw))
+        title_c = " ".join(sorted(_content_words(title)))
         candidates.append(fuzz.token_sort_ratio(query_c, title_c))
         if result.subtitle:
-            combined_c = " ".join(sorted(_content_tokens(combined)))
+            combined_c = " ".join(sorted(_content_words(combined)))
             candidates.append(fuzz.token_sort_ratio(query_c, combined_c))
     return float(max(candidates)) / 100.0
 
 
-def _providers_of(result: SearchResult) -> set[ProviderName]:
-    return {s.provider for s in result.sources}
-
-
 @dataclass
 class _Ranked:
-    """A merged result tracking each contributing provider's best (lowest) rank."""
-
     result: SearchResult
     best_rank: dict[ProviderName, int]
 
 
 @dataclass
 class _Scored:
-    """A finalized result with its query-relevance and RRF agreement scores."""
-
     result: SearchResult
     relevance: float
     rrf: float
@@ -352,34 +214,27 @@ class _Scored:
 def fuse_and_rank(
     per_provider: Sequence[Sequence[SearchResult]],
     query_norm: str,
+    *,
+    quality_scorer: QualityScorer | None = None,
 ) -> tuple[SearchResult, ...]:
-    """Merge across providers and rank relevance-first.
+    """Merge on identifiers, rank by relevance.
 
-    Each inner sequence is one provider's results in that provider's native
-    relevance order (position 0 = best). A parameter-free **match gate**
-    (`_passes_gate`) drops results sharing no content word with the query.
-    Survivors sort by: relevance-band (0.1) → popularity → cross-provider
-    agreement (RRF, `Σ 1/(_RRF_K + best_rank)` over *distinct* providers, so a
-    provider returning the same item twice can't inflate it) → multi-source →
-    prior → alpha.
-
-    Confidence is computed (cross-provider corroboration; same-provider-only
-    merge stays LOW) for telemetry only — it neither sorts nor displays.
+    Merge: ISRC or MBID only. No text similarity.
+    Gate: relevance > 0 (any non-zero fuzzy overlap).
+    Sort: relevance-band → demotion → quality score → popularity → RRF → alpha.
     """
-    # Pre-merge: capture the best album name per signature from raw provider
-    # results. Lower-prior providers (Deezer 0.85, iTunes 0.85) carry the
-    # primary commercial album name; MB (0.95) often returns a compilation.
-    _album_best: dict[str, tuple[str, float]] = {}  # sig → (album, prior)
+    # Pre-merge album-name stabilization
+    _album_best: dict[str, tuple[str, int]] = {}
     for group in per_provider:
         for result in group:
             album = result.extras.get("album")
             if not isinstance(album, str) or not album:
                 continue
             sig = _signature(result)
-            prior = _winning_prior(result)
+            comp = _completeness(result)
             prev = _album_best.get(sig)
-            if prev is None or prior < prev[1]:
-                _album_best[sig] = (album, prior)
+            if prev is None or comp > prev[1]:
+                _album_best[sig] = (album, comp)
 
     accumulated: list[_Ranked] = []
     for group in per_provider:
@@ -399,7 +254,6 @@ def fuse_and_rank(
                     _Ranked(result=candidate, best_rank=dict.fromkeys(cand_providers, rank))
                 )
 
-    # Post-merge: stabilize album names using the pre-merge lookup.
     for entry in accumulated:
         sig = _signature(entry.result)
         best = _album_best.get(sig)
@@ -420,36 +274,35 @@ def fuse_and_rank(
         rrf = sum(1.0 / (_RRF_K + rank) for rank in entry.best_rank.values())
         result = entry.result
         if len(_providers_of(result)) < 2 and result.confidence is not Confidence.LOW:
-            # Same-provider-only merge: demote to LOW (no cross-source agreement).
             result = _as_low_confidence(result)
-        if query_norm.strip() and not _passes_gate(result, query_norm):
-            # Shares no content word with the query — not a match. Parameter-free.
-            continue
+        extras = {**result.extras, "_rrf": rrf}
+        result = SearchResult(
+            kind=result.kind,
+            title=result.title,
+            subtitle=result.subtitle,
+            image_url=result.image_url,
+            confidence=result.confidence,
+            sources=result.sources,
+            extras=extras,
+        )
         rel = _relevance_score(result, query_norm)
+        if query_norm.strip() and not _shares_word(result, query_norm):
+            continue
         scored.append(_Scored(result=result, relevance=rel, rrf=rrf))
 
-    query_tokens = _content_tokens(query_norm)
-    split = _genuine_split_exists([s.result for s in scored], query_tokens)
-    bootleg_ids = {id(s.result) for s in scored if _is_bootleg(s.result, query_tokens, split)}
-
-    def _key(item: _Scored) -> tuple[float, int, int, int, float, float, float, str, str]:
-        # Relevance (banded to 0.1) leads; within a band, multi-source
-        # agreement outranks popularity so originals appearing in 3+ providers
-        # beat single-source covers regardless of play counts.
+    def _key(item: _Scored) -> tuple[float, int, int, float, float, float, str, str]:
         band = round(item.relevance, 1)
-        demoted = 1 if _is_demoted(item.result) else 0
-        bootleg = 1 if id(item.result) in bootleg_ids else 0
+        demoted = 1 if is_demoted(item.result) else 0
         multi_source = 1 if len(_providers_of(item.result)) > 1 else 0
         popularity = _popularity(item.result)
-        prior = _winning_prior(item.result)
+        q_score = quality_scorer(item.result).composite if quality_scorer is not None else 0.0
         return (
             -band,
             demoted,
-            bootleg,
             -multi_source,
             -popularity,
+            -q_score,
             -item.rrf,
-            -prior,
             item.result.subtitle or "",
             item.result.title,
         )
@@ -458,32 +311,20 @@ def fuse_and_rank(
 
 
 def rerank(results: Sequence[SearchResult], query_norm: str) -> tuple[SearchResult, ...]:
-    """Re-sort already-merged results after enrichment changed their popularity.
+    """Re-sort after enrichment changed popularity. Same key as fuse_and_rank."""
 
-    Same ordering as `fuse_and_rank` minus the RRF term (provider-native ranks
-    aren't retained post-merge): relevance-band → popularity → multi-source
-    (agreement proxy) → prior → alpha. Results are assumed already gated; this
-    only reorders.
-    """
-
-    query_tokens = _content_tokens(query_norm)
-    split = _genuine_split_exists(results, query_tokens)
-    bootleg_ids = {id(r) for r in results if _is_bootleg(r, query_tokens, split)}
-
-    def _key(result: SearchResult) -> tuple[float, int, int, int, float, float, str, str]:
+    def _key(result: SearchResult) -> tuple[float, int, int, float, float, float, str, str]:
         band = round(_relevance_score(result, query_norm), 1)
-        demoted = 1 if _is_demoted(result) else 0
-        bootleg = 1 if id(result) in bootleg_ids else 0
+        demoted = 1 if is_demoted(result) else 0
         multi_source = 1 if len(_providers_of(result)) > 1 else 0
         popularity = _popularity(result)
-        prior = _winning_prior(result)
+        rrf = float(result.extras.get("_rrf", 0.0))  # type: ignore[arg-type]
         return (
             -band,
             demoted,
-            bootleg,
             -multi_source,
             -popularity,
-            -prior,
+            -rrf,
             result.subtitle or "",
             result.title,
         )

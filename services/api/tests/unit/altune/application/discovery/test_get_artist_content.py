@@ -158,3 +158,80 @@ async def test_get_artist_albums_returns_error_for_unknown_provider() -> None:
 
     assert result.status == ProviderStatus.ERROR
     assert result.items == ()
+
+
+def _album_with_source(
+    title: str, artist: str, provider: str, ext_id: str, track_count: int = 10
+) -> SearchResult:
+    return SearchResult(
+        kind=ResultKind.ALBUM,
+        title=title,
+        subtitle=artist,
+        image_url=None,
+        confidence=Confidence.HIGH,
+        sources=(
+            SourceRef(provider=provider, external_id=ext_id, url=f"https://{provider}/{ext_id}"),
+        ),
+        extras={"track_count": track_count},
+    )
+
+
+@pytest.mark.unit
+def test_album_dedup_preserves_sources_from_all_providers() -> None:
+    """AC#22: merging duplicate albums keeps both providers' source links."""
+    from altune.application.discovery.get_artist_content import _dedup_albums
+
+    dz_album = _album_with_source("Greatest Hits", "Artist", "deezer", "dz-456", track_count=12)
+    mb_album = _album_with_source(
+        "Greatest Hits", "Artist", "musicbrainz", "mb-789", track_count=10
+    )
+
+    deduped = _dedup_albums((dz_album, mb_album))
+    assert len(deduped) == 1
+    providers = {s.provider for s in deduped[0].sources}
+    assert "deezer" in providers
+    assert "musicbrainz" in providers
+
+
+class _InMemoryValidationCache:
+    def __init__(self) -> None:
+        from altune.domain.discovery.content_validation_status import ContentValidationStatus
+
+        self._data: dict[tuple[str, str], ContentValidationStatus] = {}
+        self.calls: list[tuple[str, str, str]] = []
+
+    async def get(self, provider: str, external_id: str) -> ContentValidationStatus:
+        from altune.domain.discovery.content_validation_status import ContentValidationStatus
+
+        return self._data.get((provider, external_id), ContentValidationStatus.UNKNOWN)
+
+    async def record(
+        self, provider: str, external_id: str, status: ContentValidationStatus
+    ) -> None:
+        self._data[(provider, external_id)] = status
+        self.calls.append((provider, external_id, status.value))
+
+
+class _InMemoryFetchSuccessStore:
+    def __init__(self) -> None:
+        self._data: dict[tuple[str, str], list[bool]] = {}
+
+    async def get_rate(self, provider: str, external_id: str) -> float:
+        history = self._data.get((provider, external_id), [])
+        return sum(1 for x in history if x) / len(history) if history else 1.0
+
+    async def record(self, provider: str, external_id: str, *, success: bool) -> None:
+        self._data.setdefault((provider, external_id), []).append(success)
+
+
+@pytest.mark.asyncio
+async def test_artist_content_fetch_records_validation_failure() -> None:
+    """AC#12: failed artist content fetch records UNFETCHABLE."""
+    use_case = GetArtistTopTracks(
+        providers={},
+        content_validation_cache=_InMemoryValidationCache(),
+        fetch_success_store=_InMemoryFetchSuccessStore(),
+    )
+    cache = use_case.content_validation_cache
+    await use_case.execute(GetArtistTopTracksInput(provider="deezer", external_id="art123"))
+    assert ("deezer", "art123", "unfetchable") in cache.calls

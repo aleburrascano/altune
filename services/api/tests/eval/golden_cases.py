@@ -269,4 +269,611 @@ GOLDEN_CASES: tuple[GoldenCase, ...] = (
             ],
         },
     ),
+    # --- More popular / happy-path cases ---
+    GoldenCase(
+        query="smells like teen spirit nirvana",
+        note="Multi-source agreement + exact artist match.",
+        expected_title="Smells Like Teen Spirit",
+        expected_subtitle="Nirvana",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Smells Like Teen Spirit", "Nirvana", isrc="USGF19942501"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Smells Like Teen Spirit", "Nirvana"),
+            ],
+            ProviderName.MUSICBRAINZ: [
+                ProviderHit("Smells Like Teen Spirit", "Nirvana"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="shape of you ed sheeran",
+        note="Canonical must beat a cover/karaoke version.",
+        expected_title="Shape of You",
+        expected_subtitle="Ed Sheeran",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Shape of You", "Ed Sheeran", isrc="GBAHS1600463"),
+                ProviderHit("Shape of You (Karaoke)", "Sing2Guitar"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Shape of You", "Ed Sheeran"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="blinding lights the weeknd",
+        note="Canonical must beat unrelated noise.",
+        expected_title="Blinding Lights",
+        expected_subtitle="The Weeknd",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Blinding Lights", "The Weeknd", isrc="USUG11904181"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Blinding Lights", "The Weeknd"),
+                ProviderHit("Blinding Lights (Remix)", "DJ Snake"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="lose yourself eminem",
+        note="Clear canonical, multi-source.",
+        expected_title="Lose Yourself",
+        expected_subtitle="Eminem",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Lose Yourself", "Eminem"),
+            ],
+            ProviderName.MUSICBRAINZ: [
+                ProviderHit("Lose Yourself", "Eminem"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="hey jude beatles",
+        note="Leading article normalization; 'The Beatles' must match 'beatles'.",
+        expected_title="Hey Jude",
+        expected_subtitle="The Beatles",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Hey Jude", "The Beatles"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Hey Jude", "The Beatles"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="hotel california eagles",
+        note="Multi-source clear canonical.",
+        expected_title="Hotel California",
+        expected_subtitle="Eagles",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Hotel California", "Eagles"),
+                ProviderHit("Hotel California (Acoustic)", "Eagles Tribute"),
+            ],
+            ProviderName.MUSICBRAINZ: [
+                ProviderHit("Hotel California", "Eagles"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="thriller michael jackson",
+        note="Iconic track, should be trivial.",
+        expected_title="Thriller",
+        expected_subtitle="Michael Jackson",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Thriller", "Michael Jackson"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Thriller", "Michael Jackson"),
+            ],
+            ProviderName.MUSICBRAINZ: [
+                ProviderHit("Thriller", "Michael Jackson"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="stairway to heaven led zeppelin",
+        note="Multi-source, clear canonical.",
+        expected_title="Stairway to Heaven",
+        expected_subtitle="Led Zeppelin",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Stairway to Heaven", "Led Zeppelin"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Stairway to Heaven", "Led Zeppelin"),
+            ],
+        },
+    ),
+    # --- Ambiguous / short-name queries ---
+    GoldenCase(
+        query="sia",
+        note="Short artist name. Track by Sia must rank above unrelated.",
+        expected_title="Chandelier",
+        expected_subtitle="Sia",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Chandelier", "Sia"),
+                ProviderHit("Sia Diffusion", "DJ SIA"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Chandelier", "Sia"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="seal",
+        note="Short artist name, common word.",
+        expected_title="Kiss from a Rose",
+        expected_subtitle="Seal",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Kiss from a Rose", "Seal"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Kiss from a Rose", "Seal"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="mika",
+        note="Short artist name.",
+        expected_title="Grace Kelly",
+        expected_subtitle="MIKA",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Grace Kelly", "MIKA"),
+                ProviderHit("Mika Nakashima", "MIKA NAKASHIMA"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Grace Kelly", "MIKA"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="banks",
+        note="Short artist name that's also a common word.",
+        expected_title="Beggin for Thread",
+        expected_subtitle="BANKS",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Beggin for Thread", "BANKS"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Beggin for Thread", "BANKS"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="low",
+        note="Short name — could be band Low or Flo Rida song.",
+        expected_title="Low",
+        expected_subtitle="Flo Rida",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Low", "Flo Rida"),
+                ProviderHit("Lullaby", "Low"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Low", "Flo Rida"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="bush",
+        note="Band name that's a common word.",
+        expected_title="Glycerine",
+        expected_subtitle="Bush",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Glycerine", "Bush"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Glycerine", "Bush"),
+                ProviderHit("Kate Bush Running", "Kate Bush"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="hurt",
+        note="Both Johnny Cash and Nine Inch Nails have 'Hurt'. JW-same title "
+        "but different artists — relevance should favour exact title match.",
+        expected_title="Hurt",
+        expected_subtitle="Johnny Cash",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Hurt", "Johnny Cash"),
+                ProviderHit("Hurt", "Nine Inch Nails"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Hurt", "Johnny Cash"),
+                ProviderHit("Hurt", "Nine Inch Nails"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="closer",
+        note="Extremely common track title: Chainsmokers, NIN, Joy Division.",
+        expected_title="Closer",
+        expected_subtitle="The Chainsmokers",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Closer", "The Chainsmokers"),
+                ProviderHit("Closer", "Nine Inch Nails"),
+                ProviderHit("Closer", "Joy Division"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Closer", "The Chainsmokers"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="stay",
+        note="Very common title: Rihanna, Post Malone, Lisa Loeb.",
+        expected_title="Stay",
+        expected_subtitle="Rihanna",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Stay", "Rihanna"),
+                ProviderHit("Stay", "Post Malone"),
+                ProviderHit("Stay (I Missed You)", "Lisa Loeb"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Stay", "Rihanna"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="happy",
+        note="Common word as title. Pharrell's version is the canonical.",
+        expected_title="Happy",
+        expected_subtitle="Pharrell Williams",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Happy", "Pharrell Williams"),
+                ProviderHit("Happy Together", "The Turtles"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Happy", "Pharrell Williams"),
+            ],
+        },
+    ),
+    # --- Partial / misspelled queries ---
+    GoldenCase(
+        query="playboi cart",
+        note="Misspelled artist ('cart' → 'Carti'). Fuzzy match must still resolve.",
+        expected_title="Magnolia",
+        expected_subtitle="Playboi Carti",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Magnolia", "Playboi Carti"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Magnolia", "Playboi Carti"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="daft pnk",
+        note="Misspelled artist ('pnk' → 'Punk'). Fuzzy match.",
+        expected_title="Get Lucky",
+        expected_subtitle="Daft Punk",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Get Lucky", "Daft Punk"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Get Lucky", "Daft Punk"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="nirvna",
+        note="Misspelled artist. Fuzzy match must resolve.",
+        expected_title="Smells Like Teen Spirit",
+        expected_subtitle="Nirvana",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Smells Like Teen Spirit", "Nirvana"),
+            ],
+            ProviderName.ITUNES: [
+                ProviderHit("Smells Like Teen Spirit", "Nirvana"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="radiohed",
+        note="Misspelled artist. Fuzzy match must resolve.",
+        expected_title="Creep",
+        expected_subtitle="Radiohead",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Creep", "Radiohead"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Creep", "Radiohead"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="billie",
+        note="Partial artist name. Should resolve to Billie Eilish as most popular.",
+        expected_title="bad guy",
+        expected_subtitle="Billie Eilish",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("bad guy", "Billie Eilish"),
+                ProviderHit("Billie Jean", "Michael Jackson"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("bad guy", "Billie Eilish"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="kendrick",
+        note="Partial artist name (Kendrick Lamar).",
+        expected_title="HUMBLE.",
+        expected_subtitle="Kendrick Lamar",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("HUMBLE.", "Kendrick Lamar"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("HUMBLE.", "Kendrick Lamar"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="arctic",
+        note="Partial band name (Arctic Monkeys).",
+        expected_title="Do I Wanna Know?",
+        expected_subtitle="Arctic Monkeys",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Do I Wanna Know?", "Arctic Monkeys"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Do I Wanna Know?", "Arctic Monkeys"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="imagine",
+        note="Could be John Lennon 'Imagine' or Imagine Dragons. Title match "
+        "should rank the exact-title hit highest.",
+        expected_title="Imagine",
+        expected_subtitle="John Lennon",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Imagine", "John Lennon"),
+                ProviderHit("Radioactive", "Imagine Dragons"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Imagine", "John Lennon"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="super shy",
+        note="Partial title; should resolve to NewJeans.",
+        expected_title="Super Shy",
+        expected_subtitle="NewJeans",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Super Shy", "NewJeans"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Super Shy", "NewJeans"),
+            ],
+        },
+    ),
+    # --- Nonsense / unsatisfiable queries ---
+    GoldenCase(
+        query="asdfghjkl123",
+        note="Keyboard mash. No canonical. Relevance floor must exclude everything.",
+        expected_title=None,
+        expected_subtitle=None,
+        forbidden=(),
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("A Song", "Random Artist"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Different Song", "Other Artist"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="xyzzy12345",
+        note="Random string. No canonical.",
+        expected_title=None,
+        expected_subtitle=None,
+        forbidden=(),
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("XYZ", "Alphabet Band"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="qqqqwwww",
+        note="Repetitive keys. No canonical.",
+        expected_title=None,
+        expected_subtitle=None,
+        forbidden=(),
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("QQ", "Some DJ"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="aaa bbb ccc ddd",
+        note="Nonsense multi-word. No canonical.",
+        expected_title=None,
+        expected_subtitle=None,
+        forbidden=(),
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("ABC", "Jackson 5"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("ABC", "Jackson 5"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="zzznotatrack ever",
+        note="Gibberish. No canonical.",
+        expected_title=None,
+        expected_subtitle=None,
+        forbidden=(),
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Never Gonna Give You Up", "Rick Astley"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="jkdshfkjdshf music",
+        note="Gibberish with 'music' appended. No canonical.",
+        expected_title=None,
+        expected_subtitle=None,
+        forbidden=(),
+        providers={
+            ProviderName.LASTFM: [
+                ProviderHit("Music", "Madonna"),
+            ],
+        },
+    ),
+    # --- Cover / karaoke / tribute traps ---
+    GoldenCase(
+        query="someone like you adele",
+        note="Genuine must rank above karaoke version.",
+        expected_title="Someone Like You",
+        expected_subtitle="Adele",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Someone Like You", "Adele"),
+                ProviderHit("Someone Like You (Karaoke)", "Karaoke Kings"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Someone Like You", "Adele"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="hallelujah leonard cohen",
+        note="Many artists cover this. Genuine by Cohen must be top.",
+        expected_title="Hallelujah",
+        expected_subtitle="Leonard Cohen",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Hallelujah", "Leonard Cohen"),
+                ProviderHit("Hallelujah", "Jeff Buckley"),
+                ProviderHit("Hallelujah", "Pentatonix"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Hallelujah", "Leonard Cohen"),
+                ProviderHit("Hallelujah", "Jeff Buckley"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="yesterday beatles",
+        note="Genuine must beat instrumental/cover.",
+        expected_title="Yesterday",
+        expected_subtitle="The Beatles",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Yesterday", "The Beatles"),
+                ProviderHit("Yesterday (Instrumental)", "Piano Covers"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Yesterday", "The Beatles"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="rolling in the deep",
+        note="Adele's genuine must beat covers.",
+        expected_title="Rolling in the Deep",
+        expected_subtitle="Adele",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Rolling in the Deep", "Adele"),
+                ProviderHit("Rolling in the Deep (Cover)", "Aretha Franklin"),
+            ],
+            ProviderName.MUSICBRAINZ: [
+                ProviderHit("Rolling in the Deep", "Adele"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="let it be",
+        note="Beatles genuine above covers. Title-only query.",
+        expected_title="Let It Be",
+        expected_subtitle="The Beatles",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Let It Be", "The Beatles"),
+                ProviderHit("Let It Be (Tribute)", "Studio Band"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Let It Be", "The Beatles"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="fix you coldplay",
+        note="Genuine must beat karaoke version.",
+        expected_title="Fix You",
+        expected_subtitle="Coldplay",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Fix You", "Coldplay"),
+                ProviderHit("Fix You (Made Famous By Coldplay)", "Karaoke Star"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Fix You", "Coldplay"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="imagine john lennon",
+        note="Genuine must beat tribute versions.",
+        expected_title="Imagine",
+        expected_subtitle="John Lennon",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Imagine", "John Lennon"),
+                ProviderHit("Imagine (Originally Performed By John Lennon)", "Cover Guru"),
+            ],
+            ProviderName.MUSICBRAINZ: [
+                ProviderHit("Imagine", "John Lennon"),
+            ],
+        },
+    ),
+    GoldenCase(
+        query="dance monkey",
+        note="Genuine by Tones and I must beat covers.",
+        expected_title="Dance Monkey",
+        expected_subtitle="Tones and I",
+        providers={
+            ProviderName.DEEZER: [
+                ProviderHit("Dance Monkey", "Tones and I"),
+                ProviderHit("Dance Monkey (8 Bit)", "8 Bit Universe"),
+            ],
+            ProviderName.LASTFM: [
+                ProviderHit("Dance Monkey", "Tones and I"),
+            ],
+        },
+    ),
 )

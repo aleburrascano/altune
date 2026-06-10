@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import timedelta  # noqa: TC003
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from altune.domain.discovery.content_validation_status import ContentValidationStatus  # noqa: TC001
+
 if TYPE_CHECKING:
     from datetime import datetime
     from uuid import UUID
@@ -213,3 +215,46 @@ class ArtistContentProvider(Protocol):
         external_id: str,
         limit: int,
     ) -> ContentFetchResponse: ...
+
+
+# --- Content validation ports (discovery-foundation-v1 quality gates) ---
+
+
+@runtime_checkable
+class ContentValidationCache(Protocol):
+    """Cached content-fetch outcomes per (provider, external_id).
+
+    Used by the quality gate to filter results whose every source
+    has failed content fetch. TTL-based revalidation.
+    """
+
+    async def get(self, provider: str, external_id: str) -> ContentValidationStatus: ...
+
+    async def record(
+        self, provider: str, external_id: str, status: ContentValidationStatus
+    ) -> None: ...
+
+
+@runtime_checkable
+class FetchSuccessStore(Protocol):
+    """Sliding-window fetch success rate per (provider, external_id).
+
+    Feeds the fetch_success signal in the quality scorer.
+    """
+
+    async def get_rate(self, provider: str, external_id: str) -> float: ...
+
+    async def record(self, provider: str, external_id: str, *, success: bool) -> None: ...
+
+
+# --- Identity resolution ports (discovery-identity-v1) ---
+
+
+@runtime_checkable
+class MbidResolver(Protocol):
+    """Resolve a provider URL to a MusicBrainz ID via MB's URL endpoint.
+
+    Returns the MBID if MusicBrainz has a link for that URL, else None.
+    """
+
+    async def resolve(self, provider_url: str) -> str | None: ...

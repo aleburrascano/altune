@@ -41,6 +41,8 @@ module.exports = {
         'discover-music-v3',
         'view-result-detail',
         'acquire-track',
+        'discovery-foundation-v1',
+        'discovery-identity-v1',
       ],
     ],
     'subject-case': [2, 'always', 'lower-case'],

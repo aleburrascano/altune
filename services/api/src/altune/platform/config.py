@@ -120,6 +120,16 @@ class Settings(BaseSettings):
         description="Last.fm API key for the discovery adapter. Obtain via "
         "https://www.last.fm/api/account/create.",
     )
+    fanarttv_api_key: str | None = Field(
+        default=None,
+        description="Fanart.tv API key for MBID-based artist images. "
+        "Register at https://fanart.tv/get-an-api-key/.",
+    )
+    genius_access_token: str | None = Field(
+        default=None,
+        description="Genius API access token for artist images + metadata. "
+        "Register at https://genius.com/api-clients.",
+    )
 
     @field_validator("musicbrainz_user_agent")
     @classmethod

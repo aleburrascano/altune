@@ -353,7 +353,7 @@ function FilteredResults({
   return (
     <FlatList
       data={items}
-      keyExtractor={(r) => `${r.kind}-${r.title}-${r.subtitle ?? ''}`}
+      keyExtractor={(r) => `${r.kind}-${r.sources[0]?.provider ?? 'x'}-${r.sources[0]?.external_id ?? r.title}`}
       renderItem={({ item, index }) => (
         <DiscoverRow result={item} position={index} onPress={onResultTap} />
       )}
@@ -406,7 +406,7 @@ function BlendedResults({
           </Text>
           {_cap(section.items).map((result, index) => (
             <DiscoverRow
-              key={`${result.kind}-${result.title}-${result.subtitle ?? ''}`}
+              key={`${result.kind}-${result.sources[0]?.provider ?? 'x'}-${result.sources[0]?.external_id ?? `${result.title}-${index}`}`}
               result={result}
               position={index}
               onPress={onResultTap}

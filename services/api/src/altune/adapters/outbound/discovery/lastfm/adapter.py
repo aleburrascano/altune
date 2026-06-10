@@ -35,12 +35,8 @@ _log = logging.getLogger(__name__)
 
 _BASE_URL = "https://ws.audioscrobbler.com/2.0/"
 
-# Global Last.fm play counts reach ~10^10; log10 of that ≈ 10, so dividing by
-# 10 maps playcount → roughly [0, 1].
-_PLAYCOUNT_MAX_LOG10 = 10.0
 
-
-def _log_norm(value: object, max_log10: float) -> float | None:
+def _log_norm(value: object, max_log10: float = 10.0) -> float | None:
     """Log-normalize a popularity count to [0, 1]; None if absent/invalid."""
     if isinstance(value, str):
         try:
@@ -244,7 +240,7 @@ class LastFmSearchAdapter:
             return None
         if playcount <= 0:
             return None
-        return min(1.0, math.log10(playcount + 1.0) / _PLAYCOUNT_MAX_LOG10)
+        return min(1.0, math.log10(playcount + 1.0) / 10.0)
 
     # --- Catalog browse methods (AC#14-20) ---
 
@@ -615,7 +611,7 @@ def _translate_artist_albums(entries: list[dict[str, Any]]) -> tuple[SearchResul
             playcount = None
         extras: dict[str, object] = {"isrc": None, "preview_url": None}
         if playcount:
-            pop = _log_norm(playcount, _PLAYCOUNT_MAX_LOG10)
+            pop = _log_norm(playcount)
             if pop is not None:
                 extras["popularity"] = pop
         results.append(

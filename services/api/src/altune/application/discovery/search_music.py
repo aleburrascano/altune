@@ -19,24 +19,28 @@ from altune.application.discovery.dedup import fuse_and_rank, rerank
 from altune.application.discovery.normalize import normalize_for_match
 from altune.application.discovery.url_router import match_provider
 from altune.domain.discovery.provider_status import ProviderStatus
+from altune.domain.discovery.result_kind import ResultKind
 from altune.domain.discovery.search_history_entry import (
     SearchHistoryEntry,
     SearchHistoryEntryId,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from altune.application.discovery.ports import (
         ArtworkResolver,
+        ContentValidationCache,
         PopularityResolver,
         QueryCache,
         SearchHistoryRepository,
         SearchProvider,
     )
     from altune.domain.discovery.provider import ProviderName
-    from altune.domain.discovery.result_kind import ResultKind
+    from altune.domain.discovery.quality_score import QualityScore
     from altune.domain.discovery.search_result import SearchResult
+
+    QualityScorer = Callable[[SearchResult], QualityScore]
     from altune.domain.shared.user_id import UserId
 
 _log = logging.getLogger(__name__)
@@ -120,6 +124,11 @@ class SearchMusic:
     cache_ttls: Mapping[str, timedelta] = field(default_factory=lambda: dict(_DEFAULT_TTLS))
     artwork_resolver: ArtworkResolver | None = None
     popularity_resolver: PopularityResolver | None = None
+    quality_scorer: QualityScorer | None = None
+    content_validation_cache: ContentValidationCache | None = None
+    mbid_resolver: MbidResolver | None = None
+    fanart_resolver: object | None = None
+    genius_resolver: ArtworkResolver | None = None
     _breakers: dict[str, CircuitBreaker] = field(default_factory=dict, init=False)
 
     def _breaker_for(self, provider_name: str) -> CircuitBreaker:
@@ -129,6 +138,67 @@ class SearchMusic:
 
     def _ttl_for(self, provider_name: str) -> timedelta:
         return self.cache_ttls.get(provider_name, timedelta(hours=1))
+
+    async def _filter_unfetchable(
+        self, results: tuple[SearchResult, ...]
+    ) -> tuple[SearchResult, ...]:
+        """Remove results whose every source has a cached UNFETCHABLE status."""
+        cache = self.content_validation_cache
+        if cache is None:
+            return results
+        from altune.domain.discovery.content_validation_status import ContentValidationStatus
+
+        kept: list[SearchResult] = []
+        for result in results:
+            all_unfetchable = True
+            for src in result.sources:
+                provider_name = (
+                    src.provider.value if hasattr(src.provider, "value") else str(src.provider)
+                )
+                status = await cache.get(provider_name, src.external_id)
+                if status is not ContentValidationStatus.UNFETCHABLE:
+                    all_unfetchable = False
+                    break
+            if not all_unfetchable:
+                kept.append(result)
+        return tuple(kept)
+
+    async def _enrich_mbids(self, results: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:
+        """Resolve Deezer artist URLs to MBIDs for artist results that lack one.
+
+        One lookup per artist, max 3 artists total. Only tries Deezer source
+        URLs (MB has the best Deezer link coverage). Skips MB/SC/iTunes URLs.
+        """
+        resolver = self.mbid_resolver
+        if resolver is None:
+            return results
+        _MAX_ARTISTS = 3
+        artists_done = 0
+        enriched: list[SearchResult] = list(results)
+        for i, result in enumerate(results):
+            if artists_done >= _MAX_ARTISTS:
+                break
+            if result.extras.get("mbid"):
+                continue
+            if result.kind is not ResultKind.ARTIST:
+                continue
+            deezer_src = next((s for s in result.sources if "deezer.com" in s.url), None)
+            if deezer_src is None:
+                continue
+            artists_done += 1
+            mbid = await resolver.resolve(deezer_src.url)
+            if mbid:
+                extras = {**result.extras, "mbid": mbid}
+                enriched[i] = SearchResult(
+                    kind=result.kind,
+                    title=result.title,
+                    subtitle=result.subtitle,
+                    image_url=result.image_url,
+                    confidence=result.confidence,
+                    sources=result.sources,
+                    extras=extras,
+                )
+        return tuple(enriched)
 
     async def _enrich(self, results: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:
         """Bounded, concurrency-capped, best-effort enrichment of the top results.
@@ -164,7 +234,37 @@ class SearchMusic:
                         # all results are comparable on the same basis.
                         extras["popularity"] = pop
                         changed = True
-                if art_resolver is not None and result.image_url is None:
+                _EMPTY_ART_HASH = "d41d8cd98f00b204e9800998ecf8427e"
+                needs_art = result.image_url is None or _EMPTY_ART_HASH in (result.image_url or "")
+                try_fanart = needs_art or result.kind is ResultKind.ARTIST
+                if try_fanart and self.fanart_resolver is not None:
+                    mbid = extras.get("mbid") or result.extras.get("mbid")
+                    if isinstance(mbid, str) and mbid:
+                        try:
+                            url = await self.fanart_resolver.resolve_artwork(
+                                result.kind, result.title, result.subtitle, mbid=mbid
+                            )
+                        except Exception:
+                            url = None
+                        if url:
+                            image_url = url
+                            needs_art = False
+                            changed = True
+                if needs_art and self.genius_resolver is not None:
+                    try:
+                        url = await self.genius_resolver.resolve_artwork(
+                            result.kind, result.title, result.subtitle
+                        )
+                    except Exception:
+                        url = None
+                    if url:
+                        image_url = url
+                        needs_art = False
+                        changed = True
+                is_ambiguous_artist = (
+                    result.kind is ResultKind.ARTIST and len(result.title.split()) <= 1
+                )
+                if art_resolver is not None and needs_art and not is_ambiguous_artist:
                     try:
                         url = await art_resolver.resolve_artwork(
                             result.kind, result.title, result.subtitle
@@ -209,7 +309,9 @@ class SearchMusic:
             if cache_fetched_at is not None:
                 cache_hit_fetched_ats.append(cache_fetched_at)
 
-        merged = fuse_and_rank(groups, query_norm)
+        merged = fuse_and_rank(groups, query_norm, quality_scorer=self.quality_scorer)
+        merged = await self._enrich_mbids(merged)
+        merged = await self._filter_unfetchable(merged)
         merged = await self._enrich(merged)
         # Enrichment changed popularity (a sort key), so re-rank when it ran.
         if self.popularity_resolver is not None:

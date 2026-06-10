@@ -67,9 +67,11 @@ async def test_search_tries_isrc_tier_first() -> None:
 
 @pytest.mark.unit
 async def test_search_falls_through_on_empty_tier() -> None:
-    searcher = FakeSearcher({
-        "Blinding Lights The Weeknd": [_GOOD],
-    })
+    searcher = FakeSearcher(
+        {
+            "Blinding Lights The Weeknd": [_GOOD],
+        }
+    )
     step = SearchStep(searcher)
     ctx = AcquisitionContext(track=_track())
 
@@ -80,9 +82,11 @@ async def test_search_falls_through_on_empty_tier() -> None:
 
 @pytest.mark.unit
 async def test_search_includes_album_tier() -> None:
-    searcher = FakeSearcher({
-        "Blinding Lights The Weeknd After Hours": [_GOOD],
-    })
+    searcher = FakeSearcher(
+        {
+            "Blinding Lights The Weeknd After Hours": [_GOOD],
+        }
+    )
     step = SearchStep(searcher)
     ctx = AcquisitionContext(track=_track(album="After Hours"))
 

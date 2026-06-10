@@ -129,15 +129,20 @@ def select_best_candidate(
     if topic_candidates:
         topic_candidates.sort(key=lambda x: x[0], reverse=True)
         best = topic_candidates[0][1]
-        _logger.info("candidate_selected", title=best.title, channel=best.channel, source="topic_channel")
+        _logger.info(
+            "candidate_selected", title=best.title, channel=best.channel, source="topic_channel"
+        )
         return best
 
     if other_candidates:
         other_candidates.sort(key=lambda x: (x[1], x[0]), reverse=True)
         best = other_candidates[0][2]
         _logger.info(
-            "candidate_selected", title=best.title, channel=best.channel,
-            metadata_rank=round(other_candidates[0][0], 3), source="metadata_rank",
+            "candidate_selected",
+            title=best.title,
+            channel=best.channel,
+            metadata_rank=round(other_candidates[0][0], 3),
+            source="metadata_rank",
         )
         return best
 

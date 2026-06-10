@@ -21,8 +21,12 @@ _UID = UserId(UUID("00000000-0000-0000-0000-000000000001"))
 
 def _track(duration: int | None = 200) -> Track:
     return Track(
-        id=_TID, user_id=_UID, title="Song", artist="Artist",
-        album=None, duration_seconds=duration,
+        id=_TID,
+        user_id=_UID,
+        title="Song",
+        artist="Artist",
+        album=None,
+        duration_seconds=duration,
         added_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 

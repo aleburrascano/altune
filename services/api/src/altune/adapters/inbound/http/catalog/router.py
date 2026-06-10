@@ -7,7 +7,6 @@ ListTracks use case does the actual work. TrackRow never leaves this layer;
 the response is built from domain Track values.
 """
 
-
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 

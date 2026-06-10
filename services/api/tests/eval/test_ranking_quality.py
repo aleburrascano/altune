@@ -15,8 +15,17 @@ from tests.eval.golden_cases import GOLDEN_CASES
 from tests.eval.metrics import evaluate
 
 # Target quality bar for the relevance-first ranker (RRF + exact-match boost).
+# Baseline for identifier-only merge (less merging = more separate results).
 _MIN_MRR = 0.85
 _MIN_TOP3_HIT_RATE = 0.95
+
+
+@pytest.mark.eval
+def test_golden_case_count_minimum() -> None:
+    assert len(GOLDEN_CASES) >= 50, (
+        f"Golden set has {len(GOLDEN_CASES)} cases, need ≥50 for "
+        f"coverage across ambiguous, partial, nonsense, and cover-trap categories"
+    )
 
 
 @pytest.mark.eval

@@ -47,6 +47,7 @@ When `/feature-spec` or domain modeling introduces a new term:
 
 - **Artist** — a creator of tracks, surfaced in the discovery context as a `SearchResult` with `kind = ResultKind.ARTIST` carrying name in `title`, optional disambiguator in `extras` (year/MBID). Promoted from Future to Canonical by `discover-music-v1`. A future spec may extract `Artist` into its own value object once a write-side library surface (subscribe-to-artist, etc.) needs identity beyond `(provider, external_id)`.
 - **Album** — a grouping of tracks released together by an artist, surfaced as a `SearchResult` with `kind = ResultKind.ALBUM` carrying title + artist subtitle + year in `extras`. Promoted from Future to Canonical by `discover-music-v1`. Becomes its own type when a future spec needs distinct identity (e.g., track-album navigation).
+- **EntityResolutionTier** — three-level enum indicating how two search results were identified as the same entity during dedup: `mbid` (MusicBrainz ID match), `isrc` (ISRC match), `none` (unresolved — no shared identifier). Ordered: MBID > ISRC > NONE. Identifier-only merge: no text similarity, no duration matching. Defined in `services/api/src/altune/domain/discovery/entity_resolution_tier.py`. Introduced by `discovery-foundation-v1`; simplified to 3 members by `discovery-identity-v1`.
 
 ### Future (illustrative — to be added when the spec that introduces them ships)
 
