@@ -58,16 +58,18 @@ class YtDlpAudioSearcher:
             view_count = int(entry.get("view_count") or 0)
             follower_count = int(entry.get("channel_follower_count") or 0)
             if title and webpage_url:
-                candidates.append(AudioCandidate(
-                    title=title,
-                    artist=artist,
-                    duration_seconds=int(duration) if duration else None,
-                    url=webpage_url,
-                    channel=channel,
-                    categories=categories,
-                    view_count=view_count,
-                    channel_follower_count=follower_count,
-                ))
+                candidates.append(
+                    AudioCandidate(
+                        title=title,
+                        artist=artist,
+                        duration_seconds=int(duration) if duration else None,
+                        url=webpage_url,
+                        channel=channel,
+                        categories=categories,
+                        view_count=view_count,
+                        channel_follower_count=follower_count,
+                    )
+                )
         return candidates
 
     def _download_sync(self, url: str, temp_dir: Path) -> Path:
@@ -77,11 +79,13 @@ class YtDlpAudioSearcher:
         opts: dict[str, Any] = {
             "format": "bestaudio/best",
             "outtmpl": output_template,
-            "postprocessors": [{
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "320",
-            }],
+            "postprocessors": [
+                {
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "320",
+                }
+            ],
             "quiet": True,
             "no_warnings": True,
         }

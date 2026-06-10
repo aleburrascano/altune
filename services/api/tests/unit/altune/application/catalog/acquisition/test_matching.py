@@ -26,8 +26,13 @@ def _candidate(
     views: int = 1000,
 ) -> AudioCandidate:
     return AudioCandidate(
-        title=title, artist=artist, duration_seconds=duration, url=url,
-        channel=channel, categories=categories, view_count=views,
+        title=title,
+        artist=artist,
+        duration_seconds=duration,
+        url=url,
+        channel=channel,
+        categories=categories,
+        view_count=views,
     )
 
 
@@ -38,9 +43,10 @@ def test_identity_score_exact_match() -> None:
 
 @pytest.mark.unit
 def test_identity_score_youtube_format() -> None:
-    assert identity_score(
-        "INTOXYCATED", "Oxlade", "Oxlade - INTOXYCATED (Lyrics video) ft. Dave"
-    ) >= 60
+    assert (
+        identity_score("INTOXYCATED", "Oxlade", "Oxlade - INTOXYCATED (Lyrics video) ft. Dave")
+        >= 60
+    )
 
 
 @pytest.mark.unit
@@ -96,12 +102,16 @@ def test_duration_score_unknown() -> None:
 @pytest.mark.unit
 def test_select_prefers_topic_channel() -> None:
     topic = _candidate(
-        title="Blinding Lights", channel="The Weeknd - Topic",
-        url="http://topic", views=1000000,
+        title="Blinding Lights",
+        channel="The Weeknd - Topic",
+        url="http://topic",
+        views=1000000,
     )
     vevo = _candidate(
         title="The Weeknd - Blinding Lights (Official Video)",
-        channel="TheWeekndVEVO", url="http://vevo", views=5000000,
+        channel="TheWeekndVEVO",
+        url="http://vevo",
+        views=5000000,
     )
     result = select_best_candidate(
         track_title="Blinding Lights",
@@ -118,8 +128,10 @@ def test_select_prefers_exact_duration() -> None:
     exact = _candidate(title="Song Artist", duration=200, url="http://exact", views=100)
     close = _candidate(title="Song Artist", duration=210, url="http://close", views=100000)
     result = select_best_candidate(
-        track_title="Song", track_artist="Artist",
-        track_duration=200, candidates=[close, exact],
+        track_title="Song",
+        track_artist="Artist",
+        track_duration=200,
+        candidates=[close, exact],
     )
     assert result is not None
     assert result.url == "http://exact"
@@ -129,8 +141,10 @@ def test_select_prefers_exact_duration() -> None:
 def test_select_returns_none_when_all_fail_identity() -> None:
     bad = _candidate(title="Completely Wrong Song", artist="Other Person")
     result = select_best_candidate(
-        track_title="Blinding Lights", track_artist="The Weeknd",
-        track_duration=200, candidates=[bad],
+        track_title="Blinding Lights",
+        track_artist="The Weeknd",
+        track_duration=200,
+        candidates=[bad],
     )
     assert result is None
 
@@ -138,8 +152,10 @@ def test_select_returns_none_when_all_fail_identity() -> None:
 @pytest.mark.unit
 def test_select_returns_none_for_empty() -> None:
     result = select_best_candidate(
-        track_title="Blinding Lights", track_artist="The Weeknd",
-        track_duration=200, candidates=[],
+        track_title="Blinding Lights",
+        track_artist="The Weeknd",
+        track_duration=200,
+        candidates=[],
     )
     assert result is None
 
@@ -148,12 +164,17 @@ def test_select_returns_none_for_empty() -> None:
 def test_select_accepts_youtube_format_intoxycated() -> None:
     candidate = _candidate(
         title="Oxlade - INTOXYCATED (Lyrics video) ft. Dave",
-        artist="Oxlade", duration=211, url="http://yt/intoxycated",
-        channel="Oxlade - Topic", views=5000000,
+        artist="Oxlade",
+        duration=211,
+        url="http://yt/intoxycated",
+        channel="Oxlade - Topic",
+        views=5000000,
     )
     result = select_best_candidate(
-        track_title="INTOXYCATED", track_artist="Oxlade",
-        track_duration=211, candidates=[candidate],
+        track_title="INTOXYCATED",
+        track_artist="Oxlade",
+        track_duration=211,
+        candidates=[candidate],
     )
     assert result is not None
 

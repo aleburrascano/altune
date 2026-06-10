@@ -588,3 +588,111 @@ async def test_search_music_enriches_popularity_and_reranks() -> None:
     )
     assert output.results[0].subtitle == "Omega"
     assert output.results[0].extras["popularity"] == 0.9
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_search_music_uses_quality_scorer_when_provided() -> None:
+    from altune.application.discovery.quality_scorer import compute_quality_score
+
+    rich = SearchResult(
+        kind=ResultKind.TRACK,
+        title="Track",
+        subtitle="Artist",
+        image_url="http://img",
+        confidence=Confidence.LOW,
+        sources=(
+            SourceRef(provider=ProviderName.SOUNDCLOUD, external_id="sc1", url="https://sc/1"),
+        ),
+        extras={"isrc": "ISRC1", "duration_seconds": 200, "album": "Album"},
+    )
+    sparse = SearchResult(
+        kind=ResultKind.TRACK,
+        title="Track",
+        subtitle="Artist",
+        image_url=None,
+        confidence=Confidence.LOW,
+        sources=(
+            SourceRef(provider=ProviderName.MUSICBRAINZ, external_id="mb1", url="https://mb/1"),
+        ),
+        extras={},
+    )
+    provider_rich = InMemorySearchProvider(name="soundcloud", canned=(rich,))
+    provider_sparse = InMemorySearchProvider(name="musicbrainz", canned=(sparse,))
+    use_case = SearchMusic(
+        providers=[provider_rich, provider_sparse],
+        history_repo=InMemorySearchHistoryRepository(),
+        quality_scorer=compute_quality_score,
+    )
+    output = await use_case.execute(
+        SearchMusicInput(
+            raw_query="track artist",
+            user_id=_USER,
+            kinds=frozenset({ResultKind.TRACK}),
+        )
+    )
+    assert output.results[0].extras.get("isrc") == "ISRC1"
+
+
+class _FakeContentValidationCache:
+    """In-memory content validation cache for testing."""
+
+    def __init__(self, responses: dict[tuple[str, str], str] | None = None) -> None:
+        from altune.domain.discovery.content_validation_status import ContentValidationStatus
+
+        self._data: dict[tuple[str, str], ContentValidationStatus] = {}
+        if responses:
+            for key, val in responses.items():
+                self._data[key] = ContentValidationStatus(val)
+
+    async def get(self, provider: str, external_id: str) -> ContentValidationStatus:
+        from altune.domain.discovery.content_validation_status import ContentValidationStatus
+
+        return self._data.get((provider, external_id), ContentValidationStatus.UNKNOWN)
+
+    async def record(
+        self, provider: str, external_id: str, status: ContentValidationStatus
+    ) -> None:
+        self._data[(provider, external_id)] = status
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_result_with_all_sources_unfetchable_filtered() -> None:
+    """AC#11: result whose every source has cached UNFETCHABLE is removed."""
+    fetchable = SearchResult(
+        kind=ResultKind.TRACK,
+        title="Good Song",
+        subtitle="Good Artist",
+        image_url=None,
+        confidence=Confidence.LOW,
+        sources=(SourceRef(provider=ProviderName.DEEZER, external_id="d1", url="https://x/d1"),),
+        extras={},
+    )
+    unfetchable = SearchResult(
+        kind=ResultKind.TRACK,
+        title="Ghost Song",
+        subtitle="Ghost Artist",
+        image_url=None,
+        confidence=Confidence.LOW,
+        sources=(SourceRef(provider=ProviderName.LASTFM, external_id="l1", url="https://x/l1"),),
+        extras={},
+    )
+    cache = _FakeContentValidationCache({("lastfm", "l1"): "unfetchable"})
+    provider = InMemorySearchProvider(name="deezer", canned=(fetchable,))
+    provider2 = InMemorySearchProvider(name="lastfm", canned=(unfetchable,))
+    use_case = SearchMusic(
+        providers=[provider, provider2],
+        history_repo=InMemorySearchHistoryRepository(),
+        content_validation_cache=cache,
+    )
+    output = await use_case.execute(
+        SearchMusicInput(
+            raw_query="song artist",
+            user_id=_USER,
+            kinds=frozenset({ResultKind.TRACK}),
+        )
+    )
+    titles = [r.title for r in output.results]
+    assert "Good Song" in titles
+    assert "Ghost Song" not in titles

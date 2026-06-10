@@ -30,16 +30,25 @@ _GOOD_CANDIDATE = AudioCandidate(
 
 def _pending_track(*, isrc: str | None = None) -> Track:
     return Track(
-        id=_TID, user_id=_UID, title="Blinding Lights", artist="The Weeknd",
-        album="After Hours", duration_seconds=200,
-        added_at=datetime(2026, 1, 1, tzinfo=UTC), isrc=isrc,
+        id=_TID,
+        user_id=_UID,
+        title="Blinding Lights",
+        artist="The Weeknd",
+        album="After Hours",
+        duration_seconds=200,
+        added_at=datetime(2026, 1, 1, tzinfo=UTC),
+        isrc=isrc,
     )
 
 
 def _ready_track() -> Track:
     return Track(
-        id=_TID, user_id=_UID, title="Blinding Lights", artist="The Weeknd",
-        album="After Hours", duration_seconds=200,
+        id=_TID,
+        user_id=_UID,
+        title="Blinding Lights",
+        artist="The Weeknd",
+        album="After Hours",
+        duration_seconds=200,
         added_at=datetime(2026, 1, 1, tzinfo=UTC),
         audio_ref="user/artist/album/song.mp3",
         acquisition_status=AcquisitionStatus.READY,
@@ -50,9 +59,11 @@ def _ready_track() -> Track:
 async def test_acquire_transitions_pending_to_ready() -> None:
     track = _pending_track()
     repo = InMemoryTrackRepository([track])
-    searcher = FakeAudioSearcher({
-        "Blinding Lights The Weeknd": [_GOOD_CANDIDATE],
-    })
+    searcher = FakeAudioSearcher(
+        {
+            "Blinding Lights The Weeknd": [_GOOD_CANDIDATE],
+        }
+    )
     store = FakeAudioStore()
     use_case = AcquireTrackAudio(repo, searcher, store)
 
@@ -114,9 +125,11 @@ async def test_acquire_skips_nonexistent_track() -> None:
 async def test_acquire_uses_isrc_tier_when_available() -> None:
     track = _pending_track(isrc="USAT12345678")
     repo = InMemoryTrackRepository([track])
-    searcher = FakeAudioSearcher({
-        "USAT12345678": [_GOOD_CANDIDATE],
-    })
+    searcher = FakeAudioSearcher(
+        {
+            "USAT12345678": [_GOOD_CANDIDATE],
+        }
+    )
     store = FakeAudioStore()
     use_case = AcquireTrackAudio(repo, searcher, store)
 

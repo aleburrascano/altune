@@ -96,6 +96,86 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             None,
         )
         app.state.discovery_history_repo = build_discovery_history_repo()
+
+        # Fanart.tv: MBID-based artist images (provider-expansion Phase 1).
+        if cfg.fanarttv_api_key:
+            import httpx as _httpx
+
+            from altune.adapters.outbound.discovery.fanarttv.adapter import (
+                FanartTvArtworkResolver,
+            )
+
+            fanarttv_client = _httpx.AsyncClient(timeout=10.0)
+            app.state.fanarttv_client = fanarttv_client
+            app.state.discovery_fanart_resolver = FanartTvArtworkResolver(
+                client=fanarttv_client, api_key=cfg.fanarttv_api_key
+            )
+        else:
+            app.state.discovery_fanart_resolver = None
+
+        # Genius: artist images for hip-hop/underground (fallback after Fanart.tv).
+        if cfg.genius_access_token:
+            import httpx as _httpx2
+
+            from altune.adapters.outbound.discovery.genius.adapter import (
+                GeniusArtworkResolver,
+            )
+
+            genius_client = _httpx2.AsyncClient(timeout=10.0)
+            app.state.genius_client = genius_client
+            app.state.discovery_genius_resolver = GeniusArtworkResolver(
+                client=genius_client, access_token=cfg.genius_access_token
+            )
+        else:
+            app.state.discovery_genius_resolver = None
+
+        # Wikidata: cross-provider ID bridge (no auth, SPARQL endpoint).
+        import httpx as _httpx3
+
+        from altune.adapters.outbound.discovery.wikidata.adapter import (
+            WikidataMbidResolver,
+        )
+
+        wikidata_client = _httpx3.AsyncClient(timeout=15.0)
+        app.state.wikidata_client = wikidata_client
+        app.state.discovery_wikidata_resolver = WikidataMbidResolver(client=wikidata_client)
+
+        # Quality scorer + quality gates (discovery-foundation-v1).
+        from altune.application.discovery.quality_scorer import compute_quality_score
+
+        app.state.discovery_quality_scorer = compute_quality_score
+
+        # MusicBrainz MBID resolver for cross-provider identity bridging.
+        from altune.adapters.outbound.discovery.musicbrainz.adapter import (
+            MusicBrainzMbidResolver,
+        )
+
+        mb_adapter = next(
+            (p for p in discovery_providers if getattr(p, "name", None) == "musicbrainz"),
+            None,
+        )
+        if mb_adapter is not None and hasattr(mb_adapter, "client"):
+            app.state.discovery_mbid_resolver = MusicBrainzMbidResolver(client=mb_adapter.client)
+        else:
+            app.state.discovery_mbid_resolver = None
+
+        # Content validation + fetch success (quality gates, Redis-backed).
+        redis_client = getattr(app.state, "redis", None)
+        if redis_client is not None:
+            from altune.adapters.outbound.discovery.cache.content_validation_cache import (
+                RedisContentValidationCache,
+            )
+            from altune.adapters.outbound.discovery.cache.fetch_success_store import (
+                RedisFetchSuccessStore,
+            )
+
+            app.state.discovery_content_validation_cache = RedisContentValidationCache(
+                redis=redis_client
+            )
+            app.state.discovery_fetch_success_store = RedisFetchSuccessStore(redis=redis_client)
+        else:
+            app.state.discovery_content_validation_cache = None
+            app.state.discovery_fetch_success_store = None
         # Audio acquisition wiring (acquire-track spec). Searcher + store on
         # app.state so the POST /v1/tracks background task can access them.
         if cfg.music_dir:

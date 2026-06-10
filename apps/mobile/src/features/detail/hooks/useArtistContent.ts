@@ -15,8 +15,9 @@ import {
   type DiscoveryResult,
   type DiscoverySource,
 } from '@shared/api-client/discovery';
+import { normalizeForDedup } from '@shared/lib/normalize-for-dedup';
 
-const CONTENT_PROVIDERS = ['deezer', 'lastfm', 'musicbrainz'] as const;
+
 
 function getReleaseSortKey(album: DiscoveryResult): string | null {
   const releaseDate = album.extras['release_date'];
@@ -35,14 +36,6 @@ function sortByReleaseDateDesc(albums: DiscoveryResult[]): DiscoveryResult[] {
     if (dateB === null) return -1;
     return dateB.localeCompare(dateA);
   });
-}
-
-function normalizeForDedup(title: string): string {
-  return title
-    .replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 function _mergedSources(a: DiscoverySource[], b: DiscoverySource[]): DiscoverySource[] {
@@ -79,26 +72,8 @@ function dedupAlbumsByTitle(albums: DiscoveryResult[]): DiscoveryResult[] {
   return Array.from(groups.values());
 }
 
-function bestSourcePerProvider(
-  sources: DiscoverySource[],
-  providers: readonly string[],
-): DiscoverySource[] {
-  const result: DiscoverySource[] = [];
-  const seen = new Set<string>();
-  for (const p of providers) {
-    if (seen.has(p)) continue;
-    const match = sources.find((s) => s.provider === p);
-    if (match) {
-      seen.add(p);
-      result.push(match);
-    }
-  }
-  return result;
-}
-
 type UseArtistContentParams = {
   sources: DiscoverySource[];
-  artistName: string;
   enabled?: boolean;
 };
 
@@ -115,65 +90,50 @@ type UseArtistContentReturn = {
 
 export function useArtistContent({
   sources,
-  artistName,
   enabled = true,
 }: UseArtistContentParams): UseArtistContentReturn {
-  const contentSources = bestSourcePerProvider(sources, CONTENT_PROVIDERS);
-  const trackSource = contentSources[0] ?? null;
-  const scName = artistName.trim();
+  const mbSource = sources.find((s) => s.provider === 'musicbrainz') ?? null;
+  const deezerSource = sources.find((s) => s.provider === 'deezer') ?? null;
+  const streamSource = deezerSource ?? sources.find((s) => s.provider === 'lastfm') ?? sources[0] ?? null;
 
   const tracksQuery = useQuery({
-    queryKey: ['artist-top-tracks', trackSource?.provider ?? '', trackSource?.external_id ?? ''],
-    queryFn: () => getArtistTopTracks(trackSource!.provider, trackSource!.external_id, 5),
-    enabled: enabled && trackSource !== null,
+    queryKey: ['artist-top-tracks', streamSource?.provider ?? '', streamSource?.external_id ?? ''],
+    queryFn: () => getArtistTopTracks(streamSource!.provider, streamSource!.external_id, 5),
+    enabled: enabled && streamSource !== null,
     staleTime: 1000 * 60 * 30,
   });
 
-  const albumsQuery = useQuery({
-    queryKey: ['artist-albums-multi', ...contentSources.map((s) => `${s.provider}:${s.external_id}`)],
-    queryFn: async () => {
-      const results = await Promise.allSettled(
-        contentSources.map((s: DiscoverySource) => getArtistAlbums(s.provider, s.external_id, 100)),
-      );
-      const allAlbums = results
-        .filter(
-          (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof getArtistAlbums>>> =>
-            r.status === 'fulfilled',
-        )
-        .flatMap((r: PromiseFulfilledResult<Awaited<ReturnType<typeof getArtistAlbums>>>) => r.value.items);
-      return dedupAlbumsByTitle(allAlbums);
-    },
-    enabled: enabled && contentSources.length > 0,
+  const mbAlbumsQuery = useQuery({
+    queryKey: ['artist-albums-mb', mbSource?.external_id ?? ''],
+    queryFn: () => getArtistAlbums('musicbrainz', mbSource!.external_id, 100),
+    enabled: enabled && mbSource !== null,
     staleTime: 1000 * 60 * 30,
   });
 
-  const scAlbumsQuery = useQuery({
-    queryKey: ['artist-albums-sc', scName],
-    queryFn: () => getArtistAlbums('soundcloud', scName, 30),
-    enabled: enabled && scName.length > 0,
+  const deezerAlbumsQuery = useQuery({
+    queryKey: ['artist-albums-dz', deezerSource?.external_id ?? ''],
+    queryFn: () => getArtistAlbums('deezer', deezerSource!.external_id, 100),
+    enabled: enabled && deezerSource !== null,
     staleTime: 1000 * 60 * 30,
   });
 
-  const otherProviderAlbums = albumsQuery.data ?? [];
-  const scAlbums = scAlbumsQuery.data?.items ?? [];
-  const allRaw = [...otherProviderAlbums, ...scAlbums];
+  const mbAlbums = mbAlbumsQuery.data?.items ?? [];
+  const dzAlbums = deezerAlbumsQuery.data?.items ?? [];
+  const mergedAlbums = dedupAlbumsByTitle([...mbAlbums, ...dzAlbums]);
 
-  const mergedAlbums = dedupAlbumsByTitle(allRaw).map((album) => {
-    if (album.image_url) return album;
-    const key = normalizeForDedup(album.title);
-    const donor = allRaw.find((a) => normalizeForDedup(a.title) === key && a.image_url);
-    if (!donor) return album;
-    return { ...album, image_url: donor.image_url };
-  });
+  const isLoadingAlbums = (mbSource !== null && mbAlbumsQuery.isLoading)
+    || (deezerSource !== null && deezerAlbumsQuery.isLoading);
+  const isErrorAlbums = (mbSource !== null && mbAlbumsQuery.isError)
+    && (deezerSource === null || deezerAlbumsQuery.isError);
 
   return {
     topTracks: tracksQuery.data?.items ?? [],
     albums: sortByReleaseDateDesc(mergedAlbums),
     isLoadingTracks: tracksQuery.isLoading,
-    isLoadingAlbums: albumsQuery.isLoading && scAlbumsQuery.isLoading,
+    isLoadingAlbums,
     isErrorTracks: tracksQuery.isError || tracksQuery.data?.status === 'error',
-    isErrorAlbums: albumsQuery.isError && scAlbumsQuery.isError,
+    isErrorAlbums,
     refetchTracks: tracksQuery.refetch,
-    refetchAlbums: () => { albumsQuery.refetch(); scAlbumsQuery.refetch(); },
+    refetchAlbums: () => { mbAlbumsQuery.refetch(); deezerAlbumsQuery.refetch(); },
   };
 }

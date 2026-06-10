@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -156,7 +155,9 @@ class SoundCloudSearchAdapter:
         start = time.perf_counter()
         username = await self._resolve_username(external_id)
         if username is None:
-            _log.warning("soundcloud get_artist_albums: username resolution failed for %r", external_id)
+            _log.warning(
+                "soundcloud get_artist_albums: username resolution failed for %r", external_id
+            )
             return ContentFetchResponse(
                 self.name, ProviderStatus.ERROR, (), int((time.perf_counter() - start) * 1000)
             )
@@ -188,7 +189,12 @@ class SoundCloudSearchAdapter:
             if sc_id is not None and entry_url:
                 self._set_url_cache[str(sc_id)] = entry_url
         albums = _translate_set_entries(entries)
-        _log.info("soundcloud get_artist_albums: %d sets -> %d albums for %r", len(entries), len(albums), url)
+        _log.info(
+            "soundcloud get_artist_albums: %d sets -> %d albums for %r",
+            len(entries),
+            len(albums),
+            url,
+        )
         return ContentFetchResponse(self.name, ProviderStatus.OK, albums[:limit], latency_ms)
 
     async def get_album_tracks(self, external_id: str, limit: int) -> ContentFetchResponse:
@@ -242,9 +248,6 @@ def _translate_set_entries(
     return tuple(out)
 
 
-_SET_NOISE_RE = re.compile(r"\b(playlist|mix|best\s+of|compilation)\b", re.IGNORECASE)
-
-
 def _translate_one_set_entry(entry: dict[str, Any]) -> SearchResult | None:
     """Translate a yt-dlp set/playlist entry to a SearchResult with kind=ALBUM."""
     title = entry.get("title")
@@ -255,8 +258,6 @@ def _translate_one_set_entry(entry: dict[str, Any]) -> SearchResult | None:
         _log.warning(
             "provider_response_malformed provider=soundcloud kind=set missing=title|id|url"
         )
-        return None
-    if _SET_NOISE_RE.search(title):
         return None
     image_url = _largest_thumbnail(entry.get("thumbnails"))
     playlist_count = entry.get("playlist_count")

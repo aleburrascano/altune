@@ -51,12 +51,16 @@ class AcquireTrackAudio:
             if track.audio_ref and self._store.exists(track.audio_ref):
                 _logger.info("acquire_skip_already_ready", track_id=str(track_id))
                 return
-            _logger.info("acquire_reacquire_missing_file", track_id=str(track_id), audio_ref=track.audio_ref)
+            _logger.info(
+                "acquire_reacquire_missing_file", track_id=str(track_id), audio_ref=track.audio_ref
+            )
             track = replace(track, acquisition_status=AcquisitionStatus.PENDING, audio_ref=None)
             await self._tracks.update(track)
         if track.acquisition_status is AcquisitionStatus.FAILED:
             _logger.info("acquire_retrying_failed", track_id=str(track_id))
-            track = replace(track, acquisition_status=AcquisitionStatus.PENDING, failure_reason=None)
+            track = replace(
+                track, acquisition_status=AcquisitionStatus.PENDING, failure_reason=None
+            )
             await self._tracks.update(track)
 
         _logger.info(
@@ -67,14 +71,16 @@ class AcquireTrackAudio:
         )
 
         ctx = AcquisitionContext(track=track)
-        pipeline = AcquisitionPipeline([
-            SearchStep(self._searcher),
-            SelectStep(),
-            DownloadStep(self._searcher),
-            TagStep(),
-            StoreStep(self._store),
-            UpdateTrackStep(self._tracks),
-        ])
+        pipeline = AcquisitionPipeline(
+            [
+                SearchStep(self._searcher),
+                SelectStep(),
+                DownloadStep(self._searcher),
+                TagStep(),
+                StoreStep(self._store),
+                UpdateTrackStep(self._tracks),
+            ]
+        )
 
         try:
             ctx = await pipeline.run(ctx)

@@ -88,6 +88,13 @@ async def get_discovery_search(
     popularity_resolver = getattr(request.app.state, "discovery_popularity_resolver", None) or next(
         (p for p in providers if getattr(p, "name", None) == "lastfm"), None
     )
+    quality_scorer = getattr(request.app.state, "discovery_quality_scorer", None)
+    mbid_resolver = getattr(request.app.state, "discovery_mbid_resolver", None)
+    content_validation_cache = getattr(
+        request.app.state, "discovery_content_validation_cache", None
+    )
+    fanart_resolver = getattr(request.app.state, "discovery_fanart_resolver", None)
+    genius_resolver = getattr(request.app.state, "discovery_genius_resolver", None)
     sessionmaker = getattr(request.app.state, "sessionmaker", None)
     if sessionmaker is not None:
         from altune.adapters.outbound.persistence.discovery.search_history_repository import (
@@ -102,6 +109,11 @@ async def get_discovery_search(
                 cache=cache,
                 artwork_resolver=artwork_resolver,
                 popularity_resolver=popularity_resolver,
+                quality_scorer=quality_scorer,
+                mbid_resolver=mbid_resolver,
+                content_validation_cache=content_validation_cache,
+                fanart_resolver=fanart_resolver,
+                genius_resolver=genius_resolver,
             )
             output = await use_case.execute(
                 SearchMusicInput(
@@ -122,6 +134,9 @@ async def get_discovery_search(
             cache=cache,
             artwork_resolver=artwork_resolver,
             popularity_resolver=popularity_resolver,
+            quality_scorer=quality_scorer,
+            mbid_resolver=mbid_resolver,
+            content_validation_cache=content_validation_cache,
         )
         output = await use_case.execute(
             SearchMusicInput(
