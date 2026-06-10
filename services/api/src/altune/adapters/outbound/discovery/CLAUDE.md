@@ -52,3 +52,10 @@ Providers: `deezer/`, `musicbrainz/`, `soundcloud/`, `lastfm/`, and `itunes/` (a
 - **Return shape**: `ContentFetchResponse(provider_name, status, items: tuple[SearchResult, ...], latency_ms)`. Items carry `extras["track_position"]` (1-indexed) and `extras["duration_seconds"]` where available.
 - **MusicBrainz featured artists** — `_extract_featured_artists(credits)` returns names from `artist-credit[1:]` into `extras["featured_artists"]` on recordings. Only populated when the MB recording has multi-artist credits.
 - **SC resilience** — yt-dlp retries bumped to 2 (was 0), socket timeout 15s (was 10s). `get_artist_albums` retries once on empty entries before accepting empty. Diagnostic logging on username resolution failure and final set→album counts.
+
+## discovery rework follow-up (2026-06-10): cache adapters + genius hints
+
+- **`cache/mbid_cache.py::CachedMbidResolver`** — decorator structurally satisfying `MbidResolver`; key `discovery:mbid:v1:{sha256(url)[:32]}`, positive TTL 30d, negative sentinel `"__none__"` 24h, Redis errors degrade to the inner live lookup. Wired in app.py only when `app.state.redis` exists.
+- **`cache/artwork_cache.py::RedisArtworkCache`** — implements the `ArtworkCache` port; key `discovery:artwork:v1:{kind}:{sha256(title|subtitle|mbid)[:32]}`, positive 14d / negative 24h, degrade-to-miss. Caches the FINAL waterfall outcome, not per-rung results.
+- **Genius adapter hint search** — `resolve_artwork(..., *, track_hints: Sequence[str] = ())`. Query ladder for artists: bare name → "<name> songs" → up to 3 × "<name> <hint>"; exact `primary_artist.name` match (case-insensitive) via the shared `_find_artist_image_in_hits` helper. Hints come from MB top-track titles (the use case orchestrates — adapters never import each other).
+- **Redis lifespan wiring** — `app.state.redis` is created in `platform/app.py` from `cfg.redis_url` (lazy connect, 1s socket timeouts, `decode_responses=True`); it backs `RedisQueryCache` (search cache — previously implemented but never wired), the validation/fetch-success gates, the mbid cache, and the artwork cache. No Redis → all wire to None and the system degrades gracefully.

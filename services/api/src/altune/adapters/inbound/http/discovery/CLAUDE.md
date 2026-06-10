@@ -38,3 +38,7 @@ Six endpoints: `GET /v1/discovery/search`, `GET /v1/discovery/search-history`, `
 - **`GET /artists/{provider}/{external_id}/top-tracks`** / **`GET /artists/{provider}/{external_id}/albums`** — same pattern for artist content. Default limits 5 / 10.
 - **`ContentFetchResponseDto`** — Pydantic v2 frozen model: `items: list[SearchResultDto]`, `provider: str`, `status: str`, `latency_ms: int`. Reuses `SearchResultDto` for item shape.
 - **`_result_to_dto` helper** — factored from the search handler; converts domain `SearchResult` to wire `SearchResultDto`.
+
+## discovery rework follow-up (2026-06-10)
+
+- The search handler now also reads `discovery_track_title_source` (MB adapter, feeds the Genius hint retry) and `discovery_artwork_cache` from app.state and passes both into `SearchMusic` — in BOTH the sessionmaker and fallback constructions (the fallback branch previously omitted fanart/genius too; it no longer does).
