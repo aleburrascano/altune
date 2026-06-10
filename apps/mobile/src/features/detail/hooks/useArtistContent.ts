@@ -74,6 +74,9 @@ function dedupAlbumsByTitle(albums: DiscoveryResult[]): DiscoveryResult[] {
 
 type UseArtistContentParams = {
   sources: DiscoverySource[];
+  /** Authoritative artist MBID from extras.mbid — picks the right MB source
+   *  when the merged card carries several same-name MusicBrainz artists. */
+  mbid?: string | null;
   enabled?: boolean;
 };
 
@@ -90,9 +93,15 @@ type UseArtistContentReturn = {
 
 export function useArtistContent({
   sources,
+  mbid = null,
   enabled = true,
 }: UseArtistContentParams): UseArtistContentReturn {
-  const mbSource = sources.find((s) => s.provider === 'musicbrainz') ?? null;
+  const mbSource =
+    (mbid !== null
+      ? sources.find((s) => s.provider === 'musicbrainz' && s.external_id === mbid)
+      : undefined)
+    ?? sources.find((s) => s.provider === 'musicbrainz')
+    ?? null;
   const deezerSource = sources.find((s) => s.provider === 'deezer') ?? null;
   const streamSource = deezerSource ?? sources.find((s) => s.provider === 'lastfm') ?? sources[0] ?? null;
 

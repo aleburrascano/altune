@@ -521,6 +521,7 @@ function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; de
     refetchAlbums,
   } = useArtistContent({
     sources: result.sources,
+    mbid: typeof result.extras['mbid'] === 'string' ? result.extras['mbid'] : null,
     enabled: result.sources.length > 0,
   });
 
