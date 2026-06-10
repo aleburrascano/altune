@@ -175,8 +175,8 @@ class SearchMusic:
         """
         resolver = self.mbid_resolver
         max_lookups = 3
-        lookups_done = 0
         enriched: list[SearchResult] = list(results)
+        candidates: list[tuple[int, str]] = []
         for i, result in enumerate(results):
             if result.extras.get("mbid"):
                 continue
@@ -188,15 +188,27 @@ class SearchMusic:
             if mb_src is not None:
                 enriched[i] = replace(result, extras={**result.extras, "mbid": mb_src.external_id})
                 continue
-            if resolver is None or lookups_done >= max_lookups:
+            if resolver is None or len(candidates) >= max_lookups:
                 continue
             deezer_src = next((s for s in result.sources if "deezer.com" in s.url), None)
             if deezer_src is None:
                 continue
-            lookups_done += 1
-            mbid = await resolver.resolve(deezer_src.url)
-            if mbid:
-                enriched[i] = replace(result, extras={**result.extras, "mbid": mbid})
+            candidates.append((i, deezer_src.url))
+        if resolver is not None and candidates:
+
+            async def _resolve_one(url: str) -> str | None:
+                try:
+                    return await resolver.resolve(url)
+                except Exception:
+                    _log.warning("mbid_lookup_failed url=%s", url, exc_info=True)
+                    return None
+
+            mbids = await asyncio.gather(*(_resolve_one(url) for _, url in candidates))
+            for (i, _), mbid in zip(candidates, mbids, strict=True):
+                if mbid:
+                    enriched[i] = replace(
+                        enriched[i], extras={**enriched[i].extras, "mbid": mbid}
+                    )
         return tuple(enriched)
 
     async def _enrich(self, results: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:
