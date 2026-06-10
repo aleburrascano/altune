@@ -786,3 +786,83 @@ async def test_enrich_mbids_short_circuit_not_capped_at_three_artists() -> None:
 
     assert [r.extras.get("mbid") for r in enriched] == [f"mbid-{i}" for i in range(4)]
     assert resolver.calls == []
+
+
+def _deezer_only_artist(i: int) -> SearchResult:
+    return _artist_result(
+        f"Artist {i}",
+        sources=(
+            SourceRef(
+                provider=ProviderName.DEEZER,
+                external_id=f"dz-{i}",
+                url=f"https://www.deezer.com/artist/{i}",
+            ),
+        ),
+    )
+
+
+class _ConcurrencyProbeMbidResolver:
+    """Resolver that only completes once two resolve() calls are in flight.
+
+    A sequential caller deadlocks (caught by wait_for); a parallel caller
+    releases the barrier and every call returns its mbid.
+    """
+
+    def __init__(self) -> None:
+        self.in_flight = 0
+        self.barrier = asyncio.Event()
+        self.calls: list[str] = []
+
+    async def resolve(self, provider_url: str) -> str | None:
+        self.calls.append(provider_url)
+        self.in_flight += 1
+        if self.in_flight >= 2:
+            self.barrier.set()
+        await self.barrier.wait()
+        return f"mbid-for-{provider_url}"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_mbids_url_lookups_run_concurrently() -> None:
+    artists = tuple(_deezer_only_artist(i) for i in range(3))
+    resolver = _ConcurrencyProbeMbidResolver()
+    use_case = SearchMusic(
+        providers=[],
+        history_repo=InMemorySearchHistoryRepository(),
+        mbid_resolver=resolver,
+    )
+
+    enriched = await asyncio.wait_for(use_case._enrich_mbids(artists), timeout=2.0)
+
+    assert len(resolver.calls) == 3
+    assert all(r.extras.get("mbid") for r in enriched)
+
+
+class _OneBadMbidResolver:
+    """First call raises; later calls return a canned mbid."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def resolve(self, provider_url: str) -> str | None:
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("boom")
+        return f"mbid-for-{provider_url}"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_mbids_swallows_per_lookup_exceptions() -> None:
+    artists = tuple(_deezer_only_artist(i) for i in range(3))
+    use_case = SearchMusic(
+        providers=[],
+        history_repo=InMemorySearchHistoryRepository(),
+        mbid_resolver=_OneBadMbidResolver(),
+    )
+
+    enriched = await use_case._enrich_mbids(artists)
+
+    enriched_count = sum(1 for r in enriched if r.extras.get("mbid"))
+    assert enriched_count == 2
