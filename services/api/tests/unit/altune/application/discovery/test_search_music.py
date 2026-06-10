@@ -866,3 +866,156 @@ async def test_enrich_mbids_swallows_per_lookup_exceptions() -> None:
 
     enriched_count = sum(1 for r in enriched if r.extras.get("mbid"))
     assert enriched_count == 2
+
+
+# --- _enrich: Genius track-hint orchestration (discovery rework follow-up) ---
+
+
+class _HintRecordingGeniusResolver:
+    """Genius double: records track_hints per call; succeeds only WITH hints."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[str, ...]]] = []
+
+    async def resolve_artwork(
+        self,
+        kind: ResultKind,
+        title: str,
+        subtitle: str | None,
+        *,
+        track_hints: tuple[str, ...] = (),
+    ) -> str | None:
+        _ = (kind, subtitle)
+        self.calls.append((title, tuple(track_hints)))
+        return "https://images.genius.com/che.jpg" if track_hints else None
+
+
+def _che_with_mb_source() -> SearchResult:
+    return _artist_result(
+        "Che",
+        sources=(
+            SourceRef(
+                provider=ProviderName.MUSICBRAINZ,
+                external_id=_CHE_MBID,
+                url=f"https://musicbrainz.org/artist/{_CHE_MBID}",
+            ),
+        ),
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_retries_genius_with_filtered_track_hints() -> None:
+    from tests._doubles.fake_artist_track_title_source import FakeArtistTrackTitleSource
+
+    genius = _HintRecordingGeniusResolver()
+    titles = FakeArtistTrackTitleSource(titles=("?????", "#RESIDE", "agenda"))
+    provider = InMemorySearchProvider(name="musicbrainz", canned=(_che_with_mb_source(),))
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        genius_resolver=genius,
+        track_title_source=titles,
+    )
+
+    output = await use_case.execute(
+        SearchMusicInput(raw_query="che", user_id=_USER, kinds=frozenset({ResultKind.ARTIST}))
+    )
+
+    assert titles.calls == [(_CHE_MBID, 10)]
+    # First attempt hint-less, second with junk-filtered titles ("?????"  dropped).
+    assert genius.calls == [("Che", ()), ("Che", ("#RESIDE", "agenda"))]
+    assert output.results[0].image_url == "https://images.genius.com/che.jpg"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_skips_hint_fetch_without_mbid() -> None:
+    from tests._doubles.fake_artist_track_title_source import FakeArtistTrackTitleSource
+
+    genius = _HintRecordingGeniusResolver()
+    titles = FakeArtistTrackTitleSource(titles=("agenda",))
+    artist = _artist_result(
+        "Che",
+        sources=(
+            SourceRef(
+                provider=ProviderName.SOUNDCLOUD,
+                external_id="sc-1",
+                url="https://soundcloud.com/che",
+            ),
+        ),
+    )
+    provider = InMemorySearchProvider(name="soundcloud", canned=(artist,))
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        genius_resolver=genius,
+        track_title_source=titles,
+    )
+
+    await use_case.execute(
+        SearchMusicInput(raw_query="che", user_id=_USER, kinds=frozenset({ResultKind.ARTIST}))
+    )
+
+    assert titles.calls == []
+    assert genius.calls == [("Che", ())]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_skips_hint_fetch_for_non_artist_results() -> None:
+    from tests._doubles.fake_artist_track_title_source import FakeArtistTrackTitleSource
+
+    genius = _HintRecordingGeniusResolver()
+    titles = FakeArtistTrackTitleSource(titles=("agenda",))
+    track = SearchResult(
+        kind=ResultKind.TRACK,
+        title="agenda",
+        subtitle="Che",
+        image_url=None,
+        confidence=Confidence.LOW,
+        sources=(
+            SourceRef(
+                provider=ProviderName.MUSICBRAINZ,
+                external_id="rec-1",
+                url="https://musicbrainz.org/recording/rec-1",
+            ),
+        ),
+        extras={"mbid": "rec-1"},
+    )
+    provider = InMemorySearchProvider(name="musicbrainz", canned=(track,))
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        genius_resolver=genius,
+        track_title_source=titles,
+    )
+
+    await use_case.execute(
+        SearchMusicInput(raw_query="che agenda", user_id=_USER, kinds=frozenset({ResultKind.TRACK}))
+    )
+
+    assert titles.calls == []
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_enrich_swallows_hint_fetch_failure() -> None:
+    from tests._doubles.fake_artist_track_title_source import FakeArtistTrackTitleSource
+
+    genius = _HintRecordingGeniusResolver()
+    titles = FakeArtistTrackTitleSource(raises=True)
+    provider = InMemorySearchProvider(name="musicbrainz", canned=(_che_with_mb_source(),))
+    use_case = SearchMusic(
+        providers=[provider],
+        history_repo=InMemorySearchHistoryRepository(),
+        genius_resolver=genius,
+        track_title_source=titles,
+    )
+
+    output = await use_case.execute(
+        SearchMusicInput(raw_query="che", user_id=_USER, kinds=frozenset({ResultKind.ARTIST}))
+    )
+
+    assert genius.calls == [("Che", ())]
+    assert output.results[0].image_url is None
