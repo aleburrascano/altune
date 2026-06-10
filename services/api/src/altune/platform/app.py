@@ -60,6 +60,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.engine = engine
             app.state.sessionmaker = create_sessionmaker(engine)
             log.info("db_initialized")
+        # Redis (ADR-0007): one async client backing the whole discovery cache
+        # layer (query cache + quality gates below). from_url does not connect
+        # eagerly and every cache adapter degrades per-operation, so an
+        # unavailable Redis never blocks boot or fails a search.
+        if cfg.redis_url is not None:
+            from redis.asyncio import Redis as _Redis
+
+            from altune.adapters.outbound.discovery.cache.redis_cache import RedisQueryCache
+
+            app.state.redis = _Redis.from_url(
+                str(cfg.redis_url),
+                decode_responses=True,
+                socket_connect_timeout=1.0,
+                socket_timeout=1.0,
+            )
+            app.state.discovery_cache = RedisQueryCache(redis=app.state.redis)
+            log.info("redis_initialized")
+        else:
+            app.state.redis = None
+            app.state.discovery_cache = None
         # Discovery wiring (per ADR-0007). httpx.AsyncClient per provider for
         # bulkhead isolation. Production SqlAlchemy repos land in slice 37;
         # v1 uses InMemory placeholders so the endpoint demos end-to-end.
@@ -199,6 +219,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 log.info("db_disposed")
             for client in getattr(app.state, "discovery_clients", ()):
                 await client.aclose()
+            stored_redis = getattr(app.state, "redis", None)
+            if stored_redis is not None:
+                await stored_redis.aclose()
 
     app = FastAPI(
         title="Altune API",
