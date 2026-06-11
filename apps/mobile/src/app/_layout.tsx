@@ -6,7 +6,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import * as NavigationBar from 'expo-navigation-bar';
-import { Slot } from 'expo-router';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -14,6 +14,7 @@ import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthGate } from '../features/auth/ui/AuthGate';
+import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
 import { ThemeProvider, darkTheme } from '../shared/ui/theme';
 
 // AIDEV-NOTE: ADR-0005 — single QueryClientProvider at the Expo Router root.
@@ -75,7 +76,13 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <StatusBar style="light" />
           <AuthGate>
-            <Slot />
+            <PlaybackProvider>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="player" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+              </Stack>
+            </PlaybackProvider>
           </AuthGate>
         </SafeAreaProvider>
       </ThemeProvider>
