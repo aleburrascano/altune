@@ -14,8 +14,13 @@ _logger = structlog.get_logger(__name__)
 
 
 class YtDlpAudioSearcher:
-    def __init__(self, ffmpeg_location: str | None = None) -> None:
+    def __init__(
+        self,
+        ffmpeg_location: str | None = None,
+        cookie_file: str | None = None,
+    ) -> None:
         self._ffmpeg_location = ffmpeg_location
+        self._cookie_file = cookie_file
 
     async def search(self, query: str, limit: int = 5) -> list[AudioCandidate]:
         return await asyncio.to_thread(self._search_sync, query, limit)
@@ -31,7 +36,11 @@ class YtDlpAudioSearcher:
             "no_warnings": True,
             "default_search": "ytsearch",
             "noplaylist": True,
+            "ignoreerrors": True,
+            "ignore_no_formats_error": True,
         }
+        if self._cookie_file:
+            opts["cookiefile"] = self._cookie_file
         search_query = f"ytsearch{limit}:{query}"
         with yt_dlp.YoutubeDL(opts) as ydl:
             try:
