@@ -7,8 +7,12 @@ ListTracks use case does the actual work. TrackRow never leaves this layer;
 the response is built from domain Track values.
 """
 
+from pathlib import Path
+from uuid import UUID  # noqa: TC003  # used as runtime annotation by FastAPI
+
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
+from fastapi.responses import FileResponse
 
 from altune.adapters.inbound.http.catalog.dto import (
     CreateTrackRequest,
@@ -169,3 +173,47 @@ async def delete_track(
         else:
             log.info("track_delete_not_found", user_id=str(user_id), track_id=str(track_id))
     return Response(status_code=204 if deleted else 404)
+
+
+@router.get("/tracks/{track_id}/audio")  # type: ignore[untyped-decorator, unused-ignore]
+async def stream_audio(
+    track_id: UUID,
+    request: Request,
+    user_id: UserId = Depends(current_user_id),  # noqa: B008
+) -> FileResponse:
+    from altune.domain.catalog.acquisition_status import AcquisitionStatus
+    from altune.domain.catalog.track_id import TrackId
+
+    sessionmaker = request.app.state.sessionmaker
+    async with sessionmaker() as session:
+        repo = SqlAlchemyTrackRepository(session)
+        track = await repo.get_by_id(TrackId(track_id), user_id)
+
+    if track is None or track.acquisition_status != AcquisitionStatus.READY or not track.audio_ref:
+        return Response(status_code=404)  # type: ignore[return-value]
+
+    base_dir: str | None = getattr(request.app.state, "music_dir", None)
+    if base_dir is None:
+        return Response(status_code=404)  # type: ignore[return-value]
+
+    file_path = Path(base_dir) / track.audio_ref
+    if not file_path.is_file():
+        log.warning(
+            "audio_file_missing",
+            track_id=str(track_id),
+            audio_ref=track.audio_ref,
+            user_id=str(user_id),
+        )
+        return Response(status_code=404)  # type: ignore[return-value]
+
+    log.info(
+        "audio_stream_started",
+        track_id=str(track_id),
+        user_id=str(user_id),
+        file_size_bytes=file_path.stat().st_size,
+    )
+    return FileResponse(
+        path=file_path,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
