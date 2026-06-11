@@ -230,7 +230,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             from altune.adapters.outbound.audio.filesystem_store import FilesystemAudioStore
             from altune.adapters.outbound.audio.ytdlp_searcher import YtDlpAudioSearcher
 
-            app.state.audio_searcher = YtDlpAudioSearcher(ffmpeg_location=cfg.ffmpeg_location)
+            app.state.audio_searcher = YtDlpAudioSearcher(
+                ffmpeg_location=cfg.ffmpeg_location,
+                cookie_file=cfg.ytdlp_cookie_file,
+            )
             app.state.audio_store = FilesystemAudioStore(cfg.music_dir)
         log.info(
             "auth.startup_config_validated",

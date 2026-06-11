@@ -114,6 +114,12 @@ class Settings(BaseSettings):
         default=None,
         description="Path to ffmpeg binary directory. If unset, yt-dlp uses system PATH.",
     )
+    ytdlp_cookie_file: str | None = Field(
+        default=None,
+        description="Path to a Netscape-format cookie file for yt-dlp. "
+        "Required for age-restricted YouTube content. "
+        "Export from a logged-in browser session.",
+    )
 
     lastfm_api_key: SecretStr | None = Field(
         default=None,
@@ -146,6 +152,19 @@ class Settings(BaseSettings):
                 "MUSICBRAINZ_USER_AGENT must contain a contact form URL or email "
                 "(e.g. 'altune/0.1 ( mailto:dev@altune.test )') — per MB's "
                 "rate-limit policy."
+            )
+        return value
+
+    @field_validator("ytdlp_cookie_file")
+    @classmethod
+    def _validate_ytdlp_cookie_file_exists(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        from pathlib import Path
+
+        if not Path(value).is_file():
+            raise ValueError(
+                f"YTDLP_COOKIE_FILE points to '{value}' which does not exist or is not a file."
             )
         return value
 
