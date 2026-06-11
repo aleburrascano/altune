@@ -235,6 +235,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 cookie_file=cfg.ytdlp_cookie_file,
             )
             app.state.audio_store = FilesystemAudioStore(cfg.music_dir)
+            app.state.music_dir = cfg.music_dir
         log.info(
             "auth.startup_config_validated",
             verifier_mode="jwks" if cfg.supabase_jwt_jwks_url else "hs256",
