@@ -13,6 +13,7 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from testcontainers.postgres import PostgresContainer
 
@@ -71,6 +72,7 @@ def fresh_db(postgres_url: str) -> Iterator[str]:
         eng = create_async_engine(postgres_url)
         async with eng.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.execute(delete(TrackRow))
         await eng.dispose()
 
     asyncio.run(_setup())
@@ -116,3 +118,79 @@ def test_stream_audio_returns_200_with_correct_headers_for_ready_track(
     assert int(response.headers["content-length"]) == len(_FAKE_MP3)
     assert response.headers["cache-control"] == "private, max-age=86400"
     assert response.content == _FAKE_MP3
+
+
+@pytest.mark.e2e
+def test_stream_audio_range_request_returns_206_partial_content(
+    fresh_db: str, music_dir: Path
+) -> None:
+    _seed(fresh_db, [_ready_track()])
+    with _client(fresh_db, music_dir) as client:
+        response = client.get(
+            f"/v1/tracks/{_TRACK_ID}/audio", headers={"Range": "bytes=500-"}
+        )
+    assert response.status_code == 206
+    assert "content-range" in response.headers
+    content_range = response.headers["content-range"]
+    assert content_range.startswith("bytes 500-")
+    assert content_range.endswith(f"/{len(_FAKE_MP3)}")
+    assert len(response.content) == len(_FAKE_MP3) - 500
+
+
+@pytest.mark.e2e
+def test_stream_audio_returns_401_without_auth(fresh_db: str, music_dir: Path) -> None:
+    _seed(fresh_db, [_ready_track()])
+    settings = Settings(  # type: ignore[call-arg]
+        _env_file=None,
+        database_url=fresh_db,
+        env="test",
+        music_dir=str(music_dir),
+        supabase_project_url="https://fixture.supabase.co",
+        supabase_jwt_jwks_url="https://fixture.supabase.co/auth/v1/keys",
+    )
+    app = create_app(settings=settings)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get(f"/v1/tracks/{_TRACK_ID}/audio")
+    assert response.status_code == 401
+
+
+_USER_OTHER = UserId(UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
+
+
+@pytest.mark.e2e
+def test_stream_audio_returns_404_for_track_not_owned_by_user(
+    fresh_db: str, music_dir: Path
+) -> None:
+    _seed(fresh_db, [_ready_track()])
+    with _client(fresh_db, music_dir, user=_USER_OTHER) as client:
+        response = client.get(f"/v1/tracks/{_TRACK_ID}/audio")
+    assert response.status_code == 404
+
+
+@pytest.mark.e2e
+def test_stream_audio_returns_404_for_non_ready_track(
+    fresh_db: str, music_dir: Path
+) -> None:
+    pending_track = Track(
+        id=TrackId(UUID("22222222-2222-2222-2222-222222222222")),
+        user_id=_USER,
+        title="Pending",
+        artist="Artist",
+        album=None,
+        duration_seconds=None,
+        added_at=datetime(2026, 6, 1, 12, 0, tzinfo=UTC),
+    )
+    _seed(fresh_db, [pending_track])
+    with _client(fresh_db, music_dir) as client:
+        response = client.get("/v1/tracks/22222222-2222-2222-2222-222222222222/audio")
+    assert response.status_code == 404
+
+
+@pytest.mark.e2e
+def test_stream_audio_returns_404_and_logs_warning_for_missing_file(
+    fresh_db: str, tmp_path: Path
+) -> None:
+    _seed(fresh_db, [_ready_track()])
+    with _client(fresh_db, tmp_path) as client:
+        response = client.get(f"/v1/tracks/{_TRACK_ID}/audio")
+    assert response.status_code == 404
