@@ -215,6 +215,8 @@ export function LibraryScreen(): ReactElement {
         extras: {
           ...(track.album != null ? { album: track.album } : {}),
           ...(track.duration_seconds != null ? { duration_seconds: track.duration_seconds } : {}),
+          acquisition_status: track.acquisition_status,
+          track_id: track.id,
         },
       };
       setDetailHandoff(result);
