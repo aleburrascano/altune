@@ -17,10 +17,10 @@ export interface PlaybackState {
 
 export interface PlaybackControls {
   play(track: PlaybackTrack): Promise<void>;
-  pause(): Promise<void>;
-  resume(): Promise<void>;
-  seekTo(positionMs: number): Promise<void>;
-  stop(): Promise<void>;
+  pause(): void;
+  resume(): void;
+  seekTo(positionMs: number): void;
+  stop(): void;
 }
 
 export type PlaybackContextValue = PlaybackState & PlaybackControls;
