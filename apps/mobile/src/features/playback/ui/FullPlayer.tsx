@@ -1,5 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { ChevronDown, Pause, Play } from 'lucide-react-native';
 
 import { usePlayback } from '../hooks/usePlayback';
 import { Scrubber } from './Scrubber';
@@ -42,7 +43,7 @@ export function FullPlayer() {
     <View style={s.container}>
       <View style={s.header}>
         <IconButton
-          name="ChevronDown"
+          icon={ChevronDown}
           size={28}
           onPress={handleClose}
           accessibilityLabel="Close player"
@@ -62,7 +63,7 @@ export function FullPlayer() {
       <Scrubber positionMs={positionMs} durationMs={durationMs} onSeek={handleSeek} />
       <View style={s.controls}>
         <IconButton
-          name={isPlaying ? 'Pause' : 'Play'}
+          icon={isPlaying ? Pause : Play}
           size={48}
           onPress={handlePlayPause}
           accessibilityLabel={isPlaying ? 'Pause' : 'Play'}

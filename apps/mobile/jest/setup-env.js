@@ -8,11 +8,31 @@
 process.env.EXPO_PUBLIC_SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://fixture.supabase.co';
 process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'fixture-anon-key';
 
-// expo-av requires native module ExponentAV which doesn't exist in Jest.
-// Mock the Audio API surface used by the playback feature.
-jest.mock('expo-av', () => ({
-  Audio: {
-    Sound: { createAsync: jest.fn().mockResolvedValue({ sound: { unloadAsync: jest.fn(), pauseAsync: jest.fn(), playAsync: jest.fn(), setPositionAsync: jest.fn() } }) },
+// expo-audio requires native modules that don't exist in Jest.
+// Mock the API surface used by the playback feature.
+jest.mock('expo-audio', () => {
+  const mockPlayer = {
+    play: jest.fn(),
+    pause: jest.fn(),
+    seekTo: jest.fn(),
+    setActiveForLockScreen: jest.fn(),
+    currentTime: 0,
+    duration: 0,
+    playing: false,
+    paused: true,
+    isBuffering: false,
+    isLoaded: false,
+  };
+  return {
+    useAudioPlayer: jest.fn(() => mockPlayer),
+    useAudioPlayerStatus: jest.fn(() => ({
+      playing: false,
+      paused: true,
+      isBuffering: false,
+      isLoaded: false,
+      currentTime: 0,
+      duration: 0,
+    })),
     setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
-  },
-}));
+  };
+});
