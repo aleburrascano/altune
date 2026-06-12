@@ -42,6 +42,7 @@ export function useSaveTrack() {
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: LIBRARY_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['library-home'] });
     },
   });
 }

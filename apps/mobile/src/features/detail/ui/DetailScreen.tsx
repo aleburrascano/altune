@@ -29,6 +29,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import type { ListTracksResponse } from '@shared/api-client/types';
 
+import { canPlay } from '../../playback/helpers/canPlay';
+import { usePlayback } from '../../playback/hooks/usePlayback';
+
 import { extractFeaturedFromText, formatDuration, trackInfoRows } from '../extras';
 import { useAlbumTracks } from '../hooks/useAlbumTracks';
 import { useArtistContent } from '../hooks/useArtistContent';
@@ -169,8 +172,11 @@ function TrackDetailBody({
   lateralNav: LateralNavHandle;
 }): ReactElement {
   const save = useSaveTrack();
+  const playback = usePlayback();
   const queryClient = useQueryClient();
   const alreadySaved = _isTrackInLibraryCache(queryClient, result.title, result.subtitle);
+  const trackId = typeof result.extras['track_id'] === 'string' ? result.extras['track_id'] : null;
+  const isPlayable = canPlay(typeof result.extras['acquisition_status'] === 'string' ? result.extras['acquisition_status'] : null) && trackId !== null;
   const rows = trackInfoRows(result.extras);
   if (!rows.some((r) => r.key === 'featuring')) {
     const parsed = extractFeaturedFromText(result.title, result.subtitle);
@@ -261,6 +267,21 @@ function TrackDetailBody({
         haptic
         style={styles.save}
       />
+      {isPlayable ? (
+        <Button
+          testID="detail-play"
+          label={playback.status === 'playing' && playback.track?.trackId === trackId ? 'Playing' : 'Play'}
+          onPress={() => void playback.play({
+            trackId: trackId!,
+            title: result.title,
+            artist: result.subtitle ?? '',
+            artworkUrl: result.image_url,
+          })}
+          disabled={playback.status === 'loading'}
+          haptic
+          style={styles.save}
+        />
+      ) : null}
       {save.isError ? (
         <Banner testID="detail-save-error" tone="danger">
           Couldn't save this track. Tap Save to retry.
@@ -613,11 +634,19 @@ function _isTrackInLibraryCache(
   title: string,
   artist: string | null,
 ): boolean {
-  const data = queryClient.getQueryData<InfiniteData<ListTracksResponse>>(['library']);
-  if (!data) return false;
+  const homeData = queryClient.getQueryData<ListTracksResponse>(['library-home']);
+  if (homeData) {
+    const normalTitle = title.toLowerCase().trim();
+    const normalArtist = (artist ?? '').toLowerCase().trim();
+    return homeData.items.some(
+      (t) => t.title.toLowerCase().trim() === normalTitle && t.artist.toLowerCase().trim() === normalArtist,
+    );
+  }
+  const infiniteData = queryClient.getQueryData<InfiniteData<ListTracksResponse>>(['library']);
+  if (!infiniteData) return false;
   const normalTitle = title.toLowerCase().trim();
   const normalArtist = (artist ?? '').toLowerCase().trim();
-  return data.pages.some((page) =>
+  return infiniteData.pages.some((page) =>
     page.items.some(
       (t) => t.title.toLowerCase().trim() === normalTitle && t.artist.toLowerCase().trim() === normalArtist,
     ),

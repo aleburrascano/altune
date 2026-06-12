@@ -65,8 +65,10 @@ function _result(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
 function renderDetail(): ReturnType<typeof render> {
   const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   const { DetailScreen } = require('../ui/DetailScreen');
+  const { PlaybackProvider } = require('../../playback/hooks/PlaybackProvider');
   const wrapper = ({ children }: { children: ReactNode }): ReactNode =>
-    createElement(QueryClientProvider, { client: qc }, children);
+    createElement(QueryClientProvider, { client: qc },
+      createElement(PlaybackProvider, null, children));
   return render(createElement(DetailScreen), { wrapper });
 }
 
