@@ -22,11 +22,11 @@ export function MiniPlayer() {
   const isError = status === 'error';
   const progress = durationMs > 0 ? positionMs / durationMs : 0;
 
-  const handlePlayPause = async () => {
+  const handlePlayPause = () => {
     if (isPlaying) {
-      await pause();
+      pause();
     } else {
-      await resume();
+      resume();
     }
   };
 
@@ -70,7 +70,7 @@ export function MiniPlayer() {
 const styles = (theme: Theme) =>
   StyleSheet.create({
     container: {
-      backgroundColor: theme.color.surfaceElevated,
+      backgroundColor: theme.color.surface1,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.color.border,
     },

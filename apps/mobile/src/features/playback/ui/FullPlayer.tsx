@@ -21,16 +21,16 @@ export function FullPlayer() {
 
   const isPlaying = status === 'playing';
 
-  const handlePlayPause = async () => {
+  const handlePlayPause = () => {
     if (isPlaying) {
-      await pause();
+      pause();
     } else {
-      await resume();
+      resume();
     }
   };
 
-  const handleSeek = async (ms: number) => {
-    await seekTo(ms);
+  const handleSeek = (ms: number) => {
+    seekTo(ms);
   };
 
   const handleClose = () => {

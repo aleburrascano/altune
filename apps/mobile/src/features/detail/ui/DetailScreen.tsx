@@ -654,7 +654,7 @@ function _isTrackInLibraryCache(
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { paddingBottom: spacing['2xl'] },
+  scrollContent: { paddingBottom: 140 },
   back: { paddingVertical: spacing.lg, alignSelf: 'flex-start', minHeight: 48 },
   hero: { alignItems: 'center', paddingTop: spacing.lg, gap: spacing.sm },
   title: { textAlign: 'center', marginTop: spacing.lg },
