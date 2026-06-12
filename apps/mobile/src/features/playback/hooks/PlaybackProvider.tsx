@@ -1,6 +1,6 @@
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import type { AudioSource } from 'expo-audio';
-import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { audioRequestHeaders, audioStreamUrl } from '../api/audio';
 import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '../types';
@@ -19,6 +19,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
   const [audioSource, setAudioSource] = useState<AudioSource | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const shouldAutoPlay = useRef(false);
 
   const player = useAudioPlayer(audioSource);
   const playerStatus = useAudioPlayerStatus(player);
@@ -30,14 +31,21 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  useEffect(() => {
+    if (shouldAutoPlay.current && playerStatus.isLoaded) {
+      shouldAutoPlay.current = false;
+      player.play();
+    }
+  }, [playerStatus.isLoaded, player]);
+
   const state: PlaybackState = useMemo(() => {
     if (!track) return INITIAL_STATE;
     if (errorMessage) return { status: 'error', track, positionMs: 0, durationMs: 0, errorMessage };
+    if (shouldAutoPlay.current || (playerStatus.isBuffering && !playerStatus.isLoaded)) {
+      return { status: 'loading', track, positionMs: 0, durationMs: 0, errorMessage: null };
+    }
 
-    let status: PlaybackState['status'] = 'idle';
-    if (playerStatus.playing) status = 'playing';
-    else if (playerStatus.isBuffering && !playerStatus.isLoaded) status = 'loading';
-    else if (track) status = 'paused';
+    const status: PlaybackState['status'] = playerStatus.playing ? 'playing' : 'paused';
 
     return {
       status,
@@ -51,42 +59,30 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const play = useCallback(async (newTrack: PlaybackTrack) => {
     setErrorMessage(null);
     setTrack(newTrack);
+    shouldAutoPlay.current = true;
     try {
       const headers = await audioRequestHeaders();
-      const source: AudioSource = { uri: audioStreamUrl(newTrack.trackId), headers };
-      setAudioSource(source);
+      setAudioSource({ uri: audioStreamUrl(newTrack.trackId), headers });
     } catch (err) {
+      shouldAutoPlay.current = false;
       const message = err instanceof Error ? err.message : 'Failed to load audio';
       setErrorMessage(message);
     }
   }, []);
 
-  useEffect(() => {
-    if (audioSource && track) {
-      player.play();
-      if (track) {
-        player.setActiveForLockScreen(true, {
-          title: track.title,
-          artist: track.artist,
-          artworkUrl: track.artworkUrl ?? undefined,
-        });
-      }
-    }
-  }, [audioSource]);
-
-  const pause = useCallback(async () => {
+  const pause = useCallback(() => {
     player.pause();
   }, [player]);
 
-  const resume = useCallback(async () => {
+  const resume = useCallback(() => {
     player.play();
   }, [player]);
 
-  const seekTo = useCallback(async (positionMs: number) => {
+  const seekTo = useCallback((positionMs: number) => {
     player.seekTo(positionMs / 1000);
   }, [player]);
 
-  const stop = useCallback(async () => {
+  const stop = useCallback(() => {
     player.pause();
     player.seekTo(0);
     setTrack(null);
