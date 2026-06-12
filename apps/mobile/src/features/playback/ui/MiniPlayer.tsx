@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Pause, Play } from 'lucide-react-native';
 
 import { usePlayback } from '../hooks/usePlayback';
 import { Artwork } from '@shared/ui/primitives/Artwork';
@@ -56,7 +57,7 @@ export function MiniPlayer() {
           </Text>
         </View>
         <IconButton
-          name={isPlaying ? 'Pause' : 'Play'}
+          icon={isPlaying ? Pause : Play}
           size={24}
           onPress={handlePlayPause}
           accessibilityLabel={isPlaying ? 'Pause' : 'Play'}

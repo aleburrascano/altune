@@ -1,5 +1,6 @@
-import { Audio, type AVPlaybackStatus } from 'expo-av';
-import { createContext, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import type { AudioSource } from 'expo-audio';
+import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { audioRequestHeaders, audioStreamUrl } from '../api/audio';
 import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '../types';
@@ -15,88 +16,83 @@ const INITIAL_STATE: PlaybackState = {
 export const PlaybackContext = createContext<PlaybackContextValue | null>(null);
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const [state, setState] = useState<PlaybackState>(INITIAL_STATE);
+  const [track, setTrack] = useState<PlaybackTrack | null>(null);
+  const [audioSource, setAudioSource] = useState<AudioSource | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const player = useAudioPlayer(audioSource);
+  const playerStatus = useAudioPlayerStatus(player);
 
   useEffect(() => {
-    void Audio.setAudioModeAsync({
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
+    void setAudioModeAsync({
+      shouldPlayInBackground: true,
+      playsInSilentMode: true,
     });
-    return () => {
-      if (soundRef.current) {
-        void soundRef.current.unloadAsync();
-      }
-    };
   }, []);
 
-  const onPlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!status.isLoaded) {
-      if (status.error) {
-        setState((prev) => ({ ...prev, status: 'error', errorMessage: status.error ?? 'Playback error' }));
-      }
-      return;
-    }
-    setState((prev) => ({
-      ...prev,
-      status: status.isPlaying ? 'playing' : 'paused',
-      positionMs: status.positionMillis,
-      durationMs: status.durationMillis ?? 0,
-      errorMessage: null,
-    }));
-  }, []);
+  const state: PlaybackState = useMemo(() => {
+    if (!track) return INITIAL_STATE;
+    if (errorMessage) return { status: 'error', track, positionMs: 0, durationMs: 0, errorMessage };
 
-  const play = useCallback(async (track: PlaybackTrack) => {
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-    }
-    setState((prev) => ({
-      ...prev,
-      status: 'loading',
+    let status: PlaybackState['status'] = 'idle';
+    if (playerStatus.playing) status = 'playing';
+    else if (playerStatus.isBuffering && !playerStatus.isLoaded) status = 'loading';
+    else if (track) status = 'paused';
+
+    return {
+      status,
       track,
-      positionMs: 0,
-      durationMs: 0,
+      positionMs: (playerStatus.currentTime ?? 0) * 1000,
+      durationMs: (playerStatus.duration ?? 0) * 1000,
       errorMessage: null,
-    }));
+    };
+  }, [track, errorMessage, playerStatus.playing, playerStatus.isBuffering, playerStatus.isLoaded, playerStatus.currentTime, playerStatus.duration]);
+
+  const play = useCallback(async (newTrack: PlaybackTrack) => {
+    setErrorMessage(null);
+    setTrack(newTrack);
     try {
       const headers = await audioRequestHeaders();
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: audioStreamUrl(track.trackId), headers },
-        { shouldPlay: true },
-        onPlaybackStatusUpdate,
-      );
-      soundRef.current = sound;
+      const source: AudioSource = { uri: audioStreamUrl(newTrack.trackId), headers };
+      setAudioSource(source);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load audio';
-      setState((prev) => ({ ...prev, status: 'error', errorMessage: message }));
+      setErrorMessage(message);
     }
-  }, [onPlaybackStatusUpdate]);
+  }, []);
+
+  useEffect(() => {
+    if (audioSource && track) {
+      player.play();
+      if (track) {
+        player.setActiveForLockScreen(true, {
+          title: track.title,
+          artist: track.artist,
+          artworkUrl: track.artworkUrl ?? undefined,
+        });
+      }
+    }
+  }, [audioSource]);
 
   const pause = useCallback(async () => {
-    if (soundRef.current) {
-      await soundRef.current.pauseAsync();
-    }
-  }, []);
+    player.pause();
+  }, [player]);
 
   const resume = useCallback(async () => {
-    if (soundRef.current) {
-      await soundRef.current.playAsync();
-    }
-  }, []);
+    player.play();
+  }, [player]);
 
   const seekTo = useCallback(async (positionMs: number) => {
-    if (soundRef.current) {
-      await soundRef.current.setPositionAsync(positionMs);
-    }
-  }, []);
+    player.seekTo(positionMs / 1000);
+  }, [player]);
 
   const stop = useCallback(async () => {
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-      soundRef.current = null;
-    }
-    setState(INITIAL_STATE);
-  }, []);
+    player.pause();
+    player.seekTo(0);
+    setTrack(null);
+    setAudioSource(null);
+    setErrorMessage(null);
+  }, [player]);
 
   const value: PlaybackContextValue = {
     ...state,
