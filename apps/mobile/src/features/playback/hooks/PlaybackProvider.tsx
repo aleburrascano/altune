@@ -38,6 +38,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
   }, [playerStatus.isLoaded, player]);
 
+  useEffect(() => {
+    if (!shouldAutoPlay.current || !track) return;
+    const timeout = setTimeout(() => {
+      if (shouldAutoPlay.current) {
+        shouldAutoPlay.current = false;
+        setErrorMessage('Could not load audio — the file may be missing');
+      }
+    }, 10000);
+    return () => clearTimeout(timeout);
+  }, [track]);
+
   const state: PlaybackState = useMemo(() => {
     if (!track) return INITIAL_STATE;
     if (errorMessage) return { status: 'error', track, positionMs: 0, durationMs: 0, errorMessage };

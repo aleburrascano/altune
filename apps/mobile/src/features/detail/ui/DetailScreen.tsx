@@ -22,6 +22,7 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
 
+import { useEnrichResult } from '../hooks/useEnrichResult';
 import { useLateralNav } from '../hooks/useLateralNav';
 
 import { TrackDetailBody } from './TrackDetailBody';
@@ -42,10 +43,11 @@ export function DetailScreen(): ReactElement {
   const segments = useSegments();
   const tabRoot = segments[1] === 'library' ? 'library' : 'discover';
   const detailRoute = `/${tabRoot}/detail` as const;
-  const result = getDetailHandoff();
+  const rawResult = getDetailHandoff();
+  const { enriched: result } = useEnrichResult(rawResult ?? { kind: 'track', title: '', subtitle: null, image_url: null, confidence: 'low', sources: [], extras: {} });
   const lateralNav = useLateralNav();
 
-  if (result === null) {
+  if (rawResult === null) {
     return <Redirect href="/discover" />;
   }
 

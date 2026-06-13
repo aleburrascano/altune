@@ -12,7 +12,6 @@ import { CreatePlaylistModal } from './CreatePlaylistModal';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryRow } from './LibraryRow';
 import { PlaylistCarousel } from './PlaylistCarousel';
-import { ProfileSheet } from './ProfileSheet';
 import { SectionHeader } from './SectionHeader';
 
 type LibraryHomeProps = {
@@ -28,10 +27,6 @@ type LibraryHomeProps = {
   onExpandArtists: () => void;
   onPlaylistPress: (pl: PlaylistResponse) => void;
   onRefresh: () => void;
-  initial: string;
-  email: string;
-  profileVisible: boolean;
-  onProfileToggle: (visible: boolean) => void;
   createModalVisible: boolean;
   onCreateModalToggle: (visible: boolean) => void;
   onCreatePlaylist: (name: string) => void;
@@ -53,10 +48,6 @@ export function LibraryHome({
   onExpandArtists,
   onPlaylistPress,
   onRefresh,
-  initial,
-  email,
-  profileVisible,
-  onProfileToggle,
   createModalVisible,
   onCreateModalToggle,
   onCreatePlaylist,
@@ -67,7 +58,7 @@ export function LibraryHome({
   const theme = useTheme();
   return (
     <Screen>
-      <LibraryHeader initial={initial} onAvatarPress={() => onProfileToggle(true)} />
+      <LibraryHeader />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
@@ -122,11 +113,6 @@ export function LibraryHome({
           </>
         ) : null}
       </ScrollView>
-      <ProfileSheet
-        visible={profileVisible}
-        email={email}
-        onClose={() => onProfileToggle(false)}
-      />
       <CreatePlaylistModal
         visible={createModalVisible}
         onClose={() => onCreateModalToggle(false)}

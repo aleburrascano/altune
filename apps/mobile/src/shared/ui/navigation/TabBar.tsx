@@ -1,5 +1,5 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Compass, Library as LibraryIcon } from 'lucide-react-native';
+import { Compass, Library as LibraryIcon, Settings } from 'lucide-react-native';
 import type { ComponentType } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ type IconComponent = ComponentType<{ size?: number; color?: string }>;
 const ICONS: Record<string, IconComponent> = {
   discover: Compass,
   library: LibraryIcon,
+  settings: Settings,
 };
 
 // AIDEV-NOTE: docked tab bar — flush to the bottom edge, hairline top border,

@@ -43,6 +43,7 @@ export function AlbumCarousel({ albums, onAlbumPress }: AlbumCarouselProps): Rea
       keyExtractor={(item) => item.key}
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.listOuter}
       contentContainerStyle={styles.list}
       renderItem={renderItem}
     />
@@ -50,6 +51,7 @@ export function AlbumCarousel({ albums, onAlbumPress }: AlbumCarouselProps): Rea
 }
 
 const styles = StyleSheet.create({
+  listOuter: { marginHorizontal: -spacing.lg },
   list: { paddingHorizontal: spacing.lg, gap: spacing.md },
   card: { width: COVER_SIZE },
   pressed: { opacity: 0.7 },

@@ -12,6 +12,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { useArtistContent } from '../hooks/useArtistContent';
+import { useLibraryTracksForArtist, libraryTrackToDiscoveryResult } from '../hooks/useLibraryTracks';
 
 import { sharedStyles } from './helpers';
 import { DiscographySections } from './DiscographySections';
@@ -19,20 +20,25 @@ import { DiscographySections } from './DiscographySections';
 /** Artist body: top tracks + albums fetched from provider API. */
 export function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryResult; detailRoute: string }): ReactElement {
   const router = useRouter();
+  const hasSources = result.sources.length > 0;
   const {
-    topTracks,
+    topTracks: apiTopTracks,
     albums,
-    isLoadingTracks,
+    isLoadingTracks: apiLoadingTracks,
     isLoadingAlbums,
-    isErrorTracks,
+    isErrorTracks: apiErrorTracks,
     isErrorAlbums,
     refetchTracks,
     refetchAlbums,
   } = useArtistContent({
     sources: result.sources,
     mbid: typeof result.extras['mbid'] === 'string' ? result.extras['mbid'] : null,
-    enabled: result.sources.length > 0,
+    enabled: hasSources,
   });
+  const localTracks = useLibraryTracksForArtist(result.title);
+  const topTracks = hasSources ? apiTopTracks : localTracks.map(libraryTrackToDiscoveryResult);
+  const isLoadingTracks = hasSources ? apiLoadingTracks : false;
+  const isErrorTracks = hasSources ? apiErrorTracks : false;
 
   const onTrackPress = (track: DiscoveryResult): void => {
     const enriched = {
