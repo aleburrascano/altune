@@ -34,11 +34,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (shouldAutoPlay.current && playerStatus.isLoaded) {
+    if (shouldAutoPlay.current && playerStatus.isLoaded && audioSource) {
       shouldAutoPlay.current = false;
       player.play();
     }
-  }, [playerStatus.isLoaded, player]);
+  }, [playerStatus.isLoaded, player, audioSource]);
 
   useEffect(() => {
     if (!shouldAutoPlay.current || !track) return;
