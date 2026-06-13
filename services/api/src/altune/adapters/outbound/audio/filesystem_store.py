@@ -23,3 +23,7 @@ class FilesystemAudioStore:
         shutil.move(str(source_path), str(dest))
         _logger.info("audio_file_stored", audio_ref=audio_ref, size_bytes=dest.stat().st_size)
         return audio_ref
+
+    async def resolve_local_path(self, audio_ref: str) -> Path | None:
+        path = self._base / audio_ref
+        return path if path.is_file() else None

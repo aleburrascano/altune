@@ -7,7 +7,6 @@ ListTracks use case does the actual work. TrackRow never leaves this layer;
 the response is built from domain Track values.
 """
 
-from pathlib import Path
 from uuid import UUID  # used as runtime annotation by FastAPI
 
 import structlog
@@ -192,12 +191,12 @@ async def stream_audio(
     if track is None or track.acquisition_status != AcquisitionStatus.READY or not track.audio_ref:
         return Response(status_code=404)  # type: ignore[return-value]
 
-    base_dir: str | None = getattr(request.app.state, "music_dir", None)
-    if base_dir is None:
+    audio_store = getattr(request.app.state, "audio_store", None)
+    if audio_store is None:
         return Response(status_code=404)  # type: ignore[return-value]
 
-    file_path = Path(base_dir) / track.audio_ref
-    if not file_path.is_file():
+    file_path = await audio_store.resolve_local_path(track.audio_ref)
+    if file_path is None:
         log.warning(
             "audio_file_missing",
             track_id=str(track_id),
@@ -209,25 +208,23 @@ async def stream_audio(
             ReconcileTrackStatus,
         )
 
-        audio_store = getattr(request.app.state, "audio_store", None)
-        if audio_store is not None:
-            async with sessionmaker() as write_session:
-                write_repo = SqlAlchemyTrackRepository(write_session)
-                use_case = ReconcileTrackStatus(write_repo, audio_store)
-                result = await use_case.execute(
-                    ReconcileInput(
-                        track_id=TrackId(track_id),
-                        user_id=user_id,
-                        reason="Audio file missing from storage",
-                    ),
-                )
-                await write_session.commit()
-            if result.event:
-                log.info(
-                    "track_marked_failed",
-                    track_id=str(track_id),
-                    reason="audio_file_missing",
-                )
+        async with sessionmaker() as write_session:
+            write_repo = SqlAlchemyTrackRepository(write_session)
+            use_case = ReconcileTrackStatus(write_repo, audio_store)
+            result = await use_case.execute(
+                ReconcileInput(
+                    track_id=TrackId(track_id),
+                    user_id=user_id,
+                    reason="Audio file missing from storage",
+                ),
+            )
+            await write_session.commit()
+        if result.event:
+            log.info(
+                "track_marked_failed",
+                track_id=str(track_id),
+                reason="audio_file_missing",
+            )
         return Response(status_code=404)  # type: ignore[return-value]
 
     log.info(
