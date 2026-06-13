@@ -50,8 +50,18 @@ export function _flattenPages(pages: ListTracksResponse[]): TrackResponse[] {
   return pages.flatMap((p) => p.items);
 }
 
+// fallow-ignore-next-line unused-export
 export function useLibrary(): LibraryState {
-  const query = useInfiniteQuery<ListTracksResponse>({
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    isRefetching,
+    error,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+  } = useInfiniteQuery<ListTracksResponse>({
     queryKey: ['library'],
     queryFn: ({ pageParam }) => getTracks({ limit: PAGE_SIZE, offset: pageParam as number }),
     initialPageParam: 0,
@@ -59,18 +69,18 @@ export function useLibrary(): LibraryState {
   });
 
   return {
-    items: query.data ? _flattenPages(query.data.pages) : [],
-    total: query.data?.pages[0]?.total ?? 0,
-    isLoading: query.isLoading,
-    isFetchingNextPage: query.isFetchingNextPage,
-    isRefetching: query.isRefetching,
-    error: query.error as Error | null,
-    hasNextPage: query.hasNextPage,
+    items: data ? _flattenPages(data.pages) : [],
+    total: data?.pages[0]?.total ?? 0,
+    isLoading,
+    isFetchingNextPage,
+    isRefetching,
+    error: error as Error | null,
+    hasNextPage,
     fetchNextPage: () => {
-      void query.fetchNextPage();
+      void fetchNextPage();
     },
     refetch: () => {
-      void query.refetch();
+      void refetch();
     },
   };
 }

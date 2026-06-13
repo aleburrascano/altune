@@ -47,6 +47,7 @@ function _track(id: string): TrackResponse {
     album_artist: null,
     isrc: null,
     audio_ref: null,
+    failure_reason: null,
   };
 }
 

@@ -5,7 +5,6 @@ import {
   FlatList,
   Pressable,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,7 +21,7 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 
 import { LibraryRow } from './LibraryRow';
-import { PlaylistCover } from './PlaylistCover';
+import { PlaylistHero } from './PlaylistHero';
 
 export function PlaylistDetailScreen(): ReactElement {
   const router = useRouter();
@@ -34,7 +33,7 @@ export function PlaylistDetailScreen(): ReactElement {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
 
-  const query = useQuery({
+  const { data: playlistData, isLoading: playlistLoading, error: playlistError } = useQuery({
     queryKey: ['playlist', playlistId],
     queryFn: () => getPlaylist(playlistId),
     enabled: playlistId.length > 0,
@@ -97,35 +96,37 @@ export function PlaylistDetailScreen(): ReactElement {
   };
 
   const startEditing = () => {
-    if (query.data) {
-      setEditName(query.data.name);
+    if (playlistData) {
+      setEditName(playlistData.name);
       setIsEditing(true);
     }
   };
 
   const confirmRename = () => {
     const trimmed = editName.trim();
-    if (trimmed.length > 0 && trimmed !== query.data?.name) {
+    if (trimmed.length > 0 && trimmed !== playlistData?.name) {
       renameMut.mutate(trimmed);
     } else {
       setIsEditing(false);
     }
   };
 
+  const goBack = () => router.canGoBack() ? router.back() : router.replace('/library');
+
   if (!playlistId) {
     router.replace('/library');
     return <Screen><View /></Screen>;
   }
 
-  if (query.isLoading) {
+  if (playlistLoading) {
     return (
       <Screen>
         <View style={styles.header}>
-          <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/library')} hitSlop={8}>
+          <Pressable onPress={goBack} hitSlop={8}>
             <Text variant="body" style={{ color: theme.color.accent }}>← Back</Text>
           </Pressable>
         </View>
-        <View style={styles.hero}>
+        <View style={styles.heroLoading}>
           <Skeleton width={160} height={160} radius={8} />
           <Skeleton width={200} height={20} />
           <Skeleton width={100} height={14} />
@@ -134,11 +135,11 @@ export function PlaylistDetailScreen(): ReactElement {
     );
   }
 
-  if (query.error || !query.data) {
+  if (playlistError || !playlistData) {
     return (
       <Screen>
         <View style={styles.header}>
-          <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/library')} hitSlop={8}>
+          <Pressable onPress={goBack} hitSlop={8}>
             <Text variant="body" style={{ color: theme.color.accent }}>← Back</Text>
           </Pressable>
         </View>
@@ -150,13 +151,13 @@ export function PlaylistDetailScreen(): ReactElement {
     );
   }
 
-  const pl = query.data;
+  const pl = playlistData;
 
   return (
     <Screen>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.canGoBack() ? router.back() : router.replace('/library')}
+          onPress={goBack}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Back"
@@ -174,31 +175,14 @@ export function PlaylistDetailScreen(): ReactElement {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <View style={styles.hero}>
-            <PlaylistCover artworkUrls={pl.preview_artwork_urls} size={160} />
-            {isEditing ? (
-              <TextInput
-                testID="playlist-rename-input"
-                value={editName}
-                onChangeText={setEditName}
-                onSubmitEditing={confirmRename}
-                onBlur={confirmRename}
-                autoFocus
-                maxLength={100}
-                style={[
-                  styles.renameInput,
-                  { color: theme.color.textPrimary, borderBottomColor: theme.color.accent },
-                ]}
-              />
-            ) : (
-              <Pressable onPress={startEditing} hitSlop={8}>
-                <Text variant="title" testID="playlist-name">{pl.name}</Text>
-              </Pressable>
-            )}
-            <Text variant="label" tone="secondary">
-              {pl.track_count} {pl.track_count === 1 ? 'track' : 'tracks'}
-            </Text>
-          </View>
+          <PlaylistHero
+            playlist={pl}
+            isEditing={isEditing}
+            editName={editName}
+            onEditNameChange={setEditName}
+            onStartEditing={startEditing}
+            onConfirmRename={confirmRename}
+          />
         }
         renderItem={({ item }) => (
           <View style={styles.trackRowContainer}>
@@ -234,18 +218,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
-  hero: {
+  heroLoading: {
     alignItems: 'center',
     gap: spacing.sm,
     paddingBottom: spacing.xl,
-  },
-  renameInput: {
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-    borderBottomWidth: 2,
-    paddingBottom: 4,
-    minWidth: 200,
   },
   list: { paddingBottom: spacing['3xl'] },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg },

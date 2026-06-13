@@ -1,0 +1,50 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": [
+    "src/app/**/*.{ts,tsx}"
+  ],
+  "ignorePatterns": [
+    "**/*.test.{ts,tsx}",
+    "**/__tests__/**",
+    "**/__mocks__/**",
+    "jest/**"
+  ],
+  "ignoreDependencies": [
+    "react-doctor"
+  ],
+  "ignoreUnresolvedImports": [
+    "@react-navigation/bottom-tabs"
+  ],
+  "rules": {
+    "unused-files": "warn",
+    "unused-exports": "warn",
+    "unused-types": "warn",
+    "unused-dependencies": "warn",
+    "circular-dependencies": "error",
+    "boundary-violation": "error"
+  },
+  "boundaries": {
+    "zones": [
+      { "name": "app", "patterns": ["src/app/**"] },
+      { "name": "feature-auth", "patterns": ["src/features/auth/**"] },
+      { "name": "feature-detail", "patterns": ["src/features/detail/**"] },
+      { "name": "feature-discover", "patterns": ["src/features/discover/**"] },
+      { "name": "feature-library", "patterns": ["src/features/library/**"] },
+      { "name": "feature-playback", "patterns": ["src/features/playback/**"] },
+      { "name": "shared", "patterns": ["src/shared/**"] }
+    ],
+    "rules": [
+      { "from": "app", "allow": ["feature-auth", "feature-detail", "feature-discover", "feature-library", "feature-playback", "shared"] },
+      { "from": "feature-auth", "allow": ["shared"] },
+      { "from": "feature-detail", "allow": ["feature-playback", "shared"] },
+      { "from": "feature-discover", "allow": ["shared"] },
+      { "from": "feature-library", "allow": ["feature-auth", "shared"] },
+      { "from": "feature-playback", "allow": ["feature-auth", "shared"] },
+      { "from": "shared", "allow": ["feature-auth"] }
+    ]
+  },
+  "health": {
+    "maxCyclomatic": 15,
+    "maxCognitive": 12
+  }
+}

@@ -23,14 +23,11 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
 
   const items = state.routes
-    .map((route, index) => {
+    .flatMap((route, index) => {
       const descriptor = descriptors[route.key];
-      // Skip routes with href: null (hidden from tab bar but still navigable).
-      // Expo Router extends BottomTabNavigationOptions with href — cast to access it.
-      // Also skip routes not in our ICONS map (e.g., 'detail').
       const opts = descriptor?.options as { href?: string | null } | undefined;
       if (opts?.href === null || !(route.name in ICONS)) {
-        return null;
+        return [];
       }
 
       const focused = state.index === index;
@@ -50,7 +47,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         }
       };
 
-      return (
+      return [
         <Pressable
           key={route.key}
           onPress={onPress}
@@ -70,10 +67,9 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           <Text variant="caption" style={{ color, marginTop: spacing.xs }}>
             {label}
           </Text>
-        </Pressable>
-      );
-    })
-    .filter(Boolean);
+        </Pressable>,
+      ];
+    });
 
   const bottomPad = insets.bottom > 0 ? insets.bottom : spacing.md;
 

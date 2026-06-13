@@ -40,6 +40,7 @@ const _aTrack: TrackResponse = {
   album_artist: null,
   isrc: null,
   audio_ref: null,
+  failure_reason: null,
 };
 
 describe('_viewForState', () => {

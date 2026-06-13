@@ -71,7 +71,7 @@ export function LibraryRow({ track, onPress, onLongPress }: LibraryRowProps): Re
           <Text
             testID={`library-row-failed-${track.id}`}
             variant="caption"
-            tone="error"
+            tone="danger"
             style={styles.failed}
           >
             {track.failure_reason ?? 'Acquisition failed'}

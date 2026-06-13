@@ -25,6 +25,7 @@ function _track(id: string): TrackResponse {
     album_artist: null,
     isrc: null,
     audio_ref: null,
+    failure_reason: null,
   };
 }
 
@@ -38,7 +39,7 @@ function _data(items: TrackResponse[], total: number): InfiniteData<ListTracksRe
 describe('optimisticTrack', () => {
   it('maps a create request into a pending TrackResponse', () => {
     const t = optimisticTrack(
-      { title: 'Midnight City', artist: 'M83', album: 'A', duration_seconds: 244, artwork_url: null },
+      { title: 'Midnight City', artist: 'M83', album: 'A', duration_seconds: 244, artwork_url: null, isrc: null, year: null, genre: null, album_artist: null },
       '2026-05-30T00:00:00Z',
     );
     expect(t.title).toBe('Midnight City');

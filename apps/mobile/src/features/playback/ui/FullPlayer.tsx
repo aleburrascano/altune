@@ -1,4 +1,5 @@
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronDown, Pause, Play } from 'lucide-react-native';
 
@@ -8,12 +9,15 @@ import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
-import type { Theme } from '@shared/ui/theme';
+import { radius, spacing } from '@shared/ui/theme/tokens';
 
 export function FullPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, seekTo } = usePlayback();
   const theme = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const artworkSize = screenWidth - spacing['3xl'] * 2;
 
   if (!track) {
     return null;
@@ -21,86 +25,93 @@ export function FullPlayer() {
 
   const isPlaying = status === 'playing';
 
-  const handlePlayPause = () => {
-    if (isPlaying) {
-      pause();
-    } else {
-      resume();
-    }
-  };
-
-  const handleSeek = (ms: number) => {
-    seekTo(ms);
-  };
-
-  const handleClose = () => {
-    router.back();
-  };
-
-  const s = styles(theme);
-
   return (
-    <View style={s.container}>
-      <View style={s.header}>
+    <View style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}>
+      <View style={styles.header}>
         <IconButton
           icon={ChevronDown}
           size={28}
-          onPress={handleClose}
+          onPress={() => router.back()}
           accessibilityLabel="Close player"
         />
+        <Text variant="caption" tone="secondary">
+          Now Playing
+        </Text>
+        <View style={styles.headerSpacer} />
       </View>
-      <View style={s.artwork}>
-        <Artwork uri={track.artworkUrl} size={300} borderRadius={16} />
+
+      <View style={styles.artworkContainer}>
+        <View style={[styles.artworkShadow, { boxShadow: `0 8px 24px ${theme.color.accent}59` }]}>
+          <Artwork uri={track.artworkUrl} size={artworkSize} radius={radius.lg} />
+        </View>
       </View>
-      <View style={s.info}>
-        <Text variant="displayS" numberOfLines={1}>
+
+      <View style={styles.info}>
+        <Text variant="displayL" numberOfLines={2}>
           {track.title}
         </Text>
-        <Text variant="body" numberOfLines={1}>
+        <Text variant="body" tone="secondary" numberOfLines={1}>
           {track.artist}
         </Text>
       </View>
-      <Scrubber positionMs={positionMs} durationMs={durationMs} onSeek={handleSeek} />
-      <View style={s.controls}>
-        <IconButton
-          icon={isPlaying ? Pause : Play}
-          size={48}
-          onPress={handlePlayPause}
-          accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-        />
+
+      <Scrubber positionMs={positionMs} durationMs={durationMs} onSeek={seekTo} />
+
+      <View style={styles.controls}>
+        <View
+          style={[styles.playButton, { backgroundColor: theme.color.accent }]}
+        >
+          <IconButton
+            icon={isPlaying ? Pause : Play}
+            size={32}
+            color={theme.color.onAccent}
+            onPress={isPlaying ? pause : resume}
+            accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+          />
+        </View>
       </View>
     </View>
   );
 }
 
-const styles = (theme: Theme) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: theme.color.canvas,
-      paddingTop: 16,
-    },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'flex-start',
-      paddingHorizontal: 16,
-      paddingBottom: 24,
-    },
-    artwork: {
-      alignItems: 'center',
-      paddingHorizontal: 24,
-      paddingBottom: 32,
-    },
-    info: {
-      paddingHorizontal: 24,
-      paddingBottom: 24,
-      gap: 4,
-    },
-    controls: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingTop: 16,
-      gap: 32,
-    },
-  });
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  headerSpacer: {
+    width: 44,
+  },
+  artworkContainer: {
+    alignItems: 'center',
+    paddingHorizontal: spacing['3xl'],
+    paddingBottom: spacing['3xl'],
+  },
+  artworkShadow: {
+    elevation: 16,
+  },
+  info: {
+    paddingHorizontal: spacing['2xl'],
+    paddingBottom: spacing.xl,
+    gap: spacing.xs,
+  },
+  controls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: spacing['2xl'],
+  },
+  playButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

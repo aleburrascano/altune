@@ -1,5 +1,5 @@
-import type { ReactElement } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, type ReactElement } from 'react';
+import { FlatList, type ListRenderItemInfo, Pressable, StyleSheet, View } from 'react-native';
 
 import { Artwork, Text, radius as radiusTokens, spacing } from '@shared/ui';
 
@@ -13,6 +13,31 @@ type ArtistCarouselProps = {
 const CIRCLE_SIZE = 72;
 
 export function ArtistCarousel({ artists, onArtistPress }: ArtistCarouselProps): ReactElement {
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<ArtistGroup>) => (
+      <Pressable
+        testID={`library-artist-${item.key}`}
+        onPress={() => onArtistPress(item)}
+        style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
+        accessibilityRole="button"
+        accessibilityLabel={item.artist}
+      >
+        <Artwork
+          uri={item.artworkUrl}
+          size={CIRCLE_SIZE}
+          radius={radiusTokens.full}
+          accessibilityLabel={`${item.artist} artwork`}
+        />
+        <View style={styles.meta}>
+          <Text variant="caption" numberOfLines={1} style={styles.name}>
+            {item.artist}
+          </Text>
+        </View>
+      </Pressable>
+    ),
+    [onArtistPress],
+  );
+
   return (
     <FlatList
       testID="library-artist-carousel"
@@ -21,27 +46,7 @@ export function ArtistCarousel({ artists, onArtistPress }: ArtistCarouselProps):
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.list}
-      renderItem={({ item }) => (
-        <Pressable
-          testID={`library-artist-${item.key}`}
-          onPress={() => onArtistPress(item)}
-          style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
-          accessibilityRole="button"
-          accessibilityLabel={item.artist}
-        >
-          <Artwork
-            uri={item.artworkUrl}
-            size={CIRCLE_SIZE}
-            radius={radiusTokens.full}
-            accessibilityLabel={`${item.artist} artwork`}
-          />
-          <View style={styles.meta}>
-            <Text variant="caption" numberOfLines={1} style={styles.name}>
-              {item.artist}
-            </Text>
-          </View>
-        </Pressable>
-      )}
+      renderItem={renderItem}
     />
   );
 }

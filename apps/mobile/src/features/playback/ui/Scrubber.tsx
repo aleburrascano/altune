@@ -1,9 +1,9 @@
-import { useCallback, useRef, useState } from 'react';
-import { type GestureResponderEvent, type LayoutChangeEvent, PanResponder, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, type LayoutChangeEvent, PanResponder, StyleSheet, View } from 'react-native';
 
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
-import type { Theme } from '@shared/ui/theme';
+import { spacing } from '@shared/ui/theme/tokens';
 
 interface ScrubberProps {
   positionMs: number;
@@ -20,115 +20,189 @@ function formatTime(ms: number): string {
 
 export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
   const theme = useTheme();
-  const widthRef = useRef(0);
+  const trackRef = useRef<View>(null);
+  const layoutRef = useRef({ pageX: 0, width: 0 });
+
   const durationRef = useRef(durationMs);
   durationRef.current = durationMs;
+  const onSeekRef = useRef(onSeek);
+  onSeekRef.current = onSeek;
+  const positionRef = useRef(positionMs);
+  positionRef.current = positionMs;
+
+  const progressRef = useRef<Animated.Value | null>(null);
+  if (progressRef.current === null) progressRef.current = new Animated.Value(0);
+  const progress = progressRef.current;
+  const isDraggingRef = useRef(false);
+  const isHoldingSeek = useRef(false);
+  const seekHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastLabelUpdate = useRef(0);
 
   const [isDragging, setIsDragging] = useState(false);
-  const [dragPosition, setDragPosition] = useState(0);
+  const [labelMs, setLabelMs] = useState(positionMs);
 
-  const posFromEvent = (evt: GestureResponderEvent): number => {
-    const x = evt.nativeEvent.locationX;
-    const ratio = Math.max(0, Math.min(1, x / (widthRef.current || 1)));
-    return ratio * durationRef.current;
+  useEffect(() => {
+    if (!isDraggingRef.current && !isHoldingSeek.current && durationMs > 0) {
+      progress.setValue(positionMs / durationMs);
+      setLabelMs(positionMs);
+    }
+  }, [positionMs, durationMs, progress]);
+
+  const ratioFromPageX = (pageX: number): number => {
+    const x = pageX - layoutRef.current.pageX;
+    return Math.max(0, Math.min(1, x / (layoutRef.current.width || 1)));
   };
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (evt) => {
+        isDraggingRef.current = true;
         setIsDragging(true);
-        setDragPosition(posFromEvent(evt));
+        if (seekHoldTimer.current) {
+          clearTimeout(seekHoldTimer.current);
+          seekHoldTimer.current = null;
+        }
+        isHoldingSeek.current = false;
+        const ratio = ratioFromPageX(evt.nativeEvent.pageX);
+        progress.setValue(ratio);
+        setLabelMs(ratio * durationRef.current);
+        lastLabelUpdate.current = Date.now();
       },
       onPanResponderMove: (evt) => {
-        setDragPosition(posFromEvent(evt));
+        const ratio = ratioFromPageX(evt.nativeEvent.pageX);
+        progress.setValue(ratio);
+        const now = Date.now();
+        if (now - lastLabelUpdate.current > 80) {
+          lastLabelUpdate.current = now;
+          setLabelMs(ratio * durationRef.current);
+        }
       },
       onPanResponderRelease: (evt) => {
-        const finalPos = posFromEvent(evt);
-        setDragPosition(finalPos);
-        onSeek(finalPos);
-        setTimeout(() => setIsDragging(false), 300);
+        const ratio = ratioFromPageX(evt.nativeEvent.pageX);
+        const ms = ratio * durationRef.current;
+        progress.setValue(ratio);
+        setLabelMs(ms);
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        onSeekRef.current(ms);
+        isHoldingSeek.current = true;
+        seekHoldTimer.current = setTimeout(() => {
+          isHoldingSeek.current = false;
+          if (durationRef.current > 0) {
+            progress.setValue(positionRef.current / durationRef.current);
+            setLabelMs(positionRef.current);
+          }
+        }, 600);
       },
       onPanResponderTerminate: () => {
+        isDraggingRef.current = false;
         setIsDragging(false);
+        isHoldingSeek.current = false;
+        if (seekHoldTimer.current) {
+          clearTimeout(seekHoldTimer.current);
+          seekHoldTimer.current = null;
+        }
       },
     }),
   ).current;
 
-  const onLayout = useCallback((e: LayoutChangeEvent) => {
-    widthRef.current = e.nativeEvent.layout.width;
+  const remeasure = useCallback(() => {
+    trackRef.current?.measureInWindow((x, _y, width) => {
+      if (width > 0) layoutRef.current = { pageX: x, width };
+    });
   }, []);
 
-  const displayPosition = isDragging ? dragPosition : positionMs;
-  const displayProgress = durationMs > 0 ? Math.min(1, displayPosition / durationMs) : 0;
+  const onLayout = useCallback(
+    (_e: LayoutChangeEvent) => { remeasure(); },
+    [remeasure],
+  );
 
-  const s = styles(theme);
+  const fillWidth = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
+  const thumbLeft = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
 
   return (
-    <View style={s.container}>
+    <View style={styles.container}>
       <View
-        style={s.trackOuter}
+        ref={trackRef}
+        style={styles.trackOuter}
         onLayout={onLayout}
         accessibilityRole="adjustable"
-        accessibilityLabel={`Playback position: ${formatTime(displayPosition)} of ${formatTime(durationMs)}`}
-        accessibilityValue={{
-          min: 0,
-          max: 100,
-          now: Math.round(displayProgress * 100),
-        }}
+        accessibilityLabel={`Playback position: ${formatTime(labelMs)} of ${formatTime(durationMs)}`}
+        accessibilityValue={{ min: 0, max: 100, now: Math.round(durationMs > 0 ? (labelMs / durationMs) * 100 : 0) }}
         {...panResponder.panHandlers}
       >
-        <View style={s.trackBg} />
-        <View style={[s.trackFill, { width: `${displayProgress * 100}%` }]} />
-        <View style={[s.thumb, { left: `${displayProgress * 100}%` }]} />
+        <View style={[styles.trackBg, { backgroundColor: theme.color.border }]} />
+        <Animated.View
+          style={[
+            styles.trackFill,
+            { width: fillWidth, backgroundColor: theme.color.accent },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.thumb,
+            {
+              left: thumbLeft,
+              backgroundColor: theme.color.accent,
+              transform: [{ scale: isDragging ? 1.3 : 1 }],
+            },
+          ]}
+        />
       </View>
-      <View style={s.times}>
-        <Text variant="bodySmall">{formatTime(displayPosition)}</Text>
-        <Text variant="bodySmall">-{formatTime(Math.max(0, durationMs - displayPosition))}</Text>
+      <View style={styles.times}>
+        <Text variant="caption" tone="secondary">
+          {formatTime(labelMs)}
+        </Text>
+        <Text variant="caption" tone="secondary">
+          -{formatTime(Math.max(0, durationMs - labelMs))}
+        </Text>
       </View>
     </View>
   );
 }
 
-const styles = (theme: Theme) =>
-  StyleSheet.create({
-    container: {
-      width: '100%',
-      paddingHorizontal: 24,
-      marginTop: 8,
-    },
-    trackOuter: {
-      height: 40,
-      justifyContent: 'center',
-    },
-    trackBg: {
-      position: 'absolute',
-      left: 0,
-      right: 0,
-      height: 4,
-      backgroundColor: theme.color.border,
-      borderRadius: 2,
-    },
-    trackFill: {
-      position: 'absolute',
-      left: 0,
-      height: 4,
-      backgroundColor: theme.color.accent,
-      borderRadius: 2,
-    },
-    thumb: {
-      position: 'absolute',
-      width: 16,
-      height: 16,
-      borderRadius: 8,
-      backgroundColor: theme.color.accent,
-      marginLeft: -8,
-      top: 12,
-    },
-    times: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginTop: 4,
-    },
-  });
+const styles = StyleSheet.create({
+  container: {
+    width: '100%',
+    paddingHorizontal: spacing['2xl'],
+  },
+  trackOuter: {
+    height: 44,
+    justifyContent: 'center',
+  },
+  trackBg: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 3,
+    borderRadius: 1.5,
+  },
+  trackFill: {
+    position: 'absolute',
+    left: 0,
+    height: 3,
+    borderRadius: 1.5,
+  },
+  thumb: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginLeft: -7,
+    top: 15,
+  },
+  times: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
+  },
+});
