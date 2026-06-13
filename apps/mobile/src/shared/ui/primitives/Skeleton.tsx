@@ -24,7 +24,9 @@ export function Skeleton({
 }: SkeletonProps) {
   const theme = useTheme();
   const reduceMotion = useReduceMotion();
-  const opacity = useRef(new Animated.Value(0.5)).current;
+  const opacityRef = useRef<Animated.Value | null>(null);
+  if (opacityRef.current === null) opacityRef.current = new Animated.Value(0.5);
+  const opacity = opacityRef.current;
 
   useEffect(() => {
     if (reduceMotion) {

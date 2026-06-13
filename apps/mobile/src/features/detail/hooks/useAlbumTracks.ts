@@ -67,7 +67,7 @@ export function useAlbumTracks({
   allSources,
   enabled = true,
 }: UseAlbumTracksParams): UseAlbumTracksReturn {
-  const query = useQuery({
+  const { data: primaryData, isLoading, isError: isQueryError, refetch } = useQuery({
     queryKey: ['album-tracks', provider, externalId],
     queryFn: () => getAlbumTracks(provider, externalId),
     enabled,
@@ -78,22 +78,22 @@ export function useAlbumTracks({
     (s) => s.provider === 'musicbrainz' && !(s.provider === provider && s.external_id === externalId),
   );
 
-  const mbQuery = useQuery({
+  const { data: mbQueryData } = useQuery({
     queryKey: ['album-tracks', 'musicbrainz', mbSource?.external_id ?? ''],
     queryFn: () => getAlbumTracks('musicbrainz', mbSource!.external_id),
     enabled: enabled && mbSource !== undefined,
     staleTime: 1000 * 60 * 30,
   });
 
-  const primaryTracks = query.data?.items ?? [];
-  const mbTracks = mbQuery.data?.items ?? [];
+  const primaryTracks = primaryData?.items ?? [];
+  const mbTracks = mbQueryData?.items ?? [];
 
   const tracks = _mergeFeaturing(primaryTracks, mbTracks);
 
   return {
     tracks,
-    isLoading: query.isLoading,
-    isError: query.isError || query.data?.status === 'error',
-    refetch: query.refetch,
+    isLoading,
+    isError: isQueryError || primaryData?.status === 'error',
+    refetch,
   };
 }

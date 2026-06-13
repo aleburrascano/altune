@@ -1,11 +1,12 @@
-import { useState, type ReactElement } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useState, type ReactElement } from 'react';
+import { FlatList, type ListRenderItemInfo, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { addTrackToPlaylist, createPlaylist, getPlaylists } from '../api-client/playlists';
-import { Text, spacing, useTheme } from '../ui';
+import { addTrackToPlaylist, createPlaylist, getPlaylists } from '@shared/api-client/playlists';
+import type { PlaylistResponse } from '@shared/api-client/types';
+import { Text, spacing, useTheme } from '@shared/ui';
 
-import { CreatePlaylistModal } from '../../features/library/ui/CreatePlaylistModal';
+import { CreatePlaylistModal } from './CreatePlaylistModal';
 
 type AddToPlaylistSheetProps = {
   visible: boolean;
@@ -25,7 +26,7 @@ export function AddToPlaylistSheet({
   const [createVisible, setCreateVisible] = useState(false);
   const [addedTo, setAddedTo] = useState<string | null>(null);
 
-  const playlistsQuery = useQuery({
+  const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
     queryKey: ['playlists'],
     queryFn: getPlaylists,
     enabled: visible,
@@ -57,7 +58,36 @@ export function AddToPlaylistSheet({
     },
   });
 
-  const playlists = playlistsQuery.data?.items ?? [];
+  const playlists = playlistsData?.items ?? [];
+
+  const renderPlaylistItem = useCallback(
+    ({ item }: ListRenderItemInfo<PlaylistResponse>) => (
+      <Pressable
+        testID={`add-to-playlist-${item.id}`}
+        onPress={() => addMut.mutate(item.id)}
+        disabled={addMut.isPending}
+        style={({ pressed }) => [
+          styles.playlistRow,
+          { borderBottomColor: theme.color.border },
+          pressed ? styles.pressed : null,
+        ]}
+      >
+        <View style={[styles.playlistIcon, { backgroundColor: theme.color.surface2 }]}>
+          <Text variant="caption" tone="tertiary">♫</Text>
+        </View>
+        <View style={styles.playlistInfo}>
+          <Text variant="body" numberOfLines={1}>{item.name}</Text>
+          <Text variant="caption" tone="secondary">
+            {item.track_count} {item.track_count === 1 ? 'track' : 'tracks'}
+          </Text>
+        </View>
+        {addedTo === item.id ? (
+          <Text variant="caption" style={{ color: theme.color.success }}>Added ✓</Text>
+        ) : null}
+      </Pressable>
+    ),
+    [addMut, addedTo, theme.color.border, theme.color.surface2, theme.color.success],
+  );
 
   const handleClose = () => {
     setAddedTo(null);
@@ -104,33 +134,9 @@ export function AddToPlaylistSheet({
             data={playlists}
             keyExtractor={(item) => item.id}
             style={styles.list}
-            renderItem={({ item }) => (
-              <Pressable
-                testID={`add-to-playlist-${item.id}`}
-                onPress={() => addMut.mutate(item.id)}
-                disabled={addMut.isPending}
-                style={({ pressed }) => [
-                  styles.playlistRow,
-                  { borderBottomColor: theme.color.border },
-                  pressed ? styles.pressed : null,
-                ]}
-              >
-                <View style={[styles.playlistIcon, { backgroundColor: theme.color.surface2 }]}>
-                  <Text variant="caption" tone="tertiary">♫</Text>
-                </View>
-                <View style={styles.playlistInfo}>
-                  <Text variant="body" numberOfLines={1}>{item.name}</Text>
-                  <Text variant="caption" tone="secondary">
-                    {item.track_count} {item.track_count === 1 ? 'track' : 'tracks'}
-                  </Text>
-                </View>
-                {addedTo === item.id ? (
-                  <Text variant="caption" style={{ color: theme.color.success }}>Added ✓</Text>
-                ) : null}
-              </Pressable>
-            )}
+            renderItem={renderPlaylistItem}
             ListEmptyComponent={
-              playlists.length === 0 && !playlistsQuery.isLoading ? (
+              playlists.length === 0 && !playlistsLoading ? (
                 <View style={styles.empty}>
                   <Text variant="label" tone="secondary">No playlists yet</Text>
                 </View>

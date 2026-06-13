@@ -18,7 +18,3 @@ export function getSearchState(): { query: string; inputValue: string } {
   return { query: _lastQuery, inputValue: _lastInputValue };
 }
 
-export function clearSearchState(): void {
-  _lastQuery = '';
-  _lastInputValue = '';
-}

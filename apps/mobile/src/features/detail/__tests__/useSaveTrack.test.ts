@@ -34,6 +34,7 @@ function _existing(id: string): TrackResponse {
     album_artist: null,
     isrc: null,
     audio_ref: null,
+    failure_reason: null,
   };
 }
 
@@ -43,6 +44,10 @@ const _BODY: CreateTrackRequest = {
   album: 'Hurry Up',
   duration_seconds: 244,
   artwork_url: null,
+  isrc: null,
+  year: null,
+  genre: null,
+  album_artist: null,
 };
 
 function _seededClient(): QueryClient {

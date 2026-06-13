@@ -56,6 +56,7 @@ export async function removeTrackFromPlaylist(
   });
 }
 
+// fallow-ignore-next-line unused-export
 export async function reorderPlaylistTracks(
   playlistId: string,
   body: ReorderTracksRequest,

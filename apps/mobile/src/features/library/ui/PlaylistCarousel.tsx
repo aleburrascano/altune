@@ -1,5 +1,5 @@
-import type { ReactElement } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, type ReactElement } from 'react';
+import { FlatList, type ListRenderItemInfo, Pressable, StyleSheet, View } from 'react-native';
 
 import { Text, spacing, useTheme } from '@shared/ui';
 import type { PlaylistResponse } from '@shared/api-client/types';
@@ -20,6 +20,29 @@ export function PlaylistCarousel({
   onCreatePress,
 }: PlaylistCarouselProps): ReactElement {
   const theme = useTheme();
+
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<PlaylistResponse>) => (
+      <Pressable
+        testID={`library-playlist-${item.id}`}
+        onPress={() => onPlaylistPress(item)}
+        style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name}, ${item.track_count} tracks`}
+      >
+        <PlaylistCover artworkUrls={item.preview_artwork_urls} size={COVER_SIZE} />
+        <View style={styles.meta}>
+          <Text variant="label" numberOfLines={1}>
+            {item.name}
+          </Text>
+          <Text variant="caption" tone="secondary" numberOfLines={1}>
+            {item.track_count} {item.track_count === 1 ? 'track' : 'tracks'}
+          </Text>
+        </View>
+      </Pressable>
+    ),
+    [onPlaylistPress],
+  );
 
   return (
     <FlatList
@@ -52,25 +75,7 @@ export function PlaylistCarousel({
           </Text>
         </Pressable>
       }
-      renderItem={({ item }) => (
-        <Pressable
-          testID={`library-playlist-${item.id}`}
-          onPress={() => onPlaylistPress(item)}
-          style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
-          accessibilityRole="button"
-          accessibilityLabel={`${item.name}, ${item.track_count} tracks`}
-        >
-          <PlaylistCover artworkUrls={item.preview_artwork_urls} size={COVER_SIZE} />
-          <View style={styles.meta}>
-            <Text variant="label" numberOfLines={1}>
-              {item.name}
-            </Text>
-            <Text variant="caption" tone="secondary" numberOfLines={1}>
-              {item.track_count} {item.track_count === 1 ? 'track' : 'tracks'}
-            </Text>
-          </View>
-        </Pressable>
-      )}
+      renderItem={renderItem}
     />
   );
 }

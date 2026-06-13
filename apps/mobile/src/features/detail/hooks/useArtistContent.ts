@@ -105,35 +105,44 @@ export function useArtistContent({
   const deezerSource = sources.find((s) => s.provider === 'deezer') ?? null;
   const streamSource = deezerSource ?? sources.find((s) => s.provider === 'lastfm') ?? sources[0] ?? null;
 
-  const tracksQuery = useQuery({
+  const {
+    data: tracksData,
+    isLoading: isLoadingTracksRaw,
+    isError: isErrorTracksRaw,
+    refetch: refetchTracksRaw,
+  } = useQuery({
     queryKey: ['artist-top-tracks', streamSource?.provider ?? '', streamSource?.external_id ?? ''],
     queryFn: () => getArtistTopTracks(streamSource!.provider, streamSource!.external_id, 5),
     enabled: enabled && streamSource !== null,
     staleTime: 1000 * 60 * 30,
   });
 
-  const mbAlbumsQuery = useQuery({
+  const {
+    data: mbData,
+    isLoading: isLoadingMb,
+    isError: isErrorMb,
+    refetch: refetchMb,
+  } = useQuery({
     queryKey: ['artist-albums-mb', mbSource?.external_id ?? ''],
     queryFn: () => getArtistAlbums('musicbrainz', mbSource!.external_id, 100),
     enabled: enabled && mbSource !== null,
     staleTime: 1000 * 60 * 30,
   });
 
-  const deezerAlbumsQuery = useQuery({
+  const {
+    data: dzData,
+    isLoading: isLoadingDz,
+    isError: isErrorDz,
+    refetch: refetchDz,
+  } = useQuery({
     queryKey: ['artist-albums-dz', deezerSource?.external_id ?? ''],
     queryFn: () => getArtistAlbums('deezer', deezerSource!.external_id, 100),
     enabled: enabled && deezerSource !== null,
     staleTime: 1000 * 60 * 30,
   });
 
-  // The backend reports provider failures as HTTP 200 with status
-  // timeout/error and empty items — treat any non-ok payload as that
-  // provider's failure, and never surface its items.
-  const mbData = mbAlbumsQuery.data;
-  const dzData = deezerAlbumsQuery.data;
-  const tracksData = tracksQuery.data;
-  const mbFailed = mbAlbumsQuery.isError || (mbData !== undefined && mbData.status !== 'ok');
-  const dzFailed = deezerAlbumsQuery.isError || (dzData !== undefined && dzData.status !== 'ok');
+  const mbFailed = isErrorMb || (mbData !== undefined && mbData.status !== 'ok');
+  const dzFailed = isErrorDz || (dzData !== undefined && dzData.status !== 'ok');
 
   const mbAlbums = mbData?.status === 'ok' ? mbData.items : [];
   const dzAlbumsRaw = dzData?.status === 'ok' ? dzData.items : [];
@@ -150,8 +159,8 @@ export function useArtistContent({
     : dzAlbumsRaw;
   const mergedAlbums = dedupAlbumsByTitle([...mbAlbums, ...dzAlbums]);
 
-  const isLoadingAlbums = (mbSource !== null && mbAlbumsQuery.isLoading)
-    || (deezerSource !== null && deezerAlbumsQuery.isLoading);
+  const isLoadingAlbums = (mbSource !== null && isLoadingMb)
+    || (deezerSource !== null && isLoadingDz);
   const albumOutcomes = [
     ...(mbSource !== null ? [mbFailed] : []),
     ...(deezerSource !== null ? [dzFailed] : []),
@@ -161,12 +170,12 @@ export function useArtistContent({
   return {
     topTracks: tracksData?.status === 'ok' ? tracksData.items : [],
     albums: sortByReleaseDateDesc(mergedAlbums),
-    isLoadingTracks: tracksQuery.isLoading,
+    isLoadingTracks: isLoadingTracksRaw,
     isLoadingAlbums,
     isErrorTracks:
-      tracksQuery.isError || (tracksData !== undefined && tracksData.status !== 'ok'),
+      isErrorTracksRaw || (tracksData !== undefined && tracksData.status !== 'ok'),
     isErrorAlbums,
-    refetchTracks: tracksQuery.refetch,
-    refetchAlbums: () => { mbAlbumsQuery.refetch(); deezerAlbumsQuery.refetch(); },
+    refetchTracks: refetchTracksRaw,
+    refetchAlbums: () => { refetchMb(); refetchDz(); },
   };
 }

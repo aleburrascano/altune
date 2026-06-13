@@ -8,7 +8,9 @@ const SPRING = { stiffness: 280, damping: 18, mass: 0.6, useNativeDriver: true }
  * onPressIn/onPressOut to a Pressable and apply `animatedStyle` to a wrapping
  * Animated.View (from 'react-native'). */
 export function usePressScale(pressedScale = 0.97) {
-  const scale = useRef(new Animated.Value(1)).current;
+  const scaleRef = useRef<Animated.Value | null>(null);
+  if (scaleRef.current === null) scaleRef.current = new Animated.Value(1);
+  const scale = scaleRef.current;
 
   const onPressIn = useCallback(() => {
     Animated.spring(scale, { toValue: pressedScale, ...SPRING }).start();

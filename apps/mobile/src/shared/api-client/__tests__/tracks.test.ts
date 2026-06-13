@@ -24,6 +24,7 @@ const _SAMPLE_TRACK: TrackResponse = {
   album_artist: null,
   isrc: null,
   audio_ref: null,
+  failure_reason: null,
 };
 
 const _SAMPLE_RESPONSE: ListTracksResponse = {
@@ -89,6 +90,10 @@ describe('createTrack', () => {
       album: 'After Hours',
       duration_seconds: 200,
       artwork_url: null,
+      isrc: null,
+      year: null,
+      genre: null,
+      album_artist: null,
     });
     expect(result.id).toBe(_SAMPLE_TRACK.id);
     expect(result.acquisition_status).toBe('pending');
@@ -112,6 +117,10 @@ describe('createTrack', () => {
         album: null,
         duration_seconds: null,
         artwork_url: null,
+        isrc: null,
+        year: null,
+        genre: null,
+        album_artist: null,
       }),
     ).rejects.toBeInstanceOf(ApiError);
   });
