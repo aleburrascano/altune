@@ -23,3 +23,7 @@ export async function createTrack(body: CreateTrackRequest): Promise<TrackRespon
     body: JSON.stringify(body),
   });
 }
+
+export async function deleteTrack(trackId: string): Promise<void> {
+  await apiFetch<void>(`/v1/tracks/${trackId}`, { method: 'DELETE' });
+}

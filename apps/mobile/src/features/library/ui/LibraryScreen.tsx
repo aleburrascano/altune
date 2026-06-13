@@ -8,6 +8,7 @@ import { createPlaylist, getPlaylists } from '@shared/api-client/playlists';
 import type { TrackResponse } from '@shared/api-client/types';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
 
+import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useLibraryHome } from '../hooks/useLibraryHome';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryHome } from './LibraryHome';
@@ -17,6 +18,7 @@ export function LibraryScreen(): ReactElement {
   const router = useRouter();
   const state = useLibraryHome();
   const { navigateToTrack, navigateToAlbum, navigateToArtist } = useLibraryNavigation(router);
+  const deleteMutation = useDeleteTrack();
 
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<TrackResponse | null>(null);
@@ -113,6 +115,7 @@ export function LibraryScreen(): ReactElement {
       createLoading={createMutation.isPending}
       addToPlaylistTrack={addToPlaylistTrack}
       onAddToPlaylistTrackChange={setAddToPlaylistTrack}
+      onDeleteTrack={(trackId) => deleteMutation.mutate(trackId)}
     />
   );
 }

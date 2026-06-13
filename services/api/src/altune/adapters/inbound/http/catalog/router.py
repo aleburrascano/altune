@@ -204,18 +204,30 @@ async def stream_audio(
             audio_ref=track.audio_ref,
             user_id=str(user_id),
         )
-        from dataclasses import replace
-        failed_track = replace(
-            track,
-            acquisition_status=AcquisitionStatus.FAILED,
-            audio_ref=None,
-            failure_reason="Audio file missing from storage",
+        from altune.application.catalog.reconcile_track_status import (
+            ReconcileInput,
+            ReconcileTrackStatus,
         )
-        async with sessionmaker() as write_session:
-            write_repo = SqlAlchemyTrackRepository(write_session)
-            await write_repo.save(failed_track)
-            await write_session.commit()
-        log.info("track_marked_failed", track_id=str(track_id), reason="audio_file_missing")
+
+        audio_store = getattr(request.app.state, "audio_store", None)
+        if audio_store is not None:
+            async with sessionmaker() as write_session:
+                write_repo = SqlAlchemyTrackRepository(write_session)
+                use_case = ReconcileTrackStatus(write_repo, audio_store)
+                result = await use_case.execute(
+                    ReconcileInput(
+                        track_id=TrackId(track_id),
+                        user_id=user_id,
+                        reason="Audio file missing from storage",
+                    ),
+                )
+                await write_session.commit()
+            if result.event:
+                log.info(
+                    "track_marked_failed",
+                    track_id=str(track_id),
+                    reason="audio_file_missing",
+                )
         return Response(status_code=404)  # type: ignore[return-value]
 
     log.info(

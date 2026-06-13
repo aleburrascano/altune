@@ -10,6 +10,7 @@ type LibraryRowProps = {
   track: TrackResponse;
   onPress: () => void;
   onLongPress?: () => void;
+  onDelete?: () => void;
 };
 
 export function LibraryRow({ track, onPress, onLongPress }: LibraryRowProps): ReactElement {
