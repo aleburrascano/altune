@@ -153,6 +153,28 @@ def _schedule_acquisition(
     background_tasks.add_task(_run_acquisition, sessionmaker, searcher, store, track_id, user_id)
 
 
+@router.post("/tracks/{track_id}/retry", response_model=TrackResponse)  # type: ignore[untyped-decorator, unused-ignore]
+async def retry_acquisition(
+    track_id: UUID,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user_id: UserId = Depends(current_user_id),  # noqa: B008
+) -> TrackResponse:
+    from altune.domain.catalog.track_id import TrackId
+
+    log.info("http_retry_acquisition_request", user_id=str(user_id), track_id=str(track_id))
+    sessionmaker = request.app.state.sessionmaker
+    async with sessionmaker() as session:
+        repo = SqlAlchemyTrackRepository(session)
+        track = await repo.get_by_id(TrackId(track_id), user_id)
+    if track is None:
+        return Response(status_code=404)  # type: ignore[return-value]
+    if track.acquisition_status.value not in ("failed", "pending"):
+        return Response(status_code=409)  # type: ignore[return-value]
+    _schedule_acquisition(request, background_tasks, track.id, user_id)
+    return _track_response(track)
+
+
 @router.delete("/tracks/{track_id}", status_code=204)  # type: ignore[untyped-decorator, unused-ignore]
 async def delete_track(
     track_id: UUID,
