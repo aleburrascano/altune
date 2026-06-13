@@ -1,6 +1,7 @@
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import type { AudioSource } from 'expo-audio';
 import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { audioRequestHeaders, audioStreamUrl } from '../api/audio';
 import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '../types';
@@ -20,6 +21,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [audioSource, setAudioSource] = useState<AudioSource | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const shouldAutoPlay = useRef(false);
+  const queryClient = useQueryClient();
 
   const player = useAudioPlayer(audioSource);
   const playerStatus = useAudioPlayerStatus(player);
@@ -44,10 +46,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (shouldAutoPlay.current) {
         shouldAutoPlay.current = false;
         setErrorMessage('Could not load audio — the file may be missing');
+        void queryClient.invalidateQueries({ queryKey: ['library-home'] });
+        void queryClient.invalidateQueries({ queryKey: ['library'] });
       }
     }, 10000);
     return () => clearTimeout(timeout);
-  }, [track]);
+  }, [track, queryClient]);
 
   const state: PlaybackState = useMemo(() => {
     if (!track) return INITIAL_STATE;
@@ -70,6 +74,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const play = useCallback(async (newTrack: PlaybackTrack) => {
     setErrorMessage(null);
     setTrack(newTrack);
+    setAudioSource(null);
     shouldAutoPlay.current = true;
     try {
       const headers = await audioRequestHeaders();

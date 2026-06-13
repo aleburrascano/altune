@@ -8,7 +8,7 @@ the response is built from domain Track values.
 """
 
 from pathlib import Path
-from uuid import UUID  # noqa: TC003  # used as runtime annotation by FastAPI
+from uuid import UUID  # used as runtime annotation by FastAPI
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
@@ -204,6 +204,18 @@ async def stream_audio(
             audio_ref=track.audio_ref,
             user_id=str(user_id),
         )
+        from dataclasses import replace
+        failed_track = replace(
+            track,
+            acquisition_status=AcquisitionStatus.FAILED,
+            audio_ref=None,
+            failure_reason="Audio file missing from storage",
+        )
+        async with sessionmaker() as write_session:
+            write_repo = SqlAlchemyTrackRepository(write_session)
+            await write_repo.save(failed_track)
+            await write_session.commit()
+        log.info("track_marked_failed", track_id=str(track_id), reason="audio_file_missing")
         return Response(status_code=404)  # type: ignore[return-value]
 
     log.info(
