@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
+import { Alert, RefreshControl, ScrollView, StyleSheet } from 'react-native';
 
 import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
 import { Screen, spacing, useTheme } from '@shared/ui';
@@ -33,6 +33,7 @@ type LibraryHomeProps = {
   createLoading: boolean;
   addToPlaylistTrack: TrackResponse | null;
   onAddToPlaylistTrackChange: (track: TrackResponse | null) => void;
+  onDeleteTrack: (trackId: string) => void;
 };
 
 export function LibraryHome({
@@ -54,6 +55,7 @@ export function LibraryHome({
   createLoading,
   addToPlaylistTrack,
   onAddToPlaylistTrackChange,
+  onDeleteTrack,
 }: LibraryHomeProps): ReactElement {
   const theme = useTheme();
   return (
@@ -86,7 +88,18 @@ export function LibraryHome({
               testID="library-section-recent"
             />
             {recentTracks.map((track) => (
-              <LibraryRow key={track.id} track={track} onPress={() => navigateToTrack(track)} onLongPress={() => onAddToPlaylistTrackChange(track)} />
+              <LibraryRow
+                key={track.id}
+                track={track}
+                onPress={() => navigateToTrack(track)}
+                onLongPress={() => {
+                  Alert.alert(track.title, undefined, [
+                    { text: 'Add to Playlist', onPress: () => onAddToPlaylistTrackChange(track) },
+                    { text: 'Remove from Library', style: 'destructive', onPress: () => onDeleteTrack(track.id) },
+                    { text: 'Cancel', style: 'cancel' },
+                  ]);
+                }}
+              />
             ))}
           </>
         ) : null}

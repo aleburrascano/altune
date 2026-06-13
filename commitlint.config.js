@@ -43,6 +43,7 @@ module.exports = {
         'acquire-track',
         'discovery-foundation-v1',
         'discovery-identity-v1',
+        'resilience-v1',
       ],
     ],
     'subject-case': [2, 'always', 'lower-case'],
