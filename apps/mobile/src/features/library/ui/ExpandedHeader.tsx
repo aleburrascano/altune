@@ -7,27 +7,28 @@ import type { SortKey } from './sort';
 
 export function ExpandedHeader({
   title,
-  onCollapse,
+  onBack,
   sortKey,
   onSortChange,
   sortOptions,
 }: {
   title: string;
-  onCollapse: () => void;
+  onBack: () => void;
   sortKey: SortKey;
   onSortChange: (key: SortKey) => void;
   sortOptions: { key: SortKey; label: string }[];
 }): ReactElement {
   const theme = useTheme();
   return (
-    <View style={styles.expandedHeader}>
-      <View style={styles.expandedTitleRow}>
-        <Text variant="title">{title}</Text>
-        <Pressable onPress={onCollapse} hitSlop={8}>
+    <View style={styles.header}>
+      <View style={styles.titleRow}>
+        <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back">
           <Text variant="label" style={{ color: theme.color.accent }}>
-            Collapse ↑
+            ‹ Back
           </Text>
         </Pressable>
+        <Text variant="title">{title}</Text>
+        <View style={styles.spacer} />
       </View>
       <View style={styles.sortRow}>
         {sortOptions.map((opt) => (
@@ -45,12 +46,13 @@ export function ExpandedHeader({
 }
 
 const styles = StyleSheet.create({
-  expandedHeader: { paddingBottom: spacing.sm },
-  expandedTitleRow: {
+  header: { paddingBottom: spacing.sm },
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingBottom: spacing.sm,
   },
+  spacer: { width: 44 },
   sortRow: { flexDirection: 'row', gap: spacing.sm },
 });

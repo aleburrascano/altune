@@ -20,6 +20,7 @@ export default function TabsLayout() {
       )}>
         <Tabs.Screen name="discover" options={{ title: 'Discover' }} />
         <Tabs.Screen name="library" options={{ title: 'Library' }} />
+        <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
       </Tabs>
     </View>
   );

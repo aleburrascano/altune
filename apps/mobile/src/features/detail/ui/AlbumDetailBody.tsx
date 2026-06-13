@@ -14,6 +14,7 @@ import { setDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { extractFeaturedFromText } from '../extras';
 import { useAlbumTracks } from '../hooks/useAlbumTracks';
+import { useLibraryTracksForAlbum, libraryTrackToDiscoveryResult } from '../hooks/useLibraryTracks';
 import { useSaveTrack } from '../hooks/useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
 
@@ -50,12 +51,20 @@ export function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResu
   const queryClient = useQueryClient();
   const save = useSaveTrack();
   const source = result.sources[0];
-  const { tracks, isLoading, isError, refetch } = useAlbumTracks({
+  const hasSources = source !== undefined;
+  const { tracks: apiTracks, isLoading: apiLoading, isError: apiError, refetch } = useAlbumTracks({
     provider: source?.provider ?? '',
     externalId: source?.external_id ?? '',
     allSources: result.sources,
-    enabled: source !== undefined,
+    enabled: hasSources,
   });
+  const localTracks = useLibraryTracksForAlbum(result.title, result.subtitle);
+  const localAsDiscovery = !hasSources && localTracks.length > 0
+    ? localTracks.map(libraryTrackToDiscoveryResult)
+    : [];
+  const tracks = hasSources ? apiTracks : localAsDiscovery;
+  const isLoading = hasSources ? apiLoading : false;
+  const isError = hasSources ? apiError : false;
 
   const onTrackPress = (track: DiscoveryResult): void => {
     setDetailHandoff(_enrichAlbumTrack(track, result));

@@ -51,6 +51,7 @@ export function PlaylistCarousel({
       keyExtractor={(item) => item.id}
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.listOuter}
       contentContainerStyle={styles.list}
       ListHeaderComponent={
         <Pressable
@@ -81,6 +82,7 @@ export function PlaylistCarousel({
 }
 
 const styles = StyleSheet.create({
+  listOuter: { marginHorizontal: -spacing.lg },
   list: { paddingHorizontal: spacing.lg, gap: spacing.md },
   card: { width: COVER_SIZE },
   createCard: { width: COVER_SIZE, marginRight: spacing.md },

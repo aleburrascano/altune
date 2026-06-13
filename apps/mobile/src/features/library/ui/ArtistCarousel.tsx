@@ -10,7 +10,7 @@ type ArtistCarouselProps = {
   onArtistPress: (artist: ArtistGroup) => void;
 };
 
-const CIRCLE_SIZE = 72;
+const CIRCLE_SIZE = 110;
 
 export function ArtistCarousel({ artists, onArtistPress }: ArtistCarouselProps): ReactElement {
   const renderItem = useCallback(
@@ -45,6 +45,7 @@ export function ArtistCarousel({ artists, onArtistPress }: ArtistCarouselProps):
       keyExtractor={(item) => item.key}
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.listOuter}
       contentContainerStyle={styles.list}
       renderItem={renderItem}
     />
@@ -52,6 +53,7 @@ export function ArtistCarousel({ artists, onArtistPress }: ArtistCarouselProps):
 }
 
 const styles = StyleSheet.create({
+  listOuter: { marginHorizontal: -spacing.lg },
   list: { paddingHorizontal: spacing.lg, gap: spacing.md },
   card: { width: CIRCLE_SIZE, alignItems: 'center' },
   pressed: { opacity: 0.7 },
