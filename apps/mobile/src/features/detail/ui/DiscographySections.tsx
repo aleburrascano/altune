@@ -9,6 +9,8 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { _albumYear, sharedStyles } from './helpers';
 
+const SECTION_CAP = 10;
+
 const DISCOGRAPHY_SECTIONS: ReadonlyArray<{ type: string; label: string }> = [
   { type: 'album', label: 'Albums' },
   { type: 'single', label: 'Singles' },
@@ -40,10 +42,12 @@ export function DiscographySections({
       {DISCOGRAPHY_SECTIONS.map((section) => {
         const items = grouped.get(section.type);
         if (!items || items.length === 0) return null;
+        const capped = items.slice(0, SECTION_CAP);
+        const hasMore = items.length > SECTION_CAP;
         return (
           <View key={section.type} style={sharedStyles.albumsSection}>
             <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
-              {section.label}
+              {section.label} ({items.length})
             </Text>
             <ScrollView
               horizontal
@@ -51,7 +55,7 @@ export function DiscographySections({
               style={styles.albumsScroll}
               contentContainerStyle={styles.albumsScrollContent}
             >
-              {items.map((album, index) => {
+              {capped.map((album, index) => {
                 const year = _albumYear(album);
                 const trackCount = typeof album.extras['track_count'] === 'number'
                   ? album.extras['track_count']
@@ -87,6 +91,13 @@ export function DiscographySections({
                   </Pressable>
                 );
               })}
+              {hasMore ? (
+                <View style={styles.seeAllCard}>
+                  <Text variant="label" tone="accent" style={styles.seeAllText}>
+                    See all {items.length} {section.label.toLowerCase()}
+                  </Text>
+                </View>
+              ) : null}
             </ScrollView>
           </View>
         );
@@ -100,4 +111,12 @@ const styles = StyleSheet.create({
   albumsScrollContent: { paddingRight: spacing.lg },
   albumCard: { width: 120, marginLeft: spacing.lg },
   albumTitle: { marginTop: spacing.xs },
+  seeAllCard: {
+    width: 120,
+    height: 120,
+    marginLeft: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  seeAllText: { textAlign: 'center' },
 });
