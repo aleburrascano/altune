@@ -106,9 +106,24 @@ class Settings(BaseSettings):
     )
     music_dir: str | None = Field(
         default=None,
-        description="Base path for audio file storage, e.g. /mnt/oci-music. "
-        "Required at runtime for audio acquisition; optional so unit tests "
-        "can construct Settings without provisioning storage.",
+        description="Base path for local audio file storage. "
+        "Used by FilesystemAudioStore. Mutually exclusive with SSH store config.",
+    )
+    ssh_audio_host: str | None = Field(
+        default=None,
+        description="SSH host for remote audio storage (e.g. 151.145.41.81).",
+    )
+    ssh_audio_user: str | None = Field(
+        default=None,
+        description="SSH user for remote audio storage (e.g. ubuntu).",
+    )
+    ssh_audio_remote_base: str | None = Field(
+        default=None,
+        description="Base path on remote host (e.g. /mnt/music/user@email.com).",
+    )
+    ssh_audio_key_path: str | None = Field(
+        default=None,
+        description="Path to SSH private key for remote audio storage.",
     )
     ffmpeg_location: str | None = Field(
         default=None,

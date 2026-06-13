@@ -224,18 +224,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.discovery_content_validation_cache = None
             app.state.discovery_fetch_success_store = None
             app.state.discovery_artwork_cache = None
-        # Audio acquisition wiring (acquire-track spec). Searcher + store on
-        # app.state so the POST /v1/tracks background task can access them.
-        if cfg.music_dir:
+        # Audio store wiring — SSH remote or local filesystem.
+        if cfg.ssh_audio_host and cfg.ssh_audio_user and cfg.ssh_audio_remote_base:
+            from altune.adapters.outbound.audio.ssh_store import SshAudioStore
+
+            app.state.audio_store = SshAudioStore(
+                host=cfg.ssh_audio_host,
+                user=cfg.ssh_audio_user,
+                remote_base=cfg.ssh_audio_remote_base,
+                key_path=cfg.ssh_audio_key_path,
+            )
+            log.info("audio_store", type="ssh", host=cfg.ssh_audio_host)
+        elif cfg.music_dir:
             from altune.adapters.outbound.audio.filesystem_store import FilesystemAudioStore
+
+            app.state.audio_store = FilesystemAudioStore(cfg.music_dir)
+            app.state.music_dir = cfg.music_dir
+            log.info("audio_store", type="filesystem", path=cfg.music_dir)
+        # Audio acquisition searcher (yt-dlp)
+        if cfg.music_dir or cfg.ssh_audio_host:
             from altune.adapters.outbound.audio.ytdlp_searcher import YtDlpAudioSearcher
 
             app.state.audio_searcher = YtDlpAudioSearcher(
                 ffmpeg_location=cfg.ffmpeg_location,
                 cookie_file=cfg.ytdlp_cookie_file,
             )
-            app.state.audio_store = FilesystemAudioStore(cfg.music_dir)
-            app.state.music_dir = cfg.music_dir
         log.info(
             "auth.startup_config_validated",
             verifier_mode="jwks" if cfg.supabase_jwt_jwks_url else "hs256",

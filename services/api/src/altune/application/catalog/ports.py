@@ -58,6 +58,11 @@ class AudioStore(Protocol):
         """Check if a stored file exists at audio_ref."""
         ...
 
+    async def resolve_local_path(self, audio_ref: str) -> Path | None:
+        """Return a local file path for streaming. For remote stores, this may
+        fetch the file to a temp location first. Returns None if not found."""
+        ...
+
 
 class TrackRepository(Protocol):
     """A read+write port over the Track aggregate.
