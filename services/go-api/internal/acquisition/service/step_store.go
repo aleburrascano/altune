@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
-	"path/filepath"
+	"strings"
 
 	"altune/go-api/internal/catalog/ports"
 )
@@ -42,28 +42,30 @@ func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error 
 
 func buildAudioRef(track TrackRef) string {
 	artist := sanitizePathComponent(track.Artist)
-	album := sanitizePathComponent(track.Album)
-	title := sanitizePathComponent(track.Title)
-
+	album := track.Album
 	if album == "" {
 		album = "Unknown Album"
 	}
+	album = sanitizePathComponent(album)
+	title := sanitizePathComponent(track.Title)
 
-	return filepath.Join(artist, album, title+".mp3")
+	return strings.Join([]string{track.UserID, artist, album, title + ".mp3"}, "/")
 }
 
 func sanitizePathComponent(s string) string {
 	if s == "" {
 		return "Unknown"
 	}
-	var result []byte
-	for _, c := range []byte(s) {
-		switch c {
-		case '/', '\\', ':', '*', '?', '"', '<', '>', '|':
-			result = append(result, '_')
-		default:
-			result = append(result, c)
+	forbidden := `<>:"/\|?*;`
+	var b strings.Builder
+	for _, r := range s {
+		if !strings.ContainsRune(forbidden, r) {
+			b.WriteRune(r)
 		}
 	}
-	return string(result)
+	result := strings.Join(strings.Fields(b.String()), " ")
+	if result == "" {
+		return "Unknown"
+	}
+	return result
 }

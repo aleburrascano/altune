@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"altune/go-api/internal/auth"
@@ -104,10 +105,11 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		limit = 20
 	}
 
-	kinds := map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
+	kinds := parseKinds(r.URL.Query().Get("kinds"))
+
+	saveHistory := true
+	if r.URL.Query().Get("save_history") == "false" {
+		saveHistory = false
 	}
 
 	query, err := domain.NewSearchQuery(q, "", kinds, limit)
@@ -116,7 +118,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	result, err := h.searchSvc.Execute(r.Context(), userId, query)
+	result, err := h.searchSvc.Execute(r.Context(), userId, query, saveHistory)
 	if err != nil {
 		httputil.InternalError(w)
 		return
@@ -203,4 +205,30 @@ func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func parseKinds(csv string) map[domain.ResultKind]bool {
+	if csv == "" {
+		return map[domain.ResultKind]bool{
+			domain.ResultKindTrack:  true,
+			domain.ResultKindAlbum:  true,
+			domain.ResultKindArtist: true,
+		}
+	}
+	kinds := make(map[domain.ResultKind]bool)
+	for _, s := range strings.Split(csv, ",") {
+		s = strings.TrimSpace(s)
+		k, err := domain.ParseResultKind(s)
+		if err == nil {
+			kinds[k] = true
+		}
+	}
+	if len(kinds) == 0 {
+		return map[domain.ResultKind]bool{
+			domain.ResultKindTrack:  true,
+			domain.ResultKindAlbum:  true,
+			domain.ResultKindArtist: true,
+		}
+	}
+	return kinds
 }

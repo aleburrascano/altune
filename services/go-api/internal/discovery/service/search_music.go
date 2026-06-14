@@ -18,7 +18,6 @@ type SearchMusicService struct {
 	queryCache     ports.QueryCache
 	historyRepo    ports.SearchHistoryRepository
 	circuitBreaker *CircuitBreaker
-	qualityScorer  *QualityScorer
 }
 
 func NewSearchMusicService(
@@ -26,38 +25,38 @@ func NewSearchMusicService(
 	queryCache ports.QueryCache,
 	historyRepo ports.SearchHistoryRepository,
 	circuitBreaker *CircuitBreaker,
-	qualityScorer *QualityScorer,
 ) *SearchMusicService {
 	return &SearchMusicService{
 		providers:      providers,
 		queryCache:     queryCache,
 		historyRepo:    historyRepo,
 		circuitBreaker: circuitBreaker,
-		qualityScorer:  qualityScorer,
 	}
 }
 
 type SearchOutput struct {
 	Results          []domain.SearchResult
 	ProviderStatuses []domain.ProviderSearchResponse
+	Partial          bool
 }
 
-func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, query *domain.SearchQuery) (*SearchOutput, error) {
+func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, query *domain.SearchQuery, saveHistory bool) (*SearchOutput, error) {
 	queryNorm := NormalizeForMatch(query.Raw)
 	if query.QueryNorm == "" {
 		query.QueryNorm = queryNorm
 	}
 
 	var (
-		mu               sync.Mutex
-		providerResults  []domain.ProviderSearchResponse
-		wg               sync.WaitGroup
+		mu              sync.Mutex
+		perProvider     [][]domain.SearchResult
+		statuses        []domain.ProviderSearchResponse
+		wg              sync.WaitGroup
 	)
 
 	for _, provider := range s.providers {
 		if !s.circuitBreaker.AllowRequest(provider.Name()) {
 			mu.Lock()
-			providerResults = append(providerResults, domain.ProviderSearchResponse{
+			statuses = append(statuses, domain.ProviderSearchResponse{
 				Provider: provider.Name(),
 				Status:   domain.ProviderStatusCircuitOpen,
 			})
@@ -69,15 +68,25 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		go func(p ports.SearchProvider) {
 			defer wg.Done()
 
-			results, err := p.Search(ctx, query.Raw, query.Kinds)
+			provCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+			defer cancel()
+
+			results, err := p.Search(provCtx, query.Raw, query.Kinds)
 			if err != nil {
 				s.circuitBreaker.RecordFailure(p.Name())
+
+				status := domain.ProviderStatusError
+				if provCtx.Err() != nil {
+					status = domain.ProviderStatusTimeout
+				}
+
 				mu.Lock()
-				providerResults = append(providerResults, domain.ProviderSearchResponse{
+				statuses = append(statuses, domain.ProviderSearchResponse{
 					Provider: p.Name(),
-					Status:   domain.ProviderStatusError,
+					Status:   status,
 				})
 				mu.Unlock()
+
 				slog.WarnContext(ctx, "provider search failed",
 					"provider", p.Name().String(), "error", err)
 				return
@@ -85,7 +94,8 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 
 			s.circuitBreaker.RecordSuccess(p.Name())
 			mu.Lock()
-			providerResults = append(providerResults, domain.ProviderSearchResponse{
+			perProvider = append(perProvider, results)
+			statuses = append(statuses, domain.ProviderSearchResponse{
 				Provider: p.Name(),
 				Results:  results,
 				Status:   domain.ProviderStatusOK,
@@ -96,9 +106,21 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 
 	wg.Wait()
 
-	merged := FuseAndRank(providerResults, queryNorm, query.Limit)
+	merged := FuseAndRank(perProvider, queryNorm, nil)
 
-	if s.historyRepo != nil {
+	if len(merged) > query.Limit {
+		merged = merged[:query.Limit]
+	}
+
+	partial := false
+	for _, st := range statuses {
+		if st.Status != domain.ProviderStatusOK {
+			partial = true
+			break
+		}
+	}
+
+	if saveHistory && s.historyRepo != nil {
 		entry := &domain.SearchHistoryEntry{
 			ID:         uuid.New(),
 			UserId:     userId,
@@ -113,6 +135,7 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 
 	return &SearchOutput{
 		Results:          merged,
-		ProviderStatuses: providerResults,
+		ProviderStatuses: statuses,
+		Partial:          partial,
 	}, nil
 }

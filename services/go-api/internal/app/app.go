@@ -28,6 +28,7 @@ import (
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/httputil"
 	sharedRedis "altune/go-api/internal/shared/redis"
 
 	"github.com/go-chi/chi/v5"
@@ -129,8 +130,7 @@ func (a *App) setup(ctx context.Context) error {
 	searchProviders := a.buildDiscoveryProviders()
 	queryCache := discoveryCacheAdapters.NewRedisQueryCache(a.redisClient)
 	circuitBreaker := discoveryService.NewCircuitBreaker()
-	qualityScorer := discoveryService.NewQualityScorer()
-	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, nil, circuitBreaker, qualityScorer)
+	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, nil, circuitBreaker)
 	clickSvc := discoveryService.NewRecordClickService(nil)
 	historySvc := discoveryService.NewListSearchHistoryService(nil)
 
@@ -146,6 +146,8 @@ func (a *App) setup(ctx context.Context) error {
 
 	r := chi.NewRouter()
 
+	r.Use(httputil.Recoverer)
+	r.Use(httputil.RequestLogger)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   a.cfg.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

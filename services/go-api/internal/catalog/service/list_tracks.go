@@ -26,8 +26,8 @@ func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, l
 	if limit <= 0 {
 		limit = 50
 	}
-	if limit > 200 {
-		limit = 200
+	if limit > 2000 {
+		limit = 2000
 	}
 
 	tracks, total, err := s.trackRepo.ListForUser(ctx, userId, limit, offset)

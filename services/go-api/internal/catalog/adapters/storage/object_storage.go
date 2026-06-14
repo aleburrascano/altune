@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -16,10 +17,20 @@ type ObjectStorageAudioStore struct {
 }
 
 func NewObjectStorageAudioStore(endpoint, accessKey, secretKey, bucket, region string) (*ObjectStorageAudioStore, error) {
-	client, err := minio.New(endpoint, &minio.Options{
+	secure := true
+	host := endpoint
+	if strings.HasPrefix(host, "https://") {
+		host = strings.TrimPrefix(host, "https://")
+	} else if strings.HasPrefix(host, "http://") {
+		host = strings.TrimPrefix(host, "http://")
+		secure = false
+	}
+	host = strings.TrimRight(host, "/")
+
+	client, err := minio.New(host, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Region: region,
-		Secure: true,
+		Secure: secure,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create s3 client: %w", err)
