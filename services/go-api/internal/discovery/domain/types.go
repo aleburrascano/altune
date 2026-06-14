@@ -124,6 +124,25 @@ func (p ProviderName) String() string {
 	}
 }
 
+func ParseProviderName(s string) (ProviderName, error) {
+	switch s {
+	case "deezer":
+		return ProviderDeezer, nil
+	case "musicbrainz":
+		return ProviderMusicBrainz, nil
+	case "soundcloud":
+		return ProviderSoundCloud, nil
+	case "lastfm":
+		return ProviderLastFM, nil
+	case "itunes":
+		return ProviderITunes, nil
+	case "theaudiodb":
+		return ProviderTheAudioDB, nil
+	default:
+		return 0, fmt.Errorf("unknown provider: %s", s)
+	}
+}
+
 // ProviderStatus is the outcome of a scatter-gather call to one provider.
 type ProviderStatus int
 
