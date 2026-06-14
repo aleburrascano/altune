@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/domain"
@@ -14,7 +13,6 @@ import (
 	"altune/go-api/internal/shared/httputil"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 type DiscoveryHandler struct {
@@ -78,27 +76,37 @@ type ProviderStatusDTO struct {
 }
 
 type DiscoverySearchResponse struct {
+	Query     string              `json:"query"`
+	QueryNorm string              `json:"query_norm"`
 	Results   []SearchResultDTO   `json:"results"`
 	Providers []ProviderStatusDTO `json:"providers"`
+	Partial   bool                `json:"partial"`
+	Cache     CacheDTO            `json:"cache"`
+}
+
+type CacheDTO struct {
+	Hit       bool    `json:"hit"`
+	FetchedAt *string `json:"fetched_at"`
 }
 
 type SearchHistoryItemDTO struct {
-	ID        uuid.UUID `json:"id"`
-	Query     string    `json:"query"`
-	QueryNorm string    `json:"query_norm"`
-	ExecutedAt time.Time `json:"executed_at"`
+	Query      string `json:"query"`
+	QueryNorm  string `json:"query_norm"`
+	ExecutedAt string `json:"executed_at"`
 }
 
 type DiscoverySearchHistoryResponse struct {
 	Items []SearchHistoryItemDTO `json:"items"`
+	Total int                    `json:"total"`
 }
 
 type DiscoveryClickRequest struct {
-	QueryNorm      string   `json:"query_norm"`
-	ResultTitle    string   `json:"result_title"`
-	ResultSubtitle string   `json:"result_subtitle"`
-	Position       int      `json:"position"`
-	Confidence     string   `json:"confidence"`
+	QueryNorm  string `json:"query_norm"`
+	Kind       string `json:"kind"`
+	Title      string `json:"title"`
+	Subtitle   string `json:"subtitle"`
+	Position   int    `json:"position"`
+	Confidence string `json:"confidence"`
 }
 
 // --- Handlers ---
@@ -172,8 +180,12 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, DiscoverySearchResponse{
+		Query:     q,
+		QueryNorm: service.NormalizeForMatch(q),
 		Results:   resultDTOs,
 		Providers: providerDTOs,
+		Partial:   result.Partial,
+		Cache:     CacheDTO{Hit: false, FetchedAt: nil},
 	})
 }
 
@@ -191,14 +203,16 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 	items := make([]SearchHistoryItemDTO, len(entries))
 	for i, e := range entries {
 		items[i] = SearchHistoryItemDTO{
-			ID:         e.ID,
 			Query:      e.Query,
 			QueryNorm:  e.QueryNorm,
-			ExecutedAt: e.ExecutedAt,
+			ExecutedAt: e.ExecutedAt.Format("2006-01-02T15:04:05.000Z"),
 		}
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, DiscoverySearchHistoryResponse{Items: items})
+	httputil.WriteJSON(w, http.StatusOK, DiscoverySearchHistoryResponse{
+		Items: items,
+		Total: len(items),
+	})
 }
 
 func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Request) {
@@ -210,10 +224,16 @@ func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	resultKind := domain.ResultKindTrack
+	if k, err := domain.ParseResultKind(req.Kind); err == nil {
+		resultKind = k
+	}
+
 	input := service.RecordClickInput{
 		QueryNorm:      req.QueryNorm,
-		ResultTitle:    req.ResultTitle,
-		ResultSubtitle: req.ResultSubtitle,
+		ResultKind:     resultKind,
+		ResultTitle:    req.Title,
+		ResultSubtitle: req.Subtitle,
 		Position:       req.Position,
 	}
 
