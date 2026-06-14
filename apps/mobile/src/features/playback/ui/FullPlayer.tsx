@@ -24,6 +24,7 @@ export function FullPlayer() {
   }
 
   const isPlaying = status === 'playing';
+  const isPreview = track.source.kind === 'preview';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}>
@@ -34,8 +35,8 @@ export function FullPlayer() {
           onPress={() => router.back()}
           accessibilityLabel="Close player"
         />
-        <Text variant="caption" tone="secondary">
-          Now Playing
+        <Text variant="caption" tone={isPreview ? 'warning' : 'secondary'}>
+          {isPreview ? 'Preview' : 'Now Playing'}
         </Text>
         <View style={styles.headerSpacer} />
       </View>

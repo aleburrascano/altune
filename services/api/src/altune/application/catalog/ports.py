@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import AsyncIterator, Sequence
 
     from altune.domain.catalog.playlist import Playlist
     from altune.domain.catalog.playlist_id import PlaylistId
@@ -61,6 +61,12 @@ class AudioStore(Protocol):
     async def resolve_local_path(self, audio_ref: str) -> Path | None:
         """Return a local file path for streaming. For remote stores, this may
         fetch the file to a temp location first. Returns None if not found."""
+        ...
+
+    async def stream(self, audio_ref: str) -> AsyncIterator[bytes] | None:
+        """Yield chunks of audio bytes directly. Returns None if not found.
+        Preferred over resolve_local_path when the store supports streaming
+        without writing to a temp file (e.g., Object Storage)."""
         ...
 
 

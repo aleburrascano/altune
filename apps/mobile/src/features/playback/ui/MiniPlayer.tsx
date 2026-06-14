@@ -20,6 +20,7 @@ export function MiniPlayer() {
 
   const isPlaying = status === 'playing';
   const isError = status === 'error';
+  const isPreview = track.source.kind === 'preview';
   const progress = durationMs > 0 ? positionMs / durationMs : 0;
 
   return (
@@ -27,7 +28,7 @@ export function MiniPlayer() {
       onPress={() => router.push('/player')}
       style={[styles.container, { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border }]}
       accessibilityRole="button"
-      accessibilityLabel={`Now playing: ${track.title} by ${track.artist}`}
+      accessibilityLabel={isPreview ? `Preview: ${track.title} by ${track.artist}` : `Now playing: ${track.title} by ${track.artist}`}
     >
       <View style={[styles.progressTrack, { backgroundColor: theme.color.border }]}>
         <View
@@ -44,7 +45,7 @@ export function MiniPlayer() {
             {track.title}
           </Text>
           <Text variant="caption" tone="secondary" numberOfLines={1}>
-            {isError ? (errorMessage ?? 'Playback error') : track.artist}
+            {isError ? (errorMessage ?? 'Playback error') : isPreview ? `${track.artist} · Preview` : track.artist}
           </Text>
         </View>
         <IconButton

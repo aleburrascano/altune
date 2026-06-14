@@ -109,6 +109,30 @@ class Settings(BaseSettings):
         description="Base path for local audio file storage. "
         "Used by FilesystemAudioStore. Mutually exclusive with SSH store config.",
     )
+    # OCI Object Storage — S3-compatible endpoint for audio file storage.
+    # Takes priority over SSH and filesystem stores when fully configured.
+    oci_s3_endpoint: str | None = Field(
+        default=None,
+        description="OCI S3-compatible endpoint URL, e.g. "
+        "https://<namespace>.compat.objectstorage.<region>.oraclecloud.com.",
+    )
+    oci_s3_access_key: str | None = Field(
+        default=None,
+        description="OCI Customer Secret Key — access key ID.",
+    )
+    oci_s3_secret_key: SecretStr | None = Field(
+        default=None,
+        description="OCI Customer Secret Key — secret.",
+    )
+    oci_s3_bucket: str | None = Field(
+        default=None,
+        description="OCI Object Storage bucket name (e.g. 'altune-audio').",
+    )
+    oci_s3_region: str | None = Field(
+        default=None,
+        description="OCI region (e.g. 'eu-frankfurt-1').",
+    )
+
     ssh_audio_host: str | None = Field(
         default=None,
         description="SSH host for remote audio storage (e.g. 151.145.41.81).",

@@ -9,6 +9,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { canPlay } from '../../playback/helpers/canPlay';
+import { getPreviewUrl } from '../../playback/helpers/previewUrl';
 import { usePlayback } from '../../playback/hooks/usePlayback';
 
 import { extractFeaturedFromText, trackInfoRows } from '../extras';
@@ -41,6 +42,7 @@ export function TrackDetailBody({
   const alreadySaved = _isTrackInLibraryCache(queryClient, result.title, result.subtitle);
   const trackId = typeof result.extras['track_id'] === 'string' ? result.extras['track_id'] : null;
   const isPlayable = canPlay(typeof result.extras['acquisition_status'] === 'string' ? result.extras['acquisition_status'] : null) && trackId !== null;
+  const previewUrl = getPreviewUrl(result.extras);
   const rows = trackInfoRows(result.extras);
   if (!rows.some((r) => r.key === 'featuring')) {
     const parsed = extractFeaturedFromText(result.title, result.subtitle);
@@ -126,14 +128,14 @@ export function TrackDetailBody({
         <View style={styles.playRow}>
           <PlayIconButton
             testID="detail-play"
-            isPlaying={playback.status === 'playing' && playback.track?.trackId === trackId}
+            isPlaying={playback.status === 'playing' && playback.track?.source.kind === 'library' && playback.track.source.trackId === trackId}
             disabled={playback.status === 'loading'}
             onPress={() => {
-              if (playback.status === 'playing' && playback.track?.trackId === trackId) {
+              if (playback.status === 'playing' && playback.track?.source.kind === 'library' && playback.track.source.trackId === trackId) {
                 playback.pause();
               } else {
                 void playback.play({
-                  trackId: trackId!,
+                  source: { kind: 'library', trackId: trackId! },
                   title: result.title,
                   artist: result.subtitle ?? '',
                   artworkUrl: result.image_url,
@@ -141,6 +143,37 @@ export function TrackDetailBody({
               }
             }}
           />
+        </View>
+      ) : !isPlayable && previewUrl !== null ? (
+        <View style={styles.playRow}>
+          <PlayIconButton
+            testID="detail-preview"
+            isPlaying={
+              playback.status === 'playing' &&
+              playback.track?.source.kind === 'preview' &&
+              playback.track.source.previewUrl === previewUrl
+            }
+            disabled={playback.status === 'loading'}
+            onPress={() => {
+              if (
+                playback.status === 'playing' &&
+                playback.track?.source.kind === 'preview' &&
+                playback.track.source.previewUrl === previewUrl
+              ) {
+                playback.pause();
+              } else {
+                void playback.play({
+                  source: { kind: 'preview', previewUrl },
+                  title: result.title,
+                  artist: result.subtitle ?? '',
+                  artworkUrl: result.image_url,
+                });
+              }
+            }}
+          />
+          <Text variant="caption" tone="secondary" style={{ marginTop: spacing.xs }}>
+            Preview
+          </Text>
         </View>
       ) : null}
       <Button

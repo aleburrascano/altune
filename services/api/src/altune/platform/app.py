@@ -224,8 +224,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.discovery_content_validation_cache = None
             app.state.discovery_fetch_success_store = None
             app.state.discovery_artwork_cache = None
-        # Audio store wiring — SSH remote or local filesystem.
-        if cfg.ssh_audio_host and cfg.ssh_audio_user and cfg.ssh_audio_remote_base:
+        # Audio store wiring — OCI Object Storage > SSH > local filesystem.
+        if (
+            cfg.oci_s3_endpoint
+            and cfg.oci_s3_access_key
+            and cfg.oci_s3_secret_key
+            and cfg.oci_s3_bucket
+            and cfg.oci_s3_region
+        ):
+            from altune.adapters.outbound.audio.object_storage_store import (
+                ObjectStorageAudioStore,
+            )
+
+            app.state.audio_store = ObjectStorageAudioStore(
+                endpoint_url=cfg.oci_s3_endpoint,
+                access_key=cfg.oci_s3_access_key,
+                secret_key=cfg.oci_s3_secret_key.get_secret_value(),
+                bucket=cfg.oci_s3_bucket,
+                region=cfg.oci_s3_region,
+            )
+            log.info("audio_store", type="object_storage", bucket=cfg.oci_s3_bucket)
+        elif cfg.ssh_audio_host and cfg.ssh_audio_user and cfg.ssh_audio_remote_base:
             from altune.adapters.outbound.audio.ssh_store import SshAudioStore
 
             app.state.audio_store = SshAudioStore(
@@ -242,7 +261,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.music_dir = cfg.music_dir
             log.info("audio_store", type="filesystem", path=cfg.music_dir)
         # Audio acquisition searcher (yt-dlp)
-        if cfg.music_dir or cfg.ssh_audio_host:
+        if cfg.music_dir or cfg.ssh_audio_host or cfg.oci_s3_endpoint:
             from altune.adapters.outbound.audio.ytdlp_searcher import YtDlpAudioSearcher
 
             app.state.audio_searcher = YtDlpAudioSearcher(
