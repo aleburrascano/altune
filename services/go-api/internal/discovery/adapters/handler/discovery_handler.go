@@ -46,9 +46,9 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/search", h.handleSearch)
 	r.Get("/search-history", h.handleSearchHistory)
 	r.Post("/clicks", h.handleRecordClick)
-	r.Get("/album/{provider}/{externalId}/tracks", h.handleAlbumTracks)
-	r.Get("/artist/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
-	r.Get("/artist/{provider}/{externalId}/albums", h.handleArtistAlbums)
+	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
+	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
+	r.Get("/artists/{provider}/{externalId}/albums", h.handleArtistAlbums)
 	return r
 }
 
