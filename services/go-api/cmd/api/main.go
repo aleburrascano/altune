@@ -1,10 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
 	"os"
 
+	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/logging"
 )
@@ -17,7 +18,6 @@ func main() {
 	}
 
 	logging.Setup(cfg)
-	slog.Info("config loaded", "config", cfg)
 
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -39,7 +39,9 @@ func main() {
 }
 
 func runServer(cfg *config.Config) {
-	slog.Info("starting server", "host", cfg.Host, "port", cfg.Port)
-	// App wiring and server start will be implemented in U16
-	slog.Info("server placeholder — full wiring in U16")
+	a := app.New(cfg)
+	if err := a.Run(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
+		os.Exit(1)
+	}
 }
