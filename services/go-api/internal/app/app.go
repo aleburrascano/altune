@@ -159,7 +159,19 @@ func (a *App) setup(ctx context.Context) error {
 	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, reconcileSvc, acquireSvc, &a.wg, a.sem)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
 	streamHandler := catalogHandler.NewStreamHandler(trackRepo, audioStore, reconcileSvc)
-	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, nil, nil)
+	deezerContentClient := &http.Client{Timeout: 10 * time.Second}
+	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
+
+	albumProviders := map[string]discoveryPorts.AlbumContentProvider{
+		"deezer": deezerContent,
+	}
+	artistProviders := map[string]discoveryPorts.ArtistContentProvider{
+		"deezer": deezerContent,
+	}
+	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
+	artistSvc := discoveryService.NewGetArtistContentService(artistProviders)
+
+	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc)
 
 	var retryH *acqHandler.RetryHandler
 	if acquireSvc != nil {
