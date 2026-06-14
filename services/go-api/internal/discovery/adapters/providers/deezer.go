@@ -1,0 +1,168 @@
+package providers
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"altune/go-api/internal/discovery/domain"
+)
+
+type DeezerAdapter struct {
+	client *http.Client
+}
+
+func NewDeezerAdapter(client *http.Client) *DeezerAdapter {
+	return &DeezerAdapter{client: client}
+}
+
+func (a *DeezerAdapter) Name() domain.ProviderName { return domain.ProviderDeezer }
+
+func (a *DeezerAdapter) SupportedKinds() map[domain.ResultKind]bool {
+	return map[domain.ResultKind]bool{
+		domain.ResultKindTrack:  true,
+		domain.ResultKindAlbum:  true,
+		domain.ResultKindArtist: true,
+	}
+}
+
+func (a *DeezerAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	var results []domain.SearchResult
+
+	for kind := range kinds {
+		if !a.SupportedKinds()[kind] {
+			continue
+		}
+
+		endpoint := deezerSearchEndpoint(kind)
+		if endpoint == "" {
+			continue
+		}
+
+		u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=10", endpoint, url.QueryEscape(query))
+
+		req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+		if err != nil {
+			continue
+		}
+
+		resp, err := a.client.Do(req)
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			continue
+		}
+
+		var body deezerSearchResponse
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			continue
+		}
+
+		for _, item := range body.Data {
+			sr := mapDeezerResult(item, kind)
+			results = append(results, sr)
+		}
+	}
+
+	return results, nil
+}
+
+func deezerSearchEndpoint(kind domain.ResultKind) string {
+	switch kind {
+	case domain.ResultKindTrack:
+		return "track"
+	case domain.ResultKindAlbum:
+		return "album"
+	case domain.ResultKindArtist:
+		return "artist"
+	default:
+		return ""
+	}
+}
+
+func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResult {
+	var title, subtitle, imageURL string
+	extras := make(map[string]any)
+
+	switch kind {
+	case domain.ResultKindTrack:
+		title = item.Title
+		if item.Artist != nil {
+			subtitle = item.Artist.Name
+		}
+		if item.Album != nil {
+			imageURL = item.Album.CoverBig
+			extras["album"] = item.Album.Title
+		}
+		if item.ISRC != "" {
+			extras["isrc"] = item.ISRC
+		}
+		extras["duration"] = item.Duration
+	case domain.ResultKindAlbum:
+		title = item.Title
+		if item.Artist != nil {
+			subtitle = item.Artist.Name
+		}
+		imageURL = item.CoverBig
+	case domain.ResultKindArtist:
+		title = item.Name
+		imageURL = item.PictureBig
+	}
+
+	return domain.SearchResult{
+		Kind:       kind,
+		Title:      title,
+		Subtitle:   subtitle,
+		ImageURL:   imageURL,
+		Confidence: domain.ConfidenceLow,
+		Sources: []domain.SourceRef{{
+			Provider:   domain.ProviderDeezer,
+			ExternalID: fmt.Sprintf("%d", item.ID),
+			URL:        item.Link,
+		}},
+		Extras: extras,
+	}
+}
+
+// Deezer API response types
+
+type deezerSearchResponse struct {
+	Data []deezerItem `json:"data"`
+}
+
+type deezerItem struct {
+	ID         int64        `json:"id"`
+	Title      string       `json:"title"`
+	Name       string       `json:"name"`
+	Link       string       `json:"link"`
+	Duration   int          `json:"duration"`
+	ISRC       string       `json:"isrc"`
+	CoverBig   string       `json:"cover_big"`
+	PictureBig string       `json:"picture_big"`
+	Artist     *deezerRef   `json:"artist"`
+	Album      *deezerAlbum `json:"album"`
+}
+
+type deezerRef struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+type deezerAlbum struct {
+	ID       int64  `json:"id"`
+	Title    string `json:"title"`
+	CoverBig string `json:"cover_big"`
+}
+
+// DeezerPlaceholderImage is the URL Deezer returns when no artwork exists.
+const DeezerPlaceholderImage = "https://e-cdns-images.dzcdn.net/images/artist//500x500-000000-80-0-0.jpg"
+
+func IsDeezerPlaceholder(url string) bool {
+	return strings.Contains(url, "/images/artist//")
+}
