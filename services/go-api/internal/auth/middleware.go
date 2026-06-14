@@ -42,6 +42,11 @@ func Middleware(verifier TokenVerifier) func(http.Handler) http.Handler {
 				return
 			}
 
+			slog.DebugContext(r.Context(), "auth.verified",
+				"user_id", userId.String(),
+				"path", r.URL.Path,
+			)
+
 			ctx := context.WithValue(r.Context(), userIDKey, userId)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

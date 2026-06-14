@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -20,15 +21,15 @@ const (
 )
 
 type SearchMusicService struct {
-	providers        []ports.SearchProvider
-	queryCache       ports.QueryCache
-	historyRepo      ports.SearchHistoryRepository
-	circuitBreaker   *CircuitBreaker
+	providers          []ports.SearchProvider
+	queryCache         ports.QueryCache
+	historyRepo        ports.SearchHistoryRepository
+	circuitBreaker     *CircuitBreaker
 	popularityResolver ports.PopularityResolver
-	artworkResolver  ports.ArtworkResolver
-	artworkCache     ports.ArtworkCache
-	fanartResolver   ports.ArtworkResolver
-	geniusResolver   ports.ArtworkResolver
+	artworkResolver    ports.ArtworkResolver
+	artworkCache       ports.ArtworkCache
+	fanartResolver     ports.ArtworkResolver
+	geniusResolver     ports.ArtworkResolver
 }
 
 func NewSearchMusicService(
@@ -45,25 +46,11 @@ func NewSearchMusicService(
 	}
 }
 
-func (s *SearchMusicService) SetPopularityResolver(r ports.PopularityResolver) {
-	s.popularityResolver = r
-}
-
-func (s *SearchMusicService) SetArtworkResolver(r ports.ArtworkResolver) {
-	s.artworkResolver = r
-}
-
-func (s *SearchMusicService) SetArtworkCache(c ports.ArtworkCache) {
-	s.artworkCache = c
-}
-
-func (s *SearchMusicService) SetFanartResolver(r ports.ArtworkResolver) {
-	s.fanartResolver = r
-}
-
-func (s *SearchMusicService) SetGeniusResolver(r ports.ArtworkResolver) {
-	s.geniusResolver = r
-}
+func (s *SearchMusicService) SetPopularityResolver(r ports.PopularityResolver)  { s.popularityResolver = r }
+func (s *SearchMusicService) SetArtworkResolver(r ports.ArtworkResolver)        { s.artworkResolver = r }
+func (s *SearchMusicService) SetArtworkCache(c ports.ArtworkCache)              { s.artworkCache = c }
+func (s *SearchMusicService) SetFanartResolver(r ports.ArtworkResolver)         { s.fanartResolver = r }
+func (s *SearchMusicService) SetGeniusResolver(r ports.ArtworkResolver)         { s.geniusResolver = r }
 
 type SearchOutput struct {
 	Results          []domain.SearchResult
@@ -71,11 +58,28 @@ type SearchOutput struct {
 	Partial          bool
 }
 
+func kindsString(kinds map[domain.ResultKind]bool) string {
+	var parts []string
+	for k := range kinds {
+		parts = append(parts, k.String())
+	}
+	return strings.Join(parts, ",")
+}
+
 func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, query *domain.SearchQuery, saveHistory bool) (*SearchOutput, error) {
 	queryNorm := NormalizeForMatch(query.Raw)
 	if query.QueryNorm == "" {
 		query.QueryNorm = queryNorm
 	}
+
+	slog.InfoContext(ctx, "search.start",
+		"query", query.Raw,
+		"kinds", kindsString(query.Kinds),
+		"limit", query.Limit,
+		"user_id", userId.String(),
+	)
+
+	searchStart := time.Now()
 
 	var (
 		mu          sync.Mutex
@@ -86,6 +90,8 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 
 	for _, provider := range s.providers {
 		if !s.circuitBreaker.AllowRequest(provider.Name()) {
+			slog.WarnContext(ctx, "provider.circuit_open",
+				"provider", provider.Name().String())
 			mu.Lock()
 			statuses = append(statuses, domain.ProviderSearchResponse{
 				Provider: provider.Name(),
@@ -94,6 +100,11 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 			mu.Unlock()
 			continue
 		}
+
+		slog.InfoContext(ctx, "provider.search",
+			"provider", provider.Name().String(),
+			"kinds", kindsString(query.Kinds),
+		)
 
 		wg.Add(1)
 		go func(p ports.SearchProvider) {
@@ -119,8 +130,12 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 					LatencyMs: latencyMs,
 				})
 				mu.Unlock()
-				slog.WarnContext(ctx, "provider search failed",
-					"provider", p.Name().String(), "error", err)
+				slog.WarnContext(ctx, "provider.failed",
+					"provider", p.Name().String(),
+					"status", status.String(),
+					"latency_ms", latencyMs,
+					"error", err,
+				)
 				return
 			}
 
@@ -135,15 +150,37 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 				ResultCount: len(results),
 			})
 			mu.Unlock()
+
+			slog.InfoContext(ctx, "provider.complete",
+				"provider", p.Name().String(),
+				"status", "ok",
+				"results", len(results),
+				"latency_ms", latencyMs,
+			)
 		}(provider)
 	}
 
 	wg.Wait()
 
+	rawCount := 0
+	for _, group := range perProvider {
+		rawCount += len(group)
+	}
+
 	merged := FuseAndRank(perProvider, queryNorm, nil)
 
-	merged = s.enrich(ctx, merged)
+	enriching := enrichLimit
+	if len(merged) < enriching {
+		enriching = len(merged)
+	}
 
+	slog.InfoContext(ctx, "search.merged",
+		"raw", rawCount,
+		"merged", len(merged),
+		"enriching", enriching,
+	)
+
+	merged = s.enrich(ctx, merged)
 	merged = Rerank(merged, queryNorm)
 
 	if len(merged) > query.Limit {
@@ -167,9 +204,15 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 			ExecutedAt: time.Now().UTC(),
 		}
 		if err := s.historyRepo.Insert(ctx, entry); err != nil {
-			slog.WarnContext(ctx, "failed to persist search history", "error", err)
+			slog.WarnContext(ctx, "search.history_persist_failed", "error", err)
 		}
 	}
+
+	slog.InfoContext(ctx, "search.complete",
+		"results", len(merged),
+		"partial", partial,
+		"duration", time.Since(searchStart),
+	)
 
 	return &SearchOutput{
 		Results:          merged,
@@ -225,6 +268,11 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 		if err == nil && pop > 0 {
 			extras["popularity"] = pop
 			changed = true
+			slog.DebugContext(ctx, "enrich.popularity",
+				"title", result.Title,
+				"artist", result.Subtitle,
+				"pop", fmt.Sprintf("%.2f", pop),
+			)
 		} else if extras["popularity"] != nil {
 			extras["popularity"] = 0.0
 			changed = true
@@ -233,7 +281,6 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 
 	needsArt := imageURL == "" || strings.Contains(imageURL, emptyArtHash)
 	tryArt := needsArt || result.Kind == domain.ResultKindArtist
-
 	mbid := getStringExtra(result, "mbid")
 
 	if tryArt && s.artworkCache != nil {
@@ -242,6 +289,8 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 			if cachedURL != "" {
 				imageURL = cachedURL
 				changed = true
+				slog.DebugContext(ctx, "enrich.artwork",
+					"title", result.Title, "source", "cache_hit")
 			}
 			tryArt = false
 		}
@@ -254,6 +303,8 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 		if url != "" {
 			resolvedArt = url
 			needsArt = false
+			slog.DebugContext(ctx, "enrich.artwork",
+				"title", result.Title, "source", "fanart")
 		}
 	}
 
@@ -262,6 +313,8 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 		if url != "" {
 			resolvedArt = url
 			needsArt = false
+			slog.DebugContext(ctx, "enrich.artwork",
+				"title", result.Title, "source", "genius")
 		}
 	}
 
@@ -269,6 +322,8 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 		url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid)
 		if url != "" {
 			resolvedArt = url
+			slog.DebugContext(ctx, "enrich.artwork",
+				"title", result.Title, "source", "chain")
 		}
 	}
 

@@ -58,9 +58,16 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	slog.InfoContext(r.Context(), "stream.start",
+		"track_id", trackId.String(),
+		"title", track.Title,
+		"artist", track.Artist,
+		"audio_ref", *track.AudioRef,
+	)
+
 	reader, size, err := h.audioStore.Stream(r.Context(), *track.AudioRef)
 	if err != nil {
-		slog.WarnContext(r.Context(), "audio stream failed, reconciling",
+		slog.WarnContext(r.Context(), "stream.failed",
 			"track_id", trackId.String(), "error", err)
 
 		_ = h.reconcile.Execute(r.Context(), userId, trackId)
@@ -68,6 +75,11 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer reader.Close()
+
+	slog.InfoContext(r.Context(), "stream.serving",
+		"track_id", trackId.String(),
+		"size_bytes", size,
+	)
 
 	w.Header().Set("Content-Type", "audio/mpeg")
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
