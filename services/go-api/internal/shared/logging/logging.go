@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -19,11 +21,15 @@ func Setup(cfg *config.Config) {
 	var handler slog.Handler
 	if cfg.IsDevelopment() {
 		handler = &prettyHandler{
-			level: level,
-			w:     os.Stdout,
+			level:     level,
+			w:         os.Stdout,
+			addSource: true,
 		}
 	} else {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level:     level,
+			AddSource: true,
+		})
 	}
 
 	slog.SetDefault(slog.New(handler))
@@ -43,22 +49,24 @@ func parseLevel(s string) slog.Level {
 }
 
 const (
-	colorReset  = "\033[0m"
-	colorRed    = "\033[31m"
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-	colorBlue   = "\033[34m"
-	colorCyan   = "\033[36m"
-	colorGray   = "\033[90m"
-	colorWhite  = "\033[97m"
+	colorReset   = "\033[0m"
+	colorRed     = "\033[31m"
+	colorGreen   = "\033[32m"
+	colorYellow  = "\033[33m"
+	colorBlue    = "\033[34m"
+	colorMagenta = "\033[35m"
+	colorCyan    = "\033[36m"
+	colorGray    = "\033[90m"
+	colorWhite   = "\033[97m"
 )
 
 type prettyHandler struct {
-	level slog.Level
-	w     io.Writer
-	mu    sync.Mutex
-	attrs []slog.Attr
-	group string
+	level     slog.Level
+	w         io.Writer
+	mu        sync.Mutex
+	attrs     []slog.Attr
+	group     string
+	addSource bool
 }
 
 func (h *prettyHandler) Enabled(_ context.Context, level slog.Level) bool {
@@ -69,19 +77,40 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	timestamp := r.Time.Format("15:04:05")
+	timestamp := r.Time.Format("15:04:05.000")
 	level, levelColor := formatLevel(r.Level)
 
 	var b strings.Builder
+
+	// timestamp + level + message
 	fmt.Fprintf(&b, "%s%s%s %s%-5s%s %s%s%s",
 		colorGray, timestamp, colorReset,
 		levelColor, level, colorReset,
 		colorWhite, r.Message, colorReset,
 	)
 
+	// source location (function name + file:line)
+	if h.addSource {
+		fs := r.PC
+		if fs != 0 {
+			frames := runtime.CallersFrames([]uintptr{fs})
+			f, _ := frames.Next()
+			if f.Function != "" {
+				funcName := shortFuncName(f.Function)
+				file := shortFilePath(f.File)
+				fmt.Fprintf(&b, " %s@%s%s %s%s:%d%s",
+					colorMagenta, funcName, colorReset,
+					colorGray, file, f.Line, colorReset,
+				)
+			}
+		}
+	}
+
+	// pre-set attrs
 	for _, a := range h.attrs {
 		writeAttr(&b, a)
 	}
+	// record attrs
 	r.Attrs(func(a slog.Attr) bool {
 		writeAttr(&b, a)
 		return true
@@ -94,19 +123,21 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 
 func (h *prettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &prettyHandler{
-		level: h.level,
-		w:     h.w,
-		attrs: append(h.attrs, attrs...),
-		group: h.group,
+		level:     h.level,
+		w:         h.w,
+		attrs:     append(append([]slog.Attr{}, h.attrs...), attrs...),
+		group:     h.group,
+		addSource: h.addSource,
 	}
 }
 
 func (h *prettyHandler) WithGroup(name string) slog.Handler {
 	return &prettyHandler{
-		level: h.level,
-		w:     h.w,
-		attrs: h.attrs,
-		group: name,
+		level:     h.level,
+		w:         h.w,
+		attrs:     h.attrs,
+		group:     name,
+		addSource: h.addSource,
 	}
 }
 
@@ -115,9 +146,9 @@ func formatLevel(level slog.Level) (string, string) {
 	case level >= slog.LevelError:
 		return "ERROR", colorRed
 	case level >= slog.LevelWarn:
-		return "WARN", colorYellow
+		return "WARN ", colorYellow
 	case level >= slog.LevelInfo:
-		return "INFO", colorGreen
+		return "INFO ", colorGreen
 	default:
 		return "DEBUG", colorBlue
 	}
@@ -150,4 +181,27 @@ func writeAttr(b *strings.Builder, a slog.Attr) {
 			colorCyan, a.Key, colorReset,
 			colorGray, val.String(), colorReset)
 	}
+}
+
+func shortFuncName(full string) string {
+	// "altune/go-api/internal/catalog/service.(*AddTrackService).Execute"
+	// → "AddTrackService.Execute"
+	if idx := strings.LastIndex(full, "/"); idx >= 0 {
+		full = full[idx+1:]
+	}
+	if idx := strings.Index(full, "."); idx >= 0 {
+		full = full[idx+1:]
+	}
+	full = strings.TrimPrefix(full, "(*")
+	full = strings.TrimSuffix(full, ")")
+	full = strings.Replace(full, ").", ".", 1)
+	return full
+}
+
+func shortFilePath(full string) string {
+	parts := strings.Split(filepath.ToSlash(full), "/")
+	if len(parts) <= 2 {
+		return full
+	}
+	return strings.Join(parts[len(parts)-2:], "/")
 }
