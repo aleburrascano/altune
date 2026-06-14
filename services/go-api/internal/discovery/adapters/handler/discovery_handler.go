@@ -59,7 +59,7 @@ type SearchResultDTO struct {
 	ImageURL   string         `json:"image_url,omitempty"`
 	Confidence string         `json:"confidence"`
 	Sources    []SourceRefDTO `json:"sources"`
-	Extras     map[string]any `json:"extras,omitempty"`
+	Extras     map[string]any `json:"extras"`
 }
 
 type SourceRefDTO struct {
@@ -158,6 +158,10 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 				URL:        s.URL,
 			}
 		}
+		extras := sr.Extras
+		if extras == nil {
+			extras = make(map[string]any)
+		}
 		resultDTOs[i] = SearchResultDTO{
 			Kind:       sr.Kind.String(),
 			Title:      sr.Title,
@@ -165,7 +169,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 			ImageURL:   sr.ImageURL,
 			Confidence: sr.Confidence.String(),
 			Sources:    sources,
-			Extras:     sr.Extras,
+			Extras:     extras,
 		}
 	}
 
@@ -334,6 +338,10 @@ func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseD
 				URL:        s.URL,
 			}
 		}
+		contentExtras := r.Extras
+		if contentExtras == nil {
+			contentExtras = make(map[string]any)
+		}
 		items[i] = SearchResultDTO{
 			Kind:       r.Kind.String(),
 			Title:      r.Title,
@@ -341,7 +349,7 @@ func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseD
 			ImageURL:   r.ImageURL,
 			Confidence: r.Confidence.String(),
 			Sources:    sources,
-			Extras:     r.Extras,
+			Extras:     contentExtras,
 		}
 	}
 	return ContentFetchResponseDTO{
