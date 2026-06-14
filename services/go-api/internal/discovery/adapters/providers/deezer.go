@@ -110,9 +110,21 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 			subtitle = item.Artist.Name
 		}
 		imageURL = item.CoverBig
+		if item.RecordType != "" {
+			extras["record_type"] = item.RecordType
+		}
+		if item.ReleaseDate != "" {
+			extras["release_date"] = item.ReleaseDate
+		}
+		if item.NbTracks > 0 {
+			extras["track_count"] = item.NbTracks
+		}
 	case domain.ResultKindArtist:
 		title = item.Name
 		imageURL = item.PictureBig
+		if item.NbFan > 0 {
+			extras["nb_fan"] = item.NbFan
+		}
 	}
 
 	return domain.SearchResult{
@@ -137,16 +149,21 @@ type deezerSearchResponse struct {
 }
 
 type deezerItem struct {
-	ID         int64        `json:"id"`
-	Title      string       `json:"title"`
-	Name       string       `json:"name"`
-	Link       string       `json:"link"`
-	Duration   int          `json:"duration"`
-	ISRC       string       `json:"isrc"`
-	CoverBig   string       `json:"cover_big"`
-	PictureBig string       `json:"picture_big"`
-	Artist     *deezerRef   `json:"artist"`
-	Album      *deezerAlbum `json:"album"`
+	ID          int64        `json:"id"`
+	Title       string       `json:"title"`
+	Name        string       `json:"name"`
+	Link        string       `json:"link"`
+	Duration    int          `json:"duration"`
+	ISRC        string       `json:"isrc"`
+	CoverBig    string       `json:"cover_big"`
+	PictureBig  string       `json:"picture_big"`
+	Artist      *deezerRef   `json:"artist"`
+	Album       *deezerAlbum `json:"album"`
+	RecordType  string       `json:"record_type"`
+	ReleaseDate string       `json:"release_date"`
+	NbTracks    int          `json:"nb_tracks"`
+	Rank        int64        `json:"rank"`
+	NbFan       int64        `json:"nb_fan"`
 }
 
 type deezerRef struct {
