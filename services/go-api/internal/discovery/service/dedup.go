@@ -172,6 +172,16 @@ func tryMerge(a, b domain.SearchResult) (domain.SearchResult, bool) {
 		}
 		return domain.SearchResult{}, false
 	}
+	// Name-based merge for artists: same normalized name = same artist.
+	// Artists lack cross-provider identifiers (no ISRC, rarely MBID from
+	// non-MB providers), so without this, 4+ copies of "The Weeknd" appear.
+	if a.Kind == domain.ResultKindArtist {
+		normA := NormalizeForMatch(a.Title)
+		normB := NormalizeForMatch(b.Title)
+		if normA != "" && normA == normB {
+			return mergeResults(a, b, domain.ConfidenceMedium, domain.EntityResolutionNone), true
+		}
+	}
 	return domain.SearchResult{}, false
 }
 
