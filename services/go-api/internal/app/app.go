@@ -168,6 +168,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	r := chi.NewRouter()
 
+	r.Use(httputil.CorrelationID)
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.RequestLogger)
 	r.Use(cors.Handler(cors.Options{
