@@ -10,10 +10,14 @@
 
 import type { ReactElement } from 'react';
 import { Pressable } from 'react-native';
+import { Pause, Play } from 'lucide-react-native';
 
 import { Artwork, Card, Row, Text, radius, spacing } from '@shared/ui';
+import { IconButton } from '@shared/ui/primitives/IconButton';
 
 import type { DiscoveryResult } from '../../../shared/api-client/discovery';
+import { usePlayback } from '../../playback/hooks/usePlayback';
+import { getPreviewUrl } from '../../playback/helpers/previewUrl';
 
 export type DiscoverRowProps = {
   result: DiscoveryResult;
@@ -42,6 +46,28 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
   const isArtist = result.kind === 'artist';
   const secondary = _secondaryLine(result);
   const a11yLabel = `${result.title}${secondary ? `, ${secondary}` : ''}`;
+  const playback = usePlayback();
+  const previewUrl = result.kind === 'track' ? getPreviewUrl(result.extras) : null;
+
+  const isThisPreviewPlaying =
+    previewUrl !== null &&
+    playback.track?.source.kind === 'preview' &&
+    playback.track.source.previewUrl === previewUrl &&
+    playback.status === 'playing';
+
+  const onPreviewPress = (): void => {
+    if (previewUrl === null) return;
+    if (isThisPreviewPlaying) {
+      playback.pause();
+    } else {
+      void playback.play({
+        source: { kind: 'preview', previewUrl },
+        title: result.title,
+        artist: result.subtitle ?? '',
+        artworkUrl: result.image_url,
+      });
+    }
+  };
 
   return (
     <Pressable
@@ -60,6 +86,17 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
               radius={isArtist ? radius.full : radius.md}
               accessibilityLabel={result.title}
             />
+          }
+          trailing={
+            previewUrl !== null ? (
+              <IconButton
+                testID={`discover-preview-${position}`}
+                icon={isThisPreviewPlaying ? Pause : Play}
+                size={18}
+                onPress={onPreviewPress}
+                accessibilityLabel={isThisPreviewPlaying ? 'Pause preview' : 'Play preview'}
+              />
+            ) : undefined
           }
         >
           <Text variant="bodyStrong" numberOfLines={1}>

@@ -18,6 +18,7 @@ dependencies = [
     "rapidfuzz>=3.14.5",
     "yt-dlp>=2026.3.17",
     "mutagen>=1.47.0",
+    "boto3>=1.35",
 ]
 
 [project.optional-dependencies]
@@ -106,6 +107,8 @@ module = [
     "asyncpg.*",
     "rapidfuzz.*",
     "yt_dlp.*",
+    "boto3.*",
+    "botocore.*",
 ]
 ignore_missing_imports = true
 

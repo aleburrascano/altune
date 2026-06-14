@@ -53,6 +53,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timeout);
   }, [track, queryClient]);
 
+  useEffect(() => {
+    if (
+      track?.source.kind === 'preview' &&
+      !playerStatus.playing &&
+      playerStatus.isLoaded &&
+      playerStatus.duration > 0 &&
+      playerStatus.currentTime >= playerStatus.duration
+    ) {
+      player.pause();
+      player.seekTo(0);
+    }
+  }, [track, playerStatus.playing, playerStatus.isLoaded, playerStatus.currentTime, playerStatus.duration, player]);
+
   const state: PlaybackState = useMemo(() => {
     if (!track) return INITIAL_STATE;
     if (errorMessage) return { status: 'error', track, positionMs: 0, durationMs: 0, errorMessage };
@@ -77,8 +90,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setAudioSource(null);
     shouldAutoPlay.current = true;
     try {
-      const headers = await audioRequestHeaders();
-      setAudioSource({ uri: audioStreamUrl(newTrack.trackId), headers });
+      if (newTrack.source.kind === 'preview') {
+        setAudioSource({ uri: newTrack.source.previewUrl });
+      } else {
+        const headers = await audioRequestHeaders();
+        setAudioSource({ uri: audioStreamUrl(newTrack.source.trackId), headers });
+      }
     } catch (err) {
       shouldAutoPlay.current = false;
       const message = err instanceof Error ? err.message : 'Failed to load audio';
