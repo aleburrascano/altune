@@ -34,6 +34,10 @@ func (s *PlaylistService) Create(ctx context.Context, userId shared.UserId, name
 	return playlist, nil
 }
 
+func (s *PlaylistService) GetByID(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId) (*domain.Playlist, error) {
+	return s.playlistRepo.GetByID(ctx, playlistId, userId)
+}
+
 func (s *PlaylistService) List(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, error) {
 	return s.playlistRepo.ListForUser(ctx, userId)
 }

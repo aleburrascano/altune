@@ -79,15 +79,36 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		isrc = *track.ISRC
 	}
 
+	year := 0
+	if track.Year != nil {
+		year = *track.Year
+	}
+	trackNum := 0
+	if track.TrackNumber != nil {
+		trackNum = *track.TrackNumber
+	}
+	albumArtist := ""
+	if track.AlbumArtist != nil {
+		albumArtist = *track.AlbumArtist
+	}
+	genre := ""
+	if track.Genre != nil {
+		genre = *track.Genre
+	}
+
 	ac := &AcquisitionContext{
 		Track: TrackRef{
-			ID:       track.ID.String(),
-			UserID:   track.UserId.String(),
-			Title:    track.Title,
-			Artist:   track.Artist,
-			Album:    track.Album,
-			Duration: dur,
-			ISRC:     isrc,
+			ID:          track.ID.String(),
+			UserID:      track.UserId.String(),
+			Title:       track.Title,
+			Artist:      track.Artist,
+			Album:       track.Album,
+			Duration:    dur,
+			ISRC:        isrc,
+			Year:        year,
+			TrackNumber: trackNum,
+			AlbumArtist: albumArtist,
+			Genre:       genre,
 		},
 	}
 
@@ -95,6 +116,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		NewSearchStep(s.audioSearcher),
 		NewSelectStep(),
 		NewDownloadStep(s.audioSearcher),
+		NewTagStep(),
 		NewStoreStep(s.audioStore),
 		NewUpdateTrackStep(s.trackRepo, userId, trackId),
 	}

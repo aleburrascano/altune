@@ -55,13 +55,17 @@ type AcquisitionContext struct {
 }
 
 type TrackRef struct {
-	ID          string
-	UserID      string
-	Title       string
-	Artist      string
-	Album       string
-	Duration    float64
-	ISRC        string
+	ID           string
+	UserID       string
+	Title        string
+	Artist       string
+	Album        string
+	Duration     float64
+	ISRC         string
+	Year         int
+	TrackNumber  int
+	AlbumArtist  string
+	Genre        string
 }
 
 type Candidate struct {
