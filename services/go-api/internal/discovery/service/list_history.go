@@ -17,6 +17,9 @@ func NewListSearchHistoryService(historyRepo ports.SearchHistoryRepository) *Lis
 }
 
 func (s *ListSearchHistoryService) Execute(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
+	if s.historyRepo == nil {
+		return nil, nil
+	}
 	if limit <= 0 {
 		limit = 10
 	}

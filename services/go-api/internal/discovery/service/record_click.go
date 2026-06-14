@@ -34,6 +34,10 @@ type RecordClickInput struct {
 }
 
 func (s *RecordClickService) Execute(ctx context.Context, userId shared.UserId, input RecordClickInput) error {
+	if s.clickRepo == nil {
+		return nil
+	}
+
 	signature := computeResultSignature(input.ResultTitle, input.ResultSubtitle, input.ResultSources)
 
 	click := &domain.SearchClick{

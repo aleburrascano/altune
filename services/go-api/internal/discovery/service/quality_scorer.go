@@ -1,59 +1,80 @@
 package service
 
 import (
+	"math"
+	"strings"
+
 	"altune/go-api/internal/discovery/domain"
 )
 
-type QualityScorer struct{}
-
-func NewQualityScorer() *QualityScorer {
-	return &QualityScorer{}
+var tierScores = map[string]float64{
+	"mbid": 1.0,
+	"isrc": 0.8,
+	"none": 0.2,
 }
 
-func (qs *QualityScorer) Score(result *domain.SearchResult, fetchSuccessRate float64) domain.QualityScore {
-	completeness := computeCompleteness(result)
-	agreement := computeAgreement(result)
+const maxProviders = 6
 
-	tier := domain.EntityResolutionNone
-	if result.Quality.EntityTier > tier {
-		tier = result.Quality.EntityTier
-	}
-
-	return domain.QualityScore{
-		Completeness: completeness,
-		Agreement:    agreement,
-		EntityTier:   tier,
-		FetchSuccess: fetchSuccessRate,
-	}
+var canonicalRecordTypes = map[string]bool{
+	"album":  true,
+	"single": true,
+	"ep":     true,
 }
 
-func computeCompleteness(result *domain.SearchResult) float64 {
+func qualityCompleteness(r domain.SearchResult) float64 {
 	fields := 0
 	total := 4
-
-	if result.Title != "" {
+	if getStringExtra(r, "isrc") != "" {
 		fields++
 	}
-	if result.Subtitle != "" {
+	if r.ImageURL != "" {
 		fields++
 	}
-	if result.ImageURL != "" {
+	if r.Extras != nil {
+		if _, ok := r.Extras["duration_seconds"]; ok {
+			fields++
+		}
+	}
+	if getStringExtra(r, "album") != "" {
 		fields++
 	}
-	if len(result.Sources) > 0 {
-		fields++
-	}
-
 	return float64(fields) / float64(total)
 }
 
-func computeAgreement(result *domain.SearchResult) float64 {
-	sourceCount := len(result.Sources)
-	if sourceCount <= 1 {
-		return 0.0
+func qualityAgreement(r domain.SearchResult) float64 {
+	providers := providersOf(r)
+	return math.Min(float64(len(providers))/float64(maxProviders), 1.0)
+}
+
+func entityTierSignal(r domain.SearchResult) float64 {
+	tierVal := getStringExtra(r, "resolution_tier")
+	if score, ok := tierScores[tierVal]; ok {
+		return score
 	}
-	if sourceCount >= 3 {
-		return 1.0
+	return tierScores["none"]
+}
+
+func ComputeQualityScore(r domain.SearchResult, fetchSuccessRate float64) domain.QualityScore {
+	comp := qualityCompleteness(r)
+	agr := qualityAgreement(r)
+	tier := entityTierSignal(r)
+	fs := math.Max(0.0, math.Min(1.0, fetchSuccessRate))
+	composite := (comp + agr + tier + fs) / 4.0
+
+	return domain.QualityScore{
+		Completeness: composite,
+		Agreement:    agr,
+		EntityTier:   domain.EntityResolutionNone,
+		FetchSuccess: fs,
 	}
-	return 0.5
+}
+
+// IsDemoted returns true if the result's record_type is not canonical
+// (album, single, ep). No record_type = not demoted.
+func IsDemoted(r domain.SearchResult) bool {
+	recordType := getStringExtra(r, "record_type")
+	if recordType == "" {
+		return false
+	}
+	return !canonicalRecordTypes[strings.ToLower(recordType)]
 }

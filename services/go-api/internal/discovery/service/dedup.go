@@ -1,186 +1,449 @@
 package service
 
 import (
+	"math"
 	"sort"
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
 )
 
-// FuseAndRank performs identifier-only merge (ISRC/MBID) and RRF ranking.
-func FuseAndRank(providerResults []domain.ProviderSearchResponse, queryNorm string, limit int) []domain.SearchResult {
-	groups := mergeByIdentifier(providerResults)
-	ranked := rankResults(groups, queryNorm)
+const rrfK = 60
 
-	if len(ranked) > limit {
-		ranked = ranked[:limit]
+func isrcOf(r domain.SearchResult) string {
+	return getStringExtra(r, "isrc")
+}
+
+func mbidOf(r domain.SearchResult) string {
+	return getStringExtra(r, "mbid")
+}
+
+func popularity(r domain.SearchResult) float64 {
+	if r.Extras == nil {
+		return 0.0
 	}
-	return ranked
+	v, ok := r.Extras["popularity"]
+	if !ok {
+		return 0.0
+	}
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int64:
+		return float64(n)
+	case int:
+		return float64(n)
+	default:
+		return 0.0
+	}
 }
 
-// Rerank re-sorts results after enrichment changes popularity scores.
-// Uses a different sort key from FuseAndRank: omits quality_score.
-func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResult {
-	sort.SliceStable(results, func(i, j int) bool {
-		ri, rj := results[i], results[j]
-
-		relI := relevanceScore(ri, queryNorm)
-		relJ := relevanceScore(rj, queryNorm)
-		if relI != relJ {
-			return relI > relJ
+func completeness(r domain.SearchResult) int {
+	count := 0
+	if r.ImageURL != "" {
+		count++
+	}
+	if getStringExtra(r, "isrc") != "" {
+		count++
+	}
+	if r.Extras != nil {
+		if _, ok := r.Extras["duration_seconds"]; ok {
+			count++
 		}
-
-		popI := getPopularity(ri)
-		popJ := getPopularity(rj)
-		return popI > popJ
-	})
-	return results
+	}
+	if getStringExtra(r, "album") != "" {
+		count++
+	}
+	return count
 }
 
-type mergeGroup struct {
-	result    domain.SearchResult
-	positions map[domain.ProviderName]int
+func signature(r domain.SearchResult) string {
+	title := NormalizeForMatch(r.Title)
+	subtitle := NormalizeForMatch(r.Subtitle)
+	return subtitle + "|" + title
 }
 
-func mergeByIdentifier(providerResults []domain.ProviderSearchResponse) []mergeGroup {
-	isrcIndex := make(map[string]*mergeGroup)
-	mbidIndex := make(map[string]*mergeGroup)
-	var groups []mergeGroup
-
-	for _, pr := range providerResults {
-		for pos, result := range pr.Results {
-			isrc := getExtra(result, "isrc")
-			mbid := getExtra(result, "mbid")
-
-			var matched *mergeGroup
-
-			if mbid != "" {
-				if existing, ok := mbidIndex[mbid]; ok {
-					matched = existing
-				}
+func sharesWord(r domain.SearchResult, queryNorm string) bool {
+	queryWords := contentWords(queryNorm)
+	if len(queryWords) == 0 {
+		raw := strings.Fields(strings.TrimSpace(queryNorm))
+		text := NormalizeForMatch(r.Subtitle + " " + r.Title)
+		textTokens := strings.Fields(text)
+		for _, w := range raw {
+			if w == "" {
+				continue
 			}
-			if matched == nil && isrc != "" {
-				if existing, ok := isrcIndex[isrc]; ok {
-					matched = existing
-				}
-			}
-
-			if matched != nil {
-				matched.result.Sources = append(matched.result.Sources, result.Sources...)
-				matched.positions[pr.Provider] = pos
-
-				if mbid != "" {
-					matched.result.Quality.EntityTier = domain.EntityResolutionMBID
-					matched.result.Confidence = domain.ConfidenceHigh
-				} else if isrc != "" && matched.result.Quality.EntityTier < domain.EntityResolutionISRC {
-					matched.result.Quality.EntityTier = domain.EntityResolutionISRC
-					matched.result.Confidence = domain.ConfidenceHigh
-				}
-
-				if result.ImageURL != "" && matched.result.ImageURL == "" {
-					matched.result.ImageURL = result.ImageURL
-				}
-				if result.Subtitle != "" && matched.result.Subtitle == "" {
-					matched.result.Subtitle = result.Subtitle
-				}
-			} else {
-				g := mergeGroup{
-					result:    result,
-					positions: map[domain.ProviderName]int{pr.Provider: pos},
-				}
-				groups = append(groups, g)
-				idx := len(groups) - 1
-
-				if mbid != "" {
-					mbidIndex[mbid] = &groups[idx]
-					groups[idx].result.Quality.EntityTier = domain.EntityResolutionMBID
-				}
-				if isrc != "" {
-					isrcIndex[isrc] = &groups[idx]
-					if groups[idx].result.Quality.EntityTier < domain.EntityResolutionISRC {
-						groups[idx].result.Quality.EntityTier = domain.EntityResolutionISRC
-					}
+			for _, tw := range textTokens {
+				if w == tw {
+					return true
 				}
 			}
 		}
+		return false
 	}
-
-	return groups
-}
-
-func rankResults(groups []mergeGroup, queryNorm string) []domain.SearchResult {
-	type scoredResult struct {
-		result   domain.SearchResult
-		score    float64
-	}
-
-	var scored []scoredResult
-	for _, g := range groups {
-		rel := relevanceScore(g.result, queryNorm)
-		rrf := rrfScore(g.positions)
-		quality := g.result.Quality.Completeness*0.3 + g.result.Quality.Agreement*0.3 + float64(g.result.Quality.EntityTier)*0.2 + g.result.Quality.FetchSuccess*0.2
-
-		total := rel*0.4 + rrf*0.3 + quality*0.3
-
-		if isDemoted(g.result) {
-			total *= 0.5
-		}
-
-		scored = append(scored, scoredResult{result: g.result, score: total})
-	}
-
-	sort.SliceStable(scored, func(i, j int) bool {
-		return scored[i].score > scored[j].score
-	})
-
-	results := make([]domain.SearchResult, len(scored))
-	for i, s := range scored {
-		results[i] = s.result
-	}
-	return results
-}
-
-func relevanceScore(result domain.SearchResult, queryNorm string) float64 {
-	titleNorm := NormalizeForMatch(result.Title)
-
-	if titleNorm == queryNorm {
-		return 1.0
-	}
-
-	if strings.Contains(titleNorm, queryNorm) || strings.Contains(queryNorm, titleNorm) {
-		return 0.8
-	}
-
-	return 0.5
-}
-
-func rrfScore(positions map[domain.ProviderName]int) float64 {
-	const k = 60.0
-	score := 0.0
-	for _, pos := range positions {
-		score += 1.0 / (k + float64(pos))
-	}
-	return score
-}
-
-func isDemoted(result domain.SearchResult) bool {
-	if result.Kind == domain.ResultKindTrack {
-		title := strings.ToLower(result.Title)
-		demotionTerms := []string{"remix", "live", "karaoke", "instrumental", "cover", "acoustic version"}
-		for _, term := range demotionTerms {
-			if strings.Contains(title, term) {
-				return true
-			}
+	text := NormalizeForMatch(r.Subtitle + " " + r.Title)
+	textWords := contentWords(text)
+	for w := range queryWords {
+		if textWords[w] {
+			return true
 		}
 	}
 	return false
 }
 
-func getExtra(result domain.SearchResult, key string) string {
-	if result.Extras == nil {
+func contentWords(text string) map[string]bool {
+	result := make(map[string]bool)
+	for _, w := range strings.Fields(text) {
+		if len(w) >= 2 {
+			result[w] = true
+		}
+	}
+	return result
+}
+
+func providersOf(r domain.SearchResult) map[domain.ProviderName]bool {
+	m := make(map[domain.ProviderName]bool)
+	for _, s := range r.Sources {
+		m[s.Provider] = true
+	}
+	return m
+}
+
+func mergeResults(a, b domain.SearchResult, conf domain.Confidence, tier domain.EntityResolutionTier) domain.SearchResult {
+	canonical, other := a, b
+	if completeness(b) > completeness(a) {
+		canonical, other = b, a
+	}
+
+	seen := make(map[string]bool)
+	var sources []domain.SourceRef
+	for _, s := range append(canonical.Sources, other.Sources...) {
+		key := s.Provider.String() + ":" + s.ExternalID
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		sources = append(sources, s)
+	}
+
+	extras := make(map[string]any)
+	for k, v := range other.Extras {
+		extras[k] = v
+	}
+	for k, v := range canonical.Extras {
+		if v != nil || extras[k] == nil {
+			extras[k] = v
+		}
+	}
+	pop := math.Max(popularity(a), popularity(b))
+	if pop > 0 {
+		extras["popularity"] = pop
+	}
+	extras["resolution_tier"] = tier.String()
+
+	imageURL := canonical.ImageURL
+	if imageURL == "" {
+		imageURL = other.ImageURL
+	}
+
+	return domain.SearchResult{
+		Kind:       canonical.Kind,
+		Title:      canonical.Title,
+		Subtitle:   canonical.Subtitle,
+		ImageURL:   imageURL,
+		Confidence: conf,
+		Sources:    sources,
+		Extras:     extras,
+	}
+}
+
+func tryMerge(a, b domain.SearchResult) (domain.SearchResult, bool) {
+	if a.Kind != b.Kind {
+		return domain.SearchResult{}, false
+	}
+	isrcA, isrcB := isrcOf(a), isrcOf(b)
+	if isrcA != "" && isrcB != "" && isrcA == isrcB {
+		return mergeResults(a, b, domain.ConfidenceHigh, domain.EntityResolutionISRC), true
+	}
+	mbidA, mbidB := mbidOf(a), mbidOf(b)
+	if mbidA != "" && mbidB != "" {
+		if mbidA == mbidB {
+			return mergeResults(a, b, domain.ConfidenceHigh, domain.EntityResolutionMBID), true
+		}
+		return domain.SearchResult{}, false
+	}
+	return domain.SearchResult{}, false
+}
+
+func asLowConfidence(r domain.SearchResult) domain.SearchResult {
+	if r.Confidence == domain.ConfidenceLow {
+		return r
+	}
+	r.Confidence = domain.ConfidenceLow
+	return r
+}
+
+func relevanceScore(result domain.SearchResult, queryNorm string) float64 {
+	query := strings.TrimSpace(queryNorm)
+	if query == "" {
+		return 0.0
+	}
+
+	title := NormalizeForMatch(result.Title)
+	candidates := []float64{TokenSortRatio(query, title)}
+
+	if result.Subtitle != "" {
+		combined := strings.TrimSpace(NormalizeForMatch(result.Subtitle) + " " + title)
+		candidates = append(candidates, TokenSortRatio(query, combined))
+	}
+
+	queryCW := contentWords(query)
+	if len(queryCW) > 0 {
+		queryC := sortedJoin(queryCW)
+		titleC := sortedJoin(contentWords(title))
+		candidates = append(candidates, TokenSortRatio(queryC, titleC))
+		if result.Subtitle != "" {
+			combined := strings.TrimSpace(NormalizeForMatch(result.Subtitle) + " " + title)
+			combinedC := sortedJoin(contentWords(combined))
+			candidates = append(candidates, TokenSortRatio(queryC, combinedC))
+		}
+	}
+
+	best := 0.0
+	for _, c := range candidates {
+		if c > best {
+			best = c
+		}
+	}
+	return best / 100.0
+}
+
+func sortedJoin(words map[string]bool) string {
+	sorted := make([]string, 0, len(words))
+	for w := range words {
+		sorted = append(sorted, w)
+	}
+	sort.Strings(sorted)
+	return strings.Join(sorted, " ")
+}
+
+type ranked struct {
+	result   domain.SearchResult
+	bestRank map[domain.ProviderName]int
+}
+
+type scored struct {
+	result    domain.SearchResult
+	relevance float64
+	rrf       float64
+}
+
+// FuseAndRank merges on identifiers, ranks by relevance.
+// perProvider is a slice of per-provider result groups (native order preserved).
+func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityScorer func(domain.SearchResult) domain.QualityScore) []domain.SearchResult {
+	// Pre-merge album-name stabilization
+	albumBest := make(map[string]struct {
+		album string
+		comp  int
+	})
+	for _, group := range perProvider {
+		for _, r := range group {
+			album := getStringExtra(r, "album")
+			if album == "" {
+				continue
+			}
+			sig := signature(r)
+			comp := completeness(r)
+			prev, ok := albumBest[sig]
+			if !ok || comp > prev.comp {
+				albumBest[sig] = struct {
+					album string
+					comp  int
+				}{album, comp}
+			}
+		}
+	}
+
+	var accumulated []ranked
+	for _, group := range perProvider {
+		for rank, incoming := range group {
+			candidate := asLowConfidence(incoming)
+			candProviders := providersOf(candidate)
+
+			merged := false
+			for i := range accumulated {
+				result, ok := tryMerge(accumulated[i].result, candidate)
+				if ok {
+					accumulated[i].result = result
+					for provider := range candProviders {
+						prev, exists := accumulated[i].bestRank[provider]
+						if !exists || rank < prev {
+							accumulated[i].bestRank[provider] = rank
+						}
+					}
+					merged = true
+					break
+				}
+			}
+			if !merged {
+				ranks := make(map[domain.ProviderName]int)
+				for p := range candProviders {
+					ranks[p] = rank
+				}
+				accumulated = append(accumulated, ranked{result: candidate, bestRank: ranks})
+			}
+		}
+	}
+
+	// Post-merge album-name stabilization
+	for i := range accumulated {
+		sig := signature(accumulated[i].result)
+		best, ok := albumBest[sig]
+		if ok && getStringExtra(accumulated[i].result, "album") != best.album {
+			extras := copyExtras(accumulated[i].result.Extras)
+			extras["album"] = best.album
+			accumulated[i].result.Extras = extras
+		}
+	}
+
+	// Score and gate
+	var scoredResults []scored
+	for _, entry := range accumulated {
+		rrf := 0.0
+		for _, rank := range entry.bestRank {
+			rrf += 1.0 / (float64(rrfK) + float64(rank))
+		}
+
+		r := entry.result
+		if len(providersOf(r)) < 2 && r.Confidence != domain.ConfidenceLow {
+			r = asLowConfidence(r)
+		}
+
+		extras := copyExtras(r.Extras)
+		extras["_rrf"] = rrf
+		r.Extras = extras
+
+		rel := relevanceScore(r, queryNorm)
+		if strings.TrimSpace(queryNorm) != "" && !sharesWord(r, queryNorm) {
+			continue
+		}
+		scoredResults = append(scoredResults, scored{result: r, relevance: rel, rrf: rrf})
+	}
+
+	// Sort by the Python sort key:
+	// (-band, demoted, -multi_source, -popularity, -q_score, -rrf, subtitle, title)
+	sort.SliceStable(scoredResults, func(i, j int) bool {
+		a, b := scoredResults[i], scoredResults[j]
+		bandA := roundTo1(a.relevance)
+		bandB := roundTo1(b.relevance)
+		if bandA != bandB {
+			return bandA > bandB
+		}
+		demA := boolToInt(IsDemoted(a.result))
+		demB := boolToInt(IsDemoted(b.result))
+		if demA != demB {
+			return demA < demB
+		}
+		multiA := boolToInt(len(providersOf(a.result)) > 1)
+		multiB := boolToInt(len(providersOf(b.result)) > 1)
+		if multiA != multiB {
+			return multiA > multiB
+		}
+		popA := popularity(a.result)
+		popB := popularity(b.result)
+		if popA != popB {
+			return popA > popB
+		}
+		var qA, qB float64
+		if qualityScorer != nil {
+			qA = qualityScorer(a.result).Completeness
+			qB = qualityScorer(b.result).Completeness
+		}
+		if qA != qB {
+			return qA > qB
+		}
+		if a.rrf != b.rrf {
+			return a.rrf > b.rrf
+		}
+		subA := a.result.Subtitle
+		subB := b.result.Subtitle
+		if subA != subB {
+			return subA < subB
+		}
+		return a.result.Title < b.result.Title
+	})
+
+	results := make([]domain.SearchResult, len(scoredResults))
+	for i, s := range scoredResults {
+		results[i] = s.result
+	}
+	return results
+}
+
+// Rerank re-sorts after enrichment. Same key minus quality_score.
+func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResult {
+	sort.SliceStable(results, func(i, j int) bool {
+		a, b := results[i], results[j]
+		bandA := roundTo1(relevanceScore(a, queryNorm))
+		bandB := roundTo1(relevanceScore(b, queryNorm))
+		if bandA != bandB {
+			return bandA > bandB
+		}
+		demA := boolToInt(IsDemoted(a))
+		demB := boolToInt(IsDemoted(b))
+		if demA != demB {
+			return demA < demB
+		}
+		multiA := boolToInt(len(providersOf(a)) > 1)
+		multiB := boolToInt(len(providersOf(b)) > 1)
+		if multiA != multiB {
+			return multiA > multiB
+		}
+		popA := popularity(a)
+		popB := popularity(b)
+		if popA != popB {
+			return popA > popB
+		}
+		rrfA := getFloatExtra(a, "_rrf")
+		rrfB := getFloatExtra(b, "_rrf")
+		if rrfA != rrfB {
+			return rrfA > rrfB
+		}
+		if a.Subtitle != b.Subtitle {
+			return a.Subtitle < b.Subtitle
+		}
+		return a.Title < b.Title
+	})
+	return results
+}
+
+func roundTo1(f float64) float64 {
+	return math.Round(f*10) / 10
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func copyExtras(src map[string]any) map[string]any {
+	if src == nil {
+		return make(map[string]any)
+	}
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+func getStringExtra(r domain.SearchResult, key string) string {
+	if r.Extras == nil {
 		return ""
 	}
-	v, ok := result.Extras[key]
+	v, ok := r.Extras[key]
 	if !ok {
 		return ""
 	}
@@ -191,20 +454,20 @@ func getExtra(result domain.SearchResult, key string) string {
 	return s
 }
 
-func getPopularity(result domain.SearchResult) int64 {
-	if result.Extras == nil {
-		return 0
+func getFloatExtra(r domain.SearchResult, key string) float64 {
+	if r.Extras == nil {
+		return 0.0
 	}
-	v, ok := result.Extras["popularity"]
+	v, ok := r.Extras[key]
 	if !ok {
-		return 0
+		return 0.0
 	}
 	switch n := v.(type) {
-	case int64:
-		return n
 	case float64:
-		return int64(n)
+		return n
+	case int:
+		return float64(n)
 	default:
-		return 0
+		return 0.0
 	}
 }
