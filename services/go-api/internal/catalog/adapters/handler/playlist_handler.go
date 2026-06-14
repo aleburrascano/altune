@@ -80,7 +80,10 @@ type PlaylistDetailResponse struct {
 // --- Handlers ---
 
 func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 
 	var req CreatePlaylistRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -105,7 +108,10 @@ func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 
 	playlists, err := h.svc.List(r.Context(), userId)
 	if err != nil {
@@ -132,7 +138,10 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
 	if err != nil {
 		httputil.BadRequest(w, "invalid playlist ID")
@@ -175,7 +184,10 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
 	if err != nil {
 		httputil.BadRequest(w, "invalid playlist ID")
@@ -214,7 +226,10 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
 	if err != nil {
 		httputil.BadRequest(w, "invalid playlist ID")
@@ -234,7 +249,10 @@ func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
 	if err != nil {
 		httputil.BadRequest(w, "invalid playlist ID")
@@ -267,7 +285,10 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
 	if err != nil {
 		httputil.BadRequest(w, "invalid playlist ID")
@@ -293,7 +314,10 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
 	if err != nil {
 		httputil.BadRequest(w, "invalid playlist ID")

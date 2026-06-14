@@ -1,43 +1,41 @@
 package handler
 
 import (
-	"context"
-	"log/slog"
 	"net/http"
-	"sync"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
-	acqservice "altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 
 	"github.com/go-chi/chi/v5"
 )
 
+type acquisitionScheduler interface {
+	Schedule(userId shared.UserId, trackId domain.TrackId)
+}
+
 type RetryHandler struct {
-	trackRepo  ports.TrackRepository
-	acquireSvc *acqservice.AcquireTrackAudioService
-	wg         *sync.WaitGroup
-	sem        chan struct{}
+	trackRepo ports.TrackRepository
+	scheduler acquisitionScheduler
 }
 
 func NewRetryHandler(
 	trackRepo ports.TrackRepository,
-	acquireSvc *acqservice.AcquireTrackAudioService,
-	wg *sync.WaitGroup,
-	sem chan struct{},
+	scheduler acquisitionScheduler,
 ) *RetryHandler {
 	return &RetryHandler{
-		trackRepo:  trackRepo,
-		acquireSvc: acquireSvc,
-		wg:         wg,
-		sem:        sem,
+		trackRepo: trackRepo,
+		scheduler: scheduler,
 	}
 }
 
 func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 	trackIdStr := chi.URLParam(r, "trackId")
 
 	trackId, err := domain.ParseTrackId(trackIdStr)
@@ -61,19 +59,7 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
-
-		h.sem <- struct{}{}
-		defer func() { <-h.sem }()
-
-		bgCtx := context.Background()
-		if err := h.acquireSvc.Execute(bgCtx, userId, trackId); err != nil {
-			slog.Error("retry acquisition failed",
-				"track_id", trackId.String(), "error", err)
-		}
-	}()
+	h.scheduler.Schedule(userId, trackId)
 
 	w.WriteHeader(http.StatusAccepted)
 }

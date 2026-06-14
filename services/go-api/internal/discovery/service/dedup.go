@@ -343,47 +343,8 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 		scoredResults = append(scoredResults, scored{result: r, relevance: rel, rrf: rrf})
 	}
 
-	// Sort by the Python sort key:
-	// (-band, demoted, -multi_source, -popularity, -q_score, -rrf, subtitle, title)
 	sort.SliceStable(scoredResults, func(i, j int) bool {
-		a, b := scoredResults[i], scoredResults[j]
-		bandA := roundTo1(a.relevance)
-		bandB := roundTo1(b.relevance)
-		if bandA != bandB {
-			return bandA > bandB
-		}
-		demA := boolToInt(IsDemoted(a.result))
-		demB := boolToInt(IsDemoted(b.result))
-		if demA != demB {
-			return demA < demB
-		}
-		multiA := boolToInt(len(providersOf(a.result)) > 1)
-		multiB := boolToInt(len(providersOf(b.result)) > 1)
-		if multiA != multiB {
-			return multiA > multiB
-		}
-		popA := popularity(a.result)
-		popB := popularity(b.result)
-		if popA != popB {
-			return popA > popB
-		}
-		var qA, qB float64
-		if qualityScorer != nil {
-			qA = qualityScorer(a.result).Completeness
-			qB = qualityScorer(b.result).Completeness
-		}
-		if qA != qB {
-			return qA > qB
-		}
-		if a.rrf != b.rrf {
-			return a.rrf > b.rrf
-		}
-		subA := a.result.Subtitle
-		subB := b.result.Subtitle
-		if subA != subB {
-			return subA < subB
-		}
-		return a.result.Title < b.result.Title
+		return rankingKeyLess(scoredResults[i], scoredResults[j], qualityScorer)
 	})
 
 	results := make([]domain.SearchResult, len(scoredResults))
@@ -428,6 +389,46 @@ func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResu
 		return a.Title < b.Title
 	})
 	return results
+}
+
+// rankingKeyLess implements the multi-criteria sort:
+// (-band, demoted, -multi_source, -popularity, -q_score, -rrf, subtitle, title)
+func rankingKeyLess(a, b scored, qualityScorer func(domain.SearchResult) domain.QualityScore) bool {
+	bandA := roundTo1(a.relevance)
+	bandB := roundTo1(b.relevance)
+	if bandA != bandB {
+		return bandA > bandB
+	}
+	demA := boolToInt(IsDemoted(a.result))
+	demB := boolToInt(IsDemoted(b.result))
+	if demA != demB {
+		return demA < demB
+	}
+	multiA := boolToInt(len(providersOf(a.result)) > 1)
+	multiB := boolToInt(len(providersOf(b.result)) > 1)
+	if multiA != multiB {
+		return multiA > multiB
+	}
+	popA := popularity(a.result)
+	popB := popularity(b.result)
+	if popA != popB {
+		return popA > popB
+	}
+	var qA, qB float64
+	if qualityScorer != nil {
+		qA = qualityScorer(a.result).Completeness
+		qB = qualityScorer(b.result).Completeness
+	}
+	if qA != qB {
+		return qA > qB
+	}
+	if a.rrf != b.rrf {
+		return a.rrf > b.rrf
+	}
+	if a.result.Subtitle != b.result.Subtitle {
+		return a.result.Subtitle < b.result.Subtitle
+	}
+	return a.result.Title < b.result.Title
 }
 
 func roundTo1(f float64) float64 {

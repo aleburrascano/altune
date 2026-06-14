@@ -112,7 +112,10 @@ type DiscoveryClickRequest struct {
 // --- Handlers ---
 
 func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 
 	q := r.URL.Query().Get("q")
 	if q == "" {
@@ -194,7 +197,10 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 
@@ -220,7 +226,10 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 }
 
 func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 
 	var req DiscoveryClickRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -228,9 +237,16 @@ func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resultKind := domain.ResultKindTrack
-	if k, err := domain.ParseResultKind(req.Kind); err == nil {
-		resultKind = k
+	resultKind, err := domain.ParseResultKind(req.Kind)
+	if err != nil {
+		httputil.BadRequest(w, "invalid kind")
+		return
+	}
+
+	confidence, err := domain.ParseConfidence(req.Confidence)
+	if err != nil {
+		httputil.BadRequest(w, "invalid confidence")
+		return
 	}
 
 	input := service.RecordClickInput{
@@ -239,6 +255,7 @@ func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Requ
 		ResultTitle:    req.Title,
 		ResultSubtitle: req.Subtitle,
 		Position:       req.Position,
+		Confidence:     confidence,
 	}
 
 	if err := h.clickSvc.Execute(r.Context(), userId, input); err != nil {
@@ -252,6 +269,10 @@ func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Requ
 func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
 	externalID := chi.URLParam(r, "externalId")
+	if provider == "" || externalID == "" {
+		httputil.BadRequest(w, "provider and externalId are required")
+		return
+	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 50
@@ -276,6 +297,10 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
 	externalID := chi.URLParam(r, "externalId")
+	if provider == "" || externalID == "" {
+		httputil.BadRequest(w, "provider and externalId are required")
+		return
+	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 5
@@ -300,6 +325,10 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Request) {
 	provider := chi.URLParam(r, "provider")
 	externalID := chi.URLParam(r, "externalId")
+	if provider == "" || externalID == "" {
+		httputil.BadRequest(w, "provider and externalId are required")
+		return
+	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 10

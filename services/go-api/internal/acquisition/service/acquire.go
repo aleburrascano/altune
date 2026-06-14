@@ -70,47 +70,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		"has_isrc", track.ISRC != nil,
 	)
 
-	dur := 0.0
-	if track.DurationSeconds != nil {
-		dur = *track.DurationSeconds
-	}
-	isrc := ""
-	if track.ISRC != nil {
-		isrc = *track.ISRC
-	}
-
-	year := 0
-	if track.Year != nil {
-		year = *track.Year
-	}
-	trackNum := 0
-	if track.TrackNumber != nil {
-		trackNum = *track.TrackNumber
-	}
-	albumArtist := ""
-	if track.AlbumArtist != nil {
-		albumArtist = *track.AlbumArtist
-	}
-	genre := ""
-	if track.Genre != nil {
-		genre = *track.Genre
-	}
-
-	ac := &AcquisitionContext{
-		Track: TrackRef{
-			ID:          track.ID.String(),
-			UserID:      track.UserId.String(),
-			Title:       track.Title,
-			Artist:      track.Artist,
-			Album:       track.Album,
-			Duration:    dur,
-			ISRC:        isrc,
-			Year:        year,
-			TrackNumber: trackNum,
-			AlbumArtist: albumArtist,
-			Genre:       genre,
-		},
-	}
+	ac := &AcquisitionContext{Track: buildTrackRef(track)}
 
 	pipeline := []Step{
 		NewSearchStep(s.audioSearcher),
@@ -150,6 +110,43 @@ func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domai
 	}
 	if markErr := track.MarkFailed(reason); markErr == nil {
 		_ = s.trackRepo.Update(ctx, track)
+	}
+}
+
+func derefStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func derefFloat(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+func derefInt(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+func buildTrackRef(track *domain.Track) TrackRef {
+	return TrackRef{
+		ID:          track.ID.String(),
+		UserID:      track.UserId.String(),
+		Title:       track.Title,
+		Artist:      track.Artist,
+		Album:       track.Album,
+		Duration:    derefFloat(track.DurationSeconds),
+		ISRC:        derefStr(track.ISRC),
+		Year:        derefInt(track.Year),
+		TrackNumber: derefInt(track.TrackNumber),
+		AlbumArtist: derefStr(track.AlbumArtist),
+		Genre:       derefStr(track.Genre),
 	}
 }
 

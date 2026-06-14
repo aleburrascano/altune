@@ -34,7 +34,10 @@ func NewStreamHandler(
 }
 
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 	trackIdStr := chi.URLParam(r, "trackId")
 
 	trackId, err := domain.ParseTrackId(trackIdStr)
@@ -53,7 +56,7 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if track.AcquisitionStatus != domain.AcquisitionReady || track.AudioRef == nil {
+	if !track.IsStreamable() {
 		httputil.NotFound(w, "audio not available")
 		return
 	}
@@ -87,6 +90,7 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := io.Copy(w, reader); err != nil {
-		slog.WarnContext(r.Context(), "stream copy interrupted", "error", err)
+		slog.WarnContext(r.Context(), "stream.copy_interrupted",
+			"track_id", trackId.String(), "error", err)
 	}
 }

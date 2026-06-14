@@ -88,7 +88,13 @@ type Track struct {
 	FailureReason     *string
 }
 
-func NewTrack(userId shared.UserId, title, artist, album string) *Track {
+func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {
+	if title == "" {
+		return nil, errors.New("track title is required")
+	}
+	if artist == "" {
+		return nil, errors.New("track artist is required")
+	}
 	return &Track{
 		ID:                NewTrackId(),
 		UserId:            userId,
@@ -98,7 +104,7 @@ func NewTrack(userId shared.UserId, title, artist, album string) *Track {
 		AddedAt:           time.Now().UTC(),
 		AcquisitionStatus: AcquisitionPending,
 		DedupKey:          ComputeDedupKey(title, artist, album),
-	}
+	}, nil
 }
 
 func (t *Track) MarkReady(audioRef string) error {
@@ -125,4 +131,8 @@ func (t *Track) RevertToPending() {
 	t.AcquisitionStatus = AcquisitionPending
 	t.AudioRef = nil
 	t.FailureReason = nil
+}
+
+func (t *Track) IsStreamable() bool {
+	return t.AcquisitionStatus == AcquisitionReady && t.AudioRef != nil
 }

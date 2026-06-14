@@ -36,7 +36,10 @@ func NewAddTrackService(trackRepo ports.TrackRepository) *AddTrackService {
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, input AddTrackInput) (*AddTrackOutput, error) {
-	track := domain.NewTrack(userId, input.Title, input.Artist, input.Album)
+	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album)
+	if err != nil {
+		return nil, err
+	}
 	track.DurationSeconds = input.DurationSeconds
 	track.ArtworkURL = input.ArtworkURL
 	track.Year = input.Year
