@@ -59,7 +59,7 @@ func RunDedupMigration(cfg *config.Config, execute bool) {
 	}
 
 	if len(groups) == 0 {
-		fmt.Println("\nNo duplicates found.\n")
+		fmt.Println("\nNo duplicates found.")
 		return
 	}
 
