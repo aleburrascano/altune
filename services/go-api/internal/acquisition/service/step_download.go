@@ -1,11 +1,10 @@
-package steps
+package service
 
 import (
 	"context"
 	"fmt"
 	"os"
 
-	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/ports"
 )
 
@@ -19,7 +18,7 @@ func NewDownloadStep(searcher ports.AudioSearcher) *DownloadStep {
 
 func (s *DownloadStep) Name() string { return "download" }
 
-func (s *DownloadStep) Execute(ctx context.Context, ac *service.AcquisitionContext) error {
+func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	if ac.Selected == nil {
 		return fmt.Errorf("no candidate selected")
 	}
@@ -39,7 +38,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *service.AcquisitionConte
 	return nil
 }
 
-func (s *DownloadStep) Rollback(_ context.Context, ac *service.AcquisitionContext) error {
+func (s *DownloadStep) Rollback(_ context.Context, ac *AcquisitionContext) error {
 	if ac.TempPath != "" {
 		os.RemoveAll(ac.TempPath)
 	}

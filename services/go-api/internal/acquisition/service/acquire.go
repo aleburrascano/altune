@@ -8,8 +8,6 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
-
-	"altune/go-api/internal/acquisition/service/steps"
 )
 
 type AcquireTrackAudioService struct {
@@ -66,11 +64,11 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	}
 
 	pipeline := []Step{
-		steps.NewSearchStep(s.audioSearcher),
-		steps.NewSelectStep(),
-		steps.NewDownloadStep(s.audioSearcher),
-		steps.NewStoreStep(s.audioStore),
-		steps.NewUpdateTrackStep(s.trackRepo, userId, trackId),
+		NewSearchStep(s.audioSearcher),
+		NewSelectStep(),
+		NewDownloadStep(s.audioSearcher),
+		NewStoreStep(s.audioStore),
+		NewUpdateTrackStep(s.trackRepo, userId, trackId),
 	}
 
 	if err := RunPipeline(ctx, pipeline, ac); err != nil {

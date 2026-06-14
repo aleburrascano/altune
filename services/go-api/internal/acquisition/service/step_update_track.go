@@ -1,10 +1,9 @@
-package steps
+package service
 
 import (
 	"context"
 	"fmt"
 
-	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
@@ -26,7 +25,7 @@ func NewUpdateTrackStep(trackRepo ports.TrackRepository, userId shared.UserId, t
 
 func (s *UpdateTrackStep) Name() string { return "update_track" }
 
-func (s *UpdateTrackStep) Execute(ctx context.Context, ac *service.AcquisitionContext) error {
+func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	track, err := s.trackRepo.GetByID(ctx, s.trackId, s.userId)
 	if err != nil {
 		return fmt.Errorf("get track for update: %w", err)
@@ -46,7 +45,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *service.AcquisitionCo
 	return nil
 }
 
-func (s *UpdateTrackStep) Rollback(ctx context.Context, _ *service.AcquisitionContext) error {
+func (s *UpdateTrackStep) Rollback(ctx context.Context, _ *AcquisitionContext) error {
 	track, err := s.trackRepo.GetByID(ctx, s.trackId, s.userId)
 	if err != nil || track == nil {
 		return err
