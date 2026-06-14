@@ -76,3 +76,49 @@ func (a *TheAudioDBAdapter) Search(ctx context.Context, query string, kinds map[
 
 	return results, nil
 }
+
+// Resolve implements ArtworkResolver — searches TheAudioDB for album/artist covers.
+func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
+	if kind == domain.ResultKindArtist {
+		results, err := a.Search(ctx, title, map[domain.ResultKind]bool{domain.ResultKindArtist: true})
+		if err != nil || len(results) == 0 {
+			return "", nil
+		}
+		if results[0].ImageURL != "" {
+			return results[0].ImageURL, nil
+		}
+		return "", nil
+	}
+
+	if subtitle == "" {
+		return "", nil
+	}
+
+	u := fmt.Sprintf("https://theaudiodb.com/api/v1/json/523532/searchalbum.php?s=%s&a=%s",
+		url.QueryEscape(subtitle), url.QueryEscape(title))
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return "", nil
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", nil
+	}
+
+	var body struct {
+		Album []struct {
+			StrAlbumThumb string `json:"strAlbumThumb"`
+		} `json:"album"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", nil
+	}
+	if len(body.Album) > 0 && body.Album[0].StrAlbumThumb != "" {
+		return body.Album[0].StrAlbumThumb, nil
+	}
+	return "", nil
+}

@@ -134,6 +134,25 @@ func (a *App) setup(ctx context.Context) error {
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	clickRepo := discoveryPersistence.NewPgxSearchClickRepository(a.pool)
 	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker)
+
+	artworkChain := providers.NewChainedArtworkResolver(
+		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
+		providers.NewTheAudioDBAdapter(&http.Client{Timeout: 10 * time.Second}),
+	)
+	searchSvc.SetArtworkResolver(artworkChain)
+
+	if a.cfg.HasFanartTV() {
+		fanart := providers.NewFanartTvArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.FanartTVAPIKey)
+		searchSvc.SetFanartResolver(fanart)
+	}
+	if a.cfg.HasGenius() {
+		genius := providers.NewGeniusArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.GeniusAccessToken)
+		searchSvc.SetGeniusResolver(genius)
+	}
+	if a.redisClient != nil {
+		searchSvc.SetArtworkCache(discoveryCacheAdapters.NewRedisArtworkCache(a.redisClient))
+	}
+
 	clickSvc := discoveryService.NewRecordClickService(clickRepo)
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 
