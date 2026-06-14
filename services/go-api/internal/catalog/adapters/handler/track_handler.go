@@ -193,11 +193,22 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	status := http.StatusOK
 	if result.Created {
 		status = http.StatusCreated
+		slog.InfoContext(r.Context(), "track.saved",
+			"track_id", result.Track.ID.String(),
+			"title", result.Track.Title,
+			"artist", result.Track.Artist,
+			"album", result.Track.Album,
+		)
 	} else {
-		slog.InfoContext(r.Context(), "http_post_tracks_dedup_hit",
-			"user_id", userId.String(), "track_id", result.Track.ID.String())
+		slog.InfoContext(r.Context(), "track.dedup_hit",
+			"track_id", result.Track.ID.String(),
+			"title", result.Track.Title,
+			"status", result.Track.AcquisitionStatus.String(),
+		)
 	}
 
+	slog.InfoContext(r.Context(), "acquisition.scheduled",
+		"track_id", result.Track.ID.String())
 	h.scheduleAcquisition(userId, result.Track.ID)
 
 	httputil.WriteJSON(w, status, trackToResponse(result.Track))
@@ -212,6 +223,9 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 		httputil.BadRequest(w, "invalid track ID")
 		return
 	}
+
+	slog.InfoContext(r.Context(), "track.delete",
+		"track_id", trackId.String())
 
 	err = h.deleteTrack.Execute(r.Context(), userId, trackId)
 	if err != nil {
