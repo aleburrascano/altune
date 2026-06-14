@@ -102,7 +102,10 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 			provCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
 			defer cancel()
 
+			start := time.Now()
 			results, err := p.Search(provCtx, query.Raw, query.Kinds)
+			latencyMs := time.Since(start).Milliseconds()
+
 			if err != nil {
 				s.circuitBreaker.RecordFailure(p.Name())
 				status := domain.ProviderStatusError
@@ -111,8 +114,9 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 				}
 				mu.Lock()
 				statuses = append(statuses, domain.ProviderSearchResponse{
-					Provider: p.Name(),
-					Status:   status,
+					Provider:  p.Name(),
+					Status:    status,
+					LatencyMs: latencyMs,
 				})
 				mu.Unlock()
 				slog.WarnContext(ctx, "provider search failed",
@@ -124,9 +128,11 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 			mu.Lock()
 			perProvider = append(perProvider, results)
 			statuses = append(statuses, domain.ProviderSearchResponse{
-				Provider: p.Name(),
-				Results:  results,
-				Status:   domain.ProviderStatusOK,
+				Provider:    p.Name(),
+				Results:     results,
+				Status:      domain.ProviderStatusOK,
+				LatencyMs:   latencyMs,
+				ResultCount: len(results),
 			})
 			mu.Unlock()
 		}(provider)
