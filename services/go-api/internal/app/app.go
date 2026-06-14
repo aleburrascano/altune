@@ -134,7 +134,7 @@ func (a *App) setup(ctx context.Context) error {
 	clickSvc := discoveryService.NewRecordClickService(nil)
 	historySvc := discoveryService.NewListSearchHistoryService(nil)
 
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, reconcileSvc)
+	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, reconcileSvc, acquireSvc, &a.wg, a.sem)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
 	streamHandler := catalogHandler.NewStreamHandler(trackRepo, audioStore, reconcileSvc)
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc)

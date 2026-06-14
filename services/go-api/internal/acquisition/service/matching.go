@@ -1,158 +1,158 @@
 package service
 
 import (
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
-	"unicode"
+
+	discoverySvc "altune/go-api/internal/discovery/service"
 )
 
 const (
-	durationTolerancePct = 0.15
-	minMatchScore        = 60.0
+	identityMin   = 60.0
+	durationTight = 3
+	durationLoose = 15
 )
+
+func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
+	combined := discoverySvc.NormalizeForMatch(trackArtist + " " + trackTitle)
+	titleOnly := discoverySvc.NormalizeForMatch(trackTitle)
+	candidateNorm := discoverySvc.NormalizeForMatch(candidateTitle)
+	return math.Max(
+		discoverySvc.TokenSortRatio(combined, candidateNorm),
+		discoverySvc.TokenSortRatio(titleOnly, candidateNorm),
+	)
+}
+
+func channelScore(channel string) float64 {
+	if strings.HasSuffix(channel, "- Topic") {
+		return 1.0
+	}
+	if strings.Contains(strings.ToLower(channel), "vevo") {
+		return 0.8
+	}
+	return 0.3
+}
+
+func categoryScore(categories []string) float64 {
+	for _, c := range categories {
+		if c == "Music" {
+			return 1.0
+		}
+	}
+	return 0.2
+}
+
+func durationScore(expected, actual float64) float64 {
+	if expected == 0 || actual == 0 {
+		return 0.5
+	}
+	diff := math.Abs(expected - actual)
+	if diff <= durationTight {
+		return 1.0
+	}
+	if diff <= durationLoose {
+		return 0.5
+	}
+	return 0.0
+}
+
+func viewScore(viewCount, maxViews int64) float64 {
+	if maxViews == 0 {
+		return 0.5
+	}
+	return math.Min(float64(viewCount)/float64(maxViews), 1.0)
+}
+
+func metadataRank(c Candidate, expectedDuration float64, maxViews int64) float64 {
+	ch := channelScore(c.Channel)
+	cat := categoryScore(c.Categories)
+	dur := durationScore(expectedDuration, c.Duration)
+	views := viewScore(c.ViewCount, maxViews)
+	return 0.45*ch + 0.25*dur + 0.20*cat + 0.10*views
+}
+
+func isTopicChannel(channel string) bool {
+	return strings.HasSuffix(channel, "- Topic")
+}
 
 func SelectBestCandidate(track TrackRef, candidates []Candidate) *Candidate {
 	if len(candidates) == 0 {
 		return nil
 	}
 
-	var scored []Candidate
+	var maxViews int64
 	for _, c := range candidates {
-		if track.Duration > 0 && c.Duration > 0 {
-			ratio := math.Abs(track.Duration-c.Duration) / track.Duration
-			if ratio > durationTolerancePct {
-				continue
-			}
+		if c.ViewCount > maxViews {
+			maxViews = c.ViewCount
 		}
+	}
 
-		identity := combineIdentity(track.Title, track.Artist)
-		candidateIdentity := combineIdentity(c.Title, c.Artist)
-		score := TokenSortRatio(identity, candidateIdentity)
+	type topicEntry struct {
+		ident     float64
+		candidate Candidate
+	}
+	type otherEntry struct {
+		meta      float64
+		ident     float64
+		candidate Candidate
+	}
 
-		if score < minMatchScore {
+	var topicCandidates []topicEntry
+	var otherCandidates []otherEntry
+
+	for _, c := range candidates {
+		ident := identityScore(track.Title, track.Artist, c.Title)
+		meta := metadataRank(c, track.Duration, maxViews)
+
+		slog.Info("candidate_evaluated",
+			"candidate_title", c.Title,
+			"candidate_channel", c.Channel,
+			"candidate_duration", c.Duration,
+			"candidate_views", c.ViewCount,
+			"identity_score", math.Round(ident*10)/10,
+			"metadata_rank", math.Round(meta*1000)/1000,
+			"is_topic", isTopicChannel(c.Channel),
+		)
+
+		if ident < identityMin {
 			continue
 		}
 
-		c.Score = score
-		scored = append(scored, c)
-	}
-
-	if len(scored) == 0 {
-		return nil
-	}
-
-	sort.Slice(scored, func(i, j int) bool {
-		if scored[i].Score != scored[j].Score {
-			return scored[i].Score > scored[j].Score
-		}
-		return isMusicChannel(scored[i].Categories) && !isMusicChannel(scored[j].Categories)
-	})
-
-	result := scored[0]
-	return &result
-}
-
-func combineIdentity(title, artist string) string {
-	return normalizeForMatch(title) + " " + normalizeForMatch(artist)
-}
-
-func normalizeForMatch(s string) string {
-	s = strings.ToLower(s)
-	var b strings.Builder
-	for _, r := range s {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) {
-			b.WriteRune(r)
+		if isTopicChannel(c.Channel) {
+			topicCandidates = append(topicCandidates, topicEntry{ident, c})
+		} else {
+			otherCandidates = append(otherCandidates, otherEntry{meta, ident, c})
 		}
 	}
-	return strings.Join(strings.Fields(b.String()), " ")
-}
 
-func isMusicChannel(categories []string) bool {
-	for _, c := range categories {
-		if strings.EqualFold(c, "Music") {
-			return true
-		}
-	}
-	return false
-}
-
-// TokenSortRatio implements rapidfuzz's token_sort_ratio algorithm:
-// tokenize → sort tokens alphabetically → join → compute normalized
-// Levenshtein ratio * 100.
-func TokenSortRatio(s1, s2 string) float64 {
-	t1 := sortedTokens(s1)
-	t2 := sortedTokens(s2)
-	return levenshteinRatio(t1, t2) * 100
-}
-
-func sortedTokens(s string) string {
-	tokens := strings.Fields(strings.ToLower(strings.TrimSpace(s)))
-	sort.Strings(tokens)
-	return strings.Join(tokens, " ")
-}
-
-func levenshteinRatio(s1, s2 string) float64 {
-	if s1 == s2 {
-		return 1.0
-	}
-	lenS1 := len(s1)
-	lenS2 := len(s2)
-	total := lenS1 + lenS2
-	if total == 0 {
-		return 1.0
+	if len(topicCandidates) > 0 {
+		sort.Slice(topicCandidates, func(i, j int) bool {
+			return topicCandidates[i].ident > topicCandidates[j].ident
+		})
+		best := topicCandidates[0].candidate
+		slog.Info("candidate_selected", "title", best.Title, "channel", best.Channel, "source", "topic_channel")
+		return &best
 	}
 
-	dist := levenshteinDistance(s1, s2)
-	matching := total - 2*dist
-	if matching < 0 {
-		matching = 0
-	}
-	return float64(matching) / float64(total)
-}
-
-func levenshteinDistance(s1, s2 string) int {
-	if len(s1) == 0 {
-		return len(s2)
-	}
-	if len(s2) == 0 {
-		return len(s1)
-	}
-
-	prev := make([]int, len(s2)+1)
-	curr := make([]int, len(s2)+1)
-
-	for j := range prev {
-		prev[j] = j
-	}
-
-	for i := 1; i <= len(s1); i++ {
-		curr[0] = i
-		for j := 1; j <= len(s2); j++ {
-			cost := 1
-			if s1[i-1] == s2[j-1] {
-				cost = 0
+	if len(otherCandidates) > 0 {
+		sort.Slice(otherCandidates, func(i, j int) bool {
+			if otherCandidates[i].ident != otherCandidates[j].ident {
+				return otherCandidates[i].ident > otherCandidates[j].ident
 			}
-			curr[j] = min(
-				curr[j-1]+1,
-				prev[j]+1,
-				prev[j-1]+cost,
-			)
-		}
-		prev, curr = curr, prev
+			return otherCandidates[i].meta > otherCandidates[j].meta
+		})
+		best := otherCandidates[0].candidate
+		slog.Info("candidate_selected", "title", best.Title, "channel", best.Channel,
+			"metadata_rank", math.Round(otherCandidates[0].meta*1000)/1000, "source", "metadata_rank")
+		return &best
 	}
-	return prev[len(s2)]
-}
 
-func min(a, b, c int) int {
-	if a < b {
-		if a < c {
-			return a
-		}
-		return c
-	}
-	if b < c {
-		return b
-	}
-	return c
+	slog.Warn("no_candidates_passed",
+		"track_title", track.Title,
+		"track_artist", track.Artist,
+		"total_candidates", len(candidates),
+	)
+	return nil
 }

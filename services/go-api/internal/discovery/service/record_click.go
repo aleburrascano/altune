@@ -25,12 +25,12 @@ func NewRecordClickService(clickRepo ports.SearchClickRepository) *RecordClickSe
 }
 
 type RecordClickInput struct {
-	QueryNorm       string
-	ResultTitle     string
-	ResultSubtitle  string
-	ResultSources   []domain.SourceRef
-	Position        int
-	Confidence      domain.Confidence
+	QueryNorm      string
+	ResultKind     domain.ResultKind
+	ResultTitle    string
+	ResultSubtitle string
+	Position       int
+	Confidence     domain.Confidence
 }
 
 func (s *RecordClickService) Execute(ctx context.Context, userId shared.UserId, input RecordClickInput) error {
@@ -38,7 +38,7 @@ func (s *RecordClickService) Execute(ctx context.Context, userId shared.UserId, 
 		return nil
 	}
 
-	signature := computeResultSignature(input.ResultTitle, input.ResultSubtitle, input.ResultSources)
+	signature := computeResultSignature(input.ResultKind, input.ResultTitle, input.ResultSubtitle)
 
 	click := &domain.SearchClick{
 		ID:              uuid.New(),
@@ -63,11 +63,10 @@ func (s *RecordClickService) Execute(ctx context.Context, userId shared.UserId, 
 	return nil
 }
 
-func computeResultSignature(title, subtitle string, sources []domain.SourceRef) string {
-	input := fmt.Sprintf("%s|%s", title, subtitle)
-	for _, s := range sources {
-		input += fmt.Sprintf("|%s:%s", s.Provider.String(), s.ExternalID)
-	}
+func computeResultSignature(kind domain.ResultKind, title, subtitle string) string {
+	normTitle := NormalizeForMatch(title)
+	normSubtitle := NormalizeForMatch(subtitle)
+	input := fmt.Sprintf("%s|%s|%s", kind.String(), normTitle, normSubtitle)
 	h := sha256.Sum256([]byte(input))
-	return fmt.Sprintf("%x", h)
+	return fmt.Sprintf("%x", h)[:12]
 }
