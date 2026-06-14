@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -70,8 +71,10 @@ type SourceRefDTO struct {
 }
 
 type ProviderStatusDTO struct {
-	Provider string `json:"provider"`
-	Status   string `json:"status"`
+	Provider    string `json:"provider"`
+	Status      string `json:"status"`
+	LatencyMs   int64  `json:"latency_ms"`
+	ResultCount int    `json:"result_count"`
 }
 
 type DiscoverySearchResponse struct {
@@ -114,7 +117,11 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		limit = 20
 	}
 
-	kinds := parseKinds(r.URL.Query().Get("kinds"))
+	kinds, err := parseKinds(r.URL.Query().Get("kinds"))
+	if err != nil {
+		httputil.WriteError(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
 
 	saveHistory := true
 	if r.URL.Query().Get("save_history") == "false" {
@@ -157,8 +164,10 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	providerDTOs := make([]ProviderStatusDTO, len(result.ProviderStatuses))
 	for i, ps := range result.ProviderStatuses {
 		providerDTOs[i] = ProviderStatusDTO{
-			Provider: ps.Provider.String(),
-			Status:   ps.Status.String(),
+			Provider:    ps.Provider.String(),
+			Status:      ps.Status.String(),
+			LatencyMs:   ps.LatencyMs,
+			ResultCount: ps.ResultCount,
 		}
 	}
 
@@ -322,28 +331,37 @@ func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseD
 	}
 }
 
-func parseKinds(csv string) map[domain.ResultKind]bool {
+func parseKinds(csv string) (map[domain.ResultKind]bool, error) {
 	if csv == "" {
 		return map[domain.ResultKind]bool{
 			domain.ResultKindTrack:  true,
 			domain.ResultKindAlbum:  true,
 			domain.ResultKindArtist: true,
-		}
+		}, nil
 	}
 	kinds := make(map[domain.ResultKind]bool)
+	var invalid []string
 	for _, s := range strings.Split(csv, ",") {
 		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
 		k, err := domain.ParseResultKind(s)
-		if err == nil {
+		if err != nil {
+			invalid = append(invalid, s)
+		} else {
 			kinds[k] = true
 		}
+	}
+	if len(invalid) > 0 {
+		return nil, fmt.Errorf("invalid kinds: %s", strings.Join(invalid, ", "))
 	}
 	if len(kinds) == 0 {
 		return map[domain.ResultKind]bool{
 			domain.ResultKindTrack:  true,
 			domain.ResultKindAlbum:  true,
 			domain.ResultKindArtist: true,
-		}
+		}, nil
 	}
-	return kinds
+	return kinds, nil
 }

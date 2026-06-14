@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared"
@@ -13,10 +14,10 @@ import (
 )
 
 type SupabaseJWTVerifier struct {
-	cache      *jwk.Cache
-	jwksURL    string
-	issuer     string
-	audience   string
+	cache    *jwk.Cache
+	jwksURL  string
+	issuer   string
+	audience string
 }
 
 func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string) (*SupabaseJWTVerifier, error) {
@@ -26,7 +27,6 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 		return nil, fmt.Errorf("register JWKS URL: %w", err)
 	}
 
-	// Force initial fetch to fail fast on bad URL
 	if _, err := cache.Refresh(ctx, jwksURL); err != nil {
 		slog.Warn("initial JWKS fetch failed, will retry on first request", "error", err)
 	}
@@ -44,7 +44,10 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shared.UserId, error) {
 	keySet, err := v.cache.Get(ctx, v.jwksURL)
 	if err != nil {
-		return shared.UserId{}, &auth.InvalidTokenError{Reason: "failed to fetch JWKS"}
+		return shared.UserId{}, &auth.InvalidTokenError{
+			Reason: auth.ReasonSignatureInvalid,
+			Detail: "failed to fetch JWKS",
+		}
 	}
 
 	token, err := jwt.Parse(
@@ -55,18 +58,46 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 		jwt.WithAudience(v.audience),
 	)
 	if err != nil {
-		return shared.UserId{}, &auth.InvalidTokenError{Reason: err.Error()}
+		reason := classifyJWTError(err)
+		return shared.UserId{}, &auth.InvalidTokenError{
+			Reason: reason,
+			Detail: err.Error(),
+		}
 	}
 
 	sub := token.Subject()
 	if sub == "" {
-		return shared.UserId{}, &auth.InvalidTokenError{Reason: "missing sub claim"}
+		return shared.UserId{}, &auth.InvalidTokenError{
+			Reason: auth.ReasonClaimInvalidSUB,
+			Detail: "missing sub claim",
+		}
 	}
 
 	userId, err := shared.ParseUserId(sub)
 	if err != nil {
-		return shared.UserId{}, &auth.InvalidTokenError{Reason: "invalid sub claim: " + err.Error()}
+		return shared.UserId{}, &auth.InvalidTokenError{
+			Reason: auth.ReasonClaimInvalidSUB,
+			Detail: "invalid sub claim: " + err.Error(),
+		}
 	}
 
 	return userId, nil
+}
+
+func classifyJWTError(err error) auth.TokenRejectReason {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "exp not satisfied"):
+		return auth.ReasonExpired
+	case strings.Contains(msg, "iss not satisfied"):
+		return auth.ReasonClaimInvalidISS
+	case strings.Contains(msg, "aud not satisfied"):
+		return auth.ReasonClaimInvalidAUD
+	case strings.Contains(msg, "failed to find key"):
+		return auth.ReasonSignatureInvalid
+	case strings.Contains(msg, "could not verify message"):
+		return auth.ReasonSignatureInvalid
+	default:
+		return auth.ReasonMalformed
+	}
 }

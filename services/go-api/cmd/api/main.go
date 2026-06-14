@@ -8,6 +8,8 @@ import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/logging"
+
+	"altune/go-api/cmd/api/commands"
 )
 
 func main() {
@@ -19,22 +21,26 @@ func main() {
 
 	logging.Setup(cfg)
 
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "serve":
-			runServer(cfg)
-		case "migrate-dedup":
-			fmt.Println("dedup migration: not yet implemented")
-		case "health-check":
-			fmt.Println("health check: not yet implemented")
-		case "fix-audio-refs":
-			fmt.Println("fix audio refs: not yet implemented")
-		default:
-			fmt.Fprintf(os.Stderr, "unknown command: %s\n", os.Args[1])
-			os.Exit(1)
-		}
-	} else {
+	if len(os.Args) < 2 {
 		runServer(cfg)
+		return
+	}
+
+	switch os.Args[1] {
+	case "serve":
+		runServer(cfg)
+	case "migrate-dedup":
+		execute := hasFlag("--execute")
+		commands.RunDedupMigration(cfg, execute)
+	case "health-check":
+		fix := hasFlag("--fix")
+		commands.RunHealthCheck(cfg, fix)
+	case "fix-audio-refs":
+		execute := hasFlag("--execute")
+		commands.RunFixAudioRefs(cfg, execute)
+	default:
+		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs]\n", os.Args[1])
+		os.Exit(1)
 	}
 }
 
@@ -44,4 +50,13 @@ func runServer(cfg *config.Config) {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func hasFlag(flag string) bool {
+	for _, arg := range os.Args[2:] {
+		if arg == flag {
+			return true
+		}
+	}
+	return false
 }

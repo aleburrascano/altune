@@ -267,7 +267,9 @@ type SearchClick struct {
 
 // ProviderSearchResponse wraps a provider's results with metadata.
 type ProviderSearchResponse struct {
-	Provider ProviderName
-	Results  []SearchResult
-	Status   ProviderStatus
+	Provider    ProviderName
+	Results     []SearchResult
+	Status      ProviderStatus
+	LatencyMs   int64
+	ResultCount int
 }
