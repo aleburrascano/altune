@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"altune/go-api/internal/discovery/domain"
 )
@@ -129,8 +130,9 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 					ImageURL:   imageURL,
 					Confidence: domain.ConfidenceLow,
 					Sources: []domain.SourceRef{{
-						Provider: domain.ProviderLastFM,
-						URL:      t.URL,
+						Provider:   domain.ProviderLastFM,
+						ExternalID: lastfmExternalID(t.URL),
+						URL:        t.URL,
 					}},
 					Extras: make(map[string]any),
 				})
@@ -165,8 +167,9 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 					ImageURL:   imageURL,
 					Confidence: domain.ConfidenceLow,
 					Sources: []domain.SourceRef{{
-						Provider: domain.ProviderLastFM,
-						URL:      a.URL,
+						Provider:   domain.ProviderLastFM,
+						ExternalID: lastfmExternalID(a.URL),
+						URL:        a.URL,
 					}},
 					Extras: make(map[string]any),
 				})
@@ -175,4 +178,24 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 	}
 
 	return results
+}
+
+// lastfmExternalID derives an external ID from a Last.fm URL.
+// e.g. "https://www.last.fm/music/The+Weeknd" → "The+Weeknd"
+// e.g. "https://www.last.fm/music/Katy+Perry/_/Small+Talk" → "Katy+Perry/_/Small+Talk"
+func lastfmExternalID(u string) string {
+	const prefix = "/music/"
+	idx := strings.Index(u, prefix)
+	if idx < 0 {
+		if u != "" {
+			return u
+		}
+		return ""
+	}
+	id := u[idx+len(prefix):]
+	id = strings.TrimRight(id, "/")
+	if id == "" {
+		return u
+	}
+	return id
 }
