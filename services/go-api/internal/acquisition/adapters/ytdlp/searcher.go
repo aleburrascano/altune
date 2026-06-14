@@ -81,8 +81,10 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 
 	outTemplate := filepath.Join(outDir, "%(title)s.%(ext)s")
 	args := []string{
+		"-f", "bestaudio",
 		"-x",
 		"--audio-format", "mp3",
+		"--audio-quality", "0",
 		"--no-progress",
 		"-o", outTemplate,
 		url,
