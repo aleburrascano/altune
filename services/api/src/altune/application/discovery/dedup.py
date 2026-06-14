@@ -129,10 +129,10 @@ def _merge(
 
 
 def _try_merge(a: SearchResult, b: SearchResult) -> SearchResult | None:
-    """Merge on shared identifiers first, then text similarity fallback.
+    """Merge on shared identifiers only — ISRC or MBID.
 
-    MBID mismatch blocks merge (different real-world entities). Otherwise
-    ISRC > MBID > JW similarity (all kinds including artists).
+    MBID mismatch blocks merge (different real-world entities).
+    No text similarity fallback; provider IDs are authoritative.
     """
     if a.kind is not b.kind:
         return None
@@ -144,11 +144,6 @@ def _try_merge(a: SearchResult, b: SearchResult) -> SearchResult | None:
         if mbid_a == mbid_b:
             return _merge(a, b, Confidence.HIGH, EntityResolutionTier.MBID)
         return None
-    sim = fuzz.token_sort_ratio(_signature(a), _signature(b)) / 100.0
-    if sim >= 0.85:
-        return _merge(
-            a, b, Confidence.HIGH if sim >= 0.92 else Confidence.MEDIUM, EntityResolutionTier.NONE
-        )
     return None
 
 

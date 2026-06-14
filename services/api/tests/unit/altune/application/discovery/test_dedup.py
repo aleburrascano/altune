@@ -1,10 +1,8 @@
-"""Merge semantics for fuse_and_rank.
+"""Merge semantics for fuse_and_rank — identifier-only merge.
 
-ISRC + JW collapse + per-source-prior canonical-representative selection.
-The relevance-first RANKING (RRF + exact-match boost) is covered in
-test_fuse_and_rank.py; this module pins only the MERGE behavior, which is
-independent of query relevance — so each result is passed as its own
-provider group with an empty query_norm.
+ISRC and MBID merge only (no text similarity fallback). Canonical selection
+by metadata completeness. The relevance-first RANKING is covered in
+test_fuse_and_rank.py; this module pins only the MERGE behavior.
 """
 
 from __future__ import annotations
@@ -83,28 +81,23 @@ def test_dedup_merges_isrc_matched_into_high_confidence() -> None:
 
 
 @pytest.mark.unit
-def test_same_title_tracks_merge_on_similarity() -> None:
-    """Tracks/albums still merge on high JW similarity (hybrid approach)."""
+def test_same_title_no_identifiers_remain_separate() -> None:
+    """identity-v1 AC#3: same title+artist but no shared ISRC/MBID stay separate."""
     a = _r(
         title="Let It Be", subtitle="The Beatles", provider=ProviderName.MUSICBRAINZ, ext_id="mb"
     )
     b = _r(title="Let It Be", subtitle="The Beatles", provider=ProviderName.DEEZER, ext_id="dz")
     merged = _merge(a, b)
-    assert len(merged) == 1
+    assert len(merged) == 2
 
 
 @pytest.mark.unit
-def test_dedup_collapses_jw_in_85_to_92_into_medium() -> None:
-    # Different titles whose normalized JW lands between 0.85 and 0.92.
+def test_similar_titles_no_identifiers_remain_separate() -> None:
+    """identity-v1: no text-similarity fallback; similar titles stay separate."""
     a = _r(title="Hey Jude", subtitle="The Beatles", provider=ProviderName.MUSICBRAINZ)
     b = _r(title="Hey Judes", subtitle="The Beatles", provider=ProviderName.DEEZER)
     merged = _merge(a, b)
-    # Either merged with medium OR stayed separate; pin the exact boundary case.
-    if len(merged) == 1:
-        assert merged[0].confidence in {Confidence.HIGH, Confidence.MEDIUM}
-    else:
-        # If JW falls below 0.85, they're separate; that's also valid.
-        assert len(merged) == 2
+    assert len(merged) == 2
 
 
 @pytest.mark.unit
@@ -269,9 +262,8 @@ def test_different_mbids_same_name_remain_separate() -> None:
 
 
 @pytest.mark.unit
-def test_artist_same_name_merges_across_providers() -> None:
-    """Same-name artists merge on JW (one card in search results).
-    Discography contamination is handled at the content-fetch layer (MB-primary)."""
+def test_artist_same_name_no_identifiers_remain_separate() -> None:
+    """identity-v1 AC#3: same-name artists without shared MBID stay separate."""
     a = _r(
         title="Che",
         subtitle=None,
@@ -287,7 +279,7 @@ def test_artist_same_name_merges_across_providers() -> None:
         kind=ResultKind.ARTIST,
     )
     merged = _merge(a, b)
-    assert len(merged) == 1, "Same-name artists merge into one search result"
+    assert len(merged) == 2, "Same-name artists without shared MBID stay separate"
 
 
 @pytest.mark.unit

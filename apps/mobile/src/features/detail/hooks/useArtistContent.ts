@@ -141,11 +141,26 @@ export function useArtistContent({
     staleTime: 1000 * 60 * 30,
   });
 
+  const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
+  const {
+    data: scData,
+    isLoading: isLoadingSc,
+    isError: isErrorSc,
+    refetch: refetchSc,
+  } = useQuery({
+    queryKey: ['artist-albums-sc', scSource?.external_id ?? ''],
+    queryFn: () => getArtistAlbums('soundcloud', scSource!.external_id, 100),
+    enabled: enabled && scSource !== null,
+    staleTime: 1000 * 60 * 30,
+  });
+
   const mbFailed = isErrorMb || (mbData !== undefined && mbData.status !== 'ok');
   const dzFailed = isErrorDz || (dzData !== undefined && dzData.status !== 'ok');
+  const scFailed = isErrorSc || (scData !== undefined && scData.status !== 'ok');
 
   const mbAlbums = mbData?.status === 'ok' ? mbData.items : [];
   const dzAlbumsRaw = dzData?.status === 'ok' ? dzData.items : [];
+  const scAlbumsRaw = scData?.status === 'ok' ? scData.items : [];
   // MB-authoritative discography: Deezer's artist entities can conflate
   // several same-name artists (and its album entries carry no artist field
   // to filter on). With a VERIFIED identity (mbid matches the MB source we
@@ -157,25 +172,42 @@ export function useArtistContent({
   const dzAlbums = mbAuthoritative
     ? dzAlbumsRaw.filter((a) => mbTitleKeys.has(normalizeForDedup(a.title)))
     : dzAlbumsRaw;
-  const mergedAlbums = dedupAlbumsByTitle([...mbAlbums, ...dzAlbums]);
+  const mergedAlbums = dedupAlbumsByTitle([...mbAlbums, ...dzAlbums, ...scAlbumsRaw]);
+
+  // Back-fill artwork for albums with no image (e.g. SoundCloud sets)
+  // from a title-matched album from another provider.
+  const artByTitle = new Map<string, string>();
+  for (const a of mergedAlbums) {
+    if (a.image_url) {
+      const key = normalizeForDedup(a.title);
+      if (!artByTitle.has(key)) artByTitle.set(key, a.image_url);
+    }
+  }
+  const albumsWithArt = mergedAlbums.map((a) => {
+    if (a.image_url) return a;
+    const donor = artByTitle.get(normalizeForDedup(a.title));
+    return donor ? { ...a, image_url: donor } : a;
+  });
 
   const isLoadingAlbums = (mbSource !== null && isLoadingMb)
-    || (deezerSource !== null && isLoadingDz);
+    || (deezerSource !== null && isLoadingDz)
+    || (scSource !== null && isLoadingSc);
   const albumOutcomes = [
     ...(mbSource !== null ? [mbFailed] : []),
     ...(deezerSource !== null ? [dzFailed] : []),
+    ...(scSource !== null ? [scFailed] : []),
   ];
   const isErrorAlbums = albumOutcomes.length > 0 && albumOutcomes.every(Boolean);
 
   return {
     topTracks: tracksData?.status === 'ok' ? tracksData.items : [],
-    albums: sortByReleaseDateDesc(mergedAlbums),
+    albums: sortByReleaseDateDesc(albumsWithArt),
     isLoadingTracks: isLoadingTracksRaw,
     isLoadingAlbums,
     isErrorTracks:
       isErrorTracksRaw || (tracksData !== undefined && tracksData.status !== 'ok'),
     isErrorAlbums,
     refetchTracks: refetchTracksRaw,
-    refetchAlbums: () => { refetchMb(); refetchDz(); },
+    refetchAlbums: () => { refetchMb(); refetchDz(); refetchSc(); },
   };
 }

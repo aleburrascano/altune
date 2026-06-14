@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ from altune.domain.discovery.source_ref import SourceRef
 
 _log = logging.getLogger(__name__)
 
+_SET_NOISE_RE = re.compile(r"\b(?:playlist|mix|best\s+of|compilation)\b", re.IGNORECASE)
 
 # Async extractor takes a yt-dlp query string (e.g. "scsearch5:beatles")
 # and returns the raw yt-dlp info dict. Tests inject a fake; production
@@ -242,6 +244,10 @@ def _translate_set_entries(
     for entry in entries:
         if entry is None:
             continue
+        title = entry.get("title")
+        if isinstance(title, str) and _SET_NOISE_RE.search(title):
+            _log.info("soundcloud_set_filtered title=%r", title)
+            continue
         translated = _translate_one_set_entry(entry)
         if translated is not None:
             out.append(translated)
@@ -265,7 +271,7 @@ def _translate_one_set_entry(entry: dict[str, Any]) -> SearchResult | None:
         int(playlist_count) if isinstance(playlist_count, (int, float)) else None
     )
     extras: dict[str, object] = {
-        "record_type": "ep",
+        "record_type": "album",
         "track_count": track_count,
     }
     return SearchResult(
