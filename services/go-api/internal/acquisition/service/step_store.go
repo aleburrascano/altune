@@ -1,11 +1,10 @@
-package steps
+package service
 
 import (
 	"context"
 	"fmt"
 	"path/filepath"
 
-	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/ports"
 )
 
@@ -19,7 +18,7 @@ func NewStoreStep(audioStore ports.AudioStore) *StoreStep {
 
 func (s *StoreStep) Name() string { return "store" }
 
-func (s *StoreStep) Execute(ctx context.Context, ac *service.AcquisitionContext) error {
+func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	if ac.TempPath == "" {
 		return fmt.Errorf("no temp file to store")
 	}
@@ -34,14 +33,14 @@ func (s *StoreStep) Execute(ctx context.Context, ac *service.AcquisitionContext)
 	return nil
 }
 
-func (s *StoreStep) Rollback(ctx context.Context, ac *service.AcquisitionContext) error {
+func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {
 	if ac.AudioRef != "" {
 		_ = s.audioStore.Delete(ctx, ac.AudioRef)
 	}
 	return nil
 }
 
-func buildAudioRef(track service.TrackRef) string {
+func buildAudioRef(track TrackRef) string {
 	artist := sanitizePathComponent(track.Artist)
 	album := sanitizePathComponent(track.Album)
 	title := sanitizePathComponent(track.Title)

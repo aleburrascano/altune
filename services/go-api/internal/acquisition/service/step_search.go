@@ -1,10 +1,9 @@
-package steps
+package service
 
 import (
 	"context"
 	"fmt"
 
-	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/ports"
 )
 
@@ -18,11 +17,11 @@ func NewSearchStep(searcher ports.AudioSearcher) *SearchStep {
 
 func (s *SearchStep) Name() string { return "search" }
 
-func (s *SearchStep) Execute(ctx context.Context, ac *service.AcquisitionContext) error {
+func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	queries := buildSearchQueries(ac.Track)
 
 	seen := make(map[string]bool)
-	var allCandidates []service.Candidate
+	var allCandidates []Candidate
 
 	for _, query := range queries {
 		results, err := s.searcher.Search(ctx, query)
@@ -34,7 +33,7 @@ func (s *SearchStep) Execute(ctx context.Context, ac *service.AcquisitionContext
 				continue
 			}
 			seen[r.URL] = true
-			allCandidates = append(allCandidates, service.Candidate{
+			allCandidates = append(allCandidates, Candidate{
 				Title:         r.Title,
 				Artist:        r.Artist,
 				Duration:      r.DurationSecs,
@@ -55,11 +54,11 @@ func (s *SearchStep) Execute(ctx context.Context, ac *service.AcquisitionContext
 	return nil
 }
 
-func (s *SearchStep) Rollback(_ context.Context, _ *service.AcquisitionContext) error {
+func (s *SearchStep) Rollback(_ context.Context, _ *AcquisitionContext) error {
 	return nil
 }
 
-func buildSearchQueries(track service.TrackRef) []string {
+func buildSearchQueries(track TrackRef) []string {
 	var queries []string
 
 	if track.ISRC != "" {
