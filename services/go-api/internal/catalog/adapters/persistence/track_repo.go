@@ -118,34 +118,35 @@ func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, user
 	return tag.RowsAffected() > 0, nil
 }
 
-func scanTrack(row pgx.Row) (*domain.Track, error) {
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanTrackColumns(s scanner) (*domain.Track, error) {
 	var (
-		id              uuid.UUID
-		userId          uuid.UUID
-		title, artist   string
-		album           *string
-		durSecs         *float64
-		addedAt         time.Time
-		artworkURL      *string
-		acqStatus       string
-		dedupKey        string
-		year            *int
-		genre           *string
-		trackNumber     *int
-		albumArtist     *string
-		isrc            *string
-		audioRef        *string
-		failureReason   *string
+		id            uuid.UUID
+		userId        uuid.UUID
+		title, artist string
+		album         *string
+		durSecs       *float64
+		addedAt       time.Time
+		artworkURL    *string
+		acqStatus     string
+		dedupKey      string
+		year          *int
+		genre         *string
+		trackNumber   *int
+		albumArtist   *string
+		isrc          *string
+		audioRef      *string
+		failureReason *string
 	)
 
-	err := row.Scan(
+	err := s.Scan(
 		&id, &userId, &title, &artist, &album, &durSecs,
 		&addedAt, &artworkURL, &acqStatus, &dedupKey,
 		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason,
 	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -181,62 +182,14 @@ func scanTrack(row pgx.Row) (*domain.Track, error) {
 	}, nil
 }
 
+func scanTrack(row pgx.Row) (*domain.Track, error) {
+	track, err := scanTrackColumns(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return track, err
+}
+
 func scanTrackFromRows(rows pgx.Rows) (*domain.Track, error) {
-	var (
-		id              uuid.UUID
-		userId          uuid.UUID
-		title, artist   string
-		album           *string
-		durSecs         *float64
-		addedAt         time.Time
-		artworkURL      *string
-		acqStatus       string
-		dedupKey        string
-		year            *int
-		genre           *string
-		trackNumber     *int
-		albumArtist     *string
-		isrc            *string
-		audioRef        *string
-		failureReason   *string
-	)
-
-	err := rows.Scan(
-		&id, &userId, &title, &artist, &album, &durSecs,
-		&addedAt, &artworkURL, &acqStatus, &dedupKey,
-		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	status, err := domain.ParseAcquisitionStatus(acqStatus)
-	if err != nil {
-		return nil, err
-	}
-
-	albumVal := ""
-	if album != nil {
-		albumVal = *album
-	}
-
-	return &domain.Track{
-		ID:                domain.TrackIdFromUUID(id),
-		UserId:            shared.NewUserId(userId),
-		Title:             title,
-		Artist:            artist,
-		Album:             albumVal,
-		DurationSeconds:   durSecs,
-		AddedAt:           addedAt,
-		ArtworkURL:        artworkURL,
-		AcquisitionStatus: status,
-		DedupKey:          dedupKey,
-		Year:              year,
-		Genre:             genre,
-		TrackNumber:       trackNumber,
-		AlbumArtist:       albumArtist,
-		ISRC:              isrc,
-		AudioRef:          audioRef,
-		FailureReason:     failureReason,
-	}, nil
+	return scanTrackColumns(rows)
 }

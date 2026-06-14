@@ -1,16 +1,13 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"altune/go-api/internal/auth"
-	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared"
@@ -20,14 +17,16 @@ import (
 	"github.com/google/uuid"
 )
 
+type acquisitionScheduler interface {
+	Schedule(userId shared.UserId, trackId domain.TrackId)
+}
+
 type TrackHandler struct {
 	addTrack    *service.AddTrackService
 	listTracks  *service.ListTracksService
 	deleteTrack *service.DeleteTrackService
 	reconcile   *service.ReconcileTrackStatusService
-	acquireSvc  *acqService.AcquireTrackAudioService
-	wg          *sync.WaitGroup
-	sem         chan struct{}
+	scheduler   acquisitionScheduler
 }
 
 func NewTrackHandler(
@@ -35,18 +34,14 @@ func NewTrackHandler(
 	listTracks *service.ListTracksService,
 	deleteTrack *service.DeleteTrackService,
 	reconcile *service.ReconcileTrackStatusService,
-	acquireSvc *acqService.AcquireTrackAudioService,
-	wg *sync.WaitGroup,
-	sem chan struct{},
+	scheduler acquisitionScheduler,
 ) *TrackHandler {
 	return &TrackHandler{
 		addTrack:    addTrack,
 		listTracks:  listTracks,
 		deleteTrack: deleteTrack,
 		reconcile:   reconcile,
-		acquireSvc:  acquireSvc,
-		wg:          wg,
-		sem:         sem,
+		scheduler:   scheduler,
 	}
 }
 
@@ -125,7 +120,10 @@ func trackToResponse(t *domain.Track) TrackResponse {
 // --- Handlers ---
 
 func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
@@ -154,7 +152,10 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 
 	var req CreateTrackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -207,15 +208,20 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		)
 	}
 
-	slog.InfoContext(r.Context(), "acquisition.scheduled",
-		"track_id", result.Track.ID.String())
-	h.scheduleAcquisition(userId, result.Track.ID)
+	if h.scheduler != nil {
+		slog.InfoContext(r.Context(), "acquisition.scheduled",
+			"track_id", result.Track.ID.String())
+		h.scheduler.Schedule(userId, result.Track.ID)
+	}
 
 	httputil.WriteJSON(w, status, trackToResponse(result.Track))
 }
 
 func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
-	userId := auth.MustUserID(r.Context())
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
 
 	trackIdStr := chi.URLParam(r, "trackId")
 	trackId, err := domain.ParseTrackId(trackIdStr)
@@ -240,23 +246,3 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *TrackHandler) scheduleAcquisition(userId shared.UserId, trackId domain.TrackId) {
-	if h.acquireSvc == nil {
-		slog.Warn("acquisition_not_configured")
-		return
-	}
-
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
-
-		h.sem <- struct{}{}
-		defer func() { <-h.sem }()
-
-		bgCtx := context.Background()
-		if err := h.acquireSvc.Execute(bgCtx, userId, trackId); err != nil {
-			slog.Error("background acquisition failed",
-				"track_id", trackId.String(), "error", err)
-		}
-	}()
-}

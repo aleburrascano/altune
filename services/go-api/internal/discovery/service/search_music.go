@@ -296,36 +296,7 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 		}
 	}
 
-	var resolvedArt string
-
-	if tryArt && s.fanartResolver != nil && mbid != "" {
-		url, _ := s.fanartResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid)
-		if url != "" {
-			resolvedArt = url
-			needsArt = false
-			slog.DebugContext(ctx, "enrich.artwork",
-				"title", result.Title, "source", "fanart")
-		}
-	}
-
-	if needsArt && tryArt && s.geniusResolver != nil {
-		url, _ := s.geniusResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid)
-		if url != "" {
-			resolvedArt = url
-			needsArt = false
-			slog.DebugContext(ctx, "enrich.artwork",
-				"title", result.Title, "source", "genius")
-		}
-	}
-
-	if needsArt && tryArt && s.artworkResolver != nil {
-		url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid)
-		if url != "" {
-			resolvedArt = url
-			slog.DebugContext(ctx, "enrich.artwork",
-				"title", result.Title, "source", "chain")
-		}
-	}
+	resolvedArt := s.resolveArtwork(ctx, result, mbid, needsArt)
 
 	if resolvedArt != "" {
 		imageURL = resolvedArt
@@ -343,4 +314,35 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 	result.ImageURL = imageURL
 	result.Extras = extras
 	return result
+}
+
+func (s *SearchMusicService) resolveArtwork(ctx context.Context, result domain.SearchResult, mbid string, needsArt bool) string {
+	if s.fanartResolver != nil && mbid != "" {
+		url, _ := s.fanartResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid)
+		if url != "" {
+			slog.DebugContext(ctx, "enrich.artwork",
+				"title", result.Title, "source", "fanart")
+			return url
+		}
+	}
+
+	if needsArt && s.geniusResolver != nil {
+		url, _ := s.geniusResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid)
+		if url != "" {
+			slog.DebugContext(ctx, "enrich.artwork",
+				"title", result.Title, "source", "genius")
+			return url
+		}
+	}
+
+	if needsArt && s.artworkResolver != nil {
+		url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid)
+		if url != "" {
+			slog.DebugContext(ctx, "enrich.artwork",
+				"title", result.Title, "source", "chain")
+			return url
+		}
+	}
+
+	return ""
 }

@@ -123,9 +123,10 @@ func (a *App) setup(ctx context.Context) error {
 	reconcileSvc := catalogService.NewReconcileTrackStatusService(trackRepo, audioStore)
 	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo)
 
-	var acquireSvc *acqService.AcquireTrackAudioService
+	var scheduler acqService.AcquisitionScheduler
 	if audioSearcher != nil && audioStore != nil {
-		acquireSvc = acqService.NewAcquireTrackAudioService(trackRepo, audioSearcher, audioStore)
+		acquireSvc := acqService.NewAcquireTrackAudioService(trackRepo, audioSearcher, audioStore)
+		scheduler = acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem)
 	}
 
 	searchProviders := a.buildDiscoveryProviders()
@@ -156,7 +157,7 @@ func (a *App) setup(ctx context.Context) error {
 	clickSvc := discoveryService.NewRecordClickService(clickRepo)
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, reconcileSvc, acquireSvc, &a.wg, a.sem)
+	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, reconcileSvc, scheduler)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
 	streamHandler := catalogHandler.NewStreamHandler(trackRepo, audioStore, reconcileSvc)
 	deezerContentClient := &http.Client{Timeout: 10 * time.Second}
@@ -174,8 +175,8 @@ func (a *App) setup(ctx context.Context) error {
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc)
 
 	var retryH *acqHandler.RetryHandler
-	if acquireSvc != nil {
-		retryH = acqHandler.NewRetryHandler(trackRepo, acquireSvc, &a.wg, a.sem)
+	if scheduler != nil {
+		retryH = acqHandler.NewRetryHandler(trackRepo, scheduler)
 	}
 
 	r := chi.NewRouter()

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
@@ -32,7 +33,7 @@ func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, l
 
 	tracks, total, err := s.trackRepo.ListForUser(ctx, userId, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list tracks: %w", err)
 	}
 
 	return &ListTracksOutput{

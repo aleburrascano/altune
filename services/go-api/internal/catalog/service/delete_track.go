@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
@@ -22,7 +23,7 @@ func NewDeleteTrackService(trackRepo ports.TrackRepository) *DeleteTrackService 
 func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	deleted, err := s.trackRepo.Delete(ctx, trackId, userId)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete track: %w", err)
 	}
 	if !deleted {
 		return ErrTrackNotFound

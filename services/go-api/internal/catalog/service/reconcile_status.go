@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"altune/go-api/internal/catalog/domain"
@@ -21,13 +22,13 @@ func NewReconcileTrackStatusService(trackRepo ports.TrackRepository, audioStore 
 func (s *ReconcileTrackStatusService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if err != nil {
-		return err
+		return fmt.Errorf("reconcile track status: %w", err)
 	}
 	if track == nil {
 		return ErrTrackNotFound
 	}
 
-	if track.AcquisitionStatus != domain.AcquisitionReady || track.AudioRef == nil {
+	if !track.IsStreamable() {
 		return nil
 	}
 
@@ -49,5 +50,8 @@ func (s *ReconcileTrackStatusService) Execute(ctx context.Context, userId shared
 	slog.WarnContext(ctx, "track marked failed: audio file missing",
 		"track_id", trackId.String(), "user_id", userId.String())
 
-	return s.trackRepo.Update(ctx, track)
+	if err := s.trackRepo.Update(ctx, track); err != nil {
+		return fmt.Errorf("reconcile track status: %w", err)
+	}
+	return nil
 }

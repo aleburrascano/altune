@@ -58,6 +58,19 @@ const (
 	ConfidenceHigh
 )
 
+func ParseConfidence(s string) (Confidence, error) {
+	switch s {
+	case "high":
+		return ConfidenceHigh, nil
+	case "medium":
+		return ConfidenceMedium, nil
+	case "low":
+		return ConfidenceLow, nil
+	default:
+		return 0, fmt.Errorf("unknown confidence: %s", s)
+	}
+}
+
 func (c Confidence) String() string {
 	switch c {
 	case ConfidenceHigh:
