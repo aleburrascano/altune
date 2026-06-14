@@ -1,14 +1,19 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"altune/go-api/internal/auth"
+	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 
 	"github.com/go-chi/chi/v5"
@@ -20,6 +25,9 @@ type TrackHandler struct {
 	listTracks  *service.ListTracksService
 	deleteTrack *service.DeleteTrackService
 	reconcile   *service.ReconcileTrackStatusService
+	acquireSvc  *acqService.AcquireTrackAudioService
+	wg          *sync.WaitGroup
+	sem         chan struct{}
 }
 
 func NewTrackHandler(
@@ -27,12 +35,18 @@ func NewTrackHandler(
 	listTracks *service.ListTracksService,
 	deleteTrack *service.DeleteTrackService,
 	reconcile *service.ReconcileTrackStatusService,
+	acquireSvc *acqService.AcquireTrackAudioService,
+	wg *sync.WaitGroup,
+	sem chan struct{},
 ) *TrackHandler {
 	return &TrackHandler{
 		addTrack:    addTrack,
 		listTracks:  listTracks,
 		deleteTrack: deleteTrack,
 		reconcile:   reconcile,
+		acquireSvc:  acquireSvc,
+		wg:          wg,
+		sem:         sem,
 	}
 }
 
@@ -179,7 +193,12 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	status := http.StatusOK
 	if result.Created {
 		status = http.StatusCreated
+	} else {
+		slog.InfoContext(r.Context(), "http_post_tracks_dedup_hit",
+			"user_id", userId.String(), "track_id", result.Track.ID.String())
 	}
+
+	h.scheduleAcquisition(userId, result.Track.ID)
 
 	httputil.WriteJSON(w, status, trackToResponse(result.Track))
 }
@@ -205,4 +224,25 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *TrackHandler) scheduleAcquisition(userId shared.UserId, trackId domain.TrackId) {
+	if h.acquireSvc == nil {
+		slog.Warn("acquisition_not_configured")
+		return
+	}
+
+	h.wg.Add(1)
+	go func() {
+		defer h.wg.Done()
+
+		h.sem <- struct{}{}
+		defer func() { <-h.sem }()
+
+		bgCtx := context.Background()
+		if err := h.acquireSvc.Execute(bgCtx, userId, trackId); err != nil {
+			slog.Error("background acquisition failed",
+				"track_id", trackId.String(), "error", err)
+		}
+	}()
 }

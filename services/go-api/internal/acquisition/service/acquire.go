@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
@@ -34,18 +36,44 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		return fmt.Errorf("get track: %w", err)
 	}
 	if track == nil {
-		return fmt.Errorf("track %s not found", trackId)
+		slog.WarnContext(ctx, "acquire_track_not_found", "track_id", trackId.String())
+		return nil
 	}
 
 	if track.AcquisitionStatus == domain.AcquisitionReady {
-		return nil
+		if track.AudioRef != nil {
+			exists, err := s.audioStore.Exists(ctx, *track.AudioRef)
+			if err == nil && exists {
+				slog.InfoContext(ctx, "acquire_skip_already_ready", "track_id", trackId.String())
+				return nil
+			}
+			slog.InfoContext(ctx, "acquire_reacquire_missing_file",
+				"track_id", trackId.String(), "audio_ref", *track.AudioRef)
+		}
+		track.RevertToPending()
+		if err := s.trackRepo.Update(ctx, track); err != nil {
+			return fmt.Errorf("revert to pending: %w", err)
+		}
 	}
+
+	if track.AcquisitionStatus == domain.AcquisitionFailed {
+		slog.InfoContext(ctx, "acquire_retrying_failed", "track_id", trackId.String())
+		track.RevertToPending()
+		if err := s.trackRepo.Update(ctx, track); err != nil {
+			return fmt.Errorf("revert failed to pending: %w", err)
+		}
+	}
+
+	slog.InfoContext(ctx, "track_acquisition_started",
+		"track_id", trackId.String(),
+		"user_id", userId.String(),
+		"has_isrc", track.ISRC != nil,
+	)
 
 	dur := 0.0
 	if track.DurationSeconds != nil {
 		dur = *track.DurationSeconds
 	}
-
 	isrc := ""
 	if track.ISRC != nil {
 		isrc = *track.ISRC
@@ -71,18 +99,44 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		NewUpdateTrackStep(s.trackRepo, userId, trackId),
 	}
 
-	if err := RunPipeline(ctx, pipeline, ac); err != nil {
-		slog.ErrorContext(ctx, "acquisition failed, marking track as failed",
-			"track_id", trackId.String(), "error", err)
+	err = RunPipeline(ctx, pipeline, ac)
+	cleanupTemp(ac)
 
-		if markErr := track.MarkFailed(err.Error()); markErr == nil {
-			_ = s.trackRepo.Update(ctx, track)
-		}
-
+	if err != nil {
+		reason := err.Error()
+		slog.WarnContext(ctx, "track_acquisition_failed",
+			"track_id", trackId.String(),
+			"user_id", userId.String(),
+			"reason", reason,
+		)
+		s.markFailed(ctx, trackId, userId, reason)
 		return err
 	}
 
-	slog.InfoContext(ctx, "acquisition completed",
-		"track_id", trackId.String(), "audio_ref", ac.AudioRef)
+	slog.InfoContext(ctx, "track_acquisition_completed",
+		"track_id", trackId.String(),
+		"user_id", userId.String(),
+		"audio_ref", ac.AudioRef,
+	)
 	return nil
+}
+
+func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) {
+	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
+	if err != nil || track == nil {
+		return
+	}
+	if markErr := track.MarkFailed(reason); markErr == nil {
+		_ = s.trackRepo.Update(ctx, track)
+	}
+}
+
+func cleanupTemp(ac *AcquisitionContext) {
+	if ac.TempPath == "" {
+		return
+	}
+	parent := filepath.Dir(ac.TempPath)
+	if err := os.RemoveAll(parent); err != nil {
+		slog.Warn("temp_cleanup_failed", "path", parent, "error", err)
+	}
 }
