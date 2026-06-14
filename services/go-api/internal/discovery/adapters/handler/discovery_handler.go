@@ -17,20 +17,26 @@ import (
 )
 
 type DiscoveryHandler struct {
-	searchSvc  *service.SearchMusicService
-	clickSvc   *service.RecordClickService
-	historySvc *service.ListSearchHistoryService
+	searchSvc    *service.SearchMusicService
+	clickSvc     *service.RecordClickService
+	historySvc   *service.ListSearchHistoryService
+	albumSvc     *service.GetAlbumTracksService
+	artistSvc    *service.GetArtistContentService
 }
 
 func NewDiscoveryHandler(
 	searchSvc *service.SearchMusicService,
 	clickSvc *service.RecordClickService,
 	historySvc *service.ListSearchHistoryService,
+	albumSvc *service.GetAlbumTracksService,
+	artistSvc *service.GetArtistContentService,
 ) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		searchSvc:  searchSvc,
 		clickSvc:   clickSvc,
 		historySvc: historySvc,
+		albumSvc:   albumSvc,
+		artistSvc:  artistSvc,
 	}
 }
 
@@ -39,6 +45,9 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/search", h.handleSearch)
 	r.Get("/search-history", h.handleSearchHistory)
 	r.Post("/clicks", h.handleRecordClick)
+	r.Get("/album/{provider}/{externalId}/tracks", h.handleAlbumTracks)
+	r.Get("/artist/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
+	r.Get("/artist/{provider}/{externalId}/albums", h.handleArtistAlbums)
 	return r
 }
 
@@ -205,6 +214,112 @@ func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
+	provider := chi.URLParam(r, "provider")
+	externalID := chi.URLParam(r, "externalId")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+
+	if h.albumSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
+			Provider: provider, Status: "error", Items: []SearchResultDTO{},
+		})
+		return
+	}
+
+	resp, err := h.albumSvc.Execute(r.Context(), provider, externalID, limit)
+	if err != nil {
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
+}
+
+func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.Request) {
+	provider := chi.URLParam(r, "provider")
+	externalID := chi.URLParam(r, "externalId")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 5
+	}
+
+	if h.artistSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
+			Provider: provider, Status: "error", Items: []SearchResultDTO{},
+		})
+		return
+	}
+
+	resp, err := h.artistSvc.GetTopTracks(r.Context(), provider, externalID, limit)
+	if err != nil {
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
+}
+
+func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Request) {
+	provider := chi.URLParam(r, "provider")
+	externalID := chi.URLParam(r, "externalId")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 10
+	}
+
+	if h.artistSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
+			Provider: provider, Status: "error", Items: []SearchResultDTO{},
+		})
+		return
+	}
+
+	resp, err := h.artistSvc.GetAlbums(r.Context(), provider, externalID, limit)
+	if err != nil {
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
+}
+
+type ContentFetchResponseDTO struct {
+	Provider string            `json:"provider_name"`
+	Status   string            `json:"status"`
+	Items    []SearchResultDTO `json:"items"`
+}
+
+func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseDTO {
+	items := make([]SearchResultDTO, len(resp.Items))
+	for i, r := range resp.Items {
+		sources := make([]SourceRefDTO, len(r.Sources))
+		for j, s := range r.Sources {
+			sources[j] = SourceRefDTO{
+				Provider:   s.Provider.String(),
+				ExternalID: s.ExternalID,
+				URL:        s.URL,
+			}
+		}
+		items[i] = SearchResultDTO{
+			Kind:       r.Kind.String(),
+			Title:      r.Title,
+			Subtitle:   r.Subtitle,
+			ImageURL:   r.ImageURL,
+			Confidence: r.Confidence.String(),
+			Sources:    sources,
+			Extras:     r.Extras,
+		}
+	}
+	return ContentFetchResponseDTO{
+		Provider: resp.ProviderName,
+		Status:   resp.Status.String(),
+		Items:    items,
+	}
 }
 
 func parseKinds(csv string) map[domain.ResultKind]bool {

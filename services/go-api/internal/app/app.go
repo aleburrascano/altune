@@ -23,6 +23,7 @@ import (
 	catalogService "altune/go-api/internal/catalog/service"
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
+	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
@@ -130,14 +131,16 @@ func (a *App) setup(ctx context.Context) error {
 	searchProviders := a.buildDiscoveryProviders()
 	queryCache := discoveryCacheAdapters.NewRedisQueryCache(a.redisClient)
 	circuitBreaker := discoveryService.NewCircuitBreaker()
-	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, nil, circuitBreaker)
-	clickSvc := discoveryService.NewRecordClickService(nil)
-	historySvc := discoveryService.NewListSearchHistoryService(nil)
+	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
+	clickRepo := discoveryPersistence.NewPgxSearchClickRepository(a.pool)
+	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker)
+	clickSvc := discoveryService.NewRecordClickService(clickRepo)
+	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 
 	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, reconcileSvc, acquireSvc, &a.wg, a.sem)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
 	streamHandler := catalogHandler.NewStreamHandler(trackRepo, audioStore, reconcileSvc)
-	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc)
+	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, nil, nil)
 
 	var retryH *acqHandler.RetryHandler
 	if acquireSvc != nil {
