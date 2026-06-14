@@ -160,9 +160,53 @@ type deezerAlbum struct {
 	CoverBig string `json:"cover_big"`
 }
 
-// DeezerPlaceholderImage is the URL Deezer returns when no artwork exists.
+// Resolve implements ArtworkResolver — best-effort cover lookup by search.
+func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
+	query := title
+	if subtitle != "" {
+		query = subtitle + " " + title
+	}
+	endpoint := deezerSearchEndpoint(kind)
+	if endpoint == "" {
+		endpoint = "track"
+	}
+
+	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=1", endpoint, url.QueryEscape(query))
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return "", nil
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", nil
+	}
+
+	var body deezerSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", nil
+	}
+	for _, item := range body.Data {
+		var img string
+		if item.Album != nil && item.Album.CoverBig != "" {
+			img = item.Album.CoverBig
+		} else if item.CoverBig != "" {
+			img = item.CoverBig
+		} else if item.PictureBig != "" {
+			img = item.PictureBig
+		}
+		if img != "" && !IsDeezerPlaceholder(img) {
+			return img, nil
+		}
+	}
+	return "", nil
+}
+
 const DeezerPlaceholderImage = "https://e-cdns-images.dzcdn.net/images/artist//500x500-000000-80-0-0.jpg"
 
-func IsDeezerPlaceholder(url string) bool {
-	return strings.Contains(url, "/images/artist//")
+func IsDeezerPlaceholder(u string) bool {
+	return strings.Contains(u, "/images/artist//")
 }
