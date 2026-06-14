@@ -337,6 +337,9 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 		if strings.TrimSpace(queryNorm) != "" && !sharesWord(r, queryNorm) {
 			continue
 		}
+		if !hasBrowseableSource(r) {
+			continue
+		}
 		scoredResults = append(scoredResults, scored{result: r, relevance: rel, rrf: rrf})
 	}
 
@@ -462,6 +465,23 @@ func getStringExtra(r domain.SearchResult, key string) string {
 		return ""
 	}
 	return s
+}
+
+// hasBrowseableSource returns true if the result has at least one source
+// from a provider that supports catalog-browse (detail screen content).
+// Tracks always pass (they don't need catalog-browse — detail is the
+// handoff data). Artists and albums need a Deezer source to load
+// top-tracks / albums / tracklist.
+func hasBrowseableSource(r domain.SearchResult) bool {
+	if r.Kind == domain.ResultKindTrack {
+		return true
+	}
+	for _, s := range r.Sources {
+		if s.Provider == domain.ProviderDeezer {
+			return true
+		}
+	}
+	return false
 }
 
 func getFloatExtra(r domain.SearchResult, key string) float64 {

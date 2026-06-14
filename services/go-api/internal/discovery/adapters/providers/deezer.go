@@ -205,6 +205,55 @@ func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	return "", nil
 }
 
+// --- AlbumContentProvider + ArtistContentProvider ---
+
+func (a *DeezerAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=50", externalID)
+	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
+		return mapDeezerResult(item, domain.ResultKindTrack)
+	})
+}
+
+func (a *DeezerAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	u := fmt.Sprintf("https://api.deezer.com/artist/%s/top?limit=10", externalID)
+	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
+		return mapDeezerResult(item, domain.ResultKindTrack)
+	})
+}
+
+func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=25", externalID)
+	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
+		return mapDeezerResult(item, domain.ResultKindAlbum)
+	})
+}
+
+func (a *DeezerAdapter) fetchList(ctx context.Context, u string, mapper func(deezerItem) domain.SearchResult) ([]domain.SearchResult, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("deezer api returned %d", resp.StatusCode)
+	}
+
+	var body deezerSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+
+	var results []domain.SearchResult
+	for _, item := range body.Data {
+		results = append(results, mapper(item))
+	}
+	return results, nil
+}
+
 const DeezerPlaceholderImage = "https://e-cdns-images.dzcdn.net/images/artist//500x500-000000-80-0-0.jpg"
 
 func IsDeezerPlaceholder(u string) bool {
