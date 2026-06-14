@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -271,7 +270,7 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 			slog.DebugContext(ctx, "enrich.popularity",
 				"title", result.Title,
 				"artist", result.Subtitle,
-				"pop", fmt.Sprintf("%.2f", pop),
+				"pop", pop,
 			)
 		} else if extras["popularity"] != nil {
 			extras["popularity"] = 0.0

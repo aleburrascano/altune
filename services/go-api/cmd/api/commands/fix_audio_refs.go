@@ -57,7 +57,7 @@ func RunFixAudioRefs(cfg *config.Config, execute bool) {
 	fmt.Printf("Found %d with UUID prefix to strip.\n\n", len(needsFix))
 
 	if len(needsFix) == 0 {
-		fmt.Println("Nothing to fix.\n")
+		fmt.Println("Nothing to fix.")
 		return
 	}
 
