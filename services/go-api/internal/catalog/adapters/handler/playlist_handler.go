@@ -197,7 +197,20 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	playlist, err := h.svc.GetByID(r.Context(), userId, playlistId)
+	if err != nil || playlist == nil {
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, PlaylistResponse{
+		ID:                 playlist.ID.UUID(),
+		Name:               playlist.Name,
+		TrackCount:         len(playlist.Tracks),
+		PreviewArtworkURLs: []string{},
+		CreatedAt:          playlist.CreatedAt,
+		UpdatedAt:          playlist.UpdatedAt,
+	})
 }
 
 func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
