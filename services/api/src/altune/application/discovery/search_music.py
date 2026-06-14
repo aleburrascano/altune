@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         ArtworkCacheEntry,
         ArtworkResolver,
         ContentValidationCache,
+        FetchSuccessStore,
         HintedArtworkResolver,
         MbidArtworkResolver,
         MbidResolver,
@@ -137,6 +138,7 @@ class SearchMusic:
     genius_resolver: HintedArtworkResolver | None = None
     track_title_source: ArtistTrackTitleSource | None = None
     artwork_cache: ArtworkCache | None = None
+    fetch_success_store: FetchSuccessStore | None = None
     _breakers: dict[str, CircuitBreaker] = field(default_factory=dict, init=False)
 
     def _breaker_for(self, provider_name: str) -> CircuitBreaker:
@@ -170,6 +172,54 @@ class SearchMusic:
             if not all_unfetchable:
                 kept.append(result)
         return tuple(kept)
+
+    async def _scorer_with_fetch_rates(
+        self,
+        groups: list[tuple[SearchResult, ...]],
+    ) -> QualityScorer | None:
+        """Wrap the quality scorer with pre-fetched fetch-success rates."""
+        if self.quality_scorer is None:
+            return None
+        store = self.fetch_success_store
+        if store is None:
+            return self.quality_scorer
+
+        from altune.application.discovery.quality_scorer import compute_quality_score
+
+        pairs: set[tuple[str, str]] = set()
+        for group in groups:
+            for result in group:
+                for src in result.sources:
+                    prov = (
+                        src.provider.value if hasattr(src.provider, "value") else str(src.provider)
+                    )
+                    pairs.add((prov, src.external_id))
+
+        async def _get(prov: str, eid: str) -> tuple[tuple[str, str], float]:
+            try:
+                rate = await store.get_rate(prov, eid)
+            except Exception:
+                rate = 1.0
+            return (prov, eid), rate
+
+        fetched = await asyncio.gather(*(_get(p, e) for p, e in pairs))
+        rates: dict[tuple[str, str], float] = dict(fetched)
+
+        def scorer(result: SearchResult) -> QualityScore:
+            src_rates = [
+                rates.get(
+                    (
+                        s.provider.value if hasattr(s.provider, "value") else str(s.provider),
+                        s.external_id,
+                    ),
+                    1.0,
+                )
+                for s in result.sources
+            ]
+            avg = sum(src_rates) / len(src_rates) if src_rates else 1.0
+            return compute_quality_score(result, fetch_success_rate=avg)
+
+        return scorer
 
     async def _enrich_mbids(self, results: tuple[SearchResult, ...]) -> tuple[SearchResult, ...]:
         """Backfill extras["mbid"] for artist results that lack one.
@@ -391,7 +441,8 @@ class SearchMusic:
             if cache_fetched_at is not None:
                 cache_hit_fetched_ats.append(cache_fetched_at)
 
-        merged = fuse_and_rank(groups, query_norm, quality_scorer=self.quality_scorer)
+        scorer = await self._scorer_with_fetch_rates(groups)
+        merged = fuse_and_rank(groups, query_norm, quality_scorer=scorer)
         merged = await self._enrich_mbids(merged)
         merged = await self._filter_unfetchable(merged)
         merged = await self._enrich(merged)
