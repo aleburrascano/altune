@@ -47,6 +47,7 @@ type Config struct {
 	// Audio acquisition tools
 	FFmpegLocation  string `env:"FFMPEG_LOCATION"`
 	YtDLPCookieFile string `env:"YTDLP_COOKIE_FILE"`
+	YtDLPJSRuntime  string `env:"YTDLP_JS_RUNTIME"`
 }
 
 func Load() (*Config, error) {
