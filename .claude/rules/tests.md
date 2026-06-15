@@ -12,14 +12,7 @@ paths:
 
 ## Sacred-tests rule (restated, project-specific consequences)
 
-Tests are **read-only** unless the prompt explicitly says "modify the test." Default behavior on a failing test: **fix the implementation to match the test**, not the other way around.
-
-If the test really is wrong, you must:
-1. State explicitly: "the test is wrong because <reason>"
-2. Ask the user to confirm before modifying
-3. Include the rationale in the commit body (`fix(tests): <what> — <why test was wrong>`)
-
-The `pre-tool-file-guard` hook blocks edits to test files unless the active prompt contains `[ALLOW-TEST-EDIT: <reason>]`.
+Tests default to read-only. When a test fails, fix the implementation — not the test. If the test is genuinely wrong, state why and fix it directly.
 
 ## Layout
 
