@@ -1,0 +1,37 @@
+# Production deployment compose file.
+# Database: Supabase Postgres (external). Cache: Upstash Redis (external).
+# Reverse proxy: Caddy with automatic HTTPS via Let's Encrypt.
+#
+# Deploy:  docker compose -f docker-compose.prod.yml up --build -d
+# Logs:    docker compose -f docker-compose.prod.yml logs go-api --tail 50
+# Rebuild: docker compose -f docker-compose.prod.yml up --build -d go-api
+
+services:
+  go-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: altune-go-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.production
+    tmpfs:
+      - /tmp:size=1G
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: altune-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:
