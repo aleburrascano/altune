@@ -87,11 +87,11 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 func classifyJWTError(err error) auth.TokenRejectReason {
 	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "exp not satisfied"):
+	case strings.Contains(msg, "exp") && strings.Contains(msg, "not satisfied"):
 		return auth.ReasonExpired
-	case strings.Contains(msg, "iss not satisfied"):
+	case strings.Contains(msg, "iss") && strings.Contains(msg, "not satisfied"):
 		return auth.ReasonClaimInvalidISS
-	case strings.Contains(msg, "aud not satisfied"):
+	case strings.Contains(msg, "aud") && strings.Contains(msg, "not satisfied"):
 		return auth.ReasonClaimInvalidAUD
 	case strings.Contains(msg, "failed to find key"):
 		return auth.ReasonSignatureInvalid
