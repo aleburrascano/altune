@@ -8,7 +8,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { ReactNode } from 'react';
 
 const mockSdkSignOut = jest.fn();
-jest.mock('../api/supabaseClient', () => ({
+jest.mock('../../../shared/auth/supabaseClient', () => ({
   supabase: {
     auth: { signOut: () => mockSdkSignOut() },
   },

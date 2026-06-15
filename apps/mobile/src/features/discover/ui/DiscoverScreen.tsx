@@ -20,10 +20,11 @@ import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
-import { getSearchState, setSearchState } from '@shared/lib/search-state';
+import { setSearchState } from '@shared/lib/search-state';
 
 import { SearchBar } from './SearchBar';
 import { DiscoverBody } from './DiscoverBody';
+import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { useRecordClick } from '../hooks/useRecordClick';
 import { useSearchHistory } from '../hooks/useSearchHistory';
@@ -40,85 +41,42 @@ type ResultsFilter = 'all' | DiscoveryKind;
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const savedState = getSearchState();
-  const [committedQuery, setCommittedQuery] = useState(savedState.query);
-  const [inputValue, setInputValue] = useState(savedState.inputValue);
+  const search = useDebouncedSearch({ debounceMs: 300, minChars: 2 });
   const [filter, setFilter] = useState<ResultsFilter>('all');
   const queryClient = useQueryClient();
-  const { data: searchData, isLoading: isSearching, error: searchError } = useDiscoverSearch(committedQuery);
+  const { data: searchData, isLoading: isSearching, error: searchError } = useDiscoverSearch(search.committedQuery);
   const history = useSearchHistory();
   const click = useRecordClick();
 
-  // Persist search state for back-navigation.
   useEffect(() => {
-    setSearchState(committedQuery, inputValue);
-  }, [committedQuery, inputValue]);
+    setSearchState(search.committedQuery, search.inputValue);
+  }, [search.committedQuery, search.inputValue]);
 
-  // Refresh history chips after a search completes (the backend inserts
-  // the query into search_history as a side-effect of the search call).
   useEffect(() => {
     if (searchData) {
       void queryClient.invalidateQueries({ queryKey: ['discovery', 'history'] });
     }
   }, [searchData, queryClient]);
 
-  // Reset to the blended "All" view on every newly committed query.
-  const prevQueryRef = useRef(committedQuery);
-  if (prevQueryRef.current !== committedQuery) {
-    prevQueryRef.current = committedQuery;
+  const prevQueryRef = useRef(search.committedQuery);
+  if (prevQueryRef.current !== search.committedQuery) {
+    prevQueryRef.current = search.committedQuery;
     setFilter('all');
   }
 
   const view = _viewForState({
-    query: committedQuery,
+    query: search.committedQuery,
     isLoading: isSearching,
     data: searchData,
     error: searchError as Error | null,
   });
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const DEBOUNCE_MS = 300;
-  const MIN_CHARS = 2;
-
-  const onSubmit = (): void => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    setCommittedQuery(inputValue.trim());
-  };
-  const onChangeText = (text: string): void => {
-    setInputValue(text);
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    const trimmed = text.trim();
-    if (trimmed.length === 0) {
-      setCommittedQuery('');
-    } else if (trimmed.length >= MIN_CHARS) {
-      debounceRef.current = setTimeout(() => {
-        setCommittedQuery(trimmed);
-      }, DEBOUNCE_MS);
-    }
-  };
-  const onClear = (): void => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
-    setInputValue('');
-    setCommittedQuery('');
-  };
   const onHistoryTap = (item: SearchHistoryItem): void => {
-    setInputValue(item.query);
-    setCommittedQuery(item.query);
+    search.setQuery(item.query);
   };
   const onResultTap = (result: DiscoveryResult, position: number): void => {
-    // Click tracking stays fire-and-forget (best-effort telemetry, ADR-0007);
-    // we do NOT await it before navigating.
     click.mutate({
-      query_norm: searchData?.query_norm ?? committedQuery,
+      query_norm: searchData?.query_norm ?? search.committedQuery,
       kind: result.kind,
       title: result.title,
       subtitle: result.subtitle ?? null,
@@ -128,7 +86,7 @@ export function DiscoverScreen(): ReactElement {
     router.push(stashHandoffForDetail(result));
   };
   const onRetry = (): void => {
-    setCommittedQuery((q) => (q ? `${q} ` : q).trim() || q);
+    search.setQuery(search.committedQuery.trim() || search.committedQuery);
   };
 
   return (
@@ -143,10 +101,10 @@ export function DiscoverScreen(): ReactElement {
         </Text>
       </View>
       <SearchBar
-        value={inputValue}
-        onChangeText={onChangeText}
-        onSubmitEditing={onSubmit}
-        onClear={onClear}
+        value={search.inputValue}
+        onChangeText={search.onChangeText}
+        onSubmitEditing={search.onSubmit}
+        onClear={search.onClear}
         theme={theme}
       />
       <DiscoverBody

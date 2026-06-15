@@ -1,4 +1,4 @@
-import { supabase } from '../../auth/api/supabaseClient';
+import { supabase } from '@shared/auth/supabaseClient';
 import { apiBase } from '@shared/api-client';
 
 export function audioStreamUrl(trackId: string): string {

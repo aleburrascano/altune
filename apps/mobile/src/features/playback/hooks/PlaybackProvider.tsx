@@ -1,10 +1,12 @@
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import type { AudioSource } from 'expo-audio';
-import { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
+import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '@shared/playback/types';
+
 import { audioRequestHeaders, audioStreamUrl } from '../api/audio';
-import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '../types';
 
 const INITIAL_STATE: PlaybackState = {
   status: 'idle',
@@ -13,8 +15,6 @@ const INITIAL_STATE: PlaybackState = {
   durationMs: 0,
   errorMessage: null,
 };
-
-export const PlaybackContext = createContext<PlaybackContextValue | null>(null);
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);

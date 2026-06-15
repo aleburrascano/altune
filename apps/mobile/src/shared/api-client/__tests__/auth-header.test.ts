@@ -8,7 +8,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 
 const mockGetSession = jest.fn(async () => ({ data: { session: null as null | { access_token: string } } }));
-jest.mock('../../../features/auth/api/supabaseClient', () => ({
+jest.mock('../../auth/supabaseClient', () => ({
   supabase: {
     auth: { getSession: () => mockGetSession() },
   },

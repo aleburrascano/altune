@@ -11,6 +11,7 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
 
+import { trackExtras } from '../extras-accessors';
 import { useArtistContent } from '../hooks/useArtistContent';
 import { useLibraryTracksForArtist, libraryTrackToDiscoveryResult } from '../hooks/useLibraryTracks';
 
@@ -32,7 +33,7 @@ export function ArtistDetailBody({ result, detailRoute }: { result: DiscoveryRes
     refetchAlbums,
   } = useArtistContent({
     sources: result.sources,
-    mbid: typeof result.extras['mbid'] === 'string' ? result.extras['mbid'] : null,
+    mbid: trackExtras(result.extras).mbid,
     enabled: hasSources,
   });
   const localTracks = useLibraryTracksForArtist(result.title);
