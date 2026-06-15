@@ -30,7 +30,7 @@ A feature folder at `apps/mobile/src/features/<feat>/` owns:
 - `types.ts` — types shared *within* this feature
 - `__tests__/` — unit tests for this feature's logic
 
-**A feature MUST NOT import from another feature's folder.** Cross-feature reuse goes via `shared/`. The `architecture-reviewer` subagent enforces this.
+**A feature MUST NOT import from another feature's folder.** Cross-feature reuse goes via `shared/`.
 
 ## Shared rules
 
@@ -58,11 +58,28 @@ If a candidate has one consumer, it stays in the feature. Promote on the second 
 - Unit tests for hooks and pure logic → Jest + `@testing-library/react-native`.
 - Component tests render with `<ThemeProvider>` and an in-memory API client.
 - E2E flows in `apps/mobile/e2e/` using Maestro (preferred) or Detox.
-- The `test-author` subagent writes the failing test before `tdd-red-green-refactor` implements.
+- Write a failing test before implementing.
 
 ## Do not
 
-- Install global state libraries (Redux/MobX/Zustand) without an ADR. React Query for server state + hooks for local state is the default.
-- Add a new top-level dependency without `/brainstorm-tech-choice` first.
+- Install global state libraries (Redux/MobX/Zustand) without evaluating alternatives first. React Query for server state + hooks for local state is the default.
+- Add a new top-level dependency without evaluating alternatives first.
 - Use class components.
-- Use `console.log` in committed code — the `post-tool-check-comment-churn` hook flags additions.
+- Use `console.log` in committed code.
+
+## Resilience and UX defaults
+
+- Every async operation needs loading, error, empty, and success states. These are first-class UI states, not afterthoughts.
+- Network calls: timeout, retry with backoff, offline fallback or clear user messaging.
+- Prevent duplicate submissions (disable button during async, debounce taps).
+- Touch targets >= 44pt. Body text >= 14pt.
+- If a user action fails, they must be able to recover without navigating away.
+- Assume the network is slow, flaky, or absent. Design for that first.
+- Styling bugs are product bugs: check spacing, typography, truncation, overflow, clipping, responsiveness, and theme consistency.
+
+## Tools
+
+- Use `npx react-doctor` for React pattern analysis when reviewing frontend code.
+- Use `npx fallow` for codebase intelligence (unused exports, duplication, complexity hotspots).
+- Use Serena MCP for LSP operations (find references, go to definition, rename symbol).
+- Use context7 for latest React Native and Expo documentation.

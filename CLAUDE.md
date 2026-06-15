@@ -1,25 +1,26 @@
 # Altune — project constitution
 
-Universal coding discipline (Karpathy 4 principles, sacred-tests, verification, cited claims, brevity, knowledge-sources) lives in `~/.claude/CLAUDE.md`. This file is **project-specific only**.
+Universal coding discipline (simplicity, sacred-tests, verification, brevity, knowledge-sources) lives in `~/.claude/CLAUDE.md`. This file is **project-specific only**.
 
 @docs/architecture.md
 @docs/ubiquitous-language.md
-@docs/workflows/new-feature.md
 
 ## Project
 
-Altune — music manager. Expo (React Native + TS) mobile + Python (FastAPI, hexagonal) backend. Solo + Claude, production-grade.
+Altune — music manager. Expo (React Native + TS) mobile + Go (hexagonal, modular monolith) backend. Solo + Claude, production-grade.
 
 ## Architectural rules
 
-- **Hexagonal boundary:** `services/api/src/altune/domain/` imports nothing from `adapters/` or framework code. `application/` depends only on `domain/` and the ports it defines.
-- **Vertical-slice:** feature work belongs in `apps/mobile/src/features/<feat>/` or under a bounded context in `services/api/src/altune/<domain|application|adapters>/<context>/`. Extraction to `shared/` requires **2+ real consumers** (YAGNI).
+- **Hexagonal boundary:** `services/go-api/internal/<context>/domain/` imports nothing from `adapters/` or framework code. Service layer depends only on domain and the ports it defines.
+- **Vertical-slice:** feature work belongs in `apps/mobile/src/features/<feat>/` or under a bounded context in `services/go-api/internal/<context>/`. Extraction to `shared/` requires **2+ real consumers** (YAGNI).
 - **AIDEV-* anchors:** `# AIDEV-NOTE:`, `# AIDEV-DECISION:`, `# AIDEV-WARNING:` are durable — never strip them.
 
 ## Workflow
 
-- Skills in `.claude/skills/` auto-fire on context; you do not need to invoke them by name unless overriding.
+- Invoke skills by name (`/feature-spec`, `/feature-plan`, `/common-ground`) or use CE plugin skills (`/ce-brainstorm`, `/ce-plan`, `/ce-work`).
 - Software-architecture-design vault MCP is the authoritative pattern reference — see `.claude/rules/vault-consultation.md`. Consult **before** any non-trivial design decision.
+- Use Serena MCP for LSP operations (find references, go to definition, rename symbol).
+- Use context7 for latest library and framework documentation.
 
 ## Git
 
