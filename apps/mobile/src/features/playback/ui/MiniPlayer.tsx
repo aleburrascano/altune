@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Pause, Play } from 'lucide-react-native';
+import { Pause, Play, RotateCcw } from 'lucide-react-native';
 
 import { usePlayback } from '../hooks/usePlayback';
 import { Artwork } from '@shared/ui/primitives/Artwork';
@@ -10,9 +11,20 @@ import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
 export function MiniPlayer() {
-  const { status, track, positionMs, durationMs, pause, resume, errorMessage } = usePlayback();
+  const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage } = usePlayback();
   const theme = useTheme();
   const router = useRouter();
+
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const target = durationMs > 0 ? positionMs / durationMs : 0;
+    Animated.timing(progressAnim, {
+      toValue: target,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  }, [positionMs, durationMs, progressAnim]);
 
   if (!track || status === 'idle') {
     return null;
@@ -20,8 +32,31 @@ export function MiniPlayer() {
 
   const isPlaying = status === 'playing';
   const isError = status === 'error';
+  const isEnded = status === 'ended';
   const isPreview = track.source.kind === 'preview';
-  const progress = durationMs > 0 ? positionMs / durationMs : 0;
+
+  const progressWidth = progressAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
+  });
+
+  const onControlPress = isError
+    ? retry
+    : isPlaying
+      ? pause
+      : resume;
+
+  const controlIcon = isError
+    ? RotateCcw
+    : isPlaying
+      ? Pause
+      : Play;
+
+  const controlLabel = isError
+    ? 'Retry'
+    : isPlaying
+      ? 'Pause'
+      : 'Play';
 
   return (
     <Pressable
@@ -31,10 +66,10 @@ export function MiniPlayer() {
       accessibilityLabel={isPreview ? `Preview: ${track.title} by ${track.artist}` : `Now playing: ${track.title} by ${track.artist}`}
     >
       <View style={[styles.progressTrack, { backgroundColor: theme.color.border }]}>
-        <View
+        <Animated.View
           style={[
             styles.progressFill,
-            { width: `${progress * 100}%`, backgroundColor: theme.color.accent },
+            { width: progressWidth, backgroundColor: theme.color.accent },
           ]}
         />
       </View>
@@ -45,14 +80,18 @@ export function MiniPlayer() {
             {track.title}
           </Text>
           <Text variant="caption" tone="secondary" numberOfLines={1}>
-            {isError ? (errorMessage ?? 'Playback error') : isPreview ? `${track.artist} · Preview` : track.artist}
+            {isError
+              ? (errorMessage ?? 'Playback error')
+              : isEnded
+                ? isPreview ? 'Preview ended' : 'Finished'
+                : isPreview ? `${track.artist} · Preview` : track.artist}
           </Text>
         </View>
         <IconButton
-          icon={isPlaying ? Pause : Play}
+          icon={controlIcon}
           size={22}
-          onPress={isPlaying ? pause : resume}
-          accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+          onPress={onControlPress}
+          accessibilityLabel={controlLabel}
         />
       </View>
     </Pressable>

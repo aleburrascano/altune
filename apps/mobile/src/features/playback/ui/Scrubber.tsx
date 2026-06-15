@@ -12,6 +12,7 @@ interface ScrubberProps {
 }
 
 function formatTime(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '0:00';
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -160,10 +161,10 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
       </View>
       <View style={styles.times}>
         <Text variant="caption" tone="secondary">
-          {formatTime(labelMs)}
+          {formatTime(durationMs > 0 ? labelMs : positionMs)}
         </Text>
         <Text variant="caption" tone="secondary">
-          -{formatTime(Math.max(0, durationMs - labelMs))}
+          {durationMs > 0 ? `-${formatTime(Math.max(0, durationMs - labelMs))}` : ''}
         </Text>
       </View>
     </View>

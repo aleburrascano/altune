@@ -38,8 +38,11 @@ func main() {
 	case "fix-audio-refs":
 		execute := hasFlag("--execute")
 		commands.RunFixAudioRefs(cfg, execute)
+	case "backfill-duration":
+		execute := hasFlag("--execute")
+		commands.RunBackfillDuration(cfg, execute)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs]\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration]\n", os.Args[1])
 		os.Exit(1)
 	}
 }

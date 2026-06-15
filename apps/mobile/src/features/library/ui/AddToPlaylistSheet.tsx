@@ -1,5 +1,5 @@
 import { useCallback, useState, type ReactElement } from 'react';
-import { FlatList, type ListRenderItemInfo, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, type ListRenderItemInfo, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { addTrackToPlaylist, createPlaylist, getPlaylists } from '@shared/api-client/playlists';
@@ -36,12 +36,17 @@ export function AddToPlaylistSheet({
     mutationFn: (playlistId: string) => addTrackToPlaylist(playlistId, { track_id: trackId }),
     onSuccess: (_data, playlistId) => {
       setAddedTo(playlistId);
+    },
+    onError: () => {
+      Alert.alert('Add failed', 'Could not add the track to the playlist. Please try again.');
+    },
+    onSettled: (_data, _error, playlistId) => {
       void queryClient.invalidateQueries({ queryKey: ['playlists'] });
       void queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
       setTimeout(() => {
         setAddedTo(null);
         onClose();
-      }, 800);
+      }, 600);
     },
   });
 
@@ -51,7 +56,13 @@ export function AddToPlaylistSheet({
       await addTrackToPlaylist(pl.id, { track_id: trackId });
       return pl;
     },
-    onSuccess: () => {
+    onError: (err) => {
+      const msg = err instanceof Error && err.message.includes('playlist')
+        ? 'Playlist created but could not add the track. Try adding it manually.'
+        : 'Could not create the playlist. Please try again.';
+      Alert.alert('Error', msg);
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['playlists'] });
       setCreateVisible(false);
       setTimeout(onClose, 400);

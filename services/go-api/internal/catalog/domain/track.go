@@ -117,6 +117,12 @@ func (t *Track) MarkReady(audioRef string) error {
 	return nil
 }
 
+func (t *Track) SetDuration(seconds float64) {
+	if seconds > 0 {
+		t.DurationSeconds = &seconds
+	}
+}
+
 func (t *Track) MarkFailed(reason string) error {
 	if reason == "" {
 		return errors.New("failure_reason is required to mark track as failed")

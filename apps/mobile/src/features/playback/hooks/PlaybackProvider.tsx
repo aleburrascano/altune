@@ -16,11 +16,16 @@ const INITIAL_STATE: PlaybackState = {
   errorMessage: null,
 };
 
+const LOAD_TIMEOUT_MS = 15_000;
+const RETRY_DELAY_MS = 1_000;
+const MAX_RETRIES = 2;
+
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
   const [audioSource, setAudioSource] = useState<AudioSource | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const shouldAutoPlay = useRef(false);
+  const lastPlayedTrack = useRef<PlaybackTrack | null>(null);
   const queryClient = useQueryClient();
 
   const player = useAudioPlayer(audioSource);
@@ -45,13 +50,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const timeout = setTimeout(() => {
       if (shouldAutoPlay.current) {
         shouldAutoPlay.current = false;
-        setErrorMessage('Could not load audio — the file may be missing');
-        void queryClient.invalidateQueries({ queryKey: ['library-home'] });
-        void queryClient.invalidateQueries({ queryKey: ['library'] });
+        setErrorMessage('Audio is taking too long to load. Check your connection and try again.');
       }
-    }, 10000);
+    }, LOAD_TIMEOUT_MS);
     return () => clearTimeout(timeout);
-  }, [track, queryClient]);
+  }, [track]);
 
   useEffect(() => {
     if (
@@ -66,11 +69,53 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
   }, [track, playerStatus.playing, playerStatus.isLoaded, playerStatus.currentTime, playerStatus.duration, player]);
 
+  const safeMs = (seconds: number | undefined | null): number => {
+    if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return 0;
+    return seconds * 1000;
+  };
+
+  const rawDuration = playerStatus.duration;
+  const rawPosition = playerStatus.currentTime;
+
+  let fallbackDurationMs = 0;
+  if (track != null && track.source.kind === 'library') {
+    const trackId = track.source.trackId;
+    const homeData = queryClient.getQueryData<{ items: Array<{ id: string; duration_seconds: number | null }> }>(['library-home']);
+    const match = homeData?.items.find((t) => t.id === trackId);
+    if (match?.duration_seconds != null && Number.isFinite(match.duration_seconds)) {
+      fallbackDurationMs = match.duration_seconds * 1000;
+    }
+  }
+  if (fallbackDurationMs === 0 && track?.durationSeconds != null && Number.isFinite(track.durationSeconds)) {
+    fallbackDurationMs = track.durationSeconds * 1000;
+  }
+
+  const durationMs = safeMs(rawDuration) || fallbackDurationMs;
+  const positionMs = safeMs(rawPosition);
+
+  const isEnded =
+    track != null &&
+    !playerStatus.playing &&
+    playerStatus.isLoaded &&
+    durationMs > 0 &&
+    positionMs >= durationMs;
+
   const state: PlaybackState = useMemo(() => {
     if (!track) return INITIAL_STATE;
     if (errorMessage) return { status: 'error', track, positionMs: 0, durationMs: 0, errorMessage };
+
     if (shouldAutoPlay.current || (playerStatus.isBuffering && !playerStatus.isLoaded)) {
-      return { status: 'loading', track, positionMs: 0, durationMs: 0, errorMessage: null };
+      return { status: 'loading', track, positionMs: 0, durationMs, errorMessage: null };
+    }
+
+    if (isEnded) {
+      return {
+        status: 'ended',
+        track,
+        positionMs: durationMs,
+        durationMs,
+        errorMessage: null,
+      };
     }
 
     const status: PlaybackState['status'] = playerStatus.playing ? 'playing' : 'paused';
@@ -78,30 +123,40 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return {
       status,
       track,
-      positionMs: (playerStatus.currentTime ?? 0) * 1000,
-      durationMs: (playerStatus.duration ?? 0) * 1000,
+      positionMs,
+      durationMs,
       errorMessage: null,
     };
-  }, [track, errorMessage, playerStatus.playing, playerStatus.isBuffering, playerStatus.isLoaded, playerStatus.currentTime, playerStatus.duration]);
+  }, [track, errorMessage, isEnded, positionMs, durationMs, playerStatus.playing, playerStatus.isBuffering, playerStatus.isLoaded]);
 
-  const play = useCallback(async (newTrack: PlaybackTrack) => {
-    setErrorMessage(null);
-    setTrack(newTrack);
-    setAudioSource(null);
-    shouldAutoPlay.current = true;
+  const loadAudioSource = useCallback(async (trackToLoad: PlaybackTrack, attempt: number): Promise<void> => {
     try {
-      if (newTrack.source.kind === 'preview') {
-        setAudioSource({ uri: newTrack.source.previewUrl });
+      if (trackToLoad.source.kind === 'preview') {
+        setAudioSource({ uri: trackToLoad.source.previewUrl });
       } else {
         const headers = await audioRequestHeaders();
-        setAudioSource({ uri: audioStreamUrl(newTrack.source.trackId), headers });
+        setAudioSource({ uri: audioStreamUrl(trackToLoad.source.trackId), headers });
       }
     } catch (err) {
+      if (attempt < MAX_RETRIES) {
+        await new Promise((resolve) => { setTimeout(resolve, RETRY_DELAY_MS); });
+        return loadAudioSource(trackToLoad, attempt + 1);
+      }
       shouldAutoPlay.current = false;
       const message = err instanceof Error ? err.message : 'Failed to load audio';
       setErrorMessage(message);
     }
   }, []);
+
+  const play = useCallback(async (newTrack: PlaybackTrack) => {
+    player.pause();
+    setErrorMessage(null);
+    setTrack(newTrack);
+    setAudioSource(null);
+    shouldAutoPlay.current = true;
+    lastPlayedTrack.current = newTrack;
+    await loadAudioSource(newTrack, 0);
+  }, [player, loadAudioSource]);
 
   const pause = useCallback(() => {
     player.pause();
@@ -123,6 +178,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setErrorMessage(null);
   }, [player]);
 
+  const retry = useCallback(() => {
+    const trackToRetry = lastPlayedTrack.current;
+    if (!trackToRetry) return;
+    setErrorMessage(null);
+    setAudioSource(null);
+    shouldAutoPlay.current = true;
+    void loadAudioSource(trackToRetry, 0);
+  }, [loadAudioSource]);
+
   const value: PlaybackContextValue = {
     ...state,
     play,
@@ -130,6 +194,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     resume,
     seekTo,
     stop,
+    retry,
   };
 
   return <PlaybackContext.Provider value={value}>{children}</PlaybackContext.Provider>;
