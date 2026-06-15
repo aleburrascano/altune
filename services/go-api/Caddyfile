@@ -1,0 +1,6 @@
+# Replace altune.duckdns.org with your actual domain.
+# Caddy auto-provisions a Let's Encrypt TLS certificate.
+
+altune.duckdns.org {
+    reverse_proxy go-api:8000
+}

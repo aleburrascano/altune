@@ -1,0 +1,33 @@
+{
+  "cli": {
+    "version": ">= 15.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://altune.duckdns.org",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ellvexundmgvbbfqbzau.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://altune.duckdns.org",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ellvexundmgvbbfqbzau.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN"
+      }
+    }
+  },
+  "submit": {}
+}
