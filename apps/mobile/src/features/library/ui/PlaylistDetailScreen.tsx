@@ -18,14 +18,14 @@ import {
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { TrackResponse } from '@shared/api-client/types';
-import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
+import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
 
+import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { LibraryRow } from './LibraryRow';
 import { PlaylistHero } from './PlaylistHero';
 
 export function PlaylistDetailScreen(): ReactElement {
   const router = useRouter();
-  const theme = useTheme();
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ id: string }>();
   const playlistId = params.id ?? '';
@@ -67,6 +67,9 @@ export function PlaylistDetailScreen(): ReactElement {
       void queryClient.invalidateQueries({ queryKey: ['playlists'] });
     },
   });
+
+  const retryMut = useRetryAcquisition();
+  const retryingTrackId = retryMut.isPending ? retryMut.variables : undefined;
 
   const navigateToTrack = useCallback(
     (track: TrackResponse): void => {
@@ -123,7 +126,7 @@ export function PlaylistDetailScreen(): ReactElement {
       <Screen>
         <View style={styles.header}>
           <Pressable onPress={goBack} hitSlop={8}>
-            <Text variant="body" style={{ color: theme.color.accent }}>← Back</Text>
+            <Text variant="body" tone="accent">‹ Back</Text>
           </Pressable>
         </View>
         <View style={styles.heroLoading}>
@@ -140,7 +143,7 @@ export function PlaylistDetailScreen(): ReactElement {
       <Screen>
         <View style={styles.header}>
           <Pressable onPress={goBack} hitSlop={8}>
-            <Text variant="body" style={{ color: theme.color.accent }}>← Back</Text>
+            <Text variant="body" tone="accent">‹ Back</Text>
           </Pressable>
         </View>
         <View style={styles.center}>
@@ -162,10 +165,10 @@ export function PlaylistDetailScreen(): ReactElement {
           accessibilityRole="button"
           accessibilityLabel="Back"
         >
-          <Text variant="body" style={{ color: theme.color.accent }}>← Back</Text>
+          <Text variant="body" tone="accent">‹ Back</Text>
         </Pressable>
         <Pressable onPress={handleDelete} hitSlop={8} accessibilityRole="button" accessibilityLabel="Delete playlist">
-          <Text variant="body" style={{ color: theme.color.danger }}>Delete</Text>
+          <Text variant="body" tone="danger">Delete</Text>
         </Pressable>
       </View>
 
@@ -186,7 +189,16 @@ export function PlaylistDetailScreen(): ReactElement {
         }
         renderItem={({ item }) => (
           <View style={styles.trackRowContainer}>
-            <LibraryRow track={item} onPress={() => navigateToTrack(item)} />
+            <LibraryRow
+              track={item}
+              onPress={() => navigateToTrack(item)}
+              onRetry={
+                item.acquisition_status === 'failed'
+                  ? () => retryMut.mutate(item.id)
+                  : undefined
+              }
+              retrying={retryingTrackId === item.id}
+            />
             <Pressable
               testID={`playlist-remove-${item.id}`}
               onPress={() => removeMut.mutate(item.id)}
@@ -195,7 +207,7 @@ export function PlaylistDetailScreen(): ReactElement {
               accessibilityRole="button"
               accessibilityLabel={`Remove ${item.title}`}
             >
-              <Text variant="caption" style={{ color: theme.color.danger }}>✕</Text>
+              <Text variant="caption" tone="danger">✕</Text>
             </Pressable>
           </View>
         )}

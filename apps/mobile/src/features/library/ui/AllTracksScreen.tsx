@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Screen, spacing } from '@shared/ui';
 
 import { useLibraryHome } from '../hooks/useLibraryHome';
+import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { useLibraryNavigation } from './useLibraryNavigation';
 import { ExpandedHeader } from './ExpandedHeader';
 import { LibraryRow } from './LibraryRow';
@@ -15,6 +16,8 @@ export function AllTracksScreen(): ReactElement {
   const router = useRouter();
   const state = useLibraryHome();
   const { navigateToTrack } = useLibraryNavigation(router);
+  const retryMutation = useRetryAcquisition();
+  const retryingTrackId = retryMutation.isPending ? retryMutation.variables : undefined;
   const [sortKey, setSortKey] = useState<SortKey>('recent');
 
   const sorted = sortTracks(state.allTracks, sortKey);
@@ -32,7 +35,16 @@ export function AllTracksScreen(): ReactElement {
         data={sorted}
         keyExtractor={(t) => t.id}
         renderItem={({ item }) => (
-          <LibraryRow track={item} onPress={() => navigateToTrack(item)} />
+          <LibraryRow
+            track={item}
+            onPress={() => navigateToTrack(item)}
+            onRetry={
+              item.acquisition_status === 'failed'
+                ? () => retryMutation.mutate(item.id)
+                : undefined
+            }
+            retrying={retryingTrackId === item.id}
+          />
         )}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}

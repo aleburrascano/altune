@@ -34,6 +34,8 @@ type LibraryHomeProps = {
   addToPlaylistTrack: TrackResponse | null;
   onAddToPlaylistTrackChange: (track: TrackResponse | null) => void;
   onDeleteTrack: (trackId: string) => void;
+  onRetryTrack: (trackId: string) => void;
+  retryingTrackId?: string | undefined;
 };
 
 export function LibraryHome({
@@ -56,6 +58,8 @@ export function LibraryHome({
   addToPlaylistTrack,
   onAddToPlaylistTrackChange,
   onDeleteTrack,
+  onRetryTrack,
+  retryingTrackId,
 }: LibraryHomeProps): ReactElement {
   const theme = useTheme();
   return (
@@ -99,6 +103,12 @@ export function LibraryHome({
                     { text: 'Cancel', style: 'cancel' },
                   ]);
                 }}
+                onRetry={
+                  track.acquisition_status === 'failed'
+                    ? () => onRetryTrack(track.id)
+                    : undefined
+                }
+                retrying={retryingTrackId === track.id}
               />
             ))}
           </>

@@ -10,6 +10,7 @@ import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useLibraryHome } from '../hooks/useLibraryHome';
+import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryHome } from './LibraryHome';
 import { useLibraryNavigation } from './useLibraryNavigation';
@@ -19,6 +20,7 @@ export function LibraryScreen(): ReactElement {
   const state = useLibraryHome();
   const { navigateToTrack, navigateToAlbum, navigateToArtist } = useLibraryNavigation(router);
   const deleteMutation = useDeleteTrack();
+  const retryMutation = useRetryAcquisition();
 
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<TrackResponse | null>(null);
@@ -95,6 +97,8 @@ export function LibraryScreen(): ReactElement {
     );
   }
 
+  const retryingTrackId = retryMutation.isPending ? retryMutation.variables : undefined;
+
   return (
     <LibraryHome
       playlists={playlists}
@@ -116,6 +120,8 @@ export function LibraryScreen(): ReactElement {
       addToPlaylistTrack={addToPlaylistTrack}
       onAddToPlaylistTrackChange={setAddToPlaylistTrack}
       onDeleteTrack={(trackId) => deleteMutation.mutate(trackId)}
+      onRetryTrack={(trackId) => retryMutation.mutate(trackId)}
+      retryingTrackId={retryingTrackId}
     />
   );
 }

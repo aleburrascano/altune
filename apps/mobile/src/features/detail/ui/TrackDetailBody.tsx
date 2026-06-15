@@ -41,7 +41,8 @@ export function TrackDetailBody({
   const queryClient = useQueryClient();
   const alreadySaved = _isTrackInLibraryCache(queryClient, result.title, result.subtitle);
   const trackId = typeof result.extras['track_id'] === 'string' ? result.extras['track_id'] : null;
-  const isPlayable = canPlay(typeof result.extras['acquisition_status'] === 'string' ? result.extras['acquisition_status'] : null) && trackId !== null;
+  const rawStatus = result.extras['acquisition_status'];
+  const isPlayable = canPlay(rawStatus === 'ready' || rawStatus === 'pending' || rawStatus === 'failed' ? rawStatus : null) && trackId !== null;
   const previewUrl = getPreviewUrl(result.extras);
   const rows = trackInfoRows(result.extras);
   if (!rows.some((r) => r.key === 'featuring')) {
