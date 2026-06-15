@@ -37,58 +37,65 @@ func (a *MusicBrainzAdapter) Search(ctx context.Context, query string, kinds map
 			continue
 		}
 
-		entity := mbEntity(kind)
-		u := fmt.Sprintf("https://musicbrainz.org/ws/2/%s/?query=%s&fmt=json&limit=10",
-			entity, url.QueryEscape(query))
-
-		req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+		items, err := a.searchKind(ctx, query, kind)
 		if err != nil {
 			continue
 		}
-		req.Header.Set("User-Agent", a.userAgent)
-		req.Header.Set("Accept", "application/json")
-
-		resp, err := a.client.Do(req)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			continue
-		}
-
-		switch kind {
-		case domain.ResultKindTrack:
-			var body mbRecordingResponse
-			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-				continue
-			}
-			for _, rec := range body.Recordings {
-				sr := mapMBRecording(rec)
-				results = append(results, sr)
-			}
-		case domain.ResultKindArtist:
-			var body mbArtistResponse
-			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-				continue
-			}
-			for _, art := range body.Artists {
-				sr := mapMBArtist(art)
-				results = append(results, sr)
-			}
-		case domain.ResultKindAlbum:
-			var body mbReleaseGroupResponse
-			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-				continue
-			}
-			for _, rg := range body.ReleaseGroups {
-				sr := mapMBReleaseGroup(rg)
-				results = append(results, sr)
-			}
-		}
+		results = append(results, items...)
 	}
 
+	return results, nil
+}
+
+func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
+	entity := mbEntity(kind)
+	u := fmt.Sprintf("https://musicbrainz.org/ws/2/%s/?query=%s&fmt=json&limit=10",
+		entity, url.QueryEscape(query))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", a.userAgent)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("musicbrainz returned %d", resp.StatusCode)
+	}
+
+	var results []domain.SearchResult
+	switch kind {
+	case domain.ResultKindTrack:
+		var body mbRecordingResponse
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			return nil, err
+		}
+		for _, rec := range body.Recordings {
+			results = append(results, mapMBRecording(rec))
+		}
+	case domain.ResultKindArtist:
+		var body mbArtistResponse
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			return nil, err
+		}
+		for _, art := range body.Artists {
+			results = append(results, mapMBArtist(art))
+		}
+	case domain.ResultKindAlbum:
+		var body mbReleaseGroupResponse
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			return nil, err
+		}
+		for _, rg := range body.ReleaseGroups {
+			results = append(results, mapMBReleaseGroup(rg))
+		}
+	}
 	return results, nil
 }
 

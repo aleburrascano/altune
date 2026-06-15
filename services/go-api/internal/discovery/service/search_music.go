@@ -220,6 +220,8 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 	}, nil
 }
 
+const enrichTimeout = 4 * time.Second
+
 func (s *SearchMusicService) enrich(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
 	if s.popularityResolver == nil && s.artworkResolver == nil && s.fanartResolver == nil && s.geniusResolver == nil {
 		return results
@@ -232,6 +234,9 @@ func (s *SearchMusicService) enrich(ctx context.Context, results []domain.Search
 	if limit == 0 {
 		return results
 	}
+
+	enrichCtx, cancel := context.WithTimeout(ctx, enrichTimeout)
+	defer cancel()
 
 	top := results[:limit]
 	rest := results[limit:]
@@ -247,7 +252,7 @@ func (s *SearchMusicService) enrich(ctx context.Context, results []domain.Search
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			enriched[idx] = s.enrichOne(ctx, result)
+			enriched[idx] = s.enrichOne(enrichCtx, result)
 		}(i, r)
 	}
 

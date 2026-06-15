@@ -43,7 +43,12 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	if track.AcquisitionStatus == domain.AcquisitionReady {
 		if track.AudioRef != nil {
 			exists, err := s.audioStore.Exists(ctx, *track.AudioRef)
-			if err == nil && exists {
+			if err != nil {
+				slog.WarnContext(ctx, "acquire_exists_check_failed",
+					"track_id", trackId.String(), "audio_ref", *track.AudioRef, "error", err)
+				return nil
+			}
+			if exists {
 				slog.InfoContext(ctx, "acquire_skip_already_ready", "track_id", trackId.String())
 				return nil
 			}

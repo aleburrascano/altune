@@ -45,6 +45,7 @@ type App struct {
 	server      *http.Server
 	wg          sync.WaitGroup
 	sem         chan struct{}
+	scheduler   *acqService.BackgroundAcquisitionScheduler
 }
 
 func New(cfg *config.Config) *App {
@@ -86,7 +87,13 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	slog.Info("waiting for background tasks")
-	a.wg.Wait()
+	if a.scheduler != nil {
+		bgCtx, bgCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer bgCancel()
+		a.scheduler.Shutdown(bgCtx)
+	} else {
+		a.wg.Wait()
+	}
 
 	a.cleanup()
 	slog.Info("shutdown complete")
@@ -114,19 +121,21 @@ func (a *App) setup(ctx context.Context) error {
 
 	var audioSearcher catalogPorts.AudioSearcher
 	if audioStore != nil {
-		audioSearcher = ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile)
+		audioSearcher = ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
 	}
 
 	addTrackSvc := catalogService.NewAddTrackService(trackRepo)
 	listTracksSvc := catalogService.NewListTracksService(trackRepo)
-	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo)
+	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore)
 	reconcileSvc := catalogService.NewReconcileTrackStatusService(trackRepo, audioStore)
 	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo)
 
 	var scheduler acqService.AcquisitionScheduler
 	if audioSearcher != nil && audioStore != nil {
 		acquireSvc := acqService.NewAcquireTrackAudioService(trackRepo, audioSearcher, audioStore)
-		scheduler = acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem)
+		bgScheduler := acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem)
+		a.scheduler = bgScheduler
+		scheduler = bgScheduler
 	}
 
 	searchProviders := a.buildDiscoveryProviders()
@@ -159,7 +168,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, reconcileSvc, scheduler)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
-	streamHandler := catalogHandler.NewStreamHandler(trackRepo, audioStore, reconcileSvc)
+	streamHandler := catalogHandler.NewStreamHandler(trackRepo, audioStore, reconcileSvc, scheduler)
 	deezerContentClient := &http.Client{Timeout: 10 * time.Second}
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
 
@@ -184,6 +193,7 @@ func (a *App) setup(ctx context.Context) error {
 	r.Use(httputil.CorrelationID)
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.RequestLogger)
+	r.Use(httputil.MaxBodySize(1 << 20)) // 1MB limit on request bodies
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   a.cfg.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -208,8 +218,11 @@ func (a *App) setup(ctx context.Context) error {
 	})
 
 	a.server = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
-		Handler: r,
+		Addr:              fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	return nil
@@ -226,8 +239,15 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 		dbStatus = "not_configured"
 	}
 
+	redisStatus := "ok"
+	if a.redisClient == nil {
+		redisStatus = "not_configured"
+	} else if err := a.redisClient.Ping(r.Context()).Err(); err != nil {
+		redisStatus = "down"
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"db":"%s"}`, dbStatus)
+	fmt.Fprintf(w, `{"db":"%s","redis":"%s"}`, dbStatus, redisStatus)
 }
 
 func (a *App) buildTokenVerifier(ctx context.Context) (auth.TokenVerifier, error) {

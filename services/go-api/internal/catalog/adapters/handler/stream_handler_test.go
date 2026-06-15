@@ -68,7 +68,7 @@ func TestHandleStreamAudio(t *testing.T) {
 			repo := newFakeTrackRepo()
 			store := newFakeAudioStore()
 			trackId := tt.setup(repo, store)
-			_, router := buildStreamHandler(repo, store)
+			_, router := buildStreamHandler(repo, store, nil)
 
 			// Act
 			rec := serve(t, router, http.MethodGet, "/tracks/"+trackId+"/stream", nil)
@@ -91,11 +91,31 @@ func TestHandleStreamAudio(t *testing.T) {
 	}
 }
 
+func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
+	repo := newFakeTrackRepo()
+	store := newFakeAudioStore()
+	sched := &fakeScheduler{}
+	track := makeReadyTrack(testUserId, "Gone", "Artist", "Album", "audio/gone.opus")
+	repo.seed(track)
+
+	_, router := buildStreamHandler(repo, store, sched)
+	rec := serve(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/stream", nil)
+
+	assertStatus(t, rec, http.StatusNotFound)
+
+	if len(sched.scheduled) != 1 {
+		t.Fatalf("expected 1 scheduled reacquisition, got %d", len(sched.scheduled))
+	}
+	if sched.scheduled[0] != track.ID {
+		t.Errorf("scheduled track = %v, want %v", sched.scheduled[0], track.ID)
+	}
+}
+
 func TestHandleStreamAudio_NoAuth(t *testing.T) {
 	// Arrange
 	repo := newFakeTrackRepo()
 	store := newFakeAudioStore()
-	_, router := buildStreamHandler(repo, store)
+	_, router := buildStreamHandler(repo, store, nil)
 
 	// Act
 	rec := serveNoAuth(t, router, http.MethodGet, "/tracks/"+uuid.New().String()+"/stream", nil)

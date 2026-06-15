@@ -37,35 +37,44 @@ func (a *ITunesAdapter) Search(ctx context.Context, query string, kinds map[doma
 			continue
 		}
 
-		entity := itunesEntity(kind)
-		u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&limit=10", url.QueryEscape(query), entity)
-
-		req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+		items, err := a.searchKind(ctx, query, kind)
 		if err != nil {
 			continue
 		}
-
-		resp, err := a.client.Do(req)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			continue
-		}
-
-		var body itunesResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-			continue
-		}
-
-		for _, item := range body.Results {
-			sr := mapITunesResult(item, kind)
-			results = append(results, sr)
-		}
+		results = append(results, items...)
 	}
 
+	return results, nil
+}
+
+func (a *ITunesAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
+	entity := itunesEntity(kind)
+	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&limit=10", url.QueryEscape(query), entity)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("itunes returned %d", resp.StatusCode)
+	}
+
+	var body itunesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+
+	var results []domain.SearchResult
+	for _, item := range body.Results {
+		results = append(results, mapITunesResult(item, kind))
+	}
 	return results, nil
 }
 

@@ -38,35 +38,42 @@ func (a *LastFmAdapter) Search(ctx context.Context, query string, kinds map[doma
 			continue
 		}
 
-		method := lastfmMethod(kind)
-		u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=%s&%s=%s&api_key=%s&format=json&limit=10",
-			method, lastfmQueryParam(kind), url.QueryEscape(query), a.apiKey)
-
-		req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+		items, err := a.searchKind(ctx, query, kind)
 		if err != nil {
 			continue
 		}
-
-		resp, err := a.client.Do(req)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			continue
-		}
-
-		var raw json.RawMessage
-		if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-			continue
-		}
-
-		parsed := parseLastFmResponse(raw, kind)
-		results = append(results, parsed...)
+		results = append(results, items...)
 	}
 
 	return results, nil
+}
+
+func (a *LastFmAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
+	method := lastfmMethod(kind)
+	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=%s&%s=%s&api_key=%s&format=json&limit=10",
+		method, lastfmQueryParam(kind), url.QueryEscape(query), a.apiKey)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("lastfm returned %d", resp.StatusCode)
+	}
+
+	var raw json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	return parseLastFmResponse(raw, kind), nil
 }
 
 func lastfmMethod(kind domain.ResultKind) string {

@@ -195,14 +195,43 @@ func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, playlistId domain.
 }
 
 func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId) error {
-	_, err := r.pool.Exec(ctx,
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx,
 		`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = $2`,
 		playlistId.UUID(), trackId.UUID(),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(ctx,
+		`UPDATE playlist_tracks SET position = sub.new_pos
+		FROM (
+			SELECT track_id, ROW_NUMBER() OVER (ORDER BY position) - 1 AS new_pos
+			FROM playlist_tracks WHERE playlist_id = $1
+		) sub
+		WHERE playlist_tracks.playlist_id = $1 AND playlist_tracks.track_id = sub.track_id`,
+		playlistId.UUID(),
+	)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
 	batch := &pgx.Batch{}
 	for _, t := range tracks {
 		batch.Queue(
@@ -210,14 +239,16 @@ func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, playlistId do
 			playlistId.UUID(), t.TrackId.UUID(), t.Position,
 		)
 	}
-	br := r.pool.SendBatch(ctx, batch)
-	defer br.Close()
+	br := tx.SendBatch(ctx, batch)
 	for range tracks {
 		if _, err := br.Exec(); err != nil {
+			br.Close()
 			return err
 		}
 	}
-	return nil
+	br.Close()
+
+	return tx.Commit(ctx)
 }
 
 func (r *PgxPlaylistRepository) GetPreviewArtwork(ctx context.Context, playlistId domain.PlaylistId) ([]string, error) {

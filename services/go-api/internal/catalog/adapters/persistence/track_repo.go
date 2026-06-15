@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"altune/go-api/internal/catalog/domain"
@@ -91,7 +92,7 @@ func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.User
 }
 
 func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) error {
-	_, err := r.pool.Exec(ctx,
+	tag, err := r.pool.Exec(ctx,
 		`UPDATE tracks SET
 			title=$3, artist=$4, album=$5, duration_seconds=$6,
 			artwork_url=$7, acquisition_status=$8, dedup_key=$9,
@@ -104,18 +105,50 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) er
 		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
 		track.ISRC, track.AudioRef, track.FailureReason,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("track %s not found or was deleted", track.ID.String())
+	}
+	return nil
 }
 
 func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (bool, error) {
-	tag, err := r.pool.Exec(ctx,
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `DELETE FROM playlist_tracks WHERE track_id = $1`, id.UUID())
+	if err != nil {
+		return false, err
+	}
+
+	tag, err := tx.Exec(ctx,
 		`DELETE FROM tracks WHERE id = $1 AND user_id = $2`,
 		id.UUID(), userId.UUID(),
 	)
 	if err != nil {
 		return false, err
 	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
 	return tag.RowsAffected() > 0, nil
+}
+
+func (r *PgxTrackRepository) GetByDedupKey(ctx context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error) {
+	row := r.pool.QueryRow(ctx,
+		`SELECT id, user_id, title, artist, album, duration_seconds,
+			added_at, artwork_url, acquisition_status, dedup_key,
+			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason
+		FROM tracks WHERE user_id = $1 AND dedup_key = $2`,
+		userId.UUID(), dedupKey,
+	)
+	return scanTrack(row)
 }
 
 type scanner interface {

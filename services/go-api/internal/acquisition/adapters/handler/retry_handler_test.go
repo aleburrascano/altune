@@ -79,6 +79,10 @@ func (r *retryFakeTrackRepo) Delete(_ context.Context, id catdomain.TrackId, _ s
 	return false, nil
 }
 
+func (r *retryFakeTrackRepo) GetByDedupKey(_ context.Context, _ shared.UserId, _ string) (*catdomain.Track, error) {
+	return nil, nil
+}
+
 func (r *retryFakeTrackRepo) seed(t *catdomain.Track) {
 	r.tracks[t.ID.String()] = t
 }

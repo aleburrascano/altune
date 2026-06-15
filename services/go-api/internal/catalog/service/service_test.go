@@ -294,8 +294,9 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		{
 			name: "repo error propagates",
 			setup: func(repo *mockTrackRepo) domain.TrackId {
+				track := seedTrack(t, repo, userId, "Song", "Artist", "Album")
 				repo.errOnDelete = errRepo
-				return domain.NewTrackId()
+				return track.ID
 			},
 			wantErr: errRepo,
 		},
@@ -305,7 +306,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := newMockTrackRepo()
 			trackId := tt.setup(repo)
-			svc := NewDeleteTrackService(repo)
+			svc := NewDeleteTrackService(repo, newMockAudioStore())
 
 			err := svc.Execute(ctx, userId, trackId)
 
@@ -764,6 +765,11 @@ func TestPlaylistService_Reorder(t *testing.T) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				t1 := domain.NewTrackId()
 				t2 := domain.NewTrackId()
+				pl.Tracks = []domain.PlaylistTrack{
+					{TrackId: t1, Position: 0},
+					{TrackId: t2, Position: 1},
+				}
+				plRepo.seed(pl)
 				return pl.ID, []domain.TrackId{t2, t1}
 			},
 			wantErr: nil,
@@ -778,7 +784,7 @@ func TestPlaylistService_Reorder(t *testing.T) {
 		{
 			name: "repo error propagates",
 			setup: func(plRepo *mockPlaylistRepo) (domain.PlaylistId, []domain.TrackId) {
-				plRepo.errOnGetByID = errRepo
+				plRepo.errOnGetWithTracks = errRepo
 				return domain.NewPlaylistId(), []domain.TrackId{}
 			},
 			wantErr: errRepo,

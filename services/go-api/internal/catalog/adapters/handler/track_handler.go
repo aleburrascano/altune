@@ -208,7 +208,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		)
 	}
 
-	if h.scheduler != nil {
+	if h.scheduler != nil && result.Created {
 		slog.InfoContext(r.Context(), "acquisition.scheduled",
 			"track_id", result.Track.ID.String())
 		h.scheduler.Schedule(userId, result.Track.ID)

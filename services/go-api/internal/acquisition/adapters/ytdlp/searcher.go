@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -16,12 +17,14 @@ import (
 type YtDlpAudioSearcher struct {
 	ffmpegLocation string
 	cookieFile     string
+	jsRuntime      string
 }
 
-func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile string) *YtDlpAudioSearcher {
+func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpAudioSearcher {
 	return &YtDlpAudioSearcher{
 		ffmpegLocation: ffmpegLocation,
 		cookieFile:     cookieFile,
+		jsRuntime:      jsRuntime,
 	}
 }
 
@@ -34,6 +37,9 @@ func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.
 		"--no-download",
 		"--flat-playlist",
 		fmt.Sprintf("ytsearch5:%s", query),
+	}
+	if s.jsRuntime != "" {
+		args = append([]string{"--js-runtimes", s.jsRuntime, "--remote-components", "ejs:github"}, args...)
 	}
 	if s.cookieFile != "" {
 		args = append([]string{"--cookies", s.cookieFile}, args...)
@@ -90,6 +96,9 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 		url,
 	}
 
+	if s.jsRuntime != "" {
+		args = append([]string{"--js-runtimes", s.jsRuntime, "--remote-components", "ejs:github"}, args...)
+	}
 	if s.ffmpegLocation != "" {
 		args = append([]string{"--ffmpeg-location", s.ffmpegLocation}, args...)
 	}
@@ -109,6 +118,15 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 	matches, err := filepath.Glob(filepath.Join(outDir, "*.mp3"))
 	if err != nil || len(matches) == 0 {
 		return "", fmt.Errorf("no mp3 file produced in %s", outDir)
+	}
+
+	info, err := os.Stat(matches[0])
+	if err != nil {
+		return "", fmt.Errorf("stat downloaded file: %w", err)
+	}
+	const minFileSize = 10 * 1024 // 10KB
+	if info.Size() < minFileSize {
+		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", info.Size())
 	}
 
 	return matches[0], nil
