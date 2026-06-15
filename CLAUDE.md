@@ -31,7 +31,15 @@ Altune — music manager. Expo (React Native + TS) mobile + Go (hexagonal, modul
 
 **Grep is for text search only** — string literals, comments, config values, error messages, things that aren't code symbols. If you're grepping for a function name, you're using the wrong tool.
 
-**context7 MCP** for latest library and framework documentation. Use BEFORE answering questions about library APIs — your training data may be outdated.
+**context7 MCP is the primary documentation tool. Use it BEFORE answering from memory.**
+
+| Task | Use context7 | NOT training data |
+|------|-------------|-------------------|
+| API usage, function signatures, config options | `resolve-library-id` → `query-docs` | ~~Answer from memory~~ |
+| Version-specific behavior or breaking changes | `query-docs` with version context | ~~Guess based on training~~ |
+| "How do I do X with library Y" | `query-docs` for current patterns | ~~Recall old patterns~~ |
+
+Libraries that change fast and MUST be checked: Expo SDK, React Native, React Navigation, TanStack Query, Zustand, Reanimated, Go standard library, chi, sqlx. Never assume your training data is current for these — check context7 first.
 
 **Software-architecture-design vault MCP** is the authoritative pattern reference — see `.claude/rules/vault-consultation.md`. Consult before any non-trivial design decision.
 
