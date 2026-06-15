@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Text, spacing, useTheme } from '@shared/ui';
+import { Text, spacing } from '@shared/ui';
 
 export function SectionHeader({
   title,
@@ -12,14 +12,13 @@ export function SectionHeader({
   onSeeAll?: () => void;
   testID?: string;
 }): ReactElement {
-  const theme = useTheme();
   return (
     <View testID={testID} style={styles.sectionHeader}>
       <Text variant="title">{title}</Text>
       {onSeeAll != null ? (
         <Pressable onPress={onSeeAll} hitSlop={8}>
-          <Text variant="label" style={{ color: theme.color.accent }}>
-            See All →
+          <Text variant="label" tone="accent">
+            See All ›
           </Text>
         </Pressable>
       ) : null}

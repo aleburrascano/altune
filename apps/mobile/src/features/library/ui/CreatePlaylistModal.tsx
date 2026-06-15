@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from 'react';
 import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { Button, Text, spacing, useTheme } from '@shared/ui';
+import { Button, Text, radius, spacing, useTheme } from '@shared/ui';
 
 type CreatePlaylistModalProps = {
   visible: boolean;
@@ -94,13 +94,13 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    borderRadius: 16,
+    borderRadius: radius.lg,
     padding: spacing.xl,
   },
   title: { marginBottom: spacing.lg },
   input: {
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: radius.md,
     padding: spacing.md,
     fontSize: 16,
     marginBottom: spacing.lg,

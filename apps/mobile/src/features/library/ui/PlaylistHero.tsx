@@ -66,8 +66,8 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   renameInput: {
+    fontFamily: 'PlusJakartaSans_700Bold',
     fontSize: 20,
-    fontWeight: '700',
     textAlign: 'center',
     borderBottomWidth: 2,
     paddingBottom: 4,

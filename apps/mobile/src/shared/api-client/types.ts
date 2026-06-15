@@ -7,6 +7,8 @@
  * mitigation.
  */
 
+export type AcquisitionStatus = 'pending' | 'ready' | 'failed';
+
 export type TrackResponse = {
   id: string; // UUID string from the wire
   title: string;
@@ -14,7 +16,7 @@ export type TrackResponse = {
   album: string | null;
   duration_seconds: number | null;
   added_at: string; // ISO-8601
-  acquisition_status: string; // 'pending' | 'ready' | 'failed' (AcquisitionStatus, wire-lowercase)
+  acquisition_status: AcquisitionStatus;
   artwork_url: string | null;
   failure_reason: string | null;
   year: number | null;

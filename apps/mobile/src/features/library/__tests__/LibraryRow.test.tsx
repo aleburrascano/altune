@@ -11,9 +11,12 @@ import { render } from '@testing-library/react-native';
 jest.mock('expo-image', () => ({ Image: () => null }));
 
 import { LibraryRow } from '../ui/LibraryRow';
-import type { TrackResponse } from '../../../shared/api-client/types';
+import type { AcquisitionStatus, TrackResponse } from '../../../shared/api-client/types';
 
-function _track(acquisitionStatus: string, failureReason: string | null = null): TrackResponse {
+function _track(
+  acquisitionStatus: AcquisitionStatus,
+  failureReason: string | null = null,
+): TrackResponse {
   return {
     id: 't1',
     title: 'Midnight City',
@@ -42,7 +45,7 @@ describe('LibraryRow', () => {
   });
 
   it('omits the pending marker for any other status', () => {
-    const { queryByTestId } = render(<LibraryRow track={_track('owned')} onPress={noop} />);
+    const { queryByTestId } = render(<LibraryRow track={_track('ready')} onPress={noop} />);
     expect(queryByTestId('library-row-pending-t1')).toBeNull();
   });
 
@@ -52,13 +55,11 @@ describe('LibraryRow', () => {
     );
     const failedEl = getByTestId('library-row-failed-t1');
     expect(failedEl).toBeTruthy();
-    expect(failedEl.props.children).toBe('no_match_found');
+    expect(failedEl.props.children).toBe("Couldn't find this track");
   });
 
   it('shows fallback text when failed with no reason', () => {
-    const { getByTestId } = render(
-      <LibraryRow track={_track('failed')} onPress={noop} />,
-    );
+    const { getByTestId } = render(<LibraryRow track={_track('failed')} onPress={noop} />);
     const failedEl = getByTestId('library-row-failed-t1');
     expect(failedEl.props.children).toBe('Acquisition failed');
   });

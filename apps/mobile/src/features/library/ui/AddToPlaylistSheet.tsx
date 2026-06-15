@@ -107,7 +107,7 @@ export function AddToPlaylistSheet({
           <View />
         </Pressable>
         <View style={[styles.sheet, { backgroundColor: theme.color.surface1 }]}>
-          <View style={styles.handle} />
+          <View style={[styles.handle, { backgroundColor: theme.color.border }]} />
           <Text variant="title" style={styles.sheetTitle}>
             Add to Playlist
           </Text>
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
   },
   handle: {
     width: 36, height: 4, borderRadius: 2,
-    backgroundColor: '#555', alignSelf: 'center', marginBottom: spacing.lg,
+    alignSelf: 'center', marginBottom: spacing.lg,
   },
   sheetTitle: { marginBottom: spacing.xs },
   trackLabel: { marginBottom: spacing.lg },

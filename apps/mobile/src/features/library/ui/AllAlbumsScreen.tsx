@@ -39,7 +39,7 @@ export function AllAlbumsScreen(): ReactElement {
         showsVerticalScrollIndicator={false}
         renderItem={({ item }: { item: AlbumGroup }) => (
           <Pressable
-            style={styles.gridItem}
+            style={({ pressed }) => [styles.gridItem, pressed ? styles.pressed : null]}
             onPress={() => navigateToAlbum(item)}
             accessibilityRole="button"
             accessibilityLabel={`${item.album} by ${item.artist}`}
@@ -71,6 +71,7 @@ const styles = StyleSheet.create({
   list: { paddingBottom: spacing['3xl'] },
   gridRow: { gap: spacing.md },
   gridItem: { flex: 1, marginBottom: spacing.lg },
+  pressed: { opacity: 0.7 },
   cover: {
     width: '100%',
     height: '100%',

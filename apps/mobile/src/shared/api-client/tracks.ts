@@ -27,3 +27,7 @@ export async function createTrack(body: CreateTrackRequest): Promise<TrackRespon
 export async function deleteTrack(trackId: string): Promise<void> {
   await apiFetch<void>(`/v1/tracks/${trackId}`, { method: 'DELETE' });
 }
+
+export async function retryAcquisition(trackId: string): Promise<void> {
+  await apiFetch<void>(`/v1/tracks/${trackId}/retry`, { method: 'POST' });
+}
