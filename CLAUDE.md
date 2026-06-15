@@ -15,12 +15,29 @@ Altune — music manager. Expo (React Native + TS) mobile + Go (hexagonal, modul
 - **Vertical-slice:** feature work belongs in `apps/mobile/src/features/<feat>/` or under a bounded context in `services/go-api/internal/<context>/`. Extraction to `shared/` requires **2+ real consumers** (YAGNI).
 - **AIDEV-* anchors:** `# AIDEV-NOTE:`, `# AIDEV-DECISION:`, `# AIDEV-WARNING:` are durable — never strip them.
 
+## Tools — use the right tool for the job
+
+**Serena MCP is the primary code navigation tool. Use it BEFORE Grep for code tasks.**
+
+| Task | Use Serena | NOT Grep |
+|------|-----------|----------|
+| Find where a function/type/interface is defined | `find_declaration` or `find_symbol` | ~~Grep for function name~~ |
+| Find all callers/users of a symbol | `find_referencing_symbols` | ~~Grep for symbol name~~ |
+| Find who implements an interface | `find_implementations` | ~~Grep for interface name~~ |
+| Understand a file's structure | `get_symbols_overview` (then Read specific parts) | ~~Read entire file~~ |
+| Get type errors and warnings | `get_diagnostics_for_file` | ~~Run tsc/go vet manually~~ |
+| Rename a symbol across codebase | `rename_symbol` | ~~Find-and-replace~~ |
+| Replace a function body | `replace_symbol_body` | ~~Read + Edit~~ |
+
+**Grep is for text search only** — string literals, comments, config values, error messages, things that aren't code symbols. If you're grepping for a function name, you're using the wrong tool.
+
+**context7 MCP** for latest library and framework documentation. Use BEFORE answering questions about library APIs — your training data may be outdated.
+
+**Software-architecture-design vault MCP** is the authoritative pattern reference — see `.claude/rules/vault-consultation.md`. Consult before any non-trivial design decision.
+
 ## Workflow
 
-- Invoke skills by name (`/feature-spec`, `/feature-plan`, `/common-ground`) or use CE plugin skills (`/ce-brainstorm`, `/ce-plan`, `/ce-work`).
-- Software-architecture-design vault MCP is the authoritative pattern reference — see `.claude/rules/vault-consultation.md`. Consult **before** any non-trivial design decision.
-- Use Serena MCP for LSP operations (find references, go to definition, rename symbol).
-- Use context7 for latest library and framework documentation.
+- Invoke skills by name (`/feature-spec`, `/feature-plan`, `/common-ground`, `/audit-codebase`) or use CE plugin skills (`/ce-brainstorm`, `/ce-plan`, `/ce-work`).
 
 ## Git
 
