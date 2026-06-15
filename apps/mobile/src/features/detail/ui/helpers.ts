@@ -8,6 +8,7 @@ import type { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import type { ListTracksResponse } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { PlaybackContextValue, PlaybackSource } from '@shared/playback/types';
 
 import { spacing } from '@shared/ui/theme/tokens';
 
@@ -41,6 +42,17 @@ export function _isTrackInLibraryCache(
       (t) => t.title.toLowerCase().trim() === normalTitle && t.artist.toLowerCase().trim() === normalArtist,
     ),
   );
+}
+
+export function isCurrentlyPlaying(
+  playback: Pick<PlaybackContextValue, 'status' | 'track'>,
+  source: PlaybackSource,
+): boolean {
+  if (playback.status !== 'playing' || !playback.track) return false;
+  if (source.kind === 'library') {
+    return playback.track.source.kind === 'library' && playback.track.source.trackId === source.trackId;
+  }
+  return playback.track.source.kind === 'preview' && playback.track.source.previewUrl === source.previewUrl;
 }
 
 /** Styles shared across multiple detail sub-components. */

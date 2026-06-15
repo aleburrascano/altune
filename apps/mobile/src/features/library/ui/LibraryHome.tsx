@@ -14,6 +14,21 @@ import { LibraryRow } from './LibraryRow';
 import { PlaylistCarousel } from './PlaylistCarousel';
 import { SectionHeader } from './SectionHeader';
 
+export type PlaylistActions = {
+  createModalVisible: boolean;
+  onCreateModalToggle: (visible: boolean) => void;
+  onCreatePlaylist: (name: string) => void;
+  createLoading: boolean;
+  addToPlaylistTrack: TrackResponse | null;
+  onAddToPlaylistTrackChange: (track: TrackResponse | null) => void;
+};
+
+export type TrackActions = {
+  onDeleteTrack: (trackId: string) => void;
+  onRetryTrack: (trackId: string) => void;
+  retryingTrackId?: string | undefined;
+};
+
 type LibraryHomeProps = {
   playlists: PlaylistResponse[];
   recentTracks: TrackResponse[];
@@ -27,15 +42,8 @@ type LibraryHomeProps = {
   onExpandArtists: () => void;
   onPlaylistPress: (pl: PlaylistResponse) => void;
   onRefresh: () => void;
-  createModalVisible: boolean;
-  onCreateModalToggle: (visible: boolean) => void;
-  onCreatePlaylist: (name: string) => void;
-  createLoading: boolean;
-  addToPlaylistTrack: TrackResponse | null;
-  onAddToPlaylistTrackChange: (track: TrackResponse | null) => void;
-  onDeleteTrack: (trackId: string) => void;
-  onRetryTrack: (trackId: string) => void;
-  retryingTrackId?: string | undefined;
+  playlistActions: PlaylistActions;
+  trackActions: TrackActions;
 };
 
 export function LibraryHome({
@@ -51,15 +59,8 @@ export function LibraryHome({
   onExpandArtists,
   onPlaylistPress,
   onRefresh,
-  createModalVisible,
-  onCreateModalToggle,
-  onCreatePlaylist,
-  createLoading,
-  addToPlaylistTrack,
-  onAddToPlaylistTrackChange,
-  onDeleteTrack,
-  onRetryTrack,
-  retryingTrackId,
+  playlistActions,
+  trackActions,
 }: LibraryHomeProps): ReactElement {
   const theme = useTheme();
   return (
@@ -81,7 +82,7 @@ export function LibraryHome({
         <PlaylistCarousel
           playlists={playlists}
           onPlaylistPress={onPlaylistPress}
-          onCreatePress={() => onCreateModalToggle(true)}
+          onCreatePress={() => playlistActions.onCreateModalToggle(true)}
         />
 
         {recentTracks.length > 0 ? (
@@ -98,17 +99,17 @@ export function LibraryHome({
                 onPress={() => navigateToTrack(track)}
                 onLongPress={() => {
                   Alert.alert(track.title, undefined, [
-                    { text: 'Add to Playlist', onPress: () => onAddToPlaylistTrackChange(track) },
-                    { text: 'Remove from Library', style: 'destructive', onPress: () => onDeleteTrack(track.id) },
+                    { text: 'Add to Playlist', onPress: () => playlistActions.onAddToPlaylistTrackChange(track) },
+                    { text: 'Remove from Library', style: 'destructive', onPress: () => trackActions.onDeleteTrack(track.id) },
                     { text: 'Cancel', style: 'cancel' },
                   ]);
                 }}
                 onRetry={
                   track.acquisition_status === 'failed'
-                    ? () => onRetryTrack(track.id)
+                    ? () => trackActions.onRetryTrack(track.id)
                     : undefined
                 }
-                retrying={retryingTrackId === track.id}
+                retrying={trackActions.retryingTrackId === track.id}
               />
             ))}
           </>
@@ -137,16 +138,16 @@ export function LibraryHome({
         ) : null}
       </ScrollView>
       <CreatePlaylistModal
-        visible={createModalVisible}
-        onClose={() => onCreateModalToggle(false)}
-        onCreate={onCreatePlaylist}
-        loading={createLoading}
+        visible={playlistActions.createModalVisible}
+        onClose={() => playlistActions.onCreateModalToggle(false)}
+        onCreate={playlistActions.onCreatePlaylist}
+        loading={playlistActions.createLoading}
       />
       <AddToPlaylistSheet
-        visible={addToPlaylistTrack != null}
-        trackId={addToPlaylistTrack?.id ?? ''}
-        trackTitle={addToPlaylistTrack != null ? `${addToPlaylistTrack.title} — ${addToPlaylistTrack.artist}` : ''}
-        onClose={() => onAddToPlaylistTrackChange(null)}
+        visible={playlistActions.addToPlaylistTrack != null}
+        trackId={playlistActions.addToPlaylistTrack?.id ?? ''}
+        trackTitle={playlistActions.addToPlaylistTrack != null ? `${playlistActions.addToPlaylistTrack.title} — ${playlistActions.addToPlaylistTrack.artist}` : ''}
+        onClose={() => playlistActions.onAddToPlaylistTrackChange(null)}
       />
     </Screen>
   );

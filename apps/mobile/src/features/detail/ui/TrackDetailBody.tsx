@@ -1,22 +1,21 @@
 import type { ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
-import { useQueryClient } from '@tanstack/react-query';
-
 import { Banner } from '@shared/ui/primitives/Banner';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { canPlay } from '../../playback/helpers/canPlay';
-import { getPreviewUrl } from '../../playback/helpers/previewUrl';
-import { usePlayback } from '../../playback/hooks/usePlayback';
+import { canPlay } from '@shared/playback/canPlay';
+import { usePlayback } from '@shared/playback/usePlayback';
 
 import { extractFeaturedFromText, trackInfoRows } from '../extras';
+import { trackExtras } from '../extras-accessors';
+import { useIsTrackSaved } from '../hooks/useIsTrackSaved';
 import { useSaveTrack } from '../hooks/useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
 
-import { _isTrackInLibraryCache } from './helpers';
+import { isCurrentlyPlaying } from './helpers';
 import { PlayIconButton } from './PlayIconButton';
 
 import { spacing } from '@shared/ui/theme/tokens';
@@ -38,12 +37,10 @@ export function TrackDetailBody({
 }): ReactElement {
   const save = useSaveTrack();
   const playback = usePlayback();
-  const queryClient = useQueryClient();
-  const alreadySaved = _isTrackInLibraryCache(queryClient, result.title, result.subtitle);
-  const trackId = typeof result.extras['track_id'] === 'string' ? result.extras['track_id'] : null;
-  const rawStatus = result.extras['acquisition_status'];
-  const isPlayable = canPlay(rawStatus === 'ready' || rawStatus === 'pending' || rawStatus === 'failed' ? rawStatus : null) && trackId !== null;
-  const previewUrl = getPreviewUrl(result.extras);
+  const alreadySaved = useIsTrackSaved(result.title, result.subtitle);
+  const te = trackExtras(result.extras);
+  const isPlayable = canPlay(te.acquisitionStatus) && te.trackId !== null;
+  const previewUrl = te.previewUrl;
   const rows = trackInfoRows(result.extras);
   if (!rows.some((r) => r.key === 'featuring')) {
     const parsed = extractFeaturedFromText(result.title, result.subtitle);
@@ -60,10 +57,7 @@ export function TrackDetailBody({
     save.mutate(toCreateTrackRequest(result));
   };
 
-  const albumName =
-    typeof result.extras['album'] === 'string' && result.extras['album'].length > 0
-      ? result.extras['album']
-      : null;
+  const albumName = te.album;
 
   const onAlbumPress = (): void => {
     if (albumName !== null && result.subtitle !== null) {
@@ -125,58 +119,41 @@ export function TrackDetailBody({
           </View>
         ),
       )}
-      {isPlayable ? (
-        <View style={styles.playRow}>
-          <PlayIconButton
-            testID="detail-play"
-            isPlaying={playback.status === 'playing' && playback.track?.source.kind === 'library' && playback.track.source.trackId === trackId}
-            disabled={playback.status === 'loading'}
-            onPress={() => {
-              if (playback.status === 'playing' && playback.track?.source.kind === 'library' && playback.track.source.trackId === trackId) {
-                playback.pause();
-              } else {
-                void playback.play({
-                  source: { kind: 'library', trackId: trackId! },
-                  title: result.title,
-                  artist: result.subtitle ?? '',
-                  artworkUrl: result.image_url,
-                });
-              }
-            }}
-          />
-        </View>
-      ) : !isPlayable && previewUrl !== null ? (
-        <View style={styles.playRow}>
-          <PlayIconButton
-            testID="detail-preview"
-            isPlaying={
-              playback.status === 'playing' &&
-              playback.track?.source.kind === 'preview' &&
-              playback.track.source.previewUrl === previewUrl
-            }
-            disabled={playback.status === 'loading'}
-            onPress={() => {
-              if (
-                playback.status === 'playing' &&
-                playback.track?.source.kind === 'preview' &&
-                playback.track.source.previewUrl === previewUrl
-              ) {
-                playback.pause();
-              } else {
-                void playback.play({
-                  source: { kind: 'preview', previewUrl },
-                  title: result.title,
-                  artist: result.subtitle ?? '',
-                  artworkUrl: result.image_url,
-                });
-              }
-            }}
-          />
-          <Text variant="caption" tone="secondary" style={{ marginTop: spacing.xs }}>
-            Preview
-          </Text>
-        </View>
-      ) : null}
+      {(() => {
+        const source = isPlayable && te.trackId !== null
+          ? { kind: 'library' as const, trackId: te.trackId }
+          : previewUrl !== null
+            ? { kind: 'preview' as const, previewUrl }
+            : null;
+        if (!source) return null;
+        const playing = isCurrentlyPlaying(playback, source);
+        return (
+          <View style={styles.playRow}>
+            <PlayIconButton
+              testID={source.kind === 'library' ? 'detail-play' : 'detail-preview'}
+              isPlaying={playing}
+              disabled={playback.status === 'loading'}
+              onPress={() => {
+                if (playing) {
+                  playback.pause();
+                } else {
+                  void playback.play({
+                    source,
+                    title: result.title,
+                    artist: result.subtitle ?? '',
+                    artworkUrl: result.image_url,
+                  });
+                }
+              }}
+            />
+            {source.kind === 'preview' ? (
+              <Text variant="caption" tone="secondary" style={{ marginTop: spacing.xs }}>
+                Preview
+              </Text>
+            ) : null}
+          </View>
+        );
+      })()}
       <Button
         testID="detail-save"
         label={alreadySaved || save.isSuccess ? 'Saved' : 'Save to Library'}

@@ -113,15 +113,19 @@ export function LibraryScreen(): ReactElement {
       onExpandArtists={() => router.push('/library/all-artists' as never)}
       onPlaylistPress={(pl) => router.push(`/library/playlist/${pl.id}` as never)}
       onRefresh={state.refetch}
-      createModalVisible={createModalVisible}
-      onCreateModalToggle={setCreateModalVisible}
-      onCreatePlaylist={(name) => createMutation.mutate(name)}
-      createLoading={createMutation.isPending}
-      addToPlaylistTrack={addToPlaylistTrack}
-      onAddToPlaylistTrackChange={setAddToPlaylistTrack}
-      onDeleteTrack={(trackId) => deleteMutation.mutate(trackId)}
-      onRetryTrack={(trackId) => retryMutation.mutate(trackId)}
-      retryingTrackId={retryingTrackId}
+      playlistActions={{
+        createModalVisible,
+        onCreateModalToggle: setCreateModalVisible,
+        onCreatePlaylist: (name) => createMutation.mutate(name),
+        createLoading: createMutation.isPending,
+        addToPlaylistTrack,
+        onAddToPlaylistTrackChange: setAddToPlaylistTrack,
+      }}
+      trackActions={{
+        onDeleteTrack: (trackId) => deleteMutation.mutate(trackId),
+        onRetryTrack: (trackId) => retryMutation.mutate(trackId),
+        retryingTrackId,
+      }}
     />
   );
 }

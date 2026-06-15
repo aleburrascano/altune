@@ -12,7 +12,8 @@ import { formatDuration } from '@shared/lib/format';
 
 export { formatDuration };
 
-export type InfoRow = { key: string; label: string; value: string };
+export type InfoRowKey = 'duration' | 'album' | 'featuring';
+export type InfoRow = { key: InfoRowKey; label: string; value: string };
 
 export function trackInfoRows(extras: Record<string, unknown>): InfoRow[] {
   const rows: InfoRow[] = [];

@@ -13,7 +13,7 @@
  * EXPO_PUBLIC_API_URL overrides the default base in dev/prod builds:
  *   EXPO_PUBLIC_API_URL=https://altune.example.com npm start
  */
-import { supabase } from '../../features/auth/api/supabaseClient';
+import { supabase } from '../auth/supabaseClient';
 
 const DEFAULT_BASE = 'http://127.0.0.1:8000';
 

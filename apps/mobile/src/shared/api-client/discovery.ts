@@ -117,18 +117,18 @@ export type ContentFetchResponse = {
   latency_ms: number;
 };
 
+function _contentUrl(basePath: string, limit?: number): string {
+  if (limit === undefined) return basePath;
+  return `${basePath}?limit=${limit}`;
+}
+
 export async function getAlbumTracks(
   provider: string,
   externalId: string,
   limit?: number,
 ): Promise<ContentFetchResponse> {
-  const qs = new URLSearchParams();
-  if (limit !== undefined) {
-    qs.set('limit', String(limit));
-  }
-  const query = qs.toString();
   return apiFetch<ContentFetchResponse>(
-    `/v1/discovery/albums/${provider}/${encodeURIComponent(externalId)}/tracks${query ? `?${query}` : ''}`,
+    _contentUrl(`/v1/discovery/albums/${provider}/${encodeURIComponent(externalId)}/tracks`, limit),
   );
 }
 
@@ -137,13 +137,8 @@ export async function getArtistTopTracks(
   externalId: string,
   limit?: number,
 ): Promise<ContentFetchResponse> {
-  const qs = new URLSearchParams();
-  if (limit !== undefined) {
-    qs.set('limit', String(limit));
-  }
-  const query = qs.toString();
   return apiFetch<ContentFetchResponse>(
-    `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/top-tracks${query ? `?${query}` : ''}`,
+    _contentUrl(`/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/top-tracks`, limit),
   );
 }
 
@@ -152,12 +147,7 @@ export async function getArtistAlbums(
   externalId: string,
   limit?: number,
 ): Promise<ContentFetchResponse> {
-  const qs = new URLSearchParams();
-  if (limit !== undefined) {
-    qs.set('limit', String(limit));
-  }
-  const query = qs.toString();
   return apiFetch<ContentFetchResponse>(
-    `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/albums${query ? `?${query}` : ''}`,
+    _contentUrl(`/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/albums`, limit),
   );
 }

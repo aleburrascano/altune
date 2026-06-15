@@ -16,8 +16,8 @@ import { Artwork, Card, Row, Text, radius, spacing } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 
 import type { DiscoveryResult } from '../../../shared/api-client/discovery';
-import { usePlayback } from '../../playback/hooks/usePlayback';
-import { getPreviewUrl } from '../../playback/helpers/previewUrl';
+import { usePlayback } from '@shared/playback/usePlayback';
+import { getPreviewUrl } from '@shared/playback/previewUrl';
 
 export type DiscoverRowProps = {
   result: DiscoveryResult;

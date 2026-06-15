@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button, Text, spacing, useTheme } from '@shared/ui';
-import { useSignOut } from '../../auth/hooks/useSignOut';
+import { useSignOut } from '@shared/auth/useSignOut';
 
 type ProfileSheetProps = {
   visible: boolean;

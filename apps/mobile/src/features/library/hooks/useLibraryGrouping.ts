@@ -24,7 +24,7 @@ function groupKey(album: string | null, artist: string | null): string {
   return `${(album ?? '').toLowerCase()}|||${(artist ?? '').toLowerCase()}`;
 }
 
-function deriveAlbums(tracks: TrackResponse[]): AlbumGroup[] {
+export function deriveAlbums(tracks: TrackResponse[]): AlbumGroup[] {
   const map = new Map<string, AlbumGroup>();
   for (const t of tracks) {
     if (t.album == null || t.album.length === 0) continue;
@@ -53,7 +53,7 @@ function deriveAlbums(tracks: TrackResponse[]): AlbumGroup[] {
   return [...map.values()];
 }
 
-function deriveArtists(tracks: TrackResponse[]): ArtistGroup[] {
+export function deriveArtists(tracks: TrackResponse[]): ArtistGroup[] {
   const map = new Map<string, ArtistGroup>();
   for (const t of tracks) {
     const k = t.artist.toLowerCase();

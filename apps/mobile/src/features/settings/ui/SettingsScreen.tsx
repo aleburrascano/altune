@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button, Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSession } from '../../auth/hooks/useSession';
-import { useSignOut } from '../../auth/hooks/useSignOut';
+import { useSignOut } from '@shared/auth/useSignOut';
 
 export function SettingsScreen(): ReactElement {
   const theme = useTheme();
