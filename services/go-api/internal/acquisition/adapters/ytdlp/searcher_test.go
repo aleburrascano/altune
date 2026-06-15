@@ -13,7 +13,7 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 	}
 
 	// Arrange
-	searcher := NewYtDlpAudioSearcher("", "")
+	searcher := NewYtDlpAudioSearcher("", "", "")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -42,18 +42,21 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 }
 
 func TestNewYtDlpAudioSearcher_ReturnsNonNil(t *testing.T) {
-	searcher := NewYtDlpAudioSearcher("", "")
+	searcher := NewYtDlpAudioSearcher("", "", "")
 	if searcher == nil {
 		t.Fatal("NewYtDlpAudioSearcher returned nil")
 	}
 }
 
 func TestNewYtDlpAudioSearcher_StoresConfig(t *testing.T) {
-	searcher := NewYtDlpAudioSearcher("/usr/bin/ffmpeg", "/tmp/cookies.txt")
+	searcher := NewYtDlpAudioSearcher("/usr/bin/ffmpeg", "/tmp/cookies.txt", "deno")
 	if searcher.ffmpegLocation != "/usr/bin/ffmpeg" {
 		t.Errorf("ffmpegLocation = %q, want %q", searcher.ffmpegLocation, "/usr/bin/ffmpeg")
 	}
 	if searcher.cookieFile != "/tmp/cookies.txt" {
 		t.Errorf("cookieFile = %q, want %q", searcher.cookieFile, "/tmp/cookies.txt")
+	}
+	if searcher.jsRuntime != "deno" {
+		t.Errorf("jsRuntime = %q, want %q", searcher.jsRuntime, "deno")
 	}
 }
