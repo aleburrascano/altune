@@ -138,7 +138,7 @@ func (s *PlaylistService) RemoveTrack(ctx context.Context, userId shared.UserId,
 }
 
 func (s *PlaylistService) Reorder(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
-	playlist, err := s.playlistRepo.GetByID(ctx, playlistId, userId)
+	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
 	if err != nil {
 		return fmt.Errorf("reorder playlist: %w", err)
 	}
@@ -146,11 +146,11 @@ func (s *PlaylistService) Reorder(ctx context.Context, userId shared.UserId, pla
 		return ErrPlaylistNotFound
 	}
 
-	tracks := make([]domain.PlaylistTrack, len(trackIds))
-	for i, id := range trackIds {
-		tracks[i] = domain.PlaylistTrack{TrackId: id, Position: i}
+	if err := playlist.Reorder(trackIds); err != nil {
+		return fmt.Errorf("reorder playlist: %w", err)
 	}
-	if err := s.playlistRepo.ReorderTracks(ctx, playlistId, tracks); err != nil {
+
+	if err := s.playlistRepo.ReorderTracks(ctx, playlistId, playlist.Tracks); err != nil {
 		return fmt.Errorf("reorder playlist: %w", err)
 	}
 	return nil

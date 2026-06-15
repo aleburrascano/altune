@@ -61,7 +61,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	}
 
 	if !created {
-		existing, err := s.trackRepo.GetByID(ctx, track.ID, userId)
+		existing, err := s.trackRepo.GetByDedupKey(ctx, userId, track.DedupKey)
 		if err != nil {
 			return nil, err
 		}

@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -27,10 +30,20 @@ func NewObjectStorageAudioStore(endpoint, accessKey, secretKey, bucket, region s
 	}
 	host = strings.TrimRight(host, "/")
 
+	transport := &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+		TLSHandshakeTimeout:  10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConns:          10,
+		MaxIdleConnsPerHost:   10,
+	}
+
 	client, err := minio.New(host, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Region: region,
-		Secure: secure,
+		Creds:     credentials.NewStaticV4(accessKey, secretKey, ""),
+		Region:    region,
+		Secure:    secure,
+		Transport: transport,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create s3 client: %w", err)

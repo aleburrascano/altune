@@ -122,6 +122,18 @@ func (r *fakeTrackRepo) Delete(_ context.Context, id catdomain.TrackId, userId s
 	return r.deletedOk, nil
 }
 
+func (r *fakeTrackRepo) GetByDedupKey(_ context.Context, userId shared.UserId, dedupKey string) (*catdomain.Track, error) {
+	if r.getErr != nil {
+		return nil, r.getErr
+	}
+	for _, t := range r.tracks {
+		if t.DedupKey == dedupKey && t.UserId == userId {
+			return t, nil
+		}
+	}
+	return nil, nil
+}
+
 func (r *fakeTrackRepo) seed(t *catdomain.Track) {
 	r.tracks[t.ID.String()] = t
 }
@@ -377,7 +389,7 @@ func makePlaylist(userId shared.UserId, name string) *catdomain.Playlist {
 func buildTrackHandler(trackRepo *fakeTrackRepo, scheduler *fakeScheduler) (*TrackHandler, chi.Router) {
 	addSvc := service.NewAddTrackService(trackRepo)
 	listSvc := service.NewListTracksService(trackRepo)
-	deleteSvc := service.NewDeleteTrackService(trackRepo)
+	deleteSvc := service.NewDeleteTrackService(trackRepo, newFakeAudioStore())
 	reconcileSvc := service.NewReconcileTrackStatusService(trackRepo, newFakeAudioStore())
 
 	var sched acquisitionScheduler
@@ -401,9 +413,13 @@ func buildPlaylistHandler(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) (*Pla
 	return h, r
 }
 
-func buildStreamHandler(trackRepo *fakeTrackRepo, audioStore *fakeAudioStore) (*StreamHandler, chi.Router) {
+func buildStreamHandler(trackRepo *fakeTrackRepo, audioStore *fakeAudioStore, scheduler *fakeScheduler) (*StreamHandler, chi.Router) {
 	reconcileSvc := service.NewReconcileTrackStatusService(trackRepo, audioStore)
-	h := NewStreamHandler(trackRepo, audioStore, reconcileSvc)
+	var sched acquisitionScheduler
+	if scheduler != nil {
+		sched = scheduler
+	}
+	h := NewStreamHandler(trackRepo, audioStore, reconcileSvc, sched)
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(&fakeTokenVerifier{userId: testUserId}))
 	r.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)

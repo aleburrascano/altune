@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 type Step interface {
@@ -36,12 +37,15 @@ func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) erro
 	return nil
 }
 
-func rollback(ctx context.Context, completed []Step, ac *AcquisitionContext) {
+func rollback(_ context.Context, completed []Step, ac *AcquisitionContext) {
+	rbCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	for i := len(completed) - 1; i >= 0; i-- {
 		step := completed[i]
-		slog.InfoContext(ctx, "rolling back step", "step", step.Name())
-		if err := step.Rollback(ctx, ac); err != nil {
-			slog.ErrorContext(ctx, "rollback failed", "step", step.Name(), "error", err)
+		slog.InfoContext(rbCtx, "rolling back step", "step", step.Name())
+		if err := step.Rollback(rbCtx, ac); err != nil {
+			slog.ErrorContext(rbCtx, "rollback failed", "step", step.Name(), "error", err)
 		}
 	}
 }

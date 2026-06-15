@@ -98,6 +98,18 @@ func (r *mockTrackRepo) Delete(_ context.Context, id domain.TrackId, userId shar
 	return true, nil
 }
 
+func (r *mockTrackRepo) GetByDedupKey(_ context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error) {
+	if r.errOnGetBy != nil {
+		return nil, r.errOnGetBy
+	}
+	for _, t := range r.tracks {
+		if t.DedupKey == dedupKey && t.UserId == userId {
+			return t, nil
+		}
+	}
+	return nil, nil
+}
+
 // seed adds a track directly into the mock store.
 func (r *mockTrackRepo) seed(track *domain.Track) {
 	r.tracks[track.ID.String()] = track

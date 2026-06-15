@@ -62,6 +62,10 @@ func (r *fakeTrackRepository) Delete(_ context.Context, _ domain.TrackId, _ shar
 	return false, nil
 }
 
+func (r *fakeTrackRepository) GetByDedupKey(_ context.Context, _ shared.UserId, _ string) (*domain.Track, error) {
+	return nil, nil
+}
+
 type fakeAudioSearcher struct {
 	searchResults []ports.AudioCandidate
 	searchErr     error
@@ -165,7 +169,7 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 
 	// Assert: all complete (WaitGroup drains)
 	wg.Wait()
-	_ = completedCount // all goroutines finished if we reach here
+	_ = completedCount.Load() // all goroutines finished if we reach here
 
 	if len(sem) != 0 {
 		t.Errorf("semaphore should be empty after all goroutines complete, got %d tokens held", len(sem))

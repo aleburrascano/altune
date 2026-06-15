@@ -186,7 +186,21 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, DiscoverySearchResponse{
+	status := http.StatusOK
+	if len(result.ProviderStatuses) > 0 {
+		allFailed := true
+		for _, ps := range result.ProviderStatuses {
+			if ps.Status == domain.ProviderStatusOK {
+				allFailed = false
+				break
+			}
+		}
+		if allFailed {
+			status = http.StatusServiceUnavailable
+		}
+	}
+
+	httputil.WriteJSON(w, status, DiscoverySearchResponse{
 		Query:     q,
 		QueryNorm: service.NormalizeForMatch(q),
 		Results:   resultDTOs,

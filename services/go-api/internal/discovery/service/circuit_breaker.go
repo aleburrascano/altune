@@ -24,6 +24,7 @@ type circuitEntry struct {
 	state        CircuitState
 	failures     int
 	lastFailedAt time.Time
+	probing      bool
 }
 
 type CircuitBreaker struct {
@@ -53,6 +54,10 @@ func (cb *CircuitBreaker) AllowRequest(provider domain.ProviderName) bool {
 		}
 		return false
 	case CircuitHalfOpen:
+		if entry.probing {
+			return false
+		}
+		entry.probing = true
 		return true
 	}
 	return true
@@ -65,6 +70,7 @@ func (cb *CircuitBreaker) RecordSuccess(provider domain.ProviderName) {
 	entry := cb.getOrCreate(provider)
 	entry.state = CircuitClosed
 	entry.failures = 0
+	entry.probing = false
 }
 
 func (cb *CircuitBreaker) RecordFailure(provider domain.ProviderName) {
@@ -74,8 +80,9 @@ func (cb *CircuitBreaker) RecordFailure(provider domain.ProviderName) {
 	entry := cb.getOrCreate(provider)
 	entry.failures++
 	entry.lastFailedAt = time.Now()
+	entry.probing = false
 
-	if entry.failures >= failureThreshold {
+	if entry.state == CircuitHalfOpen || entry.failures >= failureThreshold {
 		entry.state = CircuitOpen
 	}
 }

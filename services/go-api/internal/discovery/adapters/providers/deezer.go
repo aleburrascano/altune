@@ -37,39 +37,48 @@ func (a *DeezerAdapter) Search(ctx context.Context, query string, kinds map[doma
 			continue
 		}
 
-		endpoint := deezerSearchEndpoint(kind)
-		if endpoint == "" {
-			continue
-		}
-
-		u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=10", endpoint, url.QueryEscape(query))
-
-		req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+		items, err := a.searchKind(ctx, query, kind)
 		if err != nil {
 			continue
 		}
-
-		resp, err := a.client.Do(req)
-		if err != nil {
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			continue
-		}
-
-		var body deezerSearchResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-			continue
-		}
-
-		for _, item := range body.Data {
-			sr := mapDeezerResult(item, kind)
-			results = append(results, sr)
-		}
+		results = append(results, items...)
 	}
 
+	return results, nil
+}
+
+func (a *DeezerAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
+	endpoint := deezerSearchEndpoint(kind)
+	if endpoint == "" {
+		return nil, fmt.Errorf("unsupported kind")
+	}
+
+	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=10", endpoint, url.QueryEscape(query))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("deezer returned %d", resp.StatusCode)
+	}
+
+	var body deezerSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+
+	var results []domain.SearchResult
+	for _, item := range body.Data {
+		results = append(results, mapDeezerResult(item, kind))
+	}
 	return results, nil
 }
 

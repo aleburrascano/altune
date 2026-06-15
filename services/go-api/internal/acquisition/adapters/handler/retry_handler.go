@@ -2,6 +2,8 @@ package handler
 
 import (
 	"net/http"
+	"sync"
+	"time"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
@@ -16,9 +18,13 @@ type acquisitionScheduler interface {
 	Schedule(userId shared.UserId, trackId domain.TrackId)
 }
 
+const retryCooldown = 60 * time.Second
+
 type RetryHandler struct {
 	trackRepo ports.TrackRepository
 	scheduler acquisitionScheduler
+	mu        sync.Mutex
+	lastRetry map[string]time.Time
 }
 
 func NewRetryHandler(
@@ -28,6 +34,7 @@ func NewRetryHandler(
 	return &RetryHandler{
 		trackRepo: trackRepo,
 		scheduler: scheduler,
+		lastRetry: make(map[string]time.Time),
 	}
 }
 
@@ -58,6 +65,18 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 		httputil.Conflict(w, "track is not in failed state")
 		return
 	}
+
+	key := trackId.String()
+	h.mu.Lock()
+	if last, ok := h.lastRetry[key]; ok && time.Since(last) < retryCooldown {
+		h.mu.Unlock()
+		httputil.WriteJSON(w, http.StatusTooManyRequests, map[string]string{
+			"error": "retry cooldown active, try again later",
+		})
+		return
+	}
+	h.lastRetry[key] = time.Now()
+	h.mu.Unlock()
 
 	h.scheduler.Schedule(userId, trackId)
 
