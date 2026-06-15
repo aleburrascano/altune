@@ -1,2 +1,0 @@
-# Integration tests — adapters against real-ish dependencies (testcontainers).
-# Empty until first adapter with external dependencies lands.
