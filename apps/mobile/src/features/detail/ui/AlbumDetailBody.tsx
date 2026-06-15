@@ -1,18 +1,21 @@
-import type { ReactElement } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useState, type ReactElement } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { useRouter } from 'expo-router';
 
 import { useQueryClient } from '@tanstack/react-query';
+import { ChevronDown, ChevronRight } from 'lucide-react-native';
 
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
+import { useTheme } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { extractFeaturedFromText } from '../extras';
+import { useAlbumDiscovery } from '../hooks/useAlbumDiscovery';
 import { useAlbumTracks } from '../hooks/useAlbumTracks';
 import { useLibraryTracksForAlbum, libraryTrackToDiscoveryResult } from '../hooks/useLibraryTracks';
 import { useSaveTrack } from '../hooks/useSaveTrack';
@@ -45,23 +48,39 @@ function _enrichAlbumTrack(track: DiscoveryResult, album: DiscoveryResult): Disc
   };
 }
 
-/** Album body: track list fetched from provider API. */
-export function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResult; detailRoute: string }): ReactElement {
+function _isTrackOwned(title: string, ownedTitles: Set<string>): boolean {
+  return ownedTitles.has(title.toLowerCase().trim());
+}
+
+export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean }): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const theme = useTheme();
   const save = useSaveTrack();
-  const source = result.sources[0];
+  const source = !isFromLibrary ? result.sources[0] : undefined;
   const hasSources = source !== undefined;
+
   const { tracks: apiTracks, isLoading: apiLoading, isError: apiError, refetch } = useAlbumTracks({
     provider: source?.provider ?? '',
     externalId: source?.external_id ?? '',
     allSources: result.sources,
     enabled: hasSources,
   });
+
   const localTracks = useLibraryTracksForAlbum(result.title, result.subtitle);
-  const localAsDiscovery = !hasSources && localTracks.length > 0
-    ? localTracks.map(libraryTrackToDiscoveryResult)
-    : [];
+  const localAsDiscovery = localTracks.map(libraryTrackToDiscoveryResult);
+
+  const [moreExpanded, setMoreExpanded] = useState(false);
+
+  const discovery = useAlbumDiscovery({
+    albumTitle: result.title,
+    artist: result.subtitle,
+    enabled: !hasSources && moreExpanded,
+  });
+
+  const ownedTitles = new Set(localTracks.map((t) => t.title.toLowerCase().trim()));
+  const moreTracks = discovery.tracks.filter((t) => !_isTrackOwned(t.title, ownedTitles));
+
   const tracks = hasSources ? apiTracks : localAsDiscovery;
   const isLoading = hasSources ? apiLoading : false;
   const isError = hasSources ? apiError : false;
@@ -76,7 +95,8 @@ export function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResu
   };
 
   const onSaveAll = (): void => {
-    for (const track of tracks) {
+    const allTracks = hasSources ? tracks : [...tracks, ...moreTracks];
+    for (const track of allTracks) {
       const enriched = _enrichAlbumTrack(track, result);
       if (!_isTrackInLibraryCache(queryClient, enriched.title, enriched.subtitle)) {
         save.mutate(toCreateTrackRequest(enriched));
@@ -103,7 +123,7 @@ export function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResu
     );
   }
 
-  if (tracks.length === 0) {
+  if (tracks.length === 0 && !moreExpanded) {
     return (
       <View testID="detail-tracklist-empty" style={styles.placeholder}>
         <Text variant="body" tone="tertiary">
@@ -128,17 +148,22 @@ export function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResu
     metaParts.push(hrs > 0 ? `${hrs} hr ${mins} min` : `${mins} min`);
   }
 
+  const allSaved = tracks.every((t) => _isTrackInLibraryCache(queryClient, t.title, t.subtitle));
+
   return (
     <View testID="detail-tracklist" style={styles.trackList}>
-      <Button
-        testID="detail-save-all"
-        label="Save All to Library"
-        onPress={onSaveAll}
-        style={styles.saveAllButton}
-      />
+      {hasSources && !allSaved ? (
+        <Button
+          testID="detail-save-all"
+          label="Save All to Library"
+          onPress={onSaveAll}
+          style={styles.saveAllButton}
+        />
+      ) : null}
+
       {tracks.map((track, index) => (
         <AlbumTrackRow
-          key={track.sources[0]?.external_id ?? index}
+          key={track.sources[0]?.external_id ?? `local-${index}`}
           track={track}
           index={index}
           subtitle={_trackSubtitleWithFeaturing(track)}
@@ -147,9 +172,70 @@ export function AlbumDetailBody({ result, detailRoute }: { result: DiscoveryResu
           onQuickSave={() => onQuickSave(track)}
         />
       ))}
+
       <Text testID="detail-album-meta" variant="label" tone="tertiary" style={styles.albumMeta}>
         {metaParts.join(' · ')}
       </Text>
+
+      {!hasSources ? (
+        <View style={styles.moreSection}>
+          <Pressable
+            testID="detail-more-from-album"
+            onPress={() => setMoreExpanded((prev) => !prev)}
+            accessibilityRole="button"
+            accessibilityLabel={moreExpanded ? 'Collapse more tracks' : 'Show more from this album'}
+            style={({ pressed }) => [styles.moreHeader, pressed ? { opacity: 0.6 } : null]}
+          >
+            <Text variant="label" tone="accent">
+              More from this album
+            </Text>
+            {moreExpanded ? (
+              <ChevronDown size={18} color={theme.color.accent} />
+            ) : (
+              <ChevronRight size={18} color={theme.color.accent} />
+            )}
+          </Pressable>
+
+          {moreExpanded ? (
+            discovery.isLoading ? (
+              <View style={styles.moreLoading}>
+                <ActivityIndicator size="small" />
+              </View>
+            ) : discovery.isError ? (
+              <View style={styles.moreError}>
+                <Text variant="caption" tone="secondary">
+                  Couldn't load additional tracks.
+                </Text>
+                <Button label="Retry" onPress={() => discovery.refetch()} style={sharedStyles.retryButton} />
+              </View>
+            ) : moreTracks.length === 0 ? (
+              <Text variant="caption" tone="tertiary" style={styles.moreEmpty}>
+                You have all tracks from this album.
+              </Text>
+            ) : (
+              <>
+                {moreTracks.map((track, index) => (
+                  <AlbumTrackRow
+                    key={track.sources[0]?.external_id ?? `more-${index}`}
+                    track={track}
+                    index={tracks.length + index}
+                    subtitle={_trackSubtitleWithFeaturing(track)}
+                    isSaved={false}
+                    onPress={() => onTrackPress(track)}
+                    onQuickSave={() => onQuickSave(track)}
+                  />
+                ))}
+                <Button
+                  testID="detail-save-all-more"
+                  label="Save All to Library"
+                  onPress={onSaveAll}
+                  style={styles.saveAllButton}
+                />
+              </>
+            )
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -159,4 +245,14 @@ const styles = StyleSheet.create({
   trackList: { marginTop: spacing.lg },
   albumMeta: { marginTop: spacing.lg, textAlign: 'center' as const },
   saveAllButton: { marginBottom: spacing.md },
+  moreSection: { marginTop: spacing.xl },
+  moreHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+  },
+  moreLoading: { paddingVertical: spacing.lg, alignItems: 'center' },
+  moreError: { paddingVertical: spacing.md, alignItems: 'center' },
+  moreEmpty: { paddingVertical: spacing.md },
 });

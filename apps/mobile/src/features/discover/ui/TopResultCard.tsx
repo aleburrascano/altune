@@ -37,17 +37,19 @@ export function TopResultCard({
               />
             }
           >
-            <Text variant="title" numberOfLines={2}>
-              {result.title}
-            </Text>
-            {result.subtitle !== null ? (
-              <Text variant="body" tone="secondary" numberOfLines={1} style={{ marginTop: 2 }}>
-                {result.subtitle}
+            <View>
+              <Text variant="title" numberOfLines={2}>
+                {result.title}
               </Text>
-            ) : null}
-            <Text variant="caption" tone="tertiary" style={{ marginTop: spacing.sm }}>
-              {kindLabel}
-            </Text>
+              {result.subtitle != null && result.subtitle.length > 0 ? (
+                <Text variant="body" tone="secondary" numberOfLines={1} style={{ marginTop: 2 }}>
+                  {result.subtitle}
+                </Text>
+              ) : null}
+              <Text variant="body" tone="tertiary" style={{ marginTop: 2 }}>
+                {kindLabel}
+              </Text>
+            </View>
           </Row>
         </Card>
       </Pressable>

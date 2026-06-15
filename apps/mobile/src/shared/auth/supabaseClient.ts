@@ -17,6 +17,7 @@
  * Promoted from features/auth/api/ to shared/auth/ because 2+ features
  * depend on the Supabase client (api-client, playback).
  */
+import { Platform } from 'react-native';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 
@@ -25,11 +26,26 @@ const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 // AIDEV-NOTE: Supabase SDK calls getItem/setItem/removeItem with the same
 // `name` key consistently; the adapter just forwards to SecureStore.
-const secureStoreAdapter = {
-  getItem: (key: string): Promise<string | null> => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string): Promise<void> => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string): Promise<void> => SecureStore.deleteItemAsync(key),
-};
+// Web fallback uses localStorage since expo-secure-store has no web impl.
+const webStorage = typeof window !== 'undefined' && window.localStorage != null
+  ? {
+      getItem: (key: string): Promise<string | null> => Promise.resolve(window.localStorage.getItem(key)),
+      setItem: (key: string, value: string): Promise<void> => { window.localStorage.setItem(key, value); return Promise.resolve(); },
+      removeItem: (key: string): Promise<void> => { window.localStorage.removeItem(key); return Promise.resolve(); },
+    }
+  : {
+      getItem: (_key: string): Promise<string | null> => Promise.resolve(null),
+      setItem: (_key: string, _value: string): Promise<void> => Promise.resolve(),
+      removeItem: (_key: string): Promise<void> => Promise.resolve(),
+    };
+
+const secureStoreAdapter = Platform.OS === 'web'
+  ? webStorage
+  : {
+      getItem: (key: string): Promise<string | null> => SecureStore.getItemAsync(key),
+      setItem: (key: string, value: string): Promise<void> => SecureStore.setItemAsync(key, value),
+      removeItem: (key: string): Promise<void> => SecureStore.deleteItemAsync(key),
+    };
 
 export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {

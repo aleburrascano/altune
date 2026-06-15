@@ -1,10 +1,13 @@
-import type { ReactElement } from 'react';
-import { Alert, RefreshControl, ScrollView, StyleSheet } from 'react-native';
+import { useState, type ReactElement } from 'react';
+import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 
 import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
+import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
+import { usePlayback } from '@shared/playback/usePlayback';
 import { Screen, spacing, useTheme } from '@shared/ui';
 
 import type { AlbumGroup, ArtistGroup } from '../hooks/useLibraryGrouping';
+import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 import { AddToPlaylistSheet } from './AddToPlaylistSheet';
 import { AlbumCarousel } from './AlbumCarousel';
 import { ArtistCarousel } from './ArtistCarousel';
@@ -63,6 +66,8 @@ export function LibraryHome({
   trackActions,
 }: LibraryHomeProps): ReactElement {
   const theme = useTheme();
+  const playback = usePlayback();
+  const [actionTrack, setActionTrack] = useState<TrackResponse | null>(null);
   return (
     <Screen>
       <LibraryHeader />
@@ -96,20 +101,20 @@ export function LibraryHome({
               <LibraryRow
                 key={track.id}
                 track={track}
+                {...(track.acquisition_status === 'ready' ? { onPlay: () => {
+                  void playback.play({
+                    source: { kind: 'library', trackId: track.id },
+                    title: track.title,
+                    artist: track.artist,
+                    artworkUrl: track.artwork_url ?? null,
+                    durationSeconds: track.duration_seconds ?? undefined,
+                  });
+                } } : {})}
                 onPress={() => navigateToTrack(track)}
-                onLongPress={() => {
-                  Alert.alert(track.title, undefined, [
-                    { text: 'Add to Playlist', onPress: () => playlistActions.onAddToPlaylistTrackChange(track) },
-                    { text: 'Remove from Library', style: 'destructive', onPress: () => trackActions.onDeleteTrack(track.id) },
-                    { text: 'Cancel', style: 'cancel' },
-                  ]);
-                }}
-                onRetry={
-                  track.acquisition_status === 'failed'
-                    ? () => trackActions.onRetryTrack(track.id)
-                    : undefined
-                }
+                onMore={() => setActionTrack(track)}
+                {...(track.acquisition_status === 'failed' ? { onRetry: () => trackActions.onRetryTrack(track.id) } : {})}
                 retrying={trackActions.retryingTrackId === track.id}
+                isPlaying={isCurrentlyPlaying(playback, { kind: 'library', trackId: track.id })}
               />
             ))}
           </>
@@ -148,6 +153,17 @@ export function LibraryHome({
         trackId={playlistActions.addToPlaylistTrack?.id ?? ''}
         trackTitle={playlistActions.addToPlaylistTrack != null ? `${playlistActions.addToPlaylistTrack.title} — ${playlistActions.addToPlaylistTrack.artist}` : ''}
         onClose={() => playlistActions.onAddToPlaylistTrackChange(null)}
+      />
+      <ActionSheet
+        visible={actionTrack != null}
+        title={actionTrack?.title}
+        subtitle={actionTrack != null ? `${actionTrack.artist}${actionTrack.album != null ? ` · ${actionTrack.album}` : ''}` : undefined}
+        options={actionTrack != null ? [
+          { label: 'View Details', onPress: () => navigateToTrack(actionTrack) },
+          { label: 'Add to Playlist', onPress: () => playlistActions.onAddToPlaylistTrackChange(actionTrack) },
+          { label: 'Remove from Library', tone: 'danger' as const, onPress: () => trackActions.onDeleteTrack(actionTrack.id) },
+        ] : []}
+        onClose={() => setActionTrack(null)}
       />
     </Screen>
   );

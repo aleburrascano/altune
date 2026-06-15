@@ -1,4 +1,4 @@
-export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'error';
+export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'ended' | 'error';
 
 export type PlaybackSource =
   | { readonly kind: 'library'; readonly trackId: string }
@@ -9,6 +9,7 @@ export interface PlaybackTrack {
   readonly title: string;
   readonly artist: string;
   readonly artworkUrl: string | null;
+  readonly durationSeconds?: number | undefined;
 }
 
 export interface PlaybackState {
@@ -25,6 +26,7 @@ export interface PlaybackControls {
   resume(): void;
   seekTo(positionMs: number): void;
   stop(): void;
+  retry(): void;
 }
 
 export type PlaybackContextValue = PlaybackState & PlaybackControls;

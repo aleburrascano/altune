@@ -1,18 +1,21 @@
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronDown, Pause, Play } from 'lucide-react-native';
+import { ChevronDown, Pause, Play, RotateCcw, SkipBack, SkipForward } from 'lucide-react-native';
 
 import { usePlayback } from '../hooks/usePlayback';
 import { Scrubber } from './Scrubber';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
+import { Button } from '@shared/ui/primitives/Button';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
+const SKIP_MS = 10_000;
+
 export function FullPlayer() {
-  const { status, track, positionMs, durationMs, pause, resume, seekTo } = usePlayback();
+  const { status, track, positionMs, durationMs, pause, resume, seekTo, retry } = usePlayback();
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -25,6 +28,19 @@ export function FullPlayer() {
 
   const isPlaying = status === 'playing';
   const isPreview = track.source.kind === 'preview';
+  const isError = status === 'error';
+  const isEnded = status === 'ended';
+
+  const skipBack = () => seekTo(Math.max(0, positionMs - SKIP_MS));
+  const skipForward = () => seekTo(Math.min(durationMs, positionMs + SKIP_MS));
+
+  const statusLabel = isError
+    ? 'Error'
+    : isEnded
+      ? isPreview ? 'Preview ended' : 'Finished'
+      : isPreview ? 'Preview' : 'Now Playing';
+
+  const statusTone = isError ? 'danger' : isPreview || isEnded ? 'warning' : 'secondary';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}>
@@ -35,8 +51,8 @@ export function FullPlayer() {
           onPress={() => router.back()}
           accessibilityLabel="Close player"
         />
-        <Text variant="caption" tone={isPreview ? 'warning' : 'secondary'}>
-          {isPreview ? 'Preview' : 'Now Playing'}
+        <Text variant="caption" tone={statusTone}>
+          {statusLabel}
         </Text>
         <View style={styles.headerSpacer} />
       </View>
@@ -58,19 +74,39 @@ export function FullPlayer() {
 
       <Scrubber positionMs={positionMs} durationMs={durationMs} onSeek={seekTo} />
 
-      <View style={styles.controls}>
-        <View
-          style={[styles.playButton, { backgroundColor: theme.color.accent }]}
-        >
-          <IconButton
-            icon={isPlaying ? Pause : Play}
-            size={32}
-            color={theme.color.onAccent}
-            onPress={isPlaying ? pause : resume}
-            accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+      {isError ? (
+        <View style={styles.errorControls}>
+          <Button
+            label="Retry"
+            onPress={retry}
+            haptic
           />
         </View>
-      </View>
+      ) : (
+        <View style={styles.controls}>
+          <IconButton
+            icon={SkipBack}
+            size={24}
+            onPress={skipBack}
+            accessibilityLabel="Skip back 10 seconds"
+          />
+          <View style={[styles.playButton, { backgroundColor: theme.color.accent }]}>
+            <IconButton
+              icon={isPlaying ? Pause : isEnded ? RotateCcw : Play}
+              size={32}
+              color={theme.color.onAccent}
+              onPress={isPlaying ? pause : isEnded ? () => { seekTo(0); resume(); } : resume}
+              accessibilityLabel={isPlaying ? 'Pause' : isEnded ? 'Play again' : 'Play'}
+            />
+          </View>
+          <IconButton
+            icon={SkipForward}
+            size={24}
+            onPress={skipForward}
+            accessibilityLabel="Skip forward 10 seconds"
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -105,6 +141,11 @@ const styles = StyleSheet.create({
   controls: {
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: spacing['2xl'],
+    gap: spacing['2xl'],
+  },
+  errorControls: {
     alignItems: 'center',
     paddingTop: spacing['2xl'],
   },

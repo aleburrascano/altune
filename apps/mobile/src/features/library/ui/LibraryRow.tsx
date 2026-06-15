@@ -1,6 +1,8 @@
 import type { ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
+import { MoreVertical } from 'lucide-react-native';
+
 import { formatDuration } from '@shared/lib/format';
 import { Artwork, Row, Text, spacing, useTheme } from '@shared/ui';
 
@@ -9,15 +11,17 @@ import { formatFailureReason } from './formatFailureReason';
 
 type LibraryRowProps = {
   track: TrackResponse;
+  onPlay?: () => void;
   onPress: () => void;
-  onLongPress?: () => void;
-  onDelete?: () => void;
+  onMore: () => void;
   onRetry?: (() => void) | undefined;
   retrying?: boolean;
+  isPlaying?: boolean;
 };
 
-export function LibraryRow({ track, onPress, onLongPress, onRetry, retrying }: LibraryRowProps): ReactElement {
+export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, isPlaying }: LibraryRowProps): ReactElement {
   const theme = useTheme();
+  const isReady = track.acquisition_status === 'ready';
   const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
   const retryLabel = retrying ? ', retrying' : onRetry != null ? ', retry available' : '';
   const failedLabel = track.acquisition_status === 'failed' ? ', failed' : '';
@@ -29,12 +33,18 @@ export function LibraryRow({ track, onPress, onLongPress, onRetry, retrying }: L
       ? formatDuration(track.duration_seconds)
       : null;
 
+  const handlePress = () => {
+    if (isReady && onPlay) {
+      onPlay();
+    } else {
+      onPress();
+    }
+  };
+
   return (
     <Pressable
       testID={`library-row-${track.id}`}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={400}
+      onPress={handlePress}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
       style={({ pressed }) => [
@@ -48,14 +58,26 @@ export function LibraryRow({ track, onPress, onLongPress, onRetry, retrying }: L
           <Artwork uri={track.artwork_url} size={48} radius={6} accessibilityLabel="Album art" />
         }
         trailing={
-          duration != null ? (
-            <Text variant="caption" tone="tertiary">
-              {duration}
-            </Text>
-          ) : null
+          <View style={styles.trailing}>
+            {duration != null ? (
+              <Text variant="caption" tone="tertiary">
+                {duration}
+              </Text>
+            ) : null}
+            <Pressable
+              testID={`library-row-more-${track.id}`}
+              onPress={(e) => { e.stopPropagation?.(); onMore(); }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`More options for ${track.title}`}
+              style={styles.moreBtn}
+            >
+              <MoreVertical size={18} color={theme.color.textTertiary} />
+            </Pressable>
+          </View>
         }
       >
-        <Text variant="bodyStrong" numberOfLines={1}>
+        <Text variant="bodyStrong" numberOfLines={1} {...(isPlaying ? { tone: 'accent' as const } : {})}>
           {track.title}
         </Text>
         <Text variant="label" tone="secondary" numberOfLines={1} style={styles.subtitle}>
@@ -121,4 +143,11 @@ const styles = StyleSheet.create({
   pending: { marginTop: 2 },
   failedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 2 },
   failed: { flexShrink: 1 },
+  trailing: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  moreBtn: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

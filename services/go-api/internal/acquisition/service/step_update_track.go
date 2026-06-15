@@ -38,6 +38,10 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext) e
 		return fmt.Errorf("mark ready: %w", err)
 	}
 
+	if ac.Selected != nil && ac.Selected.Duration > 0 {
+		track.SetDuration(ac.Selected.Duration)
+	}
+
 	if err := s.trackRepo.Update(ctx, track); err != nil {
 		return fmt.Errorf("persist track update: %w", err)
 	}

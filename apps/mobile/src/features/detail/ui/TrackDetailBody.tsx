@@ -12,6 +12,7 @@ import { usePlayback } from '@shared/playback/usePlayback';
 import { extractFeaturedFromText, trackInfoRows } from '../extras';
 import { trackExtras } from '../extras-accessors';
 import { useIsTrackSaved } from '../hooks/useIsTrackSaved';
+import { useLibraryTrackMatch } from '../hooks/useLibraryTrackMatch';
 import { useSaveTrack } from '../hooks/useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
 
@@ -38,8 +39,11 @@ export function TrackDetailBody({
   const save = useSaveTrack();
   const playback = usePlayback();
   const alreadySaved = useIsTrackSaved(result.title, result.subtitle);
+  const libraryMatch = useLibraryTrackMatch(result.title, result.subtitle);
   const te = trackExtras(result.extras);
-  const isPlayable = canPlay(te.acquisitionStatus) && te.trackId !== null;
+  const effectiveTrackId = te.trackId ?? libraryMatch?.id ?? null;
+  const effectiveAcqStatus = te.acquisitionStatus ?? libraryMatch?.acquisition_status ?? null;
+  const isPlayable = canPlay(effectiveAcqStatus) && effectiveTrackId !== null;
   const previewUrl = te.previewUrl;
   const rows = trackInfoRows(result.extras);
   if (!rows.some((r) => r.key === 'featuring')) {
@@ -120,8 +124,8 @@ export function TrackDetailBody({
         ),
       )}
       {(() => {
-        const source = isPlayable && te.trackId !== null
-          ? { kind: 'library' as const, trackId: te.trackId }
+        const source = isPlayable && effectiveTrackId !== null
+          ? { kind: 'library' as const, trackId: effectiveTrackId }
           : previewUrl !== null
             ? { kind: 'preview' as const, previewUrl }
             : null;
@@ -142,6 +146,7 @@ export function TrackDetailBody({
                     title: result.title,
                     artist: result.subtitle ?? '',
                     artworkUrl: result.image_url,
+                    durationSeconds: te.durationSeconds ?? undefined,
                   });
                 }
               }}

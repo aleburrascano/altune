@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Artwork } from '@shared/ui/primitives/Artwork';
@@ -24,6 +24,7 @@ export function DiscographySections({
   albums: DiscoveryResult[];
   onAlbumPress: (album: DiscoveryResult) => void;
 }): ReactElement {
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const grouped = new Map<string, DiscoveryResult[]>();
   for (const album of albums) {
     const rawType = album.extras['record_type'];
@@ -42,8 +43,9 @@ export function DiscographySections({
       {DISCOGRAPHY_SECTIONS.map((section) => {
         const items = grouped.get(section.type);
         if (!items || items.length === 0) return null;
-        const capped = items.slice(0, SECTION_CAP);
-        const hasMore = items.length > SECTION_CAP;
+        const isExpanded = expandedSections.has(section.type);
+        const capped = isExpanded ? items : items.slice(0, SECTION_CAP);
+        const hasMore = !isExpanded && items.length > SECTION_CAP;
         return (
           <View key={section.type} style={sharedStyles.albumsSection}>
             <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
@@ -92,11 +94,17 @@ export function DiscographySections({
                 );
               })}
               {hasMore ? (
-                <View style={styles.seeAllCard}>
+                <Pressable
+                  testID={`detail-see-all-${section.type}`}
+                  style={({ pressed }) => [styles.seeAllCard, pressed ? { opacity: 0.6 } : null]}
+                  onPress={() => setExpandedSections((prev) => new Set(prev).add(section.type))}
+                  accessibilityRole="button"
+                  accessibilityLabel={`See all ${items.length} ${section.label.toLowerCase()}`}
+                >
                   <Text variant="label" tone="accent" style={styles.seeAllText}>
                     See all {items.length} {section.label.toLowerCase()}
                   </Text>
-                </View>
+                </Pressable>
               ) : null}
             </ScrollView>
           </View>

@@ -22,6 +22,7 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
 
+import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
 import { useEnrichResult } from '../hooks/useEnrichResult';
 import { useLateralNav } from '../hooks/useLateralNav';
 
@@ -51,7 +52,17 @@ export function DetailScreen(): ReactElement {
     return <Redirect href="/discover" />;
   }
 
+  const isFromLibrary = rawResult.sources.length === 0;
   const isArtist = result.kind === 'artist';
+  const isLibraryArtist = isArtist && isFromLibrary;
+  const artistDiscovery = useArtistDiscovery({
+    artistName: result.title,
+    enabled: isLibraryArtist,
+  });
+  const heroImageUrl = isLibraryArtist && artistDiscovery.imageUrl != null
+    ? artistDiscovery.imageUrl
+    : result.image_url;
+
   const canNavToArtist = result.subtitle !== null && result.kind !== 'artist';
 
   const onArtistPress = (): void => {
@@ -84,7 +95,7 @@ export function DetailScreen(): ReactElement {
     <>
       <View style={styles.hero}>
         <Artwork
-          uri={result.image_url}
+          uri={heroImageUrl}
           size={HERO_SIZE}
           radius={isArtist ? radius.full : radius.lg}
           accessibilityLabel={result.title}
@@ -129,8 +140,8 @@ export function DetailScreen(): ReactElement {
       >
         {heroContent}
         {result.kind === 'track' ? <TrackDetailBody result={result} lateralNav={lateralNav} /> : null}
-        {result.kind === 'album' ? <AlbumDetailBody result={result} detailRoute={detailRoute} /> : null}
-        {result.kind === 'artist' ? <ArtistDetailBody result={result} detailRoute={detailRoute} /> : null}
+        {result.kind === 'album' ? <AlbumDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
+        {result.kind === 'artist' ? <ArtistDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
       </ScrollView>
     </Screen>
   );

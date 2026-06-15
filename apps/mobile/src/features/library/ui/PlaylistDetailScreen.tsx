@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState, type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import {
   Alert,
   FlatList,
@@ -15,14 +15,16 @@ import {
   removeTrackFromPlaylist,
   renamePlaylist,
 } from '@shared/api-client/playlists';
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
-import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { TrackResponse } from '@shared/api-client/types';
+import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
+import { usePlayback } from '@shared/playback/usePlayback';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
+import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
+import type { TrackResponse } from '@shared/api-client/types';
 
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { LibraryRow } from './LibraryRow';
 import { PlaylistHero } from './PlaylistHero';
+import { useLibraryNavigation } from './useLibraryNavigation';
 
 export function PlaylistDetailScreen(): ReactElement {
   const router = useRouter();
@@ -41,7 +43,21 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const renameMut = useMutation({
     mutationFn: (name: string) => renamePlaylist(playlistId, name),
-    onSuccess: () => {
+    onMutate: async (name) => {
+      await queryClient.cancelQueries({ queryKey: ['playlist', playlistId] });
+      const previous = queryClient.getQueryData(['playlist', playlistId]);
+      if (previous) {
+        queryClient.setQueryData(['playlist', playlistId], { ...previous, name });
+      }
+      return { previous };
+    },
+    onError: (_err, _name, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['playlist', playlistId], context.previous);
+      }
+      Alert.alert('Rename failed', 'Could not rename the playlist. Please try again.');
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
       void queryClient.invalidateQueries({ queryKey: ['playlists'] });
       setIsEditing(false);
@@ -52,17 +68,38 @@ export function PlaylistDetailScreen(): ReactElement {
     mutationFn: () => deletePlaylist(playlistId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+      void queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
       if (router.canGoBack()) {
         router.back();
       } else {
         router.replace('/library');
       }
     },
+    onError: () => {
+      Alert.alert('Delete failed', 'Could not delete the playlist. Please try again.');
+    },
   });
 
   const removeMut = useMutation({
     mutationFn: (trackId: string) => removeTrackFromPlaylist(playlistId, trackId),
-    onSuccess: () => {
+    onMutate: async (trackId) => {
+      await queryClient.cancelQueries({ queryKey: ['playlist', playlistId] });
+      const previous = queryClient.getQueryData<{ tracks: Array<{ id: string }> }>(['playlist', playlistId]);
+      if (previous) {
+        queryClient.setQueryData(['playlist', playlistId], {
+          ...previous,
+          tracks: previous.tracks.filter((t) => t.id !== trackId),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _trackId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['playlist', playlistId], context.previous);
+      }
+      Alert.alert('Remove failed', 'Could not remove the track. Please try again.');
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
       void queryClient.invalidateQueries({ queryKey: ['playlists'] });
     },
@@ -70,26 +107,9 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const retryMut = useRetryAcquisition();
   const retryingTrackId = retryMut.isPending ? retryMut.variables : undefined;
-
-  const navigateToTrack = useCallback(
-    (track: TrackResponse): void => {
-      const result: DiscoveryResult = {
-        kind: 'track',
-        title: track.title,
-        subtitle: track.artist,
-        image_url: track.artwork_url ?? null,
-        confidence: 'high',
-        sources: [],
-        extras: {
-          ...(track.album != null ? { album: track.album } : {}),
-          ...(track.duration_seconds != null ? { duration_seconds: track.duration_seconds } : {}),
-        },
-      };
-      setDetailHandoff(result);
-      router.push('/library/detail');
-    },
-    [router],
-  );
+  const { navigateToTrack } = useLibraryNavigation(router);
+  const playback = usePlayback();
+  const [actionTrack, setActionTrack] = useState<TrackResponse | null>(null);
 
   const handleDelete = () => {
     Alert.alert('Delete Playlist', 'This cannot be undone.', [
@@ -188,28 +208,23 @@ export function PlaylistDetailScreen(): ReactElement {
           />
         }
         renderItem={({ item }) => (
-          <View style={styles.trackRowContainer}>
-            <LibraryRow
-              track={item}
-              onPress={() => navigateToTrack(item)}
-              onRetry={
-                item.acquisition_status === 'failed'
-                  ? () => retryMut.mutate(item.id)
-                  : undefined
-              }
-              retrying={retryingTrackId === item.id}
-            />
-            <Pressable
-              testID={`playlist-remove-${item.id}`}
-              onPress={() => removeMut.mutate(item.id)}
-              hitSlop={8}
-              style={styles.removeBtn}
-              accessibilityRole="button"
-              accessibilityLabel={`Remove ${item.title}`}
-            >
-              <Text variant="caption" tone="danger">✕</Text>
-            </Pressable>
-          </View>
+          <LibraryRow
+            track={item}
+            {...(item.acquisition_status === 'ready' ? { onPlay: () => {
+              void playback.play({
+                source: { kind: 'library', trackId: item.id },
+                title: item.title,
+                artist: item.artist,
+                artworkUrl: item.artwork_url ?? null,
+                durationSeconds: item.duration_seconds ?? undefined,
+              });
+            } } : {})}
+            onPress={() => navigateToTrack(item)}
+            onMore={() => setActionTrack(item)}
+            {...(item.acquisition_status === 'failed' ? { onRetry: () => retryMut.mutate(item.id) } : {})}
+            retrying={retryingTrackId === item.id}
+            isPlaying={isCurrentlyPlaying(playback, { kind: 'library', trackId: item.id })}
+          />
         )}
         ListEmptyComponent={
           <View style={styles.emptyTracks}>
@@ -217,6 +232,16 @@ export function PlaylistDetailScreen(): ReactElement {
             <Text variant="caption" tone="tertiary">Long-press any track to add it here</Text>
           </View>
         }
+      />
+      <ActionSheet
+        visible={actionTrack != null}
+        title={actionTrack?.title}
+        subtitle={actionTrack != null ? actionTrack.artist : undefined}
+        options={actionTrack != null ? [
+          { label: 'View Details', onPress: () => navigateToTrack(actionTrack) },
+          { label: 'Remove from Playlist', tone: 'danger' as const, onPress: () => removeMut.mutate(actionTrack.id) },
+        ] : []}
+        onClose={() => setActionTrack(null)}
       />
     </Screen>
   );
@@ -237,11 +262,6 @@ const styles = StyleSheet.create({
   },
   list: { paddingBottom: spacing['3xl'] },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
-  trackRowContainer: { flexDirection: 'row', alignItems: 'center' },
-  removeBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
   emptyTracks: {
     alignItems: 'center',
     gap: spacing.xs,
