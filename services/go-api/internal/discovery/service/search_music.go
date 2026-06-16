@@ -83,6 +83,8 @@ type SearchOutput struct {
 	Results          []domain.SearchResult
 	ProviderStatuses []domain.ProviderSearchResponse
 	Partial          bool
+	CorrectedQuery   string
+	OriginalQuery    string
 }
 
 func kindsString(kinds map[domain.ResultKind]bool) string {
@@ -214,6 +216,11 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 	merged = s.enrich(ctx, merged)
 	merged = Rerank(merged, queryNorm)
 
+	var correctedQuery, originalQuery string
+	if len(merged) == 0 {
+		correctedQuery, originalQuery = s.tryCorrection(ctx, query, queryNorm, &merged, &statuses)
+	}
+
 	if len(merged) > query.Limit {
 		merged = merged[:query.Limit]
 	}
@@ -246,6 +253,7 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 	slog.InfoContext(ctx, "search.complete",
 		"results", len(merged),
 		"partial", partial,
+		"corrected", correctedQuery,
 		"duration", time.Since(searchStart),
 	)
 
@@ -253,7 +261,75 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		Results:          merged,
 		ProviderStatuses: statuses,
 		Partial:          partial,
+		CorrectedQuery:   correctedQuery,
+		OriginalQuery:    originalQuery,
 	}, nil
+}
+
+func (s *SearchMusicService) tryCorrection(
+	ctx context.Context,
+	query *domain.SearchQuery,
+	queryNorm string,
+	merged *[]domain.SearchResult,
+	statuses *[]domain.ProviderSearchResponse,
+) (correctedQuery, originalQuery string) {
+	if s.vocabStore == nil {
+		return "", ""
+	}
+	corrSvc := NewCorrectionService(s.vocabStore)
+	result := corrSvc.Correct(ctx, query.Raw)
+	if result == nil {
+		return "", ""
+	}
+	corrNorm := NormalizeForMatch(result.Corrected)
+	if corrNorm == queryNorm {
+		return "", ""
+	}
+
+	slog.InfoContext(ctx, "search.correcting",
+		"original", query.Raw,
+		"corrected", result.Corrected,
+		"confidence", result.Confidence,
+	)
+
+	retried := s.retrySearch(ctx, result.Corrected, query.Kinds)
+	*merged = FuseAndRank(retried, corrNorm, nil)
+	*merged = s.enrich(ctx, *merged)
+	*merged = Rerank(*merged, corrNorm)
+
+	return result.Corrected, query.Raw
+}
+
+func (s *SearchMusicService) retrySearch(
+	ctx context.Context,
+	correctedQuery string,
+	kinds map[domain.ResultKind]bool,
+) [][]domain.SearchResult {
+	var (
+		mu          sync.Mutex
+		perProvider [][]domain.SearchResult
+		wg          sync.WaitGroup
+	)
+	for _, p := range s.providers {
+		if !s.circuitBreaker.AllowRequest(p.Name()) {
+			continue
+		}
+		wg.Add(1)
+		go func(p ports.SearchProvider) {
+			defer wg.Done()
+			provCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+			defer cancel()
+			results, err := p.Search(provCtx, correctedQuery, kinds)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			perProvider = append(perProvider, results)
+			mu.Unlock()
+		}(p)
+	}
+	wg.Wait()
+	return perProvider
 }
 
 const vocabIngestTop = 3

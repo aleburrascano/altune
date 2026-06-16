@@ -80,12 +80,14 @@ type ProviderStatusDTO struct {
 }
 
 type DiscoverySearchResponse struct {
-	Query     string              `json:"query"`
-	QueryNorm string              `json:"query_norm"`
-	Results   []SearchResultDTO   `json:"results"`
-	Providers []ProviderStatusDTO `json:"providers"`
-	Partial   bool                `json:"partial"`
-	Cache     CacheDTO            `json:"cache"`
+	Query          string              `json:"query"`
+	QueryNorm      string              `json:"query_norm"`
+	Results        []SearchResultDTO   `json:"results"`
+	Providers      []ProviderStatusDTO `json:"providers"`
+	Partial        bool                `json:"partial"`
+	Cache          CacheDTO            `json:"cache"`
+	CorrectedQuery string              `json:"corrected_query,omitempty"`
+	OriginalQuery  string              `json:"original_query,omitempty"`
 }
 
 type CacheDTO struct {
@@ -249,12 +251,14 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	httputil.WriteJSON(w, status, DiscoverySearchResponse{
-		Query:     q,
-		QueryNorm: service.NormalizeForMatch(q),
-		Results:   resultDTOs,
-		Providers: providerDTOs,
-		Partial:   result.Partial,
-		Cache:     CacheDTO{Hit: false, FetchedAt: nil},
+		Query:          q,
+		QueryNorm:      service.NormalizeForMatch(q),
+		Results:        resultDTOs,
+		Providers:      providerDTOs,
+		Partial:        result.Partial,
+		Cache:          CacheDTO{Hit: false, FetchedAt: nil},
+		CorrectedQuery: result.CorrectedQuery,
+		OriginalQuery:  result.OriginalQuery,
 	})
 }
 
