@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme/useTheme';
-import { tokens } from '@shared/ui/theme/tokens';
+import { spacing, radius } from '@shared/ui/theme/tokens';
 import type { DiscoverySuggestion } from '@shared/api-client/discovery';
 
 interface SuggestionsListProps {
@@ -41,18 +41,18 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: tokens.radius.md,
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    marginHorizontal: tokens.spacing.md,
-    marginTop: tokens.spacing.xs,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.xs,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: tokens.spacing.md,
-    paddingVertical: tokens.spacing.sm + 2,
-    gap: tokens.spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    gap: spacing.sm,
     minHeight: 44,
   },
   kindLabel: {
