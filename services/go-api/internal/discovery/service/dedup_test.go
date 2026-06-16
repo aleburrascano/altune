@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 )
@@ -441,4 +442,87 @@ func TestFuseAndRank_PopularityNormalization(t *testing.T) {
 	if pop0 <= pop1 {
 		t.Errorf("expected first result to have higher popularity (%v) than second (%v)", pop0, pop1)
 	}
+}
+
+func TestApplyRecencyBoost(t *testing.T) {
+	today := time.Now().Format("2006-01-02")
+	old := time.Now().AddDate(0, 0, -60).Format("2006-01-02")
+
+	t.Run("recent release gets boosted", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "New Song", "Artist", map[string]any{
+				"popularity": int64(50), "release_date": today,
+			}),
+		}
+		got := applyRecencyBoost(results)
+		pop := popularity(got[0])
+		if pop != 55 {
+			t.Errorf("expected boosted popularity 55, got %v", pop)
+		}
+	})
+
+	t.Run("old release not boosted", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Old Song", "Artist", map[string]any{
+				"popularity": int64(50), "release_date": old,
+			}),
+		}
+		got := applyRecencyBoost(results)
+		pop := popularity(got[0])
+		if pop != 50 {
+			t.Errorf("expected unchanged popularity 50, got %v", pop)
+		}
+	})
+
+	t.Run("no release date not boosted", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Song", "Artist", map[string]any{
+				"popularity": int64(50),
+			}),
+		}
+		got := applyRecencyBoost(results)
+		pop := popularity(got[0])
+		if pop != 50 {
+			t.Errorf("expected unchanged popularity 50, got %v", pop)
+		}
+	})
+
+	t.Run("capped at 100", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Hit", "Artist", map[string]any{
+				"popularity": int64(98), "release_date": today,
+			}),
+		}
+		got := applyRecencyBoost(results)
+		pop := popularity(got[0])
+		if pop > 100 {
+			t.Errorf("expected popularity capped at 100, got %v", pop)
+		}
+	})
+
+	t.Run("year only date parsed", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Song", "Artist", map[string]any{
+				"popularity": int64(50), "release_date": "2020",
+			}),
+		}
+		got := applyRecencyBoost(results)
+		pop := popularity(got[0])
+		if pop != 50 {
+			t.Errorf("expected no boost for 2020 release, got %v", pop)
+		}
+	})
+
+	t.Run("malformed date not boosted", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Song", "Artist", map[string]any{
+				"popularity": int64(50), "release_date": "not-a-date",
+			}),
+		}
+		got := applyRecencyBoost(results)
+		pop := popularity(got[0])
+		if pop != 50 {
+			t.Errorf("expected unchanged popularity for malformed date, got %v", pop)
+		}
+	})
 }
