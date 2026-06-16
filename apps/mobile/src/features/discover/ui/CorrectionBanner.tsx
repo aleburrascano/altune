@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme/useTheme';
-import { tokens } from '@shared/ui/theme/tokens';
+import { spacing } from '@shared/ui/theme/tokens';
 
 interface CorrectionBannerProps {
   correctedQuery: string;
@@ -37,8 +37,8 @@ export function CorrectionBanner({ correctedQuery, originalQuery, onSearchOrigin
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: tokens.spacing.md,
-    paddingVertical: tokens.spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     gap: 2,
   },
   label: {
