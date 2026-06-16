@@ -108,10 +108,10 @@ export function LibraryScreen(): ReactElement {
       navigateToTrack={navigateToTrack}
       navigateToAlbum={navigateToAlbum}
       navigateToArtist={navigateToArtist}
-      onExpandRecent={() => router.push('/library/all-tracks' as never)}
-      onExpandAlbums={() => router.push('/library/all-albums' as never)}
-      onExpandArtists={() => router.push('/library/all-artists' as never)}
-      onPlaylistPress={(pl) => router.push(`/library/playlist/${pl.id}` as never)}
+      onExpandRecent={() => router.push('/library/all-tracks')}
+      onExpandAlbums={() => router.push('/library/all-albums')}
+      onExpandArtists={() => router.push('/library/all-artists')}
+      onPlaylistPress={(pl) => router.push(`/library/playlist/${pl.id}`)}
       onRefresh={state.refetch}
       playlistActions={{
         createModalVisible,

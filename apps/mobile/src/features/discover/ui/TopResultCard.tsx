@@ -13,7 +13,7 @@ export function TopResultCard({
   onPress: (result: DiscoveryResult, position: number) => void;
 }): ReactElement {
   const isArtist = result.kind === 'artist';
-  const kindLabel = isArtist ? 'Artist' : result.kind === 'album' ? 'Album' : 'Song';
+  const kindLabel = isArtist ? 'Artist' : result.kind === 'album' ? 'Album' : 'Track';
   return (
     <View style={styles.topResultWrap}>
       <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
@@ -24,7 +24,7 @@ export function TopResultCard({
         onPress={() => onPress(result, 0)}
         accessibilityRole="button"
         accessibilityLabel={`${result.title}${result.subtitle ? `, ${result.subtitle}` : ''}, ${kindLabel}`}
-        style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
+        style={({ pressed }) => (pressed ? styles.pressed : null)}
       >
         <Card>
           <Row
@@ -42,11 +42,11 @@ export function TopResultCard({
                 {result.title}
               </Text>
               {result.subtitle != null && result.subtitle.length > 0 ? (
-                <Text variant="body" tone="secondary" numberOfLines={1} style={{ marginTop: 2 }}>
+                <Text variant="body" tone="secondary" numberOfLines={1} style={styles.subtext}>
                   {result.subtitle}
                 </Text>
               ) : null}
-              <Text variant="body" tone="tertiary" style={{ marginTop: 2 }}>
+              <Text variant="body" tone="tertiary" style={styles.subtext}>
                 {kindLabel}
               </Text>
             </View>
@@ -60,4 +60,6 @@ export function TopResultCard({
 const styles = StyleSheet.create({
   topResultWrap: { marginBottom: spacing.lg },
   sectionHeader: { marginBottom: spacing.md, letterSpacing: 1 },
+  pressed: { opacity: 0.85 },
+  subtext: { marginTop: spacing.xs },
 });

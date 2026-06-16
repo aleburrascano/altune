@@ -25,11 +25,11 @@ export function ProfileSheet({ visible, email, onClose }: ProfileSheetProps): Re
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      <Pressable style={[styles.backdrop, { backgroundColor: theme.color.scrim }]} onPress={onClose}>
         <View />
       </Pressable>
       <View style={[styles.sheet, { backgroundColor: theme.color.surface1 }]}>
-        <View style={styles.handle} />
+        <View style={[styles.handle, { backgroundColor: theme.color.border }]} />
         <View style={styles.profile}>
           <View style={[styles.avatar, { backgroundColor: theme.color.accent }]}>
             <Text variant="displayL" tone="onAccent">
@@ -59,7 +59,6 @@ export function ProfileSheet({ visible, email, onClose }: ProfileSheetProps): Re
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   sheet: {
     borderTopLeftRadius: 20,
@@ -72,7 +71,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#555',
     alignSelf: 'center',
     marginBottom: spacing.xl,
   },

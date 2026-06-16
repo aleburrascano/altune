@@ -105,17 +105,17 @@ describe('_viewForState', () => {
 
 describe('_groupByKind', () => {
   it('returns empty buckets for empty input', () => {
-    expect(_groupByKind([])).toEqual({ albums: [], songs: [], artists: [] });
+    expect(_groupByKind([])).toEqual({ albums: [], tracks: [], artists: [] });
   });
 
-  it('partitions by kind, tracks landing in songs', () => {
+  it('partitions by kind', () => {
     const grouped = _groupByKind([
       _result('artist', 'Che'),
       _result('album', 'Rest in Bass'),
-      _result('track', 'Some Song'),
+      _result('track', 'Some Track'),
     ]);
     expect(grouped.albums.map((r) => r.title)).toEqual(['Rest in Bass']);
-    expect(grouped.songs.map((r) => r.title)).toEqual(['Some Song']);
+    expect(grouped.tracks.map((r) => r.title)).toEqual(['Some Track']);
     expect(grouped.artists.map((r) => r.title)).toEqual(['Che']);
   });
 
@@ -153,14 +153,14 @@ describe('_cap', () => {
 
 describe('_sectionOrder', () => {
   it('orders sections by the kind whose best member ranks earliest', () => {
-    // A song query: a track ranks first, so Songs (song) leads, then albums.
+    // A track query: a track ranks first, so tracks lead, then albums.
     const results = [
       _result('track', 'Creep'),
       _result('album', 'Creep EP'),
       _result('track', 'Creep (Live)'),
       _result('artist', 'Creep'),
     ];
-    expect(_sectionOrder(results)).toEqual(['song', 'album', 'artist']);
+    expect(_sectionOrder(results)).toEqual(['track', 'album', 'artist']);
   });
 
   it('omits kinds with no results', () => {

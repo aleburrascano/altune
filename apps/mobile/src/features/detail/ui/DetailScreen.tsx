@@ -36,7 +36,7 @@ function _kindLabel(kind: 'artist' | 'album' | 'track'): string {
   if (kind === 'artist') {
     return 'Artist';
   }
-  return kind === 'album' ? 'Album' : 'Song';
+  return kind === 'album' ? 'Album' : 'Track';
 }
 
 export function DetailScreen(): ReactElement {

@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { Text, fontFamily, radius, spacing } from '@shared/ui';
+import { Text, fontFamily, radius, spacing, typography } from '@shared/ui';
 
 interface SearchBarTheme {
   color: {
@@ -66,23 +66,23 @@ export function SearchBar({
 
 const styles = StyleSheet.create({
   header: { paddingTop: spacing.md, paddingBottom: spacing.md },
-  inputWrapper: { position: 'relative' as const, justifyContent: 'center' as const },
+  inputWrapper: { position: 'relative', justifyContent: 'center' },
   input: {
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
     paddingRight: 44,
     paddingVertical: spacing.md,
     fontFamily: fontFamily.bodyRegular,
-    fontSize: 16,
+    fontSize: typography.body.fontSize,
   },
   clearButton: {
-    position: 'absolute' as const,
+    position: 'absolute',
     right: spacing.md,
     width: 28,
     height: 28,
     borderRadius: 14,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  clearIcon: { fontSize: 14 },
+  clearIcon: { fontSize: typography.caption.fontSize },
 });
