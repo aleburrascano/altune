@@ -193,9 +193,18 @@ func (a *App) setup(ctx context.Context) error {
 	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders)
 
-	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc)
+	var vocabStore discoveryPorts.VocabularyStore
+	if a.redisClient != nil {
+		vocabStore = discoveryCacheAdapters.NewVocabularyStore(
+			a.redisClient,
+			discoveryService.NormalizeForMatch,
+		)
+	}
+	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
-	a.startVocabularyRefresh()
+	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, suggestSvc)
+
+	a.startVocabularyRefresh(vocabStore)
 
 	var retryH *acqHandler.RetryHandler
 	if scheduler != nil {
@@ -326,18 +335,14 @@ func (a *App) buildDiscoveryProviders() []discoveryPorts.SearchProvider {
 	return providerList
 }
 
-func (a *App) startVocabularyRefresh() {
-	if a.redisClient == nil {
+func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) {
+	if vocabStore == nil {
 		return
 	}
 	charts := a.buildChartProviders()
 	if len(charts) == 0 {
 		return
 	}
-	vocabStore := discoveryCacheAdapters.NewVocabularyStore(
-		a.redisClient,
-		discoveryService.NormalizeForMatch,
-	)
 	a.vocabRefresh = discoveryService.NewVocabularyRefreshService(
 		charts, vocabStore, 6*time.Hour, 50,
 	)
