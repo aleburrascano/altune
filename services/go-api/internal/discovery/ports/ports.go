@@ -71,3 +71,7 @@ type VocabularyStore interface {
 	SuggestByPrefix(ctx context.Context, prefix string, limit int) ([]domain.VocabularyEntry, error)
 	FindClosest(ctx context.Context, query string, limit int) ([]domain.VocabularyEntry, error)
 }
+
+type ChartProvider interface {
+	FetchCharts(ctx context.Context, limit int) ([]domain.VocabularyEntry, error)
+}

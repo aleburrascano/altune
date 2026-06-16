@@ -39,13 +39,14 @@ import (
 )
 
 type App struct {
-	cfg         *config.Config
-	pool        *pgxpool.Pool
-	redisClient *goredis.Client
-	server      *http.Server
-	wg          sync.WaitGroup
-	sem         chan struct{}
-	scheduler   *acqService.BackgroundAcquisitionScheduler
+	cfg          *config.Config
+	pool         *pgxpool.Pool
+	redisClient  *goredis.Client
+	server       *http.Server
+	wg           sync.WaitGroup
+	sem          chan struct{}
+	scheduler    *acqService.BackgroundAcquisitionScheduler
+	vocabRefresh *discoveryService.VocabularyRefreshService
 }
 
 func New(cfg *config.Config) *App {
@@ -87,6 +88,11 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	slog.Info("waiting for background tasks")
+	if a.vocabRefresh != nil {
+		bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer bgCancel()
+		a.vocabRefresh.Shutdown(bgCtx)
+	}
 	if a.scheduler != nil {
 		bgCtx, bgCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer bgCancel()
@@ -188,6 +194,8 @@ func (a *App) setup(ctx context.Context) error {
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders)
 
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc)
+
+	a.startVocabularyRefresh()
 
 	var retryH *acqHandler.RetryHandler
 	if scheduler != nil {
@@ -316,6 +324,38 @@ func (a *App) buildDiscoveryProviders() []discoveryPorts.SearchProvider {
 
 	slog.Info("discovery providers configured", "count", len(providerList))
 	return providerList
+}
+
+func (a *App) startVocabularyRefresh() {
+	if a.redisClient == nil {
+		return
+	}
+	charts := a.buildChartProviders()
+	if len(charts) == 0 {
+		return
+	}
+	vocabStore := discoveryCacheAdapters.NewVocabularyStore(
+		a.redisClient,
+		discoveryService.NormalizeForMatch,
+	)
+	a.vocabRefresh = discoveryService.NewVocabularyRefreshService(
+		charts, vocabStore, 6*time.Hour, 50,
+	)
+	a.vocabRefresh.Start()
+	slog.Info("vocabulary refresh started")
+}
+
+func (a *App) buildChartProviders() []discoveryPorts.ChartProvider {
+	var charts []discoveryPorts.ChartProvider
+	deezerClient := &http.Client{Timeout: 15 * time.Second}
+	charts = append(charts, providers.NewDeezerAdapter(deezerClient))
+	if a.cfg.HasLastFM() {
+		lfmClient := &http.Client{Timeout: 15 * time.Second}
+		charts = append(charts, providers.NewLastFmAdapter(
+			lfmClient, a.cfg.LastFMAPIKey,
+		))
+	}
+	return charts
 }
 
 func (a *App) cleanup() {
