@@ -339,3 +339,85 @@ func TestFuseAndRank_MergedResultPicksMoreCompleteCanonical(t *testing.T) {
 		t.Errorf("expected album 'Pablo Honey' from richer result, got %q", album)
 	}
 }
+
+func TestCollapseVersions(t *testing.T) {
+	t.Run("collapses remix and slowed versions", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Megaman", "Tay-K", map[string]any{"popularity": int64(80)}),
+			trackResult(domain.ProviderDeezer, "2", "Megaman (Remix)", "Tay-K", map[string]any{"popularity": int64(30)}),
+			trackResult(domain.ProviderDeezer, "3", "Megaman (Slowed + Reverb)", "Tay-K", map[string]any{"popularity": int64(10)}),
+		}
+		got := CollapseVersions(results)
+		if len(got) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(got))
+		}
+		if got[0].Title != "Megaman" {
+			t.Errorf("expected representative 'Megaman', got %q", got[0].Title)
+		}
+		vc, ok := got[0].Extras["variant_count"].(int)
+		if !ok || vc != 3 {
+			t.Errorf("expected variant_count=3, got %v", got[0].Extras["variant_count"])
+		}
+	})
+
+	t.Run("different artists not collapsed", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Megaman", "Tay-K", map[string]any{"popularity": int64(80)}),
+			trackResult(domain.ProviderDeezer, "2", "Megaman", "Other Artist", map[string]any{"popularity": int64(50)}),
+		}
+		got := CollapseVersions(results)
+		if len(got) != 2 {
+			t.Fatalf("expected 2 results, got %d", len(got))
+		}
+	})
+
+	t.Run("feat parenthetical not stripped", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Song (feat. Artist)", "Main", map[string]any{"popularity": int64(50)}),
+			trackResult(domain.ProviderDeezer, "2", "Song", "Main", map[string]any{"popularity": int64(40)}),
+		}
+		got := CollapseVersions(results)
+		if len(got) != 2 {
+			t.Fatalf("expected 2 results (feat not stripped), got %d", len(got))
+		}
+	})
+
+	t.Run("single version no variant count", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Unique Song", "Artist", map[string]any{}),
+		}
+		got := CollapseVersions(results)
+		if len(got) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(got))
+		}
+		if _, ok := got[0].Extras["variant_count"]; ok {
+			t.Error("expected no variant_count for single version")
+		}
+	})
+
+	t.Run("different kinds not collapsed", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Megaman", "Tay-K", map[string]any{"popularity": int64(80)}),
+			albumResult(domain.ProviderDeezer, "2", "Megaman", "Tay-K", map[string]any{"popularity": int64(50)}),
+		}
+		got := CollapseVersions(results)
+		if len(got) != 2 {
+			t.Fatalf("expected 2 results (different kinds), got %d", len(got))
+		}
+	})
+
+	t.Run("most popular version becomes representative", func(t *testing.T) {
+		results := []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "1", "Song (Live)", "Artist", map[string]any{"popularity": int64(10)}),
+			trackResult(domain.ProviderDeezer, "2", "Song (Remix)", "Artist", map[string]any{"popularity": int64(90)}),
+			trackResult(domain.ProviderDeezer, "3", "Song", "Artist", map[string]any{"popularity": int64(50)}),
+		}
+		got := CollapseVersions(results)
+		if len(got) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(got))
+		}
+		if got[0].Title != "Song (Remix)" {
+			t.Errorf("expected most popular version 'Song (Remix)' as representative, got %q", got[0].Title)
+		}
+	})
+}
