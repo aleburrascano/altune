@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 )
@@ -368,6 +369,7 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 	}
 
 	results = CollapseVersions(results)
+	results = applyRecencyBoost(results)
 	return results
 }
 
@@ -539,6 +541,47 @@ func withVariantCount(r domain.SearchResult, count int) domain.SearchResult {
 	extras["variant_count"] = count
 	r.Extras = extras
 	return r
+}
+
+const recencyWindowDays = 30
+const recencyMultiplier = 1.1
+
+func applyRecencyBoost(results []domain.SearchResult) []domain.SearchResult {
+	now := time.Now()
+	for i, r := range results {
+		results[i] = boostIfRecent(r, now)
+	}
+	return results
+}
+
+func boostIfRecent(r domain.SearchResult, now time.Time) domain.SearchResult {
+	rd := parseReleaseDate(getStringExtra(r, "release_date"))
+	if rd.IsZero() {
+		return r
+	}
+	cutoff := now.AddDate(0, 0, -recencyWindowDays)
+	if rd.Before(cutoff) {
+		return r
+	}
+	pop := popularity(r)
+	boosted := math.Min(100, pop*recencyMultiplier)
+	extras := copyExtras(r.Extras)
+	extras["popularity"] = int64(boosted)
+	r.Extras = extras
+	return r
+}
+
+func parseReleaseDate(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t
+	}
+	if t, err := time.Parse("2006", s); err == nil {
+		return t
+	}
+	return time.Time{}
 }
 
 func getStringExtra(r domain.SearchResult, key string) string {
