@@ -316,6 +316,16 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 		}
 	}
 
+	// Normalize raw provider popularity into a 0-100 score
+	for i := range accumulated {
+		pop := NormalizePopularity(accumulated[i].result.Extras)
+		if pop > 0 {
+			extras := copyExtras(accumulated[i].result.Extras)
+			extras["popularity"] = pop
+			accumulated[i].result.Extras = extras
+		}
+	}
+
 	// Score and gate
 	var scoredResults []scored
 	for _, entry := range accumulated {
