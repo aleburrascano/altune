@@ -100,4 +100,10 @@ func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
 	if first.Sources[0].Provider != domain.ProviderSoundCloud {
 		t.Errorf("provider: got %v, want %v", first.Sources[0].Provider, domain.ProviderSoundCloud)
 	}
+	// playback_count is populated when yt-dlp returns it (non-zero)
+	if pc, ok := first.Extras["playback_count"]; ok {
+		if _, isInt := pc.(int64); !isInt {
+			t.Errorf("extras.playback_count: got %T, want int64", pc)
+		}
+	}
 }

@@ -113,6 +113,12 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 			extras["isrc"] = item.ISRC
 		}
 		extras["duration"] = item.Duration
+		if item.Rank > 0 {
+			extras["rank"] = item.Rank
+		}
+		if item.NbFan > 0 {
+			extras["nb_fan"] = item.NbFan
+		}
 	case domain.ResultKindAlbum:
 		title = item.Title
 		if item.Artist != nil {
@@ -127,6 +133,9 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		}
 		if item.NbTracks > 0 {
 			extras["track_count"] = item.NbTracks
+		}
+		if item.NbFan > 0 {
+			extras["nb_fan"] = item.NbFan
 		}
 	case domain.ResultKindArtist:
 		title = item.Name

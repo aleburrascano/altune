@@ -43,6 +43,7 @@ func TestDeezerAdapter_Search_Tracks(t *testing.T) {
 				"link": "https://www.deezer.com/track/123456",
 				"duration": 355,
 				"isrc": "GBAYE7500101",
+				"rank": 150000,
 				"artist": {"id": 1, "name": "Queen"},
 				"album": {"id": 10, "title": "A Night at the Opera", "cover_big": "https://cdn.deezer.com/cover.jpg"}
 			}]
@@ -95,6 +96,9 @@ func TestDeezerAdapter_Search_Tracks(t *testing.T) {
 	// JSON unmarshals numbers as float64
 	if dur, ok := r.Extras["duration"].(int); !ok || dur != 355 {
 		t.Errorf("extras.duration: got %v (%T), want 355", r.Extras["duration"], r.Extras["duration"])
+	}
+	if rank, ok := r.Extras["rank"].(int64); !ok || rank != 150000 {
+		t.Errorf("extras.rank: got %v (%T), want 150000", r.Extras["rank"], r.Extras["rank"])
 	}
 }
 
@@ -160,7 +164,8 @@ func TestDeezerAdapter_Search_Albums(t *testing.T) {
 				"artist": {"id": 42, "name": "Radiohead"},
 				"record_type": "album",
 				"release_date": "1997-05-21",
-				"nb_tracks": 12
+				"nb_tracks": 12,
+				"nb_fan": 50000
 			}]
 		}`))
 	}))
@@ -200,6 +205,9 @@ func TestDeezerAdapter_Search_Albums(t *testing.T) {
 	if tc, ok := r.Extras["track_count"].(int); !ok || tc != 12 {
 		t.Errorf("extras.track_count: got %v (%T), want 12", r.Extras["track_count"], r.Extras["track_count"])
 	}
+	if nbFan, ok := r.Extras["nb_fan"].(int64); !ok || nbFan != 50000 {
+		t.Errorf("extras.nb_fan: got %v (%T), want 50000", r.Extras["nb_fan"], r.Extras["nb_fan"])
+	}
 }
 
 func TestDeezerAdapter_Search_HTTPError(t *testing.T) {
@@ -218,6 +226,41 @@ func TestDeezerAdapter_Search_HTTPError(t *testing.T) {
 	}
 	if len(results) != 0 {
 		t.Errorf("expected 0 results on HTTP 500, got %d", len(results))
+	}
+}
+
+func TestDeezerAdapter_Search_Track_MissingPopularity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"data": [{
+				"id": 999,
+				"title": "Unknown Track",
+				"link": "https://www.deezer.com/track/999",
+				"duration": 180,
+				"artist": {"id": 1, "name": "Artist"}
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := NewDeezerAdapter(newTestClient(server.URL))
+	results, err := adapter.Search(context.Background(), "unknown", map[domain.ResultKind]bool{
+		domain.ResultKindTrack: true,
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	r := results[0]
+	if _, ok := r.Extras["rank"]; ok {
+		t.Errorf("extras should not contain 'rank' when API returns 0")
+	}
+	if _, ok := r.Extras["nb_fan"]; ok {
+		t.Errorf("extras should not contain 'nb_fan' when API returns 0")
 	}
 }
 

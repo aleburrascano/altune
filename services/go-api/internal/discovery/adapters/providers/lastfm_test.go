@@ -19,6 +19,7 @@ func TestLastFmAdapter_Search_Tracks(t *testing.T) {
 						"name": "Small Talk",
 						"artist": "Katy Perry",
 						"url": "https://www.last.fm/music/Katy+Perry/_/Small+Talk",
+						"listeners": "1234567",
 						"image": [
 							{"#text": "https://lastfm.freetls.fastly.net/small.png", "size": "small"},
 							{"#text": "https://lastfm.freetls.fastly.net/extralarge.png", "size": "extralarge"}
@@ -70,6 +71,9 @@ func TestLastFmAdapter_Search_Tracks(t *testing.T) {
 	if r.Sources[0].URL != "https://www.last.fm/music/Katy+Perry/_/Small+Talk" {
 		t.Errorf("source URL: got %q, want last.fm track URL", r.Sources[0].URL)
 	}
+	if r.Extras["listeners"] != "1234567" {
+		t.Errorf("extras.listeners: got %v, want %q", r.Extras["listeners"], "1234567")
+	}
 }
 
 func TestLastFmAdapter_Search_Artists(t *testing.T) {
@@ -81,6 +85,7 @@ func TestLastFmAdapter_Search_Artists(t *testing.T) {
 					"artist": [{
 						"name": "The Weeknd",
 						"url": "https://www.last.fm/music/The+Weeknd",
+						"listeners": "9876543",
 						"image": [
 							{"#text": "https://lastfm.freetls.fastly.net/artist-small.png", "size": "small"},
 							{"#text": "https://lastfm.freetls.fastly.net/artist-xl.png", "size": "extralarge"}
@@ -115,6 +120,43 @@ func TestLastFmAdapter_Search_Artists(t *testing.T) {
 	}
 	if r.Sources[0].ExternalID != "The+Weeknd" {
 		t.Errorf("source externalID: got %q, want %q", r.Sources[0].ExternalID, "The+Weeknd")
+	}
+	if r.Extras["listeners"] != "9876543" {
+		t.Errorf("extras.listeners: got %v, want %q", r.Extras["listeners"], "9876543")
+	}
+}
+
+func TestLastFmAdapter_Search_Track_MissingListeners(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"results": {
+				"trackmatches": {
+					"track": [{
+						"name": "Obscure Track",
+						"artist": "Unknown",
+						"url": "https://www.last.fm/music/Unknown/_/Obscure+Track",
+						"image": []
+					}]
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := NewLastFmAdapter(newTestClient(server.URL), "test-api-key")
+	results, err := adapter.Search(context.Background(), "obscure", map[domain.ResultKind]bool{
+		domain.ResultKindTrack: true,
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	if _, ok := results[0].Extras["listeners"]; ok {
+		t.Errorf("extras should not contain 'listeners' when API omits it")
 	}
 }
 
