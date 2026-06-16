@@ -11,6 +11,7 @@ import (
 
 	"altune/go-api/internal/auth"
 	catdomain "altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared"
 
@@ -415,11 +416,12 @@ func buildPlaylistHandler(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) (*Pla
 
 func buildStreamHandler(trackRepo *fakeTrackRepo, audioStore *fakeAudioStore, scheduler *fakeScheduler) (*StreamHandler, chi.Router) {
 	reconcileSvc := service.NewReconcileTrackStatusService(trackRepo, audioStore)
-	var sched acquisitionScheduler
+	var sched ports.ReacquisitionScheduler
 	if scheduler != nil {
 		sched = scheduler
 	}
-	h := NewStreamHandler(trackRepo, audioStore, reconcileSvc, sched)
+	streamSvc := service.NewStreamTrackService(trackRepo, audioStore, reconcileSvc, sched)
+	h := NewStreamHandler(streamSvc)
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(&fakeTokenVerifier{userId: testUserId}))
 	r.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)

@@ -6,11 +6,14 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var _ ports.SearchClickRepository = (*PgxSearchClickRepository)(nil)
 
 type PgxSearchClickRepository struct {
 	pool *pgxpool.Pool

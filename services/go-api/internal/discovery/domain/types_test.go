@@ -22,6 +22,7 @@ func TestParseResultKind(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := ParseResultKind(tt.input)
 			if tt.wantErr {
 				if err == nil {
@@ -77,6 +78,7 @@ func TestParseConfidence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := ParseConfidence(tt.input)
 			if tt.wantErr {
 				if err == nil {
@@ -179,6 +181,7 @@ func TestParseProviderName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := ParseProviderName(tt.input)
 			if tt.wantErr {
 				if err == nil {
@@ -284,6 +287,7 @@ func TestNewSearchQuery_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			q, err := NewSearchQuery(tt.raw, tt.norm, tt.kinds, tt.limit)
 			if err != nil {
 				t.Fatalf("NewSearchQuery() unexpected error: %v", err)
@@ -367,6 +371,7 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			q, err := NewSearchQuery(tt.raw, tt.norm, tt.kinds, tt.limit)
 			if err == nil {
 				t.Fatalf("NewSearchQuery() expected error containing %q, got nil (result: %+v)", tt.wantMsg, q)

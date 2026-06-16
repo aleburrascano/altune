@@ -9,6 +9,12 @@ import (
 	"github.com/google/uuid"
 )
 
+type ValidationError struct {
+	Message string
+}
+
+func (e *ValidationError) Error() string { return e.Message }
+
 type PlaylistId struct {
 	value uuid.UUID
 }
@@ -106,7 +112,7 @@ func (p *Playlist) RemoveTrack(trackId TrackId) bool {
 
 func (p *Playlist) Reorder(trackIds []TrackId) error {
 	if len(trackIds) != len(p.Tracks) {
-		return errors.New("track list length mismatch")
+		return &ValidationError{Message: "track list length mismatch"}
 	}
 
 	existing := make(map[TrackId]bool)
@@ -115,7 +121,7 @@ func (p *Playlist) Reorder(trackIds []TrackId) error {
 	}
 	for _, id := range trackIds {
 		if !existing[id] {
-			return errors.New("unknown track in reorder list")
+			return &ValidationError{Message: "unknown track in reorder list"}
 		}
 	}
 
@@ -130,10 +136,10 @@ func (p *Playlist) Reorder(trackIds []TrackId) error {
 
 func validatePlaylistName(name string) error {
 	if name == "" {
-		return errors.New("playlist name cannot be empty")
+		return &ValidationError{Message: "playlist name required"}
 	}
 	if len(name) > 100 {
-		return errors.New("playlist name cannot exceed 100 characters")
+		return &ValidationError{Message: "playlist name exceeds 100 characters"}
 	}
 	return nil
 }

@@ -91,7 +91,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 				Artist: "Artist",
 				Album:  "Album",
 			},
-			wantErr: "track title is required",
+			wantErr: "track title required",
 		},
 		{
 			name: "empty artist returns validation error",
@@ -100,7 +100,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 				Artist: "",
 				Album:  "Album",
 			},
-			wantErr: "track artist is required",
+			wantErr: "track artist required",
 		},
 		{
 			name: "repo error propagates",
@@ -346,7 +346,7 @@ func TestPlaylistService_Create(t *testing.T) {
 		{
 			name:    "empty name returns validation error",
 			plName:  "",
-			wantErr: "playlist name cannot be empty",
+			wantErr: "playlist name required",
 		},
 		{
 			name:   "repo error propagates",
@@ -557,7 +557,7 @@ func TestPlaylistService_Rename(t *testing.T) {
 				pl := seedPlaylist(t, repo, userId, "Has Name")
 				return pl.ID
 			},
-			wantErr: "playlist name cannot be empty",
+			wantErr: "playlist name required",
 		},
 		{
 			name:    "repo error on GetByID propagates",

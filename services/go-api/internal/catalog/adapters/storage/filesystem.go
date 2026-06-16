@@ -6,8 +6,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"altune/go-api/internal/catalog/ports"
 )
+
+var _ ports.AudioStore = (*FilesystemAudioStore)(nil)
 
 type FilesystemAudioStore struct {
 	baseDir string
@@ -71,7 +74,7 @@ func (s *FilesystemAudioStore) Delete(_ context.Context, audioRef string) error 
 }
 
 func (s *FilesystemAudioStore) safePath(audioRef string) (string, error) {
-	if strings.Contains(audioRef, "..") {
+	if !filepath.IsLocal(audioRef) {
 		return "", fmt.Errorf("path traversal rejected: %s", audioRef)
 	}
 	return filepath.Join(s.baseDir, audioRef), nil

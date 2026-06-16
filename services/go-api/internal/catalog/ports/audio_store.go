@@ -3,6 +3,9 @@ package ports
 import (
 	"context"
 	"io"
+
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 )
 
 type AudioStore interface {
@@ -10,6 +13,10 @@ type AudioStore interface {
 	Store(ctx context.Context, sourcePath string, audioRef string) error
 	Stream(ctx context.Context, audioRef string) (io.ReadCloser, int64, error)
 	Delete(ctx context.Context, audioRef string) error
+}
+
+type ReacquisitionScheduler interface {
+	Schedule(userId shared.UserId, trackId domain.TrackId)
 }
 
 type AudioCandidate struct {

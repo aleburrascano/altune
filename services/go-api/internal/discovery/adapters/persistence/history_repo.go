@@ -5,11 +5,14 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var _ ports.SearchHistoryRepository = (*PgxSearchHistoryRepository)(nil)
 
 type PgxSearchHistoryRepository struct {
 	pool *pgxpool.Pool

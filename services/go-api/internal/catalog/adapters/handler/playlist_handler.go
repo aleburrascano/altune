@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -93,7 +95,13 @@ func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	playlist, err := h.svc.Create(r.Context(), userId, req.Name)
 	if err != nil {
-		httputil.BadRequest(w, err.Error())
+		var ve *domain.ValidationError
+		if errors.As(err, &ve) {
+			httputil.BadRequest(w, ve.Error())
+		} else {
+			slog.ErrorContext(r.Context(), "create playlist failed", "error", err)
+			httputil.InternalError(w)
+		}
 		return
 	}
 
@@ -205,7 +213,13 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 			httputil.NotFound(w, "playlist not found")
 			return
 		}
-		httputil.BadRequest(w, err.Error())
+		var ve *domain.ValidationError
+		if errors.As(err, &ve) {
+			httputil.BadRequest(w, ve.Error())
+		} else {
+			slog.ErrorContext(r.Context(), "rename playlist failed", "error", err)
+			httputil.InternalError(w)
+		}
 		return
 	}
 
@@ -340,7 +354,13 @@ func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) 
 			httputil.NotFound(w, "playlist not found")
 			return
 		}
-		httputil.BadRequest(w, err.Error())
+		var ve *domain.ValidationError
+		if errors.As(err, &ve) {
+			httputil.BadRequest(w, ve.Error())
+		} else {
+			slog.ErrorContext(r.Context(), "reorder playlist failed", "error", err)
+			httputil.InternalError(w)
+		}
 		return
 	}
 

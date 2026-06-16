@@ -51,7 +51,7 @@ type App struct {
 func New(cfg *config.Config) *App {
 	return &App{
 		cfg: cfg,
-		sem: make(chan struct{}, 5),
+		sem: make(chan struct{}, cfg.AcquisitionConcurrency),
 	}
 }
 
@@ -143,32 +143,38 @@ func (a *App) setup(ctx context.Context) error {
 	circuitBreaker := discoveryService.NewCircuitBreaker()
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	clickRepo := discoveryPersistence.NewPgxSearchClickRepository(a.pool)
-	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker)
-
 	artworkChain := providers.NewChainedArtworkResolver(
 		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
 		providers.NewTheAudioDBAdapter(&http.Client{Timeout: 10 * time.Second}),
 	)
-	searchSvc.SetArtworkResolver(artworkChain)
 
+	searchOpts := []discoveryService.SearchOption{
+		discoveryService.WithArtworkResolver(artworkChain),
+	}
 	if a.cfg.HasFanartTV() {
-		fanart := providers.NewFanartTvArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.FanartTVAPIKey)
-		searchSvc.SetFanartResolver(fanart)
+		searchOpts = append(searchOpts, discoveryService.WithFanartResolver(
+			providers.NewFanartTvArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.FanartTVAPIKey),
+		))
 	}
 	if a.cfg.HasGenius() {
-		genius := providers.NewGeniusArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.GeniusAccessToken)
-		searchSvc.SetGeniusResolver(genius)
+		searchOpts = append(searchOpts, discoveryService.WithGeniusResolver(
+			providers.NewGeniusArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.GeniusAccessToken),
+		))
 	}
 	if a.redisClient != nil {
-		searchSvc.SetArtworkCache(discoveryCacheAdapters.NewRedisArtworkCache(a.redisClient))
+		searchOpts = append(searchOpts, discoveryService.WithArtworkCache(
+			discoveryCacheAdapters.NewRedisArtworkCache(a.redisClient),
+		))
 	}
+	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker, searchOpts...)
 
 	clickSvc := discoveryService.NewRecordClickService(clickRepo)
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 
 	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, reconcileSvc, scheduler)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
-	streamHandler := catalogHandler.NewStreamHandler(trackRepo, audioStore, reconcileSvc, scheduler)
+	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, reconcileSvc, scheduler)
+	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
 	deezerContentClient := &http.Client{Timeout: 10 * time.Second}
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
 
