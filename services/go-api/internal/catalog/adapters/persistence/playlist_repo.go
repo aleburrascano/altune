@@ -6,12 +6,15 @@ import (
 	"time"
 
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var _ ports.PlaylistRepository = (*PgxPlaylistRepository)(nil)
 
 type PgxPlaylistRepository struct {
 	pool *pgxpool.Pool

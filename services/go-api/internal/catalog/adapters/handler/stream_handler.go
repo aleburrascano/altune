@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -8,7 +9,6 @@ import (
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
 
@@ -16,24 +16,11 @@ import (
 )
 
 type StreamHandler struct {
-	trackRepo  ports.TrackRepository
-	audioStore ports.AudioStore
-	reconcile  *service.ReconcileTrackStatusService
-	scheduler  acquisitionScheduler
+	svc *service.StreamTrackService
 }
 
-func NewStreamHandler(
-	trackRepo ports.TrackRepository,
-	audioStore ports.AudioStore,
-	reconcile *service.ReconcileTrackStatusService,
-	scheduler acquisitionScheduler,
-) *StreamHandler {
-	return &StreamHandler{
-		trackRepo:  trackRepo,
-		audioStore: audioStore,
-		reconcile:  reconcile,
-		scheduler:  scheduler,
-	}
+func NewStreamHandler(svc *service.StreamTrackService) *StreamHandler {
+	return &StreamHandler{svc: svc}
 }
 
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
@@ -41,61 +28,35 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	trackIdStr := chi.URLParam(r, "trackId")
 
-	trackId, err := domain.ParseTrackId(trackIdStr)
+	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
 	if err != nil {
 		httputil.BadRequest(w, "invalid track ID")
 		return
 	}
 
-	track, err := h.trackRepo.GetByID(r.Context(), trackId, userId)
+	out, err := h.svc.Execute(r.Context(), userId, trackId)
 	if err != nil {
-		httputil.InternalError(w)
-		return
-	}
-	if track == nil {
-		httputil.NotFound(w, "track not found")
-		return
-	}
-
-	if !track.IsStreamable() {
-		httputil.NotFound(w, "audio not available")
-		return
-	}
-
-	slog.InfoContext(r.Context(), "stream.start",
-		"track_id", trackId.String(),
-		"title", track.Title,
-		"artist", track.Artist,
-		"audio_ref", *track.AudioRef,
-	)
-
-	reader, size, err := h.audioStore.Stream(r.Context(), *track.AudioRef)
-	if err != nil {
-		slog.WarnContext(r.Context(), "stream.failed",
-			"track_id", trackId.String(), "error", err)
-
-		_ = h.reconcile.Execute(r.Context(), userId, trackId)
-
-		if h.scheduler != nil {
-			slog.InfoContext(r.Context(), "stream.reacquire_scheduled",
-				"track_id", trackId.String())
-			h.scheduler.Schedule(userId, trackId)
+		switch {
+		case errors.Is(err, service.ErrTrackNotFound):
+			httputil.NotFound(w, "track not found")
+		case errors.Is(err, service.ErrAudioNotAvailable):
+			httputil.NotFound(w, "audio not available")
+		default:
+			slog.ErrorContext(r.Context(), "stream track failed", "error", err)
+			httputil.InternalError(w)
 		}
-
-		httputil.NotFound(w, "audio file not found")
 		return
 	}
-	defer reader.Close()
+	defer out.Reader.Close()
 
 	slog.InfoContext(r.Context(), "stream.serving",
 		"track_id", trackId.String(),
-		"size_bytes", size,
+		"size_bytes", out.Size,
 	)
 
 	w.Header().Set("Content-Type", "audio/mpeg")
-	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	w.Header().Set("Content-Length", strconv.FormatInt(out.Size, 10))
 	w.Header().Set("Accept-Ranges", "bytes")
 	w.WriteHeader(http.StatusOK)
 
@@ -106,7 +67,7 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 				"track_id", trackId.String())
 			return
 		}
-		n, readErr := reader.Read(buf)
+		n, readErr := out.Reader.Read(buf)
 		if n > 0 {
 			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
 				slog.WarnContext(r.Context(), "stream.write_error",

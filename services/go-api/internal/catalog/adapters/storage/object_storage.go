@@ -10,9 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"altune/go-api/internal/catalog/ports"
+
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
+
+var _ ports.AudioStore = (*ObjectStorageAudioStore)(nil)
 
 type ObjectStorageAudioStore struct {
 	client *minio.Client
@@ -76,7 +80,7 @@ func (s *ObjectStorageAudioStore) Store(ctx context.Context, sourcePath string, 
 	}
 
 	_, err = s.client.PutObject(ctx, s.bucket, audioRef, file, stat.Size(), minio.PutObjectOptions{
-		ContentType: "audio/mpeg",
+		ContentType: contentTypeFromRef(audioRef),
 	})
 	if err != nil {
 		return fmt.Errorf("upload to s3: %w", err)
@@ -97,6 +101,19 @@ func (s *ObjectStorageAudioStore) Stream(ctx context.Context, audioRef string) (
 	}
 
 	return obj, stat.Size, nil
+}
+
+func contentTypeFromRef(audioRef string) string {
+	switch {
+	case strings.HasSuffix(audioRef, ".opus"):
+		return "audio/opus"
+	case strings.HasSuffix(audioRef, ".ogg"):
+		return "audio/ogg"
+	case strings.HasSuffix(audioRef, ".m4a"):
+		return "audio/mp4"
+	default:
+		return "audio/mpeg"
+	}
 }
 
 func (s *ObjectStorageAudioStore) Delete(ctx context.Context, audioRef string) error {

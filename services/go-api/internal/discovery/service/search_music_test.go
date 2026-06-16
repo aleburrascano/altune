@@ -34,11 +34,11 @@ func smUserID() shared.UserId {
 	return shared.NewUserId(uuid.New())
 }
 
-func smNewService(providers []ports.SearchProvider, historyRepo ports.SearchHistoryRepository, cb *CircuitBreaker) *SearchMusicService {
+func smNewService(providers []ports.SearchProvider, historyRepo ports.SearchHistoryRepository, cb *CircuitBreaker, opts ...SearchOption) *SearchMusicService {
 	if cb == nil {
 		cb = NewCircuitBreaker()
 	}
-	return NewSearchMusicService(providers, nil, historyRepo, cb)
+	return NewSearchMusicService(providers, nil, historyRepo, cb, opts...)
 }
 
 // ---------------------------------------------------------------------------
@@ -376,12 +376,13 @@ func TestSearchMusicService_EnrichPopularity(t *testing.T) {
 		},
 	}
 
-	svc := smNewService([]ports.SearchProvider{provider}, nil, nil)
-	svc.SetPopularityResolver(&mockPopularityResolver{
-		getPopularityFn: func(_ context.Context, _, _ string) (int64, error) {
-			return 85, nil
-		},
-	})
+	svc := smNewService([]ports.SearchProvider{provider}, nil, nil,
+		WithPopularityResolver(&mockPopularityResolver{
+			getPopularityFn: func(_ context.Context, _, _ string) (int64, error) {
+				return 85, nil
+			},
+		}),
+	)
 
 	query := smTestQuery(t, "Creep Radiohead", smTrackKinds(), 10)
 
@@ -419,18 +420,18 @@ func TestSearchMusicService_EnrichArtwork_CacheHit(t *testing.T) {
 		results:        []domain.SearchResult{r},
 	}
 
-	svc := smNewService([]ports.SearchProvider{provider}, nil, nil)
-	svc.SetArtworkCache(&mockArtworkCache{
-		getFn: func(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, bool, error) {
-			return "https://cache.example.com/art.jpg", true, nil
-		},
-	})
-	// Fanart resolver set but should not be needed when cache hits
-	svc.SetFanartResolver(&mockArtworkResolver{
-		resolveFn: func(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
-			return "", nil
-		},
-	})
+	svc := smNewService([]ports.SearchProvider{provider}, nil, nil,
+		WithArtworkCache(&mockArtworkCache{
+			getFn: func(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, bool, error) {
+				return "https://cache.example.com/art.jpg", true, nil
+			},
+		}),
+		WithFanartResolver(&mockArtworkResolver{
+			resolveFn: func(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
+				return "", nil
+			},
+		}),
+	)
 
 	query := smTestQuery(t, "Creep Radiohead", smTrackKinds(), 10)
 
@@ -460,15 +461,16 @@ func TestSearchMusicService_EnrichArtwork_ResolveFanart(t *testing.T) {
 		results:        []domain.SearchResult{r},
 	}
 
-	svc := smNewService([]ports.SearchProvider{provider}, nil, nil)
-	svc.SetFanartResolver(&mockArtworkResolver{
-		resolveFn: func(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, error) {
-			if mbid == "some-mbid-123" {
-				return "https://fanart.tv/art.jpg", nil
-			}
-			return "", nil
-		},
-	})
+	svc := smNewService([]ports.SearchProvider{provider}, nil, nil,
+		WithFanartResolver(&mockArtworkResolver{
+			resolveFn: func(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, error) {
+				if mbid == "some-mbid-123" {
+					return "https://fanart.tv/art.jpg", nil
+				}
+				return "", nil
+			},
+		}),
+	)
 
 	query := smTestQuery(t, "Creep Radiohead", smTrackKinds(), 10)
 
@@ -498,17 +500,18 @@ func TestSearchMusicService_EnrichArtwork_ResolveChain(t *testing.T) {
 		results:        []domain.SearchResult{r},
 	}
 
-	svc := smNewService([]ports.SearchProvider{provider}, nil, nil)
-	svc.SetGeniusResolver(&mockArtworkResolver{
-		resolveFn: func(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
-			return "", nil // genius finds nothing
-		},
-	})
-	svc.SetArtworkResolver(&mockArtworkResolver{
-		resolveFn: func(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
-			return "https://chain.example.com/fallback.jpg", nil
-		},
-	})
+	svc := smNewService([]ports.SearchProvider{provider}, nil, nil,
+		WithGeniusResolver(&mockArtworkResolver{
+			resolveFn: func(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
+				return "", nil // genius finds nothing
+			},
+		}),
+		WithArtworkResolver(&mockArtworkResolver{
+			resolveFn: func(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
+				return "https://chain.example.com/fallback.jpg", nil
+			},
+		}),
+	)
 
 	query := smTestQuery(t, "Creep Radiohead", smTrackKinds(), 10)
 

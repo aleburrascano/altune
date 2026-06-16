@@ -45,9 +45,10 @@ type Config struct {
 	MusicDir string `env:"MUSIC_DIR"`
 
 	// Audio acquisition tools
-	FFmpegLocation  string `env:"FFMPEG_LOCATION"`
-	YtDLPCookieFile string `env:"YTDLP_COOKIE_FILE"`
-	YtDLPJSRuntime  string `env:"YTDLP_JS_RUNTIME"`
+	FFmpegLocation         string `env:"FFMPEG_LOCATION"`
+	YtDLPCookieFile        string `env:"YTDLP_COOKIE_FILE"`
+	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
+	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
 }
 
 func Load() (*Config, error) {

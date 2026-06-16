@@ -15,7 +15,9 @@ import (
 )
 
 const (
-	enrichLimit       = 25
+	// enrichLimit caps artwork/popularity enrichment to the top N results to bound latency.
+	enrichLimit = 25
+	// enrichConcurrency limits parallel enrichment goroutines to avoid overwhelming providers.
 	enrichConcurrency = 8
 )
 
@@ -31,25 +33,46 @@ type SearchMusicService struct {
 	geniusResolver     ports.ArtworkResolver
 }
 
+type SearchOption func(*SearchMusicService)
+
+func WithPopularityResolver(r ports.PopularityResolver) SearchOption {
+	return func(s *SearchMusicService) { s.popularityResolver = r }
+}
+
+func WithArtworkResolver(r ports.ArtworkResolver) SearchOption {
+	return func(s *SearchMusicService) { s.artworkResolver = r }
+}
+
+func WithArtworkCache(c ports.ArtworkCache) SearchOption {
+	return func(s *SearchMusicService) { s.artworkCache = c }
+}
+
+func WithFanartResolver(r ports.ArtworkResolver) SearchOption {
+	return func(s *SearchMusicService) { s.fanartResolver = r }
+}
+
+func WithGeniusResolver(r ports.ArtworkResolver) SearchOption {
+	return func(s *SearchMusicService) { s.geniusResolver = r }
+}
+
 func NewSearchMusicService(
 	providers []ports.SearchProvider,
 	queryCache ports.QueryCache,
 	historyRepo ports.SearchHistoryRepository,
 	circuitBreaker *CircuitBreaker,
+	opts ...SearchOption,
 ) *SearchMusicService {
-	return &SearchMusicService{
+	s := &SearchMusicService{
 		providers:      providers,
 		queryCache:     queryCache,
 		historyRepo:    historyRepo,
 		circuitBreaker: circuitBreaker,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
-
-func (s *SearchMusicService) SetPopularityResolver(r ports.PopularityResolver)  { s.popularityResolver = r }
-func (s *SearchMusicService) SetArtworkResolver(r ports.ArtworkResolver)        { s.artworkResolver = r }
-func (s *SearchMusicService) SetArtworkCache(c ports.ArtworkCache)              { s.artworkCache = c }
-func (s *SearchMusicService) SetFanartResolver(r ports.ArtworkResolver)         { s.fanartResolver = r }
-func (s *SearchMusicService) SetGeniusResolver(r ports.ArtworkResolver)         { s.geniusResolver = r }
 
 type SearchOutput struct {
 	Results          []domain.SearchResult
@@ -109,7 +132,11 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		go func(p ports.SearchProvider) {
 			defer wg.Done()
 
-			provCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+			timeout := 1500 * time.Millisecond
+			if tp, ok := p.(interface{ SearchTimeout() time.Duration }); ok {
+				timeout = tp.SearchTimeout()
+			}
+			provCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
 			start := time.Now()

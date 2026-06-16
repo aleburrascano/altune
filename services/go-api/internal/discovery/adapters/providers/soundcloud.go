@@ -12,6 +12,8 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
+func (a *SoundCloudAdapter) SearchTimeout() time.Duration { return 5 * time.Second }
+
 // SoundCloudAdapter uses yt-dlp CLI subprocess for SoundCloud search
 // since the Python library API is not available in Go.
 type SoundCloudAdapter struct{}
@@ -33,10 +35,7 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 		return nil, nil
 	}
 
-	searchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(searchCtx, "yt-dlp",
+	cmd := exec.CommandContext(ctx, "yt-dlp",
 		"--dump-json",
 		"--flat-playlist",
 		"--no-download",
@@ -48,6 +47,10 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail != "" {
+			return nil, fmt.Errorf("yt-dlp soundcloud search: %w: %s", err, detail)
+		}
 		return nil, fmt.Errorf("yt-dlp soundcloud search: %w", err)
 	}
 

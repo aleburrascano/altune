@@ -90,10 +90,10 @@ type Track struct {
 
 func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {
 	if title == "" {
-		return nil, errors.New("track title is required")
+		return nil, errors.New("track title required")
 	}
 	if artist == "" {
-		return nil, errors.New("track artist is required")
+		return nil, errors.New("track artist required")
 	}
 	return &Track{
 		ID:                NewTrackId(),
@@ -109,7 +109,7 @@ func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error)
 
 func (t *Track) MarkReady(audioRef string) error {
 	if audioRef == "" {
-		return errors.New("audio_ref is required to mark track as ready")
+		return errors.New("audio_ref required for ready status")
 	}
 	t.AcquisitionStatus = AcquisitionReady
 	t.AudioRef = &audioRef
@@ -125,7 +125,7 @@ func (t *Track) SetDuration(seconds float64) {
 
 func (t *Track) MarkFailed(reason string) error {
 	if reason == "" {
-		return errors.New("failure_reason is required to mark track as failed")
+		return errors.New("failure_reason required for failed status")
 	}
 	t.AcquisitionStatus = AcquisitionFailed
 	t.FailureReason = &reason

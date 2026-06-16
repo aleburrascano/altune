@@ -68,14 +68,20 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 
 	key := trackId.String()
 	h.mu.Lock()
-	if last, ok := h.lastRetry[key]; ok && time.Since(last) < retryCooldown {
+	now := time.Now()
+	if last, ok := h.lastRetry[key]; ok && now.Sub(last) < retryCooldown {
 		h.mu.Unlock()
 		httputil.WriteJSON(w, http.StatusTooManyRequests, map[string]string{
 			"error": "retry cooldown active, try again later",
 		})
 		return
 	}
-	h.lastRetry[key] = time.Now()
+	h.lastRetry[key] = now
+	for k, v := range h.lastRetry {
+		if now.Sub(v) >= 2*retryCooldown {
+			delete(h.lastRetry, k)
+		}
+	}
 	h.mu.Unlock()
 
 	h.scheduler.Schedule(userId, trackId)

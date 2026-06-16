@@ -280,11 +280,23 @@ func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
+func validateContentParams(w http.ResponseWriter, r *http.Request) (string, string, bool) {
 	provider := chi.URLParam(r, "provider")
 	externalID := chi.URLParam(r, "externalId")
 	if provider == "" || externalID == "" {
 		httputil.BadRequest(w, "provider and externalId are required")
+		return "", "", false
+	}
+	if len(externalID) > 256 {
+		httputil.BadRequest(w, "externalId too long")
+		return "", "", false
+	}
+	return provider, externalID, true
+}
+
+func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
+	provider, externalID, ok := validateContentParams(w, r)
+	if !ok {
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -309,10 +321,8 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.Request) {
-	provider := chi.URLParam(r, "provider")
-	externalID := chi.URLParam(r, "externalId")
-	if provider == "" || externalID == "" {
-		httputil.BadRequest(w, "provider and externalId are required")
+	provider, externalID, ok := validateContentParams(w, r)
+	if !ok {
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -337,10 +347,8 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 }
 
 func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Request) {
-	provider := chi.URLParam(r, "provider")
-	externalID := chi.URLParam(r, "externalId")
-	if provider == "" || externalID == "" {
-		httputil.BadRequest(w, "provider and externalId are required")
+	provider, externalID, ok := validateContentParams(w, r)
+	if !ok {
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))

@@ -133,6 +133,7 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 
 	result, err := h.listTracks.Execute(r.Context(), userId, limit, offset)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "list tracks failed", "error", err)
 		httputil.InternalError(w)
 		return
 	}
@@ -187,6 +188,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 
 	result, err := h.addTrack.Execute(r.Context(), userId, input)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "add track failed", "error", err)
 		httputil.InternalError(w)
 		return
 	}
@@ -239,6 +241,7 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 			httputil.NotFound(w, "track not found")
 			return
 		}
+		slog.ErrorContext(r.Context(), "delete track failed", "error", err)
 		httputil.InternalError(w)
 		return
 	}

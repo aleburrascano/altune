@@ -9,6 +9,7 @@ import (
 )
 
 func TestParseTrackId(t *testing.T) {
+	t.Parallel()
 	validUUID := "550e8400-e29b-41d4-a716-446655440000"
 
 	tests := []struct {
@@ -37,6 +38,7 @@ func TestParseTrackId(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			id, err := ParseTrackId(tt.input)
 			if tt.wantErr {
 				if err == nil {
@@ -55,6 +57,7 @@ func TestParseTrackId(t *testing.T) {
 }
 
 func TestTrackIdFromUUID(t *testing.T) {
+	t.Parallel()
 	raw := uuid.New()
 	id := TrackIdFromUUID(raw)
 
@@ -67,6 +70,7 @@ func TestTrackIdFromUUID(t *testing.T) {
 }
 
 func TestTrackId_IsZero(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		id   TrackId
@@ -91,6 +95,7 @@ func TestTrackId_IsZero(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.id.IsZero(); got != tt.want {
 				t.Errorf("IsZero() = %v, want %v", got, tt.want)
 			}
@@ -99,6 +104,7 @@ func TestTrackId_IsZero(t *testing.T) {
 }
 
 func TestParseAcquisitionStatus(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   string
@@ -114,6 +120,7 @@ func TestParseAcquisitionStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := ParseAcquisitionStatus(tt.input)
 			if tt.wantErr {
 				if err == nil {
@@ -132,6 +139,7 @@ func TestParseAcquisitionStatus(t *testing.T) {
 }
 
 func TestAcquisitionStatus_String(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		status AcquisitionStatus
@@ -144,6 +152,7 @@ func TestAcquisitionStatus_String(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := tt.status.String(); got != tt.want {
 				t.Errorf("String() = %q, want %q", got, tt.want)
 			}
@@ -152,6 +161,7 @@ func TestAcquisitionStatus_String(t *testing.T) {
 }
 
 func TestNewTrack(t *testing.T) {
+	t.Parallel()
 	userId := shared.NewUserId(uuid.New())
 
 	tests := []struct {
@@ -178,19 +188,20 @@ func TestNewTrack(t *testing.T) {
 			title:   "",
 			artist:  "Artist Name",
 			album:   "Album Name",
-			wantErr: "track title is required",
+			wantErr: "track title required",
 		},
 		{
 			name:    "empty artist returns error",
 			title:   "Song Title",
 			artist:  "",
 			album:   "Album Name",
-			wantErr: "track artist is required",
+			wantErr: "track artist required",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			track, err := NewTrack(userId, tt.title, tt.artist, tt.album)
 			if tt.wantErr != "" {
 				if err == nil {
@@ -239,6 +250,7 @@ func TestNewTrack(t *testing.T) {
 }
 
 func TestTrack_MarkReady(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		audioRef string
@@ -251,12 +263,13 @@ func TestTrack_MarkReady(t *testing.T) {
 		{
 			name:     "empty audioRef returns error",
 			audioRef: "",
-			wantErr:  "audio_ref is required to mark track as ready",
+			wantErr:  "audio_ref required for ready status",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			track := newTestTrack(t)
 			// Pre-set a failure reason to verify it gets cleared
 			reason := "old failure"
@@ -289,6 +302,7 @@ func TestTrack_MarkReady(t *testing.T) {
 }
 
 func TestTrack_MarkFailed(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		reason  string
@@ -301,12 +315,13 @@ func TestTrack_MarkFailed(t *testing.T) {
 		{
 			name:    "empty reason returns error",
 			reason:  "",
-			wantErr: "failure_reason is required to mark track as failed",
+			wantErr: "failure_reason required for failed status",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			track := newTestTrack(t)
 			// Pre-set an audio ref to verify it gets cleared
 			ref := "s3://bucket/track.opus"
@@ -339,6 +354,7 @@ func TestTrack_MarkFailed(t *testing.T) {
 }
 
 func TestTrack_RevertToPending(t *testing.T) {
+	t.Parallel()
 	track := newTestTrack(t)
 
 	// Put track into ready state first
@@ -360,6 +376,7 @@ func TestTrack_RevertToPending(t *testing.T) {
 }
 
 func TestTrack_IsStreamable(t *testing.T) {
+	t.Parallel()
 	audioRef := "s3://bucket/track.opus"
 
 	tests := []struct {
@@ -401,6 +418,7 @@ func TestTrack_IsStreamable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			track := newTestTrack(t)
 			tt.setup(track)
 			if got := track.IsStreamable(); got != tt.want {

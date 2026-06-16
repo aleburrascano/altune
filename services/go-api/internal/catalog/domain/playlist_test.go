@@ -11,6 +11,7 @@ import (
 )
 
 func TestParsePlaylistId(t *testing.T) {
+	t.Parallel()
 	validUUID := "550e8400-e29b-41d4-a716-446655440000"
 
 	tests := []struct {
@@ -57,6 +58,7 @@ func TestParsePlaylistId(t *testing.T) {
 }
 
 func TestNewPlaylist(t *testing.T) {
+	t.Parallel()
 	userId := shared.NewUserId(uuid.New())
 
 	tests := []struct {
@@ -71,12 +73,12 @@ func TestNewPlaylist(t *testing.T) {
 		{
 			name:    "empty name returns error",
 			plName:  "",
-			wantErr: "playlist name cannot be empty",
+			wantErr: "playlist name required",
 		},
 		{
 			name:    "name over 100 chars returns error",
 			plName:  strings.Repeat("a", 101),
-			wantErr: "playlist name cannot exceed 100 characters",
+			wantErr: "playlist name exceeds 100 characters",
 		},
 		{
 			name:   "exactly 100 chars is OK",
@@ -125,6 +127,7 @@ func TestNewPlaylist(t *testing.T) {
 }
 
 func TestPlaylist_Rename(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		newName string
@@ -137,12 +140,12 @@ func TestPlaylist_Rename(t *testing.T) {
 		{
 			name:    "empty name returns error",
 			newName: "",
-			wantErr: "playlist name cannot be empty",
+			wantErr: "playlist name required",
 		},
 		{
 			name:    "name over 100 chars returns error",
 			newName: strings.Repeat("x", 101),
-			wantErr: "playlist name cannot exceed 100 characters",
+			wantErr: "playlist name exceeds 100 characters",
 		},
 	}
 
@@ -177,6 +180,7 @@ func TestPlaylist_Rename(t *testing.T) {
 }
 
 func TestPlaylist_AddTrack(t *testing.T) {
+	t.Parallel()
 	t.Run("adds track at correct position", func(t *testing.T) {
 		pl := newTestPlaylist(t)
 		beforeUpdate := pl.UpdatedAt
@@ -225,6 +229,7 @@ func TestPlaylist_AddTrack(t *testing.T) {
 }
 
 func TestPlaylist_RemoveTrack(t *testing.T) {
+	t.Parallel()
 	t.Run("removes and reorders positions", func(t *testing.T) {
 		pl := newTestPlaylist(t)
 		trackA := NewTrackId()
@@ -271,6 +276,7 @@ func TestPlaylist_RemoveTrack(t *testing.T) {
 }
 
 func TestPlaylist_Reorder(t *testing.T) {
+	t.Parallel()
 	t.Run("valid reorder", func(t *testing.T) {
 		pl := newTestPlaylist(t)
 		trackA := NewTrackId()
