@@ -31,7 +31,7 @@ func qualityCompleteness(r domain.SearchResult) float64 {
 		fields++
 	}
 	if r.Extras != nil {
-		if _, ok := r.Extras["duration_seconds"]; ok {
+		if _, ok := r.Extras["duration"]; ok {
 			fields++
 		}
 	}

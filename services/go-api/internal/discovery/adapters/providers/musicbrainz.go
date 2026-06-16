@@ -47,6 +47,35 @@ func (a *MusicBrainzAdapter) Search(ctx context.Context, query string, kinds map
 	return results, nil
 }
 
+func (a *MusicBrainzAdapter) SearchStructured(ctx context.Context, artist, track string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	var results []domain.SearchResult
+	for kind := range kinds {
+		if !a.SupportedKinds()[kind] {
+			continue
+		}
+		q := mbStructuredQuery(artist, track, kind)
+		items, err := a.searchKind(ctx, q, kind)
+		if err != nil {
+			continue
+		}
+		results = append(results, items...)
+	}
+	return results, nil
+}
+
+func mbStructuredQuery(artist, track string, kind domain.ResultKind) string {
+	switch kind {
+	case domain.ResultKindTrack:
+		return fmt.Sprintf(`artist:"%s" AND recording:"%s"`, artist, track)
+	case domain.ResultKindAlbum:
+		return fmt.Sprintf(`artist:"%s" AND release:"%s"`, artist, track)
+	case domain.ResultKindArtist:
+		return artist
+	default:
+		return artist + " " + track
+	}
+}
+
 func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
 	entity := mbEntity(kind)
 	u := fmt.Sprintf("https://musicbrainz.org/ws/2/%s/?query=%s&fmt=json&limit=10",

@@ -24,42 +24,43 @@ flowchart TD
         SUGGEST_H --> SUGGEST_SVC["SuggestService.Execute"]
 
         SEARCH_SVC --> NORMALIZE["NormalizeForMatch(query)"]
-        SEARCH_SVC --> INTENT["DetectIntent(query, vocab)"]
-        SEARCH_SVC --> SCATTER["Scatter to providers"]
+        SEARCH_SVC --> PRE_CORRECT["Pre-query correction\n(trigram + phonetic vs vocabulary)"]
+        PRE_CORRECT --> CLEAN["CleanQuery\n(strip 'official video', 'lyrics', etc.)"]
+        CLEAN --> INTENT["DetectIntent(query, vocab)"]
+        INTENT --> SCATTER["Scatter to providers"]
 
-        SCATTER --> |"1500ms timeout each"| PROVIDERS
+        SCATTER --> |"1500ms timeout each\n+ structured queries\nfor MB/Deezer when\nintent detected"| PROVIDERS
 
         SCATTER --> COLLECT["Collect results + statuses"]
         COLLECT --> FUSE["FuseAndRank"]
 
         FUSE --> MERGE["Identifier merge\n(ISRC / MBID / artist name)"]
         MERGE --> POP_NORM["NormalizePopularity\n(log-scale → 0-100)"]
-        POP_NORM --> SCORE["Score: relevance + RRF"]
+        POP_NORM --> RECENCY["Recency boost\n(×1.1 if ≤30 days)"]
+        RECENCY --> SCORE["Score: relevance + intent boost\n+ exact/prefix/multi-field bonuses\n+ RRF"]
         SCORE --> GATE["Gate: word-share + browseable source"]
-        GATE --> SORT["Sort: relevance-band → demoted →\nmulti-source → popularity →\nquality → RRF → alpha"]
+        GATE --> SORT["Sort: relevance-band(0.05) → demoted →\nmulti-source → popularity →\nquality → RRF → alpha"]
         SORT --> COLLAPSE["CollapseVersions\n(strip remix/live suffixes, group)"]
-        COLLAPSE --> RECENCY["Recency boost\n(×1.1 if ≤30 days)"]
-        RECENCY --> INTENT_BOOST["Intent boost\n(+15 if artist+track match)"]
 
-        INTENT_BOOST --> ENRICH["Enrich top 25\n(artwork only)"]
+        COLLAPSE --> ENRICH["Enrich top 25\n(artwork only)"]
         ENRICH --> RERANK["Rerank\n(same key minus quality)"]
 
         RERANK --> ZERO{zero results?}
-        ZERO -->|yes| CORRECT["CorrectionService\n(trigram Jaccard vs vocabulary)"]
+        ZERO -->|yes| CORRECT["CorrectionService\n(trigram + phonetic vs vocabulary)"]
         CORRECT -->|corrected query| SCATTER
         CORRECT -->|no match| ZERO_RESP["Return empty + no correction"]
         ZERO -->|no| LIMIT["Limit to user's count"]
 
         LIMIT --> HISTORY_SAVE["Save search history"]
-        LIMIT --> VOCAB_INGEST["Ingest to vocabulary\n(fire-and-forget)"]
+        LIMIT --> VOCAB_INGEST["Ingest to vocabulary\n(top 5 + separate artist entries)"]
         LIMIT --> RESPONSE["Return SearchOutput\n(+ corrected_query if applicable)"]
     end
 
     subgraph "Providers (adapters/providers/)"
         PROVIDERS["6 Search Providers"]
-        DEEZER["Deezer\n+nb_fan, rank, ISRC"]
-        LASTFM["Last.fm\n+listeners, playcount"]
-        MUSICBRAINZ["MusicBrainz\n+MBID, ISRC"]
+        DEEZER["Deezer\n+nb_fan, rank, ISRC\n+StructuredSearcher"]
+        LASTFM["Last.fm\n+listeners"]
+        MUSICBRAINZ["MusicBrainz\n+MBID, ISRC\n+StructuredSearcher"]
         ITUNES["iTunes\n+metadata"]
         SOUNDCLOUD["SoundCloud (yt-dlp)\n+playback_count"]
         AUDIODB["TheAudioDB\n+artist images"]
@@ -67,11 +68,11 @@ flowchart TD
     end
 
     subgraph "Vocabulary (Redis)"
-        VOCAB[("Vocabulary Store\nterms sorted set\ntrigram index\nentry hashes")]
+        VOCAB[("Vocabulary Store\nterms sorted set\ntrigram index\nmetaphone index\nentry hashes")]
         CHARTS["Chart Refresh\n(Deezer + Last.fm charts)\nevery 6 hours"] -->|BulkAdd| VOCAB
         VOCAB_INGEST -->|Add| VOCAB
         SUGGEST_SVC -->|SuggestByPrefix\nFindClosest| VOCAB
-        CORRECT -->|FindClosest| VOCAB
+        CORRECT -->|FindClosest\n(trigram + phonetic)| VOCAB
         INTENT -->|SuggestByPrefix| VOCAB
     end
 
@@ -116,8 +117,10 @@ internal/discovery/
 │   ├── normalize.go          # NormalizeForMatch (8-step canonicalization)
 │   ├── fuzzy.go              # TokenSortRatio, levenshteinDistance
 │   ├── popularity.go         # NormalizePopularity (log-scale, multi-provider)
-│   ├── correction.go         # CorrectionService (trigram Jaccard)
-│   ├── intent.go             # DetectIntent, ApplyIntentBoost
+│   ├── correction.go         # CorrectionService (trigram Jaccard + phonetic)
+│   ├── intent.go             # DetectIntent (vocabulary-based artist+track split)
+│   ├── query_clean.go        # CleanQuery (strip YouTube noise)
+│   ├── metaphone.go          # DoubleMetaphone, MetaphoneKey (phonetic codes)
 │   ├── suggest.go            # SuggestService (prefix + fuzzy fallback)
 │   ├── vocabulary_refresh.go # Background chart ingestion (6h ticker)
 │   ├── quality_scorer.go     # ComputeQualityScore, IsDemoted

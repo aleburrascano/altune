@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"log/slog"
+	"math"
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
@@ -22,7 +24,15 @@ func DetectIntent(ctx context.Context, query string, vocab ports.VocabularyStore
 	if len(tokens) < 2 {
 		return nil
 	}
-	return findBestSplit(ctx, tokens, vocab)
+	best := findBestSplit(ctx, tokens, vocab)
+	if best != nil {
+		slog.DebugContext(ctx, "intent.detected",
+			"artist", best.Artist,
+			"track", best.Track,
+			"confidence", best.Confidence,
+		)
+	}
+	return best
 }
 
 func findBestSplit(ctx context.Context, tokens []string, vocab ports.VocabularyStore) *QueryIntent {
@@ -46,7 +56,7 @@ func checkSplit(
 		return
 	}
 
-	matches, err := vocab.SuggestByPrefix(ctx, strings.ToLower(artistCandidate), 1)
+	matches, err := vocab.SuggestByPrefix(ctx, NormalizeForMatch(artistCandidate), 1)
 	if err != nil || len(matches) == 0 {
 		return
 	}
@@ -54,7 +64,7 @@ func checkSplit(
 		return
 	}
 
-	conf := float64(matches[0].Popularity) / 100.0
+	conf := math.Min(1.0, float64(matches[0].Popularity)/100.0)
 	if *best == nil || conf > (*best).Confidence {
 		*best = &QueryIntent{
 			Artist:     artistCandidate,

@@ -54,7 +54,7 @@ func TestFuseAndRank_MergeByISRC(t *testing.T) {
 		{mbTrack},
 	}
 
-	results := FuseAndRank(perProvider, "bohemian rhapsody queen", noQualityScorer)
+	results := FuseAndRank(perProvider, "bohemian rhapsody queen", noQualityScorer, nil)
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 merged result, got %d", len(results))
@@ -83,7 +83,7 @@ func TestFuseAndRank_MergeByMBID(t *testing.T) {
 		{mbTrack},
 	}
 
-	results := FuseAndRank(perProvider, "paranoid android radiohead", noQualityScorer)
+	results := FuseAndRank(perProvider, "paranoid android radiohead", noQualityScorer, nil)
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 merged result, got %d", len(results))
@@ -113,7 +113,7 @@ func TestFuseAndRank_ArtistNameMerge(t *testing.T) {
 		{mbArtist},
 	}
 
-	results := FuseAndRank(perProvider, "weeknd", noQualityScorer)
+	results := FuseAndRank(perProvider, "weeknd", noQualityScorer, nil)
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 merged artist result, got %d", len(results))
@@ -139,7 +139,7 @@ func TestFuseAndRank_ArtistNameMergeBlockedByMBID(t *testing.T) {
 		{mbArtist},
 	}
 
-	results := FuseAndRank(perProvider, "megaman", noQualityScorer)
+	results := FuseAndRank(perProvider, "megaman", noQualityScorer, nil)
 
 	if len(results) < 2 {
 		t.Errorf("expected 2 separate results when one has MBID, got %d", len(results))
@@ -155,7 +155,7 @@ func TestFuseAndRank_NoMerge(t *testing.T) {
 		{track1, track2},
 	}
 
-	results := FuseAndRank(perProvider, "radiohead", noQualityScorer)
+	results := FuseAndRank(perProvider, "radiohead", noQualityScorer, nil)
 
 	if len(results) != 2 {
 		t.Fatalf("expected 2 separate results, got %d", len(results))
@@ -170,7 +170,7 @@ func TestFuseAndRank_SingleProvider(t *testing.T) {
 		{track},
 	}
 
-	results := FuseAndRank(perProvider, "creep radiohead", noQualityScorer)
+	results := FuseAndRank(perProvider, "creep radiohead", noQualityScorer, nil)
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -192,7 +192,7 @@ func TestFuseAndRank_RelevanceRanking(t *testing.T) {
 		{partialMatch, exactMatch},
 	}
 
-	results := FuseAndRank(perProvider, "bohemian rhapsody", noQualityScorer)
+	results := FuseAndRank(perProvider, "bohemian rhapsody", noQualityScorer, nil)
 
 	if len(results) < 2 {
 		t.Fatalf("expected at least 2 results, got %d", len(results))
@@ -215,7 +215,7 @@ func TestFuseAndRank_MultiSourceBoost(t *testing.T) {
 		{multiB},
 	}
 
-	results := FuseAndRank(perProvider, "bohemian rhapsody queen", noQualityScorer)
+	results := FuseAndRank(perProvider, "bohemian rhapsody queen", noQualityScorer, nil)
 
 	if len(results) < 2 {
 		t.Fatalf("expected at least 2 results, got %d", len(results))
@@ -235,7 +235,7 @@ func TestFuseAndRank_WordShareGating(t *testing.T) {
 		{relevant, irrelevant},
 	}
 
-	results := FuseAndRank(perProvider, "yesterday beatles", noQualityScorer)
+	results := FuseAndRank(perProvider, "yesterday beatles", noQualityScorer, nil)
 
 	for _, r := range results {
 		if r.Title == "Completely Different Song" {
@@ -255,12 +255,12 @@ func TestFuseAndRank_WordShareGating(t *testing.T) {
 }
 
 func TestFuseAndRank_EmptyInput(t *testing.T) {
-	results := FuseAndRank(nil, "", noQualityScorer)
+	results := FuseAndRank(nil, "", noQualityScorer, nil)
 	if len(results) != 0 {
 		t.Errorf("expected empty results for empty input, got %d", len(results))
 	}
 
-	results2 := FuseAndRank([][]domain.SearchResult{}, "some query", noQualityScorer)
+	results2 := FuseAndRank([][]domain.SearchResult{}, "some query", noQualityScorer, nil)
 	if len(results2) != 0 {
 		t.Errorf("expected empty results for empty perProvider, got %d", len(results2))
 	}
@@ -305,7 +305,7 @@ func TestFuseAndRank_NonTrackWithoutDeezerFiltered(t *testing.T) {
 		{artistOnlyMB},
 	}
 
-	results := FuseAndRank(perProvider, "radiohead", noQualityScorer)
+	results := FuseAndRank(perProvider, "radiohead", noQualityScorer, nil)
 
 	if len(results) != 0 {
 		t.Errorf("expected non-track result without Deezer source to be filtered, got %d results", len(results))
@@ -322,7 +322,7 @@ func TestFuseAndRank_DifferentMBIDDoNotMerge(t *testing.T) {
 		{track2},
 	}
 
-	results := FuseAndRank(perProvider, "creep radiohead", noQualityScorer)
+	results := FuseAndRank(perProvider, "creep radiohead", noQualityScorer, nil)
 
 	if len(results) < 2 {
 		t.Errorf("expected 2 separate results for different MBIDs, got %d", len(results))
@@ -344,7 +344,7 @@ func TestFuseAndRank_MergedResultPicksMoreCompleteCanonical(t *testing.T) {
 		{rich},
 	}
 
-	results := FuseAndRank(perProvider, "creep radiohead", noQualityScorer)
+	results := FuseAndRank(perProvider, "creep radiohead", noQualityScorer, nil)
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 merged result, got %d", len(results))
@@ -451,7 +451,7 @@ func TestFuseAndRank_PopularityNormalization(t *testing.T) {
 		{unpopular, popular},
 	}
 
-	results := FuseAndRank(perProvider, "blinding lights weeknd", noQualityScorer)
+	results := FuseAndRank(perProvider, "blinding lights weeknd", noQualityScorer, nil)
 
 	if len(results) < 2 {
 		t.Fatalf("expected at least 2 results, got %d", len(results))

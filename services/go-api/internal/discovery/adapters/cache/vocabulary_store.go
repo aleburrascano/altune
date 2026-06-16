@@ -12,31 +12,47 @@ import (
 )
 
 const (
-	vocabTermsKey  = "discovery:vocab:v1:terms"
-	vocabTriPrefix = "discovery:vocab:v1:tri:"
-	vocabEntryPfx  = "discovery:vocab:v1:entry:"
-	memberSep      = "\x00"
+	vocabTermsKey   = "discovery:vocab:v1:terms"
+	vocabTriPrefix  = "discovery:vocab:v1:tri:"
+	vocabEntryPfx   = "discovery:vocab:v1:entry:"
+	vocabMetaPrefix = "discovery:vocab:v1:meta:"
+	memberSep       = "\x00"
 )
 
 // NormalizeFunc normalizes a term for matching. Injected to avoid
 // import cycles between cache and service packages.
 type NormalizeFunc func(string) string
 
+// MetaphoneFunc computes a phonetic key for a term.
+type MetaphoneFunc func(string) string
+
 // RedisVocabularyStore implements ports.VocabularyStore backed by Redis
 // sorted sets and trigram indexes.
 type RedisVocabularyStore struct {
 	client    *goredis.Client
 	normalize NormalizeFunc
+	metaphone MetaphoneFunc
 }
 
 func NewVocabularyStore(
 	client *goredis.Client,
 	normalize NormalizeFunc,
+	opts ...VocabStoreOption,
 ) *RedisVocabularyStore {
-	return &RedisVocabularyStore{
+	s := &RedisVocabularyStore{
 		client:    client,
 		normalize: normalize,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+type VocabStoreOption func(*RedisVocabularyStore)
+
+func WithMetaphone(fn MetaphoneFunc) VocabStoreOption {
+	return func(s *RedisVocabularyStore) { s.metaphone = fn }
 }
 
 // Add indexes a single vocabulary entry in Redis.
@@ -54,7 +70,7 @@ func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.Voc
 	}
 	pipe := s.client.Pipeline()
 	for _, e := range entries {
-		addEntryToPipeline(pipe, ctx, s.buildNorm(e), e)
+		addEntryToPipeline(pipe, ctx, s.buildNorm(e), e, s.metaphone)
 	}
 	_, err := pipe.Exec(ctx)
 	return err
@@ -104,7 +120,7 @@ func (s *RedisVocabularyStore) indexEntry(
 ) error {
 	norm := s.buildNorm(entry)
 	pipe := s.client.Pipeline()
-	addEntryToPipeline(pipe, ctx, norm, entry)
+	addEntryToPipeline(pipe, ctx, norm, entry, s.metaphone)
 	_, err := pipe.Exec(ctx)
 	return err
 }
@@ -114,6 +130,7 @@ func addEntryToPipeline(
 	ctx context.Context,
 	norm string,
 	entry domain.VocabularyEntry,
+	metaphone MetaphoneFunc,
 ) {
 	member := encodeMember(norm, entry.Term, entry.Kind)
 	pipe.ZAdd(ctx, vocabTermsKey, goredis.Z{
@@ -128,6 +145,12 @@ func addEntryToPipeline(
 	pipe.Set(ctx, vocabEntryPfx+norm, entryJSON, 0)
 	for _, tri := range trigrams(norm) {
 		pipe.SAdd(ctx, vocabTriPrefix+tri, norm)
+	}
+	if metaphone != nil {
+		code := metaphone(norm)
+		if code != "" {
+			pipe.SAdd(ctx, vocabMetaPrefix+code, norm)
+		}
 	}
 }
 
@@ -205,7 +228,8 @@ func (s *RedisVocabularyStore) attachScores(entries []domain.VocabularyEntry) {
 	}
 }
 
-// fuzzySearch retrieves candidates via trigram overlap and scores by Jaccard.
+// fuzzySearch retrieves candidates via trigram overlap and phonetic match,
+// then scores by Jaccard coefficient with a phonetic confidence floor.
 func (s *RedisVocabularyStore) fuzzySearch(
 	ctx context.Context,
 	query string,
@@ -220,7 +244,36 @@ func (s *RedisVocabularyStore) fuzzySearch(
 	if err != nil {
 		return nil, err
 	}
-	return s.scoreCandidates(ctx, candidates, queryTrigrams, norm, limit)
+
+	var phoneticSet map[string]bool
+	if s.metaphone != nil {
+		code := s.metaphone(norm)
+		if code != "" {
+			phoneticSet, _ = s.metaphoneCandidates(ctx, code)
+			for norm := range phoneticSet {
+				if _, exists := candidates[norm]; !exists {
+					candidates[norm] = 0
+				}
+			}
+		}
+	}
+
+	return s.scoreCandidatesWithPhonetic(ctx, candidates, queryTrigrams, norm, limit, phoneticSet)
+}
+
+func (s *RedisVocabularyStore) metaphoneCandidates(
+	ctx context.Context,
+	code string,
+) (map[string]bool, error) {
+	members, err := s.client.SMembers(ctx, vocabMetaPrefix+code).Result()
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]bool, len(members))
+	for _, m := range members {
+		result[m] = true
+	}
+	return result, nil
 }
 
 func (s *RedisVocabularyStore) trigramCandidates(
@@ -245,12 +298,13 @@ type fuzzyCandidate struct {
 	jaccard float64
 }
 
-func (s *RedisVocabularyStore) scoreCandidates(
+func (s *RedisVocabularyStore) scoreCandidatesWithPhonetic(
 	ctx context.Context,
 	candidates map[string]int,
 	queryTrigrams []string,
 	queryNorm string,
 	limit int,
+	phoneticSet map[string]bool,
 ) ([]domain.VocabularyEntry, error) {
 	scored := make([]fuzzyCandidate, 0, len(candidates))
 	for norm, shared := range candidates {
@@ -260,8 +314,15 @@ func (s *RedisVocabularyStore) scoreCandidates(
 		}
 		candTrigrams := trigrams(norm)
 		jaccard := jaccardCoefficient(shared, len(queryTrigrams), len(candTrigrams))
+
+		// Phonetic matches get a confidence floor of 0.5
+		if phoneticSet[norm] && jaccard < 0.5 {
+			jaccard = 0.5
+		}
+
 		maxDist := maxLevenshtein(queryNorm)
-		if levenshteinDist(queryNorm, norm) > maxDist {
+		dist := levenshteinDist(queryNorm, norm)
+		if dist > maxDist && !phoneticSet[norm] {
 			continue
 		}
 		entry.TermNorm = norm

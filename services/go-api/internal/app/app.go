@@ -178,6 +178,7 @@ func (a *App) setup(ctx context.Context) error {
 		vocabStore = discoveryCacheAdapters.NewVocabularyStore(
 			a.redisClient,
 			discoveryService.NormalizeForMatch,
+			discoveryCacheAdapters.WithMetaphone(discoveryService.MetaphoneKey),
 		)
 	}
 	if vocabStore != nil {

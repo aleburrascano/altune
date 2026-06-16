@@ -29,7 +29,7 @@ func (m *mockVocabForIntent) SuggestByPrefix(_ context.Context, prefix string, l
 func TestDetectIntent(t *testing.T) {
 	vocab := &mockVocabForIntent{
 		entries: map[string][]domain.VocabularyEntry{
-			"tay-k": {{Term: "Tay-K", TermNorm: "tay-k", Kind: "artist", Popularity: 80}},
+			"tay k": {{Term: "Tay-K", TermNorm: "tay k", Kind: "artist", Popularity: 80}},
 		},
 	}
 

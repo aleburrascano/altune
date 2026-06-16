@@ -47,6 +47,35 @@ func (a *DeezerAdapter) Search(ctx context.Context, query string, kinds map[doma
 	return results, nil
 }
 
+func (a *DeezerAdapter) SearchStructured(ctx context.Context, artist, track string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	var results []domain.SearchResult
+	for kind := range kinds {
+		if !a.SupportedKinds()[kind] {
+			continue
+		}
+		q := deezerStructuredQuery(artist, track, kind)
+		items, err := a.searchKind(ctx, q, kind)
+		if err != nil {
+			continue
+		}
+		results = append(results, items...)
+	}
+	return results, nil
+}
+
+func deezerStructuredQuery(artist, track string, kind domain.ResultKind) string {
+	switch kind {
+	case domain.ResultKindTrack:
+		return fmt.Sprintf(`artist:"%s" track:"%s"`, artist, track)
+	case domain.ResultKindAlbum:
+		return fmt.Sprintf(`artist:"%s" album:"%s"`, artist, track)
+	case domain.ResultKindArtist:
+		return artist
+	default:
+		return artist + " " + track
+	}
+}
+
 func (a *DeezerAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
 	endpoint := deezerSearchEndpoint(kind)
 	if endpoint == "" {
