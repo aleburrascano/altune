@@ -110,6 +110,13 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 
 	searchStart := time.Now()
 
+	preCorrection := s.preQueryCorrection(ctx, query.Raw, queryNorm)
+	searchQuery := query.Raw
+	if preCorrection != nil {
+		searchQuery = preCorrection.Corrected
+		queryNorm = NormalizeForMatch(searchQuery)
+	}
+
 	var (
 		mu          sync.Mutex
 		perProvider [][]domain.SearchResult
@@ -147,7 +154,7 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 			defer cancel()
 
 			start := time.Now()
-			results, err := p.Search(provCtx, query.Raw, query.Kinds)
+			results, err := p.Search(provCtx, searchQuery, query.Kinds)
 			latencyMs := time.Since(start).Milliseconds()
 
 			if err != nil {
@@ -220,7 +227,11 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 	merged = Rerank(merged, queryNorm)
 
 	var correctedQuery, originalQuery string
-	if len(merged) == 0 {
+	if preCorrection != nil {
+		correctedQuery = preCorrection.Corrected
+		originalQuery = query.Raw
+	}
+	if len(merged) == 0 && preCorrection == nil {
 		correctedQuery, originalQuery = s.tryCorrection(ctx, query, queryNorm, &merged, &statuses)
 	}
 
@@ -267,6 +278,34 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		CorrectedQuery:   correctedQuery,
 		OriginalQuery:    originalQuery,
 	}, nil
+}
+
+func (s *SearchMusicService) preQueryCorrection(
+	ctx context.Context,
+	rawQuery string,
+	queryNorm string,
+) *CorrectionResult {
+	if s.vocabStore == nil {
+		return nil
+	}
+	corrSvc := NewCorrectionService(s.vocabStore)
+	result := corrSvc.Correct(ctx, rawQuery)
+	if result == nil {
+		return nil
+	}
+	corrNorm := NormalizeForMatch(result.Corrected)
+	if corrNorm == queryNorm {
+		return nil
+	}
+	if result.Confidence < 0.4 {
+		return nil
+	}
+	slog.InfoContext(ctx, "search.pre_correction",
+		"original", rawQuery,
+		"corrected", result.Corrected,
+		"confidence", result.Confidence,
+	)
+	return result
 }
 
 func (s *SearchMusicService) tryCorrection(

@@ -181,7 +181,10 @@ func tryMerge(a, b domain.SearchResult) (domain.SearchResult, bool) {
 	// Name-based merge for artists: same normalized name = same artist.
 	// Artists lack cross-provider identifiers (no ISRC, rarely MBID from
 	// non-MB providers), so without this, 4+ copies of "The Weeknd" appear.
-	if a.Kind == domain.ResultKindArtist {
+	// Guard: if one side has MBID and the other doesn't, merge is risky
+	// (different artists can share a name). Only merge when neither has MBID
+	// or when the MBID check above already passed.
+	if a.Kind == domain.ResultKindArtist && mbidA == "" && mbidB == "" {
 		normA := NormalizeForMatch(a.Title)
 		normB := NormalizeForMatch(b.Title)
 		if normA != "" && normA == normB {

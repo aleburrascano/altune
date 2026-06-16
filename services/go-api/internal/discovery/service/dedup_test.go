@@ -127,6 +127,25 @@ func TestFuseAndRank_ArtistNameMerge(t *testing.T) {
 	}
 }
 
+func TestFuseAndRank_ArtistNameMergeBlockedByMBID(t *testing.T) {
+	// Two artists with the same name but one has an MBID should NOT merge by name.
+	// This prevents merging different artists who share a common name.
+	// Both need Deezer sources to pass hasBrowseableSource for non-tracks.
+	deezerArtist := artistResult(domain.ProviderDeezer, "dz-artist-1", "Megaman", nil)
+	mbArtist := artistResult(domain.ProviderDeezer, "dz-artist-2", "Megaman", map[string]any{"mbid": "mb-id-123"})
+
+	perProvider := [][]domain.SearchResult{
+		{deezerArtist},
+		{mbArtist},
+	}
+
+	results := FuseAndRank(perProvider, "megaman", noQualityScorer)
+
+	if len(results) < 2 {
+		t.Errorf("expected 2 separate results when one has MBID, got %d", len(results))
+	}
+}
+
 func TestFuseAndRank_NoMerge(t *testing.T) {
 	// Two different tracks from same provider stay separate.
 	track1 := trackResult(domain.ProviderDeezer, "dz-1", "Creep", "Radiohead", map[string]any{"isrc": "ISRC-AAA"})
