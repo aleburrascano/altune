@@ -14,7 +14,6 @@ type popularityMetric struct {
 var metrics = []popularityMetric{
 	{"nb_fan", 100_000_000, parseIntLike},
 	{"listeners", 1_000_000_000, parseStringInt},
-	{"playcount", 10_000_000_000, parseStringInt},
 	{"playback_count", 1_000_000_000, parseIntLike},
 }
 

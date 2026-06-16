@@ -14,6 +14,12 @@ type SearchProvider interface {
 	SupportedKinds() map[domain.ResultKind]bool
 }
 
+// StructuredSearcher is an optional interface that providers can implement
+// to receive artist+track split queries instead of raw strings.
+type StructuredSearcher interface {
+	SearchStructured(ctx context.Context, artist, track string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
+}
+
 type ArtworkResolver interface {
 	Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error)
 }

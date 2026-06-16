@@ -32,6 +32,7 @@ type SearchMusicService struct {
 	fanartResolver     ports.ArtworkResolver
 	geniusResolver     ports.ArtworkResolver
 	vocabStore         ports.VocabularyStore
+	correctionSvc      *CorrectionService
 }
 
 type SearchOption func(*SearchMusicService)
@@ -76,6 +77,9 @@ func NewSearchMusicService(
 	for _, opt := range opts {
 		opt(s)
 	}
+	if s.vocabStore != nil {
+		s.correctionSvc = NewCorrectionService(s.vocabStore)
+	}
 	return s
 }
 
@@ -111,11 +115,19 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 	searchStart := time.Now()
 
 	preCorrection := s.preQueryCorrection(ctx, query.Raw, queryNorm)
-	searchQuery := query.Raw
+	searchQuery := CleanQuery(query.Raw)
 	if preCorrection != nil {
-		searchQuery = preCorrection.Corrected
+		searchQuery = CleanQuery(preCorrection.Corrected)
 		queryNorm = NormalizeForMatch(searchQuery)
+	} else if searchQuery != query.Raw {
+		queryNorm = NormalizeForMatch(searchQuery)
+		slog.DebugContext(ctx, "search.query_cleaned",
+			"original", query.Raw,
+			"cleaned", searchQuery,
+		)
 	}
+
+	intent := DetectIntent(ctx, queryNorm, s.vocabStore)
 
 	var (
 		mu          sync.Mutex
@@ -154,7 +166,16 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 			defer cancel()
 
 			start := time.Now()
-			results, err := p.Search(provCtx, searchQuery, query.Kinds)
+			var results []domain.SearchResult
+			var err error
+			if intent != nil {
+				if ss, ok := p.(ports.StructuredSearcher); ok {
+					results, err = ss.SearchStructured(provCtx, intent.Artist, intent.Track, query.Kinds)
+				}
+			}
+			if results == nil && err == nil {
+				results, err = p.Search(provCtx, searchQuery, query.Kinds)
+			}
 			latencyMs := time.Since(start).Milliseconds()
 
 			if err != nil {
@@ -207,10 +228,10 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		rawCount += len(group)
 	}
 
-	intent := DetectIntent(ctx, queryNorm, s.vocabStore)
-
-	merged := FuseAndRank(perProvider, queryNorm, nil)
-	merged = ApplyIntentBoost(merged, intent)
+	scorer := func(r domain.SearchResult) domain.QualityScore {
+		return ComputeQualityScore(r, 1.0)
+	}
+	merged := FuseAndRank(perProvider, queryNorm, scorer, intent)
 
 	enriching := enrichLimit
 	if len(merged) < enriching {
@@ -285,19 +306,15 @@ func (s *SearchMusicService) preQueryCorrection(
 	rawQuery string,
 	queryNorm string,
 ) *CorrectionResult {
-	if s.vocabStore == nil {
+	if s.correctionSvc == nil {
 		return nil
 	}
-	corrSvc := NewCorrectionService(s.vocabStore)
-	result := corrSvc.Correct(ctx, rawQuery)
+	result := s.correctionSvc.Correct(ctx, rawQuery)
 	if result == nil {
 		return nil
 	}
 	corrNorm := NormalizeForMatch(result.Corrected)
 	if corrNorm == queryNorm {
-		return nil
-	}
-	if result.Confidence < 0.4 {
 		return nil
 	}
 	slog.InfoContext(ctx, "search.pre_correction",
@@ -315,11 +332,10 @@ func (s *SearchMusicService) tryCorrection(
 	merged *[]domain.SearchResult,
 	statuses *[]domain.ProviderSearchResponse,
 ) (correctedQuery, originalQuery string) {
-	if s.vocabStore == nil {
+	if s.correctionSvc == nil {
 		return "", ""
 	}
-	corrSvc := NewCorrectionService(s.vocabStore)
-	result := corrSvc.Correct(ctx, query.Raw)
+	result := s.correctionSvc.Correct(ctx, query.Raw)
 	if result == nil {
 		return "", ""
 	}
@@ -335,7 +351,10 @@ func (s *SearchMusicService) tryCorrection(
 	)
 
 	retried := s.retrySearch(ctx, result.Corrected, query.Kinds)
-	*merged = FuseAndRank(retried, corrNorm, nil)
+	retryScorer := func(r domain.SearchResult) domain.QualityScore {
+		return ComputeQualityScore(r, 1.0)
+	}
+	*merged = FuseAndRank(retried, corrNorm, retryScorer, nil)
 	*merged = s.enrich(ctx, *merged)
 	*merged = Rerank(*merged, corrNorm)
 
@@ -374,7 +393,7 @@ func (s *SearchMusicService) retrySearch(
 	return perProvider
 }
 
-const vocabIngestTop = 3
+const vocabIngestTop = 5
 
 func (s *SearchMusicService) ingestToVocabulary(rawQuery string, results []domain.SearchResult) {
 	defer func() {
@@ -413,6 +432,14 @@ func buildVocabEntries(rawQuery string, results []domain.SearchResult) []domain.
 			Kind:       r.Kind.String(),
 			Popularity: int64(popularity(r)),
 		})
+		if r.Subtitle != "" && r.Kind == domain.ResultKindTrack {
+			entries = append(entries, domain.VocabularyEntry{
+				Term:       r.Subtitle,
+				TermNorm:   NormalizeForMatch(r.Subtitle),
+				Kind:       "artist",
+				Popularity: int64(popularity(r)),
+			})
+		}
 	}
 	return entries
 }

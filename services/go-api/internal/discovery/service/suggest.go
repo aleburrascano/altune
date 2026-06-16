@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"strings"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -17,7 +16,7 @@ func NewSuggestService(vocab ports.VocabularyStore) *SuggestService {
 }
 
 func (s *SuggestService) Execute(ctx context.Context, partial string, limit int) ([]domain.VocabularyEntry, error) {
-	norm := strings.ToLower(strings.TrimSpace(partial))
+	norm := NormalizeForMatch(partial)
 	if norm == "" {
 		return []domain.VocabularyEntry{}, nil
 	}

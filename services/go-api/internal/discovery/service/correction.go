@@ -2,13 +2,14 @@ package service
 
 import (
 	"context"
+	"log/slog"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 )
 
 const correctionCandidates = 5
-const correctionMinConfidence = 0.3
+const correctionMinConfidence = 0.4
 
 type CorrectionService struct {
 	vocab ports.VocabularyStore
@@ -39,6 +40,11 @@ func pickBestCorrection(queryNorm string, candidates []domain.VocabularyEntry) *
 	var best *CorrectionResult
 	for _, c := range candidates {
 		score := trigramJaccard(queryNorm, c.TermNorm)
+		slog.Debug("correction.candidate",
+			"query", queryNorm,
+			"candidate", c.TermNorm,
+			"jaccard", score,
+		)
 		if score < correctionMinConfidence {
 			continue
 		}

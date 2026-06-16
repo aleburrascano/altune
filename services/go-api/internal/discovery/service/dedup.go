@@ -53,7 +53,7 @@ func completeness(r domain.SearchResult) int {
 		count++
 	}
 	if r.Extras != nil {
-		if _, ok := r.Extras["duration_seconds"]; ok {
+		if _, ok := r.Extras["duration"]; ok {
 			count++
 		}
 	}
@@ -234,7 +234,37 @@ func relevanceScore(result domain.SearchResult, queryNorm string) float64 {
 			best = c
 		}
 	}
-	return best / 100.0
+	score := best / 100.0
+
+	// Enhancement A: exact title match bonus
+	if query == title {
+		score = math.Min(1.0, score+0.05)
+	}
+
+	// Enhancement D: multi-field bonus — all query words present in title+subtitle
+	if result.Subtitle != "" && len(queryCW) > 1 {
+		combined := strings.TrimSpace(NormalizeForMatch(result.Subtitle) + " " + title)
+		combinedWords := contentWords(combined)
+		if allWordsPresent(queryCW, combinedWords) {
+			score = math.Min(1.0, score+0.03)
+		}
+	}
+
+	// Enhancement E: prefix match bonus
+	if len(query) >= 3 && strings.HasPrefix(title, query) {
+		score = math.Min(1.0, score+0.03)
+	}
+
+	return score
+}
+
+func allWordsPresent(query, text map[string]bool) bool {
+	for w := range query {
+		if !text[w] {
+			return false
+		}
+	}
+	return true
 }
 
 func sortedJoin(words map[string]bool) string {
@@ -259,7 +289,7 @@ type scored struct {
 
 // FuseAndRank merges on identifiers, ranks by relevance.
 // perProvider is a slice of per-provider result groups (native order preserved).
-func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityScorer func(domain.SearchResult) domain.QualityScore) []domain.SearchResult {
+func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityScorer func(domain.SearchResult) domain.QualityScore, intent *QueryIntent) []domain.SearchResult {
 	// Pre-merge album-name stabilization
 	albumBest := make(map[string]struct {
 		album string
@@ -335,6 +365,23 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 		}
 	}
 
+	// Recency boost before scoring so boosted popularity feeds into the sort
+	accResults := make([]domain.SearchResult, len(accumulated))
+	for i := range accumulated {
+		accResults[i] = accumulated[i].result
+	}
+	accResults = applyRecencyBoost(accResults)
+	for i := range accumulated {
+		accumulated[i].result = accResults[i]
+	}
+
+	// Prepare intent matching if detected
+	var intentArtistNorm, intentTrackNorm string
+	if intent != nil {
+		intentArtistNorm = NormalizeForMatch(intent.Artist)
+		intentTrackNorm = NormalizeForMatch(intent.Track)
+	}
+
 	// Score and gate
 	var scoredResults []scored
 	for _, entry := range accumulated {
@@ -353,6 +400,16 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 		r.Extras = extras
 
 		rel := relevanceScore(r, queryNorm)
+
+		// Intent boost: add to relevance when both artist and track match
+		if intent != nil {
+			subtitleNorm := NormalizeForMatch(r.Subtitle)
+			titleNorm := NormalizeForMatch(r.Title)
+			if strings.Contains(subtitleNorm, intentArtistNorm) && strings.Contains(titleNorm, intentTrackNorm) {
+				rel = math.Min(1.0, rel+intentBoost)
+			}
+		}
+
 		if strings.TrimSpace(queryNorm) != "" && !sharesWord(r, queryNorm) {
 			continue
 		}
@@ -371,17 +428,15 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 		results[i] = s.result
 	}
 
-	results = CollapseVersions(results)
-	results = applyRecencyBoost(results)
-	return results
+	return CollapseVersions(results)
 }
 
 // Rerank re-sorts after enrichment. Same key minus quality_score.
 func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResult {
 	sort.SliceStable(results, func(i, j int) bool {
 		a, b := results[i], results[j]
-		bandA := roundTo1(relevanceScore(a, queryNorm))
-		bandB := roundTo1(relevanceScore(b, queryNorm))
+		bandA := roundBand(relevanceScore(a, queryNorm))
+		bandB := roundBand(relevanceScore(b, queryNorm))
 		if bandA != bandB {
 			return bandA > bandB
 		}
@@ -416,8 +471,8 @@ func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResu
 // rankingKeyLess implements the multi-criteria sort:
 // (-band, demoted, -multi_source, -popularity, -q_score, -rrf, subtitle, title)
 func rankingKeyLess(a, b scored, qualityScorer func(domain.SearchResult) domain.QualityScore) bool {
-	bandA := roundTo1(a.relevance)
-	bandB := roundTo1(b.relevance)
+	bandA := roundBand(a.relevance)
+	bandB := roundBand(b.relevance)
 	if bandA != bandB {
 		return bandA > bandB
 	}
@@ -453,8 +508,8 @@ func rankingKeyLess(a, b scored, qualityScorer func(domain.SearchResult) domain.
 	return a.result.Title < b.result.Title
 }
 
-func roundTo1(f float64) float64 {
-	return math.Round(f*10) / 10
+func roundBand(f float64) float64 {
+	return math.Round(f*20) / 20
 }
 
 func boolToInt(b bool) int {
@@ -487,7 +542,7 @@ func normalizeBaseTitle(title string) string {
 // Results with distinct MBIDs are treated as separate recordings.
 func versionGroupKey(r domain.SearchResult) string {
 	base := strings.ToLower(strings.TrimSpace(normalizeBaseTitle(r.Title)))
-	artist := strings.ToLower(strings.TrimSpace(r.Subtitle))
+	artist := NormalizeForMatch(r.Subtitle)
 	mbid := getStringExtra(r, "mbid")
 	if mbid != "" {
 		return r.Kind.String() + "|" + artist + "|" + base + "|" + mbid

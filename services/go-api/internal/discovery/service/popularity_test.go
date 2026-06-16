@@ -30,8 +30,8 @@ func TestNormalizePopularity(t *testing.T) {
 			maxPop: 100,
 		},
 		{
-			name:   "lastfm playcount high as string",
-			extras: map[string]any{"playcount": "100000000"},
+			name:   "lastfm listeners high as string",
+			extras: map[string]any{"listeners": "100000000"},
 			minPop: 60,
 			maxPop: 100,
 		},
@@ -49,7 +49,7 @@ func TestNormalizePopularity(t *testing.T) {
 		},
 		{
 			name:   "extreme value capped at 100",
-			extras: map[string]any{"playcount": "10000000000000"},
+			extras: map[string]any{"listeners": "10000000000000"},
 			minPop: 100,
 			maxPop: 100,
 		},
@@ -73,7 +73,7 @@ func TestNormalizePopularity(t *testing.T) {
 		},
 		{
 			name:   "lastfm string with leading zeros",
-			extras: map[string]any{"playcount": "0000100"},
+			extras: map[string]any{"listeners": "0000100"},
 			minPop: 1,
 			maxPop: 30,
 		},
