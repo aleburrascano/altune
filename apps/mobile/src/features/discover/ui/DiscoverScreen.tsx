@@ -52,10 +52,11 @@ export function DiscoverScreen(): ReactElement {
   const history = useSearchHistory();
   const click = useRecordClick();
   const [isFocused, setIsFocused] = useState(false);
+  const [suggestionsHidden, setSuggestionsHidden] = useState(false);
 
   const showSuggestions = isFocused
+    && !suggestionsHidden
     && search.inputValue.trim().length >= 2
-    && search.inputValue !== search.committedQuery
     && (suggestions.data?.suggestions?.length ?? 0) > 0;
 
   useEffect(() => {
@@ -95,12 +96,16 @@ export function DiscoverScreen(): ReactElement {
     });
     router.push(stashHandoffForDetail(result));
   };
+  const onChangeText = (text: string): void => {
+    setSuggestionsHidden(false);
+    search.onChangeText(text);
+  };
   const onRetry = (): void => {
     search.setQuery(search.committedQuery.trim() || search.committedQuery);
   };
   const onSuggestionSelect = (text: string): void => {
+    setSuggestionsHidden(true);
     search.setQuery(text);
-    setIsFocused(false);
   };
   const onSearchOriginal = (): void => {
     if (searchData?.original_query) {
@@ -121,8 +126,8 @@ export function DiscoverScreen(): ReactElement {
       </View>
       <SearchBar
         value={search.inputValue}
-        onChangeText={search.onChangeText}
-        onSubmitEditing={() => { search.onSubmit(); setIsFocused(false); }}
+        onChangeText={onChangeText}
+        onSubmitEditing={() => { setSuggestionsHidden(true); search.onSubmit(); }}
         onClear={search.onClear}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
