@@ -46,6 +46,18 @@ export type DiscoverySearchResponse = {
   providers: DiscoveryProviderInfo[];
   partial: boolean;
   cache: { hit: boolean; fetched_at: string | null };
+  corrected_query?: string;
+  original_query?: string;
+};
+
+export type DiscoverySuggestion = {
+  text: string;
+  kind: string;
+  popularity: number;
+};
+
+export type DiscoverySuggestResponse = {
+  suggestions: DiscoverySuggestion[];
 };
 
 export type SearchHistoryItem = {
@@ -85,6 +97,17 @@ export async function searchDiscovery(params: {
     qs.set('save_history', 'false');
   }
   return apiFetch<DiscoverySearchResponse>(`/v1/discovery/search?${qs.toString()}`);
+}
+
+export async function suggestDiscovery(params: {
+  q: string;
+  limit?: number;
+}): Promise<DiscoverySuggestResponse> {
+  const qs = new URLSearchParams({ q: params.q });
+  if (params.limit !== undefined) {
+    qs.set('limit', String(params.limit));
+  }
+  return apiFetch<DiscoverySuggestResponse>(`/v1/discovery/suggest?${qs.toString()}`);
 }
 
 export async function listSearchHistory(params?: {

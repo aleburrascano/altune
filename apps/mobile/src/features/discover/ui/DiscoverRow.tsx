@@ -41,6 +41,14 @@ function _secondaryLine(result: DiscoveryResult): string | null {
   return result.subtitle;
 }
 
+function _variantLabel(result: DiscoveryResult): string {
+  const count = result.extras['variant_count'];
+  if (typeof count === 'number' && count > 1) {
+    return ` · +${count - 1} version${count > 2 ? 's' : ''}`;
+  }
+  return '';
+}
+
 export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): ReactElement {
   const testId = `discover-row-${result.kind}-${position}`;
   const isArtist = result.kind === 'artist';
@@ -105,6 +113,7 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
           {secondary !== null ? (
             <Text variant="label" tone="secondary" numberOfLines={1} style={styles.secondary}>
               {secondary}
+              {_variantLabel(result)}
             </Text>
           ) : null}
         </Row>

@@ -24,8 +24,11 @@ import { setSearchState } from '@shared/lib/search-state';
 
 import { SearchBar } from './SearchBar';
 import { DiscoverBody } from './DiscoverBody';
+import { SuggestionsList } from './SuggestionsList';
+import { CorrectionBanner } from './CorrectionBanner';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
+import { useAutocompleteSuggestions } from '../hooks/useAutocompleteSuggestions';
 import { useRecordClick } from '../hooks/useRecordClick';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 import { stashHandoffForDetail } from '../tap';
@@ -45,8 +48,15 @@ export function DiscoverScreen(): ReactElement {
   const [filter, setFilter] = useState<ResultsFilter>('all');
   const queryClient = useQueryClient();
   const { data: searchData, isLoading: isSearching, error: searchError } = useDiscoverSearch(search.committedQuery);
+  const suggestions = useAutocompleteSuggestions(search.inputValue);
   const history = useSearchHistory();
   const click = useRecordClick();
+  const [isFocused, setIsFocused] = useState(false);
+
+  const showSuggestions = isFocused
+    && search.inputValue.trim().length >= 2
+    && search.inputValue !== search.committedQuery
+    && (suggestions.data?.suggestions?.length ?? 0) > 0;
 
   useEffect(() => {
     setSearchState(search.committedQuery, search.inputValue);
@@ -88,6 +98,15 @@ export function DiscoverScreen(): ReactElement {
   const onRetry = (): void => {
     search.setQuery(search.committedQuery.trim() || search.committedQuery);
   };
+  const onSuggestionSelect = (text: string): void => {
+    search.setQuery(text);
+    setIsFocused(false);
+  };
+  const onSearchOriginal = (): void => {
+    if (searchData?.original_query) {
+      search.setQuery(searchData.original_query);
+    }
+  };
 
   return (
     <Screen>
@@ -103,10 +122,25 @@ export function DiscoverScreen(): ReactElement {
       <SearchBar
         value={search.inputValue}
         onChangeText={search.onChangeText}
-        onSubmitEditing={search.onSubmit}
+        onSubmitEditing={() => { search.onSubmit(); setIsFocused(false); }}
         onClear={search.onClear}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
         theme={theme}
       />
+      {showSuggestions && (
+        <SuggestionsList
+          suggestions={suggestions.data!.suggestions}
+          onSelect={onSuggestionSelect}
+        />
+      )}
+      {searchData?.corrected_query && searchData.original_query && (
+        <CorrectionBanner
+          correctedQuery={searchData.corrected_query}
+          originalQuery={searchData.original_query}
+          onSearchOriginal={onSearchOriginal}
+        />
+      )}
       <DiscoverBody
         view={view}
         searchData={searchData}
