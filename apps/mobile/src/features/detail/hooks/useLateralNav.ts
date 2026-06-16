@@ -36,10 +36,6 @@ export function useLateralNav(): UseLateralNavReturn {
       if (searchingRef.current) {
         return;
       }
-
-      if (searchingRef.current) {
-        return;
-      }
       searchingRef.current = true;
       setError(null);
       setState('searching');

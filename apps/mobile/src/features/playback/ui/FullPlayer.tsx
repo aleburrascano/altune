@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -27,6 +28,10 @@ export function FullPlayer() {
   }
 
   const isPlaying = status === 'playing';
+  const shadowStyle = useMemo(
+    () => ({ boxShadow: `0 8px 24px ${theme.color.accent}59` }),
+    [theme.color.accent],
+  );
   const isPreview = track.source.kind === 'preview';
   const isError = status === 'error';
   const isEnded = status === 'ended';
@@ -58,7 +63,7 @@ export function FullPlayer() {
       </View>
 
       <View style={styles.artworkContainer}>
-        <View style={[styles.artworkShadow, { boxShadow: `0 8px 24px ${theme.color.accent}59` }]}>
+        <View style={[styles.artworkShadow, shadowStyle]}>
           <Artwork uri={track.artworkUrl} size={artworkSize} radius={radius.lg} />
         </View>
       </View>

@@ -39,9 +39,13 @@ export function ActionSheet({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <View />
-      </Pressable>
+      <Pressable
+        style={[styles.backdrop, { backgroundColor: theme.color.scrim }]}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+      />
+
       <View style={[styles.sheet, { backgroundColor: theme.color.surface1 }]}>
         <View style={[styles.handle, { backgroundColor: theme.color.border }]} />
         {title != null ? (
@@ -95,7 +99,7 @@ export function ActionSheet({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  backdrop: { flex: 1 },
   sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,

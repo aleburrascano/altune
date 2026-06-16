@@ -29,18 +29,18 @@ export function BlendedSection({
   onSeeAll: (filter: DiscoveryKind) => void;
 }): ReactElement {
   const top = _topResult(results);
-  const { albums, songs, artists } = _groupByKind(results);
+  const { albums, tracks, artists } = _groupByKind(results);
 
   const byKind: Record<
     DiscoveryKind,
     { title: string; sectionKey: SectionKey; items: DiscoveryResult[] }
   > = {
     album: { title: 'Albums', sectionKey: 'album', items: albums },
-    track: { title: 'Songs', sectionKey: 'song', items: songs },
+    track: { title: 'Songs', sectionKey: 'track', items: tracks },
     artist: { title: 'Artists', sectionKey: 'artist', items: artists },
   };
   // Order containers by which kind best matches the query (the kind whose
-  // strongest member ranks earliest), so a song query shows Songs first.
+  // strongest member ranks earliest), so a track query shows Songs first.
   const order = _sectionOrder(results);
   const sections = (['album', 'track', 'artist'] as const)
     .map((kind) => ({ kind, ...byKind[kind] }))

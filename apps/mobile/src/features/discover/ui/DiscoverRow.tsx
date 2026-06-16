@@ -9,7 +9,7 @@
  */
 
 import type { ReactElement } from 'react';
-import { Pressable } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import { Pause, Play } from 'lucide-react-native';
 
 import { Artwork, Card, Row, Text, radius, spacing } from '@shared/ui';
@@ -75,9 +75,9 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
       onPress={() => onPress(result, position)}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
-      style={({ pressed }) => (pressed ? { opacity: 0.85 } : null)}
+      style={({ pressed }) => (pressed ? styles.pressed : null)}
     >
-      <Card style={{ marginBottom: spacing.sm }}>
+      <Card style={styles.card}>
         <Row
           leading={
             <Artwork
@@ -103,7 +103,7 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
             {result.title}
           </Text>
           {secondary !== null ? (
-            <Text variant="label" tone="secondary" numberOfLines={1} style={{ marginTop: 2 }}>
+            <Text variant="label" tone="secondary" numberOfLines={1} style={styles.secondary}>
               {secondary}
             </Text>
           ) : null}
@@ -112,3 +112,9 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
     </Pressable>
   );
 }
+
+const styles = StyleSheet.create({
+  pressed: { opacity: 0.85 },
+  card: { marginBottom: spacing.sm },
+  secondary: { marginTop: spacing.xs },
+});
