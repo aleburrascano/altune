@@ -339,3 +339,26 @@ func TestFuseAndRank_MergedResultPicksMoreCompleteCanonical(t *testing.T) {
 		t.Errorf("expected album 'Pablo Honey' from richer result, got %q", album)
 	}
 }
+
+func TestFuseAndRank_PopularityNormalization(t *testing.T) {
+	// Two tracks in the same relevance band; one has Deezer nb_fan, the other has no metrics.
+	// After normalization the popular track should rank first.
+	popular := trackResult(domain.ProviderDeezer, "dz-1", "Blinding Lights", "The Weeknd",
+		map[string]any{"nb_fan": int64(5_000_000)})
+	unpopular := trackResult(domain.ProviderDeezer, "dz-2", "Blinding Lights Acoustic", "The Weeknd", nil)
+
+	perProvider := [][]domain.SearchResult{
+		{unpopular, popular},
+	}
+
+	results := FuseAndRank(perProvider, "blinding lights weeknd", noQualityScorer)
+
+	if len(results) < 2 {
+		t.Fatalf("expected at least 2 results, got %d", len(results))
+	}
+	pop0 := popularity(results[0])
+	pop1 := popularity(results[1])
+	if pop0 <= pop1 {
+		t.Errorf("expected first result to have higher popularity (%v) than second (%v)", pop0, pop1)
+	}
+}
