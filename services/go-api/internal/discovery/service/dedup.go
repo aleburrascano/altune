@@ -356,6 +356,8 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 	for i, s := range scoredResults {
 		results[i] = s.result
 	}
+
+	results = CollapseVersions(results)
 	return results
 }
 
@@ -465,9 +467,16 @@ func normalizeBaseTitle(title string) string {
 }
 
 // versionGroupKey builds the collapse key: base title + artist + kind.
+// Uses lowercase + trim instead of NormalizeForMatch to avoid stripping
+// non-version parentheticals like "(feat. Artist)".
+// Results with distinct MBIDs are treated as separate recordings.
 func versionGroupKey(r domain.SearchResult) string {
-	base := NormalizeForMatch(normalizeBaseTitle(r.Title))
-	artist := NormalizeForMatch(r.Subtitle)
+	base := strings.ToLower(strings.TrimSpace(normalizeBaseTitle(r.Title)))
+	artist := strings.ToLower(strings.TrimSpace(r.Subtitle))
+	mbid := getStringExtra(r, "mbid")
+	if mbid != "" {
+		return r.Kind.String() + "|" + artist + "|" + base + "|" + mbid
+	}
 	return r.Kind.String() + "|" + artist + "|" + base
 }
 
