@@ -21,6 +21,7 @@ type DiscoveryHandler struct {
 	historySvc   *service.ListSearchHistoryService
 	albumSvc     *service.GetAlbumTracksService
 	artistSvc    *service.GetArtistContentService
+	suggestSvc   *service.SuggestService
 }
 
 func NewDiscoveryHandler(
@@ -29,6 +30,7 @@ func NewDiscoveryHandler(
 	historySvc *service.ListSearchHistoryService,
 	albumSvc *service.GetAlbumTracksService,
 	artistSvc *service.GetArtistContentService,
+	suggestSvc *service.SuggestService,
 ) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		searchSvc:  searchSvc,
@@ -36,12 +38,14 @@ func NewDiscoveryHandler(
 		historySvc: historySvc,
 		albumSvc:   albumSvc,
 		artistSvc:  artistSvc,
+		suggestSvc: suggestSvc,
 	}
 }
 
 func (h *DiscoveryHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/search", h.handleSearch)
+	r.Get("/suggest", h.handleSuggest)
 	r.Get("/search-history", h.handleSearchHistory)
 	r.Post("/clicks", h.handleRecordClick)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
@@ -109,7 +113,51 @@ type DiscoveryClickRequest struct {
 	Confidence string `json:"confidence"`
 }
 
+type SuggestionDTO struct {
+	Text       string `json:"text"`
+	Kind       string `json:"kind"`
+	Popularity int64  `json:"popularity"`
+}
+
+type SuggestResponse struct {
+	Suggestions []SuggestionDTO `json:"suggestions"`
+}
+
 // --- Handlers ---
+
+func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request) {
+	_, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		httputil.BadRequest(w, "q parameter is required")
+		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > 10 {
+		limit = 5
+	}
+
+	entries, err := h.suggestSvc.Execute(r.Context(), q, limit)
+	if err != nil {
+		httputil.InternalError(w)
+		return
+	}
+
+	dtos := make([]SuggestionDTO, len(entries))
+	for i, e := range entries {
+		dtos[i] = SuggestionDTO{
+			Text:       e.Term,
+			Kind:       e.Kind,
+			Popularity: e.Popularity,
+		}
+	}
+	httputil.WriteJSON(w, http.StatusOK, SuggestResponse{Suggestions: dtos})
+}
 
 func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
