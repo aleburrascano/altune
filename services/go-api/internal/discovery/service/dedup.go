@@ -2,10 +2,15 @@ package service
 
 import (
 	"math"
+	"regexp"
 	"sort"
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
+)
+
+var versionSuffixRe = regexp.MustCompile(
+	`(?i)\s*[\(\[](remix|live|acoustic|remaster(?:ed)?|slowed(?:\s*\+?\s*reverb)?|sped up|instrumental|cover|radio edit|deluxe|extended|clean|explicit|bonus track)[\)\]]`,
 )
 
 const rrfK = 60
@@ -451,6 +456,70 @@ func copyExtras(src map[string]any) map[string]any {
 		dst[k] = v
 	}
 	return dst
+}
+
+// normalizeBaseTitle strips known version suffixes (remix, live, etc.)
+// while preserving non-version parentheticals like "(feat. Artist)".
+func normalizeBaseTitle(title string) string {
+	return strings.TrimSpace(versionSuffixRe.ReplaceAllString(title, ""))
+}
+
+// versionGroupKey builds the collapse key: base title + artist + kind.
+func versionGroupKey(r domain.SearchResult) string {
+	base := NormalizeForMatch(normalizeBaseTitle(r.Title))
+	artist := NormalizeForMatch(r.Subtitle)
+	return r.Kind.String() + "|" + artist + "|" + base
+}
+
+type versionGroup struct {
+	bestIdx int
+	bestPop float64
+	count   int
+}
+
+// CollapseVersions groups results that are versions of the same recording
+// (remix, live, acoustic, etc.) and keeps only the most popular representative.
+func CollapseVersions(results []domain.SearchResult) []domain.SearchResult {
+	groups := make(map[string]*versionGroup)
+	order := make([]string, 0)
+
+	for i, r := range results {
+		key := versionGroupKey(r)
+		g, exists := groups[key]
+		pop := popularity(r)
+		if !exists {
+			groups[key] = &versionGroup{bestIdx: i, bestPop: pop, count: 1}
+			order = append(order, key)
+			continue
+		}
+		g.count++
+		if pop > g.bestPop {
+			g.bestIdx = i
+			g.bestPop = pop
+		}
+	}
+
+	return buildCollapsed(results, groups, order)
+}
+
+func buildCollapsed(results []domain.SearchResult, groups map[string]*versionGroup, order []string) []domain.SearchResult {
+	out := make([]domain.SearchResult, 0, len(order))
+	for _, key := range order {
+		g := groups[key]
+		r := results[g.bestIdx]
+		if g.count > 1 {
+			r = withVariantCount(r, g.count)
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+func withVariantCount(r domain.SearchResult, count int) domain.SearchResult {
+	extras := copyExtras(r.Extras)
+	extras["variant_count"] = count
+	r.Extras = extras
+	return r
 }
 
 func getStringExtra(r domain.SearchResult, key string) string {
