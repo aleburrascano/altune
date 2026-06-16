@@ -200,7 +200,10 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		rawCount += len(group)
 	}
 
+	intent := DetectIntent(ctx, queryNorm, s.vocabStore)
+
 	merged := FuseAndRank(perProvider, queryNorm, nil)
+	merged = ApplyIntentBoost(merged, intent)
 
 	enriching := enrichLimit
 	if len(merged) < enriching {
