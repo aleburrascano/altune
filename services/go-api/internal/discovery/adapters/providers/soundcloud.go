@@ -62,15 +62,23 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 		}
 
 		var entry struct {
-			Title      string  `json:"title"`
-			Uploader   string  `json:"uploader"`
-			Duration   float64 `json:"duration"`
-			WebpageURL string  `json:"webpage_url"`
-			ID         string  `json:"id"`
-			Thumbnail  string  `json:"thumbnail"`
+			Title         string  `json:"title"`
+			Uploader      string  `json:"uploader"`
+			Duration      float64 `json:"duration"`
+			WebpageURL    string  `json:"webpage_url"`
+			ID            string  `json:"id"`
+			Thumbnail     string  `json:"thumbnail"`
+			PlaybackCount int64   `json:"playback_count"`
 		}
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
+		}
+
+		extras := map[string]any{
+			"duration": entry.Duration,
+		}
+		if entry.PlaybackCount > 0 {
+			extras["playback_count"] = entry.PlaybackCount
 		}
 
 		results = append(results, domain.SearchResult{
@@ -84,9 +92,7 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 				ExternalID: entry.ID,
 				URL:        entry.WebpageURL,
 			}},
-			Extras: map[string]any{
-				"duration": entry.Duration,
-			},
+			Extras: extras,
 		})
 	}
 
