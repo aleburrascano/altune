@@ -111,10 +111,11 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 			Results struct {
 				TrackMatches struct {
 					Track []struct {
-						Name   string `json:"name"`
-						Artist string `json:"artist"`
-						URL    string `json:"url"`
-						Image  []struct {
+						Name      string `json:"name"`
+						Artist    string `json:"artist"`
+						URL       string `json:"url"`
+						Listeners string `json:"listeners"`
+						Image     []struct {
 							Text string `json:"#text"`
 							Size string `json:"size"`
 						} `json:"image"`
@@ -130,6 +131,10 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 						imageURL = img.Text
 					}
 				}
+				extras := make(map[string]any)
+				if t.Listeners != "" {
+					extras["listeners"] = t.Listeners
+				}
 				results = append(results, domain.SearchResult{
 					Kind:       domain.ResultKindTrack,
 					Title:      t.Name,
@@ -141,7 +146,7 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 						ExternalID: lastfmExternalID(t.URL),
 						URL:        t.URL,
 					}},
-					Extras: make(map[string]any),
+					Extras: extras,
 				})
 			}
 		}
@@ -150,9 +155,10 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 			Results struct {
 				ArtistMatches struct {
 					Artist []struct {
-						Name  string `json:"name"`
-						URL   string `json:"url"`
-						Image []struct {
+						Name      string `json:"name"`
+						URL       string `json:"url"`
+						Listeners string `json:"listeners"`
+						Image     []struct {
 							Text string `json:"#text"`
 							Size string `json:"size"`
 						} `json:"image"`
@@ -168,6 +174,10 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 						imageURL = img.Text
 					}
 				}
+				extras := make(map[string]any)
+				if a.Listeners != "" {
+					extras["listeners"] = a.Listeners
+				}
 				results = append(results, domain.SearchResult{
 					Kind:       domain.ResultKindArtist,
 					Title:      a.Name,
@@ -178,7 +188,7 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 						ExternalID: lastfmExternalID(a.URL),
 						URL:        a.URL,
 					}},
-					Extras: make(map[string]any),
+					Extras: extras,
 				})
 			}
 		}
