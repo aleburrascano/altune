@@ -64,3 +64,10 @@ type FetchSuccessStore interface {
 type MbidResolver interface {
 	Resolve(ctx context.Context, url string) (string, error)
 }
+
+type VocabularyStore interface {
+	Add(ctx context.Context, entry domain.VocabularyEntry) error
+	BulkAdd(ctx context.Context, entries []domain.VocabularyEntry) error
+	SuggestByPrefix(ctx context.Context, prefix string, limit int) ([]domain.VocabularyEntry, error)
+	FindClosest(ctx context.Context, query string, limit int) ([]domain.VocabularyEntry, error)
+}
