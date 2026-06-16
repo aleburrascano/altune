@@ -16,6 +16,8 @@ interface SearchBarProps {
   onChangeText: (text: string) => void;
   onSubmitEditing: () => void;
   onClear: () => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
   theme: SearchBarTheme;
 }
 
@@ -24,6 +26,8 @@ export function SearchBar({
   onChangeText,
   onSubmitEditing,
   onClear,
+  onFocus,
+  onBlur,
   theme,
 }: SearchBarProps): ReactElement {
   return (
@@ -39,6 +43,8 @@ export function SearchBar({
           value={value}
           onChangeText={onChangeText}
           onSubmitEditing={onSubmitEditing}
+          onFocus={onFocus}
+          onBlur={onBlur}
           returnKeyType="search"
           testID="discover-search-input"
           accessibilityLabel="Search music"
