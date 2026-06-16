@@ -31,6 +31,7 @@ type SearchMusicService struct {
 	artworkCache       ports.ArtworkCache
 	fanartResolver     ports.ArtworkResolver
 	geniusResolver     ports.ArtworkResolver
+	vocabStore         ports.VocabularyStore
 }
 
 type SearchOption func(*SearchMusicService)
@@ -53,6 +54,10 @@ func WithFanartResolver(r ports.ArtworkResolver) SearchOption {
 
 func WithGeniusResolver(r ports.ArtworkResolver) SearchOption {
 	return func(s *SearchMusicService) { s.geniusResolver = r }
+}
+
+func WithVocabularyStore(v ports.VocabularyStore) SearchOption {
+	return func(s *SearchMusicService) { s.vocabStore = v }
 }
 
 func NewSearchMusicService(
@@ -234,6 +239,10 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		}
 	}
 
+	if len(merged) > 0 && s.vocabStore != nil {
+		go s.ingestToVocabulary(query.Raw, merged)
+	}
+
 	slog.InfoContext(ctx, "search.complete",
 		"results", len(merged),
 		"partial", partial,
@@ -245,6 +254,49 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		ProviderStatuses: statuses,
 		Partial:          partial,
 	}, nil
+}
+
+const vocabIngestTop = 3
+
+func (s *SearchMusicService) ingestToVocabulary(rawQuery string, results []domain.SearchResult) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Warn("search.vocab_ingest_panic", "error", r)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	entries := buildVocabEntries(rawQuery, results)
+	for _, e := range entries {
+		_ = s.vocabStore.Add(ctx, e)
+	}
+}
+
+func buildVocabEntries(rawQuery string, results []domain.SearchResult) []domain.VocabularyEntry {
+	entries := []domain.VocabularyEntry{{
+		Term:     rawQuery,
+		TermNorm: NormalizeForMatch(rawQuery),
+		Kind:     "query",
+	}}
+	limit := vocabIngestTop
+	if len(results) < limit {
+		limit = len(results)
+	}
+	for _, r := range results[:limit] {
+		text := r.Title
+		if r.Subtitle != "" {
+			text = r.Title + " - " + r.Subtitle
+		}
+		entries = append(entries, domain.VocabularyEntry{
+			Term:       text,
+			TermNorm:   NormalizeForMatch(text),
+			Kind:       r.Kind.String(),
+			Popularity: int64(popularity(r)),
+		})
+	}
+	return entries
 }
 
 const enrichTimeout = 4 * time.Second

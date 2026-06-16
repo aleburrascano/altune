@@ -172,6 +172,18 @@ func (a *App) setup(ctx context.Context) error {
 			discoveryCacheAdapters.NewRedisArtworkCache(a.redisClient),
 		))
 	}
+
+	var vocabStore discoveryPorts.VocabularyStore
+	if a.redisClient != nil {
+		vocabStore = discoveryCacheAdapters.NewVocabularyStore(
+			a.redisClient,
+			discoveryService.NormalizeForMatch,
+		)
+	}
+	if vocabStore != nil {
+		searchOpts = append(searchOpts, discoveryService.WithVocabularyStore(vocabStore))
+	}
+
 	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker, searchOpts...)
 
 	clickSvc := discoveryService.NewRecordClickService(clickRepo)
@@ -192,14 +204,6 @@ func (a *App) setup(ctx context.Context) error {
 	}
 	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders)
-
-	var vocabStore discoveryPorts.VocabularyStore
-	if a.redisClient != nil {
-		vocabStore = discoveryCacheAdapters.NewVocabularyStore(
-			a.redisClient,
-			discoveryService.NormalizeForMatch,
-		)
-	}
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, suggestSvc)
