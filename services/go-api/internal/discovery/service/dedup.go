@@ -465,8 +465,8 @@ func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResu
 		if demA != demB {
 			return demA < demB
 		}
-		popA := popularity(a)
-		popB := popularity(b)
+		popA := bandPop(popularity(a))
+		popB := bandPop(popularity(b))
 		if popA != popB {
 			return popA > popB
 		}
@@ -519,8 +519,8 @@ func rankingKeyLess(a, b scored, qualityScorer func(domain.SearchResult) domain.
 	if demA != demB {
 		return demA < demB
 	}
-	popA := popularity(a.result)
-	popB := popularity(b.result)
+	popA := bandPop(popularity(a.result))
+	popB := bandPop(popularity(b.result))
 	if popA != popB {
 		return popA > popB
 	}
@@ -548,6 +548,13 @@ func rankingKeyLess(a, b scored, qualityScorer func(domain.SearchResult) domain.
 
 func roundBand(f float64) float64 {
 	return math.Round(f*20) / 20
+}
+
+// bandPop rounds popularity to 5-point bands so that 1-2 point noise
+// (e.g. a cover at pop 97 vs the original at 96) doesn't dominate the
+// sort — multi-source and RRF break the tie instead.
+func bandPop(p float64) float64 {
+	return math.Floor(p/5) * 5
 }
 
 func boolToInt(b bool) int {
