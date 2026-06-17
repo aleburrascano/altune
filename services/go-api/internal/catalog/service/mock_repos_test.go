@@ -1,10 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"context"
-	"io"
 
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 )
 
@@ -275,12 +276,16 @@ func (s *mockAudioStore) Store(_ context.Context, _ string, audioRef string) err
 	return nil
 }
 
-func (s *mockAudioStore) Stream(_ context.Context, _ string) (io.ReadCloser, int64, error) {
+func (s *mockAudioStore) Stream(_ context.Context, _ string) (ports.AudioStream, int64, error) {
 	if s.errOnStream != nil {
 		return nil, 0, s.errOnStream
 	}
-	return io.NopCloser(nil), 0, nil
+	return nopAudioStream{bytes.NewReader(nil)}, 0, nil
 }
+
+type nopAudioStream struct{ *bytes.Reader }
+
+func (nopAudioStream) Close() error { return nil }
 
 func (s *mockAudioStore) Delete(_ context.Context, audioRef string) error {
 	if s.errOnDelete != nil {

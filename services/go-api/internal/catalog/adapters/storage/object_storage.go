@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -88,7 +87,7 @@ func (s *ObjectStorageAudioStore) Store(ctx context.Context, sourcePath string, 
 	return nil
 }
 
-func (s *ObjectStorageAudioStore) Stream(ctx context.Context, audioRef string) (io.ReadCloser, int64, error) {
+func (s *ObjectStorageAudioStore) Stream(ctx context.Context, audioRef string) (ports.AudioStream, int64, error) {
 	obj, err := s.client.GetObject(ctx, s.bucket, audioRef, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, 0, fmt.Errorf("get object: %w", err)

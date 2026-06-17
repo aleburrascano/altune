@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -45,7 +44,7 @@ func (s *FilesystemAudioStore) Store(_ context.Context, sourcePath string, audio
 	return os.Rename(sourcePath, destPath)
 }
 
-func (s *FilesystemAudioStore) Stream(_ context.Context, audioRef string) (io.ReadCloser, int64, error) {
+func (s *FilesystemAudioStore) Stream(_ context.Context, audioRef string) (ports.AudioStream, int64, error) {
 	path, err := s.safePath(audioRef)
 	if err != nil {
 		return nil, 0, err
