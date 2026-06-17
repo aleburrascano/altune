@@ -303,29 +303,6 @@ type scored struct {
 // FuseAndRank merges on identifiers, ranks by relevance.
 // perProvider is a slice of per-provider result groups (native order preserved).
 func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityScorer func(domain.SearchResult) domain.QualityScore, intent *QueryIntent) []domain.SearchResult {
-	// Pre-merge album-name stabilization
-	albumBest := make(map[string]struct {
-		album string
-		comp  int
-	})
-	for _, group := range perProvider {
-		for _, r := range group {
-			album := getStringExtra(r, "album")
-			if album == "" {
-				continue
-			}
-			sig := signature(r)
-			comp := completeness(r)
-			prev, ok := albumBest[sig]
-			if !ok || comp > prev.comp {
-				albumBest[sig] = struct {
-					album string
-					comp  int
-				}{album, comp}
-			}
-		}
-	}
-
 	var accumulated []ranked
 	for _, group := range perProvider {
 		for rank, incoming := range group {
@@ -357,24 +334,29 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 		}
 	}
 
-	// Post-merge album-name stabilization
-	for i := range accumulated {
-		sig := signature(accumulated[i].result)
-		best, ok := albumBest[sig]
-		if ok && getStringExtra(accumulated[i].result, "album") != best.album {
-			extras := copyExtras(accumulated[i].result.Extras)
-			extras["album"] = best.album
-			accumulated[i].result.Extras = extras
-		}
-	}
-
-	// Normalize raw provider popularity into a 0-100 score
+	// Normalize raw provider popularity into a 0-100 score.
+	// Albums and artists from search often lack explicit popularity metrics
+	// (Deezer album search returns nb_fan=0). For those, derive a score from
+	// their Deezer result position within the same kind — Deezer already ranks
+	// by relevance/popularity. The kind-local position is used because providers
+	// return all kinds combined (tracks at 0..14, albums at 15..29, etc.).
+	kindDeezerCount := make(map[domain.ResultKind]int)
 	for i := range accumulated {
 		pop := NormalizePopularity(accumulated[i].result.Extras)
 		if pop > 0 {
 			extras := copyExtras(accumulated[i].result.Extras)
 			extras["popularity"] = pop
 			accumulated[i].result.Extras = extras
+		} else if _, ok := accumulated[i].bestRank[domain.ProviderDeezer]; ok {
+			kind := accumulated[i].result.Kind
+			kindPos := kindDeezerCount[kind]
+			kindDeezerCount[kind]++
+			pop = positionalPopularity(kindPos)
+			if pop > 0 {
+				extras := copyExtras(accumulated[i].result.Extras)
+				extras["popularity"] = pop
+				accumulated[i].result.Extras = extras
+			}
 		}
 	}
 
@@ -446,8 +428,8 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 	}
 
 	collapsed := CollapseVersions(results)
-	promoted := PromoteKind(collapsed, queryNorm)
-	return EnforceDiversity(promoted)
+	reordered := ApplyPopularityDominance(collapsed)
+	return EnforceDiversity(reordered)
 }
 
 // Rerank re-sorts after enrichment. Same key minus quality_score.
@@ -464,15 +446,15 @@ func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResu
 		if demA != demB {
 			return demA < demB
 		}
-		multiA := boolToInt(len(providersOf(a)) > 1)
-		multiB := boolToInt(len(providersOf(b)) > 1)
-		if multiA != multiB {
-			return multiA > multiB
-		}
 		popA := popularity(a)
 		popB := popularity(b)
 		if popA != popB {
 			return popA > popB
+		}
+		multiA := boolToInt(len(providersOf(a)) > 1)
+		multiB := boolToInt(len(providersOf(b)) > 1)
+		if multiA != multiB {
+			return multiA > multiB
 		}
 		rrfA := getFloatExtra(a, "_rrf")
 		rrfB := getFloatExtra(b, "_rrf")
@@ -488,7 +470,7 @@ func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResu
 }
 
 // rankingKeyLess implements the multi-criteria sort:
-// (-band, demoted, -multi_source, -popularity, -q_score, -rrf, subtitle, title)
+// (-band, demoted, -popularity, -multi_source, -q_score, -rrf, subtitle, title)
 func rankingKeyLess(a, b scored, qualityScorer func(domain.SearchResult) domain.QualityScore) bool {
 	bandA := roundBand(a.relevance)
 	bandB := roundBand(b.relevance)
@@ -500,15 +482,15 @@ func rankingKeyLess(a, b scored, qualityScorer func(domain.SearchResult) domain.
 	if demA != demB {
 		return demA < demB
 	}
-	multiA := boolToInt(len(providersOf(a.result)) > 1)
-	multiB := boolToInt(len(providersOf(b.result)) > 1)
-	if multiA != multiB {
-		return multiA > multiB
-	}
 	popA := popularity(a.result)
 	popB := popularity(b.result)
 	if popA != popB {
 		return popA > popB
+	}
+	multiA := boolToInt(len(providersOf(a.result)) > 1)
+	multiB := boolToInt(len(providersOf(b.result)) > 1)
+	if multiA != multiB {
+		return multiA > multiB
 	}
 	var qA, qB float64
 	if qualityScorer != nil {
@@ -727,33 +709,54 @@ func hasBrowseableSource(r domain.SearchResult) bool {
 	return false
 }
 
-// PromoteKind moves the first Artist result to position 0 when the query
-// exactly matches a known artist name, and likewise for albums.
-func PromoteKind(results []domain.SearchResult, queryNorm string) []domain.SearchResult {
-	if len(results) < 2 || queryNorm == "" {
+const (
+	popularityDominanceWindow    = 5
+	popularityDominanceGapAbs    = 20
+	popularityDominanceGapFactor = 3.0
+)
+
+// ApplyPopularityDominance ensures that when top results span different kinds
+// (e.g., artist "Humble" vs track "Humble" by Kendrick Lamar), the most
+// popular result wins. Results are already sorted by the ranking key, so
+// items in the top window have similar relevance. This only fires when the
+// popularity gap is decisive.
+func ApplyPopularityDominance(results []domain.SearchResult) []domain.SearchResult {
+	if len(results) < 2 {
 		return results
 	}
-	promoteIdx := -1
-	for i, r := range results {
-		if i == 0 {
+
+	topPop := popularity(results[0])
+	topKind := results[0].Kind
+
+	limit := popularityDominanceWindow
+	if len(results) < limit {
+		limit = len(results)
+	}
+
+	bestIdx := 0
+	bestPop := topPop
+	for i := 1; i < limit; i++ {
+		if results[i].Kind == topKind {
 			continue
 		}
-		titleNorm := NormalizeForMatch(r.Title)
-		if titleNorm != queryNorm {
-			continue
-		}
-		if r.Kind == domain.ResultKindArtist || r.Kind == domain.ResultKindAlbum {
-			promoteIdx = i
-			break
+		pop := popularity(results[i])
+		if pop > bestPop {
+			bestIdx = i
+			bestPop = pop
 		}
 	}
-	if promoteIdx < 0 {
+
+	if bestIdx == 0 {
 		return results
 	}
+	if bestPop-topPop < popularityDominanceGapAbs && bestPop < topPop*popularityDominanceGapFactor {
+		return results
+	}
+
 	out := make([]domain.SearchResult, 0, len(results))
-	out = append(out, results[promoteIdx])
+	out = append(out, results[bestIdx])
 	for i, r := range results {
-		if i != promoteIdx {
+		if i != bestIdx {
 			out = append(out, r)
 		}
 	}

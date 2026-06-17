@@ -29,20 +29,22 @@ flowchart TD
         CLEAN --> INTENT["DetectIntent(query, vocab)"]
         INTENT --> SCATTER["Scatter to providers"]
 
-        SCATTER --> |"1500ms timeout each\n+ structured queries\nfor MB/Deezer when\nintent detected"| PROVIDERS
+        SCATTER -->|"1500ms timeout each"| PROVIDERS
 
         SCATTER --> COLLECT["Collect results + statuses"]
         COLLECT --> FUSE["FuseAndRank"]
 
         FUSE --> MERGE["Identifier merge\n(ISRC / MBID / artist name)"]
-        MERGE --> POP_NORM["NormalizePopularity\n(log-scale → 0-100)"]
-        POP_NORM --> RECENCY["Recency boost\n(×1.1 if ≤30 days)"]
+        MERGE --> POP_NORM["NormalizePopularity\n(log-scale, 0-100)"]
+        POP_NORM --> RECENCY["Recency boost\n(x1.1 if <=30 days)"]
         RECENCY --> SCORE["Score: relevance + intent boost\n+ exact/prefix/multi-field bonuses\n+ RRF"]
         SCORE --> GATE["Gate: word-share + browseable source"]
-        GATE --> SORT["Sort: relevance-band(0.05) → demoted →\nmulti-source → popularity →\nquality → RRF → alpha"]
-        SORT --> COLLAPSE["CollapseVersions\n(strip remix/live suffixes, group)"]
+        GATE --> SORT["Sort: relevance-band(0.05)\n-> demoted -> multi-source\n-> popularity -> quality\n-> RRF -> alpha"]
+        SORT --> COLLAPSE["CollapseVersions\n(group remix/live variants)"]
+        COLLAPSE --> POP_DOM["ApplyPopularityDominance\n(cross-kind top-5 check)"]
+        POP_DOM --> DIVERSITY["EnforceDiversity\n(max 3 per artist in top 10)"]
 
-        COLLAPSE --> ENRICH["Enrich top 25\n(artwork only)"]
+        DIVERSITY --> ENRICH["Enrich top 25\n(artwork + popularity)"]
         ENRICH --> RERANK["Rerank\n(same key minus quality)"]
 
         RERANK --> ZERO{zero results?}
@@ -59,12 +61,17 @@ flowchart TD
     subgraph "Providers (adapters/providers/)"
         PROVIDERS["6 Search Providers"]
         DEEZER["Deezer\n+nb_fan, rank, ISRC\n+StructuredSearcher"]
-        LASTFM["Last.fm\n+listeners"]
+        LASTFM["Last.fm\n+listeners, albums"]
         MUSICBRAINZ["MusicBrainz\n+MBID, ISRC\n+StructuredSearcher"]
         ITUNES["iTunes\n+metadata"]
         SOUNDCLOUD["SoundCloud (yt-dlp)\n+playback_count"]
         AUDIODB["TheAudioDB\n+artist images"]
-        PROVIDERS --> DEEZER & LASTFM & MUSICBRAINZ & ITUNES & SOUNDCLOUD & AUDIODB
+        PROVIDERS --> DEEZER
+        PROVIDERS --> LASTFM
+        PROVIDERS --> MUSICBRAINZ
+        PROVIDERS --> ITUNES
+        PROVIDERS --> SOUNDCLOUD
+        PROVIDERS --> AUDIODB
     end
 
     subgraph "Vocabulary (Redis)"
@@ -72,7 +79,7 @@ flowchart TD
         CHARTS["Chart Refresh\n(Deezer + Last.fm charts)\nevery 6 hours"] -->|BulkAdd| VOCAB
         VOCAB_INGEST -->|Add| VOCAB
         SUGGEST_SVC -->|SuggestByPrefix\nFindClosest| VOCAB
-        CORRECT -->|FindClosest\n(trigram + phonetic)| VOCAB
+        CORRECT -->|FindClosest| VOCAB
         INTENT -->|SuggestByPrefix| VOCAB
     end
 
@@ -89,10 +96,10 @@ flowchart TD
 ```
 Position  Signal              Direction   Source
 ────────  ──────────────────  ──────────  ──────────────────────
-1         Relevance band      DESC        TokenSortRatio (0.1 granularity)
+1         Relevance band      DESC        TokenSortRatio (0.05 granularity)
 2         Demoted             ASC         record_type not in {album,single,ep}
-3         Multi-source        DESC        len(providers) > 1
-4         Popularity          DESC        NormalizePopularity (0-100, log-scale)
+3         Popularity          DESC        NormalizePopularity (0-100, log-scale)
+4         Multi-source        DESC        len(providers) > 1
 5         Quality score       DESC        completeness + agreement + tier + fetch
 6         RRF                 DESC        Σ 1/(60 + rank) per provider
 7         Subtitle            ASC         alphabetical tiebreak
@@ -113,7 +120,7 @@ internal/discovery/
 │   └── ports.go              # 12 port interfaces (SearchProvider, VocabularyStore, etc.)
 ├── service/
 │   ├── search_music.go       # SearchMusicService — main orchestrator
-│   ├── dedup.go              # FuseAndRank, Rerank, CollapseVersions, recency boost
+│   ├── dedup.go              # FuseAndRank, Rerank, CollapseVersions, PopularityDominance, Diversity
 │   ├── normalize.go          # NormalizeForMatch (8-step canonicalization)
 │   ├── fuzzy.go              # TokenSortRatio, levenshteinDistance
 │   ├── popularity.go         # NormalizePopularity (log-scale, multi-provider)

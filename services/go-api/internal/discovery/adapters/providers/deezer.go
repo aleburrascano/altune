@@ -82,7 +82,7 @@ func (a *DeezerAdapter) searchKind(ctx context.Context, query string, kind domai
 		return nil, fmt.Errorf("unsupported kind")
 	}
 
-	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=10", endpoint, url.QueryEscape(query))
+	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=15&order=RANKING", endpoint, url.QueryEscape(query))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {

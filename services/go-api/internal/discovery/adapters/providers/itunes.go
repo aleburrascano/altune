@@ -49,7 +49,7 @@ func (a *ITunesAdapter) Search(ctx context.Context, query string, kinds map[doma
 
 func (a *ITunesAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
 	entity := itunesEntity(kind)
-	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&limit=10", url.QueryEscape(query), entity)
+	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&limit=15", url.QueryEscape(query), entity)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {

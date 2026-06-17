@@ -115,12 +115,8 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 
 	searchStart := time.Now()
 
-	preCorrection := s.preQueryCorrection(ctx, query.Raw, queryNorm)
 	searchQuery := CleanQuery(query.Raw)
-	if preCorrection != nil {
-		searchQuery = CleanQuery(preCorrection.Corrected)
-		queryNorm = NormalizeForMatch(searchQuery)
-	} else if searchQuery != query.Raw {
+	if searchQuery != query.Raw {
 		queryNorm = NormalizeForMatch(searchQuery)
 		slog.DebugContext(ctx, "search.query_cleaned",
 			"original", query.Raw,
@@ -249,15 +245,11 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 	merged = Rerank(merged, queryNorm)
 
 	var correctedQuery, originalQuery, suggestedQuery string
-	if preCorrection != nil {
-		correctedQuery = preCorrection.Corrected
-		originalQuery = query.Raw
-	}
-	if len(merged) == 0 && preCorrection == nil {
+	if len(merged) == 0 {
 		correctedQuery, originalQuery = s.tryCorrection(ctx, query, queryNorm, &merged, &statuses)
 	}
 
-	if len(merged) > 0 && correctedQuery == "" && preCorrection == nil {
+	if len(merged) > 0 && correctedQuery == "" {
 		suggestedQuery = s.suggestIfLowRelevance(ctx, merged, query.Raw, queryNorm)
 	}
 
@@ -543,9 +535,6 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 				"artist", result.Subtitle,
 				"pop", pop,
 			)
-		} else if extras["popularity"] != nil {
-			extras["popularity"] = 0.0
-			changed = true
 		}
 	}
 

@@ -54,16 +54,16 @@ func TestNormalizePopularity(t *testing.T) {
 			maxPop: 100,
 		},
 		{
-			name:   "deezer rank 1 most popular",
-			extras: map[string]any{"rank": int64(1)},
-			minPop: 80,
+			name:   "deezer rank high popularity score",
+			extras: map[string]any{"rank": int64(800_000)},
+			minPop: 90,
 			maxPop: 100,
 		},
 		{
-			name:   "deezer rank 999999 low popularity",
-			extras: map[string]any{"rank": int64(999_999)},
-			minPop: 0,
-			maxPop: 5,
+			name:   "deezer rank low popularity score",
+			extras: map[string]any{"rank": int64(100)},
+			minPop: 1,
+			maxPop: 40,
 		},
 		{
 			name:   "lastfm non-numeric string returns zero for metric",
