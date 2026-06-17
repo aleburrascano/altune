@@ -465,8 +465,8 @@ func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResu
 		if demA != demB {
 			return demA < demB
 		}
-		popA := bandPop(popularity(a))
-		popB := bandPop(popularity(b))
+		popA := bandPop(effectivePop(a))
+		popB := bandPop(effectivePop(b))
 		if popA != popB {
 			return popA > popB
 		}
@@ -519,8 +519,8 @@ func rankingKeyLess(a, b scored, qualityScorer func(domain.SearchResult) domain.
 	if demA != demB {
 		return demA < demB
 	}
-	popA := bandPop(popularity(a.result))
-	popB := bandPop(popularity(b.result))
+	popA := bandPop(effectivePop(a.result))
+	popB := bandPop(effectivePop(b.result))
 	if popA != popB {
 		return popA > popB
 	}
@@ -555,6 +555,24 @@ func roundBand(f float64) float64 {
 // sort — multi-source and RRF break the tie instead.
 func bandPop(p float64) float64 {
 	return math.Floor(p/5) * 5
+}
+
+// artistSourceBonus is the popularity bonus per additional provider for artist
+// results. Artists naturally appear across all providers by name — a 6-source
+// artist is almost certainly the canonical entity. Tracks get multi-source
+// through ISRC/MBID merge which is a different (already handled) signal.
+const artistSourceBonus = 5
+
+func effectivePop(r domain.SearchResult) float64 {
+	pop := popularity(r)
+	if r.Kind != domain.ResultKindArtist {
+		return pop
+	}
+	extra := len(r.Sources) - 1
+	if extra <= 0 {
+		return pop
+	}
+	return math.Min(100, pop+float64(extra)*artistSourceBonus)
 }
 
 func boolToInt(b bool) int {

@@ -216,8 +216,8 @@ func TestRankingRegression_EnrichmentPreservesPopularity(t *testing.T) {
 
 func TestRankingRegression_PopBandingFavorsSources(t *testing.T) {
 	// Regression: cover versions with 1-2 points more popularity beat the
-	// canonical original. With 5-point pop banding, they land in the same
-	// band and multi-source breaks the tie.
+	// canonical original. With 5-point pop banding + source bonus, the
+	// multi-source original wins.
 	original := trackResult(domain.ProviderDeezer, "dz-orig", "Smells Like Teen Spirit", "Nirvana",
 		map[string]any{"isrc": "USGF19942501", "rank": int64(750_000)})
 	origMB := trackResult(domain.ProviderMusicBrainz, "mb-orig", "Smells Like Teen Spirit", "Nirvana",
@@ -236,8 +236,64 @@ func TestRankingRegression_PopBandingFavorsSources(t *testing.T) {
 		t.Fatalf("expected at least 2 results, got %d", len(results))
 	}
 	if results[0].Subtitle != "Nirvana" {
-		t.Errorf("expected multi-source Nirvana to beat single-source cover at similar pop, got #1 by %q",
+		t.Errorf("expected multi-source Nirvana to beat single-source cover, got #1 by %q",
 			results[0].Subtitle)
+	}
+}
+
+func TestRankingRegression_SourceBonusLiftsMultiSourceArtist(t *testing.T) {
+	// A globally famous artist appearing from 6 providers should beat a
+	// single-source track with a coincidentally matching name, even when the
+	// track has higher raw popularity. The source bonus (+8 per extra provider)
+	// lifts the artist's effective pop above the track's.
+	perProvider := [][]domain.SearchResult{
+		{
+			artistResult(domain.ProviderDeezer, "dz-art-santana", "Santana",
+				map[string]any{"nb_fan": int64(4_000_000)}),
+			trackResult(domain.ProviderDeezer, "dz-trk-santana", "Santana", "Alonzo",
+				map[string]any{"rank": int64(900_000)}),
+		},
+		{artistResult(domain.ProviderMusicBrainz, "mb-art-santana", "Santana", nil)},
+		{artistResult(domain.ProviderSoundCloud, "sc-art-santana", "Santana", nil)},
+		{artistResult(domain.ProviderLastFM, "lfm-art-santana", "Santana", nil)},
+		{artistResult(domain.ProviderITunes, "it-art-santana", "Santana", nil)},
+		{artistResult(domain.ProviderTheAudioDB, "adb-art-santana", "Santana", nil)},
+	}
+
+	results := FuseAndRank(perProvider, "santana", noQualityScorer, nil)
+
+	if len(results) == 0 {
+		t.Fatal("expected results, got 0")
+	}
+	if results[0].Kind != domain.ResultKindArtist {
+		t.Errorf("expected 6-source artist to beat single-source track, got #1 kind=%s title=%q by=%q",
+			results[0].Kind, results[0].Title, results[0].Subtitle)
+	}
+}
+
+func TestRankingRegression_SourceBonusDoesNotOverrideLargePopGap(t *testing.T) {
+	// A niche 4-source artist with low popularity must NOT beat a massively
+	// popular single-source track. The source bonus must be bounded.
+	perProvider := [][]domain.SearchResult{
+		{
+			artistResult(domain.ProviderDeezer, "dz-art-niche", "Niche",
+				map[string]any{"nb_fan": int64(500)}),
+			trackResult(domain.ProviderDeezer, "dz-trk-hit", "Niche", "Mega Star",
+				map[string]any{"rank": int64(850_000)}),
+		},
+		{artistResult(domain.ProviderMusicBrainz, "mb-art-niche", "Niche", nil)},
+		{artistResult(domain.ProviderSoundCloud, "sc-art-niche", "Niche", nil)},
+		{artistResult(domain.ProviderITunes, "it-art-niche", "Niche", nil)},
+	}
+
+	results := FuseAndRank(perProvider, "niche", noQualityScorer, nil)
+
+	if len(results) == 0 {
+		t.Fatal("expected results, got 0")
+	}
+	if results[0].Kind != domain.ResultKindTrack {
+		t.Errorf("expected popular track to beat niche 4-source artist, got #1 kind=%s",
+			results[0].Kind)
 	}
 }
 
