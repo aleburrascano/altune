@@ -1,6 +1,7 @@
 package service
 
 import (
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -422,6 +423,24 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 		return rankingKeyLess(scoredResults[i], scoredResults[j], qualityScorer)
 	})
 
+	logLimit := 10
+	if len(scoredResults) < logLimit {
+		logLimit = len(scoredResults)
+	}
+	for i := 0; i < logLimit; i++ {
+		s := scoredResults[i]
+		slog.Debug("search.ranking",
+			"pos", i+1,
+			"kind", s.result.Kind.String(),
+			"title", s.result.Title,
+			"subtitle", s.result.Subtitle,
+			"relevance", roundBand(s.relevance),
+			"popularity", popularity(s.result),
+			"sources", len(s.result.Sources),
+			"rrf", s.rrf,
+		)
+	}
+
 	results := make([]domain.SearchResult, len(scoredResults))
 	for i, s := range scoredResults {
 		results[i] = s.result
@@ -466,6 +485,24 @@ func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResu
 		}
 		return a.Title < b.Title
 	})
+
+	logLimit := 10
+	if len(results) < logLimit {
+		logLimit = len(results)
+	}
+	for i := 0; i < logLimit; i++ {
+		r := results[i]
+		slog.Debug("search.rerank",
+			"pos", i+1,
+			"kind", r.Kind.String(),
+			"title", r.Title,
+			"subtitle", r.Subtitle,
+			"relevance", roundBand(relevanceScore(r, queryNorm)),
+			"popularity", popularity(r),
+			"sources", len(r.Sources),
+		)
+	}
+
 	return results
 }
 
@@ -752,6 +789,15 @@ func ApplyPopularityDominance(results []domain.SearchResult) []domain.SearchResu
 	if bestPop-topPop < popularityDominanceGapAbs && bestPop < topPop*popularityDominanceGapFactor {
 		return results
 	}
+
+	slog.Debug("search.popularity_dominance",
+		"promoted_kind", results[bestIdx].Kind.String(),
+		"promoted_title", results[bestIdx].Title,
+		"promoted_pop", bestPop,
+		"displaced_kind", results[0].Kind.String(),
+		"displaced_title", results[0].Title,
+		"displaced_pop", topPop,
+	)
 
 	out := make([]domain.SearchResult, 0, len(results))
 	out = append(out, results[bestIdx])
