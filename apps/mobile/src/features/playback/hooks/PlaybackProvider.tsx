@@ -42,7 +42,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (shouldAutoPlay.current && playerStatus.isLoaded && audioSource) {
       shouldAutoPlay.current = false;
       player.play();
-      if (track) {
+      if (track && typeof player.setActiveForLockScreen === 'function') {
         player.setActiveForLockScreen(
           true,
           {
@@ -184,7 +184,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const stop = useCallback(() => {
     player.pause();
     player.seekTo(0);
-    player.clearLockScreenControls();
+    if (typeof player.clearLockScreenControls === 'function') {
+      player.clearLockScreenControls();
+    }
     setTrack(null);
     setAudioSource(null);
     setErrorMessage(null);
