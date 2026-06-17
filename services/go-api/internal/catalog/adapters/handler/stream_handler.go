@@ -2,10 +2,9 @@ package handler
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
+	"time"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
@@ -56,31 +55,5 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 	)
 
 	w.Header().Set("Content-Type", "audio/mpeg")
-	w.Header().Set("Content-Length", strconv.FormatInt(out.Size, 10))
-	w.Header().Set("Accept-Ranges", "bytes")
-	w.WriteHeader(http.StatusOK)
-
-	buf := make([]byte, 32*1024)
-	for {
-		if r.Context().Err() != nil {
-			slog.InfoContext(r.Context(), "stream.client_disconnected",
-				"track_id", trackId.String())
-			return
-		}
-		n, readErr := out.Reader.Read(buf)
-		if n > 0 {
-			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-				slog.WarnContext(r.Context(), "stream.write_error",
-					"track_id", trackId.String(), "error", writeErr)
-				return
-			}
-		}
-		if readErr != nil {
-			if readErr != io.EOF {
-				slog.WarnContext(r.Context(), "stream.read_error",
-					"track_id", trackId.String(), "error", readErr)
-			}
-			return
-		}
-	}
+	http.ServeContent(w, r, "", time.Time{}, out.Reader)
 }

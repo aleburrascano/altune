@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 
 	"altune/go-api/internal/catalog/domain"
@@ -15,7 +14,7 @@ import (
 var ErrAudioNotAvailable = errors.New("audio not available")
 
 type StreamOutput struct {
-	Reader io.ReadCloser
+	Reader ports.AudioStream
 	Size   int64
 	Track  *domain.Track
 }

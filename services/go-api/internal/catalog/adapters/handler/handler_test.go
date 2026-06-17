@@ -284,7 +284,7 @@ func (s *fakeAudioStore) Store(_ context.Context, _ string, audioRef string) err
 	return nil
 }
 
-func (s *fakeAudioStore) Stream(_ context.Context, audioRef string) (io.ReadCloser, int64, error) {
+func (s *fakeAudioStore) Stream(_ context.Context, audioRef string) (ports.AudioStream, int64, error) {
 	if s.streamErr != nil {
 		return nil, 0, s.streamErr
 	}
@@ -292,8 +292,12 @@ func (s *fakeAudioStore) Stream(_ context.Context, audioRef string) (io.ReadClos
 	if !ok {
 		return nil, 0, io.EOF
 	}
-	return io.NopCloser(bytes.NewReader(data)), int64(len(data)), nil
+	return fakeAudioStream{bytes.NewReader(data)}, int64(len(data)), nil
 }
+
+type fakeAudioStream struct{ *bytes.Reader }
+
+func (fakeAudioStream) Close() error { return nil }
 
 func (s *fakeAudioStore) Delete(_ context.Context, audioRef string) error {
 	if s.deleteErr != nil {
