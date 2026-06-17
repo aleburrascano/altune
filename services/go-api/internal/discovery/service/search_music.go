@@ -528,12 +528,16 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 	if s.popularityResolver != nil {
 		pop, err := s.popularityResolver.GetPopularity(ctx, result.Title, result.Subtitle)
 		if err == nil && pop > 0 {
-			extras["popularity"] = pop
+			existing := parseIntLike(extras["popularity"])
+			best := maxI64(pop, existing)
+			extras["popularity"] = best
 			changed = true
 			slog.DebugContext(ctx, "enrich.popularity",
 				"title", result.Title,
 				"artist", result.Subtitle,
-				"pop", pop,
+				"resolved", pop,
+				"existing", existing,
+				"used", best,
 			)
 		}
 	}
