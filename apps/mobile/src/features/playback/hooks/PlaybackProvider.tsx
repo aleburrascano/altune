@@ -35,6 +35,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     void setAudioModeAsync({
       shouldPlayInBackground: true,
       playsInSilentMode: true,
+      interruptionMode: 'doNotMix',
     });
   }, []);
 
@@ -42,7 +43,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (shouldAutoPlay.current && playerStatus.isLoaded && audioSource) {
       shouldAutoPlay.current = false;
       player.play();
-      if (track && typeof player.setActiveForLockScreen === 'function') {
+      if (track) {
         player.setActiveForLockScreen(
           true,
           {
@@ -184,9 +185,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const stop = useCallback(() => {
     player.pause();
     player.seekTo(0);
-    if (typeof player.clearLockScreenControls === 'function') {
-      player.clearLockScreenControls();
-    }
+    player.clearLockScreenControls();
     setTrack(null);
     setAudioSource(null);
     setErrorMessage(null);
