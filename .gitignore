@@ -58,6 +58,10 @@ CLAUDE.local.md
 .claude/git-bypass.log
 .claude/projects/
 .claude/tasks/
+.claude/worktrees/
+
+# ---- Serena (LSP server) ----
+.serena/
 
 # ---- Local data (dev audio storage, DB files) ----
 .data/
