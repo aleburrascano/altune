@@ -7,4 +7,5 @@ type VocabularyEntry struct {
 	TermNorm   string
 	Kind       string // "artist", "track", or "album"
 	Popularity int64
+	MatchScore float64 // populated by FindClosest: combined Jaccard+phonetic score
 }

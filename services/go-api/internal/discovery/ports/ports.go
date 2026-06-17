@@ -48,6 +48,12 @@ type SearchClickRepository interface {
 	InsertIfOutsideWindow(ctx context.Context, click *domain.SearchClick, windowSeconds int) (inserted bool, err error)
 }
 
+// ClickSignalProvider is an optional interface for retrieving click-based
+// ranking signals. Implement when click volume justifies the DB query per search.
+type ClickSignalProvider interface {
+	TopClickedSignatures(ctx context.Context, queryNorm string, limit int) ([]string, error)
+}
+
 type AlbumContentProvider interface {
 	GetAlbumTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
