@@ -42,8 +42,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (shouldAutoPlay.current && playerStatus.isLoaded && audioSource) {
       shouldAutoPlay.current = false;
       player.play();
+      if (track) {
+        player.setActiveForLockScreen(
+          true,
+          {
+            title: track.title,
+            artist: track.artist,
+            artworkUrl: track.artworkUrl ?? undefined,
+          },
+          { showSeekForward: true, showSeekBackward: true },
+        );
+      }
     }
-  }, [playerStatus.isLoaded, player, audioSource]);
+  }, [playerStatus.isLoaded, player, audioSource, track]);
 
   useEffect(() => {
     if (!shouldAutoPlay.current || !track) return;
@@ -173,6 +184,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const stop = useCallback(() => {
     player.pause();
     player.seekTo(0);
+    player.clearLockScreenControls();
     setTrack(null);
     setAudioSource(null);
     setErrorMessage(null);

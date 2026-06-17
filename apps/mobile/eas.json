@@ -13,7 +13,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://altune.duckdns.org",
+        "EXPO_PUBLIC_API_URL": "https://usc-inside-renewable-blue.trycloudflare.com",
         "EXPO_PUBLIC_SUPABASE_URL": "https://ellvexundmgvbbfqbzau.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN"
       }

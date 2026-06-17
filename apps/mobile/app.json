@@ -9,10 +9,17 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.altune.app"
+      "bundleIdentifier": "com.altune.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "com.altune.app"
+      "package": "com.altune.app",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -22,10 +29,21 @@
       "expo-router",
       "expo-font",
       "expo-secure-store",
-      ["expo-audio", { "enableBackgroundPlayback": true }]
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9b7654c7-6eb5-4ba8-8e26-737b70862306"
+      }
     }
   }
 }
