@@ -80,6 +80,9 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 	entity := mbEntity(kind)
 	u := fmt.Sprintf("https://musicbrainz.org/ws/2/%s/?query=%s&fmt=json&limit=15",
 		entity, url.QueryEscape(query))
+	if kind == domain.ResultKindTrack {
+		u += "&inc=isrcs"
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {

@@ -297,6 +297,56 @@ func TestRankingRegression_SourceBonusDoesNotOverrideLargePopGap(t *testing.T) {
 	}
 }
 
+func TestRankingRegression_AdaptiveBanding(t *testing.T) {
+	t.Run("3-point bands above 90 separate mega-hits", func(t *testing.T) {
+		if bandPop(99) == bandPop(95) {
+			t.Errorf("pop 99 (band %.0f) and pop 95 (band %.0f) must be in different bands",
+				bandPop(99), bandPop(95))
+		}
+	})
+
+	t.Run("5-point bands below 90 suppress noise", func(t *testing.T) {
+		if bandPop(72) != bandPop(74) {
+			t.Errorf("pop 72 (band %.0f) and pop 74 (band %.0f) should be in the same band",
+				bandPop(72), bandPop(74))
+		}
+	})
+
+	t.Run("boundary: 90 uses narrow banding", func(t *testing.T) {
+		if bandPop(90) == bandPop(85) {
+			t.Errorf("pop 90 (band %.0f) and pop 85 (band %.0f) must be in different bands",
+				bandPop(90), bandPop(85))
+		}
+	})
+
+	t.Run("pop 99 beats pop 95 in ranking", func(t *testing.T) {
+		// Regression: 5-point bands collapsed pop 95 and 99 into the same band,
+		// letting multi-source covers beat single-source originals at the top.
+		// rank=950000 → pop 99, rank=550000 → pop 95 via logNormalize.
+		megaHit := trackResult(domain.ProviderDeezer, "dz-mega", "Shape of You", "Ed Sheeran",
+			map[string]any{"rank": int64(950_000)})
+		cover := trackResult(domain.ProviderDeezer, "dz-cover", "Shape of You", "Jamie Cullum",
+			map[string]any{"isrc": "COVER00001", "rank": int64(550_000)})
+		coverMB := trackResult(domain.ProviderMusicBrainz, "mb-cover", "Shape of You", "Jamie Cullum",
+			map[string]any{"isrc": "COVER00001"})
+
+		perProvider := [][]domain.SearchResult{
+			{megaHit, cover},
+			{coverMB},
+		}
+
+		results := FuseAndRank(perProvider, "shape of you", noQualityScorer, nil)
+
+		if len(results) < 2 {
+			t.Fatalf("expected at least 2 results, got %d", len(results))
+		}
+		if results[0].Subtitle != "Ed Sheeran" {
+			t.Errorf("expected pop-99 Ed Sheeran to beat pop-95 multi-source cover, got #1 by %q",
+				results[0].Subtitle)
+		}
+	})
+}
+
 func TestRankingRegression_PreCorrectionDisabled(t *testing.T) {
 	// preQueryCorrection is dead code — Execute must pass the original query
 	// to providers without rewriting it.

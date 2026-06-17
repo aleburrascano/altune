@@ -550,10 +550,12 @@ func roundBand(f float64) float64 {
 	return math.Round(f*20) / 20
 }
 
-// bandPop rounds popularity to 5-point bands so that 1-2 point noise
-// (e.g. a cover at pop 97 vs the original at 96) doesn't dominate the
-// sort — multi-source and RRF break the tie instead.
+// bandPop quantizes popularity to reduce noise: 5-point bands below 90,
+// 3-point bands at 90+ so mega-hits remain distinguishable.
 func bandPop(p float64) float64 {
+	if p >= 90 {
+		return math.Floor(p/3) * 3
+	}
 	return math.Floor(p/5) * 5
 }
 

@@ -163,6 +163,44 @@ func TestMusicBrainzAdapter_Search_ReleaseGroups(t *testing.T) {
 	}
 }
 
+func TestMusicBrainzAdapter_Search_RecordingsRequestISRCs(t *testing.T) {
+	var receivedQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasPrefix(r.URL.Path, "/ws/2/recording") {
+			w.Write([]byte(`{"recordings": []}`))
+		} else if strings.HasPrefix(r.URL.Path, "/ws/2/artist") {
+			w.Write([]byte(`{"artists": []}`))
+		} else {
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+
+	t.Run("recording search includes inc=isrcs", func(t *testing.T) {
+		receivedQuery = ""
+		adapter.Search(context.Background(), "test", map[domain.ResultKind]bool{
+			domain.ResultKindTrack: true,
+		})
+		if !strings.Contains(receivedQuery, "inc=isrcs") {
+			t.Errorf("recording search must include inc=isrcs, got query: %s", receivedQuery)
+		}
+	})
+
+	t.Run("artist search omits inc=isrcs", func(t *testing.T) {
+		receivedQuery = ""
+		adapter.Search(context.Background(), "test", map[domain.ResultKind]bool{
+			domain.ResultKindArtist: true,
+		})
+		if strings.Contains(receivedQuery, "inc=isrcs") {
+			t.Errorf("artist search must not include inc=isrcs, got query: %s", receivedQuery)
+		}
+	})
+}
+
 func TestMusicBrainzAdapter_Search_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
