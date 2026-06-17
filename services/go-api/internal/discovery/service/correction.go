@@ -10,7 +10,6 @@ import (
 )
 
 const correctionCandidates = 5
-const correctionMinConfidence = 0.6
 
 type CorrectionService struct {
 	vocab ports.VocabularyStore
@@ -131,25 +130,41 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 
 func pickBestCorrection(queryNorm string, candidates []domain.VocabularyEntry) *CorrectionResult {
 	var best *CorrectionResult
+	bestDist := len([]rune(queryNorm)) + 1
+	maxDist := maxCorrectionDist(queryNorm)
+
 	for _, c := range candidates {
 		if c.TermNorm == queryNorm || NormalizeForMatch(c.Term) == queryNorm {
 			continue
 		}
-		score := c.MatchScore
+		dist := levenshteinDistance(queryNorm, c.TermNorm)
 		slog.Debug("correction.candidate",
 			"query", queryNorm,
 			"candidate", c.TermNorm,
-			"score", score,
+			"distance", dist,
+			"score", c.MatchScore,
 		)
-		if score < correctionMinConfidence {
+		if dist > maxDist {
 			continue
 		}
-		if best == nil || score > best.Confidence {
+		if dist < bestDist || (dist == bestDist && best != nil && c.MatchScore > best.Confidence) {
 			best = &CorrectionResult{
 				Corrected:  c.Term,
-				Confidence: score,
+				Confidence: c.MatchScore,
 			}
+			bestDist = dist
 		}
 	}
 	return best
+}
+
+func maxCorrectionDist(query string) int {
+	n := len([]rune(query))
+	if n <= 4 {
+		return 1
+	}
+	if n <= 8 {
+		return 2
+	}
+	return 3
 }
