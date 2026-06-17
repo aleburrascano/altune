@@ -17,5 +17,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "react-native-web": "^0.21.0"
   }
 }
