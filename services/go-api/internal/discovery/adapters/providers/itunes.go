@@ -105,6 +105,9 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 		title = item.TrackName
 		subtitle = item.ArtistName
 		extras["album"] = item.CollectionName
+		if item.PreviewURL != "" {
+			extras["preview_url"] = item.PreviewURL
+		}
 	case domain.ResultKindAlbum:
 		title = item.CollectionName
 		subtitle = item.ArtistName
@@ -142,5 +145,6 @@ type itunesItem struct {
 	CollectionName  string `json:"collectionName"`
 	TrackViewURL    string `json:"trackViewUrl"`
 	ArtworkURL100   string `json:"artworkUrl100"`
+	PreviewURL      string `json:"previewUrl"`
 	TrackTimeMillis int64  `json:"trackTimeMillis"`
 }
