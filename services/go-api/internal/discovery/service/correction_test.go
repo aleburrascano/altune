@@ -6,35 +6,13 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-func TestTrigramJaccard(t *testing.T) {
-	tests := []struct {
-		name     string
-		a, b     string
-		minScore float64
-		maxScore float64
-	}{
-		{"identical", "megaman", "megaman", 1.0, 1.0},
-		{"one char off", "megaman", "megamsn", 0.3, 0.8},
-		{"completely different", "megaman", "xkqzwp", 0.0, 0.1},
-		{"empty a", "", "megaman", 0.0, 0.0},
-		{"empty b", "megaman", "", 0.0, 0.0},
-		{"short strings", "ab", "ab", 1.0, 1.0},
-		{"short vs long", "ab", "abcdef", 0.0, 0.5},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			score := trigramJaccard(tt.a, tt.b)
-			if score < tt.minScore || score > tt.maxScore {
-				t.Errorf("trigramJaccard(%q, %q) = %v, want [%v, %v]",
-					tt.a, tt.b, score, tt.minScore, tt.maxScore)
-			}
-		})
-	}
-}
-
 func TestPickBestCorrection(t *testing.T) {
 	t.Run("returns best match above threshold", func(t *testing.T) {
-		candidates := buildVocabCandidates("megaman", "madonna", "metallica")
+		candidates := []domain.VocabularyEntry{
+			{Term: "megaman", TermNorm: "megaman", Kind: "track", MatchScore: 0.72},
+			{Term: "madonna", TermNorm: "madonna", Kind: "artist", MatchScore: 0.30},
+			{Term: "metallica", TermNorm: "metallica", Kind: "artist", MatchScore: 0.15},
+		}
 		result := pickBestCorrection("megamsn", candidates)
 		if result == nil {
 			t.Fatal("expected a correction result")
@@ -42,10 +20,16 @@ func TestPickBestCorrection(t *testing.T) {
 		if result.Corrected != "megaman" {
 			t.Errorf("expected corrected='megaman', got %q", result.Corrected)
 		}
+		if result.Confidence != 0.72 {
+			t.Errorf("expected confidence=0.72, got %v", result.Confidence)
+		}
 	})
 
 	t.Run("returns nil when no match above threshold", func(t *testing.T) {
-		candidates := buildVocabCandidates("zzzzzzz", "yyyyyyy")
+		candidates := []domain.VocabularyEntry{
+			{Term: "zzzzzzz", TermNorm: "zzzzzzz", Kind: "track", MatchScore: 0.10},
+			{Term: "yyyyyyy", TermNorm: "yyyyyyy", Kind: "track", MatchScore: 0.05},
+		}
 		result := pickBestCorrection("megamsn", candidates)
 		if result != nil {
 			t.Errorf("expected nil, got %+v", result)
@@ -58,16 +42,18 @@ func TestPickBestCorrection(t *testing.T) {
 			t.Errorf("expected nil, got %+v", result)
 		}
 	})
-}
 
-func buildVocabCandidates(terms ...string) []domain.VocabularyEntry {
-	entries := make([]domain.VocabularyEntry, len(terms))
-	for i, term := range terms {
-		entries[i] = domain.VocabularyEntry{
-			Term:     term,
-			TermNorm: term,
-			Kind:     "track",
+	t.Run("picks highest score among above-threshold candidates", func(t *testing.T) {
+		candidates := []domain.VocabularyEntry{
+			{Term: "weekend", TermNorm: "weekend", Kind: "track", MatchScore: 0.45},
+			{Term: "weeknd", TermNorm: "weeknd", Kind: "artist", MatchScore: 0.66},
 		}
-	}
-	return entries
+		result := pickBestCorrection("weekend", candidates)
+		if result == nil {
+			t.Fatal("expected a correction result")
+		}
+		if result.Corrected != "weeknd" {
+			t.Errorf("expected corrected='weeknd', got %q", result.Corrected)
+		}
+	})
 }

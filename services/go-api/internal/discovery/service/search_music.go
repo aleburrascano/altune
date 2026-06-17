@@ -89,6 +89,7 @@ type SearchOutput struct {
 	Partial          bool
 	CorrectedQuery   string
 	OriginalQuery    string
+	SuggestedQuery   string
 }
 
 func kindsString(kinds map[domain.ResultKind]bool) string {
@@ -247,13 +248,17 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 	merged = s.enrich(ctx, merged)
 	merged = Rerank(merged, queryNorm)
 
-	var correctedQuery, originalQuery string
+	var correctedQuery, originalQuery, suggestedQuery string
 	if preCorrection != nil {
 		correctedQuery = preCorrection.Corrected
 		originalQuery = query.Raw
 	}
 	if len(merged) == 0 && preCorrection == nil {
 		correctedQuery, originalQuery = s.tryCorrection(ctx, query, queryNorm, &merged, &statuses)
+	}
+
+	if len(merged) > 0 && correctedQuery == "" && preCorrection == nil {
+		suggestedQuery = s.suggestIfLowRelevance(ctx, merged, query.Raw, queryNorm)
 	}
 
 	if len(merged) > query.Limit {
@@ -282,7 +287,11 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 	}
 
 	if len(merged) > 0 && s.vocabStore != nil {
-		go s.ingestToVocabulary(query.Raw, merged)
+		ingestQuery := query.Raw
+		if correctedQuery != "" {
+			ingestQuery = correctedQuery
+		}
+		go s.ingestToVocabulary(ingestQuery, merged)
 	}
 
 	slog.InfoContext(ctx, "search.complete",
@@ -298,6 +307,7 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		Partial:          partial,
 		CorrectedQuery:   correctedQuery,
 		OriginalQuery:    originalQuery,
+		SuggestedQuery:   suggestedQuery,
 	}, nil
 }
 
@@ -335,7 +345,7 @@ func (s *SearchMusicService) tryCorrection(
 	if s.correctionSvc == nil {
 		return "", ""
 	}
-	result := s.correctionSvc.Correct(ctx, query.Raw)
+	result := s.correctionSvc.CorrectAggressive(ctx, query.Raw)
 	if result == nil {
 		return "", ""
 	}
@@ -391,6 +401,38 @@ func (s *SearchMusicService) retrySearch(
 	}
 	wg.Wait()
 	return perProvider
+}
+
+const lowRelevanceThreshold = 0.3
+
+func (s *SearchMusicService) suggestIfLowRelevance(
+	ctx context.Context,
+	results []domain.SearchResult,
+	rawQuery string,
+	queryNorm string,
+) string {
+	if s.correctionSvc == nil || len(results) == 0 {
+		return ""
+	}
+	topRelevance := relevanceScore(results[0], queryNorm)
+	if topRelevance >= lowRelevanceThreshold {
+		return ""
+	}
+	result := s.correctionSvc.Correct(ctx, rawQuery)
+	if result == nil {
+		return ""
+	}
+	corrNorm := NormalizeForMatch(result.Corrected)
+	if corrNorm == queryNorm {
+		return ""
+	}
+	slog.InfoContext(ctx, "search.suggestion",
+		"original", rawQuery,
+		"suggested", result.Corrected,
+		"top_relevance", topRelevance,
+		"confidence", result.Confidence,
+	)
+	return result.Corrected
 }
 
 const vocabIngestTop = 5

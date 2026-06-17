@@ -298,6 +298,13 @@ type fuzzyCandidate struct {
 	jaccard float64
 }
 
+const (
+	weightJaccard     = 0.35
+	weightLevenshtein = 0.30
+	weightPhonetic    = 0.20
+	weightLengthSim   = 0.15
+)
+
 func (s *RedisVocabularyStore) scoreCandidatesWithPhonetic(
 	ctx context.Context,
 	candidates map[string]int,
@@ -315,18 +322,45 @@ func (s *RedisVocabularyStore) scoreCandidatesWithPhonetic(
 		candTrigrams := trigrams(norm)
 		jaccard := jaccardCoefficient(shared, len(queryTrigrams), len(candTrigrams))
 
-		// Phonetic matches get a confidence floor of 0.5
-		if phoneticSet[norm] && jaccard < 0.5 {
-			jaccard = 0.5
-		}
-
-		maxDist := maxLevenshtein(queryNorm)
 		dist := levenshteinDist(queryNorm, norm)
+		maxDist := maxLevenshtein(queryNorm)
 		if dist > maxDist && !phoneticSet[norm] {
 			continue
 		}
+
+		maxLen := len([]rune(queryNorm))
+		if cl := len([]rune(norm)); cl > maxLen {
+			maxLen = cl
+		}
+		levSim := 0.0
+		if maxLen > 0 {
+			levSim = 1.0 - float64(dist)/float64(maxLen)
+		}
+
+		phonetic := 0.0
+		if phoneticSet[norm] {
+			phonetic = 1.0
+		}
+
+		qLen := len([]rune(queryNorm))
+		cLen := len([]rune(norm))
+		lengthSim := 0.0
+		if qLen > 0 || cLen > 0 {
+			bigger := qLen
+			if cLen > bigger {
+				bigger = cLen
+			}
+			diff := qLen - cLen
+			if diff < 0 {
+				diff = -diff
+			}
+			lengthSim = 1.0 - float64(diff)/float64(bigger)
+		}
+
+		combined := weightJaccard*jaccard + weightLevenshtein*levSim + weightPhonetic*phonetic + weightLengthSim*lengthSim
+
 		entry.TermNorm = norm
-		scored = append(scored, fuzzyCandidate{entry: entry, jaccard: jaccard})
+		scored = append(scored, fuzzyCandidate{entry: entry, jaccard: combined})
 	}
 	return topFuzzyCandidates(scored, limit), nil
 }
@@ -359,6 +393,7 @@ func topFuzzyCandidates(scored []fuzzyCandidate, limit int) []domain.VocabularyE
 	}
 	results := make([]domain.VocabularyEntry, len(scored))
 	for i, c := range scored {
+		c.entry.MatchScore = c.jaccard
 		results[i] = c.entry
 	}
 	return results
@@ -391,18 +426,19 @@ func decodeMember(member string) (norm, term, kind string) {
 	return parts[0], parts[1], parts[2]
 }
 
-// trigrams decomposes a string into character trigrams.
-// For strings shorter than 3 chars, the string itself is the only trigram.
+// trigrams decomposes a string into character trigrams using rune indexing
+// so multi-byte Unicode characters are handled correctly.
 func trigrams(s string) []string {
-	if len(s) == 0 {
+	runes := []rune(s)
+	if len(runes) == 0 {
 		return nil
 	}
-	if len(s) < 3 {
+	if len(runes) < 3 {
 		return []string{s}
 	}
-	out := make([]string, 0, len(s)-2)
-	for i := 0; i <= len(s)-3; i++ {
-		out = append(out, s[i:i+3])
+	out := make([]string, 0, len(runes)-2)
+	for i := 0; i <= len(runes)-3; i++ {
+		out = append(out, string(runes[i:i+3]))
 	}
 	return out
 }

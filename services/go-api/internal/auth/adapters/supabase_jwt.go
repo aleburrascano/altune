@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared"
@@ -56,6 +57,7 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 		jwt.WithValidate(true),
 		jwt.WithIssuer(v.issuer),
 		jwt.WithAudience(v.audience),
+		jwt.WithAcceptableSkew(5*time.Second),
 	)
 	if err != nil {
 		reason := classifyJWTError(err)

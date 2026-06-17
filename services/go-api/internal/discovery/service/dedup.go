@@ -2,7 +2,6 @@ package service
 
 import (
 	"math"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -10,11 +9,25 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-var versionSuffixRe = regexp.MustCompile(
-	`(?i)\s*[\(\[](remix|live|acoustic|remaster(?:ed)?|slowed(?:\s*\+?\s*reverb)?|sped up|instrumental|cover|radio edit|deluxe|extended|clean|explicit|bonus track)[\)\]]`,
-)
+const versionSimilarityThreshold = 85 // TokenSortRatio on normalized titles (0-100)
+
+var collabMarkers = []string{"feat.", "feat ", "ft.", "ft ", "featuring "}
 
 const rrfK = 60
+
+var providerRRFWeight = map[domain.ProviderName]float64{
+	domain.ProviderDeezer:      1.2,
+	domain.ProviderMusicBrainz: 1.1,
+	domain.ProviderLastFM:      1.0,
+	domain.ProviderITunes:      0.9,
+	domain.ProviderSoundCloud:  0.8,
+	domain.ProviderTheAudioDB:  0.7,
+}
+
+const (
+	diversityWindow    = 10
+	maxPerArtistInTop  = 3
+)
 
 func isrcOf(r domain.SearchResult) string {
 	return getStringExtra(r, "isrc")
@@ -386,8 +399,12 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 	var scoredResults []scored
 	for _, entry := range accumulated {
 		rrf := 0.0
-		for _, rank := range entry.bestRank {
-			rrf += 1.0 / (float64(rrfK) + float64(rank))
+		for provider, rank := range entry.bestRank {
+			w := providerRRFWeight[provider]
+			if w == 0 {
+				w = 1.0
+			}
+			rrf += w / (float64(rrfK) + float64(rank))
 		}
 
 		r := entry.result
@@ -428,7 +445,9 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 		results[i] = s.result
 	}
 
-	return CollapseVersions(results)
+	collapsed := CollapseVersions(results)
+	promoted := PromoteKind(collapsed, queryNorm)
+	return EnforceDiversity(promoted)
 }
 
 // Rerank re-sorts after enrichment. Same key minus quality_score.
@@ -530,64 +549,98 @@ func copyExtras(src map[string]any) map[string]any {
 	return dst
 }
 
-// normalizeBaseTitle strips known version suffixes (remix, live, etc.)
-// while preserving non-version parentheticals like "(feat. Artist)".
-func normalizeBaseTitle(title string) string {
-	return strings.TrimSpace(versionSuffixRe.ReplaceAllString(title, ""))
+type versionCluster struct {
+	bestIdx   int
+	bestPop   float64
+	titleNorm string
+	hasCollab bool
+	count     int
 }
 
-// versionGroupKey builds the collapse key: base title + artist + kind.
-// Uses lowercase + trim instead of NormalizeForMatch to avoid stripping
-// non-version parentheticals like "(feat. Artist)".
-// Results with distinct MBIDs are treated as separate recordings.
-func versionGroupKey(r domain.SearchResult) string {
-	base := strings.ToLower(strings.TrimSpace(normalizeBaseTitle(r.Title)))
-	artist := NormalizeForMatch(r.Subtitle)
-	mbid := getStringExtra(r, "mbid")
-	if mbid != "" {
-		return r.Kind.String() + "|" + artist + "|" + base + "|" + mbid
+func hasCollaboration(title string) bool {
+	lower := strings.ToLower(title)
+	for _, m := range collabMarkers {
+		if strings.Contains(lower, m) {
+			return true
+		}
 	}
-	return r.Kind.String() + "|" + artist + "|" + base
-}
-
-type versionGroup struct {
-	bestIdx int
-	bestPop float64
-	count   int
+	return false
 }
 
 // CollapseVersions groups results that are versions of the same recording
-// (remix, live, acoustic, etc.) and keeps only the most popular representative.
+// using title similarity on normalized titles. A collaboration guard
+// prevents collapsing "Song" with "Song (feat. Artist)" since those are
+// different recordings. Distinct MBIDs are never collapsed.
 func CollapseVersions(results []domain.SearchResult) []domain.SearchResult {
-	groups := make(map[string]*versionGroup)
-	order := make([]string, 0)
+	clusterOf := make([]int, len(results))
+	clusters := make([]*versionCluster, 0)
 
 	for i, r := range results {
-		key := versionGroupKey(r)
-		g, exists := groups[key]
+		titleNorm := NormalizeForMatch(r.Title)
+		artistNorm := NormalizeForMatch(r.Subtitle)
+		kind := r.Kind.String()
+		mbid := getStringExtra(r, "mbid")
 		pop := popularity(r)
-		if !exists {
-			groups[key] = &versionGroup{bestIdx: i, bestPop: pop, count: 1}
-			order = append(order, key)
-			continue
+		collab := hasCollaboration(r.Title)
+
+		matched := -1
+		for ci, c := range clusters {
+			cr := results[c.bestIdx]
+			if cr.Kind.String() != kind {
+				continue
+			}
+			if NormalizeForMatch(cr.Subtitle) != artistNorm {
+				continue
+			}
+			cMbid := getStringExtra(cr, "mbid")
+			if cr.Kind == domain.ResultKindArtist && (mbid != "" || cMbid != "") {
+				continue
+			}
+			if mbid != "" && cMbid != "" && mbid != cMbid {
+				continue
+			}
+			if collab != c.hasCollab {
+				continue
+			}
+			if TokenSortRatio(titleNorm, c.titleNorm) >= versionSimilarityThreshold {
+				matched = ci
+				break
+			}
 		}
-		g.count++
-		if pop > g.bestPop {
-			g.bestIdx = i
-			g.bestPop = pop
+
+		if matched >= 0 {
+			c := clusters[matched]
+			c.count++
+			if pop > c.bestPop {
+				c.bestIdx = i
+				c.bestPop = pop
+				c.titleNorm = titleNorm
+			}
+			clusterOf[i] = matched
+		} else {
+			clusterOf[i] = len(clusters)
+			clusters = append(clusters, &versionCluster{
+				bestIdx:   i,
+				bestPop:   pop,
+				titleNorm: titleNorm,
+				hasCollab: collab,
+				count:     1,
+			})
 		}
 	}
 
-	return buildCollapsed(results, groups, order)
-}
-
-func buildCollapsed(results []domain.SearchResult, groups map[string]*versionGroup, order []string) []domain.SearchResult {
-	out := make([]domain.SearchResult, 0, len(order))
-	for _, key := range order {
-		g := groups[key]
-		r := results[g.bestIdx]
-		if g.count > 1 {
-			r = withVariantCount(r, g.count)
+	emitted := make(map[int]bool)
+	out := make([]domain.SearchResult, 0, len(clusters))
+	for i := range results {
+		ci := clusterOf[i]
+		if emitted[ci] {
+			continue
+		}
+		emitted[ci] = true
+		c := clusters[ci]
+		r := results[c.bestIdx]
+		if c.count > 1 {
+			r = withVariantCount(r, c.count)
 		}
 		out = append(out, r)
 	}
@@ -672,6 +725,70 @@ func hasBrowseableSource(r domain.SearchResult) bool {
 		}
 	}
 	return false
+}
+
+// PromoteKind moves the first Artist result to position 0 when the query
+// exactly matches a known artist name, and likewise for albums.
+func PromoteKind(results []domain.SearchResult, queryNorm string) []domain.SearchResult {
+	if len(results) < 2 || queryNorm == "" {
+		return results
+	}
+	promoteIdx := -1
+	for i, r := range results {
+		if i == 0 {
+			continue
+		}
+		titleNorm := NormalizeForMatch(r.Title)
+		if titleNorm != queryNorm {
+			continue
+		}
+		if r.Kind == domain.ResultKindArtist || r.Kind == domain.ResultKindAlbum {
+			promoteIdx = i
+			break
+		}
+	}
+	if promoteIdx < 0 {
+		return results
+	}
+	out := make([]domain.SearchResult, 0, len(results))
+	out = append(out, results[promoteIdx])
+	for i, r := range results {
+		if i != promoteIdx {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// EnforceDiversity limits the number of results per artist within the
+// top diversityWindow positions to maxPerArtistInTop, moving overflow
+// results below the window.
+func EnforceDiversity(results []domain.SearchResult) []domain.SearchResult {
+	if len(results) <= diversityWindow {
+		return results
+	}
+	window := results[:diversityWindow]
+	rest := results[diversityWindow:]
+
+	artistCount := make(map[string]int)
+	kept := make([]domain.SearchResult, 0, diversityWindow)
+	overflow := make([]domain.SearchResult, 0)
+
+	for _, r := range window {
+		artist := NormalizeForMatch(r.Subtitle)
+		if artist == "" || artistCount[artist] < maxPerArtistInTop {
+			artistCount[artist]++
+			kept = append(kept, r)
+		} else {
+			overflow = append(overflow, r)
+		}
+	}
+
+	out := make([]domain.SearchResult, 0, len(results))
+	out = append(out, kept...)
+	out = append(out, overflow...)
+	out = append(out, rest...)
+	return out
 }
 
 func getFloatExtra(r domain.SearchResult, key string) float64 {

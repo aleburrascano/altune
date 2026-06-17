@@ -88,6 +88,7 @@ type DiscoverySearchResponse struct {
 	Cache          CacheDTO            `json:"cache"`
 	CorrectedQuery string              `json:"corrected_query,omitempty"`
 	OriginalQuery  string              `json:"original_query,omitempty"`
+	SuggestedQuery string              `json:"suggested_query,omitempty"`
 }
 
 type CacheDTO struct {
@@ -259,6 +260,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		Cache:          CacheDTO{Hit: false, FetchedAt: nil},
 		CorrectedQuery: result.CorrectedQuery,
 		OriginalQuery:  result.OriginalQuery,
+		SuggestedQuery: result.SuggestedQuery,
 	})
 }
 
