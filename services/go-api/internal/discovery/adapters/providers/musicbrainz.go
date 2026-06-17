@@ -78,7 +78,7 @@ func mbStructuredQuery(artist, track string, kind domain.ResultKind) string {
 
 func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
 	entity := mbEntity(kind)
-	u := fmt.Sprintf("https://musicbrainz.org/ws/2/%s/?query=%s&fmt=json&limit=10",
+	u := fmt.Sprintf("https://musicbrainz.org/ws/2/%s/?query=%s&fmt=json&limit=15",
 		entity, url.QueryEscape(query))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)

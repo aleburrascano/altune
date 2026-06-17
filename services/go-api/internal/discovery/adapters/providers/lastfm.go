@@ -50,7 +50,7 @@ func (a *LastFmAdapter) Search(ctx context.Context, query string, kinds map[doma
 
 func (a *LastFmAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
 	method := lastfmMethod(kind)
-	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=%s&%s=%s&api_key=%s&format=json&limit=10",
+	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=%s&%s=%s&api_key=%s&format=json&limit=15",
 		method, lastfmQueryParam(kind), url.QueryEscape(query), a.apiKey)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
@@ -147,6 +147,45 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 						URL:        t.URL,
 					}},
 					Extras: extras,
+				})
+			}
+		}
+	case domain.ResultKindAlbum:
+		var resp struct {
+			Results struct {
+				AlbumMatches struct {
+					Album []struct {
+						Name   string `json:"name"`
+						Artist string `json:"artist"`
+						URL    string `json:"url"`
+						Image  []struct {
+							Text string `json:"#text"`
+							Size string `json:"size"`
+						} `json:"image"`
+					} `json:"album"`
+				} `json:"albummatches"`
+			} `json:"results"`
+		}
+		if json.Unmarshal(raw, &resp) == nil {
+			for _, a := range resp.Results.AlbumMatches.Album {
+				imageURL := ""
+				for _, img := range a.Image {
+					if img.Size == "extralarge" {
+						imageURL = img.Text
+					}
+				}
+				results = append(results, domain.SearchResult{
+					Kind:       domain.ResultKindAlbum,
+					Title:      a.Name,
+					Subtitle:   a.Artist,
+					ImageURL:   imageURL,
+					Confidence: domain.ConfidenceLow,
+					Sources: []domain.SourceRef{{
+						Provider:   domain.ProviderLastFM,
+						ExternalID: lastfmExternalID(a.URL),
+						URL:        a.URL,
+					}},
+					Extras: make(map[string]any),
 				})
 			}
 		}

@@ -44,7 +44,8 @@ func scoreDeezerRank(extras map[string]any) int64 {
 	if rank <= 0 {
 		return 0
 	}
-	return logNormalize(maxI64(0, 1_000_000-rank), 1_000_000)
+	// Deezer rank is a popularity score: higher = more popular.
+	return logNormalize(rank, 1_000_000)
 }
 
 func logNormalize(count int64, refMax float64) int64 {
@@ -85,4 +86,15 @@ func maxI64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// positionalPopularity derives a popularity score from a result's position
+// in a provider's response. Used as a fallback when the provider returns no
+// explicit popularity metric (e.g., Deezer album search never returns nb_fan).
+// Position 0 → 75, position 1 → 70, …, position 9 → 30, ≥10 → 0.
+func positionalPopularity(position int) int64 {
+	if position >= 10 {
+		return 0
+	}
+	return int64(75 - position*5)
 }

@@ -10,7 +10,7 @@ import (
 )
 
 const correctionCandidates = 5
-const correctionMinConfidence = 0.4
+const correctionMinConfidence = 0.6
 
 type CorrectionService struct {
 	vocab ports.VocabularyStore
