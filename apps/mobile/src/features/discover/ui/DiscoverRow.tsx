@@ -9,10 +9,11 @@
  */
 
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Pause, Play } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 
-import { Artwork, Card, Row, Text, radius, spacing } from '@shared/ui';
+import { Artwork, Row, Text, radius, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 
 import type { DiscoveryResult } from '../../../shared/api-client/discovery';
@@ -25,28 +26,28 @@ export type DiscoverRowProps = {
   onPress: (result: DiscoveryResult, position: number) => void;
 };
 
-const ART_SIZE = 52;
+const ART_SIZE = 56;
 
-/** Secondary line under the title, by kind. Null → render nothing. */
-function _secondaryLine(result: DiscoveryResult): string | null {
+function _secondaryLine(result: DiscoveryResult): string {
+  const kind = result.kind === 'artist' ? 'Artist' : result.kind === 'album' ? 'Album' : 'Song';
+
   if (result.kind === 'artist') {
-    return 'Artist';
+    return kind;
   }
   if (result.kind === 'album') {
     const year = result.extras['year'];
-    if (typeof year === 'number' || typeof year === 'string') {
-      return result.subtitle !== null ? `${result.subtitle} · ${year}` : `${year}`;
-    }
+    const parts = [kind];
+    if (result.subtitle) parts.push(result.subtitle);
+    if (typeof year === 'number' || typeof year === 'string') parts.push(String(year));
+    return parts.join(' · ');
   }
-  return result.subtitle;
-}
-
-function _variantLabel(result: DiscoveryResult): string {
+  const parts = [kind];
+  if (result.subtitle) parts.push(result.subtitle);
   const count = result.extras['variant_count'];
   if (typeof count === 'number' && count > 1) {
-    return ` · +${count - 1} version${count > 2 ? 's' : ''}`;
+    parts.push(`+${count - 1} version${count > 2 ? 's' : ''}`);
   }
-  return '';
+  return parts.join(' · ');
 }
 
 export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): ReactElement {
@@ -54,6 +55,7 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
   const isArtist = result.kind === 'artist';
   const secondary = _secondaryLine(result);
   const a11yLabel = `${result.title}${secondary ? `, ${secondary}` : ''}`;
+  const theme = useTheme();
   const playback = usePlayback();
   const previewUrl = result.kind === 'track' ? getPreviewUrl(result.extras) : null;
 
@@ -65,6 +67,7 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
 
   const onPreviewPress = (): void => {
     if (previewUrl === null) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (isThisPreviewPlaying) {
       playback.pause();
     } else {
@@ -83,20 +86,20 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
       onPress={() => onPress(result, position)}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
-      style={({ pressed }) => (pressed ? styles.pressed : null)}
+      style={({ pressed }) => [styles.row, pressed ? { opacity: 0.7, backgroundColor: theme.color.surface1 } : null]}
     >
-      <Card style={styles.card}>
-        <Row
-          leading={
-            <Artwork
-              uri={result.image_url}
-              size={ART_SIZE}
-              radius={isArtist ? radius.full : radius.md}
-              accessibilityLabel={result.title}
-            />
-          }
-          trailing={
-            previewUrl !== null ? (
+      <Row
+        leading={
+          <Artwork
+            uri={result.image_url}
+            size={ART_SIZE}
+            radius={isArtist ? radius.full : radius.md}
+            accessibilityLabel={result.title}
+          />
+        }
+        trailing={
+          previewUrl !== null ? (
+            <View style={[styles.previewWrap, { backgroundColor: theme.color.surface2 }]}>
               <IconButton
                 testID={`discover-preview-${position}`}
                 icon={isThisPreviewPlaying ? Pause : Play}
@@ -104,26 +107,34 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
                 onPress={onPreviewPress}
                 accessibilityLabel={isThisPreviewPlaying ? 'Pause preview' : 'Play preview'}
               />
-            ) : undefined
-          }
-        >
-          <Text variant="bodyStrong" numberOfLines={1}>
-            {result.title}
-          </Text>
-          {secondary !== null ? (
-            <Text variant="label" tone="secondary" numberOfLines={1} style={styles.secondary}>
-              {secondary}
-              {_variantLabel(result)}
-            </Text>
-          ) : null}
-        </Row>
-      </Card>
+            </View>
+          ) : undefined
+        }
+      >
+        <Text variant="bodyStrong" numberOfLines={1}>
+          {result.title}
+        </Text>
+        <Text variant="label" tone="secondary" numberOfLines={1} style={styles.secondary}>
+          {secondary}
+        </Text>
+      </Row>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  pressed: { opacity: 0.85 },
-  card: { marginBottom: spacing.sm },
+  row: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+    borderRadius: radius.md,
+  },
   secondary: { marginTop: spacing.xs },
+  previewWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    overflow: 'hidden' as const,
+  },
 });
