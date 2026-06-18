@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ChevronRight } from 'lucide-react-native';
 
-import { Text, spacing } from '@shared/ui';
+import { Text, spacing, useTheme } from '@shared/ui';
 
 import { DiscoverRow } from './DiscoverRow';
 import { TopResultCard } from './TopResultCard';
@@ -28,6 +29,7 @@ export function BlendedSection({
   onResultTap: (result: DiscoveryResult, position: number) => void;
   onSeeAll: (filter: DiscoveryKind) => void;
 }): ReactElement {
+  const theme = useTheme();
   const top = _topResult(results);
   const { albums, tracks, artists } = _groupByKind(results);
 
@@ -39,6 +41,11 @@ export function BlendedSection({
     track: { title: 'Songs', sectionKey: 'track', items: tracks },
     artist: { title: 'Artists', sectionKey: 'artist', items: artists },
   };
+  // Exclude the top result from its kind section to avoid duplication.
+  if (top !== null) {
+    const kindList = byKind[top.kind];
+    kindList.items = kindList.items.filter((r) => r !== top);
+  }
   // Order containers by which kind best matches the query (the kind whose
   // strongest member ranks earliest), so a track query shows Songs first.
   const order = _sectionOrder(results);
@@ -78,19 +85,28 @@ export function BlendedSection({
               <Text variant="label" tone="accent">
                 See all {section.title.toLowerCase()}
               </Text>
+              <ChevronRight size={16} color={theme.color.accent} />
             </Pressable>
           ) : null}
         </View>
       )}
+      style={styles.list}
       contentContainerStyle={styles.listContent}
-      showsVerticalScrollIndicator={false}
     />
   );
 }
 
 const styles = StyleSheet.create({
+  list: { flex: 1 },
   listContent: { paddingTop: spacing.sm, paddingBottom: spacing.xl },
   sectionHeader: { marginBottom: spacing.md, letterSpacing: 1 },
   section: { marginBottom: spacing.lg },
-  seeAll: { paddingVertical: spacing.md, alignSelf: 'flex-start', minHeight: 44 },
+  seeAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    alignSelf: 'flex-start',
+    minHeight: 44,
+  },
 });

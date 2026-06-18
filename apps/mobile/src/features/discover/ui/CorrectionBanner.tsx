@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, View } from 'react-native';
+import { Info } from 'lucide-react-native';
 
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme/useTheme';
-import { spacing } from '@shared/ui/theme/tokens';
+import { spacing, radius } from '@shared/ui/theme/tokens';
 
 interface CorrectionBannerProps {
   correctedQuery: string;
@@ -15,20 +16,24 @@ export function CorrectionBanner({ correctedQuery, originalQuery, onSearchOrigin
 
   return (
     <View style={[styles.container, { backgroundColor: color.surface1 }]}>
-      <Text style={[styles.label, { color: color.textSecondary }]}>
-        Showing results for{' '}
-        <Text style={{ color: color.textPrimary, fontWeight: '600' }}>
-          {correctedQuery}
+      <View style={styles.row}>
+        <Info size={14} color={color.textTertiary} />
+        <Text variant="caption" tone="secondary">
+          Showing results for{' '}
+          <Text variant="caption" tone="primary" style={styles.bold}>
+            {correctedQuery}
+          </Text>
         </Text>
-      </Text>
+      </View>
       <Pressable
         onPress={onSearchOriginal}
-        accessibilityRole="button"
+        accessibilityRole="link"
         accessibilityLabel={`Search instead for ${originalQuery}`}
         hitSlop={8}
+        style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
       >
-        <Text style={[styles.link, { color: color.accent }]}>
-          Search instead for &quot;{originalQuery}&quot;
+        <Text variant="caption" tone="accent" style={styles.link}>
+          Search instead for &ldquo;{originalQuery}&rdquo;
         </Text>
       </Pressable>
     </View>
@@ -37,14 +42,22 @@ export function CorrectionBanner({ correctedQuery, originalQuery, onSearchOrigin
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: 2,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+    marginTop: spacing.sm,
   },
-  label: {
-    fontSize: 13,
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  bold: {
+    fontWeight: '600',
   },
   link: {
-    fontSize: 13,
+    textDecorationLine: 'underline',
+    marginLeft: 22, // aligned with text after the info icon
   },
 });

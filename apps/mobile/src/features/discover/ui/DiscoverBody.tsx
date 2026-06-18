@@ -88,7 +88,7 @@ export function DiscoverBody({
       <View testID="discover-zero-results" style={styles.center}>
         <Text variant="title">No matches</Text>
         <Text variant="label" tone="secondary" style={styles.centerSub}>
-          Try a different search.
+          Check spelling or try fewer words.
         </Text>
       </View>
     );

@@ -39,12 +39,22 @@ const webStorage = typeof window !== 'undefined' && window.localStorage != null
       removeItem: (_key: string): Promise<void> => Promise.resolve(),
     };
 
+// AIDEV-NOTE: keychainAccessible = AFTER_FIRST_UNLOCK lets the Supabase SDK
+// read tokens when the app wakes from background while the device is locked.
+// The default (WHEN_UNLOCKED) causes "User interaction is not allowed" on the
+// auto-refresh tick. getItem catches that error for tokens stored before this
+// change — the SDK treats null as "no session" and re-authenticates.
+const KEYCHAIN_OPTS = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
+
 const secureStoreAdapter = Platform.OS === 'web'
   ? webStorage
   : {
-      getItem: (key: string): Promise<string | null> => SecureStore.getItemAsync(key),
-      setItem: (key: string, value: string): Promise<void> => SecureStore.setItemAsync(key, value),
-      removeItem: (key: string): Promise<void> => SecureStore.deleteItemAsync(key),
+      getItem: (key: string): Promise<string | null> =>
+        SecureStore.getItemAsync(key, KEYCHAIN_OPTS).catch(() => null),
+      setItem: (key: string, value: string): Promise<void> =>
+        SecureStore.setItemAsync(key, value, KEYCHAIN_OPTS),
+      removeItem: (key: string): Promise<void> =>
+        SecureStore.deleteItemAsync(key, KEYCHAIN_OPTS),
     };
 
 export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {

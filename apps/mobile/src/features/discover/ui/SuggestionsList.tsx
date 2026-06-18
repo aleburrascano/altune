@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, View } from 'react-native';
+import { Search } from 'lucide-react-native';
 
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme/useTheme';
@@ -18,20 +19,27 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: color.surface1, borderColor: color.border }]}>
+    <View style={[styles.container, { backgroundColor: color.surface1 }]}>
       {suggestions.map((s, i) => (
         <Pressable
           key={`${s.text}-${i}`}
-          style={[styles.row, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border }]}
+          style={({ pressed }) => [
+            styles.row,
+            i > 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border } : null,
+            pressed ? { opacity: 0.7 } : null,
+          ]}
           onPress={() => onSelect(s.text)}
           accessibilityRole="button"
-          accessibilityLabel={`Suggestion: ${s.text}`}
+          accessibilityLabel={`${s.text}, ${s.kind}`}
         >
-          <Text style={[styles.kindLabel, { color: color.textTertiary }]}>
-            {s.kind}
-          </Text>
-          <Text style={[styles.text, { color: color.textPrimary }]} numberOfLines={1}>
+          <View style={[styles.iconWrap, { backgroundColor: color.surface2 }]}>
+            <Search size={14} color={color.textTertiary} />
+          </View>
+          <Text variant="body" numberOfLines={1} style={styles.text}>
             {s.text}
+          </Text>
+          <Text variant="caption" tone="tertiary">
+            {s.kind}
           </Text>
         </Pressable>
       ))}
@@ -41,27 +49,26 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.lg,
     overflow: 'hidden',
-    marginHorizontal: spacing.md,
-    marginTop: spacing.xs,
+    marginTop: spacing.sm,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
     minHeight: 44,
   },
-  kindLabel: {
-    fontSize: 11,
-    textTransform: 'uppercase',
-    width: 48,
+  iconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   text: {
     flex: 1,
-    fontSize: 15,
   },
 });
