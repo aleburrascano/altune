@@ -25,7 +25,6 @@ import { setSearchState } from '@shared/lib/search-state';
 import { SearchBar } from './SearchBar';
 import { DiscoverBody } from './DiscoverBody';
 import { SuggestionsList } from './SuggestionsList';
-import { CorrectionBanner } from './CorrectionBanner';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { useAutocompleteSuggestions } from '../hooks/useAutocompleteSuggestions';
@@ -47,7 +46,7 @@ export function DiscoverScreen(): ReactElement {
   const search = useDebouncedSearch({ debounceMs: 300, minChars: 2 });
   const [filter, setFilter] = useState<ResultsFilter>('all');
   const queryClient = useQueryClient();
-  const { data: searchData, isLoading: isSearching, error: searchError } = useDiscoverSearch(search.committedQuery);
+  const { data: searchData, isLoading: isSearching, error: searchError, refetch } = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
   const suggestions = useAutocompleteSuggestions(search.inputValue);
   const history = useSearchHistory();
   const click = useRecordClick();
@@ -85,7 +84,11 @@ export function DiscoverScreen(): ReactElement {
   const onHistoryTap = (item: SearchHistoryItem): void => {
     search.setQuery(item.query);
   };
+  const onClearHistory = (): void => {
+    queryClient.setQueryData(['discovery', 'history'], { items: [] });
+  };
   const onResultTap = (result: DiscoveryResult, position: number): void => {
+    Keyboard.dismiss();
     click.mutate({
       query_norm: searchData?.query_norm ?? search.committedQuery,
       kind: result.kind,
@@ -117,9 +120,6 @@ export function DiscoverScreen(): ReactElement {
     <Screen>
       <Pressable onPress={Keyboard.dismiss} style={styles.flex}>
       <View style={styles.titleBlock}>
-        <Text variant="label" tone="tertiary">
-          {_greeting()}
-        </Text>
         <Text variant="displayL" style={styles.title}>
           Discover
         </Text>
@@ -131,21 +131,18 @@ export function DiscoverScreen(): ReactElement {
         onClear={search.onClear}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
+        focused={isFocused}
+        pending={search.inputValue.trim().length >= 2 && search.inputValue.trim() !== search.committedQuery}
+        suggestionsOpen={showSuggestions}
         theme={theme}
-      />
-      {showSuggestions && (
-        <SuggestionsList
-          suggestions={suggestions.data!.suggestions}
-          onSelect={onSuggestionSelect}
-        />
-      )}
-      {searchData?.corrected_query && searchData.original_query && (
-        <CorrectionBanner
-          correctedQuery={searchData.corrected_query}
-          originalQuery={searchData.original_query}
-          onSearchOriginal={onSearchOriginal}
-        />
-      )}
+      >
+        {showSuggestions && (
+          <SuggestionsList
+            suggestions={suggestions.data!.suggestions}
+            onSelect={onSuggestionSelect}
+          />
+        )}
+      </SearchBar>
       <DiscoverBody
         view={view}
         searchData={searchData}
@@ -155,22 +152,16 @@ export function DiscoverScreen(): ReactElement {
         onHistoryTap={onHistoryTap}
         onResultTap={onResultTap}
         onRetry={onRetry}
+        onRefresh={() => { void refetch(); }}
+        isRefreshing={isSearching && searchData !== undefined}
+        correctedQuery={searchData?.corrected_query}
+        originalQuery={searchData?.original_query}
+        onSearchOriginal={onSearchOriginal}
+        onClearHistory={onClearHistory}
       />
       </Pressable>
     </Screen>
   );
-}
-
-/** Time-of-day greeting above the Discover title. */
-function _greeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) {
-    return 'Good morning';
-  }
-  if (hour < 18) {
-    return 'Good afternoon';
-  }
-  return 'Good evening';
 }
 
 const styles = StyleSheet.create({

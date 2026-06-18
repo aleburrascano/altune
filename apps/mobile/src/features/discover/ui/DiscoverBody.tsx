@@ -1,14 +1,15 @@
 import type { ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Search } from 'lucide-react-native';
 
 import {
   Button,
-  Card,
   Chip,
   Skeleton,
   Text,
   radius,
   spacing,
+  useTheme,
 } from '@shared/ui';
 
 import { BlendedSection } from './BlendedSection';
@@ -41,6 +42,12 @@ interface DiscoverBodyProps {
   onHistoryTap: (item: SearchHistoryItem) => void;
   onResultTap: (result: DiscoveryResult, position: number) => void;
   onRetry: () => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+  correctedQuery?: string | undefined;
+  originalQuery?: string | undefined;
+  onSearchOriginal: () => void;
+  onClearHistory?: (() => void) | undefined;
 }
 
 export function DiscoverBody({
@@ -52,20 +59,26 @@ export function DiscoverBody({
   onHistoryTap,
   onResultTap,
   onRetry,
+  onRefresh,
+  isRefreshing,
+  correctedQuery,
+  originalQuery,
+  onSearchOriginal,
+  onClearHistory,
 }: DiscoverBodyProps): ReactElement {
+  const theme = useTheme();
+
   if (view === 'loading') {
     return (
       <View testID="discover-loading" style={styles.list}>
         {SKELETON_ROWS.map((i) => (
-          <Card key={i} style={styles.skeletonCard}>
-            <View style={styles.skeletonRow}>
-              <Skeleton width={52} height={52} radius={radius.md} />
-              <View style={styles.skeletonText}>
-                <Skeleton width="70%" height={14} />
-                <Skeleton width="40%" height={12} />
-              </View>
+          <View key={i} style={styles.skeletonRow}>
+            <Skeleton width={56} height={56} radius={radius.md} />
+            <View style={styles.skeletonText}>
+              <Skeleton width="70%" height={14} />
+              <Skeleton width="40%" height={12} />
             </View>
-          </Card>
+          </View>
         ))}
       </View>
     );
@@ -85,11 +98,14 @@ export function DiscoverBody({
 
   if (view === 'zero-results') {
     return (
-      <View testID="discover-zero-results" style={styles.center}>
-        <Text variant="title">No matches</Text>
-        <Text variant="label" tone="secondary" style={styles.centerSub}>
-          Check spelling or try fewer words.
-        </Text>
+      <View testID="discover-zero-results" style={styles.zeroResults}>
+        <FilterChips active={filter} onSelect={onFilterChange} />
+        <View style={styles.center}>
+          <Text variant="title">No matches</Text>
+          <Text variant="label" tone="secondary" style={styles.centerSub}>
+            Check spelling or try fewer words.
+          </Text>
+        </View>
       </View>
     );
   }
@@ -98,14 +114,31 @@ export function DiscoverBody({
     const items = history.data?.items ?? [];
     return (
       <View testID="discover-empty-no-query" style={styles.list}>
-        <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
-          RECENT SEARCHES
-        </Text>
         {items.length === 0 ? (
-          <Text variant="body" tone="secondary">
-            Search music to get started.
-          </Text>
+          <View style={styles.emptyCenter}>
+            <Search size={32} color={theme.color.textTertiary} />
+            <Text variant="body" tone="secondary" style={styles.emptyText}>
+              Search music to get started.
+            </Text>
+          </View>
         ) : (
+          <>
+          <View style={styles.historyHeader}>
+            <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
+              RECENT SEARCHES
+            </Text>
+            {onClearHistory != null ? (
+              <Pressable
+                onPress={onClearHistory}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search history"
+                hitSlop={8}
+                style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
+              >
+                <Text variant="caption" tone="accent">Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <View style={styles.chipCloud}>
             {items.map((item, index) => (
               <Chip
@@ -116,6 +149,7 @@ export function DiscoverBody({
               />
             ))}
           </View>
+          </>
         )}
       </View>
     );
@@ -131,9 +165,23 @@ export function DiscoverBody({
           results={results}
           onResultTap={onResultTap}
           onSeeAll={onFilterChange}
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
+          correctedQuery={correctedQuery}
+          originalQuery={originalQuery}
+          onSearchOriginal={onSearchOriginal}
         />
       ) : (
-        <FilteredResults kind={filter} results={results} onResultTap={onResultTap} />
+        <FilteredResults
+          kind={filter}
+          results={results}
+          onResultTap={onResultTap}
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
+          correctedQuery={correctedQuery}
+          originalQuery={originalQuery}
+          onSearchOriginal={onSearchOriginal}
+        />
       )}
     </View>
   );
@@ -164,10 +212,22 @@ function FilterChips({
 const styles = StyleSheet.create({
   list: { flex: 1, paddingTop: spacing.sm },
   results: { flex: 1 },
-  skeletonCard: { marginBottom: spacing.sm },
-  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  zeroResults: { flex: 1 },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
   skeletonText: { flex: 1, gap: spacing.sm },
-  sectionHeader: { marginBottom: spacing.md, letterSpacing: 1 },
+  sectionHeader: { letterSpacing: 1 },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
   chipRow: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -177,4 +237,6 @@ const styles = StyleSheet.create({
   chipCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
   centerSub: { marginTop: spacing.xs, marginBottom: spacing.lg },
+  emptyCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  emptyText: { textAlign: 'center' },
 });

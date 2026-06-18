@@ -19,7 +19,7 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: color.surface1 }]}>
+    <View style={[styles.container, { backgroundColor: color.surface1, borderTopColor: color.border }]}>
       {suggestions.map((s, i) => (
         <Pressable
           key={`${s.text}-${i}`}
@@ -49,9 +49,16 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: radius.lg,
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    borderBottomLeftRadius: radius.md,
+    borderBottomRightRadius: radius.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    marginTop: spacing.sm,
+    maxHeight: 5 * 44,
+    zIndex: 20,
   },
   row: {
     flexDirection: 'row',

@@ -26,12 +26,12 @@ export function TopResultCard({
         accessibilityLabel={`${result.title}${result.subtitle ? `, ${result.subtitle}` : ''}, ${kindLabel}`}
         style={({ pressed }) => (pressed ? styles.pressed : null)}
       >
-        <Card>
+        <Card surface="surface2" style={styles.topCard}>
           <Row
             leading={
               <Artwork
                 uri={result.image_url}
-                size={88}
+                size={96}
                 radius={isArtist ? radius.full : radius.lg}
                 accessibilityLabel={result.title}
               />
@@ -61,5 +61,6 @@ const styles = StyleSheet.create({
   topResultWrap: { marginBottom: spacing.lg },
   sectionHeader: { marginBottom: spacing.md, letterSpacing: 1 },
   pressed: { opacity: 0.85 },
+  topCard: { paddingVertical: spacing.xl },
   subtext: { marginTop: spacing.xs },
 });

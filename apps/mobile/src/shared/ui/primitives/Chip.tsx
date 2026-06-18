@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 import { radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
@@ -25,12 +26,12 @@ export function Chip({ label, onPress, selected = false, icon, testID }: ChipPro
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.lg,
         borderRadius: radius.full,
-        backgroundColor: selected ? theme.color.accentTint : theme.color.surface2,
+        backgroundColor: selected ? theme.color.accent : theme.color.surface2,
         minHeight: 44,
       }}
     >
       {icon != null ? icon : null}
-      <Text variant="label" tone={selected ? 'accent' : 'secondary'}>
+      <Text variant="label" tone={selected ? 'onAccent' : 'secondary'}>
         {label}
       </Text>
     </View>
@@ -40,7 +41,7 @@ export function Chip({ label, onPress, selected = false, icon, testID }: ChipPro
     return (
       <Pressable
         testID={testID}
-        onPress={onPress}
+        onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(); }}
         accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityState={{ selected }}
