@@ -29,6 +29,9 @@ export function useSession(): SessionState {
       setState(
         data.session ? { status: 'signed-in', session: data.session } : { status: 'signed-out' },
       );
+    }).catch(() => {
+      // Stale or revoked refresh token — redirect to sign-in.
+      if (active) setState({ status: 'signed-out' });
     });
 
     // Subsequent updates — any SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED event.

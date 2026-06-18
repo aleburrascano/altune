@@ -40,9 +40,14 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   // Bearer injection (ADR-0006). The SDK keeps the current session in-memory
   // after restore from secure-store, so getSession is fast and synchronous-
   // looking. If no session, we omit the header entirely (backend returns 401).
-  const { data } = await supabase.auth.getSession();
-  if (data.session?.access_token) {
-    baseHeaders.Authorization = `Bearer ${data.session.access_token}`;
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) {
+      baseHeaders.Authorization = `Bearer ${data.session.access_token}`;
+    }
+  } catch {
+    // Stale refresh token — proceed without auth; backend returns 401,
+    // and the AuthGate redirect will handle sign-in.
   }
 
   const headers = {

@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { X } from 'lucide-react-native';
 
-import { Text, fontFamily, radius, spacing, typography } from '@shared/ui';
+import { fontFamily, radius, spacing, typography } from '@shared/ui';
 
 interface SearchBarTheme {
   color: {
@@ -60,9 +61,7 @@ export function SearchBar({
             style={({ pressed }) => [styles.clearButton, pressed ? { opacity: 0.5 } : null]}
             hitSlop={8}
           >
-            <Text variant="label" tone="secondary" style={styles.clearIcon}>
-              ✕
-            </Text>
+            <X size={16} color={theme.color.textTertiary} />
           </Pressable>
         ) : null}
       </View>
@@ -84,11 +83,10 @@ const styles = StyleSheet.create({
   clearButton: {
     position: 'absolute',
     right: spacing.md,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  clearIcon: { fontSize: typography.caption.fontSize },
 });

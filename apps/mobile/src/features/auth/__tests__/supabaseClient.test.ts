@@ -16,6 +16,7 @@ jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
   setItemAsync: jest.fn(async () => undefined),
   deleteItemAsync: jest.fn(async () => undefined),
+  AFTER_FIRST_UNLOCK: 'afterFirstUnlock',
 }));
 
 const mockCreateClient = jest.fn((..._args: unknown[]) => ({ auth: {} }));
@@ -47,9 +48,10 @@ describe('supabaseClient', () => {
     void adapter.setItem('k', 'v');
     void adapter.removeItem('k');
 
-    expect(SecureStore.getItemAsync).toHaveBeenCalledWith('k');
-    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('k', 'v');
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('k');
+    const opts = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
+    expect(SecureStore.getItemAsync).toHaveBeenCalledWith('k', opts);
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('k', 'v', opts);
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('k', opts);
   });
 
   it('configures persistSession and autoRefreshToken', () => {
