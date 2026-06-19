@@ -644,6 +644,64 @@ func TestIdentityResolver_skips_r2_after_consecutive_mb_errors(t *testing.T) {
 	assert.Equal(t, 5, itunesCallCount, "iTunes should be called for all 5 albums")
 }
 
+func TestIdentityResolver_pass2_enriches_isrc_from_itunes_confirmed(t *testing.T) {
+	// MB is down — no confirmed albums from BuildProfile, ISRC set empty
+	// iTunes confirms 2 albums in pass 1
+	// Pass 2 samples ISRCs from those, catches contamination album
+	itunes := &fakeITunesLookup{
+		lookupAlbumFn: func(_ context.Context, albumTitle, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
+			switch albumTitle {
+			case "Real Album A", "Real Album B":
+				return domain.AlbumVerdictConfirmed, nil
+			}
+			return domain.AlbumVerdictUnknown, nil
+		},
+	}
+
+	isrcByAlbum := map[string]string{
+		"dz-real-a":    "QZJ842503215", // registrant J842
+		"dz-real-b":    "QZJ842600001", // registrant J842
+		"dz-contam":    "CHXX99070654", // registrant XX99 — different
+		"dz-also-real": "QZJ842700002", // registrant J842 — same
+	}
+	isrcFetcher := &fakeISRCFetcher{
+		fetchFirstTrackIDFn: func(_ context.Context, albumID string) (string, error) {
+			return "track-" + albumID, nil
+		},
+		fetchTrackISRCFn: func(_ context.Context, trackID string) (string, error) {
+			albumID := trackID[len("track-"):]
+			if isrc, ok := isrcByAlbum[albumID]; ok {
+				return isrc, nil
+			}
+			return "", nil
+		},
+	}
+
+	svc := NewIdentityResolverService(WithITunesLookup(itunes), WithISRCFetcher(isrcFetcher))
+	profile := testProfile("", 0) // no MBID, no confirmed albums
+
+	albums := []domain.SearchResult{
+		{Title: "Real Album A", Kind: domain.ResultKindAlbum, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "dz-real-a"}}},
+		{Title: "Real Album B", Kind: domain.ResultKindAlbum, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "dz-real-b"}}},
+		{Title: "Contamination", Kind: domain.ResultKindAlbum, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "dz-contam"}}},
+		{Title: "Also Real", Kind: domain.ResultKindAlbum, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "dz-also-real"}}},
+	}
+
+	resolutions := svc.Resolve(context.Background(), "TestArtist", profile, albums)
+
+	require.Len(t, resolutions, 4)
+
+	verdicts := map[string]domain.AlbumVerdict{}
+	for _, r := range resolutions {
+		verdicts[r.Album.Title] = r.Verdict
+	}
+
+	assert.Equal(t, domain.AlbumVerdictConfirmed, verdicts["Real Album A"], "confirmed by iTunes in pass 1")
+	assert.Equal(t, domain.AlbumVerdictConfirmed, verdicts["Real Album B"], "confirmed by iTunes in pass 1")
+	assert.Equal(t, domain.AlbumVerdictContamination, verdicts["Contamination"], "caught by ISRC in pass 2")
+	assert.Equal(t, domain.AlbumVerdictUnknown, verdicts["Also Real"], "same registrant — not flagged")
+}
+
 func TestBuildProfile_handles_nil_mb(t *testing.T) {
 	svc := NewIdentityResolverService() // no MB
 
