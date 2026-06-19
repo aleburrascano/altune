@@ -274,6 +274,12 @@ type mbRecording struct {
 }
 
 type mbArtistRef struct {
+	Name   string        `json:"name"`
+	Artist *mbArtistLink `json:"artist,omitempty"`
+}
+
+type mbArtistLink struct {
+	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
@@ -497,5 +503,91 @@ func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string
 		return nil, err
 	}
 	return body.ReleaseGroups, nil
+}
+
+// LookupAlbumArtist searches MusicBrainz for a release-group matching
+// albumTitle by artistName and checks whether it is credited to the
+// artist described by profile. Returns the verdict, the credited MBID
+// (if found), and any error.
+func (a *MusicBrainzAdapter) LookupAlbumArtist(
+	ctx context.Context,
+	artistName, albumTitle string,
+	profile domain.ArtistIdentityProfile,
+) (domain.AlbumVerdict, string, error) {
+	q := fmt.Sprintf(`release-group:"%s" AND artist:"%s"`, albumTitle, artistName)
+	u := fmt.Sprintf(
+		"https://musicbrainz.org/ws/2/release-group/?query=%s&fmt=json&limit=5",
+		url.QueryEscape(q),
+	)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return domain.AlbumVerdictUnknown, "", nil
+	}
+	req.Header.Set("User-Agent", a.userAgent)
+	req.Header.Set("Accept", "application/json")
+	a.rateLimit()
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		slog.DebugContext(ctx, "mb.lookup_album_artist_http_error",
+			"artist", artistName, "album", albumTitle, "error", err)
+		return domain.AlbumVerdictUnknown, "", nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		slog.DebugContext(ctx, "mb.lookup_album_artist_status",
+			"artist", artistName, "album", albumTitle, "status", resp.StatusCode)
+		return domain.AlbumVerdictUnknown, "", nil
+	}
+
+	var body mbReleaseGroupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		slog.DebugContext(ctx, "mb.lookup_album_artist_decode_error",
+			"artist", artistName, "album", albumTitle, "error", err)
+		return domain.AlbumVerdictUnknown, "", nil
+	}
+
+	titleNorm := textnorm.NormalizeForMatch(albumTitle)
+	for _, rg := range body.ReleaseGroups {
+		if textnorm.NormalizeForMatch(rg.Title) != titleNorm {
+			continue
+		}
+		creditedMBID := extractCreditedMBID(rg)
+		if creditedMBID == "" {
+			continue
+		}
+		if profile.MBID != "" {
+			if creditedMBID == profile.MBID {
+				slog.DebugContext(ctx, "mb.lookup_album_artist_confirmed",
+					"artist", artistName, "album", albumTitle, "mbid", creditedMBID)
+				return domain.AlbumVerdictConfirmed, creditedMBID, nil
+			}
+			slog.DebugContext(ctx, "mb.lookup_album_artist_contamination",
+				"artist", artistName, "album", albumTitle,
+				"expected_mbid", profile.MBID, "credited_mbid", creditedMBID)
+			return domain.AlbumVerdictContamination, creditedMBID, nil
+		}
+		// No MBID on profile — return unknown with the credited MBID for
+		// upstream layers to use in secondary disambiguation.
+		slog.DebugContext(ctx, "mb.lookup_album_artist_no_profile_mbid",
+			"artist", artistName, "album", albumTitle, "credited_mbid", creditedMBID)
+		return domain.AlbumVerdictUnknown, creditedMBID, nil
+	}
+
+	slog.DebugContext(ctx, "mb.lookup_album_artist_no_match",
+		"artist", artistName, "album", albumTitle)
+	return domain.AlbumVerdictUnknown, "", nil
+}
+
+func extractCreditedMBID(rg mbReleaseGroup) string {
+	if len(rg.ArtistCredit) == 0 {
+		return ""
+	}
+	if rg.ArtistCredit[0].Artist == nil {
+		return ""
+	}
+	return rg.ArtistCredit[0].Artist.ID
 }
 

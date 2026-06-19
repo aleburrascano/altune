@@ -10,6 +10,15 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
+// mbReleaseGroupJSON returns a release-group JSON object for test fixtures.
+func mbReleaseGroupJSON(rgID, title, artistName, artistMBID string) string {
+	return `{
+		"id": "` + rgID + `",
+		"title": "` + title + `",
+		"artist-credit": [{"name": "` + artistName + `", "artist": {"id": "` + artistMBID + `", "name": "` + artistName + `"}}]
+	}`
+}
+
 func TestMusicBrainzAdapter_Search_Recordings(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/ws/2/recording") {
@@ -232,4 +241,143 @@ func TestMusicBrainzAdapter_Search_HTTPError(t *testing.T) {
 	if len(results) != 0 {
 		t.Errorf("expected 0 results on HTTP 500, got %d", len(results))
 	}
+}
+
+func TestMusicBrainzAdapter_LookupAlbumArtist(t *testing.T) {
+	const (
+		artistMBID    = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
+		differentMBID = "ffffffff-aaaa-bbbb-cccc-000000000000"
+	)
+
+	t.Run("album found, credited to same mbid - confirmed", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"release-groups": [` +
+				mbReleaseGroupJSON("rg-001", "OK Computer", "Radiohead", artistMBID) +
+				`]}`))
+		}))
+		defer server.Close()
+
+		adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+		profile := domain.NewArtistIdentityProfile()
+		profile.MBID = artistMBID
+
+		verdict, creditedMBID, err := adapter.LookupAlbumArtist(
+			context.Background(), "Radiohead", "OK Computer", profile,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if verdict != domain.AlbumVerdictConfirmed {
+			t.Errorf("verdict: got %v, want confirmed", verdict)
+		}
+		if creditedMBID != artistMBID {
+			t.Errorf("creditedMBID: got %q, want %q", creditedMBID, artistMBID)
+		}
+	})
+
+	t.Run("album found, credited to different mbid - contamination", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"release-groups": [` +
+				mbReleaseGroupJSON("rg-002", "OK Computer", "Some Other Artist", differentMBID) +
+				`]}`))
+		}))
+		defer server.Close()
+
+		adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+		profile := domain.NewArtistIdentityProfile()
+		profile.MBID = artistMBID
+
+		verdict, creditedMBID, err := adapter.LookupAlbumArtist(
+			context.Background(), "Some Other Artist", "OK Computer", profile,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if verdict != domain.AlbumVerdictContamination {
+			t.Errorf("verdict: got %v, want contamination", verdict)
+		}
+		if creditedMBID != differentMBID {
+			t.Errorf("creditedMBID: got %q, want %q", creditedMBID, differentMBID)
+		}
+	})
+
+	t.Run("no mb results - unknown", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"release-groups": []}`))
+		}))
+		defer server.Close()
+
+		adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+		profile := domain.NewArtistIdentityProfile()
+		profile.MBID = artistMBID
+
+		verdict, creditedMBID, err := adapter.LookupAlbumArtist(
+			context.Background(), "Radiohead", "Nonexistent Album", profile,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if verdict != domain.AlbumVerdictUnknown {
+			t.Errorf("verdict: got %v, want unknown", verdict)
+		}
+		if creditedMBID != "" {
+			t.Errorf("creditedMBID: got %q, want empty", creditedMBID)
+		}
+	})
+
+	t.Run("mb returns error - unknown (graceful degradation)", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+		profile := domain.NewArtistIdentityProfile()
+		profile.MBID = artistMBID
+
+		verdict, creditedMBID, err := adapter.LookupAlbumArtist(
+			context.Background(), "Radiohead", "OK Computer", profile,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if verdict != domain.AlbumVerdictUnknown {
+			t.Errorf("verdict: got %v, want unknown", verdict)
+		}
+		if creditedMBID != "" {
+			t.Errorf("creditedMBID: got %q, want empty", creditedMBID)
+		}
+	})
+
+	t.Run("multiple results, title match selects correct one", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"release-groups": [` +
+				mbReleaseGroupJSON("rg-wrong", "Kid A", "Radiohead", differentMBID) + `,` +
+				mbReleaseGroupJSON("rg-right", "OK Computer", "Radiohead", artistMBID) + `,` +
+				mbReleaseGroupJSON("rg-extra", "The Bends", "Radiohead", artistMBID) +
+				`]}`))
+		}))
+		defer server.Close()
+
+		adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+		profile := domain.NewArtistIdentityProfile()
+		profile.MBID = artistMBID
+
+		verdict, creditedMBID, err := adapter.LookupAlbumArtist(
+			context.Background(), "Radiohead", "OK Computer", profile,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if verdict != domain.AlbumVerdictConfirmed {
+			t.Errorf("verdict: got %v, want confirmed", verdict)
+		}
+		if creditedMBID != artistMBID {
+			t.Errorf("creditedMBID: got %q, want %q", creditedMBID, artistMBID)
+		}
+	})
 }
