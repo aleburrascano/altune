@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
+var ErrTrackAlreadyInPlaylist = errors.New("track already in playlist")
+
 type ValidationError struct {
 	Message string
 }
@@ -80,7 +82,7 @@ func (p *Playlist) Rename(name string) error {
 func (p *Playlist) AddTrack(trackId TrackId) error {
 	for _, t := range p.Tracks {
 		if t.TrackId == trackId {
-			return errors.New("track already in playlist")
+			return ErrTrackAlreadyInPlaylist
 		}
 	}
 	p.Tracks = append(p.Tracks, PlaylistTrack{

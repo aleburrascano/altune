@@ -644,11 +644,11 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 			setup: func(plRepo *mockPlaylistRepo, trRepo *mockTrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
-				// Add the track to the playlist domain object so AddTrack detects duplicate
 				_ = pl.AddTrack(track.ID)
 				return pl.ID, track.ID
 			},
 			wantAdded: false,
+			wantErr:   domain.ErrTrackAlreadyInPlaylist,
 		},
 		{
 			name: "repo error propagates",

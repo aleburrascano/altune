@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -49,6 +50,7 @@ func (h *TrackHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.handleListTracks)
 	r.Post("/", h.handleCreateTrack)
+	r.Get("/{trackId}/status", h.handleGetTrackStatus)
 	r.Delete("/{trackId}", h.handleDeleteTrack)
 	return r
 }
@@ -219,6 +221,42 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	httputil.WriteJSON(w, status, trackToResponse(result.Track))
 }
 
+type TrackStatusResponse struct {
+	ID                uuid.UUID `json:"id"`
+	AcquisitionStatus string    `json:"acquisition_status"`
+	FailureReason     *string   `json:"failure_reason,omitempty"`
+}
+
+func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
+	if err != nil {
+		httputil.BadRequest(w, "invalid track ID")
+		return
+	}
+
+	track, err := h.listTracks.GetByID(r.Context(), userId, trackId)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "get track status failed", "error", err)
+		httputil.InternalError(w)
+		return
+	}
+	if track == nil {
+		httputil.NotFound(w, "track not found")
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, TrackStatusResponse{
+		ID:                track.ID.UUID(),
+		AcquisitionStatus: track.AcquisitionStatus.String(),
+		FailureReason:     track.FailureReason,
+	})
+}
+
 func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
@@ -237,7 +275,7 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 
 	err = h.deleteTrack.Execute(r.Context(), userId, trackId)
 	if err != nil {
-		if err == service.ErrTrackNotFound {
+		if errors.Is(err, service.ErrTrackNotFound) {
 			httputil.NotFound(w, "track not found")
 			return
 		}

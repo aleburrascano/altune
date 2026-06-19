@@ -44,18 +44,24 @@ flowchart TD
         COLLAPSE --> POP_DOM["ApplyPopularityDominance\n(cross-kind top-5 check)"]
         POP_DOM --> DIVERSITY["EnforceDiversity\n(max 3 per artist in top 10)"]
 
-        DIVERSITY --> ENRICH["Enrich top 25\n(artwork + popularity)"]
+        DIVERSITY --> ENRICH["Enrich top 50\n(artwork + popularity)"]
         ENRICH --> RERANK["Rerank\n(same key minus quality)"]
 
         RERANK --> ZERO{zero results?}
         ZERO -->|yes| CORRECT["CorrectionService\n(trigram + phonetic vs vocabulary)"]
         CORRECT -->|corrected query| SCATTER
         CORRECT -->|no match| ZERO_RESP["Return empty + no correction"]
-        ZERO -->|no| LIMIT["Limit to user's count"]
+        ZERO -->|no| RELATED["FindRelatedService\n(top 5 results, 2s timeout)"]
+
+        RELATED -->|parallel| LOCAL_DB["Local DB\n(cross-user album/artist match)"]
+        RELATED -->|parallel| DZ_ALBUM["Deezer album tracks\n(via deezer_album_id)"]
+        RELATED -->|parallel| DZ_ARTIST["Deezer artist albums\n(via deezer source ID)"]
+
+        RELATED --> LIMIT["Limit to user's count"]
 
         LIMIT --> HISTORY_SAVE["Save search history"]
         LIMIT --> VOCAB_INGEST["Ingest to vocabulary\n(top 5 + separate artist entries)"]
-        LIMIT --> RESPONSE["Return SearchOutput\n(+ corrected_query if applicable)"]
+        LIMIT --> RESPONSE["Return SearchOutput\n(results + related groups)"]
     end
 
     subgraph "Providers (adapters/providers/)"
@@ -113,11 +119,11 @@ After enrichment, `Rerank` uses the same key minus quality score.
 ```
 internal/discovery/
 ├── domain/
-│   ├── types.go              # SearchResult, SearchQuery, SourceRef, enums
+│   ├── types.go              # SearchResult, SearchQuery, SourceRef, RelatedGroup, enums
 │   ├── events.go             # SearchPerformed, ResultClicked
 │   └── vocabulary.go         # VocabularyEntry
 ├── ports/
-│   └── ports.go              # 12 port interfaces (SearchProvider, VocabularyStore, etc.)
+│   └── ports.go              # 14 port interfaces (SearchProvider, VocabularyStore, RelationshipQuerier, etc.)
 ├── service/
 │   ├── search_music.go       # SearchMusicService — main orchestrator
 │   ├── dedup.go              # FuseAndRank, Rerank, CollapseVersions, PopularityDominance, Diversity
@@ -134,6 +140,7 @@ internal/discovery/
 │   ├── circuit_breaker.go    # Per-provider circuit breaker
 │   ├── record_click.go       # RecordClickService
 │   ├── list_history.go       # ListSearchHistoryService
+│   ├── find_related.go       # FindRelatedService — entity relationship enrichment (album↔track, artist↔album)
 │   ├── get_album_tracks.go   # Album content fetch
 │   ├── get_artist_content.go # Artist top-tracks/albums fetch
 │   └── url_router.go         # URL-paste provider detection
@@ -144,7 +151,7 @@ internal/discovery/
     │   ├── deezer.go         # Search + Charts + Artwork + Content
     │   ├── lastfm.go         # Search + Charts
     │   ├── musicbrainz.go    # Search (recordings, artists, releases)
-    │   ├── itunes.go         # Search
+    │   ├── itunes.go         # Search + Artwork
     │   ├── soundcloud.go     # Search via yt-dlp
     │   ├── theaudiodb.go     # Search (artists) + Artwork
     │   ├── genius.go         # Artwork

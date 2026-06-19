@@ -123,6 +123,7 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	playlists, err := h.svc.List(r.Context(), userId)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "list playlists failed", "error", err)
 		httputil.InternalError(w)
 		return
 	}
@@ -158,10 +159,11 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	playlist, tracks, err := h.svc.Get(r.Context(), userId, playlistId)
 	if err != nil {
-		if err == service.ErrPlaylistNotFound {
+		if errors.Is(err, service.ErrPlaylistNotFound) {
 			httputil.NotFound(w, "playlist not found")
 			return
 		}
+		slog.ErrorContext(r.Context(), "get playlist failed", "error", err, "playlist_id", playlistId.String())
 		httputil.InternalError(w)
 		return
 	}
@@ -209,7 +211,7 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Rename(r.Context(), userId, playlistId, req.Name); err != nil {
-		if err == service.ErrPlaylistNotFound {
+		if errors.Is(err, service.ErrPlaylistNotFound) {
 			httputil.NotFound(w, "playlist not found")
 			return
 		}
@@ -251,10 +253,11 @@ func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Delete(r.Context(), userId, playlistId); err != nil {
-		if err == service.ErrPlaylistNotFound {
+		if errors.Is(err, service.ErrPlaylistNotFound) {
 			httputil.NotFound(w, "playlist not found")
 			return
 		}
+		slog.ErrorContext(r.Context(), "delete playlist failed", "error", err, "playlist_id", playlistId.String())
 		httputil.InternalError(w)
 		return
 	}
@@ -282,10 +285,16 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 	trackId := domain.TrackIdFromUUID(req.TrackID)
 	added, err := h.svc.AddTrack(r.Context(), userId, playlistId, trackId)
 	if err != nil {
-		if err == service.ErrPlaylistNotFound || err == service.ErrTrackNotFound {
+		if errors.Is(err, service.ErrPlaylistNotFound) || errors.Is(err, service.ErrTrackNotFound) {
 			httputil.NotFound(w, err.Error())
 			return
 		}
+		if errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
+			httputil.Conflict(w, "track already in playlist")
+			return
+		}
+		slog.ErrorContext(r.Context(), "add track to playlist failed",
+			"error", err, "playlist_id", playlistId.String(), "track_id", trackId.String())
 		httputil.InternalError(w)
 		return
 	}
@@ -316,10 +325,12 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 
 	_, err = h.svc.RemoveTrack(r.Context(), userId, playlistId, trackId)
 	if err != nil {
-		if err == service.ErrPlaylistNotFound {
+		if errors.Is(err, service.ErrPlaylistNotFound) {
 			httputil.NotFound(w, "playlist not found")
 			return
 		}
+		slog.ErrorContext(r.Context(), "remove track from playlist failed",
+			"error", err, "playlist_id", playlistId.String(), "track_id", trackId.String())
 		httputil.InternalError(w)
 		return
 	}

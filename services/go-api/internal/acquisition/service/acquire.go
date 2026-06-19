@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
@@ -31,6 +32,9 @@ func NewAcquireTrackAudioService(
 }
 
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if err != nil {
 		return fmt.Errorf("get track: %w", err)
@@ -110,11 +114,22 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 
 func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) {
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
-	if err != nil || track == nil {
+	if err != nil {
+		slog.ErrorContext(ctx, "mark_failed: get track failed",
+			"track_id", trackId.String(), "error", err)
 		return
 	}
-	if markErr := track.MarkFailed(reason); markErr == nil {
-		_ = s.trackRepo.Update(ctx, track)
+	if track == nil {
+		return
+	}
+	if markErr := track.MarkFailed(reason); markErr != nil {
+		slog.ErrorContext(ctx, "mark_failed: domain error",
+			"track_id", trackId.String(), "error", markErr)
+		return
+	}
+	if err := s.trackRepo.Update(ctx, track); err != nil {
+		slog.ErrorContext(ctx, "mark_failed: persist failed, track stuck in pending",
+			"track_id", trackId.String(), "error", err)
 	}
 }
 

@@ -110,7 +110,7 @@ func (s *PlaylistService) AddTrack(ctx context.Context, userId shared.UserId, pl
 	}
 
 	if err := playlist.AddTrack(trackId); err != nil {
-		return false, nil
+		return false, err
 	}
 
 	if err := s.playlistRepo.AddTrack(ctx, playlistId, trackId, len(playlist.Tracks)-1); err != nil {

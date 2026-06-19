@@ -40,8 +40,12 @@ func BadRequest(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusBadRequest, message)
 }
 
-func InternalError(w http.ResponseWriter) {
-	WriteError(w, http.StatusInternalServerError, "internal server error")
+func InternalError(w http.ResponseWriter, msgs ...string) {
+	msg := "internal server error"
+	if len(msgs) > 0 && msgs[0] != "" {
+		msg = msgs[0]
+	}
+	WriteError(w, http.StatusInternalServerError, msg)
 }
 
 func Conflict(w http.ResponseWriter, message string) {

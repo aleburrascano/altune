@@ -56,6 +56,7 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 		return
 	}
 
+	slog.Info("acquisition.scheduling", "track_id", key, "user_id", userId.String())
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
