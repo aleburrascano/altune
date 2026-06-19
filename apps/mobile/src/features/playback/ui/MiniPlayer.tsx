@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Pause, Play, RotateCcw } from 'lucide-react-native';
+import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react-native';
 
+import { useQueueStore } from '@shared/playback/queueStore';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { usePlayback } from '../hooks/usePlayback';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
@@ -12,6 +14,8 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 
 export function MiniPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage } = usePlayback();
+  const { skipToNext } = useQueuePlayback();
+  const showSkipNext = useQueueStore((s) => s.hasNext());
   const theme = useTheme();
   const router = useRouter();
 
@@ -93,6 +97,14 @@ export function MiniPlayer() {
           onPress={onControlPress}
           accessibilityLabel={controlLabel}
         />
+        {showSkipNext && !isPreview ? (
+          <IconButton
+            icon={SkipForward}
+            size={18}
+            onPress={skipToNext}
+            accessibilityLabel="Next track"
+          />
+        ) : null}
       </View>
     </Pressable>
   );

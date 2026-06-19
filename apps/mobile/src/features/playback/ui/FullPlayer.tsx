@@ -2,9 +2,11 @@ import { useMemo } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronDown, Pause, Play, RotateCcw, SkipBack, SkipForward } from 'lucide-react-native';
+import { ChevronDown, ListMusic, Pause, Play, Repeat, Repeat1, RotateCcw, Shuffle, SkipBack, SkipForward } from 'lucide-react-native';
 
+import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '../hooks/usePlayback';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Scrubber } from './Scrubber';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
@@ -13,10 +15,18 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-const SKIP_MS = 10_000;
+const RESTART_THRESHOLD_MS = 3_000;
 
 export function FullPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, seekTo, retry } = usePlayback();
+  const { skipToNext, skipToPrevious } = useQueuePlayback();
+  const shuffled = useQueueStore((s) => s.shuffled);
+  const repeatMode = useQueueStore((s) => s.repeatMode);
+  const toggleShuffle = useQueueStore((s) => s.toggleShuffle);
+  const cycleRepeatMode = useQueueStore((s) => s.cycleRepeatMode);
+  const hasNext = useQueueStore((s) => s.hasNext());
+  const hasPrevious = useQueueStore((s) => s.hasPrevious());
+  const queueLength = useQueueStore((s) => s.playOrder.length);
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -36,8 +46,24 @@ export function FullPlayer() {
   const isError = status === 'error';
   const isEnded = status === 'ended';
 
-  const skipBack = () => seekTo(Math.max(0, positionMs - SKIP_MS));
-  const skipForward = () => seekTo(Math.min(durationMs, positionMs + SKIP_MS));
+  const handlePrevious = () => {
+    if (positionMs > RESTART_THRESHOLD_MS) {
+      seekTo(0);
+    } else {
+      skipToPrevious();
+    }
+  };
+
+  const handlePlayPause = () => {
+    if (isEnded) {
+      seekTo(0);
+      resume();
+    } else if (isPlaying) {
+      pause();
+    } else {
+      resume();
+    }
+  };
 
   const statusLabel = isError
     ? 'Error'
@@ -46,6 +72,12 @@ export function FullPlayer() {
       : isPreview ? 'Preview' : 'Now Playing';
 
   const statusTone = isError ? 'danger' : isPreview || isEnded ? 'warning' : 'secondary';
+
+  const dimColor = theme.color.textTertiary;
+  const activeColor = theme.color.accent;
+
+  const RepeatIcon = repeatMode === 'one' ? Repeat1 : Repeat;
+  const repeatColor = repeatMode === 'off' ? dimColor : activeColor;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}>
@@ -59,7 +91,16 @@ export function FullPlayer() {
         <Text variant="caption" tone={statusTone}>
           {statusLabel}
         </Text>
-        <View style={styles.headerSpacer} />
+        {queueLength > 1 ? (
+          <IconButton
+            icon={ListMusic}
+            size={22}
+            onPress={() => router.push('/player/queue')}
+            accessibilityLabel="View queue"
+          />
+        ) : (
+          <View style={styles.headerSpacer} />
+        )}
       </View>
 
       <View style={styles.artworkContainer}>
@@ -87,28 +128,58 @@ export function FullPlayer() {
             haptic
           />
         </View>
+      ) : isPreview ? (
+        <View style={styles.controls}>
+          <View style={styles.controlSpacer} />
+          <View style={[styles.playButton, { backgroundColor: theme.color.accent }]}>
+            <IconButton
+              icon={isPlaying ? Pause : isEnded ? RotateCcw : Play}
+              size={32}
+              color={theme.color.onAccent}
+              onPress={handlePlayPause}
+              accessibilityLabel={isPlaying ? 'Pause' : isEnded ? 'Play again' : 'Play'}
+            />
+          </View>
+          <View style={styles.controlSpacer} />
+        </View>
       ) : (
         <View style={styles.controls}>
           <IconButton
+            icon={Shuffle}
+            size={20}
+            color={shuffled ? activeColor : dimColor}
+            onPress={toggleShuffle}
+            accessibilityLabel={shuffled ? 'Disable shuffle' : 'Enable shuffle'}
+          />
+          <IconButton
             icon={SkipBack}
             size={24}
-            onPress={skipBack}
-            accessibilityLabel="Skip back 10 seconds"
+            color={hasPrevious || positionMs > RESTART_THRESHOLD_MS ? theme.color.textPrimary : dimColor}
+            onPress={handlePrevious}
+            accessibilityLabel="Previous track"
           />
           <View style={[styles.playButton, { backgroundColor: theme.color.accent }]}>
             <IconButton
               icon={isPlaying ? Pause : isEnded ? RotateCcw : Play}
               size={32}
               color={theme.color.onAccent}
-              onPress={isPlaying ? pause : isEnded ? () => { seekTo(0); resume(); } : resume}
+              onPress={handlePlayPause}
               accessibilityLabel={isPlaying ? 'Pause' : isEnded ? 'Play again' : 'Play'}
             />
           </View>
           <IconButton
             icon={SkipForward}
             size={24}
-            onPress={skipForward}
-            accessibilityLabel="Skip forward 10 seconds"
+            color={hasNext ? theme.color.textPrimary : dimColor}
+            onPress={skipToNext}
+            accessibilityLabel="Next track"
+          />
+          <IconButton
+            icon={RepeatIcon}
+            size={20}
+            color={repeatColor}
+            onPress={cycleRepeatMode}
+            accessibilityLabel={`Repeat: ${repeatMode}`}
           />
         </View>
       )}
@@ -148,7 +219,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: spacing['2xl'],
-    gap: spacing['2xl'],
+    gap: spacing.xl,
+  },
+  controlSpacer: {
+    width: 44,
   },
   errorControls: {
     alignItems: 'center',

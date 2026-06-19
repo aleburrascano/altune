@@ -49,10 +49,12 @@ When `/feature-spec` or domain modeling introduces a new term:
 - **Album** — a grouping of tracks released together by an artist, surfaced as a `SearchResult` with `kind = ResultKind.ALBUM` carrying title + artist subtitle + year in `extras`. Promoted from Future to Canonical by `discover-music-v1`. Becomes its own type when a future spec needs distinct identity (e.g., track-album navigation).
 - **EntityResolutionTier** — three-level enum indicating how two search results were identified as the same entity during dedup: `mbid` (MusicBrainz ID match), `isrc` (ISRC match), `none` (unresolved — no shared identifier). Ordered: MBID > ISRC > NONE. Identifier-only merge: no text similarity, no duration matching. Defined in `services/api/src/altune/domain/discovery/entity_resolution_tier.py`. Introduced by `discovery-foundation-v1`; simplified to 3 members by `discovery-identity-v1`.
 
+- **Queue** — the runtime playback sequence: an ordered list of tracks, a current index, shuffle state, and repeat mode. Created when a user plays from a playlist, library, or search results. Client-managed; server persists a snapshot for resume-on-reopen. Defined in `apps/mobile/src/shared/playback/queueStore.ts`. Introduced by ADR-0010; promoted from Future by queue-playback-v1 feature work.
+- **RepeatMode** — three-state enum governing queue end-of-list behavior: `off` (stop at end), `all` (loop entire queue), `one` (loop current track). Defined in `apps/mobile/src/shared/playback/types.ts`. Introduced by queue-playback-v1 feature work.
+
 ### Future (illustrative — to be added when the spec that introduces them ships)
 
 - **Library** — a user's personal collection. Each user has exactly one library. The library references tracks from the catalog; it does not own them.
-- **Queue** — the runtime playback sequence. Ephemeral by default; persisted only when saved as a Playlist.
 - **Play** — the event of a track being listened to (registered at threshold, e.g., 30s or 50% of duration).
 - **Favorite** — a user-applied boolean marker on a track within their library.
 
