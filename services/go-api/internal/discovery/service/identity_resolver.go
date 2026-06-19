@@ -31,10 +31,12 @@ type isrcFetcher interface {
 	FetchFirstTrackID(ctx context.Context, albumID string) (string, error)
 }
 
-// identityCache stores and retrieves per-album identity verdicts.
+// identityCache stores and retrieves per-album identity verdicts and per-artist profiles.
 type identityCache interface {
 	GetVerdict(ctx context.Context, artistName, albumTitle string) (verdict domain.AlbumVerdict, reason, layer string, firstSeen time.Time, ok bool)
 	SetVerdict(ctx context.Context, artistName, albumTitle string, verdict domain.AlbumVerdict, reason, layer string)
+	GetProfile(ctx context.Context, artistName string) (domain.ArtistIdentityProfile, bool)
+	SetProfile(ctx context.Context, artistName string, profile domain.ArtistIdentityProfile)
 }
 
 // IdentityResolverService orchestrates R2->R3->R3b->R3c identity
@@ -48,6 +50,7 @@ type IdentityResolverService struct {
 
 	mbConsecutiveErrors  int   // reset per Resolve call; skip R2 after 3
 	mbUnreachable        bool  // set by BuildProfile when MB times out
+	mbR2CallCount        int   // reset per Resolve call; skip R2 after 10
 	itunesArtistID       int64 // first iTunes artist ID seen; 0 = unset
 }
 
@@ -78,14 +81,26 @@ func NewIdentityResolverService(opts ...IdentityResolverOption) *IdentityResolve
 }
 
 // BuildProfile assembles an ArtistIdentityProfile from MB data and
-// album extras. Call once before Resolve.
+// album extras. Returns a cached profile if available.
 func (s *IdentityResolverService) BuildProfile(
 	ctx context.Context,
 	artistName string,
 	albums []domain.SearchResult,
 ) domain.ArtistIdentityProfile {
-	profile := domain.NewArtistIdentityProfile()
 	s.mbUnreachable = false
+
+	if s.cache != nil {
+		if cached, ok := s.cache.GetProfile(ctx, artistName); ok {
+			slog.InfoContext(ctx, "identity.profile_cache_hit",
+				"artist", artistName,
+				"mbid", cached.MBID,
+				"genres", len(cached.GenreCluster),
+				"isrc_registrants", len(cached.KnownISRCRegistrants))
+			return cached
+		}
+	}
+
+	profile := domain.NewArtistIdentityProfile()
 	mbErrors := 0
 
 	// Resolve MB identity (MBID, birth year, disambiguation, area, type)
@@ -184,6 +199,10 @@ func (s *IdentityResolverService) BuildProfile(
 		"isrc_registrants", len(profile.KnownISRCRegistrants),
 	)
 
+	if s.cache != nil {
+		s.cache.SetProfile(ctx, artistName, profile)
+	}
+
 	return profile
 }
 
@@ -199,6 +218,7 @@ func (s *IdentityResolverService) Resolve(
 	albums []domain.SearchResult,
 ) []ports.AlbumResolution {
 	s.mbConsecutiveErrors = 0
+	s.mbR2CallCount = 0
 	s.itunesArtistID = 0
 	resolutions := make([]ports.AlbumResolution, 0, len(albums))
 	for _, album := range albums {
@@ -246,8 +266,9 @@ func (s *IdentityResolverService) resolveOne(
 		}
 	}
 
-	// 3. MB reverse-lookup per album (authoritative, uses MBID)
-	if s.mb != nil && profile.MBID != "" && !s.mbUnreachable && s.mbConsecutiveErrors < 3 {
+	// 3. MB reverse-lookup per album (authoritative, uses MBID, budgeted to 10 calls)
+	if s.mb != nil && profile.MBID != "" && !s.mbUnreachable && s.mbConsecutiveErrors < 3 && s.mbR2CallCount < 10 {
+		s.mbR2CallCount++
 		verdict, _, err := s.mb.LookupAlbumArtist(ctx, artistName, album.Title, profile)
 		if err != nil {
 			s.mbConsecutiveErrors++
