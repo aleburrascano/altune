@@ -53,6 +53,8 @@ type Playlist struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Tracks    []PlaylistTrack
+	// TrackCount is a read-side projection populated by list queries.
+	TrackCount int
 }
 
 func NewPlaylist(userId shared.UserId, name string) (*Playlist, error) {

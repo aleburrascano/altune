@@ -51,6 +51,17 @@ func (s *PlaylistService) List(ctx context.Context, userId shared.UserId) ([]*do
 	return playlists, nil
 }
 
+func (s *PlaylistService) GetPreviewArtwork(ctx context.Context, playlistId domain.PlaylistId) ([]string, error) {
+	urls, err := s.playlistRepo.GetPreviewArtwork(ctx, playlistId)
+	if err != nil {
+		return nil, fmt.Errorf("get preview artwork: %w", err)
+	}
+	if urls == nil {
+		return []string{}, nil
+	}
+	return urls, nil
+}
+
 func (s *PlaylistService) Get(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId) (*domain.Playlist, []*domain.Track, error) {
 	playlist, tracks, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
 	if err != nil {
