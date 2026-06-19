@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"time"
 
+	"altune/go-api/internal/discovery/domain"
+
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -62,6 +64,39 @@ func (c *IdentityCache) Set(ctx context.Context, artistName, albumTitle string, 
 	if err := c.client.Set(ctx, key, data, ttl).Err(); err != nil {
 		slog.WarnContext(ctx, "identity_cache.set_failed", "key", key, "error", err)
 	}
+}
+
+// GetVerdict retrieves a cached identity verdict, converting the stored string
+// back to a domain.AlbumVerdict. Satisfies the identityCache interface in the
+// IdentityResolverService.
+func (c *IdentityCache) GetVerdict(ctx context.Context, artistName, albumTitle string) (domain.AlbumVerdict, string, string, time.Time, bool) {
+	entry, ok := c.Get(ctx, artistName, albumTitle)
+	if !ok {
+		return domain.AlbumVerdictUnknown, "", "", time.Time{}, false
+	}
+	verdict, err := domain.ParseAlbumVerdict(entry.Verdict)
+	if err != nil {
+		slog.WarnContext(ctx, "identity_cache.parse_verdict_failed",
+			"verdict", entry.Verdict, "error", err)
+		return domain.AlbumVerdictUnknown, "", "", time.Time{}, false
+	}
+	return verdict, entry.Reason, entry.Layer, entry.FirstSeen, true
+}
+
+// SetVerdict stores an identity verdict in the cache. Satisfies the
+// identityCache interface in the IdentityResolverService.
+func (c *IdentityCache) SetVerdict(ctx context.Context, artistName, albumTitle string, verdict domain.AlbumVerdict, reason, layer string) {
+	// Check if an entry already exists to preserve FirstSeen.
+	firstSeen := time.Now()
+	if existing, ok := c.Get(ctx, artistName, albumTitle); ok && !existing.FirstSeen.IsZero() {
+		firstSeen = existing.FirstSeen
+	}
+	c.Set(ctx, artistName, albumTitle, identityCacheEntry{
+		Verdict:   verdict.String(),
+		Reason:    reason,
+		Layer:     layer,
+		FirstSeen: firstSeen,
+	})
 }
 
 func identityTTL(verdict string) time.Duration {

@@ -30,20 +30,6 @@ func WithArtistIdentityResolver(r *IdentityResolverService) ArtistContentOption 
 	return func(s *GetArtistContentService) { s.identityResolver = r }
 }
 
-// WithAlbumValidator is a no-op retained for backward compatibility during
-// the transition to IdentityResolverService. Remove in U8 when app.go is
-// rewired.
-func WithAlbumValidator(_ ports.AlbumValidator) ArtistContentOption {
-	return func(_ *GetArtistContentService) {}
-}
-
-// WithDiscogsEnricher is a no-op retained for backward compatibility during
-// the transition to IdentityResolverService. Remove in U8 when app.go is
-// rewired.
-func WithDiscogsEnricher(_ ports.DiscographyEnricher) ArtistContentOption {
-	return func(_ *GetArtistContentService) {}
-}
-
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName, externalID string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName]
 	if !ok {
