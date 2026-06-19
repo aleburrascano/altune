@@ -213,7 +213,8 @@ func (a *ITunesAdapter) LookupAlbum(
 	artistNorm := textnorm.NormalizeForMatch(artistName)
 
 	for _, item := range body.Results {
-		if textnorm.NormalizeForMatch(item.CollectionName) != titleNorm {
+		collNorm := textnorm.NormalizeForMatch(stripITunesTypeSuffix(item.CollectionName))
+		if collNorm != titleNorm {
 			continue
 		}
 
@@ -235,6 +236,17 @@ func (a *ITunesAdapter) LookupAlbum(
 	}
 
 	return domain.AlbumVerdictUnknown, nil
+}
+
+var itunesTypeSuffixes = []string{" - Single", " - EP", " - Album", " - Deluxe", " - Remix"}
+
+func stripITunesTypeSuffix(name string) string {
+	for _, suffix := range itunesTypeSuffixes {
+		if idx := strings.Index(strings.ToLower(name), strings.ToLower(suffix)); idx >= 0 {
+			return strings.TrimSpace(name[:idx])
+		}
+	}
+	return name
 }
 
 type itunesResponse struct {
