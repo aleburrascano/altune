@@ -60,7 +60,7 @@ func checkSplit(
 	if err != nil || len(matches) == 0 {
 		return
 	}
-	if matches[0].Kind != "artist" {
+	if matches[0].Kind != domain.VocabKindArtist {
 		return
 	}
 
@@ -74,35 +74,9 @@ func checkSplit(
 	}
 }
 
+// intentBoost is the relevance score bonus applied when a query matches the
+// "artist track" intent pattern (e.g., "Kendrick Lamar Humble"). Tuned to
+// lift the structured-match result above same-score competitors without
+// overwhelming a strong popularity signal.
 const intentBoost = 0.15
 
-func ApplyIntentBoost(results []domain.SearchResult, intent *QueryIntent) []domain.SearchResult {
-	if intent == nil {
-		return results
-	}
-	artistNorm := NormalizeForMatch(intent.Artist)
-	trackNorm := NormalizeForMatch(intent.Track)
-	for i, r := range results {
-		results[i] = boostIfIntentMatch(r, artistNorm, trackNorm)
-	}
-	return results
-}
-
-func boostIfIntentMatch(r domain.SearchResult, artistNorm, trackNorm string) domain.SearchResult {
-	subtitleNorm := NormalizeForMatch(r.Subtitle)
-	titleNorm := NormalizeForMatch(r.Title)
-	artistMatch := strings.Contains(subtitleNorm, artistNorm)
-	trackMatch := strings.Contains(titleNorm, trackNorm)
-	if !artistMatch || !trackMatch {
-		return r
-	}
-	pop := popularity(r)
-	boosted := pop + intentBoost*100
-	if boosted > 100 {
-		boosted = 100
-	}
-	extras := copyExtras(r.Extras)
-	extras["popularity"] = int64(boosted)
-	r.Extras = extras
-	return r
-}

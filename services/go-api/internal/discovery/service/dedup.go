@@ -10,7 +10,11 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-const versionSimilarityThreshold = 85 // TokenSortRatio on normalized titles (0-100)
+// versionSimilarityThreshold is the minimum TokenSortRatio (0-100) for two
+// results to be considered versions of the same work (e.g., remix vs original).
+// 85 was chosen empirically: high enough to avoid false positives on short
+// titles ("Love" vs "Lover"), low enough to catch "(Deluxe)" and "(Remix)" variants.
+const versionSimilarityThreshold = 85
 
 var collabMarkers = []string{"feat.", "feat ", "ft.", "ft ", "featuring "}
 
@@ -192,19 +196,6 @@ func tryMerge(a, b domain.SearchResult) (domain.SearchResult, bool) {
 		}
 		return domain.SearchResult{}, false
 	}
-	// Name-based merge for artists: same normalized name = same artist.
-	// Artists lack cross-provider identifiers (no ISRC, rarely MBID from
-	// non-MB providers), so without this, 4+ copies of "The Weeknd" appear.
-	// Guard: if one side has MBID and the other doesn't, merge is risky
-	// (different artists can share a name). Only merge when neither has MBID
-	// or when the MBID check above already passed.
-	if a.Kind == domain.ResultKindArtist && mbidA == "" && mbidB == "" {
-		normA := NormalizeForMatch(a.Title)
-		normB := NormalizeForMatch(b.Title)
-		if normA != "" && normA == normB {
-			return mergeResults(a, b, domain.ConfidenceMedium, domain.EntityResolutionNone), true
-		}
-	}
 	return domain.SearchResult{}, false
 }
 
@@ -335,6 +326,8 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 		}
 	}
 
+	transferArtistDisambiguation(accumulated)
+
 	// Normalize raw provider popularity into a 0-100 score.
 	// Albums and artists from search often lack explicit popularity metrics
 	// (Deezer album search returns nb_fan=0). For those, derive a score from
@@ -451,7 +444,10 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 	return EnforceDiversity(reordered)
 }
 
-// Rerank re-sorts after enrichment. Same key minus quality_score.
+// Rerank re-sorts after enrichment. Same key minus quality_score —
+// quality_score is excluded deliberately because enrichment changes
+// completeness (artwork, popularity), so including it would cause
+// unstable reordering between pre- and post-enrichment sorts.
 func Rerank(results []domain.SearchResult, queryNorm string) []domain.SearchResult {
 	sort.SliceStable(results, func(i, j int) bool {
 		a, b := results[i], results[j]
@@ -622,6 +618,14 @@ func CollapseVersions(results []domain.SearchResult) []domain.SearchResult {
 	clusters := make([]*versionCluster, 0)
 
 	for i, r := range results {
+		if r.Kind == domain.ResultKindArtist {
+			clusterOf[i] = len(clusters)
+			clusters = append(clusters, &versionCluster{
+				bestIdx: i, bestPop: popularity(r),
+				titleNorm: NormalizeForMatch(r.Title), count: 1,
+			})
+			continue
+		}
 		titleNorm := NormalizeForMatch(r.Title)
 		artistNorm := NormalizeForMatch(r.Subtitle)
 		kind := r.Kind.String()
@@ -723,7 +727,7 @@ func boostIfRecent(r domain.SearchResult, now time.Time) domain.SearchResult {
 	pop := popularity(r)
 	boosted := math.Min(100, pop*recencyMultiplier)
 	extras := copyExtras(r.Extras)
-	extras["popularity"] = int64(boosted)
+	extras["popularity"] = boosted
 	r.Extras = extras
 	return r
 }
@@ -813,7 +817,9 @@ func ApplyPopularityDominance(results []domain.SearchResult) []domain.SearchResu
 	if bestIdx == 0 {
 		return results
 	}
-	if bestPop-topPop < popularityDominanceGapAbs && bestPop < topPop*popularityDominanceGapFactor {
+	gapSufficient := bestPop-topPop >= popularityDominanceGapAbs
+	ratioSufficient := bestPop >= topPop*popularityDominanceGapFactor
+	if !gapSufficient && !ratioSufficient {
 		return results
 	}
 
@@ -840,7 +846,7 @@ func ApplyPopularityDominance(results []domain.SearchResult) []domain.SearchResu
 // top diversityWindow positions to maxPerArtistInTop, moving overflow
 // results below the window.
 func EnforceDiversity(results []domain.SearchResult) []domain.SearchResult {
-	if len(results) <= diversityWindow {
+	if len(results) < diversityWindow {
 		return results
 	}
 	window := results[:diversityWindow]
@@ -864,6 +870,124 @@ func EnforceDiversity(results []domain.SearchResult) []domain.SearchResult {
 	out = append(out, kept...)
 	out = append(out, overflow...)
 	out = append(out, rest...)
+	return out
+}
+
+// transferArtistDisambiguation copies disambiguation metadata from MB-sourced
+// artists to matching non-MB artists with the same normalized name. MB artists
+// are later filtered by hasBrowseableSource (no Deezer source), but their
+// disambiguation text should survive on the Deezer results that pass the gate.
+func transferArtistDisambiguation(accumulated []ranked) {
+	type disambigEntry struct {
+		disambig string
+		mbid     string
+	}
+	byName := make(map[string]disambigEntry)
+	for _, entry := range accumulated {
+		r := entry.result
+		if r.Kind != domain.ResultKindArtist {
+			continue
+		}
+		disambig := getStringExtra(r, "disambiguation")
+		mbid := getStringExtra(r, "mbid")
+		if disambig == "" || mbid == "" {
+			continue
+		}
+		norm := NormalizeForMatch(r.Title)
+		if _, exists := byName[norm]; !exists {
+			byName[norm] = disambigEntry{disambig: disambig, mbid: mbid}
+		}
+	}
+
+	for i := range accumulated {
+		r := &accumulated[i].result
+		if r.Kind != domain.ResultKindArtist {
+			continue
+		}
+		if getStringExtra(*r, "disambiguation") != "" {
+			continue
+		}
+		norm := NormalizeForMatch(r.Title)
+		if entry, ok := byName[norm]; ok {
+			extras := copyExtras(r.Extras)
+			extras["disambiguation"] = entry.disambig
+			if getStringExtra(*r, "mbid") == "" {
+				extras["mbid"] = entry.mbid
+			}
+			r.Extras = extras
+		}
+	}
+}
+
+// CollapseArtistDuplicates groups artist results that share the same normalized
+// name. The highest-popularity artist is kept as the primary result. Remaining
+// same-name artists are stored in a "collapsed_artists" extra on the primary.
+func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResult {
+	type group struct {
+		primaryIdx int
+		primaryPop float64
+		otherIdxs  []int
+	}
+	groups := make(map[string]*group)
+	order := []string{}
+
+	for i, r := range results {
+		if r.Kind != domain.ResultKindArtist {
+			continue
+		}
+		norm := NormalizeForMatch(r.Title)
+		pop := getFloatExtra(r, "popularity")
+		g, exists := groups[norm]
+		if !exists {
+			groups[norm] = &group{primaryIdx: i, primaryPop: pop}
+			order = append(order, norm)
+			continue
+		}
+		if pop > g.primaryPop {
+			g.otherIdxs = append(g.otherIdxs, g.primaryIdx)
+			g.primaryIdx = i
+			g.primaryPop = pop
+		} else {
+			g.otherIdxs = append(g.otherIdxs, i)
+		}
+	}
+
+	remove := make(map[int]bool)
+	for _, norm := range order {
+		g := groups[norm]
+		if len(g.otherIdxs) == 0 {
+			continue
+		}
+		collapsed_list := make([]map[string]any, len(g.otherIdxs))
+		for j, idx := range g.otherIdxs {
+			other := results[idx]
+			collapsed_list[j] = map[string]any{
+				"title":    other.Title,
+				"subtitle": other.Subtitle,
+				"sources":  other.Sources,
+				"extras":   other.Extras,
+			}
+			if other.ImageURL != "" {
+				collapsed_list[j]["image_url"] = other.ImageURL
+			}
+			remove[idx] = true
+		}
+		primary := &results[g.primaryIdx]
+		extras := copyExtras(primary.Extras)
+		extras["collapsed_artists"] = collapsed_list
+		primary.Extras = extras
+	}
+
+	if len(remove) == 0 {
+		return results
+	}
+
+	out := make([]domain.SearchResult, 0, len(results)-len(remove))
+	for i, r := range results {
+		if !remove[i] {
+			out = append(out, r)
+		}
+	}
 	return out
 }
 

@@ -30,7 +30,13 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 		}, nil
 	}
 
-	pn, _ := domain.ParseProviderName(providerName)
+	pn, err := domain.ParseProviderName(providerName)
+	if err != nil {
+		return &ContentFetchResponse{
+			ProviderName: providerName,
+			Status:       domain.ProviderStatusError,
+		}, nil
+	}
 	results, err := provider.GetAlbumTracks(ctx, pn, externalID)
 	if err != nil {
 		return &ContentFetchResponse{

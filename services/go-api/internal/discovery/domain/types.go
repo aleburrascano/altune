@@ -13,7 +13,8 @@ import (
 type ResultKind int
 
 const (
-	ResultKindArtist ResultKind = iota
+	ResultKindUnknown  ResultKind = iota
+	ResultKindArtist
 	ResultKindAlbum
 	ResultKindTrack
 	ResultKindPlaylist
@@ -21,6 +22,8 @@ const (
 
 func (k ResultKind) String() string {
 	switch k {
+	case ResultKindUnknown:
+		return "unknown"
 	case ResultKindArtist:
 		return "artist"
 	case ResultKindAlbum:
@@ -110,16 +113,21 @@ func (t EntityResolutionTier) String() string {
 type ProviderName int
 
 const (
-	ProviderDeezer ProviderName = iota
+	ProviderUnknown    ProviderName = iota
+	ProviderDeezer
 	ProviderMusicBrainz
 	ProviderSoundCloud
 	ProviderLastFM
 	ProviderITunes
 	ProviderTheAudioDB
+	ProviderDiscogs
+	ProviderYouTube
 )
 
 func (p ProviderName) String() string {
 	switch p {
+	case ProviderUnknown:
+		return "unknown"
 	case ProviderDeezer:
 		return "deezer"
 	case ProviderMusicBrainz:
@@ -132,6 +140,10 @@ func (p ProviderName) String() string {
 		return "itunes"
 	case ProviderTheAudioDB:
 		return "theaudiodb"
+	case ProviderDiscogs:
+		return "discogs"
+	case ProviderYouTube:
+		return "youtube"
 	default:
 		return "unknown"
 	}
@@ -151,6 +163,10 @@ func ParseProviderName(s string) (ProviderName, error) {
 		return ProviderITunes, nil
 	case "theaudiodb":
 		return ProviderTheAudioDB, nil
+	case "discogs":
+		return ProviderDiscogs, nil
+	case "youtube":
+		return ProviderYouTube, nil
 	default:
 		return 0, fmt.Errorf("unknown provider: %s", s)
 	}

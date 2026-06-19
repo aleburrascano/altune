@@ -1,13 +1,10 @@
 /**
- * useArtistContent — MB-authoritative discography.
+ * useArtistContent — backend-validated discography ordering.
  *
- * Deezer's artist entities can conflate several same-name artists (its
- * /artist/{id}/albums for "Che" mixes a 1990 EP and German/Spanish singles
- * from unrelated artists, with no per-album artist field to filter on).
- * When the artist's identity is verified (mbid matches an MB source) and MB
- * returned a healthy discography, Deezer only ENRICHES title-matched albums
- * (sources/track counts) and contributes no new titles. Without a verified
- * identity, the full union stands — Deezer may be all we have.
+ * When artistName is provided, the backend applies MB cross-reference
+ * validation and returns confirmed albums first, unconfirmed last.
+ * The hook must preserve this ordering (no client-side re-sort by date).
+ * Without artistName, the hook sorts by release date descending.
  */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -24,13 +21,11 @@ jest.mock('../../../shared/api-client/discovery', () => ({
 import { useArtistContent } from '../hooks/useArtistContent';
 import type { DiscoverySource } from '../../../shared/api-client/discovery';
 
-const _MBID = '0a68f3b5-79c2-4f81-a7bc-ebc977602e86';
-
 function _src(provider: string, externalId: string): DiscoverySource {
   return { provider, external_id: externalId, url: `https://x/${externalId}` };
 }
 
-function _album(title: string, provider: string, externalId: string, trackCount?: number) {
+function _album(title: string, provider: string, externalId: string, year?: string) {
   return {
     kind: 'album',
     title,
@@ -38,7 +33,7 @@ function _album(title: string, provider: string, externalId: string, trackCount?
     image_url: null,
     confidence: 'low',
     sources: [_src(provider, externalId)],
-    extras: trackCount !== undefined ? { track_count: trackCount } : {},
+    extras: year ? { year } : {},
   };
 }
 
@@ -51,17 +46,6 @@ function _client(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-function _mockAlbums(mbItems: unknown[], dzItems: unknown[]): void {
-  mockGetArtistAlbums.mockImplementation((provider: string) =>
-    Promise.resolve({
-      items: provider === 'musicbrainz' ? mbItems : dzItems,
-      provider,
-      status: 'ok',
-      latency_ms: 0,
-    }),
-  );
-}
-
 beforeEach(() => {
   mockGetArtistAlbums.mockReset();
   mockGetArtistTopTracks
@@ -69,59 +53,57 @@ beforeEach(() => {
     .mockResolvedValue({ items: [], provider: 'deezer', status: 'ok', latency_ms: 0 });
 });
 
-const _SOURCES = [_src('deezer', '234701081'), _src('musicbrainz', _MBID)];
+const _SOURCES = [_src('deezer', '234701081')];
 
-it('drops Deezer-only titles when identity is verified and MB is healthy', async () => {
-  _mockAlbums(
-    [_album('The Final Agenda', 'musicbrainz', 'rg-1')],
-    [_album('Lande immer bei dir', 'deezer', 'alb-foreign')],
-  );
-  const { result } = renderHook(() => useArtistContent({ sources: _SOURCES, mbid: _MBID }), {
-    wrapper: _wrapper(_client()),
+it('preserves backend ordering when artistName is provided', async () => {
+  // Backend returns confirmed first (REST IN BASS), unconfirmed last (Samsonite)
+  mockGetArtistAlbums.mockResolvedValue({
+    items: [
+      _album('REST IN BASS', 'deezer', 'alb-1', '2022'),
+      _album('Sayso Says', 'deezer', 'alb-2', '2021'),
+      _album('Samsonite', 'deezer', 'alb-3', '2023'), // unconfirmed, newer but last
+    ],
+    provider: 'deezer',
+    status: 'ok',
+    latency_ms: 0,
   });
 
-  await waitFor(() => expect(result.current.isLoadingAlbums).toBe(false));
-  expect(result.current.albums.map((a) => a.title)).toEqual(['The Final Agenda']);
-});
-
-it('still enriches MB albums with title-matched Deezer data', async () => {
-  _mockAlbums(
-    [_album('Sad Lite', 'musicbrainz', 'rg-2', 3)],
-    [_album('Sad Lite', 'deezer', 'alb-2', 5), _album('Lande immer bei dir', 'deezer', 'alb-f')],
+  const { result } = renderHook(
+    () => useArtistContent({ sources: _SOURCES, artistName: 'Che' }),
+    { wrapper: _wrapper(_client()) },
   );
-  const { result } = renderHook(() => useArtistContent({ sources: _SOURCES, mbid: _MBID }), {
-    wrapper: _wrapper(_client()),
-  });
 
   await waitFor(() => expect(result.current.isLoadingAlbums).toBe(false));
-  expect(result.current.albums).toHaveLength(1);
-  const album = result.current.albums[0]!;
-  expect(album.extras['track_count']).toBe(5); // higher Deezer count wins
-  expect(album.sources.map((s) => s.provider).sort()).toEqual(['deezer', 'musicbrainz']);
-});
-
-it('keeps the full union when no verified identity exists', async () => {
-  _mockAlbums(
-    [_album('The Final Agenda', 'musicbrainz', 'rg-1')],
-    [_album('Deezer Only Single', 'deezer', 'alb-3')],
-  );
-  const { result } = renderHook(() => useArtistContent({ sources: _SOURCES, mbid: null }), {
-    wrapper: _wrapper(_client()),
-  });
-
-  await waitFor(() => expect(result.current.isLoadingAlbums).toBe(false));
-  expect(result.current.albums.map((a) => a.title).sort()).toEqual([
-    'Deezer Only Single',
-    'The Final Agenda',
+  // Order preserved from backend — NOT re-sorted by date
+  expect(result.current.albums.map((a) => a.title)).toEqual([
+    'REST IN BASS',
+    'Sayso Says',
+    'Samsonite',
   ]);
 });
 
-it('falls back to the Deezer list when MB returns ok but empty', async () => {
-  _mockAlbums([], [_album('Deezer Only Single', 'deezer', 'alb-3')]);
-  const { result } = renderHook(() => useArtistContent({ sources: _SOURCES, mbid: _MBID }), {
-    wrapper: _wrapper(_client()),
+it('sorts by release date when no artistName (no backend validation)', async () => {
+  mockGetArtistAlbums.mockResolvedValue({
+    items: [
+      _album('Older', 'deezer', 'alb-1', '2020'),
+      _album('Newer', 'deezer', 'alb-2', '2023'),
+      _album('Middle', 'deezer', 'alb-3', '2021'),
+    ],
+    provider: 'deezer',
+    status: 'ok',
+    latency_ms: 0,
   });
 
+  const { result } = renderHook(
+    () => useArtistContent({ sources: _SOURCES }),
+    { wrapper: _wrapper(_client()) },
+  );
+
   await waitFor(() => expect(result.current.isLoadingAlbums).toBe(false));
-  expect(result.current.albums.map((a) => a.title)).toEqual(['Deezer Only Single']);
+  // Sorted by release date descending
+  expect(result.current.albums.map((a) => a.title)).toEqual([
+    'Newer',
+    'Middle',
+    'Older',
+  ]);
 });

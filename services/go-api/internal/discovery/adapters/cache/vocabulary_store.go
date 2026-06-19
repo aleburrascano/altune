@@ -132,14 +132,14 @@ func addEntryToPipeline(
 	entry domain.VocabularyEntry,
 	metaphone MetaphoneFunc,
 ) {
-	member := encodeMember(norm, entry.Term, entry.Kind)
+	member := encodeMember(norm, entry.Term, string(entry.Kind))
 	pipe.ZAdd(ctx, vocabTermsKey, goredis.Z{
 		Score:  float64(entry.Popularity),
 		Member: member,
 	})
 	entryJSON, _ := json.Marshal(vocabEntryData{
 		Term:       entry.Term,
-		Kind:       entry.Kind,
+		Kind:       string(entry.Kind),
 		Popularity: entry.Popularity,
 	})
 	pipe.Set(ctx, vocabEntryPfx+norm, entryJSON, 0)
@@ -165,7 +165,7 @@ func (s *RedisVocabularyStore) prefixSearch(
 	if err != nil {
 		return nil, err
 	}
-	return s.membersToSortedEntries(members, limit), nil
+	return s.membersToSortedEntries(ctx, members, limit), nil
 }
 
 func (s *RedisVocabularyStore) lexRangeMembers(
@@ -192,6 +192,7 @@ func (s *RedisVocabularyStore) topByScore(ctx context.Context) ([]string, error)
 }
 
 func (s *RedisVocabularyStore) membersToSortedEntries(
+	ctx context.Context,
 	members []string,
 	limit int,
 ) []domain.VocabularyEntry {
@@ -204,10 +205,10 @@ func (s *RedisVocabularyStore) membersToSortedEntries(
 		entries = append(entries, domain.VocabularyEntry{
 			Term:     term,
 			TermNorm: norm,
-			Kind:     kind,
+			Kind:     domain.VocabularyKind(kind),
 		})
 	}
-	s.attachScores(entries)
+	s.attachScores(ctx, entries)
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Popularity > entries[j].Popularity
 	})
@@ -217,10 +218,9 @@ func (s *RedisVocabularyStore) membersToSortedEntries(
 	return entries
 }
 
-func (s *RedisVocabularyStore) attachScores(entries []domain.VocabularyEntry) {
-	ctx := context.Background()
+func (s *RedisVocabularyStore) attachScores(ctx context.Context, entries []domain.VocabularyEntry) {
 	for i := range entries {
-		member := encodeMember(entries[i].TermNorm, entries[i].Term, entries[i].Kind)
+		member := encodeMember(entries[i].TermNorm, entries[i].Term, string(entries[i].Kind))
 		score, err := s.client.ZScore(ctx, vocabTermsKey, member).Result()
 		if err == nil {
 			entries[i].Popularity = int64(score)
@@ -379,7 +379,7 @@ func (s *RedisVocabularyStore) loadEntry(
 	}
 	return domain.VocabularyEntry{
 		Term:       data.Term,
-		Kind:       data.Kind,
+		Kind:       domain.VocabularyKind(data.Kind),
 		Popularity: data.Popularity,
 	}, nil
 }
@@ -452,7 +452,7 @@ func jaccardCoefficient(shared, totalA, totalB int) float64 {
 }
 
 func maxLevenshtein(query string) int {
-	n := len(query)
+	n := len([]rune(query))
 	if n <= 4 {
 		return 1
 	}

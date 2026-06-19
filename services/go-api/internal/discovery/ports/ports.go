@@ -88,11 +88,53 @@ type ChartProvider interface {
 	FetchCharts(ctx context.Context, limit int) ([]domain.VocabularyEntry, error)
 }
 
+// AlbumValidator cross-references an artist's albums against an authoritative
+// source (e.g., MusicBrainz) and splits them into confirmed vs unconfirmed.
+type AlbumValidator interface {
+	ValidateArtistAlbums(ctx context.Context, artistName string, albums []domain.SearchResult) (*AlbumValidationResult, error)
+	ResolveArtistIdentity(ctx context.Context, artistName string) (*ArtistIdentity, error)
+}
+
+type ArtistIdentity struct {
+	MBID           string
+	Disambiguation string
+	BirthYear      int
+}
+
+type AlbumValidationResult struct {
+	Confirmed   []domain.SearchResult
+	Unconfirmed []domain.SearchResult
+	ArtistMBID  string
+}
+
 type RelatedTrackMatch struct {
 	Title      string
 	Artist     string
 	Album      string
 	ArtworkURL *string
+}
+
+type DiscographyEnricher interface {
+	ResolveDiscogsArtist(ctx context.Context, name string, albumTitles []string) (*DiscogsArtistInfo, error)
+	FetchArtistReleases(ctx context.Context, discogsID int) ([]DiscogsRelease, error)
+}
+
+type DiscogsArtistInfo struct {
+	ID      int
+	Name    string
+	Genre   string
+	Country string
+	Overlap int
+}
+
+type DiscogsRelease struct {
+	Title string
+	Year  int
+	Type  string
+}
+
+type AudioFingerprinter interface {
+	VerifyArtist(ctx context.Context, audioData []byte) (mbid string, confidence float64, err error)
 }
 
 type RelationshipQuerier interface {

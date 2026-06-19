@@ -175,6 +175,8 @@ func TestParseProviderName(t *testing.T) {
 		{name: "lastfm", input: "lastfm", want: ProviderLastFM},
 		{name: "itunes", input: "itunes", want: ProviderITunes},
 		{name: "theaudiodb", input: "theaudiodb", want: ProviderTheAudioDB},
+		{name: "discogs", input: "discogs", want: ProviderDiscogs},
+		{name: "youtube", input: "youtube", want: ProviderYouTube},
 		{name: "invalid", input: "spotify", wantErr: true},
 		{name: "empty", input: "", wantErr: true},
 	}
@@ -418,6 +420,7 @@ func TestParseProviderName_RoundTrip(t *testing.T) {
 	providers := []ProviderName{
 		ProviderDeezer, ProviderMusicBrainz, ProviderSoundCloud,
 		ProviderLastFM, ProviderITunes, ProviderTheAudioDB,
+		ProviderDiscogs, ProviderYouTube,
 	}
 	for _, p := range providers {
 		t.Run(p.String(), func(t *testing.T) {

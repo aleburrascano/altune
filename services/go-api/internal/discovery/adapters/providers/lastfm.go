@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -40,6 +41,8 @@ func (a *LastFmAdapter) Search(ctx context.Context, query string, kinds map[doma
 
 		items, err := a.searchKind(ctx, query, kind)
 		if err != nil {
+			slog.WarnContext(ctx, "lastfm.search_kind_failed",
+				"kind", kind.String(), "query", query, "error", err)
 			continue
 		}
 		results = append(results, items...)

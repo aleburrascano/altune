@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -39,6 +40,8 @@ func (a *DeezerAdapter) Search(ctx context.Context, query string, kinds map[doma
 
 		items, err := a.searchKind(ctx, query, kind)
 		if err != nil {
+			slog.WarnContext(ctx, "deezer.search_kind_failed",
+				"kind", kind.String(), "query", query, "error", err)
 			continue
 		}
 		results = append(results, items...)
@@ -291,7 +294,7 @@ func (a *DeezerAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 }
 
 func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=25", externalID)
+	u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=100", externalID)
 	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
 		return mapDeezerResult(item, domain.ResultKindAlbum)
 	})
@@ -425,5 +428,5 @@ func popularityOrPosition(metric int64, position int) int64 {
 const DeezerPlaceholderImage = "https://e-cdns-images.dzcdn.net/images/artist//500x500-000000-80-0-0.jpg"
 
 func IsDeezerPlaceholder(u string) bool {
-	return strings.Contains(u, "/images/artist//")
+	return strings.Contains(u, "/images/artist//") || strings.Contains(u, "d41d8cd98f00b204e9800998ecf8427e")
 }

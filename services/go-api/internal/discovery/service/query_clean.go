@@ -4,19 +4,11 @@ import (
 	"strings"
 )
 
-var defaultNoisePatterns = []string{
+var noisePatterns = []string{
 	"official music video", "official video", "music video",
 	"lyric video", "lyrics", "audio",
 	"hq", "hd", "4k", "1080p", "720p",
 	"full album", "visualizer", "visualiser", "topic",
-}
-
-var noisePatterns = defaultNoisePatterns
-
-func SetNoisePatterns(patterns []string) {
-	if len(patterns) > 0 {
-		noisePatterns = patterns
-	}
 }
 
 func CleanQuery(raw string) string {

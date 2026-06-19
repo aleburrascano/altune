@@ -1,9 +1,8 @@
 /**
- * useArtistContent — MB source selection via the artist's authoritative mbid.
+ * useArtistContent — artistName passthrough to backend for MB validation.
  *
- * The merged artist card can carry several same-name MusicBrainz sources;
- * extras.mbid (resolved by the backend) identifies the right one. Renders the
- * hook against a real QueryClient; the discovery api-client is mocked.
+ * When artistName is provided, the hook passes it to getArtistAlbums so the
+ * backend can cross-reference albums against MusicBrainz.
  */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -19,9 +18,6 @@ jest.mock('../../../shared/api-client/discovery', () => ({
 
 import { useArtistContent } from '../hooks/useArtistContent';
 import type { ContentFetchResponse, DiscoverySource } from '../../../shared/api-client/discovery';
-
-const _RIGHT_MBID = '0a68f3b5-79c2-4f81-a7bc-ebc977602e86';
-const _WRONG_MBID = '79d5ff17-0000-0000-0000-000000000000';
 
 function _src(provider: string, externalId: string): DiscoverySource {
   return { provider, external_id: externalId, url: `https://x/${externalId}` };
@@ -45,42 +41,34 @@ beforeEach(() => {
   mockGetArtistTopTracks.mockReset().mockResolvedValue(_ok('deezer'));
 });
 
-describe('mbid-directed MB source selection', () => {
-  it('queries the MB source whose external_id matches extras.mbid', async () => {
-    const sources = [
-      _src('deezer', 'dz-1'),
-      _src('musicbrainz', _WRONG_MBID),
-      _src('musicbrainz', _RIGHT_MBID),
-    ];
-    renderHook(() => useArtistContent({ sources, mbid: _RIGHT_MBID }), {
-      wrapper: _wrapper(_client()),
-    });
-
-    await waitFor(() => expect(mockGetArtistAlbums).toHaveBeenCalledTimes(2));
-    expect(mockGetArtistAlbums).toHaveBeenCalledWith('musicbrainz', _RIGHT_MBID, 100);
-    expect(mockGetArtistAlbums).not.toHaveBeenCalledWith('musicbrainz', _WRONG_MBID, 100);
-  });
-
-  it('falls back to the first MB source when mbid is null', async () => {
-    const sources = [
-      _src('musicbrainz', _WRONG_MBID),
-      _src('musicbrainz', _RIGHT_MBID),
-    ];
-    renderHook(() => useArtistContent({ sources, mbid: null }), {
+describe('artistName passthrough', () => {
+  it('passes artistName to getArtistAlbums for MB validation', async () => {
+    const sources = [_src('deezer', 'dz-1')];
+    renderHook(() => useArtistContent({ sources, artistName: 'Che' }), {
       wrapper: _wrapper(_client()),
     });
 
     await waitFor(() => expect(mockGetArtistAlbums).toHaveBeenCalledTimes(1));
-    expect(mockGetArtistAlbums).toHaveBeenCalledWith('musicbrainz', _WRONG_MBID, 100);
+    expect(mockGetArtistAlbums).toHaveBeenCalledWith('deezer', 'dz-1', 100, 'Che');
   });
 
-  it('falls back to the first MB source when mbid matches no source', async () => {
-    const sources = [_src('musicbrainz', _WRONG_MBID)];
-    renderHook(() => useArtistContent({ sources, mbid: _RIGHT_MBID }), {
+  it('omits artistName param when not provided', async () => {
+    const sources = [_src('deezer', 'dz-1')];
+    renderHook(() => useArtistContent({ sources }), {
       wrapper: _wrapper(_client()),
     });
 
     await waitFor(() => expect(mockGetArtistAlbums).toHaveBeenCalledTimes(1));
-    expect(mockGetArtistAlbums).toHaveBeenCalledWith('musicbrainz', _WRONG_MBID, 100);
+    expect(mockGetArtistAlbums).toHaveBeenCalledWith('deezer', 'dz-1', 100, undefined);
+  });
+
+  it('queries only Deezer for albums (no MB content provider)', async () => {
+    const sources = [_src('deezer', 'dz-1'), _src('musicbrainz', 'mb-1')];
+    renderHook(() => useArtistContent({ sources, artistName: 'Che' }), {
+      wrapper: _wrapper(_client()),
+    });
+
+    await waitFor(() => expect(mockGetArtistAlbums).toHaveBeenCalledTimes(1));
+    expect(mockGetArtistAlbums).toHaveBeenCalledWith('deezer', 'dz-1', 100, 'Che');
   });
 });

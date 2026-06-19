@@ -3,7 +3,7 @@
  *
  * The backend returns HTTP 200 with status timeout/error and empty items;
  * the hook must treat a non-ok payload as that provider's failure instead
- * of silently showing a partial (e.g. Deezer-only) discography.
+ * of silently showing a partial discography.
  */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -19,8 +19,6 @@ jest.mock('../../../shared/api-client/discovery', () => ({
 
 import { useArtistContent } from '../hooks/useArtistContent';
 import type { DiscoverySource } from '../../../shared/api-client/discovery';
-
-const _MBID = '0a68f3b5-79c2-4f81-a7bc-ebc977602e86';
 
 function _src(provider: string, externalId: string): DiscoverySource {
   return { provider, external_id: externalId, url: `https://x/${externalId}` };
@@ -58,21 +56,17 @@ beforeEach(() => {
     .mockResolvedValue({ items: [], provider: 'deezer', status: 'ok', latency_ms: 0 });
 });
 
-it('keeps Deezer albums and no error when only MB times out (HTTP 200 payload)', async () => {
+it('shows Deezer albums when provider returns ok', async () => {
   mockGetArtistAlbums.mockImplementation((provider: string) =>
-    Promise.resolve(
-      provider === 'musicbrainz'
-        ? { items: [], provider, status: 'timeout', latency_ms: 0 }
-        : {
-            items: [_album('Sad Lite', 'deezer', 'alb-1')],
-            provider,
-            status: 'ok',
-            latency_ms: 0,
-          },
-    ),
+    Promise.resolve({
+      items: [_album('Sad Lite', 'deezer', 'alb-1')],
+      provider,
+      status: 'ok',
+      latency_ms: 0,
+    }),
   );
-  const sources = [_src('deezer', 'dz-1'), _src('musicbrainz', _MBID)];
-  const { result } = renderHook(() => useArtistContent({ sources, mbid: _MBID }), {
+  const sources = [_src('deezer', 'dz-1')];
+  const { result } = renderHook(() => useArtistContent({ sources, artistName: 'Che' }), {
     wrapper: _wrapper(_client()),
   });
 
@@ -81,17 +75,17 @@ it('keeps Deezer albums and no error when only MB times out (HTTP 200 payload)',
   expect(result.current.isErrorAlbums).toBe(false);
 });
 
-it('flags isErrorAlbums when both providers return non-ok payloads', async () => {
+it('flags isErrorAlbums when Deezer returns non-ok payload', async () => {
   mockGetArtistAlbums.mockImplementation((provider: string) =>
     Promise.resolve({
       items: [],
       provider,
-      status: provider === 'deezer' ? 'error' : 'timeout',
+      status: 'error',
       latency_ms: 0,
     }),
   );
-  const sources = [_src('deezer', 'dz-1'), _src('musicbrainz', _MBID)];
-  const { result } = renderHook(() => useArtistContent({ sources, mbid: _MBID }), {
+  const sources = [_src('deezer', 'dz-1')];
+  const { result } = renderHook(() => useArtistContent({ sources, artistName: 'Che' }), {
     wrapper: _wrapper(_client()),
   });
 
@@ -100,23 +94,19 @@ it('flags isErrorAlbums when both providers return non-ok payloads', async () =>
 
 it('ignores items from a non-ok payload', async () => {
   mockGetArtistAlbums.mockImplementation((provider: string) =>
-    Promise.resolve(
-      provider === 'musicbrainz'
-        ? {
-            items: [_album('Ghost', 'musicbrainz', 'rg-1')],
-            provider,
-            status: 'error',
-            latency_ms: 0,
-          }
-        : { items: [], provider, status: 'ok', latency_ms: 0 },
-    ),
+    Promise.resolve({
+      items: [_album('Ghost', 'deezer', 'alb-1')],
+      provider,
+      status: 'error',
+      latency_ms: 0,
+    }),
   );
-  const sources = [_src('deezer', 'dz-1'), _src('musicbrainz', _MBID)];
-  const { result } = renderHook(() => useArtistContent({ sources, mbid: _MBID }), {
+  const sources = [_src('deezer', 'dz-1')];
+  const { result } = renderHook(() => useArtistContent({ sources, artistName: 'Che' }), {
     wrapper: _wrapper(_client()),
   });
 
-  await waitFor(() => expect(mockGetArtistAlbums).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(mockGetArtistAlbums).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(result.current.isLoadingAlbums).toBe(false));
   expect(result.current.albums).toHaveLength(0);
 });
@@ -129,7 +119,7 @@ it('flags isErrorTracks on a timeout payload (not only error)', async () => {
     latency_ms: 0,
   });
   const sources = [_src('deezer', 'dz-1')];
-  const { result } = renderHook(() => useArtistContent({ sources, mbid: null }), {
+  const { result } = renderHook(() => useArtistContent({ sources }), {
     wrapper: _wrapper(_client()),
   });
 

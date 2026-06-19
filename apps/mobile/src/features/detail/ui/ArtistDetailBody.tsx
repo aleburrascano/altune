@@ -15,7 +15,6 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
 import { deriveAlbums } from '@shared/lib/derive-library-groups';
 
-import { trackExtras } from '../extras-accessors';
 import { useArtistContent } from '../hooks/useArtistContent';
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
 import { useLibraryTracksForArtist, libraryTrackToDiscoveryResult } from '../hooks/useLibraryTracks';
@@ -39,9 +38,6 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
   });
 
   const effectiveSources = hasSources ? result.sources : (discoverySearch.sources.length > 0 ? discoverySearch.sources : result.sources);
-  const effectiveMbid = hasSources
-    ? trackExtras(result.extras).mbid
-    : discoverySearch.mbid ?? trackExtras(result.extras).mbid;
   const shouldFetchContent = effectiveSources.length > 0 && exploreExpanded;
 
   const {
@@ -55,7 +51,7 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
     refetchAlbums,
   } = useArtistContent({
     sources: effectiveSources,
-    mbid: effectiveMbid,
+    artistName: result.title,
     enabled: shouldFetchContent,
   });
 
@@ -86,7 +82,7 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
   };
 
   const onAlbumPress = (album: DiscoveryResult): void => {
-    setDetailHandoff(album);
+    setDetailHandoff({ ...album, subtitle: album.subtitle ?? result.title });
     router.push(detailRoute as '/discover/detail');
   };
 
@@ -131,6 +127,11 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
               <Text variant="body" numberOfLines={1}>
                 {track.title}
               </Text>
+              {track.subtitle ? (
+                <Text variant="label" tone="secondary" numberOfLines={1}>
+                  {track.subtitle}
+                </Text>
+              ) : null}
             </View>
           </Pressable>
         ))
