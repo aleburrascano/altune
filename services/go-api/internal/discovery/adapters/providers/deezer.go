@@ -434,3 +434,29 @@ const DeezerPlaceholderImage = "https://e-cdns-images.dzcdn.net/images/artist//5
 func IsDeezerPlaceholder(u string) bool {
 	return strings.Contains(u, "/images/artist//") || strings.Contains(u, "d41d8cd98f00b204e9800998ecf8427e")
 }
+
+// FetchTrackISRC fetches the ISRC for a Deezer track by its ID.
+// Returns empty string on error or if the track has no ISRC.
+func (a *DeezerAdapter) FetchTrackISRC(ctx context.Context, trackID string) (string, error) {
+	u := fmt.Sprintf("https://api.deezer.com/track/%s", trackID)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return "", nil
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", nil
+	}
+
+	var detail struct {
+		ISRC string `json:"isrc"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil {
+		return "", nil
+	}
+	return detail.ISRC, nil
+}
