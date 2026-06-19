@@ -10,6 +10,8 @@ type UseDebouncedSearchOptions = {
 type UseDebouncedSearchReturn = {
   inputValue: string;
   committedQuery: string;
+  /** True when the commit came from Enter key or history tap, not auto-debounce. */
+  isExplicitSubmit: boolean;
   onChangeText: (text: string) => void;
   onSubmit: () => void;
   onClear: () => void;
@@ -24,6 +26,7 @@ export function useDebouncedSearch({
   const savedState = getSearchState();
   const [committedQuery, setCommittedQuery] = useState(savedState.query);
   const [inputValue, setInputValue] = useState(savedState.inputValue);
+  const [isExplicitSubmit, setIsExplicitSubmit] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearDebounce = (): void => {
@@ -35,6 +38,7 @@ export function useDebouncedSearch({
 
   const onSubmit = (): void => {
     clearDebounce();
+    setIsExplicitSubmit(true);
     setCommittedQuery(inputValue.trim());
   };
 
@@ -43,9 +47,11 @@ export function useDebouncedSearch({
     clearDebounce();
     const trimmed = text.trim();
     if (trimmed.length === 0) {
+      setIsExplicitSubmit(false);
       setCommittedQuery('');
     } else if (trimmed.length >= minChars) {
       debounceRef.current = setTimeout(() => {
+        setIsExplicitSubmit(false);
         setCommittedQuery(trimmed);
       }, debounceMs);
     }
@@ -54,17 +60,20 @@ export function useDebouncedSearch({
   const onClear = (): void => {
     clearDebounce();
     setInputValue('');
+    setIsExplicitSubmit(false);
     setCommittedQuery('');
   };
 
   const setQuery = (query: string): void => {
     setInputValue(query);
+    setIsExplicitSubmit(true);
     setCommittedQuery(query);
   };
 
   return {
     inputValue,
     committedQuery,
+    isExplicitSubmit,
     onChangeText,
     onSubmit,
     onClear,

@@ -20,7 +20,7 @@ export const palette = {
   // brand — Cobalt
   cobalt: '#2D5BFF',
   cobaltPressed: '#244BD6',
-  cobaltTint: 'rgba(45,91,255,0.16)',
+  cobaltTint: 'rgba(45,91,255,0.25)',
   cobaltSoft: '#5B82FF',
   // semantic
   green: '#3DD68C',
