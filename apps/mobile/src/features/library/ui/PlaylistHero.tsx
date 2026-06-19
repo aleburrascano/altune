@@ -1,6 +1,5 @@
 import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Shuffle } from 'lucide-react-native';
 
 import { Text, spacing, useTheme } from '@shared/ui';
@@ -52,10 +51,6 @@ export function PlaylistHero({
 
   return (
     <View style={styles.wrapper}>
-      <LinearGradient
-        colors={[`${theme.color.accent}30`, `${theme.color.accent}08`, 'transparent']}
-        style={styles.gradient}
-      />
       <View style={styles.hero}>
         <View style={styles.coverShadow}>
           <PlaylistCover artworkUrls={playlist.preview_artwork_urls} size={160} />
@@ -117,10 +112,6 @@ export function PlaylistHero({
 const styles = StyleSheet.create({
   wrapper: {
     position: 'relative',
-  },
-  gradient: {
-    ...StyleSheet.absoluteFillObject,
-    height: 300,
   },
   hero: {
     alignItems: 'center',

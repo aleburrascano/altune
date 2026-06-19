@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 
 import {
@@ -14,7 +15,7 @@ import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
+import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
@@ -105,6 +106,7 @@ export function PlaylistDetailScreen(): ReactElement {
     },
   });
 
+  const theme = useTheme();
   const retryMut = useRetryAcquisition();
   const retryingTrackId = retryMut.isPending ? retryMut.variables : undefined;
   const { navigateToTrack } = useLibraryNavigation(router);
@@ -190,7 +192,12 @@ export function PlaylistDetailScreen(): ReactElement {
   const pl = playlistData;
 
   return (
-    <Screen>
+    <Screen padded={false}>
+      <LinearGradient
+        colors={[`${theme.color.accent}30`, `${theme.color.accent}08`, 'transparent']}
+        style={styles.gradient}
+        pointerEvents="none"
+      />
       <View style={styles.header}>
         <IconButton icon={ChevronLeft} size={24} onPress={goBack} accessibilityLabel="Back" />
         <IconButton icon={EllipsisVertical} size={20} onPress={() => setMenuVisible(true)} accessibilityLabel="Playlist options" />
@@ -223,18 +230,20 @@ export function PlaylistDetailScreen(): ReactElement {
           />
         }
         renderItem={({ item }) => (
-          <LibraryRow
-            track={item}
-            {...(item.acquisition_status === 'ready' ? { onPlay: () => {
-              const { playable, startIndex } = buildPlayableQueue(pl.tracks, item.id);
-              queue.playFromList(playable, startIndex, { kind: 'playlist', playlistId, name: pl.name });
-            } } : {})}
-            onPress={() => navigateToTrack(item)}
-            onMore={() => setActionTrack(item)}
-            {...(item.acquisition_status === 'failed' ? { onRetry: () => retryMut.mutate(item.id) } : {})}
-            retrying={retryingTrackId === item.id}
-            isPlaying={isCurrentlyPlaying(playback, { kind: 'library', trackId: item.id })}
-          />
+          <View style={styles.trackRow}>
+            <LibraryRow
+              track={item}
+              {...(item.acquisition_status === 'ready' ? { onPlay: () => {
+                const { playable, startIndex } = buildPlayableQueue(pl.tracks, item.id);
+                queue.playFromList(playable, startIndex, { kind: 'playlist', playlistId, name: pl.name });
+              } } : {})}
+              onPress={() => navigateToTrack(item)}
+              onMore={() => setActionTrack(item)}
+              {...(item.acquisition_status === 'failed' ? { onRetry: () => retryMut.mutate(item.id) } : {})}
+              retrying={retryingTrackId === item.id}
+              isPlaying={isCurrentlyPlaying(playback, { kind: 'library', trackId: item.id })}
+            />
+          </View>
         )}
         ListEmptyComponent={
           <View style={styles.emptyTracks}>
@@ -258,11 +267,19 @@ export function PlaylistDetailScreen(): ReactElement {
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 350,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: spacing.xs,
+    paddingHorizontal: spacing.lg,
   },
   heroLoading: {
     alignItems: 'center',
@@ -270,6 +287,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   list: { paddingBottom: spacing['3xl'] },
+  trackRow: { paddingHorizontal: spacing.lg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
   emptyTracks: {
     alignItems: 'center',
