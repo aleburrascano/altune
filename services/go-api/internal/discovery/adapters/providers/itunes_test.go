@@ -215,7 +215,7 @@ func TestITunesAdapter_LookupAlbum(t *testing.T) {
 			defer server.Close()
 
 			adapter := NewITunesAdapter(newTestClient(server.URL))
-			verdict, err := adapter.LookupAlbum(
+			verdict, _, err := adapter.LookupAlbum(
 				context.Background(),
 				tt.albumTitle,
 				tt.artistName,

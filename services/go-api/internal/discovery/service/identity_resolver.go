@@ -22,7 +22,7 @@ type mbLookup interface {
 
 // itunesLookup is the subset of ITunesAdapter the resolver needs.
 type itunesLookup interface {
-	LookupAlbum(ctx context.Context, albumTitle, artistName string, profile domain.ArtistIdentityProfile) (domain.AlbumVerdict, error)
+	LookupAlbum(ctx context.Context, albumTitle, artistName string, profile domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error)
 }
 
 // isrcFetcher fetches the ISRC for a track by provider-specific ID.
@@ -46,8 +46,9 @@ type IdentityResolverService struct {
 	isrc        isrcFetcher
 	cache       identityCache // nil-safe
 
-	mbConsecutiveErrors int  // reset per Resolve call; skip R2 after 3
-	mbUnreachable       bool // set by BuildProfile when MB times out
+	mbConsecutiveErrors  int   // reset per Resolve call; skip R2 after 3
+	mbUnreachable        bool  // set by BuildProfile when MB times out
+	itunesArtistID       int64 // first iTunes artist ID seen; 0 = unset
 }
 
 type IdentityResolverOption func(*IdentityResolverService)
@@ -198,6 +199,7 @@ func (s *IdentityResolverService) Resolve(
 	albums []domain.SearchResult,
 ) []ports.AlbumResolution {
 	s.mbConsecutiveErrors = 0
+	s.itunesArtistID = 0
 	resolutions := make([]ports.AlbumResolution, 0, len(albums))
 	for _, album := range albums {
 		res := s.resolveOne(ctx, artistName, profile, album)
@@ -274,18 +276,32 @@ func (s *IdentityResolverService) resolveOne(
 
 	// 4. iTunes cross-provider search
 	if s.itunes != nil {
-		verdict, err := s.itunes.LookupAlbum(ctx, album.Title, artistName, profile)
+		verdict, itunesArtistID, err := s.itunes.LookupAlbum(ctx, album.Title, artistName, profile)
 		if err == nil && verdict != domain.AlbumVerdictUnknown {
-			reason := "itunes cross-reference confirmed"
-			if verdict == domain.AlbumVerdictContamination {
-				reason = "itunes credited to different artist or incompatible genre"
+			if verdict == domain.AlbumVerdictConfirmed && itunesArtistID != 0 {
+				if s.itunesArtistID == 0 {
+					s.itunesArtistID = itunesArtistID
+				} else if s.itunesArtistID != itunesArtistID {
+					slog.DebugContext(ctx, "identity.itunes_artist_id_mismatch",
+						"album", album.Title,
+						"expected", s.itunesArtistID,
+						"got", itunesArtistID)
+					verdict = domain.AlbumVerdictUnknown
+				}
 			}
-			s.cacheVerdict(ctx, artistName, album.Title, verdict, reason, "itunes")
-			return ports.AlbumResolution{
-				Album:   album,
-				Verdict: verdict,
-				Reason:  reason,
-				Layer:   "itunes",
+
+			if verdict != domain.AlbumVerdictUnknown {
+				reason := "itunes cross-reference confirmed"
+				if verdict == domain.AlbumVerdictContamination {
+					reason = "itunes credited to different artist or incompatible genre"
+				}
+				s.cacheVerdict(ctx, artistName, album.Title, verdict, reason, "itunes")
+				return ports.AlbumResolution{
+					Album:   album,
+					Verdict: verdict,
+					Reason:  reason,
+					Layer:   "itunes",
+				}
 			}
 		}
 	}

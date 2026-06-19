@@ -178,11 +178,13 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 
 // LookupAlbum searches iTunes for an album and returns a verdict on whether
 // it belongs to the given artist based on name and genre compatibility.
+// The returned int64 is the iTunes artist ID when confirmed (0 otherwise),
+// used by the resolver for cross-album artist identity consistency.
 func (a *ITunesAdapter) LookupAlbum(
 	ctx context.Context,
 	albumTitle, artistName string,
 	profile domain.ArtistIdentityProfile,
-) (domain.AlbumVerdict, error) {
+) (domain.AlbumVerdict, int64, error) {
 	u := fmt.Sprintf(
 		"https://itunes.apple.com/search?term=%s&entity=album&limit=5",
 		url.QueryEscape(albumTitle),
@@ -190,23 +192,23 @@ func (a *ITunesAdapter) LookupAlbum(
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
-		return domain.AlbumVerdictUnknown, nil
+		return domain.AlbumVerdictUnknown, 0, nil
 	}
 
 	resp, err := a.client.Do(req)
 	if err != nil {
 		slog.WarnContext(ctx, "itunes.lookup_album_failed", "album", albumTitle, "error", err)
-		return domain.AlbumVerdictUnknown, nil
+		return domain.AlbumVerdictUnknown, 0, nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return domain.AlbumVerdictUnknown, nil
+		return domain.AlbumVerdictUnknown, 0, nil
 	}
 
 	var body itunesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return domain.AlbumVerdictUnknown, nil
+		return domain.AlbumVerdictUnknown, 0, nil
 	}
 
 	titleNorm := textnorm.NormalizeForMatch(albumTitle)
@@ -219,23 +221,20 @@ func (a *ITunesAdapter) LookupAlbum(
 		}
 
 		if textnorm.NormalizeForMatch(item.ArtistName) != artistNorm {
-			return domain.AlbumVerdictContamination, nil
+			return domain.AlbumVerdictContamination, item.ArtistID, nil
 		}
 
-		// Artist name matches. Check genre compatibility if we have genre data.
-		// iTunes genres use "/" as separator (e.g. "Hip-Hop/Rap"), so split
-		// before comparing against the profile's genre cluster.
 		if len(profile.GenreCluster) > 0 && item.PrimaryGenreName != "" {
 			genres := strings.Split(item.PrimaryGenreName, "/")
 			if !profile.HasGenreOverlap(genres) {
-				return domain.AlbumVerdictContamination, nil
+				return domain.AlbumVerdictContamination, item.ArtistID, nil
 			}
 		}
 
-		return domain.AlbumVerdictConfirmed, nil
+		return domain.AlbumVerdictConfirmed, item.ArtistID, nil
 	}
 
-	return domain.AlbumVerdictUnknown, nil
+	return domain.AlbumVerdictUnknown, 0, nil
 }
 
 var itunesTypeSuffixes = []string{" - Single", " - EP", " - Album", " - Deluxe", " - Remix"}
@@ -256,6 +255,7 @@ type itunesResponse struct {
 type itunesItem struct {
 	TrackID          int64  `json:"trackId"`
 	TrackName        string `json:"trackName"`
+	ArtistID         int64  `json:"artistId"`
 	ArtistName       string `json:"artistName"`
 	CollectionName   string `json:"collectionName"`
 	TrackViewURL     string `json:"trackViewUrl"`
