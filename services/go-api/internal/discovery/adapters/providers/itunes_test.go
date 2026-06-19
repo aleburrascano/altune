@@ -25,7 +25,8 @@ func TestITunesAdapter_Search_Tracks(t *testing.T) {
 				"collectionName": "Led Zeppelin IV",
 				"trackViewUrl": "https://music.apple.com/track/456789",
 				"artworkUrl100": "https://is1-ssl.mzstatic.com/image/100x100.jpg",
-				"trackTimeMillis": 482000
+				"trackTimeMillis": 482000,
+				"primaryGenreName": "Rock"
 			}]
 		}`))
 	}))
@@ -77,6 +78,9 @@ func TestITunesAdapter_Search_Tracks(t *testing.T) {
 	// duration should be trackTimeMillis/1000 = 482
 	if dur, ok := r.Extras["duration"].(int64); !ok || dur != 482 {
 		t.Errorf("extras.duration: got %v (%T), want 482", r.Extras["duration"], r.Extras["duration"])
+	}
+	if r.Extras["genre"] != "Rock" {
+		t.Errorf("extras.genre: got %v, want %q", r.Extras["genre"], "Rock")
 	}
 }
 

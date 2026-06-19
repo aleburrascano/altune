@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -207,6 +208,23 @@ func mapMBArtist(art mbArtistItem) domain.SearchResult {
 	if art.Disambiguation != "" {
 		extras["disambiguation"] = art.Disambiguation
 	}
+	if art.Type != "" {
+		extras["artist_type"] = art.Type
+	}
+	if art.Area != nil && art.Area.Name != "" {
+		extras["area"] = art.Area.Name
+	}
+	if len(art.Tags) > 0 {
+		names := make([]string, 0, len(art.Tags))
+		for _, tag := range art.Tags {
+			if tag.Name != "" {
+				names = append(names, tag.Name)
+			}
+		}
+		if len(names) > 0 {
+			extras["mb_tags"] = strings.Join(names, ", ")
+		}
+	}
 
 	return domain.SearchResult{
 		Kind:       domain.ResultKindArtist,
@@ -267,7 +285,19 @@ type mbArtistItem struct {
 	ID             string     `json:"id"`
 	Name           string     `json:"name"`
 	Disambiguation string     `json:"disambiguation"`
+	Type           string     `json:"type"`
+	Area           *mbArea    `json:"area"`
+	Tags           []mbTag    `json:"tags"`
 	LifeSpan       mbLifeSpan `json:"life-span"`
+}
+
+type mbArea struct {
+	Name string `json:"name"`
+}
+
+type mbTag struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
 }
 
 type mbLifeSpan struct {
