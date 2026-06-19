@@ -43,14 +43,14 @@ func (f *fakeMBLookup) LookupAlbumArtist(ctx context.Context, artistName, albumT
 }
 
 type fakeITunesLookup struct {
-	lookupAlbumFn func(ctx context.Context, albumTitle, artistName string, profile domain.ArtistIdentityProfile) (domain.AlbumVerdict, error)
+	lookupAlbumFn func(ctx context.Context, albumTitle, artistName string, profile domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error)
 }
 
-func (f *fakeITunesLookup) LookupAlbum(ctx context.Context, albumTitle, artistName string, profile domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
+func (f *fakeITunesLookup) LookupAlbum(ctx context.Context, albumTitle, artistName string, profile domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error) {
 	if f.lookupAlbumFn != nil {
 		return f.lookupAlbumFn(ctx, albumTitle, artistName, profile)
 	}
-	return domain.AlbumVerdictUnknown, nil
+	return domain.AlbumVerdictUnknown, 0, nil
 }
 
 type fakeISRCFetcher struct {
@@ -171,9 +171,9 @@ func TestIdentityResolver_confirmed_by_r2_reverse_lookup(t *testing.T) {
 
 	// R2 confirms — iTunes should not be called
 	itunes := &fakeITunesLookup{
-		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
+		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error) {
 			t.Error("itunes should not have been called after R2 confirmed")
-			return domain.AlbumVerdictUnknown, nil
+			return domain.AlbumVerdictUnknown, 0, nil
 		},
 	}
 	svc = NewIdentityResolverService(WithMBLookup(mb), WithITunesLookup(itunes))
@@ -213,8 +213,8 @@ func TestIdentityResolver_confirmed_by_itunes_r3(t *testing.T) {
 		},
 	}
 	itunes := &fakeITunesLookup{
-		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
-			return domain.AlbumVerdictConfirmed, nil
+		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error) {
+			return domain.AlbumVerdictConfirmed, 0, nil
 		},
 	}
 
@@ -239,8 +239,8 @@ func TestIdentityResolver_contamination_by_itunes_r3(t *testing.T) {
 		},
 	}
 	itunes := &fakeITunesLookup{
-		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
-			return domain.AlbumVerdictContamination, nil
+		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error) {
+			return domain.AlbumVerdictContamination, 0, nil
 		},
 	}
 
@@ -368,8 +368,8 @@ func TestIdentityResolver_all_checks_pass_returns_unknown(t *testing.T) {
 		},
 	}
 	itunes := &fakeITunesLookup{
-		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
-			return domain.AlbumVerdictUnknown, nil
+		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error) {
+			return domain.AlbumVerdictUnknown, 0, nil
 		},
 	}
 
@@ -418,9 +418,9 @@ func TestIdentityResolver_mb_error_falls_through_to_r3(t *testing.T) {
 	}
 	itunesCalled := false
 	itunes := &fakeITunesLookup{
-		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
+		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error) {
 			itunesCalled = true
-			return domain.AlbumVerdictConfirmed, nil
+			return domain.AlbumVerdictConfirmed, 0, nil
 		},
 	}
 
@@ -462,11 +462,11 @@ func TestIdentityResolver_full_pipeline_mixed_albums(t *testing.T) {
 		},
 	}
 	itunes := &fakeITunesLookup{
-		lookupAlbumFn: func(_ context.Context, albumTitle, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
+		lookupAlbumFn: func(_ context.Context, albumTitle, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error) {
 			if albumTitle == "Tšernobõl" {
-				return domain.AlbumVerdictContamination, nil
+				return domain.AlbumVerdictContamination, 0, nil
 			}
-			return domain.AlbumVerdictUnknown, nil
+			return domain.AlbumVerdictUnknown, 0, nil
 		},
 	}
 
@@ -613,6 +613,34 @@ func TestBuildProfile_collects_multiple_isrc_registrants(t *testing.T) {
 	assert.True(t, profile.KnownISRCRegistrants["SE6A"])
 }
 
+func TestIdentityResolver_itunes_artist_id_mismatch_returns_unknown(t *testing.T) {
+	itunes := &fakeITunesLookup{
+		lookupAlbumFn: func(_ context.Context, albumTitle, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error) {
+			switch albumTitle {
+			case "Real Album":
+				return domain.AlbumVerdictConfirmed, 111, nil // Che artist ID 111
+			case "Vergif":
+				return domain.AlbumVerdictConfirmed, 999, nil // different Che, artist ID 999
+			}
+			return domain.AlbumVerdictUnknown, 0, nil
+		},
+	}
+
+	svc := NewIdentityResolverService(WithITunesLookup(itunes))
+	profile := testProfile("", 0)
+
+	albums := []domain.SearchResult{
+		testAlbum("Real Album", map[string]any{"year": 2024}),
+		testAlbum("Vergif", map[string]any{"year": 2024}),
+	}
+
+	resolutions := svc.Resolve(context.Background(), "Che", profile, albums)
+
+	require.Len(t, resolutions, 2)
+	assert.Equal(t, domain.AlbumVerdictConfirmed, resolutions[0].Verdict, "first album sets the artist ID")
+	assert.Equal(t, domain.AlbumVerdictUnknown, resolutions[1].Verdict, "different artist ID should not confirm")
+}
+
 func TestIdentityResolver_skips_r2_after_consecutive_mb_errors(t *testing.T) {
 	mbCallCount := 0
 	mb := &fakeMBLookup{
@@ -623,9 +651,9 @@ func TestIdentityResolver_skips_r2_after_consecutive_mb_errors(t *testing.T) {
 	}
 	itunesCallCount := 0
 	itunes := &fakeITunesLookup{
-		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
+		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error) {
 			itunesCallCount++
-			return domain.AlbumVerdictUnknown, nil
+			return domain.AlbumVerdictUnknown, 0, nil
 		},
 	}
 
@@ -649,12 +677,12 @@ func TestIdentityResolver_pass2_enriches_isrc_from_itunes_confirmed(t *testing.T
 	// iTunes confirms 2 albums in pass 1
 	// Pass 2 samples ISRCs from those, catches contamination album
 	itunes := &fakeITunesLookup{
-		lookupAlbumFn: func(_ context.Context, albumTitle, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
+		lookupAlbumFn: func(_ context.Context, albumTitle, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, int64, error) {
 			switch albumTitle {
 			case "Real Album A", "Real Album B":
-				return domain.AlbumVerdictConfirmed, nil
+				return domain.AlbumVerdictConfirmed, 0, nil
 			}
-			return domain.AlbumVerdictUnknown, nil
+			return domain.AlbumVerdictUnknown, 0, nil
 		},
 	}
 
