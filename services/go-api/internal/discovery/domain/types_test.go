@@ -149,6 +149,8 @@ func TestProviderName_String(t *testing.T) {
 		{ProviderLastFM, "lastfm"},
 		{ProviderITunes, "itunes"},
 		{ProviderTheAudioDB, "theaudiodb"},
+		{ProviderDiscogs, "discogs"},
+		{ProviderYouTube, "youtube"},
 		{ProviderName(999), "unknown"},
 	}
 

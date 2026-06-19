@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -48,10 +49,14 @@ func (c *CachedDiscogsResolver) Set(ctx context.Context, artistName string, disc
 		return
 	}
 	key := discogsCacheKey(artistName)
+	var err error
 	if discogsID > 0 {
-		_ = c.client.Set(ctx, key, strconv.Itoa(discogsID), discogsPositiveTTL).Err()
+		err = c.client.Set(ctx, key, strconv.Itoa(discogsID), discogsPositiveTTL).Err()
 	} else {
-		_ = c.client.Set(ctx, key, discogsNoneSentinel, discogsNegativeTTL).Err()
+		err = c.client.Set(ctx, key, discogsNoneSentinel, discogsNegativeTTL).Err()
+	}
+	if err != nil {
+		slog.WarnContext(ctx, "discogs_cache.set_failed", "key", key, "error", err)
 	}
 }
 

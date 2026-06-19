@@ -149,5 +149,5 @@ func (a *YouTubeArtworkResolver) doGet(ctx context.Context, rawURL string) ([]by
 		return nil, fmt.Errorf("youtube returned %d", resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 }

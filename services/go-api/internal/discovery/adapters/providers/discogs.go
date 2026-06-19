@@ -13,6 +13,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 type DiscogsAdapter struct {
@@ -29,12 +30,12 @@ func NewDiscogsAdapter(client *http.Client, token, userAgent string) *DiscogsAda
 
 func (a *DiscogsAdapter) rateLimit() {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	since := time.Since(a.lastReq)
+	a.lastReq = time.Now()
+	a.mu.Unlock()
 	if since < time.Second {
 		time.Sleep(time.Second - since)
 	}
-	a.lastReq = time.Now()
 }
 
 func (a *DiscogsAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
@@ -53,18 +54,18 @@ func (a *DiscogsAdapter) Resolve(ctx context.Context, kind domain.ResultKind, ti
 			"name", title, "count", len(artists))
 	}
 
-	images, err := a.fetchArtistImages(ctx, best.ID)
-	if err != nil || len(images) == 0 {
+	detail, err := a.fetchArtistDetail(ctx, best.ID)
+	if err != nil || len(detail.Images) == 0 {
 		return "", nil
 	}
 
-	for _, img := range images {
+	for _, img := range detail.Images {
 		if img.Type == "primary" && img.URI != "" {
 			return img.URI, nil
 		}
 	}
-	if images[0].URI != "" {
-		return images[0].URI, nil
+	if detail.Images[0].URI != "" {
+		return detail.Images[0].URI, nil
 	}
 	return "", nil
 }
@@ -78,16 +79,16 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 		return nil, nil
 	}
 	if len(artists) == 1 {
-		info, err := a.fetchArtistProfile(ctx, artists[0].ID)
+		detail, err := a.fetchArtistDetail(ctx, artists[0].ID)
 		if err != nil {
 			return &ports.DiscogsArtistInfo{ID: artists[0].ID, Name: artists[0].Title}, nil
 		}
-		return info, nil
+		return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name}, nil
 	}
 
 	albumSet := make(map[string]bool, len(albumTitles))
 	for _, t := range albumTitles {
-		albumSet[normForMatch(t)] = true
+		albumSet[textnorm.NormalizeForMatch(t)] = true
 	}
 
 	var bestArtist discogsSearchResult
@@ -99,7 +100,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 		}
 		overlap := 0
 		for _, rel := range releases {
-			if albumSet[normForMatch(rel.Title)] {
+			if albumSet[textnorm.NormalizeForMatch(rel.Title)] {
 				overlap++
 			}
 		}
@@ -117,12 +118,11 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 		"name", name, "discogs_id", bestArtist.ID,
 		"overlap", bestOverlap, "candidates", len(artists))
 
-	info, err := a.fetchArtistProfile(ctx, bestArtist.ID)
+	detail, err := a.fetchArtistDetail(ctx, bestArtist.ID)
 	if err != nil {
 		return &ports.DiscogsArtistInfo{ID: bestArtist.ID, Name: bestArtist.Title, Overlap: bestOverlap}, nil
 	}
-	info.Overlap = bestOverlap
-	return info, nil
+	return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name, Overlap: bestOverlap}, nil
 }
 
 func (a *DiscogsAdapter) FetchArtistReleases(ctx context.Context, discogsID int) ([]ports.DiscogsRelease, error) {
@@ -186,7 +186,7 @@ func (a *DiscogsAdapter) searchArtists(ctx context.Context, name string) ([]disc
 	return resp.Results, nil
 }
 
-func (a *DiscogsAdapter) fetchArtistImages(ctx context.Context, artistID int) ([]discogsImage, error) {
+func (a *DiscogsAdapter) fetchArtistDetail(ctx context.Context, artistID int) (*discogsArtistDetail, error) {
 	u := fmt.Sprintf("https://api.discogs.com/artists/%d", artistID)
 
 	body, err := a.doGet(ctx, u)
@@ -198,26 +198,7 @@ func (a *DiscogsAdapter) fetchArtistImages(ctx context.Context, artistID int) ([
 	if err := json.Unmarshal(body, &detail); err != nil {
 		return nil, err
 	}
-	return detail.Images, nil
-}
-
-func (a *DiscogsAdapter) fetchArtistProfile(ctx context.Context, artistID int) (*ports.DiscogsArtistInfo, error) {
-	u := fmt.Sprintf("https://api.discogs.com/artists/%d", artistID)
-
-	body, err := a.doGet(ctx, u)
-	if err != nil {
-		return nil, err
-	}
-
-	var detail discogsArtistDetail
-	if err := json.Unmarshal(body, &detail); err != nil {
-		return nil, err
-	}
-
-	return &ports.DiscogsArtistInfo{
-		ID:   detail.ID,
-		Name: detail.Name,
-	}, nil
+	return &detail, nil
 }
 
 func (a *DiscogsAdapter) fetchArtistReleases(ctx context.Context, artistID, perPage int) ([]discogsRelease, error) {
@@ -259,5 +240,5 @@ func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, erro
 		return nil, fmt.Errorf("discogs returned %d", resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 }
