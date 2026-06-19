@@ -225,14 +225,25 @@ func (a *App) setup(ctx context.Context) error {
 		"deezer": deezerContent,
 	}
 	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
-	var artistContentOpts []discoveryService.ArtistContentOption
+	// Identity resolver for artist content (discography decontamination).
+	// Each provider dependency is optional — the resolver degrades gracefully.
+	var identityResolverOpts []discoveryService.IdentityResolverOption
 	if sharedMB != nil {
-		artistContentOpts = append(artistContentOpts, discoveryService.WithAlbumValidator(sharedMB))
+		identityResolverOpts = append(identityResolverOpts, discoveryService.WithMBLookup(sharedMB))
 		searchOpts = append(searchOpts, discoveryService.WithIdentityResolver(sharedMB))
 	}
-	if sharedDiscogs != nil {
-		artistContentOpts = append(artistContentOpts, discoveryService.WithDiscogsEnricher(sharedDiscogs))
+	itunesIdentity := providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second})
+	identityResolverOpts = append(identityResolverOpts, discoveryService.WithITunesLookup(itunesIdentity))
+	identityResolverOpts = append(identityResolverOpts, discoveryService.WithISRCFetcher(deezerContent))
+	if a.redisClient != nil {
+		identityResolverOpts = append(identityResolverOpts,
+			discoveryService.WithIdentityCache(discoveryCacheAdapters.NewIdentityCache(a.redisClient)),
+		)
 	}
+	identityResolver := discoveryService.NewIdentityResolverService(identityResolverOpts...)
+
+	var artistContentOpts []discoveryService.ArtistContentOption
+	artistContentOpts = append(artistContentOpts, discoveryService.WithArtistIdentityResolver(identityResolver))
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
