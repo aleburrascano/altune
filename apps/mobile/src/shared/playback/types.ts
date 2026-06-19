@@ -30,3 +30,10 @@ export interface PlaybackControls {
 }
 
 export type PlaybackContextValue = PlaybackState & PlaybackControls;
+
+export type RepeatMode = 'off' | 'all' | 'one';
+
+export type QueueSource =
+  | { readonly kind: 'playlist'; readonly playlistId: string; readonly name: string }
+  | { readonly kind: 'library' }
+  | { readonly kind: 'search'; readonly query: string };

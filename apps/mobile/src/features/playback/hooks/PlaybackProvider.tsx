@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useQueryClient } from '@tanstack/react-query';
 
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '@shared/playback/types';
+
+import { useQueueResume } from './useQueueResume';
 
 import { audioRequestHeaders, audioStreamUrl } from '../api/audio';
 
@@ -80,6 +83,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       player.seekTo(0);
     }
   }, [track, playerStatus.playing, playerStatus.isLoaded, playerStatus.currentTime, playerStatus.duration, player]);
+
+  const prevEndedRef = useRef(false);
+  const autoAdvancing = useRef(false);
 
   const safeMs = (seconds: number | undefined | null): number => {
     if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return 0;
@@ -199,6 +205,27 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     shouldAutoPlay.current = true;
     void loadAudioSource(trackToRetry, 0);
   }, [loadAudioSource]);
+
+  useEffect(() => {
+    if (!isEnded || prevEndedRef.current || track?.source.kind === 'preview' || autoAdvancing.current) {
+      prevEndedRef.current = isEnded;
+      return;
+    }
+    prevEndedRef.current = true;
+    const { repeatMode, skipToNext } = useQueueStore.getState();
+    if (repeatMode === 'one') {
+      player.seekTo(0);
+      player.play();
+    } else {
+      const nextTrack = skipToNext();
+      if (nextTrack) {
+        autoAdvancing.current = true;
+        void play(nextTrack).finally(() => { autoAdvancing.current = false; });
+      }
+    }
+  }, [isEnded, track, player, play]);
+
+  useQueueResume();
 
   const value: PlaybackContextValue = {
     ...state,

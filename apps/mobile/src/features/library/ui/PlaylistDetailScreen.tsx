@@ -16,7 +16,9 @@ import {
   renamePlaylist,
 } from '@shared/api-client/playlists';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
+import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 import type { TrackResponse } from '@shared/api-client/types';
@@ -109,6 +111,7 @@ export function PlaylistDetailScreen(): ReactElement {
   const retryingTrackId = retryMut.isPending ? retryMut.variables : undefined;
   const { navigateToTrack } = useLibraryNavigation(router);
   const playback = usePlayback();
+  const queue = useQueuePlayback();
   const [actionTrack, setActionTrack] = useState<TrackResponse | null>(null);
 
   const handleDelete = () => {
@@ -212,13 +215,9 @@ export function PlaylistDetailScreen(): ReactElement {
           <LibraryRow
             track={item}
             {...(item.acquisition_status === 'ready' ? { onPlay: () => {
-              void playback.play({
-                source: { kind: 'library', trackId: item.id },
-                title: item.title,
-                artist: item.artist,
-                artworkUrl: item.artwork_url ?? null,
-                durationSeconds: item.duration_seconds ?? undefined,
-              });
+              const playableTracks = pl.tracks.filter((t) => t.acquisition_status === 'ready').map(toPlaybackTrack);
+              const startIdx = playableTracks.findIndex((t) => t.source.kind === 'library' && t.source.trackId === item.id);
+              queue.playFromList(playableTracks, Math.max(0, startIdx), { kind: 'playlist', playlistId, name: pl.name });
             } } : {})}
             onPress={() => navigateToTrack(item)}
             onMore={() => setActionTrack(item)}
