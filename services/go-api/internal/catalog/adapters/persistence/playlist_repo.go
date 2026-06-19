@@ -34,7 +34,11 @@ func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Pla
 
 func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, name, created_at, updated_at FROM playlists WHERE user_id = $1 ORDER BY created_at DESC`,
+		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
+			(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id) AS track_count
+		FROM playlists p
+		WHERE p.user_id = $1
+		ORDER BY p.created_at DESC`,
 		userId.UUID(),
 	)
 	if err != nil {
@@ -44,10 +48,26 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 
 	var playlists []*domain.Playlist
 	for rows.Next() {
-		p, err := scanPlaylist(rows)
+		var (
+			id         uuid.UUID
+			uid        uuid.UUID
+			name       string
+			createdAt  time.Time
+			updatedAt  time.Time
+			trackCount int
+		)
+		err := rows.Scan(&id, &uid, &name, &createdAt, &updatedAt, &trackCount)
 		if err != nil {
 			return nil, err
 		}
+		p := &domain.Playlist{
+			ID:        domain.PlaylistIdFromUUID(id),
+			UserId:    shared.NewUserId(uid),
+			Name:      name,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+		}
+		p.TrackCount = trackCount
 		playlists = append(playlists, p)
 	}
 	return playlists, rows.Err()

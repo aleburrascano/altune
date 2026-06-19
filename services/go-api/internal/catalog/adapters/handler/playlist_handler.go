@@ -130,11 +130,16 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]PlaylistResponse, len(playlists))
 	for i, p := range playlists {
+		artworkURLs, err := h.svc.GetPreviewArtwork(r.Context(), p.ID)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "get preview artwork failed", "error", err, "playlist_id", p.ID.String())
+			artworkURLs = []string{}
+		}
 		items[i] = PlaylistResponse{
 			ID:                 p.ID.UUID(),
 			Name:               p.Name,
-			TrackCount:         len(p.Tracks),
-			PreviewArtworkURLs: []string{},
+			TrackCount:         p.TrackCount,
+			PreviewArtworkURLs: artworkURLs,
 			CreatedAt:          p.CreatedAt,
 			UpdatedAt:          p.UpdatedAt,
 		}

@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 
@@ -107,6 +108,7 @@ export function PlaylistDetailScreen(): ReactElement {
   });
 
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const retryMut = useRetryAcquisition();
   const retryingTrackId = retryMut.isPending ? retryMut.variables : undefined;
   const { navigateToTrack } = useLibraryNavigation(router);
@@ -206,6 +208,7 @@ export function PlaylistDetailScreen(): ReactElement {
       <ContextMenu
         visible={menuVisible}
         onClose={() => setMenuVisible(false)}
+        anchorTop={insets.top + spacing.xs + 44 + spacing.xs}
         items={[
           { label: 'Rename Playlist', onPress: startEditing },
           { label: 'Delete Playlist', onPress: handleDelete, tone: 'danger' },
