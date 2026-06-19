@@ -1,8 +1,11 @@
 package service
 
 import (
+	"regexp"
 	"strings"
 )
+
+var whitespaceRe = regexp.MustCompile(`\s+`)
 
 var noisePatterns = []string{
 	"official music video", "official video", "music video",

@@ -7,12 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 type MusicBrainzAdapter struct {
@@ -29,12 +29,12 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAd
 // rateLimit enforces MB's 1 req/sec policy. Call before every HTTP request.
 func (a *MusicBrainzAdapter) rateLimit() {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	since := time.Since(a.lastReq)
+	a.lastReq = time.Now()
+	a.mu.Unlock()
 	if since < time.Second {
 		time.Sleep(time.Second - since)
 	}
-	a.lastReq = time.Now()
 }
 
 func (a *MusicBrainzAdapter) Name() domain.ProviderName { return domain.ProviderMusicBrainz }
@@ -324,12 +324,12 @@ func (a *MusicBrainzAdapter) ValidateArtistAlbums(
 
 	mbTitles := make(map[string]bool, len(releases))
 	for _, rg := range releases {
-		mbTitles[normForMatch(rg.Title)] = true
+		mbTitles[textnorm.NormalizeForMatch(rg.Title)] = true
 	}
 
 	var confirmed, unconfirmed []domain.SearchResult
 	for _, album := range albums {
-		if mbTitles[normForMatch(album.Title)] {
+		if mbTitles[textnorm.NormalizeForMatch(album.Title)] {
 			confirmed = append(confirmed, album)
 		} else {
 			unconfirmed = append(unconfirmed, album)
@@ -355,12 +355,12 @@ func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name str
 	if err != nil {
 		return nil, err
 	}
-	nameNorm := normForMatch(name)
+	nameNorm := textnorm.NormalizeForMatch(name)
 
 	var first *mbArtistItem
 	candidateCount := 0
 	for i := range artists {
-		if normForMatch(artists[i].Name) == nameNorm {
+		if textnorm.NormalizeForMatch(artists[i].Name) == nameNorm {
 			candidateCount++
 			if first == nil {
 				first = &artists[i]
@@ -469,6 +469,3 @@ func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string
 	return body.ReleaseGroups, nil
 }
 
-func normForMatch(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
-}

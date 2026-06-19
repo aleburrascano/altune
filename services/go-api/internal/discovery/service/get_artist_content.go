@@ -97,83 +97,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 	results = dedupAlbums(results)
 
 	if artistName != "" && (s.albumValidator != nil || s.discogsEnrich != nil) {
-		mbConfirmed := make(map[string]bool)
-		discogsConfirmed := make(map[string]bool)
-		birthYear := 0
-
-		if s.albumValidator != nil {
-			identity, _ := s.albumValidator.ResolveArtistIdentity(ctx, artistName)
-			if identity != nil {
-				birthYear = identity.BirthYear
-			}
-
-			validated, err := s.albumValidator.ValidateArtistAlbums(ctx, artistName, results)
-			if err != nil {
-				slog.WarnContext(ctx, "album_validation_failed", "artist", artistName, "error", err)
-			} else {
-				for _, a := range validated.Confirmed {
-					mbConfirmed[NormalizeForMatch(a.Title)] = true
-				}
-				slog.InfoContext(ctx, "album_validation_applied",
-					"artist", artistName,
-					"confirmed", len(validated.Confirmed),
-					"unconfirmed", len(validated.Unconfirmed),
-				)
-			}
-		}
-
-		if s.discogsEnrich != nil {
-			albumTitles := make([]string, len(results))
-			for i, r := range results {
-				albumTitles[i] = r.Title
-			}
-			discogsArtist, err := s.discogsEnrich.ResolveDiscogsArtist(ctx, artistName, albumTitles)
-			if err != nil {
-				slog.WarnContext(ctx, "discogs_enrichment_failed", "artist", artistName, "error", err)
-			} else if discogsArtist != nil && discogsArtist.Overlap > 0 {
-				releases, err := s.discogsEnrich.FetchArtistReleases(ctx, discogsArtist.ID)
-				if err != nil {
-					slog.WarnContext(ctx, "discogs_releases_failed", "artist", artistName, "error", err)
-				} else {
-					discogsYears := make(map[string]int, len(releases))
-					for _, rel := range releases {
-						norm := NormalizeForMatch(rel.Title)
-						discogsConfirmed[norm] = true
-						if rel.Year > 0 {
-							discogsYears[norm] = rel.Year
-						}
-					}
-					for i, r := range results {
-						if extractYear(r) == 0 {
-							norm := NormalizeForMatch(r.Title)
-							if y, ok := discogsYears[norm]; ok {
-								extras := copyExtras(r.Extras)
-								extras["year"] = y
-								results[i].Extras = extras
-							}
-						}
-					}
-					slog.InfoContext(ctx, "discogs_enrichment_applied",
-						"artist", artistName,
-						"discogs_id", discogsArtist.ID,
-						"overlap", discogsArtist.Overlap,
-						"releases", len(releases),
-						"years_backfilled", len(discogsYears),
-					)
-				}
-			} else if discogsArtist != nil {
-				slog.InfoContext(ctx, "discogs_enrichment_skipped",
-					"artist", artistName,
-					"discogs_id", discogsArtist.ID,
-					"reason", "zero album overlap, unreliable match")
-			}
-		}
-
-		results = FilterContamination(results, DiscographyFilterInput{
-			BirthYear:        birthYear,
-			MBConfirmed:      mbConfirmed,
-			DiscogsConfirmed: discogsConfirmed,
-		})
+		results = s.validateAndFilterDiscography(ctx, artistName, results)
 	}
 
 	if limit > 0 && len(results) > limit {
@@ -185,6 +109,98 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 		Status:       domain.ProviderStatusOK,
 		Items:        results,
 	}, nil
+}
+
+func (s *GetArtistContentService) validateAndFilterDiscography(ctx context.Context, artistName string, results []domain.SearchResult) []domain.SearchResult {
+	mbConfirmed := make(map[string]bool)
+	discogsConfirmed := make(map[string]bool)
+	birthYear := 0
+
+	if s.albumValidator != nil {
+		identity, _ := s.albumValidator.ResolveArtistIdentity(ctx, artistName)
+		if identity != nil {
+			birthYear = identity.BirthYear
+		}
+
+		validated, err := s.albumValidator.ValidateArtistAlbums(ctx, artistName, results)
+		if err != nil {
+			slog.WarnContext(ctx, "album_validation_failed", "artist", artistName, "error", err)
+		} else {
+			for _, a := range validated.Confirmed {
+				mbConfirmed[NormalizeForMatch(a.Title)] = true
+			}
+			slog.InfoContext(ctx, "album_validation_applied",
+				"artist", artistName,
+				"confirmed", len(validated.Confirmed),
+				"unconfirmed", len(validated.Unconfirmed),
+			)
+		}
+	}
+
+	if s.discogsEnrich != nil {
+		results = s.applyDiscogsEnrichment(ctx, artistName, results, discogsConfirmed)
+	}
+
+	return FilterContamination(results, DiscographyFilterInput{
+		BirthYear:        birthYear,
+		MBConfirmed:      mbConfirmed,
+		DiscogsConfirmed: discogsConfirmed,
+	})
+}
+
+func (s *GetArtistContentService) applyDiscogsEnrichment(ctx context.Context, artistName string, results []domain.SearchResult, discogsConfirmed map[string]bool) []domain.SearchResult {
+	albumTitles := make([]string, len(results))
+	for i, r := range results {
+		albumTitles[i] = r.Title
+	}
+	discogsArtist, err := s.discogsEnrich.ResolveDiscogsArtist(ctx, artistName, albumTitles)
+	if err != nil {
+		slog.WarnContext(ctx, "discogs_enrichment_failed", "artist", artistName, "error", err)
+		return results
+	}
+	if discogsArtist == nil {
+		return results
+	}
+	if discogsArtist.Overlap == 0 {
+		slog.InfoContext(ctx, "discogs_enrichment_skipped",
+			"artist", artistName,
+			"discogs_id", discogsArtist.ID,
+			"reason", "zero album overlap, unreliable match")
+		return results
+	}
+
+	releases, err := s.discogsEnrich.FetchArtistReleases(ctx, discogsArtist.ID)
+	if err != nil {
+		slog.WarnContext(ctx, "discogs_releases_failed", "artist", artistName, "error", err)
+		return results
+	}
+
+	discogsYears := make(map[string]int, len(releases))
+	for _, rel := range releases {
+		norm := NormalizeForMatch(rel.Title)
+		discogsConfirmed[norm] = true
+		if rel.Year > 0 {
+			discogsYears[norm] = rel.Year
+		}
+	}
+	for i, r := range results {
+		if extractYear(r) == 0 {
+			norm := NormalizeForMatch(r.Title)
+			if y, ok := discogsYears[norm]; ok {
+				extras := copyExtras(r.Extras)
+				extras["year"] = y
+				results[i].Extras = extras
+			}
+		}
+	}
+	slog.InfoContext(ctx, "discogs_enrichment_applied",
+		"artist", artistName,
+		"discogs_id", discogsArtist.ID,
+		"overlap", discogsArtist.Overlap,
+		"releases", len(releases),
+		"years_backfilled", len(discogsYears),
+	)
+	return results
 }
 
 func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {

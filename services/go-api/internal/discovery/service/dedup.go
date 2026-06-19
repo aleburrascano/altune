@@ -958,23 +958,23 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		if len(g.otherIdxs) == 0 {
 			continue
 		}
-		collapsed_list := make([]map[string]any, len(g.otherIdxs))
+		collapsedList := make([]map[string]any, len(g.otherIdxs))
 		for j, idx := range g.otherIdxs {
 			other := results[idx]
-			collapsed_list[j] = map[string]any{
+			collapsedList[j] = map[string]any{
 				"title":    other.Title,
 				"subtitle": other.Subtitle,
 				"sources":  other.Sources,
 				"extras":   other.Extras,
 			}
 			if other.ImageURL != "" {
-				collapsed_list[j]["image_url"] = other.ImageURL
+				collapsedList[j]["image_url"] = other.ImageURL
 			}
 			remove[idx] = true
 		}
 		primary := &results[g.primaryIdx]
 		extras := copyExtras(primary.Extras)
-		extras["collapsed_artists"] = collapsed_list
+		extras["collapsed_artists"] = collapsedList
 		primary.Extras = extras
 	}
 

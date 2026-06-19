@@ -295,16 +295,17 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 			ingestQuery = correctedQuery
 		}
 		s.ingestWg.Add(1)
+		ingestCtx := context.WithoutCancel(ctx)
 		go func() {
 			defer s.ingestWg.Done()
-			s.ingestToVocabulary(ingestQuery, merged)
+			s.ingestToVocabulary(ingestCtx, ingestQuery, merged)
 		}()
 	}
 
 	// Pipeline summary: one log line with everything needed to debug wiring.
 	disambiguated := 0
 	collapsedCount := 0
-	artworkSources := map[string]int{}
+	hasArt, noArt, hasMBID := 0, 0, 0
 	for _, r := range merged {
 		if getStringExtra(r, "disambiguation") != "" {
 			disambiguated++
@@ -315,12 +316,12 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 			}
 		}
 		if r.ImageURL != "" {
-			artworkSources["has_art"]++
+			hasArt++
 		} else {
-			artworkSources["no_art"]++
+			noArt++
 		}
 		if getStringExtra(r, "mbid") != "" {
-			artworkSources["has_mbid"]++
+			hasMBID++
 		}
 	}
 
@@ -339,9 +340,9 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		"suggested", suggestedQuery,
 		"disambiguated", disambiguated,
 		"collapsed_artists", collapsedCount,
-		"has_art", artworkSources["has_art"],
-		"no_art", artworkSources["no_art"],
-		"has_mbid", artworkSources["has_mbid"],
+		"has_art", hasArt,
+		"no_art", noArt,
+		"has_mbid", hasMBID,
 		"related_groups", len(related),
 		"providers", strings.Join(providerSummary, ","),
 		"duration", time.Since(searchStart),
@@ -465,14 +466,14 @@ func (s *SearchMusicService) WaitForIngest() {
 	s.ingestWg.Wait()
 }
 
-func (s *SearchMusicService) ingestToVocabulary(rawQuery string, results []domain.SearchResult) {
+func (s *SearchMusicService) ingestToVocabulary(parentCtx context.Context, rawQuery string, results []domain.SearchResult) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Warn("search.vocab_ingest_panic", "error", r)
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(parentCtx, 3*time.Second)
 	defer cancel()
 
 	entries := buildVocabEntries(rawQuery, results)
@@ -481,6 +482,19 @@ func (s *SearchMusicService) ingestToVocabulary(rawQuery string, results []domai
 			slog.Warn("search.vocab_ingest_failed", "term", e.Term, "error", err)
 		}
 	}
+}
+
+var vocabKindByResultKind = map[domain.ResultKind]domain.VocabularyKind{
+	domain.ResultKindArtist: domain.VocabKindArtist,
+	domain.ResultKindTrack:  domain.VocabKindTrack,
+	domain.ResultKindAlbum:  domain.VocabKindAlbum,
+}
+
+func resultKindToVocabKind(k domain.ResultKind) domain.VocabularyKind {
+	if vk, ok := vocabKindByResultKind[k]; ok {
+		return vk
+	}
+	return domain.VocabKindQuery
 }
 
 func buildVocabEntries(rawQuery string, results []domain.SearchResult) []domain.VocabularyEntry {
@@ -505,7 +519,7 @@ func buildVocabEntries(rawQuery string, results []domain.SearchResult) []domain.
 		entries = append(entries, domain.VocabularyEntry{
 			Term:       text,
 			TermNorm:   NormalizeForMatch(text),
-			Kind:       domain.VocabularyKind(r.Kind.String()),
+			Kind:       resultKindToVocabKind(r.Kind),
 			Popularity: int64(pop),
 		})
 		if r.Subtitle != "" && r.Kind == domain.ResultKindTrack {
