@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -44,6 +45,9 @@ type IdentityResolverService struct {
 	itunes      itunesLookup
 	isrc        isrcFetcher
 	cache       identityCache // nil-safe
+
+	mbConsecutiveErrors int  // reset per Resolve call; skip R2 after 3
+	mbUnreachable       bool // set by BuildProfile when MB times out
 }
 
 type IdentityResolverOption func(*IdentityResolverService)
@@ -80,11 +84,14 @@ func (s *IdentityResolverService) BuildProfile(
 	albums []domain.SearchResult,
 ) domain.ArtistIdentityProfile {
 	profile := domain.NewArtistIdentityProfile()
+	s.mbUnreachable = false
+	mbErrors := 0
 
 	// Resolve MB identity (MBID, birth year, disambiguation, area, type)
 	if s.mb != nil {
 		identity, err := s.mb.ResolveArtistIdentity(ctx, artistName)
 		if err != nil {
+			mbErrors++
 			slog.WarnContext(ctx, "identity.resolve_artist_failed",
 				"artist", artistName, "error", err)
 		} else if identity != nil {
@@ -96,11 +103,29 @@ func (s *IdentityResolverService) BuildProfile(
 		}
 	}
 
-	// Collect genre cluster from album extras
+	// Collect dominant genres from album extras (frequency-based).
+	// Using all genres would pollute the cluster with contamination genres,
+	// making the genre incompatibility check useless.
+	genreFreq := map[string]int{}
+	albumsWithGenre := 0
 	for _, album := range albums {
 		genres := extractAlbumGenres(album)
+		if len(genres) > 0 {
+			albumsWithGenre++
+		}
 		for _, g := range genres {
-			profile.AddGenre(g)
+			genreFreq[strings.ToLower(g)]++
+		}
+	}
+	if albumsWithGenre > 0 {
+		threshold := albumsWithGenre / 2
+		if threshold < 2 {
+			threshold = 2
+		}
+		for genre, count := range genreFreq {
+			if count >= threshold {
+				profile.AddGenre(genre)
+			}
 		}
 	}
 
@@ -108,6 +133,10 @@ func (s *IdentityResolverService) BuildProfile(
 	if s.mb != nil {
 		validated, err := s.mb.ValidateArtistAlbums(ctx, artistName, albums)
 		if err != nil {
+			mbErrors++
+			if mbErrors >= 2 {
+				s.mbUnreachable = true
+			}
 			slog.WarnContext(ctx, "identity.validate_albums_failed",
 				"artist", artistName, "error", err)
 		} else if validated != nil {
@@ -115,9 +144,13 @@ func (s *IdentityResolverService) BuildProfile(
 				profile.MBConfirmedTitles[textnorm.NormalizeForMatch(a.Title)] = true
 			}
 
-			// Build ISRC registrant set from confirmed albums
+			// Build ISRC registrant set from confirmed albums (sample up to 5)
 			if s.isrc != nil {
+				sampled := 0
 				for _, confirmed := range validated.Confirmed {
+					if sampled >= 5 {
+						break
+					}
 					albumID := extractDeezerAlbumID(confirmed)
 					if albumID == "" {
 						continue
@@ -134,9 +167,7 @@ func (s *IdentityResolverService) BuildProfile(
 					if registrant != "" {
 						profile.AddISRCRegistrant(registrant)
 					}
-					if len(profile.KnownISRCRegistrants) > 0 {
-						break
-					}
+					sampled++
 				}
 			}
 		}
@@ -165,6 +196,7 @@ func (s *IdentityResolverService) Resolve(
 	profile domain.ArtistIdentityProfile,
 	albums []domain.SearchResult,
 ) []ports.AlbumResolution {
+	s.mbConsecutiveErrors = 0
 	resolutions := make([]ports.AlbumResolution, 0, len(albums))
 	for _, album := range albums {
 		res := s.resolveOne(ctx, artistName, profile, album)
@@ -208,25 +240,35 @@ func (s *IdentityResolverService) resolveOne(
 		}
 	}
 
-	// 3. R2: MB reverse-lookup per album
-	if s.mb != nil && profile.MBID != "" {
+	// 3. MB reverse-lookup per album (authoritative, uses MBID)
+	if s.mb != nil && profile.MBID != "" && !s.mbUnreachable && s.mbConsecutiveErrors < 3 {
 		verdict, _, err := s.mb.LookupAlbumArtist(ctx, artistName, album.Title, profile)
-		if err == nil && verdict != domain.AlbumVerdictUnknown {
-			reason := "mb reverse-lookup"
-			if verdict == domain.AlbumVerdictContamination {
-				reason = "mb credited to different artist"
+		if err != nil {
+			s.mbConsecutiveErrors++
+			if s.mbConsecutiveErrors >= 3 {
+				slog.WarnContext(ctx, "identity.mb_skipped",
+					"artist", artistName,
+					"reason", "3 consecutive MB errors, skipping R2 for remaining albums")
 			}
-			s.cacheVerdict(ctx, artistName, album.Title, verdict, reason, "mb")
-			return ports.AlbumResolution{
-				Album:   album,
-				Verdict: verdict,
-				Reason:  reason,
-				Layer:   "mb",
+		} else {
+			s.mbConsecutiveErrors = 0
+			if verdict != domain.AlbumVerdictUnknown {
+				reason := "mb reverse-lookup"
+				if verdict == domain.AlbumVerdictContamination {
+					reason = "mb credited to different artist"
+				}
+				s.cacheVerdict(ctx, artistName, album.Title, verdict, reason, "mb")
+				return ports.AlbumResolution{
+					Album:   album,
+					Verdict: verdict,
+					Reason:  reason,
+					Layer:   "mb",
+				}
 			}
 		}
 	}
 
-	// 4. R3: iTunes cross-provider search
+	// 4. iTunes cross-provider search
 	if s.itunes != nil {
 		verdict, err := s.itunes.LookupAlbum(ctx, album.Title, artistName, profile)
 		if err == nil && verdict != domain.AlbumVerdictUnknown {
@@ -244,7 +286,7 @@ func (s *IdentityResolverService) resolveOne(
 		}
 	}
 
-	// 5. R3b: Profile constraint checks
+	// 5. Profile constraint checks
 	if CheckTemporalImpossibility(profile, album) {
 		s.cacheVerdict(ctx, artistName, album.Title, domain.AlbumVerdictContamination, "album predates artist activity", "temporal")
 		return ports.AlbumResolution{
@@ -273,28 +315,15 @@ func (s *IdentityResolverService) resolveOne(
 		}
 	}
 
-	// 6. R3c: ISRC registrant fingerprint
-	slog.DebugContext(ctx, "identity.r3c_check",
-		"album", album.Title,
-		"has_isrc_fetcher", s.isrc != nil,
-		"known_registrants", len(profile.KnownISRCRegistrants))
+	// 6. ISRC registrant fingerprint
 	if s.isrc != nil && len(profile.KnownISRCRegistrants) > 0 {
 		isrc := s.fetchAlbumISRC(ctx, album)
 		if isrc != "" && CheckISRCRegistrantMismatch(profile, isrc) {
-			verdict := domain.AlbumVerdictSuspect
-			reason := "isrc registrant mismatch (first encounter)"
-			if s.cache != nil {
-				_, _, _, firstSeen, cached := s.cache.GetVerdict(ctx, artistName, album.Title)
-				if cached && !firstSeen.IsZero() && time.Since(firstSeen) > 24*time.Hour {
-					verdict = domain.AlbumVerdictContamination
-					reason = "isrc registrant mismatch (confirmed after 24h)"
-				}
-			}
-			s.cacheVerdict(ctx, artistName, album.Title, verdict, reason, "isrc")
+			s.cacheVerdict(ctx, artistName, album.Title, domain.AlbumVerdictContamination, "isrc registrant mismatch", "isrc")
 			return ports.AlbumResolution{
 				Album:   album,
-				Verdict: verdict,
-				Reason:  reason,
+				Verdict: domain.AlbumVerdictContamination,
+				Reason:  "isrc registrant mismatch",
 				Layer:   "isrc",
 			}
 		}

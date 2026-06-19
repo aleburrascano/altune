@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -168,7 +169,7 @@ func TestIdentityResolver_confirmed_by_r2_reverse_lookup(t *testing.T) {
 		testAlbum("Sayso Says", map[string]any{"year": 2021}),
 	}
 
-	// No iTunes should be called — R2 short-circuits
+	// R2 confirms — iTunes should not be called
 	itunes := &fakeITunesLookup{
 		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
 			t.Error("itunes should not have been called after R2 confirmed")
@@ -313,7 +314,7 @@ func TestIdentityResolver_contamination_by_artist_type_r3b(t *testing.T) {
 	assert.Equal(t, "type", resolutions[0].Layer)
 }
 
-func TestIdentityResolver_suspect_by_isrc_r3c(t *testing.T) {
+func TestIdentityResolver_contamination_by_isrc_r3c(t *testing.T) {
 	isrcFetcher := &fakeISRCFetcher{
 		fetchTrackISRCFn: func(_ context.Context, _ string) (string, error) {
 			return "QZFZ62070654", nil // registrant FZ62, not in known set
@@ -332,106 +333,32 @@ func TestIdentityResolver_suspect_by_isrc_r3c(t *testing.T) {
 	resolutions := svc.Resolve(context.Background(), "Che", profile, albums)
 
 	require.Len(t, resolutions, 1)
-	assert.Equal(t, domain.AlbumVerdictSuspect, resolutions[0].Verdict)
+	assert.Equal(t, domain.AlbumVerdictContamination, resolutions[0].Verdict)
 	assert.Equal(t, "isrc", resolutions[0].Layer)
-	assert.Contains(t, resolutions[0].Reason, "first encounter")
+	assert.Equal(t, "isrc registrant mismatch", resolutions[0].Reason)
 }
 
-func TestIdentityResolver_isrc_suspect_promotes_to_contamination_after_24h(t *testing.T) {
+func TestIdentityResolver_isrc_match_with_multiple_registrants(t *testing.T) {
 	isrcFetcher := &fakeISRCFetcher{
 		fetchTrackISRCFn: func(_ context.Context, _ string) (string, error) {
-			return "QZFZ62070654", nil
+			return "QZSE6A2070654", nil // registrant SE6A, in known set
 		},
 	}
 
-	cache := newFakeIdentityCache()
-	// Pre-populate cache with a suspect entry from >24h ago
-	cache.entries["Che|Gallos Ciegos"] = fakeCacheEntry{
-		verdict:   domain.AlbumVerdictSuspect,
-		reason:    "isrc registrant mismatch (first encounter)",
-		layer:     "isrc",
-		firstSeen: time.Now().Add(-25 * time.Hour),
-	}
-
-	svc := NewIdentityResolverService(
-		WithISRCFetcher(isrcFetcher),
-		WithIdentityCache(cache),
-	)
+	svc := NewIdentityResolverService(WithISRCFetcher(isrcFetcher))
 
 	profile := testProfile("", 0)
 	profile.AddISRCRegistrant("J842")
+	profile.AddISRCRegistrant("SE6A")
 
 	albums := []domain.SearchResult{
-		testAlbum("Gallos Ciegos", map[string]any{"year": 2024}),
+		testAlbum("DRUNKEN LOVE", map[string]any{"year": 2024}),
 	}
 
 	resolutions := svc.Resolve(context.Background(), "Che", profile, albums)
 
 	require.Len(t, resolutions, 1)
-	// The cache has the old suspect — but it should be re-evaluated since
-	// the ISRC check runs AFTER the cache miss path. The test pre-populates
-	// to simulate the re-evaluation flow. However, the current implementation
-	// returns on cache hit. So let's test both paths.
-	//
-	// With cache hit: returns the cached suspect (not promoted because
-	// promotion happens inside the ISRC check which runs after cache miss).
-	// To test promotion, we need the cache to miss on first GetVerdict but
-	// have firstSeen data available on the second call inside R3c.
-	//
-	// Let me restructure: the first GetVerdict (line ~cache check) returns
-	// false (miss), the second GetVerdict (inside R3c) returns the old entry.
-	callCount := 0
-	cache2 := &fakeCacheWithCallCount{
-		entries:   cache.entries,
-		callCount: &callCount,
-	}
-
-	svc = NewIdentityResolverService(
-		WithISRCFetcher(isrcFetcher),
-		WithIdentityCache(cache2),
-	)
-
-	resolutions = svc.Resolve(context.Background(), "Che", profile, albums)
-
-	require.Len(t, resolutions, 1)
-	assert.Equal(t, domain.AlbumVerdictContamination, resolutions[0].Verdict)
-	assert.Contains(t, resolutions[0].Reason, "confirmed after 24h")
-}
-
-// fakeCacheWithCallCount returns a miss on the first GetVerdict call
-// (the cache check at the top of resolveOne) and the real entry on
-// subsequent calls (inside R3c suspect promotion logic).
-type fakeCacheWithCallCount struct {
-	entries   map[string]fakeCacheEntry
-	callCount *int
-}
-
-func (f *fakeCacheWithCallCount) GetVerdict(_ context.Context, artistName, albumTitle string) (domain.AlbumVerdict, string, string, time.Time, bool) {
-	*f.callCount++
-	if *f.callCount == 1 {
-		return domain.AlbumVerdictUnknown, "", "", time.Time{}, false // cache miss
-	}
-	key := artistName + "|" + albumTitle
-	e, ok := f.entries[key]
-	if !ok {
-		return domain.AlbumVerdictUnknown, "", "", time.Time{}, false
-	}
-	return e.verdict, e.reason, e.layer, e.firstSeen, true
-}
-
-func (f *fakeCacheWithCallCount) SetVerdict(_ context.Context, artistName, albumTitle string, verdict domain.AlbumVerdict, reason, layer string) {
-	key := artistName + "|" + albumTitle
-	existing, ok := f.entries[key]
-	firstSeen := time.Now()
-	if ok {
-		firstSeen = existing.firstSeen
-	}
-	f.entries[key] = fakeCacheEntry{
-		verdict:   verdict,
-		reason:    reason,
-		layer:     layer,
-		firstSeen: firstSeen,
-	}
+	assert.Equal(t, domain.AlbumVerdictUnknown, resolutions[0].Verdict, "should pass ISRC check with known registrant")
 }
 
 func TestIdentityResolver_all_checks_pass_returns_unknown(t *testing.T) {
@@ -631,6 +558,8 @@ func TestBuildProfile_accumulates_signals(t *testing.T) {
 	albums := []domain.SearchResult{
 		testAlbum("Album 1", map[string]any{"genre": "Hip-Hop/Rap"}),
 		testAlbum("Album 2", map[string]any{"genre_id": 116}), // Deezer rap/hip hop
+		testAlbum("Album 3", map[string]any{"genre_id": 116}),
+		testAlbum("Album 4", map[string]any{"genre_id": 116}),
 	}
 
 	profile := svc.BuildProfile(context.Background(), "TestArtist", albums)
@@ -638,8 +567,81 @@ func TestBuildProfile_accumulates_signals(t *testing.T) {
 	assert.Equal(t, "test-mbid", profile.MBID)
 	assert.Equal(t, 1990, profile.BirthYear)
 	assert.Equal(t, "rapper", profile.Disambiguation)
-	assert.True(t, profile.GenreCluster["hip-hop"])
-	assert.True(t, profile.GenreCluster["rap"])
+	assert.True(t, profile.GenreCluster["hip hop"], "hip hop should be dominant (4/4 albums)")
+	assert.True(t, profile.GenreCluster["rap"], "rap should be dominant (4/4 albums)")
+}
+
+func TestBuildProfile_collects_multiple_isrc_registrants(t *testing.T) {
+	isrcByAlbum := map[string]string{
+		"album-1": "QZJ842503215", // registrant J842
+		"album-2": "QZSE6A270654", // registrant SE6A
+		"album-3": "QZJ842600001", // registrant J842 (duplicate)
+	}
+	mb := &fakeMBLookup{
+		resolveArtistIdentityFn: func(_ context.Context, _ string) (*ports.ArtistIdentity, error) {
+			return &ports.ArtistIdentity{MBID: "test-mbid"}, nil
+		},
+		validateArtistAlbumsFn: func(_ context.Context, _ string, albums []domain.SearchResult) (*ports.AlbumValidationResult, error) {
+			return &ports.AlbumValidationResult{Confirmed: albums}, nil
+		},
+	}
+	isrcFetcher := &fakeISRCFetcher{
+		fetchFirstTrackIDFn: func(_ context.Context, albumID string) (string, error) {
+			return "track-" + albumID, nil
+		},
+		fetchTrackISRCFn: func(_ context.Context, trackID string) (string, error) {
+			albumID := trackID[len("track-"):]
+			if isrc, ok := isrcByAlbum[albumID]; ok {
+				return isrc, nil
+			}
+			return "", nil
+		},
+	}
+
+	svc := NewIdentityResolverService(WithMBLookup(mb), WithISRCFetcher(isrcFetcher))
+
+	albums := []domain.SearchResult{
+		{Title: "Album 1", Kind: domain.ResultKindAlbum, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "album-1"}}},
+		{Title: "Album 2", Kind: domain.ResultKindAlbum, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "album-2"}}},
+		{Title: "Album 3", Kind: domain.ResultKindAlbum, Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "album-3"}}},
+	}
+
+	profile := svc.BuildProfile(context.Background(), "Che", albums)
+
+	assert.Len(t, profile.KnownISRCRegistrants, 2, "should collect J842 and SE6A")
+	assert.True(t, profile.KnownISRCRegistrants["J842"])
+	assert.True(t, profile.KnownISRCRegistrants["SE6A"])
+}
+
+func TestIdentityResolver_skips_r2_after_consecutive_mb_errors(t *testing.T) {
+	mbCallCount := 0
+	mb := &fakeMBLookup{
+		lookupAlbumArtistFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, string, error) {
+			mbCallCount++
+			return domain.AlbumVerdictUnknown, "", fmt.Errorf("mb: timeout")
+		},
+	}
+	itunesCallCount := 0
+	itunes := &fakeITunesLookup{
+		lookupAlbumFn: func(_ context.Context, _, _ string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, error) {
+			itunesCallCount++
+			return domain.AlbumVerdictUnknown, nil
+		},
+	}
+
+	svc := NewIdentityResolverService(WithMBLookup(mb), WithITunesLookup(itunes))
+	profile := testProfile("mbid-123", 2006)
+
+	albums := make([]domain.SearchResult, 5)
+	for i := range albums {
+		albums[i] = testAlbum(fmt.Sprintf("Album %d", i), map[string]any{"year": 2024})
+	}
+
+	resolutions := svc.Resolve(context.Background(), "Che", profile, albums)
+
+	require.Len(t, resolutions, 5)
+	assert.Equal(t, 3, mbCallCount, "MB should be called 3 times before being skipped")
+	assert.Equal(t, 5, itunesCallCount, "iTunes should be called for all 5 albums")
 }
 
 func TestBuildProfile_handles_nil_mb(t *testing.T) {
@@ -647,13 +649,15 @@ func TestBuildProfile_handles_nil_mb(t *testing.T) {
 
 	albums := []domain.SearchResult{
 		testAlbum("Album 1", map[string]any{"genre": "Pop"}),
+		testAlbum("Album 2", map[string]any{"genre": "Pop"}),
+		testAlbum("Album 3", map[string]any{"genre": "Pop"}),
 	}
 
 	profile := svc.BuildProfile(context.Background(), "TestArtist", albums)
 
 	assert.Equal(t, "", profile.MBID)
 	assert.Equal(t, 0, profile.BirthYear)
-	assert.True(t, profile.GenreCluster["pop"])
+	assert.True(t, profile.GenreCluster["pop"], "pop should be dominant (3/3 albums)")
 }
 
 func TestResolveDiscographyIdentity_ordering(t *testing.T) {

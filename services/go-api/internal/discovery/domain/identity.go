@@ -68,9 +68,9 @@ func NewArtistIdentityProfile() ArtistIdentityProfile {
 	}
 }
 
-// AddGenre adds a lowercased genre to the cluster.
+// AddGenre adds a normalized (lowercased, hyphens→spaces) genre to the cluster.
 func (p *ArtistIdentityProfile) AddGenre(genre string) {
-	p.GenreCluster[strings.ToLower(genre)] = true
+	p.GenreCluster[normalizeGenre(genre)] = true
 }
 
 // AddISRCRegistrant adds a registrant code to the known set.
@@ -81,11 +81,15 @@ func (p *ArtistIdentityProfile) AddISRCRegistrant(registrant string) {
 // HasGenreOverlap returns true if any genre in the list exists in GenreCluster.
 func (p *ArtistIdentityProfile) HasGenreOverlap(genres []string) bool {
 	for _, g := range genres {
-		if p.GenreCluster[strings.ToLower(g)] {
+		if p.GenreCluster[normalizeGenre(g)] {
 			return true
 		}
 	}
 	return false
+}
+
+func normalizeGenre(g string) string {
+	return strings.ToLower(strings.ReplaceAll(g, "-", " "))
 }
 
 // ExtractISRCRegistrant extracts the registrant code (characters 2-6) from an
