@@ -173,6 +173,9 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		if item.NbFan > 0 {
 			extras["nb_fan"] = item.NbFan
 		}
+		if item.GenreID > 0 {
+			extras["genre_id"] = item.GenreID
+		}
 	case domain.ResultKindArtist:
 		title = item.Name
 		imageURL = item.PictureBig
@@ -219,6 +222,7 @@ type deezerItem struct {
 	NbTracks    int          `json:"nb_tracks"`
 	Rank        int64        `json:"rank"`
 	NbFan       int64        `json:"nb_fan"`
+	GenreID     int          `json:"genre_id"`
 }
 
 type deezerRef struct {

@@ -101,6 +101,9 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	if item.TrackTimeMillis > 0 {
 		extras["duration"] = item.TrackTimeMillis / 1000
 	}
+	if item.PrimaryGenreName != "" {
+		extras["genre"] = item.PrimaryGenreName
+	}
 
 	var title, subtitle string
 	switch kind {
@@ -177,12 +180,13 @@ type itunesResponse struct {
 }
 
 type itunesItem struct {
-	TrackID         int64  `json:"trackId"`
-	TrackName       string `json:"trackName"`
-	ArtistName      string `json:"artistName"`
-	CollectionName  string `json:"collectionName"`
-	TrackViewURL    string `json:"trackViewUrl"`
-	ArtworkURL100   string `json:"artworkUrl100"`
-	PreviewURL      string `json:"previewUrl"`
-	TrackTimeMillis int64  `json:"trackTimeMillis"`
+	TrackID          int64  `json:"trackId"`
+	TrackName        string `json:"trackName"`
+	ArtistName       string `json:"artistName"`
+	CollectionName   string `json:"collectionName"`
+	TrackViewURL     string `json:"trackViewUrl"`
+	ArtworkURL100    string `json:"artworkUrl100"`
+	PreviewURL       string `json:"previewUrl"`
+	TrackTimeMillis  int64  `json:"trackTimeMillis"`
+	PrimaryGenreName string `json:"primaryGenreName"`
 }

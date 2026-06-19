@@ -147,7 +147,7 @@ func TestDiscogsAdapter_ResolveDiscogsArtist_OverlapSelection(t *testing.T) {
 		case r.URL.Path == "/database/search":
 			json.NewEncoder(w).Encode(discogsSearchResponse{
 				Results: []discogsSearchResult{
-					{ID: 100, Title: "Che", Type: "artist"},
+					{ID: 100, Title: "Che", Type: "artist", Genre: []string{"Electronic", "Hip Hop"}, Country: "US"},
 					{ID: 200, Title: "Che Guevara", Type: "artist"},
 				},
 			})
@@ -189,6 +189,12 @@ func TestDiscogsAdapter_ResolveDiscogsArtist_OverlapSelection(t *testing.T) {
 	}
 	if info.Overlap != 2 {
 		t.Errorf("expected overlap 2, got %d", info.Overlap)
+	}
+	if info.Genre != "Electronic, Hip Hop" {
+		t.Errorf("expected genre %q, got %q", "Electronic, Hip Hop", info.Genre)
+	}
+	if info.Country != "US" {
+		t.Errorf("expected country %q, got %q", "US", info.Country)
 	}
 }
 

@@ -165,7 +165,8 @@ func TestDeezerAdapter_Search_Albums(t *testing.T) {
 				"record_type": "album",
 				"release_date": "1997-05-21",
 				"nb_tracks": 12,
-				"nb_fan": 50000
+				"nb_fan": 50000,
+				"genre_id": 152
 			}]
 		}`))
 	}))
@@ -207,6 +208,9 @@ func TestDeezerAdapter_Search_Albums(t *testing.T) {
 	}
 	if nbFan, ok := r.Extras["nb_fan"].(int64); !ok || nbFan != 50000 {
 		t.Errorf("extras.nb_fan: got %v (%T), want 50000", r.Extras["nb_fan"], r.Extras["nb_fan"])
+	}
+	if gid, ok := r.Extras["genre_id"].(int); !ok || gid != 152 {
+		t.Errorf("extras.genre_id: got %v (%T), want 152", r.Extras["genre_id"], r.Extras["genre_id"])
 	}
 }
 

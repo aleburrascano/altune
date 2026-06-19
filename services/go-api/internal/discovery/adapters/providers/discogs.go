@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -79,11 +80,13 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 		return nil, nil
 	}
 	if len(artists) == 1 {
+		genre := strings.Join(artists[0].Genre, ", ")
+		country := artists[0].Country
 		detail, err := a.fetchArtistDetail(ctx, artists[0].ID)
 		if err != nil {
-			return &ports.DiscogsArtistInfo{ID: artists[0].ID, Name: artists[0].Title}, nil
+			return &ports.DiscogsArtistInfo{ID: artists[0].ID, Name: artists[0].Title, Genre: genre, Country: country}, nil
 		}
-		return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name}, nil
+		return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name, Genre: genre, Country: country}, nil
 	}
 
 	albumSet := make(map[string]bool, len(albumTitles))
@@ -118,11 +121,14 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 		"name", name, "discogs_id", bestArtist.ID,
 		"overlap", bestOverlap, "candidates", len(artists))
 
+	genre := strings.Join(bestArtist.Genre, ", ")
+	country := bestArtist.Country
+
 	detail, err := a.fetchArtistDetail(ctx, bestArtist.ID)
 	if err != nil {
-		return &ports.DiscogsArtistInfo{ID: bestArtist.ID, Name: bestArtist.Title, Overlap: bestOverlap}, nil
+		return &ports.DiscogsArtistInfo{ID: bestArtist.ID, Name: bestArtist.Title, Genre: genre, Country: country, Overlap: bestOverlap}, nil
 	}
-	return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name, Overlap: bestOverlap}, nil
+	return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name, Genre: genre, Country: country, Overlap: bestOverlap}, nil
 }
 
 func (a *DiscogsAdapter) FetchArtistReleases(ctx context.Context, discogsID int) ([]ports.DiscogsRelease, error) {
@@ -142,9 +148,11 @@ type discogsSearchResponse struct {
 }
 
 type discogsSearchResult struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-	Type  string `json:"type"`
+	ID      int      `json:"id"`
+	Title   string   `json:"title"`
+	Type    string   `json:"type"`
+	Genre   []string `json:"genre"`
+	Country string   `json:"country"`
 }
 
 type discogsImage struct {

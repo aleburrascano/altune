@@ -82,7 +82,13 @@ func TestMusicBrainzAdapter_Search_Artists(t *testing.T) {
 		w.Write([]byte(`{
 			"artists": [{
 				"id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
-				"name": "Radiohead"
+				"name": "Radiohead",
+				"type": "Group",
+				"area": {"name": "Oxford"},
+				"tags": [
+					{"name": "alternative rock", "count": 15},
+					{"name": "electronic", "count": 8}
+				]
 			}]
 		}`))
 	}))
@@ -114,6 +120,15 @@ func TestMusicBrainzAdapter_Search_Artists(t *testing.T) {
 	}
 	if r.Extras["mbid"] != "a74b1b7f-71a5-4011-9441-d0b5e4122711" {
 		t.Errorf("extras.mbid: got %v, want the artist MBID", r.Extras["mbid"])
+	}
+	if r.Extras["artist_type"] != "Group" {
+		t.Errorf("extras.artist_type: got %v, want %q", r.Extras["artist_type"], "Group")
+	}
+	if r.Extras["area"] != "Oxford" {
+		t.Errorf("extras.area: got %v, want %q", r.Extras["area"], "Oxford")
+	}
+	if r.Extras["mb_tags"] != "alternative rock, electronic" {
+		t.Errorf("extras.mb_tags: got %v, want %q", r.Extras["mb_tags"], "alternative rock, electronic")
 	}
 }
 
