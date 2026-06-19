@@ -18,6 +18,16 @@ function buildSourceId(source: ReturnType<typeof useQueueStore.getState>['source
   return source.kind;
 }
 
+function parseSourceId(sourceId: string): ReturnType<typeof useQueueStore.getState>['source'] {
+  if (!sourceId) return null;
+  if (sourceId.startsWith('playlist:')) {
+    return { kind: 'playlist', playlistId: sourceId.slice('playlist:'.length), name: '' };
+  }
+  if (sourceId === 'library') return { kind: 'library' };
+  if (sourceId.startsWith('search')) return { kind: 'search', query: '' };
+  return null;
+}
+
 export function useQueueResume() {
   const queryClient = useQueryClient();
   const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -39,14 +49,18 @@ export function useQueueResume() {
       // Player may not be initialized yet
     }
 
-    void saveQueueState({
-      track_ids: trackIds,
-      current_index: s.currentIndex,
-      position_ms: posMs,
-      shuffled: s.shuffled,
-      repeat_mode: s.repeatMode,
-      source_id: buildSourceId(s.source),
-    });
+    try {
+      await saveQueueState({
+        track_ids: trackIds,
+        current_index: s.currentIndex,
+        position_ms: posMs,
+        shuffled: s.shuffled,
+        repeat_mode: s.repeatMode,
+        source_id: buildSourceId(s.source),
+      });
+    } catch {
+      // Best-effort persistence — don't spam errors
+    }
   }, []);
 
   useEffect(() => {
@@ -70,13 +84,13 @@ export function useQueueResume() {
 
         const playbackTracks = validTracks.map(toPlaybackTrack);
         const startIdx = Math.min(saved.current_index, playbackTracks.length - 1);
+        const source = parseSourceId(saved.source_id);
 
-        useQueueStore.getState().loadQueue(playbackTracks, startIdx, null);
+        useQueueStore.getState().loadQueue(playbackTracks, startIdx, source);
 
         const repeatMode = saved.repeat_mode as RepeatMode;
         if (repeatMode === 'all' || repeatMode === 'one') {
-          useQueueStore.getState().cycleRepeatMode();
-          if (repeatMode === 'one') useQueueStore.getState().cycleRepeatMode();
+          useQueueStore.getState().setRepeatMode(repeatMode);
         }
         if (saved.shuffled) useQueueStore.getState().toggleShuffle();
       } catch {

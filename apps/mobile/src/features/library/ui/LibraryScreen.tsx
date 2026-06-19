@@ -112,7 +112,10 @@ export function LibraryScreen(): ReactElement {
       onExpandAlbums={() => router.push('/library/all-albums')}
       onExpandArtists={() => router.push('/library/all-artists')}
       onPlaylistPress={(pl) => router.push(`/library/playlist/${pl.id}`)}
-      onRefresh={state.refetch}
+      onRefresh={() => {
+          state.refetch();
+          void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+        }}
       playlistActions={{
         createModalVisible,
         onCreateModalToggle: setCreateModalVisible,

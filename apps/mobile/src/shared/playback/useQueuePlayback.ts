@@ -1,8 +1,10 @@
 import { useCallback } from 'react';
+import TrackPlayer from 'react-native-track-player';
+
+import { audioRequestHeaders, audioStreamUrl } from '@features/playback/api/audio';
 
 import { useQueueStore } from './queueStore';
 import type { PlaybackTrack, QueueSource } from './types';
-import { usePlayback } from './usePlayback';
 
 interface QueuePlaybackControls {
   playFromList: (tracks: readonly PlaybackTrack[], startIndex: number, source: QueueSource | null) => void;
@@ -11,36 +13,68 @@ interface QueuePlaybackControls {
   skipToPrevious: () => void;
 }
 
+async function loadNativeQueue(tracks: readonly PlaybackTrack[], startIndex: number): Promise<void> {
+  const headers = await audioRequestHeaders();
+  await TrackPlayer.reset();
+
+  const rntpTracks = tracks.map((t) => {
+    if (t.source.kind === 'preview') {
+      return {
+        url: t.source.previewUrl,
+        title: t.title,
+        artist: t.artist,
+        artwork: t.artworkUrl ?? '',
+      };
+    }
+    return {
+      url: audioStreamUrl(t.source.trackId),
+      title: t.title,
+      artist: t.artist,
+      artwork: t.artworkUrl ?? '',
+      headers,
+    };
+  });
+
+  await TrackPlayer.add(rntpTracks);
+  await TrackPlayer.skip(startIndex);
+  await TrackPlayer.play();
+}
+
 export function useQueuePlayback(): QueuePlaybackControls {
-  const { play } = usePlayback();
   const loadQueue = useQueueStore((s) => s.loadQueue);
 
   const playFromList = useCallback(
     (tracks: readonly PlaybackTrack[], startIndex: number, source: QueueSource | null) => {
       loadQueue(tracks, startIndex, source);
       const track = tracks[startIndex];
-      if (track) void play(track);
+      if (track) {
+        void loadNativeQueue(tracks, startIndex);
+      }
     },
-    [loadQueue, play],
+    [loadQueue],
   );
 
   const playTrack = useCallback(
     (track: PlaybackTrack) => {
       loadQueue([track], 0, null);
-      void play(track);
+      void loadNativeQueue([track], 0);
     },
-    [loadQueue, play],
+    [loadQueue],
   );
 
   const skipToNext = useCallback(() => {
     const nextTrack = useQueueStore.getState().skipToNext();
-    if (nextTrack) void play(nextTrack);
-  }, [play]);
+    if (nextTrack) {
+      void TrackPlayer.skipToNext();
+    }
+  }, []);
 
   const skipToPrevious = useCallback(() => {
     const prevTrack = useQueueStore.getState().skipToPrevious();
-    if (prevTrack) void play(prevTrack);
-  }, [play]);
+    if (prevTrack) {
+      void TrackPlayer.skipToPrevious();
+    }
+  }, []);
 
   return { playFromList, playTrack, skipToNext, skipToPrevious };
 }

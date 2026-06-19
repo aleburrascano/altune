@@ -1,13 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
-import {
-  Alert,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 
 import {
   deletePlaylist,
@@ -16,10 +11,12 @@ import {
   renamePlaylist,
 } from '@shared/api-client/playlists';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
-import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
+import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
+import { IconButton } from '@shared/ui/primitives/IconButton';
+import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 import type { TrackResponse } from '@shared/api-client/types';
 
@@ -36,6 +33,7 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
+  const [menuVisible, setMenuVisible] = useState(false);
 
   const { data: playlistData, isLoading: playlistLoading, error: playlistError } = useQuery({
     queryKey: ['playlist', playlistId],
@@ -137,6 +135,22 @@ export function PlaylistDetailScreen(): ReactElement {
     }
   };
 
+  const handlePlay = () => {
+    if (!playlistData) return;
+    const { playable, startIndex } = buildPlayableQueue(playlistData.tracks, playlistData.tracks[0]?.id ?? '');
+    if (playable.length > 0) {
+      queue.playFromList(playable, startIndex, { kind: 'playlist', playlistId, name: playlistData.name });
+    }
+  };
+
+  const handleShuffle = () => {
+    if (!playlistData) return;
+    const { playable } = buildPlayableQueue(playlistData.tracks, '');
+    if (playable.length === 0) return;
+    const randomIdx = Math.floor(Math.random() * playable.length);
+    queue.playFromList(playable, randomIdx, { kind: 'playlist', playlistId, name: playlistData.name });
+  };
+
   const goBack = () => router.canGoBack() ? router.back() : router.replace('/library');
 
   if (!playlistId) {
@@ -148,9 +162,7 @@ export function PlaylistDetailScreen(): ReactElement {
     return (
       <Screen>
         <View style={styles.header}>
-          <Pressable onPress={goBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back" style={styles.headerBtn}>
-            <Text variant="body" tone="accent">‹ Back</Text>
-          </Pressable>
+          <IconButton icon={ChevronLeft} size={24} onPress={goBack} accessibilityLabel="Back" />
         </View>
         <View style={styles.heroLoading}>
           <Skeleton width={160} height={160} radius={8} />
@@ -165,9 +177,7 @@ export function PlaylistDetailScreen(): ReactElement {
     return (
       <Screen>
         <View style={styles.header}>
-          <Pressable onPress={goBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back" style={styles.headerBtn}>
-            <Text variant="body" tone="accent">‹ Back</Text>
-          </Pressable>
+          <IconButton icon={ChevronLeft} size={24} onPress={goBack} accessibilityLabel="Back" />
         </View>
         <View style={styles.center}>
           <Text variant="title">Playlist not found</Text>
@@ -182,19 +192,18 @@ export function PlaylistDetailScreen(): ReactElement {
   return (
     <Screen>
       <View style={styles.header}>
-        <Pressable
-          onPress={goBack}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          style={styles.headerBtn}
-        >
-          <Text variant="body" tone="accent">‹ Back</Text>
-        </Pressable>
-        <Pressable onPress={handleDelete} hitSlop={8} accessibilityRole="button" accessibilityLabel="Delete playlist" style={styles.headerBtn}>
-          <Text variant="body" tone="danger">Delete</Text>
-        </Pressable>
+        <IconButton icon={ChevronLeft} size={24} onPress={goBack} accessibilityLabel="Back" />
+        <IconButton icon={EllipsisVertical} size={20} onPress={() => setMenuVisible(true)} accessibilityLabel="Playlist options" />
       </View>
+
+      <ContextMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        items={[
+          { label: 'Rename Playlist', onPress: startEditing },
+          { label: 'Delete Playlist', onPress: handleDelete, tone: 'danger' },
+        ]}
+      />
 
       <FlatList
         data={pl.tracks}
@@ -209,15 +218,16 @@ export function PlaylistDetailScreen(): ReactElement {
             onEditNameChange={setEditName}
             onStartEditing={startEditing}
             onConfirmRename={confirmRename}
+            onPlay={handlePlay}
+            onShuffle={handleShuffle}
           />
         }
         renderItem={({ item }) => (
           <LibraryRow
             track={item}
             {...(item.acquisition_status === 'ready' ? { onPlay: () => {
-              const playableTracks = pl.tracks.filter((t) => t.acquisition_status === 'ready').map(toPlaybackTrack);
-              const startIdx = playableTracks.findIndex((t) => t.source.kind === 'library' && t.source.trackId === item.id);
-              queue.playFromList(playableTracks, Math.max(0, startIdx), { kind: 'playlist', playlistId, name: pl.name });
+              const { playable, startIndex } = buildPlayableQueue(pl.tracks, item.id);
+              queue.playFromList(playable, startIndex, { kind: 'playlist', playlistId, name: pl.name });
             } } : {})}
             onPress={() => navigateToTrack(item)}
             onMore={() => setActionTrack(item)}
@@ -239,7 +249,7 @@ export function PlaylistDetailScreen(): ReactElement {
         subtitle={actionTrack != null ? actionTrack.artist : undefined}
         options={actionTrack != null ? [
           { label: 'View Details', onPress: () => navigateToTrack(actionTrack) },
-          { label: 'Remove from Playlist', tone: 'danger' as const, onPress: () => removeMut.mutate(actionTrack.id) },
+          { label: 'Remove from Playlist', tone: 'danger', onPress: () => removeMut.mutate(actionTrack.id) },
         ] : []}
         onClose={() => setActionTrack(null)}
       />
@@ -252,10 +262,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.xs,
   },
-  headerBtn: { minHeight: 48, justifyContent: 'center' as const },
   heroLoading: {
     alignItems: 'center',
     gap: spacing.sm,

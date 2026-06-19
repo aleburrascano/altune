@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 
 import type { TrackResponse } from '@shared/api-client/types';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
-import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
+import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Screen, SearchBar, Text, spacing, useTheme } from '@shared/ui';
@@ -73,9 +73,8 @@ export function AllTracksScreen(): ReactElement {
           <LibraryRow
             track={item}
             {...(item.acquisition_status === 'ready' ? { onPlay: () => {
-              const playable = filtered.filter((t) => t.acquisition_status === 'ready').map(toPlaybackTrack);
-              const startIdx = playable.findIndex((t) => t.source.kind === 'library' && t.source.trackId === item.id);
-              queue.playFromList(playable, Math.max(0, startIdx), { kind: 'library' });
+              const { playable, startIndex } = buildPlayableQueue(filtered, item.id);
+              queue.playFromList(playable, startIndex, { kind: 'library' });
             } } : {})}
             onPress={() => navigateToTrack(item)}
             onMore={() => setActionTrack(item)}

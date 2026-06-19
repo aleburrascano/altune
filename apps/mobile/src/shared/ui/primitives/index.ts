@@ -24,3 +24,5 @@ export { Skeleton } from './Skeleton';
 export type { SkeletonProps } from './Skeleton';
 export { SearchBar } from './SearchBar';
 export type { SearchBarProps } from './SearchBar';
+export { ContextMenu } from './ContextMenu';
+export type { ContextMenuItem } from './ContextMenu';

@@ -78,12 +78,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const durationMs = rawDurationMs || fallbackDurationMs;
 
   const tpState = playbackState.state;
-  const isEnded = tpState === State.Ended;
   const isPlaying = tpState === State.Playing;
   const isBuffering = tpState === State.Buffering || tpState === State.Loading;
-
-  const prevEndedRef = useRef(false);
-  const autoAdvancing = useRef(false);
+  const isEnded = tpState === State.Ended;
 
   const state: PlaybackState = useMemo(() => {
     if (!track) return INITIAL_STATE;
@@ -148,23 +145,30 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     void play(trackToRetry);
   }, [play]);
 
+  // Sync Zustand from TrackPlayer's active track changes (native queue transitions)
   useEffect(() => {
-    if (!isEnded || prevEndedRef.current || track?.source.kind === 'preview' || autoAdvancing.current) {
-      prevEndedRef.current = isEnded;
-      return;
-    }
-    prevEndedRef.current = true;
-    const { repeatMode, skipToNext } = useQueueStore.getState();
-    if (repeatMode === 'one') {
-      void TrackPlayer.seekTo(0).then(() => TrackPlayer.play());
-    } else {
-      const nextTrack = skipToNext();
-      if (nextTrack) {
-        autoAdvancing.current = true;
-        void play(nextTrack).finally(() => { autoAdvancing.current = false; });
+    if (!ready) return;
+    const sub = TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data) => {
+      if (data.index == null) return;
+      const { tracks, playOrder, currentIndex } = useQueueStore.getState();
+      if (tracks.length === 0) return;
+
+      // Find which queue position this native index corresponds to
+      const queueIdx = playOrder.indexOf(data.index);
+      if (queueIdx >= 0 && queueIdx !== currentIndex) {
+        useQueueStore.getState().skipToIndex(queueIdx);
       }
-    }
-  }, [isEnded, track, play]);
+
+      // Update the displayed track
+      const playbackTrack = tracks[data.index];
+      if (playbackTrack) {
+        setTrack(playbackTrack);
+        setErrorMessage(null);
+        lastPlayedTrack.current = playbackTrack;
+      }
+    });
+    return () => sub.remove();
+  }, [ready]);
 
   useEffect(() => {
     if (!ready) return;
@@ -172,11 +176,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const remotePause = TrackPlayer.addEventListener(Event.RemotePause, () => { void TrackPlayer.pause(); });
     const remoteNext = TrackPlayer.addEventListener(Event.RemoteNext, () => {
       const nextTrack = useQueueStore.getState().skipToNext();
-      if (nextTrack) void play(nextTrack);
+      if (nextTrack) void TrackPlayer.skipToNext();
     });
     const remotePrev = TrackPlayer.addEventListener(Event.RemotePrevious, () => {
       const prevTrack = useQueueStore.getState().skipToPrevious();
-      if (prevTrack) void play(prevTrack);
+      if (prevTrack) void TrackPlayer.skipToPrevious();
     });
     const remoteSeek = TrackPlayer.addEventListener(Event.RemoteSeek, (data) => {
       void TrackPlayer.seekTo(data.position);
@@ -189,7 +193,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       remotePrev.remove();
       remoteSeek.remove();
     };
-  }, [ready, play]);
+  }, [ready]);
 
   useQueueResume();
 
