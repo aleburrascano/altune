@@ -189,7 +189,8 @@ func (s *IdentityResolverService) BuildProfile(
 // Resolve runs the identity resolution pipeline for each album:
 // cache -> MB confirmed set -> R2 (MB reverse-lookup) -> R3 (iTunes) ->
 // R3b (constraints) -> R3c (ISRC registrant).
-// Returns an AlbumResolution per album with verdict, reason, and layer.
+// After pass 1, enriches the ISRC registrant set from newly confirmed
+// albums (e.g. iTunes) and re-checks unknowns with R3c.
 func (s *IdentityResolverService) Resolve(
 	ctx context.Context,
 	artistName string,
@@ -202,6 +203,9 @@ func (s *IdentityResolverService) Resolve(
 		res := s.resolveOne(ctx, artistName, profile, album)
 		resolutions = append(resolutions, res)
 	}
+
+	s.recheckWithEnrichedISRC(ctx, artistName, &profile, resolutions)
+
 	return resolutions
 }
 
@@ -336,6 +340,83 @@ func (s *IdentityResolverService) resolveOne(
 		Verdict: domain.AlbumVerdictUnknown,
 		Reason:  "no definitive signals",
 		Layer:   "",
+	}
+}
+
+// recheckWithEnrichedISRC samples ISRCs from albums confirmed during pass 1
+// (by iTunes or R2) that weren't in the initial MB-confirmed set, then
+// re-checks unknown albums with the enriched registrant fingerprint.
+func (s *IdentityResolverService) recheckWithEnrichedISRC(
+	ctx context.Context,
+	artistName string,
+	profile *domain.ArtistIdentityProfile,
+	resolutions []ports.AlbumResolution,
+) {
+	if s.isrc == nil {
+		return
+	}
+
+	var newConfirmed []domain.SearchResult
+	hasUnknowns := false
+	for _, res := range resolutions {
+		if res.Verdict == domain.AlbumVerdictUnknown {
+			hasUnknowns = true
+		}
+		if res.Verdict == domain.AlbumVerdictConfirmed {
+			titleNorm := textnorm.NormalizeForMatch(res.Album.Title)
+			if !profile.MBConfirmedTitles[titleNorm] {
+				newConfirmed = append(newConfirmed, res.Album)
+			}
+		}
+	}
+	if len(newConfirmed) == 0 || !hasUnknowns {
+		return
+	}
+
+	sampled := 0
+	for _, confirmed := range newConfirmed {
+		if sampled >= 5 {
+			break
+		}
+		albumID := extractDeezerAlbumID(confirmed)
+		if albumID == "" {
+			continue
+		}
+		trackID, err := s.isrc.FetchFirstTrackID(ctx, albumID)
+		if err != nil || trackID == "" {
+			continue
+		}
+		isrc, err := s.isrc.FetchTrackISRC(ctx, trackID)
+		if err != nil || isrc == "" {
+			continue
+		}
+		registrant := domain.ExtractISRCRegistrant(isrc)
+		if registrant != "" {
+			profile.AddISRCRegistrant(registrant)
+		}
+		sampled++
+	}
+
+	if len(profile.KnownISRCRegistrants) == 0 {
+		return
+	}
+
+	slog.InfoContext(ctx, "identity.isrc_pass2",
+		"artist", artistName,
+		"new_confirmed", len(newConfirmed),
+		"registrants", len(profile.KnownISRCRegistrants))
+
+	for i, res := range resolutions {
+		if res.Verdict != domain.AlbumVerdictUnknown {
+			continue
+		}
+		isrc := s.fetchAlbumISRC(ctx, res.Album)
+		if isrc != "" && CheckISRCRegistrantMismatch(*profile, isrc) {
+			resolutions[i].Verdict = domain.AlbumVerdictContamination
+			resolutions[i].Reason = "isrc registrant mismatch"
+			resolutions[i].Layer = "isrc"
+			s.cacheVerdict(ctx, artistName, res.Album.Title, domain.AlbumVerdictContamination, "isrc registrant mismatch", "isrc")
+		}
 	}
 }
 
