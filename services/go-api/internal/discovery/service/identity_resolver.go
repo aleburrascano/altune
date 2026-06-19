@@ -274,6 +274,10 @@ func (s *IdentityResolverService) resolveOne(
 	}
 
 	// 6. R3c: ISRC registrant fingerprint
+	slog.DebugContext(ctx, "identity.r3c_check",
+		"album", album.Title,
+		"has_isrc_fetcher", s.isrc != nil,
+		"known_registrants", len(profile.KnownISRCRegistrants))
 	if s.isrc != nil && len(profile.KnownISRCRegistrants) > 0 {
 		isrc := s.fetchAlbumISRC(ctx, album)
 		if isrc != "" && CheckISRCRegistrantMismatch(profile, isrc) {
@@ -326,19 +330,24 @@ func extractDeezerAlbumID(album domain.SearchResult) string {
 // fetchAlbumISRC fetches the ISRC of the first track in an album via the ISRC fetcher.
 func (s *IdentityResolverService) fetchAlbumISRC(ctx context.Context, album domain.SearchResult) string {
 	if s.isrc == nil {
+		slog.DebugContext(ctx, "identity.isrc_skip", "album", album.Title, "reason", "no isrc fetcher")
 		return ""
 	}
 	albumID := extractDeezerAlbumID(album)
 	if albumID == "" {
+		slog.DebugContext(ctx, "identity.isrc_skip", "album", album.Title, "reason", "no deezer album id")
 		return ""
 	}
 	trackID, err := s.isrc.FetchFirstTrackID(ctx, albumID)
 	if err != nil || trackID == "" {
+		slog.DebugContext(ctx, "identity.isrc_skip", "album", album.Title, "reason", "no track id", "album_id", albumID, "error", err)
 		return ""
 	}
 	isrc, err := s.isrc.FetchTrackISRC(ctx, trackID)
-	if err != nil {
+	if err != nil || isrc == "" {
+		slog.DebugContext(ctx, "identity.isrc_skip", "album", album.Title, "reason", "no isrc", "track_id", trackID, "error", err)
 		return ""
 	}
+	slog.DebugContext(ctx, "identity.isrc_fetched", "album", album.Title, "isrc", isrc)
 	return isrc
 }
