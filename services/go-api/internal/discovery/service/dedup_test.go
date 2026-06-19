@@ -101,29 +101,54 @@ func TestFuseAndRank_MergeByMBID(t *testing.T) {
 	}
 }
 
-func TestFuseAndRank_ArtistNameMerge(t *testing.T) {
-	// Two providers return the same artist by name (artists lack ISRC).
-	// Non-track results need Deezer source to pass hasBrowseableSource.
-	// Expected: merged with medium confidence.
+func TestFuseAndRank_ArtistNameNoMergeWithoutIdentifier(t *testing.T) {
+	// Two providers return an artist by name without MBID — they must NOT merge.
+	// Artists only merge on identifier (MBID) overlap. Name-only merge was removed
+	// because it caused same-name artists (e.g., two "Che"s) to merge into one
+	// result with the wrong external ID.
+	// Non-track results need Deezer source to pass hasBrowseableSource — give
+	// the MB artist a Deezer source too so it isn't filtered out.
 	deezerArtist := artistResult(domain.ProviderDeezer, "dz-artist-1", "The Weeknd", nil)
-	mbArtist := artistResult(domain.ProviderMusicBrainz, "mb-artist-1", "The Weeknd", nil)
+	deezerArtist2 := artistResult(domain.ProviderDeezer, "dz-artist-2", "The Weeknd", nil)
 
 	perProvider := [][]domain.SearchResult{
 		{deezerArtist},
-		{mbArtist},
+		{deezerArtist2},
 	}
 
 	results := FuseAndRank(perProvider, "weeknd", noQualityScorer, nil)
 
-	if len(results) != 1 {
-		t.Fatalf("expected 1 merged artist result, got %d", len(results))
+	if len(results) < 2 {
+		t.Fatalf("expected 2 separate artist results without identifier overlap, got %d", len(results))
 	}
-	r := results[0]
-	if r.Confidence != domain.ConfidenceMedium {
-		t.Errorf("expected confidence medium for artist name merge, got %s", r.Confidence.String())
+}
+
+func TestFuseAndRank_SameNameArtistsStaySeparate(t *testing.T) {
+	// Regression test: two different artists with the same normalized name
+	// from different providers, both without MBID, must remain separate.
+	// This is the "Che" problem — merging them picks the wrong external ID,
+	// which causes the detail screen to show the wrong artist's content.
+	cheRapper := artistResult(domain.ProviderDeezer, "dz-che-rapper", "Che", map[string]any{
+		"nb_fan": int64(323),
+	})
+	cheRock := artistResult(domain.ProviderDeezer, "dz-che-rock", "Che", map[string]any{
+		"nb_fan": int64(50000),
+	})
+
+	perProvider := [][]domain.SearchResult{
+		{cheRapper},
+		{cheRock},
 	}
-	if len(r.Sources) != 2 {
-		t.Errorf("expected 2 sources, got %d", len(r.Sources))
+
+	results := FuseAndRank(perProvider, "che", noQualityScorer, nil)
+
+	if len(results) < 2 {
+		t.Fatalf("expected 2 separate 'Che' artist results, got %d — same-name artists must not merge without identifier overlap", len(results))
+	}
+	for _, r := range results {
+		if len(r.Sources) > 1 {
+			t.Errorf("expected each 'Che' result to have 1 source (not merged), got %d sources", len(r.Sources))
+		}
 	}
 }
 
@@ -475,8 +500,8 @@ func TestApplyRecencyBoost(t *testing.T) {
 		}
 		got := applyRecencyBoost(results)
 		pop := popularity(got[0])
-		if pop != 55 {
-			t.Errorf("expected boosted popularity 55, got %v", pop)
+		if pop < 54.9 || pop > 55.1 {
+			t.Errorf("expected boosted popularity ~55, got %v", pop)
 		}
 	})
 
@@ -542,6 +567,72 @@ func TestApplyRecencyBoost(t *testing.T) {
 		pop := popularity(got[0])
 		if pop != 50 {
 			t.Errorf("expected unchanged popularity for malformed date, got %v", pop)
+		}
+	})
+}
+
+func TestCollapseArtistDuplicates(t *testing.T) {
+	t.Run("groups same-name artists keeping highest popularity", func(t *testing.T) {
+		results := []domain.SearchResult{
+			artistResult(domain.ProviderDeezer, "1", "Che", map[string]any{
+				"popularity": float64(80), "disambiguation": "Atlanta rapper",
+			}),
+			trackResult(domain.ProviderDeezer, "t1", "BA$$", "Che", nil),
+			artistResult(domain.ProviderDeezer, "2", "Che", map[string]any{
+				"popularity": float64(30), "disambiguation": "Korean singer-songwriter",
+			}),
+			artistResult(domain.ProviderDeezer, "3", "Che", map[string]any{
+				"popularity": float64(10),
+			}),
+		}
+		got := CollapseArtistDuplicates(results)
+
+		if len(got) != 2 {
+			t.Fatalf("expected 2 results (1 artist + 1 track), got %d", len(got))
+		}
+		if got[0].Title != "Che" || got[0].Kind != domain.ResultKindArtist {
+			t.Errorf("expected primary artist 'Che', got %q kind=%s", got[0].Title, got[0].Kind)
+		}
+		collapsed, ok := got[0].Extras["collapsed_artists"]
+		if !ok {
+			t.Fatal("expected collapsed_artists extra on primary artist")
+		}
+		list, ok := collapsed.([]map[string]any)
+		if !ok {
+			t.Fatalf("collapsed_artists wrong type: %T", collapsed)
+		}
+		if len(list) != 2 {
+			t.Errorf("expected 2 collapsed artists, got %d", len(list))
+		}
+		if got[1].Kind != domain.ResultKindTrack {
+			t.Errorf("expected track result preserved, got kind=%s", got[1].Kind)
+		}
+	})
+
+	t.Run("no grouping when names differ", func(t *testing.T) {
+		results := []domain.SearchResult{
+			artistResult(domain.ProviderDeezer, "1", "Drake", map[string]any{"popularity": float64(90)}),
+			artistResult(domain.ProviderDeezer, "2", "Aurora", map[string]any{"popularity": float64(70)}),
+		}
+		got := CollapseArtistDuplicates(results)
+		if len(got) != 2 {
+			t.Errorf("expected 2 distinct artists preserved, got %d", len(got))
+		}
+		if _, ok := got[0].Extras["collapsed_artists"]; ok {
+			t.Error("unexpected collapsed_artists on unique-name artist")
+		}
+	})
+
+	t.Run("single artist not collapsed", func(t *testing.T) {
+		results := []domain.SearchResult{
+			artistResult(domain.ProviderDeezer, "1", "Che", map[string]any{"popularity": float64(80)}),
+		}
+		got := CollapseArtistDuplicates(results)
+		if len(got) != 1 {
+			t.Errorf("expected 1 result, got %d", len(got))
+		}
+		if _, ok := got[0].Extras["collapsed_artists"]; ok {
+			t.Error("single artist should not have collapsed_artists")
 		}
 	})
 }

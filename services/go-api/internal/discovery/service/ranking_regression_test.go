@@ -242,22 +242,21 @@ func TestRankingRegression_PopBandingFavorsSources(t *testing.T) {
 }
 
 func TestRankingRegression_SourceBonusLiftsMultiSourceArtist(t *testing.T) {
-	// A globally famous artist appearing from 6 providers should beat a
-	// single-source track with a coincidentally matching name, even when the
-	// track has higher raw popularity. The source bonus (+8 per extra provider)
-	// lifts the artist's effective pop above the track's.
+	// A globally famous artist appearing from multiple providers with the same
+	// MBID should merge and beat a single-source track with a coincidentally
+	// matching name. Artists only merge on MBID — name-only merge is disabled.
+	santanaMBID := "5f32a4a4-c04e-4c18-86af-b5c4bc18014c"
 	perProvider := [][]domain.SearchResult{
 		{
 			artistResult(domain.ProviderDeezer, "dz-art-santana", "Santana",
-				map[string]any{"nb_fan": int64(4_000_000)}),
+				map[string]any{"nb_fan": int64(20_000_000), "mbid": santanaMBID}),
 			trackResult(domain.ProviderDeezer, "dz-trk-santana", "Santana", "Alonzo",
 				map[string]any{"rank": int64(900_000)}),
 		},
-		{artistResult(domain.ProviderMusicBrainz, "mb-art-santana", "Santana", nil)},
-		{artistResult(domain.ProviderSoundCloud, "sc-art-santana", "Santana", nil)},
-		{artistResult(domain.ProviderLastFM, "lfm-art-santana", "Santana", nil)},
-		{artistResult(domain.ProviderITunes, "it-art-santana", "Santana", nil)},
-		{artistResult(domain.ProviderTheAudioDB, "adb-art-santana", "Santana", nil)},
+		{artistResult(domain.ProviderMusicBrainz, "mb-art-santana", "Santana",
+			map[string]any{"mbid": santanaMBID})},
+		{artistResult(domain.ProviderLastFM, "lfm-art-santana", "Santana",
+			map[string]any{"mbid": santanaMBID})},
 	}
 
 	results := FuseAndRank(perProvider, "santana", noQualityScorer, nil)
@@ -266,7 +265,7 @@ func TestRankingRegression_SourceBonusLiftsMultiSourceArtist(t *testing.T) {
 		t.Fatal("expected results, got 0")
 	}
 	if results[0].Kind != domain.ResultKindArtist {
-		t.Errorf("expected 6-source artist to beat single-source track, got #1 kind=%s title=%q by=%q",
+		t.Errorf("expected MBID-merged artist to beat single-source track, got #1 kind=%s title=%q by=%q",
 			results[0].Kind, results[0].Title, results[0].Subtitle)
 	}
 }

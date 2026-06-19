@@ -34,6 +34,8 @@ type SearchMusicService struct {
 	vocabStore         ports.VocabularyStore
 	correctionSvc      *CorrectionService
 	findRelatedSvc     *FindRelatedService
+	albumValidator     ports.AlbumValidator
+	ingestWg           sync.WaitGroup
 }
 
 type SearchOption func(*SearchMusicService)
@@ -243,6 +245,8 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		"enriching", enriching,
 	)
 
+	merged = CollapseArtistDuplicates(merged)
+	merged = s.applyArtistDisambiguation(ctx, merged)
 	merged = s.enrich(ctx, merged)
 	merged = Rerank(merged, queryNorm)
 
@@ -290,13 +294,56 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		if correctedQuery != "" {
 			ingestQuery = correctedQuery
 		}
-		go s.ingestToVocabulary(ingestQuery, merged)
+		s.ingestWg.Add(1)
+		go func() {
+			defer s.ingestWg.Done()
+			s.ingestToVocabulary(ingestQuery, merged)
+		}()
+	}
+
+	// Pipeline summary: one log line with everything needed to debug wiring.
+	disambiguated := 0
+	collapsedCount := 0
+	artworkSources := map[string]int{}
+	for _, r := range merged {
+		if getStringExtra(r, "disambiguation") != "" {
+			disambiguated++
+		}
+		if ca, ok := r.Extras["collapsed_artists"]; ok {
+			if list, ok := ca.([]map[string]any); ok {
+				collapsedCount += len(list)
+			}
+		}
+		if r.ImageURL != "" {
+			artworkSources["has_art"]++
+		} else {
+			artworkSources["no_art"]++
+		}
+		if getStringExtra(r, "mbid") != "" {
+			artworkSources["has_mbid"]++
+		}
+	}
+
+	providerSummary := make([]string, 0, len(statuses))
+	for _, st := range statuses {
+		providerSummary = append(providerSummary,
+			st.Provider.String()+"="+st.Status.String())
 	}
 
 	slog.InfoContext(ctx, "search.complete",
+		"query", query.Raw,
 		"results", len(merged),
+		"raw_merged", rawCount,
 		"partial", partial,
 		"corrected", correctedQuery,
+		"suggested", suggestedQuery,
+		"disambiguated", disambiguated,
+		"collapsed_artists", collapsedCount,
+		"has_art", artworkSources["has_art"],
+		"no_art", artworkSources["no_art"],
+		"has_mbid", artworkSources["has_mbid"],
+		"related_groups", len(related),
+		"providers", strings.Join(providerSummary, ","),
 		"duration", time.Since(searchStart),
 	)
 
@@ -309,30 +356,6 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		SuggestedQuery:   suggestedQuery,
 		Related:          related,
 	}, nil
-}
-
-func (s *SearchMusicService) preQueryCorrection(
-	ctx context.Context,
-	rawQuery string,
-	queryNorm string,
-) *CorrectionResult {
-	if s.correctionSvc == nil {
-		return nil
-	}
-	result := s.correctionSvc.Correct(ctx, rawQuery)
-	if result == nil {
-		return nil
-	}
-	corrNorm := NormalizeForMatch(result.Corrected)
-	if corrNorm == queryNorm {
-		return nil
-	}
-	slog.InfoContext(ctx, "search.pre_correction",
-		"original", rawQuery,
-		"corrected", result.Corrected,
-		"confidence", result.Confidence,
-	)
-	return result
 }
 
 func (s *SearchMusicService) tryCorrection(
@@ -436,6 +459,11 @@ func (s *SearchMusicService) suggestIfLowRelevance(
 }
 
 const vocabIngestTop = 5
+const vocabMinPopularity = 30
+
+func (s *SearchMusicService) WaitForIngest() {
+	s.ingestWg.Wait()
+}
 
 func (s *SearchMusicService) ingestToVocabulary(rawQuery string, results []domain.SearchResult) {
 	defer func() {
@@ -449,7 +477,9 @@ func (s *SearchMusicService) ingestToVocabulary(rawQuery string, results []domai
 
 	entries := buildVocabEntries(rawQuery, results)
 	for _, e := range entries {
-		_ = s.vocabStore.Add(ctx, e)
+		if err := s.vocabStore.Add(ctx, e); err != nil {
+			slog.Warn("search.vocab_ingest_failed", "term", e.Term, "error", err)
+		}
 	}
 }
 
@@ -457,13 +487,17 @@ func buildVocabEntries(rawQuery string, results []domain.SearchResult) []domain.
 	entries := []domain.VocabularyEntry{{
 		Term:     rawQuery,
 		TermNorm: NormalizeForMatch(rawQuery),
-		Kind:     "query",
+		Kind:     domain.VocabKindQuery,
 	}}
 	limit := vocabIngestTop
 	if len(results) < limit {
 		limit = len(results)
 	}
 	for _, r := range results[:limit] {
+		pop := popularity(r)
+		if pop < vocabMinPopularity {
+			continue
+		}
 		text := r.Title
 		if r.Subtitle != "" {
 			text = r.Title + " - " + r.Subtitle
@@ -471,19 +505,71 @@ func buildVocabEntries(rawQuery string, results []domain.SearchResult) []domain.
 		entries = append(entries, domain.VocabularyEntry{
 			Term:       text,
 			TermNorm:   NormalizeForMatch(text),
-			Kind:       r.Kind.String(),
-			Popularity: int64(popularity(r)),
+			Kind:       domain.VocabularyKind(r.Kind.String()),
+			Popularity: int64(pop),
 		})
 		if r.Subtitle != "" && r.Kind == domain.ResultKindTrack {
 			entries = append(entries, domain.VocabularyEntry{
 				Term:       r.Subtitle,
 				TermNorm:   NormalizeForMatch(r.Subtitle),
-				Kind:       "artist",
-				Popularity: int64(popularity(r)),
+				Kind:       domain.VocabKindArtist,
+				Popularity: int64(pop),
 			})
 		}
 	}
 	return entries
+}
+
+func (s *SearchMusicService) applyArtistDisambiguation(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
+	if s.albumValidator == nil {
+		for i, r := range results {
+			if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
+				continue
+			}
+			if disambig := getStringExtra(r, "disambiguation"); disambig != "" {
+				results[i].Subtitle = disambig
+			}
+		}
+		return results
+	}
+
+	type cached struct {
+		identity *ports.ArtistIdentity
+		ok       bool
+	}
+	identityCache := make(map[string]cached)
+
+	for i, r := range results {
+		if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
+			continue
+		}
+		if disambig := getStringExtra(r, "disambiguation"); disambig != "" {
+			results[i].Subtitle = disambig
+			continue
+		}
+
+		nameNorm := NormalizeForMatch(r.Title)
+		entry, found := identityCache[nameNorm]
+		if !found {
+			identity, err := s.albumValidator.ResolveArtistIdentity(ctx, r.Title)
+			entry = cached{identity: identity, ok: err == nil && identity != nil}
+			identityCache[nameNorm] = entry
+		}
+		if !entry.ok {
+			continue
+		}
+
+		extras := copyExtras(r.Extras)
+		if entry.identity.Disambiguation != "" {
+			results[i].Subtitle = entry.identity.Disambiguation
+			extras["disambiguation"] = entry.identity.Disambiguation
+		}
+		if entry.identity.MBID != "" {
+			extras["mbid"] = entry.identity.MBID
+		}
+		results[i].Extras = extras
+	}
+	return results
 }
 
 const enrichTimeout = 4 * time.Second
@@ -554,20 +640,24 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 	tryArt := needsArt || result.Kind == domain.ResultKindArtist
 	mbid := getStringExtra(result, "mbid")
 
+	artistNeedsTrackFallback := false
 	if tryArt && s.artworkCache != nil {
 		cachedURL, found, _ := s.artworkCache.Get(ctx, result.Kind, result.Title, result.Subtitle, mbid)
 		if found {
-			if cachedURL != "" {
+			cachedIsPlaceholder := cachedURL != "" && strings.Contains(cachedURL, emptyArtHash)
+			if cachedURL != "" && !cachedIsPlaceholder {
 				imageURL = cachedURL
 				changed = true
 				slog.DebugContext(ctx, "enrich.artwork",
 					"title", result.Title, "source", "cache_hit")
+			} else if result.Kind == domain.ResultKindArtist {
+				artistNeedsTrackFallback = true
 			}
 			tryArt = false
 		}
 	}
 
-	resolvedArt := s.resolveArtwork(ctx, result, mbid, needsArt)
+	resolvedArt := s.resolveArtwork(ctx, result, mbid, needsArt || artistNeedsTrackFallback)
 
 	if resolvedArt != "" {
 		imageURL = resolvedArt
@@ -619,6 +709,15 @@ func (s *SearchMusicService) resolveArtwork(ctx context.Context, result domain.S
 			slog.DebugContext(ctx, "enrich.artwork",
 				"title", result.Title, "source", "chain")
 			return url
+		}
+
+		if result.Kind == domain.ResultKindArtist {
+			url, _ = s.artworkResolver.Resolve(ctx, domain.ResultKindTrack, result.Title, "", "")
+			if url != "" {
+				slog.DebugContext(ctx, "enrich.artwork",
+					"title", result.Title, "source", "track_fallback")
+				return url
+			}
 		}
 	}
 

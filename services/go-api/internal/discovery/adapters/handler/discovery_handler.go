@@ -164,7 +164,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 	for i, e := range entries {
 		dtos[i] = SuggestionDTO{
 			Text:       e.Term,
-			Kind:       e.Kind,
+			Kind:       string(e.Kind),
 			Popularity: e.Popularity,
 		}
 	}
@@ -362,6 +362,8 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 50
+	} else if limit > 100 {
+		limit = 100
 	}
 
 	if h.albumSvc == nil {
@@ -390,6 +392,8 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 5
+	} else if limit > 50 {
+		limit = 50
 	}
 
 	if h.artistSvc == nil {
@@ -418,7 +422,10 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 10
+	} else if limit > 100 {
+		limit = 100
 	}
+	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
 	if h.artistSvc == nil {
 		httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
@@ -427,7 +434,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	resp, err := h.artistSvc.GetAlbums(r.Context(), provider, externalID, limit)
+	resp, err := h.artistSvc.GetAlbums(r.Context(), provider, externalID, artistName, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "get artist albums failed",
 			"error", err, "provider", provider, "external_id", externalID)

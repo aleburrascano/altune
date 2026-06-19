@@ -2,17 +2,37 @@ package service
 
 import (
 	"context"
+	"log/slog"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 )
 
 type GetArtistContentService struct {
-	providers map[string]ports.ArtistContentProvider
+	providers      map[string]ports.ArtistContentProvider
+	albumValidator ports.AlbumValidator
+	discogsEnrich  ports.DiscographyEnricher
 }
 
-func NewGetArtistContentService(providers map[string]ports.ArtistContentProvider) *GetArtistContentService {
-	return &GetArtistContentService{providers: providers}
+func NewGetArtistContentService(
+	providers map[string]ports.ArtistContentProvider,
+	opts ...ArtistContentOption,
+) *GetArtistContentService {
+	s := &GetArtistContentService{providers: providers}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+type ArtistContentOption func(*GetArtistContentService)
+
+func WithAlbumValidator(v ports.AlbumValidator) ArtistContentOption {
+	return func(s *GetArtistContentService) { s.albumValidator = v }
+}
+
+func WithDiscogsEnricher(d ports.DiscographyEnricher) ArtistContentOption {
+	return func(s *GetArtistContentService) { s.discogsEnrich = d }
 }
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName, externalID string, limit int) (*ContentFetchResponse, error) {
@@ -24,7 +44,13 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 		}, nil
 	}
 
-	pn, _ := domain.ParseProviderName(providerName)
+	pn, err := domain.ParseProviderName(providerName)
+	if err != nil {
+		return &ContentFetchResponse{
+			ProviderName: providerName,
+			Status:       domain.ProviderStatusError,
+		}, nil
+	}
 	results, err := provider.GetArtistTopTracks(ctx, pn, externalID)
 	if err != nil {
 		return &ContentFetchResponse{
@@ -44,7 +70,7 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 	}, nil
 }
 
-func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, externalID string, limit int) (*ContentFetchResponse, error) {
+func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName]
 	if !ok {
 		return &ContentFetchResponse{
@@ -53,7 +79,13 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 		}, nil
 	}
 
-	pn, _ := domain.ParseProviderName(providerName)
+	pn, err := domain.ParseProviderName(providerName)
+	if err != nil {
+		return &ContentFetchResponse{
+			ProviderName: providerName,
+			Status:       domain.ProviderStatusError,
+		}, nil
+	}
 	results, err := provider.GetArtistAlbums(ctx, pn, externalID)
 	if err != nil {
 		return &ContentFetchResponse{
@@ -63,6 +95,86 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 	}
 
 	results = dedupAlbums(results)
+
+	if artistName != "" && (s.albumValidator != nil || s.discogsEnrich != nil) {
+		mbConfirmed := make(map[string]bool)
+		discogsConfirmed := make(map[string]bool)
+		birthYear := 0
+
+		if s.albumValidator != nil {
+			identity, _ := s.albumValidator.ResolveArtistIdentity(ctx, artistName)
+			if identity != nil {
+				birthYear = identity.BirthYear
+			}
+
+			validated, err := s.albumValidator.ValidateArtistAlbums(ctx, artistName, results)
+			if err != nil {
+				slog.WarnContext(ctx, "album_validation_failed", "artist", artistName, "error", err)
+			} else {
+				for _, a := range validated.Confirmed {
+					mbConfirmed[NormalizeForMatch(a.Title)] = true
+				}
+				slog.InfoContext(ctx, "album_validation_applied",
+					"artist", artistName,
+					"confirmed", len(validated.Confirmed),
+					"unconfirmed", len(validated.Unconfirmed),
+				)
+			}
+		}
+
+		if s.discogsEnrich != nil {
+			albumTitles := make([]string, len(results))
+			for i, r := range results {
+				albumTitles[i] = r.Title
+			}
+			discogsArtist, err := s.discogsEnrich.ResolveDiscogsArtist(ctx, artistName, albumTitles)
+			if err != nil {
+				slog.WarnContext(ctx, "discogs_enrichment_failed", "artist", artistName, "error", err)
+			} else if discogsArtist != nil && discogsArtist.Overlap > 0 {
+				releases, err := s.discogsEnrich.FetchArtistReleases(ctx, discogsArtist.ID)
+				if err != nil {
+					slog.WarnContext(ctx, "discogs_releases_failed", "artist", artistName, "error", err)
+				} else {
+					discogsYears := make(map[string]int, len(releases))
+					for _, rel := range releases {
+						norm := NormalizeForMatch(rel.Title)
+						discogsConfirmed[norm] = true
+						if rel.Year > 0 {
+							discogsYears[norm] = rel.Year
+						}
+					}
+					for i, r := range results {
+						if extractYear(r) == 0 {
+							norm := NormalizeForMatch(r.Title)
+							if y, ok := discogsYears[norm]; ok {
+								extras := copyExtras(r.Extras)
+								extras["year"] = y
+								results[i].Extras = extras
+							}
+						}
+					}
+					slog.InfoContext(ctx, "discogs_enrichment_applied",
+						"artist", artistName,
+						"discogs_id", discogsArtist.ID,
+						"overlap", discogsArtist.Overlap,
+						"releases", len(releases),
+						"years_backfilled", len(discogsYears),
+					)
+				}
+			} else if discogsArtist != nil {
+				slog.InfoContext(ctx, "discogs_enrichment_skipped",
+					"artist", artistName,
+					"discogs_id", discogsArtist.ID,
+					"reason", "zero album overlap, unreliable match")
+			}
+		}
+
+		results = FilterContamination(results, DiscographyFilterInput{
+			BirthYear:        birthYear,
+			MBConfirmed:      mbConfirmed,
+			DiscogsConfirmed: discogsConfirmed,
+		})
+	}
 
 	if limit > 0 && len(results) > limit {
 		results = results[:limit]

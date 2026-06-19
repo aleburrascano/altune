@@ -144,29 +144,51 @@ func (a *App) setup(ctx context.Context) error {
 		scheduler = bgScheduler
 	}
 
-	searchProviders := a.buildDiscoveryProviders()
+	var sharedMB *providers.MusicBrainzAdapter
+	if a.cfg.HasMusicBrainz() {
+		sharedMB = providers.NewMusicBrainzAdapter(
+			&http.Client{Timeout: 10 * time.Second},
+			a.cfg.MusicBrainzUserAgent,
+		)
+	}
+	searchProviders := a.buildDiscoveryProviders(sharedMB)
 	queryCache := discoveryCacheAdapters.NewRedisQueryCache(a.redisClient)
 	circuitBreaker := discoveryService.NewCircuitBreaker()
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	clickRepo := discoveryPersistence.NewPgxSearchClickRepository(a.pool)
-	artworkChain := providers.NewChainedArtworkResolver(
+	// Artwork chain: identity-verified sources first, name-only last.
+	// Order: Fanart.tv (MBID) → Discogs → YouTube → Genius → Deezer → TheAudioDB → iTunes
+	var artworkResolvers []discoveryPorts.ArtworkResolver
+	if a.cfg.HasFanartTV() {
+		artworkResolvers = append(artworkResolvers,
+			providers.NewFanartTvArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.FanartTVAPIKey))
+	}
+	var sharedDiscogs *providers.DiscogsAdapter
+	if a.cfg.HasDiscogs() {
+		sharedDiscogs = providers.NewDiscogsAdapter(
+			&http.Client{Timeout: 10 * time.Second},
+			a.cfg.DiscogsToken,
+			a.cfg.MusicBrainzUserAgent,
+		)
+		artworkResolvers = append(artworkResolvers, sharedDiscogs)
+	}
+	if a.cfg.HasYouTube() {
+		artworkResolvers = append(artworkResolvers,
+			providers.NewYouTubeArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.YouTubeAPIKey))
+	}
+	if a.cfg.HasGenius() {
+		artworkResolvers = append(artworkResolvers,
+			providers.NewGeniusArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.GeniusAccessToken))
+	}
+	artworkResolvers = append(artworkResolvers,
 		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
 		providers.NewTheAudioDBAdapter(&http.Client{Timeout: 10 * time.Second}),
 		providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second}),
 	)
+	artworkChain := providers.NewChainedArtworkResolver(artworkResolvers...)
 
 	searchOpts := []discoveryService.SearchOption{
 		discoveryService.WithArtworkResolver(artworkChain),
-	}
-	if a.cfg.HasFanartTV() {
-		searchOpts = append(searchOpts, discoveryService.WithFanartResolver(
-			providers.NewFanartTvArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.FanartTVAPIKey),
-		))
-	}
-	if a.cfg.HasGenius() {
-		searchOpts = append(searchOpts, discoveryService.WithGeniusResolver(
-			providers.NewGeniusArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.GeniusAccessToken),
-		))
 	}
 	if a.redisClient != nil {
 		searchOpts = append(searchOpts, discoveryService.WithArtworkCache(
@@ -186,8 +208,6 @@ func (a *App) setup(ctx context.Context) error {
 		searchOpts = append(searchOpts, discoveryService.WithVocabularyStore(vocabStore))
 	}
 
-	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker, searchOpts...)
-
 	clickSvc := discoveryService.NewRecordClickService(clickRepo)
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 
@@ -205,11 +225,21 @@ func (a *App) setup(ctx context.Context) error {
 		"deezer": deezerContent,
 	}
 	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
-	artistSvc := discoveryService.NewGetArtistContentService(artistProviders)
+	var artistContentOpts []discoveryService.ArtistContentOption
+	if sharedMB != nil {
+		artistContentOpts = append(artistContentOpts, discoveryService.WithAlbumValidator(sharedMB))
+		searchOpts = append(searchOpts, discoveryService.WithIdentityResolver(sharedMB))
+	}
+	if sharedDiscogs != nil {
+		artistContentOpts = append(artistContentOpts, discoveryService.WithDiscogsEnricher(sharedDiscogs))
+	}
+	artistSvc := discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
 	findRelatedSvc := discoveryService.NewFindRelatedService(trackRepo, deezerContent, deezerContent)
 	searchOpts = append(searchOpts, discoveryService.WithFindRelatedService(findRelatedSvc))
+
+	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker, searchOpts...)
 
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, suggestSvc)
 
@@ -226,10 +256,14 @@ func (a *App) setup(ctx context.Context) error {
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.RequestLogger)
 	r.Use(httputil.MaxBodySize(1 << 20)) // 1MB limit on request bodies
+	corsHeaders := []string{"Accept", "Authorization", "Content-Type"}
+	if a.cfg.IsDevelopment() {
+		corsHeaders = append(corsHeaders, "ngrok-skip-browser-warning")
+	}
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   a.cfg.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "ngrok-skip-browser-warning"},
+		AllowedHeaders:   corsHeaders,
 		ExposedHeaders:   []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -317,7 +351,7 @@ func (a *App) buildAudioStore() catalogPorts.AudioStore {
 	return nil
 }
 
-func (a *App) buildDiscoveryProviders() []discoveryPorts.SearchProvider {
+func (a *App) buildDiscoveryProviders(mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
 	var providerList []discoveryPorts.SearchProvider
 
 	deezerClient := &http.Client{Timeout: 10 * time.Second}
@@ -328,9 +362,8 @@ func (a *App) buildDiscoveryProviders() []discoveryPorts.SearchProvider {
 
 	providerList = append(providerList, providers.NewTheAudioDBAdapter(&http.Client{Timeout: 10 * time.Second}))
 
-	if a.cfg.HasMusicBrainz() {
-		mbClient := &http.Client{Timeout: 10 * time.Second}
-		providerList = append(providerList, providers.NewMusicBrainzAdapter(mbClient, a.cfg.MusicBrainzUserAgent))
+	if mb != nil {
+		providerList = append(providerList, mb)
 	}
 
 	if a.cfg.HasLastFM() {

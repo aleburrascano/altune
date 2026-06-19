@@ -158,6 +158,9 @@ func pickBestCorrection(queryNorm string, candidates []domain.VocabularyEntry) *
 	return best
 }
 
+// maxCorrectionDist returns the maximum edit distance allowed for a correction
+// candidate. Short queries (<=4 runes) tolerate only 1 edit to avoid wild
+// corrections; medium queries (<=8) tolerate 2; longer queries tolerate 3.
 func maxCorrectionDist(query string) int {
 	n := len([]rune(query))
 	if n <= 4 {

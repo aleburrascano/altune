@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -40,14 +39,14 @@ func WithFindRelatedService(svc *FindRelatedService) SearchOption {
 	return func(s *SearchMusicService) { s.findRelatedSvc = svc }
 }
 
+func WithIdentityResolver(v ports.AlbumValidator) SearchOption {
+	return func(s *SearchMusicService) { s.albumValidator = v }
+}
+
 func (s *FindRelatedService) Execute(
 	ctx context.Context,
 	organicResults []domain.SearchResult,
 ) []domain.RelatedGroup {
-	if s == nil {
-		return nil
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, relatedTimeout)
 	defer cancel()
 
@@ -220,16 +219,3 @@ func dedupRelatedAgainstOrganic(groups []domain.RelatedGroup, organic []domain.S
 	return filtered
 }
 
-func dedupRelatedGroups(groups []domain.RelatedGroup) []domain.RelatedGroup {
-	seen := make(map[string]bool)
-	var deduped []domain.RelatedGroup
-	for _, g := range groups {
-		key := g.Relationship + "|" + strings.ToLower(g.RelatedTo)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		deduped = append(deduped, g)
-	}
-	return deduped
-}

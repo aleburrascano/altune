@@ -237,15 +237,12 @@ func TestStage_TryMerge(t *testing.T) {
 		}
 	})
 
-	t.Run("same normalized artist name merges artists", func(t *testing.T) {
+	t.Run("same name artists without identifier do not merge", func(t *testing.T) {
 		a := artistResult(domain.ProviderDeezer, "dz-1", "The Weeknd", nil)
 		b := artistResult(domain.ProviderLastFM, "lfm-1", "The Weeknd", nil)
-		merged, ok := tryMerge(a, b)
-		if !ok {
-			t.Fatal("expected artist name merge")
-		}
-		if merged.Confidence != domain.ConfidenceMedium {
-			t.Errorf("expected medium confidence for name merge, got %s", merged.Confidence)
+		_, ok := tryMerge(a, b)
+		if ok {
+			t.Fatal("artists without identifier overlap must not merge")
 		}
 	})
 

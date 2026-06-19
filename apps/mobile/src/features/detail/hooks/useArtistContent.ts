@@ -21,9 +21,8 @@ import { dedupAlbumsByTitle, sortByReleaseDateDesc } from '../helpers/artist-con
 
 type UseArtistContentParams = {
   sources: DiscoverySource[];
-  /** Authoritative artist MBID from extras.mbid — picks the right MB source
-   *  when the merged card carries several same-name MusicBrainz artists. */
-  mbid?: string | null;
+  /** Artist name — passed to the backend for MB cross-reference validation. */
+  artistName?: string;
   enabled?: boolean;
 };
 
@@ -40,15 +39,9 @@ type UseArtistContentReturn = {
 
 export function useArtistContent({
   sources,
-  mbid = null,
+  artistName,
   enabled = true,
 }: UseArtistContentParams): UseArtistContentReturn {
-  const mbSource =
-    (mbid !== null
-      ? sources.find((s) => s.provider === 'musicbrainz' && s.external_id === mbid)
-      : undefined)
-    ?? sources.find((s) => s.provider === 'musicbrainz')
-    ?? null;
   const deezerSource = sources.find((s) => s.provider === 'deezer') ?? null;
   const streamSource = deezerSource ?? sources.find((s) => s.provider === 'lastfm') ?? sources[0] ?? null;
 
@@ -64,26 +57,15 @@ export function useArtistContent({
     staleTime: 1000 * 60 * 30,
   });
 
-  const {
-    data: mbData,
-    isLoading: isLoadingMb,
-    isError: isErrorMb,
-    refetch: refetchMb,
-  } = useQuery({
-    queryKey: ['artist-albums-mb', mbSource?.external_id ?? ''],
-    queryFn: () => getArtistAlbums('musicbrainz', mbSource!.external_id, 100),
-    enabled: enabled && mbSource !== null,
-    staleTime: 1000 * 60 * 30,
-  });
-
+  const dzValidated = Boolean(artistName);
   const {
     data: dzData,
     isLoading: isLoadingDz,
     isError: isErrorDz,
     refetch: refetchDz,
   } = useQuery({
-    queryKey: ['artist-albums-dz', deezerSource?.external_id ?? ''],
-    queryFn: () => getArtistAlbums('deezer', deezerSource!.external_id, 100),
+    queryKey: ['artist-albums-dz', deezerSource?.external_id ?? '', artistName ?? ''],
+    queryFn: () => getArtistAlbums('deezer', deezerSource!.external_id, 100, artistName),
     enabled: enabled && deezerSource !== null,
     staleTime: 1000 * 60 * 30,
   });
@@ -101,25 +83,12 @@ export function useArtistContent({
     staleTime: 1000 * 60 * 30,
   });
 
-  const mbFailed = isErrorMb || (mbData !== undefined && mbData.status !== 'ok');
   const dzFailed = isErrorDz || (dzData !== undefined && dzData.status !== 'ok');
   const scFailed = isErrorSc || (scData !== undefined && scData.status !== 'ok');
 
-  const mbAlbums = mbData?.status === 'ok' ? mbData.items : [];
-  const dzAlbumsRaw = dzData?.status === 'ok' ? dzData.items : [];
+  const dzAlbums = dzData?.status === 'ok' ? dzData.items : [];
   const scAlbumsRaw = scData?.status === 'ok' ? scData.items : [];
-  // MB-authoritative discography: Deezer's artist entities can conflate
-  // several same-name artists (and its album entries carry no artist field
-  // to filter on). With a VERIFIED identity (mbid matches the MB source we
-  // queried) and a healthy MB list, Deezer only enriches title-matched
-  // albums — it contributes no new titles. Without that, the union stands.
-  const mbAuthoritative =
-    mbid !== null && mbSource?.external_id === mbid && mbAlbums.length > 0;
-  const mbTitleKeys = new Set(mbAlbums.map((a) => normalizeForDedup(a.title)));
-  const dzAlbums = mbAuthoritative
-    ? dzAlbumsRaw.filter((a) => mbTitleKeys.has(normalizeForDedup(a.title)))
-    : dzAlbumsRaw;
-  const mergedAlbums = dedupAlbumsByTitle([...mbAlbums, ...dzAlbums, ...scAlbumsRaw]);
+  const mergedAlbums = dedupAlbumsByTitle([...dzAlbums, ...scAlbumsRaw]);
 
   // Back-fill artwork for albums with no image (e.g. SoundCloud sets)
   // from a title-matched album from another provider.
@@ -136,25 +105,27 @@ export function useArtistContent({
     return donor ? { ...a, image_url: donor } : a;
   });
 
-  const isLoadingAlbums = (mbSource !== null && isLoadingMb)
-    || (deezerSource !== null && isLoadingDz)
+  const isLoadingAlbums = (deezerSource !== null && isLoadingDz)
     || (scSource !== null && isLoadingSc);
   const albumOutcomes = [
-    ...(mbSource !== null ? [mbFailed] : []),
     ...(deezerSource !== null ? [dzFailed] : []),
     ...(scSource !== null ? [scFailed] : []),
   ];
   const isErrorAlbums = albumOutcomes.length > 0 && albumOutcomes.every(Boolean);
 
+  // When the backend applied MB validation (artistName was passed), trust its
+  // confirmed-first ordering. Only sort by date when no validation occurred.
+  const finalAlbums = dzValidated ? albumsWithArt : sortByReleaseDateDesc(albumsWithArt);
+
   return {
     topTracks: tracksData?.status === 'ok' ? tracksData.items : [],
-    albums: sortByReleaseDateDesc(albumsWithArt),
+    albums: finalAlbums,
     isLoadingTracks: isLoadingTracksRaw,
     isLoadingAlbums,
     isErrorTracks:
       isErrorTracksRaw || (tracksData !== undefined && tracksData.status !== 'ok'),
     isErrorAlbums,
     refetchTracks: refetchTracksRaw,
-    refetchAlbums: () => { refetchMb(); refetchDz(); refetchSc(); },
+    refetchAlbums: () => { refetchDz(); refetchSc(); },
   };
 }

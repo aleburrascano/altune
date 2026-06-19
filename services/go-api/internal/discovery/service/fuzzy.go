@@ -37,22 +37,24 @@ func levenshteinRatio(s1, s2 string) float64 {
 }
 
 func levenshteinDistance(s1, s2 string) int {
-	if len(s1) == 0 {
-		return len(s2)
+	r1 := []rune(s1)
+	r2 := []rune(s2)
+	if len(r1) == 0 {
+		return len(r2)
 	}
-	if len(s2) == 0 {
-		return len(s1)
+	if len(r2) == 0 {
+		return len(r1)
 	}
-	prev := make([]int, len(s2)+1)
-	curr := make([]int, len(s2)+1)
+	prev := make([]int, len(r2)+1)
+	curr := make([]int, len(r2)+1)
 	for j := range prev {
 		prev[j] = j
 	}
-	for i := 1; i <= len(s1); i++ {
+	for i := 1; i <= len(r1); i++ {
 		curr[0] = i
-		for j := 1; j <= len(s2); j++ {
+		for j := 1; j <= len(r2); j++ {
 			cost := 1
-			if s1[i-1] == s2[j-1] {
+			if r1[i-1] == r2[j-1] {
 				cost = 0
 			}
 			del := prev[j] + 1
@@ -69,5 +71,5 @@ func levenshteinDistance(s1, s2 string) int {
 		}
 		prev, curr = curr, prev
 	}
-	return prev[len(s2)]
+	return prev[len(r2)]
 }

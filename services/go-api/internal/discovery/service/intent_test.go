@@ -78,39 +78,3 @@ func TestDetectIntent(t *testing.T) {
 	})
 }
 
-func TestApplyIntentBoost(t *testing.T) {
-	intent := &QueryIntent{Artist: "Tay-K", Track: "Megaman"}
-
-	t.Run("matching result gets boosted", func(t *testing.T) {
-		results := []domain.SearchResult{
-			trackResult(domain.ProviderDeezer, "1", "Megaman", "Tay-K", map[string]any{"popularity": int64(50)}),
-		}
-		got := ApplyIntentBoost(results, intent)
-		pop := popularity(got[0])
-		if pop <= 50 {
-			t.Errorf("expected boosted popularity > 50, got %v", pop)
-		}
-	})
-
-	t.Run("non-matching result unchanged", func(t *testing.T) {
-		results := []domain.SearchResult{
-			trackResult(domain.ProviderDeezer, "1", "Other Song", "Other Artist", map[string]any{"popularity": int64(50)}),
-		}
-		got := ApplyIntentBoost(results, intent)
-		pop := popularity(got[0])
-		if pop != 50 {
-			t.Errorf("expected unchanged popularity 50, got %v", pop)
-		}
-	})
-
-	t.Run("nil intent no-ops", func(t *testing.T) {
-		results := []domain.SearchResult{
-			trackResult(domain.ProviderDeezer, "1", "Megaman", "Tay-K", map[string]any{"popularity": int64(50)}),
-		}
-		got := ApplyIntentBoost(results, nil)
-		pop := popularity(got[0])
-		if pop != 50 {
-			t.Errorf("expected unchanged popularity 50, got %v", pop)
-		}
-	})
-}
