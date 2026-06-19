@@ -334,28 +334,18 @@ func (a *MusicBrainzAdapter) ValidateArtistAlbums(
 	mbid, err := a.resolveArtistMBID(ctx, artistName)
 	if err != nil {
 		slog.WarnContext(ctx, "mb.resolve_mbid_failed", "artist", artistName, "error", err)
-		return &ports.AlbumValidationResult{
-			Confirmed:   albums,
-			Unconfirmed: nil,
-		}, nil
+		return nil, fmt.Errorf("mb resolve failed: %w", err)
 	}
 	if mbid == "" {
 		slog.InfoContext(ctx, "mb.no_mbid_found", "artist", artistName)
-		return &ports.AlbumValidationResult{
-			Confirmed:   albums,
-			Unconfirmed: nil,
-		}, nil
+		return nil, fmt.Errorf("mb artist not found for %q", artistName)
 	}
 	slog.InfoContext(ctx, "mb.artist_resolved", "artist", artistName, "mbid", mbid)
 
 	releases, err := a.fetchReleaseGroups(ctx, mbid)
 	if err != nil {
 		slog.WarnContext(ctx, "mb.release_groups_failed", "mbid", mbid, "error", err)
-		return &ports.AlbumValidationResult{
-			Confirmed:   albums,
-			Unconfirmed: nil,
-			ArtistMBID:  mbid,
-		}, nil
+		return nil, fmt.Errorf("mb release-groups unavailable: %w", err)
 	}
 
 	mbTitles := make(map[string]bool, len(releases))
