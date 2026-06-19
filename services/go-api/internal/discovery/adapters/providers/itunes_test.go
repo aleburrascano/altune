@@ -121,6 +121,116 @@ func TestITunesAdapter_Search_Artists(t *testing.T) {
 	}
 }
 
+func TestITunesAdapter_LookupAlbum(t *testing.T) {
+	tests := []struct {
+		name         string
+		albumTitle   string
+		artistName   string
+		profile      domain.ArtistIdentityProfile
+		responseBody string
+		statusCode   int
+		expected     domain.AlbumVerdict
+	}{
+		{
+			name:       "different artist name - contamination",
+			albumTitle: "LOTTO DREAMS",
+			artistName: "Che",
+			profile: domain.ArtistIdentityProfile{
+				GenreCluster:         map[string]bool{"hip-hop": true, "rap": true},
+				KnownISRCRegistrants: map[string]bool{},
+			},
+			responseBody: `{"results":[{"collectionName":"LOTTO DREAMS","artistName":"Mr. E.L.Y","primaryGenreName":"Hip-Hop/Rap"}]}`,
+			statusCode:   200,
+			expected:     domain.AlbumVerdictContamination,
+		},
+		{
+			name:       "same name incompatible genre - contamination",
+			albumTitle: "Tšernobõl",
+			artistName: "Che",
+			profile: domain.ArtistIdentityProfile{
+				GenreCluster:         map[string]bool{"hip-hop": true, "rap": true},
+				KnownISRCRegistrants: map[string]bool{},
+			},
+			responseBody: `{"results":[{"collectionName":"Tšernobõl","artistName":"Che","primaryGenreName":"Rock"}]}`,
+			statusCode:   200,
+			expected:     domain.AlbumVerdictContamination,
+		},
+		{
+			name:       "same name compatible genre - confirmed",
+			albumTitle: "REST IN BASS",
+			artistName: "Che",
+			profile: domain.ArtistIdentityProfile{
+				GenreCluster:         map[string]bool{"hip-hop": true, "rap": true},
+				KnownISRCRegistrants: map[string]bool{},
+			},
+			responseBody: `{"results":[{"collectionName":"REST IN BASS","artistName":"Che","primaryGenreName":"Hip-Hop/Rap"}]}`,
+			statusCode:   200,
+			expected:     domain.AlbumVerdictConfirmed,
+		},
+		{
+			name:       "album not found - unknown",
+			albumTitle: "Nonexistent Album",
+			artistName: "Che",
+			profile: domain.ArtistIdentityProfile{
+				GenreCluster:         map[string]bool{"hip-hop": true},
+				KnownISRCRegistrants: map[string]bool{},
+			},
+			responseBody: `{"results":[{"collectionName":"Something Else","artistName":"Other Artist","primaryGenreName":"Pop"}]}`,
+			statusCode:   200,
+			expected:     domain.AlbumVerdictUnknown,
+		},
+		{
+			name:       "api error - unknown",
+			albumTitle: "Any Album",
+			artistName: "Any Artist",
+			profile: domain.ArtistIdentityProfile{
+				GenreCluster:         map[string]bool{},
+				KnownISRCRegistrants: map[string]bool{},
+			},
+			responseBody: "",
+			statusCode:   500,
+			expected:     domain.AlbumVerdictUnknown,
+		},
+		{
+			name:       "empty genre cluster - genre check skipped - confirmed",
+			albumTitle: "Some Album",
+			artistName: "Che",
+			profile: domain.ArtistIdentityProfile{
+				GenreCluster:         map[string]bool{},
+				KnownISRCRegistrants: map[string]bool{},
+			},
+			responseBody: `{"results":[{"collectionName":"Some Album","artistName":"Che","primaryGenreName":"Electronic"}]}`,
+			statusCode:   200,
+			expected:     domain.AlbumVerdictConfirmed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				w.Write([]byte(tt.responseBody))
+			}))
+			defer server.Close()
+
+			adapter := NewITunesAdapter(newTestClient(server.URL))
+			verdict, err := adapter.LookupAlbum(
+				context.Background(),
+				tt.albumTitle,
+				tt.artistName,
+				tt.profile,
+			)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if verdict != tt.expected {
+				t.Errorf("got verdict %v, want %v", verdict, tt.expected)
+			}
+		})
+	}
+}
+
 func TestITunesAdapter_Search_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

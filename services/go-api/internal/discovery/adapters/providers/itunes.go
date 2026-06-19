@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 type ITunesAdapter struct {
@@ -173,6 +174,67 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 		}
 	}
 	return "", nil
+}
+
+// LookupAlbum searches iTunes for an album and returns a verdict on whether
+// it belongs to the given artist based on name and genre compatibility.
+func (a *ITunesAdapter) LookupAlbum(
+	ctx context.Context,
+	albumTitle, artistName string,
+	profile domain.ArtistIdentityProfile,
+) (domain.AlbumVerdict, error) {
+	u := fmt.Sprintf(
+		"https://itunes.apple.com/search?term=%s&entity=album&limit=5",
+		url.QueryEscape(albumTitle),
+	)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return domain.AlbumVerdictUnknown, nil
+	}
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		slog.WarnContext(ctx, "itunes.lookup_album_failed", "album", albumTitle, "error", err)
+		return domain.AlbumVerdictUnknown, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return domain.AlbumVerdictUnknown, nil
+	}
+
+	var body itunesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return domain.AlbumVerdictUnknown, nil
+	}
+
+	titleNorm := textnorm.NormalizeForMatch(albumTitle)
+	artistNorm := textnorm.NormalizeForMatch(artistName)
+
+	for _, item := range body.Results {
+		if textnorm.NormalizeForMatch(item.CollectionName) != titleNorm {
+			continue
+		}
+
+		if textnorm.NormalizeForMatch(item.ArtistName) != artistNorm {
+			return domain.AlbumVerdictContamination, nil
+		}
+
+		// Artist name matches. Check genre compatibility if we have genre data.
+		// iTunes genres use "/" as separator (e.g. "Hip-Hop/Rap"), so split
+		// before comparing against the profile's genre cluster.
+		if len(profile.GenreCluster) > 0 && item.PrimaryGenreName != "" {
+			genres := strings.Split(item.PrimaryGenreName, "/")
+			if !profile.HasGenreOverlap(genres) {
+				return domain.AlbumVerdictContamination, nil
+			}
+		}
+
+		return domain.AlbumVerdictConfirmed, nil
+	}
+
+	return domain.AlbumVerdictUnknown, nil
 }
 
 type itunesResponse struct {
