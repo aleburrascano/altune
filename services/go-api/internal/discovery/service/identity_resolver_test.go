@@ -73,7 +73,8 @@ func (f *fakeISRCFetcher) FetchFirstTrackID(ctx context.Context, albumID string)
 }
 
 type fakeIdentityCache struct {
-	entries map[string]fakeCacheEntry
+	entries  map[string]fakeCacheEntry
+	profiles map[string]domain.ArtistIdentityProfile
 }
 
 type fakeCacheEntry struct {
@@ -84,7 +85,19 @@ type fakeCacheEntry struct {
 }
 
 func newFakeIdentityCache() *fakeIdentityCache {
-	return &fakeIdentityCache{entries: map[string]fakeCacheEntry{}}
+	return &fakeIdentityCache{
+		entries:  map[string]fakeCacheEntry{},
+		profiles: map[string]domain.ArtistIdentityProfile{},
+	}
+}
+
+func (f *fakeIdentityCache) GetProfile(_ context.Context, artistName string) (domain.ArtistIdentityProfile, bool) {
+	p, ok := f.profiles[artistName]
+	return p, ok
+}
+
+func (f *fakeIdentityCache) SetProfile(_ context.Context, artistName string, profile domain.ArtistIdentityProfile) {
+	f.profiles[artistName] = profile
 }
 
 func (f *fakeIdentityCache) GetVerdict(_ context.Context, artistName, albumTitle string) (domain.AlbumVerdict, string, string, time.Time, bool) {
