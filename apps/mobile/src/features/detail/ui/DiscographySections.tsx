@@ -1,8 +1,11 @@
 import { useState, type ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { ChevronRight } from 'lucide-react-native';
+
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
+import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -24,6 +27,7 @@ export function DiscographySections({
   albums: DiscoveryResult[];
   onAlbumPress: (album: DiscoveryResult) => void;
 }): ReactElement {
+  const theme = useTheme();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const grouped = new Map<string, DiscoveryResult[]>();
   for (const album of albums) {
@@ -96,13 +100,14 @@ export function DiscographySections({
               {hasMore ? (
                 <Pressable
                   testID={`detail-see-all-${section.type}`}
-                  style={({ pressed }) => [styles.seeAllCard, pressed ? { opacity: 0.6 } : null]}
+                  style={({ pressed }) => [styles.seeAllCard, { backgroundColor: theme.color.surface2 }, pressed ? { opacity: 0.6 } : null]}
                   onPress={() => setExpandedSections((prev) => new Set(prev).add(section.type))}
                   accessibilityRole="button"
                   accessibilityLabel={`See all ${items.length} ${section.label.toLowerCase()}`}
                 >
+                  <ChevronRight size={20} color={theme.color.accent} />
                   <Text variant="label" tone="accent" style={styles.seeAllText}>
-                    See all {items.length} {section.label.toLowerCase()}
+                    See all
                   </Text>
                 </Pressable>
               ) : null}
@@ -125,6 +130,8 @@ const styles = StyleSheet.create({
     marginLeft: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radius.md,
+    gap: spacing.xs,
   },
   seeAllText: { textAlign: 'center' },
 });

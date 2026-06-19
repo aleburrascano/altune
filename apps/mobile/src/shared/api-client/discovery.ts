@@ -176,8 +176,11 @@ export async function getArtistAlbums(
   provider: string,
   externalId: string,
   limit?: number,
+  artistName?: string,
 ): Promise<ContentFetchResponse> {
-  return apiFetch<ContentFetchResponse>(
-    _contentUrl(`/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/albums`, limit),
-  );
+  let url = _contentUrl(`/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/albums`, limit);
+  if (artistName) {
+    url += `&name=${encodeURIComponent(artistName)}`;
+  }
+  return apiFetch<ContentFetchResponse>(url);
 }

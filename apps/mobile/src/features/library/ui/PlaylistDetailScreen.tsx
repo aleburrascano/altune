@@ -145,7 +145,7 @@ export function PlaylistDetailScreen(): ReactElement {
     return (
       <Screen>
         <View style={styles.header}>
-          <Pressable onPress={goBack} hitSlop={8}>
+          <Pressable onPress={goBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back" style={styles.headerBtn}>
             <Text variant="body" tone="accent">‹ Back</Text>
           </Pressable>
         </View>
@@ -162,7 +162,7 @@ export function PlaylistDetailScreen(): ReactElement {
     return (
       <Screen>
         <View style={styles.header}>
-          <Pressable onPress={goBack} hitSlop={8}>
+          <Pressable onPress={goBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back" style={styles.headerBtn}>
             <Text variant="body" tone="accent">‹ Back</Text>
           </Pressable>
         </View>
@@ -184,10 +184,11 @@ export function PlaylistDetailScreen(): ReactElement {
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Back"
+          style={styles.headerBtn}
         >
           <Text variant="body" tone="accent">‹ Back</Text>
         </Pressable>
-        <Pressable onPress={handleDelete} hitSlop={8} accessibilityRole="button" accessibilityLabel="Delete playlist">
+        <Pressable onPress={handleDelete} hitSlop={8} accessibilityRole="button" accessibilityLabel="Delete playlist" style={styles.headerBtn}>
           <Text variant="body" tone="danger">Delete</Text>
         </Pressable>
       </View>
@@ -229,7 +230,7 @@ export function PlaylistDetailScreen(): ReactElement {
         ListEmptyComponent={
           <View style={styles.emptyTracks}>
             <Text variant="label" tone="secondary">No tracks yet</Text>
-            <Text variant="caption" tone="tertiary">Long-press any track to add it here</Text>
+            <Text variant="caption" tone="tertiary">Use the menu on any track to add it here</Text>
           </View>
         }
       />
@@ -255,6 +256,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
   },
+  headerBtn: { minHeight: 48, justifyContent: 'center' as const },
   heroLoading: {
     alignItems: 'center',
     gap: spacing.sm,

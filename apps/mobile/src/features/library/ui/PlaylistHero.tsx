@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Text, spacing, useTheme } from '@shared/ui';
+import { fontFamily } from '@shared/ui/theme/tokens';
 
 import { PlaylistCover } from './PlaylistCover';
 
@@ -48,7 +49,13 @@ export function PlaylistHero({
           ]}
         />
       ) : (
-        <Pressable onPress={onStartEditing} hitSlop={8}>
+        <Pressable
+          onPress={onStartEditing}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Playlist name: ${playlist.name}`}
+          accessibilityHint="Tap to rename"
+        >
           <Text variant="title" testID="playlist-name">{playlist.name}</Text>
         </Pressable>
       )}
@@ -66,7 +73,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   renameInput: {
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: fontFamily.displaySemiBold,
     fontSize: 20,
     textAlign: 'center',
     borderBottomWidth: 2,

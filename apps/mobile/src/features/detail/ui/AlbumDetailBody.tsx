@@ -71,6 +71,7 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
   const localAsDiscovery = localTracks.map(libraryTrackToDiscoveryResult);
 
   const [moreExpanded, setMoreExpanded] = useState(false);
+  const [saveAllTapped, setSaveAllTapped] = useState(false);
 
   const discovery = useAlbumDiscovery({
     albumTitle: result.title,
@@ -95,6 +96,7 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
   };
 
   const onSaveAll = (): void => {
+    setSaveAllTapped(true);
     const allTracks = hasSources ? tracks : [...tracks, ...moreTracks];
     for (const track of allTracks) {
       const enriched = _enrichAlbumTrack(track, result);
@@ -155,8 +157,10 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
       {hasSources && !allSaved ? (
         <Button
           testID="detail-save-all"
-          label="Save All to Library"
+          label={saveAllTapped ? 'Saving...' : 'Save All to Library'}
           onPress={onSaveAll}
+          disabled={saveAllTapped}
+          loading={saveAllTapped && save.isPending}
           style={styles.saveAllButton}
         />
       ) : null}
