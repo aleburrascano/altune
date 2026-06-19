@@ -1,15 +1,19 @@
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
-import type { AudioSource } from 'expo-audio';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import TrackPlayer, {
+  Capability,
+  Event,
+  State,
+  usePlaybackState,
+  useProgress,
+} from 'react-native-track-player';
 
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '@shared/playback/types';
 
-import { useQueueResume } from './useQueueResume';
-
 import { audioRequestHeaders, audioStreamUrl } from '../api/audio';
+import { useQueueResume } from './useQueueResume';
 
 const INITIAL_STATE: PlaybackState = {
   status: 'idle',
@@ -19,81 +23,44 @@ const INITIAL_STATE: PlaybackState = {
   errorMessage: null,
 };
 
-const LOAD_TIMEOUT_MS = 15_000;
-const RETRY_DELAY_MS = 1_000;
-const MAX_RETRIES = 2;
+let playerInitialized = false;
+
+async function initPlayer(): Promise<void> {
+  if (playerInitialized) return;
+  await TrackPlayer.setupPlayer({});
+  await TrackPlayer.updateOptions({
+    capabilities: [
+      Capability.Play,
+      Capability.Pause,
+      Capability.SeekTo,
+      Capability.SkipToNext,
+      Capability.SkipToPrevious,
+    ],
+    compactCapabilities: [
+      Capability.Play,
+      Capability.Pause,
+      Capability.SkipToNext,
+    ],
+  });
+  playerInitialized = true;
+}
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
-  const [audioSource, setAudioSource] = useState<AudioSource | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const shouldAutoPlay = useRef(false);
+  const [ready, setReady] = useState(false);
   const lastPlayedTrack = useRef<PlaybackTrack | null>(null);
   const queryClient = useQueryClient();
 
-  const player = useAudioPlayer(audioSource);
-  const playerStatus = useAudioPlayerStatus(player);
+  const playbackState = usePlaybackState();
+  const progress = useProgress(500);
 
   useEffect(() => {
-    void setAudioModeAsync({
-      shouldPlayInBackground: true,
-      playsInSilentMode: true,
-      interruptionMode: 'doNotMix',
-    });
+    void initPlayer().then(() => setReady(true));
   }, []);
 
-  useEffect(() => {
-    if (shouldAutoPlay.current && playerStatus.isLoaded && audioSource) {
-      shouldAutoPlay.current = false;
-      player.play();
-      if (track) {
-        player.setActiveForLockScreen(
-          true,
-          {
-            title: track.title,
-            artist: track.artist,
-            artworkUrl: track.artworkUrl ?? undefined,
-          },
-          { showSeekForward: true, showSeekBackward: true },
-        );
-      }
-    }
-  }, [playerStatus.isLoaded, player, audioSource, track]);
-
-  useEffect(() => {
-    if (!shouldAutoPlay.current || !track) return;
-    const timeout = setTimeout(() => {
-      if (shouldAutoPlay.current) {
-        shouldAutoPlay.current = false;
-        setErrorMessage('Audio is taking too long to load. Check your connection and try again.');
-      }
-    }, LOAD_TIMEOUT_MS);
-    return () => clearTimeout(timeout);
-  }, [track]);
-
-  useEffect(() => {
-    if (
-      track?.source.kind === 'preview' &&
-      !playerStatus.playing &&
-      playerStatus.isLoaded &&
-      playerStatus.duration > 0 &&
-      playerStatus.currentTime >= playerStatus.duration
-    ) {
-      player.pause();
-      player.seekTo(0);
-    }
-  }, [track, playerStatus.playing, playerStatus.isLoaded, playerStatus.currentTime, playerStatus.duration, player]);
-
-  const prevEndedRef = useRef(false);
-  const autoAdvancing = useRef(false);
-
-  const safeMs = (seconds: number | undefined | null): number => {
-    if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return 0;
-    return seconds * 1000;
-  };
-
-  const rawDuration = playerStatus.duration;
-  const rawPosition = playerStatus.currentTime;
+  const positionMs = progress.position * 1000;
+  const rawDurationMs = progress.duration * 1000;
 
   let fallbackDurationMs = 0;
   if (track != null && track.source.kind === 'library') {
@@ -108,103 +75,78 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     fallbackDurationMs = track.durationSeconds * 1000;
   }
 
-  const durationMs = safeMs(rawDuration) || fallbackDurationMs;
-  const positionMs = safeMs(rawPosition);
+  const durationMs = rawDurationMs || fallbackDurationMs;
 
-  const isEnded =
-    track != null &&
-    !playerStatus.playing &&
-    playerStatus.isLoaded &&
-    durationMs > 0 &&
-    positionMs >= durationMs;
+  const tpState = playbackState.state;
+  const isEnded = tpState === State.Ended;
+  const isPlaying = tpState === State.Playing;
+  const isBuffering = tpState === State.Buffering || tpState === State.Loading;
+
+  const prevEndedRef = useRef(false);
+  const autoAdvancing = useRef(false);
 
   const state: PlaybackState = useMemo(() => {
     if (!track) return INITIAL_STATE;
     if (errorMessage) return { status: 'error', track, positionMs: 0, durationMs: 0, errorMessage };
-
-    if (shouldAutoPlay.current || (playerStatus.isBuffering && !playerStatus.isLoaded)) {
-      return { status: 'loading', track, positionMs: 0, durationMs, errorMessage: null };
-    }
-
-    if (isEnded) {
-      return {
-        status: 'ended',
-        track,
-        positionMs: durationMs,
-        durationMs,
-        errorMessage: null,
-      };
-    }
-
-    const status: PlaybackState['status'] = playerStatus.playing ? 'playing' : 'paused';
+    if (isBuffering) return { status: 'loading', track, positionMs: 0, durationMs, errorMessage: null };
+    if (isEnded) return { status: 'ended', track, positionMs: durationMs, durationMs, errorMessage: null };
 
     return {
-      status,
+      status: isPlaying ? 'playing' : 'paused',
       track,
       positionMs,
       durationMs,
       errorMessage: null,
     };
-  }, [track, errorMessage, isEnded, positionMs, durationMs, playerStatus.playing, playerStatus.isBuffering, playerStatus.isLoaded]);
+  }, [track, errorMessage, isEnded, isPlaying, isBuffering, positionMs, durationMs]);
 
-  const loadAudioSource = useCallback(async (trackToLoad: PlaybackTrack, attempt: number): Promise<void> => {
+  const play = useCallback(async (newTrack: PlaybackTrack) => {
+    setErrorMessage(null);
+    setTrack(newTrack);
+    lastPlayedTrack.current = newTrack;
+
     try {
-      if (trackToLoad.source.kind === 'preview') {
-        setAudioSource({ uri: trackToLoad.source.previewUrl });
+      await TrackPlayer.reset();
+      const artwork = newTrack.artworkUrl ?? '';
+      if (newTrack.source.kind === 'preview') {
+        await TrackPlayer.load({
+          url: newTrack.source.previewUrl,
+          title: newTrack.title,
+          artist: newTrack.artist,
+          artwork,
+        });
       } else {
         const headers = await audioRequestHeaders();
-        setAudioSource({ uri: audioStreamUrl(trackToLoad.source.trackId), headers });
+        await TrackPlayer.load({
+          url: audioStreamUrl(newTrack.source.trackId),
+          title: newTrack.title,
+          artist: newTrack.artist,
+          artwork,
+          headers,
+        });
       }
+      await TrackPlayer.play();
     } catch (err) {
-      if (attempt < MAX_RETRIES) {
-        await new Promise((resolve) => { setTimeout(resolve, RETRY_DELAY_MS); });
-        return loadAudioSource(trackToLoad, attempt + 1);
-      }
-      shouldAutoPlay.current = false;
       const message = err instanceof Error ? err.message : 'Failed to load audio';
       setErrorMessage(message);
     }
   }, []);
 
-  const play = useCallback(async (newTrack: PlaybackTrack) => {
-    player.pause();
-    setErrorMessage(null);
-    setTrack(newTrack);
-    setAudioSource(null);
-    shouldAutoPlay.current = true;
-    lastPlayedTrack.current = newTrack;
-    await loadAudioSource(newTrack, 0);
-  }, [player, loadAudioSource]);
-
-  const pause = useCallback(() => {
-    player.pause();
-  }, [player]);
-
-  const resume = useCallback(() => {
-    player.play();
-  }, [player]);
-
-  const seekTo = useCallback((positionMs: number) => {
-    player.seekTo(positionMs / 1000);
-  }, [player]);
+  const pause = useCallback(() => { void TrackPlayer.pause(); }, []);
+  const resume = useCallback(() => { void TrackPlayer.play(); }, []);
+  const seekTo = useCallback((ms: number) => { void TrackPlayer.seekTo(ms / 1000); }, []);
 
   const stop = useCallback(() => {
-    player.pause();
-    player.seekTo(0);
-    player.clearLockScreenControls();
+    void TrackPlayer.reset();
     setTrack(null);
-    setAudioSource(null);
     setErrorMessage(null);
-  }, [player]);
+  }, []);
 
   const retry = useCallback(() => {
     const trackToRetry = lastPlayedTrack.current;
     if (!trackToRetry) return;
-    setErrorMessage(null);
-    setAudioSource(null);
-    shouldAutoPlay.current = true;
-    void loadAudioSource(trackToRetry, 0);
-  }, [loadAudioSource]);
+    void play(trackToRetry);
+  }, [play]);
 
   useEffect(() => {
     if (!isEnded || prevEndedRef.current || track?.source.kind === 'preview' || autoAdvancing.current) {
@@ -214,8 +156,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     prevEndedRef.current = true;
     const { repeatMode, skipToNext } = useQueueStore.getState();
     if (repeatMode === 'one') {
-      player.seekTo(0);
-      player.play();
+      void TrackPlayer.seekTo(0).then(() => TrackPlayer.play());
     } else {
       const nextTrack = skipToNext();
       if (nextTrack) {
@@ -223,7 +164,32 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         void play(nextTrack).finally(() => { autoAdvancing.current = false; });
       }
     }
-  }, [isEnded, track, player, play]);
+  }, [isEnded, track, play]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const remotePlay = TrackPlayer.addEventListener(Event.RemotePlay, () => { void TrackPlayer.play(); });
+    const remotePause = TrackPlayer.addEventListener(Event.RemotePause, () => { void TrackPlayer.pause(); });
+    const remoteNext = TrackPlayer.addEventListener(Event.RemoteNext, () => {
+      const nextTrack = useQueueStore.getState().skipToNext();
+      if (nextTrack) void play(nextTrack);
+    });
+    const remotePrev = TrackPlayer.addEventListener(Event.RemotePrevious, () => {
+      const prevTrack = useQueueStore.getState().skipToPrevious();
+      if (prevTrack) void play(prevTrack);
+    });
+    const remoteSeek = TrackPlayer.addEventListener(Event.RemoteSeek, (data) => {
+      void TrackPlayer.seekTo(data.position);
+    });
+
+    return () => {
+      remotePlay.remove();
+      remotePause.remove();
+      remoteNext.remove();
+      remotePrev.remove();
+      remoteSeek.remove();
+    };
+  }, [ready, play]);
 
   useQueueResume();
 

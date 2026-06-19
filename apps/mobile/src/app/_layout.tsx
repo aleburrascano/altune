@@ -13,9 +13,14 @@ import { useEffect, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import TrackPlayer from 'react-native-track-player';
+
 import { AuthGate } from '../features/auth/ui/AuthGate';
 import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
+import { playbackService } from '../features/playback/service';
 import { ThemeProvider, darkTheme } from '../shared/ui/theme';
+
+TrackPlayer.registerPlaybackService(() => playbackService);
 
 // AIDEV-NOTE: ADR-0005 — single QueryClientProvider at the Expo Router root.
 // Every feature's hooks (useLibrary, etc.) inherit this client.
