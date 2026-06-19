@@ -2,16 +2,15 @@ import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
+import TrackPlayer from 'react-native-track-player';
+
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import type { TrackResponse } from '@shared/api-client/types';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { RepeatMode } from '@shared/playback/types';
 
-import { usePlayback } from './usePlayback';
-
 const SAVE_INTERVAL_MS = 15_000;
-
 
 function buildSourceId(source: ReturnType<typeof useQueueStore.getState>['source']): string {
   if (!source) return '';
@@ -20,12 +19,11 @@ function buildSourceId(source: ReturnType<typeof useQueueStore.getState>['source
 }
 
 export function useQueueResume() {
-  const { positionMs } = usePlayback();
   const queryClient = useQueryClient();
   const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restoredRef = useRef(false);
 
-  const save = useCallback(() => {
+  const save = useCallback(async () => {
     const s = useQueueStore.getState();
     if (s.tracks.length === 0) return;
 
@@ -33,15 +31,23 @@ export function useQueueResume() {
       .map((t) => (t.source.kind === 'library' ? t.source.trackId : ''))
       .filter(Boolean);
 
+    let posMs = 0;
+    try {
+      const progress = await TrackPlayer.getProgress();
+      posMs = Math.round(progress.position * 1000);
+    } catch {
+      // Player may not be initialized yet
+    }
+
     void saveQueueState({
       track_ids: trackIds,
       current_index: s.currentIndex,
-      position_ms: positionMs,
+      position_ms: posMs,
       shuffled: s.shuffled,
       repeat_mode: s.repeatMode,
       source_id: buildSourceId(s.source),
     });
-  }, [positionMs]);
+  }, []);
 
   useEffect(() => {
     if (restoredRef.current) return;
