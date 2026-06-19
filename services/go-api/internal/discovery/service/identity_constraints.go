@@ -1,10 +1,41 @@
 package service
 
 import (
+	"strconv"
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
 )
+
+const birthYearOffset = 14
+
+// extractYear pulls the release year from album extras, checking "year"
+// then "release_date" fields.
+func extractYear(r domain.SearchResult) int {
+	if r.Extras == nil {
+		return 0
+	}
+	if v, ok := r.Extras["year"]; ok {
+		switch y := v.(type) {
+		case int:
+			return y
+		case float64:
+			return int(y)
+		case string:
+			if n, err := strconv.Atoi(y); err == nil {
+				return n
+			}
+		}
+	}
+	if v, ok := r.Extras["release_date"]; ok {
+		if s, ok := v.(string); ok && len(s) >= 4 {
+			if n, err := strconv.Atoi(s[:4]); err == nil {
+				return n
+			}
+		}
+	}
+	return 0
+}
 
 // deezerGenreNames maps common Deezer genre IDs to lowercase genre name strings.
 var deezerGenreNames = map[int]string{
