@@ -460,3 +460,32 @@ func (a *DeezerAdapter) FetchTrackISRC(ctx context.Context, trackID string) (str
 	}
 	return detail.ISRC, nil
 }
+
+func (a *DeezerAdapter) FetchFirstTrackID(ctx context.Context, albumID string) (string, error) {
+	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=1", albumID)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return "", nil
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", nil
+	}
+
+	var body struct {
+		Data []struct {
+			ID int `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", nil
+	}
+	if len(body.Data) == 0 {
+		return "", nil
+	}
+	return fmt.Sprintf("%d", body.Data[0].ID), nil
+}
