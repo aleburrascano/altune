@@ -5,7 +5,7 @@ import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react-native';
 
 import { useQueueStore } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { usePlayback } from '../hooks/usePlayback';
+import { usePlayback } from '@shared/playback/usePlayback';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { IconButton } from '@shared/ui/primitives/IconButton';

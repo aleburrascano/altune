@@ -18,6 +18,8 @@ interface QueueActions {
   skipToIndex: (index: number) => PlaybackTrack | null;
   toggleShuffle: () => void;
   cycleRepeatMode: () => void;
+  setRepeatMode: (mode: RepeatMode) => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => void;
   removeFromQueue: (index: number) => void;
   clearQueue: () => void;
   currentTrack: () => PlaybackTrack | null;
@@ -136,6 +138,29 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
 
   cycleRepeatMode: () => {
     set((s) => ({ repeatMode: REPEAT_CYCLE[s.repeatMode] }));
+  },
+
+  setRepeatMode: (mode) => {
+    set({ repeatMode: mode });
+  },
+
+  reorderQueue: (fromIndex, toIndex) => {
+    const { playOrder, currentIndex } = get();
+    if (fromIndex === toIndex) return;
+    if (fromIndex < 0 || fromIndex >= playOrder.length) return;
+    if (toIndex < 0 || toIndex >= playOrder.length) return;
+    const newOrder = [...playOrder];
+    const [moved] = newOrder.splice(fromIndex, 1);
+    newOrder.splice(toIndex, 0, moved!);
+    let newCurrent = currentIndex;
+    if (fromIndex === currentIndex) {
+      newCurrent = toIndex;
+    } else if (fromIndex < currentIndex && toIndex >= currentIndex) {
+      newCurrent = currentIndex - 1;
+    } else if (fromIndex > currentIndex && toIndex <= currentIndex) {
+      newCurrent = currentIndex + 1;
+    }
+    set({ playOrder: newOrder, currentIndex: newCurrent });
   },
 
   removeFromQueue: (index) => {

@@ -34,38 +34,61 @@ export function AddToPlaylistSheet({
 
   const addMut = useMutation({
     mutationFn: (playlistId: string) => addTrackToPlaylist(playlistId, { track_id: trackId }),
+    onMutate: async (playlistId) => {
+      await queryClient.cancelQueries({ queryKey: ['playlists'] });
+      const previous = queryClient.getQueryData<{ items: PlaylistResponse[] }>(['playlists']);
+      if (previous) {
+        queryClient.setQueryData<{ items: PlaylistResponse[] }>(['playlists'], {
+          ...previous,
+          items: previous.items.map((p) =>
+            p.id === playlistId ? { ...p, track_count: p.track_count + 1 } : p,
+          ),
+        });
+      }
+      return { previous };
+    },
     onSuccess: (_data, playlistId) => {
       setAddedTo(playlistId);
     },
-    onError: () => {
+    onError: (_err, _playlistId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['playlists'], context.previous);
+      }
       Alert.alert('Add failed', 'Could not add the track to the playlist. Please try again.');
     },
-    onSettled: (_data, _error, playlistId) => {
-      void queryClient.invalidateQueries({ queryKey: ['playlists'] });
-      void queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
-      setTimeout(() => {
-        setAddedTo(null);
-        onClose();
-      }, 600);
+    onSettled: async (_data, _error, playlistId) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['playlists'] }),
+        queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] }),
+      ]);
+      setAddedTo(null);
+      onClose();
     },
   });
 
   const createMut = useMutation({
     mutationFn: async (name: string) => {
       const pl = await createPlaylist({ name });
-      await addTrackToPlaylist(pl.id, { track_id: trackId });
-      return pl;
+      let addFailed = false;
+      try {
+        await addTrackToPlaylist(pl.id, { track_id: trackId });
+      } catch {
+        addFailed = true;
+      }
+      return { pl, addFailed };
     },
-    onError: (err) => {
-      const msg = err instanceof Error && err.message.includes('playlist')
-        ? 'Playlist created but could not add the track. Try adding it manually.'
-        : 'Could not create the playlist. Please try again.';
-      Alert.alert('Error', msg);
+    onSuccess: ({ addFailed }) => {
+      if (addFailed) {
+        Alert.alert('Note', 'Playlist created, but the track could not be added. Try adding it manually.');
+      }
     },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+    onError: () => {
+      Alert.alert('Error', 'Could not create the playlist. Please try again.');
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['playlists'] });
       setCreateVisible(false);
-      setTimeout(onClose, 400);
+      onClose();
     },
   });
 

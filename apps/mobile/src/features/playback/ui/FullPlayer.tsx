@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { ChevronDown, ListMusic, Pause, Play, Repeat, Repeat1, RotateCcw, Shuffle, SkipBack, SkipForward } from 'lucide-react-native';
 
 import { useQueueStore } from '@shared/playback/queueStore';
-import { usePlayback } from '../hooks/usePlayback';
+import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Scrubber } from './Scrubber';
 import { Artwork } from '@shared/ui/primitives/Artwork';

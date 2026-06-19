@@ -3,7 +3,9 @@ import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 
 import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
+import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Screen, spacing, useTheme } from '@shared/ui';
 
 import type { AlbumGroup, ArtistGroup } from '../hooks/useLibraryGrouping';
@@ -67,6 +69,7 @@ export function LibraryHome({
 }: LibraryHomeProps): ReactElement {
   const theme = useTheme();
   const playback = usePlayback();
+  const queue = useQueuePlayback();
   const [actionTrack, setActionTrack] = useState<TrackResponse | null>(null);
   return (
     <Screen>
@@ -102,13 +105,8 @@ export function LibraryHome({
                 key={track.id}
                 track={track}
                 {...(track.acquisition_status === 'ready' ? { onPlay: () => {
-                  void playback.play({
-                    source: { kind: 'library', trackId: track.id },
-                    title: track.title,
-                    artist: track.artist,
-                    artworkUrl: track.artwork_url ?? null,
-                    durationSeconds: track.duration_seconds ?? undefined,
-                  });
+                  const { playable, startIndex } = buildPlayableQueue(recentTracks, track.id);
+                  queue.playFromList(playable, startIndex, { kind: 'library' });
                 } } : {})}
                 onPress={() => navigateToTrack(track)}
                 onMore={() => setActionTrack(track)}
