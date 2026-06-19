@@ -99,6 +99,8 @@ type ArtistIdentity struct {
 	MBID           string
 	Disambiguation string
 	BirthYear      int
+	Area           string
+	ArtistType     string
 }
 
 type AlbumValidationResult struct {

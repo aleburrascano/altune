@@ -56,6 +56,7 @@ type ArtistIdentityProfile struct {
 	GenreCluster         map[string]bool // set of genre strings from all providers
 	KnownISRCRegistrants map[string]bool // set of ISRC registrant codes from confirmed albums
 	Disambiguation       string          // from MB
+	MBConfirmedTitles    map[string]bool // normalized titles confirmed by MB release-groups
 }
 
 // NewArtistIdentityProfile returns a profile with initialized maps.
@@ -63,6 +64,7 @@ func NewArtistIdentityProfile() ArtistIdentityProfile {
 	return ArtistIdentityProfile{
 		GenreCluster:         map[string]bool{},
 		KnownISRCRegistrants: map[string]bool{},
+		MBConfirmedTitles:    map[string]bool{},
 	}
 }
 

@@ -53,7 +53,8 @@ func (f *fakeITunesLookup) LookupAlbum(ctx context.Context, albumTitle, artistNa
 }
 
 type fakeISRCFetcher struct {
-	fetchTrackISRCFn func(ctx context.Context, trackID string) (string, error)
+	fetchTrackISRCFn    func(ctx context.Context, trackID string) (string, error)
+	fetchFirstTrackIDFn func(ctx context.Context, albumID string) (string, error)
 }
 
 func (f *fakeISRCFetcher) FetchTrackISRC(ctx context.Context, trackID string) (string, error) {
@@ -61,6 +62,13 @@ func (f *fakeISRCFetcher) FetchTrackISRC(ctx context.Context, trackID string) (s
 		return f.fetchTrackISRCFn(ctx, trackID)
 	}
 	return "", nil
+}
+
+func (f *fakeISRCFetcher) FetchFirstTrackID(ctx context.Context, albumID string) (string, error) {
+	if f.fetchFirstTrackIDFn != nil {
+		return f.fetchFirstTrackIDFn(ctx, albumID)
+	}
+	return "track-1", nil
 }
 
 type fakeIdentityCache struct {
@@ -126,17 +134,9 @@ func testProfile(mbid string, birthYear int) domain.ArtistIdentityProfile {
 // --- tests ---
 
 func TestIdentityResolver_confirmed_by_mb_release_group(t *testing.T) {
-	mb := &fakeMBLookup{
-		validateArtistAlbumsFn: func(_ context.Context, _ string, albums []domain.SearchResult) (*ports.AlbumValidationResult, error) {
-			return &ports.AlbumValidationResult{
-				Confirmed:   albums[:1], // first album confirmed
-				Unconfirmed: albums[1:],
-			}, nil
-		},
-	}
-
-	svc := NewIdentityResolverService(WithMBLookup(mb))
+	svc := NewIdentityResolverService()
 	profile := testProfile("mbid-123", 2006)
+	profile.MBConfirmedTitles[NormalizeForMatch("REST IN BASS")] = true
 
 	albums := []domain.SearchResult{
 		testAlbum("REST IN BASS", map[string]any{"year": 2022}),
@@ -545,6 +545,8 @@ func TestIdentityResolver_full_pipeline_mixed_albums(t *testing.T) {
 
 	svc := NewIdentityResolverService(WithMBLookup(mb), WithITunesLookup(itunes))
 	profile := testProfile("mbid-123", 2006)
+	profile.MBConfirmedTitles[NormalizeForMatch("REST IN BASS")] = true
+	profile.MBConfirmedTitles[NormalizeForMatch("Sayso Says")] = true
 
 	albums := []domain.SearchResult{
 		testAlbum("REST IN BASS", map[string]any{"year": 2022}),
@@ -694,7 +696,7 @@ func TestResolveDiscographyIdentity_ordering(t *testing.T) {
 	assert.Equal(t, "Unknown Album", results[1].Title)
 }
 
-func TestExtractFirstTrackID(t *testing.T) {
+func TestExtractDeezerAlbumID(t *testing.T) {
 	tests := []struct {
 		name     string
 		album    domain.SearchResult
@@ -705,22 +707,13 @@ func TestExtractFirstTrackID(t *testing.T) {
 			album: domain.SearchResult{
 				Sources: []domain.SourceRef{{
 					Provider:   domain.ProviderDeezer,
-					ExternalID: "track-456",
+					ExternalID: "album-456",
 				}},
 			},
-			expected: "track-456",
+			expected: "album-456",
 		},
 		{
-			name: "from tracklist extras",
-			album: domain.SearchResult{
-				Extras: map[string]any{
-					"tracklist": []any{"track-789"},
-				},
-			},
-			expected: "track-789",
-		},
-		{
-			name: "no track id available",
+			name: "no deezer source",
 			album: domain.SearchResult{
 				Sources: []domain.SourceRef{{
 					Provider:   domain.ProviderMusicBrainz,
@@ -738,7 +731,7 @@ func TestExtractFirstTrackID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractFirstTrackID(tt.album)
+			got := extractDeezerAlbumID(tt.album)
 			assert.Equal(t, tt.expected, got)
 		})
 	}

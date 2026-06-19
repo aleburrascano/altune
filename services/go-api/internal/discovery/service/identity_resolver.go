@@ -27,6 +27,7 @@ type itunesLookup interface {
 // isrcFetcher fetches the ISRC for a track by provider-specific ID.
 type isrcFetcher interface {
 	FetchTrackISRC(ctx context.Context, trackID string) (string, error)
+	FetchFirstTrackID(ctx context.Context, albumID string) (string, error)
 }
 
 // identityCache stores and retrieves per-album identity verdicts.
@@ -80,7 +81,7 @@ func (s *IdentityResolverService) BuildProfile(
 ) domain.ArtistIdentityProfile {
 	profile := domain.NewArtistIdentityProfile()
 
-	// Resolve MB identity (MBID, birth year, disambiguation)
+	// Resolve MB identity (MBID, birth year, disambiguation, area, type)
 	if s.mb != nil {
 		identity, err := s.mb.ResolveArtistIdentity(ctx, artistName)
 		if err != nil {
@@ -90,6 +91,8 @@ func (s *IdentityResolverService) BuildProfile(
 			profile.MBID = identity.MBID
 			profile.BirthYear = identity.BirthYear
 			profile.Disambiguation = identity.Disambiguation
+			profile.Area = identity.Area
+			profile.ArtistType = identity.ArtistType
 		}
 	}
 
@@ -100,6 +103,54 @@ func (s *IdentityResolverService) BuildProfile(
 			profile.AddGenre(g)
 		}
 	}
+
+	// Validate albums against MB to build confirmed set
+	if s.mb != nil {
+		validated, err := s.mb.ValidateArtistAlbums(ctx, artistName, albums)
+		if err != nil {
+			slog.WarnContext(ctx, "identity.validate_albums_failed",
+				"artist", artistName, "error", err)
+		} else if validated != nil {
+			for _, a := range validated.Confirmed {
+				profile.MBConfirmedTitles[textnorm.NormalizeForMatch(a.Title)] = true
+			}
+
+			// Build ISRC registrant set from confirmed albums
+			if s.isrc != nil {
+				for _, confirmed := range validated.Confirmed {
+					albumID := extractDeezerAlbumID(confirmed)
+					if albumID == "" {
+						continue
+					}
+					trackID, err := s.isrc.FetchFirstTrackID(ctx, albumID)
+					if err != nil || trackID == "" {
+						continue
+					}
+					isrc, err := s.isrc.FetchTrackISRC(ctx, trackID)
+					if err != nil || isrc == "" {
+						continue
+					}
+					registrant := domain.ExtractISRCRegistrant(isrc)
+					if registrant != "" {
+						profile.AddISRCRegistrant(registrant)
+					}
+					if len(profile.KnownISRCRegistrants) > 0 {
+						break
+					}
+				}
+			}
+		}
+	}
+
+	slog.InfoContext(ctx, "identity.profile_built",
+		"artist", artistName,
+		"mbid", profile.MBID,
+		"birth_year", profile.BirthYear,
+		"area", profile.Area,
+		"type", profile.ArtistType,
+		"genres", len(profile.GenreCluster),
+		"isrc_registrants", len(profile.KnownISRCRegistrants),
+	)
 
 	return profile
 }
@@ -114,23 +165,9 @@ func (s *IdentityResolverService) Resolve(
 	profile domain.ArtistIdentityProfile,
 	albums []domain.SearchResult,
 ) []ports.AlbumResolution {
-	// Build the MB confirmed set once for the whole batch.
-	mbConfirmed := map[string]bool{}
-	if s.mb != nil {
-		validated, err := s.mb.ValidateArtistAlbums(ctx, artistName, albums)
-		if err != nil {
-			slog.WarnContext(ctx, "identity.validate_albums_failed",
-				"artist", artistName, "error", err)
-		} else {
-			for _, a := range validated.Confirmed {
-				mbConfirmed[textnorm.NormalizeForMatch(a.Title)] = true
-			}
-		}
-	}
-
 	resolutions := make([]ports.AlbumResolution, 0, len(albums))
 	for _, album := range albums {
-		res := s.resolveOne(ctx, artistName, profile, album, mbConfirmed)
+		res := s.resolveOne(ctx, artistName, profile, album)
 		resolutions = append(resolutions, res)
 	}
 	return resolutions
@@ -141,7 +178,6 @@ func (s *IdentityResolverService) resolveOne(
 	artistName string,
 	profile domain.ArtistIdentityProfile,
 	album domain.SearchResult,
-	mbConfirmed map[string]bool,
 ) ports.AlbumResolution {
 	titleNorm := textnorm.NormalizeForMatch(album.Title)
 
@@ -162,7 +198,7 @@ func (s *IdentityResolverService) resolveOne(
 	}
 
 	// 2. Already confirmed by MB validation (release-group membership)
-	if mbConfirmed[titleNorm] {
+	if profile.MBConfirmedTitles[titleNorm] {
 		s.cacheVerdict(ctx, artistName, album.Title, domain.AlbumVerdictConfirmed, "mb release-group match", "mb")
 		return ports.AlbumResolution{
 			Album:   album,
@@ -239,29 +275,23 @@ func (s *IdentityResolverService) resolveOne(
 
 	// 6. R3c: ISRC registrant fingerprint
 	if s.isrc != nil && len(profile.KnownISRCRegistrants) > 0 {
-		trackID := extractFirstTrackID(album)
-		if trackID != "" {
-			isrc, err := s.isrc.FetchTrackISRC(ctx, trackID)
-			if err == nil && isrc != "" {
-				if CheckISRCRegistrantMismatch(profile, isrc) {
-					// Check if this is a re-evaluation (firstSeen > 24h ago)
-					verdict := domain.AlbumVerdictSuspect
-					reason := "isrc registrant mismatch (first encounter)"
-					if s.cache != nil {
-						_, _, _, firstSeen, cached := s.cache.GetVerdict(ctx, artistName, album.Title)
-						if cached && !firstSeen.IsZero() && time.Since(firstSeen) > 24*time.Hour {
-							verdict = domain.AlbumVerdictContamination
-							reason = "isrc registrant mismatch (confirmed after 24h)"
-						}
-					}
-					s.cacheVerdict(ctx, artistName, album.Title, verdict, reason, "isrc")
-					return ports.AlbumResolution{
-						Album:   album,
-						Verdict: verdict,
-						Reason:  reason,
-						Layer:   "isrc",
-					}
+		isrc := s.fetchAlbumISRC(ctx, album)
+		if isrc != "" && CheckISRCRegistrantMismatch(profile, isrc) {
+			verdict := domain.AlbumVerdictSuspect
+			reason := "isrc registrant mismatch (first encounter)"
+			if s.cache != nil {
+				_, _, _, firstSeen, cached := s.cache.GetVerdict(ctx, artistName, album.Title)
+				if cached && !firstSeen.IsZero() && time.Since(firstSeen) > 24*time.Hour {
+					verdict = domain.AlbumVerdictContamination
+					reason = "isrc registrant mismatch (confirmed after 24h)"
 				}
+			}
+			s.cacheVerdict(ctx, artistName, album.Title, verdict, reason, "isrc")
+			return ports.AlbumResolution{
+				Album:   album,
+				Verdict: verdict,
+				Reason:  reason,
+				Layer:   "isrc",
 			}
 		}
 	}
@@ -283,26 +313,32 @@ func (s *IdentityResolverService) cacheVerdict(ctx context.Context, artistName, 
 	s.cache.SetVerdict(ctx, artistName, albumTitle, verdict, reason, layer)
 }
 
-// extractFirstTrackID tries to find a Deezer track ID from the album's
-// sources or tracklist extras. Returns empty string if none found.
-func extractFirstTrackID(album domain.SearchResult) string {
-	// Try tracklist extras (a list of track IDs set during enrichment)
-	if album.Extras != nil {
-		if tl, ok := album.Extras["tracklist"].([]any); ok && len(tl) > 0 {
-			if id, ok := tl[0].(string); ok {
-				return id
-			}
-		}
-		// Try deezer_album_id to construct a track lookup
-		if albumID, ok := album.Extras["deezer_album_id"].(string); ok && albumID != "" {
-			return "" // can't get track ID from album ID alone
-		}
-	}
-	// Try the first source if it's from Deezer
+// extractDeezerAlbumID returns the Deezer external ID from an album's sources.
+func extractDeezerAlbumID(album domain.SearchResult) string {
 	for _, src := range album.Sources {
 		if src.Provider == domain.ProviderDeezer {
 			return src.ExternalID
 		}
 	}
 	return ""
+}
+
+// fetchAlbumISRC fetches the ISRC of the first track in an album via the ISRC fetcher.
+func (s *IdentityResolverService) fetchAlbumISRC(ctx context.Context, album domain.SearchResult) string {
+	if s.isrc == nil {
+		return ""
+	}
+	albumID := extractDeezerAlbumID(album)
+	if albumID == "" {
+		return ""
+	}
+	trackID, err := s.isrc.FetchFirstTrackID(ctx, albumID)
+	if err != nil || trackID == "" {
+		return ""
+	}
+	isrc, err := s.isrc.FetchTrackISRC(ctx, trackID)
+	if err != nil {
+		return ""
+	}
+	return isrc
 }

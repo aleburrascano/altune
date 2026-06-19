@@ -414,10 +414,16 @@ func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name str
 		)
 	}
 	birthYear := parseBirthYear(first.LifeSpan.Begin)
+	area := ""
+	if first.Area != nil {
+		area = first.Area.Name
+	}
 	return &ports.ArtistIdentity{
 		MBID:           first.ID,
 		Disambiguation: first.Disambiguation,
 		BirthYear:      birthYear,
+		Area:           area,
+		ArtistType:     first.Type,
 	}, nil
 }
 
