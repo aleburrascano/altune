@@ -324,9 +324,9 @@ func TestExtractAlbumGenres(t *testing.T) {
 			expected: []string{"Rock"},
 		},
 		{
-			name:     "slash-separated genre",
+			name:     "slash-separated genre with hyphen normalization",
 			extras:   map[string]any{"genre": "Hip-Hop/Rap"},
-			expected: []string{"Hip-Hop", "Rap"},
+			expected: []string{"Hip Hop", "Rap"},
 		},
 		{
 			name:     "comma-separated genre",

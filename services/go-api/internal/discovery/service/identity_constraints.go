@@ -154,6 +154,7 @@ func extractAlbumGenres(album domain.SearchResult) []string {
 	genres := make([]string, 0, len(parts))
 	for _, p := range parts {
 		trimmed := strings.TrimSpace(p)
+		trimmed = strings.ReplaceAll(trimmed, "-", " ")
 		if trimmed != "" {
 			genres = append(genres, trimmed)
 		}
