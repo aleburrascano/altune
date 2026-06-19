@@ -1,15 +1,18 @@
 import { useState, type ReactElement } from 'react';
-import { FlatList, StyleSheet } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import type { TrackResponse } from '@shared/api-client/types';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
+import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';
-import { Screen, spacing } from '@shared/ui';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { Screen, SearchBar, Text, spacing, useTheme } from '@shared/ui';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useLibraryHome } from '../hooks/useLibraryHome';
+import { useLibrarySearch } from '../hooks/useLibrarySearch';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { useLibraryNavigation } from './useLibraryNavigation';
 import { AddToPlaylistSheet } from './AddToPlaylistSheet';
@@ -20,17 +23,22 @@ import type { SortKey } from './sort';
 
 export function AllTracksScreen(): ReactElement {
   const router = useRouter();
+  const theme = useTheme();
   const state = useLibraryHome();
   const { navigateToTrack } = useLibraryNavigation(router);
   const retryMutation = useRetryAcquisition();
   const retryingTrackId = retryMutation.isPending ? retryMutation.variables : undefined;
   const deleteMutation = useDeleteTrack();
   const playback = usePlayback();
+  const queue = useQueuePlayback();
+  const search = useLibrarySearch();
   const [sortKey, setSortKey] = useState<SortKey>('recent');
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<TrackResponse | null>(null);
   const [actionTrack, setActionTrack] = useState<TrackResponse | null>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const sorted = sortTracks(state.allTracks, sortKey);
+  const filtered = search.filter(sorted);
 
   return (
     <Screen>
@@ -41,20 +49,33 @@ export function AllTracksScreen(): ReactElement {
         onSortChange={setSortKey}
         sortOptions={TRACK_SORT_OPTIONS}
       />
+      <SearchBar
+        value={search.inputValue}
+        onChangeText={search.onChangeText}
+        onSubmitEditing={search.onSubmit}
+        onClear={search.onClear}
+        onFocus={() => setSearchFocused(true)}
+        onBlur={() => setSearchFocused(false)}
+        focused={searchFocused}
+        placeholder="Search library"
+        testID="library-search-input"
+        theme={theme}
+      />
+      {search.hasQuery && filtered.length === 0 ? (
+        <View style={styles.emptySearch}>
+          <Text variant="body" tone="secondary">No tracks found</Text>
+        </View>
+      ) : (
       <FlatList
-        data={sorted}
+        data={filtered}
         keyExtractor={(t) => t.id}
         renderItem={({ item }) => (
           <LibraryRow
             track={item}
             {...(item.acquisition_status === 'ready' ? { onPlay: () => {
-              void playback.play({
-                source: { kind: 'library', trackId: item.id },
-                title: item.title,
-                artist: item.artist,
-                artworkUrl: item.artwork_url ?? null,
-                durationSeconds: item.duration_seconds ?? undefined,
-              });
+              const playable = filtered.filter((t) => t.acquisition_status === 'ready').map(toPlaybackTrack);
+              const startIdx = playable.findIndex((t) => t.source.kind === 'library' && t.source.trackId === item.id);
+              queue.playFromList(playable, Math.max(0, startIdx), { kind: 'library' });
             } } : {})}
             onPress={() => navigateToTrack(item)}
             onMore={() => setActionTrack(item)}
@@ -66,6 +87,7 @@ export function AllTracksScreen(): ReactElement {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
       />
+      )}
       <AddToPlaylistSheet
         visible={addToPlaylistTrack != null}
         trackId={addToPlaylistTrack?.id ?? ''}
@@ -89,4 +111,5 @@ export function AllTracksScreen(): ReactElement {
 
 const styles = StyleSheet.create({
   list: { paddingBottom: spacing['3xl'] },
+  emptySearch: { flex: 1, alignItems: 'center', paddingTop: spacing['3xl'] },
 });

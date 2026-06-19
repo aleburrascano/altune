@@ -2,7 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Search, X } from 'lucide-react-native';
 
-import { fontFamily, radius, spacing, typography } from '@shared/ui';
+import { fontFamily, radius, spacing, typography } from '../theme/tokens';
 
 interface SearchBarTheme {
   color: {
@@ -13,7 +13,7 @@ interface SearchBarTheme {
   };
 }
 
-interface SearchBarProps {
+export interface SearchBarProps {
   value: string;
   onChangeText: (text: string) => void;
   onSubmitEditing: () => void;
@@ -23,6 +23,8 @@ interface SearchBarProps {
   focused?: boolean;
   pending?: boolean;
   suggestionsOpen?: boolean;
+  placeholder?: string;
+  testID?: string;
   children?: ReactNode;
   theme: SearchBarTheme;
 }
@@ -37,6 +39,8 @@ export function SearchBar({
   focused = false,
   pending = false,
   suggestionsOpen = false,
+  placeholder = 'Search music',
+  testID = 'search-input',
   children,
   theme,
 }: SearchBarProps): ReactElement {
@@ -52,7 +56,7 @@ export function SearchBar({
               { borderWidth: 1, borderColor: focused ? theme.color.accent : 'transparent' },
               suggestionsOpen ? { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 } : null,
             ]}
-            placeholder="Search music"
+            placeholder={placeholder}
             placeholderTextColor={theme.color.textTertiary}
             value={value}
             onChangeText={onChangeText}
@@ -60,14 +64,14 @@ export function SearchBar({
             onFocus={onFocus}
             onBlur={onBlur}
             returnKeyType="search"
-            testID="discover-search-input"
-            accessibilityLabel="Search music"
+            testID={testID}
+            accessibilityLabel={placeholder}
             autoCapitalize="none"
             autoCorrect={false}
           />
           {value.length > 0 ? (
             <Pressable
-              testID="discover-clear-input"
+              testID={`${testID}-clear`}
               onPress={onClear}
               accessibilityRole="button"
               accessibilityLabel="Clear search"

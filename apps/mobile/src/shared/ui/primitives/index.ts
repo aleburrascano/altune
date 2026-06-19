@@ -22,3 +22,5 @@ export { Button } from './Button';
 export type { ButtonProps, ButtonVariant } from './Button';
 export { Skeleton } from './Skeleton';
 export type { SkeletonProps } from './Skeleton';
+export { SearchBar } from './SearchBar';
+export type { SearchBarProps } from './SearchBar';
