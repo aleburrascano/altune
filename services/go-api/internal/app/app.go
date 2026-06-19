@@ -24,6 +24,9 @@ import (
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
+	playbackHandler "altune/go-api/internal/playback/adapters/handler"
+	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
+	playbackService "altune/go-api/internal/playback/service"
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
@@ -135,6 +138,11 @@ func (a *App) setup(ctx context.Context) error {
 	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore)
 	reconcileSvc := catalogService.NewReconcileTrackStatusService(trackRepo, audioStore)
 	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo)
+
+	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
+	saveQueueStateSvc := playbackService.NewSaveQueueStateService(queueStateRepo)
+	getQueueStateSvc := playbackService.NewGetQueueStateService(queueStateRepo)
+	queueHandler := playbackHandler.NewQueueHandler(saveQueueStateSvc, getQueueStateSvc)
 
 	var scheduler acqService.AcquisitionScheduler
 	if audioSearcher != nil && audioStore != nil {
@@ -291,6 +299,7 @@ func (a *App) setup(ctx context.Context) error {
 			r.Post("/tracks/{trackId}/retry", retryH.HandleRetryAcquisition)
 		}
 		r.Mount("/playlists", playlistHandler.Routes())
+		r.Mount("/playback", queueHandler.Routes())
 		r.Mount("/discovery", discoveryH.Routes())
 	})
 
