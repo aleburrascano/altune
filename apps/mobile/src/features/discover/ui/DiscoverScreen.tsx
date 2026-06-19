@@ -19,10 +19,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { Screen, Text, spacing, useTheme } from '@shared/ui';
+import { Screen, SearchBar, Text, spacing, useTheme } from '@shared/ui';
 import { setSearchState } from '@shared/lib/search-state';
-
-import { SearchBar } from './SearchBar';
 import { DiscoverBody } from './DiscoverBody';
 import { SuggestionsList } from './SuggestionsList';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
@@ -134,6 +132,8 @@ export function DiscoverScreen(): ReactElement {
         focused={isFocused}
         pending={search.inputValue.trim().length >= 2 && search.inputValue.trim() !== search.committedQuery}
         suggestionsOpen={showSuggestions}
+        placeholder="Search music"
+        testID="discover-search-input"
         theme={theme}
       >
         {showSuggestions && (
