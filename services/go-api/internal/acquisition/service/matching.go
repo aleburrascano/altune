@@ -19,10 +19,17 @@ func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
 	combined := discoverySvc.NormalizeForMatch(trackArtist + " " + trackTitle)
 	titleOnly := discoverySvc.NormalizeForMatch(trackTitle)
 	candidateNorm := discoverySvc.NormalizeForMatch(candidateTitle)
-	return math.Max(
-		discoverySvc.TokenSortRatio(combined, candidateNorm),
-		discoverySvc.TokenSortRatio(titleOnly, candidateNorm),
-	)
+
+	combinedScore := discoverySvc.TokenSortRatio(combined, candidateNorm)
+	titleOnlyScore := discoverySvc.TokenSortRatio(titleOnly, candidateNorm)
+
+	// Penalize title-only matches: without artist context the match is
+	// ambiguous (e.g., "Die Hard" matches Kendrick's "DIE HARD" by title
+	// alone). The penalty discourages selecting a wrong-artist candidate
+	// when a combined artist+title match exists.
+	titleOnlyScore *= 0.6
+
+	return math.Max(combinedScore, titleOnlyScore)
 }
 
 func channelScore(channel string) float64 {
@@ -77,6 +84,12 @@ func isTopicChannel(channel string) bool {
 	return strings.HasSuffix(channel, "- Topic")
 }
 
+func artistMatchesChannel(trackArtist, channel string) bool {
+	artistNorm := discoverySvc.NormalizeForMatch(trackArtist)
+	channelNorm := discoverySvc.NormalizeForMatch(channel)
+	return strings.Contains(channelNorm, artistNorm)
+}
+
 func SelectBestCandidate(track TrackRef, candidates []Candidate) *Candidate {
 	if len(candidates) == 0 {
 		return nil
@@ -90,8 +103,9 @@ func SelectBestCandidate(track TrackRef, candidates []Candidate) *Candidate {
 	}
 
 	type topicEntry struct {
-		ident     float64
-		candidate Candidate
+		ident        float64
+		artistMatch  bool
+		candidate    Candidate
 	}
 	type otherEntry struct {
 		meta      float64
@@ -105,6 +119,7 @@ func SelectBestCandidate(track TrackRef, candidates []Candidate) *Candidate {
 	for _, c := range candidates {
 		ident := identityScore(track.Title, track.Artist, c.Title)
 		meta := metadataRank(c, track.Duration, maxViews)
+		artMatch := artistMatchesChannel(track.Artist, c.Channel)
 
 		slog.Info("candidate_evaluated",
 			"candidate_title", c.Title,
@@ -114,6 +129,8 @@ func SelectBestCandidate(track TrackRef, candidates []Candidate) *Candidate {
 			"identity_score", math.Round(ident*10)/10,
 			"metadata_rank", math.Round(meta*1000)/1000,
 			"is_topic", isTopicChannel(c.Channel),
+			"artist_match", artMatch,
+			"track_artist", track.Artist,
 		)
 
 		if ident < identityMin {
@@ -121,14 +138,18 @@ func SelectBestCandidate(track TrackRef, candidates []Candidate) *Candidate {
 		}
 
 		if isTopicChannel(c.Channel) {
-			topicCandidates = append(topicCandidates, topicEntry{ident, c})
+			topicCandidates = append(topicCandidates, topicEntry{ident, artMatch, c})
 		} else {
 			otherCandidates = append(otherCandidates, otherEntry{meta, ident, c})
 		}
 	}
 
 	if len(topicCandidates) > 0 {
+		// Prefer Topic channels where the channel matches the expected artist.
 		sort.Slice(topicCandidates, func(i, j int) bool {
+			if topicCandidates[i].artistMatch != topicCandidates[j].artistMatch {
+				return topicCandidates[i].artistMatch
+			}
 			return topicCandidates[i].ident > topicCandidates[j].ident
 		})
 		best := topicCandidates[0].candidate

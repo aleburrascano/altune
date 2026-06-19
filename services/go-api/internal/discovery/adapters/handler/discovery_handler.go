@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -79,6 +80,12 @@ type ProviderStatusDTO struct {
 	ResultCount int    `json:"result_count"`
 }
 
+type RelatedGroupDTO struct {
+	Relationship string            `json:"relationship"`
+	RelatedTo    string            `json:"related_to"`
+	Items        []SearchResultDTO `json:"items"`
+}
+
 type DiscoverySearchResponse struct {
 	Query          string              `json:"query"`
 	QueryNorm      string              `json:"query_norm"`
@@ -89,6 +96,7 @@ type DiscoverySearchResponse struct {
 	CorrectedQuery string              `json:"corrected_query,omitempty"`
 	OriginalQuery  string              `json:"original_query,omitempty"`
 	SuggestedQuery string              `json:"suggested_query,omitempty"`
+	Related        []RelatedGroupDTO   `json:"related,omitempty"`
 }
 
 type CacheDTO struct {
@@ -147,6 +155,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 
 	entries, err := h.suggestSvc.Execute(r.Context(), q, limit)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "suggest failed", "error", err, "query", q)
 		httputil.InternalError(w)
 		return
 	}
@@ -198,33 +207,27 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	result, err := h.searchSvc.Execute(r.Context(), userId, query, saveHistory)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "search failed", "error", err, "query", q)
 		httputil.InternalError(w)
 		return
 	}
 
 	resultDTOs := make([]SearchResultDTO, len(result.Results))
 	for i, sr := range result.Results {
-		sources := make([]SourceRefDTO, len(sr.Sources))
-		for j, s := range sr.Sources {
-			sources[j] = SourceRefDTO{
-				Provider:   s.Provider.String(),
-				ExternalID: s.ExternalID,
-				URL:        s.URL,
-			}
+		resultDTOs[i] = searchResultToDTO(sr)
+	}
+
+	var relatedDTOs []RelatedGroupDTO
+	for _, g := range result.Related {
+		items := make([]SearchResultDTO, len(g.Items))
+		for i, sr := range g.Items {
+			items[i] = searchResultToDTO(sr)
 		}
-		extras := sr.Extras
-		if extras == nil {
-			extras = make(map[string]any)
-		}
-		resultDTOs[i] = SearchResultDTO{
-			Kind:       sr.Kind.String(),
-			Title:      sr.Title,
-			Subtitle:   sr.Subtitle,
-			ImageURL:   sr.ImageURL,
-			Confidence: sr.Confidence.String(),
-			Sources:    sources,
-			Extras:     extras,
-		}
+		relatedDTOs = append(relatedDTOs, RelatedGroupDTO{
+			Relationship: g.Relationship,
+			RelatedTo:    g.RelatedTo,
+			Items:        items,
+		})
 	}
 
 	providerDTOs := make([]ProviderStatusDTO, len(result.ProviderStatuses))
@@ -261,6 +264,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		CorrectedQuery: result.CorrectedQuery,
 		OriginalQuery:  result.OriginalQuery,
 		SuggestedQuery: result.SuggestedQuery,
+		Related:        relatedDTOs,
 	})
 }
 
@@ -274,6 +278,7 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 
 	entries, err := h.historySvc.Execute(r.Context(), userId, limit)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "search history failed", "error", err)
 		httputil.InternalError(w)
 		return
 	}
@@ -327,6 +332,7 @@ func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := h.clickSvc.Execute(r.Context(), userId, input); err != nil {
+		slog.ErrorContext(r.Context(), "record click failed", "error", err)
 		httputil.InternalError(w)
 		return
 	}
@@ -367,6 +373,8 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 
 	resp, err := h.albumSvc.Execute(r.Context(), provider, externalID, limit)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "get album tracks failed",
+			"error", err, "provider", provider, "external_id", externalID)
 		httputil.InternalError(w)
 		return
 	}
@@ -393,6 +401,8 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 
 	resp, err := h.artistSvc.GetTopTracks(r.Context(), provider, externalID, limit)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "get artist top tracks failed",
+			"error", err, "provider", provider, "external_id", externalID)
 		httputil.InternalError(w)
 		return
 	}
@@ -419,6 +429,8 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 
 	resp, err := h.artistSvc.GetAlbums(r.Context(), provider, externalID, limit)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "get artist albums failed",
+			"error", err, "provider", provider, "external_id", externalID)
 		httputil.InternalError(w)
 		return
 	}
@@ -435,32 +447,36 @@ type ContentFetchResponseDTO struct {
 func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseDTO {
 	items := make([]SearchResultDTO, len(resp.Items))
 	for i, r := range resp.Items {
-		sources := make([]SourceRefDTO, len(r.Sources))
-		for j, s := range r.Sources {
-			sources[j] = SourceRefDTO{
-				Provider:   s.Provider.String(),
-				ExternalID: s.ExternalID,
-				URL:        s.URL,
-			}
-		}
-		contentExtras := r.Extras
-		if contentExtras == nil {
-			contentExtras = make(map[string]any)
-		}
-		items[i] = SearchResultDTO{
-			Kind:       r.Kind.String(),
-			Title:      r.Title,
-			Subtitle:   r.Subtitle,
-			ImageURL:   r.ImageURL,
-			Confidence: r.Confidence.String(),
-			Sources:    sources,
-			Extras:     contentExtras,
-		}
+		items[i] = searchResultToDTO(r)
 	}
 	return ContentFetchResponseDTO{
 		Provider: resp.ProviderName,
 		Status:   resp.Status.String(),
 		Items:    items,
+	}
+}
+
+func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
+	sources := make([]SourceRefDTO, len(sr.Sources))
+	for i, s := range sr.Sources {
+		sources[i] = SourceRefDTO{
+			Provider:   s.Provider.String(),
+			ExternalID: s.ExternalID,
+			URL:        s.URL,
+		}
+	}
+	extras := sr.Extras
+	if extras == nil {
+		extras = make(map[string]any)
+	}
+	return SearchResultDTO{
+		Kind:       sr.Kind.String(),
+		Title:      sr.Title,
+		Subtitle:   sr.Subtitle,
+		ImageURL:   sr.ImageURL,
+		Confidence: sr.Confidence.String(),
+		Sources:    sources,
+		Extras:     extras,
 	}
 }
 

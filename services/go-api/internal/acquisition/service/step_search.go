@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"altune/go-api/internal/catalog/ports"
 )
@@ -24,10 +25,13 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext) error 
 	var allCandidates []Candidate
 
 	for _, query := range queries {
+		slog.InfoContext(ctx, "acquisition.search_query", "query", query)
 		results, err := s.searcher.Search(ctx, query)
 		if err != nil {
+			slog.WarnContext(ctx, "acquisition.search_query_failed", "query", query, "error", err)
 			continue
 		}
+		slog.InfoContext(ctx, "acquisition.search_query_results", "query", query, "candidates", len(results))
 		for _, r := range results {
 			if seen[r.URL] {
 				continue

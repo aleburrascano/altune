@@ -23,6 +23,10 @@ func NewListTracksService(trackRepo ports.TrackRepository) *ListTracksService {
 	return &ListTracksService{trackRepo: trackRepo}
 }
 
+func (s *ListTracksService) GetByID(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (*domain.Track, error) {
+	return s.trackRepo.GetByID(ctx, trackId, userId)
+}
+
 func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, limit, offset int) (*ListTracksOutput, error) {
 	if limit <= 0 {
 		limit = 50

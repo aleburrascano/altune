@@ -134,6 +134,41 @@ func upscaleArtwork(url string, size int) string {
 	return strings.Replace(url, "100x100", fmt.Sprintf("%dx%d", size, size), 1)
 }
 
+// Resolve implements ArtworkResolver — searches iTunes for cover art.
+func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
+	query := title
+	if subtitle != "" {
+		query = subtitle + " " + title
+	}
+	entity := itunesEntity(kind)
+
+	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&limit=1", url.QueryEscape(query), entity)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return "", nil
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", nil
+	}
+
+	var body itunesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", nil
+	}
+	for _, item := range body.Results {
+		art := upscaleArtwork(item.ArtworkURL100, 600)
+		if art != "" {
+			return art, nil
+		}
+	}
+	return "", nil
+}
+
 type itunesResponse struct {
 	Results []itunesItem `json:"results"`
 }

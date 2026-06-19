@@ -286,3 +286,10 @@ type ProviderSearchResponse struct {
 	LatencyMs   int64
 	ResultCount int
 }
+
+// RelatedGroup is a set of results related to an organic search result.
+type RelatedGroup struct {
+	Relationship string         // "album_tracks", "artist_albums", "library_matches"
+	RelatedTo    string         // title of the organic result that triggered this group
+	Items        []SearchResult
+}

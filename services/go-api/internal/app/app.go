@@ -152,6 +152,7 @@ func (a *App) setup(ctx context.Context) error {
 	artworkChain := providers.NewChainedArtworkResolver(
 		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
 		providers.NewTheAudioDBAdapter(&http.Client{Timeout: 10 * time.Second}),
+		providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second}),
 	)
 
 	searchOpts := []discoveryService.SearchOption{
@@ -206,6 +207,9 @@ func (a *App) setup(ctx context.Context) error {
 	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
+
+	findRelatedSvc := discoveryService.NewFindRelatedService(trackRepo, deezerContent, deezerContent)
+	searchOpts = append(searchOpts, discoveryService.WithFindRelatedService(findRelatedSvc))
 
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, suggestSvc)
 

@@ -87,3 +87,15 @@ type VocabularyStore interface {
 type ChartProvider interface {
 	FetchCharts(ctx context.Context, limit int) ([]domain.VocabularyEntry, error)
 }
+
+type RelatedTrackMatch struct {
+	Title      string
+	Artist     string
+	Album      string
+	ArtworkURL *string
+}
+
+type RelationshipQuerier interface {
+	FindRelatedByAlbum(ctx context.Context, album string, limit int) ([]RelatedTrackMatch, error)
+	FindRelatedByArtist(ctx context.Context, artist string, limit int) ([]RelatedTrackMatch, error)
+}

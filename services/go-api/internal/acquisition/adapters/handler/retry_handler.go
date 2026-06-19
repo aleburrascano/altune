@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -53,6 +54,8 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 
 	track, err := h.trackRepo.GetByID(r.Context(), trackId, userId)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "retry acquisition: get track failed",
+			"error", err, "track_id", trackIdStr)
 		httputil.InternalError(w)
 		return
 	}

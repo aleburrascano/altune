@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -105,7 +104,7 @@ func (s *fakeAudioStore) Store(_ context.Context, _ string, audioRef string) err
 	return nil
 }
 
-func (s *fakeAudioStore) Stream(_ context.Context, _ string) (io.ReadCloser, int64, error) {
+func (s *fakeAudioStore) Stream(_ context.Context, _ string) (ports.AudioStream, int64, error) {
 	return nil, 0, nil
 }
 

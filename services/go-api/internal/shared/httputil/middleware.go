@@ -36,7 +36,7 @@ func RequestLogger(next http.Handler) http.Handler {
 
 		corrID := GetCorrelationID(r.Context())
 
-		slog.DebugContext(r.Context(), "request.start",
+		slog.InfoContext(r.Context(), "request.start",
 			"corr_id", corrID,
 			"method", r.Method,
 			"path", r.URL.Path,

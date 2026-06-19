@@ -39,6 +39,12 @@ export type DiscoveryProviderInfo = {
   latency_ms: number;
 };
 
+export type RelatedGroup = {
+  relationship: string;
+  related_to: string;
+  items: DiscoveryResult[];
+};
+
 export type DiscoverySearchResponse = {
   query: string;
   query_norm: string;
@@ -48,6 +54,7 @@ export type DiscoverySearchResponse = {
   cache: { hit: boolean; fetched_at: string | null };
   corrected_query?: string;
   original_query?: string;
+  related?: RelatedGroup[];
 };
 
 export type DiscoverySuggestion = {

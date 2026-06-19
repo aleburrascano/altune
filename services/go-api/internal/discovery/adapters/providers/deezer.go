@@ -137,6 +137,7 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		if item.Album != nil {
 			imageURL = item.Album.CoverBig
 			extras["album"] = item.Album.Title
+			extras["deezer_album_id"] = fmt.Sprintf("%d", item.Album.ID)
 		}
 		if item.ISRC != "" {
 			extras["isrc"] = item.ISRC

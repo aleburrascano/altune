@@ -16,7 +16,7 @@ import (
 
 const (
 	// enrichLimit caps artwork/popularity enrichment to the top N results to bound latency.
-	enrichLimit = 25
+	enrichLimit = 50
 	// enrichConcurrency limits parallel enrichment goroutines to avoid overwhelming providers.
 	enrichConcurrency = 8
 )
@@ -33,6 +33,7 @@ type SearchMusicService struct {
 	geniusResolver     ports.ArtworkResolver
 	vocabStore         ports.VocabularyStore
 	correctionSvc      *CorrectionService
+	findRelatedSvc     *FindRelatedService
 }
 
 type SearchOption func(*SearchMusicService)
@@ -90,6 +91,7 @@ type SearchOutput struct {
 	CorrectedQuery   string
 	OriginalQuery    string
 	SuggestedQuery   string
+	Related          []domain.RelatedGroup
 }
 
 func kindsString(kinds map[domain.ResultKind]bool) string {
@@ -253,6 +255,11 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		suggestedQuery = s.suggestIfLowRelevance(ctx, merged, query.Raw, queryNorm)
 	}
 
+	var related []domain.RelatedGroup
+	if s.findRelatedSvc != nil && len(merged) > 0 {
+		related = s.findRelatedSvc.Execute(ctx, merged)
+	}
+
 	if len(merged) > query.Limit {
 		merged = merged[:query.Limit]
 	}
@@ -300,6 +307,7 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		CorrectedQuery:   correctedQuery,
 		OriginalQuery:    originalQuery,
 		SuggestedQuery:   suggestedQuery,
+		Related:          related,
 	}, nil
 }
 
@@ -571,6 +579,13 @@ func (s *SearchMusicService) enrichOne(ctx context.Context, result domain.Search
 	}
 
 	if !changed {
+		if needsArt {
+			slog.DebugContext(ctx, "enrich.artwork_miss",
+				"kind", result.Kind.String(),
+				"title", result.Title,
+				"subtitle", result.Subtitle,
+				"has_mbid", mbid != "")
+		}
 		return result
 	}
 
