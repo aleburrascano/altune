@@ -9,9 +9,8 @@ import (
 )
 
 type GetArtistContentService struct {
-	providers      map[string]ports.ArtistContentProvider
-	albumValidator ports.AlbumValidator
-	discogsEnrich  ports.DiscographyEnricher
+	providers        map[string]ports.ArtistContentProvider
+	identityResolver *IdentityResolverService
 }
 
 func NewGetArtistContentService(
@@ -27,12 +26,22 @@ func NewGetArtistContentService(
 
 type ArtistContentOption func(*GetArtistContentService)
 
-func WithAlbumValidator(v ports.AlbumValidator) ArtistContentOption {
-	return func(s *GetArtistContentService) { s.albumValidator = v }
+func WithArtistIdentityResolver(r *IdentityResolverService) ArtistContentOption {
+	return func(s *GetArtistContentService) { s.identityResolver = r }
 }
 
-func WithDiscogsEnricher(d ports.DiscographyEnricher) ArtistContentOption {
-	return func(s *GetArtistContentService) { s.discogsEnrich = d }
+// WithAlbumValidator is a no-op retained for backward compatibility during
+// the transition to IdentityResolverService. Remove in U8 when app.go is
+// rewired.
+func WithAlbumValidator(_ ports.AlbumValidator) ArtistContentOption {
+	return func(_ *GetArtistContentService) {}
+}
+
+// WithDiscogsEnricher is a no-op retained for backward compatibility during
+// the transition to IdentityResolverService. Remove in U8 when app.go is
+// rewired.
+func WithDiscogsEnricher(_ ports.DiscographyEnricher) ArtistContentOption {
+	return func(_ *GetArtistContentService) {}
 }
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName, externalID string, limit int) (*ContentFetchResponse, error) {
@@ -96,8 +105,8 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 
 	results = dedupAlbums(results)
 
-	if artistName != "" && (s.albumValidator != nil || s.discogsEnrich != nil) {
-		results = s.validateAndFilterDiscography(ctx, artistName, results)
+	if artistName != "" && s.identityResolver != nil {
+		results = s.resolveDiscographyIdentity(ctx, artistName, results)
 	}
 
 	if limit > 0 && len(results) > limit {
@@ -111,96 +120,43 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 	}, nil
 }
 
-func (s *GetArtistContentService) validateAndFilterDiscography(ctx context.Context, artistName string, results []domain.SearchResult) []domain.SearchResult {
-	mbConfirmed := make(map[string]bool)
-	discogsConfirmed := make(map[string]bool)
-	birthYear := 0
+// resolveDiscographyIdentity runs the identity resolution pipeline and
+// returns confirmed albums first, then unknown, with contamination removed.
+func (s *GetArtistContentService) resolveDiscographyIdentity(ctx context.Context, artistName string, results []domain.SearchResult) []domain.SearchResult {
+	profile := s.identityResolver.BuildProfile(ctx, artistName, results)
+	resolutions := s.identityResolver.Resolve(ctx, artistName, profile, results)
 
-	if s.albumValidator != nil {
-		identity, _ := s.albumValidator.ResolveArtistIdentity(ctx, artistName)
-		if identity != nil {
-			birthYear = identity.BirthYear
-		}
-
-		validated, err := s.albumValidator.ValidateArtistAlbums(ctx, artistName, results)
-		if err != nil {
-			slog.WarnContext(ctx, "album_validation_failed", "artist", artistName, "error", err)
-		} else {
-			for _, a := range validated.Confirmed {
-				mbConfirmed[NormalizeForMatch(a.Title)] = true
-			}
-			slog.InfoContext(ctx, "album_validation_applied",
-				"artist", artistName,
-				"confirmed", len(validated.Confirmed),
-				"unconfirmed", len(validated.Unconfirmed),
-			)
+	var confirmed, unknown []domain.SearchResult
+	removedCount := 0
+	for _, res := range resolutions {
+		switch res.Verdict {
+		case domain.AlbumVerdictConfirmed:
+			confirmed = append(confirmed, res.Album)
+		case domain.AlbumVerdictContamination:
+			removedCount++
+			slog.DebugContext(ctx, "identity.album_removed",
+				"artist", artistName, "album", res.Album.Title,
+				"reason", res.Reason, "layer", res.Layer)
+		default:
+			// Unknown and Suspect are kept (optimistic include)
+			unknown = append(unknown, res.Album)
 		}
 	}
 
-	if s.discogsEnrich != nil {
-		results = s.applyDiscogsEnrichment(ctx, artistName, results, discogsConfirmed)
-	}
-
-	return FilterContamination(results, DiscographyFilterInput{
-		BirthYear:        birthYear,
-		MBConfirmed:      mbConfirmed,
-		DiscogsConfirmed: discogsConfirmed,
-	})
-}
-
-func (s *GetArtistContentService) applyDiscogsEnrichment(ctx context.Context, artistName string, results []domain.SearchResult, discogsConfirmed map[string]bool) []domain.SearchResult {
-	albumTitles := make([]string, len(results))
-	for i, r := range results {
-		albumTitles[i] = r.Title
-	}
-	discogsArtist, err := s.discogsEnrich.ResolveDiscogsArtist(ctx, artistName, albumTitles)
-	if err != nil {
-		slog.WarnContext(ctx, "discogs_enrichment_failed", "artist", artistName, "error", err)
-		return results
-	}
-	if discogsArtist == nil {
-		return results
-	}
-	if discogsArtist.Overlap == 0 {
-		slog.InfoContext(ctx, "discogs_enrichment_skipped",
+	if removedCount > 0 {
+		slog.InfoContext(ctx, "identity.resolution_applied",
 			"artist", artistName,
-			"discogs_id", discogsArtist.ID,
-			"reason", "zero album overlap, unreliable match")
-		return results
+			"confirmed", len(confirmed),
+			"unknown", len(unknown),
+			"removed", removedCount,
+		)
 	}
 
-	releases, err := s.discogsEnrich.FetchArtistReleases(ctx, discogsArtist.ID)
-	if err != nil {
-		slog.WarnContext(ctx, "discogs_releases_failed", "artist", artistName, "error", err)
-		return results
-	}
-
-	discogsYears := make(map[string]int, len(releases))
-	for _, rel := range releases {
-		norm := NormalizeForMatch(rel.Title)
-		discogsConfirmed[norm] = true
-		if rel.Year > 0 {
-			discogsYears[norm] = rel.Year
-		}
-	}
-	for i, r := range results {
-		if extractYear(r) == 0 {
-			norm := NormalizeForMatch(r.Title)
-			if y, ok := discogsYears[norm]; ok {
-				extras := copyExtras(r.Extras)
-				extras["year"] = y
-				results[i].Extras = extras
-			}
-		}
-	}
-	slog.InfoContext(ctx, "discogs_enrichment_applied",
-		"artist", artistName,
-		"discogs_id", discogsArtist.ID,
-		"overlap", discogsArtist.Overlap,
-		"releases", len(releases),
-		"years_backfilled", len(discogsYears),
-	)
-	return results
+	// Confirmed first, then unknown
+	out := make([]domain.SearchResult, 0, len(confirmed)+len(unknown))
+	out = append(out, confirmed...)
+	out = append(out, unknown...)
+	return out
 }
 
 func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
