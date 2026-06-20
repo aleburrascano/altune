@@ -66,14 +66,15 @@ flowchart TD
     end
 
     subgraph "Providers (adapters/providers/)"
-        PROVIDERS["7 Search Providers"]
+        PROVIDERS["8 Search Providers"]
         DEEZER["Deezer\n+nb_fan, rank, ISRC\n+StructuredSearcher"]
         LASTFM["Last.fm\n+listeners, albums, top tracks"]
         MUSICBRAINZ["MusicBrainz\n+MBID, ISRC\n+StructuredSearcher"]
         ITUNES["iTunes\n+metadata, genre"]
         SOUNDCLOUD["SoundCloud (yt-dlp)\n+playback_count"]
         AUDIODB["TheAudioDB\n+artist images"]
-        TIDAL["Tidal\n+ISRC, OAuth 2.0"]
+        TIDAL["Tidal\n+ISRC (inactive — no client_credentials)"]
+        YTMUSIC["YouTube Music\n+massive catalog, no auth"]
         PROVIDERS --> DEEZER
         PROVIDERS --> LASTFM
         PROVIDERS --> MUSICBRAINZ
@@ -81,6 +82,7 @@ flowchart TD
         PROVIDERS --> SOUNDCLOUD
         PROVIDERS --> AUDIODB
         PROVIDERS --> TIDAL
+        PROVIDERS --> YTMUSIC
     end
 
     subgraph "Vocabulary (Redis)"
@@ -118,33 +120,49 @@ flowchart TD
         DZ_ALB --> DEDUP["dedupAlbums\n(by title + artist)"]
         DEDUP --> CONSENSUS["ConsensusService.BuildConsensus"]
 
-        CONSENSUS --> PARALLEL["Query consensus providers\n(2s timeout, parallel)"]
+        CONSENSUS --> PARALLEL["Query consensus providers\n(no hardcoded timeout, parallel)"]
         PARALLEL --> LFM["Last.fm\nartist.getTopAlbums"]
         PARALLEL --> MB["MusicBrainz\nrelease-groups"]
         PARALLEL --> DISCOGS["Discogs\nartist releases"]
         PARALLEL --> ITUNES_C["iTunes\nalbum search"]
+        PARALLEL --> YTM_C["YouTube Music\nalbum search"]
 
         LFM --> COUNT["Count providers with data"]
         MB --> COUNT
         DISCOGS --> COUNT
         ITUNES_C --> COUNT
+        YTM_C --> COUNT
 
         COUNT --> MATCH["Match albums by title\n(NormalizeForMatch + TSR >= 85)"]
-        MATCH --> CLASSIFY["Classify each album"]
+        MATCH --> MERGE_ALL["Merge ALL providers into union\n(every provider is equal source)"]
+        MERGE_ALL --> CLASSIFY["Classify each album"]
         CLASSIFY --> CONF["2+ providers → confirmed"]
-        CLASSIFY --> UNCONF["1 provider + <4 responded → unconfirmed, keep"]
-        CLASSIFY --> REJECT["1 provider + 4+ responded → consensus rejection"]
+        CLASSIFY --> UNCONF["1 provider → unconfirmed, keep"]
 
         CONSENSUS --> MB_CHECK["MB identity contradiction\n(different MBID → remove)"]
-        MB_CHECK --> MB_VALID["Cross-validate: zero MB overlap → discard MB identity"]
+        MB_CHECK --> MB_VALID["Cross-validate: zero MB overlap\n→ discard MB identity"]
+        MB_CHECK --> MB_AUTH{"MB has 10+ confirmed?"}
+        MB_AUTH -->|yes| AUTH_FILTER["MB authority filter:\nreject unconfirmed albums"]
+        MB_AUTH -->|no| KEEP_ALL["Keep all unconfirmed"]
 
-        CONF --> MERGE["Merge results"]
-        UNCONF --> MERGE
-        REJECT -.->|removed| MERGE
-        MB_CHECK --> MERGE
+        CONF --> FINAL["Final results"]
+        AUTH_FILTER --> FINAL
+        KEEP_ALL --> FINAL
 
-        MERGE --> LIMIT_ALB["Apply limit (default 50)"]
+        FINAL --> LIMIT_ALB["Apply limit (default 50)"]
         LIMIT_ALB --> ALB_RESP["Return with consensus_status in extras"]
+    end
+
+    subgraph "Album Tracks (with Deezer fallback)"
+        ALB_RESP -->|user taps album| TRACK_REQ["GET /albums/{provider}/{id}/tracks\n+title & artist query params"]
+        TRACK_REQ --> PROV_CHECK{provider supported?}
+        PROV_CHECK -->|yes| FETCH_TRACKS["Fetch tracks from provider"]
+        PROV_CHECK -->|no| DZ_FALLBACK["Deezer search fallback:\nsearch by title + artist"]
+        FETCH_TRACKS --> EMPTY_CHECK{empty results?}
+        EMPTY_CHECK -->|yes + title provided| DZ_FALLBACK
+        EMPTY_CHECK -->|no| TRACK_RESP["Return tracks"]
+        DZ_FALLBACK --> DZ_MATCH["First Deezer album match\n→ fetch its tracks"]
+        DZ_MATCH --> TRACK_RESP
     end
 ```
 
@@ -235,7 +253,7 @@ internal/discovery/
 │   ├── record_click.go       # RecordClickService
 │   ├── list_history.go       # ListSearchHistoryService
 │   ├── find_related.go       # FindRelatedService — entity relationship enrichment
-│   ├── get_album_tracks.go   # Album content fetch + ContentFetchResponse type
+│   ├── get_album_tracks.go   # Album content fetch + Deezer search fallback for non-Deezer albums
 │   ├── get_artist_content.go # Artist top-tracks/albums with consensus integration
 │   └── url_router.go         # URL-paste provider detection
 └── adapters/
@@ -248,7 +266,8 @@ internal/discovery/
     │   ├── itunes.go         # Search + Artwork + Album lookup
     │   ├── soundcloud.go     # Search via yt-dlp
     │   ├── theaudiodb.go     # Search (artists) + Artwork
-    │   ├── tidal.go          # Search + Artist content (OAuth 2.0 client credentials)
+    │   ├── tidal.go          # Search + Artist content (OAuth 2.0 — inactive, no client_credentials for 3rd party)
+    │   ├── ytmusic.go        # YouTube Music — Search + Artist albums/top tracks (raitonoberu/ytmusic, no auth)
     │   ├── coverartarchive.go # Artwork (MBID-keyed album covers, up to 1200px)
     │   ├── genius.go         # Artwork (name search)
     │   ├── fanarttv.go       # Artwork (MBID-based HD)
