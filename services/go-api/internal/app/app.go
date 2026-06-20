@@ -169,6 +169,7 @@ func (a *App) setup(ctx context.Context) error {
 	circuitBreaker := discoveryService.NewCircuitBreaker()
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	clickRepo := discoveryPersistence.NewPgxSearchClickRepository(a.pool)
+	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
 	// AIDEV-DECISION: artwork chain — ID-based sources first, name-search last.
 	// ID-based (always correct for the entity): Cover Art Archive → Fanart.tv
 	// Name-search fallback (risk of wrong artist): Genius → TheAudioDB → Deezer → iTunes → YouTube
@@ -224,6 +225,7 @@ func (a *App) setup(ctx context.Context) error {
 	}
 
 	searchOpts = append(searchOpts, discoveryService.WithClickSignals(clickRepo))
+	searchOpts = append(searchOpts, discoveryService.WithEventStore(eventStore))
 	clickSvc := discoveryService.NewRecordClickService(clickRepo)
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 

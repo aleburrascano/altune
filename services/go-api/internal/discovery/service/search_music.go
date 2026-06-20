@@ -36,6 +36,7 @@ type SearchMusicService struct {
 	findRelatedSvc     *FindRelatedService
 	albumValidator     ports.AlbumValidator
 	clickSignals       ports.ClickSignalProvider
+	eventStore         ports.EventStore
 	ingestWg           sync.WaitGroup
 }
 
@@ -67,6 +68,10 @@ func WithVocabularyStore(v ports.VocabularyStore) SearchOption {
 
 func WithClickSignals(c ports.ClickSignalProvider) SearchOption {
 	return func(s *SearchMusicService) { s.clickSignals = c }
+}
+
+func WithEventStore(e ports.EventStore) SearchOption {
+	return func(s *SearchMusicService) { s.eventStore = e }
 }
 
 func NewSearchMusicService(
@@ -303,6 +308,8 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 	if len(merged) > query.Limit {
 		merged = merged[:query.Limit]
 	}
+
+	s.emitSearchEvent(ctx, userId, queryNorm, merged)
 
 	partial := false
 	for _, st := range statuses {
@@ -813,4 +820,73 @@ func (s *SearchMusicService) applyClickBoost(ctx context.Context, results []doma
 	}
 
 	return results
+}
+
+const telemetryTopN = 10
+
+// emitSearchEvent records what the search returned as a telemetry event. It is
+// async and best-effort (mirrors ingestToVocabulary): a telemetry write must
+// never block, slow, or fail the search. Shutdown waits on ingestWg.
+func (s *SearchMusicService) emitSearchEvent(parentCtx context.Context, userId shared.UserId, queryNorm string, shown []domain.SearchResult) {
+	if s.eventStore == nil {
+		return
+	}
+
+	payload := map[string]any{
+		"result_count": len(shown),
+		"zero_result":  len(shown) == 0,
+	}
+	if top := buildShownTop(shown); len(top) > 0 {
+		payload["top"] = top
+	}
+
+	s.ingestWg.Add(1)
+	ctx := context.WithoutCancel(parentCtx)
+	go func() {
+		defer s.ingestWg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Warn("search.telemetry_emit_panic", "error", r)
+			}
+		}()
+
+		emitCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		event := domain.InteractionEvent{
+			OccurredAt: time.Now().UTC(),
+			UserId:     userId,
+			Type:       domain.EventTypeSearchPerformed,
+			QueryNorm:  queryNorm,
+			Payload:    payload,
+		}
+		if err := s.eventStore.Append(emitCtx, event); err != nil {
+			slog.WarnContext(emitCtx, "search.telemetry_emit_failed", "error", err)
+		}
+	}()
+}
+
+// buildShownTop captures the top-N results (position, kind, title, sources) so
+// the telemetry envelope records what the user actually saw and where.
+func buildShownTop(results []domain.SearchResult) []map[string]any {
+	n := len(results)
+	if n > telemetryTopN {
+		n = telemetryTopN
+	}
+	top := make([]map[string]any, 0, n)
+	for i := 0; i < n; i++ {
+		r := results[i]
+		providers := make([]string, 0, len(r.Sources))
+		for _, src := range r.Sources {
+			providers = append(providers, src.Provider.String())
+		}
+		top = append(top, map[string]any{
+			"position": i,
+			"kind":     r.Kind.String(),
+			"title":    r.Title,
+			"subtitle": r.Subtitle,
+			"sources":  providers,
+		})
+	}
+	return top
 }
