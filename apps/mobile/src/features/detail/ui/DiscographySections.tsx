@@ -68,7 +68,7 @@ export function DiscographySections({
                   : null;
                 return (
                   <Pressable
-                    key={album.sources[0]?.external_id ?? index}
+                    key={`${album.title}-${album.sources[0]?.external_id ?? index}`}
                     testID={`detail-${section.type}-${index}`}
                     onPress={() => onAlbumPress(album)}
                     accessibilityRole="button"
