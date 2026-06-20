@@ -295,14 +295,16 @@ model satisfies this structurally: a same-named album lands in the tier directly
 ## 4.6 First measured baseline (2026-06-20)
 
 The Step-Zero eval (plan 002) ran on the full production catalog (1,792 distinct entities, cloned
-prod → dev): **top-1 pass-rate 97.4%** (≈98% true, after ~11 eval-matcher artifacts). The 46
-failures are **three structural patterns**, not a long tail — each maps to one layer and one
-mechanism: **A** same-named album outranks the track (Layer 3 banding + popularity, 17 cases);
-**B** numbered sequel collapsed into the original (Layer 2 `CollapseVersions ≥ 85`, 8 cases);
-**C** obscure track replaced by the artist's hit (Layer 1 coverage — the YouTube-Music-0-results
-hole, ~7 cases). Evidence that quality is already high and its gaps are *categorical*: the rebuild
-is a maintainability + constants-removal effort, gated to hold ~98% top-1 / the top-3 bar. Full
-taxonomy + constants ledger: plan 003.
+prod → dev): **top-1 97.2%, top-3 98.9%** (≈99.4% true at top-3 after the ~9 `¥$` eval-matcher
+artifacts). The **top-3 rate is the gate** (product bar: the right answer must be *visible*, not
+strictly #1). The failures are **three structural patterns**, not a long tail: **A** same-named
+album outranks the track (Layer 3 banding + popularity) — already *acceptable* at top-3 (the track
+sits at #2; the 31 below-#1 passes are all this); **B** numbered sequel collapsed into the original
+(Layer 2 `CollapseVersions ≥ 85`); **C** obscure / cross-artist same-title misses (coverage +
+popularity bias). Only 19 entities miss top-3 entirely (~9 `¥$` artifacts, 2 sequels, ~8 genuinely
+hard). Evidence that quality is already high and its gaps are *categorical*: the rebuild is a
+maintainability + constants-removal effort, gated to hold ~99% top-3 / ~97% top-1. Full taxonomy +
+constants ledger: plan 003.
 
 ---
 

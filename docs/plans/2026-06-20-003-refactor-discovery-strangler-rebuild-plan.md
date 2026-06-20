@@ -58,9 +58,14 @@ tuning.
 Measured by the library-derived eval (plan 002 U4) on the full production catalog (1,792 distinct
 `(title, artist)` entities, cloned prod → dev 2026-06-20):
 
-- **Top-1 pass-rate: 97.4%** (1,746 / 1,792). True rate ≈ **98.0%** after excluding ~11
-  eval-matcher artifacts (symbol-only artist `¥$` normalizing to empty; apostrophe/bracket
-  edge cases).
+- **Top-1: 97.2%** (1,742 / 1,792). **Top-3: 98.9%** (1,773) — the **gate metric** (product bar:
+  the right answer must be *visible*, not strictly #1). ≈**99.4%** true at top-3 after excluding
+  the ~9 `¥$` eval-matcher artifacts (symbol-only artist normalizes to empty; pipeline is correct).
+  (Numbers from the top-K run 2026-06-20; small run-to-run variance from live providers.)
+- The **31 entities that pass at top-3 but not top-1 are exactly Pattern A** (album at #1, the
+  correct track at #2) — i.e. Pattern A is *already acceptable under the top-3 bar*; the tier model
+  promotes the track to #1 as polish. Only **19 entities miss top-3 entirely**, of which ~9 are
+  `¥$` matcher artifacts, 2 are Pattern B sequels, and ~8 are genuinely hard (obscure/cross-artist).
 - The **46 failures are not random** — they are three nameable patterns at three different
   layers, each with an identified mechanism in today's code:
 
