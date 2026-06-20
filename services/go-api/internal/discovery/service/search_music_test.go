@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
@@ -12,6 +13,26 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// fakeEventStore records appended telemetry events. Append runs in the search
+// service's async emit goroutine, so access is mutex-guarded.
+type fakeEventStore struct {
+	mu     sync.Mutex
+	events []domain.InteractionEvent
+}
+
+func (f *fakeEventStore) Append(_ context.Context, e domain.InteractionEvent) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, e)
+	return nil
+}
+
+func (f *fakeEventStore) recorded() []domain.InteractionEvent {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]domain.InteractionEvent(nil), f.events...)
+}
 
 // ---------------------------------------------------------------------------
 // helpers (search-music-specific; reuse trackResult/albumResult from dedup_test.go)
@@ -77,6 +98,67 @@ func TestSearchMusicService_SingleProvider(t *testing.T) {
 	}
 	if out.Partial {
 		t.Error("expected partial=false when all providers succeed")
+	}
+}
+
+func TestSearchMusicService_EmitsSearchTelemetry(t *testing.T) {
+	provider := &mockSearchProvider{
+		name:           domain.ProviderDeezer,
+		supportedKinds: smTrackKinds(),
+		results: []domain.SearchResult{
+			trackResult(domain.ProviderDeezer, "d1", "Creep", "Radiohead", map[string]any{}),
+		},
+	}
+	store := &fakeEventStore{}
+	svc := smNewService([]ports.SearchProvider{provider}, nil, nil, WithEventStore(store))
+	query := smTestQuery(t, "Radiohead", smTrackKinds(), 10)
+
+	out, err := svc.Execute(context.Background(), smUserID(), query, false)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	svc.WaitForIngest() // telemetry emission shares the ingest wait barrier
+
+	events := store.recorded()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 telemetry event, got %d", len(events))
+	}
+	ev := events[0]
+	if ev.Type != domain.EventTypeSearchPerformed {
+		t.Errorf("event type = %s, want search_performed", ev.Type)
+	}
+	if ev.QueryNorm == "" {
+		t.Error("expected query_norm to be set")
+	}
+	if ev.Payload["result_count"] != len(out.Results) {
+		t.Errorf("result_count = %v, want %d", ev.Payload["result_count"], len(out.Results))
+	}
+	if ev.Payload["zero_result"] != false {
+		t.Errorf("zero_result = %v, want false", ev.Payload["zero_result"])
+	}
+}
+
+func TestSearchMusicService_EmitsZeroResultTelemetry(t *testing.T) {
+	provider := &mockSearchProvider{
+		name:           domain.ProviderDeezer,
+		supportedKinds: smTrackKinds(),
+		results:        []domain.SearchResult{},
+	}
+	store := &fakeEventStore{}
+	svc := smNewService([]ports.SearchProvider{provider}, nil, nil, WithEventStore(store))
+	query := smTestQuery(t, "zzzznomatchquery", smTrackKinds(), 10)
+
+	if _, err := svc.Execute(context.Background(), smUserID(), query, false); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	svc.WaitForIngest()
+
+	events := store.recorded()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 telemetry event, got %d", len(events))
+	}
+	if events[0].Payload["zero_result"] != true {
+		t.Errorf("zero_result = %v, want true", events[0].Payload["zero_result"])
 	}
 }
 
