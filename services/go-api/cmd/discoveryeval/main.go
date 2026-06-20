@@ -44,7 +44,7 @@ type options struct {
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | signal-a")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | signal-a | signal-b")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -84,8 +84,10 @@ func run(opts options) error {
 		return runEval(ctx, cfg, pool, redisClient, opts)
 	case "signal-a":
 		return runSignalA(ctx, pool, redisClient, opts)
+	case "signal-b":
+		return runSignalB(ctx, cfg, pool, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | signal-a)", opts.mode)
+		return fmt.Errorf("unknown mode %q (want eval | signal-a | signal-b)", opts.mode)
 	}
 }
 
@@ -189,6 +191,54 @@ func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Cl
 	return nil
 }
 
+// ---- signal-b mode ------------------------------------------------------
+
+func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opts options) error {
+	artists, err := loadDistinctArtists(ctx, pool, opts.limit)
+	if err != nil {
+		return fmt.Errorf("load artists: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "scanning %d distinct artists across providers (concurrency=%d)...\n", len(artists), opts.concurrency)
+
+	svc := discoveryService.NewCoverageSignalBService(app.BuildConsensusProviders(cfg))
+	report, err := svc.Execute(ctx, artists, opts.concurrency)
+	if err != nil {
+		return err
+	}
+
+	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
+		return err
+	}
+	fmt.Print(renderSignalB(report))
+	return nil
+}
+
+func loadDistinctArtists(ctx context.Context, pool *pgxpool.Pool, limit int) ([]string, error) {
+	query := `SELECT DISTINCT artist FROM tracks WHERE artist <> '' ORDER BY artist`
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
+
+	rows, err := pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query artists: %w", err)
+	}
+	defer rows.Close()
+
+	artists := []string{}
+	for rows.Next() {
+		var artist string
+		if err := rows.Scan(&artist); err != nil {
+			return nil, fmt.Errorf("scan artist: %w", err)
+		}
+		artists = append(artists, artist)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate artists: %w", err)
+	}
+	return artists, nil
+}
+
 // ---- output -------------------------------------------------------------
 
 func maybeWriteJSON(path string, report any) error {
@@ -251,6 +301,25 @@ func renderSignalA(report *discoveryService.CoverageReportA, sinceDays int) stri
 
 	out += fmt.Sprintf("\n## Weak hints — %d\n\n", len(report.Weak))
 	out += renderGaps(report.Weak)
+	return out
+}
+
+func renderSignalB(report *discoveryService.CoverageReportB) string {
+	out := fmt.Sprintf("# Discovery coverage signal B — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	out += fmt.Sprintf("Artists scanned: %d. Total entities (union): %d.\n\n", report.ArtistsScanned, report.TotalEntities)
+
+	out += "## Provider imbalance\n\n"
+	if len(report.ProviderGaps) == 0 {
+		out += "_none_\n"
+	}
+	for _, g := range report.ProviderGaps {
+		out += fmt.Sprintf("- %s: missing %d / %d (%.1f%% gap)\n", g.Provider, g.Missing, g.Union, g.GapPct*100)
+	}
+
+	out += "\n## Caveats\n\n"
+	for _, c := range report.Caveats {
+		out += fmt.Sprintf("- %s\n", c)
+	}
 	return out
 }
 

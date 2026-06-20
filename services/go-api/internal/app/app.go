@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
+	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
+	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
 	authAdapters "altune/go-api/internal/auth/adapters"
-	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
-	acqService "altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	catalogHandler "altune/go-api/internal/catalog/adapters/handler"
 	"altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/adapters/storage"
@@ -24,13 +24,12 @@ import (
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
+	"altune/go-api/internal/discovery/adapters/providers"
+	discoveryPorts "altune/go-api/internal/discovery/ports"
+	discoveryService "altune/go-api/internal/discovery/service"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
 	playbackService "altune/go-api/internal/playback/service"
-	"altune/go-api/internal/discovery/adapters/providers"
-	domain "altune/go-api/internal/discovery/domain"
-	discoveryPorts "altune/go-api/internal/discovery/ports"
-	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
@@ -167,14 +166,6 @@ func (a *App) setup(ctx context.Context) error {
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	clickRepo := discoveryPersistence.NewPgxSearchClickRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
-	var sharedDiscogs *providers.DiscogsAdapter
-	if a.cfg.HasDiscogs() {
-		sharedDiscogs = providers.NewDiscogsAdapter(
-			&http.Client{Timeout: 10 * time.Second},
-			a.cfg.DiscogsToken,
-			a.cfg.MusicBrainzUserAgent,
-		)
-	}
 
 	// vocabStore is shared by suggest + the periodic vocabulary refresh; the
 	// search pipeline builds its own inside BuildSearchService.
@@ -196,7 +187,6 @@ func (a *App) setup(ctx context.Context) error {
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
 	deezerContentClient := &http.Client{Timeout: 10 * time.Second}
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
-	ytmusicContent := providers.NewYouTubeMusicAdapter()
 
 	albumProviders := map[string]discoveryPorts.AlbumContentProvider{
 		"deezer": deezerContent,
@@ -217,81 +207,10 @@ func (a *App) setup(ctx context.Context) error {
 
 	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
 
-	// Multi-provider consensus: ALL providers are equal sources.
-	// Albums are merged from every provider into a union — no single
-	// provider is "primary." No hardcoded timeout — uses request context.
-	var consensusProviders []discoveryService.ConsensusProvider
-	if a.cfg.HasLastFM() {
-		lfm := providers.NewLastFmAdapter(&http.Client{Timeout: 10 * time.Second}, a.cfg.LastFMAPIKey)
-		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-			Name: "lastfm",
-			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
-				return lfm.GetArtistAlbums(ctx, domain.ProviderLastFM, artistName)
-			},
-		})
-	}
-	if sharedMB != nil {
-		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-			Name: "musicbrainz",
-			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
-				validated, err := sharedMB.ValidateArtistAlbums(ctx, artistName, nil)
-				if err != nil || validated == nil {
-					return nil, err
-				}
-				return validated.Confirmed, nil
-			},
-		})
-	}
-	if sharedDiscogs != nil {
-		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-			Name: "discogs",
-			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
-				info, err := sharedDiscogs.ResolveDiscogsArtist(ctx, artistName, nil)
-				if err != nil || info == nil {
-					return nil, err
-				}
-				releases, err := sharedDiscogs.FetchArtistReleases(ctx, info.ID)
-				if err != nil {
-					return nil, err
-				}
-				results := make([]domain.SearchResult, 0, len(releases))
-				for _, r := range releases {
-					results = append(results, domain.SearchResult{
-						Kind:  domain.ResultKindAlbum,
-						Title: r.Title,
-						Extras: map[string]any{
-							"year":        r.Year,
-							"record_type": r.Type,
-						},
-					})
-				}
-				return results, nil
-			},
-		})
-	}
-	itunesConsensus := providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second})
-	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-		Name: "itunes",
-		Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
-			return itunesConsensus.Search(ctx, artistName, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
-		},
-	})
-
-	if tidalContent != nil {
-		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-			Name: "tidal",
-			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
-				return tidalContent.GetArtistAlbums(ctx, domain.ProviderTidal, artistName)
-			},
-		})
-	}
-
-	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-		Name: "ytmusic",
-		Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
-			return ytmusicContent.GetArtistAlbums(ctx, domain.ProviderYouTube, artistName)
-		},
-	})
+	// Multi-provider consensus: ALL providers are equal sources, merged into a
+	// union. Built via the shared BuildConsensusProviders so coverage signal B
+	// measures the same provider set.
+	consensusProviders := BuildConsensusProviders(a.cfg)
 
 	var consensusOpts []discoveryService.ConsensusOption
 	if sharedMB != nil {
