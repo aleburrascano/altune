@@ -304,6 +304,32 @@ func (s *ConsensusService) applyMBContradiction(
 		}
 	}
 
+	// AIDEV-DECISION: when MB has strong data (10+ confirmed titles), it
+	// knows this artist well enough to be authoritative. Albums that aren't
+	// confirmed by EITHER MB or multi-provider consensus are likely
+	// contamination from same-name artists. Reject them.
+	// This only fires for well-cataloged artists — underground artists
+	// with 0 MB titles are unaffected.
+	if len(confirmedTitles) >= 10 {
+		mbRejected := 0
+		for i, result := range results {
+			if result.Status == ConsensusConfirmed || result.Status == ConsensusRejected {
+				continue
+			}
+			results[i].Status = ConsensusRejected
+			results[i].Reason = "not confirmed by any authoritative source (MB has strong data for this artist)"
+			results[i].Album = annotateConsensus(results[i].Album, ConsensusRejected, 0, 0)
+			mbRejected++
+		}
+		if mbRejected > 0 {
+			slog.InfoContext(ctx, "consensus.mb_authority_filter",
+				"artist", artistName,
+				"mb_confirmed", len(confirmedTitles),
+				"rejected_unconfirmed", mbRejected,
+			)
+		}
+	}
+
 	return results
 }
 
