@@ -233,6 +233,7 @@ func (a *App) setup(ctx context.Context) error {
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
 	deezerContentClient := &http.Client{Timeout: 10 * time.Second}
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
+	ytmusicContent := providers.NewYouTubeMusicAdapter()
 
 	albumProviders := map[string]discoveryPorts.AlbumContentProvider{
 		"deezer": deezerContent,
@@ -325,6 +326,13 @@ func (a *App) setup(ctx context.Context) error {
 			},
 		})
 	}
+
+	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+		Name: "ytmusic",
+		Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+			return ytmusicContent.GetArtistAlbums(ctx, domain.ProviderYouTube, artistName)
+		},
+	})
 
 	var consensusOpts []discoveryService.ConsensusOption
 	if sharedMB != nil {
@@ -480,6 +488,8 @@ func (a *App) buildDiscoveryProviders(mb *providers.MusicBrainzAdapter) []discov
 		tidalClient := &http.Client{Timeout: 10 * time.Second}
 		providerList = append(providerList, providers.NewTidalAdapter(tidalClient, a.cfg.TidalClientID, a.cfg.TidalClientSecret))
 	}
+
+	providerList = append(providerList, providers.NewYouTubeMusicAdapter())
 
 	slog.Info("discovery providers configured", "count", len(providerList))
 	return providerList
