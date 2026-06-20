@@ -398,6 +398,11 @@ func (a *App) buildDiscoveryProviders(mb *providers.MusicBrainzAdapter) []discov
 
 	providerList = append(providerList, providers.NewSoundCloudAdapter())
 
+	if a.cfg.HasTidal() {
+		tidalClient := &http.Client{Timeout: 10 * time.Second}
+		providerList = append(providerList, providers.NewTidalAdapter(tidalClient, a.cfg.TidalClientID, a.cfg.TidalClientSecret))
+	}
+
 	slog.Info("discovery providers configured", "count", len(providerList))
 	return providerList
 }
