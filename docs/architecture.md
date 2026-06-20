@@ -9,23 +9,32 @@ altune/
 ├── apps/
 │   └── mobile/        # Expo (React Native + TypeScript) — vertical-slice feature folders
 └── services/
-    └── api/           # Python (FastAPI) — hexagonal architecture (Ports & Adapters)
+    └── go-api/        # Go (chi) — hexagonal architecture (Ports & Adapters)
 ```
 
 There is intentionally **one** mobile client and **one** API service today. New clients (web, desktop) or services (workers, ingestion) come with an ADR and a new top-level folder.
 
-## Backend (`services/api/`) — hexagonal architecture
+## Backend (`services/go-api/`) — hexagonal architecture
 
 Reference: [vault: wiki/concepts/Hexagonal Architecture.md].
 
+Each bounded context under `internal/<context>/` is its own hexagon:
+
 ```
-services/api/src/altune/
-├── domain/        # pure business model. zero framework dependencies.
-├── application/   # use cases + port interfaces (the application's API to itself)
-├── adapters/
-│   ├── inbound/   # things that DRIVE the app (HTTP routers, CLI, message consumers)
-│   └── outbound/  # things the app DRIVES (DB repositories, external HTTP clients, message publishers)
-└── platform/      # config, DI wiring, logging, observability infra
+services/go-api/
+├── cmd/api/             # main entrypoint
+└── internal/
+    ├── <context>/       # one bounded context (e.g. discovery, catalog)
+    │   ├── domain/      # pure business model. zero framework dependencies.
+    │   ├── service/     # use cases — the application layer
+    │   ├── ports/       # interfaces consumed by use cases; adapters implement them
+    │   └── adapters/
+    │       ├── handler/      # inbound: chi HTTP handlers (DRIVE the app)
+    │       ├── persistence/  # outbound: repositories (the app DRIVES)
+    │       ├── providers/    # outbound: external API clients
+    │       └── cache/        # outbound: Redis / in-memory caches
+    ├── app/             # DI wiring / composition root (app.go)
+    └── shared/          # cross-cutting value objects (e.g. UserId), httputil, config
 ```
 
 ### Dependency rule (the load-bearing rule)
@@ -33,15 +42,16 @@ services/api/src/altune/
 Dependencies point **inward only**:
 
 ```
-adapters → application → domain
-platform → everything (it wires)
+adapters → service → domain
+ports defined alongside service; adapters implement them
+app/ → everything (it wires)
 ```
 
 - `domain/` imports nothing from `adapters/` or framework code.
-- `application/` imports `domain/` + standard library. **Ports** are defined here. Adapters implement them.
-- `adapters/` imports `application/` ports + `domain/` types + framework code.
+- `service/` imports `domain/` + `ports/` + standard library. **Ports** live in `ports/`. Adapters implement them.
+- `adapters/` imports `ports/` interfaces + `domain/` types + framework code (`chi`, `net/http`, Redis).
 
-Path-scoped rules in `.claude/rules/domain-layer.md`, `application-layer.md`, `adapters-layer.md` enforce this; the `architecture-reviewer` subagent grades against it.
+Path-scoped rules in `.claude/rules/backend/domain-layer.md`, `application-layer.md`, `adapters-layer.md` enforce this; the `architecture-reviewer` subagent grades against it.
 
 ### Bounded contexts
 
@@ -53,29 +63,29 @@ Initial expected contexts (will materialize as features land):
 - `playback/` — runtime: queue, current track, scrubbing, history
 - `metadata/` — external enrichment (album art, lyrics, bios — pulled from third-party APIs)
 
-These are not created until they have features driving them. Day-1 scaffolding has only the layer dirs.
+These are not created until they have features driving them. `discovery/` and `catalog/` exist today.
 
 ### Per-context layout
 
-When a context is added:
+A context is self-contained under `internal/<context>/`:
 
 ```
-src/altune/
-├── domain/<context>/
-│   ├── __init__.py
-│   ├── <aggregate>.py
-│   ├── <value-objects>.py
-│   ├── events.py
-│   └── exceptions.py
-├── application/<context>/
-│   ├── __init__.py
-│   ├── ports.py           # interfaces consumed by use cases here
-│   └── <use-case>.py      # one file per use case
+internal/<context>/
+├── domain/
+│   ├── <aggregate>.go
+│   ├── <value-objects>.go
+│   ├── events.go
+│   └── types.go
+├── service/
+│   └── <use-case>.go      # one file per use case
+├── ports/
+│   └── ports.go           # interfaces consumed by use cases here
 └── adapters/
-    ├── inbound/http/<context>/
-    │   └── router.py
-    └── outbound/persistence/<context>/
-        └── <aggregate>_repository.py
+    ├── handler/
+    │   └── <context>_handler.go
+    ├── persistence/
+    │   └── <aggregate>_repo.go
+    └── providers/         # external API clients, when the context needs them
 ```
 
 ## Frontend (`apps/mobile/`) — vertical-slice architecture
@@ -108,19 +118,19 @@ A feature folder owns everything for that feature **end-to-end**: UI, hooks, API
 ## Cross-cutting
 
 ### Authentication / authorization
-Deferred until first feature needs it. When chosen → ADR + auth bounded context in backend + `shared/api-client/` integration on mobile.
+Supabase-issued JWTs verified by `internal/auth` middleware; handlers read the user id via `auth.RequireUserID`. Mobile integrates through `shared/api-client/`.
 
 ### Persistence
-Deferred until first feature needs it. SQLite or Postgres TBD via `/brainstorm-tech-choice` + ADR. Adapter lives under `adapters/outbound/persistence/`.
+Postgres (Supabase) for durable data; Redis (Upstash) for caches. Repository adapters live under `internal/<context>/adapters/persistence/`; cache adapters under `adapters/cache/`. Migrations via an external tool, human-reviewed (see `.claude/rules/backend/go-database.md`).
 
 ### Observability
-- Structured logging (`structlog`) in backend; correlation id per request.
+- Structured logging (`log/slog`) in backend; correlation id per request (`httputil.CorrelationID`).
 - Sentry / equivalent for crash reporting: TBD via ADR when shipping.
 - Metrics: TBD; not blocking pre-launch.
 
 ### Configuration
 - 12-factor: env vars in production, `.env` for local dev (gitignored), `.env.example` checked in as documentation.
-- Loaded via Pydantic Settings in `platform/config.py`.
+- Loaded into a config struct at startup and injected via `internal/app` (the composition root).
 
 ### Inter-service communication
 Single service today. When a second service is introduced (worker, ingestion) → ADR for transport (HTTP, queue, etc.) + an outbound adapter on the caller and inbound adapter on the callee.
