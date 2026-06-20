@@ -36,6 +36,7 @@ export type TrackActions = {
 
 type LibraryHomeProps = {
   playlists: PlaylistResponse[];
+  allTracks: TrackResponse[];
   recentTracks: TrackResponse[];
   albums: AlbumGroup[];
   artists: ArtistGroup[];
@@ -53,6 +54,7 @@ type LibraryHomeProps = {
 
 export function LibraryHome({
   playlists,
+  allTracks,
   recentTracks,
   albums,
   artists,
@@ -105,7 +107,7 @@ export function LibraryHome({
                 key={track.id}
                 track={track}
                 {...(track.acquisition_status === 'ready' ? { onPlay: () => {
-                  const { playable, startIndex } = buildPlayableQueue(recentTracks, track.id);
+                  const { playable, startIndex } = buildPlayableQueue(allTracks, track.id);
                   queue.playFromList(playable, startIndex, { kind: 'library' });
                 } } : {})}
                 onPress={() => navigateToTrack(track)}

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useQueryClient } from '@tanstack/react-query';
 import TrackPlayer, {
   Capability,
-  Event,
   State,
   usePlaybackState,
   useProgress,
@@ -12,7 +11,7 @@ import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '@shared/playback/types';
 
-import { audioRequestHeaders, audioStreamUrl } from '../api/audio';
+import { loadNativeTrack } from '../loadNativeTrack';
 import { useQueueResume } from './useQueueResume';
 
 const INITIAL_STATE: PlaybackState = {
@@ -48,7 +47,6 @@ async function initPlayer(): Promise<void> {
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
   const lastPlayedTrack = useRef<PlaybackTrack | null>(null);
   const queryClient = useQueryClient();
 
@@ -56,7 +54,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const progress = useProgress(500);
 
   useEffect(() => {
-    void initPlayer().then(() => setReady(true));
+    void initPlayer();
   }, []);
 
   const positionMs = progress.position * 1000;
@@ -103,26 +101,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     lastPlayedTrack.current = newTrack;
 
     try {
-      await TrackPlayer.reset();
-      const artwork = newTrack.artworkUrl ?? '';
-      if (newTrack.source.kind === 'preview') {
-        await TrackPlayer.load({
-          url: newTrack.source.previewUrl,
-          title: newTrack.title,
-          artist: newTrack.artist,
-          artwork,
-        });
-      } else {
-        const headers = await audioRequestHeaders();
-        await TrackPlayer.load({
-          url: audioStreamUrl(newTrack.source.trackId),
-          title: newTrack.title,
-          artist: newTrack.artist,
-          artwork,
-          headers,
-        });
-      }
-      await TrackPlayer.play();
+      await loadNativeTrack(newTrack);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load audio';
       setErrorMessage(message);
@@ -145,55 +124,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     void play(trackToRetry);
   }, [play]);
 
-  // Sync Zustand from TrackPlayer's active track changes (native queue transitions)
-  useEffect(() => {
-    if (!ready) return;
-    const sub = TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data) => {
-      if (data.index == null) return;
-      const { tracks, playOrder, currentIndex } = useQueueStore.getState();
-      if (tracks.length === 0) return;
-
-      // Find which queue position this native index corresponds to
-      const queueIdx = playOrder.indexOf(data.index);
-      if (queueIdx >= 0 && queueIdx !== currentIndex) {
-        useQueueStore.getState().skipToIndex(queueIdx);
-      }
-
-      // Update the displayed track
-      const playbackTrack = tracks[data.index];
-      if (playbackTrack) {
-        setTrack(playbackTrack);
-        setErrorMessage(null);
-        lastPlayedTrack.current = playbackTrack;
-      }
-    });
-    return () => sub.remove();
-  }, [ready]);
+  const currentQueueTrack = useQueueStore((s) => {
+    if (s.tracks.length === 0 || s.currentIndex < 0) return null;
+    const trackIndex = s.playOrder[s.currentIndex];
+    if (trackIndex == null) return null;
+    return s.tracks[trackIndex] ?? null;
+  });
 
   useEffect(() => {
-    if (!ready) return;
-    const remotePlay = TrackPlayer.addEventListener(Event.RemotePlay, () => { void TrackPlayer.play(); });
-    const remotePause = TrackPlayer.addEventListener(Event.RemotePause, () => { void TrackPlayer.pause(); });
-    const remoteNext = TrackPlayer.addEventListener(Event.RemoteNext, () => {
-      const nextTrack = useQueueStore.getState().skipToNext();
-      if (nextTrack) void TrackPlayer.skipToNext();
-    });
-    const remotePrev = TrackPlayer.addEventListener(Event.RemotePrevious, () => {
-      const prevTrack = useQueueStore.getState().skipToPrevious();
-      if (prevTrack) void TrackPlayer.skipToPrevious();
-    });
-    const remoteSeek = TrackPlayer.addEventListener(Event.RemoteSeek, (data) => {
-      void TrackPlayer.seekTo(data.position);
-    });
-
-    return () => {
-      remotePlay.remove();
-      remotePause.remove();
-      remoteNext.remove();
-      remotePrev.remove();
-      remoteSeek.remove();
-    };
-  }, [ready]);
+    setTrack(currentQueueTrack);
+    if (currentQueueTrack) {
+      setErrorMessage(null);
+      lastPlayedTrack.current = currentQueueTrack;
+    }
+  }, [currentQueueTrack]);
 
   useQueueResume();
 
