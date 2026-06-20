@@ -61,6 +61,22 @@ type EventStore interface {
 	Append(ctx context.Context, event domain.InteractionEvent) error
 }
 
+// QueryCount is a query_norm with how many times it occurred in a window.
+type QueryCount struct {
+	QueryNorm string
+	Count     int
+}
+
+// EventQuery reads aggregated telemetry for the offline coverage signals. These
+// are analytics reads over discovery's own tables — never the request path.
+type EventQuery interface {
+	// ZeroResultQueries ranks search queries that returned nothing in the window.
+	ZeroResultQueries(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
+	// NonZeroNoClickQueries ranks queries that returned results but drew no click
+	// for that query_norm in the window (a weak coverage hint).
+	NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
+}
+
 type AlbumContentProvider interface {
 	GetAlbumTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }

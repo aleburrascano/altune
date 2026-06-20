@@ -1,12 +1,14 @@
-// Command discoveryeval runs the library-derived discovery eval: for every
-// unique (title, artist) in the catalog across all users, it searches
-// "artist title" and asserts that exact track ranks #1 in the blended view.
+// Command discoveryeval runs the offline discovery diagnostics that gate and
+// inform the pipeline rebuild (plan 002). It exercises the real search pipeline
+// in-process (via app.BuildSearchService) and reads discovery's own telemetry;
+// it is meant to run nightly / on demand, NOT per-commit.
 //
-// It exercises the real search pipeline in-process (via app.BuildSearchService),
-// hits live provider APIs, and is meant to run nightly — NOT per-commit. The
-// per-commit gate stays the canonical 9-query suite. Telemetry emission is
-// disabled (nil event store) so synthetic eval searches never pollute the
-// telemetry the coverage signals read.
+// Modes (-mode):
+//   - eval     : library-derived "artist title → #1" quality-regression report.
+//   - signal-a : zero-result / abandoned-search coverage-gap report.
+//
+// Telemetry emission is disabled for eval searches (nil event store) so
+// synthetic searches never pollute the telemetry the signals read.
 package main
 
 import (
@@ -18,6 +20,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/app"
+	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
@@ -30,19 +33,32 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
+type options struct {
+	mode        string
+	limit       int
+	concurrency int
+	sinceDays   int
+	top         int
+	jsonPath    string
+}
+
 func main() {
-	limit := flag.Int("limit", 0, "max entities to evaluate (0 = all)")
-	concurrency := flag.Int("concurrency", 4, "parallel searches against live providers")
-	jsonPath := flag.String("json", "", "write the full JSON report to this path (default: stdout summary only)")
+	var opts options
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | signal-a")
+	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
+	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
+	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
+	flag.IntVar(&opts.top, "top", 50, "signals: max ranked entries")
+	flag.StringVar(&opts.jsonPath, "json", "", "write the full JSON report to this path (default: stdout summary only)")
 	flag.Parse()
 
-	if err := run(*limit, *concurrency, *jsonPath); err != nil {
+	if err := run(opts); err != nil {
 		fmt.Fprintf(os.Stderr, "discoveryeval: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(limit, concurrency int, jsonPath string) error {
+func run(opts options) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
@@ -63,25 +79,34 @@ func run(limit, concurrency int, jsonPath string) error {
 		defer redisClient.Close()
 	}
 
-	entities, err := loadLibraryEntities(ctx, pool, limit)
+	switch opts.mode {
+	case "eval":
+		return runEval(ctx, cfg, pool, redisClient, opts)
+	case "signal-a":
+		return runSignalA(ctx, pool, redisClient, opts)
+	default:
+		return fmt.Errorf("unknown mode %q (want eval | signal-a)", opts.mode)
+	}
+}
+
+// ---- eval mode ----------------------------------------------------------
+
+func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+	entities, err := loadLibraryEntities(ctx, pool, opts.limit)
 	if err != nil {
 		return fmt.Errorf("load library: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "evaluating %d unique entities (concurrency=%d)...\n", len(entities), concurrency)
+	fmt.Fprintf(os.Stderr, "evaluating %d unique entities (concurrency=%d)...\n", len(entities), opts.concurrency)
 
 	// nil event store: eval searches must not emit telemetry.
 	searchSvc := app.BuildSearchService(cfg, pool, redisClient, nil)
-	report := discoveryService.RunLibraryEval(ctx, entities, searchAdapter{svc: searchSvc}, concurrency)
+	report := discoveryService.RunLibraryEval(ctx, entities, searchAdapter{svc: searchSvc}, opts.concurrency)
 	searchSvc.WaitForIngest() // drain any best-effort vocabulary writes before exit
 
-	if jsonPath != "" {
-		if err := writeJSON(jsonPath, report); err != nil {
-			return fmt.Errorf("write json: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "wrote JSON report to %s\n", jsonPath)
+	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
+		return err
 	}
-
-	fmt.Print(renderMarkdown(report))
+	fmt.Print(renderEval(report))
 	return nil
 }
 
@@ -137,15 +162,51 @@ func (a searchAdapter) Search(ctx context.Context, query string) ([]domain.Searc
 	return out.Results, nil
 }
 
-func writeJSON(path string, report discoveryService.EvalReport) error {
-	data, err := json.MarshalIndent(report, "", "  ")
+// ---- signal-a mode ------------------------------------------------------
+
+func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+	eventStore := discoveryPersistence.NewPgxEventStore(pool)
+
+	// A correction filter drops misspellings from the strong gaps; without a
+	// vocabulary store it is simply skipped (every zero-result counts as a gap).
+	var svc *discoveryService.CoverageSignalAService
+	if vocab := app.BuildVocabularyStore(redisClient); vocab != nil {
+		svc = discoveryService.NewCoverageSignalAService(eventStore, discoveryService.NewCorrectionService(vocab))
+	} else {
+		svc = discoveryService.NewCoverageSignalAService(eventStore, nil)
+	}
+
+	since := time.Now().UTC().AddDate(0, 0, -opts.sinceDays)
+	report, err := svc.Execute(ctx, since, opts.top)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+
+	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
+		return err
+	}
+	fmt.Print(renderSignalA(report, opts.sinceDays))
+	return nil
 }
 
-func renderMarkdown(report discoveryService.EvalReport) string {
+// ---- output -------------------------------------------------------------
+
+func maybeWriteJSON(path string, report any) error {
+	if path == "" {
+		return nil
+	}
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal json: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write json: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "wrote JSON report to %s\n", path)
+	return nil
+}
+
+func renderEval(report discoveryService.EvalReport) string {
 	out := fmt.Sprintf("# Discovery library eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Total: %d (evaluated %d, skipped %d)\n", report.Total, report.Evaluated, report.Skipped)
 	out += fmt.Sprintf("- Passed: %d  Failed: %d  Pass rate: %.1f%%\n", report.Passed, report.Failed, report.PassRate()*100)
@@ -177,6 +238,29 @@ func renderMarkdown(report discoveryService.EvalReport) string {
 	}
 	if failures == 0 {
 		out += "_none_\n"
+	}
+	return out
+}
+
+func renderSignalA(report *discoveryService.CoverageReportA, sinceDays int) string {
+	out := fmt.Sprintf("# Discovery coverage signal A — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	out += fmt.Sprintf("Window: last %d days. Strong = zero-result (not a typo); weak = results shown but no click.\n\n", sinceDays)
+
+	out += fmt.Sprintf("## Strong gaps — %d (filtered %d typos)\n\n", len(report.Strong), report.FilteredAsTypos)
+	out += renderGaps(report.Strong)
+
+	out += fmt.Sprintf("\n## Weak hints — %d\n\n", len(report.Weak))
+	out += renderGaps(report.Weak)
+	return out
+}
+
+func renderGaps(gaps []discoveryService.CoverageGap) string {
+	if len(gaps) == 0 {
+		return "_none_\n"
+	}
+	out := ""
+	for _, g := range gaps {
+		out += fmt.Sprintf("- %q — %d×\n", g.QueryNorm, g.Count)
 	}
 	return out
 }
