@@ -169,9 +169,12 @@ func (a *App) setup(ctx context.Context) error {
 	circuitBreaker := discoveryService.NewCircuitBreaker()
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	clickRepo := discoveryPersistence.NewPgxSearchClickRepository(a.pool)
-	// Artwork chain: identity-verified sources first, name-only last.
-	// Order: Fanart.tv (MBID) → Discogs → YouTube → Genius → Deezer → TheAudioDB → iTunes
+	// AIDEV-DECISION: artwork chain — ID-based sources first, name-search last.
+	// ID-based (always correct for the entity): Cover Art Archive → Fanart.tv
+	// Name-search fallback (risk of wrong artist): Genius → TheAudioDB → Deezer → iTunes → YouTube
 	var artworkResolvers []discoveryPorts.ArtworkResolver
+	artworkResolvers = append(artworkResolvers,
+		providers.NewCoverArtArchiveResolver(&http.Client{Timeout: 10 * time.Second}))
 	if a.cfg.HasFanartTV() {
 		artworkResolvers = append(artworkResolvers,
 			providers.NewFanartTvArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.FanartTVAPIKey))
@@ -183,21 +186,20 @@ func (a *App) setup(ctx context.Context) error {
 			a.cfg.DiscogsToken,
 			a.cfg.MusicBrainzUserAgent,
 		)
-		artworkResolvers = append(artworkResolvers, sharedDiscogs)
-	}
-	if a.cfg.HasYouTube() {
-		artworkResolvers = append(artworkResolvers,
-			providers.NewYouTubeArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.YouTubeAPIKey))
 	}
 	if a.cfg.HasGenius() {
 		artworkResolvers = append(artworkResolvers,
 			providers.NewGeniusArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.GeniusAccessToken))
 	}
 	artworkResolvers = append(artworkResolvers,
-		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
 		providers.NewTheAudioDBAdapter(&http.Client{Timeout: 10 * time.Second}),
+		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
 		providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second}),
 	)
+	if a.cfg.HasYouTube() {
+		artworkResolvers = append(artworkResolvers,
+			providers.NewYouTubeArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.YouTubeAPIKey))
+	}
 	artworkChain := providers.NewChainedArtworkResolver(artworkResolvers...)
 
 	searchOpts := []discoveryService.SearchOption{
