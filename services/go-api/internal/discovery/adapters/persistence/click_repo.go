@@ -14,6 +14,7 @@ import (
 )
 
 var _ ports.SearchClickRepository = (*PgxSearchClickRepository)(nil)
+var _ ports.ClickSignalProvider = (*PgxSearchClickRepository)(nil)
 
 type PgxSearchClickRepository struct {
 	pool *pgxpool.Pool
@@ -51,4 +52,31 @@ func (r *PgxSearchClickRepository) InsertIfOutsideWindow(ctx context.Context, cl
 		return false, err
 	}
 	return true, nil
+}
+
+func (r *PgxSearchClickRepository) TopClickedSignatures(ctx context.Context, queryNorm string, limit int) ([]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT result_signature, COUNT(*) AS cnt
+		FROM discovery_search_clicks
+		WHERE query_norm = $1 AND clicked_at > NOW() - INTERVAL '30 days'
+		GROUP BY result_signature
+		ORDER BY cnt DESC
+		LIMIT $2`,
+		queryNorm, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sigs []string
+	for rows.Next() {
+		var sig string
+		var cnt int
+		if err := rows.Scan(&sig, &cnt); err != nil {
+			return nil, err
+		}
+		sigs = append(sigs, sig)
+	}
+	return sigs, rows.Err()
 }
