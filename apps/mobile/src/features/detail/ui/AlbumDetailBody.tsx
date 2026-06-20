@@ -58,15 +58,19 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
   const theme = useTheme();
   const save = useSaveTrack();
   const source = !isFromLibrary ? result.sources[0] : undefined;
-  const hasSources = source !== undefined;
+  const deezerSource = !isFromLibrary
+    ? result.sources.find((s) => s.provider === 'deezer')
+    : undefined;
+  const effectiveSource = deezerSource ?? source;
+  const hasSources = effectiveSource !== undefined;
 
   const { tracks: apiTracks, isLoading: apiLoading, isError: apiError, refetch } = useAlbumTracks({
-    provider: source?.provider ?? '',
-    externalId: source?.external_id ?? '',
+    provider: effectiveSource?.provider ?? 'deezer',
+    externalId: effectiveSource?.external_id ?? '_',
     albumTitle: result.title,
     albumArtist: result.subtitle,
     allSources: result.sources,
-    enabled: hasSources,
+    enabled: hasSources || (result.title !== ''),
   });
 
   const localTracks = useLibraryTracksForAlbum(result.title, result.subtitle);

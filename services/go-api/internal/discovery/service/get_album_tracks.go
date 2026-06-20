@@ -46,12 +46,20 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 		}, nil
 	}
 	results, err := provider.GetAlbumTracks(ctx, pn, externalID)
-	if err != nil {
-		return &ContentFetchResponse{
-			ProviderName: providerName,
-			Status:       domain.ProviderStatusError,
-			Items:        []domain.SearchResult{},
-		}, nil
+	if err != nil || len(results) == 0 {
+		if albumTitle != "" {
+			deezer, hasDeezer := s.providers["deezer"]
+			if hasDeezer {
+				return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
+			}
+		}
+		if err != nil {
+			return &ContentFetchResponse{
+				ProviderName: providerName,
+				Status:       domain.ProviderStatusError,
+				Items:        []domain.SearchResult{},
+			}, nil
+		}
 	}
 
 	if limit > 0 && len(results) > limit {
