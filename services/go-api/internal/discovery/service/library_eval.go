@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
@@ -148,16 +149,44 @@ func evalOne(ctx context.Context, entity LibraryEntity, searcher Searcher) EvalR
 	return res
 }
 
-// matchesEntity is true when the result is the track for this entity: same kind,
-// matching normalized title, and the artist appears in the result's subtitle.
+// matchesEntity is true when the #1 result is the track for this entity.
+// Providers routinely embed the artist (and track numbers) in the track title —
+// "A-Ha - Take On Me", "07-The Best Was Yet To Come" — and sometimes list a
+// re-uploader as the subtitle. So the entity title is matched as a contiguous
+// token run within the result title, and the artist may appear in either the
+// subtitle or the title. Token-boundary matching avoids short titles like "Go"
+// matching inside "Going".
 func matchesEntity(r domain.SearchResult, entity LibraryEntity) bool {
 	if r.Kind != domain.ResultKindTrack {
 		return false
 	}
-	if NormalizeForMatch(r.Title) != NormalizeForMatch(entity.Title) {
+	rt := NormalizeForMatch(r.Title)
+	et := NormalizeForMatch(entity.Title)
+	ea := NormalizeForMatch(entity.Artist)
+
+	if !containsTokens(rt, et) {
 		return false
 	}
-	return strings.Contains(NormalizeForMatch(r.Subtitle), NormalizeForMatch(entity.Artist))
+	return containsTokens(NormalizeForMatch(r.Subtitle), ea) || containsTokens(rt, ea)
+}
+
+// containsTokens reports whether want's tokens appear as a contiguous run within
+// have's tokens (exact match included).
+func containsTokens(have, want string) bool {
+	if want == "" {
+		return false
+	}
+	h := strings.Fields(have)
+	w := strings.Fields(want)
+	if len(w) > len(h) {
+		return false
+	}
+	for i := 0; i+len(w) <= len(h); i++ {
+		if slices.Equal(h[i:i+len(w)], w) {
+			return true
+		}
+	}
+	return false
 }
 
 func aggregate(results []EvalResult) EvalReport {

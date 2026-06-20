@@ -40,6 +40,7 @@ type options struct {
 	sinceDays   int
 	top         int
 	jsonPath    string
+	random      bool
 }
 
 func main() {
@@ -50,6 +51,7 @@ func main() {
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
 	flag.IntVar(&opts.top, "top", 50, "signals: max ranked entries")
 	flag.StringVar(&opts.jsonPath, "json", "", "write the full JSON report to this path (default: stdout summary only)")
+	flag.BoolVar(&opts.random, "random", false, "eval: sample entities randomly instead of alphabetically (use with -limit for a representative sample)")
 	flag.Parse()
 
 	if err := run(opts); err != nil {
@@ -94,7 +96,7 @@ func run(opts options) error {
 // ---- eval mode ----------------------------------------------------------
 
 func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	entities, err := loadLibraryEntities(ctx, pool, opts.limit)
+	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
 	if err != nil {
 		return fmt.Errorf("load library: %w", err)
 	}
@@ -115,8 +117,13 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 // loadLibraryEntities reads the distinct (title, artist) pairs across ALL users.
 // This is an offline-only cross-context read of the catalog's tracks table; it
 // lives in the composition root and never touches the request path.
-func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int) ([]discoveryService.LibraryEntity, error) {
-	query := `SELECT DISTINCT title, artist FROM tracks WHERE artist <> '' ORDER BY artist, title`
+func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, random bool) ([]discoveryService.LibraryEntity, error) {
+	// Random sampling needs a subquery: DISTINCT must resolve before ORDER BY random().
+	order := "ORDER BY artist, title"
+	query := `SELECT DISTINCT title, artist FROM tracks WHERE artist <> '' ` + order
+	if random {
+		query = `SELECT title, artist FROM (SELECT DISTINCT title, artist FROM tracks WHERE artist <> '') d ORDER BY random()`
+	}
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)
 	}
