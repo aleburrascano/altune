@@ -23,6 +23,7 @@ type DiscoveryHandler struct {
 	albumSvc     *service.GetAlbumTracksService
 	artistSvc    *service.GetArtistContentService
 	suggestSvc   *service.SuggestService
+	eventSvc     *service.RecordEventService
 }
 
 func NewDiscoveryHandler(
@@ -32,6 +33,7 @@ func NewDiscoveryHandler(
 	albumSvc *service.GetAlbumTracksService,
 	artistSvc *service.GetArtistContentService,
 	suggestSvc *service.SuggestService,
+	eventSvc *service.RecordEventService,
 ) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		searchSvc:  searchSvc,
@@ -40,6 +42,7 @@ func NewDiscoveryHandler(
 		albumSvc:   albumSvc,
 		artistSvc:  artistSvc,
 		suggestSvc: suggestSvc,
+		eventSvc:   eventSvc,
 	}
 }
 
@@ -49,6 +52,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/suggest", h.handleSuggest)
 	r.Get("/search-history", h.handleSearchHistory)
 	r.Post("/clicks", h.handleRecordClick)
+	r.Post("/events", h.handleRecordEvent)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
 	r.Get("/artists/{provider}/{externalId}/albums", h.handleArtistAlbums)
@@ -122,6 +126,12 @@ type DiscoveryClickRequest struct {
 	Subtitle   string `json:"subtitle"`
 	Position   int    `json:"position"`
 	Confidence string `json:"confidence"`
+}
+
+type DiscoveryEventRequest struct {
+	Type      string         `json:"type"`
+	QueryNorm string         `json:"query_norm"`
+	Payload   map[string]any `json:"payload"`
 }
 
 type SuggestionDTO struct {
@@ -333,6 +343,43 @@ func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Requ
 
 	if err := h.clickSvc.Execute(r.Context(), userId, input); err != nil {
 		slog.ErrorContext(r.Context(), "record click failed", "error", err)
+		httputil.InternalError(w)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var req DiscoveryEventRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+
+	eventType := domain.ParseEventType(req.Type)
+	if eventType == domain.EventTypeUnknown {
+		httputil.BadRequest(w, "invalid event type")
+		return
+	}
+
+	if h.eventSvc == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	input := service.RecordEventInput{
+		Type:      eventType,
+		QueryNorm: req.QueryNorm,
+		Payload:   req.Payload,
+	}
+	if err := h.eventSvc.Execute(r.Context(), userId, input); err != nil {
+		slog.ErrorContext(r.Context(), "record event failed", "error", err)
 		httputil.InternalError(w)
 		return
 	}

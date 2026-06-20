@@ -352,7 +352,8 @@ func (a *App) setup(ctx context.Context) error {
 
 	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker, searchOpts...)
 
-	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, suggestSvc)
+	eventSvc := discoveryService.NewRecordEventService(eventStore)
+	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, suggestSvc, eventSvc)
 
 	a.startVocabularyRefresh(vocabStore)
 
