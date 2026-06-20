@@ -224,12 +224,33 @@ func buildDiscoveryRouter(
 		artistSvc = service.NewGetArtistContentService(artistProviders)
 	}
 
-	h := NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, nil)
+	h := NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, nil, nil)
 
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(&discFakeTokenVerifier{userId: discTestUserId}))
 	r.Mount("/discovery", h.Routes())
 	return r
+}
+
+func TestHandleRecordEvent(t *testing.T) {
+	router := buildDiscoveryRouter(nil, nil, nil, nil, nil)
+
+	t.Run("valid event returns 204", func(t *testing.T) {
+		body := map[string]any{"type": "play", "payload": map[string]any{"video_id": "abc"}}
+		rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+		discAssertStatus(t, rec, http.StatusNoContent)
+	})
+
+	t.Run("unknown event type returns 400", func(t *testing.T) {
+		body := map[string]any{"type": "bogus"}
+		rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+		discAssertStatus(t, rec, http.StatusBadRequest)
+	})
+
+	t.Run("malformed body returns 400", func(t *testing.T) {
+		rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader("{invalid"))
+		discAssertStatus(t, rec, http.StatusBadRequest)
+	})
 }
 
 // ==================== Search ====================
