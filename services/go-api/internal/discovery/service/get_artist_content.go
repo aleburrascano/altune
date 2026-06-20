@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -49,6 +50,8 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 	}
 	results, err := provider.GetArtistTopTracks(ctx, pn, externalID)
 	if err != nil {
+		slog.WarnContext(ctx, "artist_top_tracks.provider_failed",
+			"provider", providerName, "external_id", externalID, "error", err)
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,
@@ -87,6 +90,8 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 	}
 	results, err := provider.GetArtistAlbums(ctx, pn, externalID)
 	if err != nil {
+		slog.WarnContext(ctx, "artist_albums.provider_failed",
+			"provider", providerName, "external_id", externalID, "error", err)
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,

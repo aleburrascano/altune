@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -17,6 +18,11 @@ type mbConsensusLookup interface {
 }
 
 const consensusTitleMatchMinTSR = 85
+
+// consensusTimeout bounds the whole consensus operation (parallel provider
+// fetch + sequential MB validation). Without it a hung provider or a slow MB
+// validation loop could keep the artist-detail request open for minutes.
+const consensusTimeout = 10 * time.Second
 
 type ConsensusStatus string
 
@@ -60,12 +66,15 @@ func NewConsensusService(providers []ConsensusProvider, opts ...ConsensusOption)
 // Every provider is an equal source — no single provider is "primary."
 // Albums appearing on 2+ providers are confirmed. Albums on 1 provider
 // are unconfirmed but included. MB contradiction is the only removal.
-// No hardcoded timeout — uses the request's context deadline.
+// Bounded by consensusTimeout so a slow provider can't stall the request.
 func (s *ConsensusService) BuildConsensus(
 	ctx context.Context,
 	artistName string,
 	primaryAlbums []domain.SearchResult,
 ) []ConsensusAlbum {
+	ctx, cancel := context.WithTimeout(ctx, consensusTimeout)
+	defer cancel()
+
 	allProviderAlbums := s.fetchFromProviders(ctx, artistName)
 
 	respondedCount := 0
@@ -93,10 +102,15 @@ func (s *ConsensusService) BuildConsensus(
 	merged := make(map[string]*mergedAlbum)
 	var mergeOrder []string
 
+	// Iterate mergeOrder (insertion order) rather than the merged map so the
+	// cluster an album joins is deterministic when its title fuzzy-matches
+	// more than one existing cluster. Map-range order would make the
+	// confirmed/unconfirmed outcome flaky run-to-run.
 	addAlbum := func(album domain.SearchResult, providerName string) {
 		titleNorm := NormalizeForMatch(album.Title)
-		for key, existing := range merged {
+		for _, key := range mergeOrder {
 			if TokenSortRatio(titleNorm, key) >= consensusTitleMatchMinTSR {
+				existing := merged[key]
 				existing.providerCount++
 				existing.providers = append(existing.providers, providerName)
 				if completeness(album) > completeness(existing.album) {
@@ -106,9 +120,9 @@ func (s *ConsensusService) BuildConsensus(
 			}
 		}
 		merged[titleNorm] = &mergedAlbum{
-			album:      album,
+			album:         album,
 			providerCount: 1,
-			providers:  []string{providerName},
+			providers:     []string{providerName},
 		}
 		mergeOrder = append(mergeOrder, titleNorm)
 	}
@@ -139,36 +153,6 @@ func (s *ConsensusService) BuildConsensus(
 			Status: status,
 			Reason: reason,
 		})
-	}
-
-	// Add albums from other providers that didn't match any primary album
-	// (these are albums Deezer doesn't have but other providers do)
-	for provName, albums := range allProviderAlbums {
-		if albums == nil {
-			continue
-		}
-		for _, album := range albums {
-			titleNorm := NormalizeForMatch(album.Title)
-			found := false
-			for key := range merged {
-				if TokenSortRatio(titleNorm, key) >= consensusTitleMatchMinTSR {
-					found = true
-					break
-				}
-			}
-			if !found {
-				merged[titleNorm] = &mergedAlbum{
-					album:      album,
-					providerCount: 1,
-					providers:  []string{provName},
-				}
-				results = append(results, ConsensusAlbum{
-					Album:  annotateConsensus(album, ConsensusUnconfirmed, 1, respondedCount),
-					Status: ConsensusUnconfirmed,
-					Reason: "from " + provName + " only",
-				})
-			}
-		}
 	}
 
 	results = s.applyMBContradiction(ctx, artistName, results)
@@ -272,6 +256,9 @@ func (s *ConsensusService) applyMBContradiction(
 
 	mbCallCount := 0
 	for i, result := range results {
+		if ctx.Err() != nil {
+			break
+		}
 		if result.Status == ConsensusRejected {
 			continue
 		}

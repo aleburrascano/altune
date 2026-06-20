@@ -135,23 +135,6 @@ type DiscogsRelease struct {
 	Type  string
 }
 
-// AlbumResolution is the outcome of identity resolution for a single album.
-type AlbumResolution struct {
-	Album   domain.SearchResult
-	Verdict domain.AlbumVerdict
-	Reason  string // human-readable explanation
-	Layer   string // which resolution layer decided: "mb", "itunes", "discogs", "temporal", "genre", "isrc", "type", ""
-}
-
-// IdentityResolver resolves album ownership against an artist identity profile.
-type IdentityResolver interface {
-	ResolveAlbums(ctx context.Context, profile domain.ArtistIdentityProfile, albums []domain.SearchResult) ([]AlbumResolution, error)
-}
-
-type AudioFingerprinter interface {
-	VerifyArtist(ctx context.Context, audioData []byte) (mbid string, confidence float64, err error)
-}
-
 type RelationshipQuerier interface {
 	FindRelatedByAlbum(ctx context.Context, album string, limit int) ([]RelatedTrackMatch, error)
 	FindRelatedByArtist(ctx context.Context, artist string, limit int) ([]RelatedTrackMatch, error)
