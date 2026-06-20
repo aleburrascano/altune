@@ -191,7 +191,7 @@ func (a *TidalAdapter) ensureToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -200,6 +200,12 @@ func (a *TidalAdapter) ensureToken(ctx context.Context) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
+		body := make([]byte, 1024)
+		n, _ := resp.Body.Read(body)
+		slog.Warn("tidal.token_failed",
+			"status", resp.StatusCode,
+			"body", string(body[:n]),
+		)
 		return "", fmt.Errorf("tidal token: status %d", resp.StatusCode)
 	}
 
