@@ -32,6 +32,7 @@ import (
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
 	sharedRedis "altune/go-api/internal/shared/redis"
 
@@ -50,6 +51,7 @@ type App struct {
 	sem          chan struct{}
 	scheduler    *acqService.BackgroundAcquisitionScheduler
 	vocabRefresh *discoveryService.VocabularyRefreshService
+	eventBus     *events.InProcessBus
 }
 
 func New(cfg *config.Config) *App {
@@ -124,6 +126,8 @@ func (a *App) setup(ctx context.Context) error {
 		return fmt.Errorf("auth: %w", err)
 	}
 
+	a.eventBus = events.NewInProcessBus()
+
 	audioStore := a.buildAudioStore()
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
 	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
@@ -133,11 +137,11 @@ func (a *App) setup(ctx context.Context) error {
 		audioSearcher = ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
 	}
 
-	addTrackSvc := catalogService.NewAddTrackService(trackRepo)
+	addTrackSvc := catalogService.NewAddTrackService(trackRepo, catalogService.WithAddTrackEvents(a.eventBus))
 	listTracksSvc := catalogService.NewListTracksService(trackRepo)
-	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore)
+	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore, catalogService.WithDeleteTrackEvents(a.eventBus))
 	reconcileSvc := catalogService.NewReconcileTrackStatusService(trackRepo, audioStore)
-	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo)
+	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(a.eventBus))
 
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
 	saveQueueStateSvc := playbackService.NewSaveQueueStateService(queueStateRepo)
@@ -146,7 +150,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	var scheduler acqService.AcquisitionScheduler
 	if audioSearcher != nil && audioStore != nil {
-		acquireSvc := acqService.NewAcquireTrackAudioService(trackRepo, audioSearcher, audioStore)
+		acquireSvc := acqService.NewAcquireTrackAudioService(trackRepo, audioSearcher, audioStore, acqService.WithAcquireEvents(a.eventBus))
 		bgScheduler := acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem)
 		a.scheduler = bgScheduler
 		scheduler = bgScheduler
@@ -301,6 +305,7 @@ func (a *App) setup(ctx context.Context) error {
 		r.Mount("/playlists", playlistHandler.Routes())
 		r.Mount("/playback", queueHandler.Routes())
 		r.Mount("/discovery", discoveryH.Routes())
+		r.Handle("/events", events.NewSSEHandler(a.eventBus))
 	})
 
 	a.server = &http.Server{

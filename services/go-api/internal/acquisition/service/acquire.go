@@ -11,24 +11,35 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 )
 
 type AcquireTrackAudioService struct {
 	trackRepo     ports.TrackRepository
 	audioSearcher ports.AudioSearcher
 	audioStore    ports.AudioStore
+	events        events.Publisher
 }
 
 func NewAcquireTrackAudioService(
 	trackRepo ports.TrackRepository,
 	audioSearcher ports.AudioSearcher,
 	audioStore ports.AudioStore,
+	opts ...func(*AcquireTrackAudioService),
 ) *AcquireTrackAudioService {
-	return &AcquireTrackAudioService{
+	s := &AcquireTrackAudioService{
 		trackRepo:     trackRepo,
 		audioSearcher: audioSearcher,
 		audioStore:    audioStore,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.events = pub }
 }
 
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
@@ -101,6 +112,12 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 			"reason", reason,
 		)
 		s.markFailed(ctx, trackId, userId, reason)
+		if s.events != nil {
+			s.events.Publish(userId, "track_acquisition_failed", map[string]any{
+				"track_id": trackId.String(),
+				"reason":   reason,
+			})
+		}
 		return err
 	}
 
@@ -109,6 +126,12 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		"user_id", userId.String(),
 		"audio_ref", ac.AudioRef,
 	)
+	if s.events != nil {
+		s.events.Publish(userId, "track_acquisition_completed", map[string]any{
+			"track_id":  trackId.String(),
+			"audio_ref": ac.AudioRef,
+		})
+	}
 	return nil
 }
 

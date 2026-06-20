@@ -20,7 +20,7 @@ import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Screen, SearchBar, Text, spacing, useTheme } from '@shared/ui';
-import { setSearchState } from '@shared/lib/search-state';
+import { setSearchState } from '../search-state';
 import { DiscoverBody } from './DiscoverBody';
 import { SuggestionsList } from './SuggestionsList';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';

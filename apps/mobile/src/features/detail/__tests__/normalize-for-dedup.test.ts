@@ -2,7 +2,7 @@
  * Parity tests for normalizeForDedup against the backend's normalize_for_match.
  * Each test case verifies the TS output matches the Python output for the same input.
  */
-import { normalizeForDedup } from '../normalize-for-dedup';
+import { normalizeForDedup } from '../helpers/normalize-for-dedup';
 
 describe('normalizeForDedup', () => {
   it('lowercases', () => {

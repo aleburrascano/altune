@@ -1,5 +1,1 @@
-import { AllAlbumsScreen } from '../../../features/library/ui/AllAlbumsScreen';
-
-export default function AllAlbumsRoute() {
-  return <AllAlbumsScreen />;
-}
+export { AllAlbumsScreen as default } from '../../../features/library/ui/AllAlbumsScreen';

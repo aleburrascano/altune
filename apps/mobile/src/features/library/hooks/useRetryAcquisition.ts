@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { retryAcquisition } from '@shared/api-client/tracks';
@@ -11,6 +12,9 @@ export function useRetryAcquisition() {
       void queryClient.invalidateQueries({ queryKey: ['library'] });
       void queryClient.invalidateQueries({ queryKey: ['playlist'] });
       void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+    },
+    onError: () => {
+      Alert.alert('Retry failed', 'Could not restart acquisition. Please try again later.');
     },
   });
 }

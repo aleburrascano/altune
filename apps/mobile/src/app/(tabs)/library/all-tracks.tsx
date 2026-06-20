@@ -1,5 +1,1 @@
-import { AllTracksScreen } from '../../../features/library/ui/AllTracksScreen';
-
-export default function AllTracksRoute() {
-  return <AllTracksScreen />;
-}
+export { AllTracksScreen as default } from '../../../features/library/ui/AllTracksScreen';

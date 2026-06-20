@@ -15,7 +15,7 @@ import {
   type DiscoveryResult,
   type DiscoverySource,
 } from '@shared/api-client/discovery';
-import { normalizeForDedup } from '@shared/lib/normalize-for-dedup';
+import { normalizeForDedup } from '../helpers/normalize-for-dedup';
 
 import { dedupAlbumsByTitle, sortByReleaseDateDesc } from '../helpers/artist-content';
 

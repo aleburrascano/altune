@@ -61,6 +61,9 @@ export const typography: Record<
   caption: { fontFamily: fontFamily.bodyMedium, fontSize: 12, lineHeight: 16 },
 };
 
+/** Minimum interactive element height (WCAG AA). */
+export const minInteractiveHeight = 48;
+
 /** Motion durations (ms) — tasteful/minimal personality. */
 export const duration = {
   fast: 120,

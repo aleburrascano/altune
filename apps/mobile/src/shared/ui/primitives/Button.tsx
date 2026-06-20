@@ -4,7 +4,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 
 import { usePressScale } from '../motion/pressScale';
 import type { Theme } from '../theme/theme';
-import { radius, spacing } from '../theme/tokens';
+import { minInteractiveHeight, radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { Text } from './Text';
 import type { TextTone } from './Text';
@@ -102,7 +102,7 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 48,
+    minHeight: minInteractiveHeight,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.xl,
     alignItems: 'center',

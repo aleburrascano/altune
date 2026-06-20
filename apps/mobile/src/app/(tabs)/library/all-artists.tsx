@@ -1,5 +1,1 @@
-import { AllArtistsScreen } from '../../../features/library/ui/AllArtistsScreen';
-
-export default function AllArtistsRoute() {
-  return <AllArtistsScreen />;
-}
+export { AllArtistsScreen as default } from '../../../features/library/ui/AllArtistsScreen';

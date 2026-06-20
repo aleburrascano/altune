@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 )
 
 var ErrPlaylistNotFound = errors.New("playlist not found")
@@ -16,10 +17,19 @@ var ErrPlaylistNotFound = errors.New("playlist not found")
 type PlaylistService struct {
 	playlistRepo ports.PlaylistRepository
 	trackRepo    ports.TrackRepository
+	events       events.Publisher
 }
 
-func NewPlaylistService(playlistRepo ports.PlaylistRepository, trackRepo ports.TrackRepository) *PlaylistService {
-	return &PlaylistService{playlistRepo: playlistRepo, trackRepo: trackRepo}
+func NewPlaylistService(playlistRepo ports.PlaylistRepository, trackRepo ports.TrackRepository, opts ...func(*PlaylistService)) *PlaylistService {
+	s := &PlaylistService{playlistRepo: playlistRepo, trackRepo: trackRepo}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func WithPlaylistEvents(pub events.Publisher) func(*PlaylistService) {
+	return func(s *PlaylistService) { s.events = pub }
 }
 
 func (s *PlaylistService) Create(ctx context.Context, userId shared.UserId, name string) (*domain.Playlist, error) {
@@ -32,6 +42,12 @@ func (s *PlaylistService) Create(ctx context.Context, userId shared.UserId, name
 	}
 	slog.InfoContext(ctx, "playlist created",
 		"playlist_id", playlist.ID.String(), "user_id", userId.String())
+	if s.events != nil {
+		s.events.Publish(userId, "playlist_created", map[string]any{
+			"playlist_id": playlist.ID.String(),
+			"name":        name,
+		})
+	}
 	return playlist, nil
 }
 
@@ -83,6 +99,11 @@ func (s *PlaylistService) Delete(ctx context.Context, userId shared.UserId, play
 	}
 	slog.InfoContext(ctx, "playlist deleted",
 		"playlist_id", playlistId.String(), "user_id", userId.String())
+	if s.events != nil {
+		s.events.Publish(userId, "playlist_deleted", map[string]any{
+			"playlist_id": playlistId.String(),
+		})
+	}
 	return nil
 }
 
@@ -130,6 +151,12 @@ func (s *PlaylistService) AddTrack(ctx context.Context, userId shared.UserId, pl
 
 	slog.InfoContext(ctx, "track added to playlist",
 		"playlist_id", playlistId.String(), "track_id", trackId.String())
+	if s.events != nil {
+		s.events.Publish(userId, "track_added_to_playlist", map[string]any{
+			"playlist_id": playlistId.String(),
+			"track_id":    trackId.String(),
+		})
+	}
 	return true, nil
 }
 
