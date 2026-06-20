@@ -28,6 +28,7 @@ import (
 	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
 	playbackService "altune/go-api/internal/playback/service"
 	"altune/go-api/internal/discovery/adapters/providers"
+	domain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/config"
@@ -237,25 +238,77 @@ func (a *App) setup(ctx context.Context) error {
 		"deezer": deezerContent,
 	}
 	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
-	// Identity resolver for artist content (discography decontamination).
-	// Each provider dependency is optional — the resolver degrades gracefully.
-	var identityResolverOpts []discoveryService.IdentityResolverOption
+
 	if sharedMB != nil {
-		identityResolverOpts = append(identityResolverOpts, discoveryService.WithMBLookup(sharedMB))
 		searchOpts = append(searchOpts, discoveryService.WithIdentityResolver(sharedMB))
 	}
-	itunesIdentity := providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second})
-	identityResolverOpts = append(identityResolverOpts, discoveryService.WithITunesLookup(itunesIdentity))
-	identityResolverOpts = append(identityResolverOpts, discoveryService.WithISRCFetcher(deezerContent))
-	if a.redisClient != nil {
-		identityResolverOpts = append(identityResolverOpts,
-			discoveryService.WithIdentityCache(discoveryCacheAdapters.NewIdentityCache(a.redisClient)),
-		)
+
+	// Multi-provider consensus for artist discography validation.
+	var consensusProviders []discoveryService.ConsensusProvider
+	if a.cfg.HasLastFM() {
+		lfm := providers.NewLastFmAdapter(&http.Client{Timeout: 10 * time.Second}, a.cfg.LastFMAPIKey)
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+			Name: "lastfm",
+			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+				return lfm.GetArtistAlbums(ctx, domain.ProviderLastFM, artistName)
+			},
+		})
 	}
-	identityResolver := discoveryService.NewIdentityResolverService(identityResolverOpts...)
+	if sharedMB != nil {
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+			Name: "musicbrainz",
+			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+				validated, err := sharedMB.ValidateArtistAlbums(ctx, artistName, nil)
+				if err != nil || validated == nil {
+					return nil, err
+				}
+				return validated.Confirmed, nil
+			},
+		})
+	}
+	if sharedDiscogs != nil {
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+			Name: "discogs",
+			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+				info, err := sharedDiscogs.ResolveDiscogsArtist(ctx, artistName, nil)
+				if err != nil || info == nil {
+					return nil, err
+				}
+				releases, err := sharedDiscogs.FetchArtistReleases(ctx, info.ID)
+				if err != nil {
+					return nil, err
+				}
+				results := make([]domain.SearchResult, 0, len(releases))
+				for _, r := range releases {
+					results = append(results, domain.SearchResult{
+						Kind:  domain.ResultKindAlbum,
+						Title: r.Title,
+						Extras: map[string]any{
+							"year":        r.Year,
+							"record_type": r.Type,
+						},
+					})
+				}
+				return results, nil
+			},
+		})
+	}
+	itunesConsensus := providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second})
+	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+		Name: "itunes",
+		Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+			return itunesConsensus.Search(ctx, artistName, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
+		},
+	})
+
+	var consensusOpts []discoveryService.ConsensusOption
+	if sharedMB != nil {
+		consensusOpts = append(consensusOpts, discoveryService.WithConsensusMB(sharedMB))
+	}
+	consensusSvc := discoveryService.NewConsensusService(consensusProviders, consensusOpts...)
 
 	var artistContentOpts []discoveryService.ArtistContentOption
-	artistContentOpts = append(artistContentOpts, discoveryService.WithArtistIdentityResolver(identityResolver))
+	artistContentOpts = append(artistContentOpts, discoveryService.WithConsensusService(consensusSvc))
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 

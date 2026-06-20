@@ -2,15 +2,14 @@ package service
 
 import (
 	"context"
-	"log/slog"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 )
 
 type GetArtistContentService struct {
-	providers        map[string]ports.ArtistContentProvider
-	identityResolver *IdentityResolverService
+	providers map[string]ports.ArtistContentProvider
+	consensus *ConsensusService
 }
 
 func NewGetArtistContentService(
@@ -26,8 +25,8 @@ func NewGetArtistContentService(
 
 type ArtistContentOption func(*GetArtistContentService)
 
-func WithArtistIdentityResolver(r *IdentityResolverService) ArtistContentOption {
-	return func(s *GetArtistContentService) { s.identityResolver = r }
+func WithConsensusService(c *ConsensusService) ArtistContentOption {
+	return func(s *GetArtistContentService) { s.consensus = c }
 }
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName, externalID string, limit int) (*ContentFetchResponse, error) {
@@ -97,8 +96,18 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 
 	results = dedupAlbums(results)
 
-	if artistName != "" && s.identityResolver != nil {
-		results = s.resolveDiscographyIdentity(ctx, artistName, results)
+	if artistName != "" && s.consensus != nil {
+		consensusResults := s.consensus.BuildConsensus(ctx, artistName, results)
+		var kept []domain.SearchResult
+		for _, cr := range consensusResults {
+			if cr.Status != ConsensusRejected {
+				kept = append(kept, cr.Album)
+			}
+		}
+		if kept == nil {
+			kept = []domain.SearchResult{}
+		}
+		results = kept
 	}
 
 	if limit > 0 && len(results) > limit {
@@ -110,45 +119,6 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 		Status:       domain.ProviderStatusOK,
 		Items:        results,
 	}, nil
-}
-
-// resolveDiscographyIdentity runs the identity resolution pipeline and
-// returns confirmed albums first, then unknown, with contamination removed.
-func (s *GetArtistContentService) resolveDiscographyIdentity(ctx context.Context, artistName string, results []domain.SearchResult) []domain.SearchResult {
-	profile := s.identityResolver.BuildProfile(ctx, artistName, results)
-	resolutions := s.identityResolver.Resolve(ctx, artistName, profile, results)
-
-	var confirmed, unknown []domain.SearchResult
-	removedCount := 0
-	for _, res := range resolutions {
-		switch res.Verdict {
-		case domain.AlbumVerdictConfirmed:
-			confirmed = append(confirmed, res.Album)
-		case domain.AlbumVerdictContamination:
-			removedCount++
-			slog.DebugContext(ctx, "identity.album_removed",
-				"artist", artistName, "album", res.Album.Title,
-				"reason", res.Reason, "layer", res.Layer)
-		default:
-			// Unknown and Suspect are kept (optimistic include)
-			unknown = append(unknown, res.Album)
-		}
-	}
-
-	if removedCount > 0 {
-		slog.InfoContext(ctx, "identity.resolution_applied",
-			"artist", artistName,
-			"confirmed", len(confirmed),
-			"unknown", len(unknown),
-			"removed", removedCount,
-		)
-	}
-
-	// Confirmed first, then unknown
-	out := make([]domain.SearchResult, 0, len(confirmed)+len(unknown))
-	out = append(out, confirmed...)
-	out = append(out, unknown...)
-	return out
 }
 
 func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
