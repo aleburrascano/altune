@@ -38,43 +38,61 @@ func TestEvalOne(t *testing.T) {
 		entity      LibraryEntity
 		results     []domain.SearchResult
 		searchErr   error
+		k           int
 		wantOutcome EvalOutcome
+		wantPos     int
 		wantTopKind string // only checked when outcome is fail_wrong_top
 	}{
 		{
-			name:        "entity at position 0 passes",
+			name:        "entity at #1 passes top-1",
 			entity:      entity,
 			results:     []domain.SearchResult{track("HUMBLE.", "Kendrick Lamar"), album("DAMN.", "Kendrick Lamar")},
+			k:           1,
 			wantOutcome: EvalPass,
+			wantPos:     0,
 		},
 		{
-			name:        "entity below position 0 fails with what beat it",
+			name:        "entity below #1 fails at k=1",
 			entity:      entity,
 			results:     []domain.SearchResult{album("DAMN.", "Kendrick Lamar"), track("HUMBLE.", "Kendrick Lamar")},
+			k:           1,
 			wantOutcome: EvalFailWrongTop,
 			wantTopKind: "album",
+		},
+		{
+			name:        "entity below #1 passes within top-3",
+			entity:      entity,
+			results:     []domain.SearchResult{album("DAMN.", "Kendrick Lamar"), track("HUMBLE.", "Kendrick Lamar")},
+			k:           3,
+			wantOutcome: EvalPass,
+			wantPos:     1,
 		},
 		{
 			name:        "case-insensitive title and artist still match",
 			entity:      entity,
 			results:     []domain.SearchResult{track("humble.", "kendrick lamar")},
+			k:           3,
 			wantOutcome: EvalPass,
+			wantPos:     0,
 		},
 		{
 			name:        "empty results fail as no-results",
 			entity:      entity,
 			results:     []domain.SearchResult{},
+			k:           3,
 			wantOutcome: EvalFailNoResults,
 		},
 		{
 			name:        "search error fails as no-results",
 			entity:      entity,
 			searchErr:   errors.New("provider down"),
+			k:           3,
 			wantOutcome: EvalFailNoResults,
 		},
 		{
 			name:        "empty artist is skipped",
 			entity:      LibraryEntity{Title: "Untitled", Artist: "   "},
+			k:           3,
 			wantOutcome: EvalSkipped,
 		},
 	}
@@ -85,10 +103,13 @@ func TestEvalOne(t *testing.T) {
 				byQuery: map[string][]domain.SearchResult{query: tt.results},
 				err:     tt.searchErr,
 			}
-			got := evalOne(context.Background(), tt.entity, searcher)
+			got := evalOne(context.Background(), tt.entity, searcher, tt.k)
 
 			if got.Outcome != tt.wantOutcome {
 				t.Fatalf("outcome = %v, want %v", got.Outcome, tt.wantOutcome)
+			}
+			if tt.wantOutcome == EvalPass && got.MatchPosition != tt.wantPos {
+				t.Errorf("MatchPosition = %d, want %d", got.MatchPosition, tt.wantPos)
 			}
 			if tt.wantOutcome == EvalFailWrongTop {
 				if got.Top == nil {
@@ -131,8 +152,8 @@ func TestMatchesEntity(t *testing.T) {
 
 func TestRunLibraryEval_Aggregation(t *testing.T) {
 	entities := []LibraryEntity{
-		{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, // pass
-		{Title: "Circles", Artist: "Post Malone"},    // fail: album on top
+		{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, // top-1 pass
+		{Title: "Circles", Artist: "Post Malone"},    // top-K pass at #2 (album on top)
 		{Title: "Ghost Track", Artist: "Nobody"},     // fail: no results
 		{Title: "Orphan", Artist: ""},                // skipped
 	}
@@ -142,30 +163,36 @@ func TestRunLibraryEval_Aggregation(t *testing.T) {
 		"Nobody Ghost Track":     {},
 	}}
 
-	report := RunLibraryEval(context.Background(), entities, searcher, 2)
+	report := RunLibraryEval(context.Background(), entities, searcher, 2, 3, nil)
 
+	if report.K != 3 {
+		t.Errorf("K = %d, want 3", report.K)
+	}
 	if report.Total != 4 {
 		t.Errorf("Total = %d, want 4", report.Total)
 	}
 	if report.Evaluated != 3 {
 		t.Errorf("Evaluated = %d, want 3", report.Evaluated)
 	}
-	if report.Passed != 1 {
-		t.Errorf("Passed = %d, want 1", report.Passed)
+	if report.Top1Passed != 1 {
+		t.Errorf("Top1Passed = %d, want 1", report.Top1Passed)
 	}
-	if report.Failed != 2 {
-		t.Errorf("Failed = %d, want 2", report.Failed)
+	if report.TopKPassed != 2 {
+		t.Errorf("TopKPassed = %d, want 2", report.TopKPassed)
+	}
+	if report.Failed != 1 {
+		t.Errorf("Failed = %d, want 1", report.Failed)
 	}
 	if report.Skipped != 1 {
 		t.Errorf("Skipped = %d, want 1", report.Skipped)
 	}
-	if report.FailuresByTopKind["album"] != 1 {
-		t.Errorf("FailuresByTopKind[album] = %d, want 1", report.FailuresByTopKind["album"])
-	}
 	if report.FailuresByTopKind["none"] != 1 {
 		t.Errorf("FailuresByTopKind[none] = %d, want 1", report.FailuresByTopKind["none"])
 	}
-	if got := report.PassRate(); got < 0.33 || got > 0.34 {
-		t.Errorf("PassRate = %.4f, want ~0.3333", got)
+	if got := report.Top1Rate(); got < 0.33 || got > 0.34 {
+		t.Errorf("Top1Rate = %.4f, want ~0.3333", got)
+	}
+	if got := report.TopKRate(); got < 0.66 || got > 0.67 {
+		t.Errorf("TopKRate = %.4f, want ~0.6667", got)
 	}
 }

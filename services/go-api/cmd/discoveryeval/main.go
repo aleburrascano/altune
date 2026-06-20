@@ -39,6 +39,7 @@ type options struct {
 	concurrency int
 	sinceDays   int
 	top         int
+	topK        int
 	jsonPath    string
 	random      bool
 }
@@ -50,6 +51,7 @@ func main() {
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
 	flag.IntVar(&opts.top, "top", 50, "signals: max ranked entries")
+	flag.IntVar(&opts.topK, "top-k", 3, "eval: top-K window — entity passes if it ranks within the top K (1 = strict #1)")
 	flag.StringVar(&opts.jsonPath, "json", "", "write the full JSON report to this path (default: stdout summary only)")
 	flag.BoolVar(&opts.random, "random", false, "eval: sample entities randomly instead of alphabetically (use with -limit for a representative sample)")
 	flag.Parse()
@@ -100,11 +102,18 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 	if err != nil {
 		return fmt.Errorf("load library: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "evaluating %d unique entities (concurrency=%d)...\n", len(entities), opts.concurrency)
+	fmt.Fprintf(os.Stderr, "evaluating %d unique entities (concurrency=%d, top-%d)...\n", len(entities), opts.concurrency, opts.topK)
+
+	progress := func(done, total int) {
+		fmt.Fprintf(os.Stderr, "\r  %d/%d (%d%%)", done, total, done*100/total)
+		if done == total {
+			fmt.Fprintln(os.Stderr)
+		}
+	}
 
 	// nil event store: eval searches must not emit telemetry.
 	searchSvc := app.BuildSearchService(cfg, pool, redisClient, nil)
-	report := discoveryService.RunLibraryEval(ctx, entities, searchAdapter{svc: searchSvc}, opts.concurrency)
+	report := discoveryService.RunLibraryEval(ctx, entities, searchAdapter{svc: searchSvc}, opts.concurrency, opts.topK, progress)
 	searchSvc.WaitForIngest() // drain any best-effort vocabulary writes before exit
 
 	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
@@ -266,7 +275,9 @@ func maybeWriteJSON(path string, report any) error {
 func renderEval(report discoveryService.EvalReport) string {
 	out := fmt.Sprintf("# Discovery library eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Total: %d (evaluated %d, skipped %d)\n", report.Total, report.Evaluated, report.Skipped)
-	out += fmt.Sprintf("- Passed: %d  Failed: %d  Pass rate: %.1f%%\n", report.Passed, report.Failed, report.PassRate()*100)
+	out += fmt.Sprintf("- Top-1: %d (%.1f%%)\n", report.Top1Passed, report.Top1Rate()*100)
+	out += fmt.Sprintf("- Top-%d: %d (%.1f%%) — of which %d ranked below #1\n", report.K, report.TopKPassed, report.TopKRate()*100, report.TopKPassed-report.Top1Passed)
+	out += fmt.Sprintf("- Failed (not in top-%d): %d\n", report.K, report.Failed)
 	if len(report.FailuresByTopKind) > 0 {
 		out += "- Failures by top result kind:"
 		for kind, n := range report.FailuresByTopKind {
