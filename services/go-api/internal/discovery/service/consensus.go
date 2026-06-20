@@ -7,7 +7,15 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 )
+
+// mbConsensusLookup is the subset of MusicBrainzAdapter the consensus service needs.
+type mbConsensusLookup interface {
+	LookupAlbumArtist(ctx context.Context, artistName, albumTitle string, profile domain.ArtistIdentityProfile) (domain.AlbumVerdict, string, error)
+	ResolveArtistIdentity(ctx context.Context, name string) (*ports.ArtistIdentity, error)
+	ValidateArtistAlbums(ctx context.Context, artistName string, albums []domain.SearchResult) (*ports.AlbumValidationResult, error)
+}
 
 const (
 	consensusTimeout           = 2 * time.Second
@@ -36,12 +44,12 @@ type ConsensusProvider struct {
 
 type ConsensusService struct {
 	providers []ConsensusProvider
-	mb        mbLookup
+	mb        mbConsensusLookup
 }
 
 type ConsensusOption func(*ConsensusService)
 
-func WithConsensusMB(mb mbLookup) ConsensusOption {
+func WithConsensusMB(mb mbConsensusLookup) ConsensusOption {
 	return func(s *ConsensusService) { s.mb = mb }
 }
 
