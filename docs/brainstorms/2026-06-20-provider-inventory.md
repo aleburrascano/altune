@@ -17,8 +17,9 @@ Complete inventory of all music metadata, artwork, and identity providers availa
 | **Last.fm** | track/album/artist | `artist.getTopAlbums` | `artist.getTopTracks` (with play counts) | No | Yes (returns MBIDs) | listeners (20+ yrs scrobble data) | Integrated — search + charts | Expand: add album listing + top tracks |
 | **iTunes** | track/album/artist | search `entity=album&term={artist}` | No | No | No | No | Integrated — search + artwork | Keep — already consensus-capable |
 | **SoundCloud** | tracks only (via yt-dlp) | No | No | No | No | playback_count | Integrated — search only | Keep as-is (tracks only) |
-| **Tidal** | track/album/artist | artist albums API | artist top tracks | Yes | No | No | Not integrated | Add — free, open registration, strong catalog |
-| **YouTube Data API** | video/channel search | No (video-centric) | No (views, not tracks) | No | No | view counts | Integrated — artwork only | Expand: popularity signal via view counts |
+| **Tidal** | track/album/artist | artist albums API | artist top tracks | Yes | No | No | Integrated — inactive (client_credentials not available for 3rd party apps) | Adapter built, unusable without user auth |
+| **YouTube Data API** | video/channel search | No (video-centric) | No (views, not tracks) | No | No | view counts | Integrated — artwork only | Keep for artwork |
+| **YouTube Music** | track/album/artist | album search by artist | track search by artist | No | No | No | Integrated — search + consensus | No auth, massive catalog (raitonoberu/ytmusic Go lib) |
 
 ### Provider details
 
