@@ -27,6 +27,7 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,
+			Items:        []domain.SearchResult{},
 		}, nil
 	}
 
@@ -35,6 +36,7 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,
+			Items:        []domain.SearchResult{},
 		}, nil
 	}
 	results, err := provider.GetAlbumTracks(ctx, pn, externalID)
@@ -42,6 +44,7 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,
+			Items:        []domain.SearchResult{},
 		}, nil
 	}
 

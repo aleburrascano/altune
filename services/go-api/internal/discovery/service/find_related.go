@@ -14,7 +14,7 @@ const (
 	relatedTimeout     = 2 * time.Second
 	relatedTopN        = 5
 	relatedPerGroup    = 10
-	maxProviderLookups = 3
+	maxProviderLookups = 5
 )
 
 type FindRelatedService struct {

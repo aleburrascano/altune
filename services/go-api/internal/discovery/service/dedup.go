@@ -20,14 +20,10 @@ var collabMarkers = []string{"feat.", "feat ", "ft.", "ft ", "featuring "}
 
 const rrfK = 60
 
-var providerRRFWeight = map[domain.ProviderName]float64{
-	domain.ProviderDeezer:      1.2,
-	domain.ProviderMusicBrainz: 1.1,
-	domain.ProviderLastFM:      1.0,
-	domain.ProviderITunes:      0.9,
-	domain.ProviderSoundCloud:  0.8,
-	domain.ProviderTheAudioDB:  0.7,
-}
+// AIDEV-DECISION: all providers get equal RRF weight (1.0). RRF is a pure
+// "how many providers agree" signal; popularity differentiation is handled
+// by the popularity normalization stage.
+const providerRRFWeightEqual = 1.0
 
 const (
 	diversityWindow    = 10
@@ -375,12 +371,8 @@ func FuseAndRank(perProvider [][]domain.SearchResult, queryNorm string, qualityS
 	var scoredResults []scored
 	for _, entry := range accumulated {
 		rrf := 0.0
-		for provider, rank := range entry.bestRank {
-			w := providerRRFWeight[provider]
-			if w == 0 {
-				w = 1.0
-			}
-			rrf += w / (float64(rrfK) + float64(rank))
+		for _, rank := range entry.bestRank {
+			rrf += providerRRFWeightEqual / (float64(rrfK) + float64(rank))
 		}
 
 		r := entry.result
