@@ -19,6 +19,25 @@ signals A (zero-result/abandoned-search mining) and B (entity-level cross-provid
 
 ---
 
+## Post-completion notes (2026-06-20)
+
+Status: **complete** (U1–U6 shipped on `refactor/discovery-pipeline-clarity`).
+
+- **First baseline captured.** The eval (U4) ran on the full production catalog (1,792 distinct
+  entities, cloned prod → dev): **top-1 pass-rate 97.4%** (≈98% true). The 46 failures are three
+  structural patterns mapped to three layers — see the blueprint §4.6 and plan 003's taxonomy +
+  constants ledger.
+- **Eval hardening done.** `matchesEntity` now matches when providers embed the artist/track-number
+  in the title (e.g. "A-Ha - Take On Me"), and `--random` sampling was added (the default
+  alphabetical read is biased). Commit `77b5700`.
+- **Top-K follow-on (carried into plan 003).** The product bar is "the right answer is visible in
+  the top results," not strictly #1. The eval still measures **top-1 only**; it should be extended
+  to **top-K** (default top-3, top-1 tracked alongside). This is the gate metric for the rebuild's
+  cutover — tracked as the first eval task in plan 003's verification, not reopened here.
+- **Signal A is blind** until client telemetry accrues (mobile emission deferred). Signal B is live.
+
+---
+
 ## Problem Frame
 
 The discovery pipeline can't currently tell a generic mechanism from a band-aid, can't

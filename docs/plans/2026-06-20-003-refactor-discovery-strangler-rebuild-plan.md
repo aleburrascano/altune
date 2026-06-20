@@ -1,71 +1,121 @@
 ---
-title: "refactor: Discovery strangler rebuild — new package, ported layers, gated cutover"
+title: "refactor: Discovery strangler rebuild — categorical layers, zero arbitrary constants, top-K gate"
 type: refactor
 status: active
 date: 2026-06-20
+revised: 2026-06-20
 origin: docs/brainstorms/2026-06-20-discovery-rebuild-architecture.md
 depends_on: docs/plans/2026-06-20-002-feat-discovery-telemetry-eval-step-zero-plan.md
 ---
 
-# refactor: Discovery strangler rebuild — new package, ported layers, gated cutover
+# refactor: Discovery strangler rebuild — categorical layers, zero arbitrary constants, top-K gate
 
 ## Summary
 
-Rebuild the discovery pipeline as a clean five-layer architecture in a **new package**,
-porting Layers 1–4 stage by stage behind the existing HTTP handler, **gated at every step
-by the diverse eval suite from Step Zero**, and **never deleting the old package** (kept as
-reference + instant rollback). The rebuild's distinctive job — beyond a tidier shape — is to
-**shed the accreted tuned constants and stage sprawl** that don't generalize, keeping only
-mechanisms that help across the diverse suite. No ML, no acquisition pipeline; those are
-separate threads with clean seams.
+Rebuild the discovery pipeline as a clean five-layer architecture in a **new package**, layer
+by layer behind the existing handler, **gated at every step by the top-K eval from Step Zero**,
+and **never deleting the old package** (kept as reference + instant rollback). The distinctive
+goal beyond a tidier shape: **replace tuned, query-fit constants with categorical, structural
+decisions.** Reuse only the clean parts (value objects, provider adapters); redesign the
+decision logic (merge, rank) from the ground up. No ML, no acquisition pipeline — separate
+threads with clean seams.
+
+---
+
+## The design doctrine (why this rebuild, in one rule)
+
+**Zero arbitrary, query-fit constants.** Not zero numbers — zero numbers that were fit to a
+handful of queries and that nobody can re-derive.
+
+A constant appears whenever a *continuous* or *multi-signal* judgment is forced into a decision
+("is this similar enough to be the same song?" → a threshold; "when does popularity beat
+relevance?" → an exchange rate). Those judgments are unavoidable. There are exactly three ways
+to make one:
+
+1. **Hand-tuned constant** — e.g. `TokenSortRatio ≥ 85`. Untraceable, rots, fit to a few
+   queries. **This is what we are removing.**
+2. **Learned weight** — the number becomes a model parameter fit to data. Needs labels we don't
+   have yet, and *hides* the number in a model. **Deferred** (the telemetry from plan 002 is the
+   groundwork; the Layer-3 seam is where it lands later).
+3. **Categorical / structural decision** — restructure so the judgment becomes a category and
+   the number disappears or shrinks to a documented last resort. **This is the strategy now.**
+
+Each surviving number must be justified as one of: **principled** (a published convention or an
+SLA choice — e.g. provider timeouts, RRF's `k=60`), **learned-later** (parked at the ML seam),
+or **last-resort** (a single fuzzy fallback the eval proves generalizes). Anything else is a
+band-aid and is removed.
+
+A clarifying corollary from the product owner (2026-06-20): **the correct answer does not have
+to be #1 — it must be visible in the top results.** The eval therefore measures **top-K**, not
+only top-1. A categorical tier model satisfies this *structurally*: a same-named album sits in
+the tier immediately below the exact track, so it lands right under the right answer without any
+tuning.
+
+---
+
+## Baseline evidence (captured this session, the gate we must hold)
+
+Measured by the library-derived eval (plan 002 U4) on the full production catalog (1,792 distinct
+`(title, artist)` entities, cloned prod → dev 2026-06-20):
+
+- **Top-1 pass-rate: 97.4%** (1,746 / 1,792). True rate ≈ **98.0%** after excluding ~11
+  eval-matcher artifacts (symbol-only artist `¥$` normalizing to empty; apostrophe/bracket
+  edge cases).
+- The **46 failures are not random** — they are three nameable patterns at three different
+  layers, each with an identified mechanism in today's code:
+
+| Pattern | Count | Mechanism today | Layer |
+|---|---|---|---|
+| **A — same-named album outranks the track** | 17 | relevance rounds into the same `0.05` band (`roundBand`), so popularity breaks the "tie"; `ApplyPopularityDominance` can also promote the album on a `gap ≥ 20 / ≥ 3×` | **3 (rank)** |
+| **B — numbered sequel collapses into the original** | 8 | `CollapseVersions` merges titles with `TokenSortRatio ≥ 85` and keeps the more-popular one, so "Shotta Flow 2" is deleted as a "version" of "Shotta Flow" | **2 (dedup)** |
+| **C — obscure track replaced by the artist's hit** | ~7 | the exact track is likely absent from the candidate set (a coverage hole, almost certainly the YouTube Music 0-results bug) | **1 (coverage)** |
+
+This is the proof that the failures are *structural*, not a long tail of special cases — and that
+each is fixed by a categorical decision, not a new constant.
 
 ---
 
 ## Problem Frame
 
-The current discovery pipeline works but has accumulated ~13 sequential transforms and a
-scatter of tuned constants across many sessions, with no instrument to tell which generalize
-and which were one-query band-aids (verified: the band-aids are tuned constants + stage
-sprawl, **not** hardcoded artist hacks — see origin §1, §13). The blueprint establishes the
-fix as a strangler-fig rebuild gated by a diverse eval. This plan is that rebuild. It is
-**step 1+** of the strangler sequence; **step 0** (the eval + telemetry instrument) is plan
-002 and is a hard prerequisite.
+The current pipeline works (~98%) but has accumulated ~13 sequential transforms and a scatter of
+tuned constants across many sessions, with no way to tell which generalize. (Verified: the
+band-aids are tuned constants + stage sprawl, **not** hardcoded artist hacks — origin §1, §13.)
+The fix is a strangler-fig rebuild whose decisions are **categorical** and whose every step is
+**gated by the top-K eval**. This is step 1+ of the strangler; step 0 (the eval + telemetry
+instrument) is plan 002 and is complete.
 
 ---
 
 ## Prerequisite (hard dependency)
 
-**Plan 002 (Step Zero) must be complete and have produced baselines before this plan's
-cutover units (U7–U8) run.** Specifically:
-- The diverse **library-derived eval** (002 U4) must run and produce a current-pipeline
-  baseline — the number the new pipeline must match or beat before any cutover.
-- **Coverage signals A/B** (002 U5/U6) must run to baseline coverage.
-- The **telemetry store** (002 U1) must exist (the new services re-emit into it, U7).
+**Plan 002 (Step Zero) is complete.** Its outputs gate this plan's cutover:
+- The **top-K eval** (002 U4, extended with top-K — see 002) produces the current-pipeline
+  baseline the new pipeline must match or beat before any cutover.
+- **Coverage signals A/B** (002 U5/U6) baseline coverage (signal A stays blind until client
+  telemetry accrues; signal B is live).
+- The **telemetry store** (002 U1) exists; the new services re-emit into it (U7).
 
-Earlier units of *this* plan (U1–U6, building the new pipeline in isolation) can proceed in
-parallel with 002's later units, but **no traffic flips** until the baseline exists.
+Building the new pipeline in isolation (U1–U6) can proceed now; **no traffic flips** until a
+recorded baseline delta shows new ≥ old on the chosen K.
 
 ---
 
 ## Requirements
 
-- R1. New discovery pipeline in a **new package** with clean Layers 0–4, not modifying the
-  old package's internals. *(origin §4, §13)*
-- R2. **Strangler cutover**: the HTTP handler routes each surface (search, artist albums,
-  album tracks, top tracks) to old-or-new via a switch, defaulting to old. *(origin §13)*
-- R3. **The old package is never deleted** during this rebuild — retained as reference +
-  rollback. *(origin §13, D7; user, 2026-06-20)*
-- R4. Every cutover is **gated green on the diverse eval** (002) and shows no coverage
-  regression on signals A/B. *(origin §12, §13)*
-- R5. **Shed band-aids**: ported Layer-3 ranking keeps only constants/stages that help across
-  the diverse suite; one-query tuning is dropped. *(origin §1, §13, D10)*
-- R6. Port Layers 1 (fan-out), 2 (merge/dedup/entity-resolution), 3 (rank), and Stage-3
-  consensus (with the per-artist cache); reuse existing provider adapters as-is. *(origin §4, §9)*
-- R7. Close the **three coverage gaps** in the new code (YT Music 0-results, long-tail track
-  fallback, underground top-track fallback). *(origin §5)*
-- R8. Re-add **telemetry emission** in the new services (the mechanical re-add of 002 U2). *(origin §8)*
-- R9. Deterministic only — **no model code**; Layer 4 acquisition is a **handoff seam**, not
-  built here. *(origin §6 N1/N2, §4 Layer 4)*
+- R1. New pipeline in a **new package**, clean Layers 0–4, not modifying the old package. *(origin §4, §13)*
+- R2. **Strangler cutover**: the handler routes each surface (search, artist albums, album
+  tracks, top tracks) old-or-new via a per-surface flag, default old. *(origin §13)*
+- R3. **The old package is never deleted** during the rebuild — reference + rollback. *(origin §13, D7)*
+- R4. Every cutover is **gated green on the top-K eval** and shows no coverage regression. *(origin §12, §13)*
+- R5. **Decisions are categorical.** Merge and rank use identifier/structure/tier decisions; the
+  only surviving thresholds are principled, learned-later, or a single documented last-resort —
+  each justified in a constants ledger. *(doctrine; origin §1, D10)*
+- R6. Rebuild Layers 1 (fan-out), 2 (merge/entity-resolution), 3 (rank), and Stage-3 consensus
+  (with a per-artist cache). Reuse provider adapters and domain value objects **verbatim**. *(origin §4, §9)*
+- R7. Close the **three coverage gaps** (YT Music 0-results, long-tail track fallback,
+  underground top-track fallback). *(origin §5)*
+- R8. Re-add **telemetry emission** in the new services. *(origin §8)*
+- R9. Deterministic only — **no model code**; Layer 4 acquisition is a **handoff seam**. *(origin §6, §4 L4)*
 
 **Origin:** `docs/brainstorms/2026-06-20-discovery-rebuild-architecture.md` — §4 (layers), §5 (coverage), §12 (eval gate), §13 (strangler), §9 (cache).
 
@@ -73,93 +123,92 @@ parallel with 002's later units, but **no traffic flips** until the baseline exi
 
 ## Scope Boundaries
 
-- No ML / model code (deterministic scorers only; the Layer-3 seam stays a plain function).
+- No ML / model code (the Layer-3 scorer is a deterministic function — the future ML seam).
 - No acquisition pipeline (yt-dlp→OCI) — Layer 4 is an interface/handoff only.
-- No new providers — reuse the existing adapters in `internal/discovery/adapters/providers/`.
+- No new providers — reuse the adapters in `internal/discovery/adapters/providers/`.
 - No mobile/client changes.
 
 ### Deferred to Follow-Up Work
 
-- **Eventual removal of the old package**: only after the new pipeline has run in production
-  on all surfaces for a sustained period, and **only at the user's explicit decision**. Out
-  of scope here — this plan *retains* old code by design (R3).
-- **Final package rename** (collapsing the provisional new-package name back to `discovery`):
-  bundled with the eventual old-package removal, deferred.
-- **ML scorers** at the Layer-3 seam: future, gated on telemetry data (origin §6).
-- **Provider-selection / ranking ML, contamination ML**: future (origin §6 roadmap).
+- **Removal of the old package** — only after the new pipeline runs in production on all surfaces
+  for a sustained period, at the user's explicit decision. This plan *retains* old code (R3).
+- **Final package rename** (provisional `discovery2` → `discovery`) — bundled with old-package removal.
+- **ML scorers** at the Layer-3 seam, **provider-selection / contamination ML** — future (origin §6).
+- **Client-side telemetry emission** (mobile) — separate slice; until it lands, coverage signal A
+  has no demand-side data.
 
 ---
 
-## Context & Research
+## The categorical layer design (the heart)
 
-### Relevant Code and Patterns (the current pipeline being ported)
+Each layer replaces a continuous/tuned decision with a structural one. The current magic numbers
+and their disposition are in the constants ledger below.
 
-- **Orchestrator (the ~13-stage search path to slim down):** `services/go-api/internal/discovery/service/search_music.go`
-  (`Execute` runs CleanQuery → DetectIntent → fan-out → `FuseAndRank` → `CollapseVersions` →
-  `ApplyPopularityDominance` → `CollapseArtistDuplicates` → `applyArtistDisambiguation` →
-  `applyClickBoost` → `enrich` → `Rerank` → correction → suggest → findRelated → ingest).
-- **Ranking/merge core (Layer 2/3):** `services/go-api/internal/discovery/service/dedup.go`
-  (`FuseAndRank`, `Rerank`, `CollapseVersions`, `ApplyPopularityDominance`, `CollapseArtistDuplicates`),
-  `services/go-api/internal/discovery/service/popularity.go`, `quality_scorer.go`.
-- **Consensus (Stage-3):** `services/go-api/internal/discovery/service/consensus.go` (just
-  audited; carry the bounded-timeout + deterministic-merge fixes; add the per-artist cache).
-- **Providers (reuse as-is):** `services/go-api/internal/discovery/adapters/providers/` (Deezer,
-  iTunes, MusicBrainz, Last.fm, Discogs, SoundCloud, YouTube Music, TheAudioDB).
-- **Handler (the switch point):** `services/go-api/internal/discovery/adapters/handler/discovery_handler.go`
-  (`Routes`, `handleSearch`, `handleArtistAlbums`, `handleAlbumTracks`, `handleArtistTopTracks`).
-- **DI wiring:** `services/go-api/internal/app/app.go` (`buildDiscoveryProviders`, the service construction).
-- **The eval gate + telemetry (from plan 002):** `internal/discovery/service/library_eval.go`,
-  `coverage_signal_a.go`, `coverage_signal_b.go`, `adapters/persistence/event_repo.go`.
+### Layer 0 — Query understanding (make intent *authoritative*)
+Normalize, then parse an explicit structured intent `{artist?, title?, kind?}`. Today
+`DetectIntent` exists but feeds a small additive `intentBoost` that gets rounded away. **Change:**
+intent becomes a *contract* downstream trusts — it selects the relevance tier in Layer 3, it is
+not a score nudge. No threshold.
 
-### Institutional Learnings
+### Layer 1 — Coverage fan-out (complete the candidate set)
+All providers in parallel, each with its own timeout (**principled** SLA number) + circuit
+breaker. Reuse adapters verbatim. **Fix the three coverage gaps (R7)** — most importantly the
+YouTube Music 0-results bug, the likely cause of Pattern C. No ranking constants live here.
 
-- **Position not presence** (origin §12); the eval asserts rank #1.
-- **Popularity > multi-source** is a *genuine* generic decision — keep it (origin §2, §14).
-- **Pre-correction stays disabled**, identity-resolver family stays deleted (origin §14).
-- **No hardcoded workarounds** — the band-aid-shedding (R5) enforces this rule the old code drifted from.
+### Layer 2 — Merge + entity resolution (a categorical cascade, not one fuzzy threshold)
+Decide "same entity?" by a cascade that consults the cheap/exact signals first:
+1. **Identifier match** — same MBID or same ISRC → same entity. *Exact; no threshold.*
+2. **Version-marker categories** — parse a title into `(core, version-tag)` where version-tags are
+   categorical: sequel number (`2`, `3`, `Pt. 2`), `(Remix)`, `(feat. X)`, `(Live)`, `(Deluxe)`.
+   A different core **or** a different distinguishing tag → **different entity**. This generalizes
+   the existing collab guard (which already refuses to merge "Song" with "Song (feat. X)") to all
+   version markers — and **dissolves Pattern B** without a similarity number.
+3. **Fuzzy title+artist** — the **only** surviving threshold, used as a *last resort* for the
+   typo residual after 1–2 decide nothing. Low-stakes; documented; eval-gated.
 
-### External References
+### Layer 3 — Disambiguate + rank (lexicographic tiers, not banded scores)
+Order by **categorical relevance tiers**, popularity only *within* a tier:
+- **T1 — exact intent match**: artist ✓ + full title ✓ + kind matches the Layer-0 intent.
+- **T2 — exact title, different kind**: the same-named album/single — sits *immediately below* T1.
+- **T3 — partial match.**
+- **T4 — weak / none.**
+- Within a tier: **popularity, then multi-source (RRF)** — preserving the genuine "popularity >
+  multi-source" decision, but it can never lift a lower tier above a higher one.
 
-- None — this is a port of existing local code into a new package shape; no new technology.
+This **dissolves Pattern A** (the exact track is T1; the same-named album is T2, right below it —
+exactly the product bar) and removes the `0.05` band, the dominance `gap/factor`, and the additive
+`intentBoost` — three tuned constants gone, replaced by tier categories.
 
----
+### Stage-3 consensus (detail screen, already mostly categorical)
+2+ providers → confirmed; single → unconfirmed; MB authority filter rejects contamination. Carry
+forward the audited engine (bounded timeout, deterministic merge) and add the per-artist cache.
 
-## Key Technical Decisions
-
-- **New package, provisional name `internal/discovery2/`.** Same hexagonal layout
-  (`domain/ service/ ports/ adapters/`). The name is provisional; collapsing back to
-  `discovery` happens only with the (deferred) old-package removal. Reusing the existing
-  `domain/` types where unchanged is allowed (import the current `discovery/domain`) to avoid
-  pointless duplication — the rebuild targets *orchestration and stage boundaries*, not the
-  value objects (`SearchResult`, `SourceRef`, `Confidence`).
-- **Reuse provider adapters verbatim.** They're clean and already hexagonal; the new
-  orchestrator depends on the same `ports.SearchProvider` / content-provider interfaces.
-- **Per-surface handler switch via config flag**, defaulting to old. Each of the four
-  surfaces flips independently once green. No big-bang flip.
-- **Band-aid shedding is gated, not guessed (R5).** Each ported Layer-3 stage/constant must
-  earn its place on the **diverse** eval: port it, then try removing it — if the diverse
-  suite + coverage signals stay green, it was a band-aid; drop it. This is the core method,
-  not a side note.
-- **Carry forward the audited consensus** (bounded timeout, deterministic merge, logging) and
-  **add the per-artist consensus cache** (origin §9, D9) during the consensus port.
-- **Old code is never deleted here (R3).** The switch keeps both live; rollback = flip the flag.
-- **Telemetry emission re-added in the new services (R8)** — the small mechanical port of 002 U2.
+### The gate
+The **top-K eval** runs after each layer. Cutover requires **new ≥ old at the chosen K** (default
+**top-3**, the product bar) with **top-1 tracked alongside**, and no coverage regression.
 
 ---
 
-## Open Questions
+## Constants ledger (every magic number, with its fate)
 
-### Resolved During Planning
+| Constant (today) | Where | Disposition |
+|---|---|---|
+| `versionSimilarityThreshold = 85` | `CollapseVersions` | **Replace (categorical):** identifier-first + version-marker categories; fuzzy only last-resort. |
+| `roundBand` 0.05 relevance band | `rankingKeyLess`/`Rerank` | **Remove:** lexicographic tiers, no band. |
+| `popularityDominanceWindow=5, GapAbs=20, GapFactor=3.0` | `ApplyPopularityDominance` | **Remove:** cross-kind order is structural (T1 vs T2). |
+| `intentBoost` | `FuseAndRank` | **Replace:** intent selects the tier, not a score nudge. |
+| `consensusTitleMatchMinTSR = 85` | `consensus` | **Replace (categorical):** same as version cascade. |
+| `rrfK = 60` | RRF | **Keep (principled):** published convention; role shrinks to within-tier tiebreak. |
+| provider timeouts (1.5s), `consensusTimeout=10s` | fan-out / consensus | **Keep (principled):** SLA choices. |
+| `clickBoostAmount = 0.03` | `applyClickBoost` | **Learn-later:** behavioral signal → ML seam; **drop for v1**. |
+| `artistSourceBonus = 5` | `effectivePop` | **Reconsider:** make categorical (multi-source artist tier) or drop. |
+| `positionalPopularity 75 - pos*5` | popularity fallback | **Last-resort (document):** proxy when a provider returns no popularity metric (Deezer albums). |
+| `recency 30d / ×1.1` | `applyRecencyBoost` | **Learn-later / reconsider:** real signal, tuned weight → defer or justify. |
+| `lowRelevanceThreshold = 0.3` | spell-suggest | **Reconsider:** tie to tiers (suggest when top tier is T3/T4). |
+| `diversityWindow=10, maxPerArtistInTop=3` | `EnforceDiversity` | **Keep (product rule):** a UX choice, documented as such — not a quality constant. |
 
-- *Does the rebuild touch provider adapters?* No — reused as-is.
-- *Is the old code deleted?* No — retained as rollback; removal is a deferred, user-decided cleanup.
-- *Where does ML go?* Nowhere in this plan — the Layer-3 scorer stays a deterministic function (the future ML seam).
-
-### Deferred to Implementation
-
-- Final new-package name and whether new `domain/` types are needed or the existing ones are imported wholesale.
-- Exact flag mechanism (env var vs config struct field) for the per-surface switch — match `internal/app` config conventions when wiring.
-- Which specific tuned constants survive the diverse-suite pruning (only knowable once the eval runs against ported code).
+The ledger is the R5 deliverable: each entry is resolved during the layer it belongs to, and the
+verdict is recorded in code comments + here.
 
 ---
 
@@ -167,265 +216,78 @@ parallel with 002's later units, but **no traffic flips** until the baseline exi
 
     services/go-api/internal/discovery2/        # provisional name
     ├── service/
-    │   ├── search.go            # new orchestrator (slim — only stages that earn their keep)
-    │   ├── merge.go             # Layer 2: merge + entity resolution + dedup
-    │   ├── rank.go              # Layer 3: RRF + popularity + exact-match (pruned)
+    │   ├── search.go            # slim orchestrator: fan-out → merge → rank
+    │   ├── intent.go            # Layer 0: authoritative structured intent
+    │   ├── merge.go             # Layer 2: identifier → version-category → fuzzy-last-resort
+    │   ├── rank.go              # Layer 3: lexicographic relevance tiers
     │   ├── consensus.go         # Stage-3 + MB authority + per-artist cache
     │   ├── coverage.go          # the 3 coverage-gap fallbacks
     │   └── telemetry.go         # emission hooks (re-add of 002 U2)
-    ├── ports/                   # consumed interfaces (reuse discovery/ports where identical)
-    └── adapters/
-        └── handler/             # or extend the existing handler with the switch
+    ├── ports/                   # reuse discovery/ports where identical
+    └── adapters/handler/        # or extend the existing handler with the switch
 
-(Provider adapters and domain value objects are imported from the existing `internal/discovery/`, not duplicated.)
-
----
-
-## High-Level Technical Design
-
-> *Directional guidance for review, not implementation specification.*
-
-```mermaid
-flowchart TD
-    H[Existing discovery handler] --> SW{Per-surface switch — config flag, default OLD}
-    SW -->|flag=old| OLD[internal/discovery — unchanged, retained]
-    SW -->|flag=new AND eval-green| NEW[internal/discovery2 — ported layers]
-    NEW --> CORE[merge + rank core, band-aids shed]
-    NEW --> CONS[consensus + per-artist cache]
-    NEW --> COV[3 coverage-gap fallbacks]
-    NEW --> TEL[telemetry emission]
-    GATE[Diverse eval 002 + coverage A/B] -. must be >= old baseline before any flag flip .-> SW
-    OLD -. retained as rollback, never deleted .- KEEP[(old stays)]
-```
+(Provider adapters and domain value objects are imported from `internal/discovery/`, not duplicated.)
 
 ---
 
 ## Implementation Units
 
-### Phase A — New package + the ranking/merge core (the heart, in isolation)
+> Each unit rebuilds a layer with categorical decisions and is validated on the **top-K eval**
+> in isolation. The old package is the *behavioral reference* (what cases exist), not code to
+> copy. "Characterize then rebuild," not "port then prune."
 
-- U1. **New package skeleton + handler switch (default old)**
+### Phase A — New package + the decision core
 
-**Goal:** Stand up `internal/discovery2/` and a per-surface switch in the handler that always
-chooses old until a flag flips. No behavior change yet.
+- **U1. New package skeleton + handler switch (default old).**
+  Stand up `internal/discovery2/` and a per-surface switch (new service is an interface, nil = off).
+  *Verify:* existing handler tests pass; flag off → old path unchanged.
 
-**Requirements:** R1, R2, R3
+- **U2. Layer 2 — merge + entity resolution (categorical cascade).**
+  Build identifier-first → version-marker categories → fuzzy-last-resort. Characterize current
+  merge on canonical + diverse inputs first.
+  *Verify:* unit tests for each cascade rung; the 8 Pattern-B sequel cases now keep the sequel;
+  merge-sensitive eval slice ≥ baseline.
 
-**Dependencies:** None
+- **U3. Layer 3 — lexicographic relevance tiers.**
+  Build the T1–T4 tier sort; popularity/RRF within-tier only. Remove band/dominance/intentBoost.
+  *Verify:* canonical positioning suite passes; the 17 Pattern-A album cases now rank the track
+  T1 with the album T2 directly below; top-1 **and** top-3 ≥ baseline.
 
-**Files:**
-- Create: `services/go-api/internal/discovery2/` package skeleton (service/, ports/)
-- Modify: `services/go-api/internal/discovery/adapters/handler/discovery_handler.go` (inject an optional new-pipeline service + per-surface flag check)
-- Modify: `services/go-api/internal/app/app.go` (config flag; wire new service as nil/off)
-- Test: `services/go-api/internal/discovery/adapters/handler/discovery_handler_test.go` (switch routes to old when flag off)
+### Phase B — Coverage
 
-**Approach:** Switch is a thin conditional in each handler method; new service is an interface so it can be nil (off). Default all surfaces to old.
+- **U4. Layer 1 fan-out (reuse adapters).** Slim orchestrator: fan-out → merge → rank, bounded +
+  circuit-broken. *Verify:* canonical suite end-to-end via the new orchestrator with faked providers.
 
-**Test scenarios:**
-- Happy path: flag off → handler calls the old service, response unchanged.
-- Edge case: new service nil + flag on → falls back to old (no panic).
+- **U5. Stage-3 consensus + MB authority + per-artist cache.** Rebuild the audited consensus; add
+  the cache; add the unit test the old engine lacks. *Verify:* confirmed/unconfirmed/rejected
+  logic; cache hit skips provider calls; deterministic across runs.
 
-**Verification:** Existing handler tests pass unchanged; switch compiles with new service off.
-
----
-
-- U2. **Port Layer 2 — merge + entity resolution + dedup**
-
-**Goal:** The canonical merge core in the new package, validated against the diverse eval in isolation.
-
-**Requirements:** R6, R5
-
-**Dependencies:** U1; (eval available from 002 U4 for validation)
-
-**Files:**
-- Create: `services/go-api/internal/discovery2/service/merge.go`
-- Test: `services/go-api/internal/discovery2/service/merge_test.go`
-
-**Approach:** Port `FuseAndRank`'s merge half + `CollapseVersions`/`CollapseArtistDuplicates` +
-identifier-first entity resolution (MBID → ISRC → fuzzy). **Prune as you port:** carry the
-canonical dedup tests; drop collapse logic the diverse suite doesn't need.
-
-**Execution note:** Characterization-first — capture current merge behavior on the canonical + diverse inputs before porting, so pruning is measured, not guessed.
-
-**Test scenarios:**
-- Happy path: multi-provider duplicates collapse to one canonical entry with all SourceRefs.
-- Edge case: MBID match merges; ISRC match merges; fuzzy-only merge respects the threshold.
-- Edge case (band-aid probe): removing a given collapse sub-stage leaves the diverse suite green → document it as shed.
-
-**Verification:** Merge unit tests green; diverse-eval pass-rate on merge-sensitive queries ≥ old baseline.
-
----
-
-- U3. **Port Layer 3 — ranking (RRF + popularity + exact-match), band-aids shed**
-
-**Goal:** The ranking core, keeping only constants/stages that help across the diverse suite.
-
-**Requirements:** R5, R6
-
-**Dependencies:** U2
-
-**Files:**
-- Create: `services/go-api/internal/discovery2/service/rank.go`
-- Test: `services/go-api/internal/discovery2/service/rank_test.go`
-
-**Approach:** Port RRF + exact-match boost + popularity (keep "popularity > multi-source").
-Bring `Rerank`/`ApplyPopularityDominance` only if they earn their keep. **For each tuned
-constant (`intentBoost`, `lowRelevanceThreshold`, `clickBoostAmount`, dominance gaps): port it,
-then test removal against the diverse suite; drop or keep based on the result, and record the
-verdict in a comment.**
-
-**Execution note:** Test-first against the diverse eval — each ranking change is judged by pass-rate, not intuition.
-
-**Test scenarios:**
-- Happy path: the canonical positioning suite (Humble→#1 track, Drake→#1 artist, …) passes.
-- Edge case: ambiguous single words (Humble, Scorpion, Circles) rank by popularity correctly.
-- Edge case (band-aid probe): for each ported constant, a recorded keep/drop decision with the diverse-suite delta.
-
-**Verification:** Diverse-eval pass-rate ≥ old baseline; every surviving constant has a recorded justification; no hardcoded special-cases.
-
----
-
-### Phase B — Coverage layers
-
-- U4. **Port Layer 1 fan-out (reuse provider adapters)**
-
-**Goal:** The new orchestrator's scatter-gather, reusing existing adapters, bounded + circuit-broken.
-
-**Requirements:** R6
-
-**Dependencies:** U2, U3
-
-**Files:**
-- Create: `services/go-api/internal/discovery2/service/search.go` (the slim orchestrator wiring fan-out → merge → rank)
-- Test: `services/go-api/internal/discovery2/service/search_test.go`
-
-**Approach:** Reuse `ports.SearchProvider` adapters and the circuit breaker; per-provider
-timeout (1.5s) as today. The orchestrator is intentionally short — fan-out → merge → rank →
-(enrich) — not the old 13-stage chain.
-
-**Test scenarios:**
-- Happy path: parallel fan-out merges into ranked results.
-- Edge case: a provider timeout yields partial results + per-provider status, never a failed search.
-- Integration: full search path produces correct #1 for the canonical suite via the new orchestrator.
-
-**Verification:** New orchestrator passes the canonical suite end-to-end with providers faked; latency bounded by the per-provider timeout.
-
----
-
-- U5. **Port Stage-3 consensus + MB authority + per-artist cache**
-
-**Goal:** Contamination filtering in the new package, with the latency fix the blueprint calls for.
-
-**Requirements:** R6 (cache per origin §9)
-
-**Dependencies:** U4
-
-**Files:**
-- Create: `services/go-api/internal/discovery2/service/consensus.go`
-- Test: `services/go-api/internal/discovery2/service/consensus_test.go` (the consensus engine currently has **no** unit test — add one here)
-
-**Approach:** Port the audited consensus (bounded timeout, deterministic merge, MB authority,
-logging) and **add a per-artist cache keyed by artist MBID** (TTL; origin OQ4). This is also
-the chance to add the consensus unit test that the old package lacks.
-
-**Test scenarios:**
-- Happy path: album on 2+ providers confirmed; single-provider unconfirmed; MB-contradicted rejected.
-- Edge case: MB authority filter rejects unconfirmed albums when MB has strong data; underground (0 MB) unaffected.
-- Edge case: cache hit returns without re-querying providers; cache miss populates.
-- Edge case: deterministic merge — same inputs yield same confirmed/unconfirmed split across runs.
-
-**Verification:** Consensus unit tests green (new coverage); repeat artist-detail loads hit the cache; behavior matches the audited old engine on shared inputs.
-
----
-
-- U6. **Close the three coverage gaps in the new code**
-
-**Goal:** Make the new pipeline genuinely universal — fix the gaps the blueprint names.
-
-**Requirements:** R7
-
-**Dependencies:** U4, U5; (coverage signals A/B from 002 for confirmation)
-
-**Files:**
-- Modify: `services/go-api/internal/discovery2/service/search.go` / `consensus.go`
-- Create: `services/go-api/internal/discovery2/service/coverage.go`
-- Test: `services/go-api/internal/discovery2/service/coverage_test.go`
-
-**Approach:** (1) Fix the YouTube Music search 0-results mapping; (2) long-tail album-track
-fallback chain (Deezer search → YT Music album tracks → …); (3) underground top-track
-fallback (Last.fm / YT Music). Deterministic fallback chains, no promotion of any source.
-
-**Test scenarios:**
-- Happy path: YouTube Music search results now appear in merged output (regression of the 0-results bug).
-- Edge case: an album with no tracks on the primary provider loads via fallback.
-- Edge case: an underground artist with 0 Deezer top tracks gets top tracks from a fallback.
-- Coverage: signal A/B on the new pipeline show reduced gaps vs. the old baseline.
-
-**Verification:** The three named gaps are closed on representative underground artists (OsamaSon, Killeastsxde); coverage signals improve vs. baseline.
-
----
+- **U6. Close the three coverage gaps.** Fix YT Music 0-results (Pattern C); long-tail album-track
+  fallback; underground top-track fallback. *Verify:* the Pattern-C exact tracks now appear;
+  signal B improves vs baseline on underground artists.
 
 ### Phase C — Cutover (gated on the 002 baseline)
 
-- U7. **Re-add telemetry emission in the new services**
+- **U7. Re-add telemetry emission** in the new services (async best-effort; never blocks).
+  *Verify:* same envelope; failures logged, not surfaced.
 
-**Goal:** The new pipeline feeds the same telemetry envelope the old one does.
-
-**Requirements:** R8
-
-**Dependencies:** U4; 002 U1 (event store) and 002 U2 (emission shape)
-
-**Files:**
-- Create: `services/go-api/internal/discovery2/service/telemetry.go`
-- Modify: `services/go-api/internal/discovery2/service/search.go`, `consensus.go` (emit hooks)
-- Test: extend the new orchestrator test with a fake `EventStore`
-
-**Approach:** Mechanical port of 002 U2's async best-effort emission into the new services
-(same `EventStore` port, same `context.WithoutCancel` + wait-barrier pattern, never blocks the request).
-
-**Test scenarios:**
-- Happy path: a new-pipeline search emits one search event with correct result_count/positions.
-- Integration: a failing `EventStore` does not delay or error the new search path.
-
-**Verification:** New pipeline emits the same envelope; emission failures are logged, not surfaced.
-
----
-
-- U8. **Stage-by-stage handler cutover (gated, old retained)**
-
-**Goal:** Flip each surface to the new pipeline once it's provably ≥ old on the diverse eval, keeping old as rollback.
-
-**Requirements:** R2, R3, R4
-
-**Dependencies:** U1–U7; **002 U4–U6 baselines must exist**
-
-**Files:**
-- Modify: `services/go-api/internal/app/app.go` (per-surface flags), `discovery_handler.go` (already switched in U1)
-
-**Approach:** For each surface (search → artist albums → album tracks → top tracks): run the
-diverse eval + coverage signals on the new path, confirm ≥ old baseline with no coverage
-regression, then flip that surface's flag. Old code stays; rollback = flip back. Do not flip
-a surface that regresses.
-
-**Execution note:** This unit is the gate. No flip without a green diverse-eval delta recorded for that surface.
-
-**Test scenarios:**
-- Happy path: with a surface flagged new, the handler routes to the new pipeline and the canonical suite passes.
-- Edge case: flipping back to old is instant and lossless (rollback works).
-- Integration: the diverse eval run on the flipped surface meets-or-beats the recorded old baseline.
-
-**Verification:** Each flipped surface meets-or-beats baseline on the diverse eval and shows no coverage regression; old path remains a working rollback.
+- **U8. Per-surface cutover (gated, old retained).** For each surface, run the top-K eval +
+  coverage signals on the new path; flip only when new ≥ old at the chosen K with no coverage
+  regression. Old stays; rollback = flip back. *Verify:* each flipped surface meets-or-beats
+  baseline; rollback is instant and lossless.
 
 ---
 
 ## System-Wide Impact
 
-- **Interaction graph:** the handler gains a per-surface switch; two pipelines coexist behind it.
-- **Error propagation:** new pipeline preserves partial-result + per-provider-status behavior; telemetry failures logged only.
-- **State lifecycle risks:** the per-artist consensus cache adds an invalidation concern (TTL; origin OQ4).
-- **API surface parity:** response shapes must be **identical** old vs new (the switch is invisible to clients) — assert with shared response-contract tests.
-- **Integration coverage:** the diverse eval (002) is the cross-cutting integration gate; U8 flips depend on it.
-- **Unchanged invariants:** wire/response contracts, provider adapters, and domain value objects are unchanged; the old package keeps working throughout.
+- **Interaction graph:** handler gains a per-surface switch; two pipelines coexist behind it.
+- **Error propagation:** partial-result + per-provider-status behavior preserved; telemetry
+  failures logged only.
+- **State lifecycle:** per-artist consensus cache adds an invalidation concern (TTL; origin OQ4).
+- **API parity:** response shapes identical old vs new (switch invisible to clients) — shared
+  response-contract tests.
+- **Integration gate:** the top-K eval (002) is the cross-cutting gate; U8 flips depend on it.
+- **Unchanged invariants:** wire contracts, provider adapters, domain value objects.
 
 ---
 
@@ -433,19 +295,20 @@ a surface that regresses.
 
 | Risk | Mitigation |
 |------|------------|
-| Strangler stalls with two pipelines coexisting indefinitely | Per-surface flags + a finish-each-surface discipline; U8 flips are tracked to completion. |
-| Pruning a constant that was load-bearing for a query absent from the suite | The eval is library-derived + diverse + coverage-signal-backed (broad), but residual risk is accepted and monitored post-flip via signals + abandoned-search telemetry. |
-| Cutover before the 002 baseline exists | Hard prerequisite stated; U8 blocked until 002 U4–U6 produce baselines. |
-| Response-shape drift between old and new | Shared response-contract tests; switch is invisible to clients by construction. |
-| Per-artist consensus cache staleness (missing a new release) | TTL + the existing search path still surfaces new releases; invalidation policy decided at implementation (OQ4). |
-| Old + new code duplication burden while both live | Accepted by design (rollback safety); removal is a deferred user-decided cleanup. |
+| Removing a constant that was load-bearing for a query absent from the eval | The eval is library-derived + diverse + top-K + coverage-backed; residual risk monitored post-flip via signals + abandoned-search telemetry. |
+| A categorical rule (version markers) misses a real-world title format | Version-marker parsing is itself eval-gated; unmatched formats fall through to the last-resort fuzzy rung, not silently merged. |
+| Cutover before a baseline exists | Hard prerequisite; U8 blocked until the top-K baseline is recorded. |
+| Response-shape drift old vs new | Shared response-contract tests; switch invisible by construction. |
+| Per-artist cache staleness (missed new release) | TTL + search path still surfaces new releases; policy at implementation (OQ4). |
+| Two pipelines coexisting indefinitely | Per-surface flags + finish-each-surface discipline; U8 tracked to completion. |
 
 ---
 
 ## Sources & References
 
-- **Origin document:** [docs/brainstorms/2026-06-20-discovery-rebuild-architecture.md](docs/brainstorms/2026-06-20-discovery-rebuild-architecture.md) — §4, §5, §9, §12, §13.
-- **Prerequisite plan:** [docs/plans/2026-06-20-002-feat-discovery-telemetry-eval-step-zero-plan.md](docs/plans/2026-06-20-002-feat-discovery-telemetry-eval-step-zero-plan.md)
-- Current pipeline: `services/go-api/internal/discovery/service/search_music.go`, `dedup.go`, `consensus.go`
+- **Origin / blueprint:** [docs/brainstorms/2026-06-20-discovery-rebuild-architecture.md](docs/brainstorms/2026-06-20-discovery-rebuild-architecture.md) — §4, §5, §9, §12, §13.
+- **Prerequisite (complete):** [docs/plans/2026-06-20-002-feat-discovery-telemetry-eval-step-zero-plan.md](docs/plans/2026-06-20-002-feat-discovery-telemetry-eval-step-zero-plan.md)
+- Current pipeline (behavioral reference): `services/go-api/internal/discovery/service/search_music.go`, `dedup.go`, `consensus.go`, `popularity.go`
 - Handler/switch point: `services/go-api/internal/discovery/adapters/handler/discovery_handler.go`
 - DI: `services/go-api/internal/app/app.go`
+- Baseline run: `discoveryeval --mode eval --random` (full prod catalog, 2026-06-20).
