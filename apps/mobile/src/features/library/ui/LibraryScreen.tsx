@@ -102,6 +102,7 @@ export function LibraryScreen(): ReactElement {
   return (
     <LibraryHome
       playlists={playlists}
+      allTracks={state.allTracks}
       recentTracks={state.recentTracks}
       albums={state.albums}
       artists={state.artists}
