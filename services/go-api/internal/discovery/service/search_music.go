@@ -35,6 +35,7 @@ type SearchMusicService struct {
 	correctionSvc      *CorrectionService
 	findRelatedSvc     *FindRelatedService
 	albumValidator     ports.AlbumValidator
+	clickSignals       ports.ClickSignalProvider
 	ingestWg           sync.WaitGroup
 }
 
@@ -62,6 +63,10 @@ func WithGeniusResolver(r ports.ArtworkResolver) SearchOption {
 
 func WithVocabularyStore(v ports.VocabularyStore) SearchOption {
 	return func(s *SearchMusicService) { s.vocabStore = v }
+}
+
+func WithClickSignals(c ports.ClickSignalProvider) SearchOption {
+	return func(s *SearchMusicService) { s.clickSignals = c }
 }
 
 func NewSearchMusicService(
@@ -247,6 +252,7 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 
 	merged = CollapseArtistDuplicates(merged)
 	merged = s.applyArtistDisambiguation(ctx, merged)
+	merged = s.applyClickBoost(ctx, merged, queryNorm)
 	merged = s.enrich(ctx, merged)
 	merged = Rerank(merged, queryNorm)
 
@@ -736,4 +742,45 @@ func (s *SearchMusicService) resolveArtwork(ctx context.Context, result domain.S
 	}
 
 	return ""
+}
+
+const clickBoostAmount = 0.03
+
+func (s *SearchMusicService) applyClickBoost(ctx context.Context, results []domain.SearchResult, queryNorm string) []domain.SearchResult {
+	if s.clickSignals == nil || len(results) == 0 {
+		return results
+	}
+
+	topSigs, err := s.clickSignals.TopClickedSignatures(ctx, queryNorm, 10)
+	if err != nil || len(topSigs) == 0 {
+		return results
+	}
+
+	sigSet := make(map[string]bool, len(topSigs))
+	for _, sig := range topSigs {
+		sigSet[sig] = true
+	}
+
+	boosted := 0
+	for i, r := range results {
+		sig := signature(r)
+		if sigSet[sig] {
+			extras := copyExtras(r.Extras)
+			pop := popularity(r)
+			extras["popularity"] = pop + clickBoostAmount*100
+			extras["click_boosted"] = true
+			results[i].Extras = extras
+			boosted++
+		}
+	}
+
+	if boosted > 0 {
+		slog.DebugContext(ctx, "search.click_boost",
+			"query_norm", queryNorm,
+			"boosted", boosted,
+			"top_sigs", len(topSigs),
+		)
+	}
+
+	return results
 }

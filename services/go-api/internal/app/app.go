@@ -223,6 +223,7 @@ func (a *App) setup(ctx context.Context) error {
 		searchOpts = append(searchOpts, discoveryService.WithVocabularyStore(vocabStore))
 	}
 
+	searchOpts = append(searchOpts, discoveryService.WithClickSignals(clickRepo))
 	clickSvc := discoveryService.NewRecordClickService(clickRepo)
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 

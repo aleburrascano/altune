@@ -21,7 +21,13 @@ func (r *WikidataMbidResolver) Resolve(ctx context.Context, inputURL string) (st
 	if deezerID == "" {
 		return "", nil
 	}
+	return r.ResolveByDeezerID(ctx, deezerID)
+}
 
+func (r *WikidataMbidResolver) ResolveByDeezerID(ctx context.Context, deezerID string) (string, error) {
+	if deezerID == "" {
+		return "", nil
+	}
 	query := fmt.Sprintf(`SELECT ?mbid WHERE { ?item wdt:P2722 "%s" ; wdt:P434 ?mbid . } LIMIT 1`, deezerID)
 	return r.runSparql(ctx, query, "mbid")
 }
