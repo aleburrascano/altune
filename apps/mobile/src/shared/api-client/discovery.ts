@@ -159,9 +159,12 @@ export async function getAlbumTracks(
   albumTitle?: string,
   albumArtist?: string,
 ): Promise<ContentFetchResponse> {
-  let url = _contentUrl(`/v1/discovery/albums/${provider}/${encodeURIComponent(externalId)}/tracks`, limit);
-  if (albumTitle) url += `&title=${encodeURIComponent(albumTitle)}`;
-  if (albumArtist) url += `&artist=${encodeURIComponent(albumArtist)}`;
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (albumTitle) params.set('title', albumTitle);
+  if (albumArtist) params.set('artist', albumArtist);
+  const qs = params.toString();
+  const url = `/v1/discovery/albums/${provider}/${encodeURIComponent(externalId)}/tracks${qs ? `?${qs}` : ''}`;
   return apiFetch<ContentFetchResponse>(url);
 }
 
