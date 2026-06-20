@@ -421,7 +421,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
-		limit = 10
+		limit = 50
 	} else if limit > 100 {
 		limit = 100
 	}

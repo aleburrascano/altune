@@ -36,6 +36,7 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,
+			Items:        []domain.SearchResult{},
 		}, nil
 	}
 
@@ -44,6 +45,7 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,
+			Items:        []domain.SearchResult{},
 		}, nil
 	}
 	results, err := provider.GetArtistTopTracks(ctx, pn, externalID)
@@ -51,6 +53,7 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,
+			Items:        []domain.SearchResult{},
 		}, nil
 	}
 
@@ -71,6 +74,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,
+			Items:        []domain.SearchResult{},
 		}, nil
 	}
 
@@ -79,6 +83,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,
+			Items:        []domain.SearchResult{},
 		}, nil
 	}
 	results, err := provider.GetArtistAlbums(ctx, pn, externalID)
@@ -86,6 +91,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 		return &ContentFetchResponse{
 			ProviderName: providerName,
 			Status:       domain.ProviderStatusError,
+			Items:        []domain.SearchResult{},
 		}, nil
 	}
 
@@ -150,7 +156,7 @@ func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
 	var deduped []domain.SearchResult
 
 	for _, r := range results {
-		normTitle := NormalizeForMatch(r.Title)
+		normTitle := NormalizeForMatch(r.Title) + "|" + NormalizeForMatch(r.Subtitle)
 		if idx, ok := seen[normTitle]; ok {
 			existingCount := getTrackCount(deduped[idx])
 			newCount := getTrackCount(r)
