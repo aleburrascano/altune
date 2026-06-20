@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -46,6 +47,10 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 		}, nil
 	}
 	results, err := provider.GetAlbumTracks(ctx, pn, externalID)
+	if err != nil {
+		slog.WarnContext(ctx, "album_tracks.provider_failed",
+			"provider", providerName, "external_id", externalID, "error", err)
+	}
 	if err != nil || len(results) == 0 {
 		if albumTitle != "" {
 			deezer, hasDeezer := s.providers["deezer"]
@@ -89,6 +94,10 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 	}
 
 	results, err := searcher.Search(ctx, query, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
+	if err != nil {
+		slog.WarnContext(ctx, "album_tracks.deezer_fallback_failed",
+			"query", query, "error", err)
+	}
 	if err != nil || len(results) == 0 {
 		return &ContentFetchResponse{
 			ProviderName: "deezer",

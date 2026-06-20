@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -249,16 +250,10 @@ func (a *TidalAdapter) doGet(ctx context.Context, token, u string) ([]byte, erro
 		return nil, fmt.Errorf("tidal: status %d", resp.StatusCode)
 	}
 
-	buf := make([]byte, 0, 4096)
-	tmp := make([]byte, 4096)
-	for {
-		n, readErr := resp.Body.Read(tmp)
-		if n > 0 {
-			buf = append(buf, tmp[:n]...)
-		}
-		if readErr != nil {
-			break
-		}
+	const maxBody = 4 << 20 // 4 MiB ceiling — don't trust the upstream to be small
+	buf, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	if err != nil {
+		return nil, fmt.Errorf("tidal read body: %w", err)
 	}
 	return buf, nil
 }

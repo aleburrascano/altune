@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"altune/go-api/internal/discovery/domain"
@@ -34,6 +35,7 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 
 	resp, err := r.client.Do(req)
 	if err != nil {
+		slog.DebugContext(ctx, "coverartarchive.request_failed", "mbid", mbid, "error", err)
 		return "", nil
 	}
 	resp.Body.Close()
