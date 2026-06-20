@@ -1,7 +1,7 @@
 ---
 title: "feat: Discovery Step Zero — telemetry service, library eval, coverage signals A/B"
 type: feat
-status: active
+status: complete
 date: 2026-06-20
 origin: docs/brainstorms/2026-06-20-discovery-rebuild-architecture.md
 ---
