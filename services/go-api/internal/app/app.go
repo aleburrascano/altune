@@ -240,13 +240,26 @@ func (a *App) setup(ctx context.Context) error {
 	artistProviders := map[string]discoveryPorts.ArtistContentProvider{
 		"deezer": deezerContent,
 	}
+
+	var tidalContent *providers.TidalAdapter
+	if a.cfg.HasTidal() {
+		tidalContent = providers.NewTidalAdapter(
+			&http.Client{Timeout: 15 * time.Second},
+			a.cfg.TidalClientID,
+			a.cfg.TidalClientSecret,
+		)
+		artistProviders["tidal"] = tidalContent
+	}
+
 	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
 
 	if sharedMB != nil {
 		searchOpts = append(searchOpts, discoveryService.WithIdentityResolver(sharedMB))
 	}
 
-	// Multi-provider consensus for artist discography validation.
+	// Multi-provider consensus: ALL providers are equal sources.
+	// Albums are merged from every provider into a union — no single
+	// provider is "primary." No hardcoded timeout — uses request context.
 	var consensusProviders []discoveryService.ConsensusProvider
 	if a.cfg.HasLastFM() {
 		lfm := providers.NewLastFmAdapter(&http.Client{Timeout: 10 * time.Second}, a.cfg.LastFMAPIKey)
@@ -303,6 +316,15 @@ func (a *App) setup(ctx context.Context) error {
 			return itunesConsensus.Search(ctx, artistName, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
 		},
 	})
+
+	if tidalContent != nil {
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+			Name: "tidal",
+			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+				return tidalContent.GetArtistAlbums(ctx, domain.ProviderTidal, artistName)
+			},
+		})
+	}
 
 	var consensusOpts []discoveryService.ConsensusOption
 	if sharedMB != nil {
