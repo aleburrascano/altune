@@ -239,6 +239,143 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 	return results
 }
 
+// --- ArtistContentProvider ---
+
+func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
+	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&artist=%s&api_key=%s&format=json&limit=10",
+		url.QueryEscape(artistName), a.apiKey)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("lastfm artist.gettoptracks returned %d", resp.StatusCode)
+	}
+
+	var body struct {
+		TopTracks struct {
+			Track []struct {
+				Name      string `json:"name"`
+				PlayCount string `json:"playcount"`
+				Listeners string `json:"listeners"`
+				URL       string `json:"url"`
+				Artist    struct {
+					Name string `json:"name"`
+				} `json:"artist"`
+				Image []struct {
+					Text string `json:"#text"`
+					Size string `json:"size"`
+				} `json:"image"`
+			} `json:"track"`
+		} `json:"toptracks"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+
+	results := make([]domain.SearchResult, 0, len(body.TopTracks.Track))
+	for _, t := range body.TopTracks.Track {
+		imageURL := ""
+		for _, img := range t.Image {
+			if img.Size == "extralarge" {
+				imageURL = img.Text
+			}
+		}
+		extras := make(map[string]any)
+		if t.PlayCount != "" {
+			extras["playcount"] = parseListeners(t.PlayCount)
+		}
+		if t.Listeners != "" {
+			extras["listeners"] = parseListeners(t.Listeners)
+		}
+		results = append(results, domain.SearchResult{
+			Kind:       domain.ResultKindTrack,
+			Title:      t.Name,
+			Subtitle:   t.Artist.Name,
+			ImageURL:   imageURL,
+			Confidence: domain.ConfidenceLow,
+			Sources: []domain.SourceRef{{
+				Provider:   domain.ProviderLastFM,
+				ExternalID: lastfmExternalID(t.URL),
+				URL:        t.URL,
+			}},
+			Extras: extras,
+		})
+	}
+	return results, nil
+}
+
+func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
+	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=artist.gettopalbums&artist=%s&api_key=%s&format=json&limit=50",
+		url.QueryEscape(artistName), a.apiKey)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("lastfm artist.gettopalbums returned %d", resp.StatusCode)
+	}
+
+	var body struct {
+		TopAlbums struct {
+			Album []struct {
+				Name      string `json:"name"`
+				PlayCount int    `json:"playcount"`
+				URL       string `json:"url"`
+				Artist    struct {
+					Name string `json:"name"`
+				} `json:"artist"`
+				Image []struct {
+					Text string `json:"#text"`
+					Size string `json:"size"`
+				} `json:"image"`
+			} `json:"album"`
+		} `json:"topalbums"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+
+	results := make([]domain.SearchResult, 0, len(body.TopAlbums.Album))
+	for _, a := range body.TopAlbums.Album {
+		if a.Name == "(null)" || a.Name == "" {
+			continue
+		}
+		imageURL := ""
+		for _, img := range a.Image {
+			if img.Size == "extralarge" {
+				imageURL = img.Text
+			}
+		}
+		results = append(results, domain.SearchResult{
+			Kind:       domain.ResultKindAlbum,
+			Title:      a.Name,
+			Subtitle:   a.Artist.Name,
+			ImageURL:   imageURL,
+			Confidence: domain.ConfidenceLow,
+			Sources: []domain.SourceRef{{
+				Provider:   domain.ProviderLastFM,
+				ExternalID: lastfmExternalID(a.URL),
+				URL:        a.URL,
+			}},
+			Extras: make(map[string]any),
+		})
+	}
+	return results, nil
+}
+
 // --- ChartProvider ---
 
 func (a *LastFmAdapter) FetchCharts(ctx context.Context, limit int) ([]domain.VocabularyEntry, error) {
