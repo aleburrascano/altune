@@ -125,24 +125,9 @@ func (s *ConsensusService) BuildConsensus(
 		}
 	}
 
-	// AIDEV-DECISION: only return albums that originated from the primary
-	// list (Deezer). Other providers contribute to the consensus COUNT
-	// (confirming/rejecting primary albums) but don't add new albums to the
-	// output. Non-Deezer albums have no browseable source — they can't load
-	// tracks, have no artwork, and show "couldn't load tracks" on tap.
-	results := make([]ConsensusAlbum, 0, len(primaryAlbums))
+	results := make([]ConsensusAlbum, 0, len(merged))
 	for _, key := range mergeOrder {
 		entry := merged[key]
-		hasDeezerSource := false
-		for _, p := range entry.providers {
-			if p == "deezer" {
-				hasDeezerSource = true
-				break
-			}
-		}
-		if !hasDeezerSource {
-			continue
-		}
 		status := ConsensusUnconfirmed
 		reason := "single provider"
 		if entry.providerCount >= 2 {
@@ -154,6 +139,36 @@ func (s *ConsensusService) BuildConsensus(
 			Status: status,
 			Reason: reason,
 		})
+	}
+
+	// Add albums from other providers that didn't match any primary album
+	// (these are albums Deezer doesn't have but other providers do)
+	for provName, albums := range allProviderAlbums {
+		if albums == nil {
+			continue
+		}
+		for _, album := range albums {
+			titleNorm := NormalizeForMatch(album.Title)
+			found := false
+			for key := range merged {
+				if TokenSortRatio(titleNorm, key) >= consensusTitleMatchMinTSR {
+					found = true
+					break
+				}
+			}
+			if !found {
+				merged[titleNorm] = &mergedAlbum{
+					album:      album,
+					providerCount: 1,
+					providers:  []string{provName},
+				}
+				results = append(results, ConsensusAlbum{
+					Album:  annotateConsensus(album, ConsensusUnconfirmed, 1, respondedCount),
+					Status: ConsensusUnconfirmed,
+					Reason: "from " + provName + " only",
+				})
+			}
+		}
 	}
 
 	results = s.applyMBContradiction(ctx, artistName, results)
