@@ -258,6 +258,54 @@ to fetch. It is drawn here only to show the seam.
 
 ---
 
+## 4.5 Design doctrine — zero arbitrary, query-fit constants
+
+> Added 2026-06-20 after the first measured baseline (§4.6). This is the rule the rebuild
+> (plan 003) is organized around.
+
+A constant appears whenever a *continuous* or *multi-signal* judgment is forced into a decision
+("is this similar enough to be the same song?" → a threshold; "when does popularity beat
+relevance?" → an exchange rate). Those judgments are unavoidable; the number is only *where the
+judgment is written down*. Three ways to make one:
+
+1. **Hand-tuned constant** (e.g. `TokenSortRatio ≥ 85`) — untraceable, rots, fit to a few queries.
+   **This is the band-aid we remove.**
+2. **Learned weight** — a model parameter fit to data. Needs labels we don't have yet and *hides*
+   the number in a model. **Deferred** to the ML seam (Layer 3); telemetry (§8) is its groundwork.
+3. **Categorical / structural decision** — restructure so the judgment is a category and the number
+   disappears or shrinks to a documented last resort. **This is the strategy.**
+
+**The rule: zero arbitrary, query-fit constants.** Not zero numbers — every survivor must be
+**principled** (a published convention or SLA, e.g. provider timeouts, RRF's `k=60`),
+**learned-later** (parked at the ML seam), or a single **last-resort** the eval proves generalizes.
+The categorical mechanisms:
+
+- **Layer 2 (merge):** identifier-first (MBID/ISRC — exact) → version-marker *categories* (sequel
+  number, remix, feat, live, deluxe → different entity) → fuzzy only last-resort. Replaces
+  `versionSimilarityThreshold = 85`.
+- **Layer 3 (rank):** lexicographic **relevance tiers** (exact-intent-match > exact-title-other-kind
+  > partial > none); popularity orders only *within* a tier. Replaces the `0.05` band, the dominance
+  `gap/factor`, and the additive `intentBoost`. ("popularity > multi-source" survives — but only
+  as a within-tier order.)
+
+**Product corollary (user, 2026-06-20):** the right answer need not be #1 — it must be *visible in
+the top results*. The eval measures **top-K** (default top-3; top-1 tracked alongside). The tier
+model satisfies this structurally: a same-named album lands in the tier directly below the exact track.
+
+## 4.6 First measured baseline (2026-06-20)
+
+The Step-Zero eval (plan 002) ran on the full production catalog (1,792 distinct entities, cloned
+prod → dev): **top-1 pass-rate 97.4%** (≈98% true, after ~11 eval-matcher artifacts). The 46
+failures are **three structural patterns**, not a long tail — each maps to one layer and one
+mechanism: **A** same-named album outranks the track (Layer 3 banding + popularity, 17 cases);
+**B** numbered sequel collapsed into the original (Layer 2 `CollapseVersions ≥ 85`, 8 cases);
+**C** obscure track replaced by the artist's hit (Layer 1 coverage — the YouTube-Music-0-results
+hole, ~7 cases). Evidence that quality is already high and its gaps are *categorical*: the rebuild
+is a maintainability + constants-removal effort, gated to hold ~98% top-1 / the top-3 bar. Full
+taxonomy + constants ledger: plan 003.
+
+---
+
 ## 5. The universal coverage strategy
 
 This is G1, the hardest goal, in detail.
