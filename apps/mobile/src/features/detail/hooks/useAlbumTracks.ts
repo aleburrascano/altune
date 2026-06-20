@@ -21,6 +21,8 @@ import {
 type UseAlbumTracksParams = {
   provider: string;
   externalId: string;
+  albumTitle?: string;
+  albumArtist?: string;
   allSources?: DiscoverySource[];
   enabled?: boolean;
 };
@@ -64,12 +66,14 @@ function _mergeFeaturing(
 export function useAlbumTracks({
   provider,
   externalId,
+  albumTitle,
+  albumArtist,
   allSources,
   enabled = true,
 }: UseAlbumTracksParams): UseAlbumTracksReturn {
   const { data: primaryData, isLoading, isError: isQueryError, refetch } = useQuery({
     queryKey: ['album-tracks', provider, externalId],
-    queryFn: () => getAlbumTracks(provider, externalId),
+    queryFn: () => getAlbumTracks(provider, externalId, undefined, albumTitle, albumArtist),
     enabled,
     staleTime: 1000 * 60 * 30,
   });

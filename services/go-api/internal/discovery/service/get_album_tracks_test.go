@@ -91,7 +91,7 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewGetAlbumTracksService(tt.providers)
 
-			resp, err := svc.Execute(context.Background(), tt.providerName, tt.externalID, tt.limit)
+			resp, err := svc.Execute(context.Background(), tt.providerName, tt.externalID, "", "", tt.limit)
 
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

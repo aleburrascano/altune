@@ -63,6 +63,8 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
   const { tracks: apiTracks, isLoading: apiLoading, isError: apiError, refetch } = useAlbumTracks({
     provider: source?.provider ?? '',
     externalId: source?.external_id ?? '',
+    albumTitle: result.title,
+    albumArtist: result.subtitle,
     allSources: result.sources,
     enabled: hasSources,
   });
