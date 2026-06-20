@@ -65,14 +65,22 @@ export function useQueuePlayback(): QueuePlaybackControls {
   const skipToNext = useCallback(() => {
     const nextTrack = useQueueStore.getState().skipToNext();
     if (nextTrack) {
-      void TrackPlayer.skipToNext();
+      const { playOrder, currentIndex } = useQueueStore.getState();
+      const nativeIdx = playOrder[currentIndex];
+      if (nativeIdx != null) {
+        void TrackPlayer.skip(nativeIdx);
+      }
     }
   }, []);
 
   const skipToPrevious = useCallback(() => {
     const prevTrack = useQueueStore.getState().skipToPrevious();
     if (prevTrack) {
-      void TrackPlayer.skipToPrevious();
+      const { playOrder, currentIndex } = useQueueStore.getState();
+      const nativeIdx = playOrder[currentIndex];
+      if (nativeIdx != null) {
+        void TrackPlayer.skip(nativeIdx);
+      }
     }
   }, []);
 
