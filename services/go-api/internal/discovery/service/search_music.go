@@ -127,13 +127,19 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 	searchQuery := CleanQuery(query.Raw)
 	if searchQuery != query.Raw {
 		queryNorm = NormalizeForMatch(searchQuery)
-		slog.DebugContext(ctx, "search.query_cleaned",
-			"original", query.Raw,
-			"cleaned", searchQuery,
-		)
 	}
+	slog.DebugContext(ctx, "pipeline.query_clean",
+		"stage", "query_clean",
+		"input", query.Raw,
+		"output", searchQuery,
+		"changed", searchQuery != query.Raw,
+	)
 
 	intent := DetectIntent(ctx, queryNorm, s.vocabStore)
+	slog.DebugContext(ctx, "pipeline.intent_detect",
+		"stage", "intent_detect",
+		"detected", intent != nil,
+	)
 
 	var (
 		mu          sync.Mutex
@@ -250,11 +256,35 @@ func (s *SearchMusicService) Execute(ctx context.Context, userId shared.UserId, 
 		"enriching", enriching,
 	)
 
+	preCollapse := len(merged)
 	merged = CollapseArtistDuplicates(merged)
+	slog.DebugContext(ctx, "pipeline.collapse_artist_duplicates",
+		"stage", "collapse_artist_duplicates",
+		"input_count", preCollapse,
+		"output_count", len(merged),
+	)
+
 	merged = s.applyArtistDisambiguation(ctx, merged)
+
+	preClick := len(merged)
 	merged = s.applyClickBoost(ctx, merged, queryNorm)
+	slog.DebugContext(ctx, "pipeline.click_boost",
+		"stage", "click_boost",
+		"count", preClick,
+	)
+
+	preEnrich := len(merged)
 	merged = s.enrich(ctx, merged)
+	slog.DebugContext(ctx, "pipeline.enrich",
+		"stage", "enrich",
+		"count", preEnrich,
+	)
+
 	merged = Rerank(merged, queryNorm)
+	slog.DebugContext(ctx, "pipeline.rerank",
+		"stage", "rerank",
+		"count", len(merged),
+	)
 
 	var correctedQuery, originalQuery, suggestedQuery string
 	if len(merged) == 0 {
