@@ -105,6 +105,30 @@ func TestEvalOne(t *testing.T) {
 	}
 }
 
+func TestMatchesEntity(t *testing.T) {
+	tests := []struct {
+		name   string
+		result domain.SearchResult
+		entity LibraryEntity
+		want   bool
+	}{
+		{"exact title and artist", track("HUMBLE.", "Kendrick Lamar"), LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, true},
+		{"artist prefix embedded in title", track("A-Ha - Take On Me", "a-ha"), LibraryEntity{Title: "Take On Me", Artist: "a-ha"}, true},
+		{"track-number prefix in title", track("07-The Best Was Yet To Come", "Bryan Adams"), LibraryEntity{Title: "The Best Was Yet To Come", Artist: "Bryan Adams"}, true},
+		{"reuploader subtitle but artist in title", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Lil Tecca - Yup", Subtitle: "lost_files"}, LibraryEntity{Title: "Yup", Artist: "Lil Tecca"}, true},
+		{"short title not substring-matched", track("Going Home", "Drake"), LibraryEntity{Title: "Go", Artist: "Drake"}, false},
+		{"different track same artist", track("DAMN.", "Kendrick Lamar"), LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, false},
+		{"album is never a track match", album("Circles", "Post Malone"), LibraryEntity{Title: "Circles", Artist: "Post Malone"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchesEntity(tt.result, tt.entity); got != tt.want {
+				t.Errorf("matchesEntity = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRunLibraryEval_Aggregation(t *testing.T) {
 	entities := []LibraryEntity{
 		{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, // pass
