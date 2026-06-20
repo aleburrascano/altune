@@ -33,7 +33,7 @@ export function useAlbumDiscovery({
 
   const { data: tracksData, isLoading: isLoadingTracks, isError: isTracksError, refetch } = useQuery({
     queryKey: ['album-discovery-tracks', source?.provider, source?.external_id],
-    queryFn: () => getAlbumTracks(source!.provider, source!.external_id),
+    queryFn: () => getAlbumTracks(source!.provider, source!.external_id, undefined, searchResult?.title, searchResult?.subtitle),
     enabled: enabled && source != null,
     staleTime: 30 * 60 * 1000,
   });

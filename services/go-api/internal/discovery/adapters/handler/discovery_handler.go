@@ -365,6 +365,8 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 	} else if limit > 100 {
 		limit = 100
 	}
+	albumTitle := strings.TrimSpace(r.URL.Query().Get("title"))
+	albumArtist := strings.TrimSpace(r.URL.Query().Get("artist"))
 
 	if h.albumSvc == nil {
 		httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
@@ -373,7 +375,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resp, err := h.albumSvc.Execute(r.Context(), provider, externalID, limit)
+	resp, err := h.albumSvc.Execute(r.Context(), provider, externalID, albumTitle, albumArtist, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "get album tracks failed",
 			"error", err, "provider", provider, "external_id", externalID)

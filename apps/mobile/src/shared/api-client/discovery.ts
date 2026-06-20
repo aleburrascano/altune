@@ -156,10 +156,13 @@ export async function getAlbumTracks(
   provider: string,
   externalId: string,
   limit?: number,
+  albumTitle?: string,
+  albumArtist?: string,
 ): Promise<ContentFetchResponse> {
-  return apiFetch<ContentFetchResponse>(
-    _contentUrl(`/v1/discovery/albums/${provider}/${encodeURIComponent(externalId)}/tracks`, limit),
-  );
+  let url = _contentUrl(`/v1/discovery/albums/${provider}/${encodeURIComponent(externalId)}/tracks`, limit);
+  if (albumTitle) url += `&title=${encodeURIComponent(albumTitle)}`;
+  if (albumArtist) url += `&artist=${encodeURIComponent(albumArtist)}`;
+  return apiFetch<ContentFetchResponse>(url);
 }
 
 export async function getArtistTopTracks(
