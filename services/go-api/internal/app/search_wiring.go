@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/adapters/providers"
+	domain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/config"
@@ -71,6 +73,93 @@ func BuildSearchService(
 	searchOpts = append(searchOpts, discoveryService.WithFindRelatedService(findRelatedSvc))
 
 	return discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker, searchOpts...)
+}
+
+// BuildConsensusProviders builds the multi-provider album fan-out used by the
+// artist-content consensus AND the offline coverage signal B. One definition so
+// the diagnostic measures the same provider set the app uses. Config-gated
+// identically to the server wiring.
+func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusProvider {
+	var consensusProviders []discoveryService.ConsensusProvider
+
+	if cfg.HasLastFM() {
+		lfm := providers.NewLastFmAdapter(&http.Client{Timeout: 10 * time.Second}, cfg.LastFMAPIKey)
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+			Name: "lastfm",
+			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+				return lfm.GetArtistAlbums(ctx, domain.ProviderLastFM, artistName)
+			},
+		})
+	}
+	if cfg.HasMusicBrainz() {
+		mb := providers.NewMusicBrainzAdapter(&http.Client{Timeout: 10 * time.Second}, cfg.MusicBrainzUserAgent)
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+			Name: "musicbrainz",
+			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+				validated, err := mb.ValidateArtistAlbums(ctx, artistName, nil)
+				if err != nil || validated == nil {
+					return nil, err
+				}
+				return validated.Confirmed, nil
+			},
+		})
+	}
+	if cfg.HasDiscogs() {
+		discogs := providers.NewDiscogsAdapter(&http.Client{Timeout: 10 * time.Second}, cfg.DiscogsToken, cfg.MusicBrainzUserAgent)
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+			Name: "discogs",
+			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+				info, err := discogs.ResolveDiscogsArtist(ctx, artistName, nil)
+				if err != nil || info == nil {
+					return nil, err
+				}
+				releases, err := discogs.FetchArtistReleases(ctx, info.ID)
+				if err != nil {
+					return nil, err
+				}
+				results := make([]domain.SearchResult, 0, len(releases))
+				for _, r := range releases {
+					results = append(results, domain.SearchResult{
+						Kind:  domain.ResultKindAlbum,
+						Title: r.Title,
+						Extras: map[string]any{
+							"year":        r.Year,
+							"record_type": r.Type,
+						},
+					})
+				}
+				return results, nil
+			},
+		})
+	}
+
+	itunes := providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second})
+	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+		Name: "itunes",
+		Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+			return itunes.Search(ctx, artistName, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
+		},
+	})
+
+	if cfg.HasTidal() {
+		tidal := providers.NewTidalAdapter(&http.Client{Timeout: 15 * time.Second}, cfg.TidalClientID, cfg.TidalClientSecret)
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+			Name: "tidal",
+			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+				return tidal.GetArtistAlbums(ctx, domain.ProviderTidal, artistName)
+			},
+		})
+	}
+
+	ytmusic := providers.NewYouTubeMusicAdapter()
+	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+		Name: "ytmusic",
+		Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+			return ytmusic.GetArtistAlbums(ctx, domain.ProviderYouTube, artistName)
+		},
+	})
+
+	return consensusProviders
 }
 
 // buildArtworkChain assembles the artwork resolver chain: ID-based sources first
