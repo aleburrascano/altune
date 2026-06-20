@@ -23,28 +23,29 @@ flowchart TD
         HANDLER --> SEARCH_SVC["SearchMusicService.Execute"]
         SUGGEST_H --> SUGGEST_SVC["SuggestService.Execute"]
 
-        SEARCH_SVC --> NORMALIZE["NormalizeForMatch(query)"]
-        SEARCH_SVC --> PRE_CORRECT["Pre-query correction\n(trigram + phonetic vs vocabulary)"]
-        PRE_CORRECT --> CLEAN["CleanQuery\n(strip 'official video', 'lyrics', etc.)"]
+        SEARCH_SVC --> CLEAN["CleanQuery\n(strip 'official video', 'lyrics', etc.)"]
         CLEAN --> INTENT["DetectIntent(query, vocab)"]
         INTENT --> SCATTER["Scatter to providers"]
 
-        SCATTER -->|"1500ms timeout each"| PROVIDERS
+        SCATTER -->|"1500ms timeout each\n(3s for Tidal)"| PROVIDERS
 
         SCATTER --> COLLECT["Collect results + statuses"]
         COLLECT --> FUSE["FuseAndRank"]
 
-        FUSE --> MERGE["Identifier merge\n(ISRC / MBID / artist name)"]
+        FUSE --> MERGE["Identifier merge\n(ISRC / MBID only)"]
         MERGE --> POP_NORM["NormalizePopularity\n(log-scale, 0-100)"]
         POP_NORM --> RECENCY["Recency boost\n(x1.1 if <=30 days)"]
-        RECENCY --> SCORE["Score: relevance + intent boost\n+ exact/prefix/multi-field bonuses\n+ RRF"]
+        RECENCY --> SCORE["Score: relevance + intent boost\n+ exact/prefix/multi-field bonuses\n+ RRF (equal weights)"]
         SCORE --> GATE["Gate: word-share + browseable source"]
-        GATE --> SORT["Sort: relevance-band(0.05)\n-> demoted -> multi-source\n-> popularity -> quality\n-> RRF -> alpha"]
+        GATE --> SORT["Sort: relevance-band(0.05)\n-> demoted -> popularity\n-> multi-source -> quality\n-> RRF -> alpha"]
         SORT --> COLLAPSE["CollapseVersions\n(group remix/live variants)"]
         COLLAPSE --> POP_DOM["ApplyPopularityDominance\n(cross-kind top-5 check)"]
         POP_DOM --> DIVERSITY["EnforceDiversity\n(max 3 per artist in top 10)"]
 
-        DIVERSITY --> ENRICH["Enrich top 50\n(artwork + popularity)"]
+        DIVERSITY --> COLLAPSE_ART["CollapseArtistDuplicates"]
+        COLLAPSE_ART --> DISAMBIG["ApplyArtistDisambiguation"]
+        DISAMBIG --> CLICK["Click boost\n(boost previously-clicked results)"]
+        CLICK --> ENRICH["Enrich top 50\n(artwork + popularity)"]
         ENRICH --> RERANK["Rerank\n(same key minus quality)"]
 
         RERANK --> ZERO{zero results?}
@@ -65,19 +66,21 @@ flowchart TD
     end
 
     subgraph "Providers (adapters/providers/)"
-        PROVIDERS["6 Search Providers"]
+        PROVIDERS["7 Search Providers"]
         DEEZER["Deezer\n+nb_fan, rank, ISRC\n+StructuredSearcher"]
-        LASTFM["Last.fm\n+listeners, albums"]
+        LASTFM["Last.fm\n+listeners, albums, top tracks"]
         MUSICBRAINZ["MusicBrainz\n+MBID, ISRC\n+StructuredSearcher"]
-        ITUNES["iTunes\n+metadata"]
+        ITUNES["iTunes\n+metadata, genre"]
         SOUNDCLOUD["SoundCloud (yt-dlp)\n+playback_count"]
         AUDIODB["TheAudioDB\n+artist images"]
+        TIDAL["Tidal\n+ISRC, OAuth 2.0"]
         PROVIDERS --> DEEZER
         PROVIDERS --> LASTFM
         PROVIDERS --> MUSICBRAINZ
         PROVIDERS --> ITUNES
         PROVIDERS --> SOUNDCLOUD
         PROVIDERS --> AUDIODB
+        PROVIDERS --> TIDAL
     end
 
     subgraph "Vocabulary (Redis)"
@@ -97,6 +100,79 @@ flowchart TD
     end
 ```
 
+## Artist Detail Flow
+
+```mermaid
+flowchart TD
+    TAP["User taps artist result"] --> HANDLER["handleArtistTopTracks\nhandleArtistAlbums"]
+
+    subgraph "Top Tracks"
+        HANDLER --> TOP["GetArtistContentService.GetTopTracks"]
+        TOP --> DZ_TOP["Deezer /artist/{id}/top\n(limit 10)"]
+        DZ_TOP --> TOP_RESP["Return tracks"]
+    end
+
+    subgraph "Albums (with consensus)"
+        HANDLER --> ALBUMS["GetArtistContentService.GetAlbums"]
+        ALBUMS --> DZ_ALB["Deezer /artist/{id}/albums\n(limit 100)"]
+        DZ_ALB --> DEDUP["dedupAlbums\n(by title + artist)"]
+        DEDUP --> CONSENSUS["ConsensusService.BuildConsensus"]
+
+        CONSENSUS --> PARALLEL["Query consensus providers\n(2s timeout, parallel)"]
+        PARALLEL --> LFM["Last.fm\nartist.getTopAlbums"]
+        PARALLEL --> MB["MusicBrainz\nrelease-groups"]
+        PARALLEL --> DISCOGS["Discogs\nartist releases"]
+        PARALLEL --> ITUNES_C["iTunes\nalbum search"]
+
+        LFM --> COUNT["Count providers with data"]
+        MB --> COUNT
+        DISCOGS --> COUNT
+        ITUNES_C --> COUNT
+
+        COUNT --> MATCH["Match albums by title\n(NormalizeForMatch + TSR >= 85)"]
+        MATCH --> CLASSIFY["Classify each album"]
+        CLASSIFY --> CONF["2+ providers → confirmed"]
+        CLASSIFY --> UNCONF["1 provider + <4 responded → unconfirmed, keep"]
+        CLASSIFY --> REJECT["1 provider + 4+ responded → consensus rejection"]
+
+        CONSENSUS --> MB_CHECK["MB identity contradiction\n(different MBID → remove)"]
+        MB_CHECK --> MB_VALID["Cross-validate: zero MB overlap → discard MB identity"]
+
+        CONF --> MERGE["Merge results"]
+        UNCONF --> MERGE
+        REJECT -.->|removed| MERGE
+        MB_CHECK --> MERGE
+
+        MERGE --> LIMIT_ALB["Apply limit (default 50)"]
+        LIMIT_ALB --> ALB_RESP["Return with consensus_status in extras"]
+    end
+```
+
+## Artwork Resolution Flow
+
+```mermaid
+flowchart TD
+    NEED["Result needs artwork"] --> OWN{"Deezer own image\npresent and not placeholder?"}
+    OWN -->|yes| DONE["Use Deezer image"]
+    OWN -->|no| CHAIN["Artwork chain"]
+
+    CHAIN --> CAA["Cover Art Archive\n(MBID-keyed, up to 1200px)"]
+    CAA -->|found| DONE2["Use CAA image"]
+    CAA -->|miss| FANART["Fanart.tv\n(MBID-keyed, HD)"]
+    FANART -->|found| DONE3["Use Fanart.tv image"]
+    FANART -->|miss| GENIUS["Genius\n(name search)"]
+    GENIUS -->|found| DONE4["Use Genius image"]
+    GENIUS -->|miss| TADB["TheAudioDB\n(name search)"]
+    TADB -->|found| DONE5["Use TheAudioDB image"]
+    TADB -->|miss| DZ_SEARCH["Deezer\n(name search fallback)"]
+    DZ_SEARCH -->|found| DONE6["Use Deezer fallback"]
+    DZ_SEARCH -->|miss| ITUNES_ART["iTunes\n(name search)"]
+    ITUNES_ART -->|found| DONE7["Use iTunes image"]
+    ITUNES_ART -->|miss| YT["YouTube\n(channel thumbnail, last resort)"]
+    YT -->|found| DONE8["Use YouTube image"]
+    YT -->|miss| NONE["No artwork"]
+```
+
 ## Ranking Key (sort order)
 
 ```
@@ -107,25 +183,43 @@ Position  Signal              Direction   Source
 3         Popularity          DESC        NormalizePopularity (0-100, log-scale)
 4         Multi-source        DESC        len(providers) > 1
 5         Quality score       DESC        completeness + agreement + tier + fetch
-6         RRF                 DESC        Σ 1/(60 + rank) per provider
+6         RRF                 DESC        Σ 1/(60 + rank) — equal weight all providers
 7         Subtitle            ASC         alphabetical tiebreak
 8         Title               ASC         alphabetical tiebreak
 ```
 
 After enrichment, `Rerank` uses the same key minus quality score.
 
+## Diagnostic Logging
+
+Enable with `LOG_LEVEL=debug`. Each pipeline stage emits a structured log entry:
+
+```
+pipeline.query_clean      — input, output, changed
+pipeline.intent_detect    — detected (bool)
+pipeline.fuse_and_rank    — raw count, merged count (in search.merged)
+pipeline.collapse_artist  — input_count, output_count
+pipeline.click_boost      — count
+pipeline.enrich           — count
+pipeline.rerank           — count
+consensus.providers_responded — artist, responded, total_providers
+consensus.complete        — artist, confirmed, unconfirmed, rejected
+```
+
 ## File Map
 
 ```
 internal/discovery/
 ├── domain/
-│   ├── types.go              # SearchResult, SearchQuery, SourceRef, RelatedGroup, enums
+│   ├── types.go              # SearchResult, SearchQuery, SourceRef, RelatedGroup, enums (incl. ProviderTidal)
+│   ├── identity.go           # ArtistIdentityProfile, AlbumVerdict (used by consensus MB check)
 │   ├── events.go             # SearchPerformed, ResultClicked
 │   └── vocabulary.go         # VocabularyEntry
 ├── ports/
-│   └── ports.go              # 14 port interfaces (SearchProvider, VocabularyStore, RelationshipQuerier, etc.)
+│   └── ports.go              # Port interfaces (SearchProvider, ArtistContentProvider, ClickSignalProvider, etc.)
 ├── service/
-│   ├── search_music.go       # SearchMusicService — main orchestrator
+│   ├── search_music.go       # SearchMusicService — main search orchestrator + click boost
+│   ├── consensus.go          # ConsensusService — multi-provider album consensus + MB contradiction
 │   ├── dedup.go              # FuseAndRank, Rerank, CollapseVersions, PopularityDominance, Diversity
 │   ├── normalize.go          # NormalizeForMatch (8-step canonicalization)
 │   ├── fuzzy.go              # TokenSortRatio, levenshteinDistance
@@ -140,32 +234,37 @@ internal/discovery/
 │   ├── circuit_breaker.go    # Per-provider circuit breaker
 │   ├── record_click.go       # RecordClickService
 │   ├── list_history.go       # ListSearchHistoryService
-│   ├── find_related.go       # FindRelatedService — entity relationship enrichment (album↔track, artist↔album)
-│   ├── get_album_tracks.go   # Album content fetch
-│   ├── get_artist_content.go # Artist top-tracks/albums fetch
+│   ├── find_related.go       # FindRelatedService — entity relationship enrichment
+│   ├── get_album_tracks.go   # Album content fetch + ContentFetchResponse type
+│   ├── get_artist_content.go # Artist top-tracks/albums with consensus integration
 │   └── url_router.go         # URL-paste provider detection
 └── adapters/
     ├── handler/
     │   └── discovery_handler.go  # HTTP routes (search, suggest, history, clicks, content)
     ├── providers/
-    │   ├── deezer.go         # Search + Charts + Artwork + Content
-    │   ├── lastfm.go         # Search + Charts
-    │   ├── musicbrainz.go    # Search (recordings, artists, releases)
-    │   ├── itunes.go         # Search + Artwork
+    │   ├── deezer.go         # Search + Charts + Artwork + Content + ISRC fetch
+    │   ├── lastfm.go         # Search + Charts + Artist albums/top tracks
+    │   ├── musicbrainz.go    # Search + Album validation + Identity resolution
+    │   ├── itunes.go         # Search + Artwork + Album lookup
     │   ├── soundcloud.go     # Search via yt-dlp
     │   ├── theaudiodb.go     # Search (artists) + Artwork
-    │   ├── genius.go         # Artwork
-    │   ├── fanarttv.go       # Artwork (MBID-based)
-    │   ├── artwork_chain.go  # Chained artwork resolver
-    │   └── wikidata.go       # MBID resolution (Deezer → MB)
+    │   ├── tidal.go          # Search + Artist content (OAuth 2.0 client credentials)
+    │   ├── coverartarchive.go # Artwork (MBID-keyed album covers, up to 1200px)
+    │   ├── genius.go         # Artwork (name search)
+    │   ├── fanarttv.go       # Artwork (MBID-based HD)
+    │   ├── discogs.go        # Artwork + Discography enrichment
+    │   ├── artwork_chain.go  # Chained artwork resolver (ID-first, name-search last)
+    │   ├── wikidata.go       # MBID resolution (Deezer ID → MB via SPARQL)
+    │   └── youtube.go        # Artwork (channel thumbnails, last resort)
     ├── cache/
     │   ├── query_cache.go        # 10min per-provider query cache
     │   ├── artwork_cache.go      # 14d artwork cache
     │   ├── popularity_cache.go   # 7d popularity cache
     │   ├── mbid_cache.go         # 30d MBID cache
+    │   ├── discogs_cache.go      # Discogs artist resolution cache
     │   ├── vocabulary_store.go   # Trigram-indexed vocabulary (prefix + fuzzy)
     │   └── fetch_success.go      # Provider reliability tracking
     └── persistence/
         ├── history_repo.go   # Search history (Postgres)
-        └── click_repo.go     # Click tracking (Postgres)
+        └── click_repo.go     # Click tracking + ClickSignalProvider (Postgres)
 ```
