@@ -54,6 +54,13 @@ type ClickSignalProvider interface {
 	TopClickedSignatures(ctx context.Context, queryNorm string, limit int) ([]string, error)
 }
 
+// EventStore appends telemetry interaction events (§8 of the discovery rebuild
+// blueprint). Append is best-effort from the caller's perspective — emission is
+// async and a failure must never surface to the user request.
+type EventStore interface {
+	Append(ctx context.Context, event domain.InteractionEvent) error
+}
+
 type AlbumContentProvider interface {
 	GetAlbumTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
