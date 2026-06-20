@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -40,7 +41,7 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		state.CurrentIdx,
 		state.PositionMs,
 		state.Shuffled,
-		state.RepeatMode,
+		state.RepeatMode.String(),
 		state.SourceId,
 		state.UpdatedAt,
 	)
@@ -75,13 +76,18 @@ func (r *PgxQueueStateRepository) GetForUser(
 		return nil, err
 	}
 
+	rm, err := domain.ParseRepeatMode(repeatMode)
+	if err != nil {
+		return nil, fmt.Errorf("parse repeat mode: %w", err)
+	}
+
 	return &domain.QueueState{
 		UserId:     userId,
 		TrackIds:   trackIds,
 		CurrentIdx: currentIdx,
 		PositionMs: positionMs,
 		Shuffled:   shuffled,
-		RepeatMode: repeatMode,
+		RepeatMode: rm,
 		SourceId:   sourceId,
 		UpdatedAt:  updatedAt,
 	}, nil

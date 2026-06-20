@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -87,17 +88,20 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 }
 
 func classifyJWTError(err error) auth.TokenRejectReason {
+	if errors.Is(err, jwt.ErrTokenExpired()) {
+		return auth.ReasonExpired
+	}
+	if errors.Is(err, jwt.ErrInvalidIssuer()) {
+		return auth.ReasonClaimInvalidISS
+	}
+	if errors.Is(err, jwt.ErrInvalidAudience()) {
+		return auth.ReasonClaimInvalidAUD
+	}
+
 	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "exp") && strings.Contains(msg, "not satisfied"):
-		return auth.ReasonExpired
-	case strings.Contains(msg, "iss") && strings.Contains(msg, "not satisfied"):
-		return auth.ReasonClaimInvalidISS
-	case strings.Contains(msg, "aud") && strings.Contains(msg, "not satisfied"):
-		return auth.ReasonClaimInvalidAUD
-	case strings.Contains(msg, "failed to find key"):
-		return auth.ReasonSignatureInvalid
-	case strings.Contains(msg, "could not verify message"):
+	case strings.Contains(msg, "failed to find key"),
+		strings.Contains(msg, "could not verify message"):
 		return auth.ReasonSignatureInvalid
 	default:
 		return auth.ReasonMalformed

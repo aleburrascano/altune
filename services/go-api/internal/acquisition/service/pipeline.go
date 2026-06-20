@@ -37,8 +37,8 @@ func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) erro
 	return nil
 }
 
-func rollback(_ context.Context, completed []Step, ac *AcquisitionContext) {
-	rbCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func rollback(ctx context.Context, completed []Step, ac *AcquisitionContext) {
+	rbCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	for i := len(completed) - 1; i >= 0; i-- {

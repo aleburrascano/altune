@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"time"
+	"fmt"
 
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/ports"
@@ -31,15 +31,13 @@ func (s *SaveQueueStateService) Execute(
 	userId shared.UserId,
 	input SaveQueueStateInput,
 ) error {
-	state := &domain.QueueState{
-		UserId:     userId,
-		TrackIds:   input.TrackIds,
-		CurrentIdx: input.CurrentIdx,
-		PositionMs: input.PositionMs,
-		Shuffled:   input.Shuffled,
-		RepeatMode: input.RepeatMode,
-		SourceId:   input.SourceId,
-		UpdatedAt:  time.Now(),
+	rm, err := domain.ParseRepeatMode(input.RepeatMode)
+	if err != nil {
+		return fmt.Errorf("invalid repeat mode: %w", err)
+	}
+	state, err := domain.NewQueueState(userId, input.TrackIds, input.CurrentIdx, input.PositionMs, input.Shuffled, rm, input.SourceId)
+	if err != nil {
+		return fmt.Errorf("invalid queue state: %w", err)
 	}
 	return s.repo.Upsert(ctx, state)
 }

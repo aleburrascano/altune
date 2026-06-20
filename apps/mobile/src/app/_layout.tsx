@@ -17,6 +17,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import TrackPlayer from 'react-native-track-player';
 
 import { AuthGate } from '../features/auth/ui/AuthGate';
+import { useServerEvents } from '../shared/events/useServerEvents';
 import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
 import { playbackService } from '../features/playback/service';
 import { ThemeProvider, darkTheme } from '../shared/ui/theme';
@@ -31,6 +32,11 @@ TrackPlayer.registerPlaybackService(() => playbackService);
 // design-system fonts (Space Grotesk + Inter) are held behind the native
 // splash until loaded so the UI never flashes a fallback font (FOUT).
 void SplashScreen.preventAutoHideAsync();
+
+function ServerEventsBridge() {
+  useServerEvents();
+  return null;
+}
 
 export default function RootLayout() {
   const [queryClient] = useState(
@@ -83,6 +89,7 @@ export default function RootLayout() {
           <SafeAreaProvider>
             <StatusBar style="light" />
             <AuthGate>
+              <ServerEventsBridge />
               <PlaybackProvider>
                 <Stack screenOptions={{ headerShown: false }}>
                   <Stack.Screen name="(tabs)" />

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-import { getSearchState } from '@shared/lib/search-state';
+import { getSearchState } from '../search-state';
 
 type UseDebouncedSearchOptions = {
   debounceMs: number;

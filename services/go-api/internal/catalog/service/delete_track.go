@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 )
 
 var ErrTrackNotFound = errors.New("track not found")
@@ -16,10 +17,19 @@ var ErrTrackNotFound = errors.New("track not found")
 type DeleteTrackService struct {
 	trackRepo  ports.TrackRepository
 	audioStore ports.AudioStore
+	events     events.Publisher
 }
 
-func NewDeleteTrackService(trackRepo ports.TrackRepository, audioStore ports.AudioStore) *DeleteTrackService {
-	return &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore}
+func NewDeleteTrackService(trackRepo ports.TrackRepository, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
+	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func WithDeleteTrackEvents(pub events.Publisher) func(*DeleteTrackService) {
+	return func(s *DeleteTrackService) { s.events = pub }
 }
 
 func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
@@ -39,6 +49,12 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, 
 	}
 	if !deleted {
 		return ErrTrackNotFound
+	}
+
+	if s.events != nil {
+		s.events.Publish(userId, "track_deleted", map[string]any{
+			"track_id": trackId.String(),
+		})
 	}
 
 	if audioRef != nil && s.audioStore != nil {

@@ -17,5 +17,7 @@ type VocabularyEntry struct {
 	TermNorm   string
 	Kind       VocabularyKind
 	Popularity int64
-	MatchScore float64 // populated by FindClosest: combined Jaccard+phonetic score
+	// MatchScore is populated only by VocabularyStore.FindClosest; callers
+	// constructing entries for Add should leave it at zero.
+	MatchScore float64
 }

@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 )
 
 type AddTrackInput struct {
@@ -29,10 +30,19 @@ type AddTrackOutput struct {
 
 type AddTrackService struct {
 	trackRepo ports.TrackRepository
+	events    events.Publisher
 }
 
-func NewAddTrackService(trackRepo ports.TrackRepository) *AddTrackService {
-	return &AddTrackService{trackRepo: trackRepo}
+func NewAddTrackService(trackRepo ports.TrackRepository, opts ...func(*AddTrackService)) *AddTrackService {
+	s := &AddTrackService{trackRepo: trackRepo}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func WithAddTrackEvents(pub events.Publisher) func(*AddTrackService) {
+	return func(s *AddTrackService) { s.events = pub }
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, input AddTrackInput) (*AddTrackOutput, error) {
@@ -58,6 +68,11 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 			"track_id", track.ID.String(),
 			"user_id", userId.String(),
 		)
+		if s.events != nil {
+			s.events.Publish(userId, "track_added_to_library", map[string]any{
+				"track_id": track.ID.String(),
+			})
+		}
 	}
 
 	if !created {

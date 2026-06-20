@@ -44,6 +44,8 @@ func (s *FilesystemAudioStore) Store(_ context.Context, sourcePath string, audio
 	return os.Rename(sourcePath, destPath)
 }
 
+// Stream returns a readable file handle and its size in bytes.
+// The caller MUST close the returned AudioStream when done.
 func (s *FilesystemAudioStore) Stream(_ context.Context, audioRef string) (ports.AudioStream, int64, error) {
 	path, err := s.safePath(audioRef)
 	if err != nil {

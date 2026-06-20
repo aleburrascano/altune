@@ -105,7 +105,7 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		CurrentIdx: state.CurrentIdx,
 		PositionMs: state.PositionMs,
 		Shuffled:   state.Shuffled,
-		RepeatMode: state.RepeatMode,
+		RepeatMode: state.RepeatMode.String(),
 		SourceId:   state.SourceId,
 	})
 }

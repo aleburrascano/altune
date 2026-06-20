@@ -55,7 +55,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           accessibilityRole="button"
           accessibilityState={{ selected: focused }}
           accessibilityLabel={label}
-          hitSlop={8}
+          hitSlop={12}
           style={({ pressed }) => [styles.tab, pressed ? styles.tabPressed : null]}
         >
           <View

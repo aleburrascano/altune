@@ -243,7 +243,12 @@ type SearchResult struct {
 	ImageURL   string
 	Confidence Confidence
 	Sources    []SourceRef
-	Extras     map[string]any
+	// Extras carries provider-specific metadata. Expected keys:
+	//   "year" (int), "disambiguation" (string), "mbid" (string),
+	//   "popularity" (int64), "record_type" (string: "album"|"single"|"ep"),
+	//   "release_date" (string), "track_count" (int), "featured_artists" ([]map[string]any),
+	//   "collapsed_artists" ([]map[string]any), "deezer_rank" (int64).
+	Extras map[string]any
 	Quality    QualityScore
 }
 

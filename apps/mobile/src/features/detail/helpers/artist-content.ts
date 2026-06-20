@@ -1,5 +1,5 @@
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
-import { normalizeForDedup } from '@shared/lib/normalize-for-dedup';
+import { normalizeForDedup } from './normalize-for-dedup';
 
 export function getReleaseSortKey(album: DiscoveryResult): string | null {
   const releaseDate = album.extras['release_date'];

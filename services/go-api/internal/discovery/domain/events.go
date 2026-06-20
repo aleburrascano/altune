@@ -19,4 +19,5 @@ type ResultClicked struct {
 	QueryNorm       string
 	ResultSignature string
 	Position        int
+	Confidence      Confidence
 }

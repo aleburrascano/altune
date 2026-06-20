@@ -17,4 +17,3 @@ export function setSearchState(query: string, inputValue: string): void {
 export function getSearchState(): { query: string; inputValue: string } {
   return { query: _lastQuery, inputValue: _lastInputValue };
 }
-
