@@ -23,9 +23,10 @@ signals A (zero-result/abandoned-search mining) and B (entity-level cross-provid
 
 Status: **complete** (U1–U6 shipped on `refactor/discovery-pipeline-clarity`).
 
-- **First baseline captured.** The eval (U4) ran on the full production catalog (1,792 distinct
-  entities, cloned prod → dev): **top-1 pass-rate 97.4%** (≈98% true). The 46 failures are three
-  structural patterns mapped to three layers — see the blueprint §4.6 and plan 003's taxonomy +
+- **Baseline captured (top-K).** The eval (U4, now top-K) ran on the full production catalog
+  (1,792 distinct entities, cloned prod → dev): **top-1 97.2%, top-3 98.9%** (≈99.4% true at top-3
+  after `¥$` matcher artifacts). **Top-3 is the gate.** The 31 below-#1 passes are all Pattern A
+  (acceptable under the bar); only 19 miss top-3. See blueprint §4.6 and plan 003's taxonomy +
   constants ledger.
 - **Eval hardening done.** `matchesEntity` now matches when providers embed the artist/track-number
   in the title (e.g. "A-Ha - Take On Me"), and `--random` sampling was added (the default
