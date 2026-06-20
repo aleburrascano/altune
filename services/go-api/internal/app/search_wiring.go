@@ -53,7 +53,7 @@ func BuildSearchService(
 		))
 	}
 
-	if vocabStore := buildVocabularyStore(redisClient); vocabStore != nil {
+	if vocabStore := BuildVocabularyStore(redisClient); vocabStore != nil {
 		searchOpts = append(searchOpts, discoveryService.WithVocabularyStore(vocabStore))
 	}
 
@@ -99,9 +99,9 @@ func buildArtworkChain(cfg *config.Config) discoveryPorts.ArtworkResolver {
 	return providers.NewChainedArtworkResolver(artworkResolvers...)
 }
 
-// buildVocabularyStore returns the Redis-backed vocabulary store, or nil when
+// BuildVocabularyStore returns the Redis-backed vocabulary store, or nil when
 // Redis is not configured.
-func buildVocabularyStore(redisClient *goredis.Client) discoveryPorts.VocabularyStore {
+func BuildVocabularyStore(redisClient *goredis.Client) discoveryPorts.VocabularyStore {
 	if redisClient == nil {
 		return nil
 	}

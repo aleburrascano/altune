@@ -9,10 +9,12 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var _ ports.EventStore = (*PgxEventStore)(nil)
+var _ ports.EventQuery = (*PgxEventStore)(nil)
 
 type PgxEventStore struct {
 	pool *pgxpool.Pool
@@ -52,4 +54,64 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		return fmt.Errorf("append telemetry event: %w", err)
 	}
 	return nil
+}
+
+// ZeroResultQueries ranks search_performed events flagged zero_result in the
+// window by frequency. These are the strong coverage-gap candidates.
+func (r *PgxEventStore) ZeroResultQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT query_norm, COUNT(*) AS cnt
+		FROM discovery_events
+		WHERE event_type = $1
+			AND occurred_at >= $2
+			AND query_norm IS NOT NULL
+			AND (payload->>'zero_result')::boolean = true
+		GROUP BY query_norm
+		ORDER BY cnt DESC
+		LIMIT $3`,
+		domain.EventTypeSearchPerformed.String(), since, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query zero-result events: %w", err)
+	}
+	defer rows.Close()
+	return scanQueryCounts(rows)
+}
+
+// NonZeroNoClickQueries ranks search_performed events that returned results but
+// whose query_norm drew no click in the window — a weak coverage hint.
+func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT e.query_norm, COUNT(*) AS cnt
+		FROM discovery_events e
+		WHERE e.event_type = $1
+			AND e.occurred_at >= $2
+			AND e.query_norm IS NOT NULL
+			AND (e.payload->>'zero_result')::boolean = false
+			AND NOT EXISTS (
+				SELECT 1 FROM discovery_search_clicks c
+				WHERE c.query_norm = e.query_norm AND c.clicked_at >= $2
+			)
+		GROUP BY e.query_norm
+		ORDER BY cnt DESC
+		LIMIT $3`,
+		domain.EventTypeSearchPerformed.String(), since, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query no-click events: %w", err)
+	}
+	defer rows.Close()
+	return scanQueryCounts(rows)
+}
+
+func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {
+	counts := []ports.QueryCount{}
+	for rows.Next() {
+		var qc ports.QueryCount
+		if err := rows.Scan(&qc.QueryNorm, &qc.Count); err != nil {
+			return nil, fmt.Errorf("scan query count: %w", err)
+		}
+		counts = append(counts, qc)
+	}
+	return counts, rows.Err()
 }
