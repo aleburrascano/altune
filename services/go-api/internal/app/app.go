@@ -164,22 +164,9 @@ func (a *App) setup(ctx context.Context) error {
 			a.cfg.MusicBrainzUserAgent,
 		)
 	}
-	searchProviders := a.buildDiscoveryProviders(sharedMB)
-	queryCache := discoveryCacheAdapters.NewRedisQueryCache(a.redisClient)
-	circuitBreaker := discoveryService.NewCircuitBreaker()
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	clickRepo := discoveryPersistence.NewPgxSearchClickRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
-	// AIDEV-DECISION: artwork chain — ID-based sources first, name-search last.
-	// ID-based (always correct for the entity): Cover Art Archive → Fanart.tv
-	// Name-search fallback (risk of wrong artist): Genius → TheAudioDB → Deezer → iTunes → YouTube
-	var artworkResolvers []discoveryPorts.ArtworkResolver
-	artworkResolvers = append(artworkResolvers,
-		providers.NewCoverArtArchiveResolver(&http.Client{Timeout: 10 * time.Second}))
-	if a.cfg.HasFanartTV() {
-		artworkResolvers = append(artworkResolvers,
-			providers.NewFanartTvArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.FanartTVAPIKey))
-	}
 	var sharedDiscogs *providers.DiscogsAdapter
 	if a.cfg.HasDiscogs() {
 		sharedDiscogs = providers.NewDiscogsAdapter(
@@ -188,30 +175,9 @@ func (a *App) setup(ctx context.Context) error {
 			a.cfg.MusicBrainzUserAgent,
 		)
 	}
-	if a.cfg.HasGenius() {
-		artworkResolvers = append(artworkResolvers,
-			providers.NewGeniusArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.GeniusAccessToken))
-	}
-	artworkResolvers = append(artworkResolvers,
-		providers.NewTheAudioDBAdapter(&http.Client{Timeout: 10 * time.Second}),
-		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
-		providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second}),
-	)
-	if a.cfg.HasYouTube() {
-		artworkResolvers = append(artworkResolvers,
-			providers.NewYouTubeArtworkResolver(&http.Client{Timeout: 10 * time.Second}, a.cfg.YouTubeAPIKey))
-	}
-	artworkChain := providers.NewChainedArtworkResolver(artworkResolvers...)
 
-	searchOpts := []discoveryService.SearchOption{
-		discoveryService.WithArtworkResolver(artworkChain),
-	}
-	if a.redisClient != nil {
-		searchOpts = append(searchOpts, discoveryService.WithArtworkCache(
-			discoveryCacheAdapters.NewRedisArtworkCache(a.redisClient),
-		))
-	}
-
+	// vocabStore is shared by suggest + the periodic vocabulary refresh; the
+	// search pipeline builds its own inside BuildSearchService.
 	var vocabStore discoveryPorts.VocabularyStore
 	if a.redisClient != nil {
 		vocabStore = discoveryCacheAdapters.NewVocabularyStore(
@@ -220,12 +186,7 @@ func (a *App) setup(ctx context.Context) error {
 			discoveryCacheAdapters.WithMetaphone(discoveryService.MetaphoneKey),
 		)
 	}
-	if vocabStore != nil {
-		searchOpts = append(searchOpts, discoveryService.WithVocabularyStore(vocabStore))
-	}
 
-	searchOpts = append(searchOpts, discoveryService.WithClickSignals(clickRepo))
-	searchOpts = append(searchOpts, discoveryService.WithEventStore(eventStore))
 	clickSvc := discoveryService.NewRecordClickService(clickRepo)
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 
@@ -255,10 +216,6 @@ func (a *App) setup(ctx context.Context) error {
 	}
 
 	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
-
-	if sharedMB != nil {
-		searchOpts = append(searchOpts, discoveryService.WithIdentityResolver(sharedMB))
-	}
 
 	// Multi-provider consensus: ALL providers are equal sources.
 	// Albums are merged from every provider into a union — no single
@@ -347,10 +304,7 @@ func (a *App) setup(ctx context.Context) error {
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
-	findRelatedSvc := discoveryService.NewFindRelatedService(trackRepo, deezerContent, deezerContent)
-	searchOpts = append(searchOpts, discoveryService.WithFindRelatedService(findRelatedSvc))
-
-	searchSvc := discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker, searchOpts...)
+	searchSvc := BuildSearchService(a.cfg, a.pool, a.redisClient, eventStore)
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, suggestSvc, eventSvc)
@@ -465,7 +419,7 @@ func (a *App) buildAudioStore() catalogPorts.AudioStore {
 	return nil
 }
 
-func (a *App) buildDiscoveryProviders(mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
+func buildDiscoveryProviders(cfg *config.Config, mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
 	var providerList []discoveryPorts.SearchProvider
 
 	deezerClient := &http.Client{Timeout: 10 * time.Second}
@@ -480,16 +434,16 @@ func (a *App) buildDiscoveryProviders(mb *providers.MusicBrainzAdapter) []discov
 		providerList = append(providerList, mb)
 	}
 
-	if a.cfg.HasLastFM() {
+	if cfg.HasLastFM() {
 		lfmClient := &http.Client{Timeout: 10 * time.Second}
-		providerList = append(providerList, providers.NewLastFmAdapter(lfmClient, a.cfg.LastFMAPIKey))
+		providerList = append(providerList, providers.NewLastFmAdapter(lfmClient, cfg.LastFMAPIKey))
 	}
 
 	providerList = append(providerList, providers.NewSoundCloudAdapter())
 
-	if a.cfg.HasTidal() {
+	if cfg.HasTidal() {
 		tidalClient := &http.Client{Timeout: 10 * time.Second}
-		providerList = append(providerList, providers.NewTidalAdapter(tidalClient, a.cfg.TidalClientID, a.cfg.TidalClientSecret))
+		providerList = append(providerList, providers.NewTidalAdapter(tidalClient, cfg.TidalClientID, cfg.TidalClientSecret))
 	}
 
 	providerList = append(providerList, providers.NewYouTubeMusicAdapter())
