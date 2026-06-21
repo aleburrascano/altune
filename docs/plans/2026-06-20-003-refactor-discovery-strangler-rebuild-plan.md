@@ -327,9 +327,18 @@ verdict is recorded in code comments + here.
   (`-race` unavailable here — no CGO; fan-out reuses the proven mutex+WaitGroup pattern, all shared
   writes guarded, every goroutine joined before return.)
 
-- **U5. Stage-3 consensus + MB authority + per-artist cache.** Rebuild the audited consensus; add
-  the cache; add the unit test the old engine lacks. *Verify:* confirmed/unconfirmed/rejected
-  logic; cache hit skips provider calls; deterministic across runs.
+- **U5. Stage-3 consensus + MB authority + per-artist cache. [DONE 2026-06-21]**
+  `discovery2/service/consensus.go`: the audited consensus carried forward with two changes — album
+  clustering is now **categorical** (`parseVersion` core+tags + fuzzy-core last resort, the same
+  cascade as Layer 2) replacing `consensusTitleMatchMinTSR=85` (ledger entry resolved), and a
+  **per-artist TTL cache** (`defaultConsensusCacheTTL=6h`, OQ4 policy: short TTL, not event-driven)
+  short-circuits the fan-out + MB pass. Provider iteration is slice-ordered (not map-range) so output
+  is deterministic. The MB authority pass (confirm / contamination-reject / strong-data authority
+  filter) is ported faithfully; its thresholds (mbLookupCap, mbAuthorityMin, mbDiscardMinAlbums) are
+  carried-forward audited values, not ranking constants. `consensusTimeout=10s` → **kept** (SLA).
+  *Verified:* 47 discovery2 tests pass (build + vet + gofmt clean) — the unit test the old engine
+  lacked. Covers confirmed/unconfirmed by provider count, deluxe-as-separate-release (categorical),
+  cache-hit-skips-provider-calls, determinism across 5 runs, and MB confirm + contamination-reject.
 
 - **U6. Close the three coverage gaps.** Fix YT Music 0-results (Pattern C); long-tail album-track
   fallback; underground top-track fallback. *Verify:* the Pattern-C exact tracks now appear;
