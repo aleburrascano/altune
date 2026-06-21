@@ -45,12 +45,6 @@ type Config struct {
 	OCIS3Bucket    string `env:"OCI_S3_BUCKET"`
 	OCIS3Region    string `env:"OCI_S3_REGION"`
 
-	// Discovery pipeline cutover (plan 003 strangler). When true, the search
-	// surface routes to the rebuilt v2 pipeline; default false keeps the audited
-	// v1 live. Flipping is the per-surface cutover — gate it on a green top-K eval
-	// (new ≥ old at top-3) first; rollback is flipping it back.
-	DiscoveryV2Search bool `env:"DISCOVERY_V2_SEARCH" envDefault:"false"`
-
 	// Audio storage — local filesystem fallback
 	MusicDir string `env:"MUSIC_DIR"`
 

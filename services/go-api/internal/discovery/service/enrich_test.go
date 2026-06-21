@@ -8,7 +8,6 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	legacy "altune/go-api/internal/discovery/service"
 )
 
 type fakeArtworkResolver struct {
@@ -43,7 +42,7 @@ func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _,
 func TestService_EnrichesMissingArtwork(t *testing.T) {
 	resolver := &fakeArtworkResolver{url: "https://art/cover.jpg"}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker(), WithArtworkResolver(resolver))
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithArtworkResolver(resolver))
 
 	out := runSearch(t, svc, "humble")
 
@@ -60,7 +59,7 @@ func TestService_SkipsEnrichWhenArtworkPresent(t *testing.T) {
 	withArt := deezerTrack("Humble", "Kendrick Lamar", 80)
 	withArt.ImageURL = "https://existing/art.jpg"
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{withArt}}
-	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker(), WithArtworkResolver(resolver))
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithArtworkResolver(resolver))
 
 	out := runSearch(t, svc, "humble")
 
@@ -78,7 +77,7 @@ func TestService_ArtworkCacheShortCircuits(t *testing.T) {
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := NewService(
 		[]ports.SearchProvider{p},
-		legacy.NewCircuitBreaker(),
+		NewCircuitBreaker(),
 		WithArtworkResolver(resolver),
 		WithArtworkCache(cache),
 	)

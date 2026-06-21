@@ -35,14 +35,6 @@ func NewFindRelatedService(
 	}
 }
 
-func WithFindRelatedService(svc *FindRelatedService) SearchOption {
-	return func(s *SearchMusicService) { s.findRelatedSvc = svc }
-}
-
-func WithIdentityResolver(v ports.AlbumValidator) SearchOption {
-	return func(s *SearchMusicService) { s.albumValidator = v }
-}
-
 func (s *FindRelatedService) Execute(
 	ctx context.Context,
 	organicResults []domain.SearchResult,
@@ -218,4 +210,3 @@ func dedupRelatedAgainstOrganic(groups []domain.RelatedGroup, organic []domain.S
 	}
 	return filtered
 }
-

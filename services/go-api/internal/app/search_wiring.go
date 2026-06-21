@@ -12,7 +12,6 @@ import (
 	domain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
-	discovery2 "altune/go-api/internal/discovery2/service"
 	"altune/go-api/internal/shared/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,7 +31,7 @@ func BuildSearchService(
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
 	eventStore discoveryPorts.EventStore,
-) *discoveryService.SearchMusicService {
+) *discoveryService.Service {
 	var sharedMB *providers.MusicBrainzAdapter
 	if cfg.HasMusicBrainz() {
 		sharedMB = providers.NewMusicBrainzAdapter(
@@ -42,88 +41,34 @@ func BuildSearchService(
 	}
 
 	searchProviders := buildDiscoveryProviders(cfg, sharedMB)
-	queryCache := discoveryCacheAdapters.NewRedisQueryCache(redisClient)
 	circuitBreaker := discoveryService.NewCircuitBreaker()
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(pool)
-	clickRepo := discoveryPersistence.NewPgxSearchClickRepository(pool)
 
-	searchOpts := []discoveryService.SearchOption{
+	deezerContent := providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second})
+	trackRepo := catalogPersistence.NewPgxTrackRepository(pool)
+	findRelatedSvc := discoveryService.NewFindRelatedService(trackRepo, deezerContent, deezerContent)
+
+	opts := []discoveryService.Option{
+		discoveryService.WithHistoryRepository(historyRepo),
 		discoveryService.WithArtworkResolver(buildArtworkChain(cfg)),
+		discoveryService.WithFindRelatedService(findRelatedSvc),
 	}
 	if redisClient != nil {
-		searchOpts = append(searchOpts, discoveryService.WithArtworkCache(
-			discoveryCacheAdapters.NewRedisArtworkCache(redisClient),
-		))
-	}
-
-	if vocabStore := BuildVocabularyStore(redisClient); vocabStore != nil {
-		searchOpts = append(searchOpts, discoveryService.WithVocabularyStore(vocabStore))
-	}
-
-	searchOpts = append(searchOpts, discoveryService.WithClickSignals(clickRepo))
-	if eventStore != nil {
-		searchOpts = append(searchOpts, discoveryService.WithEventStore(eventStore))
-	}
-	if sharedMB != nil {
-		searchOpts = append(searchOpts, discoveryService.WithIdentityResolver(sharedMB))
-	}
-
-	deezerContent := providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second})
-	trackRepo := catalogPersistence.NewPgxTrackRepository(pool)
-	findRelatedSvc := discoveryService.NewFindRelatedService(trackRepo, deezerContent, deezerContent)
-	searchOpts = append(searchOpts, discoveryService.WithFindRelatedService(findRelatedSvc))
-
-	return discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker, searchOpts...)
-}
-
-// BuildSearchServiceV2 constructs the rebuilt (plan 003) discovery search
-// pipeline from the SAME shared dependencies as v1 — provider adapters, circuit
-// breaker, vocabulary store, history repo, and (optionally) the telemetry store.
-// The strangler routes to this only when DISCOVERY_V2_SEARCH is set; the eval
-// uses it to gate the cutover (nil eventStore so synthetic searches don't emit).
-func BuildSearchServiceV2(
-	cfg *config.Config,
-	pool *pgxpool.Pool,
-	redisClient *goredis.Client,
-	eventStore discoveryPorts.EventStore,
-) *discovery2.Service {
-	var sharedMB *providers.MusicBrainzAdapter
-	if cfg.HasMusicBrainz() {
-		sharedMB = providers.NewMusicBrainzAdapter(
-			&http.Client{Timeout: 10 * time.Second},
-			cfg.MusicBrainzUserAgent,
-		)
-	}
-
-	searchProviders := buildDiscoveryProviders(cfg, sharedMB)
-	circuitBreaker := discoveryService.NewCircuitBreaker()
-	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(pool)
-
-	deezerContent := providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second})
-	trackRepo := catalogPersistence.NewPgxTrackRepository(pool)
-	findRelatedSvc := discoveryService.NewFindRelatedService(trackRepo, deezerContent, deezerContent)
-
-	opts := []discovery2.Option{
-		discovery2.WithHistoryRepository(historyRepo),
-		discovery2.WithArtworkResolver(buildArtworkChain(cfg)),
-		discovery2.WithFindRelatedService(findRelatedSvc),
-	}
-	if redisClient != nil {
-		opts = append(opts, discovery2.WithArtworkCache(
+		opts = append(opts, discoveryService.WithArtworkCache(
 			discoveryCacheAdapters.NewRedisArtworkCache(redisClient),
 		))
 	}
 	if vocabStore := BuildVocabularyStore(redisClient); vocabStore != nil {
-		opts = append(opts, discovery2.WithVocabularyStore(vocabStore))
+		opts = append(opts, discoveryService.WithVocabularyStore(vocabStore))
 	}
 	if eventStore != nil {
-		opts = append(opts, discovery2.WithEventStore(eventStore))
+		opts = append(opts, discoveryService.WithEventStore(eventStore))
 	}
 	if sharedMB != nil {
-		opts = append(opts, discovery2.WithAlbumValidator(sharedMB))
+		opts = append(opts, discoveryService.WithAlbumValidator(sharedMB))
 	}
 
-	return discovery2.NewService(searchProviders, circuitBreaker, opts...)
+	return discoveryService.NewService(searchProviders, circuitBreaker, opts...)
 }
 
 // BuildConsensusProviders builds the multi-provider album fan-out used by the

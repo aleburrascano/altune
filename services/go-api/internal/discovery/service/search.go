@@ -1,27 +1,24 @@
-// Package service is the rebuilt discovery search pipeline — the strangler-fig
-// replacement for internal/discovery/service, grown layer by layer behind the
-// existing handler and gated at every step by the top-K eval (plan 003).
+// Package service is the discovery search pipeline plus the surrounding
+// use cases (suggest, consensus, artist/album content, clicks, history,
+// vocabulary learning).
 //
-// Design doctrine: zero arbitrary, query-fit constants. Continuous/multi-signal
-// judgments become categorical, structural decisions (identifier-first merge,
-// version-marker categories, lexicographic relevance tiers) instead of tuned
-// thresholds. Surviving numbers must be principled (SLA timeouts, RRF k=60),
-// learned-later (the Layer-3 ML seam), or a single documented last resort the
-// eval proves generalizes.
+// The search path (Service.Execute) is the rebuilt Merge → Rank core. Its
+// design doctrine: zero arbitrary, query-fit constants. Continuous/multi-signal
+// judgments are structural decisions (identifier-first merge, continuous
+// relevance) instead of tuned thresholds. Surviving numbers must be principled
+// (SLA timeouts, RRF k=60), learned-later (the Layer-3 ML seam, plan 004), or a
+// single documented last resort the top-K eval proves generalizes. The
+// behavioral click-boost is intentionally dropped: it is a learned signal for
+// the ML seam, not a hand-tuned constant.
 //
-// This package REUSES the discovery context verbatim — domain value objects,
-// ports, provider adapters, and the orthogonal enrichment services (artwork
-// resolver chain, query correction, related groups) are imported from
-// internal/discovery, never duplicated. Only the decision logic (merge, rank)
-// is redesigned. The behavioral click-boost is intentionally dropped: it is a
-// learned signal for the ML seam (plan 004), not a hand-tuned constant.
-//
-// AIDEV-NOTE: Provisional package name `discovery2`. After the rebuild runs in
-// production on every surface, the old package is removed and this one is
-// renamed back to `discovery` (deferred follow-up, user-decided). The dependency
-// on `legacy` (circuit breaker, query cleaner, intent detector, diversity rule,
-// artist-collapse, correction + related services, SearchOutput shape) disappears
-// at that rename as those reusable parts move into this package.
+// AIDEV-NOTE: This package is the result of collapsing the strangler rebuild
+// (formerly internal/discovery2) back into the discovery context — the rebuilt
+// Merge/Rank replaced the v1 ranking chain (FuseAndRank/Rerank/CollapseVersions/
+// ApplyPopularityDominance + quality/intent/popularity machinery), which is
+// deleted. Result-shaping rules it still relies on (EnforceDiversity,
+// CollapseArtistDuplicates) live in diversity.go. The consensus detail surface
+// is still served by the v1 ConsensusService (consensus.go); its rebuilt
+// counterpart was not yet wired and is a separate cutover.
 package service
 
 import (
@@ -32,7 +29,6 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	legacy "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
 
@@ -50,16 +46,28 @@ const defaultProviderTimeout = 1500 * time.Millisecond
 // artwork, correction/suggest, related groups, telemetry, vocabulary learning).
 type Service struct {
 	providers       []ports.SearchProvider
-	circuitBreaker  *legacy.CircuitBreaker
+	circuitBreaker  *CircuitBreaker
 	historyRepo     ports.SearchHistoryRepository
 	vocabStore      ports.VocabularyStore
 	eventStore      ports.EventStore
 	artworkResolver ports.ArtworkResolver
 	artworkCache    ports.ArtworkCache
 	albumValidator  ports.AlbumValidator
-	correctionSvc   *legacy.CorrectionService
-	findRelatedSvc  *legacy.FindRelatedService
+	correctionSvc   *CorrectionService
+	findRelatedSvc  *FindRelatedService
 	bgWg            sync.WaitGroup
+}
+
+// SearchOutput is the result envelope returned by the search use case and
+// mapped to the wire by the handler.
+type SearchOutput struct {
+	Results          []domain.SearchResult
+	ProviderStatuses []domain.ProviderSearchResponse
+	Partial          bool
+	CorrectedQuery   string
+	OriginalQuery    string
+	SuggestedQuery   string
+	Related          []domain.RelatedGroup
 }
 
 // Option configures optional Service dependencies.
@@ -97,12 +105,12 @@ func WithAlbumValidator(v ports.AlbumValidator) Option {
 }
 
 // WithFindRelatedService attaches the "more from this album/artist" groups.
-func WithFindRelatedService(r *legacy.FindRelatedService) Option {
+func WithFindRelatedService(r *FindRelatedService) Option {
 	return func(s *Service) { s.findRelatedSvc = r }
 }
 
 // NewService constructs the rebuilt search orchestrator.
-func NewService(providers []ports.SearchProvider, circuitBreaker *legacy.CircuitBreaker, opts ...Option) *Service {
+func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker, opts ...Option) *Service {
 	s := &Service{
 		providers:      providers,
 		circuitBreaker: circuitBreaker,
@@ -111,7 +119,7 @@ func NewService(providers []ports.SearchProvider, circuitBreaker *legacy.Circuit
 		opt(s)
 	}
 	if s.vocabStore != nil {
-		s.correctionSvc = legacy.NewCorrectionService(s.vocabStore)
+		s.correctionSvc = NewCorrectionService(s.vocabStore)
 	}
 	return s
 }
@@ -124,8 +132,8 @@ func (s *Service) Execute(
 	userId shared.UserId,
 	query *domain.SearchQuery,
 	saveHistory bool,
-) (*legacy.SearchOutput, error) {
-	searchQuery := legacy.CleanQuery(query.Raw)
+) (*SearchOutput, error) {
+	searchQuery := CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 
 	slog.InfoContext(ctx, "search.v2.start", "query", query.Raw)
@@ -175,7 +183,7 @@ func (s *Service) Execute(
 		"related_groups", len(related),
 	)
 
-	return &legacy.SearchOutput{
+	return &SearchOutput{
 		Results:          ranked,
 		ProviderStatuses: statuses,
 		Partial:          partial,
@@ -195,8 +203,8 @@ func (s *Service) mergeRankEnrich(
 ) []domain.SearchResult {
 	entities := Merge(perProvider)
 	ranked := Rank(entities, queryNorm)
-	ranked = legacy.EnforceDiversity(ranked)
-	ranked = legacy.CollapseArtistDuplicates(ranked)
+	ranked = EnforceDiversity(ranked)
+	ranked = CollapseArtistDuplicates(ranked)
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
 	ranked = s.enrich(ctx, ranked)
 	return ranked

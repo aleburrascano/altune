@@ -8,7 +8,6 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	legacy "altune/go-api/internal/discovery/service"
 )
 
 type fakeEventStore struct {
@@ -33,10 +32,15 @@ func (f *fakeEventStore) snapshot() []domain.InteractionEvent {
 	return append([]domain.InteractionEvent(nil), f.events...)
 }
 
+// recorded is an alias for snapshot used by the record-event tests.
+func (f *fakeEventStore) recorded() []domain.InteractionEvent {
+	return f.snapshot()
+}
+
 func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 	store := &fakeEventStore{}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker(), WithEventStore(store))
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store))
 
 	runSearch(t, svc, "humble")
 	svc.WaitForBackground()
@@ -66,7 +70,7 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 	store := &fakeEventStore{err: errors.New("db down")}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker(), WithEventStore(store))
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store))
 
 	out, err := svc.Execute(context.Background(), newUser(), newQuery(t, "humble"), false)
 	svc.WaitForBackground() // must not panic despite the append error
@@ -81,7 +85,7 @@ func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 
 func TestService_NoEventStoreNoEmit(t *testing.T) {
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker())
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker())
 	runSearch(t, svc, "humble")
 	svc.WaitForBackground() // no-op, must not block or panic
 }

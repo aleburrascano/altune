@@ -210,7 +210,11 @@ func buildDiscoveryRouter(
 	}
 
 	cb := service.NewCircuitBreaker()
-	searchSvc := service.NewSearchMusicService(providers, nil, historyRepo, cb)
+	var searchOpts []service.Option
+	if historyRepo != nil {
+		searchOpts = append(searchOpts, service.WithHistoryRepository(historyRepo))
+	}
+	searchSvc := service.NewService(providers, cb, searchOpts...)
 	clickSvc := service.NewRecordClickService(clickRepo)
 	historySvc := service.NewListSearchHistoryService(historyRepo)
 

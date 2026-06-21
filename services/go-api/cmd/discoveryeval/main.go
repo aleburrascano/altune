@@ -23,7 +23,6 @@ import (
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
-	discovery2 "altune/go-api/internal/discovery2/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
@@ -43,7 +42,6 @@ type options struct {
 	topK        int
 	jsonPath    string
 	random      bool
-	pipeline    string
 	query       string
 }
 
@@ -57,8 +55,7 @@ func main() {
 	flag.IntVar(&opts.topK, "top-k", 3, "eval: top-K window — entity passes if it ranks within the top K (1 = strict #1)")
 	flag.StringVar(&opts.jsonPath, "json", "", "write the full JSON report to this path (default: stdout summary only)")
 	flag.BoolVar(&opts.random, "random", false, "eval: sample entities randomly instead of alphabetically (use with -limit for a representative sample)")
-	flag.StringVar(&opts.pipeline, "pipeline", "v1", "eval: which search pipeline to exercise — v1 (current) | v2 (rebuilt strangler). Run both and require v2 >= v1 at top-K before cutover.")
-	flag.StringVar(&opts.query, "query", "", "diagnostic: run a single query through the chosen pipeline and dump the top results (bypasses the library eval)")
+	flag.StringVar(&opts.query, "query", "", "diagnostic: run a single query and dump the top results (bypasses the library eval)")
 	flag.Parse()
 
 	if err := run(opts); err != nil {
@@ -121,10 +118,7 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 	}
 
 	// nil event store: eval searches must not emit telemetry.
-	searcher, drain, err := buildEvalSearcher(cfg, pool, redisClient, opts.pipeline)
-	if err != nil {
-		return err
-	}
+	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
 	report := discoveryService.RunLibraryEval(ctx, entities, searcher, opts.concurrency, opts.topK, progress)
 	drain() // drain best-effort background writes before exit
 
@@ -169,32 +163,17 @@ func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, ran
 	return entities, nil
 }
 
-// buildEvalSearcher constructs the requested pipeline as the eval's narrow
-// Searcher, plus a drain func to flush its best-effort background writes. The
-// cutover gate (plan 003 U8) runs this for both v1 and v2 and requires v2 ≥ v1
-// at the chosen top-K before flipping DISCOVERY_V2_SEARCH.
-func buildEvalSearcher(cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, pipeline string) (discoveryService.Searcher, func(), error) {
-	switch pipeline {
-	case "v2":
-		fmt.Fprintln(os.Stderr, "pipeline: v2 (rebuilt strangler)")
-		svc := app.BuildSearchServiceV2(cfg, pool, redisClient, nil)
-		return searchAdapterV2{svc: svc}, svc.WaitForBackground, nil
-	case "v1", "":
-		fmt.Fprintln(os.Stderr, "pipeline: v1 (current)")
-		svc := app.BuildSearchService(cfg, pool, redisClient, nil)
-		return searchAdapter{svc: svc}, svc.WaitForIngest, nil
-	default:
-		return nil, nil, fmt.Errorf("unknown pipeline %q (want v1 | v2)", pipeline)
-	}
+// buildEvalSearcher constructs the search pipeline as the eval's narrow
+// Searcher, plus a drain func to flush its best-effort background writes.
+func buildEvalSearcher(cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discoveryService.Searcher, func()) {
+	svc := app.BuildSearchService(cfg, pool, redisClient, nil)
+	return searchAdapter{svc: svc}, svc.WaitForBackground
 }
 
 // runQuery is the diagnostic mode: dump the top results a single query returns
 // through the chosen pipeline, so v1 and v2 can be compared title-by-title.
 func runQuery(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	searcher, drain, err := buildEvalSearcher(cfg, pool, redisClient, opts.pipeline)
-	if err != nil {
-		return err
-	}
+	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
 	results, err := searcher.Search(ctx, opts.query)
 	drain()
 	if err != nil {
@@ -205,7 +184,7 @@ func runQuery(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 	if len(results) < n {
 		n = len(results)
 	}
-	fmt.Printf("\n# %q via %s — %d results, top %d:\n", opts.query, opts.pipeline, len(results), n)
+	fmt.Printf("\n# %q — %d results, top %d:\n", opts.query, len(results), n)
 	for i := 0; i < n; i++ {
 		r := results[i]
 		srcs := make([]string, 0, len(r.Sources))
@@ -226,30 +205,13 @@ func evalQuery(query string) (*domain.SearchQuery, error) {
 	return domain.NewSearchQuery(query, "", kinds, 20)
 }
 
-// searchAdapter wraps the v1 search service as the eval's narrow Searcher.
+// searchAdapter wraps the search service as the eval's narrow Searcher.
 // Blended view (all music kinds), no history persistence, synthetic zero user.
 type searchAdapter struct {
-	svc *discoveryService.SearchMusicService
+	svc *discoveryService.Service
 }
 
 func (a searchAdapter) Search(ctx context.Context, query string) ([]domain.SearchResult, error) {
-	q, err := evalQuery(query)
-	if err != nil {
-		return nil, err
-	}
-	out, err := a.svc.Execute(ctx, shared.UserId{}, q, false)
-	if err != nil {
-		return nil, err
-	}
-	return out.Results, nil
-}
-
-// searchAdapterV2 wraps the rebuilt (plan 003) search service identically.
-type searchAdapterV2 struct {
-	svc *discovery2.Service
-}
-
-func (a searchAdapterV2) Search(ctx context.Context, query string) ([]domain.SearchResult, error) {
 	q, err := evalQuery(query)
 	if err != nil {
 		return nil, err

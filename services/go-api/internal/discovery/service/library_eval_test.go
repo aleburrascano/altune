@@ -21,7 +21,7 @@ func (f *fakeSearcher) Search(_ context.Context, query string) ([]domain.SearchR
 	return f.byQuery[query], nil
 }
 
-func track(title, artist string) domain.SearchResult {
+func evalTrack(title, artist string) domain.SearchResult {
 	return domain.SearchResult{Kind: domain.ResultKindTrack, Title: title, Subtitle: artist}
 }
 
@@ -46,7 +46,7 @@ func TestEvalOne(t *testing.T) {
 		{
 			name:        "entity at #1 passes top-1",
 			entity:      entity,
-			results:     []domain.SearchResult{track("HUMBLE.", "Kendrick Lamar"), album("DAMN.", "Kendrick Lamar")},
+			results:     []domain.SearchResult{evalTrack("HUMBLE.", "Kendrick Lamar"), album("DAMN.", "Kendrick Lamar")},
 			k:           1,
 			wantOutcome: EvalPass,
 			wantPos:     0,
@@ -54,7 +54,7 @@ func TestEvalOne(t *testing.T) {
 		{
 			name:        "entity below #1 fails at k=1",
 			entity:      entity,
-			results:     []domain.SearchResult{album("DAMN.", "Kendrick Lamar"), track("HUMBLE.", "Kendrick Lamar")},
+			results:     []domain.SearchResult{album("DAMN.", "Kendrick Lamar"), evalTrack("HUMBLE.", "Kendrick Lamar")},
 			k:           1,
 			wantOutcome: EvalFailWrongTop,
 			wantTopKind: "album",
@@ -62,7 +62,7 @@ func TestEvalOne(t *testing.T) {
 		{
 			name:        "entity below #1 passes within top-3",
 			entity:      entity,
-			results:     []domain.SearchResult{album("DAMN.", "Kendrick Lamar"), track("HUMBLE.", "Kendrick Lamar")},
+			results:     []domain.SearchResult{album("DAMN.", "Kendrick Lamar"), evalTrack("HUMBLE.", "Kendrick Lamar")},
 			k:           3,
 			wantOutcome: EvalPass,
 			wantPos:     1,
@@ -70,7 +70,7 @@ func TestEvalOne(t *testing.T) {
 		{
 			name:        "case-insensitive title and artist still match",
 			entity:      entity,
-			results:     []domain.SearchResult{track("humble.", "kendrick lamar")},
+			results:     []domain.SearchResult{evalTrack("humble.", "kendrick lamar")},
 			k:           3,
 			wantOutcome: EvalPass,
 			wantPos:     0,
@@ -133,12 +133,12 @@ func TestMatchesEntity(t *testing.T) {
 		entity LibraryEntity
 		want   bool
 	}{
-		{"exact title and artist", track("HUMBLE.", "Kendrick Lamar"), LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, true},
-		{"artist prefix embedded in title", track("A-Ha - Take On Me", "a-ha"), LibraryEntity{Title: "Take On Me", Artist: "a-ha"}, true},
-		{"track-number prefix in title", track("07-The Best Was Yet To Come", "Bryan Adams"), LibraryEntity{Title: "The Best Was Yet To Come", Artist: "Bryan Adams"}, true},
+		{"exact title and artist", evalTrack("HUMBLE.", "Kendrick Lamar"), LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, true},
+		{"artist prefix embedded in title", evalTrack("A-Ha - Take On Me", "a-ha"), LibraryEntity{Title: "Take On Me", Artist: "a-ha"}, true},
+		{"track-number prefix in title", evalTrack("07-The Best Was Yet To Come", "Bryan Adams"), LibraryEntity{Title: "The Best Was Yet To Come", Artist: "Bryan Adams"}, true},
 		{"reuploader subtitle but artist in title", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Lil Tecca - Yup", Subtitle: "lost_files"}, LibraryEntity{Title: "Yup", Artist: "Lil Tecca"}, true},
-		{"short title not substring-matched", track("Going Home", "Drake"), LibraryEntity{Title: "Go", Artist: "Drake"}, false},
-		{"different track same artist", track("DAMN.", "Kendrick Lamar"), LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, false},
+		{"short title not substring-matched", evalTrack("Going Home", "Drake"), LibraryEntity{Title: "Go", Artist: "Drake"}, false},
+		{"different track same artist", evalTrack("DAMN.", "Kendrick Lamar"), LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, false},
 		{"album is never a track match", album("Circles", "Post Malone"), LibraryEntity{Title: "Circles", Artist: "Post Malone"}, false},
 	}
 	for _, tt := range tests {
@@ -158,8 +158,8 @@ func TestRunLibraryEval_Aggregation(t *testing.T) {
 		{Title: "Orphan", Artist: ""},                // skipped
 	}
 	searcher := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
-		"Kendrick Lamar HUMBLE.": {track("HUMBLE.", "Kendrick Lamar")},
-		"Post Malone Circles":    {album("Circles", "Post Malone"), track("Circles", "Post Malone")},
+		"Kendrick Lamar HUMBLE.": {evalTrack("HUMBLE.", "Kendrick Lamar")},
+		"Post Malone Circles":    {album("Circles", "Post Malone"), evalTrack("Circles", "Post Malone")},
 		"Nobody Ghost Track":     {},
 	}}
 

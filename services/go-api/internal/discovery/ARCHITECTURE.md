@@ -20,36 +20,23 @@ flowchart TD
     end
 
     subgraph "Service Layer"
-        HANDLER --> SEARCH_SVC["SearchMusicService.Execute"]
+        HANDLER --> SEARCH_SVC["Service.Execute\n(rebuilt Merge/Rank core)"]
         SUGGEST_H --> SUGGEST_SVC["SuggestService.Execute"]
 
         SEARCH_SVC --> CLEAN["CleanQuery\n(strip 'official video', 'lyrics', etc.)"]
-        CLEAN --> INTENT["DetectIntent(query, vocab)"]
-        INTENT --> SCATTER["Scatter to providers"]
+        CLEAN --> SCATTER["fanOut to providers"]
 
         SCATTER -->|"1500ms timeout each\n(3s for Tidal)"| PROVIDERS
 
-        SCATTER --> COLLECT["Collect results + statuses"]
-        COLLECT --> FUSE["FuseAndRank"]
-
-        FUSE --> MERGE["Identifier merge\n(ISRC / MBID only)"]
-        MERGE --> POP_NORM["NormalizePopularity\n(log-scale, 0-100)"]
-        POP_NORM --> RECENCY["Recency boost\n(x1.1 if <=30 days)"]
-        RECENCY --> SCORE["Score: relevance + intent boost\n+ exact/prefix/multi-field bonuses\n+ RRF (equal weights)"]
-        SCORE --> GATE["Gate: word-share + browseable source"]
-        GATE --> SORT["Sort: relevance-band(0.05)\n-> demoted -> popularity\n-> multi-source -> quality\n-> RRF -> alpha"]
-        SORT --> COLLAPSE["CollapseVersions\n(group remix/live variants)"]
-        COLLAPSE --> POP_DOM["ApplyPopularityDominance\n(cross-kind top-5 check)"]
-        POP_DOM --> DIVERSITY["EnforceDiversity\n(max 3 per artist in top 10)"]
-
+        SCATTER --> MERGE["Merge (Layer 2)\nidentifier (ISRC/MBID) then\nexact canonical title+artist\nNO version vocab, NO fuzzy threshold"]
+        MERGE --> RANK["Rank (Layer 3)\ngate: shares-query-word + browseable\nsort: continuous relevance -> popularity\n-> multi-source -> RRF (k=60)"]
+        RANK --> DIVERSITY["EnforceDiversity\n(max 3 per artist in top 10)"]
         DIVERSITY --> COLLAPSE_ART["CollapseArtistDuplicates"]
-        COLLAPSE_ART --> DISAMBIG["ApplyArtistDisambiguation"]
-        DISAMBIG --> CLICK["Click boost\n(boost previously-clicked results)"]
-        CLICK --> ENRICH["Enrich top 50\n(artwork + popularity)"]
-        ENRICH --> RERANK["Rerank\n(same key minus quality)"]
+        COLLAPSE_ART --> DISAMBIG["applyArtistDisambiguation\n(MusicBrainz identity)"]
+        DISAMBIG --> ENRICH["enrich top 50\n(artwork only)"]
 
-        RERANK --> ZERO{zero results?}
-        ZERO -->|yes| CORRECT["CorrectionService\n(trigram + phonetic vs vocabulary)"]
+        ENRICH --> ZERO{zero results?}
+        ZERO -->|yes| CORRECT["tryCorrection\n(aggressive vocab correction)"]
         CORRECT -->|corrected query| SCATTER
         CORRECT -->|no match| ZERO_RESP["Return empty + no correction"]
         ZERO -->|no| RELATED["FindRelatedService\n(top 5 results, 2s timeout)"]
@@ -193,35 +180,33 @@ flowchart TD
 
 ## Ranking Key (sort order)
 
+The rebuilt `Rank` (Layer 3) sorts by **continuous** relevance — no bands, no tiers,
+no intent contract, no quality score. Eligibility gates (shares-query-word +
+browseable-source) drop non-matches before sorting.
+
 ```
-Position  Signal              Direction   Source
-────────  ──────────────────  ──────────  ──────────────────────
-1         Relevance band      DESC        TokenSortRatio (0.05 granularity)
-2         Demoted             ASC         record_type not in {album,single,ep}
-3         Popularity          DESC        NormalizePopularity (0-100, log-scale)
-4         Multi-source        DESC        len(providers) > 1
-5         Quality score       DESC        completeness + agreement + tier + fetch
-6         RRF                 DESC        Σ 1/(60 + rank) — equal weight all providers
-7         Subtitle            ASC         alphabetical tiebreak
-8         Title               ASC         alphabetical tiebreak
+Position  Signal         Direction   Source
+────────  ─────────────  ──────────  ──────────────────────
+1         Relevance      DESC        max(TokenSortRatio(q,title), TokenSortRatio(q,"artist title")) / 100
+2         Popularity     DESC        extras["popularity"] (provider-supplied, max across sources)
+3         Multi-source   DESC        len(distinct providers) > 1
+4         RRF            DESC        Σ 1/(60 + best_rank) — equal weight, within-tie tiebreak only
+5         Subtitle       ASC         alphabetical tiebreak
+6         Title          ASC         alphabetical tiebreak
 ```
 
-After enrichment, `Rerank` uses the same key minus quality score.
+Enrichment (artwork) does not reorder, so there is no post-enrichment rerank.
 
 ## Diagnostic Logging
 
 Enable with `LOG_LEVEL=debug`. Each pipeline stage emits a structured log entry:
 
 ```
-pipeline.query_clean      — input, output, changed
-pipeline.intent_detect    — detected (bool)
-pipeline.fuse_and_rank    — raw count, merged count (in search.merged)
-pipeline.collapse_artist  — input_count, output_count
-pipeline.click_boost      — count
-pipeline.enrich           — count
-pipeline.rerank           — count
-consensus.providers_responded — artist, responded, total_providers
-consensus.complete        — artist, confirmed, unconfirmed, rejected
+search.v2.start           — query
+search.v2.provider_failed — provider, status, error
+search.v2.correcting      — original, corrected, confidence
+search.v2.complete        — query, results, partial, corrected, related_groups
+consensus.v2.complete     — artist, total, confirmed, unconfirmed, rejected, responded
 ```
 
 ## File Map
@@ -236,19 +221,23 @@ internal/discovery/
 ├── ports/
 │   └── ports.go              # Port interfaces (SearchProvider, ArtistContentProvider, ClickSignalProvider, etc.)
 ├── service/
-│   ├── search_music.go       # SearchMusicService — main search orchestrator + click boost
+│   ├── search.go             # Service — search orchestrator (fanOut + mergeRankEnrich + SearchOutput)
+│   ├── merge.go              # Merge (Layer 2) — identifier + canonical-title entity resolution
+│   ├── rank.go               # Rank (Layer 3) — continuous-relevance sort + eligibility gates
+│   ├── enrich.go             # artwork enrichment (top 50, parallel)
+│   ├── disambiguation.go     # applyArtistDisambiguation (MusicBrainz identity)
+│   ├── search_correction.go  # tryCorrection (zero-result aggressive vocab correction)
+│   ├── vocab.go              # ingestVocabulary (learn query + strong results)
+│   ├── telemetry.go          # emitSearchEvent (search_performed, async best-effort)
+│   ├── diversity.go          # EnforceDiversity, CollapseArtistDuplicates + extras helpers
 │   ├── consensus.go          # ConsensusService — multi-provider album consensus + MB contradiction
-│   ├── dedup.go              # FuseAndRank, Rerank, CollapseVersions, PopularityDominance, Diversity
 │   ├── normalize.go          # NormalizeForMatch (8-step canonicalization)
 │   ├── fuzzy.go              # TokenSortRatio, levenshteinDistance
-│   ├── popularity.go         # NormalizePopularity (log-scale, multi-provider)
 │   ├── correction.go         # CorrectionService (trigram Jaccard + phonetic)
-│   ├── intent.go             # DetectIntent (vocabulary-based artist+track split)
 │   ├── query_clean.go        # CleanQuery (strip YouTube noise)
 │   ├── metaphone.go          # DoubleMetaphone, MetaphoneKey (phonetic codes)
 │   ├── suggest.go            # SuggestService (prefix + fuzzy fallback)
 │   ├── vocabulary_refresh.go # Background chart ingestion (6h ticker)
-│   ├── quality_scorer.go     # ComputeQualityScore, IsDemoted
 │   ├── circuit_breaker.go    # Per-provider circuit breaker
 │   ├── record_click.go       # RecordClickService
 │   ├── list_history.go       # ListSearchHistoryService

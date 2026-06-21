@@ -131,6 +131,17 @@ The Go discovery pipeline (the port of the Python service above) had accumulated
 
 **Reversibility.** Adapter/application-internal; the `GET /v1/discovery/search` response shape is unchanged. The old `internal/discovery` package is retained; cutover and rollback are the `DISCOVERY_V2_SEARCH` flag. ML-learned scorers remain a future, separate seam (plan 004).
 
+## Collapse addendum (2026-06-21)
+
+The strangler is folded back into one package. The rebuilt search core (`internal/discovery2`) is merged into `internal/discovery/service`, the v1 ranking chain is deleted, and the cutover flag is removed. The two packages were one deep module split across a seam the rebuilt code had to reach back across (`legacy.CircuitBreaker`, `CleanQuery`, `CorrectionService`, `FindRelatedService`, `EnforceDiversity`, `SearchOutput`); collapsing them removes that leak.
+
+- **Deleted (v1 search path):** `search_music.go` (orchestrator), the v1 ranking funcs in `dedup.go` (`FuseAndRank`/`Rerank`/`CollapseVersions`/`ApplyPopularityDominance`), and the machinery only they fed (`intent.go`, `popularity.go`, `quality_scorer.go`). ~1,900 lines.
+- **Kept as result-shaping rules:** `EnforceDiversity` + `CollapseArtistDuplicates` (+ shared extras helpers) moved to `diversity.go` — the rebuilt `mergeRankEnrich` still uses them.
+- **Search is now `Service.Execute`** (the former `discovery2.Service`); the handler's `newSearchPipeline` seam and the `DISCOVERY_V2_SEARCH` config flag are gone. `discoveryeval` loses its `-pipeline v1|v2` switch (one pipeline).
+- **Out of scope (deferred):** the rebuilt consensus/coverage (`discovery2/consensus.go`, `coverage.go`) was unwired; it was **not** carried over. The artist-detail surface is still served by the v1 `ConsensusService`. The consensus cutover is its own follow-up — the unwired rebuild lives in git history (this commit's parent) for revival then.
+
+**Reversibility.** The collapse is a refactor — response shape unchanged, all discovery tests green. Reverting means restoring the deleted v1 files from git history; there is no longer a runtime flag, so rollback is a revert, not a config flip.
+
 ## Implementation notes
 
 Pre-spec operational checklist (must be done before Slice 1 of the feature spec):
