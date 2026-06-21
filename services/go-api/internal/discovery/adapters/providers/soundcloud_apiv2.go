@@ -66,7 +66,9 @@ func (a *SoundCloudAPIAdapter) Name() domain.ProviderName { return domain.Provid
 
 func (a *SoundCloudAPIAdapter) SupportedKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{
-		domain.ResultKindTrack: true,
+		domain.ResultKindTrack:  true,
+		domain.ResultKindAlbum:  true, // typed playlists (set_type album/ep/single)
+		domain.ResultKindArtist: true, // users
 	}
 }
 
@@ -76,27 +78,54 @@ func (a *SoundCloudAPIAdapter) SupportedKinds() map[domain.ResultKind]bool {
 func (a *SoundCloudAPIAdapter) SearchTimeout() time.Duration { return scSearchTimeout }
 
 func (a *SoundCloudAPIAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	if !kinds[domain.ResultKindTrack] {
-		return nil, nil
+	var results []domain.SearchResult
+	var firstErr error
+
+	if kinds[domain.ResultKindTrack] {
+		tracks, err := a.searchTracks(ctx, query)
+		switch {
+		case err == nil:
+			results = append(results, tracks...)
+		case a.fallback != nil && ctx.Err() == nil:
+			// Fall back to yt-dlp (tracks only) when there's budget left — a
+			// cancelled/expired context would fail the fallback too, just slower.
+			slog.WarnContext(ctx, "soundcloud.apiv2_fallback", "query", query, "error", err)
+			if fb, ferr := a.fallback.Search(ctx, query, kinds); ferr == nil {
+				results = append(results, fb...)
+			} else {
+				firstErr = errors.Join(firstErr, err)
+			}
+		default:
+			firstErr = errors.Join(firstErr, err)
+		}
 	}
 
-	results, err := a.search(ctx, query)
-	if err == nil {
-		return results, nil
+	if kinds[domain.ResultKindAlbum] {
+		if albums, err := a.searchAlbums(ctx, query); err != nil {
+			firstErr = errors.Join(firstErr, err)
+		} else {
+			results = append(results, albums...)
+		}
 	}
 
-	// Fall back to yt-dlp only when there's budget left — a cancelled/expired
-	// context would fail the fallback too, just more slowly.
-	if a.fallback != nil && ctx.Err() == nil {
-		slog.WarnContext(ctx, "soundcloud.apiv2_fallback", "query", query, "error", err)
-		return a.fallback.Search(ctx, query, kinds)
+	if kinds[domain.ResultKindArtist] {
+		if artists, err := a.searchArtists(ctx, query); err != nil {
+			firstErr = errors.Join(firstErr, err)
+		} else {
+			results = append(results, artists...)
+		}
 	}
-	return nil, err
+
+	// Surface an error only when nothing came back; a partial mix still ships.
+	if len(results) == 0 && firstErr != nil {
+		return nil, firstErr
+	}
+	return results, nil
 }
 
-// search resolves a client_id, paginates the api-v2 track search, and retries
-// once with a fresh client_id on an auth failure (the rotation case).
-func (a *SoundCloudAPIAdapter) search(ctx context.Context, query string) ([]domain.SearchResult, error) {
+// searchTracks resolves a client_id, paginates the api-v2 track search, and
+// retries once with a fresh client_id on an auth failure (the rotation case).
+func (a *SoundCloudAPIAdapter) searchTracks(ctx context.Context, query string) ([]domain.SearchResult, error) {
 	id, err := a.resolver.get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolve client_id: %w", err)
@@ -158,6 +187,83 @@ func (a *SoundCloudAPIAdapter) fetchSearchPage(ctx context.Context, u string) (t
 		}
 	}
 	return tracks, body.NextHref, status, nil
+}
+
+// searchAlbums fetches one page of api-v2 album results (typed playlists). One
+// page is plenty — album/artist relevance lives at the head, so the deep
+// pagination the track long tail needs would only add latency here.
+func (a *SoundCloudAPIAdapter) searchAlbums(ctx context.Context, query string) ([]domain.SearchResult, error) {
+	var out []domain.SearchResult
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf(
+			"%s/search/albums?q=%s&client_id=%s&limit=%d",
+			a.baseURL, url.QueryEscape(query), url.QueryEscape(clientID), scSearchLimit,
+		)
+		var body scAlbumSearchResponse
+		status, err := a.getJSON(ctx, u, &body)
+		if err != nil {
+			return status, err
+		}
+		out = make([]domain.SearchResult, 0, len(body.Collection))
+		for _, al := range body.Collection {
+			if r, ok := mapSoundCloudAPIAlbum(al); ok {
+				out = append(out, r)
+			}
+		}
+		return status, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// searchArtists fetches one page of api-v2 user results (SoundCloud's "artist").
+func (a *SoundCloudAPIAdapter) searchArtists(ctx context.Context, query string) ([]domain.SearchResult, error) {
+	var out []domain.SearchResult
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf(
+			"%s/search/users?q=%s&client_id=%s&limit=%d",
+			a.baseURL, url.QueryEscape(query), url.QueryEscape(clientID), scSearchLimit,
+		)
+		var body scUserSearchResponse
+		status, err := a.getJSON(ctx, u, &body)
+		if err != nil {
+			return status, err
+		}
+		out = make([]domain.SearchResult, 0, len(body.Collection))
+		for _, u := range body.Collection {
+			if r, ok := mapSoundCloudAPIUser(u); ok {
+				out = append(out, r)
+			}
+		}
+		return status, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// resolveAndFetch runs fetch with a resolved client_id, re-resolving once on an
+// auth failure (the rotation case). Single-request callers use it; the
+// paginated track search inlines the same shape because pagination restarts on
+// a re-resolve.
+func (a *SoundCloudAPIAdapter) resolveAndFetch(ctx context.Context, fetch func(clientID string) (int, error)) error {
+	id, err := a.resolver.get(ctx)
+	if err != nil {
+		return fmt.Errorf("resolve client_id: %w", err)
+	}
+	status, err := fetch(id)
+	if err != nil && isAuthStatus(status) {
+		a.resolver.invalidate()
+		id, err = a.resolver.get(ctx)
+		if err != nil {
+			return fmt.Errorf("re-resolve client_id: %w", err)
+		}
+		_, err = fetch(id)
+	}
+	return err
 }
 
 // Resolve turns a SoundCloud permalink into the track it points at, via the
@@ -288,6 +394,86 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 			URL:        t.PermalinkURL,
 		}},
 		Extras: extras,
+	}, true
+}
+
+// scAlbumSearchResponse is one page of api-v2 /search/albums.
+type scAlbumSearchResponse struct {
+	Collection []scAPIAlbum `json:"collection"`
+}
+
+// scAPIAlbum is an api-v2 album — a playlist with set_type album/ep/single.
+type scAPIAlbum struct {
+	ID           int64  `json:"id"`
+	Kind         string `json:"kind"` // "playlist"
+	Title        string `json:"title"`
+	PermalinkURL string `json:"permalink_url"`
+	ArtworkURL   string `json:"artwork_url"`
+	SetType      string `json:"set_type"` // album | ep | single
+	Genre        string `json:"genre"`
+	User         struct {
+		Username string `json:"username"`
+	} `json:"user"`
+}
+
+func mapSoundCloudAPIAlbum(a scAPIAlbum) (domain.SearchResult, bool) {
+	if a.ID == 0 || strings.TrimSpace(a.Title) == "" {
+		return domain.SearchResult{}, false
+	}
+
+	extras := map[string]any{}
+	if st := strings.TrimSpace(a.SetType); st != "" {
+		extras["record_type"] = st // matches the ytmusic/discogs album key
+	}
+	if g := strings.TrimSpace(a.Genre); g != "" {
+		extras["genre"] = g
+	}
+
+	return domain.SearchResult{
+		Kind:       domain.ResultKindAlbum,
+		Title:      a.Title,
+		Subtitle:   a.User.Username, // album artist = uploader
+		ImageURL:   upgradeArtworkResolution(a.ArtworkURL),
+		Confidence: domain.ConfidenceLow,
+		Sources: []domain.SourceRef{{
+			Provider:   domain.ProviderSoundCloud,
+			ExternalID: strconv.FormatInt(a.ID, 10),
+			URL:        a.PermalinkURL,
+		}},
+		Extras: extras,
+	}, true
+}
+
+// scUserSearchResponse is one page of api-v2 /search/users.
+type scUserSearchResponse struct {
+	Collection []scAPIUser `json:"collection"`
+}
+
+// scAPIUser is an api-v2 user — SoundCloud's notion of an artist.
+type scAPIUser struct {
+	ID           int64  `json:"id"`
+	Kind         string `json:"kind"` // "user"
+	Username     string `json:"username"`
+	PermalinkURL string `json:"permalink_url"`
+	AvatarURL    string `json:"avatar_url"`
+}
+
+func mapSoundCloudAPIUser(u scAPIUser) (domain.SearchResult, bool) {
+	if u.ID == 0 || strings.TrimSpace(u.Username) == "" {
+		return domain.SearchResult{}, false
+	}
+
+	return domain.SearchResult{
+		Kind:       domain.ResultKindArtist,
+		Title:      u.Username,
+		ImageURL:   upgradeArtworkResolution(u.AvatarURL),
+		Confidence: domain.ConfidenceLow,
+		Sources: []domain.SourceRef{{
+			Provider:   domain.ProviderSoundCloud,
+			ExternalID: strconv.FormatInt(u.ID, 10),
+			URL:        u.PermalinkURL,
+		}},
+		Extras: map[string]any{},
 	}, true
 }
 
