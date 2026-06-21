@@ -359,8 +359,16 @@ verdict is recorded in code comments + here.
 
 ### Phase C — Cutover (gated on the 002 baseline)
 
-- **U7. Re-add telemetry emission** in the new services (async best-effort; never blocks).
-  *Verify:* same envelope; failures logged, not surfaced.
+- **U7. Re-add telemetry emission. [DONE 2026-06-21]**
+  `discovery2/service/telemetry.go` `emitSearchEvent` mirrors the legacy `search_performed` envelope
+  (`domain.InteractionEvent`: result_count, zero_result, top-10) **stamped `pipeline_version="v2"`**
+  so ML training data stays attributable across the cutover. Async best-effort: `WithoutCancel` +
+  3s timeout (outlives request cancellation), panic-recovered, failures logged not surfaced, tracked
+  by an `emitWg` with `WaitForEmit()` for graceful shutdown / deterministic tests. Wired via
+  `WithEventStore` and called at the end of `Execute`.
+  *Verified:* 56 discovery2 tests pass (build + vet + gofmt clean). Asserts the v2-stamped envelope
+  (type, pipeline_version, result_count, zero_result, top), that an append error neither surfaces in
+  `Execute` nor panics, and that a nil event store is a no-op.
 
 - **U8. Per-surface cutover (gated, old retained).** For each surface, run the top-K eval +
   coverage signals on the new path; flip only when new ≥ old at the chosen K with no coverage

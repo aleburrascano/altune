@@ -71,9 +71,13 @@ func newQuery(t *testing.T, raw string) *domain.SearchQuery {
 	return q
 }
 
+func newUser() shared.UserId {
+	return shared.NewUserId(uuid.New())
+}
+
 func runSearch(t *testing.T, svc *Service, raw string) *legacy.SearchOutput {
 	t.Helper()
-	out, err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), newQuery(t, raw), false)
+	out, err := svc.Execute(context.Background(), newUser(), newQuery(t, raw), false)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
