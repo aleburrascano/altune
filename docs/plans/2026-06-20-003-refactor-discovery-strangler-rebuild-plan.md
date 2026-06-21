@@ -312,8 +312,20 @@ verdict is recorded in code comments + here.
 
 ### Phase B — Coverage
 
-- **U4. Layer 1 fan-out (reuse adapters).** Slim orchestrator: fan-out → merge → rank, bounded +
-  circuit-broken. *Verify:* canonical suite end-to-end via the new orchestrator with faked providers.
+- **U4. Layer 1 fan-out (reuse adapters). [DONE 2026-06-21]**
+  `discovery2/service/search.go` `Service.Execute` is now real: Layer 0 intent (reuse
+  `legacy.DetectIntent` → `BuildIntent`) → Layer 1 parallel fan-out (per-provider timeout +
+  circuit breaker, reuse `legacy.CircuitBreaker`, optional `StructuredSearcher`) → Layer 2 `Merge`
+  → Layer 3 `Rank` → `legacy.EnforceDiversity` → limit → `*legacy.SearchOutput` + best-effort
+  history. `NewService(providers, circuitBreaker, opts...)` with `WithHistoryRepository` /
+  `WithVocabularyStore`. Constants ledger: provider timeout 1.5s → **kept** (SLA). Slim by design —
+  enrichment (artwork/popularity), correction/suggest, related groups, click-boost are pure reuse
+  hooks wired at cutover prep (U8), not rebuild units; telemetry emission is U7.
+  *Verified:* 42 discovery2 tests pass (build + vet + gofmt clean). End-to-end via faked providers:
+  cross-provider ISRC merge (2 sources) + popularity ranking, partial-on-provider-error, the
+  intent→tier Pattern-A path (album pop 99 vs track 40 → track #1), and limit truncation.
+  (`-race` unavailable here — no CGO; fan-out reuses the proven mutex+WaitGroup pattern, all shared
+  writes guarded, every goroutine joined before return.)
 
 - **U5. Stage-3 consensus + MB authority + per-artist cache.** Rebuild the audited consensus; add
   the cache; add the unit test the old engine lacks. *Verify:* confirmed/unconfirmed/rejected
