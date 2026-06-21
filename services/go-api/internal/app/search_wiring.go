@@ -236,6 +236,10 @@ func buildArtworkChain(cfg *config.Config) discoveryPorts.ArtworkResolver {
 		artworkResolvers = append(artworkResolvers,
 			providers.NewYouTubeArtworkResolver(&http.Client{Timeout: 10 * time.Second}, cfg.YouTubeAPIKey))
 	}
+	// SoundCloud last: name-search fallback for the underground long tail no
+	// ID-based source covers. nil fallback — artwork resolution never uses yt-dlp.
+	artworkResolvers = append(artworkResolvers,
+		providers.NewSoundCloudAPIAdapter(&http.Client{Timeout: 10 * time.Second}, nil))
 	return providers.NewChainedArtworkResolver(artworkResolvers...)
 }
 

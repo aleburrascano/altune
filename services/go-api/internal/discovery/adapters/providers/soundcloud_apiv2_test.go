@@ -342,12 +342,62 @@ func TestSoundCloudAPIAdapter_Resolve(t *testing.T) {
 	defer srv.Close()
 
 	a := newTestSoundCloudAPI(srv, nil)
-	r, err := a.Resolve(context.Background(), "https://soundcloud.com/x/leaked-cut")
+	r, err := a.ResolvePermalink(context.Background(), "https://soundcloud.com/x/leaked-cut")
 	if err != nil {
-		t.Fatalf("Resolve error: %v", err)
+		t.Fatalf("ResolvePermalink error: %v", err)
 	}
 	if r.Title != "Leaked Cut" || r.Sources[0].ExternalID != "555" {
 		t.Fatalf("unexpected resolve result: %+v", r)
+	}
+}
+
+func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/search/users"):
+			_, _ = w.Write([]byte(`{"collection":[{"id":1,"kind":"user","username":"Underground Artist",
+				"avatar_url":"https://i1.sndcdn.com/avatars-z-large.jpg"}]}`))
+		case strings.HasPrefix(r.URL.Path, "/search/tracks"):
+			_, _ = w.Write([]byte(`{"collection":[{"id":2,"kind":"track","title":"Leak",
+				"artwork_url":"https://i1.sndcdn.com/artworks-q-large.jpg","user":{"username":"x"}}],"next_href":""}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	// Artist artwork → avatar, upgraded to 500px.
+	got, err := a.Resolve(context.Background(), domain.ResultKindArtist, "Underground Artist", "", "")
+	if err != nil {
+		t.Fatalf("Resolve(artist) error: %v", err)
+	}
+	if got != "https://i1.sndcdn.com/avatars-z-t500x500.jpg" {
+		t.Errorf("artist artwork = %q", got)
+	}
+
+	// Track artwork → single-page search, top hit's image.
+	got, err = a.Resolve(context.Background(), domain.ResultKindTrack, "Leak", "Some Artist", "")
+	if err != nil {
+		t.Fatalf("Resolve(track) error: %v", err)
+	}
+	if got != "https://i1.sndcdn.com/artworks-q-t500x500.jpg" {
+		t.Errorf("track artwork = %q", got)
+	}
+}
+
+func TestSoundCloudAPIAdapter_ResolveArtwork_MissReturnsEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"collection":[],"next_href":""}`))
+	}))
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Nothing Here", "", "")
+	if err != nil || got != "" {
+		t.Fatalf("expected empty+nil on miss, got %q / %v", got, err)
 	}
 }
 
