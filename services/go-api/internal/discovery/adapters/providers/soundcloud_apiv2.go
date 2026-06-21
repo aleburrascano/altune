@@ -266,11 +266,68 @@ func (a *SoundCloudAPIAdapter) resolveAndFetch(ctx context.Context, fetch func(c
 	return err
 }
 
-// Resolve turns a SoundCloud permalink into the track it points at, via the
-// api-v2 resolve endpoint. It serves the "paste a sheet of links and import
+// Resolve implements ports.ArtworkResolver: it searches SoundCloud for the
+// entity and returns the best match's artwork URL (empty on miss, so the chain
+// continues). Placed last in the artwork chain, it only fires for entities the
+// ID-based sources couldn't cover — the underground long tail where SoundCloud
+// is the sole artwork source. Mirrors the Deezer/iTunes name-search resolvers.
+func (a *SoundCloudAPIAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
+	if strings.TrimSpace(title) == "" {
+		return "", nil
+	}
+	query := title
+	if subtitle != "" {
+		query = subtitle + " " + title
+	}
+
+	var (
+		results []domain.SearchResult
+		err     error
+	)
+	switch kind {
+	case domain.ResultKindArtist:
+		results, err = a.searchArtists(ctx, query)
+	case domain.ResultKindAlbum:
+		results, err = a.searchAlbums(ctx, query)
+	default:
+		results, err = a.searchArtworkTracks(ctx, query)
+	}
+	if err != nil {
+		return "", nil // swallow — the chain falls through to the next resolver
+	}
+	for _, r := range results {
+		if r.ImageURL != "" {
+			return r.ImageURL, nil
+		}
+	}
+	return "", nil
+}
+
+// searchArtworkTracks is a single-page track search for the artwork resolver —
+// it needs only the top hit's image, not the deep paginated set searchTracks
+// builds for coverage.
+func (a *SoundCloudAPIAdapter) searchArtworkTracks(ctx context.Context, query string) ([]domain.SearchResult, error) {
+	var out []domain.SearchResult
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf(
+			"%s/search/tracks?q=%s&client_id=%s&limit=%d&offset=0",
+			a.baseURL, url.QueryEscape(query), url.QueryEscape(clientID), scSearchLimit,
+		)
+		page, _, status, err := a.fetchSearchPage(ctx, u)
+		out = page
+		return status, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ResolvePermalink turns a SoundCloud permalink into the track it points at, via
+// the api-v2 resolve endpoint. It serves the "paste a sheet of links and import
 // them" workflow (plan 005) and is a candidate feed for the acquisition path;
 // it is not part of the SearchProvider fan-out.
-func (a *SoundCloudAPIAdapter) Resolve(ctx context.Context, permalink string) (*domain.SearchResult, error) {
+func (a *SoundCloudAPIAdapter) ResolvePermalink(ctx context.Context, permalink string) (*domain.SearchResult, error) {
 	id, err := a.resolver.get(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolve client_id: %w", err)

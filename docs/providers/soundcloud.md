@@ -61,20 +61,22 @@ So all three kinds are reachable — you map `user → artist` and `album-playli
 (genre, playback/likes/reposts) carried but **not** wired into ranking (coverage, not ranking).
 Code: `soundcloud_apiv2.go`.
 
-### 2. Album + artist search — planned
-Extend `SupportedKinds` to `album` + `artist`; add `/search/albums` and `/search/users` calls and
-mappers for the album-playlist and user objects.
+### 2. Album + artist search — ✅ BUILT
+`SupportedKinds` now includes `album` (`/search/albums`, typed playlists) and `artist`
+(`/search/users`). `Search` dispatches per kind via a shared `resolveAndFetch` client_id/auth-retry
+helper; mappers for the album-playlist and user objects.
 - **Album fields:** `artwork_url, set_type, is_album, track_count, release_date, description, genre, created_at, user`.
 - **Artist (user) fields:** `avatar_url, username, full_name, city, country_code, followers_count, verified, creator_subscriptions[] (pro/badges), description, permalink_url`.
 - **Risk:** ranking gate — SC "albums" are often bootlegs/compilations and SC "artists" are noisy
   (any uploader). Must run the full `discoveryeval --pipeline v2` gate (≥ baseline top-3) before/after,
   exactly as the track increment did.
 
-### 3. Artwork resolver — planned
-SoundCloud is the **only** artwork source for underground entities nothing else has: track
-`artwork_url`, album `artwork_url`, artist `avatar_url`. Bump resolution `-large` (100px) →
-`-t500x500` (already done for track artwork in the built client). Implement `ArtworkResolver` so the
-artwork chain can fall to SoundCloud for entities the ID-based sources miss. **Low risk.**
+### 3. Artwork resolver — ✅ BUILT
+`SoundCloudAPIAdapter` implements `ports.ArtworkResolver` (`Resolve(kind,title,subtitle,mbid)`),
+wired **last** in `buildArtworkChain` so it only fires for entities the ID-based sources miss — the
+underground long tail where SoundCloud is the sole artwork source (track/album `artwork_url`, artist
+`avatar_url`, all bumped to 500px). Returns `""` on miss so the chain falls through. The bespoke
+permalink resolver was renamed `ResolvePermalink` to free the `Resolve` signature for this port.
 
 ### 4. Artist discography — planned
 `/users/{id}/tracks`, `/toptracks`, `/albums` → populate an underground artist's page. Feeds
