@@ -293,10 +293,22 @@ verdict is recorded in code comments + here.
   and `BestRank` min-across-providers. (Live merge-sensitive eval slice runs at U8 against real
   providers.)
 
-- **U3. Layer 3 — lexicographic relevance tiers.**
-  Build the T1–T4 tier sort; popularity/RRF within-tier only. Remove band/dominance/intentBoost.
-  *Verify:* canonical positioning suite passes; the 17 Pattern-A album cases now rank the track
-  T1 with the album T2 directly below; top-1 **and** top-3 ≥ baseline.
+- **U3. Layer 3 — lexicographic relevance tiers. [DONE 2026-06-21]**
+  Built `discovery2/service/intent.go` (Layer 0 `Intent` contract + `BuildIntent`) and `rank.go`
+  (`Rank(entities, queryNorm, intent)`). Tiers are categorical: **T1** exact title + artist
+  satisfied + kind matches intent (or none intended); **T2** exact title, satisfied artist, but a
+  different kind than intended; **T3** partial; **T4** weak. Sort is lexicographic by tier, then
+  popularity, then multi-source, then RRF — **a lower tier can never outrank a higher one**. Layer 0
+  inference: artist+title query ⇒ intended kind = track (safe — if no track matches, the album is
+  still the top non-T1 tier), which structurally seats the exact track at T1 and the same-named
+  album at T2 (Pattern A). Eligibility gates (shares-query-word, browseable-source) carried forward.
+  Constants-ledger entries resolved: `roundBand` 0.05 → **removed**; `popularityDominance*` →
+  **removed** (cross-kind order is now structural); `intentBoost` → **replaced** (intent selects the
+  tier); `rrfK=60` → **kept** (within-tier tiebreak).
+  *Verified:* 38 discovery2 tests pass (build + vet + gofmt clean). Headline test: Pattern A —
+  album with popularity 99 vs track 70, track still ranks #1 (tier beats popularity), album directly
+  below. Plus bare-query popularity-within-tier, exact/partial/weak ordering, both eligibility gates,
+  and the multi-source within-tier tiebreak. (Full canonical suite + the 17-case slice run live at U8.)
 
 ### Phase B — Coverage
 
