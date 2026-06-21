@@ -370,10 +370,25 @@ verdict is recorded in code comments + here.
   (type, pipeline_version, result_count, zero_result, top), that an append error neither surfaces in
   `Execute` nor panics, and that a nil event store is a no-op.
 
-- **U8. Per-surface cutover (gated, old retained).** For each surface, run the top-K eval +
-  coverage signals on the new path; flip only when new ≥ old at the chosen K with no coverage
-  regression. Old stays; rollback = flip back. *Verify:* each flipped surface meets-or-beats
-  baseline; rollback is instant and lossless.
+- **U8. Per-surface cutover (gated, old retained). [MECHANISM DONE 2026-06-21 — flip pending live eval]**
+  Cutover mechanism built and wired, **default OFF (v1 live)**: `cfg.DiscoveryV2Search`
+  (`DISCOVERY_V2_SEARCH`, default false); `app.BuildSearchServiceV2` constructs the v2 `Service` from
+  the SAME shared deps as v1 (providers, circuit breaker, vocab, history, event store); `app.go`
+  injects it via `discoveryHandler.WithNewSearchPipeline` only when the flag is set. Rollback = unset
+  the flag (instant, lossless — old retained, R3). The eval gate is now **runnable**:
+  `discoveryeval --pipeline v1|v2` exercises either pipeline through the same `Searcher` seam.
+  *Verified offline:* full suite **1071 pass**, build + vet + gofmt clean; flag-off path leaves v1
+  unchanged (handler tests green).
+  **Blocked on a live run I cannot do offline (no provider network, no dev catalog DB):** the actual
+  flip is gated on `v2 ≥ v1 at top-3 (98.9%) / top-1 (97.2%)` with no coverage regression, plus the
+  Pattern-C confirmation (U6) and signal-B improvement. Run from `services/go-api` against the dev DB:
+  `go build -o ./tmp/discoveryeval.exe ./cmd/discoveryeval` then
+  `DATABASE_URL=… REDIS_URL=… ./tmp/discoveryeval.exe --mode eval --pipeline v2 --top-k 3 --random --limit 200`
+  (and `--pipeline v1` for the side-by-side). Flip `DISCOVERY_V2_SEARCH=true` only if v2 holds the gate.
+  **Parity caveat before a product flip:** v2 is ranking-complete but slim — artwork enrichment,
+  query correction/suggest, related groups, and click-boost remain legacy reuse-hooks not yet wired
+  into v2's `Execute`; wire them (pure reuse) before serving real users, or the flip regresses images
+  and related content even with green ranking.
 
 ---
 

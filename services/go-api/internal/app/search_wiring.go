@@ -12,6 +12,7 @@ import (
 	domain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
+	discovery2 "altune/go-api/internal/discovery2/service"
 	"altune/go-api/internal/shared/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -73,6 +74,40 @@ func BuildSearchService(
 	searchOpts = append(searchOpts, discoveryService.WithFindRelatedService(findRelatedSvc))
 
 	return discoveryService.NewSearchMusicService(searchProviders, queryCache, historyRepo, circuitBreaker, searchOpts...)
+}
+
+// BuildSearchServiceV2 constructs the rebuilt (plan 003) discovery search
+// pipeline from the SAME shared dependencies as v1 — provider adapters, circuit
+// breaker, vocabulary store, history repo, and (optionally) the telemetry store.
+// The strangler routes to this only when DISCOVERY_V2_SEARCH is set; the eval
+// uses it to gate the cutover (nil eventStore so synthetic searches don't emit).
+func BuildSearchServiceV2(
+	cfg *config.Config,
+	pool *pgxpool.Pool,
+	redisClient *goredis.Client,
+	eventStore discoveryPorts.EventStore,
+) *discovery2.Service {
+	var sharedMB *providers.MusicBrainzAdapter
+	if cfg.HasMusicBrainz() {
+		sharedMB = providers.NewMusicBrainzAdapter(
+			&http.Client{Timeout: 10 * time.Second},
+			cfg.MusicBrainzUserAgent,
+		)
+	}
+
+	searchProviders := buildDiscoveryProviders(cfg, sharedMB)
+	circuitBreaker := discoveryService.NewCircuitBreaker()
+	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(pool)
+
+	opts := []discovery2.Option{discovery2.WithHistoryRepository(historyRepo)}
+	if vocabStore := BuildVocabularyStore(redisClient); vocabStore != nil {
+		opts = append(opts, discovery2.WithVocabularyStore(vocabStore))
+	}
+	if eventStore != nil {
+		opts = append(opts, discovery2.WithEventStore(eventStore))
+	}
+
+	return discovery2.NewService(searchProviders, circuitBreaker, opts...)
 }
 
 // BuildConsensusProviders builds the multi-provider album fan-out used by the
