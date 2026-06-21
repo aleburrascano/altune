@@ -47,9 +47,57 @@ band-aid and is removed.
 
 A clarifying corollary from the product owner (2026-06-20): **the correct answer does not have
 to be #1 — it must be visible in the top results.** The eval therefore measures **top-K**, not
-only top-1. A categorical tier model satisfies this *structurally*: a same-named album sits in
-the tier immediately below the exact track, so it lands right under the right answer without any
-tuning.
+only top-1.
+
+---
+
+## ⚠️ Course correction (2026-06-21) — the "categorical" mechanisms were themselves query-fit
+
+> **This section supersedes "The categorical layer design (the heart)" and the "Constants ledger"
+> below.** Those sections describe the *first* attempt (version-marker categories + relevance
+> tiers), which was built, measured, and **scrapped**. Read this first.
+
+Building the rebuild and running the full-catalog eval exposed a flaw in the original strategy:
+**"categorical" only honors the doctrine when it *truly dissolves* the constant — not when it
+relocates it into a keyword list or pattern-specific machinery.**
+
+- **Layer 2 version markers were query-fit.** A ~25-keyword vocabulary (remix/live/deluxe/remaster/…)
+  + regexes replaced *one* magic number (`TSR≥85`) with *many magic strings* — and it **backfired**:
+  it over-merged release variants (e.g. folded `Big Poppa - 2005 Remaster` into `Big Poppa (2007
+  Remaster)`; `textnorm` strips the parens, so the exact saved variant's tokens vanished). The
+  full-catalog eval **regressed** (top-3 97.9% vs v1 98.9%).
+- **Layer 3 relevance tiers were query-fit and brittle.** Built for Pattern A's 17 cases, and they
+  depend on **vocab-based intent detection that frequently fails** ("The Notorious B.I.G." isn't
+  split) — then collapse to popularity, surfacing the wrong variant.
+
+**What replaced them (the genuinely principled design):**
+- **Layer 2 (merge):** identifiers (ISRC/MBID — exact) → **exact canonical-title equality** (the
+  shared `textnorm` *is* the "same title" decision). A trailing sequel number survives normalization
+  (`Shotta Flow 2` ≠ `Shotta Flow` → **Pattern B holds for free**); a parenthetical `(Remaster)` is
+  canonical noise and folds away. **No keyword list, no version regex, no fuzzy threshold.**
+- **Layer 3 (rank):** **continuous token-sort relevance** (the published rapidfuzz algorithm — no
+  bonuses, no bands) → popularity → multi-source → RRF (`k=60`). A similarity measure is an
+  *algorithm*, not a fitted constant.
+- **Also removed as query-fit:** the Layer-0 intent contract + vocab-based detection (ranking no
+  longer needs it; providers do plain search); the "did you mean" suggestion (tuned relevance
+  threshold); the consensus MB "authority filter" + "zero-overlap discard" thresholds (kept only the
+  operational lookup cap); the vocab-learning popularity threshold.
+- **Pattern A is moot under top-3** (the product bar): the exact result sits at #2/#3 and passes, so
+  **no kind tiebreak is needed.** `track>album>artist` remains a *non*-query-fit lever for top-1
+  polish only — deliberately not added.
+
+**Final verdict — full-catalog head-to-head (1,792 entities, same run, 2026-06-21):**
+
+| Metric | v1 (tuned) | v2 (query-fit-free) |
+|---|---|---|
+| **Top-3 (the gate)** | 98.9% (1772) | **99.0% (1774)** ✅ |
+| **Total failures** | 20 | **18** ✅ |
+| Top-1 | 96.9% (1736) | 93.6% (1677) |
+
+Net **+2 on top-3**: 3 wins (the remaster variant + `Shotta Flow 2` and `3` — the real **Pattern B**
+sequels v1 collapses), 1 "regression" (a paren-form matcher artifact). **v2 meets-and-beats the gate
+with zero query-fitting.** Top-1 is the accepted tradeoff (no kind tiebreak). Decision recorded in
+ADR-0007 (strangler-rebuild addendum).
 
 ---
 
@@ -163,7 +211,11 @@ instead of wasting it. They are not gated on the rebuild.
 
 ---
 
-## The categorical layer design (the heart)
+## The categorical layer design (the heart) — ⚠️ SUPERSEDED
+
+> **Historical.** This was the *first* design (version-marker categories + relevance tiers). It was
+> built, measured, and **scrapped** as itself query-fit — see "Course correction (2026-06-21)" above
+> for what actually shipped. Kept for the record.
 
 Each layer replaces a continuous/tuned decision with a structural one. The current magic numbers
 and their disposition are in the constants ledger below.
@@ -213,7 +265,15 @@ The **top-K eval** runs after each layer. Cutover requires **new ≥ old at the 
 
 ---
 
-## Constants ledger (every magic number, with its fate)
+## Constants ledger (every magic number, with its fate) — ⚠️ SUPERSEDED
+
+> **Historical.** The dispositions below ("replace categorical") reflect the first attempt. The final
+> design went further: the categorical *replacements* were also removed as query-fit. Net end state —
+> **kept:** identifiers, canonical `textnorm` equality, RRF `k=60`, SLA timeouts, the shares-word +
+> browseable-source gates, operational bounds (lookup cap, enrich/ingest limits). **Removed:** every
+> version-marker keyword/regex, all fuzzy thresholds, the relevance tiers, intent detection, the
+> suggestion threshold, the consensus MB authority/discard thresholds, the vocab popularity threshold.
+> See "Course correction (2026-06-21)".
 
 | Constant (today) | Where | Disposition |
 |---|---|---|
@@ -276,7 +336,8 @@ verdict is recorded in code comments + here.
   satisfies the seam. `discovery2.Service.Execute` is a documented not-yet-implemented stub
   (unreachable in prod until U8).
 
-- **U2. Layer 2 — merge + entity resolution (categorical cascade). [DONE 2026-06-21]**
+- **U2. Layer 2 — merge + entity resolution (categorical cascade). [DONE 2026-06-21; categorical
+  cascade later replaced by identifiers + canonical equality — see Course correction]**
   Built `discovery2/service/merge.go`: `Merge(perProvider) []Entity` runs the cascade
   identifier → version-marker categories → fuzzy-last-resort. `parseVersion` decomposes a title
   into `(core, tags)` where tags are categorical (`feat:<artist>`, sequel `n:N`, and qualifier
@@ -293,7 +354,8 @@ verdict is recorded in code comments + here.
   and `BestRank` min-across-providers. (Live merge-sensitive eval slice runs at U8 against real
   providers.)
 
-- **U3. Layer 3 — lexicographic relevance tiers. [DONE 2026-06-21]**
+- **U3. Layer 3 — lexicographic relevance tiers. [DONE 2026-06-21; tiers later replaced by
+  continuous relevance — see Course correction]**
   Built `discovery2/service/intent.go` (Layer 0 `Intent` contract + `BuildIntent`) and `rank.go`
   (`Rank(entities, queryNorm, intent)`). Tiers are categorical: **T1** exact title + artist
   satisfied + kind matches intent (or none intended); **T2** exact title, satisfied artist, but a
@@ -370,7 +432,12 @@ verdict is recorded in code comments + here.
   (type, pipeline_version, result_count, zero_result, top), that an append error neither surfaces in
   `Execute` nor panics, and that a nil event store is a no-op.
 
-- **U8. Per-surface cutover (gated, old retained). [MECHANISM DONE 2026-06-21 — flip pending live eval]**
+- **U8. Per-surface cutover (gated, old retained). [GATE PASSED 2026-06-21 — ready to flip]**
+  **Final gate result (full-catalog head-to-head, same run): v2 99.0% top-3 (18 fails) ≥ v1 98.9%
+  (20 fails) — v2 meets and beats the gate, query-fit-free.** Top-1 traded down (93.6% vs 96.9%), the
+  accepted top-3-moot Pattern-A effect. The flip (`DISCOVERY_V2_SEARCH=true`) is now justified; it is
+  enabled in the local `.env` for testing and reversible by unsetting the flag. See Course correction
+  for the full table + the structural wins (Pattern-B sequels). Below is the mechanism as built:
   Cutover mechanism built and wired, **default OFF (v1 live)**: `cfg.DiscoveryV2Search`
   (`DISCOVERY_V2_SEARCH`, default false); `app.BuildSearchServiceV2` constructs the v2 `Service` from
   the SAME shared deps as v1 (providers, circuit breaker, vocab, history, event store); `app.go`

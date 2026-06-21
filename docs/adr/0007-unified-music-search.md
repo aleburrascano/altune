@@ -114,6 +114,23 @@ This addendum revises three ADR-0007-locked decisions:
 
 **Reversibility.** All three are adapter/application-internal — the `GET /v1/discovery/search` response shape is unchanged (still `sources: []` + `confidence` + `extras: {}`), so mobile and downstream specs are unaffected. RRF constants and boost magnitudes are tunable; iTunes is one adapter behind the existing `SearchProvider` port.
 
+## Strangler-rebuild addendum (2026-06-21)
+
+The Go discovery pipeline (the port of the Python service above) had accumulated ~13 sequential transforms and a scatter of tuned constants across many sessions. Plan 003 rebuilt it as a parallel `internal/discovery2` package via a **strangler-fig**: built layer-by-layer behind the existing handler, gated at every step by a library-derived **top-K eval**, with the old package retained for instant rollback. Cutover is a per-surface config flag (`DISCOVERY_V2_SEARCH`, default off).
+
+**The load-bearing learning — "categorical" is not automatically principled.** The rebuild's first attempt tried to remove tuned constants by making decisions *categorical*: a version-marker **keyword vocabulary** (remix/live/deluxe/remaster/…) for merge, and **lexicographic relevance tiers** for rank. The full-catalog eval **regressed** (top-3 97.9% vs v1 98.9%). Root cause: a ~25-keyword list is **a tuned constant in disguise** — it replaced one magic number with many magic strings, and it over-merged release variants (folding `Big Poppa - 2005 Remaster` into `Big Poppa (2007 Remaster)`, whose parens normalization strips). The tiers were **pattern-fit and brittle** — they leaned on vocabulary-based intent detection that frequently fails, then collapsed to popularity.
+
+**Decision — principled signals only, converging back on this ADR's 2026-05-28 relevance-first model:**
+
+1. **Merge (Layer 2) → identifiers + canonical equality.** Same ISRC/MBID (exact) → same entity; otherwise **exact `textnorm`-canonical title + artist** equality. The shared canonical normalization *is* the "same title" decision: a trailing sequel number survives it (`Shotta Flow 2` ≠ `Shotta Flow`, so the numbered-sequel collapse — "Pattern B" — is fixed *for free*), while a parenthetical `(Remaster)`/`(Live)` is canonical noise and folds away. **No keyword list, no version regex, no fuzzy threshold.**
+2. **Rank (Layer 3) → continuous relevance.** `rel = max(token_sort_ratio(q, title), token_sort_ratio(q, "artist title")) / 100` (rapidfuzz) → popularity → distinct-multi-source → RRF (`k=60`). **No bands, no tiers, no intent contract.** This is the same relevance-first instinct as the 2026-05-28 addendum; the Go rebuild had briefly abandoned it for tiers and measurably regressed.
+3. **Also removed as query-fit:** vocabulary-based intent detection (providers now do plain search), the "did you mean" suggestion (tuned relevance threshold), the consensus MusicBrainz "authority filter" + "zero-overlap discard" thresholds (kept only an operational per-request lookup cap), and the vocab-learning popularity threshold.
+4. **No kind tiebreak.** The product bar is **top-3** ("the right answer must be *visible*, not strictly #1"), which makes "same-named album outranks the track" (Pattern A) moot — the track sits at #2/#3 and passes. `track>album>artist` remains a *non*-query-fit lever held in reserve for top-1 polish only.
+
+**Measurement (full-catalog head-to-head, 1,792 entities, identical run, 2026-06-21):** v2 **99.0% top-3 / 18 failures** vs v1 **98.9% / 20** — the query-fit-free pipeline **meets and beats** the tuned one on the gate, with net +2 driven by real structural wins (the numbered sequels `Shotta Flow 2`/`3` that v1 collapses, plus correct remaster-variant resolution). Top-1 traded down (93.6% vs 96.9%) — the accepted top-3-moot Pattern-A effect. The `discoveryeval --pipeline v1|v2` harness exercises either pipeline through one `Searcher` seam.
+
+**Reversibility.** Adapter/application-internal; the `GET /v1/discovery/search` response shape is unchanged. The old `internal/discovery` package is retained; cutover and rollback are the `DISCOVERY_V2_SEARCH` flag. ML-learned scorers remain a future, separate seam (plan 004).
+
 ## Implementation notes
 
 Pre-spec operational checklist (must be done before Slice 1 of the feature spec):

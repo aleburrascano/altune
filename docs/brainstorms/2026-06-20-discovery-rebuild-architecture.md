@@ -289,8 +289,34 @@ The categorical mechanisms:
   as a within-tier order.)
 
 **Product corollary (user, 2026-06-20):** the right answer need not be #1 — it must be *visible in
-the top results*. The eval measures **top-K** (default top-3; top-1 tracked alongside). The tier
-model satisfies this structurally: a same-named album lands in the tier directly below the exact track.
+the top results*. The eval measures **top-K** (default top-3; top-1 tracked alongside).
+
+> **Refinement (2026-06-21) — the categorical mechanisms above were themselves query-fit.**
+> Building the rebuild and measuring it revealed that "categorical" only counts when it *truly
+> dissolves* the constant, not when it relocates it:
+>
+> - The **version-marker vocabulary** (a ~25-keyword list — remix/live/deluxe/remaster/…) is a
+>   hand-tuned constant in disguise. It backfired: it over-merged *release variants* into one entity,
+>   and `textnorm` strips the parens, so the exact saved variant's tokens were lost — the full-catalog
+>   eval regressed.
+> - The **relevance tiers** were pattern-fit (built for Pattern A) **and brittle** — they depend on
+>   vocab-based intent that often fails, then fall off a cliff to popularity.
+>
+> Both were **removed**. The genuinely principled signals:
+> - **Merge (L2):** identifiers (ISRC/MBID — exact) → **exact canonical-title equality** (the shared
+>   `textnorm` *is* the "same title" decision). A trailing sequel number survives normalization
+>   ("Shotta Flow 2" ≠ "Shotta Flow", so **Pattern B holds for free**); a parenthetical "(Remaster)"
+>   is canonical noise and folds away. No keyword list, no fuzzy threshold.
+> - **Rank (L3):** **continuous token-sort relevance** (the published rapidfuzz algorithm — no
+>   bonuses, no bands) → popularity → multi-source → RRF (`k=60`). A similarity measure is an
+>   *algorithm*, not a fitted constant, and it degrades gracefully where tiers did not.
+> - **Pattern A is moot under top-3:** the exact result sits at #2/#3 and passes, so no kind tiebreak
+>   is needed. (track>album>artist remains a *non*-query-fit lever for top-1 polish only.)
+>
+> **Verdict (full-catalog head-to-head, 2026-06-21): v2 99.0% top-3 vs v1 98.9%** (18 vs 20 failures)
+> — query-fit-free, beating the tuned pipeline, winning on the real structural cases (sequels kept
+> separate, remaster variants resolved). Top-1 traded down (93.6% vs 96.9%) — the top-3-moot Pattern-A
+> effect. See ADR-0007 (strangler addendum) and plan 003's course-correction.
 
 ## 4.6 First measured baseline (2026-06-20)
 
