@@ -43,6 +43,16 @@ func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds ma
 		for _, t := range result.Tracks {
 			results = append(results, mapYTMusicTrack(t))
 		}
+		// AIDEV-NOTE: Coverage fix (plan 003 U6, Pattern C). YouTube Music
+		// classifies many obscure/underground recordings as videos
+		// (MUSIC_VIDEO_TYPE_OMV/UGC), which the ytmusic library routes to
+		// result.Videos — not result.Tracks. Dropping them left the exact track
+		// absent from the candidate set, so the ranker substituted the artist's
+		// hit. Mapping videos as tracks recovers the recording; the categorical
+		// merge dedups any video that duplicates an official track.
+		for _, v := range result.Videos {
+			results = append(results, mapYTMusicVideo(v))
+		}
 	}
 	if kinds[domain.ResultKindAlbum] {
 		for _, a := range result.Albums {
@@ -151,6 +161,38 @@ func mapYTMusicTrack(t *ytmusic.TrackItem) domain.SearchResult {
 			Provider:   domain.ProviderYouTube,
 			ExternalID: t.VideoID,
 			URL:        "https://music.youtube.com/watch?v=" + t.VideoID,
+		}},
+		Extras: extras,
+	}
+}
+
+// mapYTMusicVideo maps a YouTube Music video result to a track. Used by the
+// Pattern-C coverage fix: obscure recordings YT Music classifies as videos are
+// still the playable track the user wants.
+func mapYTMusicVideo(v *ytmusic.VideoItem) domain.SearchResult {
+	var subtitle string
+	if len(v.Artists) > 0 {
+		subtitle = v.Artists[0].Name
+	}
+	var imageURL string
+	if len(v.Thumbnails) > 0 {
+		imageURL = v.Thumbnails[len(v.Thumbnails)-1].URL
+	}
+	extras := make(map[string]any)
+	if v.Duration > 0 {
+		extras["duration"] = v.Duration
+	}
+
+	return domain.SearchResult{
+		Kind:       domain.ResultKindTrack,
+		Title:      v.Title,
+		Subtitle:   subtitle,
+		ImageURL:   imageURL,
+		Confidence: domain.ConfidenceLow,
+		Sources: []domain.SourceRef{{
+			Provider:   domain.ProviderYouTube,
+			ExternalID: v.VideoID,
+			URL:        "https://music.youtube.com/watch?v=" + v.VideoID,
 		}},
 		Extras: extras,
 	}
