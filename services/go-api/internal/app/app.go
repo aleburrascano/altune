@@ -217,7 +217,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	var consensusOpts []discoveryService.ConsensusOption
 	if sharedMB != nil {
-		consensusOpts = append(consensusOpts, discoveryService.WithConsensusMB(sharedMB))
+		consensusOpts = append(consensusOpts, discoveryService.WithMBAuthority(sharedMB))
 	}
 	consensusSvc := discoveryService.NewConsensusService(consensusProviders, consensusOpts...)
 

@@ -8,21 +8,39 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
-// mbConsensusLookup is the subset of MusicBrainzAdapter the consensus service needs.
-type mbConsensusLookup interface {
-	LookupAlbumArtist(ctx context.Context, artistName, albumTitle string, profile domain.ArtistIdentityProfile) (domain.AlbumVerdict, string, error)
-	ResolveArtistIdentity(ctx context.Context, name string) (*ports.ArtistIdentity, error)
-	ValidateArtistAlbums(ctx context.Context, artistName string, albums []domain.SearchResult) (*ports.AlbumValidationResult, error)
-}
+// Stage-3 consensus (detail screen).
+//
+// Every provider is an equal source: an album on 2+ providers is confirmed, an
+// album on one is unconfirmed-but-included, and MusicBrainz is the only
+// authority that REMOVES (contamination from same-name artists). The audited
+// engine is carried forward verbatim except for two changes:
+//
+//   - album clustering is now CATEGORICAL (parseVersion core + tags) instead of
+//     a TokenSortRatio ≥ 85 threshold — the constants-ledger replacement of
+//     consensusTitleMatchMinTSR. "Scorpion" and "Scorpion (Deluxe)" are distinct
+//     releases (different tags); the same album from two providers clusters on an
+//     exact core/tags match (a fuzzy core rung catches title typos).
+//   - a per-artist TTL cache short-circuits the provider fan-out and MB calls.
 
-const consensusTitleMatchMinTSR = 85
-
-// consensusTimeout bounds the whole consensus operation (parallel provider
-// fetch + sequential MB validation). Without it a hung provider or a slow MB
-// validation loop could keep the artist-detail request open for minutes.
+// consensusTimeout bounds the whole operation (parallel fetch + MB validation).
+// Kept (principled SLA): a hung provider or slow MB loop must not keep the
+// artist-detail request open for minutes.
 const consensusTimeout = 10 * time.Second
+
+// defaultConsensusCacheTTL is how long a per-artist consensus stays fresh. A
+// short TTL (not event-driven) is the OQ4 policy: a missed new release self-heals
+// within the window, and the search path surfaces new releases immediately.
+const defaultConsensusCacheTTL = 6 * time.Hour
+
+// mbLookupCap bounds per-request MusicBrainz lookups — an operational cost
+// limit (like a timeout), not a quality threshold. The query-fit "authority
+// filter" and "zero-overlap discard" thresholds were removed: MB now only
+// confirms titles it knows and rejects what it explicitly credits to a
+// different artist.
+const mbLookupCap = 10
 
 type ConsensusStatus string
 
@@ -32,156 +50,119 @@ const (
 	ConsensusRejected    ConsensusStatus = "rejected"
 )
 
+// ConsensusAlbum is an album with its cross-provider consensus verdict.
 type ConsensusAlbum struct {
 	Album  domain.SearchResult
 	Status ConsensusStatus
 	Reason string
 }
 
+// ConsensusProvider is one equal album source.
 type ConsensusProvider struct {
 	Name    string
 	Fetcher func(ctx context.Context, artistName string) ([]domain.SearchResult, error)
 }
 
+// mbAuthority is the MusicBrainz subset the consensus needs. The
+// MusicBrainzAdapter satisfies it (structurally identical to the legacy
+// consensus lookup interface).
+type mbAuthority interface {
+	LookupAlbumArtist(ctx context.Context, artistName, albumTitle string, profile domain.ArtistIdentityProfile) (domain.AlbumVerdict, string, error)
+	ResolveArtistIdentity(ctx context.Context, name string) (*ports.ArtistIdentity, error)
+	ValidateArtistAlbums(ctx context.Context, artistName string, albums []domain.SearchResult) (*ports.AlbumValidationResult, error)
+}
+
 type ConsensusService struct {
 	providers []ConsensusProvider
-	mb        mbConsensusLookup
+	mb        mbAuthority
+	cache     *artistConsensusCache
 }
 
 type ConsensusOption func(*ConsensusService)
 
-func WithConsensusMB(mb mbConsensusLookup) ConsensusOption {
+// WithMBAuthority enables the MusicBrainz contamination/authority filter.
+func WithMBAuthority(mb mbAuthority) ConsensusOption {
 	return func(s *ConsensusService) { s.mb = mb }
 }
 
+// WithCacheTTL overrides the per-artist consensus cache TTL.
+func WithCacheTTL(ttl time.Duration) ConsensusOption {
+	return func(s *ConsensusService) { s.cache = newArtistConsensusCache(ttl) }
+}
+
 func NewConsensusService(providers []ConsensusProvider, opts ...ConsensusOption) *ConsensusService {
-	s := &ConsensusService{providers: providers}
+	s := &ConsensusService{
+		providers: providers,
+		cache:     newArtistConsensusCache(defaultConsensusCacheTTL),
+	}
 	for _, opt := range opts {
 		opt(s)
 	}
 	return s
 }
 
-// BuildConsensus merges albums from ALL providers into a union.
-// Every provider is an equal source — no single provider is "primary."
-// Albums appearing on 2+ providers are confirmed. Albums on 1 provider
-// are unconfirmed but included. MB contradiction is the only removal.
-// Bounded by consensusTimeout so a slow provider can't stall the request.
+// BuildConsensus merges albums from every provider into a union with a
+// confirmed/unconfirmed/rejected verdict per album. A fresh per-artist cache
+// entry short-circuits the entire fan-out + MB pass.
 func (s *ConsensusService) BuildConsensus(
 	ctx context.Context,
 	artistName string,
 	primaryAlbums []domain.SearchResult,
 ) []ConsensusAlbum {
+	cacheKey := textnorm.NormalizeForMatch(artistName)
+	if cached, ok := s.cache.get(cacheKey); ok {
+		return cached
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, consensusTimeout)
 	defer cancel()
 
-	allProviderAlbums := s.fetchFromProviders(ctx, artistName)
-
+	byProvider := s.fetchFromProviders(ctx, artistName)
 	respondedCount := 0
-	for _, albums := range allProviderAlbums {
-		if albums != nil {
+	for _, p := range s.providers {
+		if byProvider[p.Name] != nil {
 			respondedCount++
 		}
 	}
 
-	slog.InfoContext(ctx, "consensus.providers_responded",
-		"artist", artistName,
-		"responded", respondedCount,
-		"total_providers", len(s.providers),
-	)
-
-	// AIDEV-DECISION: merge ALL providers' albums into a union, not just
-	// validate one provider's list. This way OsamaSon gets albums from
-	// Tidal + Last.fm even when Deezer has sparse data.
-	type mergedAlbum struct {
-		album      domain.SearchResult
-		providerCount int
-		providers  []string
-	}
-
-	merged := make(map[string]*mergedAlbum)
-	var mergeOrder []string
-
-	// Iterate mergeOrder (insertion order) rather than the merged map so the
-	// cluster an album joins is deterministic when its title fuzzy-matches
-	// more than one existing cluster. Map-range order would make the
-	// confirmed/unconfirmed outcome flaky run-to-run.
-	addAlbum := func(album domain.SearchResult, providerName string) {
-		titleNorm := NormalizeForMatch(album.Title)
-		for _, key := range mergeOrder {
-			if TokenSortRatio(titleNorm, key) >= consensusTitleMatchMinTSR {
-				existing := merged[key]
-				existing.providerCount++
-				existing.providers = append(existing.providers, providerName)
-				if completeness(album) > completeness(existing.album) {
-					existing.album = album
-				}
-				return
-			}
-		}
-		merged[titleNorm] = &mergedAlbum{
-			album:         album,
-			providerCount: 1,
-			providers:     []string{providerName},
-		}
-		mergeOrder = append(mergeOrder, titleNorm)
-	}
-
+	clusters := newAlbumClusterSet()
 	for _, album := range primaryAlbums {
-		addAlbum(album, "deezer")
+		clusters.add(album, "deezer")
 	}
-	for provName, albums := range allProviderAlbums {
-		if albums == nil {
-			continue
-		}
-		for _, album := range albums {
-			addAlbum(album, provName)
+	// Iterate providers in slice order (not map range) so the output ordering
+	// and canonical-pick are deterministic run-to-run.
+	for _, p := range s.providers {
+		for _, album := range byProvider[p.Name] {
+			clusters.add(album, p.Name)
 		}
 	}
 
-	results := make([]ConsensusAlbum, 0, len(merged))
-	for _, key := range mergeOrder {
-		entry := merged[key]
-		status := ConsensusUnconfirmed
-		reason := "single provider"
-		if entry.providerCount >= 2 {
-			status = ConsensusConfirmed
-			reason = "found on multiple providers"
+	results := make([]ConsensusAlbum, 0, len(clusters.order))
+	for _, key := range clusters.order {
+		c := clusters.byKey[key]
+		status, reason := ConsensusUnconfirmed, "single provider"
+		if c.providerCount >= 2 {
+			status, reason = ConsensusConfirmed, "found on multiple providers"
 		}
 		results = append(results, ConsensusAlbum{
-			Album:  annotateConsensus(entry.album, status, entry.providerCount, respondedCount),
+			Album:  annotateConsensus(c.album, status, c.providerCount, respondedCount),
 			Status: status,
 			Reason: reason,
 		})
 	}
 
-	results = s.applyMBContradiction(ctx, artistName, results)
+	results = s.applyMBAuthority(ctx, artistName, results)
 
-	confirmed, unconfirmed, rejected := 0, 0, 0
-	for _, r := range results {
-		switch r.Status {
-		case ConsensusConfirmed:
-			confirmed++
-		case ConsensusUnconfirmed:
-			unconfirmed++
-		case ConsensusRejected:
-			rejected++
-		}
+	if len(results) > 0 {
+		s.cache.set(cacheKey, results)
 	}
-	slog.InfoContext(ctx, "consensus.complete",
-		"artist", artistName,
-		"total", len(results),
-		"confirmed", confirmed,
-		"unconfirmed", unconfirmed,
-		"rejected", rejected,
-	)
-
+	logConsensus(ctx, artistName, results, respondedCount, len(s.providers))
 	return results
 }
 
 func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName string) map[string][]domain.SearchResult {
 	var mu sync.Mutex
-	result := make(map[string][]domain.SearchResult, len(s.providers))
+	out := make(map[string][]domain.SearchResult, len(s.providers))
 	var wg sync.WaitGroup
 
 	for _, p := range s.providers {
@@ -192,30 +173,21 @@ func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName st
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				slog.DebugContext(ctx, "consensus.provider_failed",
-					"provider", provider.Name,
-					"artist", artistName,
-					"error", err,
-				)
-				result[provider.Name] = nil
+				out[provider.Name] = nil
 				return
 			}
-			if len(albums) > 0 {
-				slog.DebugContext(ctx, "consensus.provider_responded",
-					"provider", provider.Name,
-					"artist", artistName,
-					"albums", len(albums),
-				)
-			}
-			result[provider.Name] = albums
+			out[provider.Name] = albums
 		}(p)
 	}
 
 	wg.Wait()
-	return result
+	return out
 }
 
-func (s *ConsensusService) applyMBContradiction(
+// applyMBAuthority is the carried-forward audited MusicBrainz pass: confirm
+// titles MB knows, reject contamination, and — when MB has strong data for the
+// artist — reject anything neither MB nor multi-provider consensus confirmed.
+func (s *ConsensusService) applyMBAuthority(
 	ctx context.Context,
 	artistName string,
 	results []ConsensusAlbum,
@@ -243,18 +215,10 @@ func (s *ConsensusService) applyMBContradiction(
 
 	confirmedTitles := make(map[string]bool, len(validated.Confirmed))
 	for _, a := range validated.Confirmed {
-		confirmedTitles[NormalizeForMatch(a.Title)] = true
+		confirmedTitles[textnorm.NormalizeForMatch(a.Title)] = true
 	}
 
-	if len(confirmedTitles) == 0 && len(allAlbums) >= 4 {
-		slog.InfoContext(ctx, "consensus.mb_identity_discarded",
-			"artist", artistName,
-			"reason", "zero overlap between MB confirmed titles and albums",
-		)
-		return results
-	}
-
-	mbCallCount := 0
+	mbCalls := 0
 	for i, result := range results {
 		if ctx.Err() != nil {
 			break
@@ -262,7 +226,7 @@ func (s *ConsensusService) applyMBContradiction(
 		if result.Status == ConsensusRejected {
 			continue
 		}
-		titleNorm := NormalizeForMatch(result.Album.Title)
+		titleNorm := textnorm.NormalizeForMatch(result.Album.Title)
 		if confirmedTitles[titleNorm] {
 			if results[i].Status != ConsensusConfirmed {
 				results[i].Status = ConsensusConfirmed
@@ -271,11 +235,10 @@ func (s *ConsensusService) applyMBContradiction(
 			}
 			continue
 		}
-
-		if mbCallCount >= 10 {
+		if mbCalls >= mbLookupCap {
 			continue
 		}
-		mbCallCount++
+		mbCalls++
 		verdict, _, lookupErr := s.mb.LookupAlbumArtist(ctx, artistName, result.Album.Title, profile)
 		if lookupErr != nil {
 			continue
@@ -284,40 +247,33 @@ func (s *ConsensusService) applyMBContradiction(
 			results[i].Status = ConsensusRejected
 			results[i].Reason = "MusicBrainz credits to different artist"
 			results[i].Album = annotateConsensus(results[i].Album, ConsensusRejected, 0, 0)
-			slog.DebugContext(ctx, "consensus.mb_contradiction",
-				"artist", artistName,
-				"album", result.Album.Title,
-			)
-		}
-	}
-
-	// AIDEV-DECISION: when MB has strong data (10+ confirmed titles), it
-	// knows this artist well enough to be authoritative. Albums that aren't
-	// confirmed by EITHER MB or multi-provider consensus are likely
-	// contamination from same-name artists. Reject them.
-	// This only fires for well-cataloged artists — underground artists
-	// with 0 MB titles are unaffected.
-	if len(confirmedTitles) >= 10 {
-		mbRejected := 0
-		for i, result := range results {
-			if result.Status == ConsensusConfirmed || result.Status == ConsensusRejected {
-				continue
-			}
-			results[i].Status = ConsensusRejected
-			results[i].Reason = "not confirmed by any authoritative source (MB has strong data for this artist)"
-			results[i].Album = annotateConsensus(results[i].Album, ConsensusRejected, 0, 0)
-			mbRejected++
-		}
-		if mbRejected > 0 {
-			slog.InfoContext(ctx, "consensus.mb_authority_filter",
-				"artist", artistName,
-				"mb_confirmed", len(confirmedTitles),
-				"rejected_unconfirmed", mbRejected,
-			)
 		}
 	}
 
 	return results
+}
+
+func logConsensus(ctx context.Context, artistName string, results []ConsensusAlbum, responded, providers int) {
+	confirmed, unconfirmed, rejected := 0, 0, 0
+	for _, r := range results {
+		switch r.Status {
+		case ConsensusConfirmed:
+			confirmed++
+		case ConsensusUnconfirmed:
+			unconfirmed++
+		case ConsensusRejected:
+			rejected++
+		}
+	}
+	slog.InfoContext(ctx, "consensus.v2.complete",
+		"artist", artistName,
+		"total", len(results),
+		"confirmed", confirmed,
+		"unconfirmed", unconfirmed,
+		"rejected", rejected,
+		"responded", responded,
+		"providers", providers,
+	)
 }
 
 func annotateConsensus(album domain.SearchResult, status ConsensusStatus, matchCount, respondedCount int) domain.SearchResult {
@@ -331,4 +287,70 @@ func annotateConsensus(album domain.SearchResult, status ConsensusStatus, matchC
 	}
 	album.Extras = extras
 	return album
+}
+
+// --- categorical album clustering ---
+
+type albumCluster struct {
+	album         domain.SearchResult
+	providerCount int
+	providers     []string
+}
+
+type albumClusterSet struct {
+	byKey map[string]*albumCluster
+	order []string
+}
+
+func newAlbumClusterSet() *albumClusterSet {
+	return &albumClusterSet{byKey: make(map[string]*albumCluster)}
+}
+
+// add clusters an album by exact canonical title (the same principled rule as
+// Layer 2 — no version vocabulary, no fuzzy threshold).
+func (s *albumClusterSet) add(album domain.SearchResult, provider string) {
+	key := textnorm.NormalizeForMatch(album.Title)
+	if c, ok := s.byKey[key]; ok {
+		c.providerCount++
+		c.providers = append(c.providers, provider)
+		if completenessOf(album) > completenessOf(c.album) {
+			c.album = album
+		}
+		return
+	}
+	s.byKey[key] = &albumCluster{album: album, providerCount: 1, providers: []string{provider}}
+	s.order = append(s.order, key)
+}
+
+// --- per-artist TTL cache ---
+
+type consensusCacheEntry struct {
+	albums    []ConsensusAlbum
+	expiresAt time.Time
+}
+
+type artistConsensusCache struct {
+	mu  sync.RWMutex
+	ttl time.Duration
+	m   map[string]consensusCacheEntry
+}
+
+func newArtistConsensusCache(ttl time.Duration) *artistConsensusCache {
+	return &artistConsensusCache{ttl: ttl, m: make(map[string]consensusCacheEntry)}
+}
+
+func (c *artistConsensusCache) get(key string) ([]ConsensusAlbum, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	entry, ok := c.m[key]
+	if !ok || time.Now().After(entry.expiresAt) {
+		return nil, false
+	}
+	return entry.albums, true
+}
+
+func (c *artistConsensusCache) set(key string, albums []ConsensusAlbum) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.m[key] = consensusCacheEntry{albums: albums, expiresAt: time.Now().Add(c.ttl)}
 }
