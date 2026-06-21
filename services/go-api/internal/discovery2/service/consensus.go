@@ -35,15 +35,12 @@ const consensusTimeout = 10 * time.Second
 // within the window, and the search path surfaces new releases immediately.
 const defaultConsensusCacheTTL = 6 * time.Hour
 
-// Carried-forward audited MB-authority thresholds (not ranking constants; out of
-// the ledger's scope). mbLookupCap bounds per-request MB calls; mbAuthorityMin is
-// the confirmed-title count above which MB is treated as authoritative for an
-// artist; mbDiscardMinAlbums guards the zero-overlap identity discard.
-const (
-	mbLookupCap        = 10
-	mbAuthorityMin     = 10
-	mbDiscardMinAlbums = 4
-)
+// mbLookupCap bounds per-request MusicBrainz lookups — an operational cost
+// limit (like a timeout), not a quality threshold. The query-fit "authority
+// filter" and "zero-overlap discard" thresholds were removed: MB now only
+// confirms titles it knows and rejects what it explicitly credits to a
+// different artist.
+const mbLookupCap = 10
 
 type ConsensusStatus string
 
@@ -221,11 +218,6 @@ func (s *ConsensusService) applyMBAuthority(
 		confirmedTitles[textnorm.NormalizeForMatch(a.Title)] = true
 	}
 
-	// Zero overlap on a well-populated list means we resolved the wrong artist.
-	if len(confirmedTitles) == 0 && len(allAlbums) >= mbDiscardMinAlbums {
-		return results
-	}
-
 	mbCalls := 0
 	for i, result := range results {
 		if ctx.Err() != nil {
@@ -254,20 +246,6 @@ func (s *ConsensusService) applyMBAuthority(
 		if verdict == domain.AlbumVerdictContamination {
 			results[i].Status = ConsensusRejected
 			results[i].Reason = "MusicBrainz credits to different artist"
-			results[i].Album = annotateConsensus(results[i].Album, ConsensusRejected, 0, 0)
-		}
-	}
-
-	// When MB knows the artist well, reject anything neither it nor multi-provider
-	// consensus confirmed (same-name contamination). Underground artists with no
-	// MB data are unaffected.
-	if len(confirmedTitles) >= mbAuthorityMin {
-		for i, result := range results {
-			if result.Status == ConsensusConfirmed || result.Status == ConsensusRejected {
-				continue
-			}
-			results[i].Status = ConsensusRejected
-			results[i].Reason = "not confirmed by any authoritative source (MB has strong data for this artist)"
 			results[i].Album = annotateConsensus(results[i].Album, ConsensusRejected, 0, 0)
 		}
 	}

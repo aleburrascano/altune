@@ -10,10 +10,9 @@ import (
 )
 
 const (
-	// vocabIngestTop is how many top results feed the vocabulary per search.
+	// vocabIngestTop is how many top results feed the vocabulary per search (an
+	// operational bound, like a page size).
 	vocabIngestTop = 5
-	// vocabMinPopularity gates which results are worth learning as terms.
-	vocabMinPopularity = 30
 	// vocabIngestTimeout bounds the background ingest.
 	vocabIngestTimeout = 3 * time.Second
 )
@@ -73,9 +72,6 @@ func buildVocabEntries(rawQuery string, results []domain.SearchResult) []domain.
 	}
 	for _, r := range results[:limit] {
 		pop := popularityOf(r)
-		if pop < vocabMinPopularity {
-			continue
-		}
 		text := r.Title
 		if r.Subtitle != "" {
 			text = r.Title + " - " + r.Subtitle

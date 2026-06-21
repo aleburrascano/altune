@@ -127,24 +127,18 @@ func (s *Service) Execute(
 ) (*legacy.SearchOutput, error) {
 	searchQuery := legacy.CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
-	legacyIntent, intent := s.detectIntent(ctx, queryNorm)
 
-	slog.InfoContext(ctx, "search.v2.start",
-		"query", query.Raw,
-		"intent_artist", intent.Artist,
-		"intent_kind", intent.Kind.String(),
-	)
+	slog.InfoContext(ctx, "search.v2.start", "query", query.Raw)
 
-	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds, legacyIntent)
-	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm, intent)
+	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
+	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm)
 
-	// Zero results → auto-correct and re-search; weak top → offer a suggestion.
+	// Zero results → auto-correct and re-search. (The "did you mean" suggestion
+	// for weak-but-non-empty results was removed: its trigger was a tuned
+	// relevance threshold — query-fit.)
 	var correctedQuery, originalQuery, suggestedQuery string
 	if len(ranked) == 0 {
 		correctedQuery, originalQuery, ranked = s.tryCorrection(ctx, query)
-	}
-	if len(ranked) > 0 && correctedQuery == "" {
-		suggestedQuery = s.suggestIfWeak(ctx, ranked, query.Raw, queryNorm, intent)
 	}
 
 	var related []domain.RelatedGroup
@@ -192,30 +186,15 @@ func (s *Service) Execute(
 	}, nil
 }
 
-// detectIntent runs Layer 0: the vocabulary-backed artist/title split, lifted
-// into the Intent contract (artist+title ⇒ intended kind track).
-func (s *Service) detectIntent(ctx context.Context, queryNorm string) (*legacy.QueryIntent, Intent) {
-	var legacyIntent *legacy.QueryIntent
-	if s.vocabStore != nil {
-		legacyIntent = legacy.DetectIntent(ctx, queryNorm, s.vocabStore)
-	}
-	intent := BuildIntent(queryNorm, "", "")
-	if legacyIntent != nil {
-		intent = BuildIntent(queryNorm, legacyIntent.Artist, legacyIntent.Track)
-	}
-	return legacyIntent, intent
-}
-
 // mergeRankEnrich is the decision core plus carried-forward enrichment:
 // Merge → Rank → diversity → artist-dedup → disambiguation → artwork.
 func (s *Service) mergeRankEnrich(
 	ctx context.Context,
 	perProvider [][]domain.SearchResult,
 	queryNorm string,
-	intent Intent,
 ) []domain.SearchResult {
 	entities := Merge(perProvider)
-	ranked := Rank(entities, queryNorm, intent)
+	ranked := Rank(entities, queryNorm)
 	ranked = legacy.EnforceDiversity(ranked)
 	ranked = legacy.CollapseArtistDuplicates(ranked)
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
@@ -230,7 +209,6 @@ func (s *Service) fanOut(
 	ctx context.Context,
 	searchQuery string,
 	kinds map[domain.ResultKind]bool,
-	intent *legacy.QueryIntent,
 ) ([][]domain.SearchResult, []domain.ProviderSearchResponse) {
 	var (
 		mu          sync.Mutex
@@ -262,7 +240,7 @@ func (s *Service) fanOut(
 			defer cancel()
 
 			start := time.Now()
-			results, err := searchProvider(provCtx, p, searchQuery, kinds, intent)
+			results, err := p.Search(provCtx, searchQuery, kinds)
 			latencyMs := time.Since(start).Milliseconds()
 
 			if err != nil {
@@ -299,26 +277,6 @@ func (s *Service) fanOut(
 
 	wg.Wait()
 	return perProvider, statuses
-}
-
-// searchProvider prefers a provider's structured (artist+track) search when an
-// intent was detected, falling back to the raw-string search.
-func searchProvider(
-	ctx context.Context,
-	p ports.SearchProvider,
-	searchQuery string,
-	kinds map[domain.ResultKind]bool,
-	intent *legacy.QueryIntent,
-) ([]domain.SearchResult, error) {
-	if intent != nil {
-		if ss, ok := p.(ports.StructuredSearcher); ok {
-			results, err := ss.SearchStructured(ctx, intent.Artist, intent.Track, kinds)
-			if err != nil || results != nil {
-				return results, err
-			}
-		}
-	}
-	return p.Search(ctx, searchQuery, kinds)
 }
 
 func (s *Service) persistHistory(

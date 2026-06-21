@@ -42,22 +42,6 @@ func (p *fakeProvider) SupportedKinds() map[domain.ResultKind]bool {
 	}
 }
 
-// fakeVocab reports a single known artist, so DetectIntent only splits the query
-// at that exact artist boundary.
-type fakeVocab struct{ artist string }
-
-func (v fakeVocab) Add(context.Context, domain.VocabularyEntry) error       { return nil }
-func (v fakeVocab) BulkAdd(context.Context, []domain.VocabularyEntry) error { return nil }
-func (v fakeVocab) SuggestByPrefix(_ context.Context, prefix string, _ int) ([]domain.VocabularyEntry, error) {
-	if prefix == v.artist {
-		return []domain.VocabularyEntry{{Term: v.artist, Kind: domain.VocabKindArtist, Popularity: 80}}, nil
-	}
-	return nil, nil
-}
-func (v fakeVocab) FindClosest(context.Context, string, int) ([]domain.VocabularyEntry, error) {
-	return nil, nil
-}
-
 func newQuery(t *testing.T, raw string) *domain.SearchQuery {
 	t.Helper()
 	q, err := domain.NewSearchQuery(raw, "", map[domain.ResultKind]bool{
@@ -126,22 +110,18 @@ func TestService_PartialOnProviderError(t *testing.T) {
 	}
 }
 
-func TestService_StructuredIntentSeatsTrackAboveAlbum(t *testing.T) {
-	// Pattern A end-to-end: with intent detected (artist+title → kind track),
-	// the exact track is T1 even though the same-named album is far more popular.
-	trk := deezerTrack("HUMBLE.", "Kendrick Lamar", 40)
-	album := deezerAlbum("Humble", "Kendrick Lamar", 99)
-	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{album, trk}}
+func TestService_RanksExactTitleFirst(t *testing.T) {
+	// End-to-end: continuous relevance puts the exact-title track ahead of a
+	// partial-title one regardless of popularity.
+	exact := deezerTrack("HUMBLE.", "Kendrick Lamar", 40)
+	partial := deezerTrack("Humble Beginnings", "Someone Else", 99)
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{partial, exact}}
 
-	svc := NewService(
-		[]ports.SearchProvider{p},
-		legacy.NewCircuitBreaker(),
-		WithVocabularyStore(fakeVocab{artist: "kendrick lamar"}),
-	)
-	out := runSearch(t, svc, "kendrick lamar humble")
+	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker())
+	out := runSearch(t, svc, "humble")
 
-	if len(out.Results) == 0 || out.Results[0].Kind != domain.ResultKindTrack {
-		t.Fatalf("intent should seat the track at T1, got %v", titles(out.Results))
+	if len(out.Results) == 0 || out.Results[0].Title != "HUMBLE." {
+		t.Fatalf("want the exact-title track first, got %v", titles(out.Results))
 	}
 }
 

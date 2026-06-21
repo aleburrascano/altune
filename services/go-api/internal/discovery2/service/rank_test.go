@@ -40,54 +40,42 @@ func titles(results []domain.SearchResult) []string {
 	return out
 }
 
-func TestRank_PatternA_TierBeatsPopularity(t *testing.T) {
-	// Structured query → intent kind = track. The same-named album is MORE
-	// popular, yet the exact track must still rank #1 (T1 > T2), with the album
-	// immediately below. This is the structural Pattern-A fix.
-	trackHumble := deezerTrack("HUMBLE.", "Kendrick Lamar", 70)
-	albumHumble := deezerAlbum("Humble", "Kendrick Lamar", 99)
+func TestRank_ExactTitleOutranksPartial(t *testing.T) {
+	// Continuous relevance: the exact title matches more of the query than a
+	// partial one, so it ranks higher — even when the partial is more popular.
+	exact := deezerTrack("Humble", "Artist A", 10)
+	partial := deezerTrack("Humble Beginnings", "Artist B", 99)
 
-	intent := BuildIntent("kendrick lamar humble", "Kendrick Lamar", "Humble")
-	got := Rank([]Entity{ent(albumHumble), ent(trackHumble)}, "kendrick lamar humble", intent)
+	got := Rank([]Entity{ent(partial), ent(exact)}, "humble")
 
-	if len(got) != 2 {
-		t.Fatalf("got %d results, want 2: %v", len(got), titles(got))
-	}
-	if got[0].Kind != domain.ResultKindTrack {
-		t.Errorf("rank[0] = %s %q, want the track at T1", got[0].Kind, got[0].Title)
-	}
-	if got[1].Kind != domain.ResultKindAlbum {
-		t.Errorf("rank[1] = %s %q, want the album at T2", got[1].Kind, got[1].Title)
+	if len(got) == 0 || got[0].Title != "Humble" {
+		t.Fatalf("ranking = %v, want exact 'Humble' first", titles(got))
 	}
 }
 
-func TestRank_BareQuery_PopularityDecidesWithinTier(t *testing.T) {
-	// No structured intent → no kind preference → exact-title track and album
-	// are both T1; the more popular one wins on popularity.
-	trackHumble := deezerTrack("HUMBLE.", "Kendrick Lamar", 90)
-	albumHumble := deezerAlbum("Humble", "Kendrick Lamar", 40)
+func TestRank_DashVariantOutranksParenForRemasterQuery(t *testing.T) {
+	// The regression fix, in the ranker: for a query carrying the version suffix,
+	// the dash-form variant (which keeps those tokens after normalization) is a
+	// closer match than the paren-form (whose suffix normalization strips away).
+	dash := deezerTrack("Big Poppa - 2005 Remaster", "The Notorious B.I.G.", 50)
+	paren := deezerTrack("Big Poppa (2007 Remaster)", "The Notorious B.I.G.", 99)
 
-	intent := BuildIntent("humble", "", "")
-	got := Rank([]Entity{ent(albumHumble), ent(trackHumble)}, "humble", intent)
+	got := Rank([]Entity{ent(paren), ent(dash)}, "big poppa 2005 remaster")
 
-	if len(got) != 2 || got[0].Kind != domain.ResultKindTrack {
-		t.Fatalf("want track first by popularity, got %v", titles(got))
+	if len(got) == 0 || got[0].Title != "Big Poppa - 2005 Remaster" {
+		t.Fatalf("ranking = %v, want the dash-form variant first", titles(got))
 	}
 }
 
-func TestRank_TierOrderingExactPartialWeak(t *testing.T) {
-	exact := deezerTrack("Humble", "Artist A", 10)              // T1
-	partial := deezerTrack("Humble Beginnings", "Artist B", 99) // T3 (contains target)
-	weak := deezerTrack("Vibes Only", "Humble Crew", 99)        // T4 (shares only "humble" via artist)
+func TestRank_PopularityBreaksRelevanceTie(t *testing.T) {
+	// Same canonical title → equal relevance → popularity decides.
+	a := deezerTrack("Crazy", "Artist A", 30)
+	b := deezerTrack("Crazy", "Artist B", 90)
 
-	intent := BuildIntent("humble", "", "")
-	got := Rank([]Entity{ent(partial), ent(weak), ent(exact)}, "humble", intent)
+	got := Rank([]Entity{ent(a), ent(b)}, "crazy")
 
-	want := []string{"Humble", "Humble Beginnings", "Vibes Only"}
-	for i, w := range want {
-		if i >= len(got) || got[i].Title != w {
-			t.Fatalf("ranking = %v, want %v", titles(got), want)
-		}
+	if len(got) != 2 || got[0].Subtitle != "Artist B" {
+		t.Fatalf("ranking = %v, want the more popular 'Crazy' first", titles(got))
 	}
 }
 
@@ -95,8 +83,7 @@ func TestRank_SharesQueryWordGate(t *testing.T) {
 	relevant := deezerTrack("Humble", "Artist A", 50)
 	noise := deezerTrack("Completely Different", "Other", 99)
 
-	intent := BuildIntent("humble", "", "")
-	got := Rank([]Entity{ent(noise), ent(relevant)}, "humble", intent)
+	got := Rank([]Entity{ent(noise), ent(relevant)}, "humble")
 
 	if len(got) != 1 || got[0].Title != "Humble" {
 		t.Fatalf("expected only the relevant result, got %v", titles(got))
@@ -104,23 +91,20 @@ func TestRank_SharesQueryWordGate(t *testing.T) {
 }
 
 func TestRank_BrowseableSourceGate(t *testing.T) {
-	// Album with no Deezer source can't load detail content → dropped.
 	itunesAlbum := withPop(res(domain.ResultKindAlbum, "Humble", "Artist A", domain.ProviderITunes, nil), 99)
-	track := deezerTrack("Humble", "Artist A", 10)
+	trk := deezerTrack("Humble", "Artist A", 10)
 
-	intent := BuildIntent("humble", "", "")
-	got := Rank([]Entity{ent(itunesAlbum), ent(track)}, "humble", intent)
+	got := Rank([]Entity{ent(itunesAlbum), ent(trk)}, "humble")
 
 	if len(got) != 1 || got[0].Kind != domain.ResultKindTrack {
 		t.Fatalf("expected the album dropped (no Deezer source), got %v", titles(got))
 	}
 }
 
-func TestRank_MultiSourceTiebreakWithinTier(t *testing.T) {
-	// Two exact-title T1 entities, equal popularity; the multi-source one wins.
+func TestRank_MultiSourceTiebreakWithinEqualRelevanceAndPopularity(t *testing.T) {
 	single := deezerTrack("Crazy", "Artist A", 50)
 
-	multi := withPop(track("Crazy", "Artist B", domain.ProviderDeezer, nil), 50)
+	multi := withPop(track("Crazy", "Artist A", domain.ProviderDeezer, nil), 50)
 	multi.Sources = append(multi.Sources, domain.SourceRef{
 		Provider: domain.ProviderITunes, ExternalID: "x", URL: "https://x",
 	})
@@ -129,10 +113,9 @@ func TestRank_MultiSourceTiebreakWithinTier(t *testing.T) {
 		BestRank: map[domain.ProviderName]int{domain.ProviderDeezer: 0, domain.ProviderITunes: 0},
 	}
 
-	intent := BuildIntent("crazy", "", "")
-	got := Rank([]Entity{ent(single), multiEntity}, "crazy", intent)
+	got := Rank([]Entity{ent(single), multiEntity}, "crazy")
 
-	if len(got) != 2 || got[0].Subtitle != "Artist B" {
+	if len(got) != 2 || len(got[0].Sources) != 2 {
 		t.Fatalf("expected the multi-source result first, got %v", titles(got))
 	}
 }
