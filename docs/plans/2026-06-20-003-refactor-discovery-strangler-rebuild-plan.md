@@ -105,6 +105,25 @@ recorded baseline delta shows new ≥ old on the chosen K.
 
 ---
 
+## Near-term parallel tasks (turn the telemetry faucet on during the rebuild)
+
+These run *alongside* the rebuild so the testing phase banks a real, clean dataset for ML (plan 004),
+instead of wasting it. They are not gated on the rebuild.
+
+- **[DONE 2026-06-20] Apply migration 004 to Supabase** — `discovery_events` now exists in prod;
+  search telemetry persists (it was silently dropping before). `uuid-ossp` was already present.
+- **[DONE 2026-06-20] Stamp `pipeline_version` on search telemetry** — every search event now carries
+  `pipeline_version` (`v1` today; the rebuilt pipeline emits `v2`). Makes transition-phase telemetry
+  attributable so ML trains per-pipeline and labels aren't mixed across the cutover.
+- **[TODO — separate mobile slice] Client telemetry emission.** The dense behavioral signals
+  (play / skip / completion / library-add / wrong-album) are fired by the mobile client → the existing
+  ingest endpoint (`POST /v1/discovery/events`, plan 002 U3). Nothing calls it yet. **This is the
+  gating data-collection task for ML (plan 004 Stage 1).** Until it lands, signal-a is blind and
+  ranking ML has no training data. Do it early/in parallel — it does not depend on the rebuild.
+- **When the rebuilt pipeline emits telemetry (U7),** stamp it `pipeline_version = "v2"`.
+
+---
+
 ## Requirements
 
 - R1. New pipeline in a **new package**, clean Layers 0–4, not modifying the old package. *(origin §4, §13)*
