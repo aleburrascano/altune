@@ -43,7 +43,7 @@ truly private/unlisted content never surfaces.
 
 | Provider | Doc | Audited | Notes |
 |---|---|---|---|
-| SoundCloud | [soundcloud.md](soundcloud.md) | ✅ live-probed 2026-06-21 | Track search + resolve **built**; 5 more capabilities mapped |
+| SoundCloud | [soundcloud.md](soundcloud.md) | ✅ live-probed 2026-06-21 | **4/6 capabilities built** (search all-kinds, artwork, discography); related-tracks + acquisition are TODO (need specs — see §8) |
 | Deezer | _stub_ | ⬜ | Public `api.deezer.com` used today; internal `gw-light.php` un-audited |
 | iTunes / Apple Music | _stub_ | ⬜ | Public search used; previews + richer Apple Music API un-audited |
 | YouTube Music | _stub_ | ⬜ | Via `ytmusic` lib; full internal surface un-audited |

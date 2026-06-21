@@ -85,12 +85,18 @@ implement `ports.ArtistContentProvider`, wired as `"soundcloud"` in the artist-c
 in its `SourceRef`, so no separate id-resolution is needed. Reuses the track/album mappers.
 Read-only enrichment, off the ranking path — no eval gate.
 
-### 5. Related tracks (recommendations) — planned (own feature)
+### 5. Related tracks (recommendations) — ⬜ TODO (Unit C — needs a `/feature-spec` first)
 `/tracks/{id}/related` returns a recommendation set — live probe surfaced underground collabs
-(e.g. "Lil Tecca & Ken Carson – Fell In Love") that pure search misses. This is a **new discovery
-feature**, not coverage; deserves its own spec (how it surfaces in the UI, when it's called).
+(e.g. "Lil Tecca & Ken Carson – Fell In Love") that pure search misses. The *data* is one endpoint
+(`externalID` = the track's numeric id, already in its `SourceRef`); the *feature* is what's
+undefined, which is why this is **not** another adapter bolt-on:
+- **Where does it surface?** A "Related" rail on the detail screen? Inline under a result?
+- **When is it called?** On detail open, on demand, prefetched?
+- **Whose recs?** SoundCloud-only, or merged with other providers' related signals?
+Decide these in a `/feature-spec`, then the adapter method is trivial (one endpoint, reuse
+`mapSoundCloudAPITrack`).
 
-### 6. Audio acquisition — planned (separate thread)
+### 6. Audio acquisition — ⬜ TODO (Unit D — its own acquisition plan, the big one)
 The owned-library unlock. Each track carries `media.transcodings[]` — the stream URLs.
 **It is the FULL track, not a 30s preview** (verified: `duration == full_duration`, `snipped:false`).
 Acquisition difficulty varies by tier, *not* preview-vs-full:
@@ -101,8 +107,9 @@ Acquisition difficulty varies by tier, *not* preview-vs-full:
 - **SoundCloud Go+ subscriber-only:** the *only* tier that is preview-only (`snipped:true`) when
   anonymous — and the unreleased long tail is never in this bucket.
 Resolve a transcoding: `GET {transcoding.url}?client_id=<id>` → `{ "url": "<cdn stream>" }`.
-This belongs to the **acquisition pipeline (yt-dlp → OCI)**, a separate plan; the built `Resolve`
-method is the natural feed.
+This belongs to the **acquisition pipeline (yt-dlp → OCI)**, a separate plan — it touches storage,
+OCI, and the existing `AcquisitionStatus` lifecycle in the catalog domain, so it is a full feature
+loop, not an adapter method. The built `ResolvePermalink` (link → track) is the natural feed.
 
 ## 6. Costs & risks
 
@@ -117,10 +124,35 @@ method is the natural feed.
 
 ## 7. Current implementation state
 
-- `services/go-api/internal/discovery/adapters/providers/soundcloud_apiv2.go` — direct api-v2 client:
-  `client_id` resolver, paginated track search, `Resolve(permalink)`, rich `extras`, 500px artwork.
+Capabilities 1–4 are **built and committed** on branch `refactor/discovery-pipeline-clarity`
+(unpushed, solo branch):
+
+| Capability | Commit |
+|---|---|
+| 1. Track search + `ResolvePermalink` | `b74e0ee` |
+| 2. Album + artist search | `0b4d7ff` (eval-gated 99.1% top-3) |
+| 3. Artwork resolver | `4762c91` |
+| 4. Artist discography | `6751b84` |
+
+- `services/go-api/internal/discovery/adapters/providers/soundcloud_apiv2.go` — the direct api-v2
+  client: `client_id` resolver (self-healing), paginated track search, album/artist/track search,
+  `ArtworkResolver`, `ArtistContentProvider`, `ResolvePermalink`, 500px artwork.
 - `soundcloud.go` — the original yt-dlp adapter, retained as **fallback** when `client_id`
   resolution is down.
-- Wired in `internal/app/app.go` `buildDiscoveryProviders` (api-v2 primary, yt-dlp fallback).
+- Wired in `internal/app/app.go` (`buildDiscoveryProviders` as search provider; `artistProviders`
+  map for discography) and `search_wiring.go` (`buildArtworkChain`, last).
 - Verified: live "Ken Carson Olympics" head-to-head (old: 0 SC results; new: leak surfaces) and
   full v2 eval **99.1% top-3** (≥ 99.0% baseline, 17 vs 18 failures, no new regressions).
+
+## 8. Next steps (where I left off — 2026-06-21)
+
+Adapter-level maximization is **done** (1–4). The remaining two are deliberately **not** adapter
+work — both are new product surfaces that need the feature loop:
+
+1. **Unit C — related tracks (capability 5).** Start with `/feature-spec` to decide the UI surface
+   + trigger, then add the trivial `/tracks/{id}/related` method. *Smaller; do this first.*
+2. **Unit D — audio acquisition (capability 6).** Its own plan — the yt-dlp→OCI pipeline (stream
+   resolution, HLS/encrypted-HLS handling, storage, `AcquisitionStatus`). The big one. *Do last.*
+
+To resume: pick Unit C, run `/feature-spec` for "SoundCloud related tracks". The endpoint surface and
+field shapes are already documented above (§5), so the spec only needs the product decisions.
