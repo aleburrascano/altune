@@ -194,8 +194,14 @@ func (s *Service) Execute(
 	}, nil
 }
 
-// mergeRankEnrich is the decision core plus carried-forward enrichment:
-// Merge → Rank → diversity → artist-dedup → disambiguation → artwork.
+// mergeRankEnrich is the decision core followed by two carried-forward concerns
+// that each own one responsibility and are tested in isolation:
+//
+//	decision core   : Merge (entity resolution) → Rank (relevance ordering)
+//	list policy      : EnforceDiversity, CollapseArtistDuplicates (product rules
+//	                   that reshape the list; see diversity.go)
+//	display enrich   : applyArtistDisambiguation, enrich (fill subtitle/artwork;
+//	                   neither reorders)
 func (s *Service) mergeRankEnrich(
 	ctx context.Context,
 	perProvider [][]domain.SearchResult,
@@ -203,8 +209,12 @@ func (s *Service) mergeRankEnrich(
 ) []domain.SearchResult {
 	entities := Merge(perProvider)
 	ranked := Rank(entities, queryNorm)
+
+	// list policy — reshapes the ranked list per product rules.
 	ranked = EnforceDiversity(ranked)
 	ranked = CollapseArtistDuplicates(ranked)
+
+	// display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
 	ranked = s.enrich(ctx, ranked)
 	return ranked
