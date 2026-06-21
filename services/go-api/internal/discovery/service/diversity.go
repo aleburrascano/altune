@@ -5,7 +5,14 @@ import "altune/go-api/internal/discovery/domain"
 // Result-list shaping rules carried forward from the v1 ranking pipeline. These
 // are orthogonal to ranking proper (the rebuilt Merge/Rank own ordering) — they
 // cap per-artist repetition and fold same-name artist duplicates after ranking.
-
+//
+// AIDEV-NOTE: diversityWindow/maxPerArtistInTop are PRODUCT POLICY, not the
+// query-fit ranking constants the rebuild purged (relevance bands, dominance
+// windows, intent thresholds — see search.go's doctrine). They fit the product
+// (a household of diverse tastes should not see one artist dominate the top
+// results), not the query, so they are intentionally exempt from that purge.
+// Changing them is a UX decision; validate against the top-K library eval
+// (cmd/discoveryeval) since it shifts what users see at the top.
 const (
 	diversityWindow   = 10
 	maxPerArtistInTop = 3
