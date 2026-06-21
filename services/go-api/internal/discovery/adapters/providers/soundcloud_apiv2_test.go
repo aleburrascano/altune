@@ -33,11 +33,8 @@ func TestSoundCloudAPIAdapter_Name(t *testing.T) {
 func TestSoundCloudAPIAdapter_SupportedKinds(t *testing.T) {
 	a := NewSoundCloudAPIAdapter(http.DefaultClient, nil)
 	kinds := a.SupportedKinds()
-	if !kinds[domain.ResultKindTrack] {
-		t.Error("expected track supported")
-	}
-	if kinds[domain.ResultKindAlbum] || kinds[domain.ResultKindArtist] {
-		t.Error("expected album/artist NOT supported")
+	if !kinds[domain.ResultKindTrack] || !kinds[domain.ResultKindAlbum] || !kinds[domain.ResultKindArtist] {
+		t.Errorf("expected track+album+artist supported, got %+v", kinds)
 	}
 }
 
@@ -48,14 +45,83 @@ func TestSoundCloudAPIAdapter_SearchTimeout(t *testing.T) {
 	}
 }
 
-func TestSoundCloudAPIAdapter_Search_UnsupportedKinds(t *testing.T) {
+func TestSoundCloudAPIAdapter_Search_NoKindsRequested(t *testing.T) {
+	// Empty kinds: no branch fires, so it returns nil without any network call.
 	a := NewSoundCloudAPIAdapter(http.DefaultClient, nil)
-	results, err := a.Search(context.Background(), "q", map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
+	results, err := a.Search(context.Background(), "q", map[domain.ResultKind]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if results != nil {
 		t.Errorf("expected nil results, got %d", len(results))
+	}
+}
+
+func TestSoundCloudAPIAdapter_Search_AlbumsAndArtists(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/search/albums"):
+			_, _ = w.Write([]byte(`{"collection":[
+				{"id":11,"kind":"playlist","title":"A Great Chaos","set_type":"album","genre":"Rap",
+				 "artwork_url":"https://i1.sndcdn.com/artworks-x-large.jpg","user":{"username":"Ken Carson"}},
+				{"id":0,"title":"skip — no id"}
+			]}`))
+		case strings.HasPrefix(r.URL.Path, "/search/users"):
+			_, _ = w.Write([]byte(`{"collection":[
+				{"id":22,"kind":"user","username":"Ken Carson","permalink_url":"https://soundcloud.com/kencarson",
+				 "avatar_url":"https://i1.sndcdn.com/avatars-y-large.jpg"},
+				{"id":0,"username":""}
+			]}`))
+		case strings.HasPrefix(r.URL.Path, "/search/tracks"):
+			_, _ = w.Write([]byte(`{"collection":[{"id":33,"kind":"track","title":"Overseas","user":{"username":"Ken Carson"}}],"next_href":""}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	a := newTestSoundCloudAPI(srv, nil)
+	results, err := a.Search(context.Background(), "Ken Carson", map[domain.ResultKind]bool{
+		domain.ResultKindTrack:  true,
+		domain.ResultKindAlbum:  true,
+		domain.ResultKindArtist: true,
+	})
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+
+	var nTrack, nAlbum, nArtist int
+	var album, artist domain.SearchResult
+	for _, r := range results {
+		switch r.Kind {
+		case domain.ResultKindTrack:
+			nTrack++
+		case domain.ResultKindAlbum:
+			nAlbum++
+			album = r
+		case domain.ResultKindArtist:
+			nArtist++
+			artist = r
+		}
+	}
+	if nTrack != 1 || nAlbum != 1 || nArtist != 1 {
+		t.Fatalf("expected 1 of each kind, got track=%d album=%d artist=%d", nTrack, nAlbum, nArtist)
+	}
+	if album.Title != "A Great Chaos" || album.Subtitle != "Ken Carson" {
+		t.Errorf("album mapped wrong: %+v", album)
+	}
+	if album.Extras["record_type"] != "album" {
+		t.Errorf("album record_type = %v, want album", album.Extras["record_type"])
+	}
+	if album.ImageURL != "https://i1.sndcdn.com/artworks-x-t500x500.jpg" {
+		t.Errorf("album artwork not upgraded: %q", album.ImageURL)
+	}
+	if artist.Title != "Ken Carson" || artist.Kind != domain.ResultKindArtist {
+		t.Errorf("artist mapped wrong: %+v", artist)
+	}
+	if artist.ImageURL != "https://i1.sndcdn.com/avatars-y-t500x500.jpg" {
+		t.Errorf("artist avatar not upgraded: %q", artist.ImageURL)
 	}
 }
 
