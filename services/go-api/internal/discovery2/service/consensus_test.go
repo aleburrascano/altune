@@ -76,24 +76,26 @@ func TestConsensus_ConfirmedAndUnconfirmed(t *testing.T) {
 	}
 }
 
-func TestConsensus_DeluxeIsASeparateRelease(t *testing.T) {
-	// Categorical clustering: a deluxe edition is a distinct release (different
-	// version tag), not a fuzzy duplicate of the standard album.
+func TestConsensus_DistinctAlbumsStaySeparate(t *testing.T) {
+	// Canonical clustering: genuinely different album titles stay separate; the
+	// parenthetical "(Deluxe)" is canonical noise and folds into "Scorpion".
 	svc := NewConsensusService([]ConsensusProvider{
-		provider("lastfm", "Scorpion", "Scorpion (Deluxe)"),
+		provider("lastfm", "Scorpion", "Scorpion (Deluxe)", "Take Care"),
 		provider("tidal", "Scorpion"),
 	})
 	got := svc.BuildConsensus(context.Background(), "Drake", nil)
 
-	if len(got) != 2 {
-		t.Fatalf("got %d albums, want 2 (standard + deluxe kept separate)", len(got))
-	}
 	byTitle := statusByTitle(got)
-	if byTitle["Scorpion"] != ConsensusConfirmed {
-		t.Errorf("Scorpion (2 providers) = %v, want confirmed", byTitle["Scorpion"])
+	if _, ok := byTitle["Take Care"]; !ok {
+		t.Error("expected the distinct album 'Take Care' to remain")
 	}
-	if byTitle["Scorpion (Deluxe)"] != ConsensusUnconfirmed {
-		t.Errorf("Scorpion (Deluxe) (1 provider) = %v, want unconfirmed", byTitle["Scorpion (Deluxe)"])
+	// "Scorpion" + "Scorpion (Deluxe)" + tidal "Scorpion" all normalize alike →
+	// one confirmed cluster (3 provider hits).
+	if byTitle["Scorpion"] != ConsensusConfirmed {
+		t.Errorf("Scorpion = %v, want confirmed (deluxe folds in)", byTitle["Scorpion"])
+	}
+	if _, ok := byTitle["Scorpion (Deluxe)"]; ok {
+		t.Error("'Scorpion (Deluxe)' should have folded into 'Scorpion', not stand alone")
 	}
 }
 

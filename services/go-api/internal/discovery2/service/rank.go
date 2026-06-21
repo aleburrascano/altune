@@ -106,7 +106,7 @@ func tierLess(a, b tierScored) bool {
 }
 
 func tierOf(r domain.SearchResult, intent Intent, target string) relevanceTier {
-	titleExact := parseVersion(r.Title).core == target
+	titleExact := textnorm.NormalizeForMatch(r.Title) == target
 	artistOK := intent.Artist == "" || artistMatches(r, intent.Artist)
 
 	kindKnown := intent.Kind != domain.ResultKindUnknown
@@ -131,11 +131,11 @@ func artistMatches(r domain.SearchResult, intentArtist string) bool {
 	return strings.Contains(textnorm.NormalizeForMatch(r.Subtitle), intentArtist)
 }
 
-// partialMatch is true when the entity's title core overlaps the target as a
-// substring (either direction) or the entity covers every target token —
-// categorical, no similarity threshold.
+// partialMatch is true when the entity's canonical title overlaps the target as
+// a substring (either direction) or the entity covers every target token —
+// structural, no similarity threshold.
 func partialMatch(r domain.SearchResult, target string) bool {
-	core := parseVersion(r.Title).core
+	core := textnorm.NormalizeForMatch(r.Title)
 	if core == "" || target == "" {
 		return false
 	}
