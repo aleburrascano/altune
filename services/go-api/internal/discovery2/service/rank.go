@@ -5,90 +5,67 @@ import (
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
+	legacy "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// Layer 3 — disambiguate + rank.
+// Layer 3 — rank.
 //
-// Results are ordered by categorical relevance TIERS, popularity only WITHIN a
-// tier. A lower tier can never outrank a higher one, so there is no relevance
-// band, no popularity-dominance window, and no additive intent boost — the
-// three tuned constants of the old ranker are gone, replaced by tier categories.
-//
-//	T1 (exact)          — exact title, artist satisfied, kind matches intent (or none intended)
-//	T2 (title/other)    — exact title, artist satisfied, but a different kind than intended
-//	T3 (partial)        — partial title match
-//	T4 (weak)           — shares a query word but little else
-//
-// Within a tier: popularity, then multi-source, then RRF. This preserves the
-// genuine "popularity > multi-source" decision while structurally seating the
-// same-named album (T2) immediately below the exact track (T1) — Pattern A.
+// Results are ordered by CONTINUOUS relevance — how much of the query the
+// result's title (and artist) matches, via token-sort similarity — then
+// popularity, then multi-source agreement, then RRF. There are deliberately no
+// relevance bands, no popularity-dominance window, no kind tiers, and no intent
+// contract: those were query-fit (tuned constants and pattern-specific
+// machinery). A similarity measure is a published algorithm, not a fitted
+// constant, and it degrades gracefully where the tier model fell off a cliff —
+// a result matching more of the query's tokens simply scores higher.
 
-// rrfK is the Reciprocal Rank Fusion constant. Kept (principled): it is the
-// published convention; its role here shrinks to a within-tier tiebreak.
+// rrfK is the Reciprocal Rank Fusion constant — a published convention, used
+// only as a within-tie tiebreak.
 const rrfK = 60
 
-// relevanceTier is the categorical relevance band (higher = more relevant).
-type relevanceTier int
-
-const (
-	tierWeak           relevanceTier = iota // T4
-	tierPartial                             // T3
-	tierTitleOtherKind                      // T2
-	tierExact                               // T1
-)
-
-type tierScored struct {
-	result domain.SearchResult
-	tier   relevanceTier
-	pop    float64
-	rrf    float64
-	multi  bool
+type scored struct {
+	result    domain.SearchResult
+	relevance float64
+	pop       float64
+	rrf       float64
+	multi     bool
 }
 
-// Rank applies the eligibility gates and the lexicographic tier sort, returning
-// handler-ready results. queryNorm is the normalized query; intent is the
-// Layer-0 contract.
-func Rank(entities []Entity, queryNorm string, intent Intent) []domain.SearchResult {
-	target := intent.Title
-	if target == "" {
-		target = textnorm.NormalizeForMatch(queryNorm)
-	}
+// Rank applies the eligibility gates and sorts by continuous relevance,
+// returning handler-ready results. queryNorm is the normalized query.
+func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
+	q := textnorm.NormalizeForMatch(queryNorm)
 
-	scored := make([]tierScored, 0, len(entities))
+	results := make([]scored, 0, len(entities))
 	for _, e := range entities {
 		r := e.Result
-		if !sharesQueryWord(r, queryNorm) {
+		if !sharesQueryWord(r, q) || !hasBrowseableSource(r) {
 			continue
 		}
-		if !hasBrowseableSource(r) {
-			continue
-		}
-		scored = append(scored, tierScored{
-			result: r,
-			tier:   tierOf(r, intent, target),
-			pop:    popularityOf(r),
-			rrf:    rrfScore(e.BestRank),
-			multi:  len(providersOf(r)) > 1,
+		results = append(results, scored{
+			result:    r,
+			relevance: relevanceScore(r, q),
+			pop:       popularityOf(r),
+			rrf:       rrfScore(e.BestRank),
+			multi:     len(providersOf(r)) > 1,
 		})
 	}
 
-	sort.SliceStable(scored, func(i, j int) bool {
-		return tierLess(scored[i], scored[j])
-	})
+	sort.SliceStable(results, func(i, j int) bool { return rankLess(results[i], results[j]) })
 
-	out := make([]domain.SearchResult, len(scored))
-	for i, s := range scored {
+	out := make([]domain.SearchResult, len(results))
+	for i, s := range results {
 		out[i] = s.result
 	}
 	return out
 }
 
-// tierLess is the lexicographic ordering: tier, then popularity, then
-// multi-source, then RRF, then a stable subtitle/title tiebreak.
-func tierLess(a, b tierScored) bool {
-	if a.tier != b.tier {
-		return a.tier > b.tier
+// rankLess orders by relevance, then popularity, then multi-source, then RRF,
+// with a stable subtitle/title tiebreak.
+func rankLess(a, b scored) bool {
+	if a.relevance != b.relevance {
+		return a.relevance > b.relevance
 	}
 	if a.pop != b.pop {
 		return a.pop > b.pop
@@ -105,55 +82,31 @@ func tierLess(a, b tierScored) bool {
 	return a.result.Title < b.result.Title
 }
 
-func tierOf(r domain.SearchResult, intent Intent, target string) relevanceTier {
-	titleExact := textnorm.NormalizeForMatch(r.Title) == target
-	artistOK := intent.Artist == "" || artistMatches(r, intent.Artist)
-
-	kindKnown := intent.Kind != domain.ResultKindUnknown
-	kindMismatch := kindKnown && r.Kind != intent.Kind
-
-	switch {
-	case titleExact && artistOK && !kindMismatch:
-		return tierExact
-	case titleExact && artistOK && kindMismatch:
-		return tierTitleOtherKind
-	case partialMatch(r, target):
-		return tierPartial
-	default:
-		return tierWeak
+// relevanceScore is the token-sort similarity of the query against the result's
+// title, and against artist+title — the published rapidfuzz algorithm, with no
+// tuned bonuses. The better-matching of the two framings wins.
+func relevanceScore(r domain.SearchResult, q string) float64 {
+	if q == "" {
+		return 0
 	}
-}
-
-func artistMatches(r domain.SearchResult, intentArtist string) bool {
-	if r.Kind == domain.ResultKindArtist {
-		return strings.Contains(textnorm.NormalizeForMatch(r.Title), intentArtist)
+	title := textnorm.NormalizeForMatch(r.Title)
+	best := legacy.TokenSortRatio(q, title)
+	if r.Subtitle != "" {
+		combined := textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title)
+		if s := legacy.TokenSortRatio(q, combined); s > best {
+			best = s
+		}
 	}
-	return strings.Contains(textnorm.NormalizeForMatch(r.Subtitle), intentArtist)
-}
-
-// partialMatch is true when the entity's canonical title overlaps the target as
-// a substring (either direction) or the entity covers every target token —
-// structural, no similarity threshold.
-func partialMatch(r domain.SearchResult, target string) bool {
-	core := textnorm.NormalizeForMatch(r.Title)
-	if core == "" || target == "" {
-		return false
-	}
-	if strings.Contains(core, target) || strings.Contains(target, core) {
-		return true
-	}
-	hay := textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title)
-	return allTokensPresent(target, hay)
+	return best / 100.0
 }
 
 // sharesQueryWord drops results that share no content word with the query.
 func sharesQueryWord(r domain.SearchResult, queryNorm string) bool {
-	q := textnorm.NormalizeForMatch(queryNorm)
-	if q == "" {
+	if queryNorm == "" {
 		return true
 	}
 	hay := tokenSet(textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title))
-	for w := range tokenSet(q) {
+	for w := range tokenSet(queryNorm) {
 		if hay[w] {
 			return true
 		}
@@ -191,18 +144,4 @@ func tokenSet(s string) map[string]bool {
 		}
 	}
 	return m
-}
-
-func allTokensPresent(target, hay string) bool {
-	targetTokens := tokenSet(target)
-	if len(targetTokens) == 0 {
-		return false
-	}
-	hayTokens := tokenSet(hay)
-	for w := range targetTokens {
-		if !hayTokens[w] {
-			return false
-		}
-	}
-	return true
 }
