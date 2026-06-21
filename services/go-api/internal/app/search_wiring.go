@@ -99,12 +99,28 @@ func BuildSearchServiceV2(
 	circuitBreaker := discoveryService.NewCircuitBreaker()
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(pool)
 
-	opts := []discovery2.Option{discovery2.WithHistoryRepository(historyRepo)}
+	deezerContent := providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second})
+	trackRepo := catalogPersistence.NewPgxTrackRepository(pool)
+	findRelatedSvc := discoveryService.NewFindRelatedService(trackRepo, deezerContent, deezerContent)
+
+	opts := []discovery2.Option{
+		discovery2.WithHistoryRepository(historyRepo),
+		discovery2.WithArtworkResolver(buildArtworkChain(cfg)),
+		discovery2.WithFindRelatedService(findRelatedSvc),
+	}
+	if redisClient != nil {
+		opts = append(opts, discovery2.WithArtworkCache(
+			discoveryCacheAdapters.NewRedisArtworkCache(redisClient),
+		))
+	}
 	if vocabStore := BuildVocabularyStore(redisClient); vocabStore != nil {
 		opts = append(opts, discovery2.WithVocabularyStore(vocabStore))
 	}
 	if eventStore != nil {
 		opts = append(opts, discovery2.WithEventStore(eventStore))
+	}
+	if sharedMB != nil {
+		opts = append(opts, discovery2.WithAlbumValidator(sharedMB))
 	}
 
 	return discovery2.NewService(searchProviders, circuitBreaker, opts...)

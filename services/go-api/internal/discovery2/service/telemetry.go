@@ -38,9 +38,9 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 	}
 
 	ctx := context.WithoutCancel(parentCtx)
-	s.emitWg.Add(1)
+	s.bgWg.Add(1)
 	go func() {
-		defer s.emitWg.Done()
+		defer s.bgWg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				slog.Warn("search.v2.telemetry_emit_panic", "error", r)
@@ -61,13 +61,6 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 			slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed", "error", err)
 		}
 	}()
-}
-
-// WaitForEmit blocks until all in-flight telemetry emissions finish. The
-// composition root calls it on graceful shutdown; tests call it to observe
-// emissions deterministically.
-func (s *Service) WaitForEmit() {
-	s.emitWg.Wait()
 }
 
 func buildShownTop(results []domain.SearchResult) []map[string]any {

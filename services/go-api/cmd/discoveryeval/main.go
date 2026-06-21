@@ -172,7 +172,7 @@ func buildEvalSearcher(cfg *config.Config, pool *pgxpool.Pool, redisClient *gore
 	case "v2":
 		fmt.Fprintln(os.Stderr, "pipeline: v2 (rebuilt strangler)")
 		svc := app.BuildSearchServiceV2(cfg, pool, redisClient, nil)
-		return searchAdapterV2{svc: svc}, svc.WaitForEmit, nil
+		return searchAdapterV2{svc: svc}, svc.WaitForBackground, nil
 	case "v1", "":
 		fmt.Fprintln(os.Stderr, "pipeline: v1 (current)")
 		svc := app.BuildSearchService(cfg, pool, redisClient, nil)

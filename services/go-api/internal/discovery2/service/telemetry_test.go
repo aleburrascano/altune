@@ -39,7 +39,7 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker(), WithEventStore(store))
 
 	runSearch(t, svc, "humble")
-	svc.WaitForEmit()
+	svc.WaitForBackground()
 
 	events := store.snapshot()
 	if len(events) != 1 {
@@ -69,7 +69,7 @@ func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker(), WithEventStore(store))
 
 	out, err := svc.Execute(context.Background(), newUser(), newQuery(t, "humble"), false)
-	svc.WaitForEmit() // must not panic despite the append error
+	svc.WaitForBackground() // must not panic despite the append error
 
 	if err != nil {
 		t.Fatalf("Execute returned error %v; telemetry failure must not surface", err)
@@ -83,5 +83,5 @@ func TestService_NoEventStoreNoEmit(t *testing.T) {
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker())
 	runSearch(t, svc, "humble")
-	svc.WaitForEmit() // no-op, must not block or panic
+	svc.WaitForBackground() // no-op, must not block or panic
 }
