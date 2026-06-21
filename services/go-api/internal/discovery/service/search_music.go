@@ -824,6 +824,12 @@ func (s *SearchMusicService) applyClickBoost(ctx context.Context, results []doma
 
 const telemetryTopN = 10
 
+// searchPipelineVersion stamps every search telemetry event so training data is
+// attributable to the pipeline that produced it. The current pipeline is "v1";
+// the strangler rebuild (plan 003) emits "v2". This lets ML (plan 004) train on
+// a single pipeline's behavior and not mix labels across the cutover.
+const searchPipelineVersion = "v1"
+
 // emitSearchEvent records what the search returned as a telemetry event. It is
 // async and best-effort (mirrors ingestToVocabulary): a telemetry write must
 // never block, slow, or fail the search. Shutdown waits on ingestWg.
@@ -833,8 +839,9 @@ func (s *SearchMusicService) emitSearchEvent(parentCtx context.Context, userId s
 	}
 
 	payload := map[string]any{
-		"result_count": len(shown),
-		"zero_result":  len(shown) == 0,
+		"result_count":     len(shown),
+		"zero_result":      len(shown) == 0,
+		"pipeline_version": searchPipelineVersion,
 	}
 	if top := buildShownTop(shown); len(top) > 0 {
 		payload["top"] = top
