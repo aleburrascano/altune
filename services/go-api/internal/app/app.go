@@ -368,7 +368,13 @@ func buildDiscoveryProviders(cfg *config.Config, mb *providers.MusicBrainzAdapte
 		providerList = append(providerList, providers.NewLastFmAdapter(lfmClient, cfg.LastFMAPIKey))
 	}
 
-	providerList = append(providerList, providers.NewSoundCloudAdapter())
+	// Direct api-v2 SoundCloud client (coverage: unreleased/underground long tail),
+	// with the yt-dlp adapter as fallback when client_id resolution is down.
+	soundcloudClient := &http.Client{Timeout: 10 * time.Second}
+	providerList = append(providerList, providers.NewSoundCloudAPIAdapter(
+		soundcloudClient,
+		providers.NewSoundCloudAdapter(),
+	))
 
 	if cfg.HasTidal() {
 		tidalClient := &http.Client{Timeout: 10 * time.Second}
