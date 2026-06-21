@@ -314,11 +314,13 @@ func (s *fakeAudioStore) seed(audioRef string, data []byte) {
 // --- fake acquisition scheduler ---
 
 type fakeScheduler struct {
-	scheduled []catdomain.TrackId
+	scheduled  []catdomain.TrackId
+	sourceURLs []string
 }
 
-func (s *fakeScheduler) Schedule(_ shared.UserId, trackId catdomain.TrackId) {
+func (s *fakeScheduler) Schedule(_ shared.UserId, trackId catdomain.TrackId, sourceURL string) {
 	s.scheduled = append(s.scheduled, trackId)
+	s.sourceURLs = append(s.sourceURLs, sourceURL)
 }
 
 // --- helper: build authed request through chi router ---

@@ -12,7 +12,7 @@ import (
 )
 
 type AcquisitionScheduler interface {
-	Schedule(userId shared.UserId, trackId domain.TrackId)
+	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
 }
 
 type Shutdownable interface {
@@ -44,7 +44,7 @@ func NewBackgroundAcquisitionScheduler(
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId domain.TrackId) {
+func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string) {
 	if s.closed.Load() {
 		slog.Warn("schedule_after_shutdown", "track_id", trackId.String())
 		return
@@ -74,7 +74,7 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 		s.sem <- struct{}{}
 		defer func() { <-s.sem }()
 
-		if err := s.svc.Execute(s.parentCtx, userId, trackId); err != nil {
+		if err := s.svc.Execute(s.parentCtx, userId, trackId, sourceURL); err != nil {
 			slog.Error("background acquisition failed",
 				"track_id", key, "error", err)
 		}

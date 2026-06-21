@@ -93,7 +93,7 @@ type retryFakeScheduler struct {
 	scheduled []catdomain.TrackId
 }
 
-func (s *retryFakeScheduler) Schedule(_ shared.UserId, trackId catdomain.TrackId) {
+func (s *retryFakeScheduler) Schedule(_ shared.UserId, trackId catdomain.TrackId, _ string) {
 	s.scheduled = append(s.scheduled, trackId)
 }
 

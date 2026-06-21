@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,21 +15,74 @@ import (
 	"altune/go-api/internal/catalog/ports"
 )
 
+// searchRunner issues a single yt-dlp search for a fully-formed search spec
+// (e.g. "ytsearch5:<query>") and returns the parsed candidates. Seamed onto the
+// searcher so the dual-engine fan-out is unit-testable without invoking yt-dlp.
+type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error)
+
+// searchEngines are the yt-dlp search prefixes acquisition fans each query out
+// to. YouTube covers the mainstream catalogue; SoundCloud covers the unreleased
+// / leaked / underground long tail YouTube does not index. Selection is
+// Topic-channel-first, so a SoundCloud candidate only fills a gap (no qualifying
+// YouTube Topic match) — it never displaces a good YouTube result.
+var searchEngines = []string{"ytsearch5:", "scsearch5:"}
+
 type YtDlpAudioSearcher struct {
 	ffmpegLocation string
 	cookieFile     string
 	jsRuntime      string
+	runSearch      searchRunner
 }
 
 func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpAudioSearcher {
-	return &YtDlpAudioSearcher{
+	s := &YtDlpAudioSearcher{
 		ffmpegLocation: ffmpegLocation,
 		cookieFile:     cookieFile,
 		jsRuntime:      jsRuntime,
 	}
+	s.runSearch = s.runYtDlpSearch
+	return s
 }
 
+// Search fans the query out to every search engine, merging the candidates
+// (deduped by URL). A single engine failing is tolerated — only the other
+// engine's results are kept; acquisition fails the search only if every engine
+// errors.
 func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.AudioCandidate, error) {
+	seen := make(map[string]bool)
+	merged := []ports.AudioCandidate{}
+	var firstErr error
+	failures := 0
+
+	for _, engine := range searchEngines {
+		spec := engine + query
+		candidates, err := s.runSearch(ctx, spec)
+		if err != nil {
+			failures++
+			if firstErr == nil {
+				firstErr = err
+			}
+			slog.WarnContext(ctx, "acquisition.engine_search_failed", "spec", spec, "error", err)
+			continue
+		}
+		slog.InfoContext(ctx, "acquisition.engine_search_results", "spec", spec, "candidates", len(candidates))
+		for _, c := range candidates {
+			if c.URL == "" || seen[c.URL] {
+				continue
+			}
+			seen[c.URL] = true
+			merged = append(merged, c)
+		}
+	}
+
+	if failures == len(searchEngines) {
+		return nil, fmt.Errorf("all search engines failed: %w", firstErr)
+	}
+	return merged, nil
+}
+
+// runYtDlpSearch is the real subprocess implementation of searchRunner.
+func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error) {
 	searchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -36,7 +90,7 @@ func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.
 		"--dump-json",
 		"--no-download",
 		"--flat-playlist",
-		fmt.Sprintf("ytsearch5:%s", query),
+		searchSpec,
 	}
 	if s.jsRuntime != "" {
 		args = append([]string{"--js-runtimes", s.jsRuntime, "--remote-components", "ejs:github"}, args...)
