@@ -193,6 +193,9 @@ func (a *App) setup(ctx context.Context) error {
 	}
 	artistProviders := map[string]discoveryPorts.ArtistContentProvider{
 		"deezer": deezerContent,
+		// SoundCloud serves the underground long tail: an artist sourced from
+		// SoundCloud carries its numeric user id, which keys these endpoints.
+		"soundcloud": providers.NewSoundCloudAPIAdapter(&http.Client{Timeout: 10 * time.Second}, nil),
 	}
 
 	var tidalContent *providers.TidalAdapter

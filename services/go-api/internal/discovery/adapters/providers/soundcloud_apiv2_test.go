@@ -401,6 +401,46 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_MissReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestSoundCloudAPIAdapter_ArtistContent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/users/659062284/toptracks":
+			_, _ = w.Write([]byte(`{"collection":[
+				{"id":1,"kind":"track","title":"Yale","user":{"username":"Ken Carson"}},
+				{"id":2,"kind":"track","title":"Vampire Hour","user":{"username":"Ken Carson"}}
+			],"next_href":null}`))
+		case r.URL.Path == "/users/659062284/albums":
+			_, _ = w.Write([]byte(`{"collection":[
+				{"id":9,"kind":"playlist","title":"More Chaos","set_type":"album","user":{"username":"Ken Carson"}}
+			]}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	tracks, err := a.GetArtistTopTracks(context.Background(), domain.ProviderSoundCloud, "659062284")
+	if err != nil {
+		t.Fatalf("GetArtistTopTracks error: %v", err)
+	}
+	if len(tracks) != 2 || tracks[0].Title != "Yale" || tracks[0].Kind != domain.ResultKindTrack {
+		t.Fatalf("unexpected top tracks: %+v", tracks)
+	}
+
+	albums, err := a.GetArtistAlbums(context.Background(), domain.ProviderSoundCloud, "659062284")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums error: %v", err)
+	}
+	if len(albums) != 1 || albums[0].Title != "More Chaos" || albums[0].Kind != domain.ResultKindAlbum {
+		t.Fatalf("unexpected albums: %+v", albums)
+	}
+	if albums[0].Extras["record_type"] != "album" {
+		t.Errorf("album record_type = %v", albums[0].Extras["record_type"])
+	}
+}
+
 func TestClientIDResolver_ScrapesAndCaches(t *testing.T) {
 	var homeCalls, bundleCalls int
 	bundle := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
