@@ -41,19 +41,19 @@ func TestNormalizeForMatch(t *testing.T) {
 			want:  "song feat artist",
 		},
 		{
-			name:  "ft dot normalized",
+			name:  "ft no longer normalized to feat",
 			input: "Song ft. Artist",
-			want:  "song feat artist",
+			want:  "song ft artist",
 		},
 		{
-			name:  "featuring normalized",
+			name:  "featuring no longer normalized to feat",
 			input: "Song featuring Artist",
-			want:  "song feat artist",
+			want:  "song featuring artist",
 		},
 		{
-			name:  "leading article the removed",
+			name:  "leading article the kept",
 			input: "The Beatles",
-			want:  "beatles",
+			want:  "the beatles",
 		},
 		{
 			name:  "ampersand to and",
@@ -76,19 +76,19 @@ func TestNormalizeForMatch(t *testing.T) {
 			want:  "",
 		},
 		{
-			name:  "combined normalization",
+			name:  "combined normalization keeps leading article",
 			input: "The Café (Remastered) feat. DJ & MC",
-			want:  "cafe feat dj and mc",
+			want:  "the cafe feat dj and mc",
 		},
 		{
-			name:  "leading article la removed",
+			name:  "leading article la kept",
 			input: "La Bamba",
-			want:  "bamba",
+			want:  "la bamba",
 		},
 		{
-			name:  "leading article le removed",
+			name:  "leading article le kept",
 			input: "Le Freak",
-			want:  "freak",
+			want:  "le freak",
 		},
 		{
 			name:  "apostrophes stripped",

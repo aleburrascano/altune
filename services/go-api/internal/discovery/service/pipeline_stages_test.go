@@ -25,10 +25,12 @@ func TestStage_NormalizeForMatch(t *testing.T) {
 		input string
 		want  string
 	}{
+		// As of 2026-06-21 normalization keeps leading articles and no longer
+		// special-cases feature tokens (the curated query-fit lists were removed).
 		{"Bohemian Rhapsody", "bohemian rhapsody"},
 		{"HUMBLE.", "humble"},
-		{"The Weeknd", "weeknd"},
-		{"Los Lobos", "lobos"},
+		{"The Weeknd", "the weeknd"},
+		{"Los Lobos", "los lobos"},
 		{"Beyoncé", "beyonce"},
 		{"AC/DC", "ac dc"},
 		{"Guns N' Roses", "guns n roses"},
