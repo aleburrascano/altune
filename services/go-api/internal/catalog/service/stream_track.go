@@ -63,7 +63,9 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 		if s.scheduler != nil {
 			slog.InfoContext(ctx, "stream.reacquire_scheduled",
 				"track_id", trackId.String())
-			s.scheduler.Schedule(userId, trackId)
+			// Re-acquisition has no source URL (triggered by a missing file), so
+			// it falls back to the search pipeline.
+			s.scheduler.Schedule(userId, trackId, "")
 		}
 
 		return nil, ErrAudioNotAvailable

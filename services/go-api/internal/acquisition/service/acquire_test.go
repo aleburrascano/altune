@@ -21,7 +21,7 @@ func TestAcquireTrackAudioService_Execute_TrackNotFound(t *testing.T) {
 	trackId := domain.NewTrackId()
 
 	// Act
-	err := svc.Execute(context.Background(), userId, trackId)
+	err := svc.Execute(context.Background(), userId, trackId, "")
 
 	// Assert: silent no-op, returns nil
 	if err != nil {
@@ -49,7 +49,7 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioExists(t *testing.T)
 	svc := NewAcquireTrackAudioService(repo, searcher, store)
 
 	// Act
-	execErr := svc.Execute(context.Background(), userId, track.ID)
+	execErr := svc.Execute(context.Background(), userId, track.ID, "")
 
 	// Assert: skip, return nil
 	if execErr != nil {
@@ -85,7 +85,7 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioMissing(t *testing.T
 	// Act: Execute will revert to pending, then try to re-acquire.
 	// Since the fake searcher returns no results, the pipeline will fail.
 	// We just care that the track was reverted to pending before the pipeline runs.
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), userId, track.ID, "")
 
 	// Assert: track should have been reverted to pending (then pipeline ran and failed,
 	// which marks it as failed via markFailed). Either pending or failed is acceptable —
@@ -113,7 +113,7 @@ func TestAcquireTrackAudioService_Execute_FailedStatus_RetriesToAcquire(t *testi
 	svc := NewAcquireTrackAudioService(repo, searcher, store)
 
 	// Act
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = svc.Execute(context.Background(), userId, track.ID, "")
 
 	// Assert: the track should have been reverted from failed state.
 	// Since searcher returns nothing, it will be marked failed again,

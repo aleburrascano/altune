@@ -21,7 +21,7 @@ type AudioStore interface {
 }
 
 type ReacquisitionScheduler interface {
-	Schedule(userId shared.UserId, trackId domain.TrackId)
+	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
 }
 
 type AudioCandidate struct {

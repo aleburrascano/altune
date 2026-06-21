@@ -16,7 +16,7 @@ import (
 )
 
 type acquisitionScheduler interface {
-	Schedule(userId shared.UserId, trackId domain.TrackId)
+	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
 }
 
 const retryCooldown = 60 * time.Second
@@ -87,7 +87,9 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 	}
 	h.mu.Unlock()
 
-	h.scheduler.Schedule(userId, trackId)
+	// Retries carry no source URL (the request is by trackId), so acquisition
+	// falls back to the search pipeline.
+	h.scheduler.Schedule(userId, trackId, "")
 
 	w.WriteHeader(http.StatusAccepted)
 }

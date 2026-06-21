@@ -70,13 +70,17 @@ type fakeAudioSearcher struct {
 	searchErr     error
 	downloadPath  string
 	downloadErr   error
+	searchCalled  bool
+	downloadURLs  []string
 }
 
 func (s *fakeAudioSearcher) Search(_ context.Context, _ string) ([]ports.AudioCandidate, error) {
+	s.searchCalled = true
 	return s.searchResults, s.searchErr
 }
 
-func (s *fakeAudioSearcher) Download(_ context.Context, _ string, _ string) (string, error) {
+func (s *fakeAudioSearcher) Download(_ context.Context, url string, _ string) (string, error) {
+	s.downloadURLs = append(s.downloadURLs, url)
 	return s.downloadPath, s.downloadErr
 }
 
@@ -132,7 +136,7 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 	trackId := domain.NewTrackId()
 
 	// Act
-	scheduler.Schedule(userId, trackId)
+	scheduler.Schedule(userId, trackId, "")
 
 	// Assert: WaitGroup completes (goroutine ran and finished)
 	wg.Wait()
@@ -163,7 +167,7 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 	// Act: schedule multiple acquisitions
 	for i := 0; i < numSchedules; i++ {
 		trackId := domain.NewTrackId()
-		scheduler.Schedule(userId, trackId)
+		scheduler.Schedule(userId, trackId, "")
 	}
 
 	// Assert: all complete (WaitGroup drains)

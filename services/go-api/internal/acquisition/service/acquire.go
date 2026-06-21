@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"altune/go-api/internal/catalog/domain"
@@ -42,7 +44,12 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.events = pub }
 }
 
-func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+// Execute acquires audio for a track. When sourceURL is a directly-downloadable
+// source (a SoundCloud link — the only discovery provider that is also a download
+// source), it downloads that exact track instead of re-searching by metadata; on
+// any failure it falls back to the search pipeline. sourceURL is empty for
+// retries and stream-triggered re-acquisition, which always use search.
+func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
@@ -90,6 +97,37 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		"has_isrc", track.ISRC != nil,
 	)
 
+	// Direct path: the saved result carries the exact SoundCloud URL the user
+	// discovered, so download that exact track instead of re-searching by metadata
+	// (which can grab a wrong reupload). yt-dlp downloads SoundCloud URLs natively.
+	// On any failure, fall through to the search pipeline ("last resort").
+	if isDirectAcquireURL(sourceURL) {
+		direct := &AcquisitionContext{
+			Track: buildTrackRef(track),
+			Selected: &Candidate{
+				URL:      sourceURL,
+				Title:    track.Title,
+				Artist:   track.Artist,
+				Duration: derefFloat(track.DurationSeconds),
+			},
+		}
+		directErr := RunPipeline(ctx, []Step{
+			NewDownloadStep(s.audioSearcher),
+			NewTagStep(),
+			NewStoreStep(s.audioStore),
+			NewUpdateTrackStep(s.trackRepo, userId, trackId),
+		}, direct)
+		cleanupTemp(direct)
+		if directErr == nil {
+			slog.InfoContext(ctx, "acquisition.direct_source_used",
+				"track_id", trackId.String(), "url", sourceURL)
+			s.onAcquireCompleted(ctx, userId, trackId, direct.AudioRef)
+			return nil
+		}
+		slog.WarnContext(ctx, "acquisition.direct_failed_falling_back",
+			"track_id", trackId.String(), "url", sourceURL, "error", directErr)
+	}
+
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
 
 	pipeline := []Step{
@@ -121,18 +159,38 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		return err
 	}
 
+	s.onAcquireCompleted(ctx, userId, trackId, ac.AudioRef)
+	return nil
+}
+
+func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userId shared.UserId, trackId domain.TrackId, audioRef string) {
 	slog.InfoContext(ctx, "track_acquisition_completed",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
-		"audio_ref", ac.AudioRef,
+		"audio_ref", audioRef,
 	)
 	if s.events != nil {
 		s.events.Publish(userId, "track_acquisition_completed", map[string]any{
 			"track_id":  trackId.String(),
-			"audio_ref": ac.AudioRef,
+			"audio_ref": audioRef,
 		})
 	}
-	return nil
+}
+
+// isDirectAcquireURL reports whether the URL is one acquisition can download
+// directly (skipping metadata search). Only SoundCloud qualifies today: among the
+// discovery providers it is the only one that is both a search source and a
+// yt-dlp-downloadable audio source (Deezer/iTunes/MusicBrainz are DRM/metadata).
+func isDirectAcquireURL(rawURL string) bool {
+	if rawURL == "" {
+		return false
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "soundcloud.com" || strings.HasSuffix(host, ".soundcloud.com")
 }
 
 func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) {

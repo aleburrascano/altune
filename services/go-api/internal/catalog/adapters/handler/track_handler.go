@@ -19,7 +19,7 @@ import (
 )
 
 type acquisitionScheduler interface {
-	Schedule(userId shared.UserId, trackId domain.TrackId)
+	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
 }
 
 type TrackHandler struct {
@@ -67,6 +67,11 @@ type CreateTrackRequest struct {
 	Year            *int     `json:"year,omitempty"`
 	Genre           *string  `json:"genre,omitempty"`
 	AlbumArtist     *string  `json:"album_artist,omitempty"`
+	// SourceURL is the exact provider URL the saved result was discovered at
+	// (e.g. a SoundCloud permalink). When it is a directly-downloadable source,
+	// acquisition grabs that exact track instead of re-searching by metadata.
+	// Not persisted — it rides through to the acquisition scheduler only.
+	SourceURL *string `json:"source_url,omitempty"`
 }
 
 type TrackResponse struct {
@@ -213,9 +218,13 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	if h.scheduler != nil && result.Created {
+		sourceURL := ""
+		if req.SourceURL != nil {
+			sourceURL = *req.SourceURL
+		}
 		slog.InfoContext(r.Context(), "acquisition.scheduled",
 			"track_id", result.Track.ID.String())
-		h.scheduler.Schedule(userId, result.Track.ID)
+		h.scheduler.Schedule(userId, result.Track.ID, sourceURL)
 	}
 
 	httputil.WriteJSON(w, status, trackToResponse(result.Track))
