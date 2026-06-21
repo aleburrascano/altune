@@ -48,6 +48,8 @@ type Service struct {
 	circuitBreaker *legacy.CircuitBreaker
 	historyRepo    ports.SearchHistoryRepository
 	vocabStore     ports.VocabularyStore
+	eventStore     ports.EventStore
+	emitWg         sync.WaitGroup
 }
 
 // Option configures optional Service dependencies.
@@ -61,6 +63,11 @@ func WithHistoryRepository(r ports.SearchHistoryRepository) Option {
 // WithVocabularyStore enables Layer-0 structured-intent detection.
 func WithVocabularyStore(v ports.VocabularyStore) Option {
 	return func(s *Service) { s.vocabStore = v }
+}
+
+// WithEventStore enables async best-effort search telemetry emission.
+func WithEventStore(e ports.EventStore) Option {
+	return func(s *Service) { s.eventStore = e }
 }
 
 // NewService constructs the rebuilt search orchestrator.
@@ -124,6 +131,7 @@ func (s *Service) Execute(
 	}
 
 	s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
+	s.emitSearchEvent(ctx, userId, queryNorm, ranked)
 
 	slog.InfoContext(ctx, "search.v2.complete",
 		"query", query.Raw,
