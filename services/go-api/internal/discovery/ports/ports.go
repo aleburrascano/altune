@@ -86,6 +86,14 @@ type ArtistContentProvider interface {
 	GetArtistAlbums(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
 
+// RelatedTracksProvider returns a provider's per-track "related" recommendation
+// set, keyed by the track's external id. Track-keyed sibling of
+// ArtistContentProvider; only SoundCloud implements it today
+// (/tracks/{id}/related).
+type RelatedTracksProvider interface {
+	GetRelatedTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
+}
+
 type ContentValidationCache interface {
 	Get(ctx context.Context, provider domain.ProviderName, externalID string) (domain.ContentValidationStatus, error)
 	Set(ctx context.Context, provider domain.ProviderName, externalID string, status domain.ContentValidationStatus) error

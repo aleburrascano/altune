@@ -39,11 +39,15 @@ const mockGetArtistTopTracks = jest.fn(() =>
 const mockGetArtistAlbums = jest.fn(() =>
   Promise.resolve({ items: [], provider: 'deezer', status: 'ok', latency_ms: 50 }),
 );
+const mockGetRelatedTracks = jest.fn(() =>
+  Promise.resolve({ items: [], provider: 'soundcloud', status: 'ok', latency_ms: 50 }),
+);
 jest.mock('../../../shared/api-client/discovery', () => ({
   searchDiscovery: (params: unknown) => mockSearchDiscovery(params),
   getAlbumTracks: () => mockGetAlbumTracks(),
   getArtistTopTracks: () => mockGetArtistTopTracks(),
   getArtistAlbums: () => mockGetArtistAlbums(),
+  getRelatedTracks: () => mockGetRelatedTracks(),
 }));
 
 import { clearDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';

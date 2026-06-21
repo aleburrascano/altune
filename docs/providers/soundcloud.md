@@ -85,7 +85,12 @@ implement `ports.ArtistContentProvider`, wired as `"soundcloud"` in the artist-c
 in its `SourceRef`, so no separate id-resolution is needed. Reuses the track/album mappers.
 Read-only enrichment, off the ranking path — no eval gate.
 
-### 5. Related tracks (recommendations) — ⬜ TODO (Unit C — needs a `/feature-spec` first)
+### 5. Related tracks (recommendations) — ✅ BUILT (Unit C — `docs/specs/related-tracks/`, spec+plan; 2026-06-21)
+`/tracks/{id}/related` → `GetRelatedTracks` on the api-v2 adapter (reuses `mapSoundCloudAPITrack`),
+a `RelatedTracksProvider` port, `GetRelatedTracksService`, and the
+`GET /discovery/tracks/{provider}/{externalId}/related` route. Mobile: `useRelatedTracks` (SC-gated)
+feeds a "Related on SoundCloud" rail in `TrackDetailBody`. SoundCloud-only, off the ranking path,
+no eval gate. The original capability-5 surface notes are kept below for reference.
 `/tracks/{id}/related` returns a recommendation set — live probe surfaced underground collabs
 (e.g. "Lil Tecca & Ken Carson – Fell In Love") that pure search misses. The *data* is one endpoint
 (`externalID` = the track's numeric id, already in its `SourceRef`); the *feature* is what's
@@ -96,7 +101,21 @@ undefined, which is why this is **not** another adapter bolt-on:
 Decide these in a `/feature-spec`, then the adapter method is trivial (one endpoint, reuse
 `mapSoundCloudAPITrack`).
 
-### 6. Audio acquisition — ⬜ TODO (Unit D — its own acquisition plan, the big one)
+### 6. Audio acquisition — 🟨 CODE-COMPLETE, UNVERIFIED END-TO-END (Unit D — `docs/specs/acquire-soundcloud/`, 2026-06-21)
+> **Not "done".** The code + unit tests are written, but every test mocks `Download` and `Store` — the
+> two steps that actually touch SoundCloud and OCI. Done requires a real run: save a SoundCloud-sourced
+> track on a live backend (yt-dlp + SoundCloud reachable + OCI bucket) and confirm it downloads the
+> *correct, full* MP3, lands in OCI, goes `ready`, and plays back. That run has not happened.
+**Scope correction (2026-06-21):** the acquisition *pipeline* was already built (the `acquire-track`
+spec: search → select → download → tag → store → mark-ready, the yt-dlp searcher, OCI object store,
+the background scheduler, the `AcquisitionStatus` state machine). It was **YouTube-only**. So Unit D
+is not "build the pipeline" — it's wiring SoundCloud in. Shipped (`acquire-soundcloud`): the acquisition
+searcher now fans each query out to **both** `ytsearch5:` and `scsearch5:` and merges candidates, so the
+existing Topic-first selection picks a SoundCloud upload when YouTube lacks the track (the underground
+long tail). yt-dlp downloads SC URLs natively, so download/tag/store are unchanged. **Deferred** (own spec):
+*direct-permalink acquisition* — carrying the discovered SC URL through save→acquire to skip the metadata
+re-search and grab the exact track. The transcoding details below inform that deferred path.
+
 The owned-library unlock. Each track carries `media.transcodings[]` — the stream URLs.
 **It is the FULL track, not a 30s preview** (verified: `duration == full_duration`, `snipped:false`).
 Acquisition difficulty varies by tier, *not* preview-vs-full:
@@ -144,15 +163,37 @@ Capabilities 1–4 are **built and committed** on branch `refactor/discovery-pip
 - Verified: live "Ken Carson Olympics" head-to-head (old: 0 SC results; new: leak surfaces) and
   full v2 eval **99.1% top-3** (≥ 99.0% baseline, 17 vs 18 failures, no new regressions).
 
-## 8. Next steps (where I left off — 2026-06-21)
+## 8. Next steps (updated 2026-06-21)
 
-Adapter-level maximization is **done** (1–4). The remaining two are deliberately **not** adapter
-work — both are new product surfaces that need the feature loop:
+Adapter-level maximization is **done** (1–4). Units C and D have now landed too:
 
-1. **Unit C — related tracks (capability 5).** Start with `/feature-spec` to decide the UI surface
-   + trigger, then add the trivial `/tracks/{id}/related` method. *Smaller; do this first.*
-2. **Unit D — audio acquisition (capability 6).** Its own plan — the yt-dlp→OCI pipeline (stream
-   resolution, HLS/encrypted-HLS handling, storage, `AcquisitionStatus`). The big one. *Do last.*
+1. **Unit C — related tracks (capability 5).** ✅ **BUILT** — `docs/specs/related-tracks/`
+   (spec + plan). Backend: `RelatedTracksProvider` port, `GetRelatedTracks` on the api-v2 adapter,
+   `GetRelatedTracksService`, `GET /discovery/tracks/{provider}/{externalId}/related`. Mobile:
+   `useRelatedTracks` (SC-gated) → "Related on SoundCloud" rail in `TrackDetailBody`. SoundCloud-only,
+   off the ranking path (no eval gate). 483 discovery tests green; 7 new mobile tests green.
+2. **Unit D — audio acquisition (capability 6).** 🟨 **CODE-COMPLETE, UNVERIFIED END-TO-END** —
+   `docs/specs/acquire-soundcloud/` (spec + plan). **Not "done":** the logic + wiring are written and
+   unit-tested, but the tests mock `Download` and `Store`, so nothing has proven real audio is acquired
+   correctly. **Done bar:** a live save of a SoundCloud-sourced track downloads the correct full MP3 into
+   OCI, goes `ready`, and plays back — not yet run (needs a running backend + yt-dlp + OCI + a device).
+   **Scope was smaller than this doc implied:** the acquisition pipeline already existed (`acquire-track`)
+   and was YouTube-only, so the work was wiring SoundCloud in, not building the pipeline. Two increments
+   written:
+   - **Dual-engine search** — the searcher queries `scsearch5:` alongside `ytsearch5:` and merges, so
+     Topic-first selection can pick a SoundCloud upload when YouTube lacks the track.
+   - **Direct-source acquisition (the correctness fix)** — when a saved result carries the exact
+     SoundCloud URL the user discovered, acquisition downloads *that exact track* (skipping the lossy
+     re-search that can grab a wrong reupload), falling back to search on failure. The URL rides
+     `CreateTrackRequest.source_url` → `Schedule(…, sourceURL)` → `Execute(…, sourceURL)`; pass-through,
+     no migration. The insight: the pipeline almost always downloads *something*, so the real problem is
+     *wrong* audio, not *no* audio. SoundCloud is the only discovery provider that is also yt-dlp-
+     downloadable, so the exact path is the SoundCloud path.
 
-To resume: pick Unit C, run `/feature-spec` for "SoundCloud related tracks". The endpoint surface and
-field shapes are already documented above (§5), so the spec only needs the product decisions.
+   **Still deferred:** *persisting* the source URL on the Track (needs a schema migration, human-
+   reviewed) — until then, retries / stream-reacquire fall back to search. §5.6 has the transcoding
+   details a future "persist + best-source-selection" pass would consume.
+
+**Not verifiable in this dev environment** (same limits as the rest of the pipeline): a live
+`scsearch5:` hit + SC-URL download + OCI store needs yt-dlp, SoundCloud network access, and OCI
+credentials. Unit-tested via seams; the live path reuses the already-working YouTube download code.

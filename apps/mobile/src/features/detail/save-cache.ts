@@ -26,6 +26,9 @@ export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackReques
   const year = result.extras['year'];
   const genre = result.extras['genre'];
   const albumArtist = result.extras['album_artist'];
+  // The SoundCloud permalink is a directly-downloadable source: when present, the
+  // backend acquires that exact track instead of re-searching by title/artist.
+  const soundcloudUrl = result.sources.find((s) => s.provider === 'soundcloud')?.url ?? null;
   return {
     title: result.title,
     artist: result.subtitle ?? '',
@@ -37,6 +40,7 @@ export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackReques
     year: typeof year === 'number' && Number.isFinite(year) ? year : null,
     genre: typeof genre === 'string' && genre.length > 0 ? genre : null,
     album_artist: typeof albumArtist === 'string' && albumArtist.length > 0 ? albumArtist : null,
+    source_url: soundcloudUrl,
   };
 }
 

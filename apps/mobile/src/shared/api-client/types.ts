@@ -37,6 +37,10 @@ export type CreateTrackRequest = {
   year: number | null;
   genre: string | null;
   album_artist: string | null;
+  /** Exact provider URL the result was discovered at (e.g. a SoundCloud
+   * permalink). When it's a directly-downloadable source the backend acquires
+   * that exact track instead of re-searching. Optional; not persisted. */
+  source_url?: string | null;
 };
 
 export type ListTracksResponse = {
