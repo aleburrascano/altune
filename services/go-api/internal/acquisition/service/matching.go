@@ -85,8 +85,10 @@ func isTopicChannel(channel string) bool {
 }
 
 func artistMatchesChannel(trackArtist, channel string) bool {
-	artistNorm := discoverySvc.NormalizeForMatch(trackArtist)
-	channelNorm := discoverySvc.NormalizeForMatch(channel)
+	// Strip spaces so spaceless VEVO/official channels ("TheWeekndVEVO") still
+	// match the spaced artist name ("The Weeknd").
+	artistNorm := strings.ReplaceAll(discoverySvc.NormalizeForMatch(trackArtist), " ", "")
+	channelNorm := strings.ReplaceAll(discoverySvc.NormalizeForMatch(channel), " ", "")
 	return strings.Contains(channelNorm, artistNorm)
 }
 
