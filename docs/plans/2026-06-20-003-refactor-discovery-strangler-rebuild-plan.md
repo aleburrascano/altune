@@ -276,11 +276,22 @@ verdict is recorded in code comments + here.
   satisfies the seam. `discovery2.Service.Execute` is a documented not-yet-implemented stub
   (unreachable in prod until U8).
 
-- **U2. Layer 2 — merge + entity resolution (categorical cascade).**
-  Build identifier-first → version-marker categories → fuzzy-last-resort. Characterize current
-  merge on canonical + diverse inputs first.
-  *Verify:* unit tests for each cascade rung; the 8 Pattern-B sequel cases now keep the sequel;
-  merge-sensitive eval slice ≥ baseline.
+- **U2. Layer 2 — merge + entity resolution (categorical cascade). [DONE 2026-06-21]**
+  Built `discovery2/service/merge.go`: `Merge(perProvider) []Entity` runs the cascade
+  identifier → version-marker categories → fuzzy-last-resort. `parseVersion` decomposes a title
+  into `(core, tags)` where tags are categorical (`feat:<artist>`, sequel `n:N`, and qualifier
+  categories — remix/live/acoustic/deluxe/remaster/…). **Same core + same tags = same work; same
+  core + different tags = different work** → Pattern B dissolved structurally (no similarity number
+  can collapse a sequel). The lone surviving threshold is `fuzzyCoreThreshold` (the documented
+  last-resort, never applied across a tag difference). `Entity` carries `BestRank` per provider for
+  Layer-3 RRF. Reuses `textnorm.NormalizeForMatch` + `legacy.TokenSortRatio` verbatim.
+  Constants-ledger entries resolved: `versionSimilarityThreshold=85` → **replaced** (categorical);
+  `consensusTitleMatchMinTSR` deferred to U5.
+  *Verified:* 32 discovery2 tests pass (build + vet + gofmt clean). Covers each cascade rung, the
+  Pattern-B set (sequel/remix/feat/live kept separate), cross-provider same-work merge, fuzzy typo
+  merge, same-title-different-artist separation, artist name merge (incl. "Blink-182" ≠ "Blink"),
+  and `BestRank` min-across-providers. (Live merge-sensitive eval slice runs at U8 against real
+  providers.)
 
 - **U3. Layer 3 — lexicographic relevance tiers.**
   Build the T1–T4 tier sort; popularity/RRF within-tier only. Remove band/dominance/intentBoost.
