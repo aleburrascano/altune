@@ -385,10 +385,18 @@ verdict is recorded in code comments + here.
   `go build -o ./tmp/discoveryeval.exe ./cmd/discoveryeval` then
   `DATABASE_URL=… REDIS_URL=… ./tmp/discoveryeval.exe --mode eval --pipeline v2 --top-k 3 --random --limit 200`
   (and `--pipeline v1` for the side-by-side). Flip `DISCOVERY_V2_SEARCH=true` only if v2 holds the gate.
-  **Parity caveat before a product flip:** v2 is ranking-complete but slim — artwork enrichment,
-  query correction/suggest, related groups, and click-boost remain legacy reuse-hooks not yet wired
-  into v2's `Execute`; wire them (pure reuse) before serving real users, or the flip regresses images
-  and related content even with green ranking.
+  **Parity wiring — DONE 2026-06-21.** v2's `Execute` now carries the full enrichment by reuse:
+  artwork (chained resolver + Redis cache, lean prod-faithful port in `enrich.go`), query
+  correction + tier-based suggest (`correction.go`, reuse `legacy.CorrectionService`), related groups
+  (reuse `legacy.FindRelatedService`), artist-dedup (reuse `legacy.CollapseArtistDuplicates`), artist
+  disambiguation (`disambiguation.go`), and background vocabulary learning (`vocab.go`). **Click-boost
+  is intentionally dropped** — a learned signal for the ML seam (plan 004), not a tuned constant, and
+  there's no click data yet. `BuildSearchServiceV2` injects the artwork chain/cache, find-related, and
+  MB album-validator. Background work (telemetry + ingest) drains via `WaitForBackground()`.
+  *Verified:* 59 discovery2 tests (incl. artwork enrich-from-resolver, skip-when-present, cache
+  short-circuit); full suite 1074 pass; build + vet + gofmt clean. **v2 is now product-flip-ready**;
+  the flip still gates on the live top-K eval (v2 ≥ v1). Artwork *quality* rework remains a separate
+  future effort (v2's richer merged entities are a better foundation for it).
 
 ---
 
