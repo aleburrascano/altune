@@ -4,20 +4,90 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 
 	"github.com/raitonoberu/ytmusic"
 )
 
+// ytmusicClientOnce bounds the ytmusic package's global HTTP client with a
+// timeout. The library otherwise uses a no-timeout client and ignores the
+// caller's context, so a slow/hung YouTube Music request could block a search
+// indefinitely.
+var ytmusicClientOnce sync.Once
+
+func initYTMusicClient() {
+	ytmusicClientOnce.Do(func() {
+		ytmusic.HTTPClient = &http.Client{Timeout: 8 * time.Second}
+	})
+}
+
 type YouTubeMusicAdapter struct{}
 
 func NewYouTubeMusicAdapter() *YouTubeMusicAdapter {
+	initYTMusicClient()
 	return &YouTubeMusicAdapter{}
 }
 
 func (a *YouTubeMusicAdapter) Name() domain.ProviderName { return domain.ProviderYouTube }
+
+// SearchTimeout gives YouTube Music a larger budget than the default fan-out
+// timeout so the adapter has room to retry the intermittent rate-limit (HTTP
+// 403, whose HTML body surfaces as a JSON parse error) it returns under bursty
+// load.
+func (a *YouTubeMusicAdapter) SearchTimeout() time.Duration { return 3 * time.Second }
+
+// fetchYTMusic runs a ytmusic search with one retry on a transient error —
+// notably the intermittent HTTP 403 rate-limit — while respecting the caller's
+// context, which the library itself ignores.
+func fetchYTMusic(ctx context.Context, newClient func() *ytmusic.SearchClient) (*ytmusic.SearchResult, error) {
+	const attempts = 2
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		result, err := nextWithContext(ctx, newClient())
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if i < attempts-1 {
+			select {
+			case <-time.After(250 * time.Millisecond):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+	}
+	return nil, lastErr
+}
+
+// nextWithContext runs the (context-unaware) ytmusic call on a goroutine and
+// returns as soon as the caller's context is done, so a slow request can't
+// outlive the fan-out's deadline. The goroutine completes on its own under the
+// client timeout, so it does not leak.
+func nextWithContext(ctx context.Context, client *ytmusic.SearchClient) (*ytmusic.SearchResult, error) {
+	type out struct {
+		result *ytmusic.SearchResult
+		err    error
+	}
+	ch := make(chan out, 1)
+	go func() {
+		result, err := client.Next()
+		ch <- out{result, err}
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case o := <-ch:
+		return o.result, o.err
+	}
+}
 
 func (a *YouTubeMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{
@@ -28,8 +98,7 @@ func (a *YouTubeMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	client := ytmusic.Search(query)
-	result, err := client.Next()
+	result, err := fetchYTMusic(ctx, func() *ytmusic.SearchClient { return ytmusic.Search(query) })
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic search: %w", err)
 	}
@@ -69,8 +138,7 @@ func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds ma
 }
 
 func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
-	client := ytmusic.AlbumSearch(artistName)
-	result, err := client.Next()
+	result, err := fetchYTMusic(ctx, func() *ytmusic.SearchClient { return ytmusic.AlbumSearch(artistName) })
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic album search: %w", err)
 	}
@@ -104,8 +172,7 @@ func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.Prov
 }
 
 func (a *YouTubeMusicAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
-	client := ytmusic.TrackSearch(artistName)
-	result, err := client.Next()
+	result, err := fetchYTMusic(ctx, func() *ytmusic.SearchClient { return ytmusic.TrackSearch(artistName) })
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic track search: %w", err)
 	}

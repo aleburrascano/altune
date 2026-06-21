@@ -1,12 +1,31 @@
 package providers
 
 import (
+	"context"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
 
 	"github.com/raitonoberu/ytmusic"
 )
+
+func TestFetchYTMusic_RespectsCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	called := false
+	_, err := fetchYTMusic(ctx, func() *ytmusic.SearchClient {
+		called = true
+		return ytmusic.Search("anything")
+	})
+
+	if err == nil {
+		t.Fatal("want a context error, got nil")
+	}
+	if called {
+		t.Error("must not start a network call when the context is already cancelled")
+	}
+}
 
 func TestMapYTMusicVideo(t *testing.T) {
 	v := &ytmusic.VideoItem{
