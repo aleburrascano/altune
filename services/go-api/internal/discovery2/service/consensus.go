@@ -8,7 +8,6 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	legacy "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -337,26 +336,18 @@ func newAlbumClusterSet() *albumClusterSet {
 	return &albumClusterSet{byKey: make(map[string]*albumCluster)}
 }
 
-// add clusters an album by its categorical version key (core + tags), with a
-// fuzzy-core last resort for title typos — the same cascade rungs as Layer 2.
+// add clusters an album by exact canonical title (the same principled rule as
+// Layer 2 — no version vocabulary, no fuzzy threshold).
 func (s *albumClusterSet) add(album domain.SearchResult, provider string) {
-	vk := parseVersion(album.Title)
-	for _, key := range s.order {
-		c := s.byKey[key]
-		ck := parseVersion(c.album.Title)
-		if ck.tags != vk.tags {
-			continue
+	key := textnorm.NormalizeForMatch(album.Title)
+	if c, ok := s.byKey[key]; ok {
+		c.providerCount++
+		c.providers = append(c.providers, provider)
+		if completenessOf(album) > completenessOf(c.album) {
+			c.album = album
 		}
-		if ck.core == vk.core || legacy.TokenSortRatio(ck.core, vk.core) >= fuzzyCoreThreshold {
-			c.providerCount++
-			c.providers = append(c.providers, provider)
-			if completenessOf(album) > completenessOf(c.album) {
-				c.album = album
-			}
-			return
-		}
+		return
 	}
-	key := vk.core + "\x00" + vk.tags
 	s.byKey[key] = &albumCluster{album: album, providerCount: 1, providers: []string{provider}}
 	s.order = append(s.order, key)
 }

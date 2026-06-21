@@ -23,7 +23,6 @@ func track(title, artist string, provider domain.ProviderName, extras map[string
 	return res(domain.ResultKindTrack, title, artist, provider, extras)
 }
 
-// findByTitle returns the first entity whose title matches, or fails.
 func findByTitle(t *testing.T, entities []Entity, title string) Entity {
 	t.Helper()
 	for _, e := range entities {
@@ -33,43 +32,6 @@ func findByTitle(t *testing.T, entities []Entity, title string) Entity {
 	}
 	t.Fatalf("no entity titled %q in %d entities", title, len(entities))
 	return Entity{}
-}
-
-func TestParseVersion(t *testing.T) {
-	tests := []struct {
-		name     string
-		title    string
-		wantCore string
-		wantTags string
-	}{
-		{"plain", "Humble", "humble", ""},
-		{"trailing punctuation normalizes", "HUMBLE.", "humble", ""},
-		{"sequel number", "Shotta Flow 2", "shotta flow", "n:2"},
-		{"part roman drops leading article", "The Saga Part II", "saga", "n:2"},
-		{"pt dot arabic", "Story Pt. 3", "story", "n:3"},
-		{"remix paren", "Bad (Remix)", "bad", "remix"},
-		{"live bracket", "Wish You Were Here [Live]", "wish you were here", "live"},
-		{"deluxe", "Scorpion (Deluxe)", "scorpion", "deluxe"},
-		{"dash remaster", "Dreams - Remastered 2004", "dreams", "remaster"},
-		{"feat paren", "Whats Poppin (feat. Tyga)", "whats poppin", "feat:tyga"},
-		{"feat dot", "Sicko Mode feat. Drake", "sicko mode", "feat:drake"},
-		// An unrecognized bracket emits no tag; normalization then drops it from
-		// the core. Both sides normalize identically, so this never mis-merges.
-		{"unrecognized bracket yields no tag", "(I Can't Get No) Satisfaction", "satisfaction", ""},
-		{"feat plus remix sorted", "Song (feat. A) (Remix)", "song", "feat:a|remix"},
-		{"bare 1 is not a sequel", "Track 1", "track 1", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := parseVersion(tt.title)
-			if got.core != tt.wantCore {
-				t.Errorf("core = %q, want %q", got.core, tt.wantCore)
-			}
-			if got.tags != tt.wantTags {
-				t.Errorf("tags = %q, want %q", got.tags, tt.wantTags)
-			}
-		})
-	}
 }
 
 func TestMerge_IdentifierMatch(t *testing.T) {
@@ -101,63 +63,74 @@ func TestMerge_IdentifierMatch(t *testing.T) {
 	})
 }
 
-func TestMerge_VersionMarkersKeepSequelsSeparate(t *testing.T) {
-	// Pattern B: the numbered sequel must survive as its own entity.
-	cases := []struct {
-		name string
-		a, b string
-	}{
-		{"sequel", "Shotta Flow", "Shotta Flow 2"},
-		{"remix", "Bad", "Bad (Remix)"},
-		{"feat", "Goosebumps", "Goosebumps (feat. Kevin Abstract)"},
-		{"live", "Fix You", "Fix You (Live)"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			a := track(tc.a, "Some Artist", domain.ProviderDeezer, map[string]any{"popularity": 90.0})
-			b := track(tc.b, "Some Artist", domain.ProviderDeezer, map[string]any{"popularity": 40.0})
-			entities := Merge([][]domain.SearchResult{{a, b}})
-			if len(entities) != 2 {
-				t.Fatalf("got %d entities, want 2 — %q must not collapse into %q", len(entities), tc.b, tc.a)
-			}
-		})
+func TestMerge_SequelStaysSeparate(t *testing.T) {
+	// Pattern B: a trailing sequel number survives canonical normalization, so
+	// the sequel never collapses into the original — with no version machinery.
+	a := track("Shotta Flow", "NLE Choppa", domain.ProviderDeezer, map[string]any{"popularity": 90.0})
+	b := track("Shotta Flow 2", "NLE Choppa", domain.ProviderDeezer, map[string]any{"popularity": 40.0})
+	entities := Merge([][]domain.SearchResult{{a, b}})
+	if len(entities) != 2 {
+		t.Fatalf("got %d entities, want 2 — the sequel must not collapse into the original", len(entities))
 	}
 }
 
-func TestMerge_SameWorkAcrossProvidersMerges(t *testing.T) {
-	// Same core, same (empty) tags, same artist, no identifiers → one work.
+func TestMerge_ParentheticalVariantsCollapse(t *testing.T) {
+	// Parenthetical markers are canonical noise (textnorm strips them), so a
+	// remix/live/feat variant folds into the base title — intentionally NOT a
+	// separate entity (the over-merging that broke re-find is gone the other way:
+	// we no longer fold a dash-form variant into a paren-form one; see below).
+	cases := []struct{ a, b string }{
+		{"Bad", "Bad (Remix)"},
+		{"Fix You", "Fix You (Live)"},
+		{"Goosebumps", "Goosebumps (feat. Kevin Abstract)"},
+	}
+	for _, tc := range cases {
+		a := track(tc.a, "Some Artist", domain.ProviderDeezer, nil)
+		b := track(tc.b, "Some Artist", domain.ProviderITunes, nil)
+		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		if len(entities) != 1 {
+			t.Errorf("%q + %q: got %d entities, want 1 (parenthetical variant folds in)", tc.a, tc.b, len(entities))
+		}
+	}
+}
+
+func TestMerge_DashAndParenVariantsStaySeparate(t *testing.T) {
+	// The regression fix: a dash-suffixed variant keeps its suffix tokens after
+	// normalization ("big poppa 2005 remaster") and so does NOT merge into a
+	// paren-form entity ("big poppa") — the exact saved variant survives.
+	a := track("Big Poppa - 2005 Remaster", "The Notorious B.I.G.", domain.ProviderLastFM, nil)
+	b := track("Big Poppa (2007 Remaster)", "The Notorious B.I.G.", domain.ProviderDeezer, nil)
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	if len(entities) != 2 {
+		t.Fatalf("got %d entities, want 2 — the dash-form variant must stay distinct", len(entities))
+	}
+}
+
+func TestMerge_SameTitleAcrossProvidersMerges(t *testing.T) {
 	a := track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil)
 	b := track("Humble", "Kendrick Lamar", domain.ProviderITunes, nil)
 	entities := Merge([][]domain.SearchResult{{a}, {b}})
 	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1 (same work, different providers)", len(entities))
+		t.Fatalf("got %d entities, want 1 (same canonical title, different providers)", len(entities))
 	}
 	if got := len(entities[0].Result.Sources); got != 2 {
 		t.Errorf("sources = %d, want 2", got)
 	}
 	if entities[0].Result.Confidence != domain.ConfidenceMedium {
-		t.Errorf("confidence = %v, want medium (multi-source categorical merge)", entities[0].Result.Confidence)
+		t.Errorf("confidence = %v, want medium (multi-source text merge)", entities[0].Result.Confidence)
 	}
 }
 
-func TestMerge_FuzzyLastResort(t *testing.T) {
-	t.Run("typo merges", func(t *testing.T) {
-		a := track("Bohemian Rhapsody", "Queen", domain.ProviderDeezer, nil)
-		b := track("Bohemian Rapsody", "Queen", domain.ProviderITunes, nil)
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
-		if len(entities) != 1 {
-			t.Fatalf("got %d entities, want 1 (fuzzy typo merge)", len(entities))
-		}
-	})
-
-	t.Run("different works stay separate", func(t *testing.T) {
-		a := track("Yesterday", "The Beatles", domain.ProviderDeezer, nil)
-		b := track("Let It Be", "The Beatles", domain.ProviderITunes, nil)
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
-		if len(entities) != 2 {
-			t.Fatalf("got %d entities, want 2 (distinct works)", len(entities))
-		}
-	})
+func TestMerge_TyposStaySeparate(t *testing.T) {
+	// No fuzzy rung anymore: a typo'd title is a different canonical string, so
+	// it is a separate entity. The duplicate is the accepted cost of dropping a
+	// tuned threshold; ranking surfaces both.
+	a := track("Bohemian Rhapsody", "Queen", domain.ProviderDeezer, nil)
+	b := track("Bohemian Rapsody", "Queen", domain.ProviderITunes, nil)
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	if len(entities) != 2 {
+		t.Fatalf("got %d entities, want 2 (no fuzzy merge)", len(entities))
+	}
 }
 
 func TestMerge_DifferentArtistStaysSeparate(t *testing.T) {
@@ -182,7 +155,7 @@ func TestMerge_Artists(t *testing.T) {
 		}
 	})
 
-	t.Run("numeric artist names are not treated as sequels", func(t *testing.T) {
+	t.Run("distinct names stay separate", func(t *testing.T) {
 		a := res(domain.ResultKindArtist, "Blink-182", "", domain.ProviderDeezer, nil)
 		b := res(domain.ResultKindArtist, "Blink", "", domain.ProviderITunes, nil)
 		entities := Merge([][]domain.SearchResult{{a}, {b}})
@@ -193,7 +166,6 @@ func TestMerge_Artists(t *testing.T) {
 }
 
 func TestMerge_BestRankTracksMinAcrossProviders(t *testing.T) {
-	// Same work appears at rank 2 in provider A and rank 0 in provider B.
 	groupA := []domain.SearchResult{
 		track("Filler One", "X", domain.ProviderDeezer, nil),
 		track("Filler Two", "X", domain.ProviderDeezer, nil),

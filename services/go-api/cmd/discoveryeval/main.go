@@ -44,6 +44,7 @@ type options struct {
 	jsonPath    string
 	random      bool
 	pipeline    string
+	query       string
 }
 
 func main() {
@@ -57,6 +58,7 @@ func main() {
 	flag.StringVar(&opts.jsonPath, "json", "", "write the full JSON report to this path (default: stdout summary only)")
 	flag.BoolVar(&opts.random, "random", false, "eval: sample entities randomly instead of alphabetically (use with -limit for a representative sample)")
 	flag.StringVar(&opts.pipeline, "pipeline", "v1", "eval: which search pipeline to exercise — v1 (current) | v2 (rebuilt strangler). Run both and require v2 >= v1 at top-K before cutover.")
+	flag.StringVar(&opts.query, "query", "", "diagnostic: run a single query through the chosen pipeline and dump the top results (bypasses the library eval)")
 	flag.Parse()
 
 	if err := run(opts); err != nil {
@@ -84,6 +86,10 @@ func run(opts options) error {
 	if cfg.RedisURL != "" {
 		redisClient = sharedRedis.NewClient(ctx, cfg.RedisURL)
 		defer redisClient.Close()
+	}
+
+	if opts.query != "" {
+		return runQuery(ctx, cfg, pool, redisClient, opts)
 	}
 
 	switch opts.mode {
@@ -180,6 +186,35 @@ func buildEvalSearcher(cfg *config.Config, pool *pgxpool.Pool, redisClient *gore
 	default:
 		return nil, nil, fmt.Errorf("unknown pipeline %q (want v1 | v2)", pipeline)
 	}
+}
+
+// runQuery is the diagnostic mode: dump the top results a single query returns
+// through the chosen pipeline, so v1 and v2 can be compared title-by-title.
+func runQuery(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+	searcher, drain, err := buildEvalSearcher(cfg, pool, redisClient, opts.pipeline)
+	if err != nil {
+		return err
+	}
+	results, err := searcher.Search(ctx, opts.query)
+	drain()
+	if err != nil {
+		return fmt.Errorf("search %q: %w", opts.query, err)
+	}
+
+	n := 6
+	if len(results) < n {
+		n = len(results)
+	}
+	fmt.Printf("\n# %q via %s — %d results, top %d:\n", opts.query, opts.pipeline, len(results), n)
+	for i := 0; i < n; i++ {
+		r := results[i]
+		srcs := make([]string, 0, len(r.Sources))
+		for _, s := range r.Sources {
+			srcs = append(srcs, s.Provider.String())
+		}
+		fmt.Printf("  %d. [%-6s] %-45q sub=%-28q src=%v\n", i+1, r.Kind.String(), r.Title, r.Subtitle, srcs)
+	}
+	return nil
 }
 
 func evalQuery(query string) (*domain.SearchQuery, error) {
