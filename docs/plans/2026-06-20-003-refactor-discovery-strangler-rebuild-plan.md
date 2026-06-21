@@ -262,9 +262,19 @@ verdict is recorded in code comments + here.
 
 ### Phase A — New package + the decision core
 
-- **U1. New package skeleton + handler switch (default old).**
-  Stand up `internal/discovery2/` and a per-surface switch (new service is an interface, nil = off).
-  *Verify:* existing handler tests pass; flag off → old path unchanged.
+- **U1. New package skeleton + handler switch (default old). [DONE 2026-06-21]**
+  Stood up `internal/discovery2/service/` (orchestrator skeleton — home for U2–U4) and added the
+  **search-surface seam** to the existing handler: an optional `newSearchPipeline` interface (nil =
+  off) wired via the functional `Option` `WithNewSearchPipeline`, with an `executeSearch` router. The
+  seam returns the legacy `*service.SearchOutput`, so the existing DTO mapping serves both pipelines —
+  **response parity by construction** (R4). `app.go` is untouched (passes no option ⇒ legacy path
+  provably unchanged); cutover wiring is U8. Only the search seam exists; the consensus surfaces get
+  their own seams in U5 (YAGNI — no dead switch points). The `discovery2 → discovery/service` coupling
+  (for the shared `SearchOutput` shape) is temporary and dissolves at the final rename.
+  *Verified:* full suite **1014 pass** (+3 seam tests); build + vet clean. New tests cover both routing
+  directions, the new-pipeline error path (→ 500), and a compile-time assertion that the skeleton
+  satisfies the seam. `discovery2.Service.Execute` is a documented not-yet-implemented stub
+  (unreachable in prod until U8).
 
 - **U2. Layer 2 — merge + entity resolution (categorical cascade).**
   Build identifier-first → version-marker categories → fuzzy-last-resort. Characterize current
