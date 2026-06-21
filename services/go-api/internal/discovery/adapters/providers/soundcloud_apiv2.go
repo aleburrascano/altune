@@ -49,6 +49,9 @@ const (
 	scAPIBaseURL    = "https://api-v2.soundcloud.com"
 	scSearchLimit   = 20
 	scMaxResults    = 40
+	// scArtistContentLimit bounds a single artist's toptracks/albums fetch; the
+	// GetArtistContentService truncates further per request.
+	scArtistContentLimit = 50
 	scSearchTimeout = 3 * time.Second
 	scUserAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
@@ -361,6 +364,63 @@ func (a *SoundCloudAPIAdapter) doResolve(ctx context.Context, clientID, permalin
 		return nil, status, fmt.Errorf("resolve %q did not yield a track", permalink)
 	}
 	return &result, status, nil
+}
+
+// GetArtistTopTracks implements ports.ArtistContentProvider: an artist's most
+// popular tracks. externalID is the SoundCloud numeric user id, which a
+// SoundCloud-sourced artist result already carries in its SourceRef.
+func (a *SoundCloudAPIAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	var out []domain.SearchResult
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf(
+			"%s/users/%s/toptracks?client_id=%s&limit=%d",
+			a.baseURL, url.PathEscape(externalID), url.QueryEscape(clientID), scArtistContentLimit,
+		)
+		var body scSearchResponse
+		status, err := a.getJSON(ctx, u, &body)
+		if err != nil {
+			return status, err
+		}
+		out = make([]domain.SearchResult, 0, len(body.Collection))
+		for _, t := range body.Collection {
+			if r, ok := mapSoundCloudAPITrack(t); ok {
+				out = append(out, r)
+			}
+		}
+		return status, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetArtistAlbums implements ports.ArtistContentProvider: an artist's albums
+// (typed playlists). externalID is the SoundCloud numeric user id.
+func (a *SoundCloudAPIAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	var out []domain.SearchResult
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf(
+			"%s/users/%s/albums?client_id=%s&limit=%d",
+			a.baseURL, url.PathEscape(externalID), url.QueryEscape(clientID), scArtistContentLimit,
+		)
+		var body scAlbumSearchResponse
+		status, err := a.getJSON(ctx, u, &body)
+		if err != nil {
+			return status, err
+		}
+		out = make([]domain.SearchResult, 0, len(body.Collection))
+		for _, al := range body.Collection {
+			if r, ok := mapSoundCloudAPIAlbum(al); ok {
+				out = append(out, r)
+			}
+		}
+		return status, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // getJSON performs a GET and decodes a 200 body into dst, returning the HTTP

@@ -78,10 +78,12 @@ underground long tail where SoundCloud is the sole artwork source (track/album `
 `avatar_url`, all bumped to 500px). Returns `""` on miss so the chain falls through. The bespoke
 permalink resolver was renamed `ResolvePermalink` to free the `Resolve` signature for this port.
 
-### 4. Artist discography — planned
-`/users/{id}/tracks`, `/toptracks`, `/albums` → populate an underground artist's page. Feeds
-`ArtistContentProvider`. Needs a resolved numeric user id (from `/search/users` or `/resolve`).
-**Low risk** (read-only enrichment, not the ranking path).
+### 4. Artist discography — ✅ BUILT
+`GetArtistTopTracks` (`/users/{id}/toptracks`) and `GetArtistAlbums` (`/users/{id}/albums`)
+implement `ports.ArtistContentProvider`, wired as `"soundcloud"` in the artist-content dispatch map
+(`app.go`). `externalID` is the numeric user id a SoundCloud-sourced artist result already carries
+in its `SourceRef`, so no separate id-resolution is needed. Reuses the track/album mappers.
+Read-only enrichment, off the ranking path — no eval gate.
 
 ### 5. Related tracks (recommendations) — planned (own feature)
 `/tracks/{id}/related` returns a recommendation set — live probe surfaced underground collabs
