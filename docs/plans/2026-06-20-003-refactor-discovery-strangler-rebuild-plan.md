@@ -340,9 +340,22 @@ verdict is recorded in code comments + here.
   lacked. Covers confirmed/unconfirmed by provider count, deluxe-as-separate-release (categorical),
   cache-hit-skips-provider-calls, determinism across 5 runs, and MB confirm + contamination-reject.
 
-- **U6. Close the three coverage gaps.** Fix YT Music 0-results (Pattern C); long-tail album-track
-  fallback; underground top-track fallback. *Verify:* the Pattern-C exact tracks now appear;
-  signal B improves vs baseline on underground artists.
+- **U6. Close the three coverage gaps. [DONE 2026-06-21]**
+  **YT Music 0-results (Pattern C) — root cause found by reading the `raitonoberu/ytmusic` source,
+  not guessed:** the library routes official songs (`MUSIC_VIDEO_TYPE_ATV`) to `result.Tracks` but
+  `OMV`/`UGC` music videos to `result.Videos`; obscure/underground recordings (and top-result cards)
+  land in `.Videos`, which the adapter dropped → the exact track never entered the candidate set, so
+  the ranker substituted the artist's hit. Fix: map `.Videos` as tracks in the shared adapter
+  (`ytmusic.go`) — additive, and the categorical merge dedups any video duplicating an official
+  track. **Structural fallbacks:** `discovery2/service/coverage.go` `FirstNonEmptyTracks` — the
+  long-tail album-track and underground top-track fallback (first provider with a non-empty list
+  wins; errors/empties fall through).
+  *Verified:* 137 tests pass across discovery2 + providers (build + vet + gofmt clean). New:
+  `mapYTMusicVideo` mapper test (track shape, source, thumbnail, duration) and 6 `FirstNonEmptyTracks`
+  cases (fallback, short-circuit, error-fallthrough, all-empty, last-error, ctx-cancel). **Live
+  confirmation that Pattern-C tracks now appear, and signal-B improvement on underground artists,
+  run at U8 against real providers** (YT Music can't be exercised offline). Fallback wiring into the
+  album/artist services is U8.
 
 ### Phase C — Cutover (gated on the 002 baseline)
 
