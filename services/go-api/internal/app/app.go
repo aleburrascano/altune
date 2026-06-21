@@ -208,6 +208,13 @@ func (a *App) setup(ctx context.Context) error {
 		artistProviders["tidal"] = tidalContent
 	}
 
+	// Related tracks are track-keyed: a SoundCloud-sourced track carries its
+	// numeric track id, which keys /tracks/{id}/related. SoundCloud-only today.
+	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{
+		"soundcloud": providers.NewSoundCloudAPIAdapter(&http.Client{Timeout: 10 * time.Second}, nil),
+	}
+	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
+
 	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
 
 	// Multi-provider consensus: ALL providers are equal sources, merged into a
@@ -230,7 +237,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 
-	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, suggestSvc, eventSvc)
+	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, relatedSvc, suggestSvc, eventSvc)
 
 	a.startVocabularyRefresh(vocabStore)
 

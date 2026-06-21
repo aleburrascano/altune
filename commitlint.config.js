@@ -44,6 +44,8 @@ module.exports = {
         'discovery-foundation-v1',
         'discovery-identity-v1',
         'resilience-v1',
+        'related-tracks',
+        'acquire-soundcloud',
         // Go migration scopes
         'go-api',
       ],

@@ -24,6 +24,7 @@ type DiscoveryHandler struct {
 	historySvc *service.ListSearchHistoryService
 	albumSvc   *service.GetAlbumTracksService
 	artistSvc  *service.GetArtistContentService
+	relatedSvc *service.GetRelatedTracksService
 	suggestSvc *service.SuggestService
 	eventSvc   *service.RecordEventService
 }
@@ -34,6 +35,7 @@ func NewDiscoveryHandler(
 	historySvc *service.ListSearchHistoryService,
 	albumSvc *service.GetAlbumTracksService,
 	artistSvc *service.GetArtistContentService,
+	relatedSvc *service.GetRelatedTracksService,
 	suggestSvc *service.SuggestService,
 	eventSvc *service.RecordEventService,
 ) *DiscoveryHandler {
@@ -43,6 +45,7 @@ func NewDiscoveryHandler(
 		historySvc: historySvc,
 		albumSvc:   albumSvc,
 		artistSvc:  artistSvc,
+		relatedSvc: relatedSvc,
 		suggestSvc: suggestSvc,
 		eventSvc:   eventSvc,
 	}
@@ -58,6 +61,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
 	r.Get("/artists/{provider}/{externalId}/albums", h.handleArtistAlbums)
+	r.Get("/tracks/{provider}/{externalId}/related", h.handleRelatedTracks)
 	return r
 }
 
@@ -497,6 +501,36 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 	resp, err := h.artistSvc.GetAlbums(r.Context(), provider, externalID, artistName, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "get artist albums failed",
+			"error", err, "provider", provider, "external_id", externalID)
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
+}
+
+func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Request) {
+	provider, externalID, ok := validateContentParams(w, r)
+	if !ok {
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 20
+	} else if limit > 50 {
+		limit = 50
+	}
+
+	if h.relatedSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
+			Provider: provider, Status: "error", Items: []SearchResultDTO{},
+		})
+		return
+	}
+
+	resp, err := h.relatedSvc.Execute(r.Context(), provider, externalID, limit)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "get related tracks failed",
 			"error", err, "provider", provider, "external_id", externalID)
 		httputil.InternalError(w)
 		return

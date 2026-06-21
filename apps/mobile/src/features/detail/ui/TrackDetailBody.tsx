@@ -18,6 +18,7 @@ import { toCreateTrackRequest } from '../save-cache';
 
 import { isCurrentlyPlaying } from './helpers';
 import { PlayIconButton } from './PlayIconButton';
+import { RelatedTracksSection } from './RelatedTracksSection';
 
 import { spacing } from '@shared/ui/theme/tokens';
 
@@ -32,9 +33,11 @@ export type LateralNavHandle = {
 export function TrackDetailBody({
   result,
   lateralNav,
+  detailRoute,
 }: {
   result: DiscoveryResult;
   lateralNav: LateralNavHandle;
+  detailRoute: string;
 }): ReactElement {
   const save = useSaveTrack();
   const playback = usePlayback();
@@ -186,6 +189,7 @@ export function TrackDetailBody({
           </Text>
         </View>
       ) : null}
+      <RelatedTracksSection result={result} detailRoute={detailRoute} />
     </View>
   );
 }

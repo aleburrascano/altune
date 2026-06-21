@@ -190,3 +190,18 @@ export async function getArtistAlbums(
   }
   return apiFetch<ContentFetchResponse>(url);
 }
+
+/**
+ * Related tracks for a single track, keyed by the track's external id.
+ * SoundCloud-only today (`/tracks/{id}/related`); a non-SoundCloud provider
+ * returns an empty set with `status: 'error'`.
+ */
+export async function getRelatedTracks(
+  provider: string,
+  externalId: string,
+  limit?: number,
+): Promise<ContentFetchResponse> {
+  return apiFetch<ContentFetchResponse>(
+    _contentUrl(`/v1/discovery/tracks/${provider}/${encodeURIComponent(externalId)}/related`, limit),
+  );
+}

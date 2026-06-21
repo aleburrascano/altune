@@ -52,6 +52,9 @@ const (
 	// scArtistContentLimit bounds a single artist's toptracks/albums fetch; the
 	// GetArtistContentService truncates further per request.
 	scArtistContentLimit = 50
+	// scRelatedLimit bounds a single /tracks/{id}/related fetch; the
+	// GetRelatedTracksService truncates further per request.
+	scRelatedLimit = 20
 	scSearchTimeout = 3 * time.Second
 	scUserAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
@@ -412,6 +415,36 @@ func (a *SoundCloudAPIAdapter) GetArtistAlbums(ctx context.Context, _ domain.Pro
 		out = make([]domain.SearchResult, 0, len(body.Collection))
 		for _, al := range body.Collection {
 			if r, ok := mapSoundCloudAPIAlbum(al); ok {
+				out = append(out, r)
+			}
+		}
+		return status, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetRelatedTracks implements ports.RelatedTracksProvider: SoundCloud's per-track
+// recommendation set. externalID is the SoundCloud numeric track id, which a
+// SoundCloud-sourced track result already carries in its SourceRef. Reuses the
+// track mapper, so related items are ordinary track SearchResults.
+func (a *SoundCloudAPIAdapter) GetRelatedTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	var out []domain.SearchResult
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf(
+			"%s/tracks/%s/related?client_id=%s&limit=%d",
+			a.baseURL, url.PathEscape(externalID), url.QueryEscape(clientID), scRelatedLimit,
+		)
+		var body scSearchResponse
+		status, err := a.getJSON(ctx, u, &body)
+		if err != nil {
+			return status, err
+		}
+		out = make([]domain.SearchResult, 0, len(body.Collection))
+		for _, t := range body.Collection {
+			if r, ok := mapSoundCloudAPITrack(t); ok {
 				out = append(out, r)
 			}
 		}

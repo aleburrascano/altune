@@ -139,7 +139,7 @@ export function DetailScreen(): ReactElement {
         contentContainerStyle={styles.scrollContent}
       >
         {heroContent}
-        {result.kind === 'track' ? <TrackDetailBody result={result} lateralNav={lateralNav} /> : null}
+        {result.kind === 'track' ? <TrackDetailBody result={result} lateralNav={lateralNav} detailRoute={detailRoute} /> : null}
         {result.kind === 'album' ? <AlbumDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
         {result.kind === 'artist' ? <ArtistDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
       </ScrollView>
