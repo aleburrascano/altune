@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
-	legacy "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -90,10 +89,10 @@ func relevanceScore(r domain.SearchResult, q string) float64 {
 		return 0
 	}
 	title := textnorm.NormalizeForMatch(r.Title)
-	best := legacy.TokenSortRatio(q, title)
+	best := TokenSortRatio(q, title)
 	if r.Subtitle != "" {
 		combined := textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title)
-		if s := legacy.TokenSortRatio(q, combined); s > best {
+		if s := TokenSortRatio(q, combined); s > best {
 			best = s
 		}
 	}

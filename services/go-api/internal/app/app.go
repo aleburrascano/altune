@@ -230,16 +230,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 
-	// Strangler cutover (plan 003): the search surface routes to the rebuilt v2
-	// pipeline only when DISCOVERY_V2_SEARCH is set; default keeps v1 live.
-	// Rollback is unsetting the flag. Gate the flip on a green top-K eval first.
-	var discoveryOpts []discoveryHandler.Option
-	if a.cfg.DiscoveryV2Search {
-		v2Search := BuildSearchServiceV2(a.cfg, a.pool, a.redisClient, eventStore)
-		discoveryOpts = append(discoveryOpts, discoveryHandler.WithNewSearchPipeline(v2Search))
-		slog.Info("discovery search pipeline: v2 (rebuilt strangler)")
-	}
-	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, suggestSvc, eventSvc, discoveryOpts...)
+	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, suggestSvc, eventSvc)
 
 	a.startVocabularyRefresh(vocabStore)
 

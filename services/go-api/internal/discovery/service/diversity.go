@@ -1,0 +1,182 @@
+package service
+
+import "altune/go-api/internal/discovery/domain"
+
+// Result-list shaping rules carried forward from the v1 ranking pipeline. These
+// are orthogonal to ranking proper (the rebuilt Merge/Rank own ordering) — they
+// cap per-artist repetition and fold same-name artist duplicates after ranking.
+
+const (
+	diversityWindow   = 10
+	maxPerArtistInTop = 3
+)
+
+// EnforceDiversity limits the number of results per artist within the
+// top diversityWindow positions to maxPerArtistInTop, moving overflow
+// results below the window.
+func EnforceDiversity(results []domain.SearchResult) []domain.SearchResult {
+	if len(results) < diversityWindow {
+		return results
+	}
+	window := results[:diversityWindow]
+	rest := results[diversityWindow:]
+
+	artistCount := make(map[string]int)
+	kept := make([]domain.SearchResult, 0, diversityWindow)
+	overflow := make([]domain.SearchResult, 0)
+
+	for _, r := range window {
+		artist := NormalizeForMatch(r.Subtitle)
+		if artist == "" || artistCount[artist] < maxPerArtistInTop {
+			artistCount[artist]++
+			kept = append(kept, r)
+		} else {
+			overflow = append(overflow, r)
+		}
+	}
+
+	out := make([]domain.SearchResult, 0, len(results))
+	out = append(out, kept...)
+	out = append(out, overflow...)
+	out = append(out, rest...)
+	return out
+}
+
+// CollapseArtistDuplicates groups artist results that share the same normalized
+// name. The highest-popularity artist is kept as the primary result. Remaining
+// same-name artists are stored in a "collapsed_artists" extra on the primary.
+func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResult {
+	type group struct {
+		primaryIdx int
+		primaryPop float64
+		otherIdxs  []int
+	}
+	groups := make(map[string]*group)
+	order := []string{}
+
+	for i, r := range results {
+		if r.Kind != domain.ResultKindArtist {
+			continue
+		}
+		norm := NormalizeForMatch(r.Title)
+		pop := getFloatExtra(r, "popularity")
+		g, exists := groups[norm]
+		if !exists {
+			groups[norm] = &group{primaryIdx: i, primaryPop: pop}
+			order = append(order, norm)
+			continue
+		}
+		if pop > g.primaryPop {
+			g.otherIdxs = append(g.otherIdxs, g.primaryIdx)
+			g.primaryIdx = i
+			g.primaryPop = pop
+		} else {
+			g.otherIdxs = append(g.otherIdxs, i)
+		}
+	}
+
+	remove := make(map[int]bool)
+	for _, norm := range order {
+		g := groups[norm]
+		if len(g.otherIdxs) == 0 {
+			continue
+		}
+		collapsedList := make([]map[string]any, len(g.otherIdxs))
+		for j, idx := range g.otherIdxs {
+			other := results[idx]
+			collapsedList[j] = map[string]any{
+				"title":    other.Title,
+				"subtitle": other.Subtitle,
+				"sources":  other.Sources,
+				"extras":   other.Extras,
+			}
+			if other.ImageURL != "" {
+				collapsedList[j]["image_url"] = other.ImageURL
+			}
+			remove[idx] = true
+		}
+		primary := &results[g.primaryIdx]
+		extras := copyExtras(primary.Extras)
+		extras["collapsed_artists"] = collapsedList
+		primary.Extras = extras
+	}
+
+	if len(remove) == 0 {
+		return results
+	}
+
+	out := make([]domain.SearchResult, 0, len(results)-len(remove))
+	for i, r := range results {
+		if !remove[i] {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// --- shared extras helpers (used by consensus, find_related, and the rules above) ---
+
+func copyExtras(src map[string]any) map[string]any {
+	if src == nil {
+		return make(map[string]any)
+	}
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+func getStringExtra(r domain.SearchResult, key string) string {
+	if r.Extras == nil {
+		return ""
+	}
+	v, ok := r.Extras[key]
+	if !ok {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
+// completeness scores how much metadata a result carries — used by consensus to
+// pick the most complete representative when clustering same-title albums.
+func completeness(r domain.SearchResult) int {
+	count := 0
+	if r.ImageURL != "" {
+		count++
+	}
+	if getStringExtra(r, "isrc") != "" {
+		count++
+	}
+	if r.Extras != nil {
+		if _, ok := r.Extras["duration"]; ok {
+			count++
+		}
+	}
+	if getStringExtra(r, "album") != "" {
+		count++
+	}
+	return count
+}
+
+func getFloatExtra(r domain.SearchResult, key string) float64 {
+	if r.Extras == nil {
+		return 0.0
+	}
+	v, ok := r.Extras[key]
+	if !ok {
+		return 0.0
+	}
+	switch n := v.(type) {
+	case float64:
+		return n
+	case int:
+		return float64(n)
+	default:
+		return 0.0
+	}
+}

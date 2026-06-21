@@ -8,7 +8,6 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	legacy "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
@@ -59,7 +58,7 @@ func newUser() shared.UserId {
 	return shared.NewUserId(uuid.New())
 }
 
-func runSearch(t *testing.T, svc *Service, raw string) *legacy.SearchOutput {
+func runSearch(t *testing.T, svc *Service, raw string) *SearchOutput {
 	t.Helper()
 	out, err := svc.Execute(context.Background(), newUser(), newQuery(t, raw), false)
 	if err != nil {
@@ -78,7 +77,7 @@ func TestService_EndToEnd_MergesAndRanks(t *testing.T) {
 	p1 := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{trackP1, album}}
 	p2 := &fakeProvider{name: domain.ProviderITunes, results: []domain.SearchResult{trackP2}}
 
-	svc := NewService([]ports.SearchProvider{p1, p2}, legacy.NewCircuitBreaker())
+	svc := NewService([]ports.SearchProvider{p1, p2}, NewCircuitBreaker())
 	out := runSearch(t, svc, "humble")
 
 	if len(out.Results) != 2 {
@@ -99,7 +98,7 @@ func TestService_PartialOnProviderError(t *testing.T) {
 	good := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &fakeProvider{name: domain.ProviderITunes, err: errors.New("boom")}
 
-	svc := NewService([]ports.SearchProvider{good, bad}, legacy.NewCircuitBreaker())
+	svc := NewService([]ports.SearchProvider{good, bad}, NewCircuitBreaker())
 	out := runSearch(t, svc, "humble")
 
 	if !out.Partial {
@@ -117,7 +116,7 @@ func TestService_RanksExactTitleFirst(t *testing.T) {
 	partial := deezerTrack("Humble Beginnings", "Someone Else", 99)
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{partial, exact}}
 
-	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker())
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker())
 	out := runSearch(t, svc, "humble")
 
 	if len(out.Results) == 0 || out.Results[0].Title != "HUMBLE." {
@@ -131,7 +130,7 @@ func TestService_LimitTruncates(t *testing.T) {
 		results = append(results, deezerTrack("Song", "Artist "+string(rune('A'+i)), float64(50-i)))
 	}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: results}
-	svc := NewService([]ports.SearchProvider{p}, legacy.NewCircuitBreaker())
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker())
 
 	q, err := domain.NewSearchQuery("song", "", map[domain.ResultKind]bool{domain.ResultKindTrack: true}, 3)
 	if err != nil {

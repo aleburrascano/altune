@@ -19,27 +19,25 @@ import (
 )
 
 type DiscoveryHandler struct {
-	searchSvc  *service.SearchMusicService
+	searchSvc  *service.Service
 	clickSvc   *service.RecordClickService
 	historySvc *service.ListSearchHistoryService
 	albumSvc   *service.GetAlbumTracksService
 	artistSvc  *service.GetArtistContentService
 	suggestSvc *service.SuggestService
 	eventSvc   *service.RecordEventService
-	newSearch  newSearchPipeline
 }
 
 func NewDiscoveryHandler(
-	searchSvc *service.SearchMusicService,
+	searchSvc *service.Service,
 	clickSvc *service.RecordClickService,
 	historySvc *service.ListSearchHistoryService,
 	albumSvc *service.GetAlbumTracksService,
 	artistSvc *service.GetArtistContentService,
 	suggestSvc *service.SuggestService,
 	eventSvc *service.RecordEventService,
-	opts ...Option,
 ) *DiscoveryHandler {
-	h := &DiscoveryHandler{
+	return &DiscoveryHandler{
 		searchSvc:  searchSvc,
 		clickSvc:   clickSvc,
 		historySvc: historySvc,
@@ -47,43 +45,6 @@ func NewDiscoveryHandler(
 		artistSvc:  artistSvc,
 		suggestSvc: suggestSvc,
 		eventSvc:   eventSvc,
-	}
-	for _, opt := range opts {
-		opt(h)
-	}
-	return h
-}
-
-// newSearchPipeline is the search surface of the rebuilt discovery pipeline
-// (plan 003 strangler rebuild). When wired via WithNewSearchPipeline the handler
-// routes /discovery/search to it; left unset, the legacy searchSvc runs. Both
-// pipelines satisfy this same contract, so the response mapping is identical
-// regardless of which one executed.
-//
-// AIDEV-NOTE: U1 establishes only the search seam. The consensus surfaces
-// (album tracks, artist content) gain their own optional seams when their
-// rebuilt implementations land (plan 003 U5). Per-surface cutover wiring — the
-// point where app.go constructs and injects the new pipeline — is U8.
-type newSearchPipeline interface {
-	Execute(
-		ctx context.Context,
-		userId shared.UserId,
-		query *domain.SearchQuery,
-		saveHistory bool,
-	) (*service.SearchOutput, error)
-}
-
-// Option configures optional DiscoveryHandler dependencies.
-type Option func(*DiscoveryHandler)
-
-// WithNewSearchPipeline routes the search surface to the rebuilt pipeline
-// instead of the legacy one. A nil implementation leaves the legacy path in
-// place (the strangler default).
-func WithNewSearchPipeline(p newSearchPipeline) Option {
-	return func(h *DiscoveryHandler) {
-		if p != nil {
-			h.newSearch = p
-		}
 	}
 }
 
@@ -222,18 +183,12 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 	httputil.WriteJSON(w, http.StatusOK, SuggestResponse{Suggestions: dtos})
 }
 
-// executeSearch routes to the rebuilt pipeline when one is wired (plan 003
-// strangler), otherwise the legacy pipeline. Both honor the same contract, so
-// the caller maps the result identically regardless of which ran.
 func (h *DiscoveryHandler) executeSearch(
 	ctx context.Context,
 	userId shared.UserId,
 	query *domain.SearchQuery,
 	saveHistory bool,
 ) (*service.SearchOutput, error) {
-	if h.newSearch != nil {
-		return h.newSearch.Execute(ctx, userId, query, saveHistory)
-	}
 	return h.searchSvc.Execute(ctx, userId, query, saveHistory)
 }
 

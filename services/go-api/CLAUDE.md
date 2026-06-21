@@ -74,7 +74,10 @@ air
 ## Key files
 
 - `internal/discovery/ARCHITECTURE.md` — pipeline flow diagram and ranking key
-- `internal/discovery/service/search_music.go` — main orchestrator
-- `internal/discovery/service/dedup.go` — FuseAndRank, ranking, PopularityDominance, Diversity
-- `internal/discovery/service/popularity.go` — NormalizePopularity, positionalPopularity, scoreDeezerRank
+- `internal/discovery/service/search.go` — `Service` search orchestrator (fanOut + mergeRankEnrich)
+- `internal/discovery/service/merge.go` — Merge (Layer 2): identifier + canonical-title entity resolution
+- `internal/discovery/service/rank.go` — Rank (Layer 3): continuous-relevance sort + eligibility gates
+- `internal/discovery/service/diversity.go` — EnforceDiversity, CollapseArtistDuplicates (post-rank shaping)
 - `internal/discovery/adapters/providers/` — one file per provider (Deezer, Last.fm, MusicBrainz, iTunes, SoundCloud, TheAudioDB)
+
+The v1 ranking pipeline (`search_music.go`, `dedup.go`, `intent.go`, `popularity.go`, `quality_scorer.go`) was deleted when the strangler rebuild collapsed back into this package — see the ADR-0007 collapse addendum (2026-06-21). The "Known pipeline design decisions" below that reference `FuseAndRank` / `ApplyPopularityDominance` / `PromoteKind` describe that retired pipeline and are kept only as history.
