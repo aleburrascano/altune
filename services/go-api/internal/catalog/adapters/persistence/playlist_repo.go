@@ -258,24 +258,3 @@ func (r *PgxPlaylistRepository) GetPreviewArtwork(ctx context.Context, playlistI
 	}
 	return urls, rows.Err()
 }
-
-func scanPlaylist(rows pgx.Rows) (*domain.Playlist, error) {
-	var (
-		id        uuid.UUID
-		userId    uuid.UUID
-		name      string
-		createdAt time.Time
-		updatedAt time.Time
-	)
-	err := rows.Scan(&id, &userId, &name, &createdAt, &updatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &domain.Playlist{
-		ID:        domain.PlaylistIdFromUUID(id),
-		UserId:    shared.NewUserId(userId),
-		Name:      name,
-		CreatedAt: createdAt,
-		UpdatedAt: updatedAt,
-	}, nil
-}
