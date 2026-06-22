@@ -238,3 +238,73 @@ export async function getEnrichment(params: {
   if (params.mbid) qs.set('mbid', params.mbid);
   return apiFetch<EnrichmentResponse>(`/v1/discovery/enrichment?${qs.toString()}`);
 }
+
+// --- Discogs detail-open album enrichment (docs/providers/discogs.md caps 3–6) ---
+
+export type DiscogsCredit = { name: string; role: string };
+export type DiscogsLabel = { name: string; catno: string };
+export type DiscogsCompany = { name: string; role: string };
+export type DiscogsCommunity = {
+  have: number;
+  want: number;
+  rating: number;
+  votes: number;
+};
+
+/**
+ * Discogs-derived album enrichment: credits/personnel, styles (the sub-genre
+ * layer MusicBrainz lacks), label + catalog, formats, companies, and community
+ * demand/rating. Collections are always present (never null). An unresolved
+ * album returns an empty payload (`master_id: 0`, empty lists).
+ */
+export type DiscogsEnrichmentResponse = {
+  master_id: number;
+  genres: string[];
+  styles: string[];
+  year: number;
+  credits: DiscogsCredit[];
+  labels: DiscogsLabel[];
+  formats: string[];
+  country: string;
+  companies: DiscogsCompany[];
+  community: DiscogsCommunity;
+};
+
+export async function getDiscogsEnrichment(params: {
+  album: string;
+  artist?: string | null | undefined;
+}): Promise<DiscogsEnrichmentResponse> {
+  const qs = new URLSearchParams({ album: params.album });
+  if (params.artist) qs.set('artist', params.artist);
+  return apiFetch<DiscogsEnrichmentResponse>(
+    `/v1/discovery/enrichment/discogs?${qs.toString()}`,
+  );
+}
+
+export type DiscogsLink = { label: string; url: string };
+
+/**
+ * Discogs-derived artist enrichment: biography, name history (real name,
+ * aliases, name variations), group/member relationships, and external links.
+ * Collections are always present (never null). An unresolved artist returns an
+ * empty payload (`artist_id: 0`, empty fields).
+ */
+export type DiscogsArtistEnrichmentResponse = {
+  artist_id: number;
+  profile: string;
+  real_name: string;
+  aliases: string[];
+  name_variations: string[];
+  members: string[];
+  groups: string[];
+  links: DiscogsLink[];
+};
+
+export async function getDiscogsArtistEnrichment(params: {
+  name: string;
+}): Promise<DiscogsArtistEnrichmentResponse> {
+  const qs = new URLSearchParams({ name: params.name });
+  return apiFetch<DiscogsArtistEnrichmentResponse>(
+    `/v1/discovery/enrichment/discogs/artist?${qs.toString()}`,
+  );
+}

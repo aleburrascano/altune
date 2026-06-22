@@ -23,6 +23,8 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
+import { useDiscogsArtistEnrichment } from '../hooks/useDiscogsArtistEnrichment';
+import { useDiscogsEnrichment } from '../hooks/useDiscogsEnrichment';
 import { useEnrichment } from '../hooks/useEnrichment';
 import { useEnrichResult } from '../hooks/useEnrichResult';
 import { useLateralNav } from '../hooks/useLateralNav';
@@ -30,6 +32,8 @@ import { useLateralNav } from '../hooks/useLateralNav';
 import { TrackDetailBody } from './TrackDetailBody';
 import { AlbumDetailBody } from './AlbumDetailBody';
 import { ArtistDetailBody } from './ArtistDetailBody';
+import { DiscogsArtistSection } from './DiscogsArtistSection';
+import { DiscogsEnrichmentSection } from './DiscogsEnrichmentSection';
 import { EnrichmentSection } from './EnrichmentSection';
 
 const HERO_SIZE = 200;
@@ -69,6 +73,17 @@ export function DetailScreen(): ReactElement {
     title: result.title,
     subtitle: result.subtitle,
     mbid,
+  });
+  // Discogs liner-notes enrichment — album-scoped (credits hang off the master).
+  const { enrichment: discogsEnrichment } = useDiscogsEnrichment({
+    album: result.title,
+    artist: result.subtitle,
+    enabled: result.kind === 'album',
+  });
+  // Discogs artist enrichment — bio / aliases / groups / links (cap 7).
+  const { enrichment: discogsArtist } = useDiscogsArtistEnrichment({
+    name: result.title,
+    enabled: result.kind === 'artist',
   });
 
   const heroImageUrl =
@@ -157,7 +172,9 @@ export function DetailScreen(): ReactElement {
         <EnrichmentSection enrichment={enrichment} />
         {result.kind === 'track' ? <TrackDetailBody result={result} lateralNav={lateralNav} detailRoute={detailRoute} /> : null}
         {result.kind === 'album' ? <AlbumDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
+        {result.kind === 'album' ? <DiscogsEnrichmentSection enrichment={discogsEnrichment} /> : null}
         {result.kind === 'artist' ? <ArtistDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
+        {result.kind === 'artist' ? <DiscogsArtistSection enrichment={discogsArtist} /> : null}
       </ScrollView>
     </Screen>
   );
