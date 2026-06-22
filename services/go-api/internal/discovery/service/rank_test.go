@@ -16,10 +16,7 @@ func ent(r domain.SearchResult) Entity {
 }
 
 func withPop(r domain.SearchResult, pop float64) domain.SearchResult {
-	if r.Extras == nil {
-		r.Extras = map[string]any{}
-	}
-	r.Extras["popularity"] = pop
+	r.Popularity = pop
 	return r
 }
 

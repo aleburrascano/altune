@@ -40,6 +40,10 @@ import (
 // optional SearchTimeout() method.
 const defaultProviderTimeout = 1500 * time.Millisecond
 
+// historyRingSize caps how many search-history rows are retained per user. An
+// operational bound (like a page size), trimmed best-effort after each insert.
+const historyRingSize = 100
+
 // Service is the orchestrator for the rebuilt pipeline:
 // Layer 0 intent → Layer 1 fan-out → Layer 2 merge → Layer 3 rank, then the
 // orthogonal enrichment carried forward from v1 (artist-dedup, disambiguation,
@@ -224,15 +228,13 @@ func (s *Service) mergeRankEnrich(
 	perProvider [][]domain.SearchResult,
 	queryNorm string,
 ) []domain.SearchResult {
+	// port-bound pre-merge: stamp bridged cross-provider ids (reads identity bridge).
 	s.stampIdentities(ctx, perProvider)
-	entities := Merge(perProvider)
-	ranked := Rank(entities, queryNorm)
 
-	// list policy — reshapes the ranked list per product rules.
-	ranked = EnforceDiversity(ranked)
-	ranked = CollapseArtistDuplicates(ranked)
+	// pure decision core: merge → rank → list-shaping (no ports, no I/O).
+	ranked := rankPipeline(perProvider, queryNorm)
 
-	// display enrichment — fills fields without reordering.
+	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
 	ranked = s.enrich(ctx, ranked)
 	return ranked
@@ -364,6 +366,12 @@ func (s *Service) persistHistory(
 	}
 	if err := s.historyRepo.Insert(ctx, entry); err != nil {
 		slog.WarnContext(ctx, "search.v2.history_persist_failed", "error", err)
+		return
+	}
+	// Ring-buffer trim: cap retained history per user so the table does not grow
+	// unbounded. Best-effort — a trim failure must not fail the search.
+	if err := s.historyRepo.TrimToN(ctx, userId, historyRingSize); err != nil {
+		slog.WarnContext(ctx, "search.v2.history_trim_failed", "error", err)
 	}
 }
 

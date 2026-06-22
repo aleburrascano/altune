@@ -15,8 +15,23 @@ func res(kind domain.ResultKind, title, subtitle string, provider domain.Provide
 		Sources: []domain.SourceRef{
 			{Provider: provider, ExternalID: title + ":" + provider.String(), URL: "https://x/" + title},
 		},
-		Extras: extras,
+		Popularity: popFromExtras(extras),
+		Extras:     extras,
 	}
+}
+
+// popFromExtras lifts a fixture's legacy "popularity" key into the typed
+// Popularity field, mirroring how providers populate it at ACL translation.
+func popFromExtras(extras map[string]any) float64 {
+	switch n := extras["popularity"].(type) {
+	case float64:
+		return n
+	case int64:
+		return float64(n)
+	case int:
+		return float64(n)
+	}
+	return 0
 }
 
 func track(title, artist string, provider domain.ProviderName, extras map[string]any) domain.SearchResult {

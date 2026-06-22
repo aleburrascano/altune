@@ -22,11 +22,15 @@ const (
 // top diversityWindow positions to maxPerArtistInTop, moving overflow
 // results below the window.
 func EnforceDiversity(results []domain.SearchResult) []domain.SearchResult {
-	if len(results) < diversityWindow {
-		return results
+	// Clamp the window to the result count: a short list (≤ window) is still
+	// entirely within the top positions, so the per-artist cap must apply there
+	// too — early-returning would let one artist dominate a small result set.
+	windowSize := diversityWindow
+	if len(results) < windowSize {
+		windowSize = len(results)
 	}
-	window := results[:diversityWindow]
-	rest := results[diversityWindow:]
+	window := results[:windowSize]
+	rest := results[windowSize:]
 
 	artistCount := make(map[string]int)
 	kept := make([]domain.SearchResult, 0, diversityWindow)
@@ -66,7 +70,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 			continue
 		}
 		norm := NormalizeForMatch(r.Title)
-		pop := getFloatExtra(r, "popularity")
+		pop := popularityOf(r)
 		g, exists := groups[norm]
 		if !exists {
 			groups[norm] = &group{primaryIdx: i, primaryPop: pop}
@@ -170,20 +174,3 @@ func completeness(r domain.SearchResult) int {
 	return count
 }
 
-func getFloatExtra(r domain.SearchResult, key string) float64 {
-	if r.Extras == nil {
-		return 0.0
-	}
-	v, ok := r.Extras[key]
-	if !ok {
-		return 0.0
-	}
-	switch n := v.(type) {
-	case float64:
-		return n
-	case int:
-		return float64(n)
-	default:
-		return 0.0
-	}
-}
