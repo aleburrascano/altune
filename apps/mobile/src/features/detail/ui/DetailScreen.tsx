@@ -27,6 +27,7 @@ import { useDiscogsArtistEnrichment } from '../hooks/useDiscogsArtistEnrichment'
 import { useDiscogsEnrichment } from '../hooks/useDiscogsEnrichment';
 import { useEnrichment } from '../hooks/useEnrichment';
 import { useEnrichResult } from '../hooks/useEnrichResult';
+import { useLastFmEnrichment } from '../hooks/useLastFmEnrichment';
 import { useLateralNav } from '../hooks/useLateralNav';
 
 import { TrackDetailBody } from './TrackDetailBody';
@@ -35,6 +36,7 @@ import { ArtistDetailBody } from './ArtistDetailBody';
 import { DiscogsArtistSection } from './DiscogsArtistSection';
 import { DiscogsEnrichmentSection } from './DiscogsEnrichmentSection';
 import { EnrichmentSection } from './EnrichmentSection';
+import { LastFmEnrichmentSection } from './LastFmEnrichmentSection';
 
 const HERO_SIZE = 200;
 
@@ -84,6 +86,12 @@ export function DetailScreen(): ReactElement {
   const { enrichment: discogsArtist } = useDiscogsArtistEnrichment({
     name: result.title,
     enabled: result.kind === 'artist',
+  });
+  // Last.fm enrichment — listen popularity, tags, similar artists, bio/blurb.
+  const { enrichment: lastfmEnrichment } = useLastFmEnrichment({
+    kind: result.kind,
+    title: result.title,
+    subtitle: result.subtitle,
   });
 
   const heroImageUrl =
@@ -170,6 +178,7 @@ export function DetailScreen(): ReactElement {
       >
         {heroContent}
         <EnrichmentSection enrichment={enrichment} />
+        <LastFmEnrichmentSection kind={result.kind} enrichment={lastfmEnrichment} />
         {result.kind === 'track' ? <TrackDetailBody result={result} lateralNav={lateralNav} detailRoute={detailRoute} /> : null}
         {result.kind === 'album' ? <AlbumDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
         {result.kind === 'album' ? <DiscogsEnrichmentSection enrichment={discogsEnrichment} /> : null}

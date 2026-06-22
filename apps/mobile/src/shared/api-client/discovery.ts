@@ -308,3 +308,36 @@ export async function getDiscogsArtistEnrichment(params: {
     `/v1/discovery/enrichment/discogs/artist?${qs.toString()}`,
   );
 }
+
+// --- Last.fm detail-open enrichment (docs/providers/lastfm.md cap 3) ---
+
+/**
+ * Last.fm-derived enrichment: listen-based popularity (listeners/playcount —
+ * the scrobble signal MusicBrainz and Discogs lack), weighted folksonomy tags,
+ * a biography/blurb, similar artists (artist kind only), and the entity's MBID.
+ * Collections are always present (never null). An unresolved entity returns an
+ * empty payload (`mbid: ''`, zero counts, empty lists). Kind-dispatched from
+ * `kind` + `title` + `subtitle`, mirroring the MusicBrainz enrichment endpoint.
+ */
+export type LastFmEnrichmentResponse = {
+  mbid: string;
+  listeners: number;
+  playcount: number;
+  tags: string[];
+  bio: string;
+  similar: string[];
+  duration: number;
+  album: string;
+};
+
+export async function getLastFmEnrichment(params: {
+  kind: DiscoveryKind;
+  title: string;
+  subtitle?: string | null | undefined;
+}): Promise<LastFmEnrichmentResponse> {
+  const qs = new URLSearchParams({ kind: params.kind, title: params.title });
+  if (params.subtitle) qs.set('subtitle', params.subtitle);
+  return apiFetch<LastFmEnrichmentResponse>(
+    `/v1/discovery/enrichment/lastfm?${qs.toString()}`,
+  );
+}
