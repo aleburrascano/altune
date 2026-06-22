@@ -394,17 +394,15 @@ func makePlaylist(userId shared.UserId, name string) *catdomain.Playlist {
 // --- service builders ---
 
 func buildTrackHandler(trackRepo *fakeTrackRepo, scheduler *fakeScheduler) (*TrackHandler, chi.Router) {
-	addSvc := service.NewAddTrackService(trackRepo)
+	var addOpts []func(*service.AddTrackService)
+	if scheduler != nil {
+		addOpts = append(addOpts, service.WithAcquisitionScheduler(scheduler))
+	}
+	addSvc := service.NewAddTrackService(trackRepo, addOpts...)
 	listSvc := service.NewListTracksService(trackRepo)
 	deleteSvc := service.NewDeleteTrackService(trackRepo, newFakeAudioStore())
-	reconcileSvc := service.NewReconcileTrackStatusService(trackRepo, newFakeAudioStore())
 
-	var sched acquisitionScheduler
-	if scheduler != nil {
-		sched = scheduler
-	}
-
-	h := NewTrackHandler(addSvc, listSvc, deleteSvc, reconcileSvc, sched)
+	h := NewTrackHandler(addSvc, listSvc, deleteSvc)
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(&fakeTokenVerifier{userId: testUserId}))
 	r.Mount("/tracks", h.Routes())
@@ -421,12 +419,11 @@ func buildPlaylistHandler(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) (*Pla
 }
 
 func buildStreamHandler(trackRepo *fakeTrackRepo, audioStore *fakeAudioStore, scheduler *fakeScheduler) (*StreamHandler, chi.Router) {
-	reconcileSvc := service.NewReconcileTrackStatusService(trackRepo, audioStore)
-	var sched ports.ReacquisitionScheduler
+	var sched ports.AcquisitionScheduler
 	if scheduler != nil {
 		sched = scheduler
 	}
-	streamSvc := service.NewStreamTrackService(trackRepo, audioStore, reconcileSvc, sched)
+	streamSvc := service.NewStreamTrackService(trackRepo, audioStore, sched)
 	h := NewStreamHandler(streamSvc)
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(&fakeTokenVerifier{userId: testUserId}))

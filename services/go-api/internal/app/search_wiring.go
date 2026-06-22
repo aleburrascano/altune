@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	catalogPersistence "altune/go-api/internal/catalog/adapters/persistence"
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/adapters/providers"
@@ -45,8 +44,8 @@ func BuildSearchService(
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(pool)
 
 	deezerContent := providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second})
-	trackRepo := catalogPersistence.NewPgxTrackRepository(pool)
-	findRelatedSvc := discoveryService.NewFindRelatedService(trackRepo, deezerContent, deezerContent)
+	relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
+	findRelatedSvc := discoveryService.NewFindRelatedService(relationshipQuerier, deezerContent, deezerContent)
 
 	opts := []discoveryService.Option{
 		discoveryService.WithHistoryRepository(historyRepo),

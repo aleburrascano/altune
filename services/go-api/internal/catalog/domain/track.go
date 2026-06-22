@@ -103,7 +103,7 @@ func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error)
 		Album:             album,
 		AddedAt:           time.Now().UTC(),
 		AcquisitionStatus: AcquisitionPending,
-		DedupKey:          ComputeDedupKey(title, artist, album),
+		DedupKey:          computeDedupKey(title, artist, album),
 	}, nil
 }
 

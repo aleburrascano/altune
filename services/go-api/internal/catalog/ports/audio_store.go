@@ -20,7 +20,7 @@ type AudioStore interface {
 	Delete(ctx context.Context, audioRef string) error
 }
 
-type ReacquisitionScheduler interface {
+type AcquisitionScheduler interface {
 	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
 }
 

@@ -8,7 +8,6 @@ import (
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
@@ -229,52 +228,4 @@ func scanTrack(row pgx.Row) (*domain.Track, error) {
 
 func scanTrackFromRows(rows pgx.Rows) (*domain.Track, error) {
 	return scanTrackColumns(rows)
-}
-
-// FindRelatedByAlbum queries tracks across all users by album name.
-func (r *PgxTrackRepository) FindRelatedByAlbum(ctx context.Context, album string, limit int) ([]discoveryPorts.RelatedTrackMatch, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT DISTINCT ON (lower(title), lower(artist))
-			title, artist, album, artwork_url
-		FROM tracks
-		WHERE lower(album) = lower($1) AND album != ''
-		ORDER BY lower(title), lower(artist), added_at DESC
-		LIMIT $2`,
-		album, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("find related by album: %w", err)
-	}
-	defer rows.Close()
-	return scanRelatedMatches(rows)
-}
-
-// FindRelatedByArtist queries tracks across all users by artist name.
-func (r *PgxTrackRepository) FindRelatedByArtist(ctx context.Context, artist string, limit int) ([]discoveryPorts.RelatedTrackMatch, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT DISTINCT ON (lower(title), lower(artist))
-			title, artist, album, artwork_url
-		FROM tracks
-		WHERE lower(artist) = lower($1)
-		ORDER BY lower(title), lower(artist), added_at DESC
-		LIMIT $2`,
-		artist, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("find related by artist: %w", err)
-	}
-	defer rows.Close()
-	return scanRelatedMatches(rows)
-}
-
-func scanRelatedMatches(rows pgx.Rows) ([]discoveryPorts.RelatedTrackMatch, error) {
-	var matches []discoveryPorts.RelatedTrackMatch
-	for rows.Next() {
-		var m discoveryPorts.RelatedTrackMatch
-		if err := rows.Scan(&m.Title, &m.Artist, &m.Album, &m.ArtworkURL); err != nil {
-			return nil, err
-		}
-		matches = append(matches, m)
-	}
-	return matches, rows.Err()
 }

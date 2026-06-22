@@ -239,8 +239,8 @@ func TestNewTrack(t *testing.T) {
 			if track.DedupKey == "" {
 				t.Error("expected non-empty DedupKey")
 			}
-			if track.DedupKey != ComputeDedupKey(tt.title, tt.artist, tt.album) {
-				t.Errorf("DedupKey = %q, want %q", track.DedupKey, ComputeDedupKey(tt.title, tt.artist, tt.album))
+			if track.DedupKey != computeDedupKey(tt.title, tt.artist, tt.album) {
+				t.Errorf("DedupKey = %q, want %q", track.DedupKey, computeDedupKey(tt.title, tt.artist, tt.album))
 			}
 			if track.AddedAt.IsZero() {
 				t.Error("expected non-zero AddedAt")

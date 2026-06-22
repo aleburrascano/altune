@@ -137,17 +137,6 @@ func (a *App) setup(ctx context.Context) error {
 		audioSearcher = ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
 	}
 
-	addTrackSvc := catalogService.NewAddTrackService(trackRepo, catalogService.WithAddTrackEvents(a.eventBus))
-	listTracksSvc := catalogService.NewListTracksService(trackRepo)
-	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore, catalogService.WithDeleteTrackEvents(a.eventBus))
-	reconcileSvc := catalogService.NewReconcileTrackStatusService(trackRepo, audioStore)
-	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(a.eventBus))
-
-	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
-	saveQueueStateSvc := playbackService.NewSaveQueueStateService(queueStateRepo)
-	getQueueStateSvc := playbackService.NewGetQueueStateService(queueStateRepo)
-	queueHandler := playbackHandler.NewQueueHandler(saveQueueStateSvc, getQueueStateSvc)
-
 	var scheduler acqService.AcquisitionScheduler
 	if audioSearcher != nil && audioStore != nil {
 		acquireSvc := acqService.NewAcquireTrackAudioService(trackRepo, audioSearcher, audioStore, acqService.WithAcquireEvents(a.eventBus))
@@ -155,6 +144,20 @@ func (a *App) setup(ctx context.Context) error {
 		a.scheduler = bgScheduler
 		scheduler = bgScheduler
 	}
+
+	addTrackSvc := catalogService.NewAddTrackService(
+		trackRepo,
+		catalogService.WithAddTrackEvents(a.eventBus),
+		catalogService.WithAcquisitionScheduler(scheduler),
+	)
+	listTracksSvc := catalogService.NewListTracksService(trackRepo)
+	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore, catalogService.WithDeleteTrackEvents(a.eventBus))
+	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(a.eventBus))
+
+	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
+	saveQueueStateSvc := playbackService.NewSaveQueueStateService(queueStateRepo)
+	getQueueStateSvc := playbackService.NewGetQueueStateService(queueStateRepo)
+	queueHandler := playbackHandler.NewQueueHandler(saveQueueStateSvc, getQueueStateSvc)
 
 	var sharedMB *providers.MusicBrainzAdapter
 	if a.cfg.HasMusicBrainz() {
@@ -181,9 +184,9 @@ func (a *App) setup(ctx context.Context) error {
 	clickSvc := discoveryService.NewRecordClickService(clickRepo)
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, reconcileSvc, scheduler)
+	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
-	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, reconcileSvc, scheduler)
+	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, scheduler)
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
 	deezerContentClient := &http.Client{Timeout: 10 * time.Second}
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)

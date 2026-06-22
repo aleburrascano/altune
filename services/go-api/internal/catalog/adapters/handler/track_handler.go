@@ -11,38 +11,27 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-type acquisitionScheduler interface {
-	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
-}
-
 type TrackHandler struct {
 	addTrack    *service.AddTrackService
 	listTracks  *service.ListTracksService
 	deleteTrack *service.DeleteTrackService
-	reconcile   *service.ReconcileTrackStatusService
-	scheduler   acquisitionScheduler
 }
 
 func NewTrackHandler(
 	addTrack *service.AddTrackService,
 	listTracks *service.ListTracksService,
 	deleteTrack *service.DeleteTrackService,
-	reconcile *service.ReconcileTrackStatusService,
-	scheduler acquisitionScheduler,
 ) *TrackHandler {
 	return &TrackHandler{
 		addTrack:    addTrack,
 		listTracks:  listTracks,
 		deleteTrack: deleteTrack,
-		reconcile:   reconcile,
-		scheduler:   scheduler,
 	}
 }
 
@@ -191,6 +180,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		Genre:           req.Genre,
 		ISRC:            req.ISRC,
 		AlbumArtist:     req.AlbumArtist,
+		SourceURL:       req.SourceURL,
 	}
 
 	result, err := h.addTrack.Execute(r.Context(), userId, input)
@@ -215,16 +205,6 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 			"title", result.Track.Title,
 			"status", result.Track.AcquisitionStatus.String(),
 		)
-	}
-
-	if h.scheduler != nil && result.Created {
-		sourceURL := ""
-		if req.SourceURL != nil {
-			sourceURL = *req.SourceURL
-		}
-		slog.InfoContext(r.Context(), "acquisition.scheduled",
-			"track_id", result.Track.ID.String())
-		h.scheduler.Schedule(userId, result.Track.ID, sourceURL)
 	}
 
 	httputil.WriteJSON(w, status, trackToResponse(result.Track))

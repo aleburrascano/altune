@@ -21,6 +21,11 @@ type AddTrackInput struct {
 	TrackNumber     *int
 	AlbumArtist     *string
 	ISRC            *string
+	// SourceURL is a transient acquisition hint (e.g. a SoundCloud permalink),
+	// not a domain attribute — it is never written to the Track. When set and the
+	// track is freshly created, it is forwarded to the acquisition scheduler so
+	// acquisition grabs that exact source instead of re-searching by metadata.
+	SourceURL *string
 }
 
 type AddTrackOutput struct {
@@ -31,6 +36,7 @@ type AddTrackOutput struct {
 type AddTrackService struct {
 	trackRepo ports.TrackRepository
 	events    events.Publisher
+	scheduler ports.AcquisitionScheduler
 }
 
 func NewAddTrackService(trackRepo ports.TrackRepository, opts ...func(*AddTrackService)) *AddTrackService {
@@ -43,6 +49,10 @@ func NewAddTrackService(trackRepo ports.TrackRepository, opts ...func(*AddTrackS
 
 func WithAddTrackEvents(pub events.Publisher) func(*AddTrackService) {
 	return func(s *AddTrackService) { s.events = pub }
+}
+
+func WithAcquisitionScheduler(scheduler ports.AcquisitionScheduler) func(*AddTrackService) {
+	return func(s *AddTrackService) { s.scheduler = scheduler }
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, input AddTrackInput) (*AddTrackOutput, error) {
@@ -72,6 +82,15 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 			s.events.Publish(userId, "track_added_to_library", map[string]any{
 				"track_id": track.ID.String(),
 			})
+		}
+		if s.scheduler != nil {
+			sourceURL := ""
+			if input.SourceURL != nil {
+				sourceURL = *input.SourceURL
+			}
+			slog.InfoContext(ctx, "acquisition.scheduled",
+				"track_id", track.ID.String())
+			s.scheduler.Schedule(userId, track.ID, sourceURL)
 		}
 	}
 
