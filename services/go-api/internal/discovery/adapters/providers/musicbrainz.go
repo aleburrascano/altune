@@ -28,13 +28,22 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAd
 }
 
 // rateLimit enforces MB's 1 req/sec policy. Call before every HTTP request.
+//
+// Each caller reserves a distinct future slot under the lock — lastReq advances
+// by the wait, so N concurrent callers fire 1s apart instead of bunching. The
+// earlier form stamped lastReq at lock-time and slept after unlocking, letting
+// concurrent callers share a baseline and burst together → MB 503s.
 func (a *MusicBrainzAdapter) rateLimit() {
 	a.mu.Lock()
-	since := time.Since(a.lastReq)
-	a.lastReq = time.Now()
+	next := a.lastReq.Add(time.Second)
+	if now := time.Now(); next.Before(now) {
+		next = now
+	}
+	a.lastReq = next
+	wait := time.Until(next)
 	a.mu.Unlock()
-	if since < time.Second {
-		time.Sleep(time.Second - since)
+	if wait > 0 {
+		time.Sleep(wait)
 	}
 }
 
@@ -469,6 +478,53 @@ func (a *MusicBrainzAdapter) fetchArtistMatches(ctx context.Context, name string
 		return nil, err
 	}
 	return body.Artists, nil
+}
+
+// getJSON issues a rate-limited GET with the MB User-Agent and decodes a 200
+// body into out. Non-200 is an error. Used by the enrichment surface.
+func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", a.userAgent)
+	req.Header.Set("Accept", "application/json")
+	a.rateLimit()
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("musicbrainz returned %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+// fetchReleaseGroupMatches searches release-groups by free-text query (used by
+// ResolveMBID for strict client-side matching).
+func (a *MusicBrainzAdapter) fetchReleaseGroupMatches(ctx context.Context, query string) ([]mbReleaseGroup, error) {
+	u := fmt.Sprintf("https://musicbrainz.org/ws/2/release-group/?query=%s&fmt=json&limit=10",
+		url.QueryEscape(query))
+	var body mbReleaseGroupResponse
+	if err := a.getJSON(ctx, u, &body); err != nil {
+		return nil, err
+	}
+	return body.ReleaseGroups, nil
+}
+
+// fetchRecordingMatches searches recordings by free-text query (used by
+// ResolveMBID for strict client-side matching).
+func (a *MusicBrainzAdapter) fetchRecordingMatches(ctx context.Context, query string) ([]mbRecording, error) {
+	u := fmt.Sprintf("https://musicbrainz.org/ws/2/recording/?query=%s&fmt=json&limit=10",
+		url.QueryEscape(query))
+	var body mbRecordingResponse
+	if err := a.getJSON(ctx, u, &body); err != nil {
+		return nil, err
+	}
+	return body.Recordings, nil
 }
 
 func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {

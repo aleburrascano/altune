@@ -57,6 +57,13 @@ func BuildSearchService(
 		opts = append(opts, discoveryService.WithArtworkCache(
 			discoveryCacheAdapters.NewRedisArtworkCache(redisClient),
 		))
+		// The enrichment cache triples as the identity bridge (MB → provider id
+		// graph that merge reads) and the MBID index (name → mbid memo that lets
+		// search-card artwork attach an MBID to a non-MB result). Both detail-open
+		// warmed, both cache-only — no extra MB call on the search path.
+		enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(redisClient)
+		opts = append(opts, discoveryService.WithIdentityBridge(enrichmentCache))
+		opts = append(opts, discoveryService.WithMBIDIndex(enrichmentCache))
 	}
 	if vocabStore := BuildVocabularyStore(redisClient); vocabStore != nil {
 		opts = append(opts, discoveryService.WithVocabularyStore(vocabStore))
@@ -136,16 +143,6 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 			return itunes.Search(ctx, artistName, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
 		},
 	})
-
-	if cfg.HasTidal() {
-		tidal := providers.NewTidalAdapter(&http.Client{Timeout: 15 * time.Second}, cfg.TidalClientID, cfg.TidalClientSecret)
-		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-			Name: "tidal",
-			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
-				return tidal.GetArtistAlbums(ctx, domain.ProviderTidal, artistName)
-			},
-		})
-	}
 
 	ytmusic := providers.NewYouTubeMusicAdapter()
 	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{

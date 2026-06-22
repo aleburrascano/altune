@@ -94,6 +94,46 @@ type RelatedTracksProvider interface {
 	GetRelatedTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
 
+// MetadataEnricher resolves and looks up MusicBrainz enrichment for a single
+// entity. ResolveMBID maps a (kind, title, subtitle) to an MBID via strict
+// name match (""+nil when none). Lookup fetches the inc= enrichment for a known
+// MBID. Implemented by the MusicBrainz adapter; consumed by EnrichmentService.
+type MetadataEnricher interface {
+	ResolveMBID(ctx context.Context, kind domain.ResultKind, title, subtitle string) (string, error)
+	Lookup(ctx context.Context, kind domain.ResultKind, mbid string) (domain.MBEnrichment, error)
+}
+
+// EnrichmentCache is a read-through cache of MBEnrichment. Positive entries key
+// by (kind, mbid) and store the whole value object (artwork included). The
+// negative path keys by (kind, nameKey) so an unresolved entity is not
+// re-resolved every open. A nil-backed implementation is a no-op.
+type EnrichmentCache interface {
+	Get(ctx context.Context, kind domain.ResultKind, mbid string) (domain.MBEnrichment, bool, error)
+	Set(ctx context.Context, kind domain.ResultKind, mbid string, e domain.MBEnrichment) error
+	GetNegative(ctx context.Context, kind domain.ResultKind, nameKey string) (bool, error)
+	SetNegative(ctx context.Context, kind domain.ResultKind, nameKey string) error
+}
+
+// IdentityBridge maps a resolved MusicBrainz entity to its cross-provider ids
+// (the bare ids MB asserts via url-relations: deezer/spotify/discogs/...). It is
+// the read side of the MB enrichment cache: a hit means some prior detail-open
+// enriched this MBID and cached its external_ids. Consumed by the merge step to
+// resolve identity across providers; a nil-backed implementation returns no ids,
+// so merge silently falls back to name similarity.
+type IdentityBridge interface {
+	ExternalIDs(ctx context.Context, kind domain.ResultKind, mbid string) (map[string]string, bool)
+}
+
+// MBIDIndex is a cache-only name→MBID memo. A detail-open's strict name
+// resolution remembers (kind, nameKey) → mbid; the search path reads it to
+// attach an MBID to a non-MB result so the MBID-keyed artwork tier (Cover Art
+// Archive / Fanart.tv) fires on the search card too. Cache-only — never an MB
+// call on the search path; a miss degrades to the provider's own thumbnail.
+type MBIDIndex interface {
+	LookupMBID(ctx context.Context, kind domain.ResultKind, nameKey string) (string, bool)
+	RememberMBID(ctx context.Context, kind domain.ResultKind, nameKey, mbid string) error
+}
+
 type ContentValidationCache interface {
 	Get(ctx context.Context, provider domain.ProviderName, externalID string) (domain.ContentValidationStatus, error)
 	Set(ctx context.Context, provider domain.ProviderName, externalID string, status domain.ContentValidationStatus) error

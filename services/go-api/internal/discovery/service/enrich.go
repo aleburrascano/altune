@@ -70,6 +70,13 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 		return result
 	}
 	mbid := stringExtra(result, "mbid")
+	if mbid == "" && s.mbidIndex != nil {
+		// Non-MB result with no MBID: attach a cached one (warmed by detail-opens)
+		// so the MBID-keyed artwork tier (CAA/Fanart) can fire on the search card.
+		if m, ok := s.mbidIndex.LookupMBID(ctx, result.Kind, enrichmentNameKey(result.Title, result.Subtitle)); ok {
+			mbid = m
+		}
+	}
 
 	if s.artworkCache != nil {
 		if cachedURL, found, _ := s.artworkCache.Get(ctx, result.Kind, result.Title, result.Subtitle, mbid); found {

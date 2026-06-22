@@ -94,6 +94,11 @@ const (
 	EntityResolutionNone EntityResolutionTier = iota
 	EntityResolutionISRC
 	EntityResolutionMBID
+	// EntityResolutionBridge: two results were identified as the same entity via
+	// the MusicBrainz cross-provider id bridge (an MB entity's url-relation
+	// asserts its Deezer/Spotify/Discogs id, which matches another provider's
+	// native id). Identity-grade, like ISRC/MBID.
+	EntityResolutionBridge
 )
 
 func (t EntityResolutionTier) String() string {
@@ -102,6 +107,8 @@ func (t EntityResolutionTier) String() string {
 		return "mbid"
 	case EntityResolutionISRC:
 		return "isrc"
+	case EntityResolutionBridge:
+		return "bridge"
 	case EntityResolutionNone:
 		return "none"
 	default:
@@ -122,7 +129,6 @@ const (
 	ProviderTheAudioDB
 	ProviderDiscogs
 	ProviderYouTube
-	ProviderTidal
 )
 
 func (p ProviderName) String() string {
@@ -145,8 +151,6 @@ func (p ProviderName) String() string {
 		return "discogs"
 	case ProviderYouTube:
 		return "youtube"
-	case ProviderTidal:
-		return "tidal"
 	default:
 		return "unknown"
 	}
@@ -170,8 +174,6 @@ func ParseProviderName(s string) (ProviderName, error) {
 		return ProviderDiscogs, nil
 	case "youtube":
 		return ProviderYouTube, nil
-	case "tidal":
-		return ProviderTidal, nil
 	default:
 		return 0, fmt.Errorf("unknown provider: %s", s)
 	}

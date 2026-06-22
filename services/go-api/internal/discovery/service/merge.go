@@ -90,6 +90,14 @@ func sameEntity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
 		return domain.EntityResolutionNone, false
 	}
 
+	// Cross-provider identity bridge: a stated id (MB → Deezer/Spotify/Discogs,
+	// stamped into extras pre-merge) that matches another result's native
+	// provider id proves the same entity even when the titles differ. Additive —
+	// it only ever merges; it never blocks a name match.
+	if bridgeMatch(e, c) {
+		return domain.EntityResolutionBridge, true
+	}
+
 	// Artists resolve by canonical name alone.
 	if e.Kind == domain.ResultKindArtist {
 		same := textnorm.NormalizeForMatch(e.Title) == textnorm.NormalizeForMatch(c.Title)
@@ -146,7 +154,7 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 
 	conf := domain.ConfidenceLow
 	switch tier {
-	case domain.EntityResolutionISRC, domain.EntityResolutionMBID:
+	case domain.EntityResolutionISRC, domain.EntityResolutionMBID, domain.EntityResolutionBridge:
 		conf = domain.ConfidenceHigh
 	default:
 		if len(sources) > 1 {
@@ -163,6 +171,57 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 		Sources:    sources,
 		Extras:     extras,
 	}
+}
+
+// providerID is one (provider, external id) identity claim.
+type providerID struct {
+	provider domain.ProviderName
+	id       string
+}
+
+// bridgeMatch reports whether e and c share any cross-provider identity claim.
+// A claim is either a native source id or a bridged id stamped into extras["xref"]
+// (MB → provider, populated pre-merge from the IdentityBridge). At least one
+// bridged claim must participate — two native ids alone are same-provider dups,
+// not a cross-provider bridge — so e must carry an xref for this to fire.
+func bridgeMatch(e, c domain.SearchResult) bool {
+	if _, ok := e.Extras["xref"].(map[string]string); !ok {
+		if _, ok := c.Extras["xref"].(map[string]string); !ok {
+			return false
+		}
+	}
+	ec := identityClaims(e)
+	if len(ec) == 0 {
+		return false
+	}
+	for claim := range identityClaims(c) {
+		if ec[claim] {
+			return true
+		}
+	}
+	return false
+}
+
+// identityClaims gathers a result's (provider, id) claims: native source ids plus
+// any bridged ids stamped into extras["xref"].
+func identityClaims(r domain.SearchResult) map[providerID]bool {
+	claims := make(map[providerID]bool, len(r.Sources)+1)
+	for _, s := range r.Sources {
+		if s.ExternalID != "" {
+			claims[providerID{s.Provider, s.ExternalID}] = true
+		}
+	}
+	if xref, ok := r.Extras["xref"].(map[string]string); ok {
+		for name, id := range xref {
+			if id == "" {
+				continue
+			}
+			if p, err := domain.ParseProviderName(name); err == nil {
+				claims[providerID{p, id}] = true
+			}
+		}
+	}
+	return claims
 }
 
 func stringExtra(r domain.SearchResult, key string) string {

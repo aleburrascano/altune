@@ -25,6 +25,7 @@ type DiscoveryHandler struct {
 	albumSvc   *service.GetAlbumTracksService
 	artistSvc  *service.GetArtistContentService
 	relatedSvc *service.GetRelatedTracksService
+	enrichSvc  *service.EnrichmentService
 	suggestSvc *service.SuggestService
 	eventSvc   *service.RecordEventService
 }
@@ -36,6 +37,7 @@ func NewDiscoveryHandler(
 	albumSvc *service.GetAlbumTracksService,
 	artistSvc *service.GetArtistContentService,
 	relatedSvc *service.GetRelatedTracksService,
+	enrichSvc *service.EnrichmentService,
 	suggestSvc *service.SuggestService,
 	eventSvc *service.RecordEventService,
 ) *DiscoveryHandler {
@@ -46,6 +48,7 @@ func NewDiscoveryHandler(
 		albumSvc:   albumSvc,
 		artistSvc:  artistSvc,
 		relatedSvc: relatedSvc,
+		enrichSvc:  enrichSvc,
 		suggestSvc: suggestSvc,
 		eventSvc:   eventSvc,
 	}
@@ -62,6 +65,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
 	r.Get("/artists/{provider}/{externalId}/albums", h.handleArtistAlbums)
 	r.Get("/tracks/{provider}/{externalId}/related", h.handleRelatedTracks)
+	r.Get("/enrichment", h.handleEnrichment)
 	return r
 }
 
@@ -537,6 +541,82 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
+}
+
+// handleEnrichment serves MusicBrainz detail-open enrichment for one entity.
+// Always 200 with the DTO (or an empty DTO) on the happy path — degradation is
+// the service's concern; only request-shape problems are 4xx.
+func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Request) {
+	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
+	if kindStr == "" {
+		httputil.BadRequest(w, "kind is required")
+		return
+	}
+	kind, err := domain.ParseResultKind(kindStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid kind")
+		return
+	}
+	title := strings.TrimSpace(r.URL.Query().Get("title"))
+	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
+	mbid := strings.TrimSpace(r.URL.Query().Get("mbid"))
+	if title == "" && mbid == "" {
+		httputil.BadRequest(w, "title or mbid is required")
+		return
+	}
+
+	if h.enrichSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, enrichmentToDTO(domain.EmptyEnrichment()))
+		return
+	}
+
+	e, err := h.enrichSvc.Execute(r.Context(), kind, title, subtitle, mbid)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "enrichment failed",
+			"error", err, "kind", kindStr, "title", title)
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, enrichmentToDTO(e))
+}
+
+type EnrichmentResponseDTO struct {
+	MBID           string            `json:"mbid"`
+	Genres         []string          `json:"genres"`
+	Year           int               `json:"year"`
+	Rating         float64           `json:"rating"`
+	RatingVotes    int               `json:"rating_votes"`
+	PrimaryType    string            `json:"primary_type"`
+	SecondaryTypes []string          `json:"secondary_types"`
+	ExternalIDs    map[string]string `json:"external_ids"`
+	ArtworkURL     string            `json:"artwork_url"`
+}
+
+func enrichmentToDTO(e domain.MBEnrichment) EnrichmentResponseDTO {
+	genres := e.Genres
+	if genres == nil {
+		genres = []string{}
+	}
+	secondary := e.SecondaryTypes
+	if secondary == nil {
+		secondary = []string{}
+	}
+	ids := e.ExternalIDs
+	if ids == nil {
+		ids = map[string]string{}
+	}
+	return EnrichmentResponseDTO{
+		MBID:           e.MBID,
+		Genres:         genres,
+		Year:           e.Year,
+		Rating:         e.Rating,
+		RatingVotes:    e.RatingVotes,
+		PrimaryType:    e.PrimaryType,
+		SecondaryTypes: secondary,
+		ExternalIDs:    ids,
+		ArtworkURL:     e.ArtworkURL,
+	}
 }
 
 type ContentFetchResponseDTO struct {

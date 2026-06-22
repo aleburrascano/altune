@@ -63,6 +63,61 @@ func TestMerge_IdentifierMatch(t *testing.T) {
 	})
 }
 
+func TestMerge_IdentityBridge(t *testing.T) {
+	// MB artist "Ye" carries an mbid and a bridged Deezer id (stamped pre-merge
+	// from the IdentityBridge via extras["xref"]). The Deezer result "Kanye West"
+	// has that exact native id. The titles differ, so only the stated id proves
+	// they are the same entity — name similarity never would.
+	mb := domain.SearchResult{
+		Kind:    domain.ResultKindArtist,
+		Title:   "Ye",
+		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-ye"}},
+		Extras: map[string]any{
+			"mbid": "mbid-ye",
+			"xref": map[string]string{"deezer": "230"},
+		},
+	}
+	dz := domain.SearchResult{
+		Kind:    domain.ResultKindArtist,
+		Title:   "Kanye West",
+		Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "230"}},
+	}
+
+	t.Run("stated cross-provider id merges differing titles", func(t *testing.T) {
+		entities := Merge([][]domain.SearchResult{{mb}, {dz}})
+		if len(entities) != 1 {
+			t.Fatalf("got %d entities, want 1 (bridged identity merge)", len(entities))
+		}
+		if tier := entities[0].Result.Extras["resolution_tier"]; tier != "bridge" {
+			t.Errorf("resolution_tier = %v, want bridge", tier)
+		}
+		if entities[0].Result.Confidence != domain.ConfidenceHigh {
+			t.Errorf("confidence = %v, want high (identity-grade)", entities[0].Result.Confidence)
+		}
+		if got := len(entities[0].Result.Sources); got != 2 {
+			t.Errorf("sources = %d, want 2 (unioned)", got)
+		}
+	})
+
+	t.Run("without the stated id they stay separate", func(t *testing.T) {
+		bare := mb
+		bare.Extras = map[string]any{"mbid": "mbid-ye"} // no xref
+		entities := Merge([][]domain.SearchResult{{bare}, {dz}})
+		if len(entities) != 2 {
+			t.Fatalf("got %d entities, want 2 — no stated id, differing titles must not merge", len(entities))
+		}
+	})
+
+	t.Run("a non-matching stated id does not merge", func(t *testing.T) {
+		wrong := mb
+		wrong.Extras = map[string]any{"mbid": "mbid-ye", "xref": map[string]string{"deezer": "999"}}
+		entities := Merge([][]domain.SearchResult{{wrong}, {dz}})
+		if len(entities) != 2 {
+			t.Fatalf("got %d entities, want 2 — a mismatched stated id must not merge", len(entities))
+		}
+	})
+}
+
 func TestMerge_SequelStaysSeparate(t *testing.T) {
 	// Pattern B: a trailing sequel number survives canonical normalization, so
 	// the sequel never collapses into the original — with no version machinery.
