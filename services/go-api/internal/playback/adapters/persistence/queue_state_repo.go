@@ -81,14 +81,9 @@ func (r *PgxQueueStateRepository) GetForUser(
 		return nil, fmt.Errorf("parse repeat mode: %w", err)
 	}
 
-	return &domain.QueueState{
-		UserId:     userId,
-		TrackIds:   trackIds,
-		CurrentIdx: currentIdx,
-		PositionMs: positionMs,
-		Shuffled:   shuffled,
-		RepeatMode: rm,
-		SourceId:   sourceId,
-		UpdatedAt:  updatedAt,
-	}, nil
+	state, err := domain.RehydrateQueueState(userId, trackIds, currentIdx, positionMs, shuffled, rm, sourceId, updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("rehydrate queue state: %w", err)
+	}
+	return state, nil
 }

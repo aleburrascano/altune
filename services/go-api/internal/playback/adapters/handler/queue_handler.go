@@ -7,20 +7,17 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/service"
 	"altune/go-api/internal/shared/httputil"
 )
 
 type QueueHandler struct {
-	save *service.SaveQueueStateService
-	get  *service.GetQueueStateService
+	svc *service.QueueService
 }
 
-func NewQueueHandler(
-	save *service.SaveQueueStateService,
-	get *service.GetQueueStateService,
-) *QueueHandler {
-	return &QueueHandler{save: save, get: get}
+func NewQueueHandler(svc *service.QueueService) *QueueHandler {
+	return &QueueHandler{svc: svc}
 }
 
 func (h *QueueHandler) Routes() chi.Router {
@@ -60,7 +57,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.save.Execute(r.Context(), userId, service.SaveQueueStateInput{
+	err := h.svc.Save(r.Context(), userId, service.SaveQueueStateInput{
 		TrackIds:   body.TrackIds,
 		CurrentIdx: body.CurrentIdx,
 		PositionMs: body.PositionMs,
@@ -82,30 +79,26 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state, err := h.get.Execute(r.Context(), userId)
+	state, err := h.svc.Resume(r.Context(), userId)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to get queue state")
 		return
 	}
-	if state == nil {
-		httputil.WriteJSON(w, http.StatusOK, queueStateResponse{
-			TrackIds:   []string{},
-			RepeatMode: "off",
-		})
-		return
-	}
 
+	httputil.WriteJSON(w, http.StatusOK, toResponse(state))
+}
+
+func toResponse(state *domain.QueueState) queueStateResponse {
 	trackIds := state.TrackIds
 	if trackIds == nil {
 		trackIds = []string{}
 	}
-
-	httputil.WriteJSON(w, http.StatusOK, queueStateResponse{
+	return queueStateResponse{
 		TrackIds:   trackIds,
 		CurrentIdx: state.CurrentIdx,
 		PositionMs: state.PositionMs,
 		Shuffled:   state.Shuffled,
 		RepeatMode: state.RepeatMode.String(),
 		SourceId:   state.SourceId,
-	})
+	}
 }

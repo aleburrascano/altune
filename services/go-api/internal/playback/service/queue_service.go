@@ -18,19 +18,15 @@ type SaveQueueStateInput struct {
 	SourceId   string
 }
 
-type SaveQueueStateService struct {
+type QueueService struct {
 	repo ports.QueueStateRepository
 }
 
-func NewSaveQueueStateService(repo ports.QueueStateRepository) *SaveQueueStateService {
-	return &SaveQueueStateService{repo: repo}
+func NewQueueService(repo ports.QueueStateRepository) *QueueService {
+	return &QueueService{repo: repo}
 }
 
-func (s *SaveQueueStateService) Execute(
-	ctx context.Context,
-	userId shared.UserId,
-	input SaveQueueStateInput,
-) error {
+func (s *QueueService) Save(ctx context.Context, userId shared.UserId, input SaveQueueStateInput) error {
 	rm, err := domain.ParseRepeatMode(input.RepeatMode)
 	if err != nil {
 		return fmt.Errorf("invalid repeat mode: %w", err)
@@ -40,4 +36,17 @@ func (s *SaveQueueStateService) Execute(
 		return fmt.Errorf("invalid queue state: %w", err)
 	}
 	return s.repo.Upsert(ctx, state)
+}
+
+// Resume returns the user's saved snapshot, or the empty snapshot when none is
+// stored — callers never receive nil.
+func (s *QueueService) Resume(ctx context.Context, userId shared.UserId) (*domain.QueueState, error) {
+	state, err := s.repo.GetForUser(ctx, userId)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		return domain.EmptyQueueState(userId), nil
+	}
+	return state, nil
 }
