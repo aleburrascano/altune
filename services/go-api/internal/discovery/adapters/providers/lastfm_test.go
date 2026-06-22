@@ -170,8 +170,10 @@ func TestLastFmAdapter_Search_HTTPError(t *testing.T) {
 	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
 		domain.ResultKindTrack: true,
 	})
-	if err != nil {
-		t.Fatalf("expected nil error on HTTP 500 (silent skip), got: %v", err)
+	// When every attempted kind fails (a single kind on HTTP 500), Search surfaces
+	// an error so the circuit breaker sees the provider outage.
+	if err == nil {
+		t.Fatal("expected an error when all attempted kinds fail on HTTP 500, got nil")
 	}
 	if len(results) != 0 {
 		t.Errorf("expected 0 results on HTTP 500, got %d", len(results))

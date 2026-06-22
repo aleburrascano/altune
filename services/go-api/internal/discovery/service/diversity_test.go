@@ -14,11 +14,12 @@ import (
 // hasBrowseableSource for all kinds).
 func trackResult(provider domain.ProviderName, extID, title, subtitle string, extras map[string]any) domain.SearchResult {
 	return domain.SearchResult{
-		Kind:     domain.ResultKindTrack,
-		Title:    title,
-		Subtitle: subtitle,
-		Sources:  []domain.SourceRef{{Provider: provider, ExternalID: extID, URL: "https://example.com/" + extID}},
-		Extras:   extras,
+		Kind:       domain.ResultKindTrack,
+		Title:      title,
+		Subtitle:   subtitle,
+		Sources:    []domain.SourceRef{{Provider: provider, ExternalID: extID, URL: "https://example.com/" + extID}},
+		Popularity: popFromExtras(extras),
+		Extras:     extras,
 	}
 }
 
@@ -26,21 +27,23 @@ func trackResult(provider domain.ProviderName, extID, title, subtitle string, ex
 // to pass hasBrowseableSource.
 func artistResult(provider domain.ProviderName, extID, name string, extras map[string]any) domain.SearchResult {
 	return domain.SearchResult{
-		Kind:    domain.ResultKindArtist,
-		Title:   name,
-		Sources: []domain.SourceRef{{Provider: provider, ExternalID: extID, URL: "https://example.com/" + extID}},
-		Extras:  extras,
+		Kind:       domain.ResultKindArtist,
+		Title:      name,
+		Sources:    []domain.SourceRef{{Provider: provider, ExternalID: extID, URL: "https://example.com/" + extID}},
+		Popularity: popFromExtras(extras),
+		Extras:     extras,
 	}
 }
 
 // albumResult builds an album result.
 func albumResult(provider domain.ProviderName, extID, title, subtitle string, extras map[string]any) domain.SearchResult {
 	return domain.SearchResult{
-		Kind:     domain.ResultKindAlbum,
-		Title:    title,
-		Subtitle: subtitle,
-		Sources:  []domain.SourceRef{{Provider: provider, ExternalID: extID, URL: "https://example.com/" + extID}},
-		Extras:   extras,
+		Kind:       domain.ResultKindAlbum,
+		Title:      title,
+		Subtitle:   subtitle,
+		Sources:    []domain.SourceRef{{Provider: provider, ExternalID: extID, URL: "https://example.com/" + extID}},
+		Popularity: popFromExtras(extras),
+		Extras:     extras,
 	}
 }
 

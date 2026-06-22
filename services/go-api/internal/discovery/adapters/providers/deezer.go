@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -31,23 +30,10 @@ func (a *DeezerAdapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *DeezerAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	var results []domain.SearchResult
-
-	for kind := range kinds {
-		if !a.SupportedKinds()[kind] {
-			continue
-		}
-
-		items, err := a.searchKind(ctx, query, kind)
-		if err != nil {
-			slog.WarnContext(ctx, "deezer.search_kind_failed",
-				"kind", kind.String(), "query", query, "error", err)
-			continue
-		}
-		results = append(results, items...)
-	}
-
-	return results, nil
+	return searchAcrossKinds(ctx, "deezer", query, kinds, a.SupportedKinds(),
+		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
+			return a.searchKind(ctx, query, kind)
+		})
 }
 
 func (a *DeezerAdapter) SearchStructured(ctx context.Context, artist, track string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
@@ -284,21 +270,21 @@ func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 // --- AlbumContentProvider + ArtistContentProvider ---
 
 func (a *DeezerAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=50", externalID)
+	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=50", url.PathEscape(externalID))
 	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
 		return mapDeezerResult(item, domain.ResultKindTrack)
 	})
 }
 
 func (a *DeezerAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://api.deezer.com/artist/%s/top?limit=10", externalID)
+	u := fmt.Sprintf("https://api.deezer.com/artist/%s/top?limit=10", url.PathEscape(externalID))
 	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
 		return mapDeezerResult(item, domain.ResultKindTrack)
 	})
 }
 
 func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=100", externalID)
+	u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=100", url.PathEscape(externalID))
 	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
 		return mapDeezerResult(item, domain.ResultKindAlbum)
 	})
@@ -438,7 +424,7 @@ func IsDeezerPlaceholder(u string) bool {
 // FetchTrackISRC fetches the ISRC for a Deezer track by its ID.
 // Returns empty string on error or if the track has no ISRC.
 func (a *DeezerAdapter) FetchTrackISRC(ctx context.Context, trackID string) (string, error) {
-	u := fmt.Sprintf("https://api.deezer.com/track/%s", trackID)
+	u := fmt.Sprintf("https://api.deezer.com/track/%s", url.PathEscape(trackID))
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return "", nil
@@ -462,7 +448,7 @@ func (a *DeezerAdapter) FetchTrackISRC(ctx context.Context, trackID string) (str
 }
 
 func (a *DeezerAdapter) FetchFirstTrackID(ctx context.Context, albumID string) (string, error) {
-	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=1", albumID)
+	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=1", url.PathEscape(albumID))
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return "", nil

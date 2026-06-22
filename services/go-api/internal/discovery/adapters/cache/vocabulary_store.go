@@ -3,8 +3,10 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 
@@ -13,10 +15,19 @@ import (
 
 const (
 	vocabTermsKey   = "discovery:vocab:v1:terms"
+	// vocabLexKey is a parallel sorted set holding the same members all at score 0,
+	// used only for ZRANGEBYLEX prefix queries. ZRANGEBYLEX is only well-defined
+	// when every member shares one score; vocabTermsKey scores by popularity, so a
+	// dedicated equal-score set is required for correct prefix matching.
+	vocabLexKey     = "discovery:vocab:v1:lex"
 	vocabTriPrefix  = "discovery:vocab:v1:tri:"
 	vocabEntryPfx   = "discovery:vocab:v1:entry:"
 	vocabMetaPrefix = "discovery:vocab:v1:meta:"
 	memberSep       = "\x00"
+	// vocabEntryTTL bounds the per-term JSON blobs (the largest per-term payload),
+	// refreshed on every write so hot terms persist and cold ones reclaim. The
+	// sorted-set + trigram index lifecycle is a separate (structural) concern.
+	vocabEntryTTL = 90 * 24 * time.Hour
 )
 
 // NormalizeFunc normalizes a term for matching. Injected to avoid
@@ -102,6 +113,60 @@ func (s *RedisVocabularyStore) FindClosest(
 	return s.fuzzySearch(ctx, query, limit)
 }
 
+// Trim bounds the vocabulary to its maxEntries most popular terms, fully evicting
+// the lowest-scored overflow across ALL five key families (terms ZSET, lex ZSET,
+// trigram SETs, entry blobs, metaphone SETs). This is the store's owned retention
+// — the single place that knows the multi-key model, so callers never reach in to
+// prune it. A no-op when the store is nil-backed or already within budget.
+func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
+	if s.client == nil || maxEntries <= 0 {
+		return nil
+	}
+	count, err := s.client.ZCard(ctx, vocabTermsKey).Result()
+	if err != nil {
+		return fmt.Errorf("vocab trim: card: %w", err)
+	}
+	overflow := int(count) - maxEntries
+	if overflow <= 0 {
+		return nil
+	}
+	// Lowest-scored members rank first (ascending) — the eviction set.
+	members, err := s.client.ZRange(ctx, vocabTermsKey, 0, int64(overflow-1)).Result()
+	if err != nil {
+		return fmt.Errorf("vocab trim: range: %w", err)
+	}
+	pipe := s.client.Pipeline()
+	for _, member := range members {
+		norm, _, _ := decodeMember(member)
+		if norm == "" {
+			continue
+		}
+		s.queueEvict(ctx, pipe, norm, member)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("vocab trim: evict: %w", err)
+	}
+	return nil
+}
+
+// queueEvict pipelines the removal of one term from every key family. member is
+// the encoded sorted-set member (norm\x00term\x00kind); norm keys the per-trigram,
+// metaphone, and blob entries. Sharing this keeps "what a vocabulary entry spans"
+// in one place — adding a Delete(termNorm) later is one call to this.
+func (s *RedisVocabularyStore) queueEvict(ctx context.Context, pipe goredis.Pipeliner, norm, member string) {
+	pipe.ZRem(ctx, vocabTermsKey, member)
+	pipe.ZRem(ctx, vocabLexKey, member)
+	for _, tri := range trigrams(norm) {
+		pipe.SRem(ctx, vocabTriPrefix+tri, norm)
+	}
+	if s.metaphone != nil {
+		if code := s.metaphone(norm); code != "" {
+			pipe.SRem(ctx, vocabMetaPrefix+code, norm)
+		}
+	}
+	pipe.Del(ctx, vocabEntryPfx+norm)
+}
+
 // --- internal helpers -------------------------------------------------------
 
 func (s *RedisVocabularyStore) buildNorm(e domain.VocabularyEntry) string {
@@ -137,12 +202,14 @@ func addEntryToPipeline(
 		Score:  float64(entry.Popularity),
 		Member: member,
 	})
+	// Mirror the member into the equal-score lex index for correct ZRANGEBYLEX.
+	pipe.ZAdd(ctx, vocabLexKey, goredis.Z{Score: 0, Member: member})
 	entryJSON, _ := json.Marshal(vocabEntryData{
 		Term:       entry.Term,
 		Kind:       string(entry.Kind),
 		Popularity: entry.Popularity,
 	})
-	pipe.Set(ctx, vocabEntryPfx+norm, entryJSON, 0)
+	pipe.Set(ctx, vocabEntryPfx+norm, entryJSON, vocabEntryTTL)
 	for _, tri := range trigrams(norm) {
 		pipe.SAdd(ctx, vocabTriPrefix+tri, norm)
 	}
@@ -177,7 +244,7 @@ func (s *RedisVocabularyStore) lexRangeMembers(
 	}
 	min := "[" + normPrefix
 	max := "[" + normPrefix + "\xff"
-	return s.client.ZRangeByLex(ctx, vocabTermsKey, &goredis.ZRangeBy{
+	return s.client.ZRangeByLex(ctx, vocabLexKey, &goredis.ZRangeBy{
 		Min: min,
 		Max: max,
 	}).Result()
@@ -506,6 +573,7 @@ func minInt(a, b, c int) int {
 func AllKeys(norm string) []string {
 	keys := []string{
 		vocabTermsKey,
+		vocabLexKey,
 		vocabEntryPfx + norm,
 	}
 	for _, tri := range trigrams(norm) {

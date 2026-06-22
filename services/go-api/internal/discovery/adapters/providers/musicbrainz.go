@@ -33,7 +33,7 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAd
 // by the wait, so N concurrent callers fire 1s apart instead of bunching. The
 // earlier form stamped lastReq at lock-time and slept after unlocking, letting
 // concurrent callers share a baseline and burst together → MB 503s.
-func (a *MusicBrainzAdapter) rateLimit() {
+func (a *MusicBrainzAdapter) rateLimit(ctx context.Context) {
 	a.mu.Lock()
 	next := a.lastReq.Add(time.Second)
 	if now := time.Now(); next.Before(now) {
@@ -42,8 +42,16 @@ func (a *MusicBrainzAdapter) rateLimit() {
 	a.lastReq = next
 	wait := time.Until(next)
 	a.mu.Unlock()
-	if wait > 0 {
-		time.Sleep(wait)
+	if wait <= 0 {
+		return
+	}
+	// Respect cancellation: a timed-out/cancelled request must not keep sleeping
+	// for its reserved slot — the subsequent HTTP call would fail fast anyway.
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
 	}
 }
 
@@ -62,29 +70,10 @@ func (a *MusicBrainzAdapter) SearchTimeout() time.Duration {
 }
 
 func (a *MusicBrainzAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	var results []domain.SearchResult
-
-	searchOrder := []domain.ResultKind{
-		domain.ResultKindArtist,
-		domain.ResultKindTrack,
-		domain.ResultKindAlbum,
-	}
-
-	for _, kind := range searchOrder {
-		if !kinds[kind] || !a.SupportedKinds()[kind] {
-			continue
-		}
-
-		items, err := a.searchKind(ctx, query, kind)
-		if err != nil {
-			slog.WarnContext(ctx, "musicbrainz.search_kind_failed",
-				"kind", kind.String(), "query", query, "error", err)
-			continue
-		}
-		results = append(results, items...)
-	}
-
-	return results, nil
+	return searchAcrossKinds(ctx, "musicbrainz", query, kinds, a.SupportedKinds(),
+		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
+			return a.searchKind(ctx, query, kind)
+		})
 }
 
 func (a *MusicBrainzAdapter) SearchStructured(ctx context.Context, artist, track string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
@@ -130,7 +119,7 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 	}
 	req.Header.Set("User-Agent", a.userAgent)
 	req.Header.Set("Accept", "application/json")
-	a.rateLimit()
+	a.rateLimit(ctx)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -461,7 +450,7 @@ func (a *MusicBrainzAdapter) fetchArtistMatches(ctx context.Context, name string
 	}
 	req.Header.Set("User-Agent", a.userAgent)
 	req.Header.Set("Accept", "application/json")
-	a.rateLimit()
+	a.rateLimit(ctx)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -489,7 +478,7 @@ func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) err
 	}
 	req.Header.Set("User-Agent", a.userAgent)
 	req.Header.Set("Accept", "application/json")
-	a.rateLimit()
+	a.rateLimit(ctx)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -538,7 +527,7 @@ func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string
 	}
 	req.Header.Set("User-Agent", a.userAgent)
 	req.Header.Set("Accept", "application/json")
-	a.rateLimit()
+	a.rateLimit(ctx)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -578,7 +567,7 @@ func (a *MusicBrainzAdapter) LookupAlbumArtist(
 	}
 	req.Header.Set("User-Agent", a.userAgent)
 	req.Header.Set("Accept", "application/json")
-	a.rateLimit()
+	a.rateLimit(ctx)
 
 	resp, err := a.client.Do(req)
 	if err != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -32,23 +31,10 @@ func (a *LastFmAdapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *LastFmAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	var results []domain.SearchResult
-
-	for kind := range kinds {
-		if !a.SupportedKinds()[kind] {
-			continue
-		}
-
-		items, err := a.searchKind(ctx, query, kind)
-		if err != nil {
-			slog.WarnContext(ctx, "lastfm.search_kind_failed",
-				"kind", kind.String(), "query", query, "error", err)
-			continue
-		}
-		results = append(results, items...)
-	}
-
-	return results, nil
+	return searchAcrossKinds(ctx, "lastfm", query, kinds, a.SupportedKinds(),
+		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
+			return a.searchKind(ctx, query, kind)
+		})
 }
 
 func (a *LastFmAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {

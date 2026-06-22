@@ -250,13 +250,27 @@ type SearchResult struct {
 	ImageURL   string
 	Confidence Confidence
 	Sources    []SourceRef
+	// Popularity is the continuous relevance-tiebreak Rank reads after relevance.
+	// It is a TYPED field (not an Extras key) so the producer→consumer link is
+	// compile-checked rather than a silently-absent map entry — the gap the
+	// strangler collapse opened when it deleted popularity.go but kept Rank's tier.
+	//
+	// AIDEV-WARNING: intentionally UNPOPULATED by providers today. A naive revival
+	// (Deezer track→rank, artist/album→nb_fan) was eval-rejected 2026-06-22: it
+	// regressed the top-3 gate on "Scorpion" because albums report nb_fan=0, so a
+	// high-rank obscure track buries the canonical album. A fair revival needs
+	// per-kind-comparable popularity (e.g. album positional fallback / per-kind
+	// normalization) and must clear `discoveryeval -mode eval -top-k 3` plus the
+	// canonical ambiguous-query set before it is wired. The machinery (merge max,
+	// Rank tier) is live and unit-tested; only the producer is deliberately absent.
+	Popularity float64
 	// Extras carries provider-specific metadata. Expected keys:
 	//   "year" (int), "disambiguation" (string), "mbid" (string),
-	//   "popularity" (int64), "record_type" (string: "album"|"single"|"ep"),
+	//   "record_type" (string: "album"|"single"|"ep"),
 	//   "release_date" (string), "track_count" (int), "featured_artists" ([]map[string]any),
 	//   "collapsed_artists" ([]map[string]any), "deezer_rank" (int64).
-	Extras map[string]any
-	Quality    QualityScore
+	Extras  map[string]any
+	Quality QualityScore
 }
 
 // SearchQuery is the validated user search input.

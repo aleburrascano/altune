@@ -142,9 +142,6 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 			extras[k] = v
 		}
 	}
-	if pop := math.Max(popularityOf(canonical), popularityOf(other)); pop > 0 {
-		extras["popularity"] = pop
-	}
 	extras["resolution_tier"] = tier.String()
 
 	imageURL := canonical.ImageURL
@@ -169,6 +166,7 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 		ImageURL:   imageURL,
 		Confidence: conf,
 		Sources:    sources,
+		Popularity: math.Max(canonical.Popularity, other.Popularity),
 		Extras:     extras,
 	}
 }
@@ -234,19 +232,10 @@ func stringExtra(r domain.SearchResult, key string) string {
 	return ""
 }
 
+// popularityOf is the single read accessor for the typed Popularity signal —
+// merge, rank, diversity, and vocab all read through it.
 func popularityOf(r domain.SearchResult) float64 {
-	if r.Extras == nil {
-		return 0
-	}
-	switch n := r.Extras["popularity"].(type) {
-	case float64:
-		return n
-	case int64:
-		return float64(n)
-	case int:
-		return float64(n)
-	}
-	return 0
+	return r.Popularity
 }
 
 func completenessOf(r domain.SearchResult) int {

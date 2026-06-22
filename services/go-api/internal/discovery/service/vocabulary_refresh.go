@@ -38,13 +38,40 @@ func NewVocabularyRefreshService(
 	}
 }
 
-// RunOnce fetches charts from all providers and ingests into vocab.
+// maxVocabEntries caps the learned vocabulary so the Redis index does not grow
+// unbounded as new query/result terms are ingested from traffic. Generous — the
+// household + chart vocabulary is well under this — and enforced on the periodic
+// refresh, the natural home for retention.
+const maxVocabEntries = 50000
+
+// RunOnce fetches charts from all providers, ingests them, then trims the
+// vocabulary back to its retention bound.
 func (s *VocabularyRefreshService) RunOnce(ctx context.Context) error {
 	entries := s.collectEntries(ctx)
 	if len(entries) == 0 {
+		s.trim(ctx)
 		return nil
 	}
-	return s.normalizeAndStore(ctx, entries)
+	if err := s.normalizeAndStore(ctx, entries); err != nil {
+		return err
+	}
+	s.trim(ctx)
+	return nil
+}
+
+// trim invokes the store's owned retention when it supports it. Kept off the
+// shared VocabularyStore port (ISP): only this maintenance path needs it, so the
+// capability is discovered structurally rather than widening the read/write seam.
+func (s *VocabularyRefreshService) trim(ctx context.Context) {
+	t, ok := s.vocab.(interface {
+		Trim(ctx context.Context, maxEntries int) error
+	})
+	if !ok {
+		return
+	}
+	if err := t.Trim(ctx, maxVocabEntries); err != nil {
+		slog.Warn("vocabulary trim failed", "error", err)
+	}
 }
 
 func (s *VocabularyRefreshService) collectEntries(
