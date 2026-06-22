@@ -78,6 +78,12 @@ func newQueueState(
 	if positionMs < 0 {
 		return nil, fmt.Errorf("positionMs must be non-negative, got %d", positionMs)
 	}
+	// Normalize a nil slice (NULL/empty array from storage, omitted JSON field)
+	// to empty so TrackIds is never nil — callers and JSON serialization can rely
+	// on it. This is the single home for the invariant.
+	if trackIds == nil {
+		trackIds = []string{}
+	}
 	if len(trackIds) == 0 {
 		currentIdx = 0
 	} else if currentIdx < 0 || currentIdx >= len(trackIds) {

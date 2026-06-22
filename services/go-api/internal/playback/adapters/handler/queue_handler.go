@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -66,6 +67,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		SourceId:   body.SourceId,
 	})
 	if err != nil {
+		slog.ErrorContext(r.Context(), "playback.queue_state.save_failed", "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to save queue state")
 		return
 	}
@@ -81,6 +83,7 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	state, err := h.svc.Resume(r.Context(), userId)
 	if err != nil {
+		slog.ErrorContext(r.Context(), "playback.queue_state.resume_failed", "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to get queue state")
 		return
 	}
@@ -89,12 +92,10 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func toResponse(state *domain.QueueState) queueStateResponse {
-	trackIds := state.TrackIds
-	if trackIds == nil {
-		trackIds = []string{}
-	}
+	// QueueState guarantees a non-nil TrackIds (EmptyQueueState / RehydrateQueueState
+	// both initialise it), so no nil-to-empty normalization is needed here.
 	return queueStateResponse{
-		TrackIds:   trackIds,
+		TrackIds:   state.TrackIds,
 		CurrentIdx: state.CurrentIdx,
 		PositionMs: state.PositionMs,
 		Shuffled:   state.Shuffled,
