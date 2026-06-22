@@ -1,6 +1,9 @@
 package service
 
-import "altune/go-api/internal/discovery/domain"
+import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
+)
 
 // Result-list shaping rules carried forward from the v1 ranking pipeline. These
 // are orthogonal to ranking proper (the rebuilt Merge/Rank own ordering) — they
@@ -37,7 +40,7 @@ func EnforceDiversity(results []domain.SearchResult) []domain.SearchResult {
 	overflow := make([]domain.SearchResult, 0)
 
 	for _, r := range window {
-		artist := NormalizeForMatch(r.Subtitle)
+		artist := textnorm.NormalizeForMatch(r.Subtitle)
 		if artist == "" || artistCount[artist] < maxPerArtistInTop {
 			artistCount[artist]++
 			kept = append(kept, r)
@@ -69,7 +72,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		if r.Kind != domain.ResultKindArtist {
 			continue
 		}
-		norm := NormalizeForMatch(r.Title)
+		norm := textnorm.NormalizeForMatch(r.Title)
 		pop := popularityOf(r)
 		g, exists := groups[norm]
 		if !exists {
@@ -173,4 +176,3 @@ func completeness(r domain.SearchResult) int {
 	}
 	return count
 }
-

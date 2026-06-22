@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 type fakeDiscogsEnricher struct {
@@ -249,7 +250,7 @@ func TestDiscogsArtistEnrichmentService_Execute(t *testing.T) {
 	t.Run("a positive cache hit skips the network", func(t *testing.T) {
 		enr := &fakeDiscogsEnricher{artistID: 3062364, artistEnrichment: sampleArtistEnrichment()}
 		cache := newMemDiscogsArtistCache()
-		cache.pos[NormalizeForMatch("Kendrick Lamar")] = sampleArtistEnrichment()
+		cache.pos[textnorm.NormalizeForMatch("Kendrick Lamar")] = sampleArtistEnrichment()
 		svc := NewDiscogsArtistEnrichmentService(enr, cache)
 
 		got, err := svc.Execute(context.Background(), "Kendrick Lamar")
@@ -276,7 +277,7 @@ func TestDiscogsArtistEnrichmentService_Execute(t *testing.T) {
 		if !got.IsZero() {
 			t.Errorf("expected empty, got %+v", got)
 		}
-		if !cache.neg[NormalizeForMatch("Nobody At All")] {
+		if !cache.neg[textnorm.NormalizeForMatch("Nobody At All")] {
 			t.Error("expected the miss to be negatively cached")
 		}
 	})

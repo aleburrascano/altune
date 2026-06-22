@@ -8,6 +8,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 type fakeRelationshipQuerier struct {
@@ -177,8 +178,8 @@ func TestFindRelated_DedupAgainstOrganic(t *testing.T) {
 
 	for _, g := range got {
 		for _, item := range g.Items {
-			if NormalizeForMatch(item.Title) == NormalizeForMatch("Main Track") &&
-				NormalizeForMatch(item.Subtitle) == NormalizeForMatch("Artist") {
+			if textnorm.NormalizeForMatch(item.Title) == textnorm.NormalizeForMatch("Main Track") &&
+				textnorm.NormalizeForMatch(item.Subtitle) == textnorm.NormalizeForMatch("Artist") {
 				t.Error("organic result should be deduped from related items")
 			}
 		}

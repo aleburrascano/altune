@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -153,13 +154,13 @@ func (s *CoverageSignalBService) clusterEntities(fan map[string]provResult) []ma
 			continue
 		}
 		for _, album := range r.albums {
-			titleNorm := NormalizeForMatch(album.Title)
+			titleNorm := textnorm.NormalizeForMatch(album.Title)
 			if titleNorm == "" {
 				continue
 			}
 			matched := false
 			for _, c := range clusters {
-				if TokenSortRatio(titleNorm, c.key) >= signalBTitleMatchMinTSR {
+				if textnorm.TokenSortRatio(titleNorm, c.key) >= signalBTitleMatchMinTSR {
 					c.provs[p.Name] = true
 					matched = true
 					break

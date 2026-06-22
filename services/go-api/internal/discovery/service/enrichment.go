@@ -7,6 +7,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 // EnrichmentService is the detail-open MusicBrainz enrichment use case: resolve
@@ -131,5 +132,5 @@ func (s *EnrichmentService) resolveMBID(
 // enrichmentNameKey is the normalized cache key for the unresolved path. It pins
 // normalization in the service so the key the cache hashes is consistent.
 func enrichmentNameKey(title, subtitle string) string {
-	return NormalizeForMatch(strings.TrimSpace(title) + " " + strings.TrimSpace(subtitle))
+	return textnorm.NormalizeForMatch(strings.TrimSpace(title) + " " + strings.TrimSpace(subtitle))
 }

@@ -36,6 +36,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
 	sharedRedis "altune/go-api/internal/shared/redis"
+	"altune/go-api/internal/shared/textnorm"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -162,7 +163,7 @@ func (a *App) setup(ctx context.Context) error {
 	var sharedMB *providers.MusicBrainzAdapter
 	if a.cfg.HasMusicBrainz() {
 		sharedMB = providers.NewMusicBrainzAdapter(
-			&http.Client{Timeout: 10 * time.Second},
+			newDiscoveryClient(),
 			a.cfg.MusicBrainzUserAgent,
 		)
 	}
@@ -176,7 +177,7 @@ func (a *App) setup(ctx context.Context) error {
 	if a.redisClient != nil {
 		vocabStore = discoveryCacheAdapters.NewVocabularyStore(
 			a.redisClient,
-			discoveryService.NormalizeForMatch,
+			textnorm.NormalizeForMatch,
 			discoveryCacheAdapters.WithMetaphone(discoveryService.MetaphoneKey),
 		)
 	}
@@ -188,12 +189,12 @@ func (a *App) setup(ctx context.Context) error {
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
 	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, scheduler)
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
-	deezerContentClient := &http.Client{Timeout: 10 * time.Second}
+	deezerContentClient := newDiscoveryClient()
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
 	// iTunes is a second mainstream source of truth for discography/tracklist
 	// (docs/providers/itunes.md cap 5): an iTunes-sourced album/artist result
 	// carries its collectionId/artistId, which keys the /lookup content endpoint.
-	itunesContent := providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second})
+	itunesContent := providers.NewITunesAdapter(newDiscoveryClient())
 
 	albumProviders := map[string]discoveryPorts.AlbumContentProvider{
 		"deezer": deezerContent,
@@ -204,13 +205,13 @@ func (a *App) setup(ctx context.Context) error {
 		"itunes": itunesContent,
 		// SoundCloud serves the underground long tail: an artist sourced from
 		// SoundCloud carries its numeric user id, which keys these endpoints.
-		"soundcloud": providers.NewSoundCloudAPIAdapter(&http.Client{Timeout: 10 * time.Second}, nil),
+		"soundcloud": providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
 	}
 
 	// Related tracks are track-keyed: a SoundCloud-sourced track carries its
 	// numeric track id, which keys /tracks/{id}/related. SoundCloud-only today.
 	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{
-		"soundcloud": providers.NewSoundCloudAPIAdapter(&http.Client{Timeout: 10 * time.Second}, nil),
+		"soundcloud": providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
 	}
 	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
 
@@ -259,7 +260,7 @@ func (a *App) setup(ctx context.Context) error {
 	var discogsArtistEnrichSvc *discoveryService.DiscogsArtistEnrichmentService
 	if a.cfg.HasDiscogs() {
 		discogsAdapter := providers.NewDiscogsAdapter(
-			&http.Client{Timeout: 10 * time.Second},
+			newDiscoveryClient(),
 			a.cfg.DiscogsToken,
 			a.cfg.MusicBrainzUserAgent,
 		)
@@ -280,7 +281,7 @@ func (a *App) setup(ctx context.Context) error {
 	var lastfmEnrichSvc *discoveryService.LastFmEnrichmentService
 	if a.cfg.HasLastFM() {
 		lfmEnricher := providers.NewLastFmAdapter(
-			&http.Client{Timeout: 10 * time.Second},
+			newDiscoveryClient(),
 			a.cfg.LastFMAPIKey,
 		)
 		lastfmEnrichSvc = discoveryService.NewLastFmEnrichmentService(
@@ -294,7 +295,7 @@ func (a *App) setup(ctx context.Context) error {
 	// (docs/providers/deezer.md caps 7–8). Deezer's public API needs no key, so
 	// this is wired unconditionally like the rest of the Deezer adapter.
 	deezerEnrichSvc := discoveryService.NewDeezerEnrichmentService(
-		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
+		providers.NewDeezerAdapter(newDiscoveryClient()),
 		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient),
 	)
 
@@ -303,16 +304,18 @@ func (a *App) setup(ctx context.Context) error {
 	// the reverse-engineered pipe.deezer.com GraphQL (anonymous-JWT, self-healing);
 	// no key needed, so wired unconditionally like the rest of the Deezer path.
 	lyricsSvc := discoveryService.NewLyricsService(
-		providers.NewDeezerLyricsAdapter(&http.Client{Timeout: 10 * time.Second}),
+		providers.NewDeezerLyricsAdapter(newDiscoveryClient()),
 		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient),
 	)
 
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, relatedSvc, enrichSvc, suggestSvc, eventSvc)
-	discoveryH.WithDiscogsEnrichment(discogsEnrichSvc)
-	discoveryH.WithDiscogsArtistEnrichment(discogsArtistEnrichSvc)
-	discoveryH.WithLastFmEnrichment(lastfmEnrichSvc)
-	discoveryH.WithDeezerEnrichment(deezerEnrichSvc)
-	discoveryH.WithLyrics(lyricsSvc)
+	discoveryH.WithDetailEnrichers(discoveryHandler.DetailEnrichers{
+		Discogs:       discogsEnrichSvc,
+		DiscogsArtist: discogsArtistEnrichSvc,
+		LastFm:        lastfmEnrichSvc,
+		Deezer:        deezerEnrichSvc,
+		Lyrics:        lyricsSvc,
+	})
 
 	a.startVocabularyRefresh(vocabStore)
 
@@ -427,26 +430,26 @@ func (a *App) buildAudioStore() catalogPorts.AudioStore {
 func buildDiscoveryProviders(cfg *config.Config, mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
 	var providerList []discoveryPorts.SearchProvider
 
-	deezerClient := &http.Client{Timeout: 10 * time.Second}
+	deezerClient := newDiscoveryClient()
 	providerList = append(providerList, providers.NewDeezerAdapter(deezerClient))
 
-	itunesClient := &http.Client{Timeout: 10 * time.Second}
+	itunesClient := newDiscoveryClient()
 	providerList = append(providerList, providers.NewITunesAdapter(itunesClient))
 
-	providerList = append(providerList, providers.NewTheAudioDBAdapter(&http.Client{Timeout: 10 * time.Second}))
+	providerList = append(providerList, providers.NewTheAudioDBAdapter(newDiscoveryClient()))
 
 	if mb != nil {
 		providerList = append(providerList, mb)
 	}
 
 	if cfg.HasLastFM() {
-		lfmClient := &http.Client{Timeout: 10 * time.Second}
+		lfmClient := newDiscoveryClient()
 		providerList = append(providerList, providers.NewLastFmAdapter(lfmClient, cfg.LastFMAPIKey))
 	}
 
 	// Direct api-v2 SoundCloud client (coverage: unreleased/underground long tail),
 	// with the yt-dlp adapter as fallback when client_id resolution is down.
-	soundcloudClient := &http.Client{Timeout: 10 * time.Second}
+	soundcloudClient := newDiscoveryClient()
 	providerList = append(providerList, providers.NewSoundCloudAPIAdapter(
 		soundcloudClient,
 		providers.NewSoundCloudAdapter(),
@@ -475,10 +478,10 @@ func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) 
 
 func (a *App) buildChartProviders() []discoveryPorts.ChartProvider {
 	var charts []discoveryPorts.ChartProvider
-	deezerClient := &http.Client{Timeout: 15 * time.Second}
+	deezerClient := newChartClient()
 	charts = append(charts, providers.NewDeezerAdapter(deezerClient))
 	if a.cfg.HasLastFM() {
-		lfmClient := &http.Client{Timeout: 15 * time.Second}
+		lfmClient := newChartClient()
 		charts = append(charts, providers.NewLastFmAdapter(
 			lfmClient, a.cfg.LastFMAPIKey,
 		))

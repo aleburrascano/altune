@@ -9,6 +9,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 // VocabularyRefreshService periodically fetches chart data from
@@ -94,7 +95,7 @@ func (s *VocabularyRefreshService) normalizeAndStore(
 	entries []domain.VocabularyEntry,
 ) error {
 	for i := range entries {
-		entries[i].TermNorm = NormalizeForMatch(entries[i].Term)
+		entries[i].TermNorm = textnorm.NormalizeForMatch(entries[i].Term)
 	}
 	slog.Info("vocabulary refresh", "entries", len(entries))
 	return s.vocab.BulkAdd(ctx, entries)

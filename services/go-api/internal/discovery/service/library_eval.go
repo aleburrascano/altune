@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -197,9 +198,9 @@ func matchesEntity(r domain.SearchResult, entity LibraryEntity) bool {
 	if r.Kind != domain.ResultKindTrack {
 		return false
 	}
-	rt := NormalizeForMatch(r.Title)
-	et := NormalizeForMatch(entity.Title)
-	ea := NormalizeForMatch(entity.Artist)
+	rt := textnorm.NormalizeForMatch(r.Title)
+	et := textnorm.NormalizeForMatch(entity.Title)
+	ea := textnorm.NormalizeForMatch(entity.Artist)
 
 	if !containsTokens(rt, et) {
 		return false
@@ -215,7 +216,7 @@ func matchesEntity(r domain.SearchResult, entity LibraryEntity) bool {
 		return raw != "" &&
 			(strings.Contains(strings.ToLower(r.Subtitle), raw) || strings.Contains(strings.ToLower(r.Title), raw))
 	}
-	return containsTokens(NormalizeForMatch(r.Subtitle), ea) || containsTokens(rt, ea)
+	return containsTokens(textnorm.NormalizeForMatch(r.Subtitle), ea) || containsTokens(rt, ea)
 }
 
 // containsTokens reports whether want's tokens appear as a contiguous run within

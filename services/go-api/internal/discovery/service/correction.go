@@ -7,6 +7,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 const correctionCandidates = 5
@@ -30,7 +31,7 @@ func (s *CorrectionService) Correct(ctx context.Context, query string) *Correcti
 	if s.vocab == nil {
 		return nil
 	}
-	return s.correctWholeQuery(ctx, NormalizeForMatch(query))
+	return s.correctWholeQuery(ctx, textnorm.NormalizeForMatch(query))
 }
 
 // CorrectAggressive tries whole-query correction first, then falls back
@@ -40,7 +41,7 @@ func (s *CorrectionService) CorrectAggressive(ctx context.Context, query string)
 	if s.vocab == nil {
 		return nil
 	}
-	norm := NormalizeForMatch(query)
+	norm := textnorm.NormalizeForMatch(query)
 	if result := s.correctWholeQuery(ctx, norm); result != nil {
 		return result
 	}
@@ -77,7 +78,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 		}
 
 		matches, _ := s.vocab.SuggestByPrefix(ctx, token, 1)
-		if len(matches) > 0 && NormalizeForMatch(matches[0].Term) == token {
+		if len(matches) > 0 && textnorm.NormalizeForMatch(matches[0].Term) == token {
 			corrected[i] = token
 			continue
 		}
@@ -111,7 +112,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 			"corrected", best.Corrected,
 			"confidence", best.Confidence,
 		)
-		corrected[i] = NormalizeForMatch(best.Corrected)
+		corrected[i] = textnorm.NormalizeForMatch(best.Corrected)
 		anyChanged = true
 		if best.Confidence < minScore {
 			minScore = best.Confidence
@@ -134,7 +135,7 @@ func pickBestCorrection(queryNorm string, candidates []domain.VocabularyEntry) *
 	maxDist := maxCorrectionDist(queryNorm)
 
 	for _, c := range candidates {
-		if c.TermNorm == queryNorm || NormalizeForMatch(c.Term) == queryNorm {
+		if c.TermNorm == queryNorm || textnorm.NormalizeForMatch(c.Term) == queryNorm {
 			continue
 		}
 		dist := levenshteinDistance(queryNorm, c.TermNorm)

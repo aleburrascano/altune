@@ -6,6 +6,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 type GetArtistContentService struct {
@@ -131,7 +132,7 @@ func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
 	var deduped []domain.SearchResult
 
 	for _, r := range results {
-		normTitle := NormalizeForMatch(r.Title) + "|" + NormalizeForMatch(r.Subtitle)
+		normTitle := textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
 		if idx, ok := seen[normTitle]; ok {
 			existingCount := getTrackCount(deduped[idx])
 			newCount := getTrackCount(r)

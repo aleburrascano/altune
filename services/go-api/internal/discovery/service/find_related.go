@@ -8,6 +8,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 const (
@@ -190,7 +191,7 @@ func matchesToSearchResults(matches []ports.RelatedTrackMatch) []domain.SearchRe
 func dedupRelatedAgainstOrganic(groups []domain.RelatedGroup, organic []domain.SearchResult) []domain.RelatedGroup {
 	organicKeys := make(map[string]bool, len(organic))
 	for _, r := range organic {
-		key := NormalizeForMatch(r.Title) + "|" + NormalizeForMatch(r.Subtitle)
+		key := textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
 		organicKeys[key] = true
 	}
 
@@ -198,7 +199,7 @@ func dedupRelatedAgainstOrganic(groups []domain.RelatedGroup, organic []domain.S
 	for _, g := range groups {
 		var items []domain.SearchResult
 		for _, item := range g.Items {
-			key := NormalizeForMatch(item.Title) + "|" + NormalizeForMatch(item.Subtitle)
+			key := textnorm.NormalizeForMatch(item.Title) + "|" + textnorm.NormalizeForMatch(item.Subtitle)
 			if !organicKeys[key] {
 				items = append(items, item)
 			}

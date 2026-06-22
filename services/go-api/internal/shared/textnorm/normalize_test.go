@@ -1,4 +1,4 @@
-package service
+package textnorm
 
 import (
 	"testing"
@@ -17,7 +17,7 @@ func TestNormalizeForMatch(t *testing.T) {
 		},
 		{
 			name:  "unicode diacritics stripped",
-			input: "café",
+			input: "café",
 			want:  "cafe",
 		},
 		{

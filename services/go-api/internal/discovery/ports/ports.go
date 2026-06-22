@@ -207,27 +207,27 @@ type DiscogsEnricher interface {
 	LookupArtist(ctx context.Context, artistID int) (domain.DiscogsArtistEnrichment, error)
 }
 
-// DiscogsEnrichmentCache is a read-through cache of DiscogsEnrichment keyed by a
-// normalized (artist, album) name key — Discogs has no ISRC/MBID, so the name
-// key is the only stable handle on the request. The negative path records that a
-// name resolved to nothing, so an unresolved album is not re-resolved every open.
-// A nil-backed implementation is a no-op.
-type DiscogsEnrichmentCache interface {
-	Get(ctx context.Context, nameKey string) (domain.DiscogsEnrichment, bool, error)
-	Set(ctx context.Context, nameKey string, e domain.DiscogsEnrichment) error
+// NameKeyedCache is the read-through detail-enrichment cache shape shared by the
+// name-resolved enrichers (Deezer, Last.fm, Discogs album/artist, lyrics): a
+// positive value keyed by a normalized name key, plus a negative marker that the
+// name produced nothing, so it is not re-resolved every open. The MB
+// EnrichmentCache is intentionally NOT this shape (it keys positives by mbid). A
+// nil-backed implementation is a no-op. CachedLookup (service layer) drives it.
+type NameKeyedCache[T any] interface {
+	Get(ctx context.Context, nameKey string) (T, bool, error)
+	Set(ctx context.Context, nameKey string, v T) error
 	GetNegative(ctx context.Context, nameKey string) (bool, error)
 	SetNegative(ctx context.Context, nameKey string) error
 }
 
+// DiscogsEnrichmentCache caches DiscogsEnrichment keyed by a normalized
+// (artist, album) name key — Discogs has no ISRC/MBID, so the name key is the
+// only stable handle on the request.
+type DiscogsEnrichmentCache = NameKeyedCache[domain.DiscogsEnrichment]
+
 // DiscogsArtistEnrichmentCache is the artist-scoped sibling of
-// DiscogsEnrichmentCache, keyed by a normalized artist name. A nil-backed
-// implementation is a no-op.
-type DiscogsArtistEnrichmentCache interface {
-	Get(ctx context.Context, nameKey string) (domain.DiscogsArtistEnrichment, bool, error)
-	Set(ctx context.Context, nameKey string, e domain.DiscogsArtistEnrichment) error
-	GetNegative(ctx context.Context, nameKey string) (bool, error)
-	SetNegative(ctx context.Context, nameKey string) error
-}
+// DiscogsEnrichmentCache, keyed by a normalized artist name.
+type DiscogsArtistEnrichmentCache = NameKeyedCache[domain.DiscogsArtistEnrichment]
 
 // LastFmEnricher looks up Last.fm detail-open enrichment for one entity
 // (docs/providers/lastfm.md cap 3). Last.fm's *.getInfo methods take entity
@@ -239,17 +239,10 @@ type LastFmEnricher interface {
 	Lookup(ctx context.Context, kind domain.ResultKind, artistName, entityTitle string) (domain.LastFmEnrichment, error)
 }
 
-// LastFmEnrichmentCache is a read-through cache of LastFmEnrichment keyed by a
-// normalized (kind, artist, title) name key — Last.fm has no stable id for the
-// request, so the name key is the handle. The negative path records that a name
-// resolved to nothing, so an unresolved entity is not re-looked-up every open.
-// A nil-backed implementation is a no-op.
-type LastFmEnrichmentCache interface {
-	Get(ctx context.Context, nameKey string) (domain.LastFmEnrichment, bool, error)
-	Set(ctx context.Context, nameKey string, e domain.LastFmEnrichment) error
-	GetNegative(ctx context.Context, nameKey string) (bool, error)
-	SetNegative(ctx context.Context, nameKey string) error
-}
+// LastFmEnrichmentCache caches LastFmEnrichment keyed by a normalized
+// (kind, artist, title) name key — Last.fm has no stable id for the request, so
+// the name key is the handle.
+type LastFmEnrichmentCache = NameKeyedCache[domain.LastFmEnrichment]
 
 // DeezerEnricher resolves and looks up Deezer detail-open enrichment for one
 // entity (docs/providers/deezer.md caps 7–8). ResolveID maps a (kind, artist,
@@ -262,17 +255,10 @@ type DeezerEnricher interface {
 	Lookup(ctx context.Context, kind domain.ResultKind, id string) (domain.DeezerEnrichment, error)
 }
 
-// DeezerEnrichmentCache is a read-through cache of DeezerEnrichment keyed by a
-// normalized (kind, artist, title) name key — the request handle, since the
-// detail endpoint is reached by name-resolve. The negative path records that a
-// name resolved to nothing, so an unresolved entity is not re-resolved every
-// open. A nil-backed implementation is a no-op.
-type DeezerEnrichmentCache interface {
-	Get(ctx context.Context, nameKey string) (domain.DeezerEnrichment, bool, error)
-	Set(ctx context.Context, nameKey string, e domain.DeezerEnrichment) error
-	GetNegative(ctx context.Context, nameKey string) (bool, error)
-	SetNegative(ctx context.Context, nameKey string) error
-}
+// DeezerEnrichmentCache caches DeezerEnrichment keyed by a normalized
+// (kind, artist, title) name key — the request handle, since the detail endpoint
+// is reached by name-resolve.
+type DeezerEnrichmentCache = NameKeyedCache[domain.DeezerEnrichment]
 
 // LyricsProvider resolves and looks up Deezer lyrics for a single track
 // (docs/providers/deezer.md cap 6). ResolveTrackID maps an (artist, title) to a
@@ -287,18 +273,11 @@ type LyricsProvider interface {
 	Lookup(ctx context.Context, trackID string) (domain.DeezerLyrics, error)
 }
 
-// LyricsCache is a read-through cache of DeezerLyrics keyed by a normalized
-// (artist, title) name key — the request handle, since lyrics are reached by
-// name-resolve. The negative path records that a name produced no lyrics, so an
-// unresolved/lyric-less track is not re-fetched every open. Positive entries get
-// a long TTL (lyrics are static); negative entries a short TTL (availability is
-// region/catalog dependent). A nil-backed implementation is a no-op.
-type LyricsCache interface {
-	Get(ctx context.Context, nameKey string) (domain.DeezerLyrics, bool, error)
-	Set(ctx context.Context, nameKey string, l domain.DeezerLyrics) error
-	GetNegative(ctx context.Context, nameKey string) (bool, error)
-	SetNegative(ctx context.Context, nameKey string) error
-}
+// LyricsCache caches DeezerLyrics keyed by a normalized (artist, title) name key
+// — the request handle, since lyrics are reached by name-resolve. Positive
+// entries get a long TTL (lyrics are static); negative entries a short TTL
+// (availability is region/catalog dependent) — set by the adapter constructor.
+type LyricsCache = NameKeyedCache[domain.DeezerLyrics]
 
 type DiscogsArtistInfo struct {
 	ID      int
