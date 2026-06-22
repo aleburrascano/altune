@@ -83,12 +83,30 @@ export function useArtistContent({
     staleTime: 1000 * 60 * 30,
   });
 
+  // iTunes is a second mainstream discography source alongside Deezer
+  // (docs/providers/itunes.md cap 5). artistName is passed through so the
+  // backend applies the same MB consensus validation it does for Deezer.
+  const itunesSource = sources.find((s) => s.provider === 'itunes') ?? null;
+  const {
+    data: itData,
+    isLoading: isLoadingIt,
+    isError: isErrorIt,
+    refetch: refetchIt,
+  } = useQuery({
+    queryKey: ['artist-albums-it', itunesSource?.external_id ?? '', artistName ?? ''],
+    queryFn: () => getArtistAlbums('itunes', itunesSource!.external_id, 100, artistName),
+    enabled: enabled && itunesSource !== null,
+    staleTime: 1000 * 60 * 30,
+  });
+
   const dzFailed = isErrorDz || (dzData !== undefined && dzData.status !== 'ok');
   const scFailed = isErrorSc || (scData !== undefined && scData.status !== 'ok');
+  const itFailed = isErrorIt || (itData !== undefined && itData.status !== 'ok');
 
   const dzAlbums = dzData?.status === 'ok' ? dzData.items : [];
   const scAlbumsRaw = scData?.status === 'ok' ? scData.items : [];
-  const mergedAlbums = dedupAlbumsByTitle([...dzAlbums, ...scAlbumsRaw]);
+  const itAlbums = itData?.status === 'ok' ? itData.items : [];
+  const mergedAlbums = dedupAlbumsByTitle([...dzAlbums, ...scAlbumsRaw, ...itAlbums]);
 
   // Back-fill artwork for albums with no image (e.g. SoundCloud sets)
   // from a title-matched album from another provider.
@@ -106,10 +124,12 @@ export function useArtistContent({
   });
 
   const isLoadingAlbums = (deezerSource !== null && isLoadingDz)
-    || (scSource !== null && isLoadingSc);
+    || (scSource !== null && isLoadingSc)
+    || (itunesSource !== null && isLoadingIt);
   const albumOutcomes = [
     ...(deezerSource !== null ? [dzFailed] : []),
     ...(scSource !== null ? [scFailed] : []),
+    ...(itunesSource !== null ? [itFailed] : []),
   ];
   const isErrorAlbums = albumOutcomes.length > 0 && albumOutcomes.every(Boolean);
 
@@ -126,6 +146,6 @@ export function useArtistContent({
       isErrorTracksRaw || (tracksData !== undefined && tracksData.status !== 'ok'),
     isErrorAlbums,
     refetchTracks: refetchTracksRaw,
-    refetchAlbums: () => { refetchDz(); refetchSc(); },
+    refetchAlbums: () => { refetchDz(); refetchSc(); refetchIt(); },
   };
 }

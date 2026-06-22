@@ -121,6 +121,105 @@ func TestITunesAdapter_Search_Artists(t *testing.T) {
 	}
 }
 
+func TestITunesAdapter_Resolve_HighRes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"results": [{
+				"collectionName": "Discovery",
+				"artistName": "Daft Punk",
+				"artworkUrl100": "https://is1-ssl.mzstatic.com/image/100x100bb.jpg"
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := NewITunesAdapter(newTestClient(server.URL))
+	art, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	// Detail-open hero artwork is requested above CAA's 1200px ceiling, not the
+	// 600px search-list thumbnail — see docs/providers/itunes.md §5.2.
+	if !strings.Contains(art, "1500x1500") {
+		t.Errorf("hero artwork should be 1500x1500, got %q", art)
+	}
+}
+
+func TestITunesAdapter_GetArtistAlbums(t *testing.T) {
+	// /lookup returns the artist wrapper first, then its collections.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"results": [
+				{"wrapperType": "artist", "artistId": 368183298, "artistName": "Kendrick Lamar"},
+				{"wrapperType": "collection", "collectionId": 1440881047, "collectionName": "DAMN.", "artistName": "Kendrick Lamar", "trackCount": 15, "releaseDate": "2017-04-14T07:00:00Z", "collectionViewUrl": "https://music.apple.com/album/1440881047", "artworkUrl100": "https://is1-ssl.mzstatic.com/image/100x100bb.jpg"},
+				{"wrapperType": "collection", "collectionId": 1781270319, "collectionName": "GNX", "artistName": "Kendrick Lamar", "trackCount": 12}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := NewITunesAdapter(newTestClient(server.URL))
+	results, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderITunes, "368183298")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums: %v", err)
+	}
+	// the artist wrapper is skipped; only the two collections map through
+	if len(results) != 2 {
+		t.Fatalf("expected 2 albums, got %d", len(results))
+	}
+	first := results[0]
+	if first.Kind != domain.ResultKindAlbum {
+		t.Errorf("kind: got %v, want album", first.Kind)
+	}
+	if first.Title != "DAMN." {
+		t.Errorf("title: got %q, want %q", first.Title, "DAMN.")
+	}
+	// the album carries its own collectionId — not "0" — so detail-open content
+	// lookup can key off it
+	if first.Sources[0].ExternalID != "1440881047" {
+		t.Errorf("externalID: got %q, want collectionId 1440881047", first.Sources[0].ExternalID)
+	}
+	if tc, ok := first.Extras["track_count"].(int); !ok || tc != 15 {
+		t.Errorf("extras.track_count: got %v, want 15", first.Extras["track_count"])
+	}
+}
+
+func TestITunesAdapter_GetAlbumTracks(t *testing.T) {
+	// /lookup returns the collection wrapper first, then its tracks.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"results": [
+				{"wrapperType": "collection", "collectionId": 1440881722, "collectionName": "DAMN.", "artistName": "Kendrick Lamar"},
+				{"wrapperType": "track", "trackId": 1440881736, "trackName": "BLOOD.", "artistName": "Kendrick Lamar", "collectionName": "DAMN.", "trackViewUrl": "https://music.apple.com/track/1440881736"},
+				{"wrapperType": "track", "trackId": 1440881990, "trackName": "DNA.", "artistName": "Kendrick Lamar", "collectionName": "DAMN."}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := NewITunesAdapter(newTestClient(server.URL))
+	results, err := adapter.GetAlbumTracks(context.Background(), domain.ProviderITunes, "1440881722")
+	if err != nil {
+		t.Fatalf("GetAlbumTracks: %v", err)
+	}
+	// the collection wrapper is skipped; only the two tracks map through
+	if len(results) != 2 {
+		t.Fatalf("expected 2 tracks, got %d", len(results))
+	}
+	if results[0].Kind != domain.ResultKindTrack {
+		t.Errorf("kind: got %v, want track", results[0].Kind)
+	}
+	if results[0].Title != "BLOOD." {
+		t.Errorf("title: got %q, want %q", results[0].Title, "BLOOD.")
+	}
+	if results[0].Sources[0].ExternalID != "1440881736" {
+		t.Errorf("externalID: got %q, want trackId 1440881736", results[0].Sources[0].ExternalID)
+	}
+}
+
 func TestITunesAdapter_LookupAlbum(t *testing.T) {
 	tests := []struct {
 		name         string

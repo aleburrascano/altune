@@ -190,12 +190,18 @@ func (a *App) setup(ctx context.Context) error {
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
 	deezerContentClient := &http.Client{Timeout: 10 * time.Second}
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
+	// iTunes is a second mainstream source of truth for discography/tracklist
+	// (docs/providers/itunes.md cap 5): an iTunes-sourced album/artist result
+	// carries its collectionId/artistId, which keys the /lookup content endpoint.
+	itunesContent := providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second})
 
 	albumProviders := map[string]discoveryPorts.AlbumContentProvider{
 		"deezer": deezerContent,
+		"itunes": itunesContent,
 	}
 	artistProviders := map[string]discoveryPorts.ArtistContentProvider{
 		"deezer": deezerContent,
+		"itunes": itunesContent,
 		// SoundCloud serves the underground long tail: an artist sourced from
 		// SoundCloud carries its numeric user id, which keys these endpoints.
 		"soundcloud": providers.NewSoundCloudAPIAdapter(&http.Client{Timeout: 10 * time.Second}, nil),
