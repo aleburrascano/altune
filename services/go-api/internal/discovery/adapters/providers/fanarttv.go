@@ -23,7 +23,15 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 		return "", nil
 	}
 
-	url := fmt.Sprintf("https://webservice.fanart.tv/v3/music/%s?api_key=%s", mbid, r.apiKey)
+	// Endpoint + shape verified live 2026-06-21: artist art is top-level on
+	// /v3/music/{mbid}; album art lives behind the dedicated /v3/music/albums/{mbid}
+	// endpoint, nested under albums[mbid].albumcover (the plain music endpoint
+	// returns {} for an album mbid).
+	path := "music/" + mbid
+	if kind == domain.ResultKindAlbum {
+		path = "music/albums/" + mbid
+	}
+	url := fmt.Sprintf("https://webservice.fanart.tv/v3/%s?api_key=%s", path, r.apiKey)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", nil
@@ -35,9 +43,6 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 404 {
-		return "", nil
-	}
 	if resp.StatusCode != 200 {
 		return "", nil
 	}
@@ -54,13 +59,25 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 		if img := firstImageURL(data, "artistbackground"); img != "" {
 			return img, nil
 		}
+		return "", nil
 	}
 
-	if img := firstImageURL(data, "albumcover"); img != "" {
-		return img, nil
-	}
+	return albumCoverURL(data, mbid), nil
+}
 
-	return "", nil
+// albumCoverURL digs the album cover out of the albums endpoint's nested shape:
+// {"albums": {"<mbid>": {"albumcover": [{"url": ...}]}}}. Keyed by the queried
+// mbid (the endpoint returns the album under its own id).
+func albumCoverURL(data map[string]any, mbid string) string {
+	albums, ok := data["albums"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	entry, ok := albums[mbid].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return firstImageURL(entry, "albumcover")
 }
 
 func firstImageURL(data map[string]any, key string) string {
