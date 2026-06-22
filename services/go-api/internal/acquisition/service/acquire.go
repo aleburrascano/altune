@@ -147,8 +147,8 @@ func (s *AcquireTrackAudioService) tryDirectAcquire(
 // failureReason maps an internal pipeline error to a short, stable, client-safe
 // reason. The full error chain (which can carry yt-dlp stderr, file paths, and
 // other internals) is logged at the call site and never stored on the track or
-// returned over the wire. Keys off RunPipeline's stable "step <name>: ..." and
-// "pipeline cancelled: ..." wrapping.
+// returned over the wire. Both paths route through reasonForStep so the
+// step→reason mapping lives in exactly one place.
 func failureReason(err error) string {
 	// Preferred path: map on the structured step name, robust to message changes.
 	var stepErr *StepError
@@ -159,21 +159,32 @@ func failureReason(err error) string {
 		return "audio acquisition failed"
 	}
 
-	// Fallback: a plain "step <name>: ..." / "pipeline cancelled: ..." string
-	// (e.g. errors produced outside RunPipeline). Kept for compatibility.
+	// Fallback for plain-string errors not produced by RunPipeline: recover the
+	// step name from the stable "step <name>: ..." prefix and reuse the same
+	// mapping. Keeps "pipeline cancelled: ..." distinct.
 	msg := err.Error()
-	switch {
-	case strings.HasPrefix(msg, "step search:"), strings.HasPrefix(msg, "step select:"):
-		return "no matching audio found"
-	case strings.HasPrefix(msg, "step download:"):
-		return "audio download failed"
-	case strings.HasPrefix(msg, "step store:"):
-		return "audio storage failed"
-	case strings.HasPrefix(msg, "pipeline cancelled"):
+	if strings.HasPrefix(msg, "pipeline cancelled") {
 		return "audio acquisition cancelled"
-	default:
-		return "audio acquisition failed"
 	}
+	if step, ok := stepFromPrefix(msg); ok {
+		if reason, ok := reasonForStep(step); ok {
+			return reason
+		}
+	}
+	return "audio acquisition failed"
+}
+
+// stepFromPrefix recovers a step name from a "step <name>: ..." error string.
+func stepFromPrefix(msg string) (string, bool) {
+	rest, ok := strings.CutPrefix(msg, "step ")
+	if !ok {
+		return "", false
+	}
+	name, _, found := strings.Cut(rest, ":")
+	if !found {
+		return "", false
+	}
+	return name, true
 }
 
 // reasonForStep maps a pipeline step name to its client-safe failure reason.
