@@ -63,7 +63,7 @@ func (m *fakeMB) LookupAlbumArtist(_ context.Context, _, albumTitle string, _ do
 func TestConsensus_ConfirmedAndUnconfirmed(t *testing.T) {
 	svc := NewConsensusService([]ConsensusProvider{
 		consensusProvider("lastfm", "Album A", "Album B"),
-		consensusProvider("tidal", "Album A"),
+		consensusProvider("musicbrainz", "Album A"),
 	})
 	got := svc.BuildConsensus(context.Background(), "Artist", nil)
 
@@ -81,7 +81,7 @@ func TestConsensus_DistinctAlbumsStaySeparate(t *testing.T) {
 	// parenthetical "(Deluxe)" is canonical noise and folds into "Scorpion".
 	svc := NewConsensusService([]ConsensusProvider{
 		consensusProvider("lastfm", "Scorpion", "Scorpion (Deluxe)", "Take Care"),
-		consensusProvider("tidal", "Scorpion"),
+		consensusProvider("musicbrainz", "Scorpion"),
 	})
 	got := svc.BuildConsensus(context.Background(), "Drake", nil)
 
@@ -89,7 +89,7 @@ func TestConsensus_DistinctAlbumsStaySeparate(t *testing.T) {
 	if _, ok := byTitle["Take Care"]; !ok {
 		t.Error("expected the distinct album 'Take Care' to remain")
 	}
-	// "Scorpion" + "Scorpion (Deluxe)" + tidal "Scorpion" all normalize alike →
+	// "Scorpion" + "Scorpion (Deluxe)" + musicbrainz "Scorpion" all normalize alike →
 	// one confirmed cluster (3 provider hits).
 	if byTitle["Scorpion"] != ConsensusConfirmed {
 		t.Errorf("Scorpion = %v, want confirmed (deluxe folds in)", byTitle["Scorpion"])
@@ -122,7 +122,7 @@ func TestConsensus_DeterministicAcrossRuns(t *testing.T) {
 	build := func() []ConsensusAlbum {
 		svc := NewConsensusService([]ConsensusProvider{
 			consensusProvider("lastfm", "A", "B", "C"),
-			consensusProvider("tidal", "B", "D"),
+			consensusProvider("musicbrainz", "B", "D"),
 			consensusProvider("itunes", "A", "C", "E"),
 		})
 		return svc.BuildConsensus(context.Background(), "Artist", nil)

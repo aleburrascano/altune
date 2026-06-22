@@ -35,8 +35,6 @@ type Config struct {
 	GeniusAccessToken    string `env:"GENIUS_ACCESS_TOKEN"`
 	DiscogsToken         string `env:"DISCOGS_TOKEN"`
 	YouTubeAPIKey        string `env:"YOUTUBE_API_KEY"`
-	TidalClientID        string `env:"TIDAL_CLIENT_ID"`
-	TidalClientSecret    string `env:"TIDAL_CLIENT_SECRET"`
 
 	// Audio storage — OCI Object Storage (S3-compatible)
 	OCIS3Endpoint  string `env:"OCI_S3_ENDPOINT"`
@@ -112,10 +110,6 @@ func (c *Config) HasDiscogs() bool {
 	return c.DiscogsToken != ""
 }
 
-func (c *Config) HasTidal() bool {
-	return c.TidalClientID != "" && c.TidalClientSecret != ""
-}
-
 func (c *Config) HasYouTube() bool {
 	return c.YouTubeAPIKey != ""
 }
@@ -135,6 +129,5 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_genius", c.HasGenius()),
 		slog.Bool("has_discogs", c.HasDiscogs()),
 		slog.Bool("has_youtube", c.HasYouTube()),
-		slog.Bool("has_tidal", c.HasTidal()),
 	)
 }
