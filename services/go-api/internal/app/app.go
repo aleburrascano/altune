@@ -198,16 +198,6 @@ func (a *App) setup(ctx context.Context) error {
 		"soundcloud": providers.NewSoundCloudAPIAdapter(&http.Client{Timeout: 10 * time.Second}, nil),
 	}
 
-	var tidalContent *providers.TidalAdapter
-	if a.cfg.HasTidal() {
-		tidalContent = providers.NewTidalAdapter(
-			&http.Client{Timeout: 15 * time.Second},
-			a.cfg.TidalClientID,
-			a.cfg.TidalClientSecret,
-		)
-		artistProviders["tidal"] = tidalContent
-	}
-
 	// Related tracks are track-keyed: a SoundCloud-sourced track carries its
 	// numeric track id, which keys /tracks/{id}/related. SoundCloud-only today.
 	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{
@@ -237,7 +227,23 @@ func (a *App) setup(ctx context.Context) error {
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 
-	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, relatedSvc, suggestSvc, eventSvc)
+	// MusicBrainz detail-open enrichment: genres/year/rating/external-ids + the
+	// HD MBID-keyed cover via the existing artwork chain. Only when MB is
+	// configured; nil otherwise (the handler degrades to an empty DTO).
+	var enrichSvc *discoveryService.EnrichmentService
+	if sharedMB != nil {
+		enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
+		enrichSvc = discoveryService.NewEnrichmentService(
+			sharedMB,
+			buildArtworkChain(a.cfg),
+			enrichmentCache,
+			// Memoize each name resolution so the search path can attach the MBID to
+			// a non-MB result later (cap 5 warm).
+			discoveryService.WithMBIDMemo(enrichmentCache),
+		)
+	}
+
+	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, relatedSvc, enrichSvc, suggestSvc, eventSvc)
 
 	a.startVocabularyRefresh(vocabStore)
 
@@ -376,11 +382,6 @@ func buildDiscoveryProviders(cfg *config.Config, mb *providers.MusicBrainzAdapte
 		soundcloudClient,
 		providers.NewSoundCloudAdapter(),
 	))
-
-	if cfg.HasTidal() {
-		tidalClient := &http.Client{Timeout: 10 * time.Second}
-		providerList = append(providerList, providers.NewTidalAdapter(tidalClient, cfg.TidalClientID, cfg.TidalClientSecret))
-	}
 
 	providerList = append(providerList, providers.NewYouTubeMusicAdapter())
 

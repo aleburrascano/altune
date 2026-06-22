@@ -53,6 +53,8 @@ type Service struct {
 	artworkResolver ports.ArtworkResolver
 	artworkCache    ports.ArtworkCache
 	albumValidator  ports.AlbumValidator
+	identityBridge  ports.IdentityBridge
+	mbidIndex       ports.MBIDIndex
 	correctionSvc   *CorrectionService
 	findRelatedSvc  *FindRelatedService
 	bgWg            sync.WaitGroup
@@ -102,6 +104,21 @@ func WithArtworkCache(c ports.ArtworkCache) Option {
 // WithAlbumValidator enables artist disambiguation (MusicBrainz identity).
 func WithAlbumValidator(v ports.AlbumValidator) Option {
 	return func(s *Service) { s.albumValidator = v }
+}
+
+// WithIdentityBridge enables cross-provider identity merging: MB results are
+// stamped with their bridged provider ids (from the enrichment cache) before
+// merge, so a result merges by stated identity, not just name. Off → name-only
+// merge (the prior behavior).
+func WithIdentityBridge(b ports.IdentityBridge) Option {
+	return func(s *Service) { s.identityBridge = b }
+}
+
+// WithMBIDIndex lets search-card artwork attach a cached MBID to a non-MB result
+// (name→mbid memo warmed by detail-opens), so the MBID-keyed artwork tier fires
+// on the list too. Off → non-MB results keep their provider thumbnail.
+func WithMBIDIndex(idx ports.MBIDIndex) Option {
+	return func(s *Service) { s.mbidIndex = idx }
 }
 
 // WithFindRelatedService attaches the "more from this album/artist" groups.
@@ -207,6 +224,7 @@ func (s *Service) mergeRankEnrich(
 	perProvider [][]domain.SearchResult,
 	queryNorm string,
 ) []domain.SearchResult {
+	s.stampIdentities(ctx, perProvider)
 	entities := Merge(perProvider)
 	ranked := Rank(entities, queryNorm)
 
@@ -218,6 +236,36 @@ func (s *Service) mergeRankEnrich(
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
 	ranked = s.enrich(ctx, ranked)
 	return ranked
+}
+
+// stampIdentities annotates MB-sourced results with their bridged cross-provider
+// ids (Deezer/Spotify/...), read from the IdentityBridge (the enrichment cache),
+// so Merge can resolve identity across providers instead of by name alone. It is
+// a cache-only read — no MB round-trip on the search path — and a no-op when the
+// bridge is unset or an entity was never enriched. Mutates perProvider in place.
+func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.SearchResult) {
+	if s.identityBridge == nil {
+		return
+	}
+	for gi := range perProvider {
+		for ri := range perProvider[gi] {
+			r := &perProvider[gi][ri]
+			mbid := stringExtra(*r, "mbid")
+			if mbid == "" {
+				continue
+			}
+			ids, ok := s.identityBridge.ExternalIDs(ctx, r.Kind, mbid)
+			if !ok {
+				continue
+			}
+			if r.Extras == nil {
+				r.Extras = make(map[string]any, 1)
+			}
+			r.Extras["xref"] = ids
+			slog.DebugContext(ctx, "merge.identity_bridge_stamped",
+				"kind", r.Kind.String(), "mbid", mbid, "ids", len(ids))
+		}
+	}
 }
 
 // fanOut queries every provider in parallel, each bounded by a timeout and
