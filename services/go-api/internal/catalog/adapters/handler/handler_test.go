@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"altune/go-api/internal/auth"
 	catdomain "altune/go-api/internal/catalog/domain"
@@ -323,16 +322,6 @@ func (s *fakeScheduler) Schedule(_ shared.UserId, trackId catdomain.TrackId, sou
 	s.sourceURLs = append(s.sourceURLs, sourceURL)
 }
 
-// --- helper: build authed request through chi router ---
-
-// authedRouter wraps a chi.Router with auth middleware using the fake verifier.
-func authedRouter(r chi.Router) chi.Router {
-	outer := chi.NewRouter()
-	outer.Use(auth.Middleware(&fakeTokenVerifier{userId: testUserId}))
-	outer.Mount("/", r)
-	return outer
-}
-
 // serve sends a request through a chi router and returns the response recorder.
 func serve(t *testing.T, router chi.Router, method, path string, body io.Reader) *httptest.ResponseRecorder {
 	t.Helper()
@@ -446,9 +435,4 @@ func assertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
 	if ct != "application/json" && ct != "application/json; charset=utf-8" {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
-}
-
-// nowUTC returns a truncated UTC time for test comparisons.
-func nowUTC() time.Time {
-	return time.Now().UTC().Truncate(time.Second)
 }
