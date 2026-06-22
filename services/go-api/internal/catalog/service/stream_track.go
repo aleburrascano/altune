@@ -53,7 +53,10 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 	if err != nil {
 		slog.WarnContext(ctx, "stream.audio_missing",
 			"track_id", trackId.String(), "error", err)
-		s.recoverMissingAudio(ctx, userId, track)
+		if recErr := s.recoverMissingAudio(ctx, userId, track); recErr != nil {
+			slog.ErrorContext(ctx, "stream.recover_failed",
+				"track_id", trackId.String(), "error", recErr)
+		}
 		return nil, ErrAudioNotAvailable
 	}
 
@@ -63,24 +66,23 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 // recoverMissingAudio reconciles a track whose audio failed to stream: if the
 // file is genuinely gone from storage it is marked failed, and re-acquisition is
 // scheduled regardless. The track is already loaded and known streamable here, so
-// no second fetch or status re-check is needed — and any recovery error is logged
-// at its source rather than swallowed.
-func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId shared.UserId, track *domain.Track) {
+// no second fetch or status re-check is needed. Reconcile failures are returned
+// (the caller logs once) rather than logged-and-swallowed here; scheduling stays
+// fire-and-forget and runs whether or not reconcile succeeded.
+func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId shared.UserId, track *domain.Track) error {
+	var recErr error
 	exists, err := s.audioStore.Exists(ctx, *track.AudioRef)
 	switch {
 	case err != nil:
-		slog.WarnContext(ctx, "stream.audio_check_failed",
-			"track_id", track.ID.String(), "error", err)
+		recErr = fmt.Errorf("audio existence check: %w", err)
 	case !exists:
 		if err := track.MarkFailed("audio file missing from storage"); err != nil {
-			slog.ErrorContext(ctx, "stream.mark_failed_error",
-				"track_id", track.ID.String(), "error", err)
+			recErr = fmt.Errorf("mark failed: %w", err)
 		} else {
 			slog.WarnContext(ctx, "track marked failed: audio file missing",
 				"track_id", track.ID.String(), "user_id", userId.String())
 			if err := s.trackRepo.Update(ctx, track); err != nil {
-				slog.ErrorContext(ctx, "stream.reconcile_update_failed",
-					"track_id", track.ID.String(), "error", err)
+				recErr = fmt.Errorf("persist recovery: %w", err)
 			}
 		}
 	}
@@ -92,4 +94,5 @@ func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId sha
 		// falls back to the search pipeline.
 		s.scheduler.Schedule(userId, track.ID, "")
 	}
+	return recErr
 }

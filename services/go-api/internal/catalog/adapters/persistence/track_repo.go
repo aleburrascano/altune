@@ -164,7 +164,11 @@ type scanner interface {
 	Scan(dest ...any) error
 }
 
-func scanTrackColumns(s scanner) (*domain.Track, error) {
+// trackScanDest returns the 17 scan destinations for a track row (in the canonical
+// column order used by every track SELECT) plus a builder that turns them into a
+// domain.Track. Sharing it lets joins that carry extra columns (e.g. playlist
+// position) reuse the exact same column list and construction.
+func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 	var (
 		id            uuid.UUID
 		userId        uuid.UUID
@@ -184,44 +188,52 @@ func scanTrackColumns(s scanner) (*domain.Track, error) {
 		failureReason *string
 	)
 
-	err := s.Scan(
+	dest = []any{
 		&id, &userId, &title, &artist, &album, &durSecs,
 		&addedAt, &artworkURL, &acqStatus, &dedupKey,
 		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason,
-	)
-	if err != nil {
+	}
+
+	build = func() (*domain.Track, error) {
+		status, err := domain.ParseAcquisitionStatus(acqStatus)
+		if err != nil {
+			return nil, err
+		}
+
+		albumVal := ""
+		if album != nil {
+			albumVal = *album
+		}
+
+		return &domain.Track{
+			ID:                domain.TrackIdFromUUID(id),
+			UserId:            shared.NewUserId(userId),
+			Title:             title,
+			Artist:            artist,
+			Album:             albumVal,
+			DurationSeconds:   durSecs,
+			AddedAt:           addedAt,
+			ArtworkURL:        artworkURL,
+			AcquisitionStatus: status,
+			DedupKey:          dedupKey,
+			Year:              year,
+			Genre:             genre,
+			TrackNumber:       trackNumber,
+			AlbumArtist:       albumArtist,
+			ISRC:              isrc,
+			AudioRef:          audioRef,
+			FailureReason:     failureReason,
+		}, nil
+	}
+	return dest, build
+}
+
+func scanTrackColumns(s scanner) (*domain.Track, error) {
+	dest, build := trackScanDest()
+	if err := s.Scan(dest...); err != nil {
 		return nil, err
 	}
-
-	status, err := domain.ParseAcquisitionStatus(acqStatus)
-	if err != nil {
-		return nil, err
-	}
-
-	albumVal := ""
-	if album != nil {
-		albumVal = *album
-	}
-
-	return &domain.Track{
-		ID:                domain.TrackIdFromUUID(id),
-		UserId:            shared.NewUserId(userId),
-		Title:             title,
-		Artist:            artist,
-		Album:             albumVal,
-		DurationSeconds:   durSecs,
-		AddedAt:           addedAt,
-		ArtworkURL:        artworkURL,
-		AcquisitionStatus: status,
-		DedupKey:          dedupKey,
-		Year:              year,
-		Genre:             genre,
-		TrackNumber:       trackNumber,
-		AlbumArtist:       albumArtist,
-		ISRC:              isrc,
-		AudioRef:          audioRef,
-		FailureReason:     failureReason,
-	}, nil
+	return build()
 }
 
 func scanTrack(row pgx.Row) (*domain.Track, error) {
