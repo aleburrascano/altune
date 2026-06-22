@@ -356,7 +356,7 @@ func (a *App) setup(ctx context.Context) error {
 		r.Mount("/playlists", playlistHandler.Routes())
 		r.Mount("/playback", queueHandler.Routes())
 		r.Mount("/discovery", discoveryH.Routes())
-		r.Handle("/events", events.NewSSEHandler(a.eventBus))
+		r.Handle("/events", &sseHandler{bus: a.eventBus})
 	})
 
 	a.server = &http.Server{

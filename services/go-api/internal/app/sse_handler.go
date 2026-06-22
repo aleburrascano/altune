@@ -1,4 +1,4 @@
-package events
+package app
 
 import (
 	"encoding/json"
@@ -8,17 +8,19 @@ import (
 	"strconv"
 
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/shared/events"
 )
 
-type SSEHandler struct {
-	bus Bus
+// sseHandler streams a user's event bus over Server-Sent Events. It lives in the
+// composition root because it is the seam between the cross-cutting event bus
+// (shared/events) and the auth context — wiring those together is app/'s job, and
+// keeping it here stops shared/events from importing auth (which would invert the
+// dependency ring).
+type sseHandler struct {
+	bus events.Bus
 }
 
-func NewSSEHandler(bus Bus) *SSEHandler {
-	return &SSEHandler{bus: bus}
-}
-
-func (h *SSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
 		return
@@ -68,7 +70,7 @@ func (h *SSEHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func writeSSEEvent(w http.ResponseWriter, evt Event) {
+func writeSSEEvent(w http.ResponseWriter, evt events.Event) {
 	data, err := json.Marshal(evt.Payload)
 	if err != nil {
 		slog.Warn("sse.marshal_failed", "event_type", evt.Type, "error", err)
