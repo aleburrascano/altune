@@ -299,3 +299,17 @@ func (s *mockAudioStore) Delete(_ context.Context, audioRef string) error {
 func (s *mockAudioStore) seed(audioRef string) {
 	s.files[audioRef] = true
 }
+
+// --- recordingScheduler ---
+
+var _ ports.AcquisitionScheduler = (*recordingScheduler)(nil)
+
+type recordingScheduler struct {
+	trackIds   []domain.TrackId
+	sourceURLs []string
+}
+
+func (s *recordingScheduler) Schedule(_ shared.UserId, trackId domain.TrackId, sourceURL string) {
+	s.trackIds = append(s.trackIds, trackId)
+	s.sourceURLs = append(s.sourceURLs, sourceURL)
+}

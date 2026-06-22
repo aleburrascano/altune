@@ -7,7 +7,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-func ComputeDedupKey(title, artist, album string) string {
+func computeDedupKey(title, artist, album string) string {
 	parts := []string{
 		normalizeForDedup(title),
 		normalizeForDedup(artist),

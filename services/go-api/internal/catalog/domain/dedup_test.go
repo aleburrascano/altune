@@ -53,9 +53,9 @@ func TestComputeDedupKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := ComputeDedupKey(tt.title, tt.artist, tt.album)
+			got := computeDedupKey(tt.title, tt.artist, tt.album)
 			if got != tt.want {
-				t.Errorf("ComputeDedupKey(%q, %q, %q) = %q, want %q",
+				t.Errorf("computeDedupKey(%q, %q, %q) = %q, want %q",
 					tt.title, tt.artist, tt.album, got, tt.want)
 			}
 		})
