@@ -23,12 +23,14 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
+import { useEnrichment } from '../hooks/useEnrichment';
 import { useEnrichResult } from '../hooks/useEnrichResult';
 import { useLateralNav } from '../hooks/useLateralNav';
 
 import { TrackDetailBody } from './TrackDetailBody';
 import { AlbumDetailBody } from './AlbumDetailBody';
 import { ArtistDetailBody } from './ArtistDetailBody';
+import { EnrichmentSection } from './EnrichmentSection';
 
 const HERO_SIZE = 200;
 
@@ -59,9 +61,22 @@ export function DetailScreen(): ReactElement {
     artistName: result.title,
     enabled: isLibraryArtist,
   });
-  const heroImageUrl = isLibraryArtist && artistDiscovery.imageUrl != null
-    ? artistDiscovery.imageUrl
-    : result.image_url;
+  // MusicBrainz detail enrichment (genres/year/rating + HD cover). The resolved
+  // HD artwork wins for the hero; metadata renders in EnrichmentSection below.
+  const mbid = typeof result.extras.mbid === 'string' ? result.extras.mbid : undefined;
+  const { enrichment } = useEnrichment({
+    kind: result.kind,
+    title: result.title,
+    subtitle: result.subtitle,
+    mbid,
+  });
+
+  const heroImageUrl =
+    (enrichment?.artwork_url ?? '') !== ''
+      ? enrichment!.artwork_url
+      : isLibraryArtist && artistDiscovery.imageUrl != null
+        ? artistDiscovery.imageUrl
+        : result.image_url;
 
   const canNavToArtist = result.subtitle !== null && result.kind !== 'artist';
 
@@ -139,6 +154,7 @@ export function DetailScreen(): ReactElement {
         contentContainerStyle={styles.scrollContent}
       >
         {heroContent}
+        <EnrichmentSection enrichment={enrichment} />
         {result.kind === 'track' ? <TrackDetailBody result={result} lateralNav={lateralNav} detailRoute={detailRoute} /> : null}
         {result.kind === 'album' ? <AlbumDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
         {result.kind === 'artist' ? <ArtistDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}

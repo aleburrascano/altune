@@ -42,12 +42,26 @@ const mockGetArtistAlbums = jest.fn(() =>
 const mockGetRelatedTracks = jest.fn(() =>
   Promise.resolve({ items: [], provider: 'soundcloud', status: 'ok', latency_ms: 50 }),
 );
+const mockGetEnrichment = jest.fn(() =>
+  Promise.resolve({
+    mbid: '',
+    genres: [],
+    year: 0,
+    rating: 0,
+    rating_votes: 0,
+    primary_type: '',
+    secondary_types: [],
+    external_ids: {},
+    artwork_url: '',
+  }),
+);
 jest.mock('../../../shared/api-client/discovery', () => ({
   searchDiscovery: (params: unknown) => mockSearchDiscovery(params),
   getAlbumTracks: () => mockGetAlbumTracks(),
   getArtistTopTracks: () => mockGetArtistTopTracks(),
   getArtistAlbums: () => mockGetArtistAlbums(),
   getRelatedTracks: () => mockGetRelatedTracks(),
+  getEnrichment: () => mockGetEnrichment(),
 }));
 
 import { clearDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';
@@ -136,6 +150,7 @@ describe('DetailScreen', () => {
         year: null,
         genre: null,
         album_artist: null,
+        source_url: null,
       }),
     );
   });
