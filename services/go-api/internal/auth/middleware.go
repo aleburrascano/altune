@@ -12,9 +12,11 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
-type contextKey string
+// contextKey is an unexported zero-size type so the user-id key cannot collide
+// with a context key from any other package (a bare string could).
+type contextKey struct{}
 
-const userIDKey contextKey = "userId"
+var userIDKey contextKey
 
 func Middleware(verifier TokenVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
