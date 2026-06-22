@@ -36,6 +36,7 @@ type DiscoveryHandler struct {
 	discogsArtistEnrichSvc *service.DiscogsArtistEnrichmentService
 	lastfmEnrichSvc        *service.LastFmEnrichmentService
 	deezerEnrichSvc        *service.DeezerEnrichmentService
+	lyricsSvc              *service.LyricsService
 }
 
 // WithDiscogsEnrichment attaches the Discogs album-enrichment use case (caps 3–6).
@@ -65,6 +66,14 @@ func (h *DiscoveryHandler) WithLastFmEnrichment(svc *service.LastFmEnrichmentSer
 // leaves the endpoint answering empty.
 func (h *DiscoveryHandler) WithDeezerEnrichment(svc *service.DeezerEnrichmentService) *DiscoveryHandler {
 	h.deezerEnrichSvc = svc
+	return h
+}
+
+// WithLyrics attaches the Deezer lyrics use case (cap 6 — synced + plain lyrics,
+// writers, copyright). Set at composition time; a nil service leaves the endpoint
+// answering empty.
+func (h *DiscoveryHandler) WithLyrics(svc *service.LyricsService) *DiscoveryHandler {
+	h.lyricsSvc = svc
 	return h
 }
 
@@ -108,6 +117,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/enrichment/discogs/artist", h.handleDiscogsArtistEnrichment)
 	r.Get("/enrichment/lastfm", h.handleLastFmEnrichment)
 	r.Get("/enrichment/deezer", h.handleDeezerEnrichment)
+	r.Get("/lyrics", h.handleLyrics)
 	return r
 }
 
@@ -956,6 +966,66 @@ func deezerEnrichmentToDTO(e domain.DeezerEnrichment) DeezerEnrichmentResponseDT
 		Genres:     nonNilStrings(e.Genres),
 		UPC:        e.UPC,
 		RecordType: e.RecordType,
+	}
+}
+
+// handleLyrics serves Deezer lyrics for one track: the full plain text, the
+// time-synced lines (when available), the songwriter credits, and the copyright
+// line (docs/providers/deezer.md cap 6). Identified by `title` (track) +
+// `subtitle` (artist). Always 200 with the DTO (or an empty DTO); only
+// request-shape problems are 4xx. Lyrics apply to tracks only — no kind param.
+func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) {
+	title := strings.TrimSpace(r.URL.Query().Get("title"))
+	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
+	if title == "" {
+		httputil.BadRequest(w, "title is required")
+		return
+	}
+
+	if h.lyricsSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, lyricsToDTO(domain.EmptyDeezerLyrics()))
+		return
+	}
+
+	l, err := h.lyricsSvc.Execute(r.Context(), title, subtitle)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "lyrics fetch failed", "error", err, "title", title)
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, lyricsToDTO(l))
+}
+
+type LyricsResponseDTO struct {
+	Plain       string            `json:"plain"`
+	SyncedLines []SyncedLineDTO   `json:"synced_lines"`
+	Writers     []string          `json:"writers"`
+	Copyright   string            `json:"copyright"`
+}
+
+type SyncedLineDTO struct {
+	Timecode     string `json:"timecode"`
+	Line         string `json:"line"`
+	Milliseconds int64  `json:"milliseconds"`
+	Duration     int64  `json:"duration"`
+}
+
+func lyricsToDTO(l domain.DeezerLyrics) LyricsResponseDTO {
+	lines := make([]SyncedLineDTO, len(l.SyncedLines))
+	for i, ln := range l.SyncedLines {
+		lines[i] = SyncedLineDTO{
+			Timecode:     ln.Timecode,
+			Line:         ln.Line,
+			Milliseconds: ln.Milliseconds,
+			Duration:     ln.Duration,
+		}
+	}
+	return LyricsResponseDTO{
+		Plain:       l.Plain,
+		SyncedLines: lines,
+		Writers:     nonNilStrings(l.Writers),
+		Copyright:   l.Copyright,
 	}
 }
 

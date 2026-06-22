@@ -274,6 +274,32 @@ type DeezerEnrichmentCache interface {
 	SetNegative(ctx context.Context, nameKey string) error
 }
 
+// LyricsProvider resolves and looks up Deezer lyrics for a single track
+// (docs/providers/deezer.md cap 6). ResolveTrackID maps an (artist, title) to a
+// Deezer track id via the public-API search ("" when none). Lookup fetches the
+// time-synced + plain lyrics for a known track id via the internal pipe.deezer.com
+// GraphQL (the anonymous-JWT path). A definitive "no lyrics for this track/region"
+// returns an empty value + nil error (the service negative-caches it); a transient
+// failure (auth/network) returns an error (not cached). Implemented by the Deezer
+// lyrics adapter; consumed by LyricsService.
+type LyricsProvider interface {
+	ResolveTrackID(ctx context.Context, artist, title string) (string, error)
+	Lookup(ctx context.Context, trackID string) (domain.DeezerLyrics, error)
+}
+
+// LyricsCache is a read-through cache of DeezerLyrics keyed by a normalized
+// (artist, title) name key — the request handle, since lyrics are reached by
+// name-resolve. The negative path records that a name produced no lyrics, so an
+// unresolved/lyric-less track is not re-fetched every open. Positive entries get
+// a long TTL (lyrics are static); negative entries a short TTL (availability is
+// region/catalog dependent). A nil-backed implementation is a no-op.
+type LyricsCache interface {
+	Get(ctx context.Context, nameKey string) (domain.DeezerLyrics, bool, error)
+	Set(ctx context.Context, nameKey string, l domain.DeezerLyrics) error
+	GetNegative(ctx context.Context, nameKey string) (bool, error)
+	SetNegative(ctx context.Context, nameKey string) error
+}
+
 type DiscogsArtistInfo struct {
 	ID      int
 	Name    string
