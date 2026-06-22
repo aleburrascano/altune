@@ -34,7 +34,8 @@ type scored struct {
 // Rank applies the eligibility gates and sorts by continuous relevance,
 // returning handler-ready results. queryNorm is the normalized query.
 func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
-	q := textnorm.NormalizeForMatch(queryNorm)
+	// queryNorm is already normalized by the caller (Execute); use it directly.
+	q := queryNorm
 
 	results := make([]scored, 0, len(entities))
 	for _, e := range entities {

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 
@@ -50,6 +51,8 @@ func (cb *CircuitBreaker) AllowRequest(provider domain.ProviderName) bool {
 	case CircuitOpen:
 		if time.Since(entry.lastFailedAt) > openDuration {
 			entry.state = CircuitHalfOpen
+			slog.Warn("circuit breaker half-open (probing recovery)",
+				"provider", provider.String())
 			return true
 		}
 		return false
@@ -68,6 +71,10 @@ func (cb *CircuitBreaker) RecordSuccess(provider domain.ProviderName) {
 	defer cb.mu.Unlock()
 
 	entry := cb.getOrCreate(provider)
+	if entry.state != CircuitClosed {
+		slog.Info("circuit breaker closed (provider recovered)",
+			"provider", provider.String())
+	}
 	entry.state = CircuitClosed
 	entry.failures = 0
 	entry.probing = false
@@ -82,8 +89,10 @@ func (cb *CircuitBreaker) RecordFailure(provider domain.ProviderName) {
 	entry.lastFailedAt = time.Now()
 	entry.probing = false
 
-	if entry.state == CircuitHalfOpen || entry.failures >= failureThreshold {
+	if entry.state != CircuitOpen && (entry.state == CircuitHalfOpen || entry.failures >= failureThreshold) {
 		entry.state = CircuitOpen
+		slog.Warn("circuit breaker opened (provider failing)",
+			"provider", provider.String(), "failures", entry.failures)
 	}
 }
 

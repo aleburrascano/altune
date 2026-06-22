@@ -153,7 +153,10 @@ func (s *ConsensusService) BuildConsensus(
 
 	results = s.applyMBAuthority(ctx, artistName, results)
 
-	if len(results) > 0 {
+	// Don't cache a timeout-truncated result: if the deadline fired mid-fetch or
+	// mid-MB-validation, the verdicts are partial and must not be frozen for the
+	// full TTL. A fresh request will recompute.
+	if len(results) > 0 && ctx.Err() == nil {
 		s.cache.set(cacheKey, results)
 	}
 	logConsensus(ctx, artistName, results, respondedCount, len(s.providers))

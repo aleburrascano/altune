@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -39,7 +40,7 @@ func (r *PgxSearchClickRepository) InsertIfOutsideWindow(ctx context.Context, cl
 		return false, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return false, err
+		return false, fmt.Errorf("query click dedup window: %w", err)
 	}
 
 	_, err = r.pool.Exec(ctx,
@@ -49,7 +50,7 @@ func (r *PgxSearchClickRepository) InsertIfOutsideWindow(ctx context.Context, cl
 		click.Position, click.Confidence.String(), click.ClickedAt,
 	)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("insert search click: %w", err)
 	}
 	return true, nil
 }
@@ -65,7 +66,7 @@ func (r *PgxSearchClickRepository) TopClickedSignatures(ctx context.Context, que
 		queryNorm, limit,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query top clicked signatures: %w", err)
 	}
 	defer rows.Close()
 
@@ -74,9 +75,12 @@ func (r *PgxSearchClickRepository) TopClickedSignatures(ctx context.Context, que
 		var sig string
 		var cnt int
 		if err := rows.Scan(&sig, &cnt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan clicked signature: %w", err)
 		}
 		sigs = append(sigs, sig)
 	}
-	return sigs, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate clicked signatures: %w", err)
+	}
+	return sigs, nil
 }
