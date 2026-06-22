@@ -47,9 +47,8 @@ truly private/unlisted content never surfaces.
 | Deezer | _stub_ | ⬜ | Public `api.deezer.com` used today; internal `gw-light.php` un-audited |
 | iTunes / Apple Music | _stub_ | ⬜ | Public search used; previews + richer Apple Music API un-audited |
 | YouTube Music | _stub_ | ⬜ | Via `ytmusic` lib; full internal surface un-audited |
-| MusicBrainz | _stub_ | ⬜ | Open API; identity authority |
+| MusicBrainz | [musicbrainz.md](musicbrainz.md) | ✅ live-probed 2026-06-22 / 06-21 | Search + identity/consensus + `inc=` enrichment + CAA artwork all built. Identity-merge (cap 4) & search-list artwork (cap 5) 🧪 built, awaiting one `discoveryeval -top-k 3`; Fanart.tv (cap 6) ✅ live-verified |
 | Last.fm | _stub_ | ⬜ | Public API key |
-| Tidal | _stub_ | ⬜ | OAuth; un-audited |
 | Discogs | _stub_ | ⬜ | Token API; discography enrichment |
 
 ## How to audit a provider

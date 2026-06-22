@@ -6,7 +6,7 @@
 ## 1. Why this provider matters
 
 SoundCloud is the **only** provider that carries the unreleased / leaked / underground long tail —
-the exact tracks no mainstream catalog (Deezer, iTunes, MusicBrainz, Tidal) indexes. For a
+the exact tracks no mainstream catalog (Deezer, iTunes, MusicBrainz) indexes. For a
 self-hosted **owned-library** product, it is also the **only acquisition source** for that long
 tail: the same API that finds an unreleased track also exposes its full audio stream. That makes
 SoundCloud arguably the highest-leverage provider we have — not just another search source.
