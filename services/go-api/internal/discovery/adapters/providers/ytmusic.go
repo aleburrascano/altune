@@ -219,19 +219,9 @@ func mapYTMusicTrack(t *ytmusic.TrackItem) domain.SearchResult {
 		extras["album"] = t.Album.Name
 	}
 
-	return domain.SearchResult{
-		Kind:       domain.ResultKindTrack,
-		Title:      t.Title,
-		Subtitle:   subtitle,
-		ImageURL:   imageURL,
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderYouTube,
-			ExternalID: t.VideoID,
-			URL:        "https://music.youtube.com/watch?v=" + t.VideoID,
-		}},
-		Extras: extras,
-	}
+	return domain.NewProviderResult(domain.ResultKindTrack, t.Title, subtitle, imageURL,
+		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: t.VideoID, URL: "https://music.youtube.com/watch?v=" + t.VideoID},
+		extras)
 }
 
 // mapYTMusicVideo maps a YouTube Music video result to a track. Used by the
@@ -251,19 +241,9 @@ func mapYTMusicVideo(v *ytmusic.VideoItem) domain.SearchResult {
 		extras["duration"] = v.Duration
 	}
 
-	return domain.SearchResult{
-		Kind:       domain.ResultKindTrack,
-		Title:      v.Title,
-		Subtitle:   subtitle,
-		ImageURL:   imageURL,
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderYouTube,
-			ExternalID: v.VideoID,
-			URL:        "https://music.youtube.com/watch?v=" + v.VideoID,
-		}},
-		Extras: extras,
-	}
+	return domain.NewProviderResult(domain.ResultKindTrack, v.Title, subtitle, imageURL,
+		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: v.VideoID, URL: "https://music.youtube.com/watch?v=" + v.VideoID},
+		extras)
 }
 
 func mapYTMusicAlbum(a *ytmusic.AlbumItem) domain.SearchResult {
@@ -283,19 +263,9 @@ func mapYTMusicAlbum(a *ytmusic.AlbumItem) domain.SearchResult {
 		extras["record_type"] = a.Type
 	}
 
-	return domain.SearchResult{
-		Kind:       domain.ResultKindAlbum,
-		Title:      a.Title,
-		Subtitle:   subtitle,
-		ImageURL:   imageURL,
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderYouTube,
-			ExternalID: a.BrowseID,
-			URL:        "https://music.youtube.com/browse/" + a.BrowseID,
-		}},
-		Extras: extras,
-	}
+	return domain.NewProviderResult(domain.ResultKindAlbum, a.Title, subtitle, imageURL,
+		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: a.BrowseID, URL: "https://music.youtube.com/browse/" + a.BrowseID},
+		extras)
 }
 
 // ytArtworkHeroSize is the square dimension the artist-artwork hero is resized
@@ -393,16 +363,7 @@ func mapYTMusicArtist(a *ytmusic.ArtistItem) domain.SearchResult {
 		imageURL = a.Thumbnails[len(a.Thumbnails)-1].URL
 	}
 
-	return domain.SearchResult{
-		Kind:       domain.ResultKindArtist,
-		Title:      a.Artist,
-		ImageURL:   imageURL,
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderYouTube,
-			ExternalID: a.BrowseID,
-			URL:        "https://music.youtube.com/channel/" + a.BrowseID,
-		}},
-		Extras: make(map[string]any),
-	}
+	return domain.NewProviderResult(domain.ResultKindArtist, a.Artist, "", imageURL,
+		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: a.BrowseID, URL: "https://music.youtube.com/channel/" + a.BrowseID},
+		nil)
 }

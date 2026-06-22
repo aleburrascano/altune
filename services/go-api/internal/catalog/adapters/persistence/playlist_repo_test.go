@@ -164,7 +164,7 @@ func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 
 	track := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, track.ID, userId)
-	if _, err := trackRepo.Add(ctx, track); err != nil {
+	if _, _, err := trackRepo.Add(ctx, track); err != nil {
 		t.Fatalf("Add track: %v", err)
 	}
 
@@ -230,7 +230,7 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		track := newTestTrackForDB(t, userId)
 		cleanupTrack(t, pool, track.ID, userId)
-		if _, err := trackRepo.Add(ctx, track); err != nil {
+		if _, _, err := trackRepo.Add(ctx, track); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
 		if err := playlistRepo.AddTrack(ctx, pl.ID, track.ID, i); err != nil {

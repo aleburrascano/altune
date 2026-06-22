@@ -2,8 +2,6 @@ package cache
 
 import (
 	"context"
-	"crypto/sha256"
-	"fmt"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -56,6 +54,5 @@ func (r *CachedMbidResolver) Resolve(ctx context.Context, url string) (string, e
 }
 
 func mbidCacheKey(url string) string {
-	h := sha256.Sum256([]byte(url))
-	return fmt.Sprintf("discovery:mbid:v1:%x", h[:16])
+	return hashKey("discovery:mbid:v1:", url)
 }

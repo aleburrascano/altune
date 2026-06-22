@@ -186,18 +186,9 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 		subtitle = rec.ArtistCredit[0].Name
 	}
 
-	return domain.SearchResult{
-		Kind:       domain.ResultKindTrack,
-		Title:      rec.Title,
-		Subtitle:   subtitle,
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderMusicBrainz,
-			ExternalID: rec.ID,
-			URL:        "https://musicbrainz.org/recording/" + rec.ID,
-		}},
-		Extras: extras,
-	}
+	return domain.NewProviderResult(domain.ResultKindTrack, rec.Title, subtitle, "",
+		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rec.ID, URL: "https://musicbrainz.org/recording/" + rec.ID},
+		extras)
 }
 
 func mapMBArtist(art mbArtistItem) domain.SearchResult {
@@ -224,17 +215,9 @@ func mapMBArtist(art mbArtistItem) domain.SearchResult {
 		}
 	}
 
-	return domain.SearchResult{
-		Kind:       domain.ResultKindArtist,
-		Title:      art.Name,
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderMusicBrainz,
-			ExternalID: art.ID,
-			URL:        "https://musicbrainz.org/artist/" + art.ID,
-		}},
-		Extras: extras,
-	}
+	return domain.NewProviderResult(domain.ResultKindArtist, art.Name, "", "",
+		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: art.ID, URL: "https://musicbrainz.org/artist/" + art.ID},
+		extras)
 }
 
 func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
@@ -246,18 +229,9 @@ func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
 		subtitle = rg.ArtistCredit[0].Name
 	}
 
-	return domain.SearchResult{
-		Kind:       domain.ResultKindAlbum,
-		Title:      rg.Title,
-		Subtitle:   subtitle,
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderMusicBrainz,
-			ExternalID: rg.ID,
-			URL:        "https://musicbrainz.org/release-group/" + rg.ID,
-		}},
-		Extras: extras,
-	}
+	return domain.NewProviderResult(domain.ResultKindAlbum, rg.Title, subtitle, "",
+		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rg.ID, URL: "https://musicbrainz.org/release-group/" + rg.ID},
+		extras)
 }
 
 type mbRecordingResponse struct {
@@ -472,24 +446,10 @@ func (a *MusicBrainzAdapter) fetchArtistMatches(ctx context.Context, name string
 // getJSON issues a rate-limited GET with the MB User-Agent and decodes a 200
 // body into out. Non-200 is an error. Used by the enrichment surface.
 func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", a.userAgent)
-	req.Header.Set("Accept", "application/json")
 	a.rateLimit(ctx)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("musicbrainz returned %d", resp.StatusCode)
-	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	return getJSON(ctx, a.client, u, out,
+		withHeader("User-Agent", a.userAgent),
+		withHeader("Accept", "application/json"))
 }
 
 // fetchReleaseGroupMatches searches release-groups by free-text query (used by

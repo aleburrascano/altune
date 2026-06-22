@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -33,11 +34,13 @@ func Middleware(verifier TokenVerifier) func(http.Handler) http.Handler {
 
 			userId, err := verifier.Verify(r.Context(), token)
 			if err != nil {
-				var reason TokenRejectReason
-				if ite, ok := err.(*InvalidTokenError); ok {
+				// errors.As walks the chain, so a wrapped InvalidTokenError still
+				// surfaces its specific reason instead of collapsing to "signature
+				// invalid".
+				reason := ReasonSignatureInvalid
+				var ite *InvalidTokenError
+				if errors.As(err, &ite) {
 					reason = ite.Reason
-				} else {
-					reason = ReasonSignatureInvalid
 				}
 				rejectToken(w, reason, err.Error())
 				return

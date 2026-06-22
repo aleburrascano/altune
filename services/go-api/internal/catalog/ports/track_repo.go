@@ -8,7 +8,10 @@ import (
 )
 
 type TrackRepository interface {
-	Add(ctx context.Context, track *domain.Track) (created bool, err error)
+	// Add inserts the track, or returns the existing one on a dedup-key conflict.
+	// The caller gets the persisted/existing track back (created reports which) —
+	// no second lookup needed at the call site.
+	Add(ctx context.Context, track *domain.Track) (stored *domain.Track, created bool, err error)
 	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
 	GetByDedupKey(ctx context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error)
 	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)

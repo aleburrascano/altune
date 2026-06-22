@@ -2,7 +2,6 @@ package cache
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -66,8 +65,7 @@ func queryCacheKey(provider domain.ProviderName, kindsCSV, queryHash string) str
 }
 
 func QueryHash(queryNorm string) string {
-	h := sha256.Sum256([]byte(queryNorm))
-	return fmt.Sprintf("%x", h[:16])
+	return hashKey("", queryNorm)
 }
 
 func KindsCSV(kinds map[domain.ResultKind]bool) string {

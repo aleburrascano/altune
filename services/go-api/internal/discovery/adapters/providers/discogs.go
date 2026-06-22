@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -226,27 +225,16 @@ func (a *DiscogsAdapter) fetchArtistReleases(ctx context.Context, artistID, perP
 }
 
 func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Discogs token="+a.token)
-	req.Header.Set("User-Agent", a.userAgent)
 	a.rateLimit()
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 429 {
+	status, body, err := getBytes(ctx, a.client, rawURL,
+		withHeader("Authorization", "Discogs token="+a.token),
+		withHeader("User-Agent", a.userAgent))
+	if status == 429 {
 		slog.WarnContext(ctx, "discogs.rate_limited", "url", rawURL)
 		return nil, fmt.Errorf("discogs rate limited")
 	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("discogs returned %d", resp.StatusCode)
+	if err != nil {
+		return nil, err
 	}
-
-	return io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	return body, nil
 }

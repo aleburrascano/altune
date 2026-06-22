@@ -365,13 +365,6 @@ type fuzzyCandidate struct {
 	jaccard float64
 }
 
-const (
-	weightJaccard     = 0.35
-	weightLevenshtein = 0.30
-	weightPhonetic    = 0.20
-	weightLengthSim   = 0.15
-)
-
 func (s *RedisVocabularyStore) scoreCandidatesWithPhonetic(
 	ctx context.Context,
 	candidates map[string]int,
@@ -424,7 +417,7 @@ func (s *RedisVocabularyStore) scoreCandidatesWithPhonetic(
 			lengthSim = 1.0 - float64(diff)/float64(bigger)
 		}
 
-		combined := weightJaccard*jaccard + weightLevenshtein*levSim + weightPhonetic*phonetic + weightLengthSim*lengthSim
+		combined := domain.VocabularyMatchScore(jaccard, levSim, phonetic, lengthSim)
 
 		entry.TermNorm = norm
 		scored = append(scored, fuzzyCandidate{entry: entry, jaccard: combined})

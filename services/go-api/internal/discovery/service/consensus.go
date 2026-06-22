@@ -63,6 +63,34 @@ type ConsensusProvider struct {
 	Fetcher func(ctx context.Context, artistName string) ([]domain.SearchResult, error)
 }
 
+// fanOutConsensus runs collect for every provider concurrently and gathers the
+// results into a map keyed by provider name. It is the shared scatter-gather for
+// the consensus and coverage-signal paths (the breaker/timeout-bearing search
+// fanOut in search.go is deliberately separate — it carries more policy). The
+// per-provider payload type T differs (a raw slice vs a wrapped result), so it
+// is a type parameter.
+func fanOutConsensus[T any](
+	ctx context.Context,
+	providers []ConsensusProvider,
+	collect func(ctx context.Context, p ConsensusProvider) T,
+) map[string]T {
+	var mu sync.Mutex
+	out := make(map[string]T, len(providers))
+	var wg sync.WaitGroup
+	for _, p := range providers {
+		wg.Add(1)
+		go func(p ConsensusProvider) {
+			defer wg.Done()
+			r := collect(ctx, p)
+			mu.Lock()
+			out[p.Name] = r
+			mu.Unlock()
+		}(p)
+	}
+	wg.Wait()
+	return out
+}
+
 // mbAuthority is the MusicBrainz subset the consensus needs. The
 // MusicBrainzAdapter satisfies it (structurally identical to the legacy
 // consensus lookup interface).
@@ -164,27 +192,13 @@ func (s *ConsensusService) BuildConsensus(
 }
 
 func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName string) map[string][]domain.SearchResult {
-	var mu sync.Mutex
-	out := make(map[string][]domain.SearchResult, len(s.providers))
-	var wg sync.WaitGroup
-
-	for _, p := range s.providers {
-		wg.Add(1)
-		go func(provider ConsensusProvider) {
-			defer wg.Done()
-			albums, err := provider.Fetcher(ctx, artistName)
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				out[provider.Name] = nil
-				return
-			}
-			out[provider.Name] = albums
-		}(p)
-	}
-
-	wg.Wait()
-	return out
+	return fanOutConsensus(ctx, s.providers, func(ctx context.Context, p ConsensusProvider) []domain.SearchResult {
+		albums, err := p.Fetcher(ctx, artistName)
+		if err != nil {
+			return nil
+		}
+		return albums
+	})
 }
 
 // applyMBAuthority is the carried-forward audited MusicBrainz pass: confirm

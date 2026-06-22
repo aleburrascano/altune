@@ -68,9 +68,12 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	track.AlbumArtist = input.AlbumArtist
 	track.ISRC = input.ISRC
 
-	created, err := s.trackRepo.Add(ctx, track)
+	stored, created, err := s.trackRepo.Add(ctx, track)
 	if err != nil {
 		return nil, err
+	}
+	if stored != nil {
+		track = stored
 	}
 
 	if created {
@@ -91,16 +94,6 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 			slog.InfoContext(ctx, "acquisition.scheduled",
 				"track_id", track.ID.String())
 			s.scheduler.Schedule(userId, track.ID, sourceURL)
-		}
-	}
-
-	if !created {
-		existing, err := s.trackRepo.GetByDedupKey(ctx, userId, track.DedupKey)
-		if err != nil {
-			return nil, err
-		}
-		if existing != nil {
-			track = existing
 		}
 	}
 

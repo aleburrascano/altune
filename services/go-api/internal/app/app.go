@@ -139,7 +139,7 @@ func (a *App) setup(ctx context.Context) error {
 		audioSearcher = ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
 	}
 
-	var scheduler acqService.AcquisitionScheduler
+	var scheduler catalogPorts.AcquisitionScheduler
 	if audioSearcher != nil && audioStore != nil {
 		acquireSvc := acqService.NewAcquireTrackAudioService(trackRepo, audioSearcher, audioStore, acqService.WithAcquireEvents(a.eventBus))
 		bgScheduler := acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem)

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -79,6 +78,36 @@ type PlaylistDetailResponse struct {
 	Tracks             []TrackResponse `json:"tracks"`
 }
 
+// playlistToResponse maps a playlist summary to its wire DTO — one mapper for
+// the create/list/rename responses (the detail response carries tracks too).
+func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string) PlaylistResponse {
+	if artworkURLs == nil {
+		artworkURLs = []string{}
+	}
+	return PlaylistResponse{
+		ID:                 p.ID.UUID(),
+		Name:               p.Name,
+		TrackCount:         trackCount,
+		PreviewArtworkURLs: artworkURLs,
+		CreatedAt:          p.CreatedAt,
+		UpdatedAt:          p.UpdatedAt,
+	}
+}
+
+// previewArtworkFromTracks selects up to four distinct track artwork URLs for a
+// playlist's preview tile.
+func previewArtworkFromTracks(tracks []*domain.Track) []string {
+	artworkURLs := []string{}
+	seen := make(map[string]bool)
+	for _, t := range tracks {
+		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(artworkURLs) < 4 {
+			artworkURLs = append(artworkURLs, *t.ArtworkURL)
+			seen[*t.ArtworkURL] = true
+		}
+	}
+	return artworkURLs
+}
+
 // --- Handlers ---
 
 func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -95,24 +124,11 @@ func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	playlist, err := h.svc.Create(r.Context(), userId, req.Name)
 	if err != nil {
-		var ve *domain.ValidationError
-		if errors.As(err, &ve) {
-			httputil.BadRequest(w, ve.Error())
-		} else {
-			slog.ErrorContext(r.Context(), "create playlist failed", "error", err)
-			httputil.InternalError(w)
-		}
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, PlaylistResponse{
-		ID:                 playlist.ID.UUID(),
-		Name:               playlist.Name,
-		TrackCount:         0,
-		PreviewArtworkURLs: []string{},
-		CreatedAt:          playlist.CreatedAt,
-		UpdatedAt:          playlist.UpdatedAt,
-	})
+	httputil.WriteJSON(w, http.StatusCreated, playlistToResponse(playlist, 0, nil))
 }
 
 func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
@@ -123,8 +139,7 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	playlists, err := h.svc.List(r.Context(), userId)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list playlists failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -135,14 +150,7 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 			slog.ErrorContext(r.Context(), "get preview artwork failed", "error", err, "playlist_id", p.ID.String())
 			artworkURLs = []string{}
 		}
-		items[i] = PlaylistResponse{
-			ID:                 p.ID.UUID(),
-			Name:               p.Name,
-			TrackCount:         p.TrackCount,
-			PreviewArtworkURLs: artworkURLs,
-			CreatedAt:          p.CreatedAt,
-			UpdatedAt:          p.UpdatedAt,
-		}
+		items[i] = playlistToResponse(p, p.TrackCount, artworkURLs)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, ListPlaylistsResponse{
@@ -164,12 +172,7 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	playlist, tracks, err := h.svc.Get(r.Context(), userId, playlistId)
 	if err != nil {
-		if errors.Is(err, service.ErrPlaylistNotFound) {
-			httputil.NotFound(w, "playlist not found")
-			return
-		}
-		slog.ErrorContext(r.Context(), "get playlist failed", "error", err, "playlist_id", playlistId.String())
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -178,14 +181,7 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		trackResponses[i] = trackToResponse(t)
 	}
 
-	artworkURLs := []string{}
-	seen := make(map[string]bool)
-	for _, t := range tracks {
-		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(artworkURLs) < 4 {
-			artworkURLs = append(artworkURLs, *t.ArtworkURL)
-			seen[*t.ArtworkURL] = true
-		}
-	}
+	artworkURLs := previewArtworkFromTracks(tracks)
 
 	httputil.WriteJSON(w, http.StatusOK, PlaylistDetailResponse{
 		ID:                 playlist.ID.UUID(),
@@ -216,17 +212,7 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Rename(r.Context(), userId, playlistId, req.Name); err != nil {
-		if errors.Is(err, service.ErrPlaylistNotFound) {
-			httputil.NotFound(w, "playlist not found")
-			return
-		}
-		var ve *domain.ValidationError
-		if errors.As(err, &ve) {
-			httputil.BadRequest(w, ve.Error())
-		} else {
-			slog.ErrorContext(r.Context(), "rename playlist failed", "error", err)
-			httputil.InternalError(w)
-		}
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -236,14 +222,7 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, PlaylistResponse{
-		ID:                 playlist.ID.UUID(),
-		Name:               playlist.Name,
-		TrackCount:         len(playlist.Tracks),
-		PreviewArtworkURLs: []string{},
-		CreatedAt:          playlist.CreatedAt,
-		UpdatedAt:          playlist.UpdatedAt,
-	})
+	httputil.WriteJSON(w, http.StatusOK, playlistToResponse(playlist, len(playlist.Tracks), nil))
 }
 
 func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -258,12 +237,7 @@ func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Delete(r.Context(), userId, playlistId); err != nil {
-		if errors.Is(err, service.ErrPlaylistNotFound) {
-			httputil.NotFound(w, "playlist not found")
-			return
-		}
-		slog.ErrorContext(r.Context(), "delete playlist failed", "error", err, "playlist_id", playlistId.String())
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -290,17 +264,7 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 	trackId := domain.TrackIdFromUUID(req.TrackID)
 	added, err := h.svc.AddTrack(r.Context(), userId, playlistId, trackId)
 	if err != nil {
-		if errors.Is(err, service.ErrPlaylistNotFound) || errors.Is(err, service.ErrTrackNotFound) {
-			httputil.NotFound(w, err.Error())
-			return
-		}
-		if errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
-			httputil.Conflict(w, "track already in playlist")
-			return
-		}
-		slog.ErrorContext(r.Context(), "add track to playlist failed",
-			"error", err, "playlist_id", playlistId.String(), "track_id", trackId.String())
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -330,13 +294,7 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 
 	_, err = h.svc.RemoveTrack(r.Context(), userId, playlistId, trackId)
 	if err != nil {
-		if errors.Is(err, service.ErrPlaylistNotFound) {
-			httputil.NotFound(w, "playlist not found")
-			return
-		}
-		slog.ErrorContext(r.Context(), "remove track from playlist failed",
-			"error", err, "playlist_id", playlistId.String(), "track_id", trackId.String())
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -366,17 +324,7 @@ func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.svc.Reorder(r.Context(), userId, playlistId, trackIds); err != nil {
-		if err == service.ErrPlaylistNotFound {
-			httputil.NotFound(w, "playlist not found")
-			return
-		}
-		var ve *domain.ValidationError
-		if errors.As(err, &ve) {
-			httputil.BadRequest(w, ve.Error())
-		} else {
-			slog.ErrorContext(r.Context(), "reorder playlist failed", "error", err)
-			httputil.InternalError(w)
-		}
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 

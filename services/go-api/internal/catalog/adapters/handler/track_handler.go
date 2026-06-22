@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -264,15 +263,9 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 
 	err = h.deleteTrack.Execute(r.Context(), userId, trackId)
 	if err != nil {
-		if errors.Is(err, service.ErrTrackNotFound) {
-			httputil.NotFound(w, "track not found")
-			return
-		}
-		slog.ErrorContext(r.Context(), "delete track failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
-

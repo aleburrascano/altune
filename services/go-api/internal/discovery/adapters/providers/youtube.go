@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -132,22 +131,10 @@ func (a *YouTubeArtworkResolver) fetchChannelThumbnail(ctx context.Context, chan
 }
 
 func (a *YouTubeArtworkResolver) doGet(ctx context.Context, rawURL string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
+	status, body, err := getBytes(ctx, a.client, rawURL)
 	if err != nil {
+		slog.WarnContext(ctx, "youtube.api_error", "status", status, "url", rawURL)
 		return nil, err
 	}
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		slog.WarnContext(ctx, "youtube.api_error",
-			"status", resp.StatusCode, "url", rawURL)
-		return nil, fmt.Errorf("youtube returned %d", resp.StatusCode)
-	}
-
-	return io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	return body, nil
 }

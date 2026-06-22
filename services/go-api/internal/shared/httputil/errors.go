@@ -2,12 +2,36 @@ package httputil
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 )
 
 type ErrorResponse struct {
 	Detail string `json:"detail"`
+}
+
+// StatusError is implemented by domain/service errors that carry their own HTTP
+// status and a client-safe message. Satisfied structurally, so domain packages
+// implement it without importing httputil (no net/http in the inner rings).
+type StatusError interface {
+	error
+	HTTPStatus() int
+}
+
+// HandleServiceError is the single domain-error → HTTP translation point. A
+// StatusError in the chain renders with its declared status and message; any
+// other error is logged and returned as a generic 500 (internals never reach the
+// client). Replaces the per-handler errors.Is/As ladders.
+func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
+	var se StatusError
+	if errors.As(err, &se) {
+		WriteError(w, se.HTTPStatus(), se.Error())
+		return
+	}
+	slog.ErrorContext(r.Context(), "service.unhandled_error",
+		"method", r.Method, "path", r.URL.Path, "error", err)
+	InternalError(w)
 }
 
 func WriteJSON(w http.ResponseWriter, status int, v any) {

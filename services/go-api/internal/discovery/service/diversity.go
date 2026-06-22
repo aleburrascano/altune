@@ -141,38 +141,5 @@ func copyExtras(src map[string]any) map[string]any {
 	return dst
 }
 
-func getStringExtra(r domain.SearchResult, key string) string {
-	if r.Extras == nil {
-		return ""
-	}
-	v, ok := r.Extras[key]
-	if !ok {
-		return ""
-	}
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return s
-}
-
-// completeness scores how much metadata a result carries — used by consensus to
-// pick the most complete representative when clustering same-title albums.
-func completeness(r domain.SearchResult) int {
-	count := 0
-	if r.ImageURL != "" {
-		count++
-	}
-	if getStringExtra(r, "isrc") != "" {
-		count++
-	}
-	if r.Extras != nil {
-		if _, ok := r.Extras["duration"]; ok {
-			count++
-		}
-	}
-	if getStringExtra(r, "album") != "" {
-		count++
-	}
-	return count
-}
+// stringExtra and completenessOf (the merge.go helpers) are the single
+// definitions; find_related and consensus call through to them.

@@ -2,7 +2,6 @@ package cache
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -122,8 +121,7 @@ func (c *RedisEnrichmentCache) RememberMBID(ctx context.Context, kind domain.Res
 }
 
 func mbidIndexKey(kind domain.ResultKind, nameKey string) string {
-	h := sha256.Sum256([]byte(nameKey))
-	return fmt.Sprintf("discovery:mbid:v1:%s:%x", kind.String(), h[:16])
+	return hashKey("discovery:mbid:v1:"+kind.String()+":", nameKey)
 }
 
 func enrichmentKey(kind domain.ResultKind, mbid string) string {
@@ -131,6 +129,5 @@ func enrichmentKey(kind domain.ResultKind, mbid string) string {
 }
 
 func enrichmentNegKey(kind domain.ResultKind, nameKey string) string {
-	h := sha256.Sum256([]byte(nameKey))
-	return fmt.Sprintf("discovery:mbenrich:neg:v1:%s:%x", kind.String(), h[:16])
+	return hashKey("discovery:mbenrich:neg:v1:"+kind.String()+":", nameKey)
 }

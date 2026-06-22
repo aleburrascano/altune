@@ -61,17 +61,9 @@ func (a *TheAudioDBAdapter) Search(ctx context.Context, query string, kinds map[
 
 	var results []domain.SearchResult
 	for _, art := range body.Artists {
-		results = append(results, domain.SearchResult{
-			Kind:       domain.ResultKindArtist,
-			Title:      art.StrArtist,
-			ImageURL:   art.StrArtistThumb,
-			Confidence: domain.ConfidenceLow,
-			Sources: []domain.SourceRef{{
-				Provider:   domain.ProviderTheAudioDB,
-				ExternalID: art.IDArtist,
-			}},
-			Extras: make(map[string]any),
-		})
+		results = append(results, domain.NewProviderResult(domain.ResultKindArtist, art.StrArtist, "", art.StrArtistThumb,
+			domain.SourceRef{Provider: domain.ProviderTheAudioDB, ExternalID: art.IDArtist},
+			nil))
 	}
 
 	return results, nil

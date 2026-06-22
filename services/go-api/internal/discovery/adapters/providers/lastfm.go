@@ -124,19 +124,9 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 				if t.Listeners != "" {
 					extras["listeners"] = t.Listeners
 				}
-				results = append(results, domain.SearchResult{
-					Kind:       domain.ResultKindTrack,
-					Title:      t.Name,
-					Subtitle:   t.Artist,
-					ImageURL:   imageURL,
-					Confidence: domain.ConfidenceLow,
-					Sources: []domain.SourceRef{{
-						Provider:   domain.ProviderLastFM,
-						ExternalID: lastfmExternalID(t.URL),
-						URL:        t.URL,
-					}},
-					Extras: extras,
-				})
+				results = append(results, domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist, imageURL,
+					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
+					extras))
 			}
 		}
 	case domain.ResultKindAlbum:
@@ -163,19 +153,9 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 						imageURL = img.Text
 					}
 				}
-				results = append(results, domain.SearchResult{
-					Kind:       domain.ResultKindAlbum,
-					Title:      a.Name,
-					Subtitle:   a.Artist,
-					ImageURL:   imageURL,
-					Confidence: domain.ConfidenceLow,
-					Sources: []domain.SourceRef{{
-						Provider:   domain.ProviderLastFM,
-						ExternalID: lastfmExternalID(a.URL),
-						URL:        a.URL,
-					}},
-					Extras: make(map[string]any),
-				})
+				results = append(results, domain.NewProviderResult(domain.ResultKindAlbum, a.Name, a.Artist, imageURL,
+					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
+					nil))
 			}
 		}
 	case domain.ResultKindArtist:
@@ -206,18 +186,9 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 				if a.Listeners != "" {
 					extras["listeners"] = a.Listeners
 				}
-				results = append(results, domain.SearchResult{
-					Kind:       domain.ResultKindArtist,
-					Title:      a.Name,
-					ImageURL:   imageURL,
-					Confidence: domain.ConfidenceLow,
-					Sources: []domain.SourceRef{{
-						Provider:   domain.ProviderLastFM,
-						ExternalID: lastfmExternalID(a.URL),
-						URL:        a.URL,
-					}},
-					Extras: extras,
-				})
+				results = append(results, domain.NewProviderResult(domain.ResultKindArtist, a.Name, "", imageURL,
+					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
+					extras))
 			}
 		}
 	}
@@ -280,19 +251,9 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 		if t.Listeners != "" {
 			extras["listeners"] = parseListeners(t.Listeners)
 		}
-		results = append(results, domain.SearchResult{
-			Kind:       domain.ResultKindTrack,
-			Title:      t.Name,
-			Subtitle:   t.Artist.Name,
-			ImageURL:   imageURL,
-			Confidence: domain.ConfidenceLow,
-			Sources: []domain.SourceRef{{
-				Provider:   domain.ProviderLastFM,
-				ExternalID: lastfmExternalID(t.URL),
-				URL:        t.URL,
-			}},
-			Extras: extras,
-		})
+		results = append(results, domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist.Name, imageURL,
+			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
+			extras))
 	}
 	return results, nil
 }
@@ -345,19 +306,9 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 				imageURL = img.Text
 			}
 		}
-		results = append(results, domain.SearchResult{
-			Kind:       domain.ResultKindAlbum,
-			Title:      a.Name,
-			Subtitle:   a.Artist.Name,
-			ImageURL:   imageURL,
-			Confidence: domain.ConfidenceLow,
-			Sources: []domain.SourceRef{{
-				Provider:   domain.ProviderLastFM,
-				ExternalID: lastfmExternalID(a.URL),
-				URL:        a.URL,
-			}},
-			Extras: make(map[string]any),
-		})
+		results = append(results, domain.NewProviderResult(domain.ResultKindAlbum, a.Name, a.Artist.Name, imageURL,
+			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
+			nil))
 	}
 	return results, nil
 }

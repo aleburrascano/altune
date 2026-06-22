@@ -170,19 +170,9 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		}
 	}
 
-	return domain.SearchResult{
-		Kind:       kind,
-		Title:      title,
-		Subtitle:   subtitle,
-		ImageURL:   imageURL,
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderDeezer,
-			ExternalID: fmt.Sprintf("%d", item.ID),
-			URL:        item.Link,
-		}},
-		Extras: extras,
-	}
+	return domain.NewProviderResult(kind, title, subtitle, imageURL,
+		domain.SourceRef{Provider: domain.ProviderDeezer, ExternalID: fmt.Sprintf("%d", item.ID), URL: item.Link},
+		extras)
 }
 
 // Deezer API response types

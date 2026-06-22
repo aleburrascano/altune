@@ -11,22 +11,18 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-type AcquisitionScheduler interface {
-	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
-}
-
 type Shutdownable interface {
 	Shutdown(ctx context.Context)
 }
 
 type BackgroundAcquisitionScheduler struct {
-	svc       *AcquireTrackAudioService
-	wg        *sync.WaitGroup
-	sem       chan struct{}
-	cancel    context.CancelFunc
-	parentCtx context.Context
-	closed    atomic.Bool
-	inflight  sync.Map
+	svc      *AcquireTrackAudioService
+	wg       *sync.WaitGroup
+	sem      chan struct{}
+	cancel   context.CancelFunc
+	baseCtx  context.Context // owned lifecycle context (not a request ctx); cancelled on Shutdown
+	closed   atomic.Bool
+	inflight sync.Map
 }
 
 func NewBackgroundAcquisitionScheduler(
@@ -36,11 +32,11 @@ func NewBackgroundAcquisitionScheduler(
 ) *BackgroundAcquisitionScheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &BackgroundAcquisitionScheduler{
-		svc:       svc,
-		wg:        wg,
-		sem:       sem,
-		cancel:    cancel,
-		parentCtx: ctx,
+		svc:     svc,
+		wg:      wg,
+		sem:     sem,
+		cancel:  cancel,
+		baseCtx: ctx,
 	}
 }
 
@@ -74,12 +70,12 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 		select {
 		case s.sem <- struct{}{}:
 			defer func() { <-s.sem }()
-		case <-s.parentCtx.Done():
+		case <-s.baseCtx.Done():
 			slog.Info("acquisition.cancelled_before_start", "track_id", key)
 			return
 		}
 
-		if err := s.svc.Execute(s.parentCtx, userId, trackId, sourceURL); err != nil {
+		if err := s.svc.Execute(s.baseCtx, userId, trackId, sourceURL); err != nil {
 			slog.Error("background acquisition failed",
 				"track_id", key, "error", err)
 		}

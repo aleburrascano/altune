@@ -55,18 +55,18 @@ func newFakeTrackRepo() *fakeTrackRepo {
 	return &fakeTrackRepo{tracks: make(map[string]*catdomain.Track), deletedOk: true}
 }
 
-func (r *fakeTrackRepo) Add(_ context.Context, track *catdomain.Track) (bool, error) {
+func (r *fakeTrackRepo) Add(_ context.Context, track *catdomain.Track) (*catdomain.Track, bool, error) {
 	if r.addErr != nil {
-		return false, r.addErr
+		return nil, false, r.addErr
 	}
 	for _, t := range r.tracks {
 		if t.DedupKey == track.DedupKey && t.UserId == track.UserId {
-			return false, nil
+			return t, false, nil
 		}
 	}
 	r.tracks[track.ID.String()] = track
 	r.addCreated = true
-	return true, nil
+	return track, true, nil
 }
 
 func (r *fakeTrackRepo) GetByID(_ context.Context, id catdomain.TrackId, userId shared.UserId) (*catdomain.Track, error) {

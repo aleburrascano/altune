@@ -2,7 +2,6 @@ package cache
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"time"
 
@@ -54,6 +53,5 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 
 func artworkCacheKey(kind domain.ResultKind, title, subtitle, mbid string) string {
 	input := fmt.Sprintf("%s|%s|%s", title, subtitle, mbid)
-	h := sha256.Sum256([]byte(input))
-	return fmt.Sprintf("discovery:artwork:v1:%s:%x", kind.String(), h[:16])
+	return hashKey("discovery:artwork:v1:"+kind.String()+":", input)
 }

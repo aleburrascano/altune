@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -12,7 +11,7 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-var ErrTrackNotFound = errors.New("track not found")
+var ErrTrackNotFound = &domain.CodedError{Msg: "track not found", Status: 404}
 
 type DeleteTrackService struct {
 	trackRepo  ports.TrackRepository

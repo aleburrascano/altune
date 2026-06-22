@@ -273,6 +273,26 @@ type SearchResult struct {
 	Quality QualityScore
 }
 
+// NewProviderResult builds the standard single-source, low-confidence result a
+// provider emits from one of its catalog entries. It is the single home for that
+// shape: the ConfidenceLow default, the one-element Sources wrapping, and the
+// nil-safe Extras initialization (providers that don't carry extras pass nil and
+// still get a writable map — the nil-map footgun the wire mapper used to guard).
+func NewProviderResult(kind ResultKind, title, subtitle, imageURL string, source SourceRef, extras map[string]any) SearchResult {
+	if extras == nil {
+		extras = map[string]any{}
+	}
+	return SearchResult{
+		Kind:       kind,
+		Title:      title,
+		Subtitle:   subtitle,
+		ImageURL:   imageURL,
+		Confidence: ConfidenceLow,
+		Sources:    []SourceRef{source},
+		Extras:     extras,
+	}
+}
+
 // SearchQuery is the validated user search input.
 type SearchQuery struct {
 	Raw       string
