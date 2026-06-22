@@ -74,15 +74,6 @@ func UserIDFromContext(ctx context.Context) (shared.UserId, bool) {
 	return id, ok
 }
 
-// Deprecated: use RequireUserID for safe extraction with proper HTTP error response.
-func MustUserID(ctx context.Context) shared.UserId {
-	id, ok := UserIDFromContext(ctx)
-	if !ok {
-		panic("auth middleware not applied: no user ID in context")
-	}
-	return id
-}
-
 func RequireUserID(w http.ResponseWriter, r *http.Request) (shared.UserId, bool) {
 	id, ok := UserIDFromContext(r.Context())
 	if !ok {

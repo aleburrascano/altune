@@ -246,33 +246,3 @@ func TestRequireUserID(t *testing.T) {
 		}
 	})
 }
-
-func TestMustUserID(t *testing.T) {
-	t.Run("present returns id", func(t *testing.T) {
-		uid := shared.NewUserId(uuid.New())
-		ctx := context.WithValue(context.Background(), userIDKey, uid)
-
-		got := MustUserID(ctx)
-		if got.UUID() != uid.UUID() {
-			t.Errorf("userId: got %v, want %v", got.UUID(), uid.UUID())
-		}
-	})
-
-	t.Run("absent panics", func(t *testing.T) {
-		defer func() {
-			r := recover()
-			if r == nil {
-				t.Fatal("expected panic, got none")
-			}
-			msg, ok := r.(string)
-			if !ok {
-				t.Fatalf("expected string panic, got %T: %v", r, r)
-			}
-			if msg != "auth middleware not applied: no user ID in context" {
-				t.Errorf("panic message: got %q, want %q", msg, "auth middleware not applied: no user ID in context")
-			}
-		}()
-
-		MustUserID(context.Background())
-	})
-}

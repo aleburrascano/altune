@@ -33,23 +33,3 @@ func NewClient(ctx context.Context, redisURL string) *goredis.Client {
 	slog.Info("redis connected")
 	return client
 }
-
-// Get retrieves a value, returning ("", false) on any error (graceful degradation).
-func Get(ctx context.Context, client *goredis.Client, key string) (string, bool) {
-	if client == nil {
-		return "", false
-	}
-	val, err := client.Get(ctx, key).Result()
-	if err != nil {
-		return "", false
-	}
-	return val, true
-}
-
-// Set stores a value with TTL, silently ignoring errors (graceful degradation).
-func Set(ctx context.Context, client *goredis.Client, key, value string, ttl time.Duration) {
-	if client == nil {
-		return
-	}
-	_ = client.Set(ctx, key, value, ttl).Err()
-}
