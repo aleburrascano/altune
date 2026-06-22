@@ -46,6 +46,7 @@ module.exports = {
         'resilience-v1',
         'related-tracks',
         'acquire-soundcloud',
+        'musicbrainz-enrichment',
         // Go migration scopes
         'go-api',
       ],
