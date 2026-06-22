@@ -83,7 +83,7 @@ func itunesEntity(kind domain.ResultKind) string {
 }
 
 func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResult {
-	artworkURL := upscaleArtwork(item.ArtworkURL100, 600)
+	artworkURL := upscaleArtwork(item.ArtworkURL100, iTunesListArtworkSize)
 
 	extras := make(map[string]any)
 	if item.TrackTimeMillis > 0 {
@@ -105,10 +105,17 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	case domain.ResultKindAlbum:
 		title = item.CollectionName
 		subtitle = item.ArtistName
+		if item.TrackCount > 0 {
+			extras["track_count"] = item.TrackCount
+		}
+		if item.ReleaseDate != "" {
+			extras["release_date"] = item.ReleaseDate
+		}
 	case domain.ResultKindArtist:
 		title = item.ArtistName
 	}
 
+	externalID, sourceURL := itunesSourceRef(item, kind)
 	return domain.SearchResult{
 		Kind:       kind,
 		Title:      title,
@@ -117,16 +124,46 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 		Confidence: domain.ConfidenceLow,
 		Sources: []domain.SourceRef{{
 			Provider:   domain.ProviderITunes,
-			ExternalID: fmt.Sprintf("%d", item.TrackID),
-			URL:        item.TrackViewURL,
+			ExternalID: externalID,
+			URL:        sourceURL,
 		}},
 		Extras: extras,
+	}
+}
+
+// itunesSourceRef returns the entity's own iTunes id + view URL for the kind:
+// trackId/collectionId/artistId. Previously every kind carried trackId, which
+// left album and artist results with an unusable "0" id (trackId is absent on
+// those entities) — blocking the content lookups (cap 5). The change is
+// merge-neutral: a SourceRef id only affects a merge decision through the
+// xref-gated cross-provider bridge, and MusicBrainz url-relations never carry an
+// Apple/iTunes id, so a real Apple id can never bridge-match.
+func itunesSourceRef(item itunesItem, kind domain.ResultKind) (id, sourceURL string) {
+	switch kind {
+	case domain.ResultKindAlbum:
+		return fmt.Sprintf("%d", item.CollectionID), item.CollectionViewURL
+	case domain.ResultKindArtist:
+		return fmt.Sprintf("%d", item.ArtistID), item.ArtistViewURL
+	default:
+		return fmt.Sprintf("%d", item.TrackID), item.TrackViewURL
 	}
 }
 
 func upscaleArtwork(url string, size int) string {
 	return strings.Replace(url, "100x100", fmt.Sprintf("%dx%d", size, size), 1)
 }
+
+// iTunesListArtworkSize is the resolution used for search-list thumbnails — a
+// card-sized cover, kept modest to avoid bloating the search payload.
+const iTunesListArtworkSize = 600
+
+// iTunesHeroArtworkSize is the resolution used for the detail-open artwork
+// fallback (the hero image). Apple serves resolution-templated artwork up to a
+// real 3000×3000 (live-probed 2026-06-22 — see docs/providers/itunes.md §5.2),
+// above Cover Art Archive's 1200px ceiling. We request 1500px: comfortably past
+// CAA, but a fraction of the ~2.4MB a 3000px hero would cost on mobile data.
+// The chain runs the MBID-keyed sources first, so this only fires on their miss.
+const iTunesHeroArtworkSize = 1500
 
 // Resolve implements ArtworkResolver — searches iTunes for cover art.
 func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
@@ -155,12 +192,85 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 		return "", nil
 	}
 	for _, item := range body.Results {
-		art := upscaleArtwork(item.ArtworkURL100, 600)
+		art := upscaleArtwork(item.ArtworkURL100, iTunesHeroArtworkSize)
 		if art != "" {
 			return art, nil
 		}
 	}
 	return "", nil
+}
+
+// --- AlbumContentProvider + ArtistContentProvider (docs/providers/itunes.md cap 5) ---
+//
+// The iTunes /lookup endpoint returns the parent entity as the first result
+// followed by its children (verified 2026-06-22): an artist+entity=album lookup
+// returns the artist wrapper then its collections; a collection+entity=song
+// lookup returns the collection wrapper then its tracks. We skip the parent
+// wrapper (by wrapperType) and map the children. iTunes is a second mainstream
+// source of truth for discography/tracklist alongside Deezer/MusicBrainz.
+
+func (a *ITunesAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	return a.lookupContent(ctx, externalID, "song")
+}
+
+// GetArtistTopTracks returns the artist's tracks via /lookup. iTunes lookup is
+// catalog-ordered (recent-first), not popularity-ranked — unlike Deezer's
+// /artist/{id}/top — so "top" here means "the artist's tracks", trimmed by the
+// caller's limit.
+func (a *ITunesAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	return a.lookupContent(ctx, externalID, "song")
+}
+
+func (a *ITunesAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	return a.lookupContent(ctx, externalID, "album")
+}
+
+func (a *ITunesAdapter) lookupContent(ctx context.Context, id, entity string) ([]domain.SearchResult, error) {
+	u := fmt.Sprintf(
+		"https://itunes.apple.com/lookup?id=%s&entity=%s&limit=50",
+		url.QueryEscape(id), entity,
+	)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("itunes lookup returned %d", resp.StatusCode)
+	}
+
+	var body itunesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+
+	// Keep only the requested child wrapperType. This drops the parent wrapper
+	// uniformly: an album→song lookup's parent is itself a "collection", so
+	// filtering on wrapperType alone would leak it — we filter on the *target*
+	// type the entity asked for (song→track, album→collection).
+	targetWrapper, kind := itunesContentTarget(entity)
+	results := make([]domain.SearchResult, 0, len(body.Results))
+	for _, item := range body.Results {
+		if item.WrapperType != targetWrapper {
+			continue
+		}
+		results = append(results, mapITunesResult(item, kind))
+	}
+	return results, nil
+}
+
+// itunesContentTarget maps a /lookup entity param to the child wrapperType and
+// ResultKind that lookup returns: entity=song → "track" children, entity=album
+// → "collection" children.
+func itunesContentTarget(entity string) (wrapperType string, kind domain.ResultKind) {
+	if entity == "album" {
+		return "collection", domain.ResultKindAlbum
+	}
+	return "track", domain.ResultKindTrack
 }
 
 // LookupAlbum searches iTunes for an album and returns a verdict on whether
@@ -240,14 +350,20 @@ type itunesResponse struct {
 }
 
 type itunesItem struct {
-	TrackID          int64  `json:"trackId"`
-	TrackName        string `json:"trackName"`
-	ArtistID         int64  `json:"artistId"`
-	ArtistName       string `json:"artistName"`
-	CollectionName   string `json:"collectionName"`
-	TrackViewURL     string `json:"trackViewUrl"`
-	ArtworkURL100    string `json:"artworkUrl100"`
-	PreviewURL       string `json:"previewUrl"`
-	TrackTimeMillis  int64  `json:"trackTimeMillis"`
-	PrimaryGenreName string `json:"primaryGenreName"`
+	WrapperType       string `json:"wrapperType"`
+	TrackID           int64  `json:"trackId"`
+	TrackName         string `json:"trackName"`
+	ArtistID          int64  `json:"artistId"`
+	ArtistName        string `json:"artistName"`
+	CollectionID      int64  `json:"collectionId"`
+	CollectionName    string `json:"collectionName"`
+	TrackViewURL      string `json:"trackViewUrl"`
+	CollectionViewURL string `json:"collectionViewUrl"`
+	ArtistViewURL     string `json:"artistViewUrl"`
+	ArtworkURL100     string `json:"artworkUrl100"`
+	PreviewURL        string `json:"previewUrl"`
+	TrackTimeMillis   int64  `json:"trackTimeMillis"`
+	TrackCount        int    `json:"trackCount"`
+	ReleaseDate       string `json:"releaseDate"`
+	PrimaryGenreName  string `json:"primaryGenreName"`
 }

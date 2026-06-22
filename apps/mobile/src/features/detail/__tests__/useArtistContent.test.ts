@@ -71,4 +71,15 @@ describe('artistName passthrough', () => {
     await waitFor(() => expect(mockGetArtistAlbums).toHaveBeenCalledTimes(1));
     expect(mockGetArtistAlbums).toHaveBeenCalledWith('deezer', 'dz-1', 100, 'Che');
   });
+
+  it('also fans out to iTunes for albums when an iTunes source is present', async () => {
+    const sources = [_src('deezer', 'dz-1'), _src('itunes', '368183298')];
+    renderHook(() => useArtistContent({ sources, artistName: 'Kendrick Lamar' }), {
+      wrapper: _wrapper(_client()),
+    });
+
+    await waitFor(() => expect(mockGetArtistAlbums).toHaveBeenCalledTimes(2));
+    expect(mockGetArtistAlbums).toHaveBeenCalledWith('deezer', 'dz-1', 100, 'Kendrick Lamar');
+    expect(mockGetArtistAlbums).toHaveBeenCalledWith('itunes', '368183298', 100, 'Kendrick Lamar');
+  });
 });
