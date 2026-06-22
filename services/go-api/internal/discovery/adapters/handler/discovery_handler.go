@@ -29,11 +29,12 @@ type DiscoveryHandler struct {
 	suggestSvc *service.SuggestService
 	eventSvc   *service.RecordEventService
 
-	// discogsEnrichSvc / discogsArtistEnrichSvc are wired post-construction via the
-	// With* setters so the positional constructor stays stable; nil degrades to an
-	// empty DTO.
+	// discogsEnrichSvc / discogsArtistEnrichSvc / lastfmEnrichSvc are wired
+	// post-construction via the With* setters so the positional constructor stays
+	// stable; nil degrades to an empty DTO.
 	discogsEnrichSvc       *service.DiscogsEnrichmentService
 	discogsArtistEnrichSvc *service.DiscogsArtistEnrichmentService
+	lastfmEnrichSvc        *service.LastFmEnrichmentService
 }
 
 // WithDiscogsEnrichment attaches the Discogs album-enrichment use case (caps 3–6).
@@ -47,6 +48,14 @@ func (h *DiscoveryHandler) WithDiscogsEnrichment(svc *service.DiscogsEnrichmentS
 // (cap 7). Set at composition time; a nil service answers empty.
 func (h *DiscoveryHandler) WithDiscogsArtistEnrichment(svc *service.DiscogsArtistEnrichmentService) *DiscoveryHandler {
 	h.discogsArtistEnrichSvc = svc
+	return h
+}
+
+// WithLastFmEnrichment attaches the Last.fm enrichment use case (cap 3 — listen
+// popularity, tags, bio, similar artists). Set at composition time; a nil
+// service leaves the endpoint answering empty.
+func (h *DiscoveryHandler) WithLastFmEnrichment(svc *service.LastFmEnrichmentService) *DiscoveryHandler {
+	h.lastfmEnrichSvc = svc
 	return h
 }
 
@@ -88,6 +97,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/enrichment", h.handleEnrichment)
 	r.Get("/enrichment/discogs", h.handleDiscogsEnrichment)
 	r.Get("/enrichment/discogs/artist", h.handleDiscogsArtistEnrichment)
+	r.Get("/enrichment/lastfm", h.handleLastFmEnrichment)
 	return r
 }
 
@@ -813,6 +823,69 @@ func nonNilStrings(s []string) []string {
 		return []string{}
 	}
 	return s
+}
+
+// handleLastFmEnrichment serves Last.fm detail-open enrichment for one entity:
+// listen-based popularity, weighted tags, bio, and (for artists) similar
+// artists (docs/providers/lastfm.md cap 3). Kind-dispatched from `kind` +
+// `title` + `subtitle`. Always 200 with the DTO (or an empty DTO); only
+// request-shape problems are 4xx.
+func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http.Request) {
+	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
+	if kindStr == "" {
+		httputil.BadRequest(w, "kind is required")
+		return
+	}
+	kind, err := domain.ParseResultKind(kindStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid kind")
+		return
+	}
+	title := strings.TrimSpace(r.URL.Query().Get("title"))
+	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
+	if title == "" {
+		httputil.BadRequest(w, "title is required")
+		return
+	}
+
+	if h.lastfmEnrichSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, lastfmEnrichmentToDTO(domain.EmptyLastFmEnrichment()))
+		return
+	}
+
+	e, err := h.lastfmEnrichSvc.Execute(r.Context(), kind, title, subtitle)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "lastfm enrichment failed",
+			"error", err, "kind", kindStr, "title", title)
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, lastfmEnrichmentToDTO(e))
+}
+
+type LastFmEnrichmentResponseDTO struct {
+	MBID      string   `json:"mbid"`
+	Listeners int64    `json:"listeners"`
+	Playcount int64    `json:"playcount"`
+	Tags      []string `json:"tags"`
+	Bio       string   `json:"bio"`
+	Similar   []string `json:"similar"`
+	Duration  int      `json:"duration"`
+	Album     string   `json:"album"`
+}
+
+func lastfmEnrichmentToDTO(e domain.LastFmEnrichment) LastFmEnrichmentResponseDTO {
+	return LastFmEnrichmentResponseDTO{
+		MBID:      e.MBID,
+		Listeners: e.Listeners,
+		Playcount: e.Playcount,
+		Tags:      nonNilStrings(e.Tags),
+		Bio:       e.Bio,
+		Similar:   nonNilStrings(e.Similar),
+		Duration:  e.Duration,
+		Album:     e.Album,
+	}
 }
 
 type ContentFetchResponseDTO struct {
