@@ -156,9 +156,8 @@ func (a *App) setup(ctx context.Context) error {
 	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(a.eventBus))
 
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
-	saveQueueStateSvc := playbackService.NewSaveQueueStateService(queueStateRepo)
-	getQueueStateSvc := playbackService.NewGetQueueStateService(queueStateRepo)
-	queueHandler := playbackHandler.NewQueueHandler(saveQueueStateSvc, getQueueStateSvc)
+	queueSvc := playbackService.NewQueueService(queueStateRepo)
+	queueHandler := playbackHandler.NewQueueHandler(queueSvc)
 
 	var sharedMB *providers.MusicBrainzAdapter
 	if a.cfg.HasMusicBrainz() {
