@@ -205,3 +205,36 @@ export async function getRelatedTracks(
     _contentUrl(`/v1/discovery/tracks/${provider}/${encodeURIComponent(externalId)}/related`, limit),
   );
 }
+
+// --- MusicBrainz detail-open enrichment (musicbrainz-enrichment spec) ---
+
+/**
+ * MusicBrainz-derived detail enrichment: curated genres, year, community
+ * rating, release types, the cross-provider id bridge, and a resolved HD cover.
+ * Collections are always present (never null). An unresolved entity returns an
+ * empty payload (`mbid: ''`, empty lists).
+ */
+export type EnrichmentResponse = {
+  mbid: string;
+  genres: string[];
+  year: number;
+  rating: number;
+  rating_votes: number;
+  primary_type: string;
+  secondary_types: string[];
+  external_ids: Record<string, string>;
+  artwork_url: string;
+};
+
+export async function getEnrichment(params: {
+  kind: DiscoveryKind;
+  title?: string | undefined;
+  subtitle?: string | null | undefined;
+  mbid?: string | undefined;
+}): Promise<EnrichmentResponse> {
+  const qs = new URLSearchParams({ kind: params.kind });
+  if (params.title) qs.set('title', params.title);
+  if (params.subtitle) qs.set('subtitle', params.subtitle);
+  if (params.mbid) qs.set('mbid', params.mbid);
+  return apiFetch<EnrichmentResponse>(`/v1/discovery/enrichment?${qs.toString()}`);
+}
