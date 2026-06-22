@@ -292,11 +292,21 @@ func (a *App) setup(ctx context.Context) error {
 		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient),
 	)
 
+	// Deezer lyrics: synced + plain lyrics, writers, copyright — the one metadata
+	// axis no other audited provider carries (docs/providers/deezer.md cap 6). Via
+	// the reverse-engineered pipe.deezer.com GraphQL (anonymous-JWT, self-healing);
+	// no key needed, so wired unconditionally like the rest of the Deezer path.
+	lyricsSvc := discoveryService.NewLyricsService(
+		providers.NewDeezerLyricsAdapter(&http.Client{Timeout: 10 * time.Second}),
+		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient),
+	)
+
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, relatedSvc, enrichSvc, suggestSvc, eventSvc)
 	discoveryH.WithDiscogsEnrichment(discogsEnrichSvc)
 	discoveryH.WithDiscogsArtistEnrichment(discogsArtistEnrichSvc)
 	discoveryH.WithLastFmEnrichment(lastfmEnrichSvc)
 	discoveryH.WithDeezerEnrichment(deezerEnrichSvc)
+	discoveryH.WithLyrics(lyricsSvc)
 
 	a.startVocabularyRefresh(vocabStore)
 
