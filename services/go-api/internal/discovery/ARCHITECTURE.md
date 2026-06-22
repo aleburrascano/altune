@@ -26,7 +26,7 @@ flowchart TD
         SEARCH_SVC --> CLEAN["CleanQuery\n(strip 'official video', 'lyrics', etc.)"]
         CLEAN --> SCATTER["fanOut to providers"]
 
-        SCATTER -->|"1500ms timeout each\n(3s for Tidal)"| PROVIDERS
+        SCATTER -->|"1500ms timeout each"| PROVIDERS
 
         SCATTER --> MERGE["Merge (Layer 2)\nidentifier (ISRC/MBID) then\nexact canonical title+artist\nNO version vocab, NO fuzzy threshold"]
         MERGE --> RANK["Rank (Layer 3)\ngate: shares-query-word + browseable\nsort: continuous relevance -> popularity\n-> multi-source -> RRF (k=60)"]
@@ -53,14 +53,13 @@ flowchart TD
     end
 
     subgraph "Providers (adapters/providers/)"
-        PROVIDERS["8 Search Providers"]
+        PROVIDERS["7 Search Providers"]
         DEEZER["Deezer\n+nb_fan, rank, ISRC\n+StructuredSearcher"]
         LASTFM["Last.fm\n+listeners, albums, top tracks"]
         MUSICBRAINZ["MusicBrainz\n+MBID, ISRC\n+StructuredSearcher"]
         ITUNES["iTunes\n+metadata, genre"]
         SOUNDCLOUD["SoundCloud (yt-dlp)\n+playback_count"]
         AUDIODB["TheAudioDB\n+artist images"]
-        TIDAL["Tidal\n+ISRC (inactive — no client_credentials)"]
         YTMUSIC["YouTube Music\n+massive catalog, no auth"]
         PROVIDERS --> DEEZER
         PROVIDERS --> LASTFM
@@ -68,7 +67,6 @@ flowchart TD
         PROVIDERS --> ITUNES
         PROVIDERS --> SOUNDCLOUD
         PROVIDERS --> AUDIODB
-        PROVIDERS --> TIDAL
         PROVIDERS --> YTMUSIC
     end
 
@@ -214,7 +212,7 @@ consensus.v2.complete     — artist, total, confirmed, unconfirmed, rejected, r
 ```
 internal/discovery/
 ├── domain/
-│   ├── types.go              # SearchResult, SearchQuery, SourceRef, RelatedGroup, enums (incl. ProviderTidal)
+│   ├── types.go              # SearchResult, SearchQuery, SourceRef, RelatedGroup, enums
 │   ├── identity.go           # ArtistIdentityProfile, AlbumVerdict (used by consensus MB check)
 │   ├── events.go             # SearchPerformed, ResultClicked
 │   └── vocabulary.go         # VocabularyEntry
@@ -255,7 +253,6 @@ internal/discovery/
     │   ├── itunes.go         # Search + Artwork + Album lookup
     │   ├── soundcloud.go     # Search via yt-dlp
     │   ├── theaudiodb.go     # Search (artists) + Artwork
-    │   ├── tidal.go          # Search + Artist content (OAuth 2.0 — inactive, no client_credentials for 3rd party)
     │   ├── ytmusic.go        # YouTube Music — Search + Artist albums/top tracks (raitonoberu/ytmusic, no auth)
     │   ├── coverartarchive.go # Artwork (MBID-keyed album covers, up to 1200px)
     │   ├── genius.go         # Artwork (name search)
