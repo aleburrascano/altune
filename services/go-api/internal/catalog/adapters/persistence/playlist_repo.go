@@ -128,59 +128,18 @@ func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.Pla
 	for rows.Next() {
 		var trackId uuid.UUID
 		var position int
-		var (
-			tid           uuid.UUID
-			tuid          uuid.UUID
-			title, artist string
-			album         *string
-			durSecs       *float64
-			addedAt       time.Time
-			artworkURL    *string
-			acqStatus     string
-			dedupKey      string
-			year          *int
-			genre         *string
-			trackNumber   *int
-			albumArtist   *string
-			isrc          *string
-			audioRef      *string
-			failureReason *string
-		)
-		err := rows.Scan(
-			&trackId, &position,
-			&tid, &tuid, &title, &artist, &album, &durSecs,
-			&addedAt, &artworkURL, &acqStatus, &dedupKey,
-			&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason,
-		)
+		trackDest, buildTrack := trackScanDest()
+		dest := append([]any{&trackId, &position}, trackDest...)
+		if err := rows.Scan(dest...); err != nil {
+			return playlist, nil, err
+		}
+
+		track, err := buildTrack()
 		if err != nil {
 			return playlist, nil, err
 		}
 
-		status, _ := domain.ParseAcquisitionStatus(acqStatus)
-		albumVal := ""
-		if album != nil {
-			albumVal = *album
-		}
-
-		tracks = append(tracks, &domain.Track{
-			ID:                domain.TrackIdFromUUID(tid),
-			UserId:            shared.NewUserId(tuid),
-			Title:             title,
-			Artist:            artist,
-			Album:             albumVal,
-			DurationSeconds:   durSecs,
-			AddedAt:           addedAt,
-			ArtworkURL:        artworkURL,
-			AcquisitionStatus: status,
-			DedupKey:          dedupKey,
-			Year:              year,
-			Genre:             genre,
-			TrackNumber:       trackNumber,
-			AlbumArtist:       albumArtist,
-			ISRC:              isrc,
-			AudioRef:          audioRef,
-			FailureReason:     failureReason,
-		})
+		tracks = append(tracks, track)
 		playlistTracks = append(playlistTracks, domain.PlaylistTrack{
 			TrackId:  domain.TrackIdFromUUID(trackId),
 			Position: position,
