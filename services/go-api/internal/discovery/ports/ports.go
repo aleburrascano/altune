@@ -251,6 +251,29 @@ type LastFmEnrichmentCache interface {
 	SetNegative(ctx context.Context, nameKey string) error
 }
 
+// DeezerEnricher resolves and looks up Deezer detail-open enrichment for one
+// entity (docs/providers/deezer.md caps 7–8). ResolveID maps a (kind, artist,
+// title) to a Deezer track/album id via search ("" when none). Lookup fetches
+// the /track/{id} or /album/{id} detail and assembles the audio fields / album
+// liner data. Implemented by the Deezer adapter; consumed by
+// DeezerEnrichmentService. Lyrics (cap 6) are a separate feature, not here.
+type DeezerEnricher interface {
+	ResolveID(ctx context.Context, kind domain.ResultKind, artist, title string) (string, error)
+	Lookup(ctx context.Context, kind domain.ResultKind, id string) (domain.DeezerEnrichment, error)
+}
+
+// DeezerEnrichmentCache is a read-through cache of DeezerEnrichment keyed by a
+// normalized (kind, artist, title) name key — the request handle, since the
+// detail endpoint is reached by name-resolve. The negative path records that a
+// name resolved to nothing, so an unresolved entity is not re-resolved every
+// open. A nil-backed implementation is a no-op.
+type DeezerEnrichmentCache interface {
+	Get(ctx context.Context, nameKey string) (domain.DeezerEnrichment, bool, error)
+	Set(ctx context.Context, nameKey string, e domain.DeezerEnrichment) error
+	GetNegative(ctx context.Context, nameKey string) (bool, error)
+	SetNegative(ctx context.Context, nameKey string) error
+}
+
 type DiscogsArtistInfo struct {
 	ID      int
 	Name    string

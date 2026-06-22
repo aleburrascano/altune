@@ -35,6 +35,7 @@ type DiscoveryHandler struct {
 	discogsEnrichSvc       *service.DiscogsEnrichmentService
 	discogsArtistEnrichSvc *service.DiscogsArtistEnrichmentService
 	lastfmEnrichSvc        *service.LastFmEnrichmentService
+	deezerEnrichSvc        *service.DeezerEnrichmentService
 }
 
 // WithDiscogsEnrichment attaches the Discogs album-enrichment use case (caps 3–6).
@@ -56,6 +57,14 @@ func (h *DiscoveryHandler) WithDiscogsArtistEnrichment(svc *service.DiscogsArtis
 // service leaves the endpoint answering empty.
 func (h *DiscoveryHandler) WithLastFmEnrichment(svc *service.LastFmEnrichmentService) *DiscoveryHandler {
 	h.lastfmEnrichSvc = svc
+	return h
+}
+
+// WithDeezerEnrichment attaches the Deezer enrichment use case (caps 7–8 — track
+// audio fields + album liner data). Set at composition time; a nil service
+// leaves the endpoint answering empty.
+func (h *DiscoveryHandler) WithDeezerEnrichment(svc *service.DeezerEnrichmentService) *DiscoveryHandler {
+	h.deezerEnrichSvc = svc
 	return h
 }
 
@@ -98,6 +107,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/enrichment/discogs", h.handleDiscogsEnrichment)
 	r.Get("/enrichment/discogs/artist", h.handleDiscogsArtistEnrichment)
 	r.Get("/enrichment/lastfm", h.handleLastFmEnrichment)
+	r.Get("/enrichment/deezer", h.handleDeezerEnrichment)
 	return r
 }
 
@@ -885,6 +895,67 @@ func lastfmEnrichmentToDTO(e domain.LastFmEnrichment) LastFmEnrichmentResponseDT
 		Similar:   nonNilStrings(e.Similar),
 		Duration:  e.Duration,
 		Album:     e.Album,
+	}
+}
+
+// handleDeezerEnrichment serves Deezer detail-open enrichment for one track or
+// album: the audio fields (bpm/gain) + explicit flag for tracks, and label /
+// genres / barcode / record type for albums (docs/providers/deezer.md caps 7–8).
+// Kind-dispatched from `kind` + `title` + `subtitle`. Always 200 with the DTO
+// (or an empty DTO); only request-shape problems are 4xx.
+func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http.Request) {
+	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
+	if kindStr == "" {
+		httputil.BadRequest(w, "kind is required")
+		return
+	}
+	kind, err := domain.ParseResultKind(kindStr)
+	if err != nil {
+		httputil.BadRequest(w, "invalid kind")
+		return
+	}
+	title := strings.TrimSpace(r.URL.Query().Get("title"))
+	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
+	if title == "" {
+		httputil.BadRequest(w, "title is required")
+		return
+	}
+
+	if h.deezerEnrichSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, deezerEnrichmentToDTO(domain.EmptyDeezerEnrichment()))
+		return
+	}
+
+	e, err := h.deezerEnrichSvc.Execute(r.Context(), kind, title, subtitle)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "deezer enrichment failed",
+			"error", err, "kind", kindStr, "title", title)
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, deezerEnrichmentToDTO(e))
+}
+
+type DeezerEnrichmentResponseDTO struct {
+	BPM        int      `json:"bpm"`
+	Gain       float64  `json:"gain"`
+	Explicit   bool     `json:"explicit"`
+	Label      string   `json:"label"`
+	Genres     []string `json:"genres"`
+	UPC        string   `json:"upc"`
+	RecordType string   `json:"record_type"`
+}
+
+func deezerEnrichmentToDTO(e domain.DeezerEnrichment) DeezerEnrichmentResponseDTO {
+	return DeezerEnrichmentResponseDTO{
+		BPM:        e.BPM,
+		Gain:       e.Gain,
+		Explicit:   e.Explicit,
+		Label:      e.Label,
+		Genres:     nonNilStrings(e.Genres),
+		UPC:        e.UPC,
+		RecordType: e.RecordType,
 	}
 }
 

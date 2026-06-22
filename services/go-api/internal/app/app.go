@@ -283,10 +283,20 @@ func (a *App) setup(ctx context.Context) error {
 		)
 	}
 
+	// Deezer detail-open enrichment: track audio fields (bpm/gain) + explicit
+	// flag, album liner data (label/genres/barcode/record-type)
+	// (docs/providers/deezer.md caps 7–8). Deezer's public API needs no key, so
+	// this is wired unconditionally like the rest of the Deezer adapter.
+	deezerEnrichSvc := discoveryService.NewDeezerEnrichmentService(
+		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
+		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient),
+	)
+
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, relatedSvc, enrichSvc, suggestSvc, eventSvc)
 	discoveryH.WithDiscogsEnrichment(discogsEnrichSvc)
 	discoveryH.WithDiscogsArtistEnrichment(discogsArtistEnrichSvc)
 	discoveryH.WithLastFmEnrichment(lastfmEnrichSvc)
+	discoveryH.WithDeezerEnrichment(deezerEnrichSvc)
 
 	a.startVocabularyRefresh(vocabStore)
 
