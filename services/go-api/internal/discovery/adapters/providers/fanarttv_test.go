@@ -57,23 +57,39 @@ func TestFanartTvArtworkResolver_Resolve_ArtistBackground_Fallback(t *testing.T)
 }
 
 func TestFanartTvArtworkResolver_Resolve_AlbumCover(t *testing.T) {
+	// Shape + endpoint captured from the live API (probed 2026-06-21): album art
+	// comes from /v3/music/albums/{mbid}, nested under albums[mbid].albumcover —
+	// not a top-level "albumcover" key (the prior fixture was fabricated).
+	const rgMbid = "01134202-7978-441c-a67b-f5f30c143204"
+	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{
-			"albumcover": [
-				{"url": "https://assets.fanart.tv/fanart/music/album-cover.jpg"}
-			]
+			"name": "Higher Power",
+			"mbid_id": "` + rgMbid + `",
+			"albums": {
+				"` + rgMbid + `": {
+					"albumcover": [
+						{"id": "348924", "likes": "0", "url": "https://assets.fanart.tv/fanart/album-cover.jpg"}
+					],
+					"albumcover_count": 1
+				}
+			}
 		}`))
 	}))
 	defer server.Close()
 
 	resolver := NewFanartTvArtworkResolver(newTestClient(server.URL), "test-api-key")
-	url, err := resolver.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "rg-mbid")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindAlbum, "Higher Power", "Coldplay", rgMbid)
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
-	if url != "https://assets.fanart.tv/fanart/music/album-cover.jpg" {
-		t.Errorf("resolve URL: got %q, want albumcover URL", url)
+	if gotPath != "/v3/music/albums/"+rgMbid {
+		t.Errorf("album request path: got %q, want the dedicated /v3/music/albums/ endpoint", gotPath)
+	}
+	if url != "https://assets.fanart.tv/fanart/album-cover.jpg" {
+		t.Errorf("resolve URL: got %q, want the nested albumcover URL", url)
 	}
 }
 
