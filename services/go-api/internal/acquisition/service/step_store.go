@@ -6,14 +6,14 @@ import (
 	"log/slog"
 	"strings"
 
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/acquisition/ports"
 )
 
 type StoreStep struct {
-	audioStore ports.AudioStore
+	audioStore ports.AudioWriter
 }
 
-func NewStoreStep(audioStore ports.AudioStore) *StoreStep {
+func NewStoreStep(audioStore ports.AudioWriter) *StoreStep {
 	return &StoreStep{audioStore: audioStore}
 }
 

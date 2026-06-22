@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/acquisition/ports"
 )
 
 // withRunner swaps the subprocess seam for a fake, so the dual-engine fan-out is

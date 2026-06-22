@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/acquisition/ports"
 )
 
 type SearchStep struct {

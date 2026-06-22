@@ -13,6 +13,7 @@ import (
 
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
 	authAdapters "altune/go-api/internal/auth/adapters"
@@ -132,7 +133,7 @@ func (a *App) setup(ctx context.Context) error {
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
 	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
 
-	var audioSearcher catalogPorts.AudioSearcher
+	var audioSearcher acqPorts.AudioSearcher
 	if audioStore != nil {
 		audioSearcher = ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
 	}

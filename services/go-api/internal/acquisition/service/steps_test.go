@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"

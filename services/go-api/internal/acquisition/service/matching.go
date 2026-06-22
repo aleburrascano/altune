@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	discoverySvc "altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 const (
@@ -16,12 +16,12 @@ const (
 )
 
 func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
-	combined := discoverySvc.NormalizeForMatch(trackArtist + " " + trackTitle)
-	titleOnly := discoverySvc.NormalizeForMatch(trackTitle)
-	candidateNorm := discoverySvc.NormalizeForMatch(candidateTitle)
+	combined := textnorm.NormalizeForMatch(trackArtist + " " + trackTitle)
+	titleOnly := textnorm.NormalizeForMatch(trackTitle)
+	candidateNorm := textnorm.NormalizeForMatch(candidateTitle)
 
-	combinedScore := discoverySvc.TokenSortRatio(combined, candidateNorm)
-	titleOnlyScore := discoverySvc.TokenSortRatio(titleOnly, candidateNorm)
+	combinedScore := textnorm.TokenSortRatio(combined, candidateNorm)
+	titleOnlyScore := textnorm.TokenSortRatio(titleOnly, candidateNorm)
 
 	// Penalize title-only matches: without artist context the match is
 	// ambiguous (e.g., "Die Hard" matches Kendrick's "DIE HARD" by title
@@ -87,8 +87,8 @@ func isTopicChannel(channel string) bool {
 func artistMatchesChannel(trackArtist, channel string) bool {
 	// Strip spaces so spaceless VEVO/official channels ("TheWeekndVEVO") still
 	// match the spaced artist name ("The Weeknd").
-	artistNorm := strings.ReplaceAll(discoverySvc.NormalizeForMatch(trackArtist), " ", "")
-	channelNorm := strings.ReplaceAll(discoverySvc.NormalizeForMatch(channel), " ", "")
+	artistNorm := strings.ReplaceAll(textnorm.NormalizeForMatch(trackArtist), " ", "")
+	channelNorm := strings.ReplaceAll(textnorm.NormalizeForMatch(channel), " ", "")
 	return strings.Contains(channelNorm, artistNorm)
 }
 

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 )
@@ -19,14 +19,14 @@ import (
 type AcquireTrackAudioService struct {
 	trackRepo     ports.TrackRepository
 	audioSearcher ports.AudioSearcher
-	audioStore    ports.AudioStore
+	audioStore    ports.AudioWriter
 	events        events.Publisher
 }
 
 func NewAcquireTrackAudioService(
 	trackRepo ports.TrackRepository,
 	audioSearcher ports.AudioSearcher,
-	audioStore ports.AudioStore,
+	audioStore ports.AudioWriter,
 	opts ...func(*AcquireTrackAudioService),
 ) *AcquireTrackAudioService {
 	s := &AcquireTrackAudioService{
@@ -62,33 +62,12 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		return nil
 	}
 
-	if track.AcquisitionStatus == domain.AcquisitionReady {
-		if track.AudioRef != nil {
-			exists, err := s.audioStore.Exists(ctx, *track.AudioRef)
-			if err != nil {
-				slog.WarnContext(ctx, "acquire_exists_check_failed",
-					"track_id", trackId.String(), "audio_ref", *track.AudioRef, "error", err)
-				return nil
-			}
-			if exists {
-				slog.InfoContext(ctx, "acquire_skip_already_ready", "track_id", trackId.String())
-				return nil
-			}
-			slog.InfoContext(ctx, "acquire_reacquire_missing_file",
-				"track_id", trackId.String(), "audio_ref", *track.AudioRef)
-		}
-		track.RevertToPending()
-		if err := s.trackRepo.Update(ctx, track); err != nil {
-			return fmt.Errorf("revert to pending: %w", err)
-		}
+	proceed, err := s.reconcileForReacquire(ctx, track)
+	if err != nil {
+		return err
 	}
-
-	if track.AcquisitionStatus == domain.AcquisitionFailed {
-		slog.InfoContext(ctx, "acquire_retrying_failed", "track_id", trackId.String())
-		track.RevertToPending()
-		if err := s.trackRepo.Update(ctx, track); err != nil {
-			return fmt.Errorf("revert failed to pending: %w", err)
-		}
+	if !proceed {
+		return nil
 	}
 
 	slog.InfoContext(ctx, "track_acquisition_started",
@@ -111,12 +90,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 				Duration: derefFloat(track.DurationSeconds),
 			},
 		}
-		directErr := RunPipeline(ctx, []Step{
-			NewDownloadStep(s.audioSearcher),
-			NewTagStep(),
-			NewStoreStep(s.audioStore),
-			NewUpdateTrackStep(s.trackRepo, userId, trackId),
-		}, direct)
+		directErr := RunPipeline(ctx, s.buildSteps(userId, trackId, true), direct)
 		cleanupTemp(direct)
 		if directErr == nil {
 			slog.InfoContext(ctx, "acquisition.direct_source_used",
@@ -129,17 +103,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	}
 
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
-
-	pipeline := []Step{
-		NewSearchStep(s.audioSearcher),
-		NewSelectStep(),
-		NewDownloadStep(s.audioSearcher),
-		NewTagStep(),
-		NewStoreStep(s.audioStore),
-		NewUpdateTrackStep(s.trackRepo, userId, trackId),
-	}
-
-	err = RunPipeline(ctx, pipeline, ac)
+	err = RunPipeline(ctx, s.buildSteps(userId, trackId, false), ac)
 	cleanupTemp(ac)
 
 	if err != nil {
@@ -161,6 +125,59 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 
 	s.onAcquireCompleted(ctx, userId, trackId, ac.AudioRef)
 	return nil
+}
+
+// reconcileForReacquire resets a non-pending track back to pending so the
+// pipeline can run again, and reports whether acquisition should proceed. A
+// ready track whose audio file still exists is a no-op skip (proceed=false); a
+// ready track with a missing file, or a previously failed track, is reverted to
+// pending (proceed=true). A fresh pending track proceeds unchanged.
+func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, track *domain.Track) (proceed bool, err error) {
+	switch track.AcquisitionStatus {
+	case domain.AcquisitionReady:
+		if track.AudioRef != nil {
+			exists, existsErr := s.audioStore.Exists(ctx, *track.AudioRef)
+			if existsErr != nil {
+				slog.WarnContext(ctx, "acquire_exists_check_failed",
+					"track_id", track.ID.String(), "audio_ref", *track.AudioRef, "error", existsErr)
+				return false, nil
+			}
+			if exists {
+				slog.InfoContext(ctx, "acquire_skip_already_ready", "track_id", track.ID.String())
+				return false, nil
+			}
+			slog.InfoContext(ctx, "acquire_reacquire_missing_file",
+				"track_id", track.ID.String(), "audio_ref", *track.AudioRef)
+		}
+		track.RevertToPending()
+		if err := s.trackRepo.Update(ctx, track); err != nil {
+			return false, fmt.Errorf("revert to pending: %w", err)
+		}
+	case domain.AcquisitionFailed:
+		slog.InfoContext(ctx, "acquire_retrying_failed", "track_id", track.ID.String())
+		track.RevertToPending()
+		if err := s.trackRepo.Update(ctx, track); err != nil {
+			return false, fmt.Errorf("revert failed to pending: %w", err)
+		}
+	}
+	return true, nil
+}
+
+// buildSteps assembles the acquisition pipeline. The direct path pre-seeds a
+// known downloadable source as Selected, so it skips Search+Select and goes
+// straight to download; the search path discovers a candidate first. Both share
+// the download → tag → store → update-track tail.
+func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId, direct bool) []Step {
+	var steps []Step
+	if !direct {
+		steps = append(steps, NewSearchStep(s.audioSearcher), NewSelectStep())
+	}
+	return append(steps,
+		NewDownloadStep(s.audioSearcher),
+		NewTagStep(),
+		NewStoreStep(s.audioStore),
+		NewUpdateTrackStep(s.trackRepo, userId, trackId),
+	)
 }
 
 func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userId shared.UserId, trackId domain.TrackId, audioRef string) {
