@@ -53,7 +53,7 @@ func (s *CorrectionService) correctWholeQuery(ctx context.Context, norm string) 
 		return nil
 	}
 	for _, c := range candidates {
-		if c.TermNorm == norm && c.Kind != "query" {
+		if c.TermNorm == norm && c.Kind != domain.VocabKindQuery {
 			return nil
 		}
 	}
@@ -90,7 +90,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 
 		exactMatch := false
 		for _, c := range candidates {
-			if c.TermNorm == token && c.Kind != "query" {
+			if c.TermNorm == token && c.Kind != domain.VocabKindQuery {
 				exactMatch = true
 				break
 			}

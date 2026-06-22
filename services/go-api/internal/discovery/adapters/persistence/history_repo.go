@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -28,7 +29,10 @@ func (r *PgxSearchHistoryRepository) Insert(ctx context.Context, entry *domain.S
 		VALUES ($1, $2, $3, $4, $5, $6)`,
 		entry.ID, entry.UserId.UUID(), entry.Query, entry.QueryNorm, entry.ExecutedAt, entry.ResultClickedSignature,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("insert search history: %w", err)
+	}
+	return nil
 }
 
 func (r *PgxSearchHistoryRepository) TrimToN(ctx context.Context, userId shared.UserId, n int) error {
@@ -43,7 +47,10 @@ func (r *PgxSearchHistoryRepository) TrimToN(ctx context.Context, userId shared.
 		)`,
 		userId.UUID(), n,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("trim search history: %w", err)
+	}
+	return nil
 }
 
 func (r *PgxSearchHistoryRepository) ListDistinctRecent(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
@@ -64,7 +71,7 @@ func (r *PgxSearchHistoryRepository) ListDistinctRecent(ctx context.Context, use
 		userId.UUID(), limit,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query search history: %w", err)
 	}
 	defer rows.Close()
 
@@ -79,7 +86,7 @@ func (r *PgxSearchHistoryRepository) ListDistinctRecent(ctx context.Context, use
 			clickSig  *string
 		)
 		if err := rows.Scan(&id, &uid, &query, &queryNorm, &execAt, &clickSig); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan search history: %w", err)
 		}
 		entries = append(entries, &domain.SearchHistoryEntry{
 			ID:                     id,
@@ -90,5 +97,8 @@ func (r *PgxSearchHistoryRepository) ListDistinctRecent(ctx context.Context, use
 			ResultClickedSignature: clickSig,
 		})
 	}
-	return entries, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate search history: %w", err)
+	}
+	return entries, nil
 }

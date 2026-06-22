@@ -157,6 +157,8 @@ func getTrackCount(r domain.SearchResult) int {
 	switch n := v.(type) {
 	case int:
 		return n
+	case int64:
+		return int(n)
 	case float64:
 		return int(n)
 	default:
