@@ -200,7 +200,9 @@ type deezerItem struct {
 	Duration    int          `json:"duration"`
 	ISRC        string       `json:"isrc"`
 	CoverBig    string       `json:"cover_big"`
+	CoverXL     string       `json:"cover_xl"`
 	PictureBig  string       `json:"picture_big"`
+	PictureXL   string       `json:"picture_xl"`
 	Artist      *deezerRef   `json:"artist"`
 	Album       *deezerAlbum `json:"album"`
 	RecordType  string       `json:"record_type"`
@@ -220,6 +222,7 @@ type deezerAlbum struct {
 	ID       int64  `json:"id"`
 	Title    string `json:"title"`
 	CoverBig string `json:"cover_big"`
+	CoverXL  string `json:"cover_xl"`
 }
 
 // Resolve implements ArtworkResolver — best-effort cover lookup by search.
@@ -252,12 +255,21 @@ func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 		return "", nil
 	}
 	for _, item := range body.Data {
+		// Prefer the 1000px _xl artwork (docs/providers/deezer.md cap 2), falling
+		// back to 500px _big when xl is absent.
 		var img string
-		if item.Album != nil && item.Album.CoverBig != "" {
+		switch {
+		case item.Album != nil && item.Album.CoverXL != "":
+			img = item.Album.CoverXL
+		case item.Album != nil && item.Album.CoverBig != "":
 			img = item.Album.CoverBig
-		} else if item.CoverBig != "" {
+		case item.CoverXL != "":
+			img = item.CoverXL
+		case item.CoverBig != "":
 			img = item.CoverBig
-		} else if item.PictureBig != "" {
+		case item.PictureXL != "":
+			img = item.PictureXL
+		case item.PictureBig != "":
 			img = item.PictureBig
 		}
 		if img != "" && !IsDeezerPlaceholder(img) {
