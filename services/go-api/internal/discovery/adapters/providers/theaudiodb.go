@@ -88,25 +88,12 @@ func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind,
 
 	u := fmt.Sprintf("https://theaudiodb.com/api/v1/json/523532/searchalbum.php?s=%s&a=%s",
 		url.QueryEscape(subtitle), url.QueryEscape(title))
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return "", nil
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return "", nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", nil
-	}
-
 	var body struct {
 		Album []struct {
 			StrAlbumThumb string `json:"strAlbumThumb"`
 		} `json:"album"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return "", nil
 	}
 	if len(body.Album) > 0 && body.Album[0].StrAlbumThumb != "" {

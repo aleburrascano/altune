@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -73,23 +72,8 @@ func (a *DeezerAdapter) searchKind(ctx context.Context, query string, kind domai
 
 	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=15&order=RANKING", endpoint, url.QueryEscape(query))
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("deezer returned %d", resp.StatusCode)
-	}
-
 	var body deezerSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 
@@ -227,21 +211,8 @@ func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	}
 
 	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=1", endpoint, url.QueryEscape(query))
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return "", nil
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return "", nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", nil
-	}
-
 	var body deezerSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return "", nil
 	}
 	for _, item := range body.Data {
@@ -293,21 +264,8 @@ func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 }
 
 func (a *DeezerAdapter) fetchList(ctx context.Context, u string, mapper func(deezerItem) domain.SearchResult) ([]domain.SearchResult, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("deezer api returned %d", resp.StatusCode)
-	}
-
 	var body deezerSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 
@@ -349,20 +307,8 @@ func (a *DeezerAdapter) fetchChartEntries(
 	u string,
 	kind string,
 ) ([]domain.VocabularyEntry, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("deezer chart returned %d", resp.StatusCode)
-	}
 	var body deezerSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 	return mapDeezerChartItems(body.Data, kind), nil
@@ -427,23 +373,10 @@ func IsDeezerPlaceholder(u string) bool {
 // Returns empty string on error or if the track has no ISRC.
 func (a *DeezerAdapter) FetchTrackISRC(ctx context.Context, trackID string) (string, error) {
 	u := fmt.Sprintf("https://api.deezer.com/track/%s", url.PathEscape(trackID))
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return "", nil
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return "", nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", nil
-	}
-
 	var detail struct {
 		ISRC string `json:"isrc"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil {
+	if err := getJSON(ctx, a.client, u, &detail); err != nil {
 		return "", nil
 	}
 	return detail.ISRC, nil
@@ -451,25 +384,12 @@ func (a *DeezerAdapter) FetchTrackISRC(ctx context.Context, trackID string) (str
 
 func (a *DeezerAdapter) FetchFirstTrackID(ctx context.Context, albumID string) (string, error) {
 	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=1", url.PathEscape(albumID))
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return "", nil
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return "", nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", nil
-	}
-
 	var body struct {
 		Data []struct {
 			ID int `json:"id"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return "", nil
 	}
 	if len(body.Data) == 0 {

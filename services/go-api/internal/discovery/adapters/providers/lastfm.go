@@ -42,26 +42,10 @@ func (a *LastFmAdapter) searchKind(ctx context.Context, query string, kind domai
 	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=%s&%s=%s&api_key=%s&format=json&limit=15",
 		method, lastfmQueryParam(kind), url.QueryEscape(query), a.apiKey)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("lastfm returned %d", resp.StatusCode)
-	}
-
 	var raw json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := getJSON(ctx, a.client, u, &raw); err != nil {
 		return nil, err
 	}
-
 	return parseLastFmResponse(raw, kind), nil
 }
 
@@ -202,19 +186,6 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&artist=%s&api_key=%s&format=json&limit=10",
 		url.QueryEscape(artistName), a.apiKey)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("lastfm artist.gettoptracks returned %d", resp.StatusCode)
-	}
-
 	var body struct {
 		TopTracks struct {
 			Track []struct {
@@ -232,7 +203,7 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 			} `json:"track"`
 		} `json:"toptracks"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 
@@ -262,19 +233,6 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=artist.gettopalbums&artist=%s&api_key=%s&format=json&limit=50",
 		url.QueryEscape(artistName), a.apiKey)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("lastfm artist.gettopalbums returned %d", resp.StatusCode)
-	}
-
 	var body struct {
 		TopAlbums struct {
 			Album []struct {
@@ -291,7 +249,7 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 			} `json:"album"`
 		} `json:"topalbums"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 
@@ -336,20 +294,8 @@ func (a *LastFmAdapter) fetchChart(
 		"https://ws.audioscrobbler.com/2.0/?method=%s&limit=%d&api_key=%s&format=json",
 		method, limit, a.apiKey,
 	)
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("lastfm chart returned %d", resp.StatusCode)
-	}
 	var raw json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := getJSON(ctx, a.client, u, &raw); err != nil {
 		return nil, err
 	}
 	return parseLastFmChartResponse(raw, method), nil
