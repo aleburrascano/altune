@@ -113,11 +113,6 @@ func WithMBAuthority(mb mbAuthority) ConsensusOption {
 	return func(s *ConsensusService) { s.mb = mb }
 }
 
-// WithCacheTTL overrides the per-artist consensus cache TTL.
-func WithCacheTTL(ttl time.Duration) ConsensusOption {
-	return func(s *ConsensusService) { s.cache = newArtistConsensusCache(ttl) }
-}
-
 func NewConsensusService(providers []ConsensusProvider, opts ...ConsensusOption) *ConsensusService {
 	s := &ConsensusService{
 		providers: providers,

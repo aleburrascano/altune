@@ -147,13 +147,26 @@ func TestDecodeMember_Invalid(t *testing.T) {
 
 // --- integration tests (require REDIS_URL) ----------------------------------
 
+// vocabAllKeys returns all Redis keys used by a vocabulary entry (for test cleanup).
+func vocabAllKeys(norm string) []string {
+	keys := []string{
+		vocabTermsKey,
+		vocabLexKey,
+		vocabEntryPfx + norm,
+	}
+	for _, tri := range trigrams(norm) {
+		keys = append(keys, vocabTriPrefix+tri)
+	}
+	return keys
+}
+
 func vocabCleanKeys(t *testing.T, norms ...string) {
 	t.Helper()
 	client := testRedisClient(t)
 	ctx := context.Background()
 	t.Cleanup(func() {
 		for _, n := range norms {
-			for _, k := range AllKeys(n) {
+			for _, k := range vocabAllKeys(n) {
 				client.Del(ctx, k)
 			}
 		}
