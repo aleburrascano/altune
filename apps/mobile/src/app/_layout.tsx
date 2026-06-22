@@ -14,15 +14,18 @@ import { AppState, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import TrackPlayer from 'react-native-track-player';
-
 import { AuthGate } from '../features/auth/ui/AuthGate';
 import { useServerEvents } from '../shared/events/useServerEvents';
 import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
-import { playbackService } from '../features/playback/service';
+import { isExpoGo } from '../shared/playback/isExpoGo';
 import { ThemeProvider, darkTheme } from '../shared/ui/theme';
 
-TrackPlayer.registerPlaybackService(() => playbackService);
+// Registering the playback service pulls in react-native-track-player's native
+// module, which Expo Go does not bundle — skip it there so the app boots.
+if (!isExpoGo) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('../features/playback/registerPlaybackService').registerPlaybackService();
+}
 
 // AIDEV-NOTE: ADR-0005 — single QueryClientProvider at the Expo Router root.
 // Every feature's hooks (useLibrary, etc.) inherit this client.
