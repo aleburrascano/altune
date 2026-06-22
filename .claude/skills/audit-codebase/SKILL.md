@@ -1,80 +1,90 @@
 ---
 name: audit-codebase
 description: >
-  Sweep the codebase against all rules — frontend, backend, or both.
-  Reads every file so path-scoped rules load automatically, then audits
-  against them. Reports findings by severity, surfaces improvement
-  opportunities beyond rule compliance, and optionally fixes them.
-  Use every 3-4 days or after shipping a feature batch.
-argument-hint: "[frontend | backend | all] [--fix]"
+  Low-altitude conformance sweep of one area against the project's path-scoped
+  rules and beyond them — reports what's wrong and what's worth improving,
+  optionally fixes. Run per area every 3-4 days or after a feature batch.
+  For structural/architecture work, use /improve-codebase-architecture.
+disable-model-invocation: true
+argument-hint: "<frontend | backend | area-name> [--fix]"
 ---
 
 # Codebase Audit
 
-Systematic sweep of source files against all project rules. Reading source files triggers the relevant path-scoped rules to load — they define what's right and wrong.
+A sweep of source files for the **substance** of the code — correctness, security, tests, resilience, readability. Two principles govern it.
+
+## Altitude
+
+This skill works at **low altitude**: lines, functions, files. *Is this code correct, secure, tested, resilient, clean?*
+
+Structural questions — should this module be reshaped, is this seam in the right place, is this abstraction shallow — are **high altitude**. They belong to `/improve-codebase-architecture`. When a finding wants to *restructure* rather than *fix*, that's the handoff signal: name it and point there.
+
+## Rules are the floor, not the ceiling
+
+Reading a source file auto-loads the path-scoped rules that govern it. Those are the **floor** — cheap, certain, checkable. But the rules are limited; many real problems no rule names. So every finding is one of two kinds:
+
+- **Rule-backed** — cite the rule (e.g. `go-resilience.md`, `rn-security.md`).
+- **Judgment** — no rule exists, but it's still wrong or risky. You are expected to find these. Stopping at "rules applied" is an incomplete audit.
 
 ## Arguments
 
 - `frontend` — sweep `apps/mobile/src/`
 - `backend` — sweep `services/go-api/`
-- `all` — both (default if no argument)
+- an **area name** (a feature folder or bounded context) — sweep just that slice
 - `--fix` — apply fixes after reporting (default: report only)
+
+**One area per run.** A full-repo sweep won't fit one context. Pick a scope you can read completely.
 
 ## Workflow
 
-### Phase 1: Discovery
+### 1. Discovery
 
-Enumerate every source file in the target scope. Group by area:
+Enumerate every source file in the target area and report the count before starting. That count is the completion criterion for the next phase — every file accounted for, none skipped.
 
-**Frontend**: each feature folder, shared/, app/
-**Backend**: each bounded context in internal/, shared/, cmd/
+### 2. Sweep
 
-Report file count per area before starting.
+Read every file in the area. Reading loads the path-scoped rules automatically. For each file — and across files, where a problem only shows when several are seen together — look across these dimensions:
 
-### Phase 2: Audit
+- **Correctness** — logic errors, edge cases, nil/undefined, races, state bugs
+- **Security** — unvalidated input, authz gaps, injection, leaked secrets
+- **Error handling & resilience** — swallowed errors, missing timeouts/retries, partial-failure states left bad
+- **Tests** — missing coverage, weak assertions, brittle implementation-coupled tests
+- **Testability & decomposition** — functions that do more than one thing, or can't be tested without standing up their callers. Flag these **even when they pass the line-count rule** — `code-quality.md` (≤10 lines) is the floor; *hard to test* is the real signal.
+- **Performance** — N+1 queries, blocking calls, needless allocation (line-level, not architectural)
+- **Observability** — error sites with no log or correlation id
+- **Cleanliness** — dead code, misleading names, local duplication
 
-Process one area at a time. For each area, read EVERY file — no skipping.
+These are the common dimensions, not a closed list — follow anything that smells wrong, even if it fits none of them.
 
-As files are read, path-scoped rules load automatically. Apply every loaded rule to each file. Think about cross-file issues that only appear when you see multiple files together — duplication, inconsistent patterns, missing abstractions, architecture violations.
+The sweep produces two outputs: **findings** (what's wrong → phase 3) and **suggestions** (what's worth improving → phase 4).
 
-### Phase 3: Report
+### 3. Findings — what's wrong
 
-Group findings by severity:
+Group by severity:
 
-- **Critical** — bugs, security issues, data loss risks
-- **High** — architecture violations, missing resilience, significant quality gaps
-- **Medium** — convention violations, missing tests, abstraction opportunities
-- **Low** — style improvements, minor optimizations
+- **Critical** — bugs, security holes, data-loss risks
+- **High** — missing resilience, significant quality gaps, rule violations that bite
+- **Medium** — convention drift, missing tests, weak decomposition
+- **Low** — naming, minor cleanup
 
-For each finding: file path, what's wrong, which rule it violates, concrete suggested fix.
+Per finding: file path · what's wrong · rule (if any) · concrete fix. End with a severity × file-count summary table.
 
-End with a summary table (area x severity x file count).
+### 4. Suggestions — what's worth improving
 
-### Phase 4: Opportunities
+Not violations — concrete improvements a careful engineer would make. Keep them at **low altitude**: "add input validation to this endpoint," "this error is swallowed, surface it," "split this function so the error branch is testable." If a suggestion wants to *reshape a module* rather than fix a line, don't write it here — note it as architectural and point to `/improve-codebase-architecture`.
 
-After the rule-based audit, step back and think about what's **missing** — not rule violations, but gaps a real user, tester, or ops engineer would notice. The audit catches what's *wrong*; this phase catches what's *absent*.
+Think like three people at once — a user hitting the flow, a tester trying to break it, an on-call engineer at 2 AM:
 
-Think like a user who just installed the app, a QA tester trying to break it, and an on-call engineer debugging a 2 AM incident — all at once. For each area you just audited, ask:
+- What would a user expect to happen here that doesn't?
+- What breaks silently — stale state, unconfirmed mutations, swallowed partial failures?
+- What's missing that would save hours when something breaks in production?
 
-- **What would a real user expect to happen here that doesn't?** Walk through every flow end-to-end. Where does the experience fall short of what a polished app would do?
-- **What would break silently?** Where can state go stale, mutations go unconfirmed, errors go swallowed, or partial failures leave things in a bad state?
-- **What's missing that would save hours of debugging?** What would you wish existed the first time something goes wrong in production?
-- **What can regress without anyone noticing?** Where is a fix in one layer likely to break another, with no test or signal to catch it?
+Per suggestion: what & where (name the screen, endpoint, or function) · why it matters · approach in 1-2 sentences · effort — **quick** (< 30 min) / **medium** (1-2 h) / **significant** (needs a spec). Group by effort so quick wins are pickable first.
 
-Don't limit yourself to a checklist. These questions are starting points — follow whatever threads they surface. The goal is to find things the rule-based audit can't catch because no rule exists for them yet.
+### 5. Fix (only if `--fix`)
 
-For each opportunity:
-- What's missing and where (be specific — name the screen, endpoint, or flow)
-- Why it matters (user impact, debugging impact, regression risk)
-- Suggested approach (1-2 sentences, not a full spec)
-- Effort estimate: **quick** (< 30 min), **medium** (1-2 hours), **significant** (needs a spec)
-
-Group opportunities by effort so the user can pick off quick wins first.
-
-### Phase 5: Fix (only if `--fix`)
-
-Work through findings critical-first, then quick-win opportunities. Commit fixes per area.
+Work critical-first, then quick-win suggestions. Commit fixes per area.
 
 ## Context management
 
-Complete one area fully before moving to the next. Ask the user before continuing — this allows context to reset between areas if needed.
+One run audits one area. To sweep another, start a fresh invocation so context resets cleanly between areas.
