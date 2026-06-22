@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/acquisition/ports"
 )
 
 // searchRunner issues a single yt-dlp search for a fully-formed search spec

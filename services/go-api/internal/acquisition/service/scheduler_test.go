@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	acqports "altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
@@ -66,7 +67,7 @@ func (r *fakeTrackRepository) GetByDedupKey(_ context.Context, _ shared.UserId, 
 }
 
 type fakeAudioSearcher struct {
-	searchResults []ports.AudioCandidate
+	searchResults []acqports.AudioCandidate
 	searchErr     error
 	downloadPath  string
 	downloadErr   error
@@ -74,7 +75,7 @@ type fakeAudioSearcher struct {
 	downloadURLs  []string
 }
 
-func (s *fakeAudioSearcher) Search(_ context.Context, _ string) ([]ports.AudioCandidate, error) {
+func (s *fakeAudioSearcher) Search(_ context.Context, _ string) ([]acqports.AudioCandidate, error) {
 	s.searchCalled = true
 	return s.searchResults, s.searchErr
 }

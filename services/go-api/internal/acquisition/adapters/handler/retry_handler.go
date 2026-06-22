@@ -3,12 +3,11 @@ package handler
 import (
 	"log/slog"
 	"net/http"
-	"sync"
-	"time"
 
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 
@@ -19,13 +18,10 @@ type acquisitionScheduler interface {
 	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
 }
 
-const retryCooldown = 60 * time.Second
-
 type RetryHandler struct {
 	trackRepo ports.TrackRepository
 	scheduler acquisitionScheduler
-	mu        sync.Mutex
-	lastRetry map[string]time.Time
+	admission *service.RetryAdmission
 }
 
 func NewRetryHandler(
@@ -35,7 +31,7 @@ func NewRetryHandler(
 	return &RetryHandler{
 		trackRepo: trackRepo,
 		scheduler: scheduler,
-		lastRetry: make(map[string]time.Time),
+		admission: service.NewRetryAdmission(),
 	}
 }
 
@@ -69,23 +65,12 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	key := trackId.String()
-	h.mu.Lock()
-	now := time.Now()
-	if last, ok := h.lastRetry[key]; ok && now.Sub(last) < retryCooldown {
-		h.mu.Unlock()
+	if !h.admission.Allow(trackId) {
 		httputil.WriteJSON(w, http.StatusTooManyRequests, map[string]string{
 			"error": "retry cooldown active, try again later",
 		})
 		return
 	}
-	h.lastRetry[key] = now
-	for k, v := range h.lastRetry {
-		if now.Sub(v) >= 2*retryCooldown {
-			delete(h.lastRetry, k)
-		}
-	}
-	h.mu.Unlock()
 
 	// Retries carry no source URL (the request is by trackId), so acquisition
 	// falls back to the search pipeline.

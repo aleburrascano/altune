@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/acquisition/ports"
 )
 
 type DownloadStep struct {

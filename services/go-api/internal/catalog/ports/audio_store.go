@@ -23,19 +23,3 @@ type AudioStore interface {
 type AcquisitionScheduler interface {
 	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
 }
-
-type AudioCandidate struct {
-	Title          string
-	Artist         string
-	DurationSecs   float64
-	URL            string
-	Channel        string
-	Categories     []string
-	ViewCount      int64
-	FollowerCount  int64
-}
-
-type AudioSearcher interface {
-	Search(ctx context.Context, query string) ([]AudioCandidate, error)
-	Download(ctx context.Context, url string, outDir string) (filePath string, err error)
-}
