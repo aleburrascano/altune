@@ -341,3 +341,35 @@ export async function getLastFmEnrichment(params: {
     `/v1/discovery/enrichment/lastfm?${qs.toString()}`,
   );
 }
+
+// --- Deezer detail-open enrichment (docs/providers/deezer.md caps 7–8) ---
+
+/**
+ * Deezer-derived enrichment for a track or album: track audio fields (`bpm`,
+ * `gain` — a volume-normalization value, not displayed — and the `explicit`
+ * flag) and album liner data (`label`, `genres`, `upc` barcode, `record_type`).
+ * An unresolved entity returns an empty payload (zero/empty fields). Kind-
+ * dispatched from `kind` + `title` + `subtitle`; only track and album resolve
+ * (artist returns empty). Lyrics are a separate feature, not part of this payload.
+ */
+export type DeezerEnrichmentResponse = {
+  bpm: number;
+  gain: number;
+  explicit: boolean;
+  label: string;
+  genres: string[];
+  upc: string;
+  record_type: string;
+};
+
+export async function getDeezerEnrichment(params: {
+  kind: DiscoveryKind;
+  title: string;
+  subtitle?: string | null | undefined;
+}): Promise<DeezerEnrichmentResponse> {
+  const qs = new URLSearchParams({ kind: params.kind, title: params.title });
+  if (params.subtitle) qs.set('subtitle', params.subtitle);
+  return apiFetch<DeezerEnrichmentResponse>(
+    `/v1/discovery/enrichment/deezer?${qs.toString()}`,
+  );
+}
