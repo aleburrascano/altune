@@ -246,7 +246,30 @@ func (a *App) setup(ctx context.Context) error {
 		)
 	}
 
+	// Discogs detail-open album enrichment: credits/personnel, styles,
+	// label/catalog, companies, community signal (docs/providers/discogs.md caps
+	// 3–6). Only when a Discogs token is configured; nil degrades to an empty DTO.
+	var discogsEnrichSvc *discoveryService.DiscogsEnrichmentService
+	var discogsArtistEnrichSvc *discoveryService.DiscogsArtistEnrichmentService
+	if a.cfg.HasDiscogs() {
+		discogsAdapter := providers.NewDiscogsAdapter(
+			&http.Client{Timeout: 10 * time.Second},
+			a.cfg.DiscogsToken,
+			a.cfg.MusicBrainzUserAgent,
+		)
+		discogsEnrichSvc = discoveryService.NewDiscogsEnrichmentService(
+			discogsAdapter,
+			discoveryCacheAdapters.NewRedisDiscogsEnrichmentCache(a.redisClient),
+		)
+		discogsArtistEnrichSvc = discoveryService.NewDiscogsArtistEnrichmentService(
+			discogsAdapter,
+			discoveryCacheAdapters.NewRedisDiscogsArtistEnrichmentCache(a.redisClient),
+		)
+	}
+
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, relatedSvc, enrichSvc, suggestSvc, eventSvc)
+	discoveryH.WithDiscogsEnrichment(discogsEnrichSvc)
+	discoveryH.WithDiscogsArtistEnrichment(discogsArtistEnrichSvc)
 
 	a.startVocabularyRefresh(vocabStore)
 
