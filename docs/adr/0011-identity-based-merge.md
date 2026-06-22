@@ -1,7 +1,7 @@
 # ADR-0011: Cross-provider identity-based merge
 
-- **Status:** Proposed (pending `discoveryeval -mode eval -top-k 3` on the live stack)
-- **Date:** 2026-06-21
+- **Status:** Accepted (eval 2026-06-22: top-3 **99.4%** (1782/1792) ≥ baseline 1773 — no regression)
+- **Date:** 2026-06-21 (accepted 2026-06-22)
 - **Deciders:** solo + Claude
 - **Context tags:** [pattern | policy]
 
@@ -54,9 +54,10 @@ prior name-only merge.
 - Built behind the gate: domain `EntityResolutionBridge`, `ports.IdentityBridge`,
   `RedisEnrichmentCache.ExternalIDs`, the `sameEntity` bridge branch, the `stampIdentities`
   pass, and `WithIdentityBridge` wiring. Unit tests green.
-- **Gate to run before flipping Status → Accepted:**
-  `cd services/go-api && go run ./cmd/discoveryeval -mode eval -top-k 3` against the live stack
-  (DB + providers + Redis). Pass = no top-3 regression vs the committed baseline.
+- **Gate result (2026-06-22):** `go run ./cmd/discoveryeval -mode eval -top-k 3 -concurrency 1`
+  (MB-healthy run) → top-3 **1782/1792 (99.4%)**, the highest of any recorded run (baselines
+  1773–1775), with only 10 entities outside top-3 (baseline 19). No regression → Accepted. Result
+  held despite worse-than-baseline provider conditions that day (YouTube Music slow, MB timeouts).
 
 ## Vault references
 

@@ -4,8 +4,8 @@
 > `musicbrainz.org/ws/2` and `coverartarchive.org`).
 > Built: name **search** + identity/consensus, the `inc=` enrichment **lookup** (genres/ratings/
 > url-rels), the **Cover Art Archive** + **Fanart.tv** artwork tiers, the cross-provider **identity
-> bridge** (cap 4) and **search-list MBID warm** (cap 5). Caps 4–5 are 🧪 unit-green pending one
-> `discoveryeval -top-k 3`; cap 6 (Fanart.tv) is ✅ live-verified 2026-06-21.
+> bridge** (cap 4) and **search-list MBID warm** (cap 5). Caps 4–5 ✅ (eval 2026-06-22: top-3 99.4%,
+> no regression, ADR-0011 Accepted); cap 6 (Fanart.tv) ✅ live-verified 2026-06-21.
 
 ## 1. Why this provider matters
 
@@ -94,7 +94,7 @@ The single highest-value addition. One lookup per resolved entity yields:
 - Risk: **off the ranking path** (display/enrichment only) unless we feed genres/rating into rank —
   if we do, it must clear the `discoveryeval --top-k 3` gate like every ranking change.
 
-### 4. Cross-provider identity bridge (url-relations) — ✅ EXTRACTED + 🧪 MERGE-USE BUILT, eval-gated (ADR-0011)
+### 4. Cross-provider identity bridge (url-relations) — ✅ EXTRACTED + MERGE-USE DONE (ADR-0011 Accepted)
 `inc=url-rels` on an artist returns its IDs on **Deezer (`deezer.com/artist/525046`), Spotify,
 Discogs, Last.fm, AllMusic, Genius, Wikidata (`Q130798`), official homepage, IMDb, RateYourMusic,
 BBC** (all verified). **Built (`musicbrainz-enrichment`):** the lookup parses `relations[]` into bare
@@ -103,10 +103,9 @@ enrichment endpoint — available to the client now and the seed for the merge b
 built (ADR-0011):** an `IdentityBridge` port (the enrichment cache's `ExternalIDs` read side) feeds
 those ids into `Merge` via a pre-merge `stampIdentities` pass, so a result merges by stated identity
 (new `EntityResolutionBridge` tier) instead of name similarity — additive, cache-only, no hot-path MB
-call. Code complete + unit-green. **Last step (yours):** run `discoveryeval -mode eval -top-k 3` on
-the live stack; a no-regression pass flips ADR-0011 Proposed → Accepted and this 🧪 → ✅. Still open:
-the full background-warm of the bridge (graduation path) and the keep-apart override (un-merging
-same-name different entities) — separate increments.
+call. **Eval passed (2026-06-22):** top-3 99.4% (1782/1792), the highest recorded — no regression →
+ADR-0011 Accepted. Still open: the full background-warm of the bridge (graduation path) and the
+keep-apart override (un-merging same-name different entities) — separate increments.
 
 ### 5. Cover Art Archive — HD MBID-keyed album art — ✅ BUILT on detail-open (`musicbrainz-enrichment`, 2026-06-22)
 `coverartarchive.org/release-group/{mbid}` → front cover at **250/500/1200px** (verified 200 + real
@@ -172,13 +171,12 @@ fixtures from the live probe.
 
 Remaining:
 
-1. **Identity-based merge (cap. 4 merge-use). — 🧪 BUILT, awaiting your eval run (ADR-0011).** The
-   `external_ids` now feed `Merge` via the `IdentityBridge` (cache-only, additive, `bridge` tier).
-   Code complete + unit-green. Run `discoveryeval -mode eval -top-k 3` on the live stack to confirm
-   no top-3 regression → flips ADR-0011 to Accepted and the marker to ✅.
-2. **Search-path enrichment (cap. 5 list-wide). — 🧪 BUILT (merged cards + `MBIDIndex` warm), eval-gated.**
-   Merged Deezer+MB cards already get HD CAA art via the existing `enrich()`; the cache-only `MBIDIndex`
-   attaches an MBID to unmerged non-MB results. Folds into the **same** eval run as #1. Deferred: the
+1. **Identity-based merge (cap. 4 merge-use). — ✅ DONE (ADR-0011 Accepted, eval 2026-06-22).** The
+   `external_ids` feed `Merge` via the `IdentityBridge` (cache-only, additive, `bridge` tier). Top-3
+   eval 99.4% — no regression.
+2. **Search-path enrichment (cap. 5 list-wide). — ✅ DONE (merged cards + `MBIDIndex` warm).**
+   Merged Deezer+MB cards get HD CAA art via the existing `enrich()`; the cache-only `MBIDIndex`
+   attaches an MBID to unmerged non-MB results. Covered by the same eval pass. Deferred: the
    background MBID-warm worker for cold entities (`b`).
 3. **Fanart.tv (cap. 6). — ✅ DONE.** Live-probed with `FANARTTV_API_KEY`; fixed the album
    endpoint/nesting bug; tests now encode the real shape. Display-only, no eval gate.
