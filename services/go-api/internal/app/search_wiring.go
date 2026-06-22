@@ -172,6 +172,10 @@ func buildArtworkChain(cfg *config.Config) discoveryPorts.ArtworkResolver {
 		providers.NewTheAudioDBAdapter(&http.Client{Timeout: 10 * time.Second}),
 		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
 		providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second}),
+		// Keyless YouTube Music artist artwork (internal API): the one artist-image
+		// source iTunes lacks, with no key and no Data-API quota. Fires before the
+		// key-gated official resolver below, which is now a deeper fallback.
+		providers.NewYouTubeMusicArtworkResolver(),
 	)
 	if cfg.HasYouTube() {
 		artworkResolvers = append(artworkResolvers,

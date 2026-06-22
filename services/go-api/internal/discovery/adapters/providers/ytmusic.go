@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -295,6 +296,95 @@ func mapYTMusicAlbum(a *ytmusic.AlbumItem) domain.SearchResult {
 		}},
 		Extras: extras,
 	}
+}
+
+// ytArtworkHeroSize is the square dimension the artist-artwork hero is resized
+// to. YouTube Music thumbnails are URL-resizable (the `=wN-hN` suffix); the raw
+// master (`=s0`) can be many MB (an artist photo probed at 13.9MB), so 1000px is
+// the hero sweet spot (~130KB, live-verified) — comfortably above Deezer's 1000
+// and Discogs's 600 artist fallbacks.
+const ytArtworkHeroSize = 1000
+
+// ytThumbSizeRe matches the `w<digits>-h<digits>` segment of a Google-hosted
+// YouTube Music thumbnail URL, preserving any trailing crop flags (e.g. the
+// artist `-p-` smart-crop) when rewritten.
+var ytThumbSizeRe = regexp.MustCompile(`w\d+-h\d+`)
+
+// YouTubeMusicArtworkResolver resolves artist artwork from the keyless YouTube
+// Music internal API. It earns its place in the chain because (a) iTunes — our
+// highest-res keyless artwork source — carries no artist images at all, and
+// (b) the official YouTube Data API resolver is key-gated and quota-crippled
+// (search.list costs 100 of 10k daily units → ~100 lookups/day). The internal
+// API returns real, high-res artist photos with no key and no quota.
+//
+// AIDEV-NOTE: artist-only by design. Album/track artwork is already well covered
+// by the ID-keyed sources (CAA 1200 / Deezer 1000 / iTunes 1500-from-3000); YT
+// Music adds no album ceiling above those, only artist images they lack.
+type YouTubeMusicArtworkResolver struct{}
+
+func NewYouTubeMusicArtworkResolver() *YouTubeMusicArtworkResolver {
+	initYTMusicClient()
+	return &YouTubeMusicArtworkResolver{}
+}
+
+// Resolve returns a high-res artist image URL, or "" so the chain falls through.
+func (a *YouTubeMusicArtworkResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
+	if kind != domain.ResultKindArtist || title == "" {
+		return "", nil
+	}
+	result, err := fetchYTMusic(ctx, func() *ytmusic.SearchClient { return ytmusic.ArtistSearch(title) })
+	if err != nil || result == nil {
+		return "", nil
+	}
+	url := pickArtistArtwork(result.Artists, title, ytArtworkHeroSize)
+	if url != "" {
+		slog.DebugContext(ctx, "ytmusic.artwork_resolved", "title", title)
+	}
+	return url, nil
+}
+
+// pickArtistArtwork chooses the best artist image from a search result and
+// rewrites it to `size`. It prefers an exact (case-insensitive) name match to
+// avoid wrong-artist images, falling back to the top result — which the caller
+// searched by this exact name, so a name-matched photo beats no photo (the
+// chain's fallback philosophy). Pure (no network) for testability.
+func pickArtistArtwork(artists []*ytmusic.ArtistItem, name string, size int) string {
+	var fallback string
+	for _, artist := range artists {
+		url := largestYTThumbnail(artist.Thumbnails)
+		if url == "" {
+			continue
+		}
+		if strings.EqualFold(artist.Artist, name) {
+			return resizeYTThumbnail(url, size)
+		}
+		if fallback == "" {
+			fallback = url
+		}
+	}
+	if fallback == "" {
+		return ""
+	}
+	return resizeYTThumbnail(fallback, size)
+}
+
+// largestYTThumbnail returns the URL of the highest-resolution thumbnail (the
+// library orders them ascending by size).
+func largestYTThumbnail(thumbs []ytmusic.Thumbnail) string {
+	if len(thumbs) == 0 {
+		return ""
+	}
+	return thumbs[len(thumbs)-1].URL
+}
+
+// resizeYTThumbnail rewrites a YouTube Music thumbnail URL to a square `size`,
+// preserving any crop flags. Returns the URL unchanged if it carries no
+// recognizable `wN-hN` size segment.
+func resizeYTThumbnail(url string, size int) string {
+	if !ytThumbSizeRe.MatchString(url) {
+		return url
+	}
+	return ytThumbSizeRe.ReplaceAllString(url, fmt.Sprintf("w%d-h%d", size, size))
 }
 
 func mapYTMusicArtist(a *ytmusic.ArtistItem) domain.SearchResult {
