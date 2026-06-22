@@ -16,11 +16,13 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
 	"altune/go-api/internal/app"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
+	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
@@ -47,7 +49,7 @@ type options struct {
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | signal-a | signal-b")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | signal-a | signal-b | consensus")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -85,7 +87,9 @@ func run(opts options) error {
 		defer redisClient.Close()
 	}
 
-	if opts.query != "" {
+	// The single-query search diagnostic owns -query, except in consensus mode
+	// where -query names the artist to build consensus for.
+	if opts.query != "" && opts.mode != "consensus" {
 		return runQuery(ctx, cfg, pool, redisClient, opts)
 	}
 
@@ -96,8 +100,10 @@ func run(opts options) error {
 		return runSignalA(ctx, pool, redisClient, opts)
 	case "signal-b":
 		return runSignalB(ctx, cfg, pool, opts)
+	case "consensus":
+		return runConsensus(ctx, cfg, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | signal-a | signal-b)", opts.mode)
+		return fmt.Errorf("unknown mode %q (want eval | signal-a | signal-b | consensus)", opts.mode)
 	}
 }
 
@@ -269,6 +275,74 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 		return err
 	}
 	fmt.Print(renderSignalB(report))
+	return nil
+}
+
+// ---- consensus mode ------------------------------------------------------
+
+// runConsensus exercises the rebuilt ConsensusService end-to-end on live
+// provider data for one artist (passed via -query), mirroring the artist-detail
+// GetAlbums path: resolve the Deezer artist, seed with its albums, then build
+// consensus across all providers and dump the per-album confirmed / unconfirmed
+// / rejected verdicts. Validates the artist-detail consensus cutover.
+func runConsensus(ctx context.Context, cfg *config.Config, opts options) error {
+	artistName := opts.query
+	if artistName == "" {
+		return fmt.Errorf("consensus mode needs -query \"<artist name>\"")
+	}
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	deezer := providers.NewDeezerAdapter(httpClient)
+
+	artistResults, err := deezer.Search(ctx, artistName, map[domain.ResultKind]bool{domain.ResultKindArtist: true})
+	if err != nil {
+		return fmt.Errorf("deezer artist search: %w", err)
+	}
+	artistID := ""
+	for _, r := range artistResults {
+		for _, s := range r.Sources {
+			if s.Provider == domain.ProviderDeezer {
+				artistID = s.ExternalID
+				break
+			}
+		}
+		if artistID != "" {
+			break
+		}
+	}
+
+	var primaryAlbums []domain.SearchResult
+	if artistID != "" {
+		primaryAlbums, err = deezer.GetArtistAlbums(ctx, domain.ProviderDeezer, artistID)
+		if err != nil {
+			return fmt.Errorf("deezer artist albums: %w", err)
+		}
+	}
+
+	var copts []discoveryService.ConsensusOption
+	if cfg.HasMusicBrainz() {
+		mb := providers.NewMusicBrainzAdapter(httpClient, cfg.MusicBrainzUserAgent)
+		copts = append(copts, discoveryService.WithMBAuthority(mb))
+	}
+	svc := discoveryService.NewConsensusService(app.BuildConsensusProviders(cfg), copts...)
+	results := svc.BuildConsensus(ctx, artistName, primaryAlbums)
+
+	conf, unconf, rej := 0, 0, 0
+	for _, r := range results {
+		switch r.Status {
+		case discoveryService.ConsensusConfirmed:
+			conf++
+		case discoveryService.ConsensusUnconfirmed:
+			unconf++
+		case discoveryService.ConsensusRejected:
+			rej++
+		}
+	}
+
+	fmt.Printf("\n# Consensus for %q — Deezer id %q, %d seed albums\n", artistName, artistID, len(primaryAlbums))
+	fmt.Printf("  %d confirmed · %d unconfirmed · %d rejected (of %d total)\n\n", conf, unconf, rej, len(results))
+	for _, r := range results {
+		fmt.Printf("  [%-11s] %-48q %s\n", string(r.Status), r.Album.Title, r.Reason)
+	}
 	return nil
 }
 
