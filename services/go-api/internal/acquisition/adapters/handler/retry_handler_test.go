@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -112,13 +111,6 @@ func retryAssertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	t.Helper()
 	if rec.Code != want {
 		t.Errorf("status = %d, want %d (body: %s)", rec.Code, want, rec.Body.String())
-	}
-}
-
-func retryDecodeJSON(t *testing.T, rec *httptest.ResponseRecorder, dst any) {
-	t.Helper()
-	if err := json.NewDecoder(rec.Body).Decode(dst); err != nil {
-		t.Fatalf("retryDecodeJSON: %v (body: %s)", err, rec.Body.String())
 	}
 }
 
