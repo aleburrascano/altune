@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -32,23 +31,8 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 		path = "music/albums/" + mbid
 	}
 	url := fmt.Sprintf("https://webservice.fanart.tv/v3/%s?api_key=%s", path, r.apiKey)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return "", nil
-	}
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return "", nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return "", nil
-	}
-
 	var data map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := getJSON(ctx, r.client, url, &data); err != nil {
 		return "", nil
 	}
 

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
-	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -51,20 +50,8 @@ func (a *LastFmAdapter) Lookup(
 }
 
 func (a *LastFmAdapter) getInfo(ctx context.Context, u string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("lastfm getinfo returned %d", resp.StatusCode)
-	}
 	var raw json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := getJSON(ctx, a.client, u, &raw); err != nil {
 		return nil, err
 	}
 	return raw, nil

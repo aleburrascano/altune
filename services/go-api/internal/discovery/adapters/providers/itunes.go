@@ -42,23 +42,8 @@ func (a *ITunesAdapter) searchKind(ctx context.Context, query string, kind domai
 	entity := itunesEntity(kind)
 	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&limit=15", url.QueryEscape(query), entity)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("itunes returned %d", resp.StatusCode)
-	}
-
 	var body itunesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 
@@ -164,21 +149,8 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	entity := itunesEntity(kind)
 
 	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&limit=1", url.QueryEscape(query), entity)
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return "", nil
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return "", nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return "", nil
-	}
-
 	var body itunesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return "", nil
 	}
 	for _, item := range body.Results {
@@ -220,21 +192,8 @@ func (a *ITunesAdapter) lookupContent(ctx context.Context, id, entity string) ([
 		"https://itunes.apple.com/lookup?id=%s&entity=%s&limit=50",
 		url.QueryEscape(id), entity,
 	)
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("itunes lookup returned %d", resp.StatusCode)
-	}
-
 	var body itunesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return nil, err
 	}
 

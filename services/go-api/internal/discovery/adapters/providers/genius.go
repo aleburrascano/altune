@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -84,28 +83,12 @@ func (r *GeniusArtworkResolver) resolveArtistImage(ctx context.Context, artistNa
 
 func (r *GeniusArtworkResolver) searchGenius(ctx context.Context, query string) ([]map[string]any, error) {
 	u := fmt.Sprintf("https://api.genius.com/search?q=%s", url.QueryEscape(query))
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+r.accessToken)
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, nil
-	}
-
 	var body struct {
 		Response struct {
 			Hits []map[string]any `json:"hits"`
 		} `json:"response"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, r.client, u, &body, withHeader("Authorization", "Bearer "+r.accessToken)); err != nil {
 		return nil, nil
 	}
 
