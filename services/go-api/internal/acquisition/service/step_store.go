@@ -71,5 +71,10 @@ func sanitizePathComponent(s string) string {
 	if result == "" {
 		return "Unknown"
 	}
+	// A component made only of dots ("." / "..") is a path-traversal token; the
+	// store defends against escapes, but acquisition should never emit one.
+	if strings.Trim(result, ".") == "" {
+		return "Unknown"
+	}
 	return result
 }

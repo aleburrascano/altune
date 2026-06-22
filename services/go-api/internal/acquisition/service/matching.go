@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"log/slog"
 	"math"
 	"sort"
@@ -92,38 +93,70 @@ func artistMatchesChannel(trackArtist, channel string) bool {
 	return strings.Contains(channelNorm, artistNorm)
 }
 
+type topicEntry struct {
+	ident       float64
+	artistMatch bool
+	candidate   Candidate
+}
+
+type otherEntry struct {
+	meta      float64
+	ident     float64
+	candidate Candidate
+}
+
+// SelectBestCandidate is the context-less entry point retained for tests and
+// callers without a request context. Production calls selectBestCandidate with a
+// context so candidate-evaluation logs carry the correlation id.
 func SelectBestCandidate(track TrackRef, candidates []Candidate) *Candidate {
+	return selectBestCandidate(context.Background(), track, candidates)
+}
+
+func selectBestCandidate(ctx context.Context, track TrackRef, candidates []Candidate) *Candidate {
 	if len(candidates) == 0 {
 		return nil
 	}
 
+	maxViews := maxViewCount(candidates)
+	topic, other := classifyCandidates(ctx, track, candidates, maxViews)
+
+	if best := selectTopicCandidate(ctx, topic); best != nil {
+		return best
+	}
+	if best := selectOtherCandidate(ctx, other); best != nil {
+		return best
+	}
+
+	slog.WarnContext(ctx, "no_candidates_passed",
+		"track_title", track.Title,
+		"track_artist", track.Artist,
+		"total_candidates", len(candidates),
+	)
+	return nil
+}
+
+func maxViewCount(candidates []Candidate) int64 {
 	var maxViews int64
 	for _, c := range candidates {
 		if c.ViewCount > maxViews {
 			maxViews = c.ViewCount
 		}
 	}
+	return maxViews
+}
 
-	type topicEntry struct {
-		ident        float64
-		artistMatch  bool
-		candidate    Candidate
-	}
-	type otherEntry struct {
-		meta      float64
-		ident     float64
-		candidate Candidate
-	}
-
-	var topicCandidates []topicEntry
-	var otherCandidates []otherEntry
+// classifyCandidates scores every candidate, drops those below the identity
+// gate, and splits the survivors into Topic-channel and other buckets.
+func classifyCandidates(ctx context.Context, track TrackRef, candidates []Candidate, maxViews int64) ([]topicEntry, []otherEntry) {
+	var topic []topicEntry
+	var other []otherEntry
 
 	for _, c := range candidates {
 		ident := identityScore(track.Title, track.Artist, c.Title)
 		meta := metadataRank(c, track.Duration, maxViews)
 		artMatch := artistMatchesChannel(track.Artist, c.Channel)
 
-		slog.Info("candidate_evaluated",
+		slog.InfoContext(ctx, "candidate_evaluated",
 			"candidate_title", c.Title,
 			"candidate_channel", c.Channel,
 			"candidate_duration", c.Duration,
@@ -140,42 +173,46 @@ func SelectBestCandidate(track TrackRef, candidates []Candidate) *Candidate {
 		}
 
 		if isTopicChannel(c.Channel) {
-			topicCandidates = append(topicCandidates, topicEntry{ident, artMatch, c})
+			topic = append(topic, topicEntry{ident: ident, artistMatch: artMatch, candidate: c})
 		} else {
-			otherCandidates = append(otherCandidates, otherEntry{meta, ident, c})
+			other = append(other, otherEntry{meta: meta, ident: ident, candidate: c})
 		}
 	}
 
-	if len(topicCandidates) > 0 {
-		// Prefer Topic channels where the channel matches the expected artist.
-		sort.Slice(topicCandidates, func(i, j int) bool {
-			if topicCandidates[i].artistMatch != topicCandidates[j].artistMatch {
-				return topicCandidates[i].artistMatch
-			}
-			return topicCandidates[i].ident > topicCandidates[j].ident
-		})
-		best := topicCandidates[0].candidate
-		slog.Info("candidate_selected", "title", best.Title, "channel", best.Channel, "source", "topic_channel")
-		return &best
-	}
+	return topic, other
+}
 
-	if len(otherCandidates) > 0 {
-		sort.Slice(otherCandidates, func(i, j int) bool {
-			if otherCandidates[i].ident != otherCandidates[j].ident {
-				return otherCandidates[i].ident > otherCandidates[j].ident
-			}
-			return otherCandidates[i].meta > otherCandidates[j].meta
-		})
-		best := otherCandidates[0].candidate
-		slog.Info("candidate_selected", "title", best.Title, "channel", best.Channel,
-			"metadata_rank", math.Round(otherCandidates[0].meta*1000)/1000, "source", "metadata_rank")
-		return &best
+// selectTopicCandidate prefers a Topic channel whose name matches the expected
+// artist, then highest identity. Returns nil when there are none.
+func selectTopicCandidate(ctx context.Context, topic []topicEntry) *Candidate {
+	if len(topic) == 0 {
+		return nil
 	}
+	sort.Slice(topic, func(i, j int) bool {
+		if topic[i].artistMatch != topic[j].artistMatch {
+			return topic[i].artistMatch
+		}
+		return topic[i].ident > topic[j].ident
+	})
+	best := topic[0].candidate
+	slog.InfoContext(ctx, "candidate_selected", "title", best.Title, "channel", best.Channel, "source", "topic_channel")
+	return &best
+}
 
-	slog.Warn("no_candidates_passed",
-		"track_title", track.Title,
-		"track_artist", track.Artist,
-		"total_candidates", len(candidates),
-	)
-	return nil
+// selectOtherCandidate ranks non-Topic candidates by identity, then metadata.
+// Returns nil when there are none.
+func selectOtherCandidate(ctx context.Context, other []otherEntry) *Candidate {
+	if len(other) == 0 {
+		return nil
+	}
+	sort.Slice(other, func(i, j int) bool {
+		if other[i].ident != other[j].ident {
+			return other[i].ident > other[j].ident
+		}
+		return other[i].meta > other[j].meta
+	})
+	best := other[0].candidate
+	slog.InfoContext(ctx, "candidate_selected", "title", best.Title, "channel", best.Channel,
+		"metadata_rank", math.Round(other[0].meta*1000)/1000, "source", "metadata_rank")
+	return &best
 }

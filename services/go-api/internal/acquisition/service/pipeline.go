@@ -81,5 +81,4 @@ type Candidate struct {
 	Categories   []string
 	ViewCount    int64
 	FollowerCount int64
-	Score        float64
 }

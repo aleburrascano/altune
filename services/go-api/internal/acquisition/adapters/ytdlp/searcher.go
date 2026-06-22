@@ -90,6 +90,7 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 		"--dump-json",
 		"--no-download",
 		"--flat-playlist",
+		"--",
 		searchSpec,
 	}
 	if s.jsRuntime != "" {
@@ -147,6 +148,7 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 		"--audio-quality", "0",
 		"--no-progress",
 		"-o", outTemplate,
+		"--",
 		url,
 	}
 
@@ -174,16 +176,28 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 		return "", fmt.Errorf("no mp3 file produced in %s", outDir)
 	}
 
-	info, err := os.Stat(matches[0])
-	if err != nil {
-		return "", fmt.Errorf("stat downloaded file: %w", err)
+	// Pick the largest mp3: a single-track download yields one file, but if
+	// several appear, the full track is the largest (partial/sidecar files are
+	// smaller).
+	best, bestSize := "", int64(-1)
+	for _, m := range matches {
+		info, statErr := os.Stat(m)
+		if statErr != nil {
+			continue
+		}
+		if info.Size() > bestSize {
+			best, bestSize = m, info.Size()
+		}
+	}
+	if best == "" {
+		return "", fmt.Errorf("stat downloaded files in %s", outDir)
 	}
 	const minFileSize = 10 * 1024 // 10KB
-	if info.Size() < minFileSize {
-		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", info.Size())
+	if bestSize < minFileSize {
+		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", bestSize)
 	}
 
-	return matches[0], nil
+	return best, nil
 }
 
 type ytDlpEntry struct {

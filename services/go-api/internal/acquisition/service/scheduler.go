@@ -71,8 +71,13 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 			}
 		}()
 
-		s.sem <- struct{}{}
-		defer func() { <-s.sem }()
+		select {
+		case s.sem <- struct{}{}:
+			defer func() { <-s.sem }()
+		case <-s.parentCtx.Done():
+			slog.Info("acquisition.cancelled_before_start", "track_id", key)
+			return
+		}
 
 		if err := s.svc.Execute(s.parentCtx, userId, trackId, sourceURL); err != nil {
 			slog.Error("background acquisition failed",

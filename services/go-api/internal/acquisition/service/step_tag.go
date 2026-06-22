@@ -14,14 +14,14 @@ func NewTagStep() *TagStep { return &TagStep{} }
 
 func (s *TagStep) Name() string { return "tag" }
 
-func (s *TagStep) Execute(_ context.Context, ac *AcquisitionContext) error {
+func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	if ac.TempPath == "" {
 		return nil
 	}
 
 	tag, err := id3v2.Open(ac.TempPath, id3v2.Options{Parse: false})
 	if err != nil {
-		slog.Warn("id3_tagging_failed: could not open file", "error", err)
+		slog.WarnContext(ctx, "id3_tagging_failed: could not open file", "error", err)
 		return nil
 	}
 	defer tag.Close()
@@ -49,11 +49,11 @@ func (s *TagStep) Execute(_ context.Context, ac *AcquisitionContext) error {
 	}
 
 	if err := tag.Save(); err != nil {
-		slog.Warn("id3_tagging_failed: could not save tags", "error", err)
+		slog.WarnContext(ctx, "id3_tagging_failed: could not save tags", "error", err)
 		return nil
 	}
 
-	slog.Info("id3_tags_written", "track_id", ac.Track.ID)
+	slog.InfoContext(ctx, "id3_tags_written", "track_id", ac.Track.ID)
 	return nil
 }
 
