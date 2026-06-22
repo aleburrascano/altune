@@ -204,6 +204,17 @@ func matchesEntity(r domain.SearchResult, entity LibraryEntity) bool {
 	if !containsTokens(rt, et) {
 		return false
 	}
+	if ea == "" {
+		// Symbol-only artists (e.g. "¥$") normalize to empty, so token matching
+		// can never validate them — a correct result is marked a phantom failure.
+		// Fall back to a raw, case-folded substring compare against the
+		// symbol-preserving artist. Eval-tooling only; the live pipeline's
+		// normalization is unchanged (keeping symbols there breaks tokenization,
+		// plan 005 §A).
+		raw := strings.ToLower(strings.TrimSpace(entity.Artist))
+		return raw != "" &&
+			(strings.Contains(strings.ToLower(r.Subtitle), raw) || strings.Contains(strings.ToLower(r.Title), raw))
+	}
 	return containsTokens(NormalizeForMatch(r.Subtitle), ea) || containsTokens(rt, ea)
 }
 

@@ -140,6 +140,8 @@ func TestMatchesEntity(t *testing.T) {
 		{"short title not substring-matched", evalTrack("Going Home", "Drake"), LibraryEntity{Title: "Go", Artist: "Drake"}, false},
 		{"different track same artist", evalTrack("DAMN.", "Kendrick Lamar"), LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, false},
 		{"album is never a track match", album("Circles", "Post Malone"), LibraryEntity{Title: "Circles", Artist: "Post Malone"}, false},
+		{"symbol-only artist matches via subtitle", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "CARNIVAL", Subtitle: "¥$"}, LibraryEntity{Title: "CARNIVAL", Artist: "¥$"}, true},
+		{"symbol-only artist rejects wrong result", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "CARNIVAL", Subtitle: "Some Cover Band"}, LibraryEntity{Title: "CARNIVAL", Artist: "¥$"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
