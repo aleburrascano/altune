@@ -90,10 +90,10 @@ func relevanceScore(r domain.SearchResult, q string) float64 {
 		return 0
 	}
 	title := textnorm.NormalizeForMatch(r.Title)
-	best := TokenSortRatio(q, title)
+	best := textnorm.TokenSortRatio(q, title)
 	if r.Subtitle != "" {
 		combined := textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title)
-		if s := TokenSortRatio(q, combined); s > best {
+		if s := textnorm.TokenSortRatio(q, combined); s > best {
 			best = s
 		}
 	}

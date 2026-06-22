@@ -7,6 +7,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 // LyricsService is the detail-open lyrics use case: resolve a track's Deezer id
@@ -40,52 +41,32 @@ func (s *LyricsService) Execute(ctx context.Context, title, subtitle string) (do
 		return domain.EmptyDeezerLyrics(), nil
 	}
 
-	nameKey := lyricsNameKey(artist, track)
-
-	if s.cache != nil {
-		if cached, found, _ := s.cache.Get(ctx, nameKey); found {
-			return cached, nil
-		}
-		if negative, _ := s.cache.GetNegative(ctx, nameKey); negative {
-			return domain.EmptyDeezerLyrics(), nil
-		}
-	}
-
-	trackID, err := s.provider.ResolveTrackID(ctx, artist, track)
-	if err != nil {
-		slog.WarnContext(ctx, "lyrics.resolve_failed",
-			"artist", artist, "title", track, "error", err)
-		return domain.EmptyDeezerLyrics(), nil // transient; not cached negative
-	}
-	if trackID == "" {
-		if s.cache != nil {
-			_ = s.cache.SetNegative(ctx, nameKey)
-		}
-		return domain.EmptyDeezerLyrics(), nil
-	}
-
-	l, err := s.provider.Lookup(ctx, trackID)
-	if err != nil {
-		slog.WarnContext(ctx, "lyrics.lookup_failed",
-			"track_id", trackID, "title", track, "error", err)
-		return domain.EmptyDeezerLyrics(), nil // best-effort; don't poison the cache
-	}
-
-	if l.IsZero() {
-		if s.cache != nil {
-			_ = s.cache.SetNegative(ctx, nameKey)
-		}
-		return domain.EmptyDeezerLyrics(), nil
-	}
-
-	if s.cache != nil {
-		_ = s.cache.Set(ctx, nameKey, l)
-	}
-	return l, nil
+	return CachedLookup(ctx, s.cache, lyricsNameKey(artist, track), domain.EmptyDeezerLyrics(),
+		func(ctx context.Context) (domain.DeezerLyrics, bool, error) {
+			trackID, err := s.provider.ResolveTrackID(ctx, artist, track)
+			if err != nil {
+				slog.WarnContext(ctx, "lyrics.resolve_failed",
+					"artist", artist, "title", track, "error", err)
+				return domain.EmptyDeezerLyrics(), false, err // transient; not cached negative
+			}
+			if trackID == "" {
+				return domain.EmptyDeezerLyrics(), false, nil
+			}
+			l, err := s.provider.Lookup(ctx, trackID)
+			if err != nil {
+				slog.WarnContext(ctx, "lyrics.lookup_failed",
+					"track_id", trackID, "title", track, "error", err)
+				return domain.EmptyDeezerLyrics(), false, err // best-effort; don't poison the cache
+			}
+			if l.IsZero() {
+				return domain.EmptyDeezerLyrics(), false, nil
+			}
+			return l, true, nil
+		})
 }
 
 // lyricsNameKey is the normalized cache key for an (artist, title) lookup, pinned
 // in the service so the key the cache hashes is consistent.
 func lyricsNameKey(artist, title string) string {
-	return NormalizeForMatch("track " + artist + " " + title)
+	return textnorm.NormalizeForMatch("track " + artist + " " + title)
 }

@@ -7,6 +7,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 // LastFmEnrichmentService is the detail-open Last.fm enrichment use case: look
@@ -46,35 +47,19 @@ func (s *LastFmEnrichmentService) Execute(
 		return domain.EmptyLastFmEnrichment(), nil
 	}
 
-	nameKey := lastfmNameKey(kind, artistName, entityTitle)
-
-	if s.cache != nil {
-		if cached, found, _ := s.cache.Get(ctx, nameKey); found {
-			return cached, nil
-		}
-		if negative, _ := s.cache.GetNegative(ctx, nameKey); negative {
-			return domain.EmptyLastFmEnrichment(), nil
-		}
-	}
-
-	e, err := s.enricher.Lookup(ctx, kind, artistName, entityTitle)
-	if err != nil {
-		slog.WarnContext(ctx, "lastfm_enrichment.lookup_failed",
-			"kind", kind.String(), "artist", artistName, "title", entityTitle, "error", err)
-		return domain.EmptyLastFmEnrichment(), nil // transient; not cached negative
-	}
-
-	if e.IsZero() {
-		if s.cache != nil {
-			_ = s.cache.SetNegative(ctx, nameKey)
-		}
-		return domain.EmptyLastFmEnrichment(), nil
-	}
-
-	if s.cache != nil {
-		_ = s.cache.Set(ctx, nameKey, e)
-	}
-	return e, nil
+	return CachedLookup(ctx, s.cache, lastfmNameKey(kind, artistName, entityTitle), domain.EmptyLastFmEnrichment(),
+		func(ctx context.Context) (domain.LastFmEnrichment, bool, error) {
+			e, err := s.enricher.Lookup(ctx, kind, artistName, entityTitle)
+			if err != nil {
+				slog.WarnContext(ctx, "lastfm_enrichment.lookup_failed",
+					"kind", kind.String(), "artist", artistName, "title", entityTitle, "error", err)
+				return domain.EmptyLastFmEnrichment(), false, err // transient; not cached negative
+			}
+			if e.IsZero() {
+				return domain.EmptyLastFmEnrichment(), false, nil
+			}
+			return e, true, nil
+		})
 }
 
 // lastfmLookupNames maps the wire (kind, title, subtitle) to Last.fm's
@@ -90,5 +75,5 @@ func lastfmLookupNames(kind domain.ResultKind, title, subtitle string) (artistNa
 // lastfmNameKey is the normalized cache key for a (kind, artist, title) lookup,
 // pinned in the service so the key the cache hashes is consistent.
 func lastfmNameKey(kind domain.ResultKind, artistName, entityTitle string) string {
-	return NormalizeForMatch(kind.String() + " " + artistName + " " + entityTitle)
+	return textnorm.NormalizeForMatch(kind.String() + " " + artistName + " " + entityTitle)
 }

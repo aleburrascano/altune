@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	discoverySvc "altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 // Acquisition pipeline stage tests: verify each stage's behavior in
@@ -305,7 +305,7 @@ func TestAcqStage_FullSelectionTrace(t *testing.T) {
 
 	// Stage 3: Normalization check
 	for _, q := range queries {
-		norm := discoverySvc.NormalizeForMatch(q)
+		norm := textnorm.NormalizeForMatch(q)
 		t.Logf("Stage 3 — Normalize query: %q → %q", q, norm)
 	}
 

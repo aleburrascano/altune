@@ -5,6 +5,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 type SuggestService struct {
@@ -16,7 +17,7 @@ func NewSuggestService(vocab ports.VocabularyStore) *SuggestService {
 }
 
 func (s *SuggestService) Execute(ctx context.Context, partial string, limit int) ([]domain.VocabularyEntry, error) {
-	norm := NormalizeForMatch(partial)
+	norm := textnorm.NormalizeForMatch(partial)
 	if norm == "" {
 		return []domain.VocabularyEntry{}, nil
 	}

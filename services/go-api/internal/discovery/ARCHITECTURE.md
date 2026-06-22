@@ -229,8 +229,7 @@ internal/discovery/
 │   ├── telemetry.go          # emitSearchEvent (search_performed, async best-effort)
 │   ├── diversity.go          # EnforceDiversity, CollapseArtistDuplicates + extras helpers
 │   ├── consensus.go          # ConsensusService — multi-provider album consensus + MB contradiction
-│   ├── normalize.go          # NormalizeForMatch (8-step canonicalization)
-│   ├── fuzzy.go              # TokenSortRatio, levenshteinDistance
+│   ├── fuzzy.go              # levenshteinDistance (delegates to shared/textnorm; NormalizeForMatch + TokenSortRatio now live in shared/textnorm)
 │   ├── correction.go         # CorrectionService (trigram Jaccard + phonetic)
 │   ├── query_clean.go        # CleanQuery (strip YouTube noise)
 │   ├── metaphone.go          # DoubleMetaphone, MetaphoneKey (phonetic codes)

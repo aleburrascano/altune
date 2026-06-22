@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"net/http"
-	"time"
 
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
@@ -12,6 +10,7 @@ import (
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/textnorm"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -34,7 +33,7 @@ func BuildSearchService(
 	var sharedMB *providers.MusicBrainzAdapter
 	if cfg.HasMusicBrainz() {
 		sharedMB = providers.NewMusicBrainzAdapter(
-			&http.Client{Timeout: 10 * time.Second},
+			newDiscoveryClient(),
 			cfg.MusicBrainzUserAgent,
 		)
 	}
@@ -43,7 +42,7 @@ func BuildSearchService(
 	circuitBreaker := discoveryService.NewCircuitBreaker()
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(pool)
 
-	deezerContent := providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second})
+	deezerContent := providers.NewDeezerAdapter(newDiscoveryClient())
 	relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
 	findRelatedSvc := discoveryService.NewFindRelatedService(relationshipQuerier, deezerContent, deezerContent)
 
@@ -85,7 +84,7 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 	var consensusProviders []discoveryService.ConsensusProvider
 
 	if cfg.HasLastFM() {
-		lfm := providers.NewLastFmAdapter(&http.Client{Timeout: 10 * time.Second}, cfg.LastFMAPIKey)
+		lfm := providers.NewLastFmAdapter(newDiscoveryClient(), cfg.LastFMAPIKey)
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 			Name: "lastfm",
 			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
@@ -94,7 +93,7 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 		})
 	}
 	if cfg.HasMusicBrainz() {
-		mb := providers.NewMusicBrainzAdapter(&http.Client{Timeout: 10 * time.Second}, cfg.MusicBrainzUserAgent)
+		mb := providers.NewMusicBrainzAdapter(newDiscoveryClient(), cfg.MusicBrainzUserAgent)
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 			Name: "musicbrainz",
 			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
@@ -107,7 +106,7 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 		})
 	}
 	if cfg.HasDiscogs() {
-		discogs := providers.NewDiscogsAdapter(&http.Client{Timeout: 10 * time.Second}, cfg.DiscogsToken, cfg.MusicBrainzUserAgent)
+		discogs := providers.NewDiscogsAdapter(newDiscoveryClient(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent)
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 			Name: "discogs",
 			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
@@ -135,7 +134,7 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 		})
 	}
 
-	itunes := providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second})
+	itunes := providers.NewITunesAdapter(newDiscoveryClient())
 	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 		Name: "itunes",
 		Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
@@ -159,19 +158,19 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 func buildArtworkChain(cfg *config.Config) discoveryPorts.ArtworkResolver {
 	var artworkResolvers []discoveryPorts.ArtworkResolver
 	artworkResolvers = append(artworkResolvers,
-		providers.NewCoverArtArchiveResolver(&http.Client{Timeout: 10 * time.Second}))
+		providers.NewCoverArtArchiveResolver(newDiscoveryClient()))
 	if cfg.HasFanartTV() {
 		artworkResolvers = append(artworkResolvers,
-			providers.NewFanartTvArtworkResolver(&http.Client{Timeout: 10 * time.Second}, cfg.FanartTVAPIKey))
+			providers.NewFanartTvArtworkResolver(newDiscoveryClient(), cfg.FanartTVAPIKey))
 	}
 	if cfg.HasGenius() {
 		artworkResolvers = append(artworkResolvers,
-			providers.NewGeniusArtworkResolver(&http.Client{Timeout: 10 * time.Second}, cfg.GeniusAccessToken))
+			providers.NewGeniusArtworkResolver(newDiscoveryClient(), cfg.GeniusAccessToken))
 	}
 	artworkResolvers = append(artworkResolvers,
-		providers.NewTheAudioDBAdapter(&http.Client{Timeout: 10 * time.Second}),
-		providers.NewDeezerAdapter(&http.Client{Timeout: 10 * time.Second}),
-		providers.NewITunesAdapter(&http.Client{Timeout: 10 * time.Second}),
+		providers.NewTheAudioDBAdapter(newDiscoveryClient()),
+		providers.NewDeezerAdapter(newDiscoveryClient()),
+		providers.NewITunesAdapter(newDiscoveryClient()),
 		// Keyless YouTube Music artist artwork (internal API): the one artist-image
 		// source iTunes lacks, with no key and no Data-API quota. Fires before the
 		// key-gated official resolver below, which is now a deeper fallback.
@@ -179,12 +178,12 @@ func buildArtworkChain(cfg *config.Config) discoveryPorts.ArtworkResolver {
 	)
 	if cfg.HasYouTube() {
 		artworkResolvers = append(artworkResolvers,
-			providers.NewYouTubeArtworkResolver(&http.Client{Timeout: 10 * time.Second}, cfg.YouTubeAPIKey))
+			providers.NewYouTubeArtworkResolver(newDiscoveryClient(), cfg.YouTubeAPIKey))
 	}
 	// SoundCloud last: name-search fallback for the underground long tail no
 	// ID-based source covers. nil fallback — artwork resolution never uses yt-dlp.
 	artworkResolvers = append(artworkResolvers,
-		providers.NewSoundCloudAPIAdapter(&http.Client{Timeout: 10 * time.Second}, nil))
+		providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil))
 	return providers.NewChainedArtworkResolver(artworkResolvers...)
 }
 
@@ -196,7 +195,7 @@ func BuildVocabularyStore(redisClient *goredis.Client) discoveryPorts.Vocabulary
 	}
 	return discoveryCacheAdapters.NewVocabularyStore(
 		redisClient,
-		discoveryService.NormalizeForMatch,
+		textnorm.NormalizeForMatch,
 		discoveryCacheAdapters.WithMetaphone(discoveryService.MetaphoneKey),
 	)
 }

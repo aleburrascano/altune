@@ -7,6 +7,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 // DeezerEnrichmentService is the detail-open Deezer enrichment use case: resolve
@@ -50,52 +51,32 @@ func (s *DeezerEnrichmentService) Execute(
 		return domain.EmptyDeezerEnrichment(), nil
 	}
 
-	nameKey := deezerNameKey(kind, artist, entityTitle)
-
-	if s.cache != nil {
-		if cached, found, _ := s.cache.Get(ctx, nameKey); found {
-			return cached, nil
-		}
-		if negative, _ := s.cache.GetNegative(ctx, nameKey); negative {
-			return domain.EmptyDeezerEnrichment(), nil
-		}
-	}
-
-	id, err := s.enricher.ResolveID(ctx, kind, artist, entityTitle)
-	if err != nil {
-		slog.WarnContext(ctx, "deezer_enrichment.resolve_failed",
-			"kind", kind.String(), "artist", artist, "title", entityTitle, "error", err)
-		return domain.EmptyDeezerEnrichment(), nil // transient; not cached negative
-	}
-	if id == "" {
-		if s.cache != nil {
-			_ = s.cache.SetNegative(ctx, nameKey)
-		}
-		return domain.EmptyDeezerEnrichment(), nil
-	}
-
-	e, err := s.enricher.Lookup(ctx, kind, id)
-	if err != nil {
-		slog.WarnContext(ctx, "deezer_enrichment.lookup_failed",
-			"kind", kind.String(), "id", id, "title", entityTitle, "error", err)
-		return domain.EmptyDeezerEnrichment(), nil // best-effort; don't poison the cache
-	}
-
-	if e.IsZero() {
-		if s.cache != nil {
-			_ = s.cache.SetNegative(ctx, nameKey)
-		}
-		return domain.EmptyDeezerEnrichment(), nil
-	}
-
-	if s.cache != nil {
-		_ = s.cache.Set(ctx, nameKey, e)
-	}
-	return e, nil
+	return CachedLookup(ctx, s.cache, deezerNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
+		func(ctx context.Context) (domain.DeezerEnrichment, bool, error) {
+			id, err := s.enricher.ResolveID(ctx, kind, artist, entityTitle)
+			if err != nil {
+				slog.WarnContext(ctx, "deezer_enrichment.resolve_failed",
+					"kind", kind.String(), "artist", artist, "title", entityTitle, "error", err)
+				return domain.EmptyDeezerEnrichment(), false, err // transient; not cached negative
+			}
+			if id == "" {
+				return domain.EmptyDeezerEnrichment(), false, nil
+			}
+			e, err := s.enricher.Lookup(ctx, kind, id)
+			if err != nil {
+				slog.WarnContext(ctx, "deezer_enrichment.lookup_failed",
+					"kind", kind.String(), "id", id, "title", entityTitle, "error", err)
+				return domain.EmptyDeezerEnrichment(), false, err // best-effort; don't poison the cache
+			}
+			if e.IsZero() {
+				return domain.EmptyDeezerEnrichment(), false, nil
+			}
+			return e, true, nil
+		})
 }
 
 // deezerNameKey is the normalized cache key for a (kind, artist, title) lookup,
 // pinned in the service so the key the cache hashes is consistent.
 func deezerNameKey(kind domain.ResultKind, artist, title string) string {
-	return NormalizeForMatch(kind.String() + " " + artist + " " + title)
+	return textnorm.NormalizeForMatch(kind.String() + " " + artist + " " + title)
 }

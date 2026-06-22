@@ -14,6 +14,7 @@ import (
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/textnorm"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -29,51 +30,28 @@ type DiscoveryHandler struct {
 	suggestSvc *service.SuggestService
 	eventSvc   *service.RecordEventService
 
-	// discogsEnrichSvc / discogsArtistEnrichSvc / lastfmEnrichSvc are wired
-	// post-construction via the With* setters so the positional constructor stays
-	// stable; nil degrades to an empty DTO.
-	discogsEnrichSvc       *service.DiscogsEnrichmentService
-	discogsArtistEnrichSvc *service.DiscogsArtistEnrichmentService
-	lastfmEnrichSvc        *service.LastFmEnrichmentService
-	deezerEnrichSvc        *service.DeezerEnrichmentService
-	lyricsSvc              *service.LyricsService
+	// enrichers holds the optional detail-open enrichment use cases, wired
+	// post-construction via WithDetailEnrichers so the positional constructor
+	// stays stable; a nil member degrades its endpoint to an empty DTO.
+	enrichers DetailEnrichers
 }
 
-// WithDiscogsEnrichment attaches the Discogs album-enrichment use case (caps 3–6).
-// Set at composition time; a nil service leaves the endpoint answering empty.
-func (h *DiscoveryHandler) WithDiscogsEnrichment(svc *service.DiscogsEnrichmentService) *DiscoveryHandler {
-	h.discogsEnrichSvc = svc
-	return h
+// DetailEnrichers bundles the optional detail-open enrichment use cases into one
+// wiring surface: adding a source is one field here plus its endpoint, not a new
+// With* setter wired backwards from the composition root. Any member may be nil
+// (its provider isn't configured) — the endpoint then answers an empty DTO.
+type DetailEnrichers struct {
+	Discogs       *service.DiscogsEnrichmentService       // album credits/styles/labels (caps 3–6)
+	DiscogsArtist *service.DiscogsArtistEnrichmentService // artist bio/aliases/links (cap 7)
+	LastFm        *service.LastFmEnrichmentService        // listen popularity/tags/bio/similar (cap 3)
+	Deezer        *service.DeezerEnrichmentService        // track audio fields + album liner (caps 7–8)
+	Lyrics        *service.LyricsService                  // synced + plain lyrics (cap 6)
 }
 
-// WithDiscogsArtistEnrichment attaches the Discogs artist-enrichment use case
-// (cap 7). Set at composition time; a nil service answers empty.
-func (h *DiscoveryHandler) WithDiscogsArtistEnrichment(svc *service.DiscogsArtistEnrichmentService) *DiscoveryHandler {
-	h.discogsArtistEnrichSvc = svc
-	return h
-}
-
-// WithLastFmEnrichment attaches the Last.fm enrichment use case (cap 3 — listen
-// popularity, tags, bio, similar artists). Set at composition time; a nil
-// service leaves the endpoint answering empty.
-func (h *DiscoveryHandler) WithLastFmEnrichment(svc *service.LastFmEnrichmentService) *DiscoveryHandler {
-	h.lastfmEnrichSvc = svc
-	return h
-}
-
-// WithDeezerEnrichment attaches the Deezer enrichment use case (caps 7–8 — track
-// audio fields + album liner data). Set at composition time; a nil service
-// leaves the endpoint answering empty.
-func (h *DiscoveryHandler) WithDeezerEnrichment(svc *service.DeezerEnrichmentService) *DiscoveryHandler {
-	h.deezerEnrichSvc = svc
-	return h
-}
-
-// WithLyrics attaches the Deezer lyrics use case (cap 6 — synced + plain lyrics,
-// writers, copyright). Set at composition time; a nil service leaves the endpoint
-// answering empty.
-func (h *DiscoveryHandler) WithLyrics(svc *service.LyricsService) *DiscoveryHandler {
-	h.lyricsSvc = svc
+// WithDetailEnrichers attaches the optional detail-open enrichment use cases. Set
+// at composition time; any nil member leaves its endpoint answering an empty DTO.
+func (h *DiscoveryHandler) WithDetailEnrichers(e DetailEnrichers) *DiscoveryHandler {
+	h.enrichers = e
 	return h
 }
 
@@ -337,7 +315,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	httputil.WriteJSON(w, status, DiscoverySearchResponse{
 		Query:          q,
-		QueryNorm:      service.NormalizeForMatch(q),
+		QueryNorm:      textnorm.NormalizeForMatch(q),
 		Results:        resultDTOs,
 		Providers:      providerDTOs,
 		Partial:        result.Partial,
@@ -683,12 +661,12 @@ func (h *DiscoveryHandler) handleDiscogsEnrichment(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if h.discogsEnrichSvc == nil {
+	if h.enrichers.Discogs == nil {
 		httputil.WriteJSON(w, http.StatusOK, discogsEnrichmentToDTO(domain.EmptyDiscogsEnrichment()))
 		return
 	}
 
-	e, err := h.discogsEnrichSvc.Execute(r.Context(), artist, album)
+	e, err := h.enrichers.Discogs.Execute(r.Context(), artist, album)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "discogs enrichment failed",
 			"error", err, "album", album, "artist", artist)
@@ -789,12 +767,12 @@ func (h *DiscoveryHandler) handleDiscogsArtistEnrichment(w http.ResponseWriter, 
 		return
 	}
 
-	if h.discogsArtistEnrichSvc == nil {
+	if h.enrichers.DiscogsArtist == nil {
 		httputil.WriteJSON(w, http.StatusOK, discogsArtistEnrichmentToDTO(domain.EmptyDiscogsArtistEnrichment()))
 		return
 	}
 
-	e, err := h.discogsArtistEnrichSvc.Execute(r.Context(), name)
+	e, err := h.enrichers.DiscogsArtist.Execute(r.Context(), name)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "discogs artist enrichment failed",
 			"error", err, "name", name)
@@ -868,12 +846,12 @@ func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http
 		return
 	}
 
-	if h.lastfmEnrichSvc == nil {
+	if h.enrichers.LastFm == nil {
 		httputil.WriteJSON(w, http.StatusOK, lastfmEnrichmentToDTO(domain.EmptyLastFmEnrichment()))
 		return
 	}
 
-	e, err := h.lastfmEnrichSvc.Execute(r.Context(), kind, title, subtitle)
+	e, err := h.enrichers.LastFm.Execute(r.Context(), kind, title, subtitle)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "lastfm enrichment failed",
 			"error", err, "kind", kindStr, "title", title)
@@ -931,12 +909,12 @@ func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http
 		return
 	}
 
-	if h.deezerEnrichSvc == nil {
+	if h.enrichers.Deezer == nil {
 		httputil.WriteJSON(w, http.StatusOK, deezerEnrichmentToDTO(domain.EmptyDeezerEnrichment()))
 		return
 	}
 
-	e, err := h.deezerEnrichSvc.Execute(r.Context(), kind, title, subtitle)
+	e, err := h.enrichers.Deezer.Execute(r.Context(), kind, title, subtitle)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "deezer enrichment failed",
 			"error", err, "kind", kindStr, "title", title)
@@ -982,12 +960,12 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if h.lyricsSvc == nil {
+	if h.enrichers.Lyrics == nil {
 		httputil.WriteJSON(w, http.StatusOK, lyricsToDTO(domain.EmptyDeezerLyrics()))
 		return
 	}
 
-	l, err := h.lyricsSvc.Execute(r.Context(), title, subtitle)
+	l, err := h.enrichers.Lyrics.Execute(r.Context(), title, subtitle)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "lyrics fetch failed", "error", err, "title", title)
 		httputil.InternalError(w)
@@ -998,10 +976,10 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 }
 
 type LyricsResponseDTO struct {
-	Plain       string            `json:"plain"`
-	SyncedLines []SyncedLineDTO   `json:"synced_lines"`
-	Writers     []string          `json:"writers"`
-	Copyright   string            `json:"copyright"`
+	Plain       string          `json:"plain"`
+	SyncedLines []SyncedLineDTO `json:"synced_lines"`
+	Writers     []string        `json:"writers"`
+	Copyright   string          `json:"copyright"`
 }
 
 type SyncedLineDTO struct {

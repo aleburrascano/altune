@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/textnorm"
 
 	"github.com/google/uuid"
 )
@@ -43,7 +44,7 @@ func (s *RecordClickService) Execute(ctx context.Context, userId shared.UserId, 
 	click := &domain.SearchClick{
 		ID:              uuid.New(),
 		UserId:          userId,
-		QueryNorm:       NormalizeForMatch(input.QueryNorm),
+		QueryNorm:       textnorm.NormalizeForMatch(input.QueryNorm),
 		ResultSignature: signature,
 		Position:        input.Position,
 		Confidence:      input.Confidence,
@@ -64,8 +65,8 @@ func (s *RecordClickService) Execute(ctx context.Context, userId shared.UserId, 
 }
 
 func computeResultSignature(kind domain.ResultKind, title, subtitle string) string {
-	normTitle := NormalizeForMatch(title)
-	normSubtitle := NormalizeForMatch(subtitle)
+	normTitle := textnorm.NormalizeForMatch(title)
+	normSubtitle := textnorm.NormalizeForMatch(subtitle)
 	input := fmt.Sprintf("%s|%s|%s", kind.String(), normTitle, normSubtitle)
 	h := sha256.Sum256([]byte(input))
 	return fmt.Sprintf("%x", h)[:12]
