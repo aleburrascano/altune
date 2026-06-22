@@ -27,7 +27,3 @@ type Bus interface {
 	Publisher
 	Subscriber
 }
-
-type NoopPublisher struct{}
-
-func (NoopPublisher) Publish(shared.UserId, string, map[string]any) {}
