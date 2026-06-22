@@ -44,3 +44,5 @@ Keep the discovery ranking decisions and pure utilities in `service/` for now. D
 
 - Predecessor: ADR-0007 (unified music search), and its 2026-06-21 strangler-collapse addendum
 - Surfaced by: `/tighten-backend` review, 2026-06-22 (findings S1, G2)
+
+> **Note (2026-06-22, ADR-0015):** `url_router.go`, cited above as a `service/` util to keep, was subsequently deleted as dead code — its `DetectProvider` had zero references. The "keep helpers in `service/`" decision stands for `metaphone.go` and `query_clean.go`.
