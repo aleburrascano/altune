@@ -373,3 +373,39 @@ export async function getDeezerEnrichment(params: {
     `/v1/discovery/enrichment/deezer?${qs.toString()}`,
   );
 }
+
+// --- Deezer lyrics (docs/providers/deezer.md cap 6) ---
+
+/**
+ * One time-synced lyric line: the LRC-style timecode marker, the line text, and
+ * the start offset + duration in milliseconds (for player-driven scrubbing).
+ */
+export type SyncedLyricLine = {
+  timecode: string;
+  line: string;
+  milliseconds: number;
+  duration: number;
+};
+
+/**
+ * Deezer-derived lyrics for a track: the full plain text, the time-synced lines
+ * (empty when only plain text exists), the songwriter credits, and the copyright
+ * line. Lyrics are the one metadata axis no other provider carries. A track with
+ * no lyrics (or none for this region) returns an empty payload (`plain: ''`,
+ * `synced_lines: []`). Tracks only — there is no album/artist lyrics surface.
+ */
+export type LyricsResponse = {
+  plain: string;
+  synced_lines: SyncedLyricLine[];
+  writers: string[];
+  copyright: string;
+};
+
+export async function getLyrics(params: {
+  title: string;
+  subtitle?: string | null | undefined;
+}): Promise<LyricsResponse> {
+  const qs = new URLSearchParams({ title: params.title });
+  if (params.subtitle) qs.set('subtitle', params.subtitle);
+  return apiFetch<LyricsResponse>(`/v1/discovery/lyrics?${qs.toString()}`);
+}
