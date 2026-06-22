@@ -2,9 +2,13 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"altune/go-api/internal/catalog/ports"
 )
@@ -41,7 +45,42 @@ func (s *FilesystemAudioStore) Store(_ context.Context, sourcePath string, audio
 		return fmt.Errorf("create directory: %w", err)
 	}
 
-	return os.Rename(sourcePath, destPath)
+	if err := os.Rename(sourcePath, destPath); err == nil {
+		return nil
+	} else if !errors.Is(err, syscall.EXDEV) {
+		return fmt.Errorf("move audio into place: %w", err)
+	}
+
+	// Source (temp dir) and destination (audio volume) are on different
+	// filesystems, so os.Rename returns EXDEV. Copy across, then remove the
+	// source. Without this, every acquisition fails when $TMPDIR and the audio
+	// baseDir are separate mounts (the norm on a Linux VM).
+	if err := copyFile(sourcePath, destPath); err != nil {
+		return fmt.Errorf("copy audio into place: %w", err)
+	}
+	if err := os.Remove(sourcePath); err != nil {
+		slog.Warn("audio_temp_source_remove_failed", "path", sourcePath, "error", err)
+	}
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(dst)
+		return err
+	}
+	return out.Close()
 }
 
 // Stream returns a readable file handle and its size in bytes.

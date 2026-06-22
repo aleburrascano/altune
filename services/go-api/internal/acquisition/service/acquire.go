@@ -78,41 +78,22 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 
 	// Direct path: the saved result carries the exact SoundCloud URL the user
 	// discovered, so download that exact track instead of re-searching by metadata
-	// (which can grab a wrong reupload). yt-dlp downloads SoundCloud URLs natively.
-	// On any failure, fall through to the search pipeline ("last resort").
-	if isDirectAcquireURL(sourceURL) {
-		direct := &AcquisitionContext{
-			Track: buildTrackRef(track),
-			Selected: &Candidate{
-				URL:      sourceURL,
-				Title:    track.Title,
-				Artist:   track.Artist,
-				Duration: derefFloat(track.DurationSeconds),
-			},
-		}
-		directErr := RunPipeline(ctx, s.buildSteps(userId, trackId, true), direct)
-		cleanupTemp(direct)
-		if directErr == nil {
-			slog.InfoContext(ctx, "acquisition.direct_source_used",
-				"track_id", trackId.String(), "url", sourceURL)
-			s.onAcquireCompleted(ctx, userId, trackId, direct.AudioRef)
-			return nil
-		}
-		slog.WarnContext(ctx, "acquisition.direct_failed_falling_back",
-			"track_id", trackId.String(), "url", sourceURL, "error", directErr)
+	// (which can grab a wrong reupload). On any failure it falls back to search.
+	if s.tryDirectAcquire(ctx, userId, trackId, track, sourceURL) {
+		return nil
 	}
 
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
 	err = RunPipeline(ctx, s.buildSteps(userId, trackId, false), ac)
-	cleanupTemp(ac)
+	cleanupTemp(ctx, ac)
 
 	if err != nil {
-		reason := err.Error()
 		slog.WarnContext(ctx, "track_acquisition_failed",
 			"track_id", trackId.String(),
 			"user_id", userId.String(),
-			"reason", reason,
+			"error", err,
 		)
+		reason := failureReason(err)
 		s.markFailed(ctx, trackId, userId, reason)
 		if s.events != nil {
 			s.events.Publish(userId, "track_acquisition_failed", map[string]any{
@@ -127,6 +108,62 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	return nil
 }
 
+// tryDirectAcquire attempts the direct-download path for a directly-downloadable
+// source URL, skipping search. It reports whether acquisition completed; on any
+// failure it returns false so the caller falls back to the search pipeline.
+func (s *AcquireTrackAudioService) tryDirectAcquire(
+	ctx context.Context,
+	userId shared.UserId,
+	trackId domain.TrackId,
+	track *domain.Track,
+	sourceURL string,
+) bool {
+	if !isDirectAcquireURL(sourceURL) {
+		return false
+	}
+	direct := &AcquisitionContext{
+		Track: buildTrackRef(track),
+		Selected: &Candidate{
+			URL:      sourceURL,
+			Title:    track.Title,
+			Artist:   track.Artist,
+			Duration: derefFloat(track.DurationSeconds),
+		},
+	}
+	err := RunPipeline(ctx, s.buildSteps(userId, trackId, true), direct)
+	cleanupTemp(ctx, direct)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.direct_failed_falling_back",
+			"track_id", trackId.String(), "url", sourceURL, "error", err)
+		return false
+	}
+	slog.InfoContext(ctx, "acquisition.direct_source_used",
+		"track_id", trackId.String(), "url", sourceURL)
+	s.onAcquireCompleted(ctx, userId, trackId, direct.AudioRef)
+	return true
+}
+
+// failureReason maps an internal pipeline error to a short, stable, client-safe
+// reason. The full error chain (which can carry yt-dlp stderr, file paths, and
+// other internals) is logged at the call site and never stored on the track or
+// returned over the wire. Keys off RunPipeline's stable "step <name>: ..." and
+// "pipeline cancelled: ..." wrapping.
+func failureReason(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.HasPrefix(msg, "step search:"), strings.HasPrefix(msg, "step select:"):
+		return "no matching audio found"
+	case strings.HasPrefix(msg, "step download:"):
+		return "audio download failed"
+	case strings.HasPrefix(msg, "step store:"):
+		return "audio storage failed"
+	case strings.HasPrefix(msg, "pipeline cancelled"):
+		return "audio acquisition cancelled"
+	default:
+		return "audio acquisition failed"
+	}
+}
+
 // reconcileForReacquire resets a non-pending track back to pending so the
 // pipeline can run again, and reports whether acquisition should proceed. A
 // ready track whose audio file still exists is a no-op skip (proceed=false); a
@@ -137,17 +174,19 @@ func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, tr
 	case domain.AcquisitionReady:
 		if track.AudioRef != nil {
 			exists, existsErr := s.audioStore.Exists(ctx, *track.AudioRef)
-			if existsErr != nil {
+			switch {
+			case existsErr != nil:
+				// A transient existence-check error must not leave a possibly-missing
+				// file unrepaired: fall through to re-acquire rather than skipping.
 				slog.WarnContext(ctx, "acquire_exists_check_failed",
 					"track_id", track.ID.String(), "audio_ref", *track.AudioRef, "error", existsErr)
-				return false, nil
-			}
-			if exists {
+			case exists:
 				slog.InfoContext(ctx, "acquire_skip_already_ready", "track_id", track.ID.String())
 				return false, nil
+			default:
+				slog.InfoContext(ctx, "acquire_reacquire_missing_file",
+					"track_id", track.ID.String(), "audio_ref", *track.AudioRef)
 			}
-			slog.InfoContext(ctx, "acquire_reacquire_missing_file",
-				"track_id", track.ID.String(), "audio_ref", *track.AudioRef)
 		}
 		track.RevertToPending()
 		if err := s.trackRepo.Update(ctx, track); err != nil {
@@ -207,7 +246,12 @@ func isDirectAcquireURL(rawURL string) bool {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())
-	return host == "soundcloud.com" || strings.HasSuffix(host, ".soundcloud.com")
+	if host != "soundcloud.com" && !strings.HasSuffix(host, ".soundcloud.com") {
+		return false
+	}
+	// A SoundCloud set/playlist URL downloads multiple tracks; the direct path
+	// must fetch exactly one, so reject sets and let the search pipeline handle it.
+	return !strings.Contains(strings.ToLower(u.Path), "/sets/")
 }
 
 func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) {
@@ -268,12 +312,12 @@ func buildTrackRef(track *domain.Track) TrackRef {
 	}
 }
 
-func cleanupTemp(ac *AcquisitionContext) {
+func cleanupTemp(ctx context.Context, ac *AcquisitionContext) {
 	if ac.TempPath == "" {
 		return
 	}
 	parent := filepath.Dir(ac.TempPath)
 	if err := os.RemoveAll(parent); err != nil {
-		slog.Warn("temp_cleanup_failed", "path", parent, "error", err)
+		slog.WarnContext(ctx, "temp_cleanup_failed", "path", parent, "error", err)
 	}
 }
