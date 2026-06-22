@@ -23,6 +23,7 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
+import { useDeezerEnrichment } from '../hooks/useDeezerEnrichment';
 import { useDiscogsArtistEnrichment } from '../hooks/useDiscogsArtistEnrichment';
 import { useDiscogsEnrichment } from '../hooks/useDiscogsEnrichment';
 import { useEnrichment } from '../hooks/useEnrichment';
@@ -34,6 +35,7 @@ import { TrackDetailBody } from './TrackDetailBody';
 import { AlbumDetailBody } from './AlbumDetailBody';
 import { ArtistDetailBody } from './ArtistDetailBody';
 import { DiscogsArtistSection } from './DiscogsArtistSection';
+import { DeezerEnrichmentSection } from './DeezerEnrichmentSection';
 import { DiscogsEnrichmentSection } from './DiscogsEnrichmentSection';
 import { EnrichmentSection } from './EnrichmentSection';
 import { LastFmEnrichmentSection } from './LastFmEnrichmentSection';
@@ -92,6 +94,13 @@ export function DetailScreen(): ReactElement {
     kind: result.kind,
     title: result.title,
     subtitle: result.subtitle,
+  });
+  // Deezer enrichment — track tempo/explicit + album label/genres (caps 7–8).
+  const { enrichment: deezerEnrichment } = useDeezerEnrichment({
+    kind: result.kind,
+    title: result.title,
+    subtitle: result.subtitle,
+    enabled: result.kind === 'track' || result.kind === 'album',
   });
 
   const heroImageUrl =
@@ -182,6 +191,9 @@ export function DetailScreen(): ReactElement {
         {result.kind === 'track' ? <TrackDetailBody result={result} lateralNav={lateralNav} detailRoute={detailRoute} /> : null}
         {result.kind === 'album' ? <AlbumDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
         {result.kind === 'album' ? <DiscogsEnrichmentSection enrichment={discogsEnrichment} /> : null}
+        {result.kind === 'track' || result.kind === 'album' ? (
+          <DeezerEnrichmentSection kind={result.kind} enrichment={deezerEnrichment} />
+        ) : null}
         {result.kind === 'artist' ? <ArtistDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
         {result.kind === 'artist' ? <DiscogsArtistSection enrichment={discogsArtist} /> : null}
       </ScrollView>
