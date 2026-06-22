@@ -192,6 +192,43 @@ type DiscographyEnricher interface {
 	FetchArtistReleases(ctx context.Context, discogsID int) ([]DiscogsRelease, error)
 }
 
+// DiscogsEnricher resolves and looks up Discogs album enrichment for the
+// detail-open surface (docs/providers/discogs.md caps 3–6). ResolveMasterID maps
+// (artist, album) to a Discogs master id via the structured artist+title search
+// (0 when none). LookupAlbum fetches the master + its main release and assembles
+// the credits/styles/label/community enrichment. Implemented by the Discogs
+// adapter; consumed by DiscogsEnrichmentService.
+type DiscogsEnricher interface {
+	ResolveMasterID(ctx context.Context, artist, album string) (int, error)
+	LookupAlbum(ctx context.Context, masterID int) (domain.DiscogsEnrichment, error)
+	// ResolveArtistID maps an artist name to a Discogs artist id (0 when none);
+	// LookupArtist fetches the bio/aliases/groups/links for a known id (cap 7).
+	ResolveArtistID(ctx context.Context, name string) (int, error)
+	LookupArtist(ctx context.Context, artistID int) (domain.DiscogsArtistEnrichment, error)
+}
+
+// DiscogsEnrichmentCache is a read-through cache of DiscogsEnrichment keyed by a
+// normalized (artist, album) name key — Discogs has no ISRC/MBID, so the name
+// key is the only stable handle on the request. The negative path records that a
+// name resolved to nothing, so an unresolved album is not re-resolved every open.
+// A nil-backed implementation is a no-op.
+type DiscogsEnrichmentCache interface {
+	Get(ctx context.Context, nameKey string) (domain.DiscogsEnrichment, bool, error)
+	Set(ctx context.Context, nameKey string, e domain.DiscogsEnrichment) error
+	GetNegative(ctx context.Context, nameKey string) (bool, error)
+	SetNegative(ctx context.Context, nameKey string) error
+}
+
+// DiscogsArtistEnrichmentCache is the artist-scoped sibling of
+// DiscogsEnrichmentCache, keyed by a normalized artist name. A nil-backed
+// implementation is a no-op.
+type DiscogsArtistEnrichmentCache interface {
+	Get(ctx context.Context, nameKey string) (domain.DiscogsArtistEnrichment, bool, error)
+	Set(ctx context.Context, nameKey string, e domain.DiscogsArtistEnrichment) error
+	GetNegative(ctx context.Context, nameKey string) (bool, error)
+	SetNegative(ctx context.Context, nameKey string) error
+}
+
 type DiscogsArtistInfo struct {
 	ID      int
 	Name    string

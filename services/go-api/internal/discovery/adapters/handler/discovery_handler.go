@@ -28,6 +28,26 @@ type DiscoveryHandler struct {
 	enrichSvc  *service.EnrichmentService
 	suggestSvc *service.SuggestService
 	eventSvc   *service.RecordEventService
+
+	// discogsEnrichSvc / discogsArtistEnrichSvc are wired post-construction via the
+	// With* setters so the positional constructor stays stable; nil degrades to an
+	// empty DTO.
+	discogsEnrichSvc       *service.DiscogsEnrichmentService
+	discogsArtistEnrichSvc *service.DiscogsArtistEnrichmentService
+}
+
+// WithDiscogsEnrichment attaches the Discogs album-enrichment use case (caps 3–6).
+// Set at composition time; a nil service leaves the endpoint answering empty.
+func (h *DiscoveryHandler) WithDiscogsEnrichment(svc *service.DiscogsEnrichmentService) *DiscoveryHandler {
+	h.discogsEnrichSvc = svc
+	return h
+}
+
+// WithDiscogsArtistEnrichment attaches the Discogs artist-enrichment use case
+// (cap 7). Set at composition time; a nil service answers empty.
+func (h *DiscoveryHandler) WithDiscogsArtistEnrichment(svc *service.DiscogsArtistEnrichmentService) *DiscoveryHandler {
+	h.discogsArtistEnrichSvc = svc
+	return h
 }
 
 func NewDiscoveryHandler(
@@ -66,6 +86,8 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/artists/{provider}/{externalId}/albums", h.handleArtistAlbums)
 	r.Get("/tracks/{provider}/{externalId}/related", h.handleRelatedTracks)
 	r.Get("/enrichment", h.handleEnrichment)
+	r.Get("/enrichment/discogs", h.handleDiscogsEnrichment)
+	r.Get("/enrichment/discogs/artist", h.handleDiscogsArtistEnrichment)
 	return r
 }
 
@@ -617,6 +639,180 @@ func enrichmentToDTO(e domain.MBEnrichment) EnrichmentResponseDTO {
 		ExternalIDs:    ids,
 		ArtworkURL:     e.ArtworkURL,
 	}
+}
+
+// handleDiscogsEnrichment serves Discogs detail-open album enrichment: credits,
+// styles, label/catalog, companies, and community signal (docs/providers/discogs.md
+// caps 3–6). Album-scoped — resolved from `album` + `artist`. Always 200 with the
+// DTO (or an empty DTO); only request-shape problems are 4xx.
+func (h *DiscoveryHandler) handleDiscogsEnrichment(w http.ResponseWriter, r *http.Request) {
+	album := strings.TrimSpace(r.URL.Query().Get("album"))
+	artist := strings.TrimSpace(r.URL.Query().Get("artist"))
+	if album == "" {
+		httputil.BadRequest(w, "album is required")
+		return
+	}
+
+	if h.discogsEnrichSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, discogsEnrichmentToDTO(domain.EmptyDiscogsEnrichment()))
+		return
+	}
+
+	e, err := h.discogsEnrichSvc.Execute(r.Context(), artist, album)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "discogs enrichment failed",
+			"error", err, "album", album, "artist", artist)
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, discogsEnrichmentToDTO(e))
+}
+
+type DiscogsCreditDTO struct {
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+
+type DiscogsLabelDTO struct {
+	Name  string `json:"name"`
+	Catno string `json:"catno"`
+}
+
+type DiscogsCompanyDTO struct {
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+
+type DiscogsCommunityDTO struct {
+	Have   int     `json:"have"`
+	Want   int     `json:"want"`
+	Rating float64 `json:"rating"`
+	Votes  int     `json:"votes"`
+}
+
+type DiscogsEnrichmentResponseDTO struct {
+	MasterID  int                 `json:"master_id"`
+	Genres    []string            `json:"genres"`
+	Styles    []string            `json:"styles"`
+	Year      int                 `json:"year"`
+	Credits   []DiscogsCreditDTO  `json:"credits"`
+	Labels    []DiscogsLabelDTO   `json:"labels"`
+	Formats   []string            `json:"formats"`
+	Country   string              `json:"country"`
+	Companies []DiscogsCompanyDTO `json:"companies"`
+	Community DiscogsCommunityDTO `json:"community"`
+}
+
+func discogsEnrichmentToDTO(e domain.DiscogsEnrichment) DiscogsEnrichmentResponseDTO {
+	credits := make([]DiscogsCreditDTO, len(e.Credits))
+	for i, c := range e.Credits {
+		credits[i] = DiscogsCreditDTO{Name: c.Name, Role: c.Role}
+	}
+	labels := make([]DiscogsLabelDTO, len(e.Labels))
+	for i, l := range e.Labels {
+		labels[i] = DiscogsLabelDTO{Name: l.Name, Catno: l.Catno}
+	}
+	companies := make([]DiscogsCompanyDTO, len(e.Companies))
+	for i, c := range e.Companies {
+		companies[i] = DiscogsCompanyDTO{Name: c.Name, Role: c.Role}
+	}
+	genres := e.Genres
+	if genres == nil {
+		genres = []string{}
+	}
+	styles := e.Styles
+	if styles == nil {
+		styles = []string{}
+	}
+	formats := e.Formats
+	if formats == nil {
+		formats = []string{}
+	}
+	return DiscogsEnrichmentResponseDTO{
+		MasterID:  e.MasterID,
+		Genres:    genres,
+		Styles:    styles,
+		Year:      e.Year,
+		Credits:   credits,
+		Labels:    labels,
+		Formats:   formats,
+		Country:   e.Country,
+		Companies: companies,
+		Community: DiscogsCommunityDTO{
+			Have:   e.Community.Have,
+			Want:   e.Community.Want,
+			Rating: e.Community.Rating,
+			Votes:  e.Community.Votes,
+		},
+	}
+}
+
+// handleDiscogsArtistEnrichment serves Discogs detail-open artist enrichment:
+// bio, name history, group/member links, and external links (cap 7). Resolved
+// from `name`. Always 200 with the DTO (or an empty DTO); only request-shape
+// problems are 4xx.
+func (h *DiscoveryHandler) handleDiscogsArtistEnrichment(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		httputil.BadRequest(w, "name is required")
+		return
+	}
+
+	if h.discogsArtistEnrichSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, discogsArtistEnrichmentToDTO(domain.EmptyDiscogsArtistEnrichment()))
+		return
+	}
+
+	e, err := h.discogsArtistEnrichSvc.Execute(r.Context(), name)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "discogs artist enrichment failed",
+			"error", err, "name", name)
+		httputil.InternalError(w)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, discogsArtistEnrichmentToDTO(e))
+}
+
+type DiscogsLinkDTO struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
+}
+
+type DiscogsArtistEnrichmentResponseDTO struct {
+	ArtistID       int              `json:"artist_id"`
+	Profile        string           `json:"profile"`
+	RealName       string           `json:"real_name"`
+	Aliases        []string         `json:"aliases"`
+	NameVariations []string         `json:"name_variations"`
+	Members        []string         `json:"members"`
+	Groups         []string         `json:"groups"`
+	Links          []DiscogsLinkDTO `json:"links"`
+}
+
+func discogsArtistEnrichmentToDTO(e domain.DiscogsArtistEnrichment) DiscogsArtistEnrichmentResponseDTO {
+	links := make([]DiscogsLinkDTO, len(e.Links))
+	for i, l := range e.Links {
+		links[i] = DiscogsLinkDTO{Label: l.Label, URL: l.URL}
+	}
+	return DiscogsArtistEnrichmentResponseDTO{
+		ArtistID:       e.ArtistID,
+		Profile:        e.Profile,
+		RealName:       e.RealName,
+		Aliases:        nonNilStrings(e.Aliases),
+		NameVariations: nonNilStrings(e.NameVariations),
+		Members:        nonNilStrings(e.Members),
+		Groups:         nonNilStrings(e.Groups),
+		Links:          links,
+	}
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 type ContentFetchResponseDTO struct {
