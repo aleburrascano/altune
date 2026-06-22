@@ -8,8 +8,10 @@
 > **detail-open enrichment** (cap 7 track audio fields `bpm`/`gain`/explicit; cap 8 album liner data
 > `label`/`genres`/`upc`/`record_type`) via `DeezerEnricher` → `DeezerEnrichmentService` →
 > `GET /discovery/enrichment/deezer` → mobile `useDeezerEnrichment` → `DeezerEnrichmentSection`.
-> Display-only, off the ranking path, no eval gate. Still unbuilt: **lyrics (synced + plain)** —
-> deliberately a separate feature (cap 6).
+> Display-only, off the ranking path, no eval gate. As of 2026-06-22, **lyrics (cap 6) are now
+> built** — synced + plain lyrics, writers, copyright via the anonymous-JWT `pipe.deezer.com` GraphQL,
+> surfaced on track detail (`LyricsProvider` → `LyricsService` → `GET /discovery/lyrics` → mobile
+> `useLyrics` → `LyricsSection`). **Deezer is now fully maximized — every capability (1–8) is built.**
 
 ## 1. Why this provider matters
 
@@ -98,8 +100,8 @@ inverted).
 | `GET /chart/0/{tracks\|artists\|albums}` | global charts | 200 | `ChartProvider` ✅ built |
 | `GET /ajax/gw-light.php?method=deezer.getUserData` | `results.checkForm` token + `sid` cookie | 200 | (lyrics bootstrap, legacy) |
 | `GET /ajax/gw-light.php?method=song.getLyrics` (anon) | `DATA_ERROR: No lyrics id … country CA` | 200 | ❌ auth-gated — do not use |
-| `GET auth.deezer.com/login/anonymous?jo=p&rto=c&i=c` | anonymous `jwt` (standalone) | 200 | **lyrics bootstrap (working)** |
-| `POST pipe.deezer.com/api` (`SynchronizedLyrics`, Bearer jwt) | `lyrics{ text, synchronizedLines[], writers, copyright }` | 200 | **lyrics enrichment (new, headline)** |
+| `GET auth.deezer.com/login/anonymous?jo=p&rto=c&i=c` | anonymous `jwt` (standalone) | 200 | lyrics bootstrap ✅ built |
+| `POST pipe.deezer.com/api` (`SynchronizedLyrics`, Bearer jwt) | `lyrics{ text, synchronizedLines[], writers, copyright }` | 200 | **lyrics enrichment ✅ built (cap 6)** |
 
 `SynchronizedLyrics` query body (verified):
 ```graphql
@@ -140,17 +142,23 @@ projection; the rich `/track/{id}` and `/album/{id}` fields are ignored here.
 Already hits `/track/{id}` — but reads **only** `isrc`, discarding the bpm/gain/credits on the same
 response (cap 7).
 
-### 6. **Lyrics — synced + plain** (`pipe.deezer.com` GraphQL) — ⬜ NOT BUILT (the headline)
+### 6. **Lyrics — synced + plain** (`pipe.deezer.com` GraphQL) — ✅ BUILT (2026-06-22, the headline)
 The single highest-value addition and the one axis no other provider gives us. Anonymous-JWT bootstrap
 → `SynchronizedLyrics` → `text` (plain), `synchronizedLines[]` (LRC-style timed lines), `writers`,
 `copyright`. Surfaces as a lyrics view on track detail (and, with `synchronizedLines`, a karaoke/scrub
-sync during playback once that surface exists). **Detail-open only, off the ranking path** — mirror the
-`musicbrainz-enrichment` / Discogs / Last.fm enricher pattern exactly: a `DeezerLyrics` value object,
-a `LyricsProvider` port, a read-through Redis cache (long positive TTL — lyrics are static; short
-negative TTL — availability is region/catalog dependent), a `LyricsService`, and a
-`GET /discovery/lyrics` (or `/discovery/enrichment/deezer/lyrics`) endpoint + mobile hook/section. The
-anonymous JWT needs a cached bootstrap with `401` self-heal (the rotation tax, lighter than
-SoundCloud's `client_id`). **ToS: reverse-engineered — name it explicitly** (§6).
+sync during playback once that surface exists). **Detail-open only, off the ranking path** — mirrors the
+`musicbrainz-enrichment` / Discogs / Last.fm enricher pattern exactly. **Built:** a `DeezerLyrics`
+value object; a `LyricsProvider` port (`ResolveTrackID` via public-API search + `Lookup` via the pipe
+GraphQL); the `DeezerLyricsAdapter` with a self-healing anonymous-JWT resolver (cached, singleflight-
+deduped, `401` re-bootstrap — lighter than SoundCloud's `client_id`: one GET, no JS scraping); a
+read-through `RedisDeezerLyricsCache` (90d positive — lyrics are static; 24h negative — region/catalog
+dependent); a `LyricsService` (best-effort, name-keyed, negative-caches a definitive miss); the
+`GET /discovery/lyrics?title=&subtitle=` endpoint; and mobile `useLyrics` + `LyricsSection` (synced
+lines preferred, plain fallback, writers + copyright footer; track-only). **ToS: reverse-engineered —
+named explicitly** (§6). Track-id resolution reuses the public-API `DeezerAdapter` search; the auth-
+response JWT field name is `[INFERRED]` (the body was not field-dumped in the audit) — corrected on the
+next live probe if wrong. **Not verifiable in this dev environment** (no live `pipe`/`auth` access) —
+covered by httptest fixtures of the documented shapes.
 
 ### 7. **Rich track metadata** (bpm/gain/explicit) — ✅ BUILT (2026-06-22)
 `Lookup(track)` fetches `/track/{id}` and maps `bpm` (rounded; 0 = unknown, rendered only when `> 0`),
@@ -226,23 +234,46 @@ Detail-open enrichment (caps 7–8), built 2026-06-22, mirroring the MB/Discogs/
 - Covered by httptest fixtures (adapter), fakes (service), and RNTL (hook + section). Backend discovery
   tests green (576); mobile detail tests green (130).
 
+Lyrics (cap 6), built 2026-06-22 — distinct from the public-API enrichment (the `pipe` GraphQL path):
+
+- `domain/deezer_lyrics.go` — the `DeezerLyrics` value object + `SyncedLyricLine` (+ `Empty`/`IsZero`).
+- `ports/ports.go` — `LyricsProvider` (`ResolveTrackID` + `Lookup`) + `LyricsCache`.
+- `adapters/providers/deezer_lyrics.go` — `DeezerLyricsAdapter`: delegates track-id resolution to the
+  public-API `DeezerAdapter`, fetches lyrics via `pipe.deezer.com` `SynchronizedLyrics`, gated by the
+  self-healing anonymous-JWT resolver (`deezerJWTResolver` — singleflight, `401` re-bootstrap). A null
+  `lyrics` / GraphQL error is a definitive miss (empty + nil); auth/network is a transient error.
+- `adapters/cache/deezer_lyrics_cache.go` — `RedisDeezerLyricsCache`, read-through, name-keyed
+  (positive 90d, negative 24h); nil client = no-op.
+- `service/lyrics.go` — `LyricsService` (cache → resolve → lookup; track-only; best-effort, always nil
+  error; negative-caches an unresolved/lyric-less track).
+- `adapters/handler/discovery_handler.go` — `GET /discovery/lyrics?title=&subtitle=`
+  (`WithLyrics` setter) + `LyricsResponseDTO`/`SyncedLineDTO`.
+- `internal/app/app.go` — wired unconditionally (no key needed); nil cache degrades to uncached.
+- Mobile: `shared/api-client/discovery.ts` (`getLyrics` + `LyricsResponse`/`SyncedLyricLine`),
+  `features/detail/hooks/useLyrics.ts` (track-gated), `features/detail/ui/LyricsSection.tsx` (synced
+  lines preferred, plain fallback, writers + copyright), wired into `DetailScreen` below the Deezer
+  enrichment for tracks.
+- Covered by httptest fixtures of the documented `auth`/`pipe`/`search` shapes (adapter — incl. JWT
+  caching + `401` self-heal + no-lyrics miss), a fake provider (service), and RNTL (hook + section).
+  Backend discovery tests green (587); mobile detail tests green (139).
+
 ## 8. Next steps
 
-Caps 1–5, 7, 8, and the cap-2 artwork bump are built. The one remaining capability is lyrics,
-deliberately scoped as its own feature:
+**Caps 1–8 are built — Deezer is fully maximized.** No coverage gaps remain. Remaining items are
+optional refinements, not capabilities:
 
-1. **Lyrics enrichment (cap 6, the headline — separate feature).** `/feature-spec` the surface
-   (track-detail lyrics view; timed-scroll during playback is a follow-on once the synced lines have a
-   player to drive). Backend: anonymous-JWT bootstrap (cached, `401` self-heal), the `pipe`
-   `SynchronizedLyrics` client, a `DeezerLyrics` value object, `LyricsProvider` port, `RedisLyricsCache`,
-   `LyricsService`, `GET /discovery/lyrics`, mobile hook + section. Display-only, no eval gate. **Name
-   the ToS posture in the spec** (the `pipe` GraphQL access is reverse-engineered, unlike the public-API
-   enrichment shipped here).
+1. **Timed-scroll lyrics during playback.** The synced lines (`synced_lines[].milliseconds`/`duration`)
+   are surfaced today as a static list; a karaoke/auto-scroll view that follows playback position is a
+   follow-on once the queue/player exposes the current offset to the detail screen. Pure UI — the data
+   is already there.
+2. **Confirm the `[INFERRED]` bits on a live probe.** The auth-response JWT field name (assumed `jwt`)
+   and the `writers` scalar-vs-array shape were not field-dumped in the audit session; verify on the
+   next live run and correct the adapter if needed.
 
 **Optional, eval-gated:** feeding Deezer `bpm` or any new signal into *rank* (must clear
 `discoveryeval --top-k 3`). Deezer `nb_fan`/`rank` already *is* the popularity primary — unchanged.
 
 **Not verifiable in this dev environment:** the real-world lyrics coverage / synced-line accuracy and
-the JWT-rotation cadence on live traffic (needs the running pipeline + a device). All §4 endpoints were
-probed live this session (public API anonymously; `pipe` with a freshly-bootstrapped anonymous JWT);
-field dumps above are real.
+the JWT-rotation cadence on live traffic (needs the running pipeline + a device). The §4 public-API
+endpoints were probed live in the original audit; the lyrics adapter is covered by httptest fixtures of
+the documented `auth`/`pipe` shapes (no live `pipe`/`auth` access in this dev environment).
