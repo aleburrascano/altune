@@ -562,24 +562,3 @@ func minInt(a, b, c int) int {
 	return a
 }
 
-// AllKeys returns all Redis keys used by a vocabulary entry (for test cleanup).
-func AllKeys(norm string) []string {
-	keys := []string{
-		vocabTermsKey,
-		vocabLexKey,
-		vocabEntryPfx + norm,
-	}
-	for _, tri := range trigrams(norm) {
-		keys = append(keys, vocabTriPrefix+tri)
-	}
-	return keys
-}
-
-// VocabTermsKeyForTest exposes the sorted set key for integration tests.
-func VocabTermsKeyForTest() string { return vocabTermsKey }
-
-// VocabEntryKeyForTest exposes the entry key prefix for integration tests.
-func VocabEntryKeyForTest(norm string) string { return vocabEntryPfx + norm }
-
-// VocabTriKeyForTest exposes the trigram key prefix for integration tests.
-func VocabTriKeyForTest(tri string) string { return vocabTriPrefix + tri }
