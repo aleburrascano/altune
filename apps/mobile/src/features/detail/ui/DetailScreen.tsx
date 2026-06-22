@@ -30,6 +30,7 @@ import { useEnrichment } from '../hooks/useEnrichment';
 import { useEnrichResult } from '../hooks/useEnrichResult';
 import { useLastFmEnrichment } from '../hooks/useLastFmEnrichment';
 import { useLateralNav } from '../hooks/useLateralNav';
+import { useLyrics } from '../hooks/useLyrics';
 
 import { TrackDetailBody } from './TrackDetailBody';
 import { AlbumDetailBody } from './AlbumDetailBody';
@@ -39,6 +40,7 @@ import { DeezerEnrichmentSection } from './DeezerEnrichmentSection';
 import { DiscogsEnrichmentSection } from './DiscogsEnrichmentSection';
 import { EnrichmentSection } from './EnrichmentSection';
 import { LastFmEnrichmentSection } from './LastFmEnrichmentSection';
+import { LyricsSection } from './LyricsSection';
 
 const HERO_SIZE = 200;
 
@@ -101,6 +103,12 @@ export function DetailScreen(): ReactElement {
     title: result.title,
     subtitle: result.subtitle,
     enabled: result.kind === 'track' || result.kind === 'album',
+  });
+  // Deezer lyrics — synced + plain lyrics, writers, copyright (cap 6). Track-only.
+  const { lyrics } = useLyrics({
+    title: result.title,
+    subtitle: result.subtitle,
+    enabled: result.kind === 'track',
   });
 
   const heroImageUrl =
@@ -194,6 +202,7 @@ export function DetailScreen(): ReactElement {
         {result.kind === 'track' || result.kind === 'album' ? (
           <DeezerEnrichmentSection kind={result.kind} enrichment={deezerEnrichment} />
         ) : null}
+        {result.kind === 'track' ? <LyricsSection lyrics={lyrics} /> : null}
         {result.kind === 'artist' ? <ArtistDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
         {result.kind === 'artist' ? <DiscogsArtistSection enrichment={discogsArtist} /> : null}
       </ScrollView>
