@@ -11,7 +11,15 @@ import (
 // providerhttp is the single home for the GET → status-check → decode/read
 // transport dance that every provider adapter repeated. Per-provider quirks
 // (auth headers, user-agent) are options; rate-limiting stays at the call site
-// because it is adapter policy, not transport. Two shapes:
+// because it is adapter policy, not transport.
+//
+// Rate-limiting is deliberately per-provider, not uniform: MusicBrainz reserves
+// 1 req/sec (its terms require it), Discogs detects and surfaces 429s, and the
+// rest rely on the shared client timeout plus the search circuit breaker. The
+// absence of an explicit limiter on a provider is intentional, not an oversight
+// — each reflects that provider's published contract.
+//
+// Two shapes:
 //
 //   - getJSON  streams-decodes a 200 JSON body (no body cap — matches the prior
 //     search/lookup behaviour).
