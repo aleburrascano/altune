@@ -2,10 +2,8 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -110,19 +108,7 @@ func (a *DeezerAdapter) lookupAlbumDetail(ctx context.Context, id string) (domai
 
 // getJSON performs a GET and decodes the body into dst; a non-200 is an error.
 func (a *DeezerAdapter) getJSON(ctx context.Context, u string, dst any) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("deezer detail returned %d", resp.StatusCode)
-	}
-	return json.NewDecoder(resp.Body).Decode(dst)
+	return getJSON(ctx, a.client, u, dst)
 }
 
 // dedupeDeezerGenres pulls genre names from the `{data:[{name}]}` shape, trimmed,

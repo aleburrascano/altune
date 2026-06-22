@@ -116,19 +116,9 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	}
 
 	externalID, sourceURL := itunesSourceRef(item, kind)
-	return domain.SearchResult{
-		Kind:       kind,
-		Title:      title,
-		Subtitle:   subtitle,
-		ImageURL:   artworkURL,
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderITunes,
-			ExternalID: externalID,
-			URL:        sourceURL,
-		}},
-		Extras: extras,
-	}
+	return domain.NewProviderResult(kind, title, subtitle, artworkURL,
+		domain.SourceRef{Provider: domain.ProviderITunes, ExternalID: externalID, URL: sourceURL},
+		extras)
 }
 
 // itunesSourceRef returns the entity's own iTunes id + view URL for the kind:

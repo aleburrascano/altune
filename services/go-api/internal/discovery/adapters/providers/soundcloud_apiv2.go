@@ -532,19 +532,9 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 		extras["genre"] = g
 	}
 
-	return domain.SearchResult{
-		Kind:       domain.ResultKindTrack,
-		Title:      t.Title,
-		Subtitle:   t.User.Username,
-		ImageURL:   upgradeArtworkResolution(t.ArtworkURL),
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderSoundCloud,
-			ExternalID: strconv.FormatInt(t.ID, 10),
-			URL:        t.PermalinkURL,
-		}},
-		Extras: extras,
-	}, true
+	return domain.NewProviderResult(domain.ResultKindTrack, t.Title, t.User.Username, upgradeArtworkResolution(t.ArtworkURL),
+		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(t.ID, 10), URL: t.PermalinkURL},
+		extras), true
 }
 
 // scAlbumSearchResponse is one page of api-v2 /search/albums.
@@ -579,19 +569,9 @@ func mapSoundCloudAPIAlbum(a scAPIAlbum) (domain.SearchResult, bool) {
 		extras["genre"] = g
 	}
 
-	return domain.SearchResult{
-		Kind:       domain.ResultKindAlbum,
-		Title:      a.Title,
-		Subtitle:   a.User.Username, // album artist = uploader
-		ImageURL:   upgradeArtworkResolution(a.ArtworkURL),
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderSoundCloud,
-			ExternalID: strconv.FormatInt(a.ID, 10),
-			URL:        a.PermalinkURL,
-		}},
-		Extras: extras,
-	}, true
+	return domain.NewProviderResult(domain.ResultKindAlbum, a.Title, a.User.Username, upgradeArtworkResolution(a.ArtworkURL),
+		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(a.ID, 10), URL: a.PermalinkURL},
+		extras), true
 }
 
 // scUserSearchResponse is one page of api-v2 /search/users.
@@ -613,18 +593,9 @@ func mapSoundCloudAPIUser(u scAPIUser) (domain.SearchResult, bool) {
 		return domain.SearchResult{}, false
 	}
 
-	return domain.SearchResult{
-		Kind:       domain.ResultKindArtist,
-		Title:      u.Username,
-		ImageURL:   upgradeArtworkResolution(u.AvatarURL),
-		Confidence: domain.ConfidenceLow,
-		Sources: []domain.SourceRef{{
-			Provider:   domain.ProviderSoundCloud,
-			ExternalID: strconv.FormatInt(u.ID, 10),
-			URL:        u.PermalinkURL,
-		}},
-		Extras: map[string]any{},
-	}, true
+	return domain.NewProviderResult(domain.ResultKindArtist, u.Username, "", upgradeArtworkResolution(u.AvatarURL),
+		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(u.ID, 10), URL: u.PermalinkURL},
+		nil), true
 }
 
 // upgradeArtworkResolution swaps SoundCloud's default 100px "-large" artwork

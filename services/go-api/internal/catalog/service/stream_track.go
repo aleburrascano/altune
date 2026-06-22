@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -11,7 +10,7 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-var ErrAudioNotAvailable = errors.New("audio not available")
+var ErrAudioNotAvailable = &domain.CodedError{Msg: "audio not available", Status: 404}
 
 type StreamOutput struct {
 	Reader ports.AudioStream

@@ -72,7 +72,6 @@ type SearchOutput struct {
 	Partial          bool
 	CorrectedQuery   string
 	OriginalQuery    string
-	SuggestedQuery   string
 	Related          []domain.RelatedGroup
 }
 
@@ -165,7 +164,7 @@ func (s *Service) Execute(
 	// Zero results → auto-correct and re-search. (The "did you mean" suggestion
 	// for weak-but-non-empty results was removed: its trigger was a tuned
 	// relevance threshold — query-fit.)
-	var correctedQuery, originalQuery, suggestedQuery string
+	var correctedQuery, originalQuery string
 	if len(ranked) == 0 {
 		correctedQuery, originalQuery, ranked = s.tryCorrection(ctx, query)
 	}
@@ -200,7 +199,6 @@ func (s *Service) Execute(
 		"results", len(ranked),
 		"partial", partial,
 		"corrected", correctedQuery,
-		"suggested", suggestedQuery,
 		"related_groups", len(related),
 	)
 
@@ -210,7 +208,6 @@ func (s *Service) Execute(
 		Partial:          partial,
 		CorrectedQuery:   correctedQuery,
 		OriginalQuery:    originalQuery,
-		SuggestedQuery:   suggestedQuery,
 		Related:          related,
 	}, nil
 }

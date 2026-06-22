@@ -3,7 +3,6 @@ package cache
 import (
 	"context"
 	"fmt"
-	"crypto/sha256"
 	"strconv"
 	"time"
 
@@ -60,7 +59,5 @@ func (r *CachedPopularityResolver) GetPopularity(ctx context.Context, title, art
 }
 
 func popularityCacheKey(title, artist string) string {
-	input := fmt.Sprintf("%s|%s", title, artist)
-	h := sha256.Sum256([]byte(input))
-	return fmt.Sprintf("discovery:popularity:v1:%x", h[:16])
+	return hashKey("discovery:popularity:v1:", fmt.Sprintf("%s|%s", title, artist))
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -149,6 +150,17 @@ func (s *AcquireTrackAudioService) tryDirectAcquire(
 // returned over the wire. Keys off RunPipeline's stable "step <name>: ..." and
 // "pipeline cancelled: ..." wrapping.
 func failureReason(err error) string {
+	// Preferred path: map on the structured step name, robust to message changes.
+	var stepErr *StepError
+	if errors.As(err, &stepErr) {
+		if reason, ok := reasonForStep(stepErr.Step); ok {
+			return reason
+		}
+		return "audio acquisition failed"
+	}
+
+	// Fallback: a plain "step <name>: ..." / "pipeline cancelled: ..." string
+	// (e.g. errors produced outside RunPipeline). Kept for compatibility.
 	msg := err.Error()
 	switch {
 	case strings.HasPrefix(msg, "step search:"), strings.HasPrefix(msg, "step select:"):
@@ -161,6 +173,20 @@ func failureReason(err error) string {
 		return "audio acquisition cancelled"
 	default:
 		return "audio acquisition failed"
+	}
+}
+
+// reasonForStep maps a pipeline step name to its client-safe failure reason.
+func reasonForStep(step string) (string, bool) {
+	switch step {
+	case "search", "select":
+		return "no matching audio found", true
+	case "download":
+		return "audio download failed", true
+	case "store":
+		return "audio storage failed", true
+	default:
+		return "", false
 	}
 }
 

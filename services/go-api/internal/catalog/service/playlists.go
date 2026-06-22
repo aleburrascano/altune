@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -12,7 +11,7 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-var ErrPlaylistNotFound = errors.New("playlist not found")
+var ErrPlaylistNotFound = &domain.CodedError{Msg: "playlist not found", Status: 404}
 
 type PlaylistService struct {
 	playlistRepo ports.PlaylistRepository
@@ -161,12 +160,22 @@ func (s *PlaylistService) AddTrack(ctx context.Context, userId shared.UserId, pl
 }
 
 func (s *PlaylistService) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) (bool, error) {
-	playlist, err := s.playlistRepo.GetByID(ctx, playlistId, userId)
+	// AIDEV-NOTE: removal goes THROUGH the aggregate (like Reorder), not straight
+	// to the repo. Playlist.RemoveTrack is the single authority for the
+	// contiguous-position invariant — it decides membership and renumbers; the
+	// repo's atomic DELETE+renumber persists the same result. This keeps remove
+	// and reorder consistent (both: GetWithTracks → aggregate op → persist).
+	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
 	if err != nil {
 		return false, fmt.Errorf("remove track from playlist: %w", err)
 	}
 	if playlist == nil {
 		return false, ErrPlaylistNotFound
+	}
+
+	if !playlist.RemoveTrack(trackId) {
+		// Track was not in the playlist — nothing to persist.
+		return false, nil
 	}
 
 	if err := s.playlistRepo.RemoveTrack(ctx, playlistId, trackId); err != nil {

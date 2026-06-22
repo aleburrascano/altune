@@ -60,7 +60,7 @@ func (s *FindRelatedService) Execute(
 
 	for _, result := range organicResults[:topN] {
 		if result.Kind == domain.ResultKindTrack {
-			album := getStringExtra(result, "album")
+			album := stringExtra(result, "album")
 			if album != "" && s.querier != nil {
 				wg.Add(1)
 				go func(r domain.SearchResult, albumName string) {
@@ -84,7 +84,7 @@ func (s *FindRelatedService) Execute(
 				}(result, album)
 			}
 
-			deezerAlbumID := getStringExtra(result, "deezer_album_id")
+			deezerAlbumID := stringExtra(result, "deezer_album_id")
 			if deezerAlbumID != "" && s.albumProvider != nil {
 				mu.Lock()
 				canCall := providerCalls < maxProviderLookups

@@ -81,19 +81,9 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 			extras["playback_count"] = entry.PlaybackCount
 		}
 
-		results = append(results, domain.SearchResult{
-			Kind:       domain.ResultKindTrack,
-			Title:      entry.Title,
-			Subtitle:   entry.Uploader,
-			ImageURL:   entry.Thumbnail,
-			Confidence: domain.ConfidenceLow,
-			Sources: []domain.SourceRef{{
-				Provider:   domain.ProviderSoundCloud,
-				ExternalID: entry.ID,
-				URL:        entry.WebpageURL,
-			}},
-			Extras: extras,
-		})
+		results = append(results, domain.NewProviderResult(domain.ResultKindTrack, entry.Title, entry.Uploader, entry.Thumbnail,
+			domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: entry.ID, URL: entry.WebpageURL},
+			extras))
 	}
 
 	return results, nil

@@ -2,8 +2,6 @@ package cache
 
 import (
 	"context"
-	"crypto/sha256"
-	"fmt"
 	"log/slog"
 	"strconv"
 	"time"
@@ -61,6 +59,5 @@ func (c *CachedDiscogsResolver) Set(ctx context.Context, artistName string, disc
 }
 
 func discogsCacheKey(artistName string) string {
-	h := sha256.Sum256([]byte(artistName))
-	return fmt.Sprintf("discovery:discogs:v1:%x", h[:16])
+	return hashKey("discovery:discogs:v1:", artistName)
 }

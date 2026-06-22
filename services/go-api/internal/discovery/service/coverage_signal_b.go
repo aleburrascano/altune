@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"sync"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
@@ -117,25 +116,13 @@ func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, 
 // that errors is marked not-responded (ok=false) so transient failures don't
 // inflate its gap.
 func (s *CoverageSignalBService) fanOut(ctx context.Context, artist string) map[string]provResult {
-	var mu sync.Mutex
-	out := make(map[string]provResult, len(s.providers))
-	var wg sync.WaitGroup
-	for _, p := range s.providers {
-		wg.Add(1)
-		go func(p ConsensusProvider) {
-			defer wg.Done()
-			albums, err := p.Fetcher(ctx, artist)
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				out[p.Name] = provResult{ok: false}
-				return
-			}
-			out[p.Name] = provResult{albums: albums, ok: true}
-		}(p)
-	}
-	wg.Wait()
-	return out
+	return fanOutConsensus(ctx, s.providers, func(ctx context.Context, p ConsensusProvider) provResult {
+		albums, err := p.Fetcher(ctx, artist)
+		if err != nil {
+			return provResult{ok: false}
+		}
+		return provResult{albums: albums, ok: true}
+	})
 }
 
 // clusterEntities groups albums across providers into canonical entities by

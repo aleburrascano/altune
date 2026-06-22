@@ -13,6 +13,18 @@ type Step interface {
 	Rollback(ctx context.Context, ac *AcquisitionContext) error
 }
 
+// StepError identifies which pipeline step failed. It carries the step name as a
+// field so callers (failureReason) map outcomes on the structured Step, not by
+// parsing an error-message prefix. Its Error() preserves the historical
+// "step <name>: <err>" format so logs and any string matchers stay stable.
+type StepError struct {
+	Step string
+	Err  error
+}
+
+func (e *StepError) Error() string { return fmt.Sprintf("step %s: %v", e.Step, e.Err) }
+func (e *StepError) Unwrap() error { return e.Err }
+
 func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) error {
 	var completed []Step
 
@@ -28,7 +40,7 @@ func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) erro
 			slog.ErrorContext(ctx, "pipeline step failed",
 				"step", step.Name(), "error", err)
 			rollback(ctx, completed, ac)
-			return fmt.Errorf("step %s: %w", step.Name(), err)
+			return &StepError{Step: step.Name(), Err: err}
 		}
 
 		completed = append(completed, step)

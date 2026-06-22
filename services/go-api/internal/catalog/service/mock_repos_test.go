@@ -27,21 +27,22 @@ func newMockTrackRepo() *mockTrackRepo {
 	return &mockTrackRepo{tracks: make(map[string]*domain.Track)}
 }
 
-func (r *mockTrackRepo) Add(_ context.Context, track *domain.Track) (bool, error) {
+func (r *mockTrackRepo) Add(_ context.Context, track *domain.Track) (*domain.Track, bool, error) {
 	if r.errOnAdd != nil {
-		return false, r.errOnAdd
+		return nil, false, r.errOnAdd
 	}
-	// Dedup by DedupKey+UserId
+	// Dedup by DedupKey+UserId: return the existing track on conflict.
 	for _, t := range r.tracks {
 		if t.DedupKey == track.DedupKey && t.UserId == track.UserId {
+			created := false
 			if r.addReturnsCreated != nil {
-				return *r.addReturnsCreated, nil
+				created = *r.addReturnsCreated
 			}
-			return false, nil
+			return t, created, nil
 		}
 	}
 	r.tracks[track.ID.String()] = track
-	return true, nil
+	return track, true, nil
 }
 
 func (r *mockTrackRepo) GetByID(_ context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {

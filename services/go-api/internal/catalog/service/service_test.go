@@ -717,7 +717,9 @@ func TestPlaylistService_RemoveTrack(t *testing.T) {
 		{
 			name: "repo error propagates",
 			setup: func(plRepo *mockPlaylistRepo) (domain.PlaylistId, domain.TrackId) {
-				plRepo.errOnGetByID = errRepo
+				// RemoveTrack now loads via GetWithTracks (it routes through the
+				// aggregate), so the repo error surfaces there.
+				plRepo.errOnGetWithTracks = errRepo
 				return domain.NewPlaylistId(), domain.NewTrackId()
 			},
 			wantErr: errRepo,

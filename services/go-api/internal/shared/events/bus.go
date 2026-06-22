@@ -1,6 +1,7 @@
 package events
 
 import (
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,7 +27,12 @@ type userState struct {
 type InProcessBus struct {
 	users   sync.Map
 	ringCap int
+	dropped atomic.Uint64
 }
+
+// Dropped reports the total number of events dropped because a subscriber's
+// buffer was full — the lossy-by-design backpressure made observable.
+func (b *InProcessBus) Dropped() uint64 { return b.dropped.Load() }
 
 var _ Bus = (*InProcessBus)(nil)
 
@@ -76,6 +82,12 @@ func (b *InProcessBus) Publish(userId shared.UserId, eventType string, payload m
 		select {
 		case ch <- evt:
 		default:
+			// Subscriber buffer full: drop (the ring + Replay is the recovery
+			// path). Lossy by design, but no longer silent.
+			total := b.dropped.Add(1)
+			slog.Warn("events.subscriber_dropped",
+				"user_id", userId.String(), "event_type", eventType,
+				"event_id", evt.ID, "dropped_total", total)
 		}
 	}
 }
@@ -115,6 +127,18 @@ func (b *InProcessBus) Replay(userId shared.UserId, afterID uint64) []Event {
 	start := us.ringHead - us.ringLen
 	if start < 0 {
 		start += b.ringCap
+	}
+
+	// Gap detection: if the caller resumes after an id that has already been
+	// evicted from the ring, events between afterID and the oldest retained id
+	// are lost. The client receives only the retained tail — surface the gap so
+	// it is diagnosable (a resume that silently loses events otherwise looks like
+	// a clean resume). afterID 0 means "from the beginning" — no gap expected.
+	oldestID := us.ring[start].ID
+	if afterID > 0 && oldestID > afterID+1 {
+		slog.Warn("events.replay_gap",
+			"user_id", userId.String(), "after_id", afterID,
+			"oldest_retained_id", oldestID, "lost", oldestID-afterID-1)
 	}
 
 	var result []Event

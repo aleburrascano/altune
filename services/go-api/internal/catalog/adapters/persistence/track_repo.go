@@ -25,7 +25,7 @@ func NewPgxTrackRepository(pool *pgxpool.Pool) *PgxTrackRepository {
 	return &PgxTrackRepository{pool: pool}
 }
 
-func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (bool, error) {
+func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
 	var returnedID uuid.UUID
 	err := r.pool.QueryRow(ctx,
 		`INSERT INTO tracks (
@@ -43,12 +43,18 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (bool
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
+		// Dedup-key conflict: the row already exists. Return it so the caller does
+		// not have to issue its own lookup.
+		existing, lookupErr := r.GetByDedupKey(ctx, track.UserId, track.DedupKey)
+		if lookupErr != nil {
+			return nil, false, lookupErr
+		}
+		return existing, false, nil
 	}
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
-	return true, nil
+	return track, true, nil
 }
 
 func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {

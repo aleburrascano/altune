@@ -55,7 +55,7 @@ func TestPgxTrackRepo_AddAndGetByID(t *testing.T) {
 	cleanupTrack(t, pool, track.ID, userId)
 
 	// Act: Add
-	created, err := repo.Add(ctx, track)
+	_, created, err := repo.Add(ctx, track)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
@@ -105,7 +105,7 @@ func TestPgxTrackRepo_Add_DedupConflict(t *testing.T) {
 	track1 := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, track1.ID, userId)
 
-	created1, err := repo.Add(ctx, track1)
+	_, created1, err := repo.Add(ctx, track1)
 	if err != nil {
 		t.Fatalf("first Add() error = %v", err)
 	}
@@ -121,7 +121,7 @@ func TestPgxTrackRepo_Add_DedupConflict(t *testing.T) {
 	cleanupTrack(t, pool, track2.ID, userId)
 
 	// Act: second Add with same dedup key
-	created2, err := repo.Add(ctx, track2)
+	_, created2, err := repo.Add(ctx, track2)
 	if err != nil {
 		t.Fatalf("second Add() error = %v", err)
 	}
@@ -144,7 +144,7 @@ func TestPgxTrackRepo_ListForUser(t *testing.T) {
 		tracks[i] = newTestTrackForDB(t, userId)
 		tracks[i].AddedAt = time.Now().UTC().Add(time.Duration(i) * time.Second)
 		cleanupTrack(t, pool, tracks[i].ID, userId)
-		if _, err := repo.Add(ctx, tracks[i]); err != nil {
+		if _, _, err := repo.Add(ctx, tracks[i]); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
 	}
@@ -190,7 +190,7 @@ func TestPgxTrackRepo_Update(t *testing.T) {
 	track := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, track.ID, userId)
 
-	if _, err := repo.Add(ctx, track); err != nil {
+	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 
@@ -228,7 +228,7 @@ func TestPgxTrackRepo_Delete(t *testing.T) {
 	track := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, track.ID, userId)
 
-	if _, err := repo.Add(ctx, track); err != nil {
+	if _, _, err := repo.Add(ctx, track); err != nil {
 		t.Fatalf("Add() error = %v", err)
 	}
 

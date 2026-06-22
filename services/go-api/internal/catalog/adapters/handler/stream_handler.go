@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 	"time"
@@ -36,15 +35,7 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 
 	out, err := h.svc.Execute(r.Context(), userId, trackId)
 	if err != nil {
-		switch {
-		case errors.Is(err, service.ErrTrackNotFound):
-			httputil.NotFound(w, "track not found")
-		case errors.Is(err, service.ErrAudioNotAvailable):
-			httputil.NotFound(w, "audio not available")
-		default:
-			slog.ErrorContext(r.Context(), "stream track failed", "error", err)
-			httputil.InternalError(w)
-		}
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 	defer out.Reader.Close()
