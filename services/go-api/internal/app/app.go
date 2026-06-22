@@ -267,9 +267,26 @@ func (a *App) setup(ctx context.Context) error {
 		)
 	}
 
+	// Last.fm detail-open enrichment: listen-based popularity (listeners/
+	// playcount), weighted tags, bio, the similar-artist graph, and the MBID
+	// bridge (docs/providers/lastfm.md cap 3). Only when a Last.fm key is
+	// configured; nil degrades to an empty DTO.
+	var lastfmEnrichSvc *discoveryService.LastFmEnrichmentService
+	if a.cfg.HasLastFM() {
+		lfmEnricher := providers.NewLastFmAdapter(
+			&http.Client{Timeout: 10 * time.Second},
+			a.cfg.LastFMAPIKey,
+		)
+		lastfmEnrichSvc = discoveryService.NewLastFmEnrichmentService(
+			lfmEnricher,
+			discoveryCacheAdapters.NewRedisLastFmEnrichmentCache(a.redisClient),
+		)
+	}
+
 	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, relatedSvc, enrichSvc, suggestSvc, eventSvc)
 	discoveryH.WithDiscogsEnrichment(discogsEnrichSvc)
 	discoveryH.WithDiscogsArtistEnrichment(discogsArtistEnrichSvc)
+	discoveryH.WithLastFmEnrichment(lastfmEnrichSvc)
 
 	a.startVocabularyRefresh(vocabStore)
 

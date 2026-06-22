@@ -229,6 +229,28 @@ type DiscogsArtistEnrichmentCache interface {
 	SetNegative(ctx context.Context, nameKey string) error
 }
 
+// LastFmEnricher looks up Last.fm detail-open enrichment for one entity
+// (docs/providers/lastfm.md cap 3). Last.fm's *.getInfo methods take entity
+// names directly and fuzzy-match server-side (autocorrect), so there is no
+// separate id-resolution step — a single Lookup per opened entity. artistName
+// is the artist; entityTitle is the track/album title (empty for the artist
+// kind). Implemented by the Last.fm adapter; consumed by LastFmEnrichmentService.
+type LastFmEnricher interface {
+	Lookup(ctx context.Context, kind domain.ResultKind, artistName, entityTitle string) (domain.LastFmEnrichment, error)
+}
+
+// LastFmEnrichmentCache is a read-through cache of LastFmEnrichment keyed by a
+// normalized (kind, artist, title) name key — Last.fm has no stable id for the
+// request, so the name key is the handle. The negative path records that a name
+// resolved to nothing, so an unresolved entity is not re-looked-up every open.
+// A nil-backed implementation is a no-op.
+type LastFmEnrichmentCache interface {
+	Get(ctx context.Context, nameKey string) (domain.LastFmEnrichment, bool, error)
+	Set(ctx context.Context, nameKey string, e domain.LastFmEnrichment) error
+	GetNegative(ctx context.Context, nameKey string) (bool, error)
+	SetNegative(ctx context.Context, nameKey string) error
+}
+
 type DiscogsArtistInfo struct {
 	ID      int
 	Name    string
