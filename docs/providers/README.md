@@ -49,7 +49,7 @@ truly private/unlisted content never surfaces.
 | YouTube Music | _stub_ | ⬜ | Via `ytmusic` lib; full internal surface un-audited |
 | MusicBrainz | [musicbrainz.md](musicbrainz.md) | ✅ live-probed 2026-06-22 / 06-21 | **Fully maximized.** Search + identity/consensus + `inc=` enrichment + CAA artwork; identity-merge (cap 4) & search-list artwork (cap 5) ✅ eval-passed (top-3 99.4%, ADR-0011); Fanart.tv (cap 6) ✅ live-verified. Only the cold-entity background MBID-warm worker remains deferred |
 | Last.fm | _stub_ | ⬜ | Public API key |
-| Discogs | _stub_ | ⬜ | Token API; discography enrichment |
+| Discogs | [discogs.md](discogs.md) | ✅ live-probed 2026-06-22 | **Fully maximized (caps 1–7 built).** Artwork fallback (≤600px) + artist identity consensus + **detail-open album enrichment** (credits/personnel, styles, label/catalog, formats/companies, community rating) + **artist enrichment** (bio, name history, group/member links, external links) via `DiscogsEnricher` → `GET /discovery/enrichment/discogs[/artist]` → mobile `DiscogsEnrichmentSection` / `DiscogsArtistSection`. Token API, 60 req/min. No ISRC/MBID — resolves via structured artist+title / artist-name search. Optional refinements only: tighter matching via the MB-bridge discogs id; styles/community into rank (eval-gated) |
 
 ## How to audit a provider
 
