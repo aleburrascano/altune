@@ -66,7 +66,7 @@ func (a *MusicBrainzAdapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *MusicBrainzAdapter) SearchTimeout() time.Duration {
-	return 4 * time.Second
+	return 5 * time.Second
 }
 
 func (a *MusicBrainzAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
