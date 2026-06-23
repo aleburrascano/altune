@@ -46,6 +46,12 @@ export class SSEClient {
     const token = await this.getToken();
     if (!token || this.disposed) return;
 
+    // Close any existing connection first. connect() can be invoked again while
+    // one is already open (AppState 'active', a scheduled reconnect, or a token
+    // race); without this the previous XHR keeps streaming and the server
+    // accrues duplicate SSE connections (the connection-churn bug).
+    this.closeConnection();
+
     this.processedLength = 0;
     this.buffer = '';
 
@@ -87,10 +93,22 @@ export class SSEClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    if (this.xhr) {
-      this.xhr.abort();
-      this.xhr = null;
-    }
+    this.closeConnection();
+  }
+
+  /**
+   * Aborts the active XHR after detaching its handlers, so the teardown does not
+   * fire onerror/onloadend -> scheduleReconnect (which would turn an intentional
+   * close into a reconnect storm).
+   */
+  private closeConnection(): void {
+    const xhr = this.xhr;
+    if (!xhr) return;
+    xhr.onprogress = null;
+    xhr.onerror = null;
+    xhr.onloadend = null;
+    xhr.abort();
+    this.xhr = null;
   }
 
   dispose(): void {
