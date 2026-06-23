@@ -229,15 +229,25 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 	return results, nil
 }
 
+// lastfmAlbumsLimit caps artist.gettopalbums. The default 50 is deliberate, not
+// a truncation bug: past the top ~50-by-playcount the method returns the
+// artist's entire credited-on graph (compilations, "various artists"
+// appearances, live bootlegs, singles-as-albums), not real discography. A prod
+// coverage scan at limit=500 exploded the album union 21× with this noise, so
+// real deep discography is sourced from MusicBrainz/Deezer (identifier-backed)
+// instead. See docs/providers/maximization-audit-2026-06-22.md §3.3.
+const lastfmAlbumsLimit = 50
+
 func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=artist.gettopalbums&artist=%s&api_key=%s&format=json&limit=50",
-		url.QueryEscape(artistName), a.apiKey)
+	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=artist.gettopalbums&artist=%s&api_key=%s&format=json&limit=%d",
+		url.QueryEscape(artistName), a.apiKey, lastfmAlbumsLimit)
 
 	var body struct {
 		TopAlbums struct {
 			Album []struct {
 				Name      string `json:"name"`
 				PlayCount int    `json:"playcount"`
+				MBID      string `json:"mbid"`
 				URL       string `json:"url"`
 				Artist    struct {
 					Name string `json:"name"`
@@ -254,19 +264,28 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 	}
 
 	results := make([]domain.SearchResult, 0, len(body.TopAlbums.Album))
-	for _, a := range body.TopAlbums.Album {
-		if a.Name == "(null)" || a.Name == "" {
+	for _, al := range body.TopAlbums.Album {
+		if al.Name == "(null)" || al.Name == "" {
 			continue
 		}
 		imageURL := ""
-		for _, img := range a.Image {
+		for _, img := range al.Image {
 			if img.Size == "extralarge" {
 				imageURL = img.Text
 			}
 		}
-		results = append(results, domain.NewProviderResult(domain.ResultKindAlbum, a.Name, a.Artist.Name, imageURL,
-			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
-			nil))
+		// mbid bridges the album into identifier-based merge; playcount is a
+		// popularity signal — both were previously dropped on the floor.
+		extras := make(map[string]any)
+		if al.MBID != "" {
+			extras["mbid"] = al.MBID
+		}
+		if al.PlayCount > 0 {
+			extras["playcount"] = int64(al.PlayCount)
+		}
+		results = append(results, domain.NewProviderResult(domain.ResultKindAlbum, al.Name, al.Artist.Name, imageURL,
+			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(al.URL), URL: al.URL},
+			extras))
 	}
 	return results, nil
 }

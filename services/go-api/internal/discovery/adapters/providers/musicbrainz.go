@@ -348,6 +348,31 @@ func (a *MusicBrainzAdapter) ValidateArtistAlbums(
 	}, nil
 }
 
+// ListArtistDiscography resolves the artist by name and lists their
+// release-groups as album SearchResults — the contributor counterpart to
+// ValidateArtistAlbums (which only filters a supplied album list). Wiring MB's
+// consensus fetcher to this is what lets MB actually cast votes: the prior
+// ValidateArtistAlbums(ctx, name, nil) always returned empty because the
+// filter loop never ran over a nil input slice.
+func (a *MusicBrainzAdapter) ListArtistDiscography(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+	mbid, err := a.resolveArtistMBID(ctx, artistName)
+	if err != nil {
+		return nil, err
+	}
+	if mbid == "" {
+		return nil, nil
+	}
+	rgs, err := a.fetchReleaseGroups(ctx, mbid)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.SearchResult, 0, len(rgs))
+	for _, rg := range rgs {
+		results = append(results, mapMBReleaseGroup(rg))
+	}
+	return results, nil
+}
+
 func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name string) (*ports.ArtistIdentity, error) {
 	artists, err := a.fetchArtistMatches(ctx, name)
 	if err != nil {

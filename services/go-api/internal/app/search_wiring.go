@@ -97,11 +97,10 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 			Name: "musicbrainz",
 			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
-				validated, err := mb.ValidateArtistAlbums(ctx, artistName, nil)
-				if err != nil || validated == nil {
-					return nil, err
-				}
-				return validated.Confirmed, nil
+				// List MB's discography so it casts real votes. The prior
+				// ValidateArtistAlbums(_, nil) was a filter over a nil slice and
+				// always returned empty — MB contributed nothing to consensus.
+				return mb.ListArtistDiscography(ctx, artistName)
 			},
 		})
 	}
