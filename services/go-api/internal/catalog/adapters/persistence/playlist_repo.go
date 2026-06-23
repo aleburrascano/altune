@@ -235,11 +235,12 @@ func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, playlistId do
 
 func (r *PgxPlaylistRepository) GetPreviewArtwork(ctx context.Context, playlistId domain.PlaylistId) ([]string, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT DISTINCT t.artwork_url
+		`SELECT t.artwork_url
 		FROM playlist_tracks pt
 		JOIN tracks t ON t.id = pt.track_id
 		WHERE pt.playlist_id = $1 AND t.artwork_url IS NOT NULL
-		ORDER BY pt.position ASC
+		GROUP BY t.artwork_url
+		ORDER BY MIN(pt.position) ASC
 		LIMIT 4`,
 		playlistId.UUID(),
 	)

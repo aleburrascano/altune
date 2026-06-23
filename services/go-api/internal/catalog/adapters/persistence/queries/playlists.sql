@@ -46,9 +46,10 @@ WHERE playlist_id = $1 AND track_id = $2;
 SELECT count(*) FROM playlist_tracks WHERE playlist_id = $1;
 
 -- name: GetPreviewArtwork :many
-SELECT DISTINCT t.artwork_url
+SELECT t.artwork_url
 FROM playlist_tracks pt
 JOIN tracks t ON t.id = pt.track_id
 WHERE pt.playlist_id = $1 AND t.artwork_url IS NOT NULL
-ORDER BY pt.position ASC
+GROUP BY t.artwork_url
+ORDER BY MIN(pt.position) ASC
 LIMIT 4;
