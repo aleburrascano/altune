@@ -112,7 +112,9 @@ Two keyless endpoints (`/search`, `/lookup`) + the mzstatic artwork transform. T
 ### 3.3 Last.fm (the coverage backbone — 9,937 unique entities)
 Public API, `api_key` query param only. The backbone, and it's capped.
 
-**The cap — [C]:** `GetArtistAlbums` hardcodes `artist.gettopalbums&limit=50` with no `page`. The API has **no documented max**; this truncates every artist's discography at 50 albums. Almost certainly a real chunk of the 15.2% gap, and it caps the source of two-thirds of the album union. It also drops the per-album `mbid` + `rank` it returns.
+**The cap — [C]:** `GetArtistAlbums` hardcodes `artist.gettopalbums&limit=50` with no `page`. The API has **no documented max**. It also drops the per-album `mbid` + `rank` it returns.
+
+> **Measurement correction (implemented + reverted 2026-06-22):** lifting the cap to `limit=500`+paginate was tried and **measured against prod — it floods coverage with noise, not real albums.** The album union exploded 21× (15,117 → 320,413), with Last.fm "uniquely" holding 302,242 entities (~1,030 "albums" per artist). Past the top ~50-by-playcount, `gettopalbums` returns the artist's entire *credited-on* graph (compilations, "various artists" appearances, live bootlegs, singles-as-albums), not discography. **The 50 cap is a deliberate quality cutoff, not a bug** — real deep discography is sourced from MusicBrainz/Deezer (identifier-backed). The page-size lift was reverted; only the `mbid`+`playcount` mapping (a clean identity/popularity win) was kept. This is the audit's per-provider research being overturned by direct measurement — the intended workflow.
 
 **Untapped:**
 | Move | Surface | Kind | Effort |
@@ -125,7 +127,7 @@ Public API, `api_key` query param only. The backbone, and it's capped.
 
 **[I]:** the "~5 req/s" limit is community lore, not in the ToS (which gives no number); there's also a 100 MB stored-data cap. Artist images are deprecated placeholders — keep MB-keyed.
 
-**Top 3:** lift the 50-album cap → `artist.getCorrection` → map the album tracklist.
+**Top 3:** map `mbid`+`playcount` (done) → `artist.getCorrection` → map the album tracklist. (The 50-album cap lift was tried and reverted — see the measurement correction above.)
 
 ### 3.4 MusicBrainz (the dead contributor)
 ws/2 API, 1 req/s limiter, MBID-keyed enrichment.
@@ -274,7 +276,7 @@ Currently **artwork-only**: one `GET /search` call mapped to `song_art_image_url
 
 ### Tier 0 — coverage/correctness bugs (S, do first, highest leverage)
 1. **iTunes 403 fix** — shared `rate.Limiter` ~17/min + real User-Agent + `country=US`. Unblocks ~half of iTunes (1,704+ unique reach). Off ranking path.
-2. **Last.fm 50-album cap** — `limit=500` + paginate; map `mbid`+`rank`. Un-caps the backbone (66% of the union).
+2. **Last.fm `mbid`+`playcount` mapping** — map the per-album identity/popularity fields the limit=50 call dropped. (The cap *lift* was tried and reverted: measured as noise, not coverage — see §3.3.)
 3. **MusicBrainz dead contributor** — `ListArtistDiscography` + one wiring line. Revives MB in live consensus. *Needs signal-b rerun + artist spot-check (changes detail-screen album lists).*
 
 These three widen the search/consensus union → **must clear `discoveryeval -mode eval -top-k 3`** (baseline 1773/1792) before trusting.
