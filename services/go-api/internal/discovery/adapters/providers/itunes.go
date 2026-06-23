@@ -8,17 +8,61 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
 )
 
 type ITunesAdapter struct {
-	client *http.Client
+	client  *http.Client
+	mu      sync.Mutex
+	lastReq time.Time
 }
 
 func NewITunesAdapter(client *http.Client) *ITunesAdapter {
 	return &ITunesAdapter{client: client}
+}
+
+// itunesMinInterval throttles this adapter to ~17 req/min, under Apple's
+// ~20 req/min/IP ceiling — exceeding it returns HTTP 403 (not 503). Without
+// this gate the fan-out (3 kind searches per query + per-album consensus
+// lookups) trivially burst past the ceiling and ~half of album searches 403.
+const itunesMinInterval = 3500 * time.Millisecond
+
+// itunesUserAgent identifies the client to Apple. The default Go user-agent
+// (Go-http-client/1.1) makes Apple's abuse heuristic stricter; a plain
+// identifying UA avoids that.
+const itunesUserAgent = "Altune/1.0 (music manager; self-hosted)"
+
+// rateLimit enforces itunesMinInterval. Mirrors the MusicBrainz limiter: each
+// caller reserves a distinct future slot under the lock so concurrent callers
+// fire spaced out instead of bursting (the bursting is what trips the 403).
+//
+// The limiter is per-adapter. iTunes is constructed as several instances
+// (search, consensus, artwork, content) that don't share this gate, but each
+// reflects a separate flow; for a personal/family-scale deployment the
+// per-instance budget is sufficient, and the search fan-out's 1.5s provider
+// timeout drops a throttled call rather than blocking the user.
+func (a *ITunesAdapter) rateLimit(ctx context.Context) {
+	a.mu.Lock()
+	next := a.lastReq.Add(itunesMinInterval)
+	if now := time.Now(); next.Before(now) {
+		next = now
+	}
+	a.lastReq = next
+	wait := time.Until(next)
+	a.mu.Unlock()
+	if wait <= 0 {
+		return
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+	}
 }
 
 func (a *ITunesAdapter) Name() domain.ProviderName { return domain.ProviderITunes }
@@ -40,10 +84,11 @@ func (a *ITunesAdapter) Search(ctx context.Context, query string, kinds map[doma
 
 func (a *ITunesAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
 	entity := itunesEntity(kind)
-	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&limit=15", url.QueryEscape(query), entity)
+	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&country=US&limit=15", url.QueryEscape(query), entity)
 
+	a.rateLimit(ctx)
 	var body itunesResponse
-	if err := getJSON(ctx, a.client, u, &body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
 		return nil, err
 	}
 
@@ -148,9 +193,10 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	}
 	entity := itunesEntity(kind)
 
-	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&limit=1", url.QueryEscape(query), entity)
+	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&country=US&limit=1", url.QueryEscape(query), entity)
+	a.rateLimit(ctx)
 	var body itunesResponse
-	if err := getJSON(ctx, a.client, u, &body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
 		return "", nil
 	}
 	for _, item := range body.Results {
@@ -189,11 +235,12 @@ func (a *ITunesAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 
 func (a *ITunesAdapter) lookupContent(ctx context.Context, id, entity string) ([]domain.SearchResult, error) {
 	u := fmt.Sprintf(
-		"https://itunes.apple.com/lookup?id=%s&entity=%s&limit=50",
+		"https://itunes.apple.com/lookup?id=%s&entity=%s&country=US&limit=50",
 		url.QueryEscape(id), entity,
 	)
+	a.rateLimit(ctx)
 	var body itunesResponse
-	if err := getJSON(ctx, a.client, u, &body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
 		return nil, err
 	}
 
@@ -232,7 +279,7 @@ func (a *ITunesAdapter) LookupAlbum(
 	profile domain.ArtistIdentityProfile,
 ) (domain.AlbumVerdict, int64, error) {
 	u := fmt.Sprintf(
-		"https://itunes.apple.com/search?term=%s&entity=album&limit=5",
+		"https://itunes.apple.com/search?term=%s&entity=album&country=US&limit=5",
 		url.QueryEscape(albumTitle),
 	)
 
@@ -240,6 +287,8 @@ func (a *ITunesAdapter) LookupAlbum(
 	if err != nil {
 		return domain.AlbumVerdictUnknown, 0, nil
 	}
+	req.Header.Set("User-Agent", itunesUserAgent)
+	a.rateLimit(ctx)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
