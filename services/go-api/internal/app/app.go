@@ -436,7 +436,10 @@ func buildDiscoveryProviders(cfg *config.Config, mb *providers.MusicBrainzAdapte
 	itunesClient := newDiscoveryClient()
 	providerList = append(providerList, providers.NewITunesAdapter(itunesClient))
 
-	providerList = append(providerList, providers.NewTheAudioDBAdapter(newDiscoveryClient()))
+	// TheAudioDB is intentionally NOT a search provider: its free key caps artist
+	// search at 1 result and it carries no ranking signal, so it fails the
+	// ambiguous-query case while Deezer/MB/Last.fm/YT already cover artists. It is
+	// kept as an artwork-by-identity resolver in buildArtworkChain. (audit §3.8)
 
 	if mb != nil {
 		providerList = append(providerList, mb)
