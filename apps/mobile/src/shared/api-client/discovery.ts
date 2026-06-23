@@ -87,12 +87,15 @@ export type ClickPayload = {
   confidence: DiscoveryConfidence;
 };
 
-export async function searchDiscovery(params: {
-  q: string;
-  kinds?: DiscoveryKind[];
-  limit?: number;
-  saveHistory?: boolean;
-}): Promise<DiscoverySearchResponse> {
+export async function searchDiscovery(
+  params: {
+    q: string;
+    kinds?: DiscoveryKind[];
+    limit?: number;
+    saveHistory?: boolean;
+  },
+  signal?: AbortSignal,
+): Promise<DiscoverySearchResponse> {
   const qs = new URLSearchParams({ q: params.q });
   if (params.kinds && params.kinds.length > 0) {
     qs.set('kinds', params.kinds.join(','));
@@ -103,7 +106,10 @@ export async function searchDiscovery(params: {
   if (params.saveHistory === false) {
     qs.set('save_history', 'false');
   }
-  return apiFetch<DiscoverySearchResponse>(`/v1/discovery/search?${qs.toString()}`);
+  return apiFetch<DiscoverySearchResponse>(
+    `/v1/discovery/search?${qs.toString()}`,
+    signal ? { signal } : undefined,
+  );
 }
 
 export async function suggestDiscovery(params: {
