@@ -448,7 +448,9 @@ func renderSignalB(report *discoveryService.CoverageReportB) string {
 		out += "_none_\n"
 	}
 	for _, g := range report.ProviderGaps {
-		out += fmt.Sprintf("- %s: missing %d / %d (%.1f%% gap)\n", g.Provider, g.Missing, g.Union, g.GapPct*100)
+		covered := g.Union - g.Missing
+		out += fmt.Sprintf("- %s: covered %d / %d (%.1f%% gap) — unique reach %d\n",
+			g.Provider, covered, g.Union, g.GapPct*100, g.Unique)
 	}
 
 	out += "\n## Caveats\n\n"

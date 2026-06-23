@@ -19,6 +19,7 @@ type ProviderGap struct {
 	Missing  int     `json:"missing"` // union entities this provider lacked
 	Union    int     `json:"union"`   // union entities across artists where it responded
 	GapPct   float64 `json:"gap_pct"` // missing / union, in [0,1]
+	Unique   int     `json:"unique"`  // entities ONLY this provider had (reach no one else covers)
 }
 
 // CoverageReportB is the entity-level cross-provider imbalance diagnostic.
@@ -76,6 +77,7 @@ func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, 
 
 	missing := map[string]int{}
 	union := map[string]int{}
+	unique := map[string]int{}
 	report := &CoverageReportB{
 		ProviderGaps: make([]ProviderGap, 0, len(s.providers)),
 		Caveats:      signalBCaveats(),
@@ -94,6 +96,16 @@ func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, 
 				}
 			}
 		}
+		// An entity held by exactly one provider is reach only that provider
+		// brings — the truest "did this provider expand coverage" signal.
+		for _, ent := range ac.entities {
+			if len(ent) != 1 {
+				continue
+			}
+			for prov := range ent {
+				unique[prov]++
+			}
+		}
 	}
 
 	for _, p := range s.providers {
@@ -107,6 +119,7 @@ func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, 
 			Missing:  missing[p.Name],
 			Union:    u,
 			GapPct:   gap,
+			Unique:   unique[p.Name],
 		})
 	}
 	return report, nil
