@@ -21,10 +21,60 @@ type MusicBrainzAdapter struct {
 	userAgent string
 	mu        sync.Mutex
 	lastReq   time.Time
+
+	identityMemo *mbMemo[*ports.ArtistIdentity]
+	releaseMemo  *mbMemo[[]mbReleaseGroup]
 }
 
+// mbMemoTTL bounds how long stable MB lookups (artist identity by name,
+// release-groups by MBID) are reused. Artist metadata and discography change
+// rarely; a few hours removes the repeated per-search / per-detail-open MB
+// round-trips that were timing out under MB's 1 req/s limit.
+const mbMemoTTL = 6 * time.Hour
+
 func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAdapter {
-	return &MusicBrainzAdapter{client: client, userAgent: userAgent}
+	return &MusicBrainzAdapter{
+		client:       client,
+		userAgent:    userAgent,
+		identityMemo: newMBMemo[*ports.ArtistIdentity](mbMemoTTL),
+		releaseMemo:  newMBMemo[[]mbReleaseGroup](mbMemoTTL),
+	}
+}
+
+// mbMemo is a small TTL cache for MB lookups whose inputs are stable. Only
+// successful results are stored — errors and timeouts are never cached, so a
+// transient MB failure self-heals on the next call. The working set (a
+// household's artists) is small, so no eviction beyond TTL is needed.
+type mbMemo[V any] struct {
+	mu  sync.RWMutex
+	ttl time.Duration
+	m   map[string]mbMemoEntry[V]
+}
+
+type mbMemoEntry[V any] struct {
+	val     V
+	expires time.Time
+}
+
+func newMBMemo[V any](ttl time.Duration) *mbMemo[V] {
+	return &mbMemo[V]{ttl: ttl, m: make(map[string]mbMemoEntry[V])}
+}
+
+func (c *mbMemo[V]) get(key string) (V, bool) {
+	c.mu.RLock()
+	e, ok := c.m[key]
+	c.mu.RUnlock()
+	if !ok || time.Now().After(e.expires) {
+		var zero V
+		return zero, false
+	}
+	return e.val, true
+}
+
+func (c *mbMemo[V]) put(key string, v V) {
+	c.mu.Lock()
+	c.m[key] = mbMemoEntry[V]{val: v, expires: time.Now().Add(c.ttl)}
+	c.mu.Unlock()
 }
 
 // rateLimit enforces MB's 1 req/sec policy. Call before every HTTP request.
@@ -374,11 +424,15 @@ func (a *MusicBrainzAdapter) ListArtistDiscography(ctx context.Context, artistNa
 }
 
 func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name string) (*ports.ArtistIdentity, error) {
+	nameNorm := textnorm.NormalizeForMatch(name)
+	if id, ok := a.identityMemo.get(nameNorm); ok {
+		return id, nil
+	}
+
 	artists, err := a.fetchArtistMatches(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	nameNorm := textnorm.NormalizeForMatch(name)
 
 	var first *mbArtistItem
 	candidateCount := 0
@@ -405,13 +459,15 @@ func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name str
 	if first.Area != nil {
 		area = first.Area.Name
 	}
-	return &ports.ArtistIdentity{
+	identity := &ports.ArtistIdentity{
 		MBID:           first.ID,
 		Disambiguation: first.Disambiguation,
 		BirthYear:      birthYear,
 		Area:           area,
 		ArtistType:     first.Type,
-	}, nil
+	}
+	a.identityMemo.put(nameNorm, identity)
+	return identity, nil
 }
 
 func parseBirthYear(begin string) int {
@@ -502,6 +558,9 @@ func (a *MusicBrainzAdapter) fetchRecordingMatches(ctx context.Context, query st
 }
 
 func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {
+	if rgs, ok := a.releaseMemo.get(mbid); ok {
+		return rgs, nil
+	}
 	u := fmt.Sprintf(
 		"https://musicbrainz.org/ws/2/release-group?artist=%s&type=album%%7Cep%%7Csingle&fmt=json&limit=100",
 		url.QueryEscape(mbid))
@@ -528,6 +587,7 @@ func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return nil, err
 	}
+	a.releaseMemo.put(mbid, body.ReleaseGroups)
 	return body.ReleaseGroups, nil
 }
 
