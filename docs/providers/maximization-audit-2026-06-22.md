@@ -2,9 +2,31 @@
 
 Cross-provider audit of every discovery provider in `services/go-api`, grounded in (a) two live prod coverage scans and (b) one deep research pass per provider (current adapter code + provider doc + web research into public/internal/scrape surface). Goal: find where each provider is **capped, broken, or under-mapped**, and rank concrete moves to squeeze more coverage and enrichment out of each.
 
-**Status:** research/audit only. Survivors route to `/feature-spec` or `/feature-plan`; nothing here is implemented except the unique-reach diagnostic (below). Anything that touches search ordering must clear the `discoveryeval -mode eval -top-k 3` gate per `services/go-api/CLAUDE.md`.
+**Status:** Tier 0 + Tier 1 + cross-cutting **shipped and verified** (see the Implementation log below); Tier 2/3 remain backlog. Anything that touches search ordering must clear the `discoveryeval -mode eval -top-k 3` gate per `services/go-api/CLAUDE.md`.
 
 **Confidence tags** carried from the research: **[C]** confirmed (read in code / official docs / live-probed this session) · **[I]** inferred (reasoned from API shape, not live-verified). Items marked [I] need a live probe before building.
+
+---
+
+## Implementation log (2026-06-22)
+
+What's been built from this backlog, newest first. Anything not listed is still backlog.
+
+### Shipped & verified
+- **Tier 0 bug fixes** — `43ee1db`. iTunes 403 throttle (per-adapter ~17/min limiter + UA + `country=US`), MusicBrainz dead-contributor revival (`ListArtistDiscography`). Last.fm cap *lift* tried and reverted as noise (§3.3); only its `mbid`+`playcount` mapping kept. Verified on prod: MB 0 → 14,790 covered (2,664 unique), iTunes 403s 161 → 0; top-3 eval held 98.7%.
+- **Tier 1 identity + coverage** — `f510ee2`. SoundCloud `publisher_metadata.isrc` (tracks now merge in the ISRC tier), iTunes `limit=15→200` + free fields (copyright, track/disc number, explicit).
+- **Tier 1 artwork** — `f510ee2`. CAA hero `front-500→1200`; Fanart.tv best-image by `likes`/`lang`; TheAudioDB MBID-deterministic artist lookup (`artist-mb.php`).
+- **Cross-cutting** — `f510ee2`. TheAudioDB demoted from the search fan-out (kept as artwork resolver).
+- **Eval gate (Tier 1 + cross-cutting, 300-sample top-3):** top-1 **98.7%** (baseline 97.2%), top-3 **99.0%** (baseline 98.9%) — net improvement, no regression.
+
+### Assessed and intentionally skipped
+- **Artwork-chain per-kind reorder** (cross-cutting) — *not done.* Fanart.tv album art is MBID-keyed (identity-correct) and sits behind CAA already; ranking it below name-searched iTunes for albums isn't clearly better. Left as-is.
+
+### Deferred, with reason (still backlog)
+- **Tier 1 enrichment** (Discogs per-track credits + liner notes + barcode, Last.fm album tracklist) — backend is straightforward, but the value surfaces through detail-screen sections that need a mobile change (untestable without a device) and new domain terms (glossary work). Not shipped to avoid wire fields the app doesn't yet render.
+- **Last.fm `artist.getCorrection`** — needs a merge consumer to be worth wiring; deferred until one exists.
+- **Tier 2** (Deezer related/radio, ListenBrainz, Genius enricher, Discogs editions, Last.fm similar/tag/geo, SoundCloud charts) — each is a new subsystem (port+adapter+service+handler+DI) and/or needs a surface that doesn't exist. Genuinely multi-session.
+- **Tier 3** (YT browse, SoundCloud acquisition, MB mirror) — environment-blocked (prod-IP probe / OCI SSH, device verification, infra).
 
 ---
 
@@ -274,27 +296,25 @@ Currently **artwork-only**: one `GET /search` call mapped to `song_art_image_url
 
 ## 4. Consolidated prioritized backlog
 
-### Tier 0 — coverage/correctness bugs (S, do first, highest leverage)
-1. **iTunes 403 fix** — shared `rate.Limiter` ~17/min + real User-Agent + `country=US`. Unblocks ~half of iTunes (1,704+ unique reach). Off ranking path.
-2. **Last.fm `mbid`+`playcount` mapping** — map the per-album identity/popularity fields the limit=50 call dropped. (The cap *lift* was tried and reverted: measured as noise, not coverage — see §3.3.)
-3. **MusicBrainz dead contributor** — `ListArtistDiscography` + one wiring line. Revives MB in live consensus. *Needs signal-b rerun + artist spot-check (changes detail-screen album lists).*
+### Tier 0 — coverage/correctness bugs (S) — ✅ DONE (`43ee1db`)
+1. ✅ **iTunes 403 fix** — per-adapter ~17/min limiter + real User-Agent + `country=US`. iTunes 403s 161 → 0 on prod.
+2. ✅ **Last.fm `mbid`+`playcount` mapping** — done. (The cap *lift* was tried and reverted: measured as noise, not coverage — see §3.3.)
+3. ✅ **MusicBrainz dead contributor** — `ListArtistDiscography` + one wiring line. MB 0 → 14,790 covered on prod. *Changes detail-screen album lists — eyeball on device.*
 
-These three widen the search/consensus union → **must clear `discoveryeval -mode eval -top-k 3`** (baseline 1773/1792) before trusting.
+### Tier 1 — zero/low-cost enrichment & identity (S) — partially done (`f510ee2`)
+- ✅ Identity: SoundCloud `isrc` (now merges in ISRC tier). ◻️ Discogs barcode, iTunes `amgArtistId`, TheAudioDB external-ID hub — deferred (TheAudioDB demoted; Discogs barcode needs cross-context UPC threading).
+- ✅ iTunes free fields (copyright/track#/explicit). ◻️ **Discarded enrichment** — Last.fm album tracklist, Discogs per-track credits + liner notes — deferred (need mobile detail-section wiring).
+- ◻️ Last.fm `artist.getCorrection` — deferred (no merge consumer yet).
+- ✅ iTunes `limit=200`; ✅ CAA hero `front-1200`; ✅ Fanart `likes`/`lang` selection; ✅ TheAudioDB MBID lookup. ◻️ Fanart `artistbackground` backdrop slot + personal key; TheAudioDB full artwork set — deferred (need detail-screen art slots).
 
-### Tier 1 — zero/low-cost enrichment & identity (S)
-- Identity keys already fetched: SoundCloud `isrc`, Discogs barcode, iTunes `amgArtistId`, TheAudioDB external-ID hub.
-- Already-fetched data discarded: Last.fm album tracklist, Discogs per-track credits + liner notes, iTunes free fields.
-- Last.fm `artist.getCorrection` (name normalization + free MBID).
-- iTunes `limit=200`; CAA hero `front-1200`; Fanart `artistbackground` backdrop + personal key + `likes`/`lang`; TheAudioDB full artwork set + MBID lookup.
-
-### Tier 2 — new capabilities (M, mostly need a `/feature-spec` surface)
+### Tier 2 — new capabilities (M, each a new subsystem + surface) — ◻️ backlog
 - Deezer `/artist/{id}/related` + `/artist/{id}/radio` (recommendation surface; cheapest ML stand-in).
 - ListenBrainz popularity by MBID (the popularity axis MB lacks).
 - Genius `GeniusEnricher` (per-song credits + song relationships).
 - Discogs `/masters/{id}/versions` editions + barcode-keyed resolve.
 - CAA per-release gallery; SoundCloud charts; Last.fm `track.getSimilar`/`tag`/`geo`.
 
-### Tier 3 — heavy / gated (L)
+### Tier 3 — heavy / gated (L) — ◻️ backlog (environment-blocked)
 - SoundCloud `media.transcodings` acquisition (verification-bound; product-vision payoff).
 - YouTube Music custom `browse` discography client — **deprioritized** (only 582 unique reach; validate prod-IP keyless first).
 - Local MusicBrainz mirror (defer until 1 req/s saturates).
