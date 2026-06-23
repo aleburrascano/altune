@@ -498,7 +498,15 @@ type scAPITrack struct {
 	PlaybackCount int64  `json:"playback_count"`
 	LikesCount    int64  `json:"likes_count"`
 	RepostsCount  int64  `json:"reposts_count"`
-	User          struct {
+	// PublisherMetadata carries the distributor-supplied ISRC on officially
+	// released uploads — the identity key that lets a SoundCloud track merge
+	// with the same recording from Deezer/MusicBrainz (often null for pure
+	// underground uploads, which is fine: it's additive).
+	PublisherMetadata struct {
+		ISRC       string `json:"isrc"`
+		AlbumTitle string `json:"album_title"`
+	} `json:"publisher_metadata"`
+	User struct {
 		Username string `json:"username"`
 	} `json:"user"`
 }
@@ -530,6 +538,14 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 	}
 	if g := strings.TrimSpace(t.Genre); g != "" {
 		extras["genre"] = g
+	}
+	// ISRC lifts the track from EntityResolutionNone into the isrc merge tier —
+	// SoundCloud tracks otherwise never merge with other providers (see merge.go).
+	if isrc := strings.TrimSpace(t.PublisherMetadata.ISRC); isrc != "" {
+		extras["isrc"] = isrc
+	}
+	if al := strings.TrimSpace(t.PublisherMetadata.AlbumTitle); al != "" {
+		extras["album"] = al
 	}
 
 	return domain.NewProviderResult(domain.ResultKindTrack, t.Title, t.User.Username, upgradeArtworkResolution(t.ArtworkURL),

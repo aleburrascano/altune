@@ -84,7 +84,9 @@ func (a *ITunesAdapter) Search(ctx context.Context, query string, kinds map[doma
 
 func (a *ITunesAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
 	entity := itunesEntity(kind)
-	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&country=US&limit=15", url.QueryEscape(query), entity)
+	// limit=200 is the API max (default 50) — deeper recall for merge at no extra
+	// rate cost (same single call). The fan-out trims to the requested limit.
+	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&country=US&limit=200", url.QueryEscape(query), entity)
 
 	a.rateLimit(ctx)
 	var body itunesResponse
@@ -132,6 +134,15 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 		if item.PreviewURL != "" {
 			extras["preview_url"] = item.PreviewURL
 		}
+		if item.TrackNumber > 0 {
+			extras["track_number"] = item.TrackNumber
+		}
+		if item.DiscNumber > 0 {
+			extras["disc_number"] = item.DiscNumber
+		}
+		if item.TrackExplicitness == "explicit" {
+			extras["explicit"] = true
+		}
 	case domain.ResultKindAlbum:
 		title = item.CollectionName
 		subtitle = item.ArtistName
@@ -140,6 +151,9 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 		}
 		if item.ReleaseDate != "" {
 			extras["release_date"] = item.ReleaseDate
+		}
+		if item.Copyright != "" {
+			extras["copyright"] = item.Copyright
 		}
 	case domain.ResultKindArtist:
 		title = item.ArtistName
@@ -362,6 +376,10 @@ type itunesItem struct {
 	PreviewURL        string `json:"previewUrl"`
 	TrackTimeMillis   int64  `json:"trackTimeMillis"`
 	TrackCount        int    `json:"trackCount"`
+	TrackNumber       int    `json:"trackNumber"`
+	DiscNumber        int    `json:"discNumber"`
 	ReleaseDate       string `json:"releaseDate"`
 	PrimaryGenreName  string `json:"primaryGenreName"`
+	Copyright         string `json:"copyright"`
+	TrackExplicitness string `json:"trackExplicitness"`
 }

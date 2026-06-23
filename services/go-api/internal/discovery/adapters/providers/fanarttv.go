@@ -37,10 +37,10 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 	}
 
 	if kind == domain.ResultKindArtist {
-		if img := firstImageURL(data, "artistthumb"); img != "" {
+		if img := bestFanartImage(data, "artistthumb"); img != "" {
 			return img, nil
 		}
-		if img := firstImageURL(data, "artistbackground"); img != "" {
+		if img := bestFanartImage(data, "artistbackground"); img != "" {
 			return img, nil
 		}
 		return "", nil
@@ -61,25 +61,40 @@ func albumCoverURL(data map[string]any, mbid string) string {
 	if !ok {
 		return ""
 	}
-	return firstImageURL(entry, "albumcover")
+	return bestFanartImage(entry, "albumcover")
 }
 
-func firstImageURL(data map[string]any, key string) string {
-	items, ok := data[key]
-	if !ok {
-		return ""
-	}
-	arr, ok := items.([]any)
+// bestFanartImage picks the best image of a Fanart.tv type instead of blindly
+// taking the first: it prefers community-favored art (highest `likes`) and
+// English/neutral `lang`, which avoids an arbitrary or wrong-locale first entry.
+// Each image object is {id, url, lang, likes(string)}.
+func bestFanartImage(data map[string]any, key string) string {
+	arr, ok := data[key].([]any)
 	if !ok || len(arr) == 0 {
 		return ""
 	}
-	first, ok := arr[0].(map[string]any)
-	if !ok {
-		return ""
+	bestURL := ""
+	bestScore := int64(-1)
+	for _, it := range arr {
+		m, ok := it.(map[string]any)
+		if !ok {
+			continue
+		}
+		u, _ := m["url"].(string)
+		if u == "" {
+			continue
+		}
+		var score int64
+		if likes, ok := m["likes"].(string); ok {
+			score = parseListeners(likes) // reuse the digit parser
+		}
+		if lang, _ := m["lang"].(string); lang == "en" || lang == "" {
+			score += 1_000_000 // language preference dominates the likes tiebreak
+		}
+		if score > bestScore {
+			bestScore = score
+			bestURL = u
+		}
 	}
-	url, ok := first["url"].(string)
-	if !ok {
-		return ""
-	}
-	return url
+	return bestURL
 }
