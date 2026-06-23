@@ -20,5 +20,8 @@
   },
   "dependencies": {
     "react-native-web": "^0.21.0"
+  },
+  "overrides": {
+    "react-native-worklets": "0.5.1"
   }
 }
