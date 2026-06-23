@@ -113,3 +113,14 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	w.bytes += n
 	return n, err
 }
+
+// Flush forwards to the underlying ResponseWriter so streaming handlers — the
+// SSE endpoint at /v1/events type-asserts http.Flusher — keep working through
+// this logging wrapper. Without it the assertion fails and SSE 500s.
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+var _ http.Flusher = (*statusWriter)(nil)
