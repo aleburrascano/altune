@@ -16,44 +16,53 @@ import (
 )
 
 type ITunesAdapter struct {
-	client  *http.Client
-	mu      sync.Mutex
-	lastReq time.Time
+	client *http.Client
+	mu     sync.Mutex
+	tat    time.Time // GCRA theoretical arrival time of the next conforming request
 }
 
 func NewITunesAdapter(client *http.Client) *ITunesAdapter {
 	return &ITunesAdapter{client: client}
 }
 
-// itunesMinInterval throttles this adapter to ~17 req/min, under Apple's
-// ~20 req/min/IP ceiling — exceeding it returns HTTP 403 (not 503). Without
-// this gate the fan-out (3 kind searches per query + per-album consensus
-// lookups) trivially burst past the ceiling and ~half of album searches 403.
-const itunesMinInterval = 3500 * time.Millisecond
+// iTunes rate limiting (GCRA token bucket). Apple's ceiling is ~20 req/min/IP —
+// exceeding it returns HTTP 403 (not 503). itunesEmitInterval sets the sustained
+// rate (~15 req/min, safely under the ceiling); itunesBurst lets a short run of
+// calls fire back-to-back before throttling kicks in. The burst is what makes a
+// single search usable: its 3 sequential kind calls fire immediately instead of
+// being spaced 3.5s apart (the old fixed-gap limiter blew the search SLA and made
+// iTunes time out on every query), while sustained load still stays under 403 range.
+const (
+	itunesEmitInterval = 4 * time.Second // sustained ~15 req/min
+	itunesBurst        = 4               // calls allowed back-to-back before spacing
+)
 
 // itunesUserAgent identifies the client to Apple. The default Go user-agent
 // (Go-http-client/1.1) makes Apple's abuse heuristic stricter; a plain
 // identifying UA avoids that.
 const itunesUserAgent = "Altune/1.0 (music manager; self-hosted)"
 
-// rateLimit enforces itunesMinInterval. Mirrors the MusicBrainz limiter: each
-// caller reserves a distinct future slot under the lock so concurrent callers
-// fire spaced out instead of bursting (the bursting is what trips the 403).
+// rateLimit blocks until the GCRA limiter admits a request. tat is the
+// theoretical arrival time of the next conforming request: a call is admitted
+// immediately while now is within the burst tolerance of tat, otherwise it waits
+// until then. Each admitted call pushes tat forward by one emit interval.
 //
 // The limiter is per-adapter. iTunes is constructed as several instances
 // (search, consensus, artwork, content) that don't share this gate, but each
 // reflects a separate flow; for a personal/family-scale deployment the
-// per-instance budget is sufficient, and the search fan-out's 1.5s provider
-// timeout drops a throttled call rather than blocking the user.
+// per-instance budget is sufficient.
 func (a *ITunesAdapter) rateLimit(ctx context.Context) {
+	const burstTolerance = time.Duration(itunesBurst-1) * itunesEmitInterval
+
 	a.mu.Lock()
-	next := a.lastReq.Add(itunesMinInterval)
-	if now := time.Now(); next.Before(now) {
-		next = now
+	now := time.Now()
+	if a.tat.Before(now) {
+		a.tat = now
 	}
-	a.lastReq = next
-	wait := time.Until(next)
+	wait := time.Until(a.tat.Add(-burstTolerance))
+	a.tat = a.tat.Add(itunesEmitInterval)
 	a.mu.Unlock()
+
 	if wait <= 0 {
 		return
 	}
@@ -64,6 +73,11 @@ func (a *ITunesAdapter) rateLimit(ctx context.Context) {
 	case <-ctx.Done():
 	}
 }
+
+// SearchTimeout overrides the fan-out default. iTunes runs three sequential
+// kind searches (~3s total at limit=200); the burst-tolerant limiter lets them
+// fire without spacing, but the 1.5s default is still too tight for three calls.
+func (a *ITunesAdapter) SearchTimeout() time.Duration { return 4 * time.Second }
 
 func (a *ITunesAdapter) Name() domain.ProviderName { return domain.ProviderITunes }
 
