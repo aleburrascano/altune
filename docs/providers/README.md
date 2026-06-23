@@ -41,7 +41,7 @@ truly private/unlisted content never surfaces.
 
 ## Cross-provider audit
 
-[**maximization-audit-2026-06-22.md**](maximization-audit-2026-06-22.md) — a single-pass audit of **all 11 providers** against two live prod coverage scans, with a consolidated prioritized backlog. It corrects several "Fully maximized" claims in the table below: it found **3 coverage bugs** (Last.fm capped at 50 albums/artist, iTunes 403'd on ~52% of calls, MusicBrainz casting zero consensus votes), that Deezer's "fully maximized" status covers enrichment but not its untapped recommendation surface, and that YouTube Music — the original "did it work" question — adds the least unique reach of any provider. Read it before acting on the per-provider notes below.
+[**maximization-audit-2026-06-22.md**](maximization-audit-2026-06-22.md) — a single-pass audit of **all 11 providers** against two live prod coverage scans, with a consolidated prioritized backlog. It corrects several "Fully maximized" claims in the table below: it found **3 coverage bugs** (Last.fm capped at 50 albums/artist, iTunes 403'd on ~52% of calls, MusicBrainz casting zero consensus votes), that Deezer's "fully maximized" status covers enrichment but not its untapped recommendation surface, and that YouTube Music — the original "did it work" question — adds the least unique reach of any provider. **Tier 0 + Tier 1 + cross-cutting are now shipped and eval-verified** (see the audit's Implementation log); Tier 2/3 remain backlog. Read it before acting on the per-provider notes below.
 
 ## Per-provider status
 
