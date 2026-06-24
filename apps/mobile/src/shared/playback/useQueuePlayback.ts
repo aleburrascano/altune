@@ -9,6 +9,7 @@ interface QueuePlaybackControls {
   playTrack: (track: PlaybackTrack) => void;
   skipToNext: () => void;
   skipToPrevious: () => void;
+  toggleShuffle: () => void;
 }
 
 export function useQueuePlayback(): QueuePlaybackControls {
@@ -42,5 +43,9 @@ export function useQueuePlayback(): QueuePlaybackControls {
     if (prevTrack) void play(prevTrack);
   }, [play]);
 
-  return { playFromList, playTrack, skipToNext, skipToPrevious };
+  const toggleShuffle = useCallback(() => {
+    useQueueStore.getState().toggleShuffle();
+  }, []);
+
+  return { playFromList, playTrack, skipToNext, skipToPrevious, toggleShuffle };
 }
