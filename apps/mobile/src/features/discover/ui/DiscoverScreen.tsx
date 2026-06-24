@@ -13,106 +13,17 @@
  * discover-top-result.
  */
 
-import { useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
-import { useEffect, useRef, useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
 
 import { Screen, SearchBar, Text, spacing, useTheme } from '@shared/ui';
-import { setSearchState } from '../search-state';
 import { DiscoverBody } from './DiscoverBody';
 import { SuggestionsList } from './SuggestionsList';
-import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
-import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
-import { useAutocompleteSuggestions } from '../hooks/useAutocompleteSuggestions';
-import { useRecordClick } from '../hooks/useRecordClick';
-import { useSearchHistory } from '../hooks/useSearchHistory';
-import { stashHandoffForDetail } from '../tap';
-import { _viewForState } from '../state';
-import type {
-  DiscoveryKind,
-  DiscoveryResult,
-  SearchHistoryItem,
-} from '../../../shared/api-client/discovery';
-
-type ResultsFilter = 'all' | DiscoveryKind;
+import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
 
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();
-  const router = useRouter();
-  const search = useDebouncedSearch({ debounceMs: 300, minChars: 2 });
-  const [filter, setFilter] = useState<ResultsFilter>('all');
-  const queryClient = useQueryClient();
-  const { data: searchData, isLoading: isSearching, error: searchError, refetch } = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
-  const suggestions = useAutocompleteSuggestions(search.inputValue);
-  const history = useSearchHistory();
-  const click = useRecordClick();
-  const [isFocused, setIsFocused] = useState(false);
-  const [suggestionsHidden, setSuggestionsHidden] = useState(false);
-
-  const showSuggestions = isFocused
-    && !suggestionsHidden
-    && search.inputValue.trim().length >= 2
-    && (suggestions.data?.suggestions?.length ?? 0) > 0;
-
-  useEffect(() => {
-    setSearchState(search.committedQuery, search.inputValue);
-  }, [search.committedQuery, search.inputValue]);
-
-  useEffect(() => {
-    if (searchData) {
-      void queryClient.invalidateQueries({ queryKey: ['discovery', 'history'] });
-    }
-  }, [searchData, queryClient]);
-
-  const prevQueryRef = useRef(search.committedQuery);
-  if (prevQueryRef.current !== search.committedQuery) {
-    prevQueryRef.current = search.committedQuery;
-    setFilter('all');
-  }
-
-  const view = _viewForState({
-    query: search.committedQuery,
-    isLoading: isSearching,
-    data: searchData,
-    error: searchError as Error | null,
-  });
-
-  const onHistoryTap = (item: SearchHistoryItem): void => {
-    search.setQuery(item.query);
-  };
-  const onClearHistory = (): void => {
-    queryClient.setQueryData(['discovery', 'history'], { items: [] });
-  };
-  const onResultTap = (result: DiscoveryResult, position: number): void => {
-    Keyboard.dismiss();
-    click.mutate({
-      query_norm: searchData?.query_norm ?? search.committedQuery,
-      kind: result.kind,
-      title: result.title,
-      subtitle: result.subtitle ?? null,
-      position,
-      confidence: result.confidence,
-    });
-    router.push(stashHandoffForDetail(result));
-  };
-  const onChangeText = (text: string): void => {
-    setSuggestionsHidden(false);
-    search.onChangeText(text);
-  };
-  const onRetry = (): void => {
-    search.setQuery(search.committedQuery.trim() || search.committedQuery);
-  };
-  const onSuggestionSelect = (text: string): void => {
-    setSuggestionsHidden(true);
-    search.setQuery(text);
-  };
-  const onSearchOriginal = (): void => {
-    if (searchData?.original_query) {
-      search.setQuery(searchData.original_query);
-    }
-  };
+  const d = useDiscoverLogic();
 
   return (
     <Screen>
@@ -123,41 +34,41 @@ export function DiscoverScreen(): ReactElement {
         </Text>
       </View>
       <SearchBar
-        value={search.inputValue}
-        onChangeText={onChangeText}
-        onSubmitEditing={() => { setSuggestionsHidden(true); search.onSubmit(); }}
-        onClear={search.onClear}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
-        focused={isFocused}
-        pending={search.inputValue.trim().length >= 2 && search.inputValue.trim() !== search.committedQuery}
-        suggestionsOpen={showSuggestions}
+        value={d.inputValue}
+        onChangeText={d.onChangeText}
+        onSubmitEditing={d.onSubmit}
+        onClear={d.onClear}
+        onFocus={() => d.setIsFocused(true)}
+        onBlur={() => d.setIsFocused(false)}
+        focused={d.isFocused}
+        pending={d.pending}
+        suggestionsOpen={d.showSuggestions}
         placeholder="Search music"
         testID="discover-search-input"
         theme={theme}
       >
-        {showSuggestions && (
+        {d.showSuggestions && (
           <SuggestionsList
-            suggestions={suggestions.data!.suggestions}
-            onSelect={onSuggestionSelect}
+            suggestions={d.suggestionItems}
+            onSelect={d.onSuggestionSelect}
           />
         )}
       </SearchBar>
       <DiscoverBody
-        view={view}
-        searchData={searchData}
-        history={history}
-        filter={filter}
-        onFilterChange={setFilter}
-        onHistoryTap={onHistoryTap}
-        onResultTap={onResultTap}
-        onRetry={onRetry}
-        onRefresh={() => { void refetch(); }}
-        isRefreshing={isSearching && searchData !== undefined}
-        correctedQuery={searchData?.corrected_query}
-        originalQuery={searchData?.original_query}
-        onSearchOriginal={onSearchOriginal}
-        onClearHistory={onClearHistory}
+        view={d.view}
+        searchData={d.searchData}
+        history={d.history}
+        filter={d.filter}
+        onFilterChange={d.setFilter}
+        onHistoryTap={d.onHistoryTap}
+        onResultTap={d.onResultTap}
+        onRetry={d.onRetry}
+        onRefresh={d.onRefresh}
+        isRefreshing={d.isRefreshing}
+        correctedQuery={d.correctedQuery}
+        originalQuery={d.originalQuery}
+        onSearchOriginal={d.onSearchOriginal}
+        onClearHistory={d.onClearHistory}
       />
       </Pressable>
     </Screen>
