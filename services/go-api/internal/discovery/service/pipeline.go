@@ -23,3 +23,11 @@ func rankPipeline(perProvider [][]domain.SearchResult, queryNorm string) []domai
 	ranked = CollapseArtistDuplicates(ranked)
 	return ranked
 }
+
+// rankPipelineNoReshape is rankPipeline minus the post-rank list-shaping tier
+// (EnforceDiversity + CollapseArtistDuplicates) — the eval baseline against
+// which the diversity harness measures what reshaping costs (plan 2026-06-24-001).
+// It is a pure read and never runs on the live search path.
+func rankPipelineNoReshape(perProvider [][]domain.SearchResult, queryNorm string) []domain.SearchResult {
+	return Rank(Merge(perProvider), queryNorm)
+}

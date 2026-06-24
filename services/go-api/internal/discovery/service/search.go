@@ -372,6 +372,24 @@ func (s *Service) persistHistory(
 	}
 }
 
+// RankVariantsForEval runs ONE provider fan-out and returns the ranked list
+// both with and without the post-rank reshaping tier (EnforceDiversity +
+// CollapseArtistDuplicates). Eval-only seam for the diversity harness (plan
+// 2026-06-24-001): a single fan-out keeps provider load identical to a normal
+// search — critical under provider rate limits — while exposing exactly what
+// reshaping changed. It deliberately skips display enrichment (artwork,
+// disambiguation), which fills fields and never reorders.
+func (s *Service) RankVariantsForEval(
+	ctx context.Context,
+	query *domain.SearchQuery,
+) (withReshape, withoutReshape []domain.SearchResult) {
+	searchQuery := CleanQuery(query.Raw)
+	queryNorm := textnorm.NormalizeForMatch(searchQuery)
+	perProvider, _ := s.fanOut(ctx, searchQuery, query.Kinds)
+	s.stampIdentities(ctx, perProvider)
+	return rankPipeline(perProvider, queryNorm), rankPipelineNoReshape(perProvider, queryNorm)
+}
+
 // WaitForBackground blocks until all best-effort background work (telemetry
 // emission, vocabulary ingest) finishes. The composition root calls it on
 // graceful shutdown; tests call it to observe background effects deterministically.

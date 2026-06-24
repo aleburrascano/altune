@@ -74,6 +74,30 @@ origin: grilling session 2026-06-24 (see memory: discovery-eval-harness-program)
 >     safe to attempt. (Per this package's CLAUDE.md: no hardcoded workarounds,
 >     fix the algorithm, measure against the top-K eval.)
 
+> **"Fix all of this" attempt + REVERT (2026-06-24).** Took on the score work.
+> Root cause confirmed deeper than expected: `SearchResult.Popularity` was **never
+> populated in the search path** (NewProviderResult left it 0; the rebuild dropped
+> the wiring), so the documented "Popularity > multi-source" design was inert and
+> same-named artists beat tracks via source accumulation. Wired it back:
+> `DerivePopularity` = log1p(max of Deezer rank/nb_fan, SoundCloud playback_count,
+> Last.fm listeners) — all data already in extras; parameter-free transform. On
+> isolated queries it looked right (Jump/Salty/Moonlight → tracks not obscure
+> artists; Drake/Bad Bunny still artist). A first guard fixed an album regression
+> (Scorpion) by only comparing popularity when both sides carry a signal.
+> **But the rigorous same-sample A/B (228 single-token entities) showed it
+> REGRESSES the hard corpus: top-1 68.0%→61.0%, top-3 81.1%→75.4%; exact corpus
+> stayed 100%.** Reason: this is a *personal-library* product — the user owns
+> *niche* tracks, and popularity surfaces the *famous* same-title track over the
+> user's own, which is exactly what library-as-truth penalizes. The artist-vs-track
+> "fix" and this regression are the same mechanism. **Reverted** `types.go` +
+> `rank.go` to HEAD (zero diff); kept only the harness work. The harness +
+> same-sample A/B did their job: caught that a plausible, doctrine-aligned change
+> is a net regression. **Lesson: earlier "+7pp" was sampling noise across random
+> samples — always A/B on an identical deterministic sample.** Net conclusion: the
+> exact-query flow (the real product bar) is already 100%; the bare-title hard
+> corpus is best left to multi-source/RRF, not popularity, for this niche-library
+> product.
+
 # test: Discovery eval-harness quality program
 
 ## Summary

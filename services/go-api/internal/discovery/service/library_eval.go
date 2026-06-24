@@ -79,6 +79,7 @@ type EvalResult struct {
 // "the right answer is visible in the top results", so both top-1 (strict) and
 // top-K (the relaxed bar) are reported.
 type EvalReport struct {
+	Corpus            string         `json:"corpus,omitempty"` // "" = exact, "hard" = title-only ambiguous
 	K                 int            `json:"k"`           // the top-K window evaluated
 	Total             int            `json:"total"`       // entities evaluated (includes skipped)
 	Evaluated         int            `json:"evaluated"`   // total - skipped (the rate denominator)
@@ -106,6 +107,35 @@ func (r EvalReport) TopKRate() float64 {
 	return float64(r.TopKPassed) / float64(r.Evaluated)
 }
 
+// QueryMode selects how the eval forms its search query from an entity. It is
+// what makes the eval discriminate: the exact corpus is trivially easy (an exact
+// "artist title" almost always ranks #1), while the title-only corpus is the
+// hard, ambiguous case — a bare title competes against same-named artists,
+// albums, and other tracks (the documented hardest case: "Humble", "Scorpion",
+// "Circles").
+type QueryMode int
+
+const (
+	QueryExact     QueryMode = iota // "artist title" — easy corpus
+	QueryTitleOnly                  // "title" — ambiguous/hard corpus
+)
+
+func (m QueryMode) queryFor(e LibraryEntity) string {
+	if m == QueryTitleOnly {
+		return e.Title
+	}
+	return e.Artist + " " + e.Title
+}
+
+// label is the corpus tag stamped into report metric names so exact and hard
+// baselines are distinct gate entries ("eval.top1_rate" vs "eval.hard_top1_rate").
+func (m QueryMode) label() string {
+	if m == QueryTitleOnly {
+		return "hard"
+	}
+	return ""
+}
+
 // RunLibraryEval searches "artist title" for every entity and checks whether the
 // entity appears within the top-k results. concurrency bounds parallel searches
 // against live provider rate limits (use 1 for a fake searcher in tests). k is
@@ -113,6 +143,12 @@ func (r EvalReport) TopKRate() float64 {
 // complete (throttled to ~5% steps). A per-entity search error is recorded as a
 // failure, never aborting the run.
 func RunLibraryEval(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency, k int, progress func(done, total int)) EvalReport {
+	return RunLibraryEvalMode(ctx, entities, searcher, concurrency, k, QueryExact, progress)
+}
+
+// RunLibraryEvalMode is RunLibraryEval with an explicit query mode — QueryExact
+// for the easy corpus, QueryTitleOnly for the hard ambiguous corpus.
+func RunLibraryEvalMode(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency, k int, mode QueryMode, progress func(done, total int)) EvalReport {
 	if concurrency < 1 {
 		concurrency = 1
 	}
@@ -134,7 +170,7 @@ func RunLibraryEval(ctx context.Context, entities []LibraryEntity, searcher Sear
 	for i, entity := range entities {
 		i, entity := i, entity
 		g.Go(func() error {
-			results[i] = evalOne(ctx, entity, searcher, k)
+			results[i] = evalOneQuery(ctx, mode.queryFor(entity), entity, searcher, k)
 			n := int(atomic.AddInt32(&done, 1))
 			if progress != nil && (n%step == 0 || n == total) {
 				progress(n, total)
@@ -142,17 +178,28 @@ func RunLibraryEval(ctx context.Context, entities []LibraryEntity, searcher Sear
 			return nil
 		})
 	}
-	_ = g.Wait() // evalOne never returns an error through the group
+	_ = g.Wait() // evalOneQuery never returns an error through the group
 
-	return aggregate(results, k)
+	report := aggregate(results, k)
+	report.Corpus = mode.label()
+	return report
 }
 
+// evalOne searches the exact "artist title" query — the default corpus. Kept as
+// the unit-tested entry; RunLibraryEvalMode uses evalOneQuery directly.
 func evalOne(ctx context.Context, entity LibraryEntity, searcher Searcher, k int) EvalResult {
+	return evalOneQuery(ctx, entity.Artist+" "+entity.Title, entity, searcher, k)
+}
+
+// evalOneQuery runs one eval against a caller-supplied query, matching against
+// the full entity (title + artist) regardless of what the query contained — so a
+// title-only query still verifies the result is the owned track, not a same-named
+// other track.
+func evalOneQuery(ctx context.Context, query string, entity LibraryEntity, searcher Searcher, k int) EvalResult {
 	if strings.TrimSpace(entity.Artist) == "" {
 		return EvalResult{Entity: entity, Outcome: EvalSkipped, MatchPosition: -1}
 	}
 
-	query := entity.Artist + " " + entity.Title
 	res := EvalResult{Entity: entity, Query: query, MatchPosition: -1}
 
 	shown, err := searcher.Search(ctx, query)
