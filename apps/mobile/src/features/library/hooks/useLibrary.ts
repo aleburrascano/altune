@@ -1,21 +1,18 @@
 /**
- * useLibrary — paginated track list via React Query's useInfiniteQuery.
+ * Library pagination helpers + the LibraryState shape.
  *
  * Per ADR-0005 (mobile server state) and view-library spec AC#3 (the client
- * stops fetching when `has_more` is false).
+ * stops fetching when `has_more` is false). The pure helpers below carry the
+ * pagination logic so they can be unit-tested without React Query / a
+ * QueryClientProvider / RNTL.
  *
- * The pagination logic lives in pure helpers `_nextOffsetFromPage` and
- * `_flattenPages` below so they can be unit-tested without spinning up React
- * Query / a QueryClientProvider / RNTL. The hook itself is a 10-line shell
- * that delegates to those helpers + React Query.
+ * The original `useInfiniteQuery`-backed `useLibrary()` hook was removed —
+ * it had no live caller (the sectioned library home fetches via
+ * `useLibraryHome`). When the expanded Songs view ships, rebuild the hook
+ * fresh on top of these helpers rather than reviving a dormant shell.
  */
 
-import { useInfiniteQuery } from '@tanstack/react-query';
-
-import { getTracks } from '../../../shared/api-client/tracks';
 import type { ListTracksResponse, TrackResponse } from '../../../shared/api-client/types';
-
-const PAGE_SIZE = 50;
 
 export type LibraryState = {
   items: TrackResponse[];
@@ -48,39 +45,4 @@ export function _nextOffsetFromPage(page: ListTracksResponse): number | undefine
  */
 export function _flattenPages(pages: ListTracksResponse[]): TrackResponse[] {
   return pages.flatMap((p) => p.items);
-}
-
-// fallow-ignore-next-line unused-export
-export function useLibrary(): LibraryState {
-  const {
-    data,
-    isLoading,
-    isFetchingNextPage,
-    isRefetching,
-    error,
-    hasNextPage,
-    fetchNextPage,
-    refetch,
-  } = useInfiniteQuery<ListTracksResponse>({
-    queryKey: ['library'],
-    queryFn: ({ pageParam }) => getTracks({ limit: PAGE_SIZE, offset: pageParam as number }),
-    initialPageParam: 0,
-    getNextPageParam: _nextOffsetFromPage,
-  });
-
-  return {
-    items: data ? _flattenPages(data.pages) : [],
-    total: data?.pages[0]?.total ?? 0,
-    isLoading,
-    isFetchingNextPage,
-    isRefetching,
-    error: error as Error | null,
-    hasNextPage,
-    fetchNextPage: () => {
-      void fetchNextPage();
-    },
-    refetch: () => {
-      void refetch();
-    },
-  };
 }

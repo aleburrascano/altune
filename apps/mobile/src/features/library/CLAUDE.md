@@ -22,7 +22,8 @@ Sectioned library home (revamp-library-v1 spec). Replaces the original flat Flat
 - `ui/PlaylistCover.tsx` — 2x2 collage from up to 4 artwork URLs.
 - `ui/PlaylistDetailScreen.tsx` — playlist detail: cover, rename (tap name), delete, tracklist with per-track remove. Route: `/library/playlist/[id]`.
 - `ui/CreatePlaylistModal.tsx` — modal with text input for naming a new playlist.
-- `hooks/useLibrary.ts` — original paginated `useInfiniteQuery` hook (kept for potential future use in expanded Songs view).
+- `hooks/useLibrary.ts` — pure pagination helpers (`_nextOffsetFromPage`, `_flattenPages`) + the `LibraryState` shape. The `useInfiniteQuery` hook was removed (no live caller); rebuild fresh on these helpers when the expanded Songs view ships.
+- `ui/library-to-discovery.ts` — pure `albumToDiscoveryResult` / `artistToDiscoveryResult` mappers (siblings of shared `trackToDiscoveryResult`); feature-local until a 2nd consumer.
 - `state.ts` — `_viewForState` pure helper (loading > error > empty > list).
 
 ## Patterns

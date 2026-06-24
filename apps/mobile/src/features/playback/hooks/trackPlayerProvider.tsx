@@ -123,12 +123,7 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     void play(trackToRetry);
   }, [play]);
 
-  const currentQueueTrack = useQueueStore((s) => {
-    if (s.tracks.length === 0 || s.currentIndex < 0) return null;
-    const trackIndex = s.playOrder[s.currentIndex];
-    if (trackIndex == null) return null;
-    return s.tracks[trackIndex] ?? null;
-  });
+  const currentQueueTrack = useQueueStore((s) => s.currentTrack());
 
   useEffect(() => {
     setTrack(currentQueueTrack);
