@@ -12,10 +12,11 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
+import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
 import { useAlbumDiscovery } from './useAlbumDiscovery';
 import { useAlbumTracks } from './useAlbumTracks';
-import { useLibraryTracksForAlbum, libraryTrackToDiscoveryResult } from './useLibraryTracks';
+import { useLibraryTracksForAlbum } from './useLibraryTracks';
 import { useSaveTrack } from './useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
 import { _isTrackInLibraryCache } from '../ui/helpers';
@@ -82,7 +83,7 @@ export function useAlbumDetailState(
   });
 
   const localTracks = useLibraryTracksForAlbum(result.title, result.subtitle);
-  const localAsDiscovery = localTracks.map(libraryTrackToDiscoveryResult);
+  const localAsDiscovery = localTracks.map(trackToDiscoveryResult);
 
   const [moreExpanded, setMoreExpanded] = useState(false);
   const [saveAllTapped, setSaveAllTapped] = useState(false);
