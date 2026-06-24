@@ -16,7 +16,7 @@ import { radius, spacing, useTheme } from '@shared/ui/theme';
  * state + layout, and the screens pass the per-mode bits as props. Extracted
  * after the 3 clone groups fallow flagged across the two screens.
  */
-export type AuthFormProps = {
+type AuthFormProps = {
   screenTestID: string;
   title: string;
   submitLabel: string;

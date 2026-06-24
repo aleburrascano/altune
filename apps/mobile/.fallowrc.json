@@ -10,7 +10,8 @@
     "jest/**"
   ],
   "ignoreDependencies": [
-    "react-doctor"
+    "react-doctor",
+    "expo-audio"
   ],
   "ignoreUnresolvedImports": [
     "@react-navigation/bottom-tabs"
@@ -31,15 +32,17 @@
       { "name": "feature-discover", "patterns": ["src/features/discover/**"] },
       { "name": "feature-library", "patterns": ["src/features/library/**"] },
       { "name": "feature-playback", "patterns": ["src/features/playback/**"] },
+      { "name": "feature-settings", "patterns": ["src/features/settings/**"] },
       { "name": "shared", "patterns": ["src/shared/**"] }
     ],
     "rules": [
-      { "from": "app", "allow": ["feature-auth", "feature-detail", "feature-discover", "feature-library", "feature-playback", "shared"] },
+      { "from": "app", "allow": ["feature-auth", "feature-detail", "feature-discover", "feature-library", "feature-playback", "feature-settings", "shared"] },
       { "from": "feature-auth", "allow": ["shared"] },
       { "from": "feature-detail", "allow": ["feature-playback", "shared"] },
       { "from": "feature-discover", "allow": ["shared"] },
       { "from": "feature-library", "allow": ["feature-auth", "shared"] },
       { "from": "feature-playback", "allow": ["feature-auth", "shared"] },
+      { "from": "feature-settings", "allow": ["feature-auth", "shared"] },
       { "from": "shared", "allow": ["feature-auth"] }
     ]
   },
