@@ -71,7 +71,7 @@ Per finding: file path · what's wrong · rule (if any) · concrete fix. End wit
 
 ### 4. Fix (only if `--fix`)
 
-Work critical-first, then quick-win suggestions. Commit fixes per area.
+Work critical-first. Commit fixes per area.
 
 ## Context management
 
