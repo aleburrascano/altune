@@ -22,7 +22,7 @@ type UseAlbumTracksParams = {
   provider: string;
   externalId: string;
   albumTitle?: string;
-  albumArtist?: string;
+  albumArtist?: string | undefined;
   allSources?: DiscoverySource[];
   enabled?: boolean;
 };

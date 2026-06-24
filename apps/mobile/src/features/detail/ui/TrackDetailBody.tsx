@@ -17,9 +17,9 @@ import { useSaveTrack } from '../hooks/useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
 
 import { isCurrentlyPlaying } from './helpers';
-import { PlayIconButton } from './PlayIconButton';
 import { RelatedTracksSection } from './RelatedTracksSection';
 
+import { PlayIconButton } from '@shared/ui/primitives/PlayIconButton';
 import { spacing } from '@shared/ui/theme/tokens';
 
 export type LateralNavHandle = {

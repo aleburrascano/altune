@@ -55,11 +55,7 @@ export function DetailScreen(): ReactElement {
   const { enriched: result } = useEnrichResult(rawResult ?? { kind: 'track', title: '', subtitle: null, image_url: null, confidence: 'low', sources: [], extras: {} });
   const lateralNav = useLateralNav();
 
-  if (rawResult === null) {
-    return <Redirect href="/discover" />;
-  }
-
-  const isFromLibrary = rawResult.sources.length === 0;
+  const isFromLibrary = (rawResult?.sources.length ?? 0) === 0;
   const isArtist = result.kind === 'artist';
   const isLibraryArtist = isArtist && isFromLibrary;
   const artistDiscovery = useArtistDiscovery({
@@ -70,6 +66,13 @@ export function DetailScreen(): ReactElement {
   // kind → providers decision; each comes back content-gated (null hides its
   // section). The resolved MusicBrainz HD artwork wins for the hero.
   const enrichments = useDetailEnrichments(result);
+
+  // All hooks are called above; only now is it safe to bail on an empty
+  // handoff (cold start / reload / deep link) — returning earlier would make
+  // useArtistDiscovery/useDetailEnrichments conditional and break hook order.
+  if (rawResult === null) {
+    return <Redirect href="/discover" />;
+  }
 
   const heroImageUrl =
     (enrichments.musicbrainz?.artwork_url ?? '') !== ''
