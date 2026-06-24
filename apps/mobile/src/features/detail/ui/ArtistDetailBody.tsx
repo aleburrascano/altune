@@ -1,7 +1,5 @@
-import { useState, type ReactElement } from 'react';
+import { type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-
-import { useRouter } from 'expo-router';
 
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
 
@@ -12,107 +10,43 @@ import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
-import { deriveAlbums } from '@shared/lib/derive-library-groups';
 
-import { useArtistContent } from '../hooks/useArtistContent';
-import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
-import { useLibraryTracksForArtist, libraryTrackToDiscoveryResult } from '../hooks/useLibraryTracks';
+import { useArtistDetailState } from '../hooks/useArtistDetailState';
 
 import { sharedStyles } from './helpers';
 import { DiscographySections } from './DiscographySections';
 
 export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean }): ReactElement {
-  const router = useRouter();
   const theme = useTheme();
-  const hasSources = !isFromLibrary && result.sources.length > 0;
-
-  const localTracks = useLibraryTracksForArtist(result.title);
-  const hasLibraryTracks = localTracks.length > 0;
-
-  const [exploreExpanded, setExploreExpanded] = useState(hasSources);
-
-  const discoverySearch = useArtistDiscovery({
-    artistName: result.title,
-    enabled: !hasSources && (exploreExpanded || hasLibraryTracks),
-  });
-
-  const effectiveSources = hasSources ? result.sources : (discoverySearch.sources.length > 0 ? discoverySearch.sources : result.sources);
-  const shouldFetchContent = effectiveSources.length > 0 && exploreExpanded;
-
-  const {
-    topTracks: apiTopTracks,
-    albums: apiAlbums,
-    isLoadingTracks: apiLoadingTracks,
-    isLoadingAlbums,
-    isErrorTracks: apiErrorTracks,
-    isErrorAlbums,
-    refetchTracks,
-    refetchAlbums,
-  } = useArtistContent({
-    sources: effectiveSources,
-    artistName: result.title,
-    enabled: shouldFetchContent,
-  });
-
-  const libraryTracksAsDiscovery = localTracks.map(libraryTrackToDiscoveryResult);
-  const libraryAlbums: DiscoveryResult[] = deriveAlbums(localTracks).map((g) => ({
-    kind: 'album' as const,
-    title: g.album,
-    subtitle: g.artist,
-    image_url: g.artworkUrl,
-    confidence: 'high' as const,
-    sources: [],
-    extras: {
-      track_count: g.trackCount,
-      ...(g.year != null ? { year: g.year } : {}),
-    },
-  }));
-
-  const topTracks = hasSources ? apiTopTracks : libraryTracksAsDiscovery;
-  const isLoadingTracks = hasSources ? apiLoadingTracks : false;
-  const isErrorTracks = hasSources ? apiErrorTracks : false;
-
-  const onTrackPress = (track: DiscoveryResult): void => {
-    setDetailHandoff({
-      ...track,
-      image_url: track.image_url ?? result.image_url,
-    });
-    router.push(detailRoute as '/discover/detail');
-  };
-
-  const onAlbumPress = (album: DiscoveryResult): void => {
-    setDetailHandoff({ ...album, subtitle: album.subtitle ?? result.title });
-    router.push(detailRoute as '/discover/detail');
-  };
+  const artist = useArtistDetailState(result, detailRoute, isFromLibrary);
 
   return (
     <View testID="detail-artist-content" style={styles.artistContent}>
       {/* Your Tracks */}
       <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
-        {hasSources ? 'Popular Tracks' : 'Your Tracks'}
+        {artist.hasSources ? 'Popular Tracks' : 'Your Tracks'}
       </Text>
-      {isLoadingTracks ? (
+      {artist.isLoadingTracks ? (
         <View testID="detail-top-tracks-loading" style={styles.sectionLoading}>
           <ActivityIndicator />
         </View>
-      ) : isErrorTracks ? (
+      ) : artist.isErrorTracks ? (
         <View testID="detail-top-tracks-error" style={styles.sectionError}>
           <Text variant="body" tone="danger">
             Couldn't load tracks.
           </Text>
-          <Button testID="detail-top-tracks-retry" label="Retry" onPress={() => refetchTracks()} style={sharedStyles.retryButton} />
+          <Button testID="detail-top-tracks-retry" label="Retry" onPress={() => artist.refetchTracks()} style={sharedStyles.retryButton} />
         </View>
-      ) : topTracks.length === 0 ? (
+      ) : artist.topTracks.length === 0 ? (
         <Text variant="body" tone="tertiary" style={styles.emptySection}>
           No tracks found.
         </Text>
       ) : (
-        topTracks.map((track, index) => (
+        artist.topTracks.map((track, index) => (
           <Pressable
             key={track.sources[0]?.external_id ?? index}
             testID={`detail-top-track-${index}`}
-            onPress={() => onTrackPress(track)}
+            onPress={() => artist.onTrackPress(track)}
             accessibilityRole="button"
             accessibilityLabel={`Play ${track.title}`}
             style={({ pressed }) => [sharedStyles.trackRow, pressed ? { opacity: 0.6 } : null]}
@@ -138,35 +72,35 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
       )}
 
       {/* Library Albums (when from library) */}
-      {!hasSources && libraryAlbums.length > 0 ? (
+      {!artist.hasSources && artist.libraryAlbums.length > 0 ? (
         <View style={sharedStyles.albumsSection}>
           <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
             Your Albums
           </Text>
-          <DiscographySections albums={libraryAlbums} onAlbumPress={onAlbumPress} />
+          <DiscographySections albums={artist.libraryAlbums} onAlbumPress={artist.onAlbumPress} />
         </View>
       ) : null}
 
       {/* Discovery Discography — always shown when hasSources, expandable when from library */}
-      {hasSources ? (
+      {artist.hasSources ? (
         <>
-          {isLoadingAlbums ? (
+          {artist.isLoadingAlbums ? (
             <View testID="detail-albums-loading" style={[styles.sectionLoading, sharedStyles.albumsSection]}>
               <ActivityIndicator />
             </View>
-          ) : isErrorAlbums ? (
+          ) : artist.isErrorAlbums ? (
             <View testID="detail-albums-error" style={[styles.sectionError, sharedStyles.albumsSection]}>
               <Text variant="body" tone="danger">
                 Couldn't load albums.
               </Text>
-              <Button testID="detail-albums-retry" label="Retry" onPress={() => refetchAlbums()} style={sharedStyles.retryButton} />
+              <Button testID="detail-albums-retry" label="Retry" onPress={() => artist.refetchAlbums()} style={sharedStyles.retryButton} />
             </View>
-          ) : apiAlbums.length === 0 ? (
+          ) : artist.apiAlbums.length === 0 ? (
             <Text variant="body" tone="tertiary" style={[styles.emptySection, sharedStyles.albumsSection]}>
               No albums found.
             </Text>
           ) : (
-            <DiscographySections albums={apiAlbums} onAlbumPress={onAlbumPress} />
+            <DiscographySections albums={artist.apiAlbums} onAlbumPress={artist.onAlbumPress} />
           )}
         </>
       ) : (
@@ -174,39 +108,39 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
           <View style={[styles.separator, { backgroundColor: theme.color.border }]} />
           <Pressable
             testID="detail-explore-discography"
-            onPress={() => setExploreExpanded((prev) => !prev)}
+            onPress={() => artist.setExploreExpanded((prev) => !prev)}
             accessibilityRole="button"
-            accessibilityLabel={exploreExpanded ? 'Collapse discography' : 'Explore full discography'}
+            accessibilityLabel={artist.exploreExpanded ? 'Collapse discography' : 'Explore full discography'}
             style={({ pressed }) => [styles.exploreHeader, pressed ? { opacity: 0.6 } : null]}
           >
             <Text variant="label" tone="accent">
               Explore Discography
             </Text>
-            {exploreExpanded ? (
+            {artist.exploreExpanded ? (
               <ChevronDown size={18} color={theme.color.accent} />
             ) : (
               <ChevronRight size={18} color={theme.color.accent} />
             )}
           </Pressable>
 
-          {exploreExpanded ? (
-            discoverySearch.isLoading || isLoadingAlbums ? (
+          {artist.exploreExpanded ? (
+            artist.discoveryLoading || artist.isLoadingAlbums ? (
               <View style={styles.sectionLoading}>
                 <ActivityIndicator />
               </View>
-            ) : discoverySearch.isError || isErrorAlbums ? (
+            ) : artist.discoveryError || artist.isErrorAlbums ? (
               <View style={styles.sectionError}>
                 <Text variant="caption" tone="secondary">
                   Couldn't load discography.
                 </Text>
-                <Button label="Retry" onPress={() => refetchAlbums()} style={sharedStyles.retryButton} />
+                <Button label="Retry" onPress={() => artist.refetchAlbums()} style={sharedStyles.retryButton} />
               </View>
-            ) : apiAlbums.length === 0 ? (
+            ) : artist.apiAlbums.length === 0 ? (
               <Text variant="caption" tone="tertiary" style={styles.emptySection}>
                 No additional albums found.
               </Text>
             ) : (
-              <DiscographySections albums={apiAlbums} onAlbumPress={onAlbumPress} />
+              <DiscographySections albums={artist.apiAlbums} onAlbumPress={artist.onAlbumPress} />
             )
           ) : null}
         </View>
