@@ -205,12 +205,3 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     return currentIndex > 0;
   },
 }));
-
-export const selectCurrentTrack = (s: QueueStore): PlaybackTrack | null =>
-  s.currentTrack();
-export const selectHasNext = (s: QueueStore): boolean => s.hasNext();
-export const selectHasPrevious = (s: QueueStore): boolean => s.hasPrevious();
-export const selectShuffled = (s: QueueStore): boolean => s.shuffled;
-export const selectRepeatMode = (s: QueueStore): RepeatMode => s.repeatMode;
-export const selectQueueLength = (s: QueueStore): number => s.playOrder.length;
-export const selectSource = (s: QueueStore): QueueSource | null => s.source;
