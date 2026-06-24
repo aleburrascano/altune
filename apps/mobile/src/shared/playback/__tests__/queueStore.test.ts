@@ -147,7 +147,7 @@ describe('toggleShuffle', () => {
   });
 
   it('does nothing for single-track queue', () => {
-    useQueueStore.getState().loadQueue([tracks[0]], 0, null);
+    useQueueStore.getState().loadQueue([tracks[0]!], 0, null);
     useQueueStore.getState().toggleShuffle();
     expect(useQueueStore.getState().shuffled).toBe(false);
   });
@@ -213,7 +213,7 @@ describe('removeFromQueue', () => {
   });
 
   it('clears queue when last track removed', () => {
-    useQueueStore.getState().loadQueue([tracks[0]], 0, null);
+    useQueueStore.getState().loadQueue([tracks[0]!], 0, null);
     useQueueStore.getState().removeFromQueue(0);
     expect(useQueueStore.getState().tracks.length).toBe(0);
   });

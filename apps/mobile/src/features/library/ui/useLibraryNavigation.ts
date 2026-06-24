@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import type { useRouter } from 'expo-router';
 
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';

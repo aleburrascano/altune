@@ -19,7 +19,7 @@ import type { DiscoverView } from '../state';
 
 type ResultsFilter = 'all' | DiscoveryKind;
 
-const FILTER_CHIPS: ReadonlyArray<{ filter: ResultsFilter; label: string; testID: string }> = [
+const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: string }[] = [
   { filter: 'all', label: 'All', testID: 'discover-filter-all' },
   { filter: 'album', label: 'Albums', testID: 'discover-filter-album' },
   { filter: 'track', label: 'Songs', testID: 'discover-filter-track' },

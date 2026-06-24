@@ -3,7 +3,9 @@
  * altune actually uses. Keeps the rest of the mobile codebase from importing
  * `@supabase/supabase-js` directly.
  */
-export type { Session, User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
+
+export type { Session, User };
 
 /**
  * `useSession`'s exposed state, modeled as a discriminated union per
@@ -12,5 +14,5 @@ export type { Session, User } from '@supabase/supabase-js';
  */
 export type SessionState =
   | { status: 'loading' }
-  | { status: 'signed-in'; session: import('@supabase/supabase-js').Session }
+  | { status: 'signed-in'; session: Session }
   | { status: 'signed-out' };

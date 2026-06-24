@@ -5,7 +5,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 const mockSdkSignOut = jest.fn();
 jest.mock('../../../shared/auth/supabaseClient', () => ({

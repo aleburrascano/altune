@@ -11,15 +11,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
+import { useArtistContent } from '../hooks/useArtistContent';
+import type { DiscoverySource } from '../../../shared/api-client/discovery';
+
 const mockGetArtistAlbums = jest.fn();
 const mockGetArtistTopTracks = jest.fn();
 jest.mock('../../../shared/api-client/discovery', () => ({
   getArtistAlbums: (...args: unknown[]) => mockGetArtistAlbums(...args),
   getArtistTopTracks: (...args: unknown[]) => mockGetArtistTopTracks(...args),
 }));
-
-import { useArtistContent } from '../hooks/useArtistContent';
-import type { DiscoverySource } from '../../../shared/api-client/discovery';
 
 function _src(provider: string, externalId: string): DiscoverySource {
   return { provider, external_id: externalId, url: `https://x/${externalId}` };

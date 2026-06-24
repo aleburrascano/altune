@@ -11,7 +11,7 @@ interface PlaylistData {
   name: string;
   track_count: number;
   preview_artwork_urls: string[];
-  tracks?: Array<{ duration_seconds: number | null }>;
+  tracks?: { duration_seconds: number | null }[];
 }
 
 interface PlaylistHeroProps {
@@ -25,7 +25,7 @@ interface PlaylistHeroProps {
   onShuffle: () => void;
 }
 
-function formatTotalDuration(tracks: Array<{ duration_seconds: number | null }> | undefined): string {
+function formatTotalDuration(tracks: { duration_seconds: number | null }[] | undefined): string {
   if (!tracks || tracks.length === 0) return '';
   const totalSec = tracks.reduce((sum, t) => sum + (t.duration_seconds ?? 0), 0);
   if (totalSec === 0) return '';

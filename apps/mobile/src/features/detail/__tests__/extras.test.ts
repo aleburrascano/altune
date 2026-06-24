@@ -1,4 +1,4 @@
-﻿/**
+/**
  * trackInfoRows / formatDuration — present extras render in order; absent or
  * empty keys are omitted (view-result-detail slice 13, AC#3).
  *

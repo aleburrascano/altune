@@ -1,8 +1,10 @@
-﻿/**
+/**
  * useLateralNav — search-and-navigate for lateral browsing (AC#11-13).
  */
 
 import { renderHook, act, waitFor } from '@testing-library/react-native';
+
+import { useLateralNav } from '../hooks/useLateralNav';
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
@@ -19,8 +21,6 @@ const mockSetDetailHandoff = jest.fn();
 jest.mock('../../../shared/lib/detail-handoff', () => ({
   setDetailHandoff: (result: unknown) => mockSetDetailHandoff(result),
 }));
-
-import { useLateralNav } from '../hooks/useLateralNav';
 
 afterEach(() => {
   jest.clearAllMocks();

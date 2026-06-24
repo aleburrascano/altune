@@ -3,20 +3,20 @@
  * (view-result-detail slice 15). Renders the hook against a real QueryClient
  * seeded with a ['library'] cache; createTrack is mocked.
  */
-/* eslint-disable @typescript-eslint/no-require-imports */
+ 
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
+import { useSaveTrack } from '../hooks/useSaveTrack';
+import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '../../../shared/api-client/types';
+
 const mockCreateTrack = jest.fn();
 jest.mock('../../../shared/api-client/tracks', () => ({
   createTrack: (body: unknown) => mockCreateTrack(body),
 }));
-
-import { useSaveTrack } from '../hooks/useSaveTrack';
-import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '../../../shared/api-client/types';
 
 function _existing(id: string): TrackResponse {
   return {

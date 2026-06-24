@@ -8,10 +8,10 @@
 
 import { fireEvent, render } from '@testing-library/react-native';
 
-jest.mock('expo-image', () => ({ Image: () => null }));
-
 import { LibraryRow } from '../ui/LibraryRow';
 import type { AcquisitionStatus, TrackResponse } from '../../../shared/api-client/types';
+
+jest.mock('expo-image', () => ({ Image: () => null }));
 
 function _track(acquisitionStatus: AcquisitionStatus, failureReason: string | null = null): TrackResponse {
   return {
@@ -38,14 +38,14 @@ const noop = (): void => {};
 describe('LibraryRow retry', () => {
   it('shows Retry button when onRetry is provided and status is failed', () => {
     const { getByTestId } = render(
-      <LibraryRow track={_track('failed')} onPress={noop} onRetry={noop} />,
+      <LibraryRow track={_track('failed')} onPress={noop} onMore={noop} onRetry={noop} />,
     );
     expect(getByTestId('library-row-retry-t1')).toBeTruthy();
   });
 
   it('hides Retry button when onRetry is undefined', () => {
     const { queryByTestId } = render(
-      <LibraryRow track={_track('failed')} onPress={noop} />,
+      <LibraryRow track={_track('failed')} onPress={noop} onMore={noop} />,
     );
     expect(queryByTestId('library-row-retry-t1')).toBeNull();
   });
@@ -53,7 +53,7 @@ describe('LibraryRow retry', () => {
   it('fires onRetry callback on press', () => {
     const onRetry = jest.fn();
     const { getByTestId } = render(
-      <LibraryRow track={_track('failed')} onPress={noop} onRetry={onRetry} />,
+      <LibraryRow track={_track('failed')} onPress={noop} onMore={noop} onRetry={onRetry} />,
     );
     fireEvent.press(getByTestId('library-row-retry-t1'));
     expect(onRetry).toHaveBeenCalledTimes(1);
@@ -61,7 +61,7 @@ describe('LibraryRow retry', () => {
 
   it('shows ActivityIndicator when retrying is true', () => {
     const { getByTestId, queryByTestId } = render(
-      <LibraryRow track={_track('failed')} onPress={noop} onRetry={noop} retrying />,
+      <LibraryRow track={_track('failed')} onPress={noop} onMore={noop} onRetry={noop} retrying />,
     );
     expect(getByTestId('library-row-retrying-t1')).toBeTruthy();
     expect(queryByTestId('library-row-retry-t1')).toBeNull();
@@ -69,7 +69,7 @@ describe('LibraryRow retry', () => {
 
   it('shows "Retrying…" text when retrying is true', () => {
     const { getByTestId } = render(
-      <LibraryRow track={_track('failed')} onPress={noop} onRetry={noop} retrying />,
+      <LibraryRow track={_track('failed')} onPress={noop} onMore={noop} onRetry={noop} retrying />,
     );
     const failedEl = getByTestId('library-row-failed-t1');
     expect(failedEl.props.children).toBe('Retrying…');
@@ -77,7 +77,7 @@ describe('LibraryRow retry', () => {
 
   it('shows human-readable failure reason instead of raw server string', () => {
     const { getByTestId } = render(
-      <LibraryRow track={_track('failed', 'no_match_found')} onPress={noop} />,
+      <LibraryRow track={_track('failed', 'no_match_found')} onPress={noop} onMore={noop} />,
     );
     const failedEl = getByTestId('library-row-failed-t1');
     expect(failedEl.props.children).toBe("Couldn't find this track");
