@@ -1,4 +1,4 @@
-import { canPlay } from '../helpers/canPlay';
+import { canPlay } from '../canPlay';
 
 describe('canPlay', () => {
   it('returns true for ready status', () => {
