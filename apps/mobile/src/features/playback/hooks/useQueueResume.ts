@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
 
 import TrackPlayer from 'react-native-track-player';
 
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
+import { getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { RepeatMode } from '@shared/playback/types';
 
 const SAVE_INTERVAL_MS = 15_000;
+// Mirror of the library-home page size — resume rehydrates from the same
+// /v1/tracks surface. Kept here so playback owns its own fetch instead of
+// depending on the library screen having warmed its cache first.
+const REHYDRATE_LIMIT = 2000;
 
 function buildSourceId(source: ReturnType<typeof useQueueStore.getState>['source']): string {
   if (!source) return '';
@@ -29,7 +33,6 @@ function parseSourceId(sourceId: string): ReturnType<typeof useQueueStore.getSta
 }
 
 export function useQueueResume() {
-  const queryClient = useQueryClient();
   const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restoredRef = useRef(false);
 
@@ -72,10 +75,13 @@ export function useQueueResume() {
         const saved = await getQueueState();
         if (!saved.track_ids.length) return;
 
-        const homeData = queryClient.getQueryData<{ items: TrackResponse[] }>(['library-home']);
-        if (!homeData?.items.length) return;
+        // Rehydrate full track data through the shared api-client transport
+        // rather than reaching into the library feature's React Query cache.
+        // Resume no longer silently no-ops when the library screen hasn't loaded.
+        const home = await getTracks({ limit: REHYDRATE_LIMIT, offset: 0 });
+        if (!home.items.length) return;
 
-        const trackMap = new Map(homeData.items.map((t) => [t.id, t]));
+        const trackMap = new Map(home.items.map((t) => [t.id, t]));
         const validTracks = saved.track_ids
           .map((id) => trackMap.get(id))
           .filter((t): t is TrackResponse => t != null && t.acquisition_status === 'ready');
@@ -97,7 +103,7 @@ export function useQueueResume() {
         // Resume is best-effort
       }
     })();
-  }, [queryClient]);
+  }, []);
 
   useEffect(() => {
     saveTimerRef.current = setInterval(save, SAVE_INTERVAL_MS);

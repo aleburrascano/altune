@@ -10,6 +10,8 @@
 
 import { formatDuration } from '@shared/lib/format';
 
+import { trackExtras } from './extras-accessors';
+
 export { formatDuration };
 
 export type InfoRowKey = 'duration' | 'album' | 'featuring';
@@ -17,23 +19,18 @@ export type InfoRow = { key: InfoRowKey; label: string; value: string };
 
 export function trackInfoRows(extras: Record<string, unknown>): InfoRow[] {
   const rows: InfoRow[] = [];
+  const te = trackExtras(extras);
 
-  const duration = extras['duration_seconds'];
-  if (typeof duration === 'number' && Number.isFinite(duration) && duration > 0) {
-    rows.push({ key: 'duration', label: 'Duration', value: formatDuration(duration) });
+  if (te.durationSeconds != null && te.durationSeconds > 0) {
+    rows.push({ key: 'duration', label: 'Duration', value: formatDuration(te.durationSeconds) });
   }
 
-  const album = extras['album'];
-  if (typeof album === 'string' && album.length > 0) {
-    rows.push({ key: 'album', label: 'Album', value: album });
+  if (te.album != null) {
+    rows.push({ key: 'album', label: 'Album', value: te.album });
   }
 
-  const featured = extras['featured_artists'];
-  if (Array.isArray(featured) && featured.length > 0) {
-    const names = featured.filter((n): n is string => typeof n === 'string' && n.length > 0);
-    if (names.length > 0) {
-      rows.push({ key: 'featuring', label: 'Featuring', value: names.join(', ') });
-    }
+  if (te.featuredArtists.length > 0) {
+    rows.push({ key: 'featuring', label: 'Featuring', value: te.featuredArtists.join(', ') });
   }
 
   return rows;

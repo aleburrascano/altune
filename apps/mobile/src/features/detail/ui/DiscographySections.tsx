@@ -10,6 +10,7 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
+import { albumExtras } from '../extras-accessors';
 import { _albumYear, sharedStyles } from './helpers';
 
 const SECTION_CAP = 10;
@@ -31,8 +32,7 @@ export function DiscographySections({
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const grouped = new Map<string, DiscoveryResult[]>();
   for (const album of albums) {
-    const rawType = album.extras['record_type'];
-    const type = typeof rawType === 'string' ? rawType.toLowerCase() : 'album';
+    const type = albumExtras(album.extras).recordType?.toLowerCase() ?? 'album';
     const bucket = type === 'compilation' ? 'album' : type;
     const list = grouped.get(bucket);
     if (list) {
@@ -63,9 +63,7 @@ export function DiscographySections({
             >
               {capped.map((album, index) => {
                 const year = _albumYear(album);
-                const trackCount = typeof album.extras['track_count'] === 'number'
-                  ? album.extras['track_count']
-                  : null;
+                const trackCount = albumExtras(album.extras).trackCount;
                 return (
                   <Pressable
                     key={`${album.title}-${album.sources[0]?.external_id ?? index}`}

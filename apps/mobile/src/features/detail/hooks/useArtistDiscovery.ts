@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 
 import { searchDiscovery } from '@shared/api-client/discovery';
 
+import { trackExtras } from '../extras-accessors';
+
 export function useArtistDiscovery({
   artistName,
   enabled,
@@ -32,7 +34,7 @@ export function useArtistDiscovery({
     artistResult: searchResult ?? null,
     imageUrl,
     sources: searchResult?.sources ?? [],
-    mbid: typeof searchResult?.extras['mbid'] === 'string' ? searchResult.extras['mbid'] : null,
+    mbid: searchResult ? trackExtras(searchResult.extras).mbid : null,
     isLoading,
     isError,
   };

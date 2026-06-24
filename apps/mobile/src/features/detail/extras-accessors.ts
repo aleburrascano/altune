@@ -12,6 +12,7 @@ export type TrackExtras = {
   acquisitionStatus: AcquisitionStatus | null;
   previewUrl: string | null;
   mbid: string | null;
+  trackPosition: number | null;
 };
 
 export function trackExtras(extras: Record<string, unknown>): TrackExtras {
@@ -26,6 +27,7 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
   const status = extras['acquisition_status'];
   const preview = extras['preview_url'];
   const mbid = extras['mbid'];
+  const trackPosition = extras['track_position'];
 
   return {
     durationSeconds: typeof duration === 'number' && Number.isFinite(duration) ? duration : null,
@@ -41,6 +43,8 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
     acquisitionStatus: typeof status === 'string' && (status === 'ready' || status === 'pending' || status === 'failed') ? status : null,
     previewUrl: typeof preview === 'string' && preview.length > 0 ? preview : null,
     mbid: typeof mbid === 'string' ? mbid : null,
+    trackPosition:
+      typeof trackPosition === 'number' && Number.isFinite(trackPosition) ? trackPosition : null,
   };
 }
 

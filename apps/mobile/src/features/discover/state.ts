@@ -6,6 +6,8 @@
  * can import without RN transform overhead.
  */
 
+import { asyncView } from '@shared/lib/async-view';
+
 import type { DiscoveryResult, DiscoverySearchResponse } from '../../shared/api-client/discovery';
 
 export type DiscoverView =
@@ -23,27 +25,31 @@ export type DiscoverHookState = {
 };
 
 /**
- * Derive which view to render. Order of precedence:
- *   empty-no-query (q is blank, no fetch yet)
- *   > loading (q present, fetch in flight, no data yet)
- *   > full-error (q present, error and no fallback data)
- *   > zero-results (q present, data with empty results array)
- *   > results (q present, data with at least one result)
+ * Derive which view to render. `empty-no-query` is a discover-specific pre-state
+ * (no fetch yet); past that, the shared async-view spine drives the loading >
+ * error > empty > ready precedence, gated on "no data yet" so a refetch over
+ * existing results doesn't flash the spinner. The verdict maps onto discover's
+ * vocabulary (ready → results, empty → zero-results, error → full-error).
  */
 export function _viewForState(state: DiscoverHookState): DiscoverView {
   if (!state.query.trim()) {
     return 'empty-no-query';
   }
-  if (state.isLoading && state.data === undefined) {
-    return 'loading';
+  const view = asyncView({
+    isLoading: state.isLoading && state.data === undefined,
+    isError: state.error != null && state.data === undefined,
+    isEmpty: state.data !== undefined && state.data.results.length === 0,
+  });
+  switch (view) {
+    case 'loading':
+      return 'loading';
+    case 'error':
+      return 'full-error';
+    case 'empty':
+      return 'zero-results';
+    case 'ready':
+      return 'results';
   }
-  if (state.error && state.data === undefined) {
-    return 'full-error';
-  }
-  if (state.data !== undefined && state.data.results.length === 0) {
-    return 'zero-results';
-  }
-  return 'results';
 }
 
 /** Max items shown per kind-section in the blended "All" view. */

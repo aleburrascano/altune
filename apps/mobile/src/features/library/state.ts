@@ -5,13 +5,16 @@
  * `__tests__/` can import these without jest needing RN transforms.
  */
 
+import { asyncView } from '@shared/lib/async-view';
+
 import type { LibraryState } from './hooks/useLibrary';
 
 export type ScreenView = 'loading' | 'error' | 'empty' | 'list';
 
 /**
  * Derives which sub-view the LibraryScreen should render from the hook's
- * state. Order matters: loading > error > empty > list. Reasoning:
+ * state. The loading > error > empty > ready precedence lives in the shared
+ * async-view spine; this maps `ready` onto the library's `list` vocabulary.
  *   - loading first because mid-load the items array is empty by definition
  *     (or stale from a prior load), so "empty" would mis-fire.
  *   - error over empty because a fetch failure is a real surface, not "no
@@ -20,14 +23,10 @@ export type ScreenView = 'loading' | 'error' | 'empty' | 'list';
 export function _viewForState(
   state: Pick<LibraryState, 'isLoading' | 'error' | 'items'>,
 ): ScreenView {
-  if (state.isLoading) {
-    return 'loading';
-  }
-  if (state.error) {
-    return 'error';
-  }
-  if (state.items.length === 0) {
-    return 'empty';
-  }
-  return 'list';
+  const view = asyncView({
+    isLoading: state.isLoading,
+    isError: Boolean(state.error),
+    isEmpty: state.items.length === 0,
+  });
+  return view === 'ready' ? 'list' : view;
 }

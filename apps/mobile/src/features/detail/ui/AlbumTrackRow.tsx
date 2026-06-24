@@ -10,6 +10,7 @@ import { spacing } from '@shared/ui/theme/tokens';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { formatDuration } from '../extras';
+import { trackExtras } from '../extras-accessors';
 import { sharedStyles } from './helpers';
 
 type AlbumTrackRowProps = {
@@ -30,14 +31,9 @@ export function AlbumTrackRow({
   onQuickSave,
 }: AlbumTrackRowProps): ReactElement {
   const theme = useTheme();
-  const position =
-    typeof track.extras['track_position'] === 'number'
-      ? track.extras['track_position']
-      : index + 1;
-  const duration =
-    typeof track.extras['duration_seconds'] === 'number'
-      ? formatDuration(track.extras['duration_seconds'])
-      : null;
+  const te = trackExtras(track.extras);
+  const position = te.trackPosition ?? index + 1;
+  const duration = te.durationSeconds != null ? formatDuration(te.durationSeconds) : null;
 
   return (
     <Pressable

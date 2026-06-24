@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import TrackPlayer, {
   Capability,
   State,
@@ -53,7 +52,6 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const lastPlayedTrack = useRef<PlaybackTrack | null>(null);
-  const queryClient = useQueryClient();
 
   const playbackState = usePlaybackState();
   const progress = useProgress(500);
@@ -65,20 +63,16 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const positionMs = progress.position * 1000;
   const rawDurationMs = progress.duration * 1000;
 
-  let fallbackDurationMs = 0;
-  if (track != null && track.source.kind === 'library') {
-    const trackId = track.source.trackId;
-    const homeData = queryClient.getQueryData<{ items: Array<{ id: string; duration_seconds: number | null }> }>(['library-home']);
-    const match = homeData?.items.find((t) => t.id === trackId);
-    if (match?.duration_seconds != null && Number.isFinite(match.duration_seconds)) {
-      fallbackDurationMs = match.duration_seconds * 1000;
-    }
-  }
-  if (fallbackDurationMs === 0 && track?.durationSeconds != null && Number.isFinite(track.durationSeconds)) {
-    fallbackDurationMs = track.durationSeconds * 1000;
-  }
+  // The track carries its own duration (set at queue-build time by
+  // toPlaybackTrack), so playback never reaches into the library feature's
+  // React Query cache. The native player's reported duration wins once known;
+  // the track value fills the gap before the stream's metadata loads.
+  const trackDurationMs =
+    track?.durationSeconds != null && Number.isFinite(track.durationSeconds)
+      ? track.durationSeconds * 1000
+      : 0;
 
-  const durationMs = rawDurationMs || fallbackDurationMs;
+  const durationMs = rawDurationMs || trackDurationMs;
 
   const tpState = playbackState.state;
   const isPlaying = tpState === State.Playing;
