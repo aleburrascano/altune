@@ -32,16 +32,16 @@ export function FullPlayer() {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const artworkSize = screenWidth - spacing['3xl'] * 2;
+  const shadowStyle = useMemo(
+    () => ({ boxShadow: `0 8px 24px ${theme.color.accent}59` }),
+    [theme.color.accent],
+  );
 
   if (!track) {
     return null;
   }
 
   const isPlaying = status === 'playing';
-  const shadowStyle = useMemo(
-    () => ({ boxShadow: `0 8px 24px ${theme.color.accent}59` }),
-    [theme.color.accent],
-  );
   const isPreview = track.source.kind === 'preview';
   const isError = status === 'error';
   const isEnded = status === 'ended';
