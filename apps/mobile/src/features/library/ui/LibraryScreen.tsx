@@ -1,15 +1,12 @@
 import { useRouter } from 'expo-router';
-import { useState, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-
-import { createPlaylist, getPlaylists } from '@shared/api-client/playlists';
-import type { TrackResponse } from '@shared/api-client/types';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useLibraryHome } from '../hooks/useLibraryHome';
+import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryHome } from './LibraryHome';
@@ -21,24 +18,7 @@ export function LibraryScreen(): ReactElement {
   const { navigateToTrack, navigateToAlbum, navigateToArtist } = useLibraryNavigation(router);
   const deleteMutation = useDeleteTrack();
   const retryMutation = useRetryAcquisition();
-
-  const [createModalVisible, setCreateModalVisible] = useState(false);
-  const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<TrackResponse | null>(null);
-
-  const queryClient = useQueryClient();
-  const { data: playlistsData } = useQuery({
-    queryKey: ['playlists'],
-    queryFn: getPlaylists,
-  });
-  const playlists = playlistsData?.items ?? [];
-
-  const createMutation = useMutation({
-    mutationFn: (name: string) => createPlaylist({ name }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['playlists'] });
-      setCreateModalVisible(false);
-    },
-  });
+  const pl = usePlaylistActions();
 
   if (state.isLoading) {
     return (
@@ -101,7 +81,7 @@ export function LibraryScreen(): ReactElement {
 
   return (
     <LibraryHome
-      playlists={playlists}
+      playlists={pl.playlists}
       allTracks={state.allTracks}
       recentTracks={state.recentTracks}
       albums={state.albums}
@@ -112,18 +92,18 @@ export function LibraryScreen(): ReactElement {
       onExpandRecent={() => router.push('/library/all-tracks')}
       onExpandAlbums={() => router.push('/library/all-albums')}
       onExpandArtists={() => router.push('/library/all-artists')}
-      onPlaylistPress={(pl) => router.push(`/library/playlist/${pl.id}`)}
+      onPlaylistPress={(playlist) => router.push(`/library/playlist/${playlist.id}`)}
       onRefresh={() => {
           state.refetch();
-          void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+          pl.invalidatePlaylists();
         }}
       playlistActions={{
-        createModalVisible,
-        onCreateModalToggle: setCreateModalVisible,
-        onCreatePlaylist: (name) => createMutation.mutate(name),
-        createLoading: createMutation.isPending,
-        addToPlaylistTrack,
-        onAddToPlaylistTrackChange: setAddToPlaylistTrack,
+        createModalVisible: pl.createModalVisible,
+        onCreateModalToggle: pl.setCreateModalVisible,
+        onCreatePlaylist: pl.createPlaylist,
+        createLoading: pl.createLoading,
+        addToPlaylistTrack: pl.addToPlaylistTrack,
+        onAddToPlaylistTrackChange: pl.setAddToPlaylistTrack,
       }}
       trackActions={{
         onDeleteTrack: (trackId) => deleteMutation.mutate(trackId),
