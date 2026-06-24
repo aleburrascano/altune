@@ -12,10 +12,11 @@ import { useRouter } from 'expo-router';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
 import { deriveAlbums } from '@shared/lib/derive-library-groups';
+import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
 import { useArtistContent } from './useArtistContent';
 import { useArtistDiscovery } from './useArtistDiscovery';
-import { useLibraryTracksForArtist, libraryTrackToDiscoveryResult } from './useLibraryTracks';
+import { useLibraryTracksForArtist } from './useLibraryTracks';
 
 export type ArtistDetailState = {
   hasSources: boolean;
@@ -76,7 +77,7 @@ export function useArtistDetailState(
     enabled: shouldFetchContent,
   });
 
-  const libraryTracksAsDiscovery = localTracks.map(libraryTrackToDiscoveryResult);
+  const libraryTracksAsDiscovery = localTracks.map(trackToDiscoveryResult);
   const libraryAlbums: DiscoveryResult[] = deriveAlbums(localTracks).map((g) => ({
     kind: 'album' as const,
     title: g.album,

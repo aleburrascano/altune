@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useRouter } from 'expo-router';
 
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
+import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { TrackResponse } from '@shared/api-client/types';
 
@@ -10,21 +11,7 @@ import type { AlbumGroup, ArtistGroup } from '../hooks/useLibraryGrouping';
 export function useLibraryNavigation(router: ReturnType<typeof useRouter>) {
   const navigateToTrack = useCallback(
     (track: TrackResponse): void => {
-      const result: DiscoveryResult = {
-        kind: 'track',
-        title: track.title,
-        subtitle: track.artist,
-        image_url: track.artwork_url ?? null,
-        confidence: 'high',
-        sources: [],
-        extras: {
-          ...(track.album != null ? { album: track.album } : {}),
-          ...(track.duration_seconds != null ? { duration_seconds: track.duration_seconds } : {}),
-          acquisition_status: track.acquisition_status,
-          track_id: track.id,
-        },
-      };
-      setDetailHandoff(result);
+      setDetailHandoff(trackToDiscoveryResult(track));
       router.push('/library/detail');
     },
     [router],
