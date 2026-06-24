@@ -1,4 +1,4 @@
-import { getPreviewUrl } from '../helpers/previewUrl';
+import { getPreviewUrl } from '../previewUrl';
 
 describe('getPreviewUrl', () => {
   it('returns the URL when preview_url is a non-empty string', () => {
