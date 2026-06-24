@@ -1,13 +1,10 @@
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
+import { albumExtras } from '../extras-accessors';
 import { normalizeForDedup } from './normalize-for-dedup';
 
 export function getReleaseSortKey(album: DiscoveryResult): string | null {
-  const releaseDate = album.extras['release_date'];
-  if (typeof releaseDate === 'string') return releaseDate;
-  const year = album.extras['year'];
-  if (typeof year === 'string') return year;
-  if (typeof year === 'number') return String(year);
-  return null;
+  const ae = albumExtras(album.extras);
+  return ae.releaseDate ?? ae.year;
 }
 
 export function sortByReleaseDateDesc(albums: DiscoveryResult[]): DiscoveryResult[] {
@@ -41,8 +38,8 @@ export function dedupAlbumsByTitle(albums: DiscoveryResult[]): DiscoveryResult[]
     if (existing === undefined) {
       groups.set(key, album);
     } else {
-      const existingCount = typeof existing.extras['track_count'] === 'number' ? existing.extras['track_count'] : 0;
-      const newCount = typeof album.extras['track_count'] === 'number' ? album.extras['track_count'] : 0;
+      const existingCount = albumExtras(existing.extras).trackCount ?? 0;
+      const newCount = albumExtras(album.extras).trackCount ?? 0;
       const merged = mergedSources(existing.sources, album.sources);
       if (newCount > existingCount) {
         groups.set(key, { ...album, sources: merged });

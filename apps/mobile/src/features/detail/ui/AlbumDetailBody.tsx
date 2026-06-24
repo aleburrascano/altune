@@ -15,6 +15,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { extractFeaturedFromText } from '../extras';
+import { trackExtras } from '../extras-accessors';
 import { useAlbumDiscovery } from '../hooks/useAlbumDiscovery';
 import { useAlbumTracks } from '../hooks/useAlbumTracks';
 import { useLibraryTracksForAlbum, libraryTrackToDiscoveryResult } from '../hooks/useLibraryTracks';
@@ -26,11 +27,8 @@ import { AlbumTrackRow } from './AlbumTrackRow';
 
 function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   const base = track.subtitle ?? '';
-  const mbFeat = track.extras['featured_artists'];
-  if (Array.isArray(mbFeat) && mbFeat.length > 0) {
-    const names = mbFeat.filter((n): n is string => typeof n === 'string' && n.length > 0);
-    if (names.length > 0) return `${base}, ${names.join(', ')}`;
-  }
+  const names = trackExtras(track.extras).featuredArtists;
+  if (names.length > 0) return `${base}, ${names.join(', ')}`;
   const parsed = extractFeaturedFromText(track.title, track.subtitle);
   if (parsed) return `${base}, ${parsed}`;
   return base;
@@ -143,8 +141,7 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
 
   const albumYear = _albumYear(result);
   const totalDurationSec = tracks.reduce((sum, t) => {
-    const dur = t.extras['duration_seconds'];
-    return sum + (typeof dur === 'number' ? dur : 0);
+    return sum + (trackExtras(t.extras).durationSeconds ?? 0);
   }, 0);
   const metaParts: string[] = [];
   if (albumYear) metaParts.push(albumYear);

@@ -10,12 +10,12 @@ import type { ListTracksResponse } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { spacing } from '@shared/ui/theme/tokens';
 
+import { albumExtras } from '../extras-accessors';
+
 export function _albumYear(album: DiscoveryResult): string | null {
-  const releaseDate = album.extras['release_date'];
-  if (typeof releaseDate === 'string') return releaseDate.slice(0, 4);
-  const yearExtra = album.extras['year'];
-  if (typeof yearExtra === 'string' || typeof yearExtra === 'number') return String(yearExtra);
-  return null;
+  const ae = albumExtras(album.extras);
+  if (ae.releaseDate != null) return ae.releaseDate.slice(0, 4);
+  return ae.year;
 }
 
 export function _isTrackInLibraryCache(

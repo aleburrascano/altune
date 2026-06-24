@@ -99,14 +99,21 @@ export function useArtistContent({
     staleTime: 1000 * 60 * 30,
   });
 
-  const dzFailed = isErrorDz || (dzData !== undefined && dzData.status !== 'ok');
-  const scFailed = isErrorSc || (scData !== undefined && scData.status !== 'ok');
-  const itFailed = isErrorIt || (itData !== undefined && itData.status !== 'ok');
+  // One descriptor per discography provider. The useQuery calls above stay
+  // explicit (rules of hooks forbid looping them), but every downstream
+  // aggregation — merge, loading, the all-failed verdict, refetch — derives
+  // from this list. Adding a provider is one query block plus one entry here,
+  // not edits scattered across five derivations. Order (deezer, soundcloud,
+  // itunes) is preserved so the merge keeps its existing precedence.
+  const albumProviders = [
+    { source: deezerSource, data: dzData, isLoading: isLoadingDz, isError: isErrorDz, refetch: refetchDz },
+    { source: scSource, data: scData, isLoading: isLoadingSc, isError: isErrorSc, refetch: refetchSc },
+    { source: itunesSource, data: itData, isLoading: isLoadingIt, isError: isErrorIt, refetch: refetchIt },
+  ].filter((p) => p.source !== null);
 
-  const dzAlbums = dzData?.status === 'ok' ? dzData.items : [];
-  const scAlbumsRaw = scData?.status === 'ok' ? scData.items : [];
-  const itAlbums = itData?.status === 'ok' ? itData.items : [];
-  const mergedAlbums = dedupAlbumsByTitle([...dzAlbums, ...scAlbumsRaw, ...itAlbums]);
+  const mergedAlbums = dedupAlbumsByTitle(
+    albumProviders.flatMap((p) => (p.data?.status === 'ok' ? p.data.items : [])),
+  );
 
   // Back-fill artwork for albums with no image (e.g. SoundCloud sets)
   // from a title-matched album from another provider.
@@ -123,14 +130,10 @@ export function useArtistContent({
     return donor ? { ...a, image_url: donor } : a;
   });
 
-  const isLoadingAlbums = (deezerSource !== null && isLoadingDz)
-    || (scSource !== null && isLoadingSc)
-    || (itunesSource !== null && isLoadingIt);
-  const albumOutcomes = [
-    ...(deezerSource !== null ? [dzFailed] : []),
-    ...(scSource !== null ? [scFailed] : []),
-    ...(itunesSource !== null ? [itFailed] : []),
-  ];
+  const isLoadingAlbums = albumProviders.some((p) => p.isLoading);
+  const albumOutcomes = albumProviders.map(
+    (p) => p.isError || (p.data !== undefined && p.data.status !== 'ok'),
+  );
   const isErrorAlbums = albumOutcomes.length > 0 && albumOutcomes.every(Boolean);
 
   // When the backend applied MB validation (artistName was passed), trust its
@@ -146,6 +149,6 @@ export function useArtistContent({
       isErrorTracksRaw || (tracksData !== undefined && tracksData.status !== 'ok'),
     isErrorAlbums,
     refetchTracks: refetchTracksRaw,
-    refetchAlbums: () => { refetchDz(); refetchSc(); refetchIt(); },
+    refetchAlbums: () => { albumProviders.forEach((p) => p.refetch()); },
   };
 }

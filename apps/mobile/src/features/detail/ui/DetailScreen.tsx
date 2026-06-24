@@ -23,14 +23,9 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
-import { useDeezerEnrichment } from '../hooks/useDeezerEnrichment';
-import { useDiscogsArtistEnrichment } from '../hooks/useDiscogsArtistEnrichment';
-import { useDiscogsEnrichment } from '../hooks/useDiscogsEnrichment';
-import { useEnrichment } from '../hooks/useEnrichment';
+import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
 import { useEnrichResult } from '../hooks/useEnrichResult';
-import { useLastFmEnrichment } from '../hooks/useLastFmEnrichment';
 import { useLateralNav } from '../hooks/useLateralNav';
-import { useLyrics } from '../hooks/useLyrics';
 
 import { TrackDetailBody } from './TrackDetailBody';
 import { AlbumDetailBody } from './AlbumDetailBody';
@@ -71,49 +66,14 @@ export function DetailScreen(): ReactElement {
     artistName: result.title,
     enabled: isLibraryArtist,
   });
-  // MusicBrainz detail enrichment (genres/year/rating + HD cover). The resolved
-  // HD artwork wins for the hero; metadata renders in EnrichmentSection below.
-  const mbid = typeof result.extras.mbid === 'string' ? result.extras.mbid : undefined;
-  const { enrichment } = useEnrichment({
-    kind: result.kind,
-    title: result.title,
-    subtitle: result.subtitle,
-    mbid,
-  });
-  // Discogs liner-notes enrichment — album-scoped (credits hang off the master).
-  const { enrichment: discogsEnrichment } = useDiscogsEnrichment({
-    album: result.title,
-    artist: result.subtitle,
-    enabled: result.kind === 'album',
-  });
-  // Discogs artist enrichment — bio / aliases / groups / links (cap 7).
-  const { enrichment: discogsArtist } = useDiscogsArtistEnrichment({
-    name: result.title,
-    enabled: result.kind === 'artist',
-  });
-  // Last.fm enrichment — listen popularity, tags, similar artists, bio/blurb.
-  const { enrichment: lastfmEnrichment } = useLastFmEnrichment({
-    kind: result.kind,
-    title: result.title,
-    subtitle: result.subtitle,
-  });
-  // Deezer enrichment — track tempo/explicit + album label/genres (caps 7–8).
-  const { enrichment: deezerEnrichment } = useDeezerEnrichment({
-    kind: result.kind,
-    title: result.title,
-    subtitle: result.subtitle,
-    enabled: result.kind === 'track' || result.kind === 'album',
-  });
-  // Deezer lyrics — synced + plain lyrics, writers, copyright (cap 6). Track-only.
-  const { lyrics } = useLyrics({
-    title: result.title,
-    subtitle: result.subtitle,
-    enabled: result.kind === 'track',
-  });
+  // All provider enrichments, fetched behind one seam. The hook owns the
+  // kind → providers decision; each comes back content-gated (null hides its
+  // section). The resolved MusicBrainz HD artwork wins for the hero.
+  const enrichments = useDetailEnrichments(result);
 
   const heroImageUrl =
-    (enrichment?.artwork_url ?? '') !== ''
-      ? enrichment!.artwork_url
+    (enrichments.musicbrainz?.artwork_url ?? '') !== ''
+      ? enrichments.musicbrainz!.artwork_url
       : isLibraryArtist && artistDiscovery.imageUrl != null
         ? artistDiscovery.imageUrl
         : result.image_url;
@@ -194,17 +154,17 @@ export function DetailScreen(): ReactElement {
         contentContainerStyle={styles.scrollContent}
       >
         {heroContent}
-        <EnrichmentSection enrichment={enrichment} />
-        <LastFmEnrichmentSection kind={result.kind} enrichment={lastfmEnrichment} />
+        <EnrichmentSection enrichment={enrichments.musicbrainz} />
+        <LastFmEnrichmentSection kind={result.kind} enrichment={enrichments.lastfm} />
         {result.kind === 'track' ? <TrackDetailBody result={result} lateralNav={lateralNav} detailRoute={detailRoute} /> : null}
         {result.kind === 'album' ? <AlbumDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
-        {result.kind === 'album' ? <DiscogsEnrichmentSection enrichment={discogsEnrichment} /> : null}
+        {result.kind === 'album' ? <DiscogsEnrichmentSection enrichment={enrichments.discogsAlbum} /> : null}
         {result.kind === 'track' || result.kind === 'album' ? (
-          <DeezerEnrichmentSection kind={result.kind} enrichment={deezerEnrichment} />
+          <DeezerEnrichmentSection kind={result.kind} enrichment={enrichments.deezer} />
         ) : null}
-        {result.kind === 'track' ? <LyricsSection lyrics={lyrics} /> : null}
+        {result.kind === 'track' ? <LyricsSection lyrics={enrichments.lyrics} /> : null}
         {result.kind === 'artist' ? <ArtistDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} /> : null}
-        {result.kind === 'artist' ? <DiscogsArtistSection enrichment={discogsArtist} /> : null}
+        {result.kind === 'artist' ? <DiscogsArtistSection enrichment={enrichments.discogsArtist} /> : null}
       </ScrollView>
     </Screen>
   );

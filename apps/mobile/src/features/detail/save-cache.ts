@@ -13,6 +13,8 @@ import type { InfiniteData } from '@tanstack/react-query';
 import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
+import { trackExtras } from './extras-accessors';
+
 const PAGE_SIZE = 50;
 
 /** Map a tapped track result into the POST body. Artist comes from subtitle;
@@ -20,26 +22,20 @@ const PAGE_SIZE = 50;
  * result image. Title/artist invariants are enforced server-side (and the Save
  * button is disabled when subtitle is null — slice 16). */
 export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackRequest {
-  const album = result.extras['album'];
-  const duration = result.extras['duration_seconds'];
-  const isrc = result.extras['isrc'];
-  const year = result.extras['year'];
-  const genre = result.extras['genre'];
-  const albumArtist = result.extras['album_artist'];
+  const te = trackExtras(result.extras);
   // The SoundCloud permalink is a directly-downloadable source: when present, the
   // backend acquires that exact track instead of re-searching by title/artist.
   const soundcloudUrl = result.sources.find((s) => s.provider === 'soundcloud')?.url ?? null;
   return {
     title: result.title,
     artist: result.subtitle ?? '',
-    album: typeof album === 'string' && album.length > 0 ? album : null,
-    duration_seconds:
-      typeof duration === 'number' && Number.isFinite(duration) ? Math.floor(duration) : null,
+    album: te.album,
+    duration_seconds: te.durationSeconds != null ? Math.floor(te.durationSeconds) : null,
     artwork_url: result.image_url,
-    isrc: typeof isrc === 'string' && isrc.length > 0 ? isrc : null,
-    year: typeof year === 'number' && Number.isFinite(year) ? year : null,
-    genre: typeof genre === 'string' && genre.length > 0 ? genre : null,
-    album_artist: typeof albumArtist === 'string' && albumArtist.length > 0 ? albumArtist : null,
+    isrc: te.isrc,
+    year: te.year,
+    genre: te.genre,
+    album_artist: te.albumArtist,
     source_url: soundcloudUrl,
   };
 }
