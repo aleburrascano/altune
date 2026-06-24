@@ -1,11 +1,23 @@
-// Command discoveryeval runs the offline discovery diagnostics that gate and
-// inform the pipeline rebuild (plan 002). It exercises the real search pipeline
-// in-process (via app.BuildSearchService) and reads discovery's own telemetry;
-// it is meant to run nightly / on demand, NOT per-commit.
+// Command discoveryeval runs the offline discovery quality harnesses. It
+// exercises the real search pipeline in-process (via app.BuildSearchService) and
+// reads discovery's own telemetry; it runs nightly / on demand, NOT per-commit.
+//
+// Every gated harness shares one spine (harness.go): run → gate the headline
+// metrics against cmd/discoveryeval/baselines.json → print the attributed-failure
+// slices → exit 2 on regression. Re-baseline explicitly with -update-baselines
+// (use -noise-runs 3 to set an empirical margin). See plan
+// docs/plans/2026-06-24-001-test-discovery-eval-harness-program-plan.md.
 //
 // Modes (-mode):
-//   - eval     : library-derived "artist title → #1" quality-regression report.
-//   - signal-a : zero-result / abandoned-search coverage-gap report.
+//   - eval       : ranking — library "artist title → top-K" (gated: top1, topk).
+//   - merge      : entity resolution — collapse + over-merge (gated).
+//   - correction : synthetic-typo precision/recall, offline (gated).
+//   - diversity  : reshaping cost differential on the library oracle (gated).
+//   - signal-a   : demand-side coverage gaps from telemetry (gated).
+//   - signal-b   : cross-provider coverage imbalance (gated).
+//   - health     : fill-rate / bridge-hit / latency (report-only, never gated).
+//   - consensus  : per-artist detail dump (-query), or corpus completeness
+//                  (no -query, report-only).
 //
 // Telemetry emission is disabled for eval searches (nil event store) so
 // synthetic searches never pollute the telemetry the signals read.
@@ -14,6 +26,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -36,20 +49,25 @@ import (
 )
 
 type options struct {
-	mode        string
-	limit       int
-	concurrency int
-	sinceDays   int
-	top         int
-	topK        int
-	jsonPath    string
-	random      bool
-	query       string
+	mode            string
+	limit           int
+	concurrency     int
+	sinceDays       int
+	top             int
+	topK            int
+	jsonPath        string
+	random          bool
+	query           string
+	baselinesPath   string
+	updateBaselines bool
+	noiseRuns       int
+	typos           int
+	corpus          string
 }
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | signal-a | signal-b | consensus")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | diversity | health | signal-a | signal-b | consensus")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -58,9 +76,18 @@ func main() {
 	flag.StringVar(&opts.jsonPath, "json", "", "write the full JSON report to this path (default: stdout summary only)")
 	flag.BoolVar(&opts.random, "random", false, "eval: sample entities randomly instead of alphabetically (use with -limit for a representative sample)")
 	flag.StringVar(&opts.query, "query", "", "diagnostic: run a single query and dump the top results (bypasses the library eval)")
+	flag.StringVar(&opts.baselinesPath, "baselines", "cmd/discoveryeval/baselines.json", "path to the committed baselines/thresholds file")
+	flag.BoolVar(&opts.updateBaselines, "update-baselines", false, "re-baseline: measure the current value(s) and write them to -baselines (explicit, reviewed)")
+	flag.IntVar(&opts.noiseRuns, "noise-runs", 1, "with -update-baselines: run N times and set the margin to the measured spread (use 3)")
+	flag.IntVar(&opts.typos, "typos", 3, "correction: synthetic typos generated per known-good term")
+	flag.StringVar(&opts.corpus, "corpus", "exact", "eval/diversity corpus: exact (\"artist title\") | hard (single-token titles, title-only query)")
 	flag.Parse()
 
 	if err := run(opts); err != nil {
+		if errors.Is(err, errRegressed) {
+			fmt.Fprintln(os.Stderr, "discoveryeval: REGRESSION")
+			os.Exit(2)
+		}
 		fmt.Fprintf(os.Stderr, "discoveryeval: %v\n", err)
 		os.Exit(1)
 	}
@@ -96,15 +123,225 @@ func run(opts options) error {
 	switch opts.mode {
 	case "eval":
 		return runEval(ctx, cfg, pool, redisClient, opts)
+	case "merge":
+		return runMerge(ctx, cfg, pool, redisClient, opts)
+	case "correction":
+		return runCorrection(ctx, pool, redisClient, opts)
+	case "diversity":
+		return runDiversity(ctx, cfg, pool, redisClient, opts)
+	case "health":
+		return runHealth(ctx, cfg, pool, redisClient, opts)
 	case "signal-a":
 		return runSignalA(ctx, pool, redisClient, opts)
 	case "signal-b":
 		return runSignalB(ctx, cfg, pool, opts)
 	case "consensus":
-		return runConsensus(ctx, cfg, opts)
+		return runConsensus(ctx, cfg, pool, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | signal-a | signal-b | consensus)", opts.mode)
+		return fmt.Errorf("unknown mode %q (want eval | merge | correction | diversity | health | signal-a | signal-b | consensus)", opts.mode)
 	}
+}
+
+// ---- health mode (report-only, never gated) -----------------------------
+
+func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
+	if err != nil {
+		return fmt.Errorf("load library: %w", err)
+	}
+	progress := func(done, total int) {
+		fmt.Fprintf(os.Stderr, "\r  %d/%d (%d%%)", done, total, done*100/total)
+		if done == total {
+			fmt.Fprintln(os.Stderr)
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "health pass over %d entities (concurrency=%d)...\n", len(entities), opts.concurrency)
+	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+	report := discoveryService.RunHealthEval(ctx, entities, searcher, opts.concurrency, progress)
+	drain()
+
+	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
+		return err
+	}
+	fmt.Print(renderHealth(report))
+
+	// Report-only: record gauges for visibility/history on an explicit update,
+	// but NEVER gate them — a health gauge cannot flip the exit code.
+	if opts.updateBaselines {
+		existing, err := loadBaselines(opts.baselinesPath)
+		if err != nil {
+			return err
+		}
+		if existing == nil {
+			existing = discoveryService.Baselines{}
+		}
+		for k, v := range discoveryService.BuildBaselines(report.HealthMetrics(), nil) {
+			v.Note = "health gauge — report-only, never gated"
+			existing[k] = v
+		}
+		if err := writeBaselines(opts.baselinesPath, existing); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "recorded %d health gauge(s) in %s\n", len(report.HealthMetrics()), opts.baselinesPath)
+	}
+	return nil
+}
+
+// ---- diversity mode -----------------------------------------------------
+
+func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
+	if err != nil {
+		return fmt.Errorf("load library: %w", err)
+	}
+
+	progress := func(done, total int) {
+		fmt.Fprintf(os.Stderr, "\r  %d/%d (%d%%)", done, total, done*100/total)
+		if done == total {
+			fmt.Fprintln(os.Stderr)
+		}
+	}
+
+	corpusEnts, mode := corpusEntities(entities, opts.corpus)
+	once := func() (discoveryService.HarnessReport, error) {
+		fmt.Fprintf(os.Stderr, "diversity differential over %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
+		svc := app.BuildSearchService(cfg, pool, redisClient, nil)
+		vs := variantSearchAdapter{svc: svc}
+		report := discoveryService.RunDiversityEvalMode(ctx, corpusEnts, vs, opts.concurrency, opts.topK, mode, progress)
+		svc.WaitForBackground()
+		return report, nil
+	}
+	human := func(r discoveryService.HarnessReport) string { return renderDiversity(r.(discoveryService.DiversityReport)) }
+	return runHarness("diversity", once, human, opts)
+}
+
+// corpusEntities applies the corpus selection. Hard mode keeps only single-token
+// titles (the ambiguous case — "Humble", "Scorpion") and signals title-only
+// querying; exact mode keeps every entity and queries "artist title".
+func corpusEntities(entities []discoveryService.LibraryEntity, corpus string) ([]discoveryService.LibraryEntity, discoveryService.QueryMode) {
+	if corpus != "hard" {
+		return entities, discoveryService.QueryExact
+	}
+	out := []discoveryService.LibraryEntity{}
+	for _, e := range entities {
+		if discoveryService.TokenCount(e.Title) == 1 {
+			out = append(out, e)
+		}
+	}
+	return out, discoveryService.QueryTitleOnly
+}
+
+// variantSearchAdapter exposes the pipeline's with/without-reshape seam as the
+// diversity harness's VariantSearcher.
+type variantSearchAdapter struct {
+	svc *discoveryService.Service
+}
+
+func (a variantSearchAdapter) SearchVariants(ctx context.Context, query string) ([]domain.SearchResult, []domain.SearchResult) {
+	q, err := evalQuery(query)
+	if err != nil {
+		return nil, nil
+	}
+	return a.svc.RankVariantsForEval(ctx, q)
+}
+
+// ---- correction mode ----------------------------------------------------
+
+// runCorrection is offline w.r.t. providers: it reads the vocabulary store and
+// the library only. Library terms are filtered to those the store recognizes so
+// recall measures the correction algorithm, not vocabulary coverage.
+func runCorrection(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+	vocab := app.BuildVocabularyStore(redisClient)
+	if vocab == nil {
+		return fmt.Errorf("correction mode needs a vocabulary store (set REDIS_URL)")
+	}
+	corrector := discoveryService.NewCorrectionService(vocab)
+
+	terms, err := loadLibraryTerms(ctx, pool, opts.limit)
+	if err != nil {
+		return fmt.Errorf("load library terms: %w", err)
+	}
+	recognized := filterRecognized(ctx, vocab, terms)
+	fmt.Fprintf(os.Stderr, "correction-eval: %d library terms, %d recognized by the vocabulary store\n", len(terms), len(recognized))
+	if len(recognized) == 0 {
+		return fmt.Errorf("no library terms are in the vocabulary store — run some searches first to seed it")
+	}
+
+	once := func() (discoveryService.HarnessReport, error) {
+		return discoveryService.RunCorrectionEval(ctx, recognized, corrector, opts.typos), nil
+	}
+	human := func(r discoveryService.HarnessReport) string {
+		return renderCorrection(r.(discoveryService.CorrectionReport))
+	}
+	return runHarness("correction", once, human, opts)
+}
+
+// loadLibraryTerms reads the distinct artist and title strings across all users
+// — the known-good vocabulary the correction harness perturbs.
+func loadLibraryTerms(ctx context.Context, pool *pgxpool.Pool, limit int) ([]string, error) {
+	query := `SELECT DISTINCT artist AS term FROM tracks WHERE artist <> ''
+	          UNION
+	          SELECT DISTINCT title AS term FROM tracks WHERE title <> ''`
+	if limit > 0 {
+		query = fmt.Sprintf("SELECT term FROM (%s) t LIMIT %d", query, limit)
+	}
+	rows, err := pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query terms: %w", err)
+	}
+	defer rows.Close()
+
+	terms := []string{}
+	for rows.Next() {
+		var term string
+		if err := rows.Scan(&term); err != nil {
+			return nil, fmt.Errorf("scan term: %w", err)
+		}
+		terms = append(terms, term)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate terms: %w", err)
+	}
+	return terms, nil
+}
+
+// filterRecognized keeps only terms the vocabulary store holds exactly — so a
+// recall miss means the corrector failed, not that the term was never in vocab.
+func filterRecognized(ctx context.Context, vocab discoveryService.VocabularyLookup, terms []string) []string {
+	out := []string{}
+	for _, term := range terms {
+		if discoveryService.IsRecognizedTerm(ctx, vocab, term) {
+			out = append(out, term)
+		}
+	}
+	return out
+}
+
+// ---- merge mode ---------------------------------------------------------
+
+func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
+	if err != nil {
+		return fmt.Errorf("load library: %w", err)
+	}
+
+	progress := func(done, total int) {
+		fmt.Fprintf(os.Stderr, "\r  %d/%d (%d%%)", done, total, done*100/total)
+		if done == total {
+			fmt.Fprintln(os.Stderr)
+		}
+	}
+
+	once := func() (discoveryService.HarnessReport, error) {
+		fmt.Fprintf(os.Stderr, "merge-eval over %d unique entities (concurrency=%d)...\n", len(entities), opts.concurrency)
+		searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+		report := discoveryService.RunMergeEval(ctx, entities, searcher, opts.concurrency, progress)
+		drain()
+		return report, nil
+	}
+	human := func(r discoveryService.HarnessReport) string { return renderMerge(r.(discoveryService.MergeReport)) }
+	return runHarness("merge", once, human, opts)
 }
 
 // ---- eval mode ----------------------------------------------------------
@@ -114,7 +351,6 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 	if err != nil {
 		return fmt.Errorf("load library: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "evaluating %d unique entities (concurrency=%d, top-%d)...\n", len(entities), opts.concurrency, opts.topK)
 
 	progress := func(done, total int) {
 		fmt.Fprintf(os.Stderr, "\r  %d/%d (%d%%)", done, total, done*100/total)
@@ -123,16 +359,17 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 		}
 	}
 
-	// nil event store: eval searches must not emit telemetry.
-	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
-	report := discoveryService.RunLibraryEval(ctx, entities, searcher, opts.concurrency, opts.topK, progress)
-	drain() // drain best-effort background writes before exit
-
-	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
-		return err
+	corpusEnts, mode := corpusEntities(entities, opts.corpus)
+	once := func() (discoveryService.HarnessReport, error) {
+		fmt.Fprintf(os.Stderr, "evaluating %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
+		// nil event store: eval searches must not emit telemetry.
+		searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+		report := discoveryService.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
+		drain() // drain best-effort background writes before exit
+		return report, nil
 	}
-	fmt.Print(renderEval(report))
-	return nil
+	human := func(r discoveryService.HarnessReport) string { return renderEval(r.(discoveryService.EvalReport)) }
+	return runHarness("eval", once, human, opts)
 }
 
 // loadLibraryEntities reads the distinct (title, artist) pairs across ALL users.
@@ -243,17 +480,14 @@ func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Cl
 		svc = discoveryService.NewCoverageSignalAService(eventStore, nil)
 	}
 
-	since := time.Now().UTC().AddDate(0, 0, -opts.sinceDays)
-	report, err := svc.Execute(ctx, since, opts.top)
-	if err != nil {
-		return err
+	once := func() (discoveryService.HarnessReport, error) {
+		since := time.Now().UTC().AddDate(0, 0, -opts.sinceDays)
+		return svc.Execute(ctx, since, opts.top)
 	}
-
-	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
-		return err
+	human := func(r discoveryService.HarnessReport) string {
+		return renderSignalA(r.(*discoveryService.CoverageReportA), opts.sinceDays)
 	}
-	fmt.Print(renderSignalA(report, opts.sinceDays))
-	return nil
+	return runHarness("signal-a", once, human, opts)
 }
 
 // ---- signal-b mode ------------------------------------------------------
@@ -263,39 +497,48 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 	if err != nil {
 		return fmt.Errorf("load artists: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "scanning %d distinct artists across providers (concurrency=%d)...\n", len(artists), opts.concurrency)
-
 	svc := discoveryService.NewCoverageSignalBService(app.BuildConsensusProviders(cfg))
-	report, err := svc.Execute(ctx, artists, opts.concurrency)
-	if err != nil {
-		return err
-	}
 
-	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
-		return err
+	once := func() (discoveryService.HarnessReport, error) {
+		fmt.Fprintf(os.Stderr, "scanning %d distinct artists across providers (concurrency=%d)...\n", len(artists), opts.concurrency)
+		return svc.Execute(ctx, artists, opts.concurrency)
 	}
-	fmt.Print(renderSignalB(report))
-	return nil
+	human := func(r discoveryService.HarnessReport) string {
+		return renderSignalB(r.(*discoveryService.CoverageReportB))
+	}
+	return runHarness("signal-b", once, human, opts)
 }
 
 // ---- consensus mode ------------------------------------------------------
 
-// runConsensus exercises the rebuilt ConsensusService end-to-end on live
-// provider data for one artist (passed via -query), mirroring the artist-detail
-// GetAlbums path: resolve the Deezer artist, seed with its albums, then build
-// consensus across all providers and dump the per-album confirmed / unconfirmed
-// / rejected verdicts. Validates the artist-detail consensus cutover.
-func runConsensus(ctx context.Context, cfg *config.Config, opts options) error {
-	artistName := opts.query
-	if artistName == "" {
-		return fmt.Errorf("consensus mode needs -query \"<artist name>\"")
-	}
+// runConsensus has two paths. With -query it is the single-artist diagnostic:
+// resolve the Deezer artist, seed its albums, build consensus across providers,
+// and dump the per-album verdicts. Without -query it is the report-only
+// completeness gauge: build consensus for a corpus of library artists and report
+// the mean confirmed fraction (plan 2026-06-24-001 — health tier, never gated).
+func runConsensus(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opts options) error {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	deezer := providers.NewDeezerAdapter(httpClient)
 
+	var copts []discoveryService.ConsensusOption
+	if cfg.HasMusicBrainz() {
+		mb := providers.NewMusicBrainzAdapter(httpClient, cfg.MusicBrainzUserAgent)
+		copts = append(copts, discoveryService.WithMBAuthority(mb))
+	}
+	svc := discoveryService.NewConsensusService(app.BuildConsensusProviders(cfg), copts...)
+
+	if opts.query != "" {
+		return consensusSingle(ctx, deezer, svc, opts.query)
+	}
+	return consensusCompleteness(ctx, deezer, svc, pool, opts.limit)
+}
+
+// buildArtistConsensus resolves the Deezer artist, seeds with its albums, and
+// builds cross-provider consensus — the per-artist core shared by both paths.
+func buildArtistConsensus(ctx context.Context, deezer *providers.DeezerAdapter, svc *discoveryService.ConsensusService, artistName string) ([]discoveryService.ConsensusAlbum, string, error) {
 	artistResults, err := deezer.Search(ctx, artistName, map[domain.ResultKind]bool{domain.ResultKindArtist: true})
 	if err != nil {
-		return fmt.Errorf("deezer artist search: %w", err)
+		return nil, "", fmt.Errorf("deezer artist search: %w", err)
 	}
 	artistID := ""
 	for _, r := range artistResults {
@@ -314,19 +557,67 @@ func runConsensus(ctx context.Context, cfg *config.Config, opts options) error {
 	if artistID != "" {
 		primaryAlbums, err = deezer.GetArtistAlbums(ctx, domain.ProviderDeezer, artistID)
 		if err != nil {
-			return fmt.Errorf("deezer artist albums: %w", err)
+			return nil, artistID, fmt.Errorf("deezer artist albums: %w", err)
 		}
 	}
+	return svc.BuildConsensus(ctx, artistName, primaryAlbums), artistID, nil
+}
 
-	var copts []discoveryService.ConsensusOption
-	if cfg.HasMusicBrainz() {
-		mb := providers.NewMusicBrainzAdapter(httpClient, cfg.MusicBrainzUserAgent)
-		copts = append(copts, discoveryService.WithMBAuthority(mb))
+func consensusSingle(ctx context.Context, deezer *providers.DeezerAdapter, svc *discoveryService.ConsensusService, artistName string) error {
+	results, artistID, err := buildArtistConsensus(ctx, deezer, svc, artistName)
+	if err != nil {
+		return err
 	}
-	svc := discoveryService.NewConsensusService(app.BuildConsensusProviders(cfg), copts...)
-	results := svc.BuildConsensus(ctx, artistName, primaryAlbums)
+	conf, unconf, rej := tallyConsensus(results)
+	fmt.Printf("\n# Consensus for %q — Deezer id %q\n", artistName, artistID)
+	fmt.Printf("  %d confirmed · %d unconfirmed · %d rejected (of %d total)\n\n", conf, unconf, rej, len(results))
+	for _, r := range results {
+		fmt.Printf("  [%-11s] %-48q %s\n", string(r.Status), r.Album.Title, r.Reason)
+	}
+	return nil
+}
 
-	conf, unconf, rej := 0, 0, 0
+// consensusCompleteness is the report-only health gauge: mean confirmed fraction
+// across a corpus of library artists. Never gated — provider availability moves
+// it run to run.
+func consensusCompleteness(ctx context.Context, deezer *providers.DeezerAdapter, svc *discoveryService.ConsensusService, pool *pgxpool.Pool, limit int) error {
+	artists, err := loadDistinctArtists(ctx, pool, limit)
+	if err != nil {
+		return fmt.Errorf("load artists: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "consensus completeness over %d artists...\n", len(artists))
+
+	scanned, totalAlbums, totalConfirmed := 0, 0, 0
+	var sumFraction float64
+	for i, artist := range artists {
+		results, _, err := buildArtistConsensus(ctx, deezer, svc, artist)
+		if err != nil || len(results) == 0 {
+			continue
+		}
+		conf, _, _ := tallyConsensus(results)
+		scanned++
+		totalAlbums += len(results)
+		totalConfirmed += conf
+		sumFraction += float64(conf) / float64(len(results))
+		if (i+1)%10 == 0 {
+			fmt.Fprintf(os.Stderr, "\r  %d/%d", i+1, len(artists))
+		}
+	}
+	fmt.Fprintln(os.Stderr)
+
+	meanFraction := 0.0
+	if scanned > 0 {
+		meanFraction = sumFraction / float64(scanned)
+	}
+	fmt.Printf("# Discovery consensus completeness (report-only) — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Printf("- Artists scanned: %d\n", scanned)
+	fmt.Printf("- Mean confirmed fraction: %.1f%% (per-artist average)\n", meanFraction*100)
+	fmt.Printf("- Pooled: %d confirmed of %d albums (%.1f%%)\n", totalConfirmed, totalAlbums, pooledPct(totalConfirmed, totalAlbums))
+	fmt.Printf("\n_Report-only — provider availability moves this run to run; it never gates._\n")
+	return nil
+}
+
+func tallyConsensus(results []discoveryService.ConsensusAlbum) (conf, unconf, rej int) {
 	for _, r := range results {
 		switch r.Status {
 		case discoveryService.ConsensusConfirmed:
@@ -337,13 +628,14 @@ func runConsensus(ctx context.Context, cfg *config.Config, opts options) error {
 			rej++
 		}
 	}
+	return conf, unconf, rej
+}
 
-	fmt.Printf("\n# Consensus for %q — Deezer id %q, %d seed albums\n", artistName, artistID, len(primaryAlbums))
-	fmt.Printf("  %d confirmed · %d unconfirmed · %d rejected (of %d total)\n\n", conf, unconf, rej, len(results))
-	for _, r := range results {
-		fmt.Printf("  [%-11s] %-48q %s\n", string(r.Status), r.Album.Title, r.Reason)
+func pooledPct(n, total int) float64 {
+	if total == 0 {
+		return 0
 	}
-	return nil
+	return float64(n) / float64(total) * 100
 }
 
 func loadDistinctArtists(ctx context.Context, pool *pgxpool.Pool, limit int) ([]string, error) {
@@ -423,6 +715,73 @@ func renderEval(report discoveryService.EvalReport) string {
 	}
 	if failures == 0 {
 		out += "_none_\n"
+	}
+	return out
+}
+
+func renderMerge(report discoveryService.MergeReport) string {
+	out := fmt.Sprintf("# Discovery merge eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	out += fmt.Sprintf("- Total: %d (evaluated %d, no-match %d, skipped %d)\n", report.Total, report.Evaluated, report.NoMatch, report.Skipped)
+	out += fmt.Sprintf("- Under-merge rate: %.2f%% (%d provable dups unmerged of %d rows; %.1f%% queries clean)\n",
+		report.UnderMergeRate()*100, report.UnderMergeIncidents, report.ResultsSeen, report.CleanMergeRate()*100)
+	out += fmt.Sprintf("- Over-merge rate: %.2f%% (%d of %d distinct entities)\n", report.OverMergeRate()*100, report.OverMerged, report.DistinctSeen)
+
+	if len(report.OverMergeExamples) > 0 {
+		out += "\n## Over-merges (distinct owned titles folded into one entity)\n\n"
+		for _, ex := range report.OverMergeExamples {
+			out += fmt.Sprintf("- %s\n", ex)
+		}
+	}
+
+	out += "\n## Under-merges (provable duplicate left as separate rows)\n\n"
+	if len(report.UnderMergeExamples) == 0 {
+		out += "_none_\n"
+	}
+	for _, ex := range report.UnderMergeExamples {
+		out += fmt.Sprintf("- %s\n", ex)
+	}
+	return out
+}
+
+func renderHealth(report discoveryService.HealthReport) string {
+	out := fmt.Sprintf("# Discovery health gauges (report-only) — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	out += fmt.Sprintf("- Searches: %d, result rows: %d\n", report.Searches, report.Results)
+	out += fmt.Sprintf("- Artwork fill-rate: %.1f%% (%d of %d)\n", report.FillRate*100, report.WithArtwork, report.Results)
+	out += fmt.Sprintf("- Identity-bridge hit-rate: %.1f%% (%d merged via bridge)\n", report.BridgeHitRate*100, report.BridgedMerges)
+	out += fmt.Sprintf("- Latency: p50 %dms · p95 %dms · max %dms\n", report.LatencyP50Ms, report.LatencyP95Ms, report.LatencyMaxMs)
+	out += "\n_These gauges are tracked for visibility only — they never gate._\n"
+	return out
+}
+
+func renderDiversity(report discoveryService.DiversityReport) string {
+	out := fmt.Sprintf("# Discovery diversity differential — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	out += fmt.Sprintf("- Evaluated: %d of %d\n", report.Evaluated, report.Total)
+	out += fmt.Sprintf("- COST (gated): %.2f%% lost to reshape (%d demoted out of top-%d), %d gained\n",
+		report.CostRate()*100, report.LostToReshape, report.K, report.GainedByReshape)
+	out += fmt.Sprintf("- BENEFIT (report-only): top-%d concentration %.3f → %.3f (drop %.3f)\n",
+		report.K, report.ConcentrationWithout, report.ConcentrationWith, report.ConcentrationDrop())
+
+	out += "\n## Lost to reshape (correct result demoted below the fold)\n\n"
+	if len(report.Losses) == 0 {
+		out += "_none_\n"
+	}
+	for _, l := range report.Losses {
+		out += fmt.Sprintf("- %q\n", l.Query)
+	}
+	return out
+}
+
+func renderCorrection(report discoveryService.CorrectionReport) string {
+	out := fmt.Sprintf("# Discovery correction eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	out += fmt.Sprintf("- Terms (known-good): %d\n", report.Terms)
+	out += fmt.Sprintf("- Recall: %.1f%% (%d of %d typos recovered)\n", report.RecallRate()*100, report.Recovered, report.TyposTested)
+	out += fmt.Sprintf("- Precision: %.1f%% (%d valid queries corrupted)\n", report.PrecisionRate()*100, report.Corrupted)
+
+	if len(report.Corruptions) > 0 {
+		out += "\n## Corruptions (valid query rewritten — the costly failure)\n\n"
+		for _, c := range report.Corruptions {
+			out += fmt.Sprintf("- %q → %v\n", c.Query, c.Attrs["corrected_to"])
+		}
 	}
 	return out
 }
