@@ -86,7 +86,7 @@ export function PlaylistDetailScreen(): ReactElement {
     mutationFn: (trackId: string) => removeTrackFromPlaylist(playlistId, trackId),
     onMutate: async (trackId) => {
       await queryClient.cancelQueries({ queryKey: ['playlist', playlistId] });
-      const previous = queryClient.getQueryData<{ tracks: Array<{ id: string }> }>(['playlist', playlistId]);
+      const previous = queryClient.getQueryData<{ tracks: { id: string }[] }>(['playlist', playlistId]);
       if (previous) {
         queryClient.setQueryData(['playlist', playlistId], {
           ...previous,

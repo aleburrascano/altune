@@ -7,13 +7,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
+import { useDeezerEnrichment } from '../hooks/useDeezerEnrichment';
+import type { DeezerEnrichmentResponse } from '../../../shared/api-client/discovery';
+
 const mockGet = jest.fn();
 jest.mock('../../../shared/api-client/discovery', () => ({
   getDeezerEnrichment: (...args: unknown[]) => mockGet(...args),
 }));
-
-import { useDeezerEnrichment } from '../hooks/useDeezerEnrichment';
-import type { DeezerEnrichmentResponse } from '../../../shared/api-client/discovery';
 
 function _enrichment(over: Partial<DeezerEnrichmentResponse> = {}): DeezerEnrichmentResponse {
   return {

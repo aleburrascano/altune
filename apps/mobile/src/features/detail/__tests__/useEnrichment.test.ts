@@ -7,13 +7,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
+import { useEnrichment } from '../hooks/useEnrichment';
+import type { EnrichmentResponse } from '../../../shared/api-client/discovery';
+
 const mockGetEnrichment = jest.fn();
 jest.mock('../../../shared/api-client/discovery', () => ({
   getEnrichment: (...args: unknown[]) => mockGetEnrichment(...args),
 }));
-
-import { useEnrichment } from '../hooks/useEnrichment';
-import type { EnrichmentResponse } from '../../../shared/api-client/discovery';
 
 function _enrichment(over: Partial<EnrichmentResponse> = {}): EnrichmentResponse {
   return {

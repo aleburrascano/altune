@@ -7,13 +7,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
+import { useLastFmEnrichment } from '../hooks/useLastFmEnrichment';
+import type { LastFmEnrichmentResponse } from '../../../shared/api-client/discovery';
+
 const mockGet = jest.fn();
 jest.mock('../../../shared/api-client/discovery', () => ({
   getLastFmEnrichment: (...args: unknown[]) => mockGet(...args),
 }));
-
-import { useLastFmEnrichment } from '../hooks/useLastFmEnrichment';
-import type { LastFmEnrichmentResponse } from '../../../shared/api-client/discovery';
 
 function _enrichment(over: Partial<LastFmEnrichmentResponse> = {}): LastFmEnrichmentResponse {
   return {

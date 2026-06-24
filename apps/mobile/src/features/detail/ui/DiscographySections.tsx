@@ -15,7 +15,7 @@ import { _albumYear, sharedStyles } from './helpers';
 
 const SECTION_CAP = 10;
 
-const DISCOGRAPHY_SECTIONS: ReadonlyArray<{ type: string; label: string }> = [
+const DISCOGRAPHY_SECTIONS: readonly { type: string; label: string }[] = [
   { type: 'album', label: 'Albums' },
   { type: 'single', label: 'Singles' },
   { type: 'ep', label: 'EPs' },

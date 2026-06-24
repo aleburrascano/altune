@@ -5,11 +5,15 @@
  * card tap navigates to that track's detail via the handoff push. expo-image,
  * expo-router, and the discovery client are mocked.
  */
-/* eslint-disable @typescript-eslint/no-require-imports */
+ 
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
+
+import { getDetailHandoff } from '@shared/lib/detail-handoff';
+import { RelatedTracksSection } from '../ui/RelatedTracksSection';
+import type { DiscoveryResult } from '../../../shared/api-client/discovery';
 
 jest.mock('expo-image', () => ({ Image: () => null }));
 
@@ -22,10 +26,6 @@ const mockGetRelatedTracks = jest.fn();
 jest.mock('../../../shared/api-client/discovery', () => ({
   getRelatedTracks: (...args: unknown[]) => mockGetRelatedTracks(...args),
 }));
-
-import { setDetailHandoff, getDetailHandoff } from '@shared/lib/detail-handoff';
-import { RelatedTracksSection } from '../ui/RelatedTracksSection';
-import type { DiscoveryResult } from '../../../shared/api-client/discovery';
 
 function _track(title: string, provider = 'soundcloud', externalId = '1'): DiscoveryResult {
   return {

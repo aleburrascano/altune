@@ -7,17 +7,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
-const mockGetRelatedTracks = jest.fn();
-jest.mock('../../../shared/api-client/discovery', () => ({
-  getRelatedTracks: (...args: unknown[]) => mockGetRelatedTracks(...args),
-}));
-
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
 import type {
   ContentFetchResponse,
   DiscoveryResult,
   DiscoverySource,
 } from '../../../shared/api-client/discovery';
+
+const mockGetRelatedTracks = jest.fn();
+jest.mock('../../../shared/api-client/discovery', () => ({
+  getRelatedTracks: (...args: unknown[]) => mockGetRelatedTracks(...args),
+}));
 
 function _track(title: string): DiscoveryResult {
   return {
@@ -66,7 +66,7 @@ describe('useRelatedTracks', () => {
     });
 
     await waitFor(() => expect(result.current.relatedTracks).toHaveLength(1));
-    expect(result.current.relatedTracks[0].title).toBe('Fell In Love');
+    expect(result.current.relatedTracks[0]!.title).toBe('Fell In Love');
     expect(mockGetRelatedTracks).toHaveBeenCalledWith('soundcloud', '12345', 20);
     expect(result.current.isError).toBe(false);
   });

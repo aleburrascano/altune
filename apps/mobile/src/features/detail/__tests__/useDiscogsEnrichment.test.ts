@@ -8,13 +8,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
+import { useDiscogsEnrichment } from '../hooks/useDiscogsEnrichment';
+import type { DiscogsEnrichmentResponse } from '../../../shared/api-client/discovery';
+
 const mockGet = jest.fn();
 jest.mock('../../../shared/api-client/discovery', () => ({
   getDiscogsEnrichment: (...args: unknown[]) => mockGet(...args),
 }));
-
-import { useDiscogsEnrichment } from '../hooks/useDiscogsEnrichment';
-import type { DiscogsEnrichmentResponse } from '../../../shared/api-client/discovery';
 
 function _enrichment(over: Partial<DiscogsEnrichmentResponse> = {}): DiscogsEnrichmentResponse {
   return {

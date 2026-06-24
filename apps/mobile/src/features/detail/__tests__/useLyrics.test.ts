@@ -7,13 +7,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
+import { useLyrics } from '../hooks/useLyrics';
+import type { LyricsResponse } from '../../../shared/api-client/discovery';
+
 const mockGet = jest.fn();
 jest.mock('../../../shared/api-client/discovery', () => ({
   getLyrics: (...args: unknown[]) => mockGet(...args),
 }));
-
-import { useLyrics } from '../hooks/useLyrics';
-import type { LyricsResponse } from '../../../shared/api-client/discovery';
 
 function _lyrics(over: Partial<LyricsResponse> = {}): LyricsResponse {
   return {

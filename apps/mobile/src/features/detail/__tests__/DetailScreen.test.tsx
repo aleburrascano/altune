@@ -1,4 +1,4 @@
-﻿/**
+/**
  * DetailScreen â€” header from handoff, empty-handoff redirect, per-kind bodies,
  * and the optimistic Save action (view-result-detail slices 11-16).
  *
@@ -12,6 +12,9 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
+
+import { clearDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';
+import type { DiscoveryResult } from '../../../shared/api-client/discovery';
 
 jest.mock('expo-image', () => ({ Image: () => null }));
 
@@ -63,9 +66,6 @@ jest.mock('../../../shared/api-client/discovery', () => ({
   getRelatedTracks: () => mockGetRelatedTracks(),
   getEnrichment: () => mockGetEnrichment(),
 }));
-
-import { clearDetailHandoff, setDetailHandoff } from '@shared/lib/detail-handoff';
-import type { DiscoveryResult } from '../../../shared/api-client/discovery';
 
 function _result(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
   return {
