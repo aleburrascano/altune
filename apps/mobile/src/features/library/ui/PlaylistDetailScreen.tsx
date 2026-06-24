@@ -16,7 +16,6 @@ import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { useQueueStore } from '@shared/playback/queueStore';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
@@ -154,7 +153,7 @@ export function PlaylistDetailScreen(): ReactElement {
     if (playable.length === 0) return;
     const randomIdx = Math.floor(Math.random() * playable.length);
     queue.playFromList(playable, randomIdx, { kind: 'playlist', playlistId, name: playlistData.name });
-    useQueueStore.getState().toggleShuffle();
+    queue.toggleShuffle();
   };
 
   const goBack = () => router.canGoBack() ? router.back() : router.replace('/library');
