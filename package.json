@@ -2,10 +2,7 @@
   "name": "altune",
   "version": "0.0.0",
   "private": true,
-  "description": "Altune — music manager. Workspace root.",
-  "workspaces": [
-    "apps/*"
-  ],
+  "description": "Altune — music manager. Repo root: git-hook tooling only (husky + commitlint). The mobile app is a standalone npm package under apps/mobile (see ADR-0016); the Go service lives under services/go-api.",
   "scripts": {
     "prepare": "husky",
     "lint:commits": "commitlint --from=HEAD~10 --to=HEAD --verbose"
@@ -17,11 +14,5 @@
   },
   "engines": {
     "node": ">=20"
-  },
-  "dependencies": {
-    "react-native-web": "^0.21.0"
-  },
-  "overrides": {
-    "react-native-worklets": "0.5.1"
   }
 }

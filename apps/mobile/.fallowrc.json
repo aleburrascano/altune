@@ -11,7 +11,8 @@
   ],
   "ignoreDependencies": [
     "react-doctor",
-    "expo-audio"
+    "expo-audio",
+    "react-native-web"
   ],
   "ignoreUnresolvedImports": [
     "@react-navigation/bottom-tabs"

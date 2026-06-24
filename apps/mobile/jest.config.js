@@ -1,11 +1,11 @@
 /**
- * Jest config for the mobile workspace.
+ * Jest config for the mobile app.
  *
- * Uses jest-expo's preset for RN-aware test transforms. For the preset to
- * resolve its internal `require('react-native/jest-preset')`, jest-expo and
- * react-native must live in the same node_modules tree — which they do
- * because apps/mobile/.npmrc forces nested install for this workspace. If
- * you change that .npmrc, this preset will likely break again.
+ * Uses jest-expo's preset for RN-aware test transforms. The preset's internal
+ * `require('react-native/jest-preset')` resolves cleanly because apps/mobile is
+ * a standalone npm package (ADR-0016) — jest-expo and react-native share one
+ * flat node_modules with no workspace hoisting to split them. (This previously
+ * needed an `.npmrc install-strategy=nested` hack; decoupling removed the need.)
  *
  * Path aliases (`@/`, `@features/`, `@shared/`) are mapped here for jest;
  * babel.config.js handles them for Metro at build time.
