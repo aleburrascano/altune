@@ -15,9 +15,9 @@ A sweep of source files for the **substance** of the code — correctness, secur
 
 ## Altitude
 
-This skill works at **low altitude**: lines, functions, files. *Is this code correct, secure, tested, resilient, clean?*
+This skill works at **low altitude**: lines, functions, files. _Is this code correct, secure, tested, resilient, clean?_
 
-Structural questions — should this module be reshaped, is this seam in the right place, is this abstraction shallow — are **high altitude**. They belong to `/improve-codebase-architecture`. When a finding wants to *restructure* rather than *fix*, that's the handoff signal: name it and point there.
+Structural questions — should this module be reshaped, is this seam in the right place, is this abstraction shallow — are **high altitude**. They belong to `/improve-codebase-architecture`. When a finding wants to _restructure_ rather than _fix_, that's the handoff signal: name it and point there.
 
 ## Rules are the floor, not the ceiling
 
@@ -49,7 +49,7 @@ Read every file in the area. Reading loads the path-scoped rules automatically. 
 - **Security** — unvalidated input, authz gaps, injection, leaked secrets
 - **Error handling & resilience** — swallowed errors, missing timeouts/retries, partial-failure states left bad
 - **Tests** — missing coverage, weak assertions, brittle implementation-coupled tests
-- **Testability & decomposition** — functions that do more than one thing, or can't be tested without standing up their callers. Flag these **even when they pass the line-count rule** — `code-quality.md` (≤10 lines) is the floor; *hard to test* is the real signal.
+- **Testability & decomposition** — functions that do more than one thing, or can't be tested without standing up their callers. Flag these **even when they pass the line-count rule** — `code-quality.md` (≤10 lines) is the floor; _hard to test_ is the real signal.
 - **Performance** — N+1 queries, blocking calls, needless allocation (line-level, not architectural)
 - **Observability** — error sites with no log or correlation id
 - **Cleanliness** — dead code, misleading names, local duplication
@@ -69,19 +69,7 @@ Group by severity:
 
 Per finding: file path · what's wrong · rule (if any) · concrete fix. End with a severity × file-count summary table.
 
-### 4. Suggestions — what's worth improving
-
-Not violations — concrete improvements a careful engineer would make. Keep them at **low altitude**: "add input validation to this endpoint," "this error is swallowed, surface it," "split this function so the error branch is testable." If a suggestion wants to *reshape a module* rather than fix a line, don't write it here — note it as architectural and point to `/improve-codebase-architecture`.
-
-Think like three people at once — a user hitting the flow, a tester trying to break it, an on-call engineer at 2 AM:
-
-- What would a user expect to happen here that doesn't?
-- What breaks silently — stale state, unconfirmed mutations, swallowed partial failures?
-- What's missing that would save hours when something breaks in production?
-
-Per suggestion: what & where (name the screen, endpoint, or function) · why it matters · approach in 1-2 sentences · effort — **quick** (< 30 min) / **medium** (1-2 h) / **significant** (needs a spec). Group by effort so quick wins are pickable first.
-
-### 5. Fix (only if `--fix`)
+### 4. Fix (only if `--fix`)
 
 Work critical-first, then quick-win suggestions. Commit fixes per area.
 
