@@ -66,7 +66,7 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
     provider: effectiveSource?.provider ?? 'deezer',
     externalId: effectiveSource?.external_id ?? '_',
     albumTitle: result.title,
-    albumArtist: result.subtitle,
+    albumArtist: result.subtitle ?? undefined,
     allSources: result.sources,
     enabled: hasSources || (result.title !== ''),
   });
