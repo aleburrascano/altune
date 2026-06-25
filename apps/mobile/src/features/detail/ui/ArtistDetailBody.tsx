@@ -11,17 +11,23 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
+import { formatDuration } from '../extras';
+import { trackExtras } from '../extras-accessors';
 import { useArtistDetailState } from '../hooks/useArtistDetailState';
 
 import { sharedStyles } from './helpers';
 import { DiscographySections } from './DiscographySections';
+import { GenrePills } from './GenrePills';
+import { TrackSaveControl } from './TrackSaveControl';
 
-export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean }): ReactElement {
+export function ArtistDetailBody({ result, detailRoute, isFromLibrary, genres }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean; genres: string[] }): ReactElement {
   const theme = useTheme();
   const artist = useArtistDetailState(result, detailRoute, isFromLibrary);
 
   return (
     <View testID="detail-artist-content" style={styles.artistContent}>
+      <GenrePills genres={genres} />
+
       {/* Your Tracks */}
       <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
         {artist.hasSources ? 'Popular Tracks' : 'Your Tracks'}
@@ -42,33 +48,42 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
           No tracks found.
         </Text>
       ) : (
-        artist.topTracks.map((track, index) => (
-          <Pressable
-            key={track.sources[0]?.external_id ?? index}
-            testID={`detail-top-track-${index}`}
-            onPress={() => artist.onTrackPress(track)}
-            accessibilityRole="button"
-            accessibilityLabel={`Play ${track.title}`}
-            style={({ pressed }) => [sharedStyles.trackRow, pressed ? { opacity: 0.6 } : null]}
-          >
-            <Artwork
-              uri={track.image_url}
-              size={40}
-              radius={radius.sm}
-              accessibilityLabel={track.title}
-            />
-            <View style={sharedStyles.trackInfo}>
-              <Text variant="body" numberOfLines={1}>
-                {track.title}
-              </Text>
-              {track.subtitle ? (
-                <Text variant="label" tone="secondary" numberOfLines={1}>
-                  {track.subtitle}
+        artist.topTracks.map((track, index) => {
+          const durationSeconds = trackExtras(track.extras).durationSeconds;
+          return (
+            <Pressable
+              key={track.sources[0]?.external_id ?? index}
+              testID={`detail-top-track-${index}`}
+              onPress={() => artist.onTrackPress(track)}
+              accessibilityRole="button"
+              accessibilityLabel={`Play ${track.title}`}
+              style={({ pressed }) => [sharedStyles.trackRow, pressed ? { opacity: 0.6 } : null]}
+            >
+              <Artwork
+                uri={track.image_url}
+                size={40}
+                radius={radius.sm}
+                accessibilityLabel={track.title}
+              />
+              <View style={sharedStyles.trackInfo}>
+                <Text variant="body" numberOfLines={1}>
+                  {track.title}
+                </Text>
+              </View>
+              {durationSeconds != null ? (
+                <Text variant="label" tone="tertiary" style={styles.trackDuration}>
+                  {formatDuration(durationSeconds)}
                 </Text>
               ) : null}
-            </View>
-          </Pressable>
-        ))
+              <TrackSaveControl
+                testID={`detail-top-track-save-${index}`}
+                state={artist.saveStateFor(track.title, track.subtitle)}
+                title={track.title}
+                onPress={() => artist.onQuickSave(track)}
+              />
+            </Pressable>
+          );
+        })
       )}
 
       {/* Library Albums (when from library) */}
@@ -151,6 +166,7 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
 
 const styles = StyleSheet.create({
   artistContent: { marginTop: spacing.lg },
+  trackDuration: { marginRight: spacing.xs, fontVariant: ['tabular-nums'] },
   sectionLoading: { paddingVertical: spacing.lg, alignItems: 'center' },
   sectionError: { paddingVertical: spacing.md, alignItems: 'center' },
   emptySection: { paddingVertical: spacing.md },

@@ -8,6 +8,7 @@
  */
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
@@ -15,9 +16,13 @@ import { deriveAlbums } from '@shared/lib/derive-library-groups';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
 import { trackExtras } from '../extras-accessors';
+import { findTrackInLibraryCache } from '../helpers/find-track-in-library-cache';
+import { saveControlState, type SaveControlState } from '../save-control-state';
+import { toCreateTrackRequest } from '../save-cache';
 import { useArtistContent } from './useArtistContent';
 import { useArtistDiscovery } from './useArtistDiscovery';
 import { useLibraryTracksForArtist } from './useLibraryTracks';
+import { useSaveTrack } from './useSaveTrack';
 
 export type ArtistDetailState = {
   hasSources: boolean;
@@ -36,6 +41,8 @@ export type ArtistDetailState = {
   discoveryError: boolean;
   onTrackPress: (track: DiscoveryResult) => void;
   onAlbumPress: (album: DiscoveryResult) => void;
+  onQuickSave: (track: DiscoveryResult) => void;
+  saveStateFor: (title: string, subtitle: string | null) => SaveControlState;
 };
 
 export function useArtistDetailState(
@@ -44,6 +51,8 @@ export function useArtistDetailState(
   isFromLibrary?: boolean,
 ): ArtistDetailState {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const save = useSaveTrack();
   const hasSources = !isFromLibrary && result.sources.length > 0;
 
   const localTracks = useLibraryTracksForArtist(result.title);
@@ -115,6 +124,19 @@ export function useArtistDetailState(
     router.push(detailRoute as '/discover/detail');
   };
 
+  const onQuickSave = (track: DiscoveryResult): void => {
+    save.mutate(
+      toCreateTrackRequest({
+        ...track,
+        subtitle: track.subtitle ?? result.title,
+        image_url: track.image_url ?? result.image_url,
+      }),
+    );
+  };
+
+  const saveStateFor = (title: string, subtitle: string | null): SaveControlState =>
+    saveControlState(findTrackInLibraryCache(queryClient, title, subtitle));
+
   return {
     hasSources,
     topTracks,
@@ -132,5 +154,7 @@ export function useArtistDetailState(
     discoveryError: discoverySearch.isError,
     onTrackPress,
     onAlbumPress,
+    onQuickSave,
+    saveStateFor,
   };
 }

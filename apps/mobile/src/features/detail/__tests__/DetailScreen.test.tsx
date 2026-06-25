@@ -110,10 +110,11 @@ describe('DetailScreen', () => {
     expect(mockRedirect).toHaveBeenCalledWith({ href: '/discover' });
   });
 
-  it('renders track info rows for present extras and omits absent keys', () => {
+  it('renders the album nav row for present album extra and omits absent keys', () => {
+    // Reworked detail: duration moved onto the Play button, album/featuring became
+    // tappable nav rows; the old isrc/popularity info rows are gone entirely.
     setDetailHandoff(_result({ extras: { duration_seconds: 244, album: 'After Hours' } }));
     const { getByTestId, queryByTestId } = renderDetail();
-    expect(getByTestId('detail-info-duration')).toBeTruthy();
     expect(getByTestId('detail-info-album')).toBeTruthy();
     expect(queryByTestId('detail-info-isrc')).toBeNull();
     expect(queryByTestId('detail-info-popularity')).toBeNull();

@@ -8,8 +8,9 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { canPlay } from '@shared/playback/canPlay';
 import { usePlayback } from '@shared/playback/usePlayback';
+import { spacing } from '@shared/ui/theme/tokens';
 
-import { extractFeaturedFromText, trackInfoRows } from '../extras';
+import { extractFeaturedFromText, formatDuration } from '../extras';
 import { trackExtras } from '../extras-accessors';
 import { useIsTrackSaved } from '../hooks/useIsTrackSaved';
 import { useLibraryTrackMatch } from '../hooks/useLibraryTrackMatch';
@@ -17,10 +18,8 @@ import { useSaveTrack } from '../hooks/useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
 
 import { isCurrentlyPlaying } from './helpers';
+import { GenrePills } from './GenrePills';
 import { RelatedTracksSection } from './RelatedTracksSection';
-
-import { PlayIconButton } from '@shared/ui/primitives/PlayIconButton';
-import { spacing } from '@shared/ui/theme/tokens';
 
 export type LateralNavHandle = {
   navigateTo: (query: string, kind: 'artist' | 'album' | 'track') => Promise<void>;
@@ -29,15 +28,17 @@ export type LateralNavHandle = {
   clearError: () => void;
 };
 
-/** Track body: info rows + an optimistic Save-to-library action. */
+/** Track body: play / save actions, identity genres, and light navigation. */
 export function TrackDetailBody({
   result,
   lateralNav,
   detailRoute,
+  genres,
 }: {
   result: DiscoveryResult;
   lateralNav: LateralNavHandle;
   detailRoute: string;
+  genres: string[];
 }): ReactElement {
   const save = useSaveTrack();
   const playback = usePlayback();
@@ -48,14 +49,27 @@ export function TrackDetailBody({
   const effectiveAcqStatus = te.acquisitionStatus ?? libraryMatch?.acquisition_status ?? null;
   const isPlayable = canPlay(effectiveAcqStatus) && effectiveTrackId !== null;
   const previewUrl = te.previewUrl;
-  const rows = trackInfoRows(result.extras);
-  if (!rows.some((r) => r.key === 'featuring')) {
-    const parsed = extractFeaturedFromText(result.title, result.subtitle);
-    if (parsed) {
-      rows.push({ key: 'featuring', label: 'Featuring', value: parsed });
-    }
-  }
+  const duration = te.durationSeconds != null ? formatDuration(te.durationSeconds) : null;
+
   const canSave = result.subtitle !== null && result.subtitle.length > 0;
+  const albumName = te.album;
+  const featured =
+    te.featuredArtists.length > 0
+      ? te.featuredArtists
+      : (extractFeaturedFromText(result.title, result.subtitle)?.split(', ') ?? []);
+
+  const source =
+    isPlayable && effectiveTrackId !== null
+      ? ({ kind: 'library', trackId: effectiveTrackId } as const)
+      : previewUrl !== null
+        ? ({ kind: 'preview', previewUrl } as const)
+        : null;
+  const playing = source !== null && isCurrentlyPlaying(playback, source);
+  const playLabel = playing
+    ? 'Pause'
+    : source?.kind === 'preview'
+      ? 'Preview'
+      : `Play${duration ? `  ·  ${duration}` : ''}`;
 
   const onSave = (): void => {
     if (!canSave) {
@@ -64,113 +78,103 @@ export function TrackDetailBody({
     save.mutate(toCreateTrackRequest(result));
   };
 
-  const albumName = te.album;
+  const onTogglePlay = (): void => {
+    if (source === null) {
+      return;
+    }
+    if (playing) {
+      playback.pause();
+    } else {
+      void playback.play({
+        source,
+        title: result.title,
+        artist: result.subtitle ?? '',
+        artworkUrl: result.image_url,
+        durationSeconds: te.durationSeconds ?? undefined,
+      });
+    }
+  };
 
   const onAlbumPress = (): void => {
     if (albumName !== null && result.subtitle !== null) {
-      // Include artist for disambiguation: "Album Name Artist Name"
       void lateralNav.navigateTo(`${albumName} ${result.subtitle}`, 'album');
     }
   };
 
   return (
-    <View testID="detail-track-info" style={styles.info}>
-      {rows.map((row) =>
-        row.key === 'album' && albumName !== null ? (
-          <Pressable
-            key={row.key}
-            testID="detail-info-album"
-            onPress={onAlbumPress}
-            disabled={lateralNav.state === 'searching'}
-            accessibilityRole="link"
-            accessibilityLabel={`View album ${row.value}`}
-            accessibilityHint="Opens album detail"
-            style={({ pressed }) => [styles.infoRow, pressed ? { opacity: 0.6 } : null]}
-          >
-            <Text variant="label" tone="tertiary">
-              {row.label}
-            </Text>
-            <Text variant="body" tone="accent">
-              {row.value}
-            </Text>
-          </Pressable>
-        ) : row.key === 'featuring' ? (
-          <View key={row.key} testID="detail-info-featuring" style={styles.infoRow}>
-            <Text variant="label" tone="tertiary">
-              {row.label}
-            </Text>
-            <View style={styles.featuredArtists}>
-              {row.value.split(', ').map((name, i) => (
-                <Pressable
-                  key={name}
-                  onPress={() => void lateralNav.navigateTo(name, 'artist')}
-                  disabled={lateralNav.state === 'searching'}
-                  accessibilityRole="link"
-                  accessibilityLabel={`View artist ${name}`}
-                >
-                  {({ pressed }) => (
-                    <Text variant="body" tone="accent" style={pressed ? { opacity: 0.6 } : undefined}>
-                      {i > 0 ? `, ${name}` : name}
-                    </Text>
-                  )}
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : (
-          <View key={row.key} testID={`detail-info-${row.key}`} style={styles.infoRow}>
-            <Text variant="label" tone="tertiary">
-              {row.label}
-            </Text>
-            <Text variant="body">{row.value}</Text>
-          </View>
-        ),
-      )}
-      {(() => {
-        const source = isPlayable && effectiveTrackId !== null
-          ? { kind: 'library' as const, trackId: effectiveTrackId }
-          : previewUrl !== null
-            ? { kind: 'preview' as const, previewUrl }
-            : null;
-        if (!source) return null;
-        const playing = isCurrentlyPlaying(playback, source);
-        return (
-          <View style={styles.playRow}>
-            <PlayIconButton
+    <View testID="detail-track-info" style={styles.body}>
+      <View style={styles.actions}>
+        {source !== null ? (
+          <View style={styles.flex}>
+            <Button
               testID={source.kind === 'library' ? 'detail-play' : 'detail-preview'}
-              isPlaying={playing}
+              variant="primary"
+              label={playLabel}
+              onPress={onTogglePlay}
               disabled={playback.status === 'loading'}
-              onPress={() => {
-                if (playing) {
-                  playback.pause();
-                } else {
-                  void playback.play({
-                    source,
-                    title: result.title,
-                    artist: result.subtitle ?? '',
-                    artworkUrl: result.image_url,
-                    durationSeconds: te.durationSeconds ?? undefined,
-                  });
-                }
-              }}
+              haptic
             />
-            {source.kind === 'preview' ? (
-              <Text variant="caption" tone="secondary" style={{ marginTop: spacing.xs }}>
-                Preview
-              </Text>
-            ) : null}
           </View>
-        );
-      })()}
-      <Button
-        testID="detail-save"
-        label={alreadySaved || save.isSuccess ? 'Saved' : 'Save to Library'}
-        onPress={onSave}
-        disabled={!canSave || save.isPending || save.isSuccess || alreadySaved}
-        loading={save.isPending}
-        haptic
-        style={styles.saveButton}
-      />
+        ) : null}
+        <View style={styles.flex}>
+          <Button
+            testID="detail-save"
+            variant={source !== null ? 'secondary' : 'primary'}
+            label={alreadySaved || save.isSuccess ? 'Saved' : 'Save'}
+            onPress={onSave}
+            disabled={!canSave || save.isPending || save.isSuccess || alreadySaved}
+            loading={save.isPending}
+            haptic
+          />
+        </View>
+      </View>
+
+      <GenrePills genres={genres} />
+
+      {albumName !== null ? (
+        <Pressable
+          testID="detail-info-album"
+          onPress={onAlbumPress}
+          disabled={lateralNav.state === 'searching'}
+          accessibilityRole="link"
+          accessibilityLabel={`View album ${albumName}`}
+          accessibilityHint="Opens album detail"
+          style={({ pressed }) => [styles.navRow, pressed ? { opacity: 0.6 } : null]}
+        >
+          <Text variant="label" tone="tertiary">
+            Album
+          </Text>
+          <Text variant="body" tone="accent" numberOfLines={1} style={styles.navValue}>
+            {albumName}  ›
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {featured.length > 0 ? (
+        <View testID="detail-info-featuring" style={styles.navRow}>
+          <Text variant="label" tone="tertiary">
+            Featuring
+          </Text>
+          <View style={styles.featured}>
+            {featured.map((name, i) => (
+              <Pressable
+                key={name}
+                onPress={() => void lateralNav.navigateTo(name, 'artist')}
+                disabled={lateralNav.state === 'searching'}
+                accessibilityRole="link"
+                accessibilityLabel={`View artist ${name}`}
+              >
+                {({ pressed }) => (
+                  <Text variant="body" tone="accent" style={pressed ? { opacity: 0.6 } : undefined}>
+                    {i > 0 ? `, ${name}` : name}
+                  </Text>
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       {save.isError ? (
         <Banner testID="detail-save-error" tone="danger">
           Couldn't save this track. Tap Save to retry.
@@ -189,26 +193,25 @@ export function TrackDetailBody({
           </Text>
         </View>
       ) : null}
+
       <RelatedTracksSection result={result} detailRoute={detailRoute} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  info: { marginTop: spacing['2xl'], gap: spacing.md },
-  infoRow: {
+  body: { marginTop: spacing.xl, gap: spacing.md },
+  actions: { flexDirection: 'row', gap: spacing.md },
+  flex: { flex: 1 },
+  navRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: spacing.lg,
     minHeight: 48,
   },
-  featuredArtists: { flexDirection: 'row', flexWrap: 'wrap' },
-  playRow: {
-    alignItems: 'center',
-    marginTop: spacing['2xl'],
-  },
-  saveButton: { marginTop: spacing.lg },
+  navValue: { flexShrink: 1, textAlign: 'right' },
+  featured: { flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, justifyContent: 'flex-end' },
   lateralLoading: {
     flexDirection: 'row',
     alignItems: 'center',

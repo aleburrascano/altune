@@ -16,6 +16,7 @@ import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
 
 import { _albumYear, sharedStyles } from './helpers';
 import { AlbumTrackRow } from './AlbumTrackRow';
+import { GenrePills } from './GenrePills';
 
 function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   const base = track.subtitle ?? '';
@@ -26,7 +27,7 @@ function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   return base;
 }
 
-export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean }): ReactElement {
+export function AlbumDetailBody({ result, detailRoute, isFromLibrary, genres }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean; genres: string[] }): ReactElement {
   const theme = useTheme();
   const album = useAlbumDetailState(result, detailRoute, isFromLibrary);
 
@@ -88,13 +89,19 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
         />
       ) : null}
 
+      <GenrePills genres={genres} />
+
+      <Text variant="label" tone="tertiary" style={styles.tracksTitle}>
+        Tracks
+      </Text>
+
       {album.tracks.map((track, index) => (
         <AlbumTrackRow
           key={track.sources[0]?.external_id ?? `local-${index}`}
           track={track}
           index={index}
           subtitle={_trackSubtitleWithFeaturing(track)}
-          isSaved={album.isSaved(track.title, track.subtitle)}
+          saveState={album.saveStateFor(track.title, track.subtitle)}
           onPress={() => album.onTrackPress(track)}
           onQuickSave={() => album.onQuickSave(track)}
         />
@@ -147,7 +154,7 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
                     track={track}
                     index={album.tracks.length + index}
                     subtitle={_trackSubtitleWithFeaturing(track)}
-                    isSaved={false}
+                    saveState={album.saveStateFor(track.title, track.subtitle)}
                     onPress={() => album.onTrackPress(track)}
                     onQuickSave={() => album.onQuickSave(track)}
                   />
@@ -170,6 +177,7 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
 const styles = StyleSheet.create({
   placeholder: { marginTop: spacing['2xl'], alignItems: 'center' },
   trackList: { marginTop: spacing.lg },
+  tracksTitle: { marginTop: spacing.xl, marginBottom: spacing.sm },
   albumMeta: { marginTop: spacing.lg, textAlign: 'center' as const },
   saveAllButton: { marginBottom: spacing.md },
   moreSection: { marginTop: spacing.xl },
