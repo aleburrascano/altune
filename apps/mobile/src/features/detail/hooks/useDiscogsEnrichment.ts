@@ -8,12 +8,12 @@
  * Off the search path — one cached call per open (docs/providers/discogs.md).
  */
 
-import { useQuery } from '@tanstack/react-query';
-
 import {
   getDiscogsEnrichment,
   type DiscogsEnrichmentResponse,
 } from '@shared/api-client/discovery';
+
+import { useEnrichmentQuery } from './useEnrichmentQuery';
 
 type UseDiscogsEnrichmentParams = {
   album: string;
@@ -46,18 +46,12 @@ export function useDiscogsEnrichment({
   artist,
   enabled = true,
 }: UseDiscogsEnrichmentParams): UseDiscogsEnrichmentReturn {
-  const canFetch = enabled && album.trim() !== '';
-
-  const { data, isLoading, isError } = useQuery({
+  const { value, isLoading, isError } = useEnrichmentQuery({
     queryKey: ['discogs-enrichment', `${album}|${artist ?? ''}`],
     queryFn: () => getDiscogsEnrichment({ album, artist }),
-    enabled: canFetch,
-    staleTime: 1000 * 60 * 60 * 24,
+    hasContent,
+    enabled: enabled && album.trim() !== '',
   });
 
-  return {
-    enrichment: data && hasContent(data) ? data : null,
-    isLoading,
-    isError,
-  };
+  return { enrichment: value, isLoading, isError };
 }

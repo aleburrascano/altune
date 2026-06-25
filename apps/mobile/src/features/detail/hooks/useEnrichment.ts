@@ -7,13 +7,13 @@
  * path — one cached call per open (spec AC#8).
  */
 
-import { useQuery } from '@tanstack/react-query';
-
 import {
   getEnrichment,
   type DiscoveryKind,
   type EnrichmentResponse,
 } from '@shared/api-client/discovery';
+
+import { useEnrichmentQuery } from './useEnrichmentQuery';
 
 type UseEnrichmentParams = {
   kind: DiscoveryKind;
@@ -48,18 +48,12 @@ export function useEnrichment({
   mbid,
   enabled = true,
 }: UseEnrichmentParams): UseEnrichmentReturn {
-  const canFetch = enabled && (title.trim() !== '' || (mbid ?? '') !== '');
-
-  const { data, isLoading, isError } = useQuery({
+  const { value, isLoading, isError } = useEnrichmentQuery({
     queryKey: ['enrichment', kind, mbid && mbid !== '' ? mbid : `${title}|${subtitle ?? ''}`],
     queryFn: () => getEnrichment({ kind, title, subtitle, mbid }),
-    enabled: canFetch,
-    staleTime: 1000 * 60 * 60 * 24,
+    hasContent,
+    enabled: enabled && (title.trim() !== '' || (mbid ?? '') !== ''),
   });
 
-  return {
-    enrichment: data && hasContent(data) ? data : null,
-    isLoading,
-    isError,
-  };
+  return { enrichment: value, isLoading, isError };
 }
