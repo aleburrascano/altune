@@ -8,13 +8,13 @@
  * per open (docs/providers/lastfm.md cap 3).
  */
 
-import { useQuery } from '@tanstack/react-query';
-
 import {
   getLastFmEnrichment,
   type DiscoveryKind,
   type LastFmEnrichmentResponse,
 } from '@shared/api-client/discovery';
+
+import { useEnrichmentQuery } from './useEnrichmentQuery';
 
 type UseLastFmEnrichmentParams = {
   kind: DiscoveryKind;
@@ -47,18 +47,12 @@ export function useLastFmEnrichment({
   subtitle,
   enabled = true,
 }: UseLastFmEnrichmentParams): UseLastFmEnrichmentReturn {
-  const canFetch = enabled && title.trim() !== '';
-
-  const { data, isLoading, isError } = useQuery({
+  const { value, isLoading, isError } = useEnrichmentQuery({
     queryKey: ['lastfm-enrichment', kind, `${title}|${subtitle ?? ''}`],
     queryFn: () => getLastFmEnrichment({ kind, title, subtitle }),
-    enabled: canFetch,
-    staleTime: 1000 * 60 * 60 * 24,
+    hasContent,
+    enabled: enabled && title.trim() !== '',
   });
 
-  return {
-    enrichment: data && hasContent(data) ? data : null,
-    isLoading,
-    isError,
-  };
+  return { enrichment: value, isLoading, isError };
 }

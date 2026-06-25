@@ -8,9 +8,9 @@
  * (docs/providers/deezer.md cap 6).
  */
 
-import { useQuery } from '@tanstack/react-query';
-
 import { getLyrics, type LyricsResponse } from '@shared/api-client/discovery';
+
+import { useEnrichmentQuery } from './useEnrichmentQuery';
 
 type UseLyricsParams = {
   title: string;
@@ -34,18 +34,12 @@ export function useLyrics({
   subtitle,
   enabled = true,
 }: UseLyricsParams): UseLyricsReturn {
-  const canFetch = enabled && title.trim() !== '';
-
-  const { data, isLoading, isError } = useQuery({
+  const { value, isLoading, isError } = useEnrichmentQuery({
     queryKey: ['lyrics', `${title}|${subtitle ?? ''}`],
     queryFn: () => getLyrics({ title, subtitle }),
-    enabled: canFetch,
-    staleTime: 1000 * 60 * 60 * 24,
+    hasContent,
+    enabled: enabled && title.trim() !== '',
   });
 
-  return {
-    lyrics: data && hasContent(data) ? data : null,
-    isLoading,
-    isError,
-  };
+  return { lyrics: value, isLoading, isError };
 }

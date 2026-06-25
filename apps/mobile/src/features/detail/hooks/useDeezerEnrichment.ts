@@ -8,13 +8,13 @@
  * search path — one cached call per open (docs/providers/deezer.md caps 7–8).
  */
 
-import { useQuery } from '@tanstack/react-query';
-
 import {
   getDeezerEnrichment,
   type DeezerEnrichmentResponse,
   type DiscoveryKind,
 } from '@shared/api-client/discovery';
+
+import { useEnrichmentQuery } from './useEnrichmentQuery';
 
 type UseDeezerEnrichmentParams = {
   kind: DiscoveryKind;
@@ -47,18 +47,12 @@ export function useDeezerEnrichment({
   subtitle,
   enabled = true,
 }: UseDeezerEnrichmentParams): UseDeezerEnrichmentReturn {
-  const canFetch = enabled && title.trim() !== '';
-
-  const { data, isLoading, isError } = useQuery({
+  const { value, isLoading, isError } = useEnrichmentQuery({
     queryKey: ['deezer-enrichment', kind, `${title}|${subtitle ?? ''}`],
     queryFn: () => getDeezerEnrichment({ kind, title, subtitle }),
-    enabled: canFetch,
-    staleTime: 1000 * 60 * 60 * 24,
+    hasContent,
+    enabled: enabled && title.trim() !== '',
   });
 
-  return {
-    enrichment: data && hasContent(data) ? data : null,
-    isLoading,
-    isError,
-  };
+  return { enrichment: value, isLoading, isError };
 }
