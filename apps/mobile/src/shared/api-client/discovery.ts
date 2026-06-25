@@ -336,15 +336,23 @@ export type LastFmEnrichmentResponse = {
   album: string;
 };
 
+/**
+ * Build the `?kind=…&title=…[&subtitle=…]` query shared by the per-provider
+ * (Last.fm, Deezer) detail-open enrichment endpoints.
+ */
+function kindTitleQs(kind: DiscoveryKind, title: string, subtitle?: string | null): string {
+  const qs = new URLSearchParams({ kind, title });
+  if (subtitle) qs.set('subtitle', subtitle);
+  return qs.toString();
+}
+
 export async function getLastFmEnrichment(params: {
   kind: DiscoveryKind;
   title: string;
   subtitle?: string | null | undefined;
 }): Promise<LastFmEnrichmentResponse> {
-  const qs = new URLSearchParams({ kind: params.kind, title: params.title });
-  if (params.subtitle) qs.set('subtitle', params.subtitle);
   return apiFetch<LastFmEnrichmentResponse>(
-    `/v1/discovery/enrichment/lastfm?${qs.toString()}`,
+    `/v1/discovery/enrichment/lastfm?${kindTitleQs(params.kind, params.title, params.subtitle)}`,
   );
 }
 
@@ -373,10 +381,8 @@ export async function getDeezerEnrichment(params: {
   title: string;
   subtitle?: string | null | undefined;
 }): Promise<DeezerEnrichmentResponse> {
-  const qs = new URLSearchParams({ kind: params.kind, title: params.title });
-  if (params.subtitle) qs.set('subtitle', params.subtitle);
   return apiFetch<DeezerEnrichmentResponse>(
-    `/v1/discovery/enrichment/deezer?${qs.toString()}`,
+    `/v1/discovery/enrichment/deezer?${kindTitleQs(params.kind, params.title, params.subtitle)}`,
   );
 }
 

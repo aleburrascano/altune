@@ -14,6 +14,7 @@ import { setDetailHandoff } from '@shared/lib/detail-handoff';
 import { deriveAlbums } from '@shared/lib/derive-library-groups';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
+import { trackExtras } from '../extras-accessors';
 import { useArtistContent } from './useArtistContent';
 import { useArtistDiscovery } from './useArtistDiscovery';
 import { useLibraryTracksForArtist } from './useLibraryTracks';
@@ -62,6 +63,11 @@ export function useArtistDetailState(
       : result.sources;
   const shouldFetchContent = effectiveSources.length > 0 && exploreExpanded;
 
+  // MBID for identity-safe Last.fm top-tracks — from the tapped artist when it has
+  // its own sources, else from the name-resolved discovery result.
+  const effectiveMbid =
+    (hasSources ? trackExtras(result.extras).mbid : discoverySearch.mbid) ?? undefined;
+
   const {
     topTracks: apiTopTracks,
     albums: apiAlbums,
@@ -74,6 +80,7 @@ export function useArtistDetailState(
   } = useArtistContent({
     sources: effectiveSources,
     artistName: result.title,
+    ...(effectiveMbid ? { mbid: effectiveMbid } : {}),
     enabled: shouldFetchContent,
   });
 
