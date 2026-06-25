@@ -1,18 +1,29 @@
 # detail — feature-local context
 
-Read-only detail screen for a tapped discovery result (`view-result-detail` spec). Fed by an in-memory handoff — no per-item backend fetch. A track can be saved to the library with an optimistic UI. Album detail shows tracklist fetched from provider API; artist detail shows top tracks + albums. Lateral navigation (AC#11-13) allows tapping artist/album names to browse related content; content items are tappable to navigate deeper (AC#14-20).
+Read-only detail screen for a tapped discovery result (`view-result-detail` spec). Fed by an in-memory handoff — no per-item backend fetch. A track can be saved to the library with an optimistic UI and a visible acquire lifecycle. Album detail shows a tracklist fetched from provider API; artist detail shows top tracks + discography. Lateral navigation (AC#11-13) allows tapping artist/album names to browse related content; content items are tappable to navigate deeper (AC#14-20).
+
+The screen was **reworked to declutter**: one vertical scroll of **header → per-kind body → optional `Disclosure`**, with no tabs and no always-on provider slabs (see "Screen shape" below).
 
 ## Key terms
 
 - **Handoff** — the last-tapped `DiscoveryResult`, stashed in `@shared/lib/detail-handoff` (shared, not feature-local: discover writes, detail reads). DetailScreen reads it on mount; an empty handoff (cold start / reload / deep link) redirects to `/discover`.
-- **AcquisitionStatus pending** — a freshly saved track starts `pending` (audio not yet acquired); the library row shows a "Pending" marker.
+- **Save / acquire lifecycle** — a freshly saved track starts `pending` (audio acquiring server-side), then reconciles to `ready` or `failed`. On the detail screen the `TrackSaveControl` renders this as add → saving (spinner) → ready (check) → failed (retry); the state is derived from the library React Query cache by the pure `saveControlState` helper (`save-control-state.ts`). It advances on query invalidation today; the backend `/v1/events` SSE stream (`track_acquired` event) makes it instant.
+
+## Screen shape (post-rework)
+
+One scroll: **header → per-kind body → optional `Disclosure`**.
+
+- **Header** (`DetailScreen.tsx`) — back · hero artwork (square track/album, circular artist) · title · an `artist · year` subtitle (artist is a tappable lateral-nav link; the year is appended muted). No kind label.
+- **Genres** — one identity pill row (`GenrePills`, MusicBrainz genres ≤4) at the top of each body, replacing the four per-provider genre/tag blocks.
+- **Deep metadata** — lives behind a single collapsed `Disclosure`, mounted only when its enrichment is present: album → `DiscogsEnrichmentSection` + `DeezerEnrichmentSection` under "Details & credits" (`detail-album-details`); artist → `LastFmEnrichmentSection` + `DiscogsArtistSection` under "About &lt;artist&gt;" (`detail-artist-about`). **Lyrics are no longer on the detail screen** (they belong to the full player) — `LyricsSection` still exists as a component but is unrendered here. The MusicBrainz `EnrichmentSection` is also no longer mounted (genres/year surface via `GenrePills` + the header).
 
 ## Patterns specific here
 
 - **Pure helpers, thin JSX** (same as discover/library). `extras.ts` (`trackInfoRows`, `formatDuration`) and `save-cache.ts` (`insertOptimisticTrack`, `optimisticTrack`, `toCreateTrackRequest`) hold the logic and are unit-tested without rendering; `DetailScreen.tsx` is the wrapper.
 - **Primitives imported directly** (`@shared/ui/primitives/*`), not the barrel, to keep jest transitive loads small. `Artwork` → `expo-image` is mocked in the component test.
 - **Optimistic save.** `useSaveTrack` prepends a pending placeholder to the `['library']` infinite-query cache on mutate, rolls back to the snapshot on error, and invalidates on settle so a dedup hit reconciles to the server row. Cache transforms are pure (`save-cache.ts`). The optimistic placeholder includes null values for the extended metadata fields (`year`, `genre`, `track_number`, `album_artist`, `isrc`, `audio_ref`) added by the `import-legacy-library` spec.
-- **`extras` is an untyped wire map.** Every key is narrowed before use; absent/empty values are omitted. Track detail shows `duration_seconds`, `album`, and `featured_artists` (ISRC and popularity removed — not user-facing per Spotify parity). Featured artists come from MB's `artist-credit` array (structured) OR from regex parsing of "feat./ft./with" in the title/subtitle strings (fallback for Deezer/iTunes/SC). `formatDuration` promoted to `@shared/lib/format` (2-consumer rule); re-exported from `extras.ts` for backwards compatibility.
+- **`extras` is an untyped wire map.** Every key is narrowed before use (`extras-accessors.ts`); absent/empty values are omitted. Post-rework the track body shows **duration on the Play button** (`Play · 4:03`), and **album + featured artists as tappable nav rows** (`detail-info-album` / `detail-info-featuring`) — not a per-field info-row wall. Genres come from MusicBrainz (`GenrePills`, ≤4); the year is shown in the header `artist · year` subtitle (MusicBrainz year, else extras/album year). Featured artists come from MB's `artist-credit` array (structured) OR regex parsing of "feat./ft./with" in title/subtitle (fallback for Deezer/iTunes/SC). `trackInfoRows` in `extras.ts` is now **unused by the screen** (kept for its unit test). `formatDuration` lives in `@shared/lib/format`, re-exported from `extras.ts`.
+- **`TrackSaveControl`** — the 40pt circular save/download control (`ui/TrackSaveControl.tsx`) shared by the album tracklist rows (`AlbumTrackRow`) and the artist Popular-Tracks rows. State comes from each kind's state hook: `useAlbumDetailState.saveStateFor` / `useArtistDetailState.saveStateFor` (and `onQuickSave`), both reading the library cache. Replaces the old bare 16pt Plus; clears the 44pt touch-target bar (40pt circle + `hitSlop`).
 - **Save guarded by the Track artist invariant** — when `result.subtitle` (artist) is null the Save button is disabled and `onSave` short-circuits (no invalid POST).
 - **Lateral navigation via search** — `useLateralNav` hook searches for artist/album by name (`searchDiscovery` with `limit: 1, saveHistory: false`) and navigates via `router.push` within the current tab's stack. Uses a `searchingRef` guard that **never resets after a successful push** — prevents duplicate detail screens. The new detail screen gets its own fresh instance. Artist name is tappable on track/album detail; album row and featured artist names are also tappable. Shows Banner on failure (not Alert).
 - **Album content fetch** — `useAlbumTracks` hook calls `getAlbumTracks(provider, externalId)` using the first source from the album's `sources[]`. If a MusicBrainz source also exists, fetches MB tracks in parallel and merges `featured_artists` by title match (`_mergeFeaturing`). React Query cached per `(provider, external_id)` with 30min staleTime. Track rows are tappable → navigate to track detail; tapped tracks inherit the parent album's `image_url` when they lack their own.
@@ -27,13 +38,13 @@ Read-only detail screen for a tapped discovery result (`view-result-detail` spec
 
 ## TestIDs (load-bearing)
 
-**Track detail:** `detail-header`, `detail-back`, `detail-artist-link` (tappable artist name), `detail-track-info`, `detail-info-<key>` (duration/album/isrc/popularity — album is tappable), `detail-save`, `detail-save-error`.
+**Header / shared:** `detail-header`, `detail-back`, `detail-artist-link` (tappable artist name), `detail-genres` (genre pill row).
 
-**Album detail:** `detail-tracklist-loading`, `detail-tracklist-error`, `detail-tracklist-empty`, `detail-tracklist` (success), `detail-track-<n>` (each track row, 0-indexed).
+**Track detail:** `detail-track-info` (body), `detail-play` / `detail-preview` (play/preview Button), `detail-save`, `detail-save-error`, `detail-info-album` (tappable album nav row), `detail-info-featuring` (featured-artist nav row), `detail-lateral-error`. **Removed by the rework:** `detail-info-duration`, `detail-info-isrc`, `detail-info-popularity`, and the on-screen lyrics testIDs.
 
-**Album metadata:** `detail-album-meta` (year · tracks · duration summary).
+**Album detail:** `detail-tracklist-loading`, `detail-tracklist-error`, `detail-tracklist-empty`, `detail-tracklist` (success), `detail-track-<n>` (each track row, 0-indexed), `detail-track-save-<n>` (per-row save control), `detail-album-meta` (year · tracks · duration), `detail-album-details` (Details &amp; credits Disclosure).
 
-**Artist detail:** `detail-artist-content` (container), `detail-top-tracks-loading`, `detail-top-tracks-error`, `detail-top-track-<n>` (each top track), `detail-albums-loading`, `detail-albums-error`, `detail-album-<n>` (each album card), `detail-single-<n>` (each single card), `detail-ep-<n>` (each EP card).
+**Artist detail:** `detail-artist-content` (container), `detail-top-tracks-loading`, `detail-top-tracks-error`, `detail-top-track-<n>` (each top track), `detail-top-track-save-<n>` (per-row save control), `detail-albums-loading`, `detail-albums-error`, `detail-album-<n>` / `detail-single-<n>` / `detail-ep-<n>` (discography cards), `detail-artist-about` (About Disclosure).
 
 ## Routing
 
@@ -51,6 +62,7 @@ Detail is a **stack screen nested within each tab**: `src/app/(tabs)/discover/de
 ## Test files
 
 - `__tests__/extras.test.ts` — `trackInfoRows` / `formatDuration`.
+- `__tests__/save-control-state.test.ts` — the add/saving/ready/failed lifecycle mapping (pure).
 - `__tests__/save-cache.test.ts` — optimistic cache transforms + request mapping.
 - `__tests__/useSaveTrack.test.ts` — optimistic insert + rollback against a real QueryClient.
 - `__tests__/useLateralNav.test.ts` — search-and-navigate for lateral browsing.
