@@ -1,10 +1,14 @@
 /**
- * useArtistContent — fetch top tracks and albums from an artist.
+ * useArtistContent — fetch top tracks and albums for an artist.
  *
  * AC#16-18: Fans out to all providers in the artist's sources array for
- * albums (multi-provider merge), and uses the best source for top tracks.
- * Albums are deduped by normalized title (keep highest track_count),
- * then sorted newest-first.
+ * albums (multi-provider merge), and uses the best sources for top tracks.
+ * Albums are deduped by normalized title (keep highest track_count), then
+ * sorted newest-first.
+ *
+ * The hook is a thin composition of two cohesive halves — `useArtistTopTracks`
+ * and `useArtistAlbums` — each owning one concern's provider fan-out, merge,
+ * and all-failed verdict. The public return contract is their union.
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -15,49 +19,132 @@ import {
   type DiscoveryResult,
   type DiscoverySource,
 } from '@shared/api-client/discovery';
-import { normalizeForDedup } from '../helpers/normalize-for-dedup';
-
-import { dedupAlbumsByTitle, sortByReleaseDateDesc } from '../helpers/artist-content';
+import {
+  backfillAlbumArt,
+  dedupAlbumsByTitle,
+  dedupeTracksByTitle,
+  sortByReleaseDateDesc,
+} from '../helpers/artist-content';
 
 type UseArtistContentParams = {
   sources: DiscoverySource[];
   /** Artist name — passed to the backend for MB cross-reference validation. */
   artistName?: string;
+  /** Resolved MusicBrainz id — enables identity-safe Last.fm top-tracks. */
+  mbid?: string;
   enabled?: boolean;
 };
 
-type UseArtistContentReturn = {
+type ArtistTopTracksResult = {
   topTracks: DiscoveryResult[];
-  albums: DiscoveryResult[];
   isLoadingTracks: boolean;
-  isLoadingAlbums: boolean;
   isErrorTracks: boolean;
-  isErrorAlbums: boolean;
   refetchTracks: () => void;
+};
+
+type ArtistAlbumsResult = {
+  albums: DiscoveryResult[];
+  isLoadingAlbums: boolean;
+  isErrorAlbums: boolean;
   refetchAlbums: () => void;
 };
 
-export function useArtistContent({
+type UseArtistContentReturn = ArtistTopTracksResult & ArtistAlbumsResult;
+
+/**
+ * Top tracks — multi-provider, equal sources: Deezer (mainstream) + SoundCloud
+ * (underground), merged by title with Deezer precedence and capped at 5. Both
+ * key by numeric id; Last.fm is keyed by MBID (identity-safe) so it never falls
+ * back to ambiguous name matching, adding the scrobble-popular layer.
+ */
+export function useArtistTopTracks({
   sources,
-  artistName,
+  mbid,
   enabled = true,
-}: UseArtistContentParams): UseArtistContentReturn {
+}: Pick<UseArtistContentParams, 'sources' | 'mbid' | 'enabled'>): ArtistTopTracksResult {
   const deezerSource = sources.find((s) => s.provider === 'deezer') ?? null;
-  const streamSource = deezerSource ?? sources.find((s) => s.provider === 'lastfm') ?? sources[0] ?? null;
+  const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
 
   const {
-    data: tracksData,
-    isLoading: isLoadingTracksRaw,
-    isError: isErrorTracksRaw,
-    refetch: refetchTracksRaw,
+    data: dzTracksData,
+    isLoading: isLoadingDzTracks,
+    isError: isErrorDzTracks,
+    refetch: refetchDzTracks,
   } = useQuery({
-    queryKey: ['artist-top-tracks', streamSource?.provider ?? '', streamSource?.external_id ?? ''],
-    queryFn: () => getArtistTopTracks(streamSource!.provider, streamSource!.external_id, 5),
-    enabled: enabled && streamSource !== null,
+    queryKey: ['artist-top-tracks-dz', deezerSource?.external_id ?? ''],
+    queryFn: () => getArtistTopTracks('deezer', deezerSource!.external_id, 5),
+    enabled: enabled && deezerSource !== null,
+    staleTime: 1000 * 60 * 30,
+  });
+  const {
+    data: scTracksData,
+    isLoading: isLoadingScTracks,
+    isError: isErrorScTracks,
+    refetch: refetchScTracks,
+  } = useQuery({
+    queryKey: ['artist-top-tracks-sc', scSource?.external_id ?? ''],
+    queryFn: () => getArtistTopTracks('soundcloud', scSource!.external_id, 5),
+    enabled: enabled && scSource !== null,
     staleTime: 1000 * 60 * 30,
   });
 
+  // Last.fm top-tracks, keyed by MBID (identity-safe) — only when an MBID is
+  // known, so it never falls back to ambiguous name matching. No Last.fm
+  // *source* is required.
+  const {
+    data: lfmTracksData,
+    isLoading: isLoadingLfmTracks,
+    isError: isErrorLfmTracks,
+    refetch: refetchLfmTracks,
+  } = useQuery({
+    queryKey: ['artist-top-tracks-lfm', mbid ?? ''],
+    queryFn: () => getArtistTopTracks('lastfm', mbid!, 5),
+    enabled: enabled && Boolean(mbid),
+    staleTime: 1000 * 60 * 30,
+  });
+
+  const topTrackProviders = [
+    { source: deezerSource, data: dzTracksData, isLoading: isLoadingDzTracks, isError: isErrorDzTracks, refetch: refetchDzTracks },
+    { source: scSource, data: scTracksData, isLoading: isLoadingScTracks, isError: isErrorScTracks, refetch: refetchScTracks },
+    { source: mbid ? { provider: 'lastfm', external_id: mbid, url: '' } : null, data: lfmTracksData, isLoading: isLoadingLfmTracks, isError: isErrorLfmTracks, refetch: refetchLfmTracks },
+  ].filter((p) => p.source !== null);
+
+  const mergedTopTracks = dedupeTracksByTitle(
+    topTrackProviders.flatMap((p) => (p.data?.status === 'ok' ? p.data.items : [])),
+  ).slice(0, 5);
+
+  const isLoadingTracks = topTrackProviders.some((p) => p.isLoading);
+  const trackOutcomes = topTrackProviders.map(
+    (p) => p.isError || (p.data !== undefined && p.data.status !== 'ok'),
+  );
+  const isErrorTracks = trackOutcomes.length > 0 && trackOutcomes.every(Boolean);
+
+  return {
+    topTracks: mergedTopTracks,
+    isLoadingTracks,
+    isErrorTracks,
+    refetchTracks: () => { topTrackProviders.forEach((p) => p.refetch()); },
+  };
+}
+
+/**
+ * Albums — multi-provider union (Deezer + SoundCloud + iTunes), deduped by
+ * normalized title (keep highest track_count). `artistName` is threaded to every
+ * provider so the backend runs the same MB-spine consensus validation; without
+ * it SoundCloud/Deezer bypass validation and leak same-name contamination. When
+ * the backend validated (artistName present) we trust its confirmed-first
+ * ordering; otherwise we sort by release date.
+ */
+export function useArtistAlbums({
+  sources,
+  artistName,
+  enabled = true,
+}: Pick<UseArtistContentParams, 'sources' | 'artistName' | 'enabled'>): ArtistAlbumsResult {
+  const deezerSource = sources.find((s) => s.provider === 'deezer') ?? null;
+  const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
+  const itunesSource = sources.find((s) => s.provider === 'itunes') ?? null;
   const dzValidated = Boolean(artistName);
+
   const {
     data: dzData,
     isLoading: isLoadingDz,
@@ -70,15 +157,17 @@ export function useArtistContent({
     staleTime: 1000 * 60 * 30,
   });
 
-  const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
+  // SoundCloud albums also pass artistName so the backend runs the same MB-spine
+  // consensus it does for Deezer/iTunes — without it SoundCloud albums bypassed
+  // validation and leaked same-name contamination into the merged list.
   const {
     data: scData,
     isLoading: isLoadingSc,
     isError: isErrorSc,
     refetch: refetchSc,
   } = useQuery({
-    queryKey: ['artist-albums-sc', scSource?.external_id ?? ''],
-    queryFn: () => getArtistAlbums('soundcloud', scSource!.external_id, 100),
+    queryKey: ['artist-albums-sc', scSource?.external_id ?? '', artistName ?? ''],
+    queryFn: () => getArtistAlbums('soundcloud', scSource!.external_id, 100, artistName),
     enabled: enabled && scSource !== null,
     staleTime: 1000 * 60 * 30,
   });
@@ -86,7 +175,6 @@ export function useArtistContent({
   // iTunes is a second mainstream discography source alongside Deezer
   // (docs/providers/itunes.md cap 5). artistName is passed through so the
   // backend applies the same MB consensus validation it does for Deezer.
-  const itunesSource = sources.find((s) => s.provider === 'itunes') ?? null;
   const {
     data: itData,
     isLoading: isLoadingIt,
@@ -117,18 +205,7 @@ export function useArtistContent({
 
   // Back-fill artwork for albums with no image (e.g. SoundCloud sets)
   // from a title-matched album from another provider.
-  const artByTitle = new Map<string, string>();
-  for (const a of mergedAlbums) {
-    if (a.image_url) {
-      const key = normalizeForDedup(a.title);
-      if (!artByTitle.has(key)) artByTitle.set(key, a.image_url);
-    }
-  }
-  const albumsWithArt = mergedAlbums.map((a) => {
-    if (a.image_url) return a;
-    const donor = artByTitle.get(normalizeForDedup(a.title));
-    return donor ? { ...a, image_url: donor } : a;
-  });
+  const albumsWithArt = backfillAlbumArt(mergedAlbums);
 
   const isLoadingAlbums = albumProviders.some((p) => p.isLoading);
   const albumOutcomes = albumProviders.map(
@@ -141,14 +218,16 @@ export function useArtistContent({
   const finalAlbums = dzValidated ? albumsWithArt : sortByReleaseDateDesc(albumsWithArt);
 
   return {
-    topTracks: tracksData?.status === 'ok' ? tracksData.items : [],
     albums: finalAlbums,
-    isLoadingTracks: isLoadingTracksRaw,
     isLoadingAlbums,
-    isErrorTracks:
-      isErrorTracksRaw || (tracksData !== undefined && tracksData.status !== 'ok'),
     isErrorAlbums,
-    refetchTracks: refetchTracksRaw,
     refetchAlbums: () => { albumProviders.forEach((p) => p.refetch()); },
+  };
+}
+
+export function useArtistContent(params: UseArtistContentParams): UseArtistContentReturn {
+  return {
+    ...useArtistTopTracks(params),
+    ...useArtistAlbums(params),
   };
 }

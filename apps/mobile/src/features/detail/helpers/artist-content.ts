@@ -30,6 +30,40 @@ export function mergedSources(a: DiscoverySource[], b: DiscoverySource[]): Disco
   return merged;
 }
 
+// dedupeTracksByTitle merges top-tracks from multiple providers, keeping the
+// first occurrence of each normalized title (caller orders by provider
+// precedence — Deezer mainstream before SoundCloud underground).
+export function dedupeTracksByTitle(tracks: DiscoveryResult[]): DiscoveryResult[] {
+  const seen = new Set<string>();
+  const out: DiscoveryResult[] = [];
+  for (const t of tracks) {
+    const key = normalizeForDedup(t.title);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+/**
+ * Back-fill artwork for albums with no image (e.g. SoundCloud sets) from a
+ * title-matched album from another provider in the same merged list.
+ */
+export function backfillAlbumArt(albums: DiscoveryResult[]): DiscoveryResult[] {
+  const artByTitle = new Map<string, string>();
+  for (const a of albums) {
+    if (a.image_url) {
+      const key = normalizeForDedup(a.title);
+      if (!artByTitle.has(key)) artByTitle.set(key, a.image_url);
+    }
+  }
+  return albums.map((a) => {
+    if (a.image_url) return a;
+    const donor = artByTitle.get(normalizeForDedup(a.title));
+    return donor ? { ...a, image_url: donor } : a;
+  });
+}
+
 export function dedupAlbumsByTitle(albums: DiscoveryResult[]): DiscoveryResult[] {
   const groups = new Map<string, DiscoveryResult>();
   for (const album of albums) {

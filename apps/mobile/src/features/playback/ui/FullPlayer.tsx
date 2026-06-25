@@ -7,6 +7,7 @@ import { ChevronDown, ListMusic, Pause, Play, Repeat, Repeat1, RotateCcw, Shuffl
 import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import type { PlaybackStatus } from '@shared/playback/types';
 import { Scrubber } from './Scrubber';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
@@ -16,6 +17,43 @@ import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
 const RESTART_THRESHOLD_MS = 3_000;
+
+/** The now-playing label + tone for the current playback status. */
+function getStatusDisplay(
+  status: PlaybackStatus,
+  isPreview: boolean,
+): { label: string; tone: 'danger' | 'warning' | 'secondary' } {
+  if (status === 'error') return { label: 'Error', tone: 'danger' };
+  if (status === 'ended') {
+    return { label: isPreview ? 'Preview ended' : 'Finished', tone: 'warning' };
+  }
+  return { label: isPreview ? 'Preview' : 'Now Playing', tone: isPreview ? 'warning' : 'secondary' };
+}
+
+/** The accent-filled circular play/pause/replay button, shared by the preview
+ *  and full transport-control rows. */
+function PlayButton({
+  isPlaying,
+  isEnded,
+  onPress,
+}: {
+  isPlaying: boolean;
+  isEnded: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={[styles.playButton, { backgroundColor: theme.color.accent }]}>
+      <IconButton
+        icon={isPlaying ? Pause : isEnded ? RotateCcw : Play}
+        size={32}
+        color={theme.color.onAccent}
+        onPress={onPress}
+        accessibilityLabel={isPlaying ? 'Pause' : isEnded ? 'Play again' : 'Play'}
+      />
+    </View>
+  );
+}
 
 export function FullPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, seekTo, retry } = usePlayback();
@@ -65,13 +103,7 @@ export function FullPlayer() {
     }
   };
 
-  const statusLabel = isError
-    ? 'Error'
-    : isEnded
-      ? isPreview ? 'Preview ended' : 'Finished'
-      : isPreview ? 'Preview' : 'Now Playing';
-
-  const statusTone = isError ? 'danger' : isPreview || isEnded ? 'warning' : 'secondary';
+  const { label: statusLabel, tone: statusTone } = getStatusDisplay(status, isPreview);
 
   const dimColor = theme.color.textTertiary;
   const activeColor = theme.color.accent;
@@ -131,15 +163,7 @@ export function FullPlayer() {
       ) : isPreview ? (
         <View style={styles.controls}>
           <View style={styles.controlSpacer} />
-          <View style={[styles.playButton, { backgroundColor: theme.color.accent }]}>
-            <IconButton
-              icon={isPlaying ? Pause : isEnded ? RotateCcw : Play}
-              size={32}
-              color={theme.color.onAccent}
-              onPress={handlePlayPause}
-              accessibilityLabel={isPlaying ? 'Pause' : isEnded ? 'Play again' : 'Play'}
-            />
-          </View>
+          <PlayButton isPlaying={isPlaying} isEnded={isEnded} onPress={handlePlayPause} />
           <View style={styles.controlSpacer} />
         </View>
       ) : (
@@ -158,15 +182,7 @@ export function FullPlayer() {
             onPress={handlePrevious}
             accessibilityLabel="Previous track"
           />
-          <View style={[styles.playButton, { backgroundColor: theme.color.accent }]}>
-            <IconButton
-              icon={isPlaying ? Pause : isEnded ? RotateCcw : Play}
-              size={32}
-              color={theme.color.onAccent}
-              onPress={handlePlayPause}
-              accessibilityLabel={isPlaying ? 'Pause' : isEnded ? 'Play again' : 'Play'}
-            />
-          </View>
+          <PlayButton isPlaying={isPlaying} isEnded={isEnded} onPress={handlePlayPause} />
           <IconButton
             icon={SkipForward}
             size={24}

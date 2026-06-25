@@ -4,12 +4,12 @@
 
 import { StyleSheet } from 'react-native';
 
-import type { useQueryClient , InfiniteData } from '@tanstack/react-query';
-import type { ListTracksResponse } from '@shared/api-client/types';
+import type { QueryClient } from '@tanstack/react-query';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { spacing } from '@shared/ui/theme/tokens';
 
 import { albumExtras } from '../extras-accessors';
+import { findTrackInLibraryCache } from '../helpers/find-track-in-library-cache';
 
 export function _albumYear(album: DiscoveryResult): string | null {
   const ae = albumExtras(album.extras);
@@ -18,27 +18,11 @@ export function _albumYear(album: DiscoveryResult): string | null {
 }
 
 export function _isTrackInLibraryCache(
-  queryClient: ReturnType<typeof useQueryClient>,
+  queryClient: QueryClient,
   title: string,
   artist: string | null,
 ): boolean {
-  const homeData = queryClient.getQueryData<ListTracksResponse>(['library-home']);
-  if (homeData) {
-    const normalTitle = title.toLowerCase().trim();
-    const normalArtist = (artist ?? '').toLowerCase().trim();
-    return homeData.items.some(
-      (t) => t.title.toLowerCase().trim() === normalTitle && t.artist.toLowerCase().trim() === normalArtist,
-    );
-  }
-  const infiniteData = queryClient.getQueryData<InfiniteData<ListTracksResponse>>(['library']);
-  if (!infiniteData) return false;
-  const normalTitle = title.toLowerCase().trim();
-  const normalArtist = (artist ?? '').toLowerCase().trim();
-  return infiniteData.pages.some((page) =>
-    page.items.some(
-      (t) => t.title.toLowerCase().trim() === normalTitle && t.artist.toLowerCase().trim() === normalArtist,
-    ),
-  );
+  return findTrackInLibraryCache(queryClient, title, artist) !== null;
 }
 
 export { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
