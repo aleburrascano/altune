@@ -101,5 +101,6 @@ a held-in-reserve, non-query-fit tiebreak for strict-#1 polish — not the gate.
 - `ARCHITECTURE.md` — flow diagram + ranking key
 - `service/search.go` — `Service` orchestrator (fanOut + mergeRankEnrich)
 - `service/merge.go` / `service/rank.go` / `service/diversity.go` — the Merge→Rank→reshape core
-- `service/*_eval.go` + `cmd/discoveryeval/` — the harnesses
+- `service/enrich/` — detail-open enrichers (Deezer, Last.fm, Discogs, lyrics) + the `CachedLookup` read-through helper
+- `service/eval/` + `cmd/discoveryeval/` — the offline regression harnesses (eval, merge, correction, diversity, health, coverage signals)
 - `adapters/providers/` — one file per provider (Deezer, Last.fm, MusicBrainz, iTunes, SoundCloud, YouTube/YT Music, Discogs, Genius)
