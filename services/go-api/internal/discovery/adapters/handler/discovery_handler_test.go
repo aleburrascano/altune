@@ -228,7 +228,13 @@ func buildDiscoveryRouter(
 		artistSvc = service.NewGetArtistContentService(artistProviders)
 	}
 
-	h := NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, nil, nil, nil, nil)
+	h := NewDiscoveryHandler(DiscoveryServices{
+		Search:  searchSvc,
+		Click:   clickSvc,
+		History: historySvc,
+		Album:   albumSvc,
+		Artist:  artistSvc,
+	})
 
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(&discFakeTokenVerifier{userId: discTestUserId}))

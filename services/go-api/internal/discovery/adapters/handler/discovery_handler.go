@@ -55,27 +55,33 @@ func (h *DiscoveryHandler) WithDetailEnrichers(e DetailEnrichers) *DiscoveryHand
 	return h
 }
 
-func NewDiscoveryHandler(
-	searchSvc *service.Service,
-	clickSvc *service.RecordClickService,
-	historySvc *service.ListSearchHistoryService,
-	albumSvc *service.GetAlbumTracksService,
-	artistSvc *service.GetArtistContentService,
-	relatedSvc *service.GetRelatedTracksService,
-	enrichSvc *service.EnrichmentService,
-	suggestSvc *service.SuggestService,
-	eventSvc *service.RecordEventService,
-) *DiscoveryHandler {
+// DiscoveryServices bundles the required (non-optional) discovery use cases the
+// handler dispatches to — one named field per endpoint family. Replaces a
+// 9-positional constructor: callers (the composition root, tests) name what they
+// pass, and adding an endpoint is one field here, not another positional arg.
+type DiscoveryServices struct {
+	Search  *service.Service
+	Click   *service.RecordClickService
+	History *service.ListSearchHistoryService
+	Album   *service.GetAlbumTracksService
+	Artist  *service.GetArtistContentService
+	Related *service.GetRelatedTracksService
+	Enrich  *service.EnrichmentService
+	Suggest *service.SuggestService
+	Event   *service.RecordEventService
+}
+
+func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
 	return &DiscoveryHandler{
-		searchSvc:  searchSvc,
-		clickSvc:   clickSvc,
-		historySvc: historySvc,
-		albumSvc:   albumSvc,
-		artistSvc:  artistSvc,
-		relatedSvc: relatedSvc,
-		enrichSvc:  enrichSvc,
-		suggestSvc: suggestSvc,
-		eventSvc:   eventSvc,
+		searchSvc:  svcs.Search,
+		clickSvc:   svcs.Click,
+		historySvc: svcs.History,
+		albumSvc:   svcs.Album,
+		artistSvc:  svcs.Artist,
+		relatedSvc: svcs.Related,
+		enrichSvc:  svcs.Enrich,
+		suggestSvc: svcs.Suggest,
+		eventSvc:   svcs.Event,
 	}
 }
 
@@ -270,58 +276,16 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resultDTOs := make([]SearchResultDTO, len(result.Results))
-	for i, sr := range result.Results {
-		resultDTOs[i] = searchResultToDTO(sr)
-	}
-
-	var relatedDTOs []RelatedGroupDTO
-	for _, g := range result.Related {
-		items := make([]SearchResultDTO, len(g.Items))
-		for i, sr := range g.Items {
-			items[i] = searchResultToDTO(sr)
-		}
-		relatedDTOs = append(relatedDTOs, RelatedGroupDTO{
-			Relationship: g.Relationship,
-			RelatedTo:    g.RelatedTo,
-			Items:        items,
-		})
-	}
-
-	providerDTOs := make([]ProviderStatusDTO, len(result.ProviderStatuses))
-	for i, ps := range result.ProviderStatuses {
-		providerDTOs[i] = ProviderStatusDTO{
-			Provider:    ps.Provider.String(),
-			Status:      ps.Status.String(),
-			LatencyMs:   ps.LatencyMs,
-			ResultCount: ps.ResultCount,
-		}
-	}
-
-	status := http.StatusOK
-	if len(result.ProviderStatuses) > 0 {
-		allFailed := true
-		for _, ps := range result.ProviderStatuses {
-			if ps.Status == domain.ProviderStatusOK {
-				allFailed = false
-				break
-			}
-		}
-		if allFailed {
-			status = http.StatusServiceUnavailable
-		}
-	}
-
-	httputil.WriteJSON(w, status, DiscoverySearchResponse{
+	httputil.WriteJSON(w, searchStatusCode(result.ProviderStatuses), DiscoverySearchResponse{
 		Query:          q,
 		QueryNorm:      textnorm.NormalizeForMatch(q),
-		Results:        resultDTOs,
-		Providers:      providerDTOs,
+		Results:        searchResultsToDTOs(result.Results),
+		Providers:      providerStatusesToDTOs(result.ProviderStatuses),
 		Partial:        result.Partial,
 		Cache:          CacheDTO{Hit: false, FetchedAt: nil},
 		CorrectedQuery: result.CorrectedQuery,
 		OriginalQuery:  result.OriginalQuery,
-		Related:        relatedDTOs,
+		Related:        relatedGroupsToDTOs(result.Related),
 	})
 }
 
@@ -1045,6 +1009,61 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 		Sources:    sources,
 		Extras:     extras,
 	}
+}
+
+// searchResultsToDTOs maps a slice of domain results to wire DTOs.
+func searchResultsToDTOs(results []domain.SearchResult) []SearchResultDTO {
+	dtos := make([]SearchResultDTO, len(results))
+	for i, sr := range results {
+		dtos[i] = searchResultToDTO(sr)
+	}
+	return dtos
+}
+
+// relatedGroupsToDTOs maps the related-tracks groups to wire DTOs. Returns nil
+// (not an empty slice) when there are no groups, preserving the response's
+// omitempty behavior for the related block.
+func relatedGroupsToDTOs(groups []domain.RelatedGroup) []RelatedGroupDTO {
+	if len(groups) == 0 {
+		return nil
+	}
+	dtos := make([]RelatedGroupDTO, 0, len(groups))
+	for _, g := range groups {
+		dtos = append(dtos, RelatedGroupDTO{
+			Relationship: g.Relationship,
+			RelatedTo:    g.RelatedTo,
+			Items:        searchResultsToDTOs(g.Items),
+		})
+	}
+	return dtos
+}
+
+// providerStatusesToDTOs maps per-provider scatter-gather outcomes to wire DTOs.
+func providerStatusesToDTOs(statuses []domain.ProviderSearchResponse) []ProviderStatusDTO {
+	dtos := make([]ProviderStatusDTO, len(statuses))
+	for i, ps := range statuses {
+		dtos[i] = ProviderStatusDTO{
+			Provider:    ps.Provider.String(),
+			Status:      ps.Status.String(),
+			LatencyMs:   ps.LatencyMs,
+			ResultCount: ps.ResultCount,
+		}
+	}
+	return dtos
+}
+
+// searchStatusCode is 503 when a non-empty scatter had every provider fail, else
+// 200 — an all-error fan-out is surfaced as service-unavailable per AC.
+func searchStatusCode(statuses []domain.ProviderSearchResponse) int {
+	if len(statuses) == 0 {
+		return http.StatusOK
+	}
+	for _, ps := range statuses {
+		if ps.Status == domain.ProviderStatusOK {
+			return http.StatusOK
+		}
+	}
+	return http.StatusServiceUnavailable
 }
 
 func parseKinds(csv string) (map[domain.ResultKind]bool, error) {
