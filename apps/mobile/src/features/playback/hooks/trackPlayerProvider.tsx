@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import TrackPlayer, {
-  Capability,
   State,
   usePlaybackState,
   useProgress,
@@ -10,6 +9,7 @@ import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '@shared/playback/types';
 
+import { ensurePlayerSetup } from '../initPlayer';
 import { loadNativeTrack } from '../loadNativeTrack';
 import { useQueueResume } from './useQueueResume';
 
@@ -26,28 +26,6 @@ const INITIAL_STATE: PlaybackState = {
   errorMessage: null,
 };
 
-let playerInitialized = false;
-
-async function initPlayer(): Promise<void> {
-  if (playerInitialized) return;
-  await TrackPlayer.setupPlayer({});
-  await TrackPlayer.updateOptions({
-    capabilities: [
-      Capability.Play,
-      Capability.Pause,
-      Capability.SeekTo,
-      Capability.SkipToNext,
-      Capability.SkipToPrevious,
-    ],
-    compactCapabilities: [
-      Capability.Play,
-      Capability.Pause,
-      Capability.SkipToNext,
-    ],
-  });
-  playerInitialized = true;
-}
-
 export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -57,7 +35,7 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const progress = useProgress(500);
 
   useEffect(() => {
-    void initPlayer();
+    void ensurePlayerSetup();
   }, []);
 
   const positionMs = progress.position * 1000;

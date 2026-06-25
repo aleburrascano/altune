@@ -10,6 +10,8 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { RepeatMode } from '@shared/playback/types';
 
+import { loadNativeTrack } from '../loadNativeTrack';
+
 const SAVE_INTERVAL_MS = 15_000;
 // Mirror of the library-home page size — resume rehydrates from the same
 // /v1/tracks surface. Kept here so playback owns its own fetch instead of
@@ -99,6 +101,20 @@ export function useQueueResume() {
           useQueueStore.getState().setRepeatMode(repeatMode);
         }
         if (saved.shuffled) useQueueStore.getState().toggleShuffle();
+
+        // Prime the native player with the restored track, paused and seeked to
+        // the saved position. loadQueue only updates the store; without this the
+        // native queue stays empty and pressing play after a relaunch does
+        // nothing. Read currentTrack AFTER shuffle/repeat so the pinned-current
+        // track survives a shuffle restore. autoplay:false leaves it paused so
+        // the app never blares audio on its own — the user taps play to resume.
+        const current = useQueueStore.getState().currentTrack();
+        if (current) {
+          await loadNativeTrack(current, {
+            autoplay: false,
+            startPositionMs: saved.position_ms,
+          });
+        }
       } catch {
         // Resume is best-effort
       }

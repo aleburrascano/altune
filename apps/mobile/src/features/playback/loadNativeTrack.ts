@@ -1,9 +1,24 @@
 import TrackPlayer from 'react-native-track-player';
 
 import { audioRequestHeaders, audioStreamUrl } from './api/audio';
+import { ensurePlayerSetup } from './initPlayer';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-export async function loadNativeTrack(track: PlaybackTrack): Promise<void> {
+export interface LoadNativeTrackOptions {
+  // When false, the track is loaded but not started — used to resume a queue
+  // paused at a saved position so the user presses play to continue.
+  autoplay?: boolean;
+  // Seek to this offset (ms) after loading. 0 starts from the top.
+  startPositionMs?: number;
+}
+
+export async function loadNativeTrack(
+  track: PlaybackTrack,
+  options: LoadNativeTrackOptions = {},
+): Promise<void> {
+  const { autoplay = true, startPositionMs = 0 } = options;
+
+  await ensurePlayerSetup();
   await TrackPlayer.reset();
   const artwork = track.artworkUrl ?? '';
   if (track.source.kind === 'preview') {
@@ -23,5 +38,11 @@ export async function loadNativeTrack(track: PlaybackTrack): Promise<void> {
       headers,
     });
   }
-  await TrackPlayer.play();
+
+  if (startPositionMs > 0) {
+    await TrackPlayer.seekTo(startPositionMs / 1000);
+  }
+  if (autoplay) {
+    await TrackPlayer.play();
+  }
 }
