@@ -1,5 +1,5 @@
 # Production deployment compose file.
-# Database: Supabase Postgres (external). Cache: Upstash Redis (external).
+# Database: Supabase Postgres (external). Cache: self-hosted Redis (this VM).
 # Reverse proxy: Caddy with automatic HTTPS via Let's Encrypt.
 #
 # Deploy:  docker compose -f docker-compose.prod.yml up --build -d
@@ -21,6 +21,24 @@ services:
       - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
     tmpfs:
       - /tmp:size=1G
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Self-hosted cache (replaces Upstash). Caches are regenerable, so persistence
+  # is disabled and memory is capped with LRU eviction to protect the VM's RAM.
+  # Not published to the host — only reachable by go-api on the compose network
+  # via REDIS_URL=redis://redis:6379/0 in .env.production.
+  redis:
+    image: redis:7-alpine
+    container_name: altune-redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   caddy:
     image: caddy:2-alpine
