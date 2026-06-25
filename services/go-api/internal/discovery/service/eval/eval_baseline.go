@@ -1,4 +1,4 @@
-package service
+package eval
 
 // Eval substrate — baselines and the regression gate shared by every
 // discoveryeval harness (plan 2026-06-24-001).

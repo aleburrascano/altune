@@ -1,4 +1,4 @@
-package service
+package eval
 
 // Harness → substrate adapters (plan 2026-06-24-001).
 //

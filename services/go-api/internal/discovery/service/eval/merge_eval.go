@@ -1,4 +1,4 @@
-package service
+package eval
 
 // Merge harness — library-as-truth precision/recall (plan 2026-06-24-001, Phase 1;
 // recall metric redefined 2026-06-24 after the live-data test).
@@ -37,12 +37,12 @@ import (
 
 // MergeResult is the per-entity verdict plus diagnostics.
 type MergeResult struct {
-	Entity            LibraryEntity `json:"entity"`
-	Query             string        `json:"query"`
-	Found             bool          `json:"found"`              // entity matched at least one result
-	ResultsSeen       int           `json:"results_seen"`       // result rows returned for this query
-	UnderMergeIncidents int         `json:"under_merge_incidents"` // provable dups left unmerged
-	UnderMergeExample string        `json:"under_merge_example,omitempty"`
+	Entity              LibraryEntity `json:"entity"`
+	Query               string        `json:"query"`
+	Found               bool          `json:"found"`                 // entity matched at least one result
+	ResultsSeen         int           `json:"results_seen"`          // result rows returned for this query
+	UnderMergeIncidents int           `json:"under_merge_incidents"` // provable dups left unmerged
+	UnderMergeExample   string        `json:"under_merge_example,omitempty"`
 }
 
 // MergeReport is the aggregate precision/recall report.

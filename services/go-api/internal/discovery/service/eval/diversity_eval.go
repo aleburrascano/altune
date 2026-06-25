@@ -1,4 +1,4 @@
-package service
+package eval
 
 // Diversity harness — differential on the library oracle (plan 2026-06-24-001, Phase 2).
 //
@@ -45,15 +45,15 @@ type DiversityResult struct {
 
 // DiversityReport is the aggregate cost/benefit report.
 type DiversityReport struct {
-	Corpus        string            `json:"corpus,omitempty"` // "" = exact, "hard" = title-only
-	K             int               `json:"k"`
-	Total         int               `json:"total"`
-	Evaluated     int               `json:"evaluated"`       // entities scored (artist present)
-	LostToReshape int               `json:"lost_to_reshape"` // in top-K without reshape, out with — the cost
-	GainedByReshape int             `json:"gained_by_reshape"` // out without, in with (collapse can promote)
-	ConcentrationWith    float64    `json:"concentration_with"`    // mean top-K Herfindahl, reshaped (benefit side)
-	ConcentrationWithout float64    `json:"concentration_without"` // mean top-K Herfindahl, unshaped
-	Losses        []FailureRecord   `json:"losses"`
+	Corpus               string          `json:"corpus,omitempty"` // "" = exact, "hard" = title-only
+	K                    int             `json:"k"`
+	Total                int             `json:"total"`
+	Evaluated            int             `json:"evaluated"`             // entities scored (artist present)
+	LostToReshape        int             `json:"lost_to_reshape"`       // in top-K without reshape, out with — the cost
+	GainedByReshape      int             `json:"gained_by_reshape"`     // out without, in with (collapse can promote)
+	ConcentrationWith    float64         `json:"concentration_with"`    // mean top-K Herfindahl, reshaped (benefit side)
+	ConcentrationWithout float64         `json:"concentration_without"` // mean top-K Herfindahl, unshaped
+	Losses               []FailureRecord `json:"losses"`
 }
 
 // CostRate is lost_to_reshape / evaluated, in [0,1]. Gated, lower is better.

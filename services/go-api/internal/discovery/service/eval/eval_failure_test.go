@@ -1,4 +1,4 @@
-package service
+package eval
 
 import (
 	"testing"
@@ -11,10 +11,10 @@ func TestTokenCount(t *testing.T) {
 		in   string
 		want int
 	}{
-		{"Humble", 1},               // the single-token hard case
+		{"Humble", 1}, // the single-token hard case
 		{"Kendrick Lamar Humble", 3},
 		{"  spaced   out  ", 2},
-		{"Beyoncé", 1},              // diacritics fold, still one token
+		{"Beyoncé", 1}, // diacritics fold, still one token
 		{"", 0},
 	}
 	for _, tt := range tests {

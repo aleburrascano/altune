@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"os"
 
-	discoveryService "altune/go-api/internal/discovery/service"
+	discoveryEval "altune/go-api/internal/discovery/service/eval"
 )
 
 // errRegressed is the sentinel runHarness returns when a gate trips; main maps
@@ -26,8 +26,8 @@ var errRegressed = errors.New("eval regression")
 // a single time; `human` renders the mode's existing human-readable report.
 func runHarness(
 	name string,
-	once func() (discoveryService.HarnessReport, error),
-	human func(discoveryService.HarnessReport) string,
+	once func() (discoveryEval.HarnessReport, error),
+	human func(discoveryEval.HarnessReport) string,
 	opts options,
 ) error {
 	if opts.updateBaselines {
@@ -51,7 +51,7 @@ func runHarness(
 	fmt.Print(renderGateBlock(gates))
 	fmt.Print(renderSlices(report.Failures()))
 
-	if discoveryService.AnyRegressed(gates) {
+	if discoveryEval.AnyRegressed(gates) {
 		return errRegressed
 	}
 	return nil
@@ -63,7 +63,7 @@ func runHarness(
 // writes it back. This is the explicit, operator-invoked re-baseline.
 func updateBaselines(
 	name string,
-	once func() (discoveryService.HarnessReport, error),
+	once func() (discoveryEval.HarnessReport, error),
 	opts options,
 ) error {
 	runs := opts.noiseRuns
@@ -89,24 +89,24 @@ func updateBaselines(
 		}
 	}
 
-	metrics := make([]discoveryService.NamedMetric, 0, len(order))
+	metrics := make([]discoveryEval.NamedMetric, 0, len(order))
 	margins := map[string]float64{}
 	for _, mName := range order {
-		metrics = append(metrics, discoveryService.NamedMetric{
+		metrics = append(metrics, discoveryEval.NamedMetric{
 			Name:           mName,
-			Value:          discoveryService.Mean(samples[mName]),
+			Value:          discoveryEval.Mean(samples[mName]),
 			HigherIsBetter: directions[mName],
 		})
-		margins[mName] = discoveryService.MeasureNoise(samples[mName])
+		margins[mName] = discoveryEval.MeasureNoise(samples[mName])
 	}
-	fresh := discoveryService.BuildBaselines(metrics, margins)
+	fresh := discoveryEval.BuildBaselines(metrics, margins)
 
 	existing, err := loadBaselines(opts.baselinesPath)
 	if err != nil {
 		return err
 	}
 	if existing == nil {
-		existing = discoveryService.Baselines{}
+		existing = discoveryEval.Baselines{}
 	}
 	for k, v := range fresh {
 		if runs < 2 {
@@ -129,22 +129,22 @@ func updateBaselines(
 // loadBaselines reads baselines.json. A missing file is not an error — it yields
 // an empty set so every metric reports Missing (recorded, never regressed) until
 // the first --update-baselines lands.
-func loadBaselines(path string) (discoveryService.Baselines, error) {
+func loadBaselines(path string) (discoveryEval.Baselines, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return discoveryService.Baselines{}, nil
+		return discoveryEval.Baselines{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read baselines %s: %w", path, err)
 	}
-	var b discoveryService.Baselines
+	var b discoveryEval.Baselines
 	if err := json.Unmarshal(data, &b); err != nil {
 		return nil, fmt.Errorf("parse baselines %s: %w", path, err)
 	}
 	return b, nil
 }
 
-func writeBaselines(path string, b discoveryService.Baselines) error {
+func writeBaselines(path string, b discoveryEval.Baselines) error {
 	data, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal baselines: %w", err)
@@ -157,12 +157,12 @@ func writeBaselines(path string, b discoveryService.Baselines) error {
 
 // ---- gate + slice rendering ---------------------------------------------
 
-func renderGateBlock(gates []discoveryService.GateResult) string {
+func renderGateBlock(gates []discoveryEval.GateResult) string {
 	out := "\n## Gate\n\n"
-	for _, g := range discoveryService.SortedGates(gates) {
+	for _, g := range discoveryEval.SortedGates(gates) {
 		out += "  " + g.String() + "\n"
 	}
-	if discoveryService.AnyRegressed(gates) {
+	if discoveryEval.AnyRegressed(gates) {
 		out += "\n  ⚠ REGRESSION — one or more metrics fell past their noise margin.\n"
 	}
 	return out
@@ -172,30 +172,30 @@ func renderGateBlock(gates []discoveryService.GateResult) string {
 // the four mechanical single-key slices, then the token×pop joint band where
 // ambiguity tends to surface. Disposable sugar — the raw log (in the JSON) is
 // the system of record.
-func renderSlices(failures []discoveryService.FailureRecord) string {
+func renderSlices(failures []discoveryEval.FailureRecord) string {
 	out := fmt.Sprintf("\n## Failure slices — %d total\n\n", len(failures))
 	if len(failures) == 0 {
 		return out + "_none_\n"
 	}
 	axes := []struct{ label, key string }{
-		{"by token count", discoveryService.TokenCountAttr},
-		{"by script", discoveryService.ScriptAttr},
-		{"by pop band", discoveryService.PopBandAttr},
-		{"by has-id", discoveryService.HasIDAttr},
+		{"by token count", discoveryEval.TokenCountAttr},
+		{"by script", discoveryEval.ScriptAttr},
+		{"by pop band", discoveryEval.PopBandAttr},
+		{"by has-id", discoveryEval.HasIDAttr},
 	}
 	for _, a := range axes {
-		buckets := discoveryService.SliceFailures(failures, a.key)
+		buckets := discoveryEval.SliceFailures(failures, a.key)
 		// Skip an axis no harness populated (every record "(unset)").
 		if len(buckets) == 1 {
 			if _, only := buckets["(unset)"]; only {
 				continue
 			}
 		}
-		out += fmt.Sprintf("- %-16s %v\n", a.label+":", discoveryService.TopBuckets(buckets, 8))
+		out += fmt.Sprintf("- %-16s %v\n", a.label+":", discoveryEval.TopBuckets(buckets, 8))
 	}
-	joint := discoveryService.SliceFailuresByPair(failures, discoveryService.TokenCountAttr, discoveryService.PopBandAttr)
+	joint := discoveryEval.SliceFailuresByPair(failures, discoveryEval.TokenCountAttr, discoveryEval.PopBandAttr)
 	if len(joint) > 1 || func() bool { _, only := joint["(unset)|(unset)"]; return !only }() {
-		out += fmt.Sprintf("- %-16s %v\n", "token×pop:", discoveryService.TopBuckets(joint, 8))
+		out += fmt.Sprintf("- %-16s %v\n", "token×pop:", discoveryEval.TopBuckets(joint, 8))
 	}
 	return out
 }

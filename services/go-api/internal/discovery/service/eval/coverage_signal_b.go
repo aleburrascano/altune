@@ -1,9 +1,10 @@
-package service
+package eval
 
 import (
 	"context"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 
 	"golang.org/x/sync/errgroup"
@@ -34,10 +35,10 @@ type CoverageReportB struct {
 // which provider misses which canonical album. Diagnostic only: it measures
 // provider imbalance, not absolute coverage (see Caveats in the report).
 type CoverageSignalBService struct {
-	providers []ConsensusProvider
+	providers []service.ConsensusProvider
 }
 
-func NewCoverageSignalBService(providers []ConsensusProvider) *CoverageSignalBService {
+func NewCoverageSignalBService(providers []service.ConsensusProvider) *CoverageSignalBService {
 	return &CoverageSignalBService{providers: providers}
 }
 
@@ -129,7 +130,7 @@ func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, 
 // that errors is marked not-responded (ok=false) so transient failures don't
 // inflate its gap.
 func (s *CoverageSignalBService) fanOut(ctx context.Context, artist string) map[string]provResult {
-	return fanOutConsensus(ctx, s.providers, func(ctx context.Context, p ConsensusProvider) provResult {
+	return service.FanOutConsensus(ctx, s.providers, func(ctx context.Context, p service.ConsensusProvider) provResult {
 		albums, err := p.Fetcher(ctx, artist)
 		if err != nil {
 			return provResult{ok: false}

@@ -1,15 +1,16 @@
-package service
+package eval
 
 import (
 	"context"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service"
 )
 
 // stubProvider returns a fixed album list regardless of artist.
-func stubProvider(name string, titles ...string) ConsensusProvider {
-	return ConsensusProvider{
+func stubProvider(name string, titles ...string) service.ConsensusProvider {
+	return service.ConsensusProvider{
 		Name: name,
 		Fetcher: func(_ context.Context, _ string) ([]domain.SearchResult, error) {
 			out := make([]domain.SearchResult, 0, len(titles))
@@ -32,7 +33,7 @@ func gapFor(report *CoverageReportB, provider string) ProviderGap {
 
 func TestCoverageSignalB_AttributesGapsToMissingProvider(t *testing.T) {
 	// 4 entities, each missing from exactly one provider → 25% gap each.
-	providers := []ConsensusProvider{
+	providers := []service.ConsensusProvider{
 		stubProvider("p1", "Beta", "Gamma", "Delta"),  // missing Alpha
 		stubProvider("p2", "Alpha", "Gamma", "Delta"), // missing Beta
 		stubProvider("p3", "Alpha", "Beta", "Delta"),  // missing Gamma
@@ -59,7 +60,7 @@ func TestCoverageSignalB_AttributesGapsToMissingProvider(t *testing.T) {
 }
 
 func TestCoverageSignalB_AllProvidersHaveItIsZeroGap(t *testing.T) {
-	providers := []ConsensusProvider{
+	providers := []service.ConsensusProvider{
 		stubProvider("p1", "Solo Album"),
 		stubProvider("p2", "Solo Album"),
 		stubProvider("p3", "Solo Album"),
@@ -85,7 +86,7 @@ func TestCoverageSignalB_AllProvidersHaveItIsZeroGap(t *testing.T) {
 
 func TestCoverageSignalB_EntityLevelNotCount(t *testing.T) {
 	// Same album under slightly different titles must resolve to one entity.
-	providers := []ConsensusProvider{
+	providers := []service.ConsensusProvider{
 		stubProvider("p1", "DAMN."),
 		stubProvider("p2", "Damn"),
 	}

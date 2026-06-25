@@ -63,13 +63,13 @@ type ConsensusProvider struct {
 	Fetcher func(ctx context.Context, artistName string) ([]domain.SearchResult, error)
 }
 
-// fanOutConsensus runs collect for every provider concurrently and gathers the
+// FanOutConsensus runs collect for every provider concurrently and gathers the
 // results into a map keyed by provider name. It is the shared scatter-gather for
 // the consensus and coverage-signal paths (the breaker/timeout-bearing search
 // fanOut in search.go is deliberately separate — it carries more policy). The
 // per-provider payload type T differs (a raw slice vs a wrapped result), so it
 // is a type parameter.
-func fanOutConsensus[T any](
+func FanOutConsensus[T any](
 	ctx context.Context,
 	providers []ConsensusProvider,
 	collect func(ctx context.Context, p ConsensusProvider) T,
@@ -187,7 +187,7 @@ func (s *ConsensusService) BuildConsensus(
 }
 
 func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName string) map[string][]domain.SearchResult {
-	return fanOutConsensus(ctx, s.providers, func(ctx context.Context, p ConsensusProvider) []domain.SearchResult {
+	return FanOutConsensus(ctx, s.providers, func(ctx context.Context, p ConsensusProvider) []domain.SearchResult {
 		albums, err := p.Fetcher(ctx, artistName)
 		if err != nil {
 			return nil
