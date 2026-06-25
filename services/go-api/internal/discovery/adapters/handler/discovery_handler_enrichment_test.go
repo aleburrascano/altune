@@ -26,7 +26,7 @@ func (f *fakeMetadataEnricher) Lookup(_ context.Context, _ discdomain.ResultKind
 }
 
 func buildEnrichmentRouter(svc *service.EnrichmentService) chi.Router {
-	h := NewDiscoveryHandler(nil, nil, nil, nil, nil, nil, svc, nil, nil)
+	h := NewDiscoveryHandler(DiscoveryServices{Enrich: svc})
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(&discFakeTokenVerifier{userId: discTestUserId}))
 	r.Mount("/discovery", h.Routes())

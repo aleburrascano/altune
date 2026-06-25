@@ -33,7 +33,7 @@ func buildRelatedRouter(provider *fakeRelatedTracksProvider) chi.Router {
 	svc := service.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
-	h := NewDiscoveryHandler(nil, nil, nil, nil, nil, svc, nil, nil, nil)
+	h := NewDiscoveryHandler(DiscoveryServices{Related: svc})
 
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(&discFakeTokenVerifier{userId: discTestUserId}))

@@ -308,7 +308,17 @@ func (a *App) setup(ctx context.Context) error {
 		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient),
 	)
 
-	discoveryH := discoveryHandler.NewDiscoveryHandler(searchSvc, clickSvc, historySvc, albumSvc, artistSvc, relatedSvc, enrichSvc, suggestSvc, eventSvc)
+	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
+		Search:  searchSvc,
+		Click:   clickSvc,
+		History: historySvc,
+		Album:   albumSvc,
+		Artist:  artistSvc,
+		Related: relatedSvc,
+		Enrich:  enrichSvc,
+		Suggest: suggestSvc,
+		Event:   eventSvc,
+	})
 	discoveryH.WithDetailEnrichers(discoveryHandler.DetailEnrichers{
 		Discogs:       discogsEnrichSvc,
 		DiscogsArtist: discogsArtistEnrichSvc,
