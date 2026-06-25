@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-var ErrAudioNotAvailable = &domain.CodedError{Msg: "audio not available", Status: 404}
-
 type StreamOutput struct {
 	Reader ports.AudioStream
 	Size   int64

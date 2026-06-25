@@ -11,8 +11,6 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-var ErrPlaylistNotFound = &domain.CodedError{Msg: "playlist not found", Status: 404}
-
 type PlaylistService struct {
 	playlistRepo ports.PlaylistRepository
 	trackRepo    ports.TrackRepository
@@ -123,6 +121,12 @@ func (s *PlaylistService) Rename(ctx context.Context, userId shared.UserId, play
 	return nil
 }
 
+// AIDEV-NOTE: AddTrack reads (track existence + playlist) then writes without a
+// surrounding transaction, leaving a narrow race: a concurrent track delete
+// between the GetByID checks and repo.AddTrack can append a now-missing track.
+// Outcome is a soft failure (the row's FK/next read reconciles; client retries),
+// not corruption — accepted pre-launch. Harden with a tx or FK-on-insert when a
+// spec needs stronger atomicity.
 func (s *PlaylistService) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) (bool, error) {
 	playlist, err := s.playlistRepo.GetByID(ctx, playlistId, userId)
 	if err != nil {
