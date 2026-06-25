@@ -40,4 +40,4 @@ Walk every finding; none is silently dropped. Sort into three tiers:
 
 ### 4. Fix the approved
 
-Report-only by default. Fix only what's approved, highest blast first, commit per context. A rejection with a load-bearing reason → offer an ADR so the next run doesn't re-surface it.
+Report-only by default. Fix only what's approved, highest blast first, commit per context. Re-evaluate each finding on its own merits every run — a past decision to defer is a data point, not a veto; situations change and the right call adapts.

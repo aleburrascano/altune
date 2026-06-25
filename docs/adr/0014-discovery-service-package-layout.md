@@ -1,9 +1,11 @@
 # ADR-0014: Keep the discovery ranking/util code in service/; defer a domain/ranking module
 
-- **Status:** Accepted
+- **Status:** Superseded (2026-06-25) — see note below
 - **Date:** 2026-06-22
 - **Deciders:** solo + Claude
 - **Context tags:** [layer | pattern]
+
+> **Superseded (2026-06-25):** the deferral trigger ("until the consensus-ranking redesign settles") is met — the rebuilt Merge→Rank core is stable with no known ranking bug. The `service/` directory was split for navigability: the offline regression harness moved to `service/eval/` and the detail-open enrichers to `service/enrich/` (40 → 26 non-test files in `service/`). The ranking *decisions* (`merge.go`/`rank.go`/`diversity.go`) and pure utils stay in `service/` as this ADR decided — only the harness and enrichers, which are not the hot path, were extracted. The "don't move helpers into `domain/`" decision still stands.
 
 ## Context
 
