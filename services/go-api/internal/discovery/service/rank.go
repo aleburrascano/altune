@@ -10,14 +10,14 @@ import (
 
 // Layer 3 — rank.
 //
-// Results are ordered by CONTINUOUS relevance — how much of the query the
-// result's title (and artist) matches, via token-sort similarity — then
-// popularity, then multi-source agreement, then RRF. There are deliberately no
-// relevance bands, no popularity-dominance window, no kind tiers, and no intent
-// contract: those were query-fit (tuned constants and pattern-specific
-// machinery). A similarity measure is a published algorithm, not a fitted
-// constant, and it degrades gracefully where the tier model fell off a cliff —
-// a result matching more of the query's tokens simply scores higher.
+// Results are ordered by CONTINUOUS relevance — IDF-weighted, per-token fuzzy
+// coverage of the query over each result's title+subtitle (see rank_relevance.go)
+// — then popularity, then multi-source agreement, then RRF. There are
+// deliberately no relevance bands, no popularity-dominance window, no kind tiers,
+// no intent contract, and NO tuned constant anywhere in the measure: those were
+// query-fit. The relevance is parameter-free — the IDF weight comes from the data
+// and the per-token match is a Levenshtein ratio — so a result accounting for more
+// of the query's distinguishing tokens simply scores higher.
 
 // rrfK is the Reciprocal Rank Fusion constant — a published convention, used
 // only as a within-tie tiebreak.
@@ -37,15 +37,27 @@ func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
 	// queryNorm is already normalized by the caller (Execute); use it directly.
 	q := queryNorm
 
-	results := make([]scored, 0, len(entities))
+	// Pass 1: keep only eligible entities.
+	eligible := make([]Entity, 0, len(entities))
 	for _, e := range entities {
-		r := e.Result
-		if !sharesQueryWord(r, q) || !hasBrowseableSource(r) {
-			continue
+		if sharesQueryWord(e.Result, q) && hasBrowseableSource(e.Result) {
+			eligible = append(eligible, e)
 		}
+	}
+
+	// IDF weights across the candidate set: the artist portion of an "artist title"
+	// query repeats across every result and so weighs ~nothing; the token that
+	// names the specific song is rare and carries most of the weight. These weight
+	// the relevance measure directly — there is no separate tuned bonus.
+	rarity := queryTokenRarity(q, eligible)
+
+	// Pass 2: score.
+	results := make([]scored, 0, len(eligible))
+	for _, e := range eligible {
+		r := e.Result
 		results = append(results, scored{
 			result:    r,
-			relevance: relevanceScore(r, q),
+			relevance: idfWeightedCoverage(r, q, rarity),
 			pop:       popularityOf(r),
 			rrf:       rrfScore(e.BestRank),
 			multi:     len(providersOf(r)) > 1,
@@ -82,23 +94,35 @@ func rankLess(a, b scored) bool {
 	return a.result.Title < b.result.Title
 }
 
-// relevanceScore is the token-sort similarity of the query against the result's
-// title, and against artist+title — the published rapidfuzz algorithm, with no
-// tuned bonuses. The better-matching of the two framings wins.
-func relevanceScore(r domain.SearchResult, q string) float64 {
-	if q == "" {
-		return 0
+// queryTokenRarity weights each query token by how DISTINGUISHING it is across the
+// candidate set: rarity = 1 - documentFrequency/N. A token present in every result
+// (the artist name of an "artist title" query) approaches 0; a token that names the
+// specific song approaches 1.
+func queryTokenRarity(q string, eligible []Entity) map[string]float64 {
+	qTokens := tokenSet(q)
+	rarity := make(map[string]float64, len(qTokens))
+	n := len(eligible)
+	if n == 0 {
+		for t := range qTokens {
+			rarity[t] = 1
+		}
+		return rarity
 	}
-	title := textnorm.NormalizeForMatch(r.Title)
-	best := textnorm.TokenSortRatio(q, title)
-	if r.Subtitle != "" {
-		combined := textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title)
-		if s := textnorm.TokenSortRatio(q, combined); s > best {
-			best = s
+	df := make(map[string]int, len(qTokens))
+	for _, e := range eligible {
+		hay := tokenSet(textnorm.NormalizeForMatch(e.Result.Subtitle + " " + e.Result.Title))
+		for t := range qTokens {
+			if hay[t] {
+				df[t]++
+			}
 		}
 	}
-	return best / 100.0
+	for t := range qTokens {
+		rarity[t] = 1 - float64(df[t])/float64(n)
+	}
+	return rarity
 }
+
 
 // sharesQueryWord drops results that share no content word with the query.
 func sharesQueryWord(r domain.SearchResult, queryNorm string) bool {

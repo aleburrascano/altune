@@ -22,17 +22,17 @@
   },
   "eval.top1_rate": {
     "metric": "eval.top1_rate",
-    "value": 1,
+    "value": 0.985082578582845,
     "margin": 0,
     "higher_is_better": true,
-    "note": "measured over 3 runs"
+    "note": "single-run baseline — margin 0; re-run with -noise-runs 3 to set a real margin"
   },
   "eval.topk_rate": {
     "metric": "eval.topk_rate",
-    "value": 1,
+    "value": 0.9952051145444859,
     "margin": 0,
     "higher_is_better": true,
-    "note": "measured over 3 runs"
+    "note": "single-run baseline — margin 0; re-run with -noise-runs 3 to set a real margin"
   },
   "merge.collapse_rate": {
     "metric": "merge.collapse_rate",

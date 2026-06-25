@@ -183,9 +183,15 @@ func sortedGenres(genres []mbGenre) []string {
 }
 
 // externalIDsFromRelations extracts the cross-provider id bridge from MB
-// url-relations: Discogs and Wikidata by relation type, Spotify/Deezer by the
-// host behind a "free streaming"/"streaming" relation. Value is the bare id (last
+// url-relations: Discogs and Wikidata by relation type, Spotify/Deezer/Apple by
+// the host behind a streaming/purchase relation. Value is the bare id (last
 // non-empty path segment). First occurrence per provider wins; keys lowercase.
+//
+// The "itunes" key is the Apple Music artist id, which is the SAME value the
+// iTunes Search API returns as artistId (live-verified: MB rel
+// music.apple.com/.../5468295 == iTunes artistId 5468295). It keys directly to
+// ProviderITunes, so the merge bridge resolves iTunes results to the MB identity
+// — unlike the legacy amgArtistId, which is a different (numeric AMG) id-space.
 func externalIDsFromRelations(relations []mbRelation) map[string]string {
 	ids := map[string]string{}
 	put := func(key, raw string) {
@@ -206,12 +212,14 @@ func externalIDsFromRelations(relations []mbRelation) map[string]string {
 			put("discogs", res)
 		case "wikidata":
 			put("wikidata", res)
-		case "free streaming", "streaming":
+		case "free streaming", "streaming", "purchase for download":
 			switch {
 			case strings.Contains(res, "open.spotify.com"):
 				put("spotify", res)
 			case strings.Contains(res, "deezer.com"):
 				put("deezer", res)
+			case strings.Contains(res, "music.apple.com"):
+				put("itunes", res)
 			}
 		}
 	}

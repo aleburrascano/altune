@@ -163,3 +163,43 @@ func TestConsensus_MBRejectsContaminationAndConfirms(t *testing.T) {
 		t.Errorf("Fake Album = %v, want rejected (MB contamination)", byTitle["Fake Album"])
 	}
 }
+
+func TestConsensus_MBSpineRejectsAlbumsNotInDiscography(t *testing.T) {
+	// Precision-first: when MB resolves the artist and confirms at least one
+	// album, an album MB does NOT credit to this artist is rejected — even when
+	// MB doesn't explicitly flag it as another artist's. This is the same-name
+	// ("wrong Che") contamination drop the per-album probe used to miss.
+	mb := &fakeMB{mbid: "mb1", confirmed: []string{"Real Album"}}
+	svc := NewConsensusService([]ConsensusProvider{
+		consensusProvider("lastfm", "Real Album", "Other Artist Album"),
+	}, WithMBAuthority(mb))
+
+	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "Artist", nil))
+
+	if byTitle["Real Album"] != ConsensusConfirmed {
+		t.Errorf("Real Album = %v, want confirmed", byTitle["Real Album"])
+	}
+	if byTitle["Other Artist Album"] != ConsensusRejected {
+		t.Errorf("Other Artist Album = %v, want rejected (not in MB discography)", byTitle["Other Artist Album"])
+	}
+}
+
+func TestConsensus_MBNotCredibleKeepsUnion(t *testing.T) {
+	// MB resolves no confirmations (artist absent / underground) → MB is not an
+	// authority here; the provider union is kept untouched (coverage over
+	// precision when there is no spine to anchor on).
+	mb := &fakeMB{mbid: "mb1", confirmed: nil}
+	svc := NewConsensusService([]ConsensusProvider{
+		consensusProvider("lastfm", "Album A", "Album B"),
+		consensusProvider("itunes", "Album A"),
+	}, WithMBAuthority(mb))
+
+	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "Artist", nil))
+
+	if byTitle["Album A"] != ConsensusConfirmed {
+		t.Errorf("Album A (2 providers) = %v, want confirmed", byTitle["Album A"])
+	}
+	if byTitle["Album B"] != ConsensusUnconfirmed {
+		t.Errorf("Album B (1 provider) = %v, want unconfirmed (kept, MB not credible)", byTitle["Album B"])
+	}
+}

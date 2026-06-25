@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 )
@@ -21,6 +22,12 @@ func NewLastFmAdapter(client *http.Client, apiKey string) *LastFmAdapter {
 }
 
 func (a *LastFmAdapter) Name() domain.ProviderName { return domain.ProviderLastFM }
+
+// SearchTimeout gives Last.fm a budget in line with the other multi-kind
+// providers (iTunes 4s, MB 5s). The 1.5s default was the lone omission and, even
+// with the per-kind calls now concurrent, Last.fm's endpoints are routinely
+// slower than 1.5s — so the default surfaced as spurious timeouts.
+func (a *LastFmAdapter) SearchTimeout() time.Duration { return 4 * time.Second }
 
 func (a *LastFmAdapter) SupportedKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{
@@ -182,9 +189,37 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 
 // --- ArtistContentProvider ---
 
-func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&artist=%s&api_key=%s&format=json&limit=10",
-		url.QueryEscape(artistName), a.apiKey)
+// looksLikeMBID reports whether s is a MusicBrainz UUID (8-4-4-4-12 hex with
+// dashes), so the caller can pass an MBID for identity-safe lookups.
+func looksLikeMBID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i, c := range s {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if c != '-' {
+				return false
+			}
+			continue
+		}
+		isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+		if !isHex {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, artistRef string) ([]domain.SearchResult, error) {
+	// artistRef is an MBID when the caller has the artist's resolved identity
+	// (identity-safe — avoids the ambiguous-name top-tracks problem); otherwise it
+	// is the artist name.
+	idParam := "artist=" + url.QueryEscape(artistRef)
+	if looksLikeMBID(artistRef) {
+		idParam = "mbid=" + artistRef
+	}
+	u := fmt.Sprintf("https://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&%s&api_key=%s&format=json&limit=10&autocorrect=1",
+		idParam, a.apiKey)
 
 	var body struct {
 		TopTracks struct {

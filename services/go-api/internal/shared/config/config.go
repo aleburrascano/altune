@@ -34,7 +34,6 @@ type Config struct {
 	FanartTVAPIKey       string `env:"FANARTTV_API_KEY"`
 	GeniusAccessToken    string `env:"GENIUS_ACCESS_TOKEN"`
 	DiscogsToken         string `env:"DISCOGS_TOKEN"`
-	YouTubeAPIKey        string `env:"YOUTUBE_API_KEY"`
 
 	// Audio storage — OCI Object Storage (S3-compatible)
 	OCIS3Endpoint  string `env:"OCI_S3_ENDPOINT"`
@@ -110,10 +109,6 @@ func (c *Config) HasDiscogs() bool {
 	return c.DiscogsToken != ""
 }
 
-func (c *Config) HasYouTube() bool {
-	return c.YouTubeAPIKey != ""
-}
-
 // LogValue implements slog.LogValuer to redact secrets.
 func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
@@ -128,6 +123,5 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_fanarttv", c.HasFanartTV()),
 		slog.Bool("has_genius", c.HasGenius()),
 		slog.Bool("has_discogs", c.HasDiscogs()),
-		slog.Bool("has_youtube", c.HasYouTube()),
 	)
 }

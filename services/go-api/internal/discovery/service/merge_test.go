@@ -49,6 +49,82 @@ func findByTitle(t *testing.T, entities []Entity, title string) Entity {
 	return Entity{}
 }
 
+func TestMerge_AmbiguousArtistNameKeepsIdentitiesSeparate(t *testing.T) {
+	// MB returns two distinct "Che" artists (different MBIDs) → the name is
+	// ambiguous. A no-identifier provider artist of the same name must NOT be
+	// absorbed by name alone — every entity keeps only its own source.
+	mb1 := res(domain.ResultKindArtist, "Che", "", domain.ProviderMusicBrainz, map[string]any{"mbid": "mbid-1"})
+	mb2 := res(domain.ResultKindArtist, "Che", "", domain.ProviderMusicBrainz, map[string]any{"mbid": "mbid-2"})
+	itunes := res(domain.ResultKindArtist, "Che", "", domain.ProviderITunes, nil)
+
+	entities := Merge([][]domain.SearchResult{{mb1, mb2}, {itunes}})
+
+	if len(entities) != 3 {
+		t.Fatalf("got %d entities, want 3 (two MB identities + unmerged iTunes)", len(entities))
+	}
+	for _, e := range entities {
+		if got := len(e.Result.Sources); got != 1 {
+			t.Errorf("entity %q has %d sources, want 1 (no cross-identity union)", e.Result.Title, got)
+		}
+	}
+}
+
+func TestMerge_UnambiguousArtistNameStillNameMerges(t *testing.T) {
+	// One MB identity for the name → unambiguous → a no-identifier provider artist
+	// of the same name merges by name as before (no regression for e.g. Drake).
+	mb := res(domain.ResultKindArtist, "Drake", "", domain.ProviderMusicBrainz, map[string]any{"mbid": "mbid-drake"})
+	itunes := res(domain.ResultKindArtist, "Drake", "", domain.ProviderITunes, nil)
+
+	entities := Merge([][]domain.SearchResult{{mb}, {itunes}})
+
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1 (name merge preserved when unambiguous)", len(entities))
+	}
+	if got := len(entities[0].Result.Sources); got != 2 {
+		t.Errorf("merged entity has %d sources, want 2", got)
+	}
+}
+
+func TestMerge_ITunesBridgesIntoMBIdentityDespiteAmbiguousName(t *testing.T) {
+	// MB "Che" is stamped with its Apple Music id (xref["itunes"]); the iTunes
+	// "Che" carries that same artistId natively. They bridge and merge even though
+	// the name is ambiguous (a second distinct MB "Che" exists) — identity beats
+	// the name-ambiguity gate.
+	mb := domain.SearchResult{
+		Kind:    domain.ResultKindArtist,
+		Title:   "Che",
+		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-1", URL: "https://mb/1"}},
+		Extras:  map[string]any{"mbid": "mbid-che-1", "xref": map[string]string{"itunes": "5468295"}},
+	}
+	mb2 := domain.SearchResult{
+		Kind:    domain.ResultKindArtist,
+		Title:   "Che",
+		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-2", URL: "https://mb/2"}},
+		Extras:  map[string]any{"mbid": "mbid-che-2"},
+	}
+	itunes := domain.SearchResult{
+		Kind:    domain.ResultKindArtist,
+		Title:   "Che",
+		Sources: []domain.SourceRef{{Provider: domain.ProviderITunes, ExternalID: "5468295", URL: "https://itunes/x"}},
+	}
+
+	entities := Merge([][]domain.SearchResult{{mb, mb2}, {itunes}})
+
+	if len(entities) != 2 {
+		t.Fatalf("got %d entities, want 2 (iTunes bridged into MB#1; MB#2 stays separate)", len(entities))
+	}
+	bridged := findByTitle(t, entities, "Che") // first "Che" = MB#1 (the xref carrier)
+	hasITunes := false
+	for _, s := range bridged.Result.Sources {
+		if s.Provider == domain.ProviderITunes {
+			hasITunes = true
+		}
+	}
+	if !hasITunes {
+		t.Error("iTunes source should have bridged into the MB identity via xref[itunes]")
+	}
+}
+
 func TestMerge_IdentifierMatch(t *testing.T) {
 	t.Run("same isrc merges across providers", func(t *testing.T) {
 		a := track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, map[string]any{"isrc": "USUM71703089"})

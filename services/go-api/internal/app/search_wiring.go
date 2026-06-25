@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"net/http"
 
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
@@ -30,26 +31,52 @@ func BuildSearchService(
 	redisClient *goredis.Client,
 	eventStore discoveryPorts.EventStore,
 ) *discoveryService.Service {
+	return BuildSearchServiceWithTransport(cfg, pool, redisClient, eventStore, nil, false)
+}
+
+// BuildSearchServiceWithTransport is BuildSearchService with an injectable HTTP
+// transport for every discovery provider. The server passes nil (default
+// transport); the deterministic eval passes a record/replay transport so the
+// identical wiring runs against frozen provider responses.
+//
+// rankingOnly skips the post-ranking display enrichment (artwork chain) and
+// related-groups — annotations that fill fields without reordering. The
+// deterministic ranking eval sets it: those calls fire the bulk of a search's
+// HTTP, so recording them would bloat fixtures ~10x for zero ranking signal.
+// rankPipeline (merge → rank → shape) is identical either way.
+func BuildSearchServiceWithTransport(
+	cfg *config.Config,
+	pool *pgxpool.Pool,
+	redisClient *goredis.Client,
+	eventStore discoveryPorts.EventStore,
+	transport http.RoundTripper,
+	rankingOnly bool,
+) *discoveryService.Service {
+	cf := clientFactory{transport: transport}
+
 	var sharedMB *providers.MusicBrainzAdapter
 	if cfg.HasMusicBrainz() {
 		sharedMB = providers.NewMusicBrainzAdapter(
-			newDiscoveryClient(),
+			cf.discovery(),
 			cfg.MusicBrainzUserAgent,
 		)
 	}
 
-	searchProviders := buildDiscoveryProviders(cfg, sharedMB)
+	searchProviders := buildDiscoveryProviders(cf, cfg, sharedMB)
 	circuitBreaker := discoveryService.NewCircuitBreaker()
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(pool)
 
-	deezerContent := providers.NewDeezerAdapter(newDiscoveryClient())
-	relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
-	findRelatedSvc := discoveryService.NewFindRelatedService(relationshipQuerier, deezerContent, deezerContent)
-
 	opts := []discoveryService.Option{
 		discoveryService.WithHistoryRepository(historyRepo),
-		discoveryService.WithArtworkResolver(buildArtworkChain(cfg)),
-		discoveryService.WithFindRelatedService(findRelatedSvc),
+	}
+	if !rankingOnly {
+		deezerContent := providers.NewDeezerAdapter(cf.discovery())
+		relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
+		findRelatedSvc := discoveryService.NewFindRelatedService(relationshipQuerier, deezerContent, deezerContent)
+		opts = append(opts,
+			discoveryService.WithArtworkResolver(buildArtworkChain(cf, cfg)),
+			discoveryService.WithFindRelatedService(findRelatedSvc),
+		)
 	}
 	if redisClient != nil {
 		opts = append(opts, discoveryService.WithArtworkCache(
@@ -141,11 +168,22 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 		},
 	})
 
-	ytmusic := providers.NewYouTubeMusicAdapter()
+	ytmusic := providers.NewYouTubeMusicAdapter(nil)
 	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 		Name: "ytmusic",
 		Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
 			return ytmusic.GetArtistAlbums(ctx, domain.ProviderYouTube, artistName)
+		},
+	})
+
+	// SoundCloud joins the consensus as an equal source (no provider is detail-
+	// only): album-kind search by name, then MB-spine authority filters out the
+	// same-name contamination. Closes the gap where SC albums bypassed the union.
+	sc := providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil)
+	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+		Name: "soundcloud",
+		Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
+			return sc.Search(ctx, artistName, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
 		},
 	})
 
@@ -154,35 +192,32 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 
 // buildArtworkChain assembles the artwork resolver chain: ID-based sources first
 // (always correct for the entity), name-search fallbacks last.
-func buildArtworkChain(cfg *config.Config) discoveryPorts.ArtworkResolver {
+func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.ArtworkResolver {
 	var artworkResolvers []discoveryPorts.ArtworkResolver
 	artworkResolvers = append(artworkResolvers,
-		providers.NewCoverArtArchiveResolver(newDiscoveryClient()))
+		providers.NewCoverArtArchiveResolver(cf.discovery()))
 	if cfg.HasFanartTV() {
 		artworkResolvers = append(artworkResolvers,
-			providers.NewFanartTvArtworkResolver(newDiscoveryClient(), cfg.FanartTVAPIKey))
+			providers.NewFanartTvArtworkResolver(cf.discovery(), cfg.FanartTVAPIKey))
 	}
 	if cfg.HasGenius() {
 		artworkResolvers = append(artworkResolvers,
-			providers.NewGeniusArtworkResolver(newDiscoveryClient(), cfg.GeniusAccessToken))
+			providers.NewGeniusArtworkResolver(cf.discovery(), cfg.GeniusAccessToken))
 	}
 	artworkResolvers = append(artworkResolvers,
-		providers.NewTheAudioDBAdapter(newDiscoveryClient()),
-		providers.NewDeezerAdapter(newDiscoveryClient()),
-		providers.NewITunesAdapter(newDiscoveryClient()),
+		providers.NewTheAudioDBAdapter(cf.discovery()),
+		providers.NewDeezerAdapter(cf.discovery()),
+		providers.NewITunesAdapter(cf.discovery()),
 		// Keyless YouTube Music artist artwork (internal API): the one artist-image
-		// source iTunes lacks, with no key and no Data-API quota. Fires before the
-		// key-gated official resolver below, which is now a deeper fallback.
-		providers.NewYouTubeMusicArtworkResolver(),
+		// source iTunes lacks, with no key and no Data-API quota. Verified working
+		// from the prod OCI IP (2026-06-25, innertube 200), so the key-gated
+		// YouTube Data API v3 resolver was retired in favour of it.
+		providers.NewYouTubeMusicArtworkResolver(cf.roundTripper()),
 	)
-	if cfg.HasYouTube() {
-		artworkResolvers = append(artworkResolvers,
-			providers.NewYouTubeArtworkResolver(newDiscoveryClient(), cfg.YouTubeAPIKey))
-	}
 	// SoundCloud last: name-search fallback for the underground long tail no
 	// ID-based source covers. nil fallback — artwork resolution never uses yt-dlp.
 	artworkResolvers = append(artworkResolvers,
-		providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil))
+		providers.NewSoundCloudAPIAdapter(cf.discovery(), nil))
 	return providers.NewChainedArtworkResolver(artworkResolvers...)
 }
 
