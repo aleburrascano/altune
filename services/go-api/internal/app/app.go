@@ -28,6 +28,7 @@ import (
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
+	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
 	playbackService "altune/go-api/internal/playback/service"
@@ -393,11 +394,11 @@ func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
 			a.cfg.DiscogsToken,
 			a.cfg.MusicBrainzUserAgent,
 		)
-		enrichers.Discogs = discoveryService.NewDiscogsEnrichmentService(
+		enrichers.Discogs = discoveryEnrich.NewDiscogsEnrichmentService(
 			discogsAdapter,
 			discoveryCacheAdapters.NewRedisDiscogsEnrichmentCache(a.redisClient),
 		)
-		enrichers.DiscogsArtist = discoveryService.NewDiscogsArtistEnrichmentService(
+		enrichers.DiscogsArtist = discoveryEnrich.NewDiscogsArtistEnrichmentService(
 			discogsAdapter,
 			discoveryCacheAdapters.NewRedisDiscogsArtistEnrichmentCache(a.redisClient),
 		)
@@ -407,7 +408,7 @@ func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
 	// MBID bridge (docs/providers/lastfm.md cap 3). Only when a Last.fm key is set.
 	if a.cfg.HasLastFM() {
 		lfmEnricher := providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
-		enrichers.LastFm = discoveryService.NewLastFmEnrichmentService(
+		enrichers.LastFm = discoveryEnrich.NewLastFmEnrichmentService(
 			lfmEnricher,
 			discoveryCacheAdapters.NewRedisLastFmEnrichmentCache(a.redisClient),
 		)
@@ -415,7 +416,7 @@ func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
 
 	// Deezer: track audio fields (bpm/gain) + explicit flag, album liner data
 	// (docs/providers/deezer.md caps 7–8). Public API, no key — wired always.
-	enrichers.Deezer = discoveryService.NewDeezerEnrichmentService(
+	enrichers.Deezer = discoveryEnrich.NewDeezerEnrichmentService(
 		providers.NewDeezerAdapter(newDiscoveryClient()),
 		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient),
 	)
@@ -423,7 +424,7 @@ func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
 	// Deezer lyrics: synced + plain lyrics, writers, copyright — the one axis no
 	// other audited provider carries (docs/providers/deezer.md cap 6). Via the
 	// pipe.deezer.com GraphQL (anonymous-JWT, self-healing); no key — wired always.
-	enrichers.Lyrics = discoveryService.NewLyricsService(
+	enrichers.Lyrics = discoveryEnrich.NewLyricsService(
 		providers.NewDeezerLyricsAdapter(newDiscoveryClient()),
 		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient),
 	)
