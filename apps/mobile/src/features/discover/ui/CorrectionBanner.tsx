@@ -26,7 +26,7 @@ export function CorrectionBanner({ correctedQuery, originalQuery, onSearchOrigin
         style={({ pressed }) => [styles.link, pressed ? { opacity: 0.7 } : null]}
       >
         <Text variant="caption" tone="accent">
-          Search for &ldquo;{originalQuery}&rdquo;
+          Search for “{originalQuery}”
         </Text>
       </Pressable>
     </View>
