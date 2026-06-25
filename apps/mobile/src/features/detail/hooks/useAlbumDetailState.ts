@@ -19,6 +19,8 @@ import { useAlbumTracks } from './useAlbumTracks';
 import { useLibraryTracksForAlbum } from './useLibraryTracks';
 import { useSaveTrack } from './useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
+import { findTrackInLibraryCache } from '../helpers/find-track-in-library-cache';
+import { saveControlState, type SaveControlState } from '../save-control-state';
 import { _isTrackInLibraryCache } from '../ui/helpers';
 
 function _enrichAlbumTrack(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult {
@@ -55,6 +57,7 @@ export type AlbumDetailState = {
   onQuickSave: (track: DiscoveryResult) => void;
   onSaveAll: () => void;
   isSaved: (title: string, subtitle: string | null) => boolean;
+  saveStateFor: (title: string, subtitle: string | null) => SaveControlState;
 };
 
 export function useAlbumDetailState(
@@ -124,6 +127,9 @@ export function useAlbumDetailState(
   const isSaved = (title: string, subtitle: string | null): boolean =>
     _isTrackInLibraryCache(queryClient, title, subtitle);
 
+  const saveStateFor = (title: string, subtitle: string | null): SaveControlState =>
+    saveControlState(findTrackInLibraryCache(queryClient, title, subtitle));
+
   return {
     tracks,
     isLoading,
@@ -142,5 +148,6 @@ export function useAlbumDetailState(
     onQuickSave,
     onSaveAll,
     isSaved,
+    saveStateFor,
   };
 }

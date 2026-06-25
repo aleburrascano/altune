@@ -1,23 +1,22 @@
 import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Check, Plus } from 'lucide-react-native';
-
 import { Text } from '@shared/ui/primitives/Text';
-import { useTheme } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { formatDuration } from '../extras';
 import { trackExtras } from '../extras-accessors';
+import type { SaveControlState } from '../save-control-state';
 import { sharedStyles } from './helpers';
+import { TrackSaveControl } from './TrackSaveControl';
 
 type AlbumTrackRowProps = {
   track: DiscoveryResult;
   index: number;
   subtitle: string;
-  isSaved: boolean;
+  saveState: SaveControlState;
   onPress: () => void;
   onQuickSave: () => void;
 };
@@ -26,11 +25,10 @@ export function AlbumTrackRow({
   track,
   index,
   subtitle,
-  isSaved,
+  saveState,
   onPress,
   onQuickSave,
 }: AlbumTrackRowProps): ReactElement {
-  const theme = useTheme();
   const te = trackExtras(track.extras);
   const position = te.trackPosition ?? index + 1;
   const duration = te.durationSeconds != null ? formatDuration(te.durationSeconds) : null;
@@ -61,32 +59,17 @@ export function AlbumTrackRow({
           {duration}
         </Text>
       ) : null}
-      <Pressable
+      <TrackSaveControl
         testID={`detail-track-save-${index}`}
-        onPress={(e) => { e.stopPropagation(); onQuickSave(); }}
-        disabled={isSaved}
-        accessibilityRole="button"
-        accessibilityLabel={isSaved ? `${track.title} saved` : `Save ${track.title}`}
-        hitSlop={8}
-        style={styles.saveBtn}
-      >
-        {isSaved ? (
-          <Check size={16} color={theme.color.success} />
-        ) : (
-          <Plus size={16} color={theme.color.accent} />
-        )}
-      </Pressable>
+        state={saveState}
+        title={track.title}
+        onPress={onQuickSave}
+      />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   position: { width: 24, textAlign: 'center' },
-  duration: { marginRight: spacing.xs },
-  saveBtn: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  duration: { marginRight: spacing.xs, fontVariant: ['tabular-nums'] },
 });
