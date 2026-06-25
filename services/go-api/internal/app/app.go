@@ -208,6 +208,12 @@ func (a *App) setup(ctx context.Context) error {
 		// SoundCloud carries its numeric user id, which keys these endpoints.
 		"soundcloud": providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
 	}
+	// Last.fm top-tracks, keyed by MBID (identity-safe) — the client calls it only
+	// when the artist has a resolved MBID, so it never falls back to ambiguous
+	// name matching. Adds the scrobble-popular layer alongside Deezer/SoundCloud.
+	if a.cfg.HasLastFM() {
+		artistProviders["lastfm"] = providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
+	}
 
 	// Related tracks are track-keyed: a SoundCloud-sourced track carries its
 	// numeric track id, which keys /tracks/{id}/related. SoundCloud-only today.
@@ -246,7 +252,7 @@ func (a *App) setup(ctx context.Context) error {
 		enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
 		enrichSvc = discoveryService.NewEnrichmentService(
 			sharedMB,
-			buildArtworkChain(a.cfg),
+			buildArtworkChain(clientFactory{}, a.cfg),
 			enrichmentCache,
 			// Memoize each name resolution so the search path can attach the MBID to
 			// a non-MB result later (cap 5 warm).
@@ -432,13 +438,13 @@ func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
 	return enrichers
 }
 
-func buildDiscoveryProviders(cfg *config.Config, mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
+func buildDiscoveryProviders(cf clientFactory, cfg *config.Config, mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
 	var providerList []discoveryPorts.SearchProvider
 
-	deezerClient := newDiscoveryClient()
+	deezerClient := cf.discovery()
 	providerList = append(providerList, providers.NewDeezerAdapter(deezerClient))
 
-	itunesClient := newDiscoveryClient()
+	itunesClient := cf.discovery()
 	providerList = append(providerList, providers.NewITunesAdapter(itunesClient))
 
 	// TheAudioDB is intentionally NOT a search provider: its free key caps artist
@@ -451,19 +457,19 @@ func buildDiscoveryProviders(cfg *config.Config, mb *providers.MusicBrainzAdapte
 	}
 
 	if cfg.HasLastFM() {
-		lfmClient := newDiscoveryClient()
+		lfmClient := cf.discovery()
 		providerList = append(providerList, providers.NewLastFmAdapter(lfmClient, cfg.LastFMAPIKey))
 	}
 
 	// Direct api-v2 SoundCloud client (coverage: unreleased/underground long tail),
 	// with the yt-dlp adapter as fallback when client_id resolution is down.
-	soundcloudClient := newDiscoveryClient()
+	soundcloudClient := cf.discovery()
 	providerList = append(providerList, providers.NewSoundCloudAPIAdapter(
 		soundcloudClient,
 		providers.NewSoundCloudAdapter(),
 	))
 
-	providerList = append(providerList, providers.NewYouTubeMusicAdapter())
+	providerList = append(providerList, providers.NewYouTubeMusicAdapter(cf.roundTripper()))
 
 	slog.Info("discovery providers configured", "count", len(providerList))
 	return providerList

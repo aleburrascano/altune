@@ -64,6 +64,8 @@ type options struct {
 	noiseRuns       int
 	typos           int
 	corpus          string
+	fixtures        string
+	record          bool
 }
 
 func main() {
@@ -82,6 +84,8 @@ func main() {
 	flag.IntVar(&opts.noiseRuns, "noise-runs", 1, "with -update-baselines: run N times and set the margin to the measured spread (use 3)")
 	flag.IntVar(&opts.typos, "typos", 3, "correction: synthetic typos generated per known-good term")
 	flag.StringVar(&opts.corpus, "corpus", "exact", "eval/diversity corpus: exact (\"artist title\") | hard (single-token titles, title-only query)")
+	flag.StringVar(&opts.fixtures, "fixtures", "", "eval: directory of recorded provider fixtures. With -record, write them (live); without, replay them (deterministic, offline w.r.t. providers)")
+	flag.BoolVar(&opts.record, "record", false, "eval: with -fixtures, record provider responses to the directory instead of replaying (runs live, sequentially)")
 	flag.Parse()
 
 	if err := run(opts); err != nil {
@@ -361,6 +365,11 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 	}
 
 	corpusEnts, mode := corpusEntities(entities, opts.corpus)
+
+	if opts.fixtures != "" {
+		return runEvalFixtures(ctx, cfg, pool, corpusEnts, mode, progress, opts)
+	}
+
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "evaluating %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
 		// nil event store: eval searches must not emit telemetry.
@@ -370,6 +379,52 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 		return report, nil
 	}
 	human := func(r discoveryEval.HarnessReport) string { return renderEval(r.(discoveryEval.EvalReport)) }
+	return runHarness("eval", once, human, opts)
+}
+
+// runEvalFixtures runs the ranking eval against recorded provider fixtures. With
+// -record it captures live provider responses through one shared recording
+// Service (concurrent) and writes a single corpus fixture. Without -record it
+// replays them through one combined Replayer + one Service, deterministically.
+func runEvalFixtures(
+	ctx context.Context,
+	cfg *config.Config,
+	pool *pgxpool.Pool,
+	corpusEnts []discoveryEval.LibraryEntity,
+	mode discoveryEval.QueryMode,
+	progress func(done, total int),
+	opts options,
+) error {
+	human := func(r discoveryEval.HarnessReport) string { return renderEval(r.(discoveryEval.EvalReport)) }
+
+	if opts.record {
+		if err := os.MkdirAll(opts.fixtures, 0o755); err != nil {
+			return fmt.Errorf("mkdir fixtures %s: %w", opts.fixtures, err)
+		}
+		// Record writes one corpus file at the end, so the \r progress counter gives
+		// no mid-run signal. Emit newline-terminated progress so a tail of the log
+		// shows how far a long background record has gotten.
+		recProgress := func(done, total int) {
+			if done == total || done%25 == 0 {
+				fmt.Fprintf(os.Stderr, "recorded %d/%d\n", done, total)
+			}
+		}
+		once := func() (discoveryEval.HarnessReport, error) {
+			fmt.Fprintf(os.Stderr, "RECORDING %d entities to %s (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.fixtures, opts.corpus, opts.concurrency, opts.topK)
+			return recordCorpus(ctx, cfg, pool, opts.fixtures, corpusEnts, mode, opts.concurrency, opts.topK, recProgress)
+		}
+		return runHarness("eval", once, human, opts)
+	}
+
+	once := func() (discoveryEval.HarnessReport, error) {
+		fmt.Fprintf(os.Stderr, "REPLAYING %d entities from %s (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.fixtures, opts.corpus, opts.concurrency, opts.topK)
+		searcher, err := buildReplaySearcher(cfg, pool, opts.fixtures)
+		if err != nil {
+			return discoveryEval.EvalReport{}, err
+		}
+		report := discoveryEval.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
+		return report, nil
+	}
 	return runHarness("eval", once, human, opts)
 }
 

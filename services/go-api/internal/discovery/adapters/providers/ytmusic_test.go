@@ -105,7 +105,7 @@ func TestPickArtistArtwork(t *testing.T) {
 }
 
 func TestYouTubeMusicArtworkResolver_NonArtistKindIsNoop(t *testing.T) {
-	r := NewYouTubeMusicArtworkResolver()
+	r := NewYouTubeMusicArtworkResolver(nil)
 	for _, kind := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindAlbum} {
 		got, err := r.Resolve(context.Background(), kind, "Some Title", "Some Subtitle", "")
 		if err != nil {

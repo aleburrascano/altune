@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -15,22 +14,30 @@ import (
 	"github.com/raitonoberu/ytmusic"
 )
 
-// ytmusicClientOnce bounds the ytmusic package's global HTTP client with a
-// timeout. The library otherwise uses a no-timeout client and ignores the
-// caller's context, so a slow/hung YouTube Music request could block a search
-// indefinitely.
-var ytmusicClientOnce sync.Once
+// ytmusicTimeout bounds every YouTube Music call: the ytmusic library otherwise
+// uses a no-timeout client and ignores the caller's context, so a slow/hung
+// request could block a search indefinitely.
+const ytmusicTimeout = 8 * time.Second
 
-func initYTMusicClient() {
-	ytmusicClientOnce.Do(func() {
-		ytmusic.HTTPClient = &http.Client{Timeout: 8 * time.Second}
-	})
+// setYTMusicHTTPClient points the ytmusic library's package-global client at a
+// timeout-bounded client over the given transport. The library exposes NO
+// per-instance client — request.go calls the package-global HTTPClient.Do
+// directly — so this global write is the only injection seam it offers. The
+// deterministic eval uses it to route YouTube Music through its record/replay
+// transport; a nil transport yields the default transport (the production path,
+// unchanged). The composition root sets this once per process and every YouTube
+// Music construction in a process shares one transport, so the write is not racy.
+func setYTMusicHTTPClient(transport http.RoundTripper) {
+	ytmusic.HTTPClient = &http.Client{Timeout: ytmusicTimeout, Transport: transport}
 }
 
 type YouTubeMusicAdapter struct{}
 
-func NewYouTubeMusicAdapter() *YouTubeMusicAdapter {
-	initYTMusicClient()
+// NewYouTubeMusicAdapter builds the YouTube Music search adapter. transport is
+// injected into the ytmusic library's global client (nil → default transport),
+// so offline tooling can record/replay YouTube Music like every other provider.
+func NewYouTubeMusicAdapter(transport http.RoundTripper) *YouTubeMusicAdapter {
+	setYTMusicHTTPClient(transport)
 	return &YouTubeMusicAdapter{}
 }
 
@@ -292,8 +299,11 @@ var ytThumbSizeRe = regexp.MustCompile(`w\d+-h\d+`)
 // Music adds no album ceiling above those, only artist images they lack.
 type YouTubeMusicArtworkResolver struct{}
 
-func NewYouTubeMusicArtworkResolver() *YouTubeMusicArtworkResolver {
-	initYTMusicClient()
+// NewYouTubeMusicArtworkResolver builds the keyless YouTube Music artist-artwork
+// resolver. transport is injected into the ytmusic library's global client (nil
+// → default transport).
+func NewYouTubeMusicArtworkResolver(transport http.RoundTripper) *YouTubeMusicArtworkResolver {
+	setYTMusicHTTPClient(transport)
 	return &YouTubeMusicArtworkResolver{}
 }
 

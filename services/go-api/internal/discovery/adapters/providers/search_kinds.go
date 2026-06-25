@@ -25,6 +25,11 @@ var defaultKindOrder = []domain.ResultKind{
 // total provider outage while a partial mix (some kinds ok, some failed) still
 // ships. Before this, each adapter hand-rolled the loop and the partial/outage
 // decision; the deletion test concentrates that complexity here.
+//
+// The per-kind calls run SEQUENTIALLY, on purpose: most providers rate-limit by
+// host (MusicBrainz enforces ~1 req/sec), so firing a provider's 3 kind-searches
+// at once trips throttling and surfaces as timeouts. Serial calls stay within each
+// host's budget; the per-provider SearchTimeout is sized to cover all three.
 func searchAcrossKinds(
 	ctx context.Context,
 	provider, query string,

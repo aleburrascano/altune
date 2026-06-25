@@ -38,6 +38,7 @@ type Entity struct {
 // variant becomes canonical. Native per-provider ordering is preserved as
 // BestRank.
 func Merge(perProvider [][]domain.SearchResult) []Entity {
+	ambiguous := ambiguousArtistNames(perProvider)
 	entities := make([]Entity, 0)
 	for _, group := range perProvider {
 		for rank, c := range group {
@@ -47,6 +48,15 @@ func Merge(perProvider [][]domain.SearchResult) []Entity {
 			for i := range entities {
 				tier, ok := sameEntity(entities[i].Result, c)
 				if !ok {
+					continue
+				}
+				// Ambiguous-name guard: when MusicBrainz reports >1 distinct artist
+				// for this name, a bare name match is NOT identity proof — refuse it
+				// so distinct same-name artists (the "Che" problem) keep separate
+				// sources. Identity tiers (ISRC/MBID/bridge) still merge freely.
+				if c.Kind == domain.ResultKindArtist &&
+					tier == domain.EntityResolutionNone &&
+					ambiguous[textnorm.NormalizeForMatch(c.Title)] {
 					continue
 				}
 				entities[i].Result = mergeInto(entities[i].Result, c, tier)
@@ -220,6 +230,37 @@ func identityClaims(r domain.SearchResult) map[providerID]bool {
 		}
 	}
 	return claims
+}
+
+// ambiguousArtistNames returns the set of normalized artist names for which
+// MusicBrainz surfaced 2+ distinct identities (MBIDs). A name in this set is one
+// where a bare name match is not safe identity proof — multiple real artists
+// share it (e.g. "Che"). Computed once per merge from the raw provider groups.
+func ambiguousArtistNames(perProvider [][]domain.SearchResult) map[string]bool {
+	mbidsByName := make(map[string]map[string]bool)
+	for _, group := range perProvider {
+		for _, r := range group {
+			if r.Kind != domain.ResultKindArtist {
+				continue
+			}
+			mbid := stringExtra(r, "mbid")
+			if mbid == "" {
+				continue
+			}
+			name := textnorm.NormalizeForMatch(r.Title)
+			if mbidsByName[name] == nil {
+				mbidsByName[name] = make(map[string]bool)
+			}
+			mbidsByName[name][mbid] = true
+		}
+	}
+	ambiguous := make(map[string]bool)
+	for name, mbids := range mbidsByName {
+		if len(mbids) >= 2 {
+			ambiguous[name] = true
+		}
+	}
+	return ambiguous
 }
 
 func stringExtra(r domain.SearchResult, key string) string {

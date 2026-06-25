@@ -41,6 +41,7 @@ const kendrickArtistLookup = `{
     {"type": "wikidata", "url": {"resource": "https://www.wikidata.org/wiki/Q130798"}},
     {"type": "free streaming", "url": {"resource": "https://open.spotify.com/artist/2YZyLoL8N0Wb9xBt1NhZWg"}},
     {"type": "free streaming", "url": {"resource": "https://www.deezer.com/artist/525046"}},
+    {"type": "streaming", "url": {"resource": "https://music.apple.com/us/artist/kendrick-lamar/368183298"}},
     {"type": "last.fm", "url": {"resource": "https://www.last.fm/music/Kendrick+Lamar"}},
     {"type": "official homepage", "url": {"resource": "http://www.kendricklamar.com/"}}
   ]
@@ -91,6 +92,7 @@ func TestMusicBrainzAdapter_Lookup_Artist(t *testing.T) {
 		"wikidata": "Q130798",
 		"spotify":  "2YZyLoL8N0Wb9xBt1NhZWg",
 		"deezer":   "525046",
+		"itunes":   "368183298",
 	}
 	for k, v := range wantIDs {
 		if e.ExternalIDs[k] != v {

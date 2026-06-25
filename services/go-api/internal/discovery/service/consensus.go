@@ -35,13 +35,6 @@ const consensusTimeout = 10 * time.Second
 // within the window, and the search path surfaces new releases immediately.
 const defaultConsensusCacheTTL = 6 * time.Hour
 
-// mbLookupCap bounds per-request MusicBrainz lookups — an operational cost
-// limit (like a timeout), not a quality threshold. The query-fit "authority
-// filter" and "zero-overlap discard" thresholds were removed: MB now only
-// confirms titles it knows and rejects what it explicitly credits to a
-// different artist.
-const mbLookupCap = 10
-
 type ConsensusStatus string
 
 const (
@@ -91,12 +84,10 @@ func FanOutConsensus[T any](
 	return out
 }
 
-// mbAuthority is the MusicBrainz subset the consensus needs. The
-// MusicBrainzAdapter satisfies it (structurally identical to the legacy
-// consensus lookup interface).
+// mbAuthority is the MusicBrainz subset the consensus needs: the bulk
+// release-group discography for the resolved artist, used as the identity spine.
+// The MusicBrainzAdapter satisfies it.
 type mbAuthority interface {
-	LookupAlbumArtist(ctx context.Context, artistName, albumTitle string, profile domain.ArtistIdentityProfile) (domain.AlbumVerdict, string, error)
-	ResolveArtistIdentity(ctx context.Context, name string) (*ports.ArtistIdentity, error)
 	ValidateArtistAlbums(ctx context.Context, artistName string, albums []domain.SearchResult) (*ports.AlbumValidationResult, error)
 }
 
@@ -196,9 +187,19 @@ func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName st
 	})
 }
 
-// applyMBAuthority is the carried-forward audited MusicBrainz pass: confirm
-// titles MB knows, reject contamination, and — when MB has strong data for the
-// artist — reject anything neither MB nor multi-provider consensus confirmed.
+// applyMBAuthority anchors the album list on the MusicBrainz spine. When MB
+// resolves the artist and confirms at least one album, its release-group
+// discography is the identity authority: confirmed albums are kept, and every
+// other album is REJECTED as same-name contamination — the "wrong Che" albums a
+// name-keyed union pulls in. This replaces the old per-album LookupAlbumArtist
+// probe (capped + timeout-prone) with the bulk discography already fetched by
+// ValidateArtistAlbums: more precise (drops what MB simply does not credit to
+// this artist, not only what it credits to another) and far cheaper — one call,
+// not N.
+//
+// When MB confirms nothing — artist absent from MB, or an underground artist MB
+// does not cover — MB is not a credible authority here, so the provider union is
+// returned untouched (precision is unattainable without a spine; coverage wins).
 func (s *ConsensusService) applyMBAuthority(
 	ctx context.Context,
 	artistName string,
@@ -207,13 +208,6 @@ func (s *ConsensusService) applyMBAuthority(
 	if s.mb == nil {
 		return results
 	}
-
-	profile := domain.NewArtistIdentityProfile()
-	identity, err := s.mb.ResolveArtistIdentity(ctx, artistName)
-	if err != nil || identity == nil || identity.MBID == "" {
-		return results
-	}
-	profile.MBID = identity.MBID
 
 	allAlbums := make([]domain.SearchResult, len(results))
 	for i, r := range results {
@@ -230,36 +224,25 @@ func (s *ConsensusService) applyMBAuthority(
 		confirmedTitles[textnorm.NormalizeForMatch(a.Title)] = true
 	}
 
-	mbCalls := 0
-	for i, result := range results {
-		if ctx.Err() != nil {
-			break
-		}
-		if result.Status == ConsensusRejected {
+	// MB confirmed nothing → not a credible authority for this artist; keep the
+	// provider union as-is.
+	if len(confirmedTitles) == 0 {
+		return results
+	}
+
+	for i := range results {
+		if results[i].Status == ConsensusRejected {
 			continue
 		}
-		titleNorm := textnorm.NormalizeForMatch(result.Album.Title)
-		if confirmedTitles[titleNorm] {
-			if results[i].Status != ConsensusConfirmed {
-				results[i].Status = ConsensusConfirmed
-				results[i].Reason = "confirmed by MusicBrainz"
-				results[i].Album = annotateConsensus(results[i].Album, ConsensusConfirmed, 1, 0)
-			}
+		if confirmedTitles[textnorm.NormalizeForMatch(results[i].Album.Title)] {
+			results[i].Status = ConsensusConfirmed
+			results[i].Reason = "confirmed by MusicBrainz"
+			results[i].Album = annotateConsensus(results[i].Album, ConsensusConfirmed, 1, 0)
 			continue
 		}
-		if mbCalls >= mbLookupCap {
-			continue
-		}
-		mbCalls++
-		verdict, _, lookupErr := s.mb.LookupAlbumArtist(ctx, artistName, result.Album.Title, profile)
-		if lookupErr != nil {
-			continue
-		}
-		if verdict == domain.AlbumVerdictContamination {
-			results[i].Status = ConsensusRejected
-			results[i].Reason = "MusicBrainz credits to different artist"
-			results[i].Album = annotateConsensus(results[i].Album, ConsensusRejected, 0, 0)
-		}
+		results[i].Status = ConsensusRejected
+		results[i].Reason = "not in MusicBrainz discography for resolved artist"
+		results[i].Album = annotateConsensus(results[i].Album, ConsensusRejected, 0, 0)
 	}
 
 	return results

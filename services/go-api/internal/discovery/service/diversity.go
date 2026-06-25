@@ -65,6 +65,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		primaryPop float64
 		otherIdxs  []int
 	}
+	ambiguous := ambiguousArtistNames([][]domain.SearchResult{results})
 	groups := make(map[string]*group)
 	order := []string{}
 
@@ -73,11 +74,18 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 			continue
 		}
 		norm := textnorm.NormalizeForMatch(r.Title)
+		key := norm
+		// Ambiguous name (multiple real artists share it): key by MBID so distinct
+		// identities stay as separate cards instead of folding into one. Unambiguous
+		// names collapse by name as before.
+		if ambiguous[norm] {
+			key = norm + "\x00" + stringExtra(r, "mbid")
+		}
 		pop := popularityOf(r)
-		g, exists := groups[norm]
+		g, exists := groups[key]
 		if !exists {
-			groups[norm] = &group{primaryIdx: i, primaryPop: pop}
-			order = append(order, norm)
+			groups[key] = &group{primaryIdx: i, primaryPop: pop}
+			order = append(order, key)
 			continue
 		}
 		if pop > g.primaryPop {
