@@ -1,4 +1,4 @@
-package service
+package enrich
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -51,7 +52,7 @@ func (s *DeezerEnrichmentService) Execute(
 		return domain.EmptyDeezerEnrichment(), nil
 	}
 
-	return CachedLookup(ctx, s.cache, deezerNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
+	return service.CachedLookup(ctx, s.cache, deezerNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
 		func(ctx context.Context) (domain.DeezerEnrichment, bool, error) {
 			id, err := s.enricher.ResolveID(ctx, kind, artist, entityTitle)
 			if err != nil {

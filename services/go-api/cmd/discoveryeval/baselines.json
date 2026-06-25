@@ -1,0 +1,65 @@
+{
+  "correction.precision_rate": {
+    "metric": "correction.precision_rate",
+    "value": 1,
+    "margin": 0,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
+  "correction.recall_rate": {
+    "metric": "correction.recall_rate",
+    "value": 0.9348148148148149,
+    "margin": 0.00666666666666671,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
+  "diversity.cost_rate": {
+    "metric": "diversity.cost_rate",
+    "value": 0,
+    "margin": 0,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  },
+  "eval.top1_rate": {
+    "metric": "eval.top1_rate",
+    "value": 1,
+    "margin": 0,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
+  "eval.topk_rate": {
+    "metric": "eval.topk_rate",
+    "value": 1,
+    "margin": 0,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
+  "merge.collapse_rate": {
+    "metric": "merge.collapse_rate",
+    "value": 0.052870978900034594,
+    "margin": 0.04047042545831893,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
+  "merge.over_merge_rate": {
+    "metric": "merge.over_merge_rate",
+    "value": 0.0009442870632672333,
+    "margin": 0.00424929178470255,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  },
+  "signal_a.strong_gaps": {
+    "metric": "signal_a.strong_gaps",
+    "value": 0,
+    "margin": 0,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  },
+  "signal_b.mean_gap_pct": {
+    "metric": "signal_b.mean_gap_pct",
+    "value": 0.6660091561668842,
+    "margin": 0.03537556963013366,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  }
+}

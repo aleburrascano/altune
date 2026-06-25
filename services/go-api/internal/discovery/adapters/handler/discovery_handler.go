@@ -12,6 +12,7 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/textnorm"
@@ -41,11 +42,11 @@ type DiscoveryHandler struct {
 // With* setter wired backwards from the composition root. Any member may be nil
 // (its provider isn't configured) — the endpoint then answers an empty DTO.
 type DetailEnrichers struct {
-	Discogs       *service.DiscogsEnrichmentService       // album credits/styles/labels (caps 3–6)
-	DiscogsArtist *service.DiscogsArtistEnrichmentService // artist bio/aliases/links (cap 7)
-	LastFm        *service.LastFmEnrichmentService        // listen popularity/tags/bio/similar (cap 3)
-	Deezer        *service.DeezerEnrichmentService        // track audio fields + album liner (caps 7–8)
-	Lyrics        *service.LyricsService                  // synced + plain lyrics (cap 6)
+	Discogs       *enrich.DiscogsEnrichmentService       // album credits/styles/labels (caps 3–6)
+	DiscogsArtist *enrich.DiscogsArtistEnrichmentService // artist bio/aliases/links (cap 7)
+	LastFm        *enrich.LastFmEnrichmentService        // listen popularity/tags/bio/similar (cap 3)
+	Deezer        *enrich.DeezerEnrichmentService        // track audio fields + album liner (caps 7–8)
+	Lyrics        *enrich.LyricsService                  // synced + plain lyrics (cap 6)
 }
 
 // WithDetailEnrichers attaches the optional detail-open enrichment use cases. Set

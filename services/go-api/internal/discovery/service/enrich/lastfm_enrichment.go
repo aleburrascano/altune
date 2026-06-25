@@ -1,4 +1,4 @@
-package service
+package enrich
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -47,7 +48,7 @@ func (s *LastFmEnrichmentService) Execute(
 		return domain.EmptyLastFmEnrichment(), nil
 	}
 
-	return CachedLookup(ctx, s.cache, lastfmNameKey(kind, artistName, entityTitle), domain.EmptyLastFmEnrichment(),
+	return service.CachedLookup(ctx, s.cache, lastfmNameKey(kind, artistName, entityTitle), domain.EmptyLastFmEnrichment(),
 		func(ctx context.Context) (domain.LastFmEnrichment, bool, error) {
 			e, err := s.enricher.Lookup(ctx, kind, artistName, entityTitle)
 			if err != nil {

@@ -1,4 +1,4 @@
-package service
+package enrich
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -43,7 +44,7 @@ func (s *DiscogsEnrichmentService) Execute(
 		return domain.EmptyDiscogsEnrichment(), nil
 	}
 
-	return CachedLookup(ctx, s.cache, discogsNameKey(artist, album), domain.EmptyDiscogsEnrichment(),
+	return service.CachedLookup(ctx, s.cache, discogsNameKey(artist, album), domain.EmptyDiscogsEnrichment(),
 		func(ctx context.Context) (domain.DiscogsEnrichment, bool, error) {
 			masterID, err := s.enricher.ResolveMasterID(ctx, artist, album)
 			if err != nil {
@@ -99,7 +100,7 @@ func (s *DiscogsArtistEnrichmentService) Execute(
 
 	nameKey := textnorm.NormalizeForMatch(strings.TrimSpace(name))
 
-	return CachedLookup(ctx, s.cache, nameKey, domain.EmptyDiscogsArtistEnrichment(),
+	return service.CachedLookup(ctx, s.cache, nameKey, domain.EmptyDiscogsArtistEnrichment(),
 		func(ctx context.Context) (domain.DiscogsArtistEnrichment, bool, error) {
 			artistID, err := s.enricher.ResolveArtistID(ctx, name)
 			if err != nil {

@@ -1,4 +1,4 @@
-package service
+package enrich
 
 import (
 	"context"
@@ -9,14 +9,14 @@ import (
 )
 
 type fakeLyricsProvider struct {
-	resolves    int
-	lookups     int
-	lastArtist  string
-	lastTitle   string
-	resolveID   string
-	resolveErr  error
-	lookupErr   error
-	lyrics      domain.DeezerLyrics
+	resolves   int
+	lookups    int
+	lastArtist string
+	lastTitle  string
+	resolveID  string
+	resolveErr error
+	lookupErr  error
+	lyrics     domain.DeezerLyrics
 }
 
 func (f *fakeLyricsProvider) ResolveTrackID(_ context.Context, artist, title string) (string, error) {
