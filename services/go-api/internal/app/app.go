@@ -253,61 +253,6 @@ func (a *App) setup(ctx context.Context) error {
 		)
 	}
 
-	// Discogs detail-open album enrichment: credits/personnel, styles,
-	// label/catalog, companies, community signal (docs/providers/discogs.md caps
-	// 3–6). Only when a Discogs token is configured; nil degrades to an empty DTO.
-	var discogsEnrichSvc *discoveryService.DiscogsEnrichmentService
-	var discogsArtistEnrichSvc *discoveryService.DiscogsArtistEnrichmentService
-	if a.cfg.HasDiscogs() {
-		discogsAdapter := providers.NewDiscogsAdapter(
-			newDiscoveryClient(),
-			a.cfg.DiscogsToken,
-			a.cfg.MusicBrainzUserAgent,
-		)
-		discogsEnrichSvc = discoveryService.NewDiscogsEnrichmentService(
-			discogsAdapter,
-			discoveryCacheAdapters.NewRedisDiscogsEnrichmentCache(a.redisClient),
-		)
-		discogsArtistEnrichSvc = discoveryService.NewDiscogsArtistEnrichmentService(
-			discogsAdapter,
-			discoveryCacheAdapters.NewRedisDiscogsArtistEnrichmentCache(a.redisClient),
-		)
-	}
-
-	// Last.fm detail-open enrichment: listen-based popularity (listeners/
-	// playcount), weighted tags, bio, the similar-artist graph, and the MBID
-	// bridge (docs/providers/lastfm.md cap 3). Only when a Last.fm key is
-	// configured; nil degrades to an empty DTO.
-	var lastfmEnrichSvc *discoveryService.LastFmEnrichmentService
-	if a.cfg.HasLastFM() {
-		lfmEnricher := providers.NewLastFmAdapter(
-			newDiscoveryClient(),
-			a.cfg.LastFMAPIKey,
-		)
-		lastfmEnrichSvc = discoveryService.NewLastFmEnrichmentService(
-			lfmEnricher,
-			discoveryCacheAdapters.NewRedisLastFmEnrichmentCache(a.redisClient),
-		)
-	}
-
-	// Deezer detail-open enrichment: track audio fields (bpm/gain) + explicit
-	// flag, album liner data (label/genres/barcode/record-type)
-	// (docs/providers/deezer.md caps 7–8). Deezer's public API needs no key, so
-	// this is wired unconditionally like the rest of the Deezer adapter.
-	deezerEnrichSvc := discoveryService.NewDeezerEnrichmentService(
-		providers.NewDeezerAdapter(newDiscoveryClient()),
-		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient),
-	)
-
-	// Deezer lyrics: synced + plain lyrics, writers, copyright — the one metadata
-	// axis no other audited provider carries (docs/providers/deezer.md cap 6). Via
-	// the reverse-engineered pipe.deezer.com GraphQL (anonymous-JWT, self-healing);
-	// no key needed, so wired unconditionally like the rest of the Deezer path.
-	lyricsSvc := discoveryService.NewLyricsService(
-		providers.NewDeezerLyricsAdapter(newDiscoveryClient()),
-		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient),
-	)
-
 	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
 		Search:  searchSvc,
 		Click:   clickSvc,
@@ -319,13 +264,7 @@ func (a *App) setup(ctx context.Context) error {
 		Suggest: suggestSvc,
 		Event:   eventSvc,
 	})
-	discoveryH.WithDetailEnrichers(discoveryHandler.DetailEnrichers{
-		Discogs:       discogsEnrichSvc,
-		DiscogsArtist: discogsArtistEnrichSvc,
-		LastFm:        lastfmEnrichSvc,
-		Deezer:        deezerEnrichSvc,
-		Lyrics:        lyricsSvc,
-	})
+	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
 
 	a.startVocabularyRefresh(vocabStore)
 
@@ -435,6 +374,61 @@ func (a *App) buildAudioStore() catalogPorts.AudioStore {
 
 	slog.Warn("no audio store configured")
 	return nil
+}
+
+// buildDetailEnrichers wires the optional, provider-keyed detail-open enrichers
+// (Discogs album+artist, Last.fm, Deezer, lyrics) into one DetailEnrichers
+// bundle. Each is best-effort: an unconfigured provider leaves its field nil and
+// the endpoint answers an empty DTO. The MusicBrainz enricher is deliberately
+// NOT here — it also feeds the search path, so it stays wired in setup.
+func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
+	var enrichers discoveryHandler.DetailEnrichers
+
+	// Discogs album + artist: credits/personnel, styles, label/catalog, companies,
+	// community signal + artist bio/aliases/links (docs/providers/discogs.md caps
+	// 3–7). Only when a Discogs token is configured.
+	if a.cfg.HasDiscogs() {
+		discogsAdapter := providers.NewDiscogsAdapter(
+			newDiscoveryClient(),
+			a.cfg.DiscogsToken,
+			a.cfg.MusicBrainzUserAgent,
+		)
+		enrichers.Discogs = discoveryService.NewDiscogsEnrichmentService(
+			discogsAdapter,
+			discoveryCacheAdapters.NewRedisDiscogsEnrichmentCache(a.redisClient),
+		)
+		enrichers.DiscogsArtist = discoveryService.NewDiscogsArtistEnrichmentService(
+			discogsAdapter,
+			discoveryCacheAdapters.NewRedisDiscogsArtistEnrichmentCache(a.redisClient),
+		)
+	}
+
+	// Last.fm: listen-based popularity, weighted tags, bio, similar-artist graph,
+	// MBID bridge (docs/providers/lastfm.md cap 3). Only when a Last.fm key is set.
+	if a.cfg.HasLastFM() {
+		lfmEnricher := providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
+		enrichers.LastFm = discoveryService.NewLastFmEnrichmentService(
+			lfmEnricher,
+			discoveryCacheAdapters.NewRedisLastFmEnrichmentCache(a.redisClient),
+		)
+	}
+
+	// Deezer: track audio fields (bpm/gain) + explicit flag, album liner data
+	// (docs/providers/deezer.md caps 7–8). Public API, no key — wired always.
+	enrichers.Deezer = discoveryService.NewDeezerEnrichmentService(
+		providers.NewDeezerAdapter(newDiscoveryClient()),
+		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient),
+	)
+
+	// Deezer lyrics: synced + plain lyrics, writers, copyright — the one axis no
+	// other audited provider carries (docs/providers/deezer.md cap 6). Via the
+	// pipe.deezer.com GraphQL (anonymous-JWT, self-healing); no key — wired always.
+	enrichers.Lyrics = discoveryService.NewLyricsService(
+		providers.NewDeezerLyricsAdapter(newDiscoveryClient()),
+		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient),
+	)
+
+	return enrichers
 }
 
 func buildDiscoveryProviders(cfg *config.Config, mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
