@@ -1,4 +1,4 @@
-package service
+package eval
 
 import (
 	"context"
@@ -80,12 +80,12 @@ type EvalResult struct {
 // top-K (the relaxed bar) are reported.
 type EvalReport struct {
 	Corpus            string         `json:"corpus,omitempty"` // "" = exact, "hard" = title-only ambiguous
-	K                 int            `json:"k"`           // the top-K window evaluated
-	Total             int            `json:"total"`       // entities evaluated (includes skipped)
-	Evaluated         int            `json:"evaluated"`   // total - skipped (the rate denominator)
-	Top1Passed        int            `json:"top1_passed"` // entity ranked #1
-	TopKPassed        int            `json:"topk_passed"` // entity within the top-K (includes top1)
-	Failed            int            `json:"failed"`      // not in the top-K (or no results)
+	K                 int            `json:"k"`                // the top-K window evaluated
+	Total             int            `json:"total"`            // entities evaluated (includes skipped)
+	Evaluated         int            `json:"evaluated"`        // total - skipped (the rate denominator)
+	Top1Passed        int            `json:"top1_passed"`      // entity ranked #1
+	TopKPassed        int            `json:"topk_passed"`      // entity within the top-K (includes top1)
+	Failed            int            `json:"failed"`           // not in the top-K (or no results)
 	Skipped           int            `json:"skipped"`
 	FailuresByTopKind map[string]int `json:"failures_by_top_kind"` // what kind ranked #1 on a miss (incl. "none")
 	Results           []EvalResult   `json:"results"`

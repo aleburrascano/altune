@@ -1,4 +1,4 @@
-package service
+package eval
 
 import (
 	"context"
@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
 )
 
 // queryCorrector is the slice of CorrectionService the signal consumes: given a
 // query, does a vocabulary correction exist? Defined here (consumer side) so the
 // signal can be tested with a fake.
 type queryCorrector interface {
-	Correct(ctx context.Context, query string) *CorrectionResult
+	Correct(ctx context.Context, query string) *service.CorrectionResult
 }
 
 // GapStrength labels how confident we are that a query is a real coverage gap.

@@ -1,4 +1,4 @@
-package service
+package eval
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
 )
 
 // fakeEventQuery returns canned aggregates; no DB.
@@ -27,9 +28,9 @@ type fakeCorrector struct {
 	typos map[string]bool
 }
 
-func (f *fakeCorrector) Correct(_ context.Context, query string) *CorrectionResult {
+func (f *fakeCorrector) Correct(_ context.Context, query string) *service.CorrectionResult {
 	if f.typos[query] {
-		return &CorrectionResult{Corrected: query + " (fixed)", Confidence: 0.9}
+		return &service.CorrectionResult{Corrected: query + " (fixed)", Confidence: 0.9}
 	}
 	return nil
 }

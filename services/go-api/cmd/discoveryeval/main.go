@@ -17,7 +17,7 @@
 //   - signal-b   : cross-provider coverage imbalance (gated).
 //   - health     : fill-rate / bridge-hit / latency (report-only, never gated).
 //   - consensus  : per-artist detail dump (-query), or corpus completeness
-//                  (no -query, report-only).
+//     (no -query, report-only).
 //
 // Telemetry emission is disabled for eval searches (nil event store) so
 // synthetic searches never pollute the telemetry the signals read.
@@ -38,6 +38,7 @@ import (
 	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
+	discoveryEval "altune/go-api/internal/discovery/service/eval"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
@@ -158,7 +159,7 @@ func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 
 	fmt.Fprintf(os.Stderr, "health pass over %d entities (concurrency=%d)...\n", len(entities), opts.concurrency)
 	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
-	report := discoveryService.RunHealthEval(ctx, entities, searcher, opts.concurrency, progress)
+	report := discoveryEval.RunHealthEval(ctx, entities, searcher, opts.concurrency, progress)
 	drain()
 
 	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
@@ -174,9 +175,9 @@ func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 			return err
 		}
 		if existing == nil {
-			existing = discoveryService.Baselines{}
+			existing = discoveryEval.Baselines{}
 		}
-		for k, v := range discoveryService.BuildBaselines(report.HealthMetrics(), nil) {
+		for k, v := range discoveryEval.BuildBaselines(report.HealthMetrics(), nil) {
 			v.Note = "health gauge — report-only, never gated"
 			existing[k] = v
 		}
@@ -204,32 +205,32 @@ func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	}
 
 	corpusEnts, mode := corpusEntities(entities, opts.corpus)
-	once := func() (discoveryService.HarnessReport, error) {
+	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "diversity differential over %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
 		svc := app.BuildSearchService(cfg, pool, redisClient, nil)
 		vs := variantSearchAdapter{svc: svc}
-		report := discoveryService.RunDiversityEvalMode(ctx, corpusEnts, vs, opts.concurrency, opts.topK, mode, progress)
+		report := discoveryEval.RunDiversityEvalMode(ctx, corpusEnts, vs, opts.concurrency, opts.topK, mode, progress)
 		svc.WaitForBackground()
 		return report, nil
 	}
-	human := func(r discoveryService.HarnessReport) string { return renderDiversity(r.(discoveryService.DiversityReport)) }
+	human := func(r discoveryEval.HarnessReport) string { return renderDiversity(r.(discoveryEval.DiversityReport)) }
 	return runHarness("diversity", once, human, opts)
 }
 
 // corpusEntities applies the corpus selection. Hard mode keeps only single-token
 // titles (the ambiguous case — "Humble", "Scorpion") and signals title-only
 // querying; exact mode keeps every entity and queries "artist title".
-func corpusEntities(entities []discoveryService.LibraryEntity, corpus string) ([]discoveryService.LibraryEntity, discoveryService.QueryMode) {
+func corpusEntities(entities []discoveryEval.LibraryEntity, corpus string) ([]discoveryEval.LibraryEntity, discoveryEval.QueryMode) {
 	if corpus != "hard" {
-		return entities, discoveryService.QueryExact
+		return entities, discoveryEval.QueryExact
 	}
-	out := []discoveryService.LibraryEntity{}
+	out := []discoveryEval.LibraryEntity{}
 	for _, e := range entities {
-		if discoveryService.TokenCount(e.Title) == 1 {
+		if discoveryEval.TokenCount(e.Title) == 1 {
 			out = append(out, e)
 		}
 	}
-	return out, discoveryService.QueryTitleOnly
+	return out, discoveryEval.QueryTitleOnly
 }
 
 // variantSearchAdapter exposes the pipeline's with/without-reshape seam as the
@@ -268,11 +269,11 @@ func runCorrection(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis
 		return fmt.Errorf("no library terms are in the vocabulary store — run some searches first to seed it")
 	}
 
-	once := func() (discoveryService.HarnessReport, error) {
-		return discoveryService.RunCorrectionEval(ctx, recognized, corrector, opts.typos), nil
+	once := func() (discoveryEval.HarnessReport, error) {
+		return discoveryEval.RunCorrectionEval(ctx, recognized, corrector, opts.typos), nil
 	}
-	human := func(r discoveryService.HarnessReport) string {
-		return renderCorrection(r.(discoveryService.CorrectionReport))
+	human := func(r discoveryEval.HarnessReport) string {
+		return renderCorrection(r.(discoveryEval.CorrectionReport))
 	}
 	return runHarness("correction", once, human, opts)
 }
@@ -308,10 +309,10 @@ func loadLibraryTerms(ctx context.Context, pool *pgxpool.Pool, limit int) ([]str
 
 // filterRecognized keeps only terms the vocabulary store holds exactly — so a
 // recall miss means the corrector failed, not that the term was never in vocab.
-func filterRecognized(ctx context.Context, vocab discoveryService.VocabularyLookup, terms []string) []string {
+func filterRecognized(ctx context.Context, vocab discoveryEval.VocabularyLookup, terms []string) []string {
 	out := []string{}
 	for _, term := range terms {
-		if discoveryService.IsRecognizedTerm(ctx, vocab, term) {
+		if discoveryEval.IsRecognizedTerm(ctx, vocab, term) {
 			out = append(out, term)
 		}
 	}
@@ -333,14 +334,14 @@ func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 		}
 	}
 
-	once := func() (discoveryService.HarnessReport, error) {
+	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "merge-eval over %d unique entities (concurrency=%d)...\n", len(entities), opts.concurrency)
 		searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
-		report := discoveryService.RunMergeEval(ctx, entities, searcher, opts.concurrency, progress)
+		report := discoveryEval.RunMergeEval(ctx, entities, searcher, opts.concurrency, progress)
 		drain()
 		return report, nil
 	}
-	human := func(r discoveryService.HarnessReport) string { return renderMerge(r.(discoveryService.MergeReport)) }
+	human := func(r discoveryEval.HarnessReport) string { return renderMerge(r.(discoveryEval.MergeReport)) }
 	return runHarness("merge", once, human, opts)
 }
 
@@ -360,22 +361,22 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 	}
 
 	corpusEnts, mode := corpusEntities(entities, opts.corpus)
-	once := func() (discoveryService.HarnessReport, error) {
+	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "evaluating %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
 		// nil event store: eval searches must not emit telemetry.
 		searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
-		report := discoveryService.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
+		report := discoveryEval.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
 		drain() // drain best-effort background writes before exit
 		return report, nil
 	}
-	human := func(r discoveryService.HarnessReport) string { return renderEval(r.(discoveryService.EvalReport)) }
+	human := func(r discoveryEval.HarnessReport) string { return renderEval(r.(discoveryEval.EvalReport)) }
 	return runHarness("eval", once, human, opts)
 }
 
 // loadLibraryEntities reads the distinct (title, artist) pairs across ALL users.
 // This is an offline-only cross-context read of the catalog's tracks table; it
 // lives in the composition root and never touches the request path.
-func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, random bool) ([]discoveryService.LibraryEntity, error) {
+func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, random bool) ([]discoveryEval.LibraryEntity, error) {
 	// Random sampling needs a subquery: DISTINCT must resolve before ORDER BY random().
 	order := "ORDER BY artist, title"
 	query := `SELECT DISTINCT title, artist FROM tracks WHERE artist <> '' ` + order
@@ -392,13 +393,13 @@ func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, ran
 	}
 	defer rows.Close()
 
-	entities := []discoveryService.LibraryEntity{}
+	entities := []discoveryEval.LibraryEntity{}
 	for rows.Next() {
 		var title, artist string
 		if err := rows.Scan(&title, &artist); err != nil {
 			return nil, fmt.Errorf("scan track: %w", err)
 		}
-		entities = append(entities, discoveryService.LibraryEntity{Title: title, Artist: artist})
+		entities = append(entities, discoveryEval.LibraryEntity{Title: title, Artist: artist})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate tracks: %w", err)
@@ -408,7 +409,7 @@ func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, ran
 
 // buildEvalSearcher constructs the search pipeline as the eval's narrow
 // Searcher, plus a drain func to flush its best-effort background writes.
-func buildEvalSearcher(cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discoveryService.Searcher, func()) {
+func buildEvalSearcher(cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discoveryEval.Searcher, func()) {
 	svc := app.BuildSearchService(cfg, pool, redisClient, nil)
 	return searchAdapter{svc: svc}, svc.WaitForBackground
 }
@@ -473,19 +474,19 @@ func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Cl
 
 	// A correction filter drops misspellings from the strong gaps; without a
 	// vocabulary store it is simply skipped (every zero-result counts as a gap).
-	var svc *discoveryService.CoverageSignalAService
+	var svc *discoveryEval.CoverageSignalAService
 	if vocab := app.BuildVocabularyStore(redisClient); vocab != nil {
-		svc = discoveryService.NewCoverageSignalAService(eventStore, discoveryService.NewCorrectionService(vocab))
+		svc = discoveryEval.NewCoverageSignalAService(eventStore, discoveryService.NewCorrectionService(vocab))
 	} else {
-		svc = discoveryService.NewCoverageSignalAService(eventStore, nil)
+		svc = discoveryEval.NewCoverageSignalAService(eventStore, nil)
 	}
 
-	once := func() (discoveryService.HarnessReport, error) {
+	once := func() (discoveryEval.HarnessReport, error) {
 		since := time.Now().UTC().AddDate(0, 0, -opts.sinceDays)
 		return svc.Execute(ctx, since, opts.top)
 	}
-	human := func(r discoveryService.HarnessReport) string {
-		return renderSignalA(r.(*discoveryService.CoverageReportA), opts.sinceDays)
+	human := func(r discoveryEval.HarnessReport) string {
+		return renderSignalA(r.(*discoveryEval.CoverageReportA), opts.sinceDays)
 	}
 	return runHarness("signal-a", once, human, opts)
 }
@@ -497,14 +498,14 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 	if err != nil {
 		return fmt.Errorf("load artists: %w", err)
 	}
-	svc := discoveryService.NewCoverageSignalBService(app.BuildConsensusProviders(cfg))
+	svc := discoveryEval.NewCoverageSignalBService(app.BuildConsensusProviders(cfg))
 
-	once := func() (discoveryService.HarnessReport, error) {
+	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "scanning %d distinct artists across providers (concurrency=%d)...\n", len(artists), opts.concurrency)
 		return svc.Execute(ctx, artists, opts.concurrency)
 	}
-	human := func(r discoveryService.HarnessReport) string {
-		return renderSignalB(r.(*discoveryService.CoverageReportB))
+	human := func(r discoveryEval.HarnessReport) string {
+		return renderSignalB(r.(*discoveryEval.CoverageReportB))
 	}
 	return runHarness("signal-b", once, human, opts)
 }
@@ -681,7 +682,7 @@ func maybeWriteJSON(path string, report any) error {
 	return nil
 }
 
-func renderEval(report discoveryService.EvalReport) string {
+func renderEval(report discoveryEval.EvalReport) string {
 	out := fmt.Sprintf("# Discovery library eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Total: %d (evaluated %d, skipped %d)\n", report.Total, report.Evaluated, report.Skipped)
 	out += fmt.Sprintf("- Top-1: %d (%.1f%%)\n", report.Top1Passed, report.Top1Rate()*100)
@@ -698,18 +699,18 @@ func renderEval(report discoveryService.EvalReport) string {
 	out += "\n## Failures\n\n"
 	failures := 0
 	for _, r := range report.Results {
-		if r.Outcome == discoveryService.EvalPass || r.Outcome == discoveryService.EvalSkipped {
+		if r.Outcome == discoveryEval.EvalPass || r.Outcome == discoveryEval.EvalSkipped {
 			continue
 		}
 		failures++
 		switch r.Outcome {
-		case discoveryService.EvalFailNoResults:
+		case discoveryEval.EvalFailNoResults:
 			reason := "no results"
 			if r.Error != "" {
 				reason = "error: " + r.Error
 			}
 			out += fmt.Sprintf("- %q → %s\n", r.Query, reason)
-		case discoveryService.EvalFailWrongTop:
+		case discoveryEval.EvalFailWrongTop:
 			out += fmt.Sprintf("- %q → #1 was [%s] %q — %s\n", r.Query, r.Top.Kind, r.Top.Title, r.Top.Subtitle)
 		}
 	}
@@ -719,7 +720,7 @@ func renderEval(report discoveryService.EvalReport) string {
 	return out
 }
 
-func renderMerge(report discoveryService.MergeReport) string {
+func renderMerge(report discoveryEval.MergeReport) string {
 	out := fmt.Sprintf("# Discovery merge eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Total: %d (evaluated %d, no-match %d, skipped %d)\n", report.Total, report.Evaluated, report.NoMatch, report.Skipped)
 	out += fmt.Sprintf("- Under-merge rate: %.2f%% (%d provable dups unmerged of %d rows; %.1f%% queries clean)\n",
@@ -743,7 +744,7 @@ func renderMerge(report discoveryService.MergeReport) string {
 	return out
 }
 
-func renderHealth(report discoveryService.HealthReport) string {
+func renderHealth(report discoveryEval.HealthReport) string {
 	out := fmt.Sprintf("# Discovery health gauges (report-only) — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Searches: %d, result rows: %d\n", report.Searches, report.Results)
 	out += fmt.Sprintf("- Artwork fill-rate: %.1f%% (%d of %d)\n", report.FillRate*100, report.WithArtwork, report.Results)
@@ -753,7 +754,7 @@ func renderHealth(report discoveryService.HealthReport) string {
 	return out
 }
 
-func renderDiversity(report discoveryService.DiversityReport) string {
+func renderDiversity(report discoveryEval.DiversityReport) string {
 	out := fmt.Sprintf("# Discovery diversity differential — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Evaluated: %d of %d\n", report.Evaluated, report.Total)
 	out += fmt.Sprintf("- COST (gated): %.2f%% lost to reshape (%d demoted out of top-%d), %d gained\n",
@@ -771,7 +772,7 @@ func renderDiversity(report discoveryService.DiversityReport) string {
 	return out
 }
 
-func renderCorrection(report discoveryService.CorrectionReport) string {
+func renderCorrection(report discoveryEval.CorrectionReport) string {
 	out := fmt.Sprintf("# Discovery correction eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Terms (known-good): %d\n", report.Terms)
 	out += fmt.Sprintf("- Recall: %.1f%% (%d of %d typos recovered)\n", report.RecallRate()*100, report.Recovered, report.TyposTested)
@@ -786,7 +787,7 @@ func renderCorrection(report discoveryService.CorrectionReport) string {
 	return out
 }
 
-func renderSignalA(report *discoveryService.CoverageReportA, sinceDays int) string {
+func renderSignalA(report *discoveryEval.CoverageReportA, sinceDays int) string {
 	out := fmt.Sprintf("# Discovery coverage signal A — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("Window: last %d days. Strong = zero-result (not a typo); weak = results shown but no click.\n\n", sinceDays)
 
@@ -798,7 +799,7 @@ func renderSignalA(report *discoveryService.CoverageReportA, sinceDays int) stri
 	return out
 }
 
-func renderSignalB(report *discoveryService.CoverageReportB) string {
+func renderSignalB(report *discoveryEval.CoverageReportB) string {
 	out := fmt.Sprintf("# Discovery coverage signal B — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("Artists scanned: %d. Total entities (union): %d.\n\n", report.ArtistsScanned, report.TotalEntities)
 
@@ -819,7 +820,7 @@ func renderSignalB(report *discoveryService.CoverageReportB) string {
 	return out
 }
 
-func renderGaps(gaps []discoveryService.CoverageGap) string {
+func renderGaps(gaps []discoveryEval.CoverageGap) string {
 	if len(gaps) == 0 {
 		return "_none_\n"
 	}

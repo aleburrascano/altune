@@ -1,4 +1,4 @@
-package service
+package eval
 
 // Eval substrate — the attributed failure log (artifact D, plan 2026-06-24-001).
 //

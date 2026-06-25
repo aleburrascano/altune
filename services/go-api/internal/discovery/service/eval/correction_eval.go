@@ -1,4 +1,4 @@
-package service
+package eval
 
 // Correction harness — synthetic perturbation (plan 2026-06-24-001, Phase 2).
 //
@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -62,8 +63,8 @@ func IsRecognizedTerm(ctx context.Context, v VocabularyLookup, term string) bool
 // conservative whole-query path (precision) and the aggressive recovery path
 // (recall). Defined here (consumer side) so the harness tests with a fake.
 type Corrector interface {
-	Correct(ctx context.Context, query string) *CorrectionResult
-	CorrectAggressive(ctx context.Context, query string) *CorrectionResult
+	Correct(ctx context.Context, query string) *service.CorrectionResult
+	CorrectAggressive(ctx context.Context, query string) *service.CorrectionResult
 }
 
 // CorrectionReport is the aggregate precision/recall report.

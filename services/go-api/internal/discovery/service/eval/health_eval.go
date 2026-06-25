@@ -1,4 +1,4 @@
-package service
+package eval
 
 // Health gauges — report-only (plan 2026-06-24-001, Phase 3).
 //
@@ -30,15 +30,15 @@ import (
 
 // HealthReport is the report-only operational snapshot.
 type HealthReport struct {
-	Searches       int     `json:"searches"`
-	Results        int     `json:"results"`          // total result rows seen
-	WithArtwork    int     `json:"with_artwork"`
-	BridgedMerges  int     `json:"bridged_merges"`
-	FillRate       float64 `json:"fill_rate"`        // with_artwork / results
-	BridgeHitRate  float64 `json:"bridge_hit_rate"`  // bridged_merges / results
-	LatencyP50Ms   int64   `json:"latency_p50_ms"`
-	LatencyP95Ms   int64   `json:"latency_p95_ms"`
-	LatencyMaxMs   int64   `json:"latency_max_ms"`
+	Searches      int     `json:"searches"`
+	Results       int     `json:"results"` // total result rows seen
+	WithArtwork   int     `json:"with_artwork"`
+	BridgedMerges int     `json:"bridged_merges"`
+	FillRate      float64 `json:"fill_rate"`       // with_artwork / results
+	BridgeHitRate float64 `json:"bridge_hit_rate"` // bridged_merges / results
+	LatencyP50Ms  int64   `json:"latency_p50_ms"`
+	LatencyP95Ms  int64   `json:"latency_p95_ms"`
+	LatencyMaxMs  int64   `json:"latency_max_ms"`
 }
 
 // RunHealthEval searches "artist title" for each entity, timing each call and

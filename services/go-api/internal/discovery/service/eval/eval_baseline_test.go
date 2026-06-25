@@ -1,4 +1,4 @@
-package service
+package eval
 
 import (
 	"math"
@@ -15,10 +15,10 @@ func TestBaselines_Gate_higherIsBetter(t *testing.T) {
 		regressed bool
 	}{
 		{"at baseline", 0.90, false},
-		{"inside margin below", 0.88, false},   // 0.90-0.03=0.87 threshold; 0.88 ok
-		{"exactly at threshold", 0.87, false},  // not strictly below
-		{"below threshold", 0.86, true},        // regressed
-		{"improved", 0.95, false},              // higher is fine
+		{"inside margin below", 0.88, false},  // 0.90-0.03=0.87 threshold; 0.88 ok
+		{"exactly at threshold", 0.87, false}, // not strictly below
+		{"below threshold", 0.86, true},       // regressed
+		{"improved", 0.95, false},             // higher is fine
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
