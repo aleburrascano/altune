@@ -11,8 +11,6 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-var ErrTrackNotFound = &domain.CodedError{Msg: "track not found", Status: 404}
-
 type DeleteTrackService struct {
 	trackRepo  ports.TrackRepository
 	audioStore ports.AudioStore
