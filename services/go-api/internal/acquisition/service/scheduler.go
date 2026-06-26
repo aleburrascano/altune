@@ -15,6 +15,24 @@ type Shutdownable interface {
 	Shutdown(ctx context.Context)
 }
 
+const recentFailCap = 20
+
+// FailureRecord is one recent acquisition failure, surfaced on the operator
+// console.
+type FailureRecord struct {
+	TrackID string `json:"track_id"`
+	Reason  string `json:"reason"`
+}
+
+// AcquisitionStatus is the in-memory snapshot of the background acquisition
+// pipeline for the operator console. In-memory only — resets on restart.
+type AcquisitionStatus struct {
+	InFlight    int             `json:"in_flight"`
+	Succeeded   uint64          `json:"succeeded"`
+	Failed      uint64          `json:"failed"`
+	RecentFails []FailureRecord `json:"recent_failures"`
+}
+
 type BackgroundAcquisitionScheduler struct {
 	svc      *AcquireTrackAudioService
 	wg       *sync.WaitGroup
@@ -23,6 +41,13 @@ type BackgroundAcquisitionScheduler struct {
 	baseCtx  context.Context // owned lifecycle context (not a request ctx); cancelled on Shutdown
 	closed   atomic.Bool
 	inflight sync.Map
+
+	// Operator-console telemetry (in-memory).
+	inflightCount atomic.Int64
+	succeeded     atomic.Uint64
+	failed        atomic.Uint64
+	failMu        sync.Mutex
+	recentFails   []FailureRecord
 }
 
 func NewBackgroundAcquisitionScheduler(
@@ -53,10 +78,12 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 	}
 
 	slog.Info("acquisition.scheduling", "track_id", key, "user_id", userId.String())
+	s.inflightCount.Add(1)
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 		defer s.inflight.Delete(key)
+		defer s.inflightCount.Add(-1)
 		defer func() {
 			if r := recover(); r != nil {
 				slog.Error("acquisition_panic",
@@ -76,10 +103,39 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 		}
 
 		if err := s.svc.Execute(s.baseCtx, userId, trackId, sourceURL); err != nil {
+			s.failed.Add(1)
+			s.recordFailure(key, err.Error())
 			slog.Error("background acquisition failed",
 				"track_id", key, "error", err)
+			return
 		}
+		s.succeeded.Add(1)
 	}()
+}
+
+func (s *BackgroundAcquisitionScheduler) recordFailure(trackID, reason string) {
+	s.failMu.Lock()
+	s.recentFails = append(s.recentFails, FailureRecord{TrackID: trackID, Reason: reason})
+	if len(s.recentFails) > recentFailCap {
+		s.recentFails = s.recentFails[len(s.recentFails)-recentFailCap:]
+	}
+	s.failMu.Unlock()
+}
+
+// Status returns the in-memory acquisition pipeline snapshot for the operator
+// console.
+func (s *BackgroundAcquisitionScheduler) Status() AcquisitionStatus {
+	s.failMu.Lock()
+	fails := make([]FailureRecord, len(s.recentFails))
+	copy(fails, s.recentFails)
+	s.failMu.Unlock()
+
+	return AcquisitionStatus{
+		InFlight:    int(s.inflightCount.Load()),
+		Succeeded:   s.succeeded.Load(),
+		Failed:      s.failed.Load(),
+		RecentFails: fails,
+	}
 }
 
 func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {

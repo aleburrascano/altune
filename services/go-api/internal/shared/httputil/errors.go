@@ -64,6 +64,13 @@ func BadRequest(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusBadRequest, message)
 }
 
+func Forbidden(w http.ResponseWriter, message string) {
+	if message == "" {
+		message = "forbidden"
+	}
+	WriteError(w, http.StatusForbidden, message)
+}
+
 func InternalError(w http.ResponseWriter, msgs ...string) {
 	msg := "internal server error"
 	if len(msgs) > 0 && msgs[0] != "" {

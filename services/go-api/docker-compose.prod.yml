@@ -17,6 +17,11 @@ services:
       - "8000:8000"
     env_file:
       - .env.production
+    environment:
+      # Mission Control operator account. Not a secret — /admin still requires
+      # this account's Supabase JWT; the id only names who may open the console.
+      # Override or move to .env.production if it should rotate without a deploy.
+      - OPERATOR_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524
     volumes:
       - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
     tmpfs:

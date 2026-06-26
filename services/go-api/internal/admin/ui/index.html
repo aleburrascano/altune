@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Altune · Mission Control</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { font-family: ui-monospace, "SF Mono", Menlo, monospace; background:#0b0b0e; color:#e6e6e6; margin:0; padding:1rem; font-size:13px; }
+    h1 { font-size:1rem; letter-spacing:.05em; margin:0; }
+    header { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem; }
+    header input { background:#16161c; border:1px solid #2a2a33; color:#e6e6e6; padding:.35rem .5rem; border-radius:6px; min-width:280px; font-family:inherit; }
+    header button { background:#2a2a33; border:0; color:#e6e6e6; padding:.35rem .7rem; border-radius:6px; cursor:pointer; }
+    .muted { color:#7c7c87; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:.75rem; }
+    .panel { background:#121218; border:1px solid #23232c; border-radius:10px; padding:.75rem; min-height:120px; }
+    .panel h2 { font-size:.75rem; text-transform:uppercase; letter-spacing:.08em; color:#9a9aa5; margin:0 0 .5rem; }
+    .tiles { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .tile { flex:1; min-width:80px; text-align:center; padding:.6rem; border-radius:8px; background:#16161c; border:1px solid #2a2a33; }
+    .tile .name { font-size:.7rem; color:#9a9aa5; text-transform:uppercase; }
+    .tile .state { font-weight:600; margin-top:.2rem; }
+    .ok { color:#3ecf8e; } .down { color:#ff5c5c; } .warn { color:#ffb454; } .na { color:#7c7c87; }
+    table { width:100%; border-collapse:collapse; }
+    td, th { text-align:left; padding:.2rem .35rem; border-bottom:1px solid #1d1d25; font-size:12px; }
+    th { color:#9a9aa5; font-weight:500; }
+    .feed, .logs { max-height:240px; overflow:auto; font-size:11.5px; }
+    .logline { padding:.1rem 0; border-bottom:1px solid #15151b; white-space:nowrap; }
+    .lvl-ERROR { color:#ff5c5c; } .lvl-WARN { color:#ffb454; } .lvl-INFO { color:#cfcfd6; } .lvl-DEBUG { color:#7c7c87; }
+    .corr { color:#5aa9ff; cursor:pointer; }
+    .controls { display:flex; gap:.4rem; margin-bottom:.4rem; align-items:center; }
+    select { background:#16161c; border:1px solid #2a2a33; color:#e6e6e6; border-radius:6px; padding:.2rem; font-family:inherit; }
+    .big { font-size:1.6rem; font-weight:700; }
+    .err { color:#ff5c5c; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Altune · Mission Control</h1>
+    <input id="token" type="password" placeholder="operator JWT (Bearer token)" autocomplete="off">
+    <button id="save">Connect</button>
+    <span id="conn" class="muted">not connected</span>
+  </header>
+
+  <div class="grid">
+    <div class="panel"><h2>Service health</h2><div id="tiles" class="tiles"><span class="muted">—</span></div></div>
+    <div class="panel"><h2>Providers</h2><div id="providers"><span class="muted">—</span></div></div>
+    <div class="panel"><h2>Discovery eval</h2><div id="eval"><span class="muted">—</span></div></div>
+    <div class="panel"><h2>Acquisition</h2><div id="acq"><span class="muted">—</span></div></div>
+    <div class="panel"><h2>Event rates <span class="muted">(live)</span></h2><div id="rates"></div><div id="feed" class="feed"></div></div>
+    <div class="panel">
+      <h2>Logs <span class="muted">(live tail)</span></h2>
+      <div class="controls">
+        <select id="level"><option value="">all</option><option>DEBUG</option><option>INFO</option><option>WARN</option><option>ERROR</option></select>
+        <input id="corrFilter" placeholder="filter corr_id" style="flex:1;background:#16161c;border:1px solid #2a2a33;color:#e6e6e6;border-radius:6px;padding:.2rem .4rem;font-family:inherit;">
+      </div>
+      <div id="logs" class="logs"></div>
+    </div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let token = sessionStorage.getItem("altune_op_token") || "";
+$("token").value = token;
+
+function authHeaders() { return token ? { "Authorization": "Bearer " + token } : {}; }
+function rank(l){ return ({DEBUG:0,INFO:1,WARN:2,ERROR:3})[(l||"").replace(/[+-].*/,"").toUpperCase()] ?? 0; }
+
+async function getJSON(path) {
+  const r = await fetch(path, { headers: authHeaders() });
+  if (!r.ok) throw new Error(path + " → " + r.status);
+  return r.json();
+}
+
+// fetch-based SSE so we can attach the Authorization header (EventSource cannot).
+async function streamSSE(path, onEvent, signal) {
+  const r = await fetch(path, { headers: authHeaders(), signal });
+  if (!r.ok || !r.body) throw new Error(path + " → " + r.status);
+  const reader = r.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const line = buf.slice(0, i).split("\n").find((l) => l.startsWith("data: "));
+      buf = buf.slice(i + 2);
+      if (line) { try { onEvent(JSON.parse(line.slice(6))); } catch {} }
+    }
+  }
+}
+
+function tileClass(s){ return s === "ok" ? "ok" : s === "down" ? "down" : "na"; }
+
+async function pollHealth() {
+  try {
+    const h = await getJSON("/admin/health");
+    $("tiles").innerHTML = ["api:ok", "db:"+h.db, "redis:"+h.redis].map((kv) => {
+      const [n, s] = kv.split(":");
+      return `<div class="tile"><div class="name">${n}</div><div class="state ${tileClass(s)}">${s}</div></div>`;
+    }).join("");
+  } catch (e) { $("tiles").innerHTML = `<span class="err">${e.message}</span>`; }
+}
+
+async function pollProviders() {
+  try {
+    const ps = await getJSON("/admin/providers");
+    if (!ps.length) { $("providers").innerHTML = `<span class="muted">no traffic yet</span>`; return; }
+    $("providers").innerHTML = `<table><tr><th>provider</th><th>state</th><th>calls</th><th>p~ms</th></tr>` +
+      ps.map((p) => {
+        const cls = p.current === "ok" ? "ok" : (p.current === "circuit_open" || p.current === "error" || p.current === "timeout") ? "down" : "warn";
+        return `<tr><td>${p.provider}</td><td class="${cls}">${p.current||"—"}</td><td>${p.total}</td><td>${p.avg_latency_ms}</td></tr>`;
+      }).join("") + `</table>`;
+  } catch (e) { $("providers").innerHTML = `<span class="err">${e.message}</span>`; }
+}
+
+async function pollEval() {
+  try {
+    const e = await getJSON("/admin/eval");
+    const map = { disabled:"na", no_data:"na", ok:"ok", regression:"down", error:"down" };
+    let body = `<div class="big ${map[e.state]||'na'}">${e.state}</div>`;
+    if (e.score != null) body += `<div>score ${e.score.toFixed(3)} vs baseline ${e.baseline?.toFixed(3)}</div>`;
+    if (e.error) body += `<div class="err">${e.error}</div>`;
+    $("eval").innerHTML = body;
+  } catch (e) { $("eval").innerHTML = `<span class="err">${e.message}</span>`; }
+}
+
+async function pollAcq() {
+  try {
+    const a = await getJSON("/admin/acquisition");
+    let body = `<div>in-flight <b>${a.in_flight}</b> · ok <b class="ok">${a.succeeded}</b> · failed <b class="down">${a.failed}</b></div>`;
+    if (a.recent_failures?.length) {
+      body += `<table><tr><th>track</th><th>reason</th></tr>` +
+        a.recent_failures.slice(-6).reverse().map((f) => `<tr><td>${f.track_id.slice(0,8)}</td><td>${f.reason}</td></tr>`).join("") + `</table>`;
+    }
+    $("acq").innerHTML = body;
+  } catch (e) { $("acq").innerHTML = `<span class="err">${e.message}</span>`; }
+}
+
+let rates = {};
+function renderRates() {
+  const keys = Object.keys(rates).sort();
+  $("rates").innerHTML = keys.length
+    ? keys.map((k) => `<span class="muted">${k}</span> ${rates[k]}`).join(" · ")
+    : `<span class="muted">no events in window</span>`;
+}
+async function pollRates() { try { rates = await getJSON("/admin/events/rates"); renderRates(); } catch {} }
+
+const logBuf = [];
+function renderLogs() {
+  const min = rank($("level").value || "DEBUG");
+  const cf = $("corrFilter").value.trim();
+  $("logs").innerHTML = logBuf.filter((r) =>
+    rank(r.level) >= ($("level").value ? rank($("level").value) : 0) &&
+    (!cf || (r.attrs && r.attrs.corr_id && r.attrs.corr_id.includes(cf)))
+  ).slice(-200).map((r) => {
+    const t = (r.time || "").slice(11, 23);
+    const corr = r.attrs && r.attrs.corr_id ? `<span class="corr" onclick="document.getElementById('corrFilter').value='${r.attrs.corr_id}';renderLogs()">${r.attrs.corr_id}</span> ` : "";
+    return `<div class="logline lvl-${(r.level||'').replace(/[+-].*/,'')}">${t} ${r.level} ${corr}${r.msg}</div>`;
+  }).join("");
+  $("logs").scrollTop = $("logs").scrollHeight;
+}
+window.renderLogs = renderLogs;
+
+let abort = null;
+async function connect() {
+  if (abort) abort.abort();
+  abort = new AbortController();
+  $("conn").textContent = "connecting…"; $("conn").className = "muted";
+
+  // Snapshots + polling
+  const tick = () => { pollHealth(); pollProviders(); pollEval(); pollAcq(); pollRates(); };
+  try {
+    // verify token with one gated call before declaring connected
+    await getJSON("/admin/health");
+    $("conn").textContent = "connected"; $("conn").className = "ok";
+  } catch (e) {
+    $("conn").textContent = "auth failed (" + e.message + ")"; $("conn").className = "err"; return;
+  }
+  tick();
+  clearInterval(window._poll); window._poll = setInterval(tick, 5000);
+
+  // log snapshot then live tail
+  try { (await getJSON("/admin/logs")).forEach((r) => logBuf.push(r)); renderLogs(); } catch {}
+  streamSSE("/admin/logs/stream", (r) => { logBuf.push(r); if (logBuf.length > 2000) logBuf.shift(); renderLogs(); }, abort.signal).catch(() => {});
+  streamSSE("/admin/events/stream", (e) => {
+    const div = document.createElement("div");
+    div.className = "logline";
+    div.textContent = (e.timestamp || "").slice(11, 19) + "  " + e.type;
+    $("feed").prepend(div);
+    while ($("feed").childNodes.length > 100) $("feed").lastChild.remove();
+  }, abort.signal).catch(() => {});
+}
+
+$("save").onclick = () => {
+  token = $("token").value.trim();
+  sessionStorage.setItem("altune_op_token", token);
+  connect();
+};
+$("level").onchange = renderLogs;
+$("corrFilter").oninput = renderLogs;
+if (token) connect();
+</script>
+</body>
+</html>

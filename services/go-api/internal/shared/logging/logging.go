@@ -15,24 +15,29 @@ import (
 	"altune/go-api/internal/shared/config"
 )
 
-func Setup(cfg *config.Config) {
+// Setup installs the default slog logger and returns the in-memory ring that
+// tees every record for the Mission Control logs panel. Callers that don't need
+// the ring (e.g. CLI subcommands) may ignore the return value.
+func Setup(cfg *config.Config) *RingBuffer {
 	level := parseLevel(cfg.LogLevel)
 
-	var handler slog.Handler
+	var base slog.Handler
 	if cfg.IsDevelopment() {
-		handler = &prettyHandler{
+		base = &prettyHandler{
 			level:     level,
 			w:         os.Stdout,
 			addSource: true,
 		}
 	} else {
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		base = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 			Level:     level,
 			AddSource: true,
 		})
 	}
 
-	slog.SetDefault(slog.New(handler))
+	ring := NewRingBuffer(logRingCapacity)
+	slog.SetDefault(slog.New(newRingHandler(base, ring)))
+	return ring
 }
 
 func parseLevel(s string) slog.Level {
