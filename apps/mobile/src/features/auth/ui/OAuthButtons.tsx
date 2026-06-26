@@ -11,8 +11,11 @@ import { useOAuth } from '../hooks/useOAuth';
 const OAUTH_ERROR = "Couldn't sign in with that provider. Please try again.";
 
 /**
- * Apple + Google one-tap sign-in, rendered on both auth screens (AC#10).
- * Apple ships alongside Google by necessity (App Store Guideline 4.8).
+ * One-tap social sign-in (AC#10). Google only for now — Sign in with Apple is
+ * deferred because it needs a paid Apple Developer account, and App Store
+ * Guideline 4.8 (which would force Apple alongside Google) cannot trigger
+ * without App Store distribution, which also needs that account. `useOAuth`
+ * stays provider-agnostic, so adding an Apple button later is one line.
  */
 export function OAuthButtons(): ReactElement {
   const theme = useTheme();
@@ -28,14 +31,6 @@ export function OAuthButtons(): ReactElement {
         </Text>
         <View style={[styles.rule, { backgroundColor: theme.color.border }]} />
       </View>
-      <Button
-        testID="oauth-apple"
-        label="Continue with Apple"
-        variant="secondary"
-        onPress={() => void signInWith('apple')}
-        loading={pendingProvider === 'apple'}
-        disabled={state.kind === 'pending'}
-      />
       <Button
         testID="oauth-google"
         label="Continue with Google"
