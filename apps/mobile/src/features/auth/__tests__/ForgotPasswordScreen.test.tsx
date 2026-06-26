@@ -9,7 +9,15 @@ const mockReset = jest.fn();
 jest.mock('../api/supabaseClient', () => ({
   supabase: { auth: { resetPasswordForEmail: (...a: unknown[]) => mockReset(...a) } },
 }));
-jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn(), push: jest.fn() }) }));
+jest.mock('expo-router', () => {
+  const { View } = require('react-native');
+  return {
+    useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
+    Link: ({ children, testID }: { children: unknown; testID?: string }) => (
+      <View testID={testID}>{children as never}</View>
+    ),
+  };
+});
 
 beforeEach(() => mockReset.mockReset());
 

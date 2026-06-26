@@ -12,7 +12,7 @@ export function SignInScreen(): ReactElement {
   return (
     <AuthForm
       screenTestID="sign-in-screen"
-      title="Welcome back"
+      tagline="Welcome back."
       submitLabel="Sign in"
       onSubmit={(email, password) => void signIn(email, password)}
       pending={state.kind === 'pending'}

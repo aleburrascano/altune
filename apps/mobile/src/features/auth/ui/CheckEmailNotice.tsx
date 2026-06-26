@@ -3,10 +3,10 @@ import { StyleSheet, View } from 'react-native';
 import type { ReactElement } from 'react';
 
 import { Banner } from '@shared/ui/primitives/Banner';
-import { Screen } from '@shared/ui/primitives/Screen';
 import { Text } from '@shared/ui/primitives/Text';
-import { Wordmark } from '@shared/ui/primitives/Wordmark';
 import { spacing } from '@shared/ui/theme';
+
+import { AuthHeroLayout } from './hero/AuthHeroLayout';
 
 /**
  * Post-sign-up "check your email" state (AC#4). Shown for BOTH a fresh
@@ -15,12 +15,9 @@ import { spacing } from '@shared/ui/theme';
  */
 export function CheckEmailNotice(): ReactElement {
   return (
-    <Screen testID="check-email-screen">
-      <View style={styles.body}>
-        <View style={styles.header}>
-          <Wordmark size={40} />
-          <Text variant="title">Check your email</Text>
-        </View>
+    <AuthHeroLayout testID="check-email-screen" tagline="Almost there.">
+      <View style={styles.form}>
+        <Text variant="title">Check your email</Text>
         <Banner testID="check-email-banner" tone="info">
           We&apos;ve sent you a link to confirm your account. Open it on this device to finish
           signing up.
@@ -33,12 +30,11 @@ export function CheckEmailNotice(): ReactElement {
           </Link>
         </View>
       </View>
-    </Screen>
+    </AuthHeroLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, justifyContent: 'center', gap: spacing.md },
-  header: { alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xl },
-  linkWrap: { alignItems: 'center', paddingVertical: spacing.sm },
+  form: { gap: spacing.md },
+  linkWrap: { alignItems: 'center', paddingTop: spacing.sm },
 });

@@ -17,7 +17,7 @@ export function SignUpScreen(): ReactElement {
   return (
     <AuthForm
       screenTestID="sign-up-screen"
-      title="Create your account"
+      tagline="Every track you own, in one place."
       submitLabel="Sign up"
       onSubmit={(email, password) => void signUp(email, password)}
       pending={state.kind === 'pending'}
