@@ -1,9 +1,10 @@
 // Package handler serves the Mission Control operator console under /admin.
 //
-// The console is operator-only: callers must be authenticated (auth.Middleware,
-// applied by the composition root) and match the configured operator account
-// (OperatorOnly, applied here). Panel endpoints mount onto Routes() as later
-// units land; today it serves the console page.
+// The console shell (ServeIndex) is unauthenticated — a browser cannot send a
+// bearer token on navigation, and the shell holds no data: every panel fetches
+// from the operator-gated data endpoints (RegisterData), which the composition
+// root wraps with auth.Middleware + OperatorOnly. The token is supplied by the
+// page and sent as an Authorization header on those data calls.
 package handler
 
 import (
@@ -52,13 +53,15 @@ func New(
 	}
 }
 
-// Routes returns the operator-gated console router. The caller is responsible
-// for applying auth.Middleware ahead of this router (the two-layer stack); this
-// router applies the operator gate.
-func (h *AdminHandler) Routes() chi.Router {
-	r := chi.NewRouter()
-	r.Use(OperatorOnly(h.operatorUserID))
-	r.Get("/", h.serveIndex)
+// ServeIndex serves the unauthenticated console shell.
+func (h *AdminHandler) ServeIndex(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(ui.IndexHTML))
+}
+
+// RegisterData registers the operator-gated data + stream endpoints onto r. The
+// caller applies auth.Middleware + OperatorOnly ahead of r (the two-layer gate).
+func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/health", h.serveHealth)
 	r.Get("/logs", h.serveLogs)
 	r.Get("/logs/stream", h.streamLogs)
@@ -67,10 +70,4 @@ func (h *AdminHandler) Routes() chi.Router {
 	r.Get("/providers", h.serveProviders)
 	r.Get("/acquisition", h.serveAcquisition)
 	r.Get("/eval", h.serveEval)
-	return r
-}
-
-func (h *AdminHandler) serveIndex(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(ui.IndexHTML))
 }

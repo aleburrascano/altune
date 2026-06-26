@@ -7,10 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/google/uuid"
-
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/shared"
+	"github.com/go-chi/chi/v5"
 )
 
 func TestDependencyHealth_Healthy(t *testing.T) {
@@ -35,18 +32,19 @@ func TestDependencyHealth_Healthy(t *testing.T) {
 }
 
 // AE1: the operator health tile reports the per-dependency breakdown (Redis
-// down shows red, DB green) through the gated endpoint.
+// down shows red, DB green) through the data endpoint.
 func TestAdminHealthEndpoint(t *testing.T) {
-	operator := shared.NewUserId(uuid.New())
 	probe := func(context.Context) DependencyHealth {
 		return DependencyHealth{DB: "ok", Redis: "down"}
 	}
-	h := New(operator.String(), probe, nil, nil, nil, nil, nil)
+	h := New("op", probe, nil, nil, nil, nil, nil)
+
+	r := chi.NewRouter()
+	h.RegisterData(r)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	req = req.WithContext(auth.ContextWithUserID(req.Context(), operator))
 	rec := httptest.NewRecorder()
-	h.Routes().ServeHTTP(rec, req)
+	r.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)

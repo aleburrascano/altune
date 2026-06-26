@@ -362,8 +362,12 @@ func (a *App) setup(ctx context.Context) error {
 	a.evalMeter.Start(ctx)
 	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader, a.evalMeter)
 	r.Route("/admin", func(ar chi.Router) {
-		ar.Use(auth.Middleware(verifier))
-		ar.Mount("/", adminH.Routes())
+		ar.Get("/", adminH.ServeIndex) // public shell — holds no data
+		ar.Group(func(gr chi.Router) { // gated data: auth, then operator check
+			gr.Use(auth.Middleware(verifier))
+			gr.Use(adminHandler.OperatorOnly(a.cfg.OperatorUserID))
+			adminH.RegisterData(gr)
+		})
 	})
 
 	a.startAlertMonitor(ctx)
