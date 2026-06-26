@@ -38,6 +38,7 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	sharedRedis "altune/go-api/internal/shared/redis"
 	"altune/go-api/internal/shared/textnorm"
 
@@ -58,12 +59,14 @@ type App struct {
 	vocabRefresh *discoveryService.VocabularyRefreshService
 	eventBus     *events.InProcessBus
 	alertMonitor *adminAlert.Monitor
+	logRing      *logging.RingBuffer
 }
 
-func New(cfg *config.Config) *App {
+func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 	return &App{
-		cfg: cfg,
-		sem: make(chan struct{}, cfg.AcquisitionConcurrency),
+		cfg:     cfg,
+		sem:     make(chan struct{}, cfg.AcquisitionConcurrency),
+		logRing: logRing,
 	}
 }
 
@@ -326,7 +329,7 @@ func (a *App) setup(ctx context.Context) error {
 	// Mission Control operator console — two-layer gate: auth first, then the
 	// operator-only check inside adminH.Routes(). Fails closed when
 	// OperatorUserID is unset.
-	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth)
+	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing)
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Use(auth.Middleware(verifier))
 		ar.Mount("/", adminH.Routes())
