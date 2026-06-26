@@ -127,36 +127,42 @@ jobs:
           body: |
             Unsigned iOS build for sideloading (AltStore / SideStore).
             Add the source once, then install/update from there:
-            `https://raw.githubusercontent.com/${{ github.repository }}/main/apps.json`
+            `https://raw.githubusercontent.com/${{ github.repository }}/altstore/apps.json`
           files: ${{ runner.temp }}/Altune.ipa
           fail_on_unmatched_files: true
 
+  # Publishes the AltStore/SideStore manifest to the dedicated, UNPROTECTED
+  # `altstore` branch. main stays fully protected — the bot never writes to it.
   update-source:
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
+      - uses: actions/checkout@v4 # main — has the updater script
 
-      - name: Update AltStore source manifest
+      - name: Seed working copy with the currently published manifest
+        run: |
+          git fetch origin altstore
+          git show origin/altstore:apps.json > apps.json
+
+      - name: Update AltStore manifest
         env:
           VERSION: ${{ needs.build.outputs.version }}
           SIZE: ${{ needs.build.outputs.size }}
           REPO: ${{ github.repository }}
         run: node scripts/update-altstore-source.mjs
 
-      - name: Commit & push apps.json
+      - name: Publish to altstore branch
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- apps.json; then
-            echo "apps.json unchanged"; exit 0
-          fi
+          git worktree add wt altstore
+          cp apps.json wt/apps.json
+          cd wt
+          if git diff --quiet -- apps.json; then echo "apps.json unchanged"; exit 0; fi
           git add apps.json
           git commit -m "ci(release): altstore source v${VERSION}"
-          git push origin main
+          git push origin altstore

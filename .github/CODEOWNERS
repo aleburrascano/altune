@@ -1,0 +1,8 @@
+# Default owner for everything in the repo.
+# Required reviewer on PRs once branch protection is enabled.
+*       @aleburrascano
+
+# CI/CD and deploy config — owner review required.
+/.github/        @aleburrascano
+/services/go-api/docker-compose.prod.yml   @aleburrascano
+/apps.json       @aleburrascano
