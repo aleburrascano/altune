@@ -50,6 +50,10 @@ type Config struct {
 	YtDLPCookieFile        string `env:"YTDLP_COOKIE_FILE"`
 	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
 	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
+
+	// Mission Control — operator console. The console is denied to everyone
+	// (fail-closed) unless OPERATOR_USER_ID is set to the operator's account id.
+	OperatorUserID string `env:"OPERATOR_USER_ID"`
 }
 
 func Load() (*Config, error) {
@@ -107,6 +111,10 @@ func (c *Config) HasMusicBrainz() bool {
 
 func (c *Config) HasDiscogs() bool {
 	return c.DiscogsToken != ""
+}
+
+func (c *Config) HasOperatorConsole() bool {
+	return c.OperatorUserID != ""
 }
 
 // LogValue implements slog.LogValuer to redact secrets.

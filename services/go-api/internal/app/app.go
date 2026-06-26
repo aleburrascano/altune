@@ -13,6 +13,7 @@ import (
 
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	adminHandler "altune/go-api/internal/admin/handler"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
@@ -313,6 +314,15 @@ func (a *App) setup(ctx context.Context) error {
 		r.Mount("/playback", queueHandler.Routes())
 		r.Mount("/discovery", discoveryH.Routes())
 		r.Handle("/events", &sseHandler{bus: a.eventBus})
+	})
+
+	// Mission Control operator console — two-layer gate: auth first, then the
+	// operator-only check inside adminH.Routes(). Fails closed when
+	// OperatorUserID is unset.
+	adminH := adminHandler.New(a.cfg.OperatorUserID)
+	r.Route("/admin", func(ar chi.Router) {
+		ar.Use(auth.Middleware(verifier))
+		ar.Mount("/", adminH.Routes())
 	})
 
 	a.server = &http.Server{
