@@ -22,6 +22,10 @@ services:
       # this account's Supabase JWT; the id only names who may open the console.
       # Override or move to .env.production if it should rotate without a deploy.
       - OPERATOR_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524
+      # Eval meter: runs ~5 canonical smoke queries every 6h through a
+      # breaker-isolated search instance (can't affect live search). Safe to
+      # leave on; set false to silence the panel.
+      - EVAL_METER_ENABLED=true
     volumes:
       - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
     tmpfs:

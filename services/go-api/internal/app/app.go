@@ -352,13 +352,12 @@ func (a *App) setup(ctx context.Context) error {
 		acqReader = a.scheduler
 	}
 
-	// AIDEV-NOTE: eval meter ships OFF by default. The live runner (3rd arg) is a
-	// deliberate opt-in seam left nil: it must use a dedicated HTTP client that
-	// bypasses the shared per-provider circuit breakers and a small fixed smoke
-	// query set (per the doc-reviewed plan, U7) before it runs against live
-	// providers — wiring that safely is a follow-up. With a nil runner the meter
-	// reports state "disabled"/"no_data" and never touches providers.
-	a.evalMeter = adminHandler.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, nil)
+	// AIDEV-NOTE: eval meter ships OFF by default (EVAL_METER_ENABLED). The runner
+	// runs a tiny fixed smoke-query set through a *dedicated* search-service
+	// instance whose per-provider circuit breakers are isolated from production's,
+	// so eval failures can't trip the breakers live search depends on. When
+	// disabled, buildEvalRunner returns nil and no second provider stack is built.
+	a.evalMeter = adminHandler.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, a.buildEvalRunner())
 	a.evalMeter.Start(ctx)
 	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader, a.evalMeter)
 	r.Route("/admin", func(ar chi.Router) {
