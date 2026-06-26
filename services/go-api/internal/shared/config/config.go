@@ -50,6 +50,17 @@ type Config struct {
 	YtDLPCookieFile        string `env:"YTDLP_COOKIE_FILE"`
 	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
 	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
+
+	// Mission Control — operator console. The console is denied to everyone
+	// (fail-closed) unless OPERATOR_USER_ID is set to the operator's account id.
+	OperatorUserID string `env:"OPERATOR_USER_ID"`
+	// Alert push channel (ntfy topic URL). Empty → alerts are logged only, not
+	// pushed. Use a non-guessable random topic.
+	AlertNtfyURL string `env:"ALERT_NTFY_URL"`
+	// Discovery-eval meter. OFF by default: the live smoke run hits real provider
+	// APIs and shares per-provider quota with user traffic, so it must be opted
+	// into deliberately.
+	EvalMeterEnabled bool `env:"EVAL_METER_ENABLED" envDefault:"false"`
 }
 
 func Load() (*Config, error) {
@@ -107,6 +118,14 @@ func (c *Config) HasMusicBrainz() bool {
 
 func (c *Config) HasDiscogs() bool {
 	return c.DiscogsToken != ""
+}
+
+func (c *Config) HasOperatorConsole() bool {
+	return c.OperatorUserID != ""
+}
+
+func (c *Config) HasAlertPush() bool {
+	return c.AlertNtfyURL != ""
 }
 
 // LogValue implements slog.LogValuer to redact secrets.

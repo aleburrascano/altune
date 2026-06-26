@@ -53,10 +53,16 @@ func Middleware(verifier TokenVerifier) func(http.Handler) http.Handler {
 				"path", r.URL.Path,
 			)
 
-			ctx := context.WithValue(r.Context(), userIDKey, userId)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r.WithContext(ContextWithUserID(r.Context(), userId)))
 		})
 	}
+}
+
+// ContextWithUserID stores a verified user id in the context under the same
+// unexported key the middleware uses. Exposed so other packages (and tests) can
+// compose an authenticated context without depending on the key's identity.
+func ContextWithUserID(ctx context.Context, id shared.UserId) context.Context {
+	return context.WithValue(ctx, userIDKey, id)
 }
 
 func rejectToken(w http.ResponseWriter, reason TokenRejectReason, detail string) {

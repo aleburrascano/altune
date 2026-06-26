@@ -19,16 +19,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	logging.Setup(cfg)
+	logRing := logging.Setup(cfg)
 
 	if len(os.Args) < 2 {
-		runServer(cfg)
+		runServer(cfg, logRing)
 		return
 	}
 
 	switch os.Args[1] {
 	case "serve":
-		runServer(cfg)
+		runServer(cfg, logRing)
 	case "migrate-dedup":
 		execute := hasFlag("--execute")
 		commands.RunDedupMigration(cfg, execute)
@@ -47,8 +47,8 @@ func main() {
 	}
 }
 
-func runServer(cfg *config.Config) {
-	a := app.New(cfg)
+func runServer(cfg *config.Config, logRing *logging.RingBuffer) {
+	a := app.New(cfg, logRing)
 	if err := a.Run(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
 		os.Exit(1)

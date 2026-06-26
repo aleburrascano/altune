@@ -13,6 +13,9 @@ import (
 
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	adminAlert "altune/go-api/internal/admin/alert"
+	adminHandler "altune/go-api/internal/admin/handler"
+	"altune/go-api/internal/admin/providerhealth"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
@@ -36,6 +39,7 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	sharedRedis "altune/go-api/internal/shared/redis"
 	"altune/go-api/internal/shared/textnorm"
 
@@ -55,12 +59,18 @@ type App struct {
 	scheduler    *acqService.BackgroundAcquisitionScheduler
 	vocabRefresh *discoveryService.VocabularyRefreshService
 	eventBus     *events.InProcessBus
+	alertMonitor *adminAlert.Monitor
+	logRing        *logging.RingBuffer
+	eventFeed      *adminHandler.EventFeed
+	providerHealth *providerhealth.Store
+	evalMeter      *adminHandler.EvalMeter
 }
 
-func New(cfg *config.Config) *App {
+func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 	return &App{
-		cfg: cfg,
-		sem: make(chan struct{}, cfg.AcquisitionConcurrency),
+		cfg:     cfg,
+		sem:     make(chan struct{}, cfg.AcquisitionConcurrency),
+		logRing: logRing,
 	}
 }
 
@@ -96,6 +106,21 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	slog.Info("waiting for background tasks")
+	if a.alertMonitor != nil {
+		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer bgCancel()
+		a.alertMonitor.Shutdown(bgCtx)
+	}
+	if a.eventFeed != nil {
+		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer bgCancel()
+		a.eventFeed.Shutdown(bgCtx)
+	}
+	if a.evalMeter != nil {
+		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer bgCancel()
+		a.evalMeter.Shutdown(bgCtx)
+	}
 	if a.vocabRefresh != nil {
 		bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer bgCancel()
@@ -272,6 +297,8 @@ func (a *App) setup(ctx context.Context) error {
 		Event:   eventSvc,
 	})
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
+	a.providerHealth = providerhealth.NewStore()
+	discoveryH.WithProviderHealth(a.providerHealth)
 
 	a.startVocabularyRefresh(vocabStore)
 
@@ -315,6 +342,36 @@ func (a *App) setup(ctx context.Context) error {
 		r.Handle("/events", &sseHandler{bus: a.eventBus})
 	})
 
+	// Mission Control operator console — two-layer gate: auth first, then the
+	// operator-only check inside adminH.Routes(). Fails closed when
+	// OperatorUserID is unset.
+	a.eventFeed = adminHandler.NewEventFeed()
+	a.eventFeed.Start(ctx, a.eventBus)
+	var acqReader adminHandler.AcquisitionStatusReader
+	if a.scheduler != nil {
+		acqReader = a.scheduler
+	}
+
+	// AIDEV-NOTE: eval meter ships OFF by default. The live runner (3rd arg) is a
+	// deliberate opt-in seam left nil: it must use a dedicated HTTP client that
+	// bypasses the shared per-provider circuit breakers and a small fixed smoke
+	// query set (per the doc-reviewed plan, U7) before it runs against live
+	// providers — wiring that safely is a follow-up. With a nil runner the meter
+	// reports state "disabled"/"no_data" and never touches providers.
+	a.evalMeter = adminHandler.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, nil)
+	a.evalMeter.Start(ctx)
+	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader, a.evalMeter)
+	r.Route("/admin", func(ar chi.Router) {
+		ar.Get("/", adminH.ServeIndex) // public shell — holds no data
+		ar.Group(func(gr chi.Router) { // gated data: auth, then operator check
+			gr.Use(auth.Middleware(verifier))
+			gr.Use(adminHandler.OperatorOnly(a.cfg.OperatorUserID))
+			adminH.RegisterData(gr)
+		})
+	})
+
+	a.startAlertMonitor(ctx)
+
 	a.server = &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
 		Handler:           r,
@@ -326,26 +383,74 @@ func (a *App) setup(ctx context.Context) error {
 	return nil
 }
 
+// handleHealth is the public readiness probe. It deliberately exposes no
+// dependency topology: just whether the service can serve. The detailed
+// per-dependency breakdown lives behind the operator-gated /admin/health tile.
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
-	status := database.CheckHealth(r.Context(), a.pool)
-
-	dbStatus := "ok"
-	if !status.OK {
-		dbStatus = "down"
+	if a.dependencyHealth(r.Context()).Healthy() {
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
 	}
-	if a.pool == nil {
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "degraded"})
+}
+
+// dependencyHealth pings the configured dependencies and reports each one's
+// status. A nil dependency is "not_configured" (intentionally absent), distinct
+// from "down" (configured but unreachable).
+func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealth {
+	dbStatus := "ok"
+	switch {
+	case a.pool == nil:
 		dbStatus = "not_configured"
+	case !database.CheckHealth(ctx, a.pool).OK:
+		dbStatus = "down"
 	}
 
 	redisStatus := "ok"
-	if a.redisClient == nil {
+	switch {
+	case a.redisClient == nil:
 		redisStatus = "not_configured"
-	} else if err := a.redisClient.Ping(r.Context()).Err(); err != nil {
+	case a.redisClient.Ping(ctx).Err() != nil:
 		redisStatus = "down"
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"db":"%s","redis":"%s"}`, dbStatus, redisStatus)
+	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus}
+}
+
+// startAlertMonitor builds and starts the Mission Control alert monitor. It
+// pages the operator on Signal conditions (dependency down to start), pushing
+// via ntfy when configured and logging only otherwise. Alert messages carry
+// only state names, never connection details.
+func (a *App) startAlertMonitor(ctx context.Context) {
+	var notifier adminAlert.AlertNotifier = adminAlert.NopNotifier{}
+	if a.cfg.HasAlertPush() {
+		notifier = adminAlert.NewNtfyNotifier(a.cfg.AlertNtfyURL)
+	}
+
+	dependencyDown := adminAlert.Condition{
+		Key: "dependency_down",
+		Eval: func(ctx context.Context) *adminAlert.Alert {
+			h := a.dependencyHealth(ctx)
+			if h.Healthy() {
+				return nil
+			}
+			msg := "dependencies down:"
+			if h.DB == "down" {
+				msg += " db"
+			}
+			if h.Redis == "down" {
+				msg += " redis"
+			}
+			return &adminAlert.Alert{
+				Title:    "altune dependency down",
+				Message:  msg,
+				Severity: adminAlert.SeveritySignal,
+			}
+		},
+	}
+
+	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, dependencyDown)
+	a.alertMonitor.Start(ctx)
 }
 
 func (a *App) buildTokenVerifier(ctx context.Context) (auth.TokenVerifier, error) {
