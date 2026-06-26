@@ -11,7 +11,7 @@ import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import { useUpdatePassword } from '../hooks/useUpdatePassword';
 import { authErrorText } from '../lib/errorCopy';
-import { DEFAULT_PASSWORD_MIN_LENGTH, passwordsMatch, validatePassword } from '../lib/validation';
+import { PASSWORD_REQUIREMENTS_HINT, passwordsMatch, validatePassword } from '../lib/validation';
 
 const GENERIC_ERROR = "Couldn't update your password. Please try again.";
 
@@ -22,9 +22,9 @@ export function SetNewPasswordScreen(): ReactElement {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
 
-  const tooShort = validatePassword(password).includes('too_short');
+  const passwordIssues = validatePassword(password);
   const matches = passwordsMatch(password, confirm);
-  const formValid = !tooShort && matches && password.length > 0;
+  const formValid = passwordIssues.length === 0 && matches && password.length > 0;
 
   useEffect(() => {
     if (state.kind === 'ok') {
@@ -54,9 +54,9 @@ export function SetNewPasswordScreen(): ReactElement {
           secureTextEntry
           style={[styles.input, fieldColors]}
         />
-        {tooShort && password.length > 0 ? (
+        {passwordIssues.length > 0 && password.length > 0 ? (
           <Text testID="password-error" variant="caption" tone="danger">
-            Use at least {DEFAULT_PASSWORD_MIN_LENGTH} characters.
+            {PASSWORD_REQUIREMENTS_HINT}
           </Text>
         ) : null}
         <TextInput

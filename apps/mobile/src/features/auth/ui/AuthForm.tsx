@@ -10,7 +10,7 @@ import { Wordmark } from '@shared/ui/primitives/Wordmark';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import {
-  DEFAULT_PASSWORD_MIN_LENGTH,
+  PASSWORD_REQUIREMENTS_HINT,
   isValidEmail,
   passwordsMatch,
   validatePassword,
@@ -83,7 +83,7 @@ export function AuthForm({
   // Errors surface only once the field has content — a pristine empty field
   // is "incomplete", not "wrong".
   const showEmailError = email.length > 0 && !emailValid;
-  const showPasswordError = passwordIssues.includes('too_short') && password.length > 0;
+  const showPasswordError = passwordIssues.length > 0 && password.length > 0;
   const showConfirmError = showConfirm && confirm.length > 0 && !confirmValid;
 
   const formValid =
@@ -122,7 +122,7 @@ export function AuthForm({
         />
         {showPasswordError ? (
           <Text testID="password-error" variant="caption" tone="danger" style={styles.fieldError}>
-            Use at least {DEFAULT_PASSWORD_MIN_LENGTH} characters.
+            {PASSWORD_REQUIREMENTS_HINT}
           </Text>
         ) : null}
         {showConfirm ? (

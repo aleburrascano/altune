@@ -20,7 +20,7 @@ beforeEach(() => {
   mockReplace.mockReset();
 });
 
-const VALID = 'newpassword1';
+const VALID = 'Newpassword1!';
 
 describe('SetNewPasswordScreen', () => {
   it('blocks submit on a mismatch and on a too-short password', () => {
