@@ -76,6 +76,9 @@ Legend: 🟢 code-only · 🟡 code lands, live verification needs dashboard con
 
 ---
 
+### Slice 7 — Music-forward hero across all auth screens 🟢 (done)
+**Goal:** the locked direction-A visual. `ui/hero/` gains `AuthHeroLayout` (full-bleed `ArtworkBackground` of gradient tiles + expo-blur + veil; wordmark + `EqGlyph` + tagline; bottom-anchored form w/ safe-area inset), `GoogleLogo` (official mark via react-native-svg). All five screens render through it; OAuth is a compact pill. Added `expo-blur` (ADR ceremony waived by owner). Static only — never animated. 70 auth tests green (testIDs preserved).
+
 ## Non-code prerequisites checklist (developer / dashboard)
 
 - [ ] Supabase: enable **Confirm email** (gates Slice 5 live).
