@@ -1,0 +1,162 @@
+# Build an UNSIGNED iOS .ipa for sideloading and publish it as a GitHub Release.
+#
+# Sideloaders (AltStore / SideStore) re-sign the app on-device with the user's
+# own Apple ID, so we ship an unsigned archive — no Apple Developer account or
+# signing certificate needed here. macOS runner minutes are free on public repos.
+#
+# Trigger: push a tag like `v1.0.0`  (git tag v1.0.0 && git push origin v1.0.0)
+# or run manually via the Actions tab (provide the version).
+#
+# After the build, the AltStore source (apps.json on main) is updated so
+# existing installs see the new version automatically.
+
+name: Release iOS (sideload)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version without the leading v, e.g. 1.0.0'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-ios
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      size: ${{ steps.pack.outputs.size }}
+    env:
+      # Public (publishable) build-time config, inlined into the JS bundle.
+      EXPO_PUBLIC_API_URL: https://altune.duckdns.org
+      EXPO_PUBLIC_SUPABASE_URL: https://ellvexundmgvbbfqbzau.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            V="${{ github.event.inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Building version $V"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install JS deps
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Stamp version into app.json
+        working-directory: apps/mobile
+        run: |
+          node -e "
+            const fs=require('fs');
+            const j=JSON.parse(fs.readFileSync('app.json','utf8'));
+            j.expo.version='${{ steps.meta.outputs.version }}';
+            j.expo.ios=j.expo.ios||{};
+            j.expo.ios.buildNumber=String(${{ github.run_number }});
+            fs.writeFileSync('app.json',JSON.stringify(j,null,2));
+            console.log('version',j.expo.version,'build',j.expo.ios.buildNumber);
+          "
+
+      - name: Expo prebuild (generate native iOS project)
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Install CocoaPods
+        working-directory: apps/mobile/ios
+        run: pod install
+
+      - name: Build unsigned archive
+        working-directory: apps/mobile/ios
+        run: |
+          WS=$(ls -d *.xcworkspace | head -1)
+          SCHEME=$(basename "$WS" .xcworkspace)
+          echo "Workspace=$WS Scheme=$SCHEME"
+          xcodebuild \
+            -workspace "$WS" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Altune.xcarchive" \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package .ipa
+        id: pack
+        run: |
+          APP=$(ls -d "$RUNNER_TEMP/Altune.xcarchive/Products/Applications/"*.app | head -1)
+          echo "App=$APP"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+          ( cd "$RUNNER_TEMP" && zip -qry Altune.ipa Payload )
+          SIZE=$(stat -f%z "$RUNNER_TEMP/Altune.ipa")
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "Built Altune.ipa ($SIZE bytes)"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.meta.outputs.version }}
+          name: Altune v${{ steps.meta.outputs.version }}
+          body: |
+            Unsigned iOS build for sideloading (AltStore / SideStore).
+            Add the source once, then install/update from there:
+            `https://raw.githubusercontent.com/${{ github.repository }}/main/apps.json`
+          files: ${{ runner.temp }}/Altune.ipa
+          fail_on_unmatched_files: true
+
+  update-source:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Update AltStore source manifest
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SIZE: ${{ needs.build.outputs.size }}
+          REPO: ${{ github.repository }}
+        run: node scripts/update-altstore-source.mjs
+
+      - name: Commit & push apps.json
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- apps.json; then
+            echo "apps.json unchanged"; exit 0
+          fi
+          git add apps.json
+          git commit -m "ci(release): altstore source v${VERSION}"
+          git push origin main
