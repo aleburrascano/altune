@@ -29,6 +29,7 @@ type AdminHandler struct {
 	eventFeed      *EventFeed
 	providerHealth providerHealthReader
 	acquisition    AcquisitionStatusReader
+	evalMeter      *EvalMeter
 }
 
 func New(
@@ -38,6 +39,7 @@ func New(
 	eventFeed *EventFeed,
 	providerHealth providerHealthReader,
 	acquisition AcquisitionStatusReader,
+	evalMeter *EvalMeter,
 ) *AdminHandler {
 	return &AdminHandler{
 		operatorUserID: operatorUserID,
@@ -46,6 +48,7 @@ func New(
 		eventFeed:      eventFeed,
 		providerHealth: providerHealth,
 		acquisition:    acquisition,
+		evalMeter:      evalMeter,
 	}
 }
 
@@ -63,6 +66,7 @@ func (h *AdminHandler) Routes() chi.Router {
 	r.Get("/events/stream", h.streamEvents)
 	r.Get("/providers", h.serveProviders)
 	r.Get("/acquisition", h.serveAcquisition)
+	r.Get("/eval", h.serveEval)
 	return r
 }
 

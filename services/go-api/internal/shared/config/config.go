@@ -57,6 +57,10 @@ type Config struct {
 	// Alert push channel (ntfy topic URL). Empty → alerts are logged only, not
 	// pushed. Use a non-guessable random topic.
 	AlertNtfyURL string `env:"ALERT_NTFY_URL"`
+	// Discovery-eval meter. OFF by default: the live smoke run hits real provider
+	// APIs and shares per-provider quota with user traffic, so it must be opted
+	// into deliberately.
+	EvalMeterEnabled bool `env:"EVAL_METER_ENABLED" envDefault:"false"`
 }
 
 func Load() (*Config, error) {
