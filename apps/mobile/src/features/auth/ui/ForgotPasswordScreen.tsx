@@ -26,7 +26,7 @@ export function ForgotPasswordScreen(): ReactElement {
   const showEmailError = email.length > 0 && !emailValid;
 
   return (
-    <AuthHeroLayout testID="forgot-password-screen">
+    <AuthHeroLayout testID="forgot-password-screen" background={false}>
       {state.kind === 'sent' ? (
         <View style={styles.form}>
           <Text variant="title">Check your email</Text>
