@@ -5,6 +5,7 @@
     "version": "0.0.0",
     "orientation": "portrait",
     "scheme": "altune",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
