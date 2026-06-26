@@ -1,7 +1,8 @@
 /**
- * OAuthButtons — Apple + Google one-tap (AC#10). Verifies both buttons render
- * and dispatch signInWithOAuth with the right provider + callback redirect.
- * Supabase + expo-router mocked; expo-web-browser mocked globally (setup-env).
+ * OAuthButtons — Google one-tap (AC#10; Apple deferred — needs a paid Apple
+ * account). Verifies the button renders and dispatches signInWithOAuth with
+ * the right provider + callback redirect. Supabase + expo-router mocked;
+ * expo-web-browser mocked globally (setup-env).
  */
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -17,38 +18,25 @@ beforeEach(() => {
 });
 
 describe('OAuthButtons', () => {
-  it('renders both providers (Apple ships alongside Google per Guideline 4.8)', () => {
+  it('renders the Google provider (Apple deferred)', () => {
     const { OAuthButtons } = require('../ui/OAuthButtons');
-    const { getByTestId } = render(<OAuthButtons />);
-    expect(getByTestId('oauth-apple')).toBeTruthy();
+    const { getByTestId, queryByTestId } = render(<OAuthButtons />);
     expect(getByTestId('oauth-google')).toBeTruthy();
+    expect(queryByTestId('oauth-apple')).toBeNull();
   });
 
-  it('dispatches signInWithOAuth for Apple with the callback redirect', async () => {
+  it('dispatches signInWithOAuth for Google with the callback redirect', async () => {
     const { OAuthButtons } = require('../ui/OAuthButtons');
     const { OAUTH_REDIRECT_URL } = require('../hooks/useOAuth');
-    const { getByTestId } = render(<OAuthButtons />);
-
-    fireEvent.press(getByTestId('oauth-apple'));
-
-    await waitFor(() =>
-      expect(mockSignInWithOAuth).toHaveBeenCalledWith({
-        provider: 'apple',
-        options: { redirectTo: OAUTH_REDIRECT_URL, skipBrowserRedirect: true },
-      }),
-    );
-  });
-
-  it('dispatches signInWithOAuth for Google', async () => {
-    const { OAuthButtons } = require('../ui/OAuthButtons');
     const { getByTestId } = render(<OAuthButtons />);
 
     fireEvent.press(getByTestId('oauth-google'));
 
     await waitFor(() =>
-      expect(mockSignInWithOAuth).toHaveBeenCalledWith(
-        expect.objectContaining({ provider: 'google' }),
-      ),
+      expect(mockSignInWithOAuth).toHaveBeenCalledWith({
+        provider: 'google',
+        options: { redirectTo: OAUTH_REDIRECT_URL, skipBrowserRedirect: true },
+      }),
     );
   });
 
