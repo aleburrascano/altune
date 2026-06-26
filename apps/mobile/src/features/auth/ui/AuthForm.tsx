@@ -82,7 +82,7 @@ export function AuthForm({
     emailValid && password.length > 0 && passwordIssues.length === 0 && confirmValid;
 
   return (
-    <AuthHeroLayout testID={screenTestID} tagline={tagline}>
+    <AuthHeroLayout testID={screenTestID} tagline={tagline} background={false}>
       <View style={styles.form}>
         <TextInput
           testID="email-input"

@@ -15,7 +15,7 @@ import { AuthHeroLayout } from './hero/AuthHeroLayout';
  */
 export function CheckEmailNotice(): ReactElement {
   return (
-    <AuthHeroLayout testID="check-email-screen" tagline="Almost there.">
+    <AuthHeroLayout testID="check-email-screen" tagline="Almost there." background={false}>
       <View style={styles.form}>
         <Text variant="title">Check your email</Text>
         <Banner testID="check-email-banner" tone="info">
