@@ -54,6 +54,9 @@ type Config struct {
 	// Mission Control — operator console. The console is denied to everyone
 	// (fail-closed) unless OPERATOR_USER_ID is set to the operator's account id.
 	OperatorUserID string `env:"OPERATOR_USER_ID"`
+	// Alert push channel (ntfy topic URL). Empty → alerts are logged only, not
+	// pushed. Use a non-guessable random topic.
+	AlertNtfyURL string `env:"ALERT_NTFY_URL"`
 }
 
 func Load() (*Config, error) {
@@ -115,6 +118,10 @@ func (c *Config) HasDiscogs() bool {
 
 func (c *Config) HasOperatorConsole() bool {
 	return c.OperatorUserID != ""
+}
+
+func (c *Config) HasAlertPush() bool {
+	return c.AlertNtfyURL != ""
 }
 
 // LogValue implements slog.LogValuer to redact secrets.
