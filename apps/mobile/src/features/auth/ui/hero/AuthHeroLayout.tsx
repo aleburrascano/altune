@@ -29,30 +29,27 @@ export function AuthHeroLayout({ tagline, children, testID }: AuthHeroLayoutProp
 
   return (
     <View testID={testID} style={[styles.root, { backgroundColor: theme.color.canvas }]}>
+      {/* Background + hero are pinned: the keyboard must not shift them. */}
       <ArtworkBackground />
+      <View
+        pointerEvents="box-none"
+        style={[styles.hero, { top: insets.top + spacing['4xl'] }]}
+      >
+        <EqGlyph />
+        <Wordmark size={34} />
+        {tagline ? (
+          <Text variant="label" tone="secondary">
+            {tagline}
+          </Text>
+        ) : null}
+      </View>
+      {/* Only the form lifts above the keyboard. */}
       <KeyboardAvoidingView
-        style={styles.flex}
+        style={styles.kav}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View
-          style={[
-            styles.body,
-            {
-              paddingTop: insets.top + spacing['4xl'],
-              paddingBottom: insets.bottom + spacing.xl,
-            },
-          ]}
-        >
-          <View style={styles.hero}>
-            <EqGlyph />
-            <Wordmark size={34} />
-            {tagline ? (
-              <Text variant="label" tone="secondary">
-                {tagline}
-              </Text>
-            ) : null}
-          </View>
-          <View>{children}</View>
+        <View style={[styles.form, { paddingBottom: insets.bottom + spacing.xl }]}>
+          {children}
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -61,11 +58,12 @@ export function AuthHeroLayout({ tagline, children, testID }: AuthHeroLayoutProp
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  flex: { flex: 1 },
-  body: {
-    flex: 1,
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl,
+  hero: {
+    position: 'absolute',
+    left: spacing.xl,
+    right: spacing.xl,
+    gap: spacing.sm,
   },
-  hero: { gap: spacing.sm },
+  kav: { flex: 1, justifyContent: 'flex-end' },
+  form: { paddingHorizontal: spacing.xl },
 });

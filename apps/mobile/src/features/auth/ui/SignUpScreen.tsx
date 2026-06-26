@@ -27,7 +27,8 @@ export function SignUpScreen(): ReactElement {
       }
       linkHref="/sign-in"
       linkTestID="link-to-sign-in"
-      linkText="Have an account? Sign in"
+      linkQuestion="Have an account?"
+      linkAction="Sign in"
       showConfirm
       enforcePasswordPolicy
     />

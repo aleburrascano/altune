@@ -33,7 +33,9 @@ export function Wordmark({ size = 28 }: WordmarkProps) {
           borderRadius: dot / 2,
           backgroundColor: theme.color.accent,
           marginLeft: 3,
-          marginBottom: size * 0.12,
+          // Lift the dot to sit on the type baseline (flex-end aligns it to the
+          // text box bottom, which sits below the glyphs' visual bottom).
+          marginBottom: size * 0.2,
         }}
       />
     </View>

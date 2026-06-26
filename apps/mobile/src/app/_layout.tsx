@@ -104,7 +104,12 @@ export default function RootLayout() {
               <ServerEventsBridge />
               <AuthDeepLinkBridge />
               <PlaybackProvider>
-                <Stack screenOptions={{ headerShown: false }}>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: darkTheme.color.canvas },
+                  }}
+                >
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="(auth)" />
                   <Stack.Screen name="reset-password" />

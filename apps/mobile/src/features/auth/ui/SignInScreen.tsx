@@ -22,7 +22,8 @@ export function SignInScreen(): ReactElement {
       }
       linkHref="/sign-up"
       linkTestID="link-to-sign-up"
-      linkText="No account? Sign up"
+      linkQuestion="No account?"
+      linkAction="Sign up"
       showForgotPassword
     />
   );
