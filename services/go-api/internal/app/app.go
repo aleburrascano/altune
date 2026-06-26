@@ -15,6 +15,7 @@ import (
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	adminAlert "altune/go-api/internal/admin/alert"
 	adminHandler "altune/go-api/internal/admin/handler"
+	"altune/go-api/internal/admin/providerhealth"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
@@ -59,8 +60,9 @@ type App struct {
 	vocabRefresh *discoveryService.VocabularyRefreshService
 	eventBus     *events.InProcessBus
 	alertMonitor *adminAlert.Monitor
-	logRing      *logging.RingBuffer
-	eventFeed    *adminHandler.EventFeed
+	logRing        *logging.RingBuffer
+	eventFeed      *adminHandler.EventFeed
+	providerHealth *providerhealth.Store
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
@@ -289,6 +291,8 @@ func (a *App) setup(ctx context.Context) error {
 		Event:   eventSvc,
 	})
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
+	a.providerHealth = providerhealth.NewStore()
+	discoveryH.WithProviderHealth(a.providerHealth)
 
 	a.startVocabularyRefresh(vocabStore)
 
@@ -337,7 +341,7 @@ func (a *App) setup(ctx context.Context) error {
 	// OperatorUserID is unset.
 	a.eventFeed = adminHandler.NewEventFeed()
 	a.eventFeed.Start(ctx, a.eventBus)
-	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed)
+	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth)
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Use(auth.Middleware(verifier))
 		ar.Mount("/", adminH.Routes())

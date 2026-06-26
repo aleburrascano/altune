@@ -35,6 +35,25 @@ type DiscoveryHandler struct {
 	// post-construction via WithDetailEnrichers so the positional constructor
 	// stays stable; a nil member degrades its endpoint to an empty DTO.
 	enrichers DetailEnrichers
+
+	// providerHealth records per-provider scatter-gather outcomes for the
+	// operator console. Optional and nil-safe; recording happens at the response
+	// boundary, never on the ranking path.
+	providerHealth providerHealthRecorder
+}
+
+// providerHealthRecorder is the consumer-defined seam for the operator console's
+// provider status board. Satisfied by the in-memory store wired at the
+// composition root.
+type providerHealthRecorder interface {
+	Record(provider, status string, latencyMs int64)
+}
+
+// WithProviderHealth attaches the optional provider-health recorder. A nil
+// recorder leaves the board empty; recording never affects search behavior.
+func (h *DiscoveryHandler) WithProviderHealth(r providerHealthRecorder) *DiscoveryHandler {
+	h.providerHealth = r
+	return h
 }
 
 // DetailEnrichers bundles the optional detail-open enrichment use cases into one
@@ -275,6 +294,12 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		slog.ErrorContext(r.Context(), "search failed", "error", err, "query", q)
 		httputil.InternalError(w)
 		return
+	}
+
+	if h.providerHealth != nil {
+		for _, ps := range result.ProviderStatuses {
+			h.providerHealth.Record(ps.Provider.String(), ps.Status.String(), ps.LatencyMs)
+		}
 	}
 
 	httputil.WriteJSON(w, searchStatusCode(result.ProviderStatuses), DiscoverySearchResponse{
