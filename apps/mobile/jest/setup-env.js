@@ -36,3 +36,10 @@ jest.mock('expo-audio', () => {
     setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
   };
 });
+
+// expo-web-browser opens a native auth session; mock the surface useOAuth uses
+// so auth screens that render the OAuth buttons load without native modules.
+jest.mock('expo-web-browser', () => ({
+  maybeCompleteAuthSession: jest.fn(),
+  openAuthSessionAsync: jest.fn().mockResolvedValue({ type: 'cancel' }),
+}));

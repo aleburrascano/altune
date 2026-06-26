@@ -70,6 +70,19 @@ describe('SignInScreen', () => {
     });
   });
 
+  it('surfaces a distinct, non-generic message for network failures (AC#9)', async () => {
+    const { NETWORK_ERROR_COPY } = require('../lib/errorCopy');
+    mockSignIn.mockRejectedValueOnce(new Error('Network request failed'));
+    const { SignInScreen } = require('../ui/SignInScreen');
+    const { getByTestId, findByText } = render(<SignInScreen />);
+
+    fireEvent.changeText(getByTestId('email-input'), 'user@example.com');
+    fireEvent.changeText(getByTestId('password-input'), 'pw');
+    fireEvent.press(getByTestId('submit-button'));
+
+    expect(await findByText(NETWORK_ERROR_COPY)).toBeTruthy();
+  });
+
   it('does NOT render auth-error on success', async () => {
     mockSignIn.mockResolvedValueOnce({ error: null });
     const { SignInScreen } = require('../ui/SignInScreen');

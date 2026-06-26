@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthGate } from '../features/auth/ui/AuthGate';
+import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
 import { useServerEvents } from '../shared/events/useServerEvents';
 import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
 import { isExpoGo } from '../shared/playback/isExpoGo';
@@ -38,6 +39,14 @@ void SplashScreen.preventAutoHideAsync();
 
 function ServerEventsBridge() {
   useServerEvents();
+  return null;
+}
+
+// AIDEV-NOTE: the auth deep-link spine (email-confirm / recovery / OAuth
+// callbacks). Mounted inside AuthGate next to ServerEventsBridge; cold-start
+// links survive via Linking.getInitialURL even across the sign-in redirect.
+function AuthDeepLinkBridge() {
+  useAuthDeepLink();
   return null;
 }
 
@@ -93,10 +102,12 @@ export default function RootLayout() {
             <StatusBar style="light" />
             <AuthGate>
               <ServerEventsBridge />
+              <AuthDeepLinkBridge />
               <PlaybackProvider>
                 <Stack screenOptions={{ headerShown: false }}>
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen name="(auth)" />
+                  <Stack.Screen name="reset-password" />
                   <Stack.Screen name="player" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', gestureEnabled: true }} />
                 </Stack>
               </PlaybackProvider>
