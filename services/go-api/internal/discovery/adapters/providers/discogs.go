@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +60,33 @@ func (a *DiscogsAdapter) Resolve(ctx context.Context, kind domain.ResultKind, ti
 		return "", nil
 	}
 
+	for _, img := range detail.Images {
+		if img.Type == "primary" && img.URI != "" {
+			return img.URI, nil
+		}
+	}
+	if detail.Images[0].URI != "" {
+		return detail.Images[0].URI, nil
+	}
+	return "", nil
+}
+
+// ResolveByIdentity fetches the primary image of the exact bridged Discogs
+// artist — identity-correct, no name search. This is the path that gets the
+// right face for same-name artists ("Che (38)" vs the seven other Ches): the
+// merge's MB→Discogs bridge already proved which Discogs entry this entity is.
+func (a *DiscogsAdapter) ResolveByIdentity(ctx context.Context, kind domain.ResultKind, id ports.ArtworkIdentity) (string, error) {
+	if kind != domain.ResultKindArtist {
+		return "", nil
+	}
+	discogsID, err := strconv.Atoi(id.ExternalIDs["discogs"])
+	if err != nil || discogsID == 0 {
+		return "", nil
+	}
+	detail, err := a.fetchArtistDetail(ctx, discogsID)
+	if err != nil || len(detail.Images) == 0 {
+		return "", nil
+	}
 	for _, img := range detail.Images {
 		if img.Type == "primary" && img.URI != "" {
 			return img.URI, nil

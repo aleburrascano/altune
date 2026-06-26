@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 )
 
 const (
@@ -60,13 +61,15 @@ func (s *Service) enrich(ctx context.Context, results []domain.SearchResult) []d
 	return append(enriched, rest...)
 }
 
-// enrichOne fills a single result's artwork: a usable cache hit short-circuits;
-// otherwise resolve via the chain and memoize. Artists always try (to upgrade a
-// channel thumbnail) and fall back to a same-name track image.
+// enrichOne fills a single result's MISSING artwork: a usable provider image is
+// kept as-is (R5); otherwise a usable cache hit short-circuits, else resolve via
+// the identity-aware chain and memoize.
 func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) domain.SearchResult {
+	// R5: a valid (non-placeholder) provider image is identity-bound by the merge
+	// (the bridged source's own photo) — keep it, don't overwrite it with a
+	// lower-confidence resolved one. Only resolve when there's no usable image.
 	needsArt := result.ImageURL == "" || strings.Contains(result.ImageURL, emptyArtHash)
-	tryArt := needsArt || result.Kind == domain.ResultKindArtist
-	if !tryArt {
+	if !needsArt {
 		return result
 	}
 	mbid := stringExtra(result, "mbid")
@@ -102,10 +105,18 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 	return result
 }
 
-// resolveArtwork resolves via the chained resolver, with a same-name track
-// fallback for artists whose direct lookup returns nothing.
+// resolveArtwork resolves artwork identity-first: when the entity carries a
+// proven identity (MBID + bridged provider ids), the identity-aware chain fetches
+// the exact entity's image before any name search — the only way to get the right
+// face for a same-name artist. Falls back to the name chain (no identity), then a
+// same-name track image for artists whose direct lookup returns nothing.
 func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult, mbid string) string {
-	if url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
+	identity := artworkIdentity(result, mbid)
+	if aware, ok := s.artworkResolver.(ports.IdentityAwareArtworkResolver); ok && identity.HasLinks() {
+		if url, _ := aware.ResolveWithIdentity(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
+			return url
+		}
+	} else if url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
 		return url
 	}
 	if result.Kind == domain.ResultKindArtist {
@@ -114,4 +125,15 @@ func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult
 		}
 	}
 	return ""
+}
+
+// artworkIdentity assembles the proven cross-provider identity for artwork
+// resolution: the MBID plus the bridged provider ids the merge stamped into
+// extras["xref"] (MB → discogs/spotify/deezer/…).
+func artworkIdentity(result domain.SearchResult, mbid string) ports.ArtworkIdentity {
+	id := ports.ArtworkIdentity{MBID: mbid}
+	if xref, ok := result.Extras["xref"].(map[string]string); ok && len(xref) > 0 {
+		id.ExternalIDs = xref
+	}
+	return id
 }
