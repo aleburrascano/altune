@@ -1,0 +1,19 @@
+{
+  "name": "Altune",
+  "identifier": "com.altune.altstore",
+  "subtitle": "Self-hosted music, owned not rented.",
+  "apps": [
+    {
+      "name": "Altune",
+      "bundleIdentifier": "com.altune.app",
+      "developerName": "Alessandro Burrascano",
+      "subtitle": "Self-hosted owned-library music streaming.",
+      "localizedDescription": "Altune is a self-hosted music manager: discover music across providers, build your own library, and stream audio you own.",
+      "iconURL": "https://raw.githubusercontent.com/aleburrascano/altune/main/apps/mobile/assets/icon.png",
+      "tintColor": "0B0B0F",
+      "category": "music",
+      "screenshotURLs": [],
+      "versions": []
+    }
+  ]
+}
