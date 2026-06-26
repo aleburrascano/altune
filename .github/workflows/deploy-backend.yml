@@ -1,0 +1,89 @@
+# Deploy the Go API to the OCI production VM.
+#
+# Mirrors the manual runbook: SSH in, fast-forward `main`, rebuild the
+# docker-compose stack. The VM deploys from `main` only.
+#
+# Triggers on pushes to `main` that touch the backend (or manually).
+# Schema migrations stay MANUAL by design — see the "migrations" guard below.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_HOST     e.g. altune.duckdns.org
+#   DEPLOY_USER     e.g. ubuntu
+#   DEPLOY_SSH_KEY  the PRIVATE key matching an authorized key on the VM
+#                   (the contents of ~/.ssh/altune-prod.key)
+#   DEPLOY_PORT     (optional) SSH port, defaults to 22
+
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/go-api/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo (full history for migration diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Warn on new migrations (applied manually, not by this pipeline)
+        if: github.event_name == 'push'
+        run: |
+          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" \
+            -- services/go-api/migrations/ 2>/dev/null || true)
+          if [ -n "$CHANGED" ]; then
+            echo "::warning title=Manual migration required::This push changed migration files. Apply them on the VM with psql BEFORE/AFTER deploy as appropriate:"
+            echo "$CHANGED" | sed 's/^/::warning::  /'
+          else
+            echo "No migration changes in this push."
+          fi
+
+      - name: Verify deploy secrets are present
+        run: |
+          missing=""
+          [ -z "${{ secrets.DEPLOY_HOST }}" ] && missing="$missing DEPLOY_HOST"
+          [ -z "${{ secrets.DEPLOY_USER }}" ] && missing="$missing DEPLOY_USER"
+          [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ] && missing="$missing DEPLOY_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error title=Missing secrets::Set these repo secrets:$missing"
+            exit 1
+          fi
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true
+          command_timeout: 20m
+          script: |
+            set -e
+            cd /home/ubuntu/altune
+            git fetch --prune origin
+            git checkout main
+            git pull --ff-only origin main
+            cd services/go-api
+            docker compose -f docker-compose.prod.yml up --build -d
+            docker compose -f docker-compose.prod.yml ps
+            docker image prune -f
+
+      - name: Health check
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "https://${{ secrets.DEPLOY_HOST }}/health" || true)
+            if [ "$code" = "200" ]; then echo "health OK"; exit 0; fi
+            echo "attempt $i: /health -> $code, retrying..."; sleep 10
+          done
+          echo "::error title=Health check failed::/health did not return 200"
+          exit 1
