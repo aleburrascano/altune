@@ -33,7 +33,7 @@ Each one is testable and becomes at least one automated test.
 7. **AC#7 (forgot password — set new)** — Given the user opens the recovery deep link, when they enter a new password (subject to AC#3 + confirm-match), then the password is updated via Supabase and they land signed-in.
 8. **AC#8 (deep-link safety)** — Given an incoming `altune://` URL, when the deep-link handler processes it, then only whitelisted callback paths are acted on; unrecognized paths are ignored.
 9. **AC#9 (error surfacing)** — Given any auth submission that fails (invalid credentials, weak password, network, unknown), when the failure returns, then a visible, human-readable status message is shown (via the Banner primitive) — never a silent blank state. Credential failures keep generic wording (AC#5).
-10. **AC#10 (OAuth)** — Given either auth screen, when the user taps "Continue with Apple" or "Continue with Google" and completes the provider flow, then the returned identity is exchanged via Supabase `signInWithIdToken` and the user lands signed-in. Both providers ship together (Apple is mandatory alongside Google per App Store Guideline 4.8).
+10. **AC#10 (OAuth)** — Given either auth screen, when the user taps "Continue with Google" and completes the provider flow, then the returned code is exchanged via Supabase for a session and the user lands signed-in. Google only for now; Sign in with Apple is deferred (needs a paid Apple Developer account, and Guideline 4.8 cannot trigger without App Store distribution — see ADR-0018). `useOAuth` is provider-agnostic so Apple is a one-button addition later.
 
 ## Out of scope
 

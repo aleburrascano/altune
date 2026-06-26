@@ -62,8 +62,8 @@ Legend: 🟢 code-only · 🟡 code lands, live verification needs dashboard con
 **Verify:** unit tests green; live confirm-email flow after enabling the setting.
 **Prereq:** enable "Confirm email" in Supabase + redirect URLs.
 
-### Slice 6 — OAuth (Apple + Google) 🟡 (prereq: provider registration + ADR)
-**Goal:** AC#10.
+### Slice 6 — OAuth (Google; Apple deferred) 🟡 (prereq: provider registration + ADR)
+**Goal:** AC#10. Google only — Apple needs a paid developer account; see ADR-0018.
 **Files:**
 - ADR `docs/adr/0018-oauth-providers-and-deeplink-auth.md` (done) — providers + deep-link redirect contract + the new dep.
 - `npx expo install expo-web-browser` (`expo-linking` already present; `expo-auth-session` deliberately not used — see ADR-0018).
@@ -81,9 +81,9 @@ Legend: 🟢 code-only · 🟡 code lands, live verification needs dashboard con
 - [ ] Supabase: enable **Confirm email** (gates Slice 5 live).
 - [ ] Supabase: set **password policy** (min length) to match Slice 1 default (8).
 - [ ] Supabase: register **`altune://` redirect URLs** for confirm / recovery / oauth (gates Slices 3–6 live).
-- [ ] Apple Developer: Sign in with Apple **Service ID + key**.
-- [ ] Google Cloud: **OAuth client**.
-- [ ] Supabase: register **Apple + Google** providers.
+- [ ] Google Cloud: **OAuth client (Web type)** → redirect URI = Supabase callback.
+- [ ] Supabase: enable the **Google** provider (client ID + secret).
+- [ ] ~~Apple~~ — deferred (no paid Apple Developer account; see ADR-0018).
 
 ## Deferred (not this plan)
 
