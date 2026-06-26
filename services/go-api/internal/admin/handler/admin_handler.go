@@ -12,15 +12,17 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"altune/go-api/internal/admin/ui"
+	"altune/go-api/internal/shared/logging"
 )
 
 type AdminHandler struct {
 	operatorUserID string
 	probe          HealthProbe
+	logRing        *logging.RingBuffer
 }
 
-func New(operatorUserID string, probe HealthProbe) *AdminHandler {
-	return &AdminHandler{operatorUserID: operatorUserID, probe: probe}
+func New(operatorUserID string, probe HealthProbe, logRing *logging.RingBuffer) *AdminHandler {
+	return &AdminHandler{operatorUserID: operatorUserID, probe: probe, logRing: logRing}
 }
 
 // Routes returns the operator-gated console router. The caller is responsible
@@ -31,6 +33,8 @@ func (h *AdminHandler) Routes() chi.Router {
 	r.Use(OperatorOnly(h.operatorUserID))
 	r.Get("/", h.serveIndex)
 	r.Get("/health", h.serveHealth)
+	r.Get("/logs", h.serveLogs)
+	r.Get("/logs/stream", h.streamLogs)
 	return r
 }
 
