@@ -1,0 +1,52 @@
+# Mission Control U9 — off-box total-down detection.
+#
+# The in-process alert monitor (U8) dies with the box, so it cannot report the
+# box being fully down. This scheduled check runs on GitHub's infrastructure,
+# curls the public readiness endpoint, and pushes an alert when it is non-OK or
+# unreachable. It is $0 (GitHub Actions) and stores no topology — only the
+# health URL and an optional ntfy URL, both as env-scoped secrets.
+#
+# Required secrets (Settings → Environments → "uptime" → secrets):
+#   UPTIME_HEALTH_URL  e.g. https://api.example.com/health
+#   UPTIME_NTFY_URL    e.g. https://ntfy.sh/<random-non-guessable-topic>  (optional)
+name: uptime-check
+
+on:
+  schedule:
+    # Every 5 minutes (GitHub's minimum granularity; runs may be delayed under load).
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    environment: uptime
+    steps:
+      - name: Probe readiness and alert on failure
+        env:
+          HEALTH_URL: ${{ secrets.UPTIME_HEALTH_URL }}
+          NTFY_URL: ${{ secrets.UPTIME_NTFY_URL }}
+        run: |
+          set -u
+          if [ -z "${HEALTH_URL}" ]; then
+            echo "UPTIME_HEALTH_URL not set; nothing to probe."
+            exit 0
+          fi
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${HEALTH_URL}" || echo 000)
+          echo "readiness probe → HTTP ${code}"
+          if [ "${code}" = "200" ]; then
+            exit 0
+          fi
+
+          echo "::error::backend readiness probe failed (HTTP ${code})"
+          if [ -n "${NTFY_URL}" ]; then
+            # Message carries only the operational state — no hostnames or secrets.
+            curl -s --max-time 20 \
+              -H "Title: altune backend unreachable" \
+              -H "Priority: urgent" \
+              -H "Tags: rotating_light" \
+              -d "readiness probe failed: HTTP ${code}" \
+              "${NTFY_URL}" || true
+          fi
+          exit 1
