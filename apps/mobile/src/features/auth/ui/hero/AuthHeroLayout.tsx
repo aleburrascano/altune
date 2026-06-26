@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@shared/ui/primitives/Text';
@@ -25,25 +24,17 @@ type AuthHeroLayoutProps = {
   testID?: string;
 };
 
-/** True only while the soft keyboard is on screen. */
-function useKeyboardOpen(): boolean {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setOpen(true));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setOpen(false));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return open;
-}
-
 /**
  * Shared shell for every auth screen: artwork wall + veil, the wordmark / EQ
  * glyph / tagline pinned near the top (never moves), and the form
- * bottom-anchored. Only the form lifts for the keyboard; the safe-area bottom
- * padding is dropped while the keyboard is up so the form doesn't overshoot.
+ * bottom-anchored in a scroll view.
+ *
+ * Keyboard handling: the form lives in a ScrollView with
+ * `automaticallyAdjustKeyboardInsets` (iOS) — the keyboard insets the scroll
+ * and only the FOCUSED field scrolls into view, instead of flinging the whole
+ * form up. The hero stays absolutely pinned. On Android the same scroll +
+ * `softwareKeyboardLayoutMode: "resize"` (app.json) brings the focused field
+ * into view without panning the window.
  */
 export function AuthHeroLayout({
   tagline,
@@ -53,7 +44,6 @@ export function AuthHeroLayout({
 }: AuthHeroLayoutProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const keyboardOpen = useKeyboardOpen();
 
   return (
     <View
@@ -74,20 +64,20 @@ export function AuthHeroLayout({
           </Text>
         ) : null}
       </View>
-      {/* Only the form lifts above the keyboard. */}
-      <KeyboardAvoidingView
-        style={styles.kav}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing['4xl'], paddingBottom: insets.bottom + spacing.xl },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
       >
-        <View
-          style={[
-            styles.form,
-            { paddingBottom: keyboardOpen ? spacing.md : insets.bottom + spacing.xl },
-          ]}
-        >
-          {children}
-        </View>
-      </KeyboardAvoidingView>
+        <View>{children}</View>
+      </ScrollView>
     </View>
   );
 }
@@ -99,7 +89,10 @@ const styles = StyleSheet.create({
     left: spacing.xl,
     right: spacing.xl,
     gap: spacing.sm,
+    zIndex: 1,
   },
-  kav: { flex: 1, justifyContent: 'flex-end' },
-  form: { paddingHorizontal: spacing.xl },
+  scroll: { flex: 1 },
+  // flexGrow + flex-end keeps the form bottom-anchored when it doesn't fill
+  // the screen; it scrolls only once the keyboard inset makes it overflow.
+  content: { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: spacing.xl },
 });
