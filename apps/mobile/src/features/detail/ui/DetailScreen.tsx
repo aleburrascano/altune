@@ -90,9 +90,13 @@ export function DetailScreen(): ReactElement {
     return <Redirect href="/discover" />;
   }
 
+  // Lock the hero to the tapped card's artwork — the identity-bound image the
+  // discovery card already resolved. Do NOT re-resolve via enrichment here: a
+  // name-based artwork lookup on open was overwriting the card with a different
+  // (often wrong same-name) artist's image and causing a visible flicker.
   const heroImageUrl =
-    (enrichments.musicbrainz?.artwork_url ?? '') !== ''
-      ? enrichments.musicbrainz!.artwork_url
+    (result.image_url ?? '') !== ''
+      ? result.image_url
       : isLibraryArtist && artistDiscovery.imageUrl != null
         ? artistDiscovery.imageUrl
         : result.image_url;
