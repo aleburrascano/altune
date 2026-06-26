@@ -13,7 +13,22 @@
       "tintColor": "0B0B0F",
       "category": "music",
       "screenshotURLs": [],
-      "versions": []
+      "versions": [
+        {
+          "version": "1.0.0",
+          "date": "2026-06-26",
+          "localizedDescription": "Altune v1.0.0",
+          "downloadURL": "https://github.com/aleburrascano/altune/releases/download/v1.0.0/Altune.ipa",
+          "size": 14666921,
+          "minOSVersion": "15.1"
+        }
+      ],
+      "version": "1.0.0",
+      "versionDate": "2026-06-26",
+      "versionDescription": "Altune v1.0.0",
+      "downloadURL": "https://github.com/aleburrascano/altune/releases/download/v1.0.0/Altune.ipa",
+      "size": 14666921,
+      "minOSVersion": "15.1"
     }
   ]
 }
