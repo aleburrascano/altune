@@ -31,17 +31,24 @@ describe('isValidEmail', () => {
 });
 
 describe('validatePassword', () => {
-  it('returns no issues for a password meeting the minimum length', () => {
-    expect(validatePassword('longenough')).toEqual([]);
+  it('returns no issues for a password meeting every rule', () => {
+    expect(validatePassword('Longenough1!')).toEqual([]);
   });
 
   it('flags too_short below the default minimum', () => {
-    expect(validatePassword('short')).toContain('too_short');
+    expect(validatePassword('Ab1!')).toContain('too_short');
   });
 
-  it('respects a custom minimum length', () => {
-    expect(validatePassword('abcdef', 4)).toEqual([]);
-    expect(validatePassword('abc', 4)).toContain('too_short');
+  it('flags each missing character class (mirrors the Supabase policy)', () => {
+    expect(validatePassword('alllowercase1!')).toContain('no_uppercase');
+    expect(validatePassword('ALLUPPERCASE1!')).toContain('no_lowercase');
+    expect(validatePassword('NoNumbersHere!')).toContain('no_number');
+    expect(validatePassword('NoSymbolsHere1')).toContain('no_symbol');
+  });
+
+  it('respects a custom minimum length while still enforcing classes', () => {
+    expect(validatePassword('Ab1!xy', 4)).toEqual([]);
+    expect(validatePassword('A1!', 4)).toContain('too_short');
   });
 
   it('exposes the default minimum as a constant', () => {

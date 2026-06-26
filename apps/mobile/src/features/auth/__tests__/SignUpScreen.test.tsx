@@ -25,7 +25,7 @@ beforeEach(() => {
   mockSignUp.mockReset();
 });
 
-const VALID_PASSWORD = 'hunter2hunter2';
+const VALID_PASSWORD = 'Hunter2hunter!';
 
 function fillValidForm(
   getByTestId: (id: string) => { props: Record<string, unknown> } & object,
