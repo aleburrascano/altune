@@ -52,6 +52,10 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 }
 
 func artworkCacheKey(kind domain.ResultKind, title, subtitle, mbid string) string {
+	// v2: identity-aware resolution (artwork keyed to the proven identity, not a
+	// name guess). The bump abandons v1 entries — which cached wrong same-name
+	// faces (the "Che" problem) — so the fix takes effect immediately; stale keys
+	// expire by TTL. Bump this on any change to how artwork is resolved.
 	input := fmt.Sprintf("%s|%s|%s", title, subtitle, mbid)
-	return hashKey("discovery:artwork:v1:"+kind.String()+":", input)
+	return hashKey("discovery:artwork:v2:"+kind.String()+":", input)
 }

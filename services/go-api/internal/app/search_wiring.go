@@ -196,6 +196,13 @@ func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.Artw
 	var artworkResolvers []discoveryPorts.ArtworkResolver
 	artworkResolvers = append(artworkResolvers,
 		providers.NewCoverArtArchiveResolver(cf.discovery()))
+	// Discogs is identity-only: it resolves the exact bridged Discogs artist by id
+	// (the right face for same-name artists), never by name. The chain tries it in
+	// the identity phase and excludes it from the name phase.
+	if cfg.HasDiscogs() {
+		artworkResolvers = append(artworkResolvers,
+			providers.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent))
+	}
 	if cfg.HasFanartTV() {
 		artworkResolvers = append(artworkResolvers,
 			providers.NewFanartTvArtworkResolver(cf.discovery(), cfg.FanartTVAPIKey))
