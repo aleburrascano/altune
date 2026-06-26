@@ -341,7 +341,11 @@ func (a *App) setup(ctx context.Context) error {
 	// OperatorUserID is unset.
 	a.eventFeed = adminHandler.NewEventFeed()
 	a.eventFeed.Start(ctx, a.eventBus)
-	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth)
+	var acqReader adminHandler.AcquisitionStatusReader
+	if a.scheduler != nil {
+		acqReader = a.scheduler
+	}
+	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader)
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Use(auth.Middleware(verifier))
 		ar.Mount("/", adminH.Routes())
