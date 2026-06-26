@@ -16,10 +16,11 @@ import (
 
 type AdminHandler struct {
 	operatorUserID string
+	probe          HealthProbe
 }
 
-func New(operatorUserID string) *AdminHandler {
-	return &AdminHandler{operatorUserID: operatorUserID}
+func New(operatorUserID string, probe HealthProbe) *AdminHandler {
+	return &AdminHandler{operatorUserID: operatorUserID, probe: probe}
 }
 
 // Routes returns the operator-gated console router. The caller is responsible
@@ -29,6 +30,7 @@ func (h *AdminHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Use(OperatorOnly(h.operatorUserID))
 	r.Get("/", h.serveIndex)
+	r.Get("/health", h.serveHealth)
 	return r
 }
 
