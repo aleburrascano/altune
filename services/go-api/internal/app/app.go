@@ -319,7 +319,7 @@ func (a *App) setup(ctx context.Context) error {
 	// Mission Control operator console — two-layer gate: auth first, then the
 	// operator-only check inside adminH.Routes(). Fails closed when
 	// OperatorUserID is unset.
-	adminH := adminHandler.New(a.cfg.OperatorUserID)
+	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth)
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Use(auth.Middleware(verifier))
 		ar.Mount("/", adminH.Routes())
@@ -336,26 +336,38 @@ func (a *App) setup(ctx context.Context) error {
 	return nil
 }
 
+// handleHealth is the public readiness probe. It deliberately exposes no
+// dependency topology: just whether the service can serve. The detailed
+// per-dependency breakdown lives behind the operator-gated /admin/health tile.
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
-	status := database.CheckHealth(r.Context(), a.pool)
-
-	dbStatus := "ok"
-	if !status.OK {
-		dbStatus = "down"
+	if a.dependencyHealth(r.Context()).Healthy() {
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
 	}
-	if a.pool == nil {
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "degraded"})
+}
+
+// dependencyHealth pings the configured dependencies and reports each one's
+// status. A nil dependency is "not_configured" (intentionally absent), distinct
+// from "down" (configured but unreachable).
+func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealth {
+	dbStatus := "ok"
+	switch {
+	case a.pool == nil:
 		dbStatus = "not_configured"
+	case !database.CheckHealth(ctx, a.pool).OK:
+		dbStatus = "down"
 	}
 
 	redisStatus := "ok"
-	if a.redisClient == nil {
+	switch {
+	case a.redisClient == nil:
 		redisStatus = "not_configured"
-	} else if err := a.redisClient.Ping(r.Context()).Err(); err != nil {
+	case a.redisClient.Ping(ctx).Err() != nil:
 		redisStatus = "down"
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"db":"%s","redis":"%s"}`, dbStatus, redisStatus)
+	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus}
 }
 
 func (a *App) buildTokenVerifier(ctx context.Context) (auth.TokenVerifier, error) {
