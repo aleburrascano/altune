@@ -4,9 +4,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 
 import { Banner } from '@shared/ui/primitives/Banner';
 import { Button } from '@shared/ui/primitives/Button';
-import { Screen } from '@shared/ui/primitives/Screen';
 import { Text } from '@shared/ui/primitives/Text';
-import { Wordmark } from '@shared/ui/primitives/Wordmark';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import {
@@ -15,25 +13,18 @@ import {
   passwordsMatch,
   validatePassword,
 } from '../lib/validation';
+import { AuthHeroLayout } from './hero/AuthHeroLayout';
 import { OAuthButtons } from './OAuthButtons';
 
 /**
- * AuthForm — the shared presentational shell for SignIn and SignUp.
- *
- * The two screens are identical except for their copy, link target, and
- * which auth hook they dispatch into; this component owns the form state +
- * layout, and the screens pass the per-mode bits as props. Extracted after
- * the 3 clone groups fallow flagged across the two screens.
- *
- * Validation (auth-hardening spec): email format is checked on both screens
- * (AC#2). Sign-up additionally enforces the password policy (AC#3) and a
- * confirm-password match (AC#1) via `enforcePasswordPolicy` + `showConfirm`.
- * Submit stays disabled until the active rules pass — malformed input never
- * costs a network round-trip. Server validation remains the backstop.
+ * Shared sign-in / sign-up form, rendered in the AuthHeroLayout (artwork hero
+ * on top, this form bottom-anchored). The screens pass per-mode copy + which
+ * extras to show. Validation (email format always; password policy + confirm
+ * on sign-up) gates submit before any network call; server stays the backstop.
  */
 type AuthFormProps = {
   screenTestID: string;
-  title: string;
+  tagline: string;
   submitLabel: string;
   onSubmit: (email: string, password: string) => void;
   pending: boolean;
@@ -52,7 +43,7 @@ type AuthFormProps = {
 
 export function AuthForm({
   screenTestID,
-  title,
+  tagline,
   submitLabel,
   onSubmit,
   pending,
@@ -80,8 +71,6 @@ export function AuthForm({
   const passwordIssues = enforcePasswordPolicy ? validatePassword(password) : [];
   const confirmValid = showConfirm ? passwordsMatch(password, confirm) : true;
 
-  // Errors surface only once the field has content — a pristine empty field
-  // is "incomplete", not "wrong".
   const showEmailError = email.length > 0 && !emailValid;
   const showPasswordError = passwordIssues.length > 0 && password.length > 0;
   const showConfirmError = showConfirm && confirm.length > 0 && !confirmValid;
@@ -90,12 +79,8 @@ export function AuthForm({
     emailValid && password.length > 0 && passwordIssues.length === 0 && confirmValid;
 
   return (
-    <Screen testID={screenTestID}>
-      <View style={styles.body}>
-        <View style={styles.header}>
-          <Wordmark size={40} />
-          <Text variant="title">{title}</Text>
-        </View>
+    <AuthHeroLayout testID={screenTestID} tagline={tagline}>
+      <View style={styles.form}>
         <TextInput
           testID="email-input"
           value={email}
@@ -107,7 +92,7 @@ export function AuthForm({
           style={[styles.input, fieldColors]}
         />
         {showEmailError ? (
-          <Text testID="email-error" variant="caption" tone="danger" style={styles.fieldError}>
+          <Text testID="email-error" variant="caption" tone="danger">
             Enter a valid email address.
           </Text>
         ) : null}
@@ -121,7 +106,7 @@ export function AuthForm({
           style={[styles.input, fieldColors]}
         />
         {showPasswordError ? (
-          <Text testID="password-error" variant="caption" tone="danger" style={styles.fieldError}>
+          <Text testID="password-error" variant="caption" tone="danger">
             {PASSWORD_REQUIREMENTS_HINT}
           </Text>
         ) : null}
@@ -137,9 +122,23 @@ export function AuthForm({
           />
         ) : null}
         {showConfirmError ? (
-          <Text testID="confirm-error" variant="caption" tone="danger" style={styles.fieldError}>
+          <Text testID="confirm-error" variant="caption" tone="danger">
             Passwords don&apos;t match.
           </Text>
+        ) : null}
+        {showForgotPassword ? (
+          <View style={styles.forgotRow}>
+            <Link href="/forgot-password" testID="link-to-forgot-password">
+              <Text variant="caption" tone="accent">
+                Forgot password?
+              </Text>
+            </Link>
+          </View>
+        ) : null}
+        {hasError ? (
+          <Banner testID="auth-error" tone="danger">
+            {errorText}
+          </Banner>
         ) : null}
         <Button
           testID="submit-button"
@@ -148,15 +147,7 @@ export function AuthForm({
           loading={pending}
           disabled={!formValid}
         />
-        {showForgotPassword ? (
-          <View style={styles.linkWrap}>
-            <Link href="/forgot-password" testID="link-to-forgot-password">
-              <Text variant="label" tone="accent">
-                Forgot password?
-              </Text>
-            </Link>
-          </View>
-        ) : null}
+        <OAuthButtons />
         <View style={styles.linkWrap}>
           <Link href={linkHref} testID={linkTestID}>
             <Text variant="label" tone="accent">
@@ -164,27 +155,19 @@ export function AuthForm({
             </Text>
           </Link>
         </View>
-        {hasError ? (
-          <Banner testID="auth-error" tone="danger" style={styles.errorBanner}>
-            {errorText}
-          </Banner>
-        ) : null}
-        <OAuthButtons />
       </View>
-    </Screen>
+    </AuthHeroLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, justifyContent: 'center', gap: spacing.md },
-  header: { alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xl },
+  form: { gap: spacing.sm },
   input: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  fieldError: { marginTop: -spacing.xs },
-  linkWrap: { alignItems: 'center', paddingVertical: spacing.sm },
-  errorBanner: { marginTop: spacing.sm },
+  forgotRow: { alignItems: 'flex-end', marginTop: -spacing.xs },
+  linkWrap: { alignItems: 'center', paddingTop: spacing.sm },
 });

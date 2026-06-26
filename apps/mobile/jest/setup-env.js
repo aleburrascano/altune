@@ -43,3 +43,24 @@ jest.mock('expo-web-browser', () => ({
   maybeCompleteAuthSession: jest.fn(),
   openAuthSessionAsync: jest.fn().mockResolvedValue({ type: 'cancel' }),
 }));
+
+// expo-blur's BlurView is a native view; render it as a plain View in tests
+// (the auth hero background mounts it).
+jest.mock('expo-blur', () => {
+  const { View } = require('react-native');
+  return { BlurView: View };
+});
+
+// expo-linear-gradient: render as a plain View in tests (the auth hero uses it
+// for the artwork tiles + veil).
+jest.mock('expo-linear-gradient', () => {
+  const { View } = require('react-native');
+  return { LinearGradient: View };
+});
+
+// react-native-svg: stub Svg + Path to plain Views so the Google logo renders
+// in tests without the native module.
+jest.mock('react-native-svg', () => {
+  const { View } = require('react-native');
+  return { __esModule: true, default: View, Svg: View, Path: View };
+});
