@@ -11,23 +11,38 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/admin/ui"
 	"altune/go-api/internal/shared/logging"
 )
+
+// providerHealthReader is the read side of the provider status board, satisfied
+// by *providerhealth.Store.
+type providerHealthReader interface {
+	Snapshot() []providerhealth.ProviderSnapshot
+}
 
 type AdminHandler struct {
 	operatorUserID string
 	probe          HealthProbe
 	logRing        *logging.RingBuffer
 	eventFeed      *EventFeed
+	providerHealth providerHealthReader
 }
 
-func New(operatorUserID string, probe HealthProbe, logRing *logging.RingBuffer, eventFeed *EventFeed) *AdminHandler {
+func New(
+	operatorUserID string,
+	probe HealthProbe,
+	logRing *logging.RingBuffer,
+	eventFeed *EventFeed,
+	providerHealth providerHealthReader,
+) *AdminHandler {
 	return &AdminHandler{
 		operatorUserID: operatorUserID,
 		probe:          probe,
 		logRing:        logRing,
 		eventFeed:      eventFeed,
+		providerHealth: providerHealth,
 	}
 }
 
@@ -43,6 +58,7 @@ func (h *AdminHandler) Routes() chi.Router {
 	r.Get("/logs/stream", h.streamLogs)
 	r.Get("/events/rates", h.serveEventRates)
 	r.Get("/events/stream", h.streamEvents)
+	r.Get("/providers", h.serveProviders)
 	return r
 }
 
