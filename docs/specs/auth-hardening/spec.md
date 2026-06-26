@@ -39,7 +39,7 @@ Each one is testable and becomes at least one automated test.
 
 Explicit non-goals — things people might assume but we're not doing here:
 
-- **Music-forward hero visual (direction A)** — the blurred artwork-wall + EQ-glyph hero locked earlier in the session. Deferred to a follow-up visual slice; mockup preserved under `.superpowers/brainstorm/`. This spec rebuilds the screens functionally; the hero layers on after.
+- ~~Music-forward hero visual (direction A)~~ — **now built (Slice 7).** The full-bleed artwork wall (gradient tiles + expo-blur + veil), EQ glyph, wordmark + tagline, and bottom-anchored form ship across all five auth screens; OAuth is a compact pill with the official Google logo.
 - Passwordless / magic-link / OTP sign-in.
 - Anonymous "guest" browse-before-auth and account claiming.
 - Biometric app-lock and silent session resurrection on refresh failure.
