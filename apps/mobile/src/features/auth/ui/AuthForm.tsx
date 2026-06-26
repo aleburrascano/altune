@@ -32,7 +32,9 @@ type AuthFormProps = {
   errorText: string;
   linkHref: '/sign-in' | '/sign-up';
   linkTestID: string;
-  linkText: string;
+  /** Toggle-link copy, split so the question reads white and the action cobalt. */
+  linkQuestion: string;
+  linkAction: string;
   /** Render a confirm-password field and require it to match (sign-up). */
   showConfirm?: boolean;
   /** Enforce the password policy before enabling submit (sign-up). */
@@ -51,7 +53,8 @@ export function AuthForm({
   errorText,
   linkHref,
   linkTestID,
-  linkText,
+  linkQuestion,
+  linkAction,
   showConfirm = false,
   enforcePasswordPolicy = false,
   showForgotPassword = false,
@@ -150,8 +153,11 @@ export function AuthForm({
         <OAuthButtons />
         <View style={styles.linkWrap}>
           <Link href={linkHref} testID={linkTestID}>
-            <Text variant="label" tone="accent">
-              {linkText}
+            <Text variant="label" tone="secondary">
+              {linkQuestion}{' '}
+              <Text variant="label" tone="accent">
+                {linkAction}
+              </Text>
             </Text>
           </Link>
         </View>
@@ -168,6 +174,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  forgotRow: { alignItems: 'flex-end', marginTop: -spacing.xs },
+  forgotRow: { alignItems: 'flex-end', marginVertical: spacing.xs },
   linkWrap: { alignItems: 'center', paddingTop: spacing.sm },
 });
