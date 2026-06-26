@@ -60,6 +60,7 @@ type App struct {
 	eventBus     *events.InProcessBus
 	alertMonitor *adminAlert.Monitor
 	logRing      *logging.RingBuffer
+	eventFeed    *adminHandler.EventFeed
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
@@ -106,6 +107,11 @@ func (a *App) Run(ctx context.Context) error {
 		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer bgCancel()
 		a.alertMonitor.Shutdown(bgCtx)
+	}
+	if a.eventFeed != nil {
+		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer bgCancel()
+		a.eventFeed.Shutdown(bgCtx)
 	}
 	if a.vocabRefresh != nil {
 		bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -329,7 +335,9 @@ func (a *App) setup(ctx context.Context) error {
 	// Mission Control operator console — two-layer gate: auth first, then the
 	// operator-only check inside adminH.Routes(). Fails closed when
 	// OperatorUserID is unset.
-	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing)
+	a.eventFeed = adminHandler.NewEventFeed()
+	a.eventFeed.Start(ctx, a.eventBus)
+	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed)
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Use(auth.Middleware(verifier))
 		ar.Mount("/", adminH.Routes())

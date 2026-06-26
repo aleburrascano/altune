@@ -19,10 +19,16 @@ type AdminHandler struct {
 	operatorUserID string
 	probe          HealthProbe
 	logRing        *logging.RingBuffer
+	eventFeed      *EventFeed
 }
 
-func New(operatorUserID string, probe HealthProbe, logRing *logging.RingBuffer) *AdminHandler {
-	return &AdminHandler{operatorUserID: operatorUserID, probe: probe, logRing: logRing}
+func New(operatorUserID string, probe HealthProbe, logRing *logging.RingBuffer, eventFeed *EventFeed) *AdminHandler {
+	return &AdminHandler{
+		operatorUserID: operatorUserID,
+		probe:          probe,
+		logRing:        logRing,
+		eventFeed:      eventFeed,
+	}
 }
 
 // Routes returns the operator-gated console router. The caller is responsible
@@ -35,6 +41,8 @@ func (h *AdminHandler) Routes() chi.Router {
 	r.Get("/health", h.serveHealth)
 	r.Get("/logs", h.serveLogs)
 	r.Get("/logs/stream", h.streamLogs)
+	r.Get("/events/rates", h.serveEventRates)
+	r.Get("/events/stream", h.streamEvents)
 	return r
 }
 
