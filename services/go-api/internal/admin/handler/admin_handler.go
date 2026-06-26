@@ -28,6 +28,7 @@ type AdminHandler struct {
 	logRing        *logging.RingBuffer
 	eventFeed      *EventFeed
 	providerHealth providerHealthReader
+	acquisition    AcquisitionStatusReader
 }
 
 func New(
@@ -36,6 +37,7 @@ func New(
 	logRing *logging.RingBuffer,
 	eventFeed *EventFeed,
 	providerHealth providerHealthReader,
+	acquisition AcquisitionStatusReader,
 ) *AdminHandler {
 	return &AdminHandler{
 		operatorUserID: operatorUserID,
@@ -43,6 +45,7 @@ func New(
 		logRing:        logRing,
 		eventFeed:      eventFeed,
 		providerHealth: providerHealth,
+		acquisition:    acquisition,
 	}
 }
 
@@ -59,6 +62,7 @@ func (h *AdminHandler) Routes() chi.Router {
 	r.Get("/events/rates", h.serveEventRates)
 	r.Get("/events/stream", h.streamEvents)
 	r.Get("/providers", h.serveProviders)
+	r.Get("/acquisition", h.serveAcquisition)
 	return r
 }
 

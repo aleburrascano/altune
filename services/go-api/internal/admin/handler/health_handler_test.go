@@ -41,7 +41,7 @@ func TestAdminHealthEndpoint(t *testing.T) {
 	probe := func(context.Context) DependencyHealth {
 		return DependencyHealth{DB: "ok", Redis: "down"}
 	}
-	h := New(operator.String(), probe, nil, nil, nil)
+	h := New(operator.String(), probe, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	req = req.WithContext(auth.ContextWithUserID(req.Context(), operator))
