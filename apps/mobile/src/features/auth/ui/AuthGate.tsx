@@ -18,9 +18,18 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const session = useSession();
   const segments = useSegments();
   const inAuthGroup = segments[0] === '(auth)';
+  // AIDEV-NOTE: password-recovery establishes a real (signed-in) session, but
+  // the user must still reach the top-level set-new-password screen. Let that
+  // route through regardless of session so the signed-in→/library redirect
+  // below doesn't bounce them off the recovery screen.
+  const onRecoveryRoute = segments[0] === 'reset-password';
 
   if (session.status === 'loading') {
     return <AuthSplash />;
+  }
+
+  if (onRecoveryRoute) {
+    return <>{children}</>;
   }
 
   if (session.status === 'signed-out' && !inAuthGroup) {
