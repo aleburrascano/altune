@@ -13,6 +13,7 @@ import (
 
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	adminAlert "altune/go-api/internal/admin/alert"
 	adminHandler "altune/go-api/internal/admin/handler"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
@@ -56,6 +57,7 @@ type App struct {
 	scheduler    *acqService.BackgroundAcquisitionScheduler
 	vocabRefresh *discoveryService.VocabularyRefreshService
 	eventBus     *events.InProcessBus
+	alertMonitor *adminAlert.Monitor
 }
 
 func New(cfg *config.Config) *App {
@@ -97,6 +99,11 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	slog.Info("waiting for background tasks")
+	if a.alertMonitor != nil {
+		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer bgCancel()
+		a.alertMonitor.Shutdown(bgCtx)
+	}
 	if a.vocabRefresh != nil {
 		bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer bgCancel()
@@ -325,6 +332,8 @@ func (a *App) setup(ctx context.Context) error {
 		ar.Mount("/", adminH.Routes())
 	})
 
+	a.startAlertMonitor(ctx)
+
 	a.server = &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
 		Handler:           r,
@@ -368,6 +377,42 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 	}
 
 	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus}
+}
+
+// startAlertMonitor builds and starts the Mission Control alert monitor. It
+// pages the operator on Signal conditions (dependency down to start), pushing
+// via ntfy when configured and logging only otherwise. Alert messages carry
+// only state names, never connection details.
+func (a *App) startAlertMonitor(ctx context.Context) {
+	var notifier adminAlert.AlertNotifier = adminAlert.NopNotifier{}
+	if a.cfg.HasAlertPush() {
+		notifier = adminAlert.NewNtfyNotifier(a.cfg.AlertNtfyURL)
+	}
+
+	dependencyDown := adminAlert.Condition{
+		Key: "dependency_down",
+		Eval: func(ctx context.Context) *adminAlert.Alert {
+			h := a.dependencyHealth(ctx)
+			if h.Healthy() {
+				return nil
+			}
+			msg := "dependencies down:"
+			if h.DB == "down" {
+				msg += " db"
+			}
+			if h.Redis == "down" {
+				msg += " redis"
+			}
+			return &adminAlert.Alert{
+				Title:    "altune dependency down",
+				Message:  msg,
+				Severity: adminAlert.SeveritySignal,
+			}
+		},
+	}
+
+	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, dependencyDown)
+	a.alertMonitor.Start(ctx)
 }
 
 func (a *App) buildTokenVerifier(ctx context.Context) (auth.TokenVerifier, error) {
