@@ -63,6 +63,7 @@ type App struct {
 	logRing        *logging.RingBuffer
 	eventFeed      *adminHandler.EventFeed
 	providerHealth *providerhealth.Store
+	evalMeter      *adminHandler.EvalMeter
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
@@ -114,6 +115,11 @@ func (a *App) Run(ctx context.Context) error {
 		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer bgCancel()
 		a.eventFeed.Shutdown(bgCtx)
+	}
+	if a.evalMeter != nil {
+		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer bgCancel()
+		a.evalMeter.Shutdown(bgCtx)
 	}
 	if a.vocabRefresh != nil {
 		bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -345,7 +351,16 @@ func (a *App) setup(ctx context.Context) error {
 	if a.scheduler != nil {
 		acqReader = a.scheduler
 	}
-	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader)
+
+	// AIDEV-NOTE: eval meter ships OFF by default. The live runner (3rd arg) is a
+	// deliberate opt-in seam left nil: it must use a dedicated HTTP client that
+	// bypasses the shared per-provider circuit breakers and a small fixed smoke
+	// query set (per the doc-reviewed plan, U7) before it runs against live
+	// providers — wiring that safely is a follow-up. With a nil runner the meter
+	// reports state "disabled"/"no_data" and never touches providers.
+	a.evalMeter = adminHandler.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, nil)
+	a.evalMeter.Start(ctx)
+	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader, a.evalMeter)
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Use(auth.Middleware(verifier))
 		ar.Mount("/", adminH.Routes())
