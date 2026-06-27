@@ -24,6 +24,9 @@ type Config struct {
 	SupabaseProjectURL string `env:"SUPABASE_PROJECT_URL"`
 	SupabaseJWTAud     string `env:"SUPABASE_JWT_AUD" envDefault:"authenticated"`
 	SupabaseJWTJWKSURL string `env:"SUPABASE_JWT_JWKS_URL"`
+	// Public client (publishable/anon) key — safe to expose to browsers. Lets the
+	// Mission Control page sign the operator in with email + password directly.
+	SupabaseAnonKey string `env:"SUPABASE_ANON_KEY"`
 
 	// Redis
 	RedisURL string `env:"REDIS_URL"`

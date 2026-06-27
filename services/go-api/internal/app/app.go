@@ -359,10 +359,12 @@ func (a *App) setup(ctx context.Context) error {
 	// disabled, buildEvalRunner returns nil and no second provider stack is built.
 	a.evalMeter = adminHandler.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, a.buildEvalRunner())
 	a.evalMeter.Start(ctx)
-	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader, a.evalMeter)
+	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader, a.evalMeter).
+		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey)
 	r.Route("/admin", func(ar chi.Router) {
-		ar.Get("/", adminH.ServeIndex) // public shell — holds no data
-		ar.Group(func(gr chi.Router) { // gated data: auth, then operator check
+		ar.Get("/", adminH.ServeIndex)         // public shell — holds no data
+		ar.Get("/config", adminH.ServeConfig)  // public client config for sign-in
+		ar.Group(func(gr chi.Router) {         // gated data: auth, then operator check
 			gr.Use(auth.Middleware(verifier))
 			gr.Use(adminHandler.OperatorOnly(a.cfg.OperatorUserID))
 			adminH.RegisterData(gr)
