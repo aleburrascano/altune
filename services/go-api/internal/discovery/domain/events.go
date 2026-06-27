@@ -29,6 +29,7 @@ type EventType int
 const (
 	EventTypeUnknown EventType = iota
 	EventTypeSearchPerformed
+	EventTypeResultsShown
 	EventTypeResultClicked
 	EventTypePlay
 	EventTypeSkip
@@ -39,6 +40,7 @@ const (
 
 var eventTypeNames = map[EventType]string{
 	EventTypeSearchPerformed: "search_performed",
+	EventTypeResultsShown:    "results_shown",
 	EventTypeResultClicked:   "result_clicked",
 	EventTypePlay:            "play",
 	EventTypeSkip:            "skip",
@@ -74,5 +76,9 @@ type InteractionEvent struct {
 	UserId     shared.UserId
 	Type       EventType
 	QueryNorm  string
-	Payload    map[string]any
+	// SearchId is the keystone join key: the UUID of the search_performed that
+	// produced this event. Empty for events with no originating search (e.g. a
+	// play from the library). Stored in the real search_id column, not payload.
+	SearchId string
+	Payload  map[string]any
 }

@@ -159,14 +159,15 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 // --- DTOs ---
 
 type SearchResultDTO struct {
-	Kind          string         `json:"kind"`
-	Title         string         `json:"title"`
-	Subtitle      string         `json:"subtitle,omitempty"`
-	ImageURL      string         `json:"image_url,omitempty"`
-	ArtworkSource string         `json:"artwork_source,omitempty"`
-	Confidence    string         `json:"confidence"`
-	Sources       []SourceRefDTO `json:"sources"`
-	Extras        map[string]any `json:"extras"`
+	Kind            string         `json:"kind"`
+	Title           string         `json:"title"`
+	Subtitle        string         `json:"subtitle,omitempty"`
+	ImageURL        string         `json:"image_url,omitempty"`
+	ArtworkSource   string         `json:"artwork_source,omitempty"`
+	Confidence      string         `json:"confidence"`
+	ResultSignature string         `json:"result_signature"`
+	Sources         []SourceRefDTO `json:"sources"`
+	Extras          map[string]any `json:"extras"`
 }
 
 type SourceRefDTO struct {
@@ -191,6 +192,7 @@ type RelatedGroupDTO struct {
 type DiscoverySearchResponse struct {
 	Query          string              `json:"query"`
 	QueryNorm      string              `json:"query_norm"`
+	SearchID       string              `json:"search_id"`
 	Results        []SearchResultDTO   `json:"results"`
 	Providers      []ProviderStatusDTO `json:"providers"`
 	Partial        bool                `json:"partial"`
@@ -219,6 +221,7 @@ type DiscoverySearchHistoryResponse struct {
 type DiscoveryEventRequest struct {
 	Type      string         `json:"type"`
 	QueryNorm string         `json:"query_norm"`
+	SearchID  string         `json:"search_id"`
 	Payload   map[string]any `json:"payload"`
 }
 
@@ -332,6 +335,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	httputil.WriteJSON(w, searchStatusCode(result.ProviderStatuses), DiscoverySearchResponse{
 		Query:          q,
 		QueryNorm:      textnorm.NormalizeForMatch(q),
+		SearchID:       result.SearchId,
 		Results:        searchResultsToDTOs(result.Results),
 		Providers:      providerStatusesToDTOs(result.ProviderStatuses),
 		Partial:        result.Partial,
@@ -398,6 +402,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 	input := service.RecordEventInput{
 		Type:      eventType,
 		QueryNorm: req.QueryNorm,
+		SearchId:  req.SearchID,
 		Payload:   req.Payload,
 	}
 	if err := h.eventSvc.Execute(r.Context(), userId, input); err != nil {
@@ -1020,15 +1025,27 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 		extras = make(map[string]any)
 	}
 	return SearchResultDTO{
-		Kind:          sr.Kind.String(),
-		Title:         sr.Title,
-		Subtitle:      sr.Subtitle,
-		ImageURL:      sr.ImageURL,
-		ArtworkSource: sr.ArtworkSource,
-		Confidence:    sr.Confidence.String(),
-		Sources:       sources,
-		Extras:        extras,
+		Kind:            sr.Kind.String(),
+		Title:           sr.Title,
+		Subtitle:        sr.Subtitle,
+		ImageURL:        sr.ImageURL,
+		ArtworkSource:   sr.ArtworkSource,
+		Confidence:      sr.Confidence.String(),
+		ResultSignature: resultSignature(sr),
+		Sources:         sources,
+		Extras:          extras,
 	}
+}
+
+// resultSignature is the server-computed stable identity the client echoes on
+// every engagement event — (kind, normalized title, normalized subtitle). It is
+// the cross-query, cross-provider join key for impression/click attribution: a
+// merged result and any single-source variant of the same recording collapse to
+// one signature (unlike a provider source ref, which differs per provider).
+func resultSignature(sr domain.SearchResult) string {
+	return sr.Kind.String() + "|" +
+		textnorm.NormalizeForMatch(sr.Title) + "|" +
+		textnorm.NormalizeForMatch(sr.Subtitle)
 }
 
 // searchResultsToDTOs maps a slice of domain results to wire DTOs.

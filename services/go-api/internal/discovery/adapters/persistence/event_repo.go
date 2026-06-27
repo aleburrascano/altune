@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -40,15 +41,25 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		queryNorm = &event.QueryNorm
 	}
 
+	// search_id is nullable — only events that trace back to a search carry one.
+	// Parse defensively: a malformed id is dropped (logged-not-swallowed upstream)
+	// rather than failing the whole append.
+	var searchID *uuid.UUID
+	if event.SearchId != "" {
+		if id, parseErr := uuid.Parse(event.SearchId); parseErr == nil {
+			searchID = &id
+		}
+	}
+
 	occurredAt := event.OccurredAt
 	if occurredAt.IsZero() {
 		occurredAt = time.Now().UTC()
 	}
 
 	_, err = r.pool.Exec(ctx,
-		`INSERT INTO discovery_events (user_id, event_type, query_norm, payload, occurred_at)
-		VALUES ($1, $2, $3, $4, $5)`,
-		event.UserId.UUID(), event.Type.String(), queryNorm, string(payloadJSON), occurredAt,
+		`INSERT INTO discovery_events (user_id, event_type, query_norm, search_id, payload, occurred_at)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		event.UserId.UUID(), event.Type.String(), queryNorm, searchID, string(payloadJSON), occurredAt,
 	)
 	if err != nil {
 		return fmt.Errorf("append telemetry event: %w", err)

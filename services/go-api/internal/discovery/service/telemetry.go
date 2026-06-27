@@ -23,7 +23,7 @@ const (
 // best-effort: it never blocks the request, outlives request cancellation (via
 // WithoutCancel + its own timeout), recovers from panics, and logs — never
 // surfaces — failures. The envelope matches the legacy emitter, stamped v2.
-func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserId, queryNorm string, shown []domain.SearchResult) {
+func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult) {
 	if s.eventStore == nil {
 		return
 	}
@@ -55,6 +55,7 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 			UserId:     userId,
 			Type:       domain.EventTypeSearchPerformed,
 			QueryNorm:  queryNorm,
+			SearchId:   searchId,
 			Payload:    payload,
 		}
 		if err := s.eventStore.Append(emitCtx, event); err != nil {
