@@ -64,6 +64,11 @@ type Config struct {
 	// APIs and shares per-provider quota with user traffic, so it must be opted
 	// into deliberately.
 	EvalMeterEnabled bool `env:"EVAL_METER_ENABLED" envDefault:"false"`
+	// Tail-noise demotion experiment. OFF by default: demotes single-source
+	// UGC/scrobble results with no identity below corroborated results. Flipped on
+	// for eval A/B before any production rollout. See
+	// docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
+	TailDemotionEnabled bool `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
 }
 
 func Load() (*Config, error) {
