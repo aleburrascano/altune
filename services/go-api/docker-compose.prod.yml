@@ -26,6 +26,9 @@ services:
       # breaker-isolated search instance (can't affect live search). Safe to
       # leave on; set false to silence the panel.
       - EVAL_METER_ENABLED=true
+      # Public Supabase client key — lets the /admin page sign the operator in
+      # with email + password. Public client config (same key the app ships).
+      - SUPABASE_ANON_KEY=sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
     volumes:
       - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
     tmpfs:
