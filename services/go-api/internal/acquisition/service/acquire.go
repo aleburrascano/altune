@@ -71,6 +71,8 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		return nil
 	}
 
+	jobReporterFrom(ctx).meta(track.Title, track.Artist, track.Album)
+
 	slog.InfoContext(ctx, "track_acquisition_started",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),

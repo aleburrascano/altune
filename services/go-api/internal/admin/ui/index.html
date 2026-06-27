@@ -90,6 +90,9 @@
     .art { width:24px; height:24px; border-radius:4px; object-fit:cover; background:#1c2230; border:1px solid var(--bd2); vertical-align:middle; margin-right:4px; }
     .row2 { display:flex; align-items:center; gap:5px; padding:1.5px 0; flex-wrap:wrap; }
     .lbl { font-size:8.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); background:var(--card2); border:1px solid var(--bd); border-radius:4px; padding:2px 6px; }
+    .lbl.done { color:var(--ok); border-color:#1f3a30; }
+    .lbl.cur { color:var(--cy); border-color:#2a4a57; background:#0d1a20; }
+    .lbl.failx { color:var(--down); border-color:#3a1f1f; background:#1a0e0e; }
     pre.json { font-size:9.5px; color:#7f9cc0; background:#0a0c10; border:1px solid #1a1f27; border-radius:5px; padding:5px; white-space:pre-wrap; word-break:break-all; max-height:120px; overflow:auto; margin:3px 0; }
     .empty { color:var(--mut); padding:.3rem 0; } .err { color:var(--down); }
     .section-title { margin:.2rem 0 .5rem; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
@@ -151,8 +154,10 @@
         <div class="card"><div class="bd"><div class="big ok" id="acqOk">—</div><div class="mut">succeeded</div></div></div>
         <div class="card"><div class="bd"><div class="big" id="acqFail">—</div><div class="mut">failed</div></div></div>
       </div>
-      <div class="card" style="margin-bottom:.7rem"><div class="hd"><h2>In-flight jobs</h2></div><div class="bd" id="acqJobs"><div class="empty">—</div></div></div>
-      <div class="card"><div class="hd"><h2>Recent outcomes</h2></div><div class="bd" id="acqRecent"><div class="empty">—</div></div></div>
+      <div class="grid disc">
+        <div class="card"><div class="hd"><h2>Jobs</h2><span id="acqMeta" class="meta"></span></div><div id="acqList"><div class="empty" style="padding:.6rem">no jobs</div></div></div>
+        <div class="card"><div class="hd"><h2>Job detail</h2></div><div class="bd" id="acqDetail"><div class="empty">select a job</div></div></div>
+      </div>
     </div>
 
     <!-- EVAL -->
@@ -235,10 +240,46 @@ function renderProviders(el, ps){
 
 /* ---------- acquisition ---------- */
 function jobLine(j){ const elapsed=(j.elapsed_ms/1000).toFixed(1); return `<div class="row2"><span class="cy">${esc((j.track_id||'').slice(0,8))}</span> ${badge(j.state)} <span class="mut">${elapsed}s${j.source_url?' · '+esc(j.source_url.slice(0,42)):''}${j.reason?' · '+esc(j.reason):''}</span></div>`; }
+const acqStages = ["search","select","download","tag","store","update_track"];
+let acqJobs = [];
+let acqSelected = null;
+function acqRow(j,i){
+  const title = j.title ? `${esc(j.title)}${j.artist?' — '+esc(j.artist):''}` : `<span class="mut">track ${esc((j.track_id||'').slice(0,8))}</span>`;
+  return `<div class="req ${acqSelected===j.track_id?'sel':''}" data-i="${i}"><div class="q">${title}</div><div class="m">${badge(j.state)} ${j.stage?'<span class="lbl">'+esc(j.stage)+'</span>':''} <span class="mut">${(j.elapsed_ms/1000).toFixed(1)}s${j.reason?' · '+esc(j.reason):''}</span></div></div>`;
+}
 function renderAcq(a){
   $("acqInflight").textContent=a.in_flight; $("acqOk").textContent=a.succeeded; $("acqFail").textContent=a.failed; $("acqFail").className="big "+(a.failed?'down':'');
-  $("acqJobs").innerHTML = (a.jobs&&a.jobs.length)? a.jobs.map(jobLine).join("") : `<div class="empty">no jobs in flight</div>`;
-  $("acqRecent").innerHTML = (a.recent&&a.recent.length)? a.recent.map(jobLine).join("") : `<div class="empty">no recent outcomes</div>`;
+  acqJobs = [...(a.jobs||[]), ...(a.recent||[])];
+  $("acqMeta").textContent = (a.jobs||[]).length+" in-flight · "+(a.recent||[]).length+" recent";
+  $("acqList").innerHTML = acqJobs.length ? acqJobs.map((j,i)=>acqRow(j,i)).join("") : `<div class="empty" style="padding:.6rem">no jobs</div>`;
+  if(acqSelected){ const j=acqJobs.find(x=>x.track_id===acqSelected); if(j) renderAcqDetail(j); }
+}
+function stagePipeline(j){
+  const cur = acqStages.indexOf(j.stage);
+  const terminal = ["succeeded","failed","cancelled"].includes(j.state);
+  return `<div class="row2" style="gap:3px">`+acqStages.map((s,idx)=>{
+    let cls="lbl";
+    if(j.state==="succeeded") cls="lbl done";
+    else if(j.state==="failed" && cur===idx) cls="lbl failx";
+    else if(cur>=0 && idx<cur) cls="lbl done";
+    else if(cur===idx && !terminal) cls="lbl cur";
+    return `<span class="${cls}">${s}</span>`;
+  }).join('<span class="mut">›</span>')+`</div>`;
+}
+function jobLogs(trackId){
+  const rows = logBuf.filter(r=>r.attrs&&r.attrs.track_id===trackId).slice(-15);
+  if(!rows.length) return `<span class="empty">no logs captured for this job</span>`;
+  return rows.map(r=>{ const lv=(r.level||"").replace(/[+-].*/,""); return `<div class="logrow" style="cursor:default"><time>${(r.time||"").slice(11,19)}</time><span class="lv ${lv}">${lv}</span><span class="msg">${esc(r.msg)}</span></div>`; }).join("");
+}
+function renderAcqDetail(j){
+  acqSelected = j.track_id;
+  document.querySelectorAll("#acqList .req").forEach(x=>{ const jj=acqJobs[+x.dataset.i]; x.classList.toggle("sel", jj && jj.track_id===j.track_id); });
+  const head = j.title ? `${esc(j.title)} <span class="mut">${j.artist?'· '+esc(j.artist):''} ${j.album?'· '+esc(j.album):''}</span>` : `<span class="mut">track ${esc((j.track_id||'').slice(0,8))}</span>`;
+  $("acqDetail").innerHTML =
+    `<div class="cy" style="margin-bottom:.4rem">${head} ${badge(j.state)}</div>`+
+    `<div class="stage"><div class="sh"><span>pipeline</span><span>${esc(j.stage||(j.state==='queued'?'waiting for worker':'—'))}</span></div><div class="sb">${stagePipeline(j)}</div></div>`+
+    `<div class="kv"><b>track_id</b><span>${esc(j.track_id||'')}</span><b>elapsed</b><span>${(j.elapsed_ms/1000).toFixed(1)}s</span>${j.source?`<b>resolved source</b><span>${esc(j.source)}</span>`:''}${j.source_url?`<b>source_url</b><span>${esc(j.source_url)}</span>`:''}${j.reason?`<b>reason</b><span class="down">${esc(j.reason)}</span>`:''}</div>`+
+    `<div class="stage"><div class="sh"><span>logs · track ${esc((j.track_id||'').slice(0,8))}</span></div><div class="sb" style="font-size:9.5px">${jobLogs(j.track_id)}</div></div>`;
 }
 function renderAcqOverview(a){
   $("ovAcq").innerHTML = `<div class="row2"><b class="cy">${a.in_flight}</b><span class="mut">in-flight</span> <b class="ok">${a.succeeded}</b><span class="mut">ok</span> <b class="${a.failed?'down':''}">${a.failed}</b><span class="mut">failed</span></div>`+
@@ -292,7 +333,8 @@ function renderReqDetail(r){
     `<div class="stage"><div class="sh"><span>raw exchanges (${(r.exchanges||[]).length})</span></div><div class="sb">${exch||'<span class="empty">—</span>'}</div></div>`;
 }
 $("reqList").addEventListener("click",(e)=>{ const el=e.target.closest(".req"); if(!el) return;
-  document.querySelectorAll(".req").forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); renderReqDetail(requests[+el.dataset.i]); });
+  $("reqList").querySelectorAll(".req").forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); renderReqDetail(requests[+el.dataset.i]); });
+$("acqList").addEventListener("click",(e)=>{ const el=e.target.closest(".req"); if(!el) return; const j=acqJobs[+el.dataset.i]; if(j) renderAcqDetail(j); });
 
 /* ---------- re-run ---------- */
 $("rrRun").onclick = async () => {

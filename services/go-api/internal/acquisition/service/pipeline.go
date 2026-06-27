@@ -27,6 +27,7 @@ func (e *StepError) Unwrap() error { return e.Err }
 
 func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) error {
 	var completed []Step
+	reporter := jobReporterFrom(ctx)
 
 	for _, step := range steps {
 		if err := ctx.Err(); err != nil {
@@ -34,11 +35,15 @@ func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) erro
 			return fmt.Errorf("pipeline cancelled: %w", err)
 		}
 
-		slog.InfoContext(ctx, "pipeline step starting", "step", step.Name())
+		reporter.stage(step.Name())
+		if ac.Selected != nil {
+			reporter.source(ac.Selected.URL)
+		}
+		slog.InfoContext(ctx, "pipeline step starting", "step", step.Name(), "track_id", ac.Track.ID)
 
 		if err := step.Execute(ctx, ac); err != nil {
 			slog.ErrorContext(ctx, "pipeline step failed",
-				"step", step.Name(), "error", err)
+				"step", step.Name(), "track_id", ac.Track.ID, "error", err)
 			rollback(ctx, completed, ac)
 			return &StepError{Step: step.Name(), Err: err}
 		}
