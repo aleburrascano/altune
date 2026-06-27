@@ -1,0 +1,38 @@
+# Backend test gate. Runs on PRs and pushes that touch the Go API.
+#
+# Crucially runs the race detector (go test -race), which needs cgo — the local
+# dev box (Windows, no C toolchain) can't, so this Linux runner is where data
+# races in the concurrent telemetry code (log ring, event tap, provider store,
+# scheduler counters, alert monitor) actually get caught.
+name: Test backend
+
+on:
+  pull_request:
+    paths:
+      - 'services/go-api/**'
+  push:
+    branches: [main]
+    paths:
+      - 'services/go-api/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/go-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: services/go-api/go.sum
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test -race
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race -count=1 ./...

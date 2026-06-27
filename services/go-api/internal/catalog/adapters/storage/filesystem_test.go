@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -128,51 +129,42 @@ func TestFilesystemAudioStore_SafePath(t *testing.T) {
 	store := NewFilesystemAudioStore(dir)
 	ctx := context.Background()
 
+	// Forward-slash traversal is rejected on every OS. Backslash is only a path
+	// separator on Windows — on Linux "..\windows\system32" is a single valid
+	// filename and correctly NOT traversal, so only assert it where it applies.
 	traversalRefs := []string{
 		"../etc/passwd",
 		"tracks/../../secret",
-		"..\\windows\\system32",
+	}
+	if runtime.GOOS == "windows" {
+		traversalRefs = append(traversalRefs, "..\\windows\\system32")
+	}
+
+	assertRejected := func(t *testing.T, ref string, err error) {
+		t.Helper()
+		if err == nil {
+			t.Errorf("expected path traversal to be rejected for %q, got nil error", ref)
+			return // guard the nil deref below
+		}
+		if !strings.Contains(err.Error(), "path traversal rejected") {
+			t.Errorf("expected 'path traversal rejected' in error, got: %v", err)
+		}
 	}
 
 	for _, ref := range traversalRefs {
 		t.Run("Exists_"+ref, func(t *testing.T) {
 			_, err := store.Exists(ctx, ref)
-			if err == nil {
-				t.Errorf("expected path traversal to be rejected for %q, got nil error", ref)
-			}
-			if !strings.Contains(err.Error(), "path traversal rejected") {
-				t.Errorf("expected 'path traversal rejected' in error, got: %v", err)
-			}
+			assertRejected(t, ref, err)
 		})
-
 		t.Run("Stream_"+ref, func(t *testing.T) {
 			_, _, err := store.Stream(ctx, ref)
-			if err == nil {
-				t.Errorf("expected path traversal to be rejected for %q, got nil error", ref)
-			}
-			if !strings.Contains(err.Error(), "path traversal rejected") {
-				t.Errorf("expected 'path traversal rejected' in error, got: %v", err)
-			}
+			assertRejected(t, ref, err)
 		})
-
 		t.Run("Delete_"+ref, func(t *testing.T) {
-			err := store.Delete(ctx, ref)
-			if err == nil {
-				t.Errorf("expected path traversal to be rejected for %q, got nil error", ref)
-			}
-			if !strings.Contains(err.Error(), "path traversal rejected") {
-				t.Errorf("expected 'path traversal rejected' in error, got: %v", err)
-			}
+			assertRejected(t, ref, store.Delete(ctx, ref))
 		})
-
 		t.Run("Store_"+ref, func(t *testing.T) {
-			err := store.Store(ctx, "/tmp/whatever", ref)
-			if err == nil {
-				t.Errorf("expected path traversal to be rejected for %q, got nil error", ref)
-			}
-			if !strings.Contains(err.Error(), "path traversal rejected") {
-				t.Errorf("expected 'path traversal rejected' in error, got: %v", err)
-			}
+			assertRejected(t, ref, store.Store(ctx, "/tmp/whatever", ref))
 		})
 	}
 }
