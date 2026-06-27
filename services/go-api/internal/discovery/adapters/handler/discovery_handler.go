@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/domain"
@@ -220,10 +221,12 @@ type DiscoverySearchHistoryResponse struct {
 }
 
 type DiscoveryEventRequest struct {
-	Type      string         `json:"type"`
-	QueryNorm string         `json:"query_norm"`
-	SearchID  string         `json:"search_id"`
-	Payload   map[string]any `json:"payload"`
+	Type             string         `json:"type"`
+	QueryNorm        string         `json:"query_norm"`
+	SearchID         string         `json:"search_id"`
+	EventID          string         `json:"event_id"`
+	ClientOccurredAt string         `json:"client_occurred_at"`
+	Payload          map[string]any `json:"payload"`
 }
 
 type SuggestionDTO struct {
@@ -401,11 +404,22 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// client_occurred_at is optional RFC3339; a malformed value is dropped (the
+	// server received_at still anchors the event in time).
+	var clientOccurredAt time.Time
+	if req.ClientOccurredAt != "" {
+		if t, parseErr := time.Parse(time.RFC3339, req.ClientOccurredAt); parseErr == nil {
+			clientOccurredAt = t
+		}
+	}
+
 	input := service.RecordEventInput{
-		Type:      eventType,
-		QueryNorm: req.QueryNorm,
-		SearchId:  req.SearchID,
-		Payload:   req.Payload,
+		Type:             eventType,
+		QueryNorm:        req.QueryNorm,
+		SearchId:         req.SearchID,
+		EventId:          req.EventID,
+		ClientOccurredAt: clientOccurredAt,
+		Payload:          req.Payload,
 	}
 	if err := h.eventSvc.Execute(r.Context(), userId, input); err != nil {
 		slog.ErrorContext(r.Context(), "record event failed", "error", err)
