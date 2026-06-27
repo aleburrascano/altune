@@ -16,7 +16,10 @@ export type TrackExtras = {
 };
 
 export function trackExtras(extras: Record<string, unknown>): TrackExtras {
-  const duration = extras['duration_seconds'];
+  // Discovery providers emit the duration (in seconds) under `duration`; older
+  // payloads / saved tracks used `duration_seconds`. Accept either so the save
+  // request carries a duration instead of always sending null.
+  const duration = extras['duration'] ?? extras['duration_seconds'];
   const album = extras['album'];
   const isrc = extras['isrc'];
   const year = extras['year'];
