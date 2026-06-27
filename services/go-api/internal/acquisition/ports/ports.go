@@ -31,6 +31,13 @@ type AudioSearcher interface {
 	Download(ctx context.Context, url string, outDir string) (filePath string, err error)
 }
 
+// AudioProber reads the actual duration (seconds) of a downloaded audio file.
+// Implemented by the ffprobe adapter. Used to verify a downloaded file is the
+// right recording before it is stored.
+type AudioProber interface {
+	ProbeDuration(ctx context.Context, filePath string) (float64, error)
+}
+
 // AudioWriter is the write-side of audio storage acquisition needs: persist a
 // downloaded file, check existence, and roll back. The catalog AudioStore
 // adapter satisfies it (its read-side Stream is not part of this seam).

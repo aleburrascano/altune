@@ -14,6 +14,13 @@ const (
 	identityMin   = 60.0
 	durationTight = 3
 	durationLoose = 15
+
+	// Same-recording tolerance for post-download verification (durationWithinTolerance):
+	// the larger of an absolute slack and a fraction of the expected length. The same
+	// recording from any source runs the same length within a few seconds (intro/outro
+	// or silence trimming); a larger gap means a different recording.
+	durationMatchSlackSecs = 15.0
+	durationMatchFraction  = 0.07
 )
 
 func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
@@ -113,6 +120,25 @@ func SelectBestCandidate(track TrackRef, candidates []Candidate) *Candidate {
 }
 
 func selectBestCandidate(ctx context.Context, track TrackRef, candidates []Candidate) *Candidate {
+	ranked := rankCandidates(ctx, track, candidates)
+	if len(ranked) == 0 {
+		slog.WarnContext(ctx, "no_candidates_passed",
+			"track_title", track.Title,
+			"track_artist", track.Artist,
+			"total_candidates", len(candidates),
+		)
+		return nil
+	}
+	best := ranked[0]
+	return &best
+}
+
+// rankCandidates returns every identity-passing candidate ordered best-first.
+// Topic-channel candidates rank ahead of all others (artist-matching Topic first,
+// then by identity); non-Topic candidates follow, ordered by identity then
+// metadata. Selection takes element 0; the acquisition pipeline walks the rest as
+// fallbacks when a downloaded file fails duration verification.
+func rankCandidates(ctx context.Context, track TrackRef, candidates []Candidate) []Candidate {
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -120,19 +146,35 @@ func selectBestCandidate(ctx context.Context, track TrackRef, candidates []Candi
 	maxViews := maxViewCount(candidates)
 	topic, other := classifyCandidates(ctx, track, candidates, maxViews)
 
-	if best := selectTopicCandidate(ctx, topic); best != nil {
-		return best
-	}
-	if best := selectOtherCandidate(ctx, other); best != nil {
-		return best
-	}
+	sort.Slice(topic, func(i, j int) bool {
+		if topic[i].artistMatch != topic[j].artistMatch {
+			return topic[i].artistMatch
+		}
+		return topic[i].ident > topic[j].ident
+	})
+	sort.Slice(other, func(i, j int) bool {
+		if other[i].ident != other[j].ident {
+			return other[i].ident > other[j].ident
+		}
+		return other[i].meta > other[j].meta
+	})
 
-	slog.WarnContext(ctx, "no_candidates_passed",
-		"track_title", track.Title,
-		"track_artist", track.Artist,
-		"total_candidates", len(candidates),
-	)
-	return nil
+	ranked := make([]Candidate, 0, len(topic)+len(other))
+	for _, e := range topic {
+		ranked = append(ranked, e.candidate)
+	}
+	for _, e := range other {
+		ranked = append(ranked, e.candidate)
+	}
+	return ranked
+}
+
+// durationWithinTolerance reports whether an acquired file's actual duration is
+// close enough to the track's expected (catalog-provider) duration to be the same
+// recording. Callers must only invoke it when the expected duration is known.
+func durationWithinTolerance(expected, actual float64) bool {
+	tolerance := math.Max(durationMatchSlackSecs, expected*durationMatchFraction)
+	return math.Abs(expected-actual) <= tolerance
 }
 
 func maxViewCount(candidates []Candidate) int64 {
@@ -182,37 +224,3 @@ func classifyCandidates(ctx context.Context, track TrackRef, candidates []Candid
 	return topic, other
 }
 
-// selectTopicCandidate prefers a Topic channel whose name matches the expected
-// artist, then highest identity. Returns nil when there are none.
-func selectTopicCandidate(ctx context.Context, topic []topicEntry) *Candidate {
-	if len(topic) == 0 {
-		return nil
-	}
-	sort.Slice(topic, func(i, j int) bool {
-		if topic[i].artistMatch != topic[j].artistMatch {
-			return topic[i].artistMatch
-		}
-		return topic[i].ident > topic[j].ident
-	})
-	best := topic[0].candidate
-	slog.InfoContext(ctx, "candidate_selected", "title", best.Title, "channel", best.Channel, "source", "topic_channel")
-	return &best
-}
-
-// selectOtherCandidate ranks non-Topic candidates by identity, then metadata.
-// Returns nil when there are none.
-func selectOtherCandidate(ctx context.Context, other []otherEntry) *Candidate {
-	if len(other) == 0 {
-		return nil
-	}
-	sort.Slice(other, func(i, j int) bool {
-		if other[i].ident != other[j].ident {
-			return other[i].ident > other[j].ident
-		}
-		return other[i].meta > other[j].meta
-	})
-	best := other[0].candidate
-	slog.InfoContext(ctx, "candidate_selected", "title", best.Title, "channel", best.Channel,
-		"metadata_rank", math.Round(other[0].meta*1000)/1000, "source", "metadata_rank")
-	return &best
-}

@@ -68,11 +68,14 @@ func rollback(ctx context.Context, completed []Step, ac *AcquisitionContext) {
 }
 
 type AcquisitionContext struct {
-	Track     TrackRef
+	Track      TrackRef
 	Candidates []Candidate
-	Selected  *Candidate
-	TempPath  string
-	AudioRef  string
+	// Ranked is the best-first candidate list produced by SelectStep; DownloadStep
+	// walks it, downloading and verifying each until one passes.
+	Ranked   []Candidate
+	Selected *Candidate
+	TempPath string
+	AudioRef string
 }
 
 type TrackRef struct {
