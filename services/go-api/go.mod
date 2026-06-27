@@ -12,7 +12,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lestrrat-go/jwx/v2 v2.1.4
 	github.com/minio/minio-go/v7 v7.0.87
-	github.com/raitonoberu/ytmusic v0.0.0-20240324143733-0e5780514b1d
 	github.com/redis/go-redis/v9 v9.7.3
 	go.uber.org/goleak v1.3.0
 	golang.org/x/sync v0.11.0
