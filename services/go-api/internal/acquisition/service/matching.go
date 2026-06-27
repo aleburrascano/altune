@@ -4,11 +4,60 @@ import (
 	"context"
 	"log/slog"
 	"math"
+	"regexp"
 	"sort"
 	"strings"
 
 	"altune/go-api/internal/shared/textnorm"
 )
+
+// featuredRe captures the featured-artist blob after a feat/ft/featuring marker,
+// up to a bracket or end of string. "with" is deliberately excluded — it mangles
+// real titles like "Stuck with U" (the same reason textnorm dropped it).
+var featuredRe = regexp.MustCompile(`(?i)\b(?:featuring|feat|ft)\.?\s+([^()\[\]]+)`)
+
+// featSepRe splits a featured-artist blob into individual names ("A & B", "A, B").
+var featSepRe = regexp.MustCompile(`(?i)\s*(?:,|&|\band\b)\s*`)
+
+// extractFeaturedArtists pulls the featured-artist names out of a title's
+// "feat./ft./featuring X" marker. Returns nil when the title carries no feature.
+// NOTE: NormalizeForMatch strips bracketed segments, so by the time identityScore
+// compares titles the "(feat. X)" is gone — the matcher is blind to features. This
+// reads the RAW title to recover that lost signal for feature-aware ranking.
+func extractFeaturedArtists(title string) []string {
+	m := featuredRe.FindStringSubmatch(title)
+	if m == nil {
+		return nil
+	}
+	parts := featSepRe.Split(strings.TrimSpace(m[1]), -1)
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// featureMatch reports whether a candidate is consistent with the track's feature.
+// When the track names featured artists, a candidate must mention every one of
+// them in its (raw, un-normalized) title — otherwise it is a different recording
+// (the solo cut / official video that the duration-blind identity score cannot
+// tell apart). A track with no feature imposes no requirement (every candidate
+// passes), so solo-track acquisition is unaffected.
+func featureMatch(trackTitle, candidateTitle string) bool {
+	feats := extractFeaturedArtists(trackTitle)
+	if len(feats) == 0 {
+		return true
+	}
+	cand := strings.ToLower(candidateTitle)
+	for _, f := range feats {
+		if !strings.Contains(cand, strings.ToLower(f)) {
+			return false
+		}
+	}
+	return true
+}
 
 const (
 	identityMin   = 60.0
@@ -103,12 +152,14 @@ func artistMatchesChannel(trackArtist, channel string) bool {
 type topicEntry struct {
 	ident       float64
 	artistMatch bool
+	featMatch   bool
 	candidate   Candidate
 }
 
 type otherEntry struct {
 	meta      float64
 	ident     float64
+	featMatch bool
 	candidate Candidate
 }
 
@@ -150,11 +201,20 @@ func rankCandidates(ctx context.Context, track TrackRef, candidates []Candidate)
 		if topic[i].artistMatch != topic[j].artistMatch {
 			return topic[i].artistMatch
 		}
+		if topic[i].featMatch != topic[j].featMatch {
+			return topic[i].featMatch
+		}
 		return topic[i].ident > topic[j].ident
 	})
 	sort.Slice(other, func(i, j int) bool {
 		if other[i].ident != other[j].ident {
 			return other[i].ident > other[j].ident
+		}
+		// Feature-consistency breaks an identity tie: a "(feat. X)" track prefers a
+		// candidate that names X over an equally-scored solo cut / official video
+		// (identity can't see the stripped "(feat. X)"). See featureMatch.
+		if other[i].featMatch != other[j].featMatch {
+			return other[i].featMatch
 		}
 		return other[i].meta > other[j].meta
 	})
@@ -197,6 +257,7 @@ func classifyCandidates(ctx context.Context, track TrackRef, candidates []Candid
 		ident := identityScore(track.Title, track.Artist, c.Title)
 		meta := metadataRank(c, track.Duration, maxViews)
 		artMatch := artistMatchesChannel(track.Artist, c.Channel)
+		featMatch := featureMatch(track.Title, c.Title)
 
 		slog.InfoContext(ctx, "candidate_evaluated",
 			"candidate_title", c.Title,
@@ -207,6 +268,7 @@ func classifyCandidates(ctx context.Context, track TrackRef, candidates []Candid
 			"metadata_rank", math.Round(meta*1000)/1000,
 			"is_topic", isTopicChannel(c.Channel),
 			"artist_match", artMatch,
+			"feature_match", featMatch,
 			"track_artist", track.Artist,
 		)
 
@@ -215,9 +277,9 @@ func classifyCandidates(ctx context.Context, track TrackRef, candidates []Candid
 		}
 
 		if isTopicChannel(c.Channel) {
-			topic = append(topic, topicEntry{ident: ident, artistMatch: artMatch, candidate: c})
+			topic = append(topic, topicEntry{ident: ident, artistMatch: artMatch, featMatch: featMatch, candidate: c})
 		} else {
-			other = append(other, otherEntry{meta: meta, ident: ident, candidate: c})
+			other = append(other, otherEntry{meta: meta, ident: ident, featMatch: featMatch, candidate: c})
 		}
 	}
 
