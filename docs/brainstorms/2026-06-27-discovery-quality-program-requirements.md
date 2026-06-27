@@ -51,6 +51,20 @@ All gaps below are verified against the code this session.
   clean queries with sound-alikes; same-sample A/B on exact + hard corpora.
 - **Open decision.** How aggressive phonetic expansion is (recall vs precision),
   resolved via the eval.
+- **Empirical finding (2026-06-27, discoverytrace on "somber").** The variant is
+  NOT a candidate-set problem — it's strictly query-side. Searching "somber"
+  returns 749 merged entities, **zero** carrying a bare "sombr" token; providers
+  return *Somber*-titled tracks but never the artist *sombr*. So eligibility/ranking
+  relaxation cannot help (nothing to rank). The fix must issue a provider query for
+  the phonetic variant: run the existing metaphone correction (`service/metaphone.go`)
+  **additively** (search both, merge) instead of zero-results-only-replace, gated by
+  a flag — but only when the vocab store already holds the variant under the shared
+  metaphone key (metaphone("somber")==metaphone("sombr")==SMBR).
+- **Status: DEFERRED to a focused session.** This is a hot-path algorithm change;
+  shipping it blind is exactly the pre-correction anti-pattern the codebase already
+  reverted. It needs (a) a phonetic-mismatch eval corpus the standard recall eval
+  doesn't exercise, and (b) a same-sample A/B like the demotion work. Not rushed
+  into this push. Everything else in the program shipped.
 
 ### 3. Enrichment / discography correctness
 - **Gap.** Artist discography (albums/EPs/singles) renders out of chronological
