@@ -8,11 +8,11 @@ import TrackPlayer, {
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '@shared/playback/types';
-import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
 import { ensurePlayerSetup } from '../initPlayer';
 import { loadNativeTrack } from '../loadNativeTrack';
 import { useIsForeground } from './useIsForeground';
+import { usePlaybackSignals } from './usePlaybackSignals';
 import { useQueueResume } from './useQueueResume';
 
 // AIDEV-NOTE: The real, track-player-backed playback provider. It is imported
@@ -36,12 +36,6 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const playbackState = usePlaybackState();
   const progress = useProgress(500);
   const isForeground = useIsForeground();
-
-  // Behavioral telemetry, via a ref so `play`'s identity stays stable (it is
-  // load-bearing for the background-CPU memoization below). Fire-and-forget.
-  const recordEvent = useRecordEvent();
-  const recordEventRef = useRef(recordEvent);
-  recordEventRef.current = recordEvent;
 
   useEffect(() => {
     void ensurePlayerSetup();
@@ -91,14 +85,21 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     };
   }, [track, errorMessage, isEnded, isPlaying, isBuffering, positionMs, durationMs]);
 
+  // Behavioral play/skip/completed are derived from live playback state (listen
+  // threshold + dwell), not fired on play-start — see usePlaybackSignals. The
+  // live position is used so the 30s/50% threshold is measured against real
+  // listening, independent of the frozen-for-render positionMs above.
+  usePlaybackSignals({
+    track,
+    positionMs: livePositionMs,
+    durationMs,
+    isEnded,
+  });
+
   const play = useCallback(async (newTrack: PlaybackTrack) => {
     setErrorMessage(null);
     setTrack(newTrack);
     lastPlayedTrack.current = newTrack;
-    recordEventRef.current.mutate({
-      type: 'play',
-      payload: { title: newTrack.title, artist: newTrack.artist },
-    });
 
     try {
       await loadNativeTrack(newTrack);
