@@ -61,6 +61,7 @@ func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user share
 	}
 
 	passed := 0
+	queries := make([]adminHandler.EvalQueryResult, 0, len(evalSmokeChecks))
 	for _, check := range evalSmokeChecks {
 		query, err := domain.NewSearchQuery(check.query, "", kinds, evalLimit)
 		if err != nil {
@@ -70,9 +71,17 @@ func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user share
 		if err != nil {
 			return adminHandler.EvalResult{}, fmt.Errorf("eval search %q: %w", check.query, err)
 		}
-		if topKContains(out.Results, check.expect, evalTopK) {
+		pos := matchPosition(out.Results, check.expect)
+		ok := pos >= 0 && pos < evalTopK
+		if ok {
 			passed++
 		}
+		queries = append(queries, adminHandler.EvalQueryResult{
+			Query:    check.query,
+			Expect:   check.expect,
+			Passed:   ok,
+			Position: pos,
+		})
 	}
 
 	score := float64(passed) / float64(len(evalSmokeChecks))
@@ -80,18 +89,24 @@ func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user share
 		Score:     score,
 		Baseline:  evalBaseline,
 		Regressed: score < evalBaseline,
+		Queries:   queries,
 	}, nil
 }
 
+// topKContains reports whether the expected result lands within the top k.
 func topKContains(results []domain.SearchResult, expect string, k int) bool {
+	pos := matchPosition(results, expect)
+	return pos >= 0 && pos < k
+}
+
+// matchPosition returns the index of the first result whose title/subtitle
+// contains expect, or -1 if none match in the returned list.
+func matchPosition(results []domain.SearchResult, expect string) int {
 	expect = strings.ToLower(expect)
 	for i, r := range results {
-		if i >= k {
-			break
-		}
 		if strings.Contains(strings.ToLower(r.Title+" "+r.Subtitle), expect) {
-			return true
+			return i
 		}
 	}
-	return false
+	return -1
 }

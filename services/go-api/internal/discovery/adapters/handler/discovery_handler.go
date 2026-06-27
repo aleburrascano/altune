@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -40,6 +41,11 @@ type DiscoveryHandler struct {
 	// operator console. Optional and nil-safe; recording happens at the response
 	// boundary, never on the ranking path.
 	providerHealth providerHealthRecorder
+
+	// searchTrace records the full per-request story (query, user, per-provider
+	// results, final list) for the operator console's discovery drill-down.
+	// Optional and nil-safe; recorded at the response boundary, off the ranking path.
+	searchTrace searchTraceRecorder
 }
 
 // providerHealthRecorder is the consumer-defined seam for the operator console's
@@ -49,10 +55,31 @@ type providerHealthRecorder interface {
 	Record(provider, status string, latencyMs int64)
 }
 
+// searchTraceRecorder is the consumer-defined seam for the operator console's
+// discovery request drill-down. Satisfied by the in-memory request store wired at
+// the composition root, which keys the trace by the request's correlation id.
+type searchTraceRecorder interface {
+	RecordSearch(
+		ctx context.Context,
+		query string,
+		kinds []string,
+		user string,
+		statuses []domain.ProviderSearchResponse,
+		final []domain.SearchResult,
+	)
+}
+
 // WithProviderHealth attaches the optional provider-health recorder. A nil
 // recorder leaves the board empty; recording never affects search behavior.
 func (h *DiscoveryHandler) WithProviderHealth(r providerHealthRecorder) *DiscoveryHandler {
 	h.providerHealth = r
+	return h
+}
+
+// WithRequestTrace attaches the optional discovery request-trace recorder. A nil
+// recorder leaves the drill-down empty; recording never affects search behavior.
+func (h *DiscoveryHandler) WithRequestTrace(r searchTraceRecorder) *DiscoveryHandler {
+	h.searchTrace = r
 	return h
 }
 
@@ -300,6 +327,10 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		for _, ps := range result.ProviderStatuses {
 			h.providerHealth.Record(ps.Provider.String(), ps.Status.String(), ps.LatencyMs)
 		}
+	}
+
+	if h.searchTrace != nil {
+		h.searchTrace.RecordSearch(r.Context(), q, kindNames(kinds), userId.String(), result.ProviderStatuses, result.Results)
 	}
 
 	httputil.WriteJSON(w, searchStatusCode(result.ProviderStatuses), DiscoverySearchResponse{
@@ -1090,6 +1121,17 @@ func searchStatusCode(statuses []domain.ProviderSearchResponse) int {
 		}
 	}
 	return http.StatusServiceUnavailable
+}
+
+// kindNames returns the requested kinds as a stable, sorted slice of names for
+// the operator console's request trace.
+func kindNames(kinds map[domain.ResultKind]bool) []string {
+	out := make([]string, 0, len(kinds))
+	for k := range kinds {
+		out = append(out, k.String())
+	}
+	sort.Strings(out)
+	return out
 }
 
 func parseKinds(csv string) (map[domain.ResultKind]bool, error) {

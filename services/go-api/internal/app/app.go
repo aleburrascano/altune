@@ -16,6 +16,7 @@ import (
 	adminAlert "altune/go-api/internal/admin/alert"
 	adminHandler "altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/admin/providerhealth"
+	"altune/go-api/internal/admin/requeststore"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
@@ -265,7 +266,18 @@ func (a *App) setup(ctx context.Context) error {
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
-	searchSvc := BuildSearchService(a.cfg, a.pool, a.redisClient, eventStore)
+	// The recording transport wraps the shared live transport so every provider
+	// call on a correlated request is captured into the drill-down store, keyed by
+	// correlation id. Bounded + degrades silently — never affects the search path.
+	requestStore := requeststore.New()
+	searchSvc := BuildSearchServiceWithTransport(
+		a.cfg,
+		a.pool,
+		a.redisClient,
+		eventStore,
+		requeststore.NewTransport(defaultLiveTransport, requestStore),
+		false,
+	)
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 
@@ -299,6 +311,7 @@ func (a *App) setup(ctx context.Context) error {
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
 	a.providerHealth = providerhealth.NewStore()
 	discoveryH.WithProviderHealth(a.providerHealth)
+	discoveryH.WithRequestTrace(requestStore)
 
 	a.startVocabularyRefresh(vocabStore)
 
@@ -360,7 +373,9 @@ func (a *App) setup(ctx context.Context) error {
 	a.evalMeter = adminHandler.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, a.buildEvalRunner())
 	a.evalMeter.Start(ctx)
 	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader, a.evalMeter).
-		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey)
+		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).
+		WithRequestStore(requestStore).
+		WithReRunner(a.buildReRunner())
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Get("/", adminH.ServeIndex)         // public shell — holds no data
 		ar.Get("/config", adminH.ServeConfig)  // public client config for sign-in
@@ -399,23 +414,35 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 // status. A nil dependency is "not_configured" (intentionally absent), distinct
 // from "down" (configured but unreachable).
 func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealth {
+	detail := adminHandler.DependencyDetail{CheckedAt: time.Now().UTC()}
+
 	dbStatus := "ok"
 	switch {
 	case a.pool == nil:
 		dbStatus = "not_configured"
-	case !database.CheckHealth(ctx, a.pool).OK:
-		dbStatus = "down"
+	default:
+		start := time.Now()
+		if !database.CheckHealth(ctx, a.pool).OK {
+			dbStatus = "down"
+			detail.DBError = "health check failed"
+		}
+		detail.DBLatencyMs = time.Since(start).Milliseconds()
 	}
 
 	redisStatus := "ok"
 	switch {
 	case a.redisClient == nil:
 		redisStatus = "not_configured"
-	case a.redisClient.Ping(ctx).Err() != nil:
-		redisStatus = "down"
+	default:
+		start := time.Now()
+		if err := a.redisClient.Ping(ctx).Err(); err != nil {
+			redisStatus = "down"
+			detail.RedisError = err.Error()
+		}
+		detail.RedisLatencyMs = time.Since(start).Milliseconds()
 	}
 
-	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus}
+	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus, Detail: detail}
 }
 
 // startAlertMonitor builds and starts the Mission Control alert monitor. It

@@ -29,6 +29,14 @@ func GetCorrelationID(ctx context.Context) string {
 	return id
 }
 
+// WithCorrelationID returns a context carrying the given correlation id. Used by
+// synthetic request paths (e.g. the Mission Control re-run inspector) that need to
+// participate in correlation-keyed telemetry without passing through the
+// CorrelationID HTTP middleware.
+func WithCorrelationID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, correlationIDKey, id)
+}
+
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

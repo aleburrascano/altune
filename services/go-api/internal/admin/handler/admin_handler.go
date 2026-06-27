@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"altune/go-api/internal/admin/providerhealth"
+	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/admin/ui"
 	"altune/go-api/internal/shared/logging"
 )
@@ -23,6 +24,13 @@ type providerHealthReader interface {
 	Snapshot() []providerhealth.ProviderSnapshot
 }
 
+// requestStoreReader is the read side of the discovery request drill-down,
+// satisfied by *requeststore.Store.
+type requestStoreReader interface {
+	Snapshot() []requeststore.Record
+	Get(corrID string) (requeststore.Record, bool)
+}
+
 type AdminHandler struct {
 	operatorUserID string
 	probe          HealthProbe
@@ -31,9 +39,18 @@ type AdminHandler struct {
 	providerHealth providerHealthReader
 	acquisition    AcquisitionStatusReader
 	evalMeter      *EvalMeter
+	requests       requestStoreReader
+	reRunner       ReRunner
 
 	supabaseURL     string
 	supabaseAnonKey string
+}
+
+// WithRequestStore attaches the discovery request-drill-down store. A nil store
+// leaves the /requests endpoints answering empty.
+func (h *AdminHandler) WithRequestStore(r requestStoreReader) *AdminHandler {
+	h.requests = r
+	return h
 }
 
 // WithSupabaseLogin attaches the public Supabase client config so the console
@@ -82,4 +99,7 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/providers", h.serveProviders)
 	r.Get("/acquisition", h.serveAcquisition)
 	r.Get("/eval", h.serveEval)
+	r.Get("/requests", h.serveRequests)
+	r.Get("/requests/{corrID}", h.serveRequestDetail)
+	r.Post("/rerun", h.serveReRun)
 }

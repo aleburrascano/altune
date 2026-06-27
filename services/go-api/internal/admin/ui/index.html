@@ -13,140 +13,168 @@
     }
     * { box-sizing:border-box; }
     html, body { height:100%; margin:0; }
-    body {
-      background:var(--bg); color:var(--tx); overflow:hidden;
-      font:12px/1.45 ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
-      display:flex; flex-direction:column;
-    }
+    body { background:var(--bg); color:var(--tx); overflow:hidden;
+      font:12px/1.45 ui-monospace,"SF Mono","JetBrains Mono",Menlo,monospace; display:flex; flex-direction:column; }
     a { color:var(--blue); }
-    .mut { color:var(--mut); } .dim { color:var(--dim); }
-    .ok{color:var(--ok)} .warn{color:var(--warn)} .down{color:var(--down)} .na{color:var(--mut)} .cy{color:var(--cy)}
+    .mut{color:var(--mut)} .dim{color:var(--dim)} .ok{color:var(--ok)} .warn{color:var(--warn)}
+    .down{color:var(--down)} .cy{color:var(--cy)} .na{color:var(--mut)}
 
-    /* top bar */
-    .top {
-      display:flex; align-items:center; gap:.9rem; padding:.55rem .9rem;
-      border-bottom:1px solid var(--bd); background:linear-gradient(180deg,#0e1014,#0a0b0d);
-      flex-wrap:wrap;
-    }
-    .brand { font-size:.82rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; white-space:nowrap; }
+    .top { display:flex; align-items:center; gap:.8rem; padding:.5rem .9rem; border-bottom:1px solid var(--bd);
+      background:linear-gradient(180deg,#0e1014,#0a0b0d); flex-wrap:wrap; }
+    .brand { font-size:.8rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; white-space:nowrap; }
     .brand .dot { color:var(--cy); }
-    .pills { display:flex; gap:.4rem; }
-    .pill {
-      display:flex; align-items:center; gap:.4rem; padding:.25rem .55rem; border-radius:999px;
-      background:var(--card); border:1px solid var(--bd); font-size:11px;
-    }
-    .pill .led { width:7px; height:7px; border-radius:50%; background:var(--mut); box-shadow:0 0 6px transparent; }
+    .tabs { display:flex; gap:3px; }
+    .tab { padding:.3rem .7rem; border-radius:6px; color:var(--dim); border:1px solid transparent; cursor:pointer; font-size:11px; }
+    .tab:hover { color:var(--tx); }
+    .tab.on { color:var(--cy); background:#0d1a20; border-color:#2a4a57; }
+    .tiles { display:flex; gap:5px; }
+    .pill { display:flex; align-items:center; gap:5px; padding:.25rem .55rem; border-radius:999px; background:var(--card);
+      border:1px solid var(--bd); font-size:10.5px; }
+    .pill .led { width:7px; height:7px; border-radius:50%; background:var(--mut); }
     .pill.up .led { background:var(--ok); box-shadow:0 0 7px var(--ok); }
     .pill.bad .led { background:var(--down); box-shadow:0 0 7px var(--down); }
-    .pill .k { color:var(--mut); text-transform:uppercase; letter-spacing:.06em; font-size:10px; }
     .spacer { flex:1; }
-    .auth { display:flex; align-items:center; gap:.4rem; }
-    .auth input { background:var(--card2); border:1px solid var(--bd); color:var(--tx); padding:.34rem .5rem; border-radius:7px; font-family:inherit; font-size:12px; min-width:150px; }
-    .auth input:focus { outline:none; border-color:var(--cy); }
-    .btn { background:var(--cy); color:#04121b; border:0; padding:.36rem .7rem; border-radius:7px; cursor:pointer; font-family:inherit; font-weight:600; font-size:12px; }
-    .btn.ghost { background:var(--bd); color:var(--tx); font-weight:500; }
     #conn { font-size:11px; white-space:nowrap; }
-    .tokenrow { display:none; padding:.5rem .9rem; border-bottom:1px solid var(--bd); gap:.5rem; align-items:center; }
-    .tokenrow input { flex:1; max-width:520px; background:var(--card2); border:1px solid var(--bd); color:var(--tx); padding:.34rem .5rem; border-radius:7px; font-family:inherit; }
+    .auth { display:flex; align-items:center; gap:.4rem; }
+    .auth input { background:var(--card2); border:1px solid var(--bd); color:var(--tx); padding:.32rem .5rem; border-radius:7px; font-family:inherit; font-size:12px; min-width:140px; }
+    .auth input:focus { outline:none; border-color:var(--cy); }
+    .btn { background:var(--cy); color:#04121b; border:0; padding:.34rem .7rem; border-radius:7px; cursor:pointer; font-family:inherit; font-weight:600; font-size:12px; }
+    .btn.ghost { background:var(--bd); color:var(--tx); font-weight:500; }
 
-    /* dashboard fills the rest of the viewport */
-    .wrap { flex:1; min-height:0; display:grid; grid-template-rows:auto 1fr; gap:.6rem; padding:.6rem; }
-    .row { display:grid; gap:.6rem; min-height:0; }
-    .row.summary { grid-template-columns:1.7fr 1fr 1fr; }
-    .row.live { grid-template-columns:1.8fr 1fr; min-height:0; }
+    .wrap { flex:1; min-height:0; overflow:auto; padding:.7rem; }
+    .pane { display:none; } .pane.on { display:block; }
+    .grid { display:grid; gap:.7rem; }
+    .g3 { grid-template-columns:1.5fr 1fr 1fr; } .g2 { grid-template-columns:1.7fr 1fr; }
+    .disc { grid-template-columns:.85fr 1.35fr; }
+    @media (max-width:900px){ .g3,.g2,.disc{ grid-template-columns:1fr; } }
 
-    .card { background:var(--card); border:1px solid var(--bd); border-radius:11px; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
-    .card > .hd { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.5rem .7rem; border-bottom:1px solid var(--bd); }
-    .card > .hd h2 { margin:0; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); font-weight:600; }
-    .card > .hd .meta { font-size:10.5px; color:var(--mut); }
-    .card > .bd { padding:.6rem .7rem; overflow:auto; min-height:0; }
-    .card.live > .bd { flex:1; }
+    .card { background:var(--card); border:1px solid var(--bd); border-radius:10px; overflow:hidden; }
+    .card.bad { border-color:#3a1f1f; }
+    .hd { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.45rem .7rem; border-bottom:1px solid var(--bd); }
+    .hd h2 { margin:0; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); font-weight:600; }
+    .hd .meta { font-size:10px; color:var(--mut); }
+    .bd { padding:.6rem .7rem; }
 
     table { width:100%; border-collapse:collapse; }
-    th, td { text-align:left; padding:.28rem .4rem; border-bottom:1px solid #181b21; }
-    th { color:var(--mut); font-weight:500; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; }
-    td.num { text-align:right; font-variant-numeric:tabular-nums; }
-    .badge { padding:.08rem .4rem; border-radius:5px; font-size:10.5px; border:1px solid var(--bd2); }
+    th,td { text-align:left; padding:.25rem .4rem; border-bottom:1px solid #181b21; }
+    th { color:var(--mut); font-weight:500; font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; }
+    td.num,th.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .badge { padding:.06rem .4rem; border-radius:5px; font-size:10px; border:1px solid var(--bd2); }
     .badge.ok{color:var(--ok);border-color:#1f3a30;background:#0e1a15}
     .badge.bad{color:var(--down);border-color:#3a1f1f;background:#1a0e0e}
     .badge.warn{color:var(--warn);border-color:#3a331f;background:#1a160e}
-
-    .stat { display:flex; gap:1.1rem; align-items:baseline; }
-    .stat b { font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
-    .big { font-size:1.7rem; font-weight:700; }
-
-    .ratebar { display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:.5rem; }
-    .chip { background:var(--card2); border:1px solid var(--bd); border-radius:6px; padding:.12rem .45rem; font-size:11px; }
+    .big { font-size:1.6rem; font-weight:700; font-variant-numeric:tabular-nums; }
+    .chip { display:inline-block; background:var(--card2); border:1px solid var(--bd); border-radius:6px; padding:.1rem .45rem; font-size:10.5px; margin:1px; }
     .chip b { color:var(--cy); }
+    .bar { height:6px; background:var(--card2); border:1px solid var(--bd); border-radius:4px; overflow:hidden; margin:3px 0; }
+    .bar i { display:block; height:100%; background:linear-gradient(90deg,var(--cy),var(--ok)); }
 
-    .logs, .feed { font-size:11px; }
-    .logrow { padding:.12rem 0; border-bottom:1px solid #15181d; white-space:nowrap; display:flex; gap:.45rem; }
-    .logrow time { color:var(--mut); }
-    .logrow .lv { width:42px; }
+    .logrow { padding:.13rem 0; border-bottom:1px solid #15181d; display:flex; gap:.45rem; white-space:nowrap; cursor:pointer; }
+    .logrow:hover { background:#0e1116; }
+    .logrow time { color:var(--mut); } .logrow .lv { width:46px; }
     .lv.ERROR{color:var(--down)} .lv.WARN{color:var(--warn)} .lv.INFO{color:var(--dim)} .lv.DEBUG{color:var(--mut)}
-    .corr { color:var(--blue); cursor:pointer; }
-    .msg { color:var(--tx); overflow:hidden; text-overflow:ellipsis; }
+    .corr { color:var(--blue); } .msg { color:var(--tx); overflow:hidden; text-overflow:ellipsis; }
+    .kv { background:#0a0c10; border:1px solid #1a1f27; border-radius:6px; padding:5px 8px; margin:2px 0 5px;
+      display:grid; grid-template-columns:auto 1fr; gap:2px 14px; font-size:10px; }
+    .kv b { color:#7f9cc0; font-weight:500; }
     .ctrls { display:flex; gap:.4rem; align-items:center; }
-    .ctrls select, .ctrls input { background:var(--card2); border:1px solid var(--bd); color:var(--tx); border-radius:6px; padding:.2rem .4rem; font-family:inherit; font-size:11px; }
-    .feedrow { padding:.12rem 0; border-bottom:1px solid #15181d; display:flex; gap:.5rem; }
-    .feedrow time { color:var(--mut); }
-    .err { color:var(--down); }
-    .empty { color:var(--mut); padding:.3rem 0; }
+    .ctrls select,.ctrls input { background:var(--card2); border:1px solid var(--bd); color:var(--tx); border-radius:6px; padding:.2rem .4rem; font-family:inherit; font-size:11px; }
+
+    .req { padding:.4rem .6rem; border-bottom:1px solid #181b21; cursor:pointer; }
+    .req:hover { background:#0e1116; } .req.sel { background:#0d1a20; border-left:2px solid var(--cy); }
+    .req .q { color:var(--tx); } .req .m { color:var(--mut); font-size:9.5px; }
+    .stage { border:1px solid var(--bd); border-radius:7px; margin-bottom:6px; overflow:hidden; }
+    .stage .sh { display:flex; justify-content:space-between; padding:.3rem .6rem; background:#0e1014; border-bottom:1px solid var(--bd);
+      color:var(--dim); font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; }
+    .stage .sb { padding:.4rem .6rem; }
+    .art { width:24px; height:24px; border-radius:4px; object-fit:cover; background:#1c2230; border:1px solid var(--bd2); vertical-align:middle; margin-right:4px; }
+    .row2 { display:flex; align-items:center; gap:5px; padding:1.5px 0; flex-wrap:wrap; }
+    .lbl { font-size:8.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); background:var(--card2); border:1px solid var(--bd); border-radius:4px; padding:2px 6px; }
+    pre.json { font-size:9.5px; color:#7f9cc0; background:#0a0c10; border:1px solid #1a1f27; border-radius:5px; padding:5px; white-space:pre-wrap; word-break:break-all; max-height:120px; overflow:auto; margin:3px 0; }
+    .empty { color:var(--mut); padding:.3rem 0; } .err { color:var(--down); }
+    .section-title { margin:.2rem 0 .5rem; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
     ::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-thumb{background:#252a31;border-radius:8px}
   </style>
 </head>
 <body>
   <div class="top">
     <div class="brand"><span class="dot">◆</span> Altune · Mission&nbsp;Control</div>
-    <div id="tiles" class="pills"></div>
+    <div class="tabs" id="tabs">
+      <span class="tab on" data-tab="overview">Overview</span>
+      <span class="tab" data-tab="discovery">Discovery</span>
+      <span class="tab" data-tab="acquisition">Acquisition</span>
+      <span class="tab" data-tab="eval">Eval</span>
+      <span class="tab" data-tab="logs">Logs</span>
+      <span class="tab" data-tab="health">Health</span>
+    </div>
+    <div id="tiles" class="tiles"></div>
     <div class="spacer"></div>
     <span id="conn" class="mut">not connected</span>
     <div class="auth">
       <input id="email" type="email" placeholder="email" autocomplete="username">
       <input id="password" type="password" placeholder="password" autocomplete="current-password">
       <button id="signin" class="btn">Sign in</button>
-      <a id="tokenToggle" href="#" class="mut" style="font-size:10.5px">token</a>
     </div>
-  </div>
-  <div id="tokenRow" class="tokenrow">
-    <input id="token" type="password" placeholder="operator JWT (Bearer token)" autocomplete="off">
-    <button id="useToken" class="btn ghost">Use token</button>
   </div>
 
   <div class="wrap">
-    <div class="row summary">
-      <div class="card">
-        <div class="hd"><h2>Providers</h2><span id="provMeta" class="meta"></span></div>
-        <div class="bd" id="providers"><div class="empty">—</div></div>
+    <!-- OVERVIEW -->
+    <div class="pane on" data-pane="overview">
+      <div class="grid g3" style="margin-bottom:.7rem">
+        <div class="card"><div class="hd"><h2>Providers</h2><span id="ovProvMeta" class="meta"></span></div><div class="bd" id="ovProviders"><div class="empty">—</div></div></div>
+        <div class="card"><div class="hd"><h2>Acquisition</h2></div><div class="bd" id="ovAcq"><div class="empty">—</div></div></div>
+        <div class="card"><div class="hd"><h2>Discovery eval</h2></div><div class="bd" id="ovEval"><div class="empty">—</div></div></div>
       </div>
-      <div class="card">
-        <div class="hd"><h2>Acquisition</h2></div>
-        <div class="bd" id="acq"><div class="empty">—</div></div>
-      </div>
-      <div class="card">
-        <div class="hd"><h2>Discovery eval</h2></div>
-        <div class="bd" id="eval"><div class="empty">—</div></div>
+      <div class="grid g2">
+        <div class="card"><div class="hd"><h2>Logs <span class="mut">live</span></h2></div><div class="bd" id="ovLogs" style="max-height:38vh;overflow:auto"></div></div>
+        <div class="card"><div class="hd"><h2>Events <span class="mut">live</span></h2></div><div class="bd"><div id="ovRates"></div><div id="ovFeed" style="max-height:32vh;overflow:auto;margin-top:.4rem"></div></div></div>
       </div>
     </div>
 
-    <div class="row live">
-      <div class="card live">
-        <div class="hd">
-          <h2>Logs <span class="mut">live</span></h2>
-          <div class="ctrls">
-            <select id="level"><option value="">all</option><option>DEBUG</option><option>INFO</option><option>WARN</option><option>ERROR</option></select>
-            <input id="corrFilter" placeholder="corr_id" style="width:120px">
-          </div>
-        </div>
-        <div class="bd logs" id="logs"></div>
+    <!-- DISCOVERY -->
+    <div class="pane" data-pane="discovery">
+      <div class="card" style="margin-bottom:.7rem"><div class="bd">
+        <div class="ctrls"><input id="rrQuery" placeholder="re-run a query…" style="flex:1"><input id="rrKinds" placeholder="kinds (artist,track,album)" style="width:200px"><button id="rrRun" class="btn">⟲ Run</button></div>
+        <div class="mut" style="font-size:9.5px;margin-top:4px">live — hits provider APIs · bypasses circuit breakers · shares live keys</div>
+        <div id="rrOut"></div>
+      </div></div>
+      <div class="grid disc">
+        <div class="card"><div class="hd"><h2>Recent requests</h2><span id="reqMeta" class="meta"></span></div><div id="reqList"><div class="empty" style="padding:.6rem">no requests yet</div></div></div>
+        <div class="card"><div class="hd"><h2>Request detail</h2></div><div class="bd" id="reqDetail"><div class="empty">select a request</div></div></div>
       </div>
-      <div class="card live">
-        <div class="hd"><h2>Events <span class="mut">live</span></h2></div>
-        <div class="bd">
-          <div id="rates" class="ratebar"></div>
-          <div id="feed" class="feed"></div>
-        </div>
+    </div>
+
+    <!-- ACQUISITION -->
+    <div class="pane" data-pane="acquisition">
+      <div class="grid g3" style="margin-bottom:.7rem">
+        <div class="card"><div class="bd"><div class="big cy" id="acqInflight">—</div><div class="mut">in-flight</div></div></div>
+        <div class="card"><div class="bd"><div class="big ok" id="acqOk">—</div><div class="mut">succeeded</div></div></div>
+        <div class="card"><div class="bd"><div class="big" id="acqFail">—</div><div class="mut">failed</div></div></div>
       </div>
+      <div class="card" style="margin-bottom:.7rem"><div class="hd"><h2>In-flight jobs</h2></div><div class="bd" id="acqJobs"><div class="empty">—</div></div></div>
+      <div class="card"><div class="hd"><h2>Recent outcomes</h2></div><div class="bd" id="acqRecent"><div class="empty">—</div></div></div>
+    </div>
+
+    <!-- EVAL -->
+    <div class="pane" data-pane="eval">
+      <div class="card"><div class="hd"><h2>Discovery eval</h2><span id="evalMeta" class="meta"></span></div><div class="bd" id="evalBody"><div class="empty">—</div></div></div>
+    </div>
+
+    <!-- LOGS -->
+    <div class="pane" data-pane="logs">
+      <div class="card"><div class="hd"><h2>Logs <span class="mut">live · DEBUG+</span></h2>
+        <div class="ctrls">
+          <select id="level"><option value="">all</option><option>DEBUG</option><option>INFO</option><option>WARN</option><option>ERROR</option></select>
+          <input id="corrFilter" placeholder="corr_id" style="width:120px">
+          <input id="textFilter" placeholder="text" style="width:140px">
+        </div></div>
+        <div class="bd" id="logsFull" style="max-height:78vh;overflow:auto"></div>
+      </div>
+    </div>
+
+    <!-- HEALTH -->
+    <div class="pane" data-pane="health">
+      <div class="grid g3" id="healthCards"><div class="empty">—</div></div>
     </div>
   </div>
 
@@ -155,179 +183,230 @@ const $ = (id) => document.getElementById(id);
 let token = sessionStorage.getItem("altune_op_token") || "";
 let refreshToken = sessionStorage.getItem("altune_op_refresh") || "";
 let sbConfig = null;
+let activeTab = "overview";
 
-function authHeaders() { return token ? { "Authorization": "Bearer " + token } : {}; }
+function authHeaders(){ return token ? { "Authorization":"Bearer "+token } : {}; }
 function rank(l){ return ({DEBUG:0,INFO:1,WARN:2,ERROR:3})[(l||"").replace(/[+-].*/,"").toUpperCase()] ?? 0; }
+function esc(s){ return (s||"").replace(/[&<>]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function setTokens(a,r){ token=a||""; refreshToken=r||refreshToken; sessionStorage.setItem("altune_op_token",token); sessionStorage.setItem("altune_op_refresh",refreshToken); }
 
-function setTokens(access, refresh) {
-  token = access || "";
-  refreshToken = refresh || refreshToken;
-  sessionStorage.setItem("altune_op_token", token);
-  sessionStorage.setItem("altune_op_refresh", refreshToken);
-}
-
-async function loadConfig() {
-  if (sbConfig) return sbConfig;
-  sbConfig = await (await fetch("/admin/config")).json();
-  return sbConfig;
-}
-
-async function supabaseToken(grant, body) {
+async function loadConfig(){ if(sbConfig) return sbConfig; sbConfig = await (await fetch("/admin/config")).json(); return sbConfig; }
+async function supabaseToken(grant, body){
   const c = await loadConfig();
-  const r = await fetch(`${c.supabase_url}/auth/v1/token?grant_type=${grant}`, {
-    method: "POST",
-    headers: { "apikey": c.anon_key, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const r = await fetch(`${c.supabase_url}/auth/v1/token?grant_type=${grant}`,{method:"POST",headers:{"apikey":c.anon_key,"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const data = await r.json().catch(()=>({}));
+  if(!r.ok || !data.access_token) throw new Error(data.error_description||data.msg||data.error||("auth "+r.status));
+  setTokens(data.access_token, data.refresh_token); return data;
+}
+async function tryRefresh(){ if(!refreshToken) return false; try{ await supabaseToken("refresh_token",{refresh_token:refreshToken}); return true; }catch{ return false; } }
+async function getJSON(path){
+  let r = await fetch(path,{headers:authHeaders()});
+  if(r.status===401 && await tryRefresh()) r = await fetch(path,{headers:authHeaders()});
+  if(!r.ok) throw new Error(path+" → "+r.status); return r.json();
+}
+async function postJSON(path, body){
+  let r = await fetch(path,{method:"POST",headers:{...authHeaders(),"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(r.status===401 && await tryRefresh()) r = await fetch(path,{method:"POST",headers:{...authHeaders(),"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(!r.ok) throw new Error(path+" → "+r.status); return r.json();
+}
+async function streamSSE(path, onEvent, signal){
+  const r = await fetch(path,{headers:authHeaders(),signal});
+  if(!r.ok || !r.body) throw new Error(path+" → "+r.status);
+  const reader=r.body.getReader(), dec=new TextDecoder(); let buf="";
+  for(;;){ const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true});
+    let i; while((i=buf.indexOf("\n\n"))>=0){ const line=buf.slice(0,i).split("\n").find(l=>l.startsWith("data: ")); buf=buf.slice(i+2);
+      if(line){ try{ onEvent(JSON.parse(line.slice(6))); }catch{} } } }
+}
+
+/* ---------- shared renderers ---------- */
+function badge(s){ const bad=["circuit_open","error","timeout","rate_limited","failed","down","regression"].includes(s); const warn=["queued","running","soft","no_data"].includes(s);
+  return `<span class="badge ${s==='ok'||s==='succeeded'||s==='running'?'ok':bad?'bad':warn?'warn':''}">${esc(s||'—')}</span>`; }
+function img(u){ return u ? `<img class="art" src="${esc(u)}" onerror="this.style.visibility='hidden'">` : `<span class="art" style="display:inline-block"></span>`; }
+function resultRow(r){ return `<div class="row2">${img(r.image_url)}<span>${esc(r.title)}</span><span class="mut">· ${esc(r.kind)}${r.subtitle?' · '+esc(r.subtitle):''}${r.sources&&r.sources.length?' · src='+r.sources.length+' ['+r.sources.map(esc).join(',')+']':''}</span></div>`; }
+
+/* ---------- providers ---------- */
+function renderProviders(el, ps){
+  if(!ps.length){ el.innerHTML=`<div class="empty">no provider traffic yet</div>`; return; }
+  el.innerHTML = `<table><tr><th>provider</th><th>state</th><th class="num">calls</th><th class="num">p95</th><th class="num">err%</th><th class="num">rl</th></tr>`+
+    ps.map(p=>{ const bad=["circuit_open","error","timeout","rate_limited"].includes(p.current);
+      return `<tr><td>${esc(p.provider)}</td><td>${badge(p.current)}</td><td class="num">${p.total}</td><td class="num">${p.p95_latency_ms}</td><td class="num">${Math.round((p.error_rate||0)*100)}</td><td class="num ${p.rate_limited?'warn':''}">${p.rate_limited||0}</td></tr>`;
+    }).join("")+`</table>`;
+}
+
+/* ---------- acquisition ---------- */
+function jobLine(j){ const elapsed=(j.elapsed_ms/1000).toFixed(1); return `<div class="row2"><span class="cy">${esc((j.track_id||'').slice(0,8))}</span> ${badge(j.state)} <span class="mut">${elapsed}s${j.source_url?' · '+esc(j.source_url.slice(0,42)):''}${j.reason?' · '+esc(j.reason):''}</span></div>`; }
+function renderAcq(a){
+  $("acqInflight").textContent=a.in_flight; $("acqOk").textContent=a.succeeded; $("acqFail").textContent=a.failed; $("acqFail").className="big "+(a.failed?'down':'');
+  $("acqJobs").innerHTML = (a.jobs&&a.jobs.length)? a.jobs.map(jobLine).join("") : `<div class="empty">no jobs in flight</div>`;
+  $("acqRecent").innerHTML = (a.recent&&a.recent.length)? a.recent.map(jobLine).join("") : `<div class="empty">no recent outcomes</div>`;
+}
+function renderAcqOverview(a){
+  $("ovAcq").innerHTML = `<div class="row2"><b class="cy">${a.in_flight}</b><span class="mut">in-flight</span> <b class="ok">${a.succeeded}</b><span class="mut">ok</span> <b class="${a.failed?'down':''}">${a.failed}</b><span class="mut">failed</span></div>`+
+    ((a.jobs&&a.jobs.length)? a.jobs.slice(0,3).map(jobLine).join("") : `<div class="mut" style="font-size:9.5px">idle</div>`);
+}
+
+/* ---------- eval ---------- */
+function renderEval(e, full){
+  const cls={ok:"ok",regression:"down",error:"down",disabled:"na",no_data:"na"}[e.state]||"na";
+  let head = `<div class="big ${cls}">${(e.score!=null)?e.score.toFixed(2):e.state.replace("_"," ")}</div>`;
+  if(e.score!=null) head+=`<div class="dim">baseline ${e.baseline?.toFixed(2)} ${e.state==='regression'?'<span class="down">▼ regressed</span>':''}</div>`;
+  if(e.error) head+=`<div class="err" style="margin-top:.3rem">${esc(e.error)}</div>`;
+  if(!full){ $("ovEval").innerHTML=head; return; }
+  let body=head;
+  if(e.queries&&e.queries.length){
+    body+=`<table style="margin-top:.5rem"><tr><th>query</th><th>expect</th><th class="num">pos</th><th>verdict</th></tr>`+
+      e.queries.map(q=>`<tr><td>${esc(q.query)}</td><td class="mut">${esc(q.expect)}</td><td class="num">${q.position<0?'—':q.position}</td><td>${badge(q.passed?'ok':'failed')}</td></tr>`).join("")+`</table>`;
+  } else { body+=`<div class="mut" style="margin-top:.4rem">${e.state==='disabled'?'eval off — set DISCOVERY_EVAL / EVAL_METER_ENABLED':'no per-query data yet'}</div>`; }
+  $("evalBody").innerHTML=body; $("evalMeta").textContent = e.last_run? new Date(e.last_run).toLocaleTimeString():"";
+}
+
+/* ---------- health ---------- */
+function tileCard(name, status, rows){ const bad=status==='down';
+  return `<div class="card ${bad?'bad':''}"><div class="hd"><h2><span class="led" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${status==='ok'?'var(--ok)':bad?'var(--down)':'var(--mut)'}"></span> ${name}</h2><span class="${status==='ok'?'ok':bad?'down':'mut'}">${status}</span></div><div class="bd"><div class="kv">${rows}</div></div></div>`; }
+function renderHealth(h){
+  const d=h.detail||{};
+  $("healthCards").innerHTML =
+    tileCard("API","ok",`<b>goroutines</b><span>${h.goroutines}</span><b>heap</b><span>${h.heap_mb} MB</span><b>checked</b><span>${d.checked_at?new Date(d.checked_at).toLocaleTimeString():'—'}</span>`)+
+    tileCard("Postgres",h.db,`<b>latency</b><span>${d.db_latency_ms??'—'} ms</span>${d.db_error?`<b>error</b><span class="down">${esc(d.db_error)}</span>`:''}`)+
+    tileCard("Redis",h.redis,`<b>latency</b><span>${d.redis_latency_ms??'—'} ms</span>${d.redis_error?`<b>error</b><span class="down">${esc(d.redis_error)}</span>`:`<b>impact</b><span class="mut">${h.redis==='not_configured'?'cache disabled':'cache active'}</span>`}`);
+}
+
+/* ---------- requests + drill-down ---------- */
+let requests = [];
+function renderReqList(){
+  $("reqMeta").textContent = requests.length+" recent";
+  $("reqList").innerHTML = requests.length ? requests.map((r,i)=>{
+    const t = new Date(r.started_at).toLocaleTimeString();
+    return `<div class="req" data-i="${i}"><div class="q">${esc(r.query||'(no query)')} <span class="mut">${(r.kinds||[]).join(',')}</span></div><div class="m">${esc((r.corr_id||'').slice(0,8))} · ${esc(r.user||'?').slice(0,12)} · ${t} · ${(r.providers||[]).length} prov · ${(r.final||[]).length} final · ${(r.exchanges||[]).length} calls</div></div>`;
+  }).join("") : `<div class="empty" style="padding:.6rem">no requests yet</div>`;
+}
+function renderReqDetail(r){
+  const provs = (r.providers||[]).map(p=>`<div class="row2"><span class="lbl">${esc(p.provider)}</span>${badge(p.status)}<span class="mut">${p.latency_ms}ms · ${p.result_count} results</span></div>`+
+    (p.results||[]).slice(0,4).map(resultRow).join("")).join("");
+  const exch = (r.exchanges||[]).map(x=>`<div class="row2"><span class="lbl">${esc((x.url||'').replace(/^https?:\/\//,'').slice(0,40))}</span>${badge(String(x.status||x.error||'—'))}<span class="mut">${x.latency_ms}ms${x.truncated?' · truncated':''}</span></div><pre class="json">${esc((x.response_body||'').slice(0,1200))}</pre>`).join("");
+  const final = (r.final||[]).map((x,i)=>`<div class="row2"><span class="mut">${i+1}</span>${resultRow(x)}</div>`).join("");
+  $("reqDetail").innerHTML =
+    `<div class="cy" style="margin-bottom:.4rem">${esc(r.corr_id)} · ${esc(r.query||'')} · ${esc(r.user||'')}</div>`+
+    `<div class="stage"><div class="sh"><span>providers (${(r.providers||[]).length})</span></div><div class="sb">${provs||'<span class="empty">—</span>'}</div></div>`+
+    `<div class="stage"><div class="sh"><span>final results (${(r.final||[]).length})</span></div><div class="sb">${final||'<span class="empty">—</span>'}</div></div>`+
+    `<div class="stage"><div class="sh"><span>raw exchanges (${(r.exchanges||[]).length})</span></div><div class="sb">${exch||'<span class="empty">—</span>'}</div></div>`;
+}
+$("reqList").addEventListener("click",(e)=>{ const el=e.target.closest(".req"); if(!el) return;
+  document.querySelectorAll(".req").forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); renderReqDetail(requests[+el.dataset.i]); });
+
+/* ---------- re-run ---------- */
+$("rrRun").onclick = async () => {
+  const q=$("rrQuery").value.trim(); if(!q) return;
+  $("rrOut").innerHTML=`<div class="mut" style="margin-top:.5rem">running…</div>`;
+  try{
+    const kinds = $("rrKinds").value.trim()? $("rrKinds").value.split(",").map(s=>s.trim()).filter(Boolean):[];
+    const w = await postJSON("/admin/rerun",{query:q,kinds});
+    const stage=(t,n,rows)=>`<div class="stage"><div class="sh"><span>${t}</span><span>${n}</span></div><div class="sb">${rows||'<span class="empty">—</span>'}</div></div>`;
+    $("rrOut").innerHTML = `<div class="cy" style="margin:.5rem 0">"${esc(w.query)}" · ${w.took_ms}ms · ${(w.providers||[]).length} providers</div>`+
+      stage("① per provider (mapped)", (w.providers||[]).length+" providers",
+        (w.providers||[]).map(p=>`<div class="row2"><span class="lbl">${esc(p.provider)}</span>${badge(p.status)}<span class="mut">${p.result_count} · ${p.latency_ms}ms</span></div>`+(p.results||[]).slice(0,3).map(resultRow).join("")).join(""))+
+      stage("② raw exchanges", (w.exchanges||[]).length+" calls",
+        (w.exchanges||[]).map(x=>`<div class="row2"><span class="lbl">${esc((x.url||'').replace(/^https?:\/\//,'').slice(0,40))}</span>${badge(String(x.status||'—'))}</div><pre class="json">${esc((x.response_body||'').slice(0,800))}</pre>`).join(""))+
+      stage("③ merged", (w.merged||[]).length+" entities", (w.merged||[]).slice(0,10).map(resultRow).join(""))+
+      stage("④ ranked", (w.ranked||[]).length, (w.ranked||[]).slice(0,10).map((x,i)=>`<div class="row2"><span class="mut">${i+1}</span>${resultRow(x)}</div>`).join(""))+
+      stage("⑤ final", (w.final||[]).length, (w.final||[]).map((x,i)=>`<div class="row2"><span class="mut">${i+1}</span>${resultRow(x)}</div>`).join(""));
+  }catch(e){ $("rrOut").innerHTML=`<div class="err" style="margin-top:.5rem">${esc(e.message)}</div>`; }
+};
+
+/* ---------- logs ---------- */
+const logBuf=[];
+function logMatch(r){ const cf=$("corrFilter").value.trim(), tf=$("textFilter").value.trim().toLowerCase(), min=$("level").value?rank($("level").value):0;
+  if(rank(r.level)<min) return false;
+  if(cf && !(r.attrs&&r.attrs.corr_id&&r.attrs.corr_id.includes(cf))) return false;
+  if(tf && !((r.msg||"")+JSON.stringify(r.attrs||{})).toLowerCase().includes(tf)) return false;
+  return true; }
+function logRowHTML(r, idx){ const t=(r.time||"").slice(11,23); const lv=(r.level||"").replace(/[+-].*/,"");
+  const corr=r.attrs&&r.attrs.corr_id?`<span class="corr">${esc(r.attrs.corr_id)}</span>`:"";
+  return `<div class="logrow" data-idx="${idx}"><time>${t}</time><span class="lv ${lv}">${lv}</span>${corr}<span class="msg">${esc(r.msg)}</span></div>`; }
+function renderLogsInto(el, limit){
+  const rows = logBuf.filter(logMatch).slice(-limit);
+  el.innerHTML = rows.map((r)=>logRowHTML(r, logBuf.indexOf(r))).join("");
+  el.scrollTop = el.scrollHeight;
+}
+function attrsKV(a){ return Object.keys(a||{}).sort().map(k=>`<b>${esc(k)}</b><span>${esc(String(a[k]))}</span>`).join(""); }
+function wireLogClicks(el){
+  el.addEventListener("click",(e)=>{ const row=e.target.closest(".logrow"); if(!row) return;
+    const r=logBuf[+row.dataset.idx]; if(!r) return;
+    if(e.target.classList.contains("corr")){ $("corrFilter").value=r.attrs.corr_id; renderLogsFull(); switchTab("logs"); return; }
+    const next=row.nextElementSibling;
+    if(next&&next.classList.contains("kv")){ next.remove(); return; }
+    const kv=document.createElement("div"); kv.className="kv"; kv.innerHTML=attrsKV(r.attrs); row.after(kv);
   });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok || !data.access_token) throw new Error(data.error_description || data.msg || data.error || ("auth " + r.status));
-  setTokens(data.access_token, data.refresh_token);
-  return data;
+}
+function renderLogsFull(){ if(activeTab==="logs") renderLogsInto($("logsFull"),400); }
+function renderLogsOverview(){ if(activeTab==="overview") renderLogsInto($("ovLogs"),120); }
+
+/* ---------- events ---------- */
+let rates={};
+function renderRates(el){ const k=Object.keys(rates).sort(); el.innerHTML = k.length? k.map(t=>`<span class="chip">${esc(t)} <b>${rates[t]}</b></span>`).join("") : `<span class="empty">no events in window</span>`; }
+
+/* ---------- tabs ---------- */
+function switchTab(name){
+  activeTab=name;
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.tab===name));
+  document.querySelectorAll(".pane").forEach(p=>p.classList.toggle("on",p.dataset.pane===name));
+  loadTab(name);
+}
+$("tabs").addEventListener("click",(e)=>{ const t=e.target.closest(".tab"); if(t) switchTab(t.dataset.tab); });
+
+async function loadTab(name){
+  try{
+    if(name==="overview"){ renderProviders($("ovProviders"),await getJSON("/admin/providers")); renderAcqOverview(await getJSON("/admin/acquisition")); renderEval(await getJSON("/admin/eval"),false); renderLogsOverview(); renderRates($("ovRates")); }
+    if(name==="discovery"){ requests = await getJSON("/admin/requests"); renderReqList(); }
+    if(name==="acquisition"){ renderAcq(await getJSON("/admin/acquisition")); }
+    if(name==="eval"){ renderEval(await getJSON("/admin/eval"),true); }
+    if(name==="logs"){ renderLogsFull(); }
+    if(name==="health"){ renderHealth(await getJSON("/admin/health")); }
+  }catch(e){ /* surfaced via conn */ }
 }
 
-async function tryRefresh() {
-  if (!refreshToken) return false;
-  try { await supabaseToken("refresh_token", { refresh_token: refreshToken }); return true; } catch { return false; }
+/* ---------- health tiles (top bar) ---------- */
+async function pollTiles(){
+  try{ const h=await getJSON("/admin/health");
+    const items=[["api","ok"],["db",h.db],["redis",h.redis]];
+    $("tiles").innerHTML = items.map(([k,s])=>`<span class="pill ${s==='ok'?'up':s==='down'?'bad':''}"><span class="led"></span>${k} ${s}</span>`).join("");
+  }catch(e){ $("tiles").innerHTML=`<span class="pill bad"><span class="led"></span>${esc(e.message)}</span>`; }
 }
 
-async function getJSON(path) {
-  let r = await fetch(path, { headers: authHeaders() });
-  if (r.status === 401 && await tryRefresh()) r = await fetch(path, { headers: authHeaders() });
-  if (!r.ok) throw new Error(path + " → " + r.status);
-  return r.json();
-}
+/* ---------- connect ---------- */
+let abort=null;
+async function connect(){
+  if(abort) abort.abort(); abort=new AbortController();
+  $("conn").textContent="connecting…"; $("conn").className="mut";
+  try{ await getJSON("/admin/health"); }catch(e){ $("conn").textContent="auth failed ("+e.message+")"; $("conn").className="err"; return; }
+  $("conn").textContent="● connected"; $("conn").className="ok";
 
-async function streamSSE(path, onEvent, signal) {
-  const r = await fetch(path, { headers: authHeaders(), signal });
-  if (!r.ok || !r.body) throw new Error(path + " → " + r.status);
-  const reader = r.body.getReader(), dec = new TextDecoder();
-  let buf = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    let i;
-    while ((i = buf.indexOf("\n\n")) >= 0) {
-      const line = buf.slice(0, i).split("\n").find((l) => l.startsWith("data: "));
-      buf = buf.slice(i + 2);
-      if (line) { try { onEvent(JSON.parse(line.slice(6))); } catch {} }
-    }
-  }
-}
+  pollTiles(); loadTab(activeTab);
+  clearInterval(window._poll); window._poll=setInterval(()=>{ pollTiles(); loadTab(activeTab); },5000);
 
-/* ---------- panels ---------- */
-async function pollHealth() {
-  try {
-    const h = await getJSON("/admin/health");
-    const items = [["api","ok"],["db",h.db],["redis",h.redis]];
-    $("tiles").innerHTML = items.map(([k,s]) => {
-      const cls = s === "ok" ? "up" : s === "down" ? "bad" : "";
-      return `<span class="pill ${cls}"><span class="led"></span><span class="k">${k}</span> ${s}</span>`;
-    }).join("");
-  } catch (e) { $("tiles").innerHTML = `<span class="pill bad"><span class="led"></span>${e.message}</span>`; }
-}
-
-async function pollProviders() {
-  try {
-    const ps = await getJSON("/admin/providers");
-    if (!ps.length) { $("providers").innerHTML = `<div class="empty">no provider traffic yet</div>`; $("provMeta").textContent=""; return; }
-    $("provMeta").textContent = ps.length + " providers";
-    $("providers").innerHTML = `<table><tr><th>provider</th><th>state</th><th class="num">calls</th><th class="num">p~ms</th></tr>` +
-      ps.map((p) => {
-        const bad = ["circuit_open","error","timeout","rate_limited"].includes(p.current);
-        const cls = p.current === "ok" ? "ok" : bad ? "bad" : "warn";
-        return `<tr><td>${p.provider}</td><td><span class="badge ${cls}">${p.current||"—"}</span></td><td class="num">${p.total}</td><td class="num">${p.avg_latency_ms}</td></tr>`;
-      }).join("") + `</table>`;
-  } catch (e) { $("providers").innerHTML = `<div class="err">${e.message}</div>`; }
-}
-
-async function pollEval() {
-  try {
-    const e = await getJSON("/admin/eval");
-    const cls = {ok:"ok",regression:"down",error:"down",disabled:"na",no_data:"na"}[e.state]||"na";
-    let body = `<div class="big ${cls}">${e.state.replace("_"," ")}</div>`;
-    if (e.score != null) body += `<div class="dim">score <b class="cy">${e.score.toFixed(2)}</b> vs baseline ${e.baseline?.toFixed(2)}</div>`;
-    if (e.error) body += `<div class="err" style="margin-top:.3rem">${e.error}</div>`;
-    $("eval").innerHTML = body;
-  } catch (e) { $("eval").innerHTML = `<div class="err">${e.message}</div>`; }
-}
-
-async function pollAcq() {
-  try {
-    const a = await getJSON("/admin/acquisition");
-    let body = `<div class="stat"><span><b class="cy">${a.in_flight}</b><div class="mut">in-flight</div></span>`
-      + `<span><b class="ok">${a.succeeded}</b><div class="mut">ok</div></span>`
-      + `<span><b class="${a.failed?'down':''}">${a.failed}</b><div class="mut">failed</div></span></div>`;
-    if (a.recent_failures?.length) {
-      body += `<table style="margin-top:.5rem"><tr><th>track</th><th>reason</th></tr>` +
-        a.recent_failures.slice(-5).reverse().map((f) => `<tr><td>${(f.track_id||"").slice(0,8)}</td><td class="down">${f.reason}</td></tr>`).join("") + `</table>`;
-    }
-    $("acq").innerHTML = body;
-  } catch (e) { $("acq").innerHTML = `<div class="err">${e.message}</div>`; }
-}
-
-let rates = {};
-function renderRates() {
-  const keys = Object.keys(rates).sort();
-  $("rates").innerHTML = keys.length ? keys.map((k) => `<span class="chip">${k} <b>${rates[k]}</b></span>`).join("") : `<span class="empty">no events in window</span>`;
-}
-async function pollRates() { try { rates = await getJSON("/admin/events/rates"); renderRates(); } catch {} }
-
-const logBuf = [];
-function renderLogs() {
-  const cf = $("corrFilter").value.trim();
-  const min = $("level").value ? rank($("level").value) : 0;
-  $("logs").innerHTML = logBuf.filter((r) =>
-    rank(r.level) >= min && (!cf || (r.attrs && r.attrs.corr_id && r.attrs.corr_id.includes(cf)))
-  ).slice(-300).map((r) => {
-    const t = (r.time || "").slice(11, 23);
-    const corr = r.attrs && r.attrs.corr_id ? `<span class="corr" data-c="${r.attrs.corr_id}">${r.attrs.corr_id}</span>` : "";
-    const lv = (r.level||"").replace(/[+-].*/,"");
-    return `<div class="logrow"><time>${t}</time><span class="lv ${lv}">${lv}</span>${corr}<span class="msg">${escapeHtml(r.msg)}</span></div>`;
-  }).join("");
-  $("logs").scrollTop = $("logs").scrollHeight;
-}
-function escapeHtml(s){ return (s||"").replace(/[&<>]/g, (c)=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
-$("logs").addEventListener("click", (e) => { const c = e.target.dataset.c; if (c) { $("corrFilter").value = c; renderLogs(); } });
-
-/* ---------- connect / auth ---------- */
-let abort = null;
-async function connect() {
-  if (abort) abort.abort();
-  abort = new AbortController();
-  $("conn").textContent = "connecting…"; $("conn").className = "mut";
-  try { await getJSON("/admin/health"); }
-  catch (e) { $("conn").textContent = "auth failed (" + e.message + ")"; $("conn").className = "err"; return; }
-  $("conn").textContent = "● connected"; $("conn").className = "ok";
-
-  const tick = () => { pollHealth(); pollProviders(); pollEval(); pollAcq(); pollRates(); };
-  tick();
-  clearInterval(window._poll); window._poll = setInterval(tick, 5000);
-
-  logBuf.length = 0;
-  try { (await getJSON("/admin/logs")).forEach((r) => logBuf.push(r)); renderLogs(); } catch {}
-  streamSSE("/admin/logs/stream", (r) => { logBuf.push(r); if (logBuf.length > 2500) logBuf.shift(); renderLogs(); }, abort.signal).catch(() => {});
-  streamSSE("/admin/events/stream", (e) => {
-    const d = document.createElement("div");
-    d.className = "feedrow";
-    d.innerHTML = `<time>${(e.timestamp||"").slice(11,19)}</time><span>${e.type}</span>`;
-    $("feed").prepend(d);
-    while ($("feed").childNodes.length > 120) $("feed").lastChild.remove();
-  }, abort.signal).catch(() => {});
+  logBuf.length=0;
+  try{ (await getJSON("/admin/logs")).forEach(r=>logBuf.push(r)); renderLogsFull(); renderLogsOverview(); }catch{}
+  streamSSE("/admin/logs/stream",(r)=>{ logBuf.push(r); if(logBuf.length>3000) logBuf.shift(); renderLogsFull(); renderLogsOverview(); }, abort.signal).catch(()=>{});
+  streamSSE("/admin/events/stream",(e)=>{
+    if(activeTab!=="overview") return;
+    const d=document.createElement("div"); d.className="logrow"; d.style.cursor="default";
+    d.innerHTML=`<time>${(e.timestamp||"").slice(11,19)}</time><span class="cy">${esc(e.type)}</span><span class="mut">${esc(e.subject||"")} ${e.user?'· '+esc(e.user.slice(0,8)):''}</span>`;
+    $("ovFeed").prepend(d); while($("ovFeed").childNodes.length>100) $("ovFeed").lastChild.remove();
+  }, abort.signal).catch(()=>{});
+  setInterval(async()=>{ try{ rates=await getJSON("/admin/events/rates"); if(activeTab==="overview") renderRates($("ovRates")); }catch{} },5000);
 }
 
 $("signin").onclick = async () => {
-  $("conn").textContent = "signing in…"; $("conn").className = "mut";
-  try { await supabaseToken("password", { email: $("email").value.trim(), password: $("password").value }); $("password").value=""; connect(); }
-  catch (e) { $("conn").textContent = "sign-in failed: " + e.message; $("conn").className = "err"; }
+  $("conn").textContent="signing in…"; $("conn").className="mut";
+  try{ await supabaseToken("password",{email:$("email").value.trim(),password:$("password").value}); $("password").value=""; connect(); }
+  catch(e){ $("conn").textContent="sign-in failed: "+e.message; $("conn").className="err"; }
 };
-$("password").addEventListener("keydown", (e) => { if (e.key === "Enter") $("signin").click(); });
-$("tokenToggle").onclick = (e) => { e.preventDefault(); const r = $("tokenRow"); r.style.display = r.style.display === "flex" ? "none" : "flex"; };
-$("useToken").onclick = () => { token = $("token").value.trim(); sessionStorage.setItem("altune_op_token", token); $("tokenRow").style.display="none"; connect(); };
-$("level").onchange = renderLogs;
-$("corrFilter").oninput = renderLogs;
+$("password").addEventListener("keydown",(e)=>{ if(e.key==="Enter") $("signin").click(); });
+$("level").onchange=renderLogsFull; $("corrFilter").oninput=renderLogsFull; $("textFilter").oninput=renderLogsFull;
+$("rrQuery").addEventListener("keydown",(e)=>{ if(e.key==="Enter") $("rrRun").click(); });
+wireLogClicks($("logsFull")); wireLogClicks($("ovLogs"));
 
-if (token) connect();
+if(token) connect();
 </script>
 </body>
 </html>
