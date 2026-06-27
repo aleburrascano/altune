@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -187,7 +188,7 @@ func TestFindRelated_DedupAgainstOrganic(t *testing.T) {
 }
 
 func TestFindRelated_ProviderCallCap(t *testing.T) {
-	callCount := 0
+	var callCount atomic.Int64
 	albumProvider := &fakeAlbumProvider{
 		tracks: []domain.SearchResult{
 			trackResult(domain.ProviderDeezer, "t1", "Track", "Artist", nil),
@@ -207,18 +208,20 @@ func TestFindRelated_ProviderCallCap(t *testing.T) {
 
 	svc.Execute(context.Background(), organic)
 
-	if callCount > maxProviderLookups {
-		t.Errorf("expected at most %d provider calls, got %d", maxProviderLookups, callCount)
+	if got := callCount.Load(); got > int64(maxProviderLookups) {
+		t.Errorf("expected at most %d provider calls, got %d", maxProviderLookups, got)
 	}
 }
 
+// countingAlbumProvider counts calls; the production scatter-gather invokes it
+// from multiple goroutines, so the counter must be atomic (caught by -race).
 type countingAlbumProvider struct {
 	inner ports.AlbumContentProvider
-	count *int
+	count *atomic.Int64
 }
 
 func (c *countingAlbumProvider) GetAlbumTracks(ctx context.Context, p domain.ProviderName, id string) ([]domain.SearchResult, error) {
-	*c.count++
+	c.count.Add(1)
 	return c.inner.GetAlbumTracks(ctx, p, id)
 }
 
