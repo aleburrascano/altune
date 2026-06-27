@@ -31,6 +31,7 @@ import (
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service/eval"
 	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
@@ -291,6 +292,11 @@ func (a *App) setup(ctx context.Context) error {
 		searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
 		slog.Info("behavioral ranking refresh started")
 	}
+
+	// Self-growing eval corpus: when a path is configured, nightly-materialize the
+	// behavioral labels (search→engagement positives, wrong_album hard negatives)
+	// into the eval corpus format. Off when the path is empty.
+	a.startCorpusRefresh(ctx, eventStore)
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 
@@ -618,6 +624,43 @@ func buildDiscoveryProviders(cf clientFactory, cfg *config.Config, mb *providers
 
 	slog.Info("discovery providers configured", "count", len(providerList))
 	return providerList
+}
+
+// startCorpusRefresh runs the nightly self-growing-corpus materialization when
+// BEHAVIORAL_CORPUS_PATH is set: it mines the last 30 days of behavioral labels
+// and writes them to the configured path in the eval corpus format. Best-effort —
+// a failure is logged, never fatal. Exits when ctx is cancelled (graceful
+// shutdown). A no-op when the path is empty.
+func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.BehavioralLabelStore) {
+	if a.cfg.BehavioralCorpusPath == "" {
+		return
+	}
+	builder := eval.NewCorpusBuilder(store)
+	const lookback = 30 * 24 * time.Hour
+	run := func() {
+		since := time.Now().UTC().Add(-lookback)
+		if err := builder.Materialize(ctx, since, since.Format("2006-01-02"), a.cfg.BehavioralCorpusPath); err != nil {
+			slog.WarnContext(ctx, "behavioral corpus materialize failed", "error", err)
+			return
+		}
+		slog.InfoContext(ctx, "behavioral corpus materialized", "path", a.cfg.BehavioralCorpusPath)
+	}
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		run()
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				run()
+			}
+		}
+	}()
+	slog.Info("behavioral corpus refresh started", "path", a.cfg.BehavioralCorpusPath)
 }
 
 func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) {

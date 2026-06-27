@@ -52,6 +52,25 @@ type EventConsumer interface {
 	Signals(ctx context.Context, since time.Time) ([]BehavioralSignal, error)
 }
 
+// BehavioralLabel is a free relevance label mined from a query→engagement chain:
+// a (query_norm, result) pair the behavior proved relevant (Polarity +1, from a
+// completed/library_add) or proved wrong (Polarity −1, a hard negative from a
+// wrong_album). The self-growing eval corpus is built from these.
+type BehavioralLabel struct {
+	QueryNorm       string
+	ResultSignature string
+	Title           string
+	Subtitle        string
+	Polarity        int
+}
+
+// BehavioralLabelStore mines query→engagement chains (joined by search_id) into
+// behavioral labels. Read-side SQL over discovery_events — analytics, never the
+// request path.
+type BehavioralLabelStore interface {
+	BehavioralLabels(ctx context.Context, since time.Time) ([]BehavioralLabel, error)
+}
+
 // EventQuery reads aggregated telemetry for the offline coverage signals. These
 // are analytics reads over discovery's own tables — never the request path.
 type EventQuery interface {

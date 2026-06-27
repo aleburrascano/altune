@@ -74,6 +74,10 @@ type Config struct {
 	// as a within-tie input. A new ranking consumer, so it ships dark until eval
 	// A/B proves it on the hard corpus — same discipline as tail demotion.
 	BehavioralRankingEnabled bool `env:"BEHAVIORAL_RANKING_ENABLED" envDefault:"false"`
+	// Self-growing eval corpus. Empty → the nightly behavioral-label corpus job is
+	// disabled. When set to a writable path, the job materializes search→engagement
+	// labels (positive) + wrong_album (hard negative) into the eval corpus format.
+	BehavioralCorpusPath string `env:"BEHAVIORAL_CORPUS_PATH"`
 }
 
 func Load() (*Config, error) {
