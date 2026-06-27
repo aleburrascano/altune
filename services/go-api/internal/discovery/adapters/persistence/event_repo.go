@@ -18,6 +18,7 @@ var _ ports.EventStore = (*PgxEventStore)(nil)
 var _ ports.EventQuery = (*PgxEventStore)(nil)
 var _ ports.BehavioralSignalStore = (*PgxEventStore)(nil)
 var _ ports.BehavioralLabelStore = (*PgxEventStore)(nil)
+var _ ports.SessionSignalStore = (*PgxEventStore)(nil)
 
 type PgxEventStore struct {
 	pool *pgxpool.Pool
@@ -216,6 +217,42 @@ func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) (
 		labels = append(labels, lbl)
 	}
 	return labels, rows.Err()
+}
+
+// AbandonedSearches ranks queries that drew no click and were reformulated — the
+// same session_id fired another search within 60s (a Joachims query-chain
+// dissatisfaction signal). The no-click test joins precisely by search_id; the
+// reformulation test joins by the session_id carried in the JSONB payload.
+func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT sp.query_norm, COUNT(*) AS cnt
+		FROM discovery_events sp
+		WHERE sp.event_type = 'search_performed'
+			AND sp.occurred_at >= $1
+			AND sp.query_norm IS NOT NULL
+			AND NOT EXISTS (
+				SELECT 1 FROM discovery_events c
+				WHERE c.event_type = 'result_clicked'
+					AND c.search_id = sp.search_id
+			)
+			AND EXISTS (
+				SELECT 1 FROM discovery_events nxt
+				WHERE nxt.event_type = 'search_performed'
+					AND nxt.payload->>'session_id' = sp.payload->>'session_id'
+					AND sp.payload->>'session_id' IS NOT NULL
+					AND nxt.occurred_at > sp.occurred_at
+					AND nxt.occurred_at <= sp.occurred_at + interval '60 seconds'
+			)
+		GROUP BY sp.query_norm
+		ORDER BY cnt DESC
+		LIMIT $2`,
+		since, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query abandoned searches: %w", err)
+	}
+	defer rows.Close()
+	return scanQueryCounts(rows)
 }
 
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {
