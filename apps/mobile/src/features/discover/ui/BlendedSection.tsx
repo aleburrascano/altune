@@ -20,10 +20,12 @@ import type {
   DiscoveryKind,
   DiscoveryResult,
 } from '../../../shared/api-client/discovery';
+import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
 
 export function BlendedSection({
   results,
   onResultTap,
+  impression,
   onSeeAll,
   onRefresh,
   isRefreshing,
@@ -33,6 +35,7 @@ export function BlendedSection({
 }: {
   results: DiscoveryResult[];
   onResultTap: (result: DiscoveryResult, position: number) => void;
+  impression: ImpressionHandlers;
   onSeeAll: (filter: DiscoveryKind) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
@@ -114,6 +117,8 @@ export function BlendedSection({
       contentContainerStyle={styles.listContent}
       onRefresh={onRefresh}
       refreshing={isRefreshing}
+      onViewableItemsChanged={impression.onViewableItemsChanged}
+      viewabilityConfig={impression.viewabilityConfig}
     />
   );
 }

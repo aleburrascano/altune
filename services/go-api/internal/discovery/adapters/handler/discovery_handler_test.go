@@ -90,22 +90,6 @@ func (r *fakeSearchHistoryRepo) ListDistinctRecent(_ context.Context, _ shared.U
 	return r.entries[:limit], nil
 }
 
-// --- fake click repo ---
-
-type fakeSearchClickRepo struct {
-	clicks   []*discdomain.SearchClick
-	err      error
-	inserted bool
-}
-
-func (r *fakeSearchClickRepo) InsertIfOutsideWindow(_ context.Context, click *discdomain.SearchClick, _ int) (bool, error) {
-	if r.err != nil {
-		return false, r.err
-	}
-	r.clicks = append(r.clicks, click)
-	return r.inserted, nil
-}
-
 // --- fake album content provider ---
 
 type fakeAlbumContentProvider struct {
@@ -200,7 +184,6 @@ func discAssertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
 func buildDiscoveryRouter(
 	searchProvider *fakeSearchProvider,
 	historyRepo *fakeSearchHistoryRepo,
-	clickRepo *fakeSearchClickRepo,
 	albumProviders map[string]ports.AlbumContentProvider,
 	artistProviders map[string]ports.ArtistContentProvider,
 ) chi.Router {
@@ -215,7 +198,6 @@ func buildDiscoveryRouter(
 		searchOpts = append(searchOpts, service.WithHistoryRepository(historyRepo))
 	}
 	searchSvc := service.NewService(providers, cb, searchOpts...)
-	clickSvc := service.NewRecordClickService(clickRepo)
 	historySvc := service.NewListSearchHistoryService(historyRepo)
 
 	var albumSvc *service.GetAlbumTracksService
@@ -230,7 +212,6 @@ func buildDiscoveryRouter(
 
 	h := NewDiscoveryHandler(DiscoveryServices{
 		Search:  searchSvc,
-		Click:   clickSvc,
 		History: historySvc,
 		Album:   albumSvc,
 		Artist:  artistSvc,
@@ -243,7 +224,7 @@ func buildDiscoveryRouter(
 }
 
 func TestHandleRecordEvent(t *testing.T) {
-	router := buildDiscoveryRouter(nil, nil, nil, nil, nil)
+	router := buildDiscoveryRouter(nil, nil, nil, nil)
 
 	t.Run("valid event returns 204", func(t *testing.T) {
 		body := map[string]any{"type": "play", "payload": map[string]any{"video_id": "abc"}}
@@ -314,8 +295,7 @@ func TestHandleSearch(t *testing.T) {
 				results: tt.results,
 			}
 			historyRepo := &fakeSearchHistoryRepo{}
-			clickRepo := &fakeSearchClickRepo{inserted: true}
-			router := buildDiscoveryRouter(provider, historyRepo, clickRepo, nil, nil)
+			router := buildDiscoveryRouter(provider, historyRepo, nil, nil)
 
 			// Act
 			rec := discServe(t, router, http.MethodGet, "/discovery/search"+tt.query, nil)
@@ -343,12 +323,7 @@ func TestHandleSearch(t *testing.T) {
 
 func TestHandleSearch_NoAuth(t *testing.T) {
 	// Arrange
-	router := buildDiscoveryRouter(
-		&fakeSearchProvider{name: discdomain.ProviderDeezer},
-		&fakeSearchHistoryRepo{},
-		&fakeSearchClickRepo{inserted: true},
-		nil, nil,
-	)
+	router := buildDiscoveryRouter(&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil, )
 
 	// Act
 	rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/search?q=test")
@@ -375,7 +350,7 @@ func TestHandleSearch_ResponseShape(t *testing.T) {
 			},
 		},
 	}
-	router := buildDiscoveryRouter(provider, &fakeSearchHistoryRepo{}, &fakeSearchClickRepo{inserted: true}, nil, nil)
+	router := buildDiscoveryRouter(provider, &fakeSearchHistoryRepo{}, nil, nil)
 
 	// Act
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=shape+test", nil)
@@ -429,7 +404,7 @@ func TestHandleSearchHistory(t *testing.T) {
 					ExecutedAt: time.Now().UTC(),
 				})
 			}
-			router := buildDiscoveryRouter(nil, historyRepo, &fakeSearchClickRepo{}, nil, nil)
+			router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
 
 			// Act
 			rec := discServe(t, router, http.MethodGet, "/discovery/search-history?limit=10", nil)
@@ -446,77 +421,6 @@ func TestHandleSearchHistory(t *testing.T) {
 			if resp.Total != tt.wantItemsLen {
 				t.Errorf("Total = %d, want %d", resp.Total, tt.wantItemsLen)
 			}
-		})
-	}
-}
-
-// ==================== Record Click ====================
-
-func TestHandleRecordClick(t *testing.T) {
-	tests := []struct {
-		name       string
-		body       any
-		wantStatus int
-	}{
-		{
-			name: "valid click returns 204",
-			body: DiscoveryClickRequest{
-				QueryNorm:  "test",
-				Kind:       "track",
-				Title:      "Test Song",
-				Subtitle:   "Test Artist",
-				Position:   0,
-				Confidence: "high",
-			},
-			wantStatus: http.StatusNoContent,
-		},
-		{
-			name: "invalid kind returns 400",
-			body: DiscoveryClickRequest{
-				QueryNorm:  "test",
-				Kind:       "invalid_kind",
-				Title:      "Test Song",
-				Subtitle:   "Test Artist",
-				Position:   0,
-				Confidence: "high",
-			},
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name: "invalid confidence returns 400",
-			body: DiscoveryClickRequest{
-				QueryNorm:  "test",
-				Kind:       "track",
-				Title:      "Test Song",
-				Subtitle:   "Test Artist",
-				Position:   0,
-				Confidence: "invalid_conf",
-			},
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name:       "invalid JSON returns 400",
-			body:       nil,
-			wantStatus: http.StatusBadRequest,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
-			clickRepo := &fakeSearchClickRepo{inserted: true}
-			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, clickRepo, nil, nil)
-
-			// Act
-			var rec *httptest.ResponseRecorder
-			if tt.body == nil {
-				rec = discServe(t, router, http.MethodPost, "/discovery/clicks", strings.NewReader("{invalid"))
-			} else {
-				rec = discServe(t, router, http.MethodPost, "/discovery/clicks", discJsonBody(t, tt.body))
-			}
-
-			// Assert
-			discAssertStatus(t, rec, tt.wantStatus)
 		})
 	}
 }
@@ -561,7 +465,7 @@ func TestHandleAlbumTracks(t *testing.T) {
 			albumProviders := map[string]ports.AlbumContentProvider{
 				"deezer": tt.albumProv,
 			}
-			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, &fakeSearchClickRepo{}, albumProviders, nil)
+			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
 			// Act
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
@@ -619,7 +523,7 @@ func TestHandleArtistTopTracks(t *testing.T) {
 			artistProviders := map[string]ports.ArtistContentProvider{
 				"deezer": tt.artistProv,
 			}
-			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, &fakeSearchClickRepo{}, nil, artistProviders)
+			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
 			// Act
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
@@ -671,7 +575,7 @@ func TestHandleArtistAlbums(t *testing.T) {
 			artistProviders := map[string]ports.ArtistContentProvider{
 				"deezer": tt.artistProv,
 			}
-			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, &fakeSearchClickRepo{}, nil, artistProviders)
+			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
 			// Act
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)

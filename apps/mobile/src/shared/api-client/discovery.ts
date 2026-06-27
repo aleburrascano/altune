@@ -5,6 +5,8 @@
  * docs/specs/discover-music-v1/spec.md §3.7.
  */
 
+import { getSessionId } from '@shared/telemetry/session';
+
 import { apiFetch } from './index';
 
 export type DiscoveryKind = 'artist' | 'album' | 'track';
@@ -28,6 +30,11 @@ export type DiscoveryResult = {
   subtitle: string | null;
   image_url: string | null;
   confidence: DiscoveryConfidence;
+  // Server-computed stable identity — (kind, normalized title, normalized
+  // subtitle). The cross-query join key the client echoes on every engagement
+  // event. Present only on results that came from the discovery wire; absent on
+  // results synthesized client-side (library → discovery conversions).
+  result_signature?: string | undefined;
   sources: DiscoverySource[];
   extras: Record<string, unknown>;
 };
@@ -48,6 +55,9 @@ export type RelatedGroup = {
 export type DiscoverySearchResponse = {
   query: string;
   query_norm: string;
+  // The search_id keystone minted per search. Echoed back on every engagement
+  // event (results_shown, result_clicked, …) so the funnel joins to its search.
+  search_id?: string | undefined;
   results: DiscoveryResult[];
   providers: DiscoveryProviderInfo[];
   partial: boolean;
@@ -78,13 +88,31 @@ export type DiscoverySearchHistoryResponse = {
   total: number;
 };
 
-export type ClickPayload = {
-  query_norm: string;
-  kind: DiscoveryKind;
-  title: string;
-  subtitle?: string | null;
-  position: number;
-  confidence: DiscoveryConfidence;
+// Behavioral interaction events, all routed through the unified /events envelope
+// (the legacy /clicks endpoint was folded into this — clicks are now a
+// result_clicked event). query_norm is top-level so the no-click coverage signal
+// can match it; everything else rides in payload.
+export type DiscoveryEventType =
+  | 'results_shown'
+  | 'result_clicked'
+  | 'play'
+  | 'skip'
+  | 'completed'
+  | 'library_add'
+  | 'wrong_album';
+
+export type DiscoveryEvent = {
+  type: DiscoveryEventType;
+  query_norm?: string;
+  // The originating search's keystone. Threaded onto every engagement event so
+  // the backend can join the impression/click/play funnel back to its search.
+  search_id?: string | undefined;
+  // Two-tier reliability fields, set only for the label-critical outbox tier
+  // (library_add, wrong_album): an idempotency key the server dedups on, and the
+  // client's record time (vs the server received_at).
+  event_id?: string | undefined;
+  client_occurred_at?: string | undefined;
+  payload?: Record<string, unknown>;
 };
 
 export async function searchDiscovery(
@@ -136,11 +164,18 @@ export async function listSearchHistory(params?: {
   );
 }
 
-export async function recordClick(payload: ClickPayload): Promise<void> {
-  await apiFetch<void>('/v1/discovery/clicks', {
+export async function recordEvent(event: DiscoveryEvent): Promise<void> {
+  // Stamp the rotating session_id onto every event's payload (no column — it
+  // rides in JSONB) so the backend can derive session-arc signals (abandonment,
+  // pogo-sticking) without each call site threading it.
+  const body: DiscoveryEvent = {
+    ...event,
+    payload: { ...(event.payload ?? {}), session_id: getSessionId() },
+  };
+  await apiFetch<void>('/v1/discovery/events', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
 }
 

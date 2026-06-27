@@ -69,6 +69,16 @@ func BuildSearchServiceWithTransport(
 	opts := []discoveryService.Option{
 		discoveryService.WithHistoryRepository(historyRepo),
 	}
+	// Tail-noise demotion experiment (off unless TAIL_DEMOTION_ENABLED). Pure
+	// ranking concern, applied regardless of rankingOnly so the eval A/B exercises it.
+	if cfg.TailDemotionEnabled {
+		opts = append(opts, discoveryService.WithTailDemotion())
+	}
+	// Exploration randomization (off unless EXPLORATION_ENABLED). Never on the
+	// rankingOnly eval path — the eval must see the deterministic order it scores.
+	if cfg.ExplorationEnabled && !rankingOnly {
+		opts = append(opts, discoveryService.WithExploration(cfg.ExplorationRate))
+	}
 	if !rankingOnly {
 		deezerContent := providers.NewDeezerAdapter(cf.discovery())
 		relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
@@ -79,6 +89,14 @@ func BuildSearchServiceWithTransport(
 		)
 	}
 	if redisClient != nil {
+		// App-wide consistency cache (shared, short-TTL): identical query → identical
+		// ranked list for everyone within the window. Skipped on the rankingOnly eval
+		// path so the eval always exercises the live pipeline, never a cached list.
+		if !rankingOnly {
+			opts = append(opts, discoveryService.WithResultCache(
+				discoveryCacheAdapters.NewRedisResultCache(redisClient),
+			))
+		}
 		opts = append(opts, discoveryService.WithArtworkCache(
 			discoveryCacheAdapters.NewRedisArtworkCache(redisClient),
 		))
@@ -95,6 +113,17 @@ func BuildSearchServiceWithTransport(
 	}
 	if eventStore != nil {
 		opts = append(opts, discoveryService.WithEventStore(eventStore))
+		// Behavioral ranking (off unless BEHAVIORAL_RANKING_ENABLED). The event
+		// store doubles as the behavioral-signal read store; the consumer is the
+		// satisfaction Strategy. Applied regardless of rankingOnly so the eval A/B
+		// can exercise it. The refresh ticker is started by the composition root.
+		if cfg.BehavioralRankingEnabled {
+			if store, ok := eventStore.(discoveryPorts.BehavioralSignalStore); ok {
+				opts = append(opts, discoveryService.WithBehavioralRanking(
+					discoveryService.NewSatisfactionConsumer(store),
+				))
+			}
+		}
 	}
 	if sharedMB != nil {
 		opts = append(opts, discoveryService.WithAlbumValidator(sharedMB))

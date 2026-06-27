@@ -64,6 +64,29 @@ type Config struct {
 	// APIs and shares per-provider quota with user traffic, so it must be opted
 	// into deliberately.
 	EvalMeterEnabled bool `env:"EVAL_METER_ENABLED" envDefault:"false"`
+	// Tail-noise demotion experiment. OFF by default: demotes single-source
+	// UGC/scrobble results with no identity below corroborated results. Flipped on
+	// for eval A/B before any production rollout. See
+	// docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
+	TailDemotionEnabled bool `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
+	// Behavioral ranking. OFF by default: feeds the EventConsumer-derived
+	// satisfaction signal (play-to-completion +, skip-after-click −) into ranking
+	// as a within-tie input. A new ranking consumer, so it ships dark until eval
+	// A/B proves it on the hard corpus — same discipline as tail demotion.
+	BehavioralRankingEnabled bool `env:"BEHAVIORAL_RANKING_ENABLED" envDefault:"false"`
+	// Self-growing eval corpus. Empty → the nightly behavioral-label corpus job is
+	// disabled. When set to a writable path, the job materializes search→engagement
+	// labels (positive) + wrong_album (hard negative) into the eval corpus format.
+	BehavioralCorpusPath string `env:"BEHAVIORAL_CORPUS_PATH"`
+	// Exploration randomization. OFF by default: a small fraction of searches
+	// serve a randomized result order (logged as exploration) so offline
+	// counterfactual eval has unbiased propensity data. The one user-facing
+	// behavior change — shipped dark behind this flag so it needs no live sign-off.
+	ExplorationEnabled bool    `env:"EXPLORATION_ENABLED" envDefault:"false"`
+	ExplorationRate    float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
+	// Coverage alert: page the operator when zero-result searches in the last 24h
+	// exceed this count. 0 → disabled. Aggregate count only, never the query text.
+	AlertZeroResultThreshold int `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
 }
 
 func Load() (*Config, error) {

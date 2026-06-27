@@ -23,17 +23,38 @@ import (
 // only as a within-tie tiebreak.
 const rrfK = 60
 
+// demoteFunc flags a result for tail demotion. nil on the default path.
+type demoteFunc func(domain.SearchResult) bool
+
 type scored struct {
-	result    domain.SearchResult
-	relevance float64
-	pop       float64
-	rrf       float64
-	multi     bool
+	result     domain.SearchResult
+	relevance  float64
+	behavioral float64
+	pop        float64
+	rrf        float64
+	multi      bool
+	demoted    bool
 }
 
 // Rank applies the eligibility gates and sorts by continuous relevance,
-// returning handler-ready results. queryNorm is the normalized query.
+// returning handler-ready results. queryNorm is the normalized query. This is the
+// default production behavior (no tail demotion) and the surface the sacred
+// rank/pipeline tests assert; it delegates to rankWith with no predicate.
 func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
+	return rankWith(entities, queryNorm, nil, nil)
+}
+
+// rankWith is Rank with an optional tail-demotion predicate. A non-nil demote
+// pushes flagged results (single-source UGC/scrobble noise — see isLowConfidenceTail)
+// below every non-demoted result, overriding their query-word relevance. demote is
+// nil on the default path, making the demotion branch inert. EXPERIMENTAL,
+// eval-gated — see docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
+// rankWith is Rank with an optional tail-demotion predicate and an optional
+// behavioral score map (keyed by result_signature). Both are nil on the default
+// path, making their branches inert — the sacred rank/pipeline tests assert that
+// default. behavioral is the EventConsumer-derived satisfaction signal, applied
+// only as a within-tie input below relevance (see rankLess), eval A/B-gated.
+func rankWith(entities []Entity, queryNorm string, demote demoteFunc, behavioral map[string]float64) []domain.SearchResult {
 	// queryNorm is already normalized by the caller (Execute); use it directly.
 	q := queryNorm
 
@@ -55,12 +76,18 @@ func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
 	results := make([]scored, 0, len(eligible))
 	for _, e := range eligible {
 		r := e.Result
+		demoted := false
+		if demote != nil {
+			demoted = demote(r)
+		}
 		results = append(results, scored{
-			result:    r,
-			relevance: idfWeightedCoverage(r, q, rarity),
-			pop:       popularityOf(r),
-			rrf:       rrfScore(e.BestRank),
-			multi:     len(providersOf(r)) > 1,
+			result:     r,
+			relevance:  idfWeightedCoverage(r, q, rarity),
+			behavioral: behavioral[resultSignature(r)], // nil map read → 0 (inert)
+			pop:        popularityOf(r),
+			rrf:        rrfScore(e.BestRank),
+			multi:      len(providersOf(r)) > 1,
+			demoted:    demoted,
 		})
 	}
 
@@ -73,11 +100,24 @@ func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
 	return out
 }
 
-// rankLess orders by relevance, then popularity, then multi-source, then RRF,
-// with a stable subtitle/title tiebreak.
+// rankLess orders by demotion, then relevance, then popularity, then multi-source,
+// then RRF, with a stable subtitle/title tiebreak.
 func rankLess(a, b scored) bool {
+	// Tail demotion (experimental, off by default): a flagged low-confidence result
+	// sorts below every non-demoted one, overriding relevance. Inert when no demote
+	// predicate is set — both false, so this never fires. See isLowConfidenceTail.
+	if a.demoted != b.demoted {
+		return !a.demoted
+	}
 	if a.relevance != b.relevance {
 		return a.relevance > b.relevance
+	}
+	// Behavioral satisfaction (experimental, off by default): among equally
+	// relevant results, the one users actually played-to-completion sorts above
+	// the one they skip-after-click. Inert when no behavioral scores are set —
+	// both 0, so this never fires. eval A/B-gated (BEHAVIORAL_RANKING_ENABLED).
+	if a.behavioral != b.behavioral {
+		return a.behavioral > b.behavioral
 	}
 	if a.pop != b.pop {
 		return a.pop > b.pop
@@ -160,6 +200,16 @@ func rrfScore(bestRank map[domain.ProviderName]int) float64 {
 	return s
 }
 
+// resultSignature is the canonical cross-query join key — (kind, normalized
+// title, normalized subtitle) — identical to the one the handler emits on the
+// wire and the client echoes on engagement events, so behavioral scores keyed by
+// the stored signature line up with the live results being ranked.
+func resultSignature(r domain.SearchResult) string {
+	return r.Kind.String() + "|" +
+		textnorm.NormalizeForMatch(r.Title) + "|" +
+		textnorm.NormalizeForMatch(r.Subtitle)
+}
+
 func tokenSet(s string) map[string]bool {
 	m := make(map[string]bool)
 	for _, w := range strings.Fields(s) {
@@ -168,4 +218,45 @@ func tokenSet(s string) map[string]bool {
 		}
 	}
 	return m
+}
+
+// isLowConfidenceTail flags a result as tail noise: a single entry from a UGC /
+// scrobble provider (SoundCloud uploads, Last.fm scrobbles) that carries no
+// corroborating identity (no ISRC, MBID, or album). These dominate the result tail
+// — 61% of tail positions are single-source, ~72% of that from these two providers
+// (prod telemetry, Jun 2026) — and are the reupload / type-beat / reaction /
+// scrobble-fragment noise users mistake for the real recording. Multi-source
+// results (corroborated) and single-source results from curated catalogs
+// (Deezer/iTunes/MusicBrainz) are never flagged. The demotion is uniform, so on a
+// purely-underground query where every candidate is UGC it does not change relative
+// order. See docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
+// TailNoiseInTopK counts how many of the first k results are low-confidence tail
+// noise (see isLowConfidenceTail) — the tail-quality signal the search log and
+// discoveryeval track over time to catch result-quality regressions that
+// target-recall is blind to (the noise sits below the answer).
+func TailNoiseInTopK(results []domain.SearchResult, k int) int {
+	n := 0
+	for i, r := range results {
+		if i >= k {
+			break
+		}
+		if isLowConfidenceTail(r) {
+			n++
+		}
+	}
+	return n
+}
+
+func isLowConfidenceTail(r domain.SearchResult) bool {
+	provs := providersOf(r)
+	if len(provs) != 1 {
+		return false
+	}
+	if !provs[domain.ProviderSoundCloud] && !provs[domain.ProviderLastFM] {
+		return false
+	}
+	hasIdentity := stringExtra(r, "isrc") != "" ||
+		stringExtra(r, "mbid") != "" ||
+		stringExtra(r, "album") != ""
+	return !hasIdentity
 }
