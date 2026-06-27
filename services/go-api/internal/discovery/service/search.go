@@ -270,31 +270,31 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 // fanOut queries every provider in parallel, each bounded by a timeout and
 // gated by the circuit breaker, and returns the per-provider result groups
 // (for merge) plus the per-provider statuses (for the wire).
+//
+// Both outputs are ordered by the fixed provider order (s.providers), NOT by
+// goroutine-completion order. Each goroutine writes only its own slot, so the
+// downstream merge/rank input — and thus the final ranking of otherwise-tied
+// results — is deterministic run-to-run. Disjoint-index writes need no mutex.
 func (s *Service) fanOut(
 	ctx context.Context,
 	searchQuery string,
 	kinds map[domain.ResultKind]bool,
 ) ([][]domain.SearchResult, []domain.ProviderSearchResponse) {
-	var (
-		mu          sync.Mutex
-		perProvider [][]domain.SearchResult
-		statuses    []domain.ProviderSearchResponse
-		wg          sync.WaitGroup
-	)
+	results := make([][]domain.SearchResult, len(s.providers))
+	statuses := make([]domain.ProviderSearchResponse, len(s.providers))
+	var wg sync.WaitGroup
 
-	for _, provider := range s.providers {
+	for i, provider := range s.providers {
 		if !s.circuitBreaker.AllowRequest(provider.Name()) {
-			mu.Lock()
-			statuses = append(statuses, domain.ProviderSearchResponse{
+			statuses[i] = domain.ProviderSearchResponse{
 				Provider: provider.Name(),
 				Status:   domain.ProviderStatusCircuitOpen,
-			})
-			mu.Unlock()
+			}
 			continue
 		}
 
 		wg.Add(1)
-		go func(p ports.SearchProvider) {
+		go func(i int, p ports.SearchProvider) {
 			defer wg.Done()
 
 			timeout := defaultProviderTimeout
@@ -305,7 +305,7 @@ func (s *Service) fanOut(
 			defer cancel()
 
 			start := time.Now()
-			results, err := p.Search(provCtx, searchQuery, kinds)
+			res, err := p.Search(provCtx, searchQuery, kinds)
 			latencyMs := time.Since(start).Milliseconds()
 
 			if err != nil {
@@ -314,33 +314,38 @@ func (s *Service) fanOut(
 				if provCtx.Err() != nil {
 					status = domain.ProviderStatusTimeout
 				}
-				mu.Lock()
-				statuses = append(statuses, domain.ProviderSearchResponse{
+				statuses[i] = domain.ProviderSearchResponse{
 					Provider:  p.Name(),
 					Status:    status,
 					LatencyMs: latencyMs,
-				})
-				mu.Unlock()
+				}
 				slog.WarnContext(ctx, "search.v2.provider_failed",
 					"provider", p.Name().String(), "status", status.String(), "error", err)
 				return
 			}
 
 			s.circuitBreaker.RecordSuccess(p.Name())
-			mu.Lock()
-			perProvider = append(perProvider, results)
-			statuses = append(statuses, domain.ProviderSearchResponse{
+			results[i] = res
+			statuses[i] = domain.ProviderSearchResponse{
 				Provider:    p.Name(),
-				Results:     results,
+				Results:     res,
 				Status:      domain.ProviderStatusOK,
 				LatencyMs:   latencyMs,
-				ResultCount: len(results),
-			})
-			mu.Unlock()
-		}(provider)
+				ResultCount: len(res),
+			}
+		}(i, provider)
 	}
 
 	wg.Wait()
+
+	// Flatten to per-provider groups in fixed provider order, keeping only
+	// providers that returned results (circuit-open/error/timeout slots are nil).
+	perProvider := make([][]domain.SearchResult, 0, len(s.providers))
+	for _, r := range results {
+		if len(r) > 0 {
+			perProvider = append(perProvider, r)
+		}
+	}
 	return perProvider, statuses
 }
 
