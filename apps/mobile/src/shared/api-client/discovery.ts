@@ -78,13 +78,22 @@ export type DiscoverySearchHistoryResponse = {
   total: number;
 };
 
-export type ClickPayload = {
-  query_norm: string;
-  kind: DiscoveryKind;
-  title: string;
-  subtitle?: string | null;
-  position: number;
-  confidence: DiscoveryConfidence;
+// Behavioral interaction events, all routed through the unified /events envelope
+// (the legacy /clicks endpoint was folded into this — clicks are now a
+// result_clicked event). query_norm is top-level so the no-click coverage signal
+// can match it; everything else rides in payload.
+export type DiscoveryEventType =
+  | 'result_clicked'
+  | 'play'
+  | 'skip'
+  | 'completed'
+  | 'library_add'
+  | 'wrong_album';
+
+export type DiscoveryEvent = {
+  type: DiscoveryEventType;
+  query_norm?: string;
+  payload?: Record<string, unknown>;
 };
 
 export async function searchDiscovery(
@@ -136,11 +145,11 @@ export async function listSearchHistory(params?: {
   );
 }
 
-export async function recordClick(payload: ClickPayload): Promise<void> {
-  await apiFetch<void>('/v1/discovery/clicks', {
+export async function recordEvent(event: DiscoveryEvent): Promise<void> {
+  await apiFetch<void>('/v1/discovery/events', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(event),
   });
 }
 

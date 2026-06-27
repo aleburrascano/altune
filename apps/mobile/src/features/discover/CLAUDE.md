@@ -15,7 +15,7 @@ Mobile screen for the unified music search surface. A greeting + "Discover" titl
 - **Debounce + submit** — `onChangeText` starts a 300ms debounce timer (cleared on each keystroke); `onSubmitEditing` clears the timer and commits immediately. The React Query hook keys on `committedQuery`. Clear (X) button clears both and returns to recent searches.
 - **History cache invalidation** — after a successful search, `['discovery', 'history']` query is invalidated so new searches appear as chips immediately (needed because the stack navigator keeps DiscoverScreen mounted).
 - **Search state persists across navigation** — `search-state.ts` (feature-local) holds the last query/input so navigating detail→back preserves the search. State is initialized from this module on mount and synced on every change.
-- **Click tracking is fire-and-forget.** `useRecordClick` wraps `useMutation`; errors are swallowed in `onError`. The user never sees a click-failure toast — telemetry being best-effort is intentional per ADR-0007 §3.12.
+- **Interaction telemetry is fire-and-forget.** A result tap emits a `result_clicked` event via the shared `useRecordEvent` (`@shared/telemetry`) → `POST /v1/discovery/events`; errors are swallowed in `onError`. Best-effort telemetry is intentional per ADR-0007 §3.12. The legacy `/clicks` endpoint + `useRecordClick` were unified into the `/events` envelope.
 - **History row text truncates at 40 chars** with a `…` suffix client-side. Full query is preserved in the server's `discovery_search_history.query` column; the truncation is purely visual.
 - **Accessibility** — all tappable elements have `accessibilityRole="button"` + `accessibilityLabel`: result rows (`DiscoverRow`), Top Result card, "See all" links. Touch targets ≥44pt on "See all".
 - **Filtered empty state** — `FilteredResults` shows "No songs/albums/artists found" when the filtered kind has no results.
@@ -47,7 +47,6 @@ Mobile screen for the unified music search surface. A greeting + "Discover" titl
 - [state.ts](state.ts) — pure `_viewForState` + blended-view helpers (`_groupByKind`, `_topResult`, `_sectionOrder`, `_cap`); no RN imports so jest runs without RN transform.
 - [hooks/useDiscoverSearch.ts](hooks/useDiscoverSearch.ts) — `useQuery<DiscoverySearchResponse>` keyed on trimmed query; `enabled` only when query non-empty.
 - [hooks/useSearchHistory.ts](hooks/useSearchHistory.ts) — `useQuery<DiscoverySearchHistoryResponse>`; powers empty-no-query state's history list.
-- [hooks/useRecordClick.ts](hooks/useRecordClick.ts) — `useMutation<void, Error, ClickPayload>`; swallows errors (best-effort telemetry).
 - [ui/DiscoverScreen.tsx](ui/DiscoverScreen.tsx) — entrypoint; owns `inputValue` + `committedQuery`; switches on `_viewForState` output.
 - [ui/DiscoverRow.tsx](ui/DiscoverRow.tsx) — single result row; testID `discover-row-<kind>-<position>`.
 
@@ -58,7 +57,8 @@ Mobile screen for the unified music search surface. A greeting + "Discover" titl
 
 ### Dependencies on other features / shared
 
-- `@shared/api-client/discovery` — `searchDiscovery`, `listSearchHistory`, `recordClick` + wire types.
+- `@shared/api-client/discovery` — `searchDiscovery`, `listSearchHistory`, `recordEvent` + wire types.
+- `@shared/telemetry/useRecordEvent` — shared fire-and-forget behavioral-event hook (`result_clicked`).
 - `@shared/api-client/index` — `apiFetch` underlying transport (transitively).
 - `@tanstack/react-query` — `useQuery` + `useMutation`, via the root `QueryClientProvider`.
 - `@shared/ui` — design-system primitives (ADR-0008 / ADR-0009): the result row is the art-forward `Card` (`Artwork` + title/subtitle; no confidence, no glow); states use `Skeleton` / `Chip` / `Button`.
