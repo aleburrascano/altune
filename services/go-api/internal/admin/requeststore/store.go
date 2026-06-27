@@ -48,7 +48,31 @@ type Record struct {
 	Providers []ProviderTrace `json:"providers,omitempty"`
 	Final     []ResultRow     `json:"final,omitempty"`
 
+	// Detail-fetch trace, filled by RecordContentFetch for non-search discovery
+	// requests (artist discography / top-tracks / related). Each detail fetch is its
+	// own correlation id, so this and the search fields don't co-occur on one record.
+	Detail *DetailTrace `json:"detail,omitempty"`
+
 	bytes int // retained body bytes for this record, for the total ceiling
+}
+
+// DetailTrace is the high-level story of a detail-screen fetch — what the operator
+// sees when they trace "what came up when I pressed this artist." Raw provider
+// exchanges are captured separately under the same correlation id.
+type DetailTrace struct {
+	Kind     string      `json:"kind"` // "albums" | "top_tracks" | "related"
+	Provider string      `json:"provider"`
+	Artist   string      `json:"artist,omitempty"`
+	Status   string      `json:"status"`
+	Items    []DetailRow `json:"items,omitempty"`
+}
+
+// DetailRow is one returned item of a detail fetch, carrying the fields an operator
+// needs to spot ordering/metadata bugs (year present? chronological? confirmed?).
+type DetailRow struct {
+	Title  string `json:"title"`
+	Year   int    `json:"year,omitempty"`
+	Status string `json:"status,omitempty"` // consensus verdict, when present
 }
 
 // ProviderTrace is one provider's contribution to a search: its outcome plus the
@@ -183,6 +207,12 @@ func cloneRecord(rec *Record) Record {
 	copy(providers, rec.Providers)
 	final := make([]ResultRow, len(rec.Final))
 	copy(final, rec.Final)
+	var detail *DetailTrace
+	if rec.Detail != nil {
+		d := *rec.Detail
+		d.Items = append([]DetailRow(nil), rec.Detail.Items...)
+		detail = &d
+	}
 	return Record{
 		CorrID:    rec.CorrID,
 		StartedAt: rec.StartedAt,
@@ -192,5 +222,6 @@ func cloneRecord(rec *Record) Record {
 		User:      rec.User,
 		Providers: providers,
 		Final:     final,
+		Detail:    detail,
 	}
 }

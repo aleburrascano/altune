@@ -67,6 +67,14 @@ type searchTraceRecorder interface {
 		statuses []domain.ProviderSearchResponse,
 		final []domain.SearchResult,
 	)
+	// RecordContentFetch traces a detail-screen fetch (discography/top-tracks/
+	// related) so the operator console can see what came up when an artist was
+	// opened — not just searches.
+	RecordContentFetch(
+		ctx context.Context,
+		kind, provider, artist, status string,
+		items []domain.SearchResult,
+	)
 }
 
 // WithProviderHealth attaches the optional provider-health recorder. A nil
@@ -529,6 +537,10 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 		return
 	}
 
+	if h.searchTrace != nil {
+		h.searchTrace.RecordContentFetch(r.Context(), "top_tracks", provider, "", resp.Status.String(), resp.Items)
+	}
+
 	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
 }
 
@@ -558,6 +570,10 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 			"error", err, "provider", provider, "external_id", externalID)
 		httputil.InternalError(w)
 		return
+	}
+
+	if h.searchTrace != nil {
+		h.searchTrace.RecordContentFetch(r.Context(), "albums", provider, artistName, resp.Status.String(), resp.Items)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
