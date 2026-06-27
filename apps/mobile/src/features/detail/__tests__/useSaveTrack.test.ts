@@ -18,6 +18,11 @@ jest.mock('../../../shared/api-client/tracks', () => ({
   createTrack: (body: unknown) => mockCreateTrack(body),
 }));
 
+// Isolate the unit from the best-effort library_add telemetry side effect.
+jest.mock('@shared/telemetry/useRecordEvent', () => ({
+  useRecordEvent: () => ({ mutate: jest.fn() }),
+}));
+
 function _existing(id: string): TrackResponse {
   return {
     id,
