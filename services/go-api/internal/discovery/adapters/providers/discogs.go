@@ -266,3 +266,5 @@ func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, erro
 	}
 	return body, nil
 }
+
+func (*DiscogsAdapter) ArtworkSource() string { return "discogs" }

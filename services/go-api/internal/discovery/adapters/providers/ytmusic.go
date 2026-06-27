@@ -339,3 +339,5 @@ func mapYTMusicArtist(a *ytmArtistItem) domain.SearchResult {
 		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: a.BrowseID, URL: "https://music.youtube.com/channel/" + a.BrowseID},
 		nil)
 }
+
+func (*YouTubeMusicArtworkResolver) ArtworkSource() string { return "ytmusic" }

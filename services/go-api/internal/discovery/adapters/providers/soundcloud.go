@@ -772,3 +772,5 @@ func dedupePreserveOrder(in []string) []string {
 	}
 	return out
 }
+
+func (*SoundCloudAPIAdapter) ArtworkSource() string { return "soundcloud" }

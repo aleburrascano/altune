@@ -16,6 +16,13 @@ func NewChainedArtworkResolver(resolvers ...ports.ArtworkResolver) *ChainedArtwo
 }
 
 func (c *ChainedArtworkResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
+	url, _, err := c.ResolveTagged(ctx, kind, title, subtitle, mbid)
+	return url, err
+}
+
+// ResolveTagged is Resolve plus the source that supplied the URL (for
+// per-provider coverage visibility). Source is "" when nothing resolved.
+func (c *ChainedArtworkResolver) ResolveTagged(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, string, error) {
 	for _, resolver := range c.resolvers {
 		// Identity-only resolvers (fetch by bridged id) never name-search — skip
 		// them on the name path so a missing identity can't trigger a wrong guess.
@@ -27,10 +34,18 @@ func (c *ChainedArtworkResolver) Resolve(ctx context.Context, kind domain.Result
 			continue
 		}
 		if url != "" && !IsDeezerPlaceholder(url) {
-			return url, nil
+			return url, artworkSourceOf(resolver), nil
 		}
 	}
-	return "", nil
+	return "", "", nil
+}
+
+// artworkSourceOf names the resolver for tagging, or "" if it doesn't report one.
+func artworkSourceOf(r ports.ArtworkResolver) string {
+	if s, ok := r.(ports.SourcedArtworkResolver); ok {
+		return s.ArtworkSource()
+	}
+	return ""
 }
 
 // ResolveWithIdentity resolves artwork identity-first: every resolver that can
@@ -40,6 +55,13 @@ func (c *ChainedArtworkResolver) Resolve(ctx context.Context, kind domain.Result
 // (the "Che" problem) getting another Che's face — the bridged id pins the exact
 // entity. Returns "" when nothing resolves; the caller decides the fallback.
 func (c *ChainedArtworkResolver) ResolveWithIdentity(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ports.ArtworkIdentity) (string, error) {
+	url, _, err := c.ResolveWithIdentityTagged(ctx, kind, title, subtitle, id)
+	return url, err
+}
+
+// ResolveWithIdentityTagged is ResolveWithIdentity plus the source that supplied
+// the URL.
+func (c *ChainedArtworkResolver) ResolveWithIdentityTagged(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ports.ArtworkIdentity) (string, string, error) {
 	for _, resolver := range c.resolvers {
 		ir, ok := resolver.(ports.IdentityArtworkResolver)
 		if !ok {
@@ -50,8 +72,8 @@ func (c *ChainedArtworkResolver) ResolveWithIdentity(ctx context.Context, kind d
 			continue
 		}
 		if url != "" && !IsDeezerPlaceholder(url) {
-			return url, nil
+			return url, artworkSourceOf(resolver), nil
 		}
 	}
-	return c.Resolve(ctx, kind, title, subtitle, id.MBID)
+	return c.ResolveTagged(ctx, kind, title, subtitle, id.MBID)
 }

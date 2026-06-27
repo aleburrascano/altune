@@ -397,3 +397,5 @@ func (a *DeezerAdapter) FetchFirstTrackID(ctx context.Context, albumID string) (
 	}
 	return fmt.Sprintf("%d", body.Data[0].ID), nil
 }
+
+func (*DeezerAdapter) ArtworkSource() string { return "deezer" }
