@@ -53,7 +53,10 @@ export function TrackDetailBody({
   const previewUrl = te.previewUrl;
   const duration = te.durationSeconds != null ? formatDuration(te.durationSeconds) : null;
 
-  const canSave = result.subtitle !== null && result.subtitle.length > 0;
+  // `?? ''` guards against an absent subtitle arriving as `undefined` (the wire
+  // omits an empty subtitle, despite the `string | null` type) — a bare
+  // `!== null` check passes for undefined and then `.length` crashes the screen.
+  const canSave = (result.subtitle ?? '').length > 0;
   const albumName = te.album;
   const featured =
     te.featuredArtists.length > 0
