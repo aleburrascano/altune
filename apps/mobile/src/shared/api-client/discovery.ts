@@ -28,6 +28,11 @@ export type DiscoveryResult = {
   subtitle: string | null;
   image_url: string | null;
   confidence: DiscoveryConfidence;
+  // Server-computed stable identity — (kind, normalized title, normalized
+  // subtitle). The cross-query join key the client echoes on every engagement
+  // event. Present only on results that came from the discovery wire; absent on
+  // results synthesized client-side (library → discovery conversions).
+  result_signature?: string | undefined;
   sources: DiscoverySource[];
   extras: Record<string, unknown>;
 };
@@ -48,6 +53,9 @@ export type RelatedGroup = {
 export type DiscoverySearchResponse = {
   query: string;
   query_norm: string;
+  // The search_id keystone minted per search. Echoed back on every engagement
+  // event (results_shown, result_clicked, …) so the funnel joins to its search.
+  search_id?: string | undefined;
   results: DiscoveryResult[];
   providers: DiscoveryProviderInfo[];
   partial: boolean;
@@ -83,6 +91,7 @@ export type DiscoverySearchHistoryResponse = {
 // result_clicked event). query_norm is top-level so the no-click coverage signal
 // can match it; everything else rides in payload.
 export type DiscoveryEventType =
+  | 'results_shown'
   | 'result_clicked'
   | 'play'
   | 'skip'
@@ -93,6 +102,9 @@ export type DiscoveryEventType =
 export type DiscoveryEvent = {
   type: DiscoveryEventType;
   query_norm?: string;
+  // The originating search's keystone. Threaded onto every engagement event so
+  // the backend can join the impression/click/play funnel back to its search.
+  search_id?: string | undefined;
   payload?: Record<string, unknown>;
 };
 

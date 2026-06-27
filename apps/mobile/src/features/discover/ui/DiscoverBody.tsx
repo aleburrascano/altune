@@ -16,6 +16,7 @@ import { BlendedSection } from './BlendedSection';
 import { FilteredResults } from './FilteredResults';
 import type { DiscoveryKind, DiscoveryResult, SearchHistoryItem } from '../../../shared/api-client/discovery';
 import type { DiscoverView } from '../state';
+import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
 
 type ResultsFilter = 'all' | DiscoveryKind;
 
@@ -41,6 +42,7 @@ interface DiscoverBodyProps {
   onFilterChange: (filter: ResultsFilter) => void;
   onHistoryTap: (item: SearchHistoryItem) => void;
   onResultTap: (result: DiscoveryResult, position: number) => void;
+  impression: ImpressionHandlers;
   onRetry: () => void;
   onRefresh: () => void;
   isRefreshing: boolean;
@@ -58,6 +60,7 @@ export function DiscoverBody({
   onFilterChange,
   onHistoryTap,
   onResultTap,
+  impression,
   onRetry,
   onRefresh,
   isRefreshing,
@@ -164,6 +167,7 @@ export function DiscoverBody({
         <BlendedSection
           results={results}
           onResultTap={onResultTap}
+          impression={impression}
           onSeeAll={onFilterChange}
           onRefresh={onRefresh}
           isRefreshing={isRefreshing}
@@ -176,6 +180,7 @@ export function DiscoverBody({
           kind={filter}
           results={results}
           onResultTap={onResultTap}
+          impression={impression}
           onRefresh={onRefresh}
           isRefreshing={isRefreshing}
           correctedQuery={correctedQuery}
