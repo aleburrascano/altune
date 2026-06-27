@@ -108,6 +108,17 @@ func BuildSearchServiceWithTransport(
 	}
 	if eventStore != nil {
 		opts = append(opts, discoveryService.WithEventStore(eventStore))
+		// Behavioral ranking (off unless BEHAVIORAL_RANKING_ENABLED). The event
+		// store doubles as the behavioral-signal read store; the consumer is the
+		// satisfaction Strategy. Applied regardless of rankingOnly so the eval A/B
+		// can exercise it. The refresh ticker is started by the composition root.
+		if cfg.BehavioralRankingEnabled {
+			if store, ok := eventStore.(discoveryPorts.BehavioralSignalStore); ok {
+				opts = append(opts, discoveryService.WithBehavioralRanking(
+					discoveryService.NewSatisfactionConsumer(store),
+				))
+			}
+		}
 	}
 	if sharedMB != nil {
 		opts = append(opts, discoveryService.WithAlbumValidator(sharedMB))

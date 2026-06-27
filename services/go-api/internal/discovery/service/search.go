@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -65,7 +66,16 @@ type Service struct {
 	findRelatedSvc  *FindRelatedService
 	resultCache     ports.ResultCache
 	tailDemotion    bool
-	bgWg            sync.WaitGroup
+
+	// behavioralRanking, default off, gates the EventConsumer-derived satisfaction
+	// signal as a within-tie ranking input. behavioralScores is the published
+	// snapshot (atomic, refreshed off the request path); behavioralConsumer is its
+	// source. Exactly the tail-demotion shape: inert until eval A/B-gated on.
+	behavioralRanking  bool
+	behavioralConsumer ports.EventConsumer
+	behavioralScores   atomic.Pointer[map[string]float64]
+
+	bgWg sync.WaitGroup
 }
 
 // SearchOutput is the result envelope returned by the search use case and
@@ -150,6 +160,19 @@ func WithResultCache(c ports.ResultCache) Option {
 // eval A/B. See docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
 func WithTailDemotion() Option {
 	return func(s *Service) { s.tailDemotion = true }
+}
+
+// WithBehavioralRanking enables the EventConsumer-derived satisfaction signal as
+// a within-tie ranking input, sourced from the given consumer. Off by default;
+// the composition root applies it only under BEHAVIORAL_RANKING_ENABLED, eval
+// A/B-gated exactly like tail demotion. The score map starts empty (inert) until
+// the first RefreshBehavioralScores; the caller drives refresh via
+// StartBehavioralRefresh.
+func WithBehavioralRanking(consumer ports.EventConsumer) Option {
+	return func(s *Service) {
+		s.behavioralRanking = true
+		s.behavioralConsumer = consumer
+	}
 }
 
 // NewService constructs the rebuilt search orchestrator.
@@ -284,7 +307,10 @@ func (s *Service) mergeRankEnrich(
 	if s.tailDemotion {
 		demote = isLowConfidenceTail
 	}
-	ranked := rankPipelineWith(perProvider, queryNorm, demote)
+	// Behavioral satisfaction signal: a published snapshot (nil when the flag is
+	// off / not yet refreshed), read without locking and applied as a within-tie
+	// rank input only.
+	ranked := rankPipelineWith(perProvider, queryNorm, demote, s.behavioralScoresSnapshot())
 
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)

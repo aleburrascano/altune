@@ -27,6 +27,31 @@ type QueryCount struct {
 	Count     int
 }
 
+// BehavioralSignal is one result's net behavioral score over a window, keyed by
+// its result_signature: positive for satisfaction (a play that crossed the
+// listen threshold, a play-to-completion), negative for dissatisfaction (a
+// skip-after-click with short dwell).
+type BehavioralSignal struct {
+	ResultSignature string
+	Score           float64
+}
+
+// BehavioralSignalStore is the read port that aggregates the raw
+// play/skip/completed events into per-result_signature net satisfaction. SQL
+// over discovery_events — analytics, never the request path.
+type BehavioralSignalStore interface {
+	SatisfactionSignals(ctx context.Context, since time.Time) ([]BehavioralSignal, error)
+}
+
+// EventConsumer derives a behavioral ranking signal from the persisted
+// interaction-event stream. The Strategy/Observer seam the event-system program
+// is built around: a new signal (satisfaction, pogo-sticking, abandonment) is a
+// new EventConsumer implementation, not a rewrite of the ranking pipeline.
+type EventConsumer interface {
+	Name() string
+	Signals(ctx context.Context, since time.Time) ([]BehavioralSignal, error)
+}
+
 // EventQuery reads aggregated telemetry for the offline coverage signals. These
 // are analytics reads over discovery's own tables — never the request path.
 type EventQuery interface {

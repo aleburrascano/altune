@@ -284,6 +284,14 @@ func (a *App) setup(ctx context.Context) error {
 		false,
 	)
 
+	// Behavioral-ranking refresh: when the flag is on, recompute the satisfaction
+	// score map off the request path on a ticker. Inert (the option is unset)
+	// otherwise. Bound to the app context so it exits on graceful shutdown.
+	if a.cfg.BehavioralRankingEnabled {
+		searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
+		slog.Info("behavioral ranking refresh started")
+	}
+
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 
 	// MusicBrainz detail-open enrichment: genres/year/rating/external-ids + the

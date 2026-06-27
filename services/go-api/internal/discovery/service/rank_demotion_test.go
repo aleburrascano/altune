@@ -79,7 +79,7 @@ func TestRankWith_DemotesUGCNoiseBelowCleanResult(t *testing.T) {
 	}
 
 	// With demotion: the corroborated catalog result rises despite lower relevance.
-	got := rankWith([]Entity{ent(clean), ent(junk)}, "rest in bass encore", isLowConfidenceTail)
+	got := rankWith([]Entity{ent(clean), ent(junk)}, "rest in bass encore", isLowConfidenceTail, nil)
 	if len(got) != 2 || got[0].Subtitle != "Che" {
 		t.Fatalf("with demotion: expected clean 'Che' first, got %v", titles(got))
 	}
@@ -96,7 +96,7 @@ func TestRankWith_NilPredicateMatchesRank(t *testing.T) {
 	entities := []Entity{ent(clean), ent(junk)}
 
 	a := Rank(entities, "crazy")
-	b := rankWith(entities, "crazy", nil)
+	b := rankWith(entities, "crazy", nil, nil)
 	if len(a) != len(b) {
 		t.Fatalf("length mismatch: %v vs %v", titles(a), titles(b))
 	}
