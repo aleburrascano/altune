@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -70,6 +71,11 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 	// lower-confidence resolved one. Only resolve when there's no usable image.
 	needsArt := result.ImageURL == "" || strings.Contains(result.ImageURL, emptyArtHash)
 	if !needsArt {
+		// Kept the provider's own image (R5) — tag it with that provider so the
+		// coverage view distinguishes "provider supplied it" from a chain resolve.
+		if result.ArtworkSource == "" && len(result.Sources) > 0 {
+			result.ArtworkSource = result.Sources[0].Provider.String()
+		}
 		return result
 	}
 	mbid := stringExtra(result, "mbid")
@@ -82,10 +88,11 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 	}
 
 	if s.artworkCache != nil {
-		if cachedURL, found, _ := s.artworkCache.Get(ctx, result.Kind, result.Title, result.Subtitle, mbid); found {
+		if cachedURL, cachedSource, found, _ := s.artworkCache.Get(ctx, result.Kind, result.Title, result.Subtitle, mbid); found {
 			usable := cachedURL != "" && !strings.Contains(cachedURL, emptyArtHash)
 			if usable {
 				result.ImageURL = cachedURL
+				result.ArtworkSource = cachedSource
 				return result
 			}
 			// Cached miss/placeholder: only artists retry (track-image fallback).
@@ -95,13 +102,17 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 		}
 	}
 
-	resolved := s.resolveArtwork(ctx, result, mbid)
+	resolved, source := s.resolveArtwork(ctx, result, mbid)
 	if s.artworkCache != nil {
-		_ = s.artworkCache.Set(ctx, result.Kind, result.Title, result.Subtitle, mbid, resolved)
+		_ = s.artworkCache.Set(ctx, result.Kind, result.Title, result.Subtitle, mbid, resolved, source)
 	}
 	if resolved != "" {
 		result.ImageURL = resolved
+		result.ArtworkSource = source
 	}
+	slog.DebugContext(ctx, "artwork.enriched",
+		"kind", result.Kind.String(), "source", source,
+		"resolved", resolved != "", "had_mbid", mbid != "")
 	return result
 }
 
@@ -110,21 +121,40 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 // the exact entity's image before any name search — the only way to get the right
 // face for a same-name artist. Falls back to the name chain (no identity), then a
 // same-name track image for artists whose direct lookup returns nothing.
-func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult, mbid string) string {
+func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult, mbid string) (string, string) {
 	identity := artworkIdentity(result, mbid)
+
+	// Tagged path (production chain): also reports which source supplied the URL.
+	if tagger, ok := s.artworkResolver.(ports.TaggingArtworkResolver); ok {
+		if identity.HasLinks() {
+			if url, src, _ := tagger.ResolveWithIdentityTagged(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
+				return url, src
+			}
+		} else if url, src, _ := tagger.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
+			return url, src
+		}
+		if result.Kind == domain.ResultKindArtist {
+			if url, src, _ := tagger.ResolveTagged(ctx, domain.ResultKindTrack, result.Title, "", ""); url != "" {
+				return url, src
+			}
+		}
+		return "", ""
+	}
+
+	// Untagged fallback (a resolver without tagging, e.g. test fakes): no source.
 	if aware, ok := s.artworkResolver.(ports.IdentityAwareArtworkResolver); ok && identity.HasLinks() {
 		if url, _ := aware.ResolveWithIdentity(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
-			return url
+			return url, ""
 		}
 	} else if url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
-		return url
+		return url, ""
 	}
 	if result.Kind == domain.ResultKindArtist {
 		if url, _ := s.artworkResolver.Resolve(ctx, domain.ResultKindTrack, result.Title, "", ""); url != "" {
-			return url
+			return url, ""
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // artworkIdentity assembles the proven cross-provider identity for artwork

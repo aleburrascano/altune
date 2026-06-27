@@ -127,3 +127,5 @@ func stringOr(m map[string]any, key, fallback string) string {
 	}
 	return s
 }
+
+func (*GeniusArtworkResolver) ArtworkSource() string { return "genius" }

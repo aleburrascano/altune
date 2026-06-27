@@ -59,3 +59,5 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 
 	return "", nil
 }
+
+func (*CoverArtArchiveResolver) ArtworkSource() string { return "coverartarchive" }

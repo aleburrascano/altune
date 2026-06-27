@@ -10,6 +10,23 @@ type ArtworkResolver interface {
 	Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error)
 }
 
+// SourcedArtworkResolver is the optional capability a resolver implements to
+// name itself ("fanart", "discogs", …). The chain reads it to tag which provider
+// supplied a result's artwork, for per-provider coverage visibility. A resolver
+// that doesn't implement it is reported as an empty source.
+type SourcedArtworkResolver interface {
+	ArtworkSource() string
+}
+
+// TaggingArtworkResolver resolves artwork AND reports which source supplied it.
+// The chain implements it; the enrichment use case type-asserts for it to record
+// SearchResult.ArtworkSource, falling back to the plain (untagged) resolver when
+// absent. Source is "" when nothing resolved.
+type TaggingArtworkResolver interface {
+	ResolveTagged(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (url, source string, err error)
+	ResolveWithIdentityTagged(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ArtworkIdentity) (url, source string, err error)
+}
+
 // ArtworkIdentity carries an entity's proven cross-provider identity: its MBID
 // plus the bridged provider ids (discogs, spotify, deezer, …) the merge's
 // identity bridge stamped from MusicBrainz url-relations. Resolvers that can
@@ -42,8 +59,8 @@ type IdentityAwareArtworkResolver interface {
 }
 
 type ArtworkCache interface {
-	Get(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (url string, found bool, err error)
-	Set(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid, url string) error
+	Get(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (url, source string, found bool, err error)
+	Set(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid, url, source string) error
 }
 
 type PopularityResolver interface {

@@ -98,3 +98,5 @@ func bestFanartImage(data map[string]any, key string) string {
 	}
 	return bestURL
 }
+
+func (*FanartTvArtworkResolver) ArtworkSource() string { return "fanart" }

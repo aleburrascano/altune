@@ -397,3 +397,5 @@ type itunesItem struct {
 	Copyright         string `json:"copyright"`
 	TrackExplicitness string `json:"trackExplicitness"`
 }
+
+func (*ITunesAdapter) ArtworkSource() string { return "itunes" }

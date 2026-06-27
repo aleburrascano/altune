@@ -25,14 +25,14 @@ type fakeArtworkCache struct {
 	store map[string]string
 }
 
-func (c *fakeArtworkCache) Get(_ context.Context, _ domain.ResultKind, title, _, _ string) (string, bool, error) {
+func (c *fakeArtworkCache) Get(_ context.Context, _ domain.ResultKind, title, _, _ string) (string, string, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	url, ok := c.store[title]
-	return url, ok, nil
+	return url, "", ok, nil
 }
 
-func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _, _ string, url string) error {
+func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _, _, url, _ string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.store[title] = url

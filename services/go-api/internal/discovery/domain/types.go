@@ -248,8 +248,14 @@ type SearchResult struct {
 	Title      string
 	Subtitle   string
 	ImageURL   string
-	Confidence Confidence
-	Sources    []SourceRef
+	// ArtworkSource records WHERE ImageURL came from, for per-provider coverage
+	// visibility: a resolver source ("fanart", "discogs", "itunes", …) when the
+	// artwork chain resolved it, the search provider's own name when the result's
+	// provider image was kept, "cached" on an artwork-cache hit, or "" when no
+	// artwork was found. Display/telemetry only — never a ranking or merge input.
+	ArtworkSource string
+	Confidence    Confidence
+	Sources       []SourceRef
 	// Popularity is the continuous relevance-tiebreak Rank reads after relevance.
 	// It is a TYPED field (not an Extras key) so the producer→consumer link is
 	// compile-checked rather than a silently-absent map entry — the gap the

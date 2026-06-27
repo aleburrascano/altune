@@ -57,12 +57,12 @@ func TestRedisArtworkCache_SetAndGet_CacheHit(t *testing.T) {
 	cleanKeys(t, client, key)
 
 	// Act
-	err := cache.Set(ctx, kind, title, subtitle, mbid, url)
+	err := cache.Set(ctx, kind, title, subtitle, mbid, url, "fanart")
 	if err != nil {
 		t.Fatalf("Set returned unexpected error: %v", err)
 	}
 
-	got, hit, err := cache.Get(ctx, kind, title, subtitle, mbid)
+	got, gotSource, hit, err := cache.Get(ctx, kind, title, subtitle, mbid)
 
 	// Assert
 	if err != nil {
@@ -73,6 +73,9 @@ func TestRedisArtworkCache_SetAndGet_CacheHit(t *testing.T) {
 	}
 	if got != url {
 		t.Errorf("expected URL %q, got %q", url, got)
+	}
+	if gotSource != "fanart" {
+		t.Errorf("expected source %q to round-trip, got %q", "fanart", gotSource)
 	}
 }
 
@@ -91,12 +94,12 @@ func TestRedisArtworkCache_SetEmpty_NegativeCache(t *testing.T) {
 	cleanKeys(t, client, key)
 
 	// Act
-	err := cache.Set(ctx, kind, title, subtitle, mbid, "")
+	err := cache.Set(ctx, kind, title, subtitle, mbid, "", "")
 	if err != nil {
 		t.Fatalf("Set returned unexpected error: %v", err)
 	}
 
-	got, hit, err := cache.Get(ctx, kind, title, subtitle, mbid)
+	got, _, hit, err := cache.Get(ctx, kind, title, subtitle, mbid)
 
 	// Assert
 	if err != nil {
@@ -120,7 +123,7 @@ func TestRedisArtworkCache_Get_CacheMiss(t *testing.T) {
 	title := fmt.Sprintf("Nonexistent %s", t.Name())
 
 	// Act
-	got, hit, err := cache.Get(ctx, kind, title, "nobody", "")
+	got, _, hit, err := cache.Get(ctx, kind, title, "nobody", "")
 
 	// Assert
 	if err != nil {

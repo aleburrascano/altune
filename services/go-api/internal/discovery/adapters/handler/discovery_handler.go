@@ -155,13 +155,14 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 // --- DTOs ---
 
 type SearchResultDTO struct {
-	Kind       string         `json:"kind"`
-	Title      string         `json:"title"`
-	Subtitle   string         `json:"subtitle,omitempty"`
-	ImageURL   string         `json:"image_url,omitempty"`
-	Confidence string         `json:"confidence"`
-	Sources    []SourceRefDTO `json:"sources"`
-	Extras     map[string]any `json:"extras"`
+	Kind          string         `json:"kind"`
+	Title         string         `json:"title"`
+	Subtitle      string         `json:"subtitle,omitempty"`
+	ImageURL      string         `json:"image_url,omitempty"`
+	ArtworkSource string         `json:"artwork_source,omitempty"`
+	Confidence    string         `json:"confidence"`
+	Sources       []SourceRefDTO `json:"sources"`
+	Extras        map[string]any `json:"extras"`
 }
 
 type SourceRefDTO struct {
@@ -1058,13 +1059,14 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 		extras = make(map[string]any)
 	}
 	return SearchResultDTO{
-		Kind:       sr.Kind.String(),
-		Title:      sr.Title,
-		Subtitle:   sr.Subtitle,
-		ImageURL:   sr.ImageURL,
-		Confidence: sr.Confidence.String(),
-		Sources:    sources,
-		Extras:     extras,
+		Kind:          sr.Kind.String(),
+		Title:         sr.Title,
+		Subtitle:      sr.Subtitle,
+		ImageURL:      sr.ImageURL,
+		ArtworkSource: sr.ArtworkSource,
+		Confidence:    sr.Confidence.String(),
+		Sources:       sources,
+		Extras:        extras,
 	}
 }
 
