@@ -12,20 +12,21 @@ import { useState } from 'react';
 
 import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
+import { enqueueCritical } from '@shared/telemetry/outbox';
 
 export function useReportWrongAlbum(result: DiscoveryResult): {
   report: () => void;
   reported: boolean;
 } {
-  const recordEvent = useRecordEvent();
   const [reported, setReported] = useState(false);
 
   const report = (): void => {
     if (reported) return;
     setReported(true);
     const album = typeof result.extras.album === 'string' ? result.extras.album : null;
-    recordEvent.mutate({
+    // Label-critical: routed through the outbox (idempotency key + retry), not
+    // fire-and-forget — a lost wrong_album is a lost hard negative.
+    void enqueueCritical({
       type: 'wrong_album',
       search_id: getDetailHandoffSearchId() ?? undefined,
       payload: {
