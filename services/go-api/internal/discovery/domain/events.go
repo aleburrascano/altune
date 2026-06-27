@@ -80,5 +80,12 @@ type InteractionEvent struct {
 	// produced this event. Empty for events with no originating search (e.g. a
 	// play from the library). Stored in the real search_id column, not payload.
 	SearchId string
-	Payload  map[string]any
+	// EventId is the client-minted idempotency key for label-critical events
+	// (library_add, wrong_album) delivered via the outbox. Empty for the
+	// fire-and-forget tier. Insert dedups on it so a retry is a no-op.
+	EventId string
+	// ClientOccurredAt is when the client recorded the event (vs OccurredAt /
+	// received_at, when the server got it). Zero for events minted server-side.
+	ClientOccurredAt time.Time
+	Payload          map[string]any
 }

@@ -54,15 +54,35 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		}
 	}
 
+	// event_id is the idempotency key — only the label-critical outbox tier sets
+	// it; NULL otherwise, so fire-and-forget events never collide.
+	var eventID *uuid.UUID
+	if event.EventId != "" {
+		if id, parseErr := uuid.Parse(event.EventId); parseErr == nil {
+			eventID = &id
+		}
+	}
+
+	// client_occurred_at is nullable — only client-minted events carry one.
+	var clientOccurredAt *time.Time
+	if !event.ClientOccurredAt.IsZero() {
+		t := event.ClientOccurredAt.UTC()
+		clientOccurredAt = &t
+	}
+
 	occurredAt := event.OccurredAt
 	if occurredAt.IsZero() {
 		occurredAt = time.Now().UTC()
 	}
 
+	// received_at fills from its column default (now()). ON CONFLICT on the partial
+	// event_id index makes a retried critical event a no-op (at-least-once → once).
 	_, err = r.pool.Exec(ctx,
-		`INSERT INTO discovery_events (user_id, event_type, query_norm, search_id, payload, occurred_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`,
-		event.UserId.UUID(), event.Type.String(), queryNorm, searchID, string(payloadJSON), occurredAt,
+		`INSERT INTO discovery_events
+			(user_id, event_type, query_norm, search_id, event_id, client_occurred_at, payload, occurred_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (event_id) WHERE event_id IS NOT NULL DO NOTHING`,
+		event.UserId.UUID(), event.Type.String(), queryNorm, searchID, eventID, clientOccurredAt, string(payloadJSON), occurredAt,
 	)
 	if err != nil {
 		return fmt.Errorf("append telemetry event: %w", err)

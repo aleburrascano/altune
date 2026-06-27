@@ -21,10 +21,12 @@ func NewRecordEventService(eventStore ports.EventStore) *RecordEventService {
 }
 
 type RecordEventInput struct {
-	Type      domain.EventType
-	QueryNorm string
-	SearchId  string
-	Payload   map[string]any
+	Type             domain.EventType
+	QueryNorm        string
+	SearchId         string
+	EventId          string
+	ClientOccurredAt time.Time
+	Payload          map[string]any
 }
 
 func (s *RecordEventService) Execute(ctx context.Context, userId shared.UserId, input RecordEventInput) error {
@@ -33,12 +35,14 @@ func (s *RecordEventService) Execute(ctx context.Context, userId shared.UserId, 
 	}
 
 	event := domain.InteractionEvent{
-		OccurredAt: time.Now().UTC(),
-		UserId:     userId,
-		Type:       input.Type,
-		QueryNorm:  input.QueryNorm,
-		SearchId:   input.SearchId,
-		Payload:    input.Payload,
+		OccurredAt:       time.Now().UTC(),
+		UserId:           userId,
+		Type:             input.Type,
+		QueryNorm:        input.QueryNorm,
+		SearchId:         input.SearchId,
+		EventId:          input.EventId,
+		ClientOccurredAt: input.ClientOccurredAt,
+		Payload:          input.Payload,
 	}
 	if err := s.eventStore.Append(ctx, event); err != nil {
 		return fmt.Errorf("record event: %w", err)
