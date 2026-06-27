@@ -20,6 +20,7 @@ type AcquireTrackAudioService struct {
 	trackRepo     ports.TrackRepository
 	audioSearcher ports.AudioSearcher
 	audioStore    ports.AudioWriter
+	audioProber   ports.AudioProber
 	events        events.Publisher
 }
 
@@ -42,6 +43,13 @@ func NewAcquireTrackAudioService(
 
 func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.events = pub }
+}
+
+// WithAudioProber enables post-download duration verification: each downloaded
+// file is probed and rejected if its length doesn't match the track's expected
+// duration, falling through to the next-best candidate.
+func WithAudioProber(p ports.AudioProber) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.audioProber = p }
 }
 
 // Execute acquires audio for a track via the search pipeline (YouTube-first,
@@ -206,7 +214,7 @@ func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId doma
 	return []Step{
 		NewSearchStep(s.audioSearcher),
 		NewSelectStep(),
-		NewDownloadStep(s.audioSearcher),
+		NewDownloadStep(s.audioSearcher, WithDownloadProber(s.audioProber)),
 		NewTagStep(),
 		NewStoreStep(s.audioStore),
 		NewUpdateTrackStep(s.trackRepo, userId, trackId),

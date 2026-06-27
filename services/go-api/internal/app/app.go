@@ -168,7 +168,14 @@ func (a *App) setup(ctx context.Context) error {
 
 	var scheduler catalogPorts.AcquisitionScheduler
 	if audioSearcher != nil && audioStore != nil {
-		acquireSvc := acqService.NewAcquireTrackAudioService(trackRepo, audioSearcher, audioStore, acqService.WithAcquireEvents(a.eventBus))
+		audioProber := ytdlp.NewFfprobeProber(a.cfg.FFmpegLocation)
+		acquireSvc := acqService.NewAcquireTrackAudioService(
+			trackRepo,
+			audioSearcher,
+			audioStore,
+			acqService.WithAcquireEvents(a.eventBus),
+			acqService.WithAudioProber(audioProber),
+		)
 		bgScheduler := acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem)
 		a.scheduler = bgScheduler
 		scheduler = bgScheduler
