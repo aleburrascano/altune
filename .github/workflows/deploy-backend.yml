@@ -74,6 +74,13 @@ jobs:
             git checkout main
             git pull --ff-only origin main
             cd services/go-api
+            # Clear any stale renamed container from an interrupted recreate.
+            # Compose renames the old container to "<id>_altune-go-api" before
+            # swapping; an interrupted swap leaves it behind and the next recreate
+            # fails with a name conflict. Match only the renamed leftovers (the
+            # "_altune-go-api" suffix) so the live "altune-go-api" is untouched and
+            # keeps serving during the rebuild.
+            docker ps -aq --filter "name=_altune-go-api" | xargs -r docker rm -f || true
             docker compose -f docker-compose.prod.yml up --build -d
             docker compose -f docker-compose.prod.yml ps
             docker image prune -f
