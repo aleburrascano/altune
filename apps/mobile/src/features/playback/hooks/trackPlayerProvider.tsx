@@ -11,6 +11,7 @@ import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '@shared
 
 import { ensurePlayerSetup } from '../initPlayer';
 import { loadNativeTrack } from '../loadNativeTrack';
+import { useIsForeground } from './useIsForeground';
 import { useQueueResume } from './useQueueResume';
 
 // AIDEV-NOTE: The real, track-player-backed playback provider. It is imported
@@ -33,12 +34,23 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   const playbackState = usePlaybackState();
   const progress = useProgress(500);
+  const isForeground = useIsForeground();
 
   useEffect(() => {
     void ensurePlayerSetup();
   }, []);
 
-  const positionMs = progress.position * 1000;
+  // While backgrounded, freeze positionMs at its last foreground value so the
+  // context value stops changing twice a second. useProgress still fires its
+  // own setState, but with a stable positionMs the memoized state object below
+  // keeps its identity — so no usePlayback() consumer re-renders and no
+  // JS-thread scrubber/mini-player animation runs. This is what keeps a locked,
+  // music-playing app from tripping iOS's background CPU watchdog. The native
+  // player (and its lock-screen position) is driven natively, unaffected.
+  const frozenPositionMs = useRef(0);
+  const livePositionMs = progress.position * 1000;
+  if (isForeground) frozenPositionMs.current = livePositionMs;
+  const positionMs = isForeground ? livePositionMs : frozenPositionMs.current;
   const rawDurationMs = progress.duration * 1000;
 
   // The track carries its own duration (set at queue-build time by
