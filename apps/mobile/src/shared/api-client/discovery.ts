@@ -5,6 +5,8 @@
  * docs/specs/discover-music-v1/spec.md §3.7.
  */
 
+import { getSessionId } from '@shared/telemetry/session';
+
 import { apiFetch } from './index';
 
 export type DiscoveryKind = 'artist' | 'album' | 'track';
@@ -158,10 +160,17 @@ export async function listSearchHistory(params?: {
 }
 
 export async function recordEvent(event: DiscoveryEvent): Promise<void> {
+  // Stamp the rotating session_id onto every event's payload (no column — it
+  // rides in JSONB) so the backend can derive session-arc signals (abandonment,
+  // pogo-sticking) without each call site threading it.
+  const body: DiscoveryEvent = {
+    ...event,
+    payload: { ...(event.payload ?? {}), session_id: getSessionId() },
+  };
   await apiFetch<void>('/v1/discovery/events', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(event),
+    body: JSON.stringify(body),
   });
 }
 
