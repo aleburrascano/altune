@@ -24,6 +24,8 @@ package service
 import (
 	"context"
 	"log/slog"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -61,6 +63,7 @@ type Service struct {
 	mbidIndex       ports.MBIDIndex
 	correctionSvc   *CorrectionService
 	findRelatedSvc  *FindRelatedService
+	resultCache     ports.ResultCache
 	tailDemotion    bool
 	bgWg            sync.WaitGroup
 }
@@ -130,6 +133,13 @@ func WithFindRelatedService(r *FindRelatedService) Option {
 	return func(s *Service) { s.findRelatedSvc = r }
 }
 
+// WithResultCache enables the app-wide consistency cache (shared, short-TTL) so an
+// identical query returns the identical ranked list for everyone within the window.
+// Off → every search recomputes (the prior behavior).
+func WithResultCache(c ports.ResultCache) Option {
+	return func(s *Service) { s.resultCache = c }
+}
+
 // WithTailDemotion enables the experimental tail-noise demotion: single-source
 // UGC/scrobble results with no identity (see isLowConfidenceTail) sort below every
 // corroborated result. Off by default; flipped on via TAIL_DEMOTION_ENABLED for
@@ -167,15 +177,42 @@ func (s *Service) Execute(
 
 	slog.InfoContext(ctx, "search.v2.start", "query", query.Raw)
 
-	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
-	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm)
+	// App-wide consistency cache: an identical query returns the identical ranked
+	// list for everyone within the TTL, smoothing provider-drop-out / cache-warmth
+	// variance. Cache key is query-only (catalog-derived results are not
+	// user-specific); the cached value is the full pre-limit list, re-truncated per
+	// request. Inert when no cache is wired — the default path is unchanged.
+	cacheKey := resultCacheKey(queryNorm, query.Kinds)
+	var (
+		ranked         []domain.SearchResult
+		statuses       []domain.ProviderSearchResponse
+		correctedQuery string
+		originalQuery  string
+		cached         bool
+	)
+	if s.resultCache != nil {
+		if hit, ok := s.resultCache.Get(ctx, cacheKey); ok {
+			ranked, cached = hit, true
+		}
+	}
 
-	// Zero results → auto-correct and re-search. (The "did you mean" suggestion
-	// for weak-but-non-empty results was removed: its trigger was a tuned
-	// relevance threshold — query-fit.)
-	var correctedQuery, originalQuery string
-	if len(ranked) == 0 {
-		correctedQuery, originalQuery, ranked = s.tryCorrection(ctx, query)
+	if !cached {
+		var perProvider [][]domain.SearchResult
+		perProvider, statuses = s.fanOut(ctx, searchQuery, query.Kinds)
+		ranked = s.mergeRankEnrich(ctx, perProvider, queryNorm)
+
+		// Zero results → auto-correct and re-search. (The "did you mean" suggestion
+		// for weak-but-non-empty results was removed: its trigger was a tuned
+		// relevance threshold — query-fit.)
+		if len(ranked) == 0 {
+			correctedQuery, originalQuery, ranked = s.tryCorrection(ctx, query)
+		}
+
+		// Cache only complete, non-empty results: a partial (provider-drop-out) run
+		// frozen for the TTL would serve a degraded list to everyone.
+		if s.resultCache != nil && len(ranked) > 0 && !anyProviderFailed(statuses) {
+			s.resultCache.Set(ctx, cacheKey, ranked)
+		}
 	}
 
 	var related []domain.RelatedGroup
@@ -187,13 +224,7 @@ func (s *Service) Execute(
 		ranked = ranked[:query.Limit]
 	}
 
-	partial := false
-	for _, st := range statuses {
-		if st.Status != domain.ProviderStatusOK {
-			partial = true
-			break
-		}
-	}
+	partial := anyProviderFailed(statuses)
 
 	s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
 	s.emitSearchEvent(ctx, userId, queryNorm, ranked)
@@ -209,6 +240,7 @@ func (s *Service) Execute(
 		"partial", partial,
 		"corrected", correctedQuery,
 		"related_groups", len(related),
+		"cached", cached,
 	)
 
 	return &SearchOutput{
@@ -430,4 +462,26 @@ func (s *Service) RankVariantsForEval(
 // graceful shutdown; tests call it to observe background effects deterministically.
 func (s *Service) WaitForBackground() {
 	s.bgWg.Wait()
+}
+
+// resultCacheKey builds the app-wide consistency-cache key from the normalized
+// query and the requested kinds (sorted for stability). Limit is deliberately
+// excluded: the cached value is the full pre-limit list, re-truncated per request,
+// so different limits share one entry.
+func resultCacheKey(queryNorm string, kinds map[domain.ResultKind]bool) string {
+	ks := make([]string, 0, len(kinds))
+	for k := range kinds {
+		ks = append(ks, k.String())
+	}
+	sort.Strings(ks)
+	return queryNorm + "|" + strings.Join(ks, ",")
+}
+
+func anyProviderFailed(statuses []domain.ProviderSearchResponse) bool {
+	for _, st := range statuses {
+		if st.Status != domain.ProviderStatusOK {
+			return true
+		}
+	}
+	return false
 }
