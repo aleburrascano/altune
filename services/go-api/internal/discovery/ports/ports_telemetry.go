@@ -91,6 +91,23 @@ type SessionSignalStore interface {
 	AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
 }
 
+// MetricPoint is one day's value of a rolled-up metric.
+type MetricPoint struct {
+	AsOf  time.Time
+	Value float64
+}
+
+// MetricsRollupStore persists and reads the daily Mission Control metrics
+// rollup — the durable, restart-surviving history the in-memory console counters
+// cannot provide. Aggregates only; no user_id.
+type MetricsRollupStore interface {
+	// RollupDay computes the metrics for the UTC day containing `day` and upserts
+	// them (idempotent — safe to re-run).
+	RollupDay(ctx context.Context, day time.Time) error
+	// MetricsHistory returns the last `days` daily values of `metric`, newest first.
+	MetricsHistory(ctx context.Context, metric string, days int) ([]MetricPoint, error)
+}
+
 type FetchSuccessStore interface {
 	Record(ctx context.Context, provider domain.ProviderName, success bool) error
 	GetRate(ctx context.Context, provider domain.ProviderName) (float64, error)

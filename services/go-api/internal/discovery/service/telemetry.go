@@ -31,6 +31,7 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 	payload := map[string]any{
 		"result_count":     len(shown),
 		"zero_result":      len(shown) == 0,
+		"tail_noise_top5":  TailNoiseInTopK(shown, 5),
 		"pipeline_version": pipelineVersionV2,
 	}
 	// Stamp exploration so offline counterfactual eval can weight these searches
