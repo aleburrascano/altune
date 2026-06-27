@@ -17,6 +17,7 @@ import (
 var _ ports.EventStore = (*PgxEventStore)(nil)
 var _ ports.EventQuery = (*PgxEventStore)(nil)
 var _ ports.BehavioralSignalStore = (*PgxEventStore)(nil)
+var _ ports.BehavioralLabelStore = (*PgxEventStore)(nil)
 
 type PgxEventStore struct {
 	pool *pgxpool.Pool
@@ -168,6 +169,53 @@ func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time
 		signals = append(signals, sig)
 	}
 	return signals, rows.Err()
+}
+
+// BehavioralLabels mines free relevance labels from query→engagement chains:
+// each engagement event (completed, library_add, wrong_album) is joined to its
+// originating search_performed by search_id to recover the query. A signature
+// touched by a wrong_album is a hard negative (Polarity −1); otherwise a
+// completed/library_add makes it a positive (Polarity +1). Read-only — never the
+// request path.
+func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) ([]ports.BehavioralLabel, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT sp.query_norm,
+			ev.payload->>'result_signature' AS sig,
+			COALESCE(ev.payload->>'title', '') AS title,
+			COALESCE(ev.payload->>'subtitle', ev.payload->>'artist', ev.payload->>'album', '') AS subtitle,
+			MAX(CASE WHEN ev.event_type = 'wrong_album' THEN 1 ELSE 0 END) AS has_negative
+		FROM discovery_events ev
+		JOIN discovery_events sp
+			ON sp.search_id = ev.search_id AND sp.event_type = 'search_performed'
+		WHERE ev.occurred_at >= $1
+			AND ev.search_id IS NOT NULL
+			AND ev.event_type IN ('completed', 'library_add', 'wrong_album')
+			AND COALESCE(ev.payload->>'result_signature', '') <> ''
+			AND COALESCE(sp.query_norm, '') <> ''
+		GROUP BY sp.query_norm, sig, title, subtitle`,
+		since,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query behavioral labels: %w", err)
+	}
+	defer rows.Close()
+
+	labels := []ports.BehavioralLabel{}
+	for rows.Next() {
+		var (
+			lbl         ports.BehavioralLabel
+			hasNegative int
+		)
+		if err := rows.Scan(&lbl.QueryNorm, &lbl.ResultSignature, &lbl.Title, &lbl.Subtitle, &hasNegative); err != nil {
+			return nil, fmt.Errorf("scan behavioral label: %w", err)
+		}
+		lbl.Polarity = 1
+		if hasNegative == 1 {
+			lbl.Polarity = -1
+		}
+		labels = append(labels, lbl)
+	}
+	return labels, rows.Err()
 }
 
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {
