@@ -27,12 +27,13 @@ const rrfK = 60
 type demoteFunc func(domain.SearchResult) bool
 
 type scored struct {
-	result    domain.SearchResult
-	relevance float64
-	pop       float64
-	rrf       float64
-	multi     bool
-	demoted   bool
+	result     domain.SearchResult
+	relevance  float64
+	behavioral float64
+	pop        float64
+	rrf        float64
+	multi      bool
+	demoted    bool
 }
 
 // Rank applies the eligibility gates and sorts by continuous relevance,
@@ -40,7 +41,7 @@ type scored struct {
 // default production behavior (no tail demotion) and the surface the sacred
 // rank/pipeline tests assert; it delegates to rankWith with no predicate.
 func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
-	return rankWith(entities, queryNorm, nil)
+	return rankWith(entities, queryNorm, nil, nil)
 }
 
 // rankWith is Rank with an optional tail-demotion predicate. A non-nil demote
@@ -48,7 +49,12 @@ func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
 // below every non-demoted result, overriding their query-word relevance. demote is
 // nil on the default path, making the demotion branch inert. EXPERIMENTAL,
 // eval-gated — see docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
-func rankWith(entities []Entity, queryNorm string, demote demoteFunc) []domain.SearchResult {
+// rankWith is Rank with an optional tail-demotion predicate and an optional
+// behavioral score map (keyed by result_signature). Both are nil on the default
+// path, making their branches inert — the sacred rank/pipeline tests assert that
+// default. behavioral is the EventConsumer-derived satisfaction signal, applied
+// only as a within-tie input below relevance (see rankLess), eval A/B-gated.
+func rankWith(entities []Entity, queryNorm string, demote demoteFunc, behavioral map[string]float64) []domain.SearchResult {
 	// queryNorm is already normalized by the caller (Execute); use it directly.
 	q := queryNorm
 
@@ -75,12 +81,13 @@ func rankWith(entities []Entity, queryNorm string, demote demoteFunc) []domain.S
 			demoted = demote(r)
 		}
 		results = append(results, scored{
-			result:    r,
-			relevance: idfWeightedCoverage(r, q, rarity),
-			pop:       popularityOf(r),
-			rrf:       rrfScore(e.BestRank),
-			multi:     len(providersOf(r)) > 1,
-			demoted:   demoted,
+			result:     r,
+			relevance:  idfWeightedCoverage(r, q, rarity),
+			behavioral: behavioral[resultSignature(r)], // nil map read → 0 (inert)
+			pop:        popularityOf(r),
+			rrf:        rrfScore(e.BestRank),
+			multi:      len(providersOf(r)) > 1,
+			demoted:    demoted,
 		})
 	}
 
@@ -104,6 +111,13 @@ func rankLess(a, b scored) bool {
 	}
 	if a.relevance != b.relevance {
 		return a.relevance > b.relevance
+	}
+	// Behavioral satisfaction (experimental, off by default): among equally
+	// relevant results, the one users actually played-to-completion sorts above
+	// the one they skip-after-click. Inert when no behavioral scores are set —
+	// both 0, so this never fires. eval A/B-gated (BEHAVIORAL_RANKING_ENABLED).
+	if a.behavioral != b.behavioral {
+		return a.behavioral > b.behavioral
 	}
 	if a.pop != b.pop {
 		return a.pop > b.pop
@@ -184,6 +198,16 @@ func rrfScore(bestRank map[domain.ProviderName]int) float64 {
 		s += 1.0 / float64(rrfK+rank)
 	}
 	return s
+}
+
+// resultSignature is the canonical cross-query join key — (kind, normalized
+// title, normalized subtitle) — identical to the one the handler emits on the
+// wire and the client echoes on engagement events, so behavioral scores keyed by
+// the stored signature line up with the live results being ranked.
+func resultSignature(r domain.SearchResult) string {
+	return r.Kind.String() + "|" +
+		textnorm.NormalizeForMatch(r.Title) + "|" +
+		textnorm.NormalizeForMatch(r.Subtitle)
 }
 
 func tokenSet(s string) map[string]bool {

@@ -17,16 +17,21 @@ import "altune/go-api/internal/discovery/domain"
 //	EnforceDiversity         : per-artist cap within the top window (product rule)
 //	CollapseArtistDuplicates : fold same-name artists into one (product rule)
 func rankPipeline(perProvider [][]domain.SearchResult, queryNorm string) []domain.SearchResult {
-	return rankPipelineWith(perProvider, queryNorm, nil)
+	return rankPipelineWith(perProvider, queryNorm, nil, nil)
 }
 
 // rankPipelineWith is rankPipeline with an optional tail-demotion predicate threaded
 // into the rank step. The live search path passes the predicate when the experiment
 // is enabled (Service.tailDemotion); rankPipeline and the pipeline tests keep the
 // nil-predicate default. See docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
-func rankPipelineWith(perProvider [][]domain.SearchResult, queryNorm string, demote demoteFunc) []domain.SearchResult {
+func rankPipelineWith(
+	perProvider [][]domain.SearchResult,
+	queryNorm string,
+	demote demoteFunc,
+	behavioral map[string]float64,
+) []domain.SearchResult {
 	entities := Merge(perProvider)
-	ranked := rankWith(entities, queryNorm, demote)
+	ranked := rankWith(entities, queryNorm, demote, behavioral)
 	ranked = EnforceDiversity(ranked)
 	ranked = CollapseArtistDuplicates(ranked)
 	return ranked

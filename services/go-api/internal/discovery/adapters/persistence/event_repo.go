@@ -16,6 +16,7 @@ import (
 
 var _ ports.EventStore = (*PgxEventStore)(nil)
 var _ ports.EventQuery = (*PgxEventStore)(nil)
+var _ ports.BehavioralSignalStore = (*PgxEventStore)(nil)
 
 type PgxEventStore struct {
 	pool *pgxpool.Pool
@@ -115,6 +116,58 @@ func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Ti
 	}
 	defer rows.Close()
 	return scanQueryCounts(rows)
+}
+
+// shortDwellThresholdMs is the dwell below which a skip counts as
+// dissatisfaction (Kim WSDM 2014: dwell <20–30s signals an unsatisfying result).
+const shortDwellThresholdMs = 20000
+
+// SatisfactionSignals aggregates play/skip/completed events per result_signature
+// over the window into a net score: +1 per play (listen-threshold satisfaction)
+// or completed (play-to-completion), −1 per skip whose dwell_ms is below the
+// short-dwell threshold (skip-after-click dissatisfaction). result_signature
+// rides in the JSONB payload (echoed by the client); only signed results are
+// returned. Read-only analytics — never the request path.
+func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time) ([]ports.BehavioralSignal, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT payload->>'result_signature' AS sig,
+			SUM(
+				CASE
+					WHEN event_type IN ('play', 'completed') THEN 1.0
+					WHEN event_type = 'skip'
+						AND COALESCE(NULLIF(payload->>'dwell_ms', '')::numeric, 0) < $2 THEN -1.0
+					ELSE 0
+				END
+			)::float8 AS score
+		FROM discovery_events
+		WHERE occurred_at >= $1
+			AND event_type IN ('play', 'skip', 'completed')
+			AND COALESCE(payload->>'result_signature', '') <> ''
+		GROUP BY sig
+		HAVING SUM(
+			CASE
+				WHEN event_type IN ('play', 'completed') THEN 1.0
+				WHEN event_type = 'skip'
+					AND COALESCE(NULLIF(payload->>'dwell_ms', '')::numeric, 0) < $2 THEN -1.0
+				ELSE 0
+			END
+		) <> 0`,
+		since, shortDwellThresholdMs,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query satisfaction signals: %w", err)
+	}
+	defer rows.Close()
+
+	signals := []ports.BehavioralSignal{}
+	for rows.Next() {
+		var sig ports.BehavioralSignal
+		if err := rows.Scan(&sig.ResultSignature, &sig.Score); err != nil {
+			return nil, fmt.Errorf("scan satisfaction signal: %w", err)
+		}
+		signals = append(signals, sig)
+	}
+	return signals, rows.Err()
 }
 
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {

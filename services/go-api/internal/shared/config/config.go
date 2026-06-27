@@ -69,6 +69,11 @@ type Config struct {
 	// for eval A/B before any production rollout. See
 	// docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
 	TailDemotionEnabled bool `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
+	// Behavioral ranking. OFF by default: feeds the EventConsumer-derived
+	// satisfaction signal (play-to-completion +, skip-after-click −) into ranking
+	// as a within-tie input. A new ranking consumer, so it ships dark until eval
+	// A/B proves it on the hard corpus — same discipline as tail demotion.
+	BehavioralRankingEnabled bool `env:"BEHAVIORAL_RANKING_ENABLED" envDefault:"false"`
 }
 
 func Load() (*Config, error) {
