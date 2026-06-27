@@ -10,58 +10,32 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
-
-	"github.com/raitonoberu/ytmusic"
 )
 
-// ytmusicTimeout bounds every YouTube Music call: the ytmusic library otherwise
-// uses a no-timeout client and ignores the caller's context, so a slow/hung
-// request could block a search indefinitely.
+// ytmusicTimeout bounds every YouTube Music call. The keyless internal endpoint
+// has no SLA, so a slow/hung request must not block a search indefinitely.
 const ytmusicTimeout = 8 * time.Second
 
-// setYTMusicHTTPClient points the ytmusic library's package-global client at a
-// timeout-bounded client over the given transport. The library exposes NO
-// per-instance client — request.go calls the package-global HTTPClient.Do
-// directly — so this global write is the only injection seam it offers. The
-// deterministic eval uses it to route YouTube Music through its record/replay
-// transport; a nil transport yields the default transport (the production path,
-// unchanged). The composition root sets this once per process and every YouTube
-// Music construction in a process shares one transport, so the write is not racy.
-func setYTMusicHTTPClient(transport http.RoundTripper) {
-	ytmusic.HTTPClient = &http.Client{Timeout: ytmusicTimeout, Transport: transport}
+// ytmHTTPClient builds the timeout-bounded client the adapter and the artwork
+// resolver share-shape. transport is injected (nil → default transport) so the
+// deterministic eval can record/replay YouTube Music like every other provider.
+func ytmHTTPClient(transport http.RoundTripper) *http.Client {
+	return &http.Client{Timeout: ytmusicTimeout, Transport: transport}
 }
 
-type YouTubeMusicAdapter struct{}
-
-// NewYouTubeMusicAdapter builds the YouTube Music search adapter. transport is
-// injected into the ytmusic library's global client (nil → default transport),
-// so offline tooling can record/replay YouTube Music like every other provider.
-func NewYouTubeMusicAdapter(transport http.RoundTripper) *YouTubeMusicAdapter {
-	setYTMusicHTTPClient(transport)
-	return &YouTubeMusicAdapter{}
-}
-
-func (a *YouTubeMusicAdapter) Name() domain.ProviderName { return domain.ProviderYouTube }
-
-// SearchTimeout gives YouTube Music a larger budget than the default fan-out
-// timeout so the adapter has room to retry the intermittent rate-limit (HTTP
-// 403, whose HTML body surfaces as a JSON parse error) it returns under bursty
-// load.
-func (a *YouTubeMusicAdapter) SearchTimeout() time.Duration { return 3 * time.Second }
-
-// fetchYTMusic runs a ytmusic search with one retry on a transient error —
-// notably the intermittent HTTP 403 rate-limit — while respecting the caller's
-// context, which the library itself ignores.
-func fetchYTMusic(ctx context.Context, newClient func() *ytmusic.SearchClient) (*ytmusic.SearchResult, error) {
+// ytmSearchRetry runs a search with one retry on a transient error — notably the
+// intermittent HTTP 403 rate-limit, whose HTML body surfaces as a JSON decode
+// error — while respecting the caller's context.
+func ytmSearchRetry(ctx context.Context, client *http.Client, query string, filter ytmFilter) (*ytmResult, error) {
 	const attempts = 2
 	var lastErr error
 	for i := 0; i < attempts; i++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		result, err := nextWithContext(ctx, newClient())
+		res, err := ytmSearch(ctx, client, query, filter)
 		if err == nil {
-			return result, nil
+			return res, nil
 		}
 		lastErr = err
 		if i < attempts-1 {
@@ -75,27 +49,23 @@ func fetchYTMusic(ctx context.Context, newClient func() *ytmusic.SearchClient) (
 	return nil, lastErr
 }
 
-// nextWithContext runs the (context-unaware) ytmusic call on a goroutine and
-// returns as soon as the caller's context is done, so a slow request can't
-// outlive the fan-out's deadline. The goroutine completes on its own under the
-// client timeout, so it does not leak.
-func nextWithContext(ctx context.Context, client *ytmusic.SearchClient) (*ytmusic.SearchResult, error) {
-	type out struct {
-		result *ytmusic.SearchResult
-		err    error
-	}
-	ch := make(chan out, 1)
-	go func() {
-		result, err := client.Next()
-		ch <- out{result, err}
-	}()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case o := <-ch:
-		return o.result, o.err
-	}
+type YouTubeMusicAdapter struct {
+	client *http.Client
 }
+
+// NewYouTubeMusicAdapter builds the YouTube Music search adapter. transport is
+// injected into the adapter's own HTTP client (nil → default transport), so
+// offline tooling can record/replay YouTube Music like every other provider.
+func NewYouTubeMusicAdapter(transport http.RoundTripper) *YouTubeMusicAdapter {
+	return &YouTubeMusicAdapter{client: ytmHTTPClient(transport)}
+}
+
+func (a *YouTubeMusicAdapter) Name() domain.ProviderName { return domain.ProviderYouTube }
+
+// SearchTimeout gives YouTube Music a larger budget than the default fan-out
+// timeout so the adapter has room to retry the intermittent rate-limit (HTTP
+// 403) it returns under bursty load.
+func (a *YouTubeMusicAdapter) SearchTimeout() time.Duration { return 3 * time.Second }
 
 func (a *YouTubeMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{
@@ -106,12 +76,9 @@ func (a *YouTubeMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	result, err := fetchYTMusic(ctx, func() *ytmusic.SearchClient { return ytmusic.Search(query) })
+	result, err := ytmSearchRetry(ctx, a.client, query, ytmNoFilter)
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic search: %w", err)
-	}
-	if result == nil {
-		return []domain.SearchResult{}, nil
 	}
 
 	var results []domain.SearchResult
@@ -122,23 +89,23 @@ func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds ma
 		}
 		// AIDEV-NOTE: Coverage fix (plan 003 U6, Pattern C). YouTube Music
 		// classifies many obscure/underground recordings as videos
-		// (MUSIC_VIDEO_TYPE_OMV/UGC), which the ytmusic library routes to
-		// result.Videos — not result.Tracks. Dropping them left the exact track
-		// absent from the candidate set, so the ranker substituted the artist's
-		// hit. Mapping videos as tracks recovers the recording; the categorical
-		// merge dedups any video that duplicates an official track.
+		// (MUSIC_VIDEO_TYPE_OMV/UGC), which our parser routes to result.Videos —
+		// not result.Tracks. Dropping them left the exact track absent from the
+		// candidate set, so the ranker substituted the artist's hit. Mapping
+		// videos as tracks recovers the recording; the categorical merge dedups
+		// any video that duplicates an official track.
 		for _, v := range result.Videos {
 			results = append(results, mapYTMusicVideo(v))
 		}
 	}
 	if kinds[domain.ResultKindAlbum] {
-		for _, a := range result.Albums {
-			results = append(results, mapYTMusicAlbum(a))
+		for _, al := range result.Albums {
+			results = append(results, mapYTMusicAlbum(al))
 		}
 	}
 	if kinds[domain.ResultKindArtist] {
-		for _, a := range result.Artists {
-			results = append(results, mapYTMusicArtist(a))
+		for _, ar := range result.Artists {
+			results = append(results, mapYTMusicArtist(ar))
 		}
 	}
 
@@ -146,18 +113,15 @@ func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds ma
 }
 
 func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
-	result, err := fetchYTMusic(ctx, func() *ytmusic.SearchClient { return ytmusic.AlbumSearch(artistName) })
+	result, err := ytmSearchRetry(ctx, a.client, artistName, ytmAlbumFilter)
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic album search: %w", err)
 	}
-	if result == nil {
-		return []domain.SearchResult{}, nil
-	}
 
 	var results []domain.SearchResult
-	for _, a := range result.Albums {
+	for _, al := range result.Albums {
 		artistMatch := false
-		for _, artist := range a.Artists {
+		for _, artist := range al.Artists {
 			if strings.EqualFold(artist.Name, artistName) {
 				artistMatch = true
 				break
@@ -166,7 +130,7 @@ func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.Prov
 		if !artistMatch {
 			continue
 		}
-		results = append(results, mapYTMusicAlbum(a))
+		results = append(results, mapYTMusicAlbum(al))
 	}
 
 	if len(result.Albums) > 0 && len(results) == 0 {
@@ -180,12 +144,9 @@ func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.Prov
 }
 
 func (a *YouTubeMusicAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
-	result, err := fetchYTMusic(ctx, func() *ytmusic.SearchClient { return ytmusic.TrackSearch(artistName) })
+	result, err := ytmSearchRetry(ctx, a.client, artistName, ytmTrackFilter)
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic track search: %w", err)
-	}
-	if result == nil {
-		return []domain.SearchResult{}, nil
 	}
 
 	var results []domain.SearchResult
@@ -209,7 +170,7 @@ func (a *YouTubeMusicAdapter) GetArtistTopTracks(ctx context.Context, _ domain.P
 	return results, nil
 }
 
-func mapYTMusicTrack(t *ytmusic.TrackItem) domain.SearchResult {
+func mapYTMusicTrack(t *ytmTrack) domain.SearchResult {
 	var subtitle string
 	if len(t.Artists) > 0 {
 		subtitle = t.Artists[0].Name
@@ -234,7 +195,7 @@ func mapYTMusicTrack(t *ytmusic.TrackItem) domain.SearchResult {
 // mapYTMusicVideo maps a YouTube Music video result to a track. Used by the
 // Pattern-C coverage fix: obscure recordings YT Music classifies as videos are
 // still the playable track the user wants.
-func mapYTMusicVideo(v *ytmusic.VideoItem) domain.SearchResult {
+func mapYTMusicVideo(v *ytmVideo) domain.SearchResult {
 	var subtitle string
 	if len(v.Artists) > 0 {
 		subtitle = v.Artists[0].Name
@@ -253,7 +214,7 @@ func mapYTMusicVideo(v *ytmusic.VideoItem) domain.SearchResult {
 		extras)
 }
 
-func mapYTMusicAlbum(a *ytmusic.AlbumItem) domain.SearchResult {
+func mapYTMusicAlbum(a *ytmAlbum) domain.SearchResult {
 	var subtitle string
 	if len(a.Artists) > 0 {
 		subtitle = a.Artists[0].Name
@@ -297,14 +258,15 @@ var ytThumbSizeRe = regexp.MustCompile(`w\d+-h\d+`)
 // AIDEV-NOTE: artist-only by design. Album/track artwork is already well covered
 // by the ID-keyed sources (CAA 1200 / Deezer 1000 / iTunes 1500-from-3000); YT
 // Music adds no album ceiling above those, only artist images they lack.
-type YouTubeMusicArtworkResolver struct{}
+type YouTubeMusicArtworkResolver struct {
+	client *http.Client
+}
 
 // NewYouTubeMusicArtworkResolver builds the keyless YouTube Music artist-artwork
-// resolver. transport is injected into the ytmusic library's global client (nil
-// → default transport).
+// resolver. transport is injected into the resolver's own HTTP client (nil →
+// default transport).
 func NewYouTubeMusicArtworkResolver(transport http.RoundTripper) *YouTubeMusicArtworkResolver {
-	setYTMusicHTTPClient(transport)
-	return &YouTubeMusicArtworkResolver{}
+	return &YouTubeMusicArtworkResolver{client: ytmHTTPClient(transport)}
 }
 
 // Resolve returns a high-res artist image URL, or "" so the chain falls through.
@@ -312,8 +274,8 @@ func (a *YouTubeMusicArtworkResolver) Resolve(ctx context.Context, kind domain.R
 	if kind != domain.ResultKindArtist || title == "" {
 		return "", nil
 	}
-	result, err := fetchYTMusic(ctx, func() *ytmusic.SearchClient { return ytmusic.ArtistSearch(title) })
-	if err != nil || result == nil {
+	result, err := ytmSearchRetry(ctx, a.client, title, ytmArtistFilter)
+	if err != nil {
 		return "", nil
 	}
 	url := pickArtistArtwork(result.Artists, title, ytArtworkHeroSize)
@@ -328,7 +290,7 @@ func (a *YouTubeMusicArtworkResolver) Resolve(ctx context.Context, kind domain.R
 // avoid wrong-artist images, falling back to the top result — which the caller
 // searched by this exact name, so a name-matched photo beats no photo (the
 // chain's fallback philosophy). Pure (no network) for testability.
-func pickArtistArtwork(artists []*ytmusic.ArtistItem, name string, size int) string {
+func pickArtistArtwork(artists []*ytmArtistItem, name string, size int) string {
 	var fallback string
 	for _, artist := range artists {
 		url := largestYTThumbnail(artist.Thumbnails)
@@ -349,8 +311,8 @@ func pickArtistArtwork(artists []*ytmusic.ArtistItem, name string, size int) str
 }
 
 // largestYTThumbnail returns the URL of the highest-resolution thumbnail (the
-// library orders them ascending by size).
-func largestYTThumbnail(thumbs []ytmusic.Thumbnail) string {
+// API orders them ascending by size).
+func largestYTThumbnail(thumbs []ytmThumbnail) string {
 	if len(thumbs) == 0 {
 		return ""
 	}
@@ -367,7 +329,7 @@ func resizeYTThumbnail(url string, size int) string {
 	return ytThumbSizeRe.ReplaceAllString(url, fmt.Sprintf("w%d-h%d", size, size))
 }
 
-func mapYTMusicArtist(a *ytmusic.ArtistItem) domain.SearchResult {
+func mapYTMusicArtist(a *ytmArtistItem) domain.SearchResult {
 	var imageURL string
 	if len(a.Thumbnails) > 0 {
 		imageURL = a.Thumbnails[len(a.Thumbnails)-1].URL

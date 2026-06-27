@@ -2,27 +2,34 @@ package providers
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
-
-	"github.com/raitonoberu/ytmusic"
 )
 
-func TestFetchYTMusic_RespectsCancelledContext(t *testing.T) {
+// recordingRoundTripper records whether a request was ever dispatched, so the
+// cancelled-context test can assert no network call happened.
+type recordingRoundTripper struct{ called bool }
+
+func (r *recordingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	r.called = true
+	return nil, errors.New("network call should not happen")
+}
+
+func TestYTMSearchRetry_RespectsCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	called := false
-	_, err := fetchYTMusic(ctx, func() *ytmusic.SearchClient {
-		called = true
-		return ytmusic.Search("anything")
-	})
+	rt := &recordingRoundTripper{}
+	client := &http.Client{Transport: rt}
+	_, err := ytmSearchRetry(ctx, client, "anything", ytmNoFilter)
 
 	if err == nil {
 		t.Fatal("want a context error, got nil")
 	}
-	if called {
+	if rt.called {
 		t.Error("must not start a network call when the context is already cancelled")
 	}
 }
@@ -63,12 +70,12 @@ func TestResizeYTThumbnail(t *testing.T) {
 }
 
 func TestPickArtistArtwork(t *testing.T) {
-	thumb := func(url string) []ytmusic.Thumbnail {
-		return []ytmusic.Thumbnail{{URL: "https://img/small=w60-h60-rj"}, {URL: url}}
+	thumb := func(url string) []ytmThumbnail {
+		return []ytmThumbnail{{URL: "https://img/small=w60-h60-rj"}, {URL: url}}
 	}
 
 	t.Run("prefers an exact case-insensitive name match over the top result", func(t *testing.T) {
-		artists := []*ytmusic.ArtistItem{
+		artists := []*ytmArtistItem{
 			{Artist: "Kendrick Lamar Type Beat", Thumbnails: thumb("https://img/wrong=w120-h120-rj")},
 			{Artist: "kendrick lamar", Thumbnails: thumb("https://img/right=w120-h120-p-rj")},
 		}
@@ -80,7 +87,7 @@ func TestPickArtistArtwork(t *testing.T) {
 	})
 
 	t.Run("falls back to the top result when no exact match", func(t *testing.T) {
-		artists := []*ytmusic.ArtistItem{
+		artists := []*ytmArtistItem{
 			{Artist: "Some Other Artist", Thumbnails: thumb("https://img/top=w120-h120-rj")},
 		}
 		got := pickArtistArtwork(artists, "Nonexistent", 1000)
@@ -91,7 +98,7 @@ func TestPickArtistArtwork(t *testing.T) {
 	})
 
 	t.Run("returns empty when no artist carries a thumbnail", func(t *testing.T) {
-		artists := []*ytmusic.ArtistItem{{Artist: "No Image", Thumbnails: nil}}
+		artists := []*ytmArtistItem{{Artist: "No Image", Thumbnails: nil}}
 		if got := pickArtistArtwork(artists, "No Image", 1000); got != "" {
 			t.Errorf("got %q, want empty", got)
 		}
@@ -118,12 +125,12 @@ func TestYouTubeMusicArtworkResolver_NonArtistKindIsNoop(t *testing.T) {
 }
 
 func TestMapYTMusicVideo(t *testing.T) {
-	v := &ytmusic.VideoItem{
+	v := &ytmVideo{
 		VideoID:  "abc123",
 		Title:    "Obscure Track",
-		Artists:  []ytmusic.Artist{{Name: "Underground Artist"}},
+		Artists:  []ytmArtistRef{{Name: "Underground Artist"}},
 		Duration: 200,
-		Thumbnails: []ytmusic.Thumbnail{
+		Thumbnails: []ytmThumbnail{
 			{URL: "https://img/small"},
 			{URL: "https://img/large"},
 		},
