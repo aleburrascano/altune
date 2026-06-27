@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"log/slog"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -166,6 +169,7 @@ func (s *ConsensusService) BuildConsensus(
 	}
 
 	results = s.applyMBAuthority(ctx, artistName, results)
+	sortChronological(results)
 
 	// Don't cache a timeout-truncated result: if the deadline fired mid-fetch or
 	// mid-MB-validation, the verdicts are partial and must not be frozen for the
@@ -175,6 +179,47 @@ func (s *ConsensusService) BuildConsensus(
 	}
 	logConsensus(ctx, artistName, results, respondedCount, len(s.providers))
 	return results
+}
+
+// sortChronological orders the discography newest-first by release year, with
+// unknown-year albums sinking to the end and a stable title tiebreak. The cluster
+// union is assembled in provider-fetch order (non-chronological); this makes the
+// detail-screen discography read as a real timeline. Year backfill from a
+// secondary provider when the canonical pick lacks one is a separate concern.
+func sortChronological(results []ConsensusAlbum) {
+	slices.SortStableFunc(results, func(a, b ConsensusAlbum) int {
+		ya, yb := yearOf(a.Album), yearOf(b.Album)
+		switch {
+		case ya == 0 && yb != 0:
+			return 1
+		case ya != 0 && yb == 0:
+			return -1
+		case ya != yb:
+			return yb - ya // newest first
+		}
+		return strings.Compare(a.Album.Title, b.Album.Title)
+	})
+}
+
+// yearOf reads the release year from an album's Extras, tolerating the int /
+// int64 / float64 / string shapes different providers store. 0 = unknown.
+func yearOf(album domain.SearchResult) int {
+	v, ok := album.Extras["year"]
+	if !ok {
+		return 0
+	}
+	switch y := v.(type) {
+	case int:
+		return y
+	case int64:
+		return int(y)
+	case float64:
+		return int(y)
+	case string:
+		n, _ := strconv.Atoi(strings.TrimSpace(y))
+		return n
+	}
+	return 0
 }
 
 func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName string) map[string][]domain.SearchResult {
