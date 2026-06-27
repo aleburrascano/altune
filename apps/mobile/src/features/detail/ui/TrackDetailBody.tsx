@@ -14,6 +14,7 @@ import { extractFeaturedFromText, formatDuration } from '../extras';
 import { trackExtras } from '../extras-accessors';
 import { useIsTrackSaved } from '../hooks/useIsTrackSaved';
 import { useLibraryTrackMatch } from '../hooks/useLibraryTrackMatch';
+import { useReportWrongAlbum } from '../hooks/useReportWrongAlbum';
 import { useSaveTrack } from '../hooks/useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
 
@@ -41,6 +42,7 @@ export function TrackDetailBody({
   genres: string[];
 }): ReactElement {
   const save = useSaveTrack();
+  const wrongAlbum = useReportWrongAlbum(result);
   const playback = usePlayback();
   const alreadySaved = useIsTrackSaved(result.title, result.subtitle);
   const libraryMatch = useLibraryTrackMatch(result.title, result.subtitle);
@@ -150,6 +152,23 @@ export function TrackDetailBody({
         </Pressable>
       ) : null}
 
+      {albumName !== null ? (
+        <Pressable
+          testID="detail-wrong-album"
+          onPress={wrongAlbum.report}
+          disabled={wrongAlbum.reported}
+          accessibilityRole="button"
+          accessibilityLabel="Report wrong album"
+          accessibilityHint="Tells us this album is wrong for this track"
+          hitSlop={8}
+          style={({ pressed }) => [styles.wrongAlbum, pressed ? { opacity: 0.6 } : null]}
+        >
+          <Text variant="caption" tone="tertiary">
+            {wrongAlbum.reported ? 'Thanks — noted' : 'Wrong album?'}
+          </Text>
+        </Pressable>
+      ) : null}
+
       {featured.length > 0 ? (
         <View testID="detail-info-featuring" style={styles.navRow}>
           <Text variant="label" tone="tertiary">
@@ -211,6 +230,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   navValue: { flexShrink: 1, textAlign: 'right' },
+  wrongAlbum: { alignSelf: 'flex-end', paddingVertical: spacing.xs },
   featured: { flexDirection: 'row', flexWrap: 'wrap', flexShrink: 1, justifyContent: 'flex-end' },
   lateralLoading: {
     flexDirection: 'row',

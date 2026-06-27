@@ -15,6 +15,7 @@ import type { InfiniteData } from '@tanstack/react-query';
 
 import { createTrack } from '@shared/api-client/tracks';
 import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '@shared/api-client/types';
+import { getDetailHandoff, getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
 import { insertOptimisticTrack, optimisticTrack } from '../save-cache';
@@ -31,9 +32,20 @@ export function useSaveTrack() {
   return useMutation<TrackResponse, Error, CreateTrackRequest, SaveContext>({
     mutationFn: (body) => createTrack(body),
     onSuccess: (_data, body) => {
+      // library_add is the positive label for the self-growing corpus, so it
+      // carries the originating search_id + result_signature when the save came
+      // from a search-tapped result (both null for a library-originated save).
+      const handoff = getDetailHandoff();
       recordEvent.mutate({
         type: 'library_add',
-        payload: { title: body.title, artist: body.artist, album: body.album, year: body.year },
+        search_id: getDetailHandoffSearchId() ?? undefined,
+        payload: {
+          title: body.title,
+          artist: body.artist,
+          album: body.album,
+          year: body.year,
+          result_signature: handoff?.result_signature ?? null,
+        },
       });
     },
     onMutate: async (body) => {
