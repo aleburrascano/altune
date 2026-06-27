@@ -23,6 +23,7 @@ func NewRecordEventService(eventStore ports.EventStore) *RecordEventService {
 type RecordEventInput struct {
 	Type      domain.EventType
 	QueryNorm string
+	SearchId  string
 	Payload   map[string]any
 }
 
@@ -36,6 +37,7 @@ func (s *RecordEventService) Execute(ctx context.Context, userId shared.UserId, 
 		UserId:     userId,
 		Type:       input.Type,
 		QueryNorm:  input.QueryNorm,
+		SearchId:   input.SearchId,
 		Payload:    input.Payload,
 	}
 	if err := s.eventStore.Append(ctx, event); err != nil {

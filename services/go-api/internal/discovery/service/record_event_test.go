@@ -42,6 +42,30 @@ func TestRecordEventService_Execute_AppendsEvent(t *testing.T) {
 	}
 }
 
+func TestRecordEventService_Execute_ThreadsSearchId(t *testing.T) {
+	store := &fakeEventStore{}
+	svc := NewRecordEventService(store)
+	userId := shared.NewUserId(uuid.New())
+	searchId := uuid.New().String()
+
+	err := svc.Execute(context.Background(), userId, RecordEventInput{
+		Type:     domain.EventTypeResultClicked,
+		SearchId: searchId,
+		Payload:  map[string]any{"position": 0},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	events := store.recorded()
+	if len(events) != 1 {
+		t.Fatalf("want 1 event, got %d", len(events))
+	}
+	if events[0].SearchId != searchId {
+		t.Errorf("search_id = %q, want %q", events[0].SearchId, searchId)
+	}
+}
+
 func TestRecordEventService_Execute_RejectsUnknownType(t *testing.T) {
 	store := &fakeEventStore{}
 	svc := NewRecordEventService(store)

@@ -71,6 +71,10 @@ type Service struct {
 // SearchOutput is the result envelope returned by the search use case and
 // mapped to the wire by the handler.
 type SearchOutput struct {
+	// SearchId is the keystone minted per search_performed and returned to the
+	// client, which threads it back onto every downstream engagement event so the
+	// impression/click/play funnel joins to the search that produced it.
+	SearchId         string
 	Results          []domain.SearchResult
 	ProviderStatuses []domain.ProviderSearchResponse
 	Partial          bool
@@ -175,6 +179,10 @@ func (s *Service) Execute(
 	searchQuery := CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 
+	// Mint the keystone once per search. Returned to the client and stamped on the
+	// search_performed event so every downstream engagement event can join back.
+	searchId := uuid.New().String()
+
 	slog.InfoContext(ctx, "search.v2.start", "query", query.Raw)
 
 	// App-wide consistency cache: an identical query returns the identical ranked
@@ -227,7 +235,7 @@ func (s *Service) Execute(
 	partial := anyProviderFailed(statuses)
 
 	s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
-	s.emitSearchEvent(ctx, userId, queryNorm, ranked)
+	s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked)
 	ingestQuery := query.Raw
 	if correctedQuery != "" {
 		ingestQuery = correctedQuery
@@ -245,6 +253,7 @@ func (s *Service) Execute(
 	)
 
 	return &SearchOutput{
+		SearchId:         searchId,
 		Results:          ranked,
 		ProviderStatuses: statuses,
 		Partial:          partial,
