@@ -196,6 +196,7 @@ type DiscoverySearchResponse struct {
 	Results        []SearchResultDTO   `json:"results"`
 	Providers      []ProviderStatusDTO `json:"providers"`
 	Partial        bool                `json:"partial"`
+	Exploration    bool                `json:"exploration,omitempty"`
 	Cache          CacheDTO            `json:"cache"`
 	CorrectedQuery string              `json:"corrected_query,omitempty"`
 	OriginalQuery  string              `json:"original_query,omitempty"`
@@ -339,6 +340,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		Results:        searchResultsToDTOs(result.Results),
 		Providers:      providerStatusesToDTOs(result.ProviderStatuses),
 		Partial:        result.Partial,
+		Exploration:    result.Explored,
 		Cache:          CacheDTO{Hit: false, FetchedAt: nil},
 		CorrectedQuery: result.CorrectedQuery,
 		OriginalQuery:  result.OriginalQuery,
