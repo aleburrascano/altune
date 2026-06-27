@@ -62,6 +62,7 @@ export function DiscoverScreen(): ReactElement {
         onFilterChange={d.setFilter}
         onHistoryTap={d.onHistoryTap}
         onResultTap={d.onResultTap}
+        impression={d.impression}
         onRetry={d.onRetry}
         onRefresh={d.onRefresh}
         isRefreshing={d.isRefreshing}
