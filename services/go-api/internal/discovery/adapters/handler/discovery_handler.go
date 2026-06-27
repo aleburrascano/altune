@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/domain"
@@ -23,7 +24,6 @@ import (
 
 type DiscoveryHandler struct {
 	searchSvc  *service.Service
-	clickSvc   *service.RecordClickService
 	historySvc *service.ListSearchHistoryService
 	albumSvc   *service.GetAlbumTracksService
 	artistSvc  *service.GetArtistContentService
@@ -67,6 +67,14 @@ type searchTraceRecorder interface {
 		statuses []domain.ProviderSearchResponse,
 		final []domain.SearchResult,
 	)
+	// RecordContentFetch traces a detail-screen fetch (discography/top-tracks/
+	// related) so the operator console can see what came up when an artist was
+	// opened — not just searches.
+	RecordContentFetch(
+		ctx context.Context,
+		kind, provider, artist, status string,
+		items []domain.SearchResult,
+	)
 }
 
 // WithProviderHealth attaches the optional provider-health recorder. A nil
@@ -108,7 +116,6 @@ func (h *DiscoveryHandler) WithDetailEnrichers(e DetailEnrichers) *DiscoveryHand
 // pass, and adding an endpoint is one field here, not another positional arg.
 type DiscoveryServices struct {
 	Search  *service.Service
-	Click   *service.RecordClickService
 	History *service.ListSearchHistoryService
 	Album   *service.GetAlbumTracksService
 	Artist  *service.GetArtistContentService
@@ -121,7 +128,6 @@ type DiscoveryServices struct {
 func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		searchSvc:  svcs.Search,
-		clickSvc:   svcs.Click,
 		historySvc: svcs.History,
 		albumSvc:   svcs.Album,
 		artistSvc:  svcs.Artist,
@@ -137,7 +143,6 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/search", h.handleSearch)
 	r.Get("/suggest", h.handleSuggest)
 	r.Get("/search-history", h.handleSearchHistory)
-	r.Post("/clicks", h.handleRecordClick)
 	r.Post("/events", h.handleRecordEvent)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
@@ -155,14 +160,15 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 // --- DTOs ---
 
 type SearchResultDTO struct {
-	Kind          string         `json:"kind"`
-	Title         string         `json:"title"`
-	Subtitle      string         `json:"subtitle,omitempty"`
-	ImageURL      string         `json:"image_url,omitempty"`
-	ArtworkSource string         `json:"artwork_source,omitempty"`
-	Confidence    string         `json:"confidence"`
-	Sources       []SourceRefDTO `json:"sources"`
-	Extras        map[string]any `json:"extras"`
+	Kind            string         `json:"kind"`
+	Title           string         `json:"title"`
+	Subtitle        string         `json:"subtitle,omitempty"`
+	ImageURL        string         `json:"image_url,omitempty"`
+	ArtworkSource   string         `json:"artwork_source,omitempty"`
+	Confidence      string         `json:"confidence"`
+	ResultSignature string         `json:"result_signature"`
+	Sources         []SourceRefDTO `json:"sources"`
+	Extras          map[string]any `json:"extras"`
 }
 
 type SourceRefDTO struct {
@@ -187,9 +193,11 @@ type RelatedGroupDTO struct {
 type DiscoverySearchResponse struct {
 	Query          string              `json:"query"`
 	QueryNorm      string              `json:"query_norm"`
+	SearchID       string              `json:"search_id"`
 	Results        []SearchResultDTO   `json:"results"`
 	Providers      []ProviderStatusDTO `json:"providers"`
 	Partial        bool                `json:"partial"`
+	Exploration    bool                `json:"exploration,omitempty"`
 	Cache          CacheDTO            `json:"cache"`
 	CorrectedQuery string              `json:"corrected_query,omitempty"`
 	OriginalQuery  string              `json:"original_query,omitempty"`
@@ -212,19 +220,13 @@ type DiscoverySearchHistoryResponse struct {
 	Total int                    `json:"total"`
 }
 
-type DiscoveryClickRequest struct {
-	QueryNorm  string `json:"query_norm"`
-	Kind       string `json:"kind"`
-	Title      string `json:"title"`
-	Subtitle   string `json:"subtitle"`
-	Position   int    `json:"position"`
-	Confidence string `json:"confidence"`
-}
-
 type DiscoveryEventRequest struct {
-	Type      string         `json:"type"`
-	QueryNorm string         `json:"query_norm"`
-	Payload   map[string]any `json:"payload"`
+	Type             string         `json:"type"`
+	QueryNorm        string         `json:"query_norm"`
+	SearchID         string         `json:"search_id"`
+	EventID          string         `json:"event_id"`
+	ClientOccurredAt string         `json:"client_occurred_at"`
+	Payload          map[string]any `json:"payload"`
 }
 
 type SuggestionDTO struct {
@@ -337,9 +339,11 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	httputil.WriteJSON(w, searchStatusCode(result.ProviderStatuses), DiscoverySearchResponse{
 		Query:          q,
 		QueryNorm:      textnorm.NormalizeForMatch(q),
+		SearchID:       result.SearchId,
 		Results:        searchResultsToDTOs(result.Results),
 		Providers:      providerStatusesToDTOs(result.ProviderStatuses),
 		Partial:        result.Partial,
+		Exploration:    result.Explored,
 		Cache:          CacheDTO{Hit: false, FetchedAt: nil},
 		CorrectedQuery: result.CorrectedQuery,
 		OriginalQuery:  result.OriginalQuery,
@@ -377,48 +381,6 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 	})
 }
 
-func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
-	if !ok {
-		return
-	}
-
-	var req DiscoveryClickRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
-		return
-	}
-
-	resultKind, err := domain.ParseResultKind(req.Kind)
-	if err != nil {
-		httputil.BadRequest(w, "invalid kind")
-		return
-	}
-
-	confidence, err := domain.ParseConfidence(req.Confidence)
-	if err != nil {
-		httputil.BadRequest(w, "invalid confidence")
-		return
-	}
-
-	input := service.RecordClickInput{
-		QueryNorm:      req.QueryNorm,
-		ResultKind:     resultKind,
-		ResultTitle:    req.Title,
-		ResultSubtitle: req.Subtitle,
-		Position:       req.Position,
-		Confidence:     confidence,
-	}
-
-	if err := h.clickSvc.Execute(r.Context(), userId, input); err != nil {
-		slog.ErrorContext(r.Context(), "record click failed", "error", err)
-		httputil.InternalError(w)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
@@ -442,10 +404,22 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// client_occurred_at is optional RFC3339; a malformed value is dropped (the
+	// server received_at still anchors the event in time).
+	var clientOccurredAt time.Time
+	if req.ClientOccurredAt != "" {
+		if t, parseErr := time.Parse(time.RFC3339, req.ClientOccurredAt); parseErr == nil {
+			clientOccurredAt = t
+		}
+	}
+
 	input := service.RecordEventInput{
-		Type:      eventType,
-		QueryNorm: req.QueryNorm,
-		Payload:   req.Payload,
+		Type:             eventType,
+		QueryNorm:        req.QueryNorm,
+		SearchId:         req.SearchID,
+		EventId:          req.EventID,
+		ClientOccurredAt: clientOccurredAt,
+		Payload:          req.Payload,
 	}
 	if err := h.eventSvc.Execute(r.Context(), userId, input); err != nil {
 		slog.ErrorContext(r.Context(), "record event failed", "error", err)
@@ -529,6 +503,10 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 		return
 	}
 
+	if h.searchTrace != nil {
+		h.searchTrace.RecordContentFetch(r.Context(), "top_tracks", provider, "", resp.Status.String(), resp.Items)
+	}
+
 	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
 }
 
@@ -558,6 +536,10 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 			"error", err, "provider", provider, "external_id", externalID)
 		httputil.InternalError(w)
 		return
+	}
+
+	if h.searchTrace != nil {
+		h.searchTrace.RecordContentFetch(r.Context(), "albums", provider, artistName, resp.Status.String(), resp.Items)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
@@ -1059,15 +1041,27 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 		extras = make(map[string]any)
 	}
 	return SearchResultDTO{
-		Kind:          sr.Kind.String(),
-		Title:         sr.Title,
-		Subtitle:      sr.Subtitle,
-		ImageURL:      sr.ImageURL,
-		ArtworkSource: sr.ArtworkSource,
-		Confidence:    sr.Confidence.String(),
-		Sources:       sources,
-		Extras:        extras,
+		Kind:            sr.Kind.String(),
+		Title:           sr.Title,
+		Subtitle:        sr.Subtitle,
+		ImageURL:        sr.ImageURL,
+		ArtworkSource:   sr.ArtworkSource,
+		Confidence:      sr.Confidence.String(),
+		ResultSignature: resultSignature(sr),
+		Sources:         sources,
+		Extras:          extras,
 	}
+}
+
+// resultSignature is the server-computed stable identity the client echoes on
+// every engagement event — (kind, normalized title, normalized subtitle). It is
+// the cross-query, cross-provider join key for impression/click attribution: a
+// merged result and any single-source variant of the same recording collapse to
+// one signature (unlike a provider source ref, which differs per provider).
+func resultSignature(sr domain.SearchResult) string {
+	return sr.Kind.String() + "|" +
+		textnorm.NormalizeForMatch(sr.Title) + "|" +
+		textnorm.NormalizeForMatch(sr.Subtitle)
 }
 
 // searchResultsToDTOs maps a slice of domain results to wire DTOs.

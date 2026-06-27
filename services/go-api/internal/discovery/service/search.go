@@ -24,7 +24,12 @@ package service
 import (
 	"context"
 	"log/slog"
+	"math/rand/v2"
+	"slices"
+	"sort"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -61,12 +66,35 @@ type Service struct {
 	mbidIndex       ports.MBIDIndex
 	correctionSvc   *CorrectionService
 	findRelatedSvc  *FindRelatedService
-	bgWg            sync.WaitGroup
+	resultCache     ports.ResultCache
+	tailDemotion    bool
+
+	// behavioralRanking, default off, gates the EventConsumer-derived satisfaction
+	// signal as a within-tie ranking input. behavioralScores is the published
+	// snapshot (atomic, refreshed off the request path); behavioralConsumer is its
+	// source. Exactly the tail-demotion shape: inert until eval A/B-gated on.
+	behavioralRanking  bool
+	behavioralConsumer ports.EventConsumer
+	behavioralScores   atomic.Pointer[map[string]float64]
+
+	// explorationRate, 0 = off, is the fraction of searches whose result order is
+	// randomized (and logged as exploration) for unbiased propensity data — the
+	// small-scale bandit substitute for IPS. The one user-facing behavior change,
+	// shipped behind a flag so it needs no live sign-off.
+	explorationRate float64
+
+	bgWg sync.WaitGroup
 }
 
 // SearchOutput is the result envelope returned by the search use case and
 // mapped to the wire by the handler.
 type SearchOutput struct {
+	// SearchId is the keystone minted per search_performed and returned to the
+	// client, which threads it back onto every downstream engagement event so the
+	// impression/click/play funnel joins to the search that produced it.
+	SearchId string
+	// Explored is true when this search served a randomized (exploration) order.
+	Explored         bool
 	Results          []domain.SearchResult
 	ProviderStatuses []domain.ProviderSearchResponse
 	Partial          bool
@@ -129,6 +157,62 @@ func WithFindRelatedService(r *FindRelatedService) Option {
 	return func(s *Service) { s.findRelatedSvc = r }
 }
 
+// WithResultCache enables the app-wide consistency cache (shared, short-TTL) so an
+// identical query returns the identical ranked list for everyone within the window.
+// Off → every search recomputes (the prior behavior).
+func WithResultCache(c ports.ResultCache) Option {
+	return func(s *Service) { s.resultCache = c }
+}
+
+// WithTailDemotion enables the experimental tail-noise demotion: single-source
+// UGC/scrobble results with no identity (see isLowConfidenceTail) sort below every
+// corroborated result. Off by default; flipped on via TAIL_DEMOTION_ENABLED for
+// eval A/B. See docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
+func WithTailDemotion() Option {
+	return func(s *Service) { s.tailDemotion = true }
+}
+
+// WithBehavioralRanking enables the EventConsumer-derived satisfaction signal as
+// a within-tie ranking input, sourced from the given consumer. Off by default;
+// the composition root applies it only under BEHAVIORAL_RANKING_ENABLED, eval
+// A/B-gated exactly like tail demotion. The score map starts empty (inert) until
+// the first RefreshBehavioralScores; the caller drives refresh via
+// StartBehavioralRefresh.
+func WithBehavioralRanking(consumer ports.EventConsumer) Option {
+	return func(s *Service) {
+		s.behavioralRanking = true
+		s.behavioralConsumer = consumer
+	}
+}
+
+// WithExploration enables exploration randomization: a `rate` fraction of
+// searches (e.g. 0.03) have their result order shuffled and the search stamped
+// as exploration, generating the unbiased propensity data offline counterfactual
+// eval needs. Off by default (rate 0); gated by EXPLORATION_ENABLED at the
+// composition root — the one user-facing change, shipped dark.
+func WithExploration(rate float64) Option {
+	return func(s *Service) {
+		if rate > 0 {
+			s.explorationRate = rate
+		}
+	}
+}
+
+// maybeExplore returns a possibly-randomized copy of ranked plus whether this
+// search was selected for exploration. It clones before shuffling so a cached
+// (shared) result list is never mutated. Inert when the rate is 0.
+func (s *Service) maybeExplore(ranked []domain.SearchResult) ([]domain.SearchResult, bool) {
+	if s.explorationRate <= 0 || len(ranked) < 2 {
+		return ranked, false
+	}
+	if rand.Float64() >= s.explorationRate {
+		return ranked, false
+	}
+	out := slices.Clone(ranked)
+	rand.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
+	return out, true
+}
+
 // NewService constructs the rebuilt search orchestrator.
 func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker, opts ...Option) *Service {
 	s := &Service{
@@ -156,17 +240,48 @@ func (s *Service) Execute(
 	searchQuery := CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 
+	// Mint the keystone once per search. Returned to the client and stamped on the
+	// search_performed event so every downstream engagement event can join back.
+	searchId := uuid.New().String()
+
 	slog.InfoContext(ctx, "search.v2.start", "query", query.Raw)
 
-	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
-	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm)
+	// App-wide consistency cache: an identical query returns the identical ranked
+	// list for everyone within the TTL, smoothing provider-drop-out / cache-warmth
+	// variance. Cache key is query-only (catalog-derived results are not
+	// user-specific); the cached value is the full pre-limit list, re-truncated per
+	// request. Inert when no cache is wired — the default path is unchanged.
+	cacheKey := resultCacheKey(queryNorm, query.Kinds)
+	var (
+		ranked         []domain.SearchResult
+		statuses       []domain.ProviderSearchResponse
+		correctedQuery string
+		originalQuery  string
+		cached         bool
+	)
+	if s.resultCache != nil {
+		if hit, ok := s.resultCache.Get(ctx, cacheKey); ok {
+			ranked, cached = hit, true
+		}
+	}
 
-	// Zero results → auto-correct and re-search. (The "did you mean" suggestion
-	// for weak-but-non-empty results was removed: its trigger was a tuned
-	// relevance threshold — query-fit.)
-	var correctedQuery, originalQuery string
-	if len(ranked) == 0 {
-		correctedQuery, originalQuery, ranked = s.tryCorrection(ctx, query)
+	if !cached {
+		var perProvider [][]domain.SearchResult
+		perProvider, statuses = s.fanOut(ctx, searchQuery, query.Kinds)
+		ranked = s.mergeRankEnrich(ctx, perProvider, queryNorm)
+
+		// Zero results → auto-correct and re-search. (The "did you mean" suggestion
+		// for weak-but-non-empty results was removed: its trigger was a tuned
+		// relevance threshold — query-fit.)
+		if len(ranked) == 0 {
+			correctedQuery, originalQuery, ranked = s.tryCorrection(ctx, query)
+		}
+
+		// Cache only complete, non-empty results: a partial (provider-drop-out) run
+		// frozen for the TTL would serve a degraded list to everyone.
+		if s.resultCache != nil && len(ranked) > 0 && !anyProviderFailed(statuses) {
+			s.resultCache.Set(ctx, cacheKey, ranked)
+		}
 	}
 
 	var related []domain.RelatedGroup
@@ -178,16 +293,14 @@ func (s *Service) Execute(
 		ranked = ranked[:query.Limit]
 	}
 
-	partial := false
-	for _, st := range statuses {
-		if st.Status != domain.ProviderStatusOK {
-			partial = true
-			break
-		}
-	}
+	// Exploration: a small fraction of searches serve a randomized order (cloned
+	// so the cache is never mutated) and are logged as exploration for propensity.
+	ranked, explored := s.maybeExplore(ranked)
+
+	partial := anyProviderFailed(statuses)
 
 	s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
-	s.emitSearchEvent(ctx, userId, queryNorm, ranked)
+	s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked, explored)
 	ingestQuery := query.Raw
 	if correctedQuery != "" {
 		ingestQuery = correctedQuery
@@ -200,9 +313,13 @@ func (s *Service) Execute(
 		"partial", partial,
 		"corrected", correctedQuery,
 		"related_groups", len(related),
+		"cached", cached,
+		"tail_noise_top5", TailNoiseInTopK(ranked, 5),
 	)
 
 	return &SearchOutput{
+		SearchId:         searchId,
+		Explored:         explored,
 		Results:          ranked,
 		ProviderStatuses: statuses,
 		Partial:          partial,
@@ -229,7 +346,14 @@ func (s *Service) mergeRankEnrich(
 	s.stampIdentities(ctx, perProvider)
 
 	// pure decision core: merge → rank → list-shaping (no ports, no I/O).
-	ranked := rankPipeline(perProvider, queryNorm)
+	var demote demoteFunc
+	if s.tailDemotion {
+		demote = isLowConfidenceTail
+	}
+	// Behavioral satisfaction signal: a published snapshot (nil when the flag is
+	// off / not yet refreshed), read without locking and applied as a within-tie
+	// rank input only.
+	ranked := rankPipelineWith(perProvider, queryNorm, demote, s.behavioralScoresSnapshot())
 
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
@@ -400,4 +524,26 @@ func (s *Service) RankVariantsForEval(
 // graceful shutdown; tests call it to observe background effects deterministically.
 func (s *Service) WaitForBackground() {
 	s.bgWg.Wait()
+}
+
+// resultCacheKey builds the app-wide consistency-cache key from the normalized
+// query and the requested kinds (sorted for stability). Limit is deliberately
+// excluded: the cached value is the full pre-limit list, re-truncated per request,
+// so different limits share one entry.
+func resultCacheKey(queryNorm string, kinds map[domain.ResultKind]bool) string {
+	ks := make([]string, 0, len(kinds))
+	for k := range kinds {
+		ks = append(ks, k.String())
+	}
+	sort.Strings(ks)
+	return queryNorm + "|" + strings.Join(ks, ",")
+}
+
+func anyProviderFailed(statuses []domain.ProviderSearchResponse) bool {
+	for _, st := range statuses {
+		if st.Status != domain.ProviderStatusOK {
+			return true
+		}
+	}
+	return false
 }

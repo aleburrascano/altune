@@ -10,11 +10,13 @@ import type {
   DiscoveryKind,
   DiscoveryResult,
 } from '../../../shared/api-client/discovery';
+import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
 
 export function FilteredResults({
   kind,
   results,
   onResultTap,
+  impression,
   onRefresh,
   isRefreshing,
   correctedQuery,
@@ -24,6 +26,7 @@ export function FilteredResults({
   kind: DiscoveryKind;
   results: DiscoveryResult[];
   onResultTap: (result: DiscoveryResult, position: number) => void;
+  impression: ImpressionHandlers;
   onRefresh: () => void;
   isRefreshing: boolean;
   correctedQuery?: string | undefined;
@@ -64,6 +67,8 @@ export function FilteredResults({
       showsVerticalScrollIndicator={false}
       onRefresh={onRefresh}
       refreshing={isRefreshing}
+      onViewableItemsChanged={impression.onViewableItemsChanged}
+      viewabilityConfig={impression.viewabilityConfig}
     />
   );
 }

@@ -15,7 +15,8 @@ import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { useDiscoverSearch } from './useDiscoverSearch';
 import { useAutocompleteSuggestions } from './useAutocompleteSuggestions';
-import { useRecordClick } from './useRecordClick';
+import { useImpressionLogger, type ImpressionHandlers } from './useImpressionLogger';
+import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 import { useSearchHistory } from './useSearchHistory';
 import { stashHandoffForDetail } from '../tap';
 import { _viewForState } from '../state';
@@ -49,6 +50,7 @@ export type DiscoverLogic = {
   setFilter: Dispatch<SetStateAction<ResultsFilter>>;
   onHistoryTap: (item: SearchHistoryItem) => void;
   onResultTap: (result: DiscoveryResult, position: number) => void;
+  impression: ImpressionHandlers;
   onRetry: () => void;
   onRefresh: () => void;
   isRefreshing: boolean;
@@ -66,7 +68,8 @@ export function useDiscoverLogic(): DiscoverLogic {
   const { data: searchData, isLoading: isSearching, error: searchError, refetch } = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
   const suggestions = useAutocompleteSuggestions(search.inputValue);
   const history = useSearchHistory();
-  const click = useRecordClick();
+  const recordEvent = useRecordEvent();
+  const impression = useImpressionLogger(searchData);
   const [isFocused, setIsFocused] = useState(false);
   const [suggestionsHidden, setSuggestionsHidden] = useState(false);
 
@@ -106,15 +109,21 @@ export function useDiscoverLogic(): DiscoverLogic {
   };
   const onResultTap = (result: DiscoveryResult, position: number): void => {
     Keyboard.dismiss();
-    click.mutate({
+    recordEvent.mutate({
+      type: 'result_clicked',
       query_norm: searchData?.query_norm ?? search.committedQuery,
-      kind: result.kind,
-      title: result.title,
-      subtitle: result.subtitle ?? null,
-      position,
-      confidence: result.confidence,
+      search_id: searchData?.search_id,
+      payload: {
+        kind: result.kind,
+        title: result.title,
+        subtitle: result.subtitle ?? null,
+        position,
+        confidence: result.confidence,
+        provider: result.sources[0]?.provider ?? null,
+        result_signature: result.result_signature ?? null,
+      },
     });
-    router.push(stashHandoffForDetail(result));
+    router.push(stashHandoffForDetail(result, searchData?.search_id));
   };
   const onChangeText = (text: string): void => {
     setSuggestionsHidden(false);
@@ -156,6 +165,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     setFilter,
     onHistoryTap,
     onResultTap,
+    impression,
     onRetry,
     onRefresh: () => { void refetch(); },
     isRefreshing: isSearching && searchData !== undefined,

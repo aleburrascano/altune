@@ -65,6 +65,9 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 	if _, ok := e.Payload["top"]; !ok {
 		t.Error("payload missing top")
 	}
+	if e.SearchId == "" {
+		t.Error("search_performed event missing the minted search_id keystone")
+	}
 }
 
 func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {

@@ -23,7 +23,7 @@ const (
 // best-effort: it never blocks the request, outlives request cancellation (via
 // WithoutCancel + its own timeout), recovers from panics, and logs — never
 // surfaces — failures. The envelope matches the legacy emitter, stamped v2.
-func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserId, queryNorm string, shown []domain.SearchResult) {
+func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult, explored bool) {
 	if s.eventStore == nil {
 		return
 	}
@@ -31,7 +31,14 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 	payload := map[string]any{
 		"result_count":     len(shown),
 		"zero_result":      len(shown) == 0,
+		"tail_noise_top5":  TailNoiseInTopK(shown, 5),
 		"pipeline_version": pipelineVersionV2,
+	}
+	// Stamp exploration so offline counterfactual eval can weight these searches
+	// (their shown order is unbiased by ranking — the propensity slate).
+	if explored {
+		payload["exploration"] = true
+		payload["exploration_rate"] = s.explorationRate
 	}
 	if top := buildShownTop(shown); len(top) > 0 {
 		payload["top"] = top
@@ -55,6 +62,7 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 			UserId:     userId,
 			Type:       domain.EventTypeSearchPerformed,
 			QueryNorm:  queryNorm,
+			SearchId:   searchId,
 			Payload:    payload,
 		}
 		if err := s.eventStore.Append(emitCtx, event); err != nil {

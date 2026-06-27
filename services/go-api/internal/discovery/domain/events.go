@@ -29,6 +29,7 @@ type EventType int
 const (
 	EventTypeUnknown EventType = iota
 	EventTypeSearchPerformed
+	EventTypeResultsShown
 	EventTypeResultClicked
 	EventTypePlay
 	EventTypeSkip
@@ -39,6 +40,7 @@ const (
 
 var eventTypeNames = map[EventType]string{
 	EventTypeSearchPerformed: "search_performed",
+	EventTypeResultsShown:    "results_shown",
 	EventTypeResultClicked:   "result_clicked",
 	EventTypePlay:            "play",
 	EventTypeSkip:            "skip",
@@ -74,5 +76,16 @@ type InteractionEvent struct {
 	UserId     shared.UserId
 	Type       EventType
 	QueryNorm  string
-	Payload    map[string]any
+	// SearchId is the keystone join key: the UUID of the search_performed that
+	// produced this event. Empty for events with no originating search (e.g. a
+	// play from the library). Stored in the real search_id column, not payload.
+	SearchId string
+	// EventId is the client-minted idempotency key for label-critical events
+	// (library_add, wrong_album) delivered via the outbox. Empty for the
+	// fire-and-forget tier. Insert dedups on it so a retry is a no-op.
+	EventId string
+	// ClientOccurredAt is when the client recorded the event (vs OccurredAt /
+	// received_at, when the server got it). Zero for events minted server-side.
+	ClientOccurredAt time.Time
+	Payload          map[string]any
 }
