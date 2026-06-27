@@ -23,7 +23,6 @@ import (
 
 type DiscoveryHandler struct {
 	searchSvc  *service.Service
-	clickSvc   *service.RecordClickService
 	historySvc *service.ListSearchHistoryService
 	albumSvc   *service.GetAlbumTracksService
 	artistSvc  *service.GetArtistContentService
@@ -116,7 +115,6 @@ func (h *DiscoveryHandler) WithDetailEnrichers(e DetailEnrichers) *DiscoveryHand
 // pass, and adding an endpoint is one field here, not another positional arg.
 type DiscoveryServices struct {
 	Search  *service.Service
-	Click   *service.RecordClickService
 	History *service.ListSearchHistoryService
 	Album   *service.GetAlbumTracksService
 	Artist  *service.GetArtistContentService
@@ -129,7 +127,6 @@ type DiscoveryServices struct {
 func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
 	return &DiscoveryHandler{
 		searchSvc:  svcs.Search,
-		clickSvc:   svcs.Click,
 		historySvc: svcs.History,
 		albumSvc:   svcs.Album,
 		artistSvc:  svcs.Artist,
@@ -145,7 +142,6 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/search", h.handleSearch)
 	r.Get("/suggest", h.handleSuggest)
 	r.Get("/search-history", h.handleSearchHistory)
-	r.Post("/clicks", h.handleRecordClick)
 	r.Post("/events", h.handleRecordEvent)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
@@ -218,15 +214,6 @@ type SearchHistoryItemDTO struct {
 type DiscoverySearchHistoryResponse struct {
 	Items []SearchHistoryItemDTO `json:"items"`
 	Total int                    `json:"total"`
-}
-
-type DiscoveryClickRequest struct {
-	QueryNorm  string `json:"query_norm"`
-	Kind       string `json:"kind"`
-	Title      string `json:"title"`
-	Subtitle   string `json:"subtitle"`
-	Position   int    `json:"position"`
-	Confidence string `json:"confidence"`
 }
 
 type DiscoveryEventRequest struct {
@@ -383,48 +370,6 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 		Items: items,
 		Total: len(items),
 	})
-}
-
-func (h *DiscoveryHandler) handleRecordClick(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
-	if !ok {
-		return
-	}
-
-	var req DiscoveryClickRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
-		return
-	}
-
-	resultKind, err := domain.ParseResultKind(req.Kind)
-	if err != nil {
-		httputil.BadRequest(w, "invalid kind")
-		return
-	}
-
-	confidence, err := domain.ParseConfidence(req.Confidence)
-	if err != nil {
-		httputil.BadRequest(w, "invalid confidence")
-		return
-	}
-
-	input := service.RecordClickInput{
-		QueryNorm:      req.QueryNorm,
-		ResultKind:     resultKind,
-		ResultTitle:    req.Title,
-		ResultSubtitle: req.Subtitle,
-		Position:       req.Position,
-		Confidence:     confidence,
-	}
-
-	if err := h.clickSvc.Execute(r.Context(), userId, input); err != nil {
-		slog.ErrorContext(r.Context(), "record click failed", "error", err)
-		httputil.InternalError(w)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Request) {

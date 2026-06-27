@@ -89,8 +89,10 @@ func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Ti
 			AND e.query_norm IS NOT NULL
 			AND (e.payload->>'zero_result')::boolean = false
 			AND NOT EXISTS (
-				SELECT 1 FROM discovery_search_clicks c
-				WHERE c.query_norm = e.query_norm AND c.clicked_at >= $2
+				SELECT 1 FROM discovery_events c
+				WHERE c.event_type = 'result_clicked'
+					AND c.query_norm = e.query_norm
+					AND c.occurred_at >= $2
 			)
 		GROUP BY e.query_norm
 		ORDER BY cnt DESC
