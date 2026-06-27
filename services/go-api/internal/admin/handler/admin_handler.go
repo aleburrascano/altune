@@ -31,6 +31,18 @@ type AdminHandler struct {
 	providerHealth providerHealthReader
 	acquisition    AcquisitionStatusReader
 	evalMeter      *EvalMeter
+
+	supabaseURL     string
+	supabaseAnonKey string
+}
+
+// WithSupabaseLogin attaches the public Supabase client config so the console
+// page can sign the operator in with email + password directly. Both values are
+// public client config, not secrets.
+func (h *AdminHandler) WithSupabaseLogin(url, anonKey string) *AdminHandler {
+	h.supabaseURL = url
+	h.supabaseAnonKey = anonKey
+	return h
 }
 
 func New(

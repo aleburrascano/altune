@@ -5,79 +5,202 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Altune · Mission Control</title>
   <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body { font-family: ui-monospace, "SF Mono", Menlo, monospace; background:#0b0b0e; color:#e6e6e6; margin:0; padding:1rem; font-size:13px; }
-    h1 { font-size:1rem; letter-spacing:.05em; margin:0; }
-    header { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem; }
-    header input { background:#16161c; border:1px solid #2a2a33; color:#e6e6e6; padding:.35rem .5rem; border-radius:6px; min-width:280px; font-family:inherit; }
-    header button { background:#2a2a33; border:0; color:#e6e6e6; padding:.35rem .7rem; border-radius:6px; cursor:pointer; }
-    .muted { color:#7c7c87; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:.75rem; }
-    .panel { background:#121218; border:1px solid #23232c; border-radius:10px; padding:.75rem; min-height:120px; }
-    .panel h2 { font-size:.75rem; text-transform:uppercase; letter-spacing:.08em; color:#9a9aa5; margin:0 0 .5rem; }
-    .tiles { display:flex; gap:.5rem; flex-wrap:wrap; }
-    .tile { flex:1; min-width:80px; text-align:center; padding:.6rem; border-radius:8px; background:#16161c; border:1px solid #2a2a33; }
-    .tile .name { font-size:.7rem; color:#9a9aa5; text-transform:uppercase; }
-    .tile .state { font-weight:600; margin-top:.2rem; }
-    .ok { color:#3ecf8e; } .down { color:#ff5c5c; } .warn { color:#ffb454; } .na { color:#7c7c87; }
+    :root {
+      color-scheme: dark;
+      --bg:#0a0b0d; --card:#111317; --card2:#0d0f12; --bd:#20242b; --bd2:#2a2f37;
+      --tx:#d8dde3; --mut:#6b7280; --dim:#9aa3ad;
+      --ok:#34d399; --warn:#fbbf24; --down:#f87171; --cy:#38bdf8; --blue:#60a5fa;
+    }
+    * { box-sizing:border-box; }
+    html, body { height:100%; margin:0; }
+    body {
+      background:var(--bg); color:var(--tx); overflow:hidden;
+      font:12px/1.45 ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+      display:flex; flex-direction:column;
+    }
+    a { color:var(--blue); }
+    .mut { color:var(--mut); } .dim { color:var(--dim); }
+    .ok{color:var(--ok)} .warn{color:var(--warn)} .down{color:var(--down)} .na{color:var(--mut)} .cy{color:var(--cy)}
+
+    /* top bar */
+    .top {
+      display:flex; align-items:center; gap:.9rem; padding:.55rem .9rem;
+      border-bottom:1px solid var(--bd); background:linear-gradient(180deg,#0e1014,#0a0b0d);
+      flex-wrap:wrap;
+    }
+    .brand { font-size:.82rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; white-space:nowrap; }
+    .brand .dot { color:var(--cy); }
+    .pills { display:flex; gap:.4rem; }
+    .pill {
+      display:flex; align-items:center; gap:.4rem; padding:.25rem .55rem; border-radius:999px;
+      background:var(--card); border:1px solid var(--bd); font-size:11px;
+    }
+    .pill .led { width:7px; height:7px; border-radius:50%; background:var(--mut); box-shadow:0 0 6px transparent; }
+    .pill.up .led { background:var(--ok); box-shadow:0 0 7px var(--ok); }
+    .pill.bad .led { background:var(--down); box-shadow:0 0 7px var(--down); }
+    .pill .k { color:var(--mut); text-transform:uppercase; letter-spacing:.06em; font-size:10px; }
+    .spacer { flex:1; }
+    .auth { display:flex; align-items:center; gap:.4rem; }
+    .auth input { background:var(--card2); border:1px solid var(--bd); color:var(--tx); padding:.34rem .5rem; border-radius:7px; font-family:inherit; font-size:12px; min-width:150px; }
+    .auth input:focus { outline:none; border-color:var(--cy); }
+    .btn { background:var(--cy); color:#04121b; border:0; padding:.36rem .7rem; border-radius:7px; cursor:pointer; font-family:inherit; font-weight:600; font-size:12px; }
+    .btn.ghost { background:var(--bd); color:var(--tx); font-weight:500; }
+    #conn { font-size:11px; white-space:nowrap; }
+    .tokenrow { display:none; padding:.5rem .9rem; border-bottom:1px solid var(--bd); gap:.5rem; align-items:center; }
+    .tokenrow input { flex:1; max-width:520px; background:var(--card2); border:1px solid var(--bd); color:var(--tx); padding:.34rem .5rem; border-radius:7px; font-family:inherit; }
+
+    /* dashboard fills the rest of the viewport */
+    .wrap { flex:1; min-height:0; display:grid; grid-template-rows:auto 1fr; gap:.6rem; padding:.6rem; }
+    .row { display:grid; gap:.6rem; min-height:0; }
+    .row.summary { grid-template-columns:1.7fr 1fr 1fr; }
+    .row.live { grid-template-columns:1.8fr 1fr; min-height:0; }
+
+    .card { background:var(--card); border:1px solid var(--bd); border-radius:11px; display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+    .card > .hd { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.5rem .7rem; border-bottom:1px solid var(--bd); }
+    .card > .hd h2 { margin:0; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); font-weight:600; }
+    .card > .hd .meta { font-size:10.5px; color:var(--mut); }
+    .card > .bd { padding:.6rem .7rem; overflow:auto; min-height:0; }
+    .card.live > .bd { flex:1; }
+
     table { width:100%; border-collapse:collapse; }
-    td, th { text-align:left; padding:.2rem .35rem; border-bottom:1px solid #1d1d25; font-size:12px; }
-    th { color:#9a9aa5; font-weight:500; }
-    .feed, .logs { max-height:240px; overflow:auto; font-size:11.5px; }
-    .logline { padding:.1rem 0; border-bottom:1px solid #15151b; white-space:nowrap; }
-    .lvl-ERROR { color:#ff5c5c; } .lvl-WARN { color:#ffb454; } .lvl-INFO { color:#cfcfd6; } .lvl-DEBUG { color:#7c7c87; }
-    .corr { color:#5aa9ff; cursor:pointer; }
-    .controls { display:flex; gap:.4rem; margin-bottom:.4rem; align-items:center; }
-    select { background:#16161c; border:1px solid #2a2a33; color:#e6e6e6; border-radius:6px; padding:.2rem; font-family:inherit; }
-    .big { font-size:1.6rem; font-weight:700; }
-    .err { color:#ff5c5c; }
+    th, td { text-align:left; padding:.28rem .4rem; border-bottom:1px solid #181b21; }
+    th { color:var(--mut); font-weight:500; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; }
+    td.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .badge { padding:.08rem .4rem; border-radius:5px; font-size:10.5px; border:1px solid var(--bd2); }
+    .badge.ok{color:var(--ok);border-color:#1f3a30;background:#0e1a15}
+    .badge.bad{color:var(--down);border-color:#3a1f1f;background:#1a0e0e}
+    .badge.warn{color:var(--warn);border-color:#3a331f;background:#1a160e}
+
+    .stat { display:flex; gap:1.1rem; align-items:baseline; }
+    .stat b { font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
+    .big { font-size:1.7rem; font-weight:700; }
+
+    .ratebar { display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom:.5rem; }
+    .chip { background:var(--card2); border:1px solid var(--bd); border-radius:6px; padding:.12rem .45rem; font-size:11px; }
+    .chip b { color:var(--cy); }
+
+    .logs, .feed { font-size:11px; }
+    .logrow { padding:.12rem 0; border-bottom:1px solid #15181d; white-space:nowrap; display:flex; gap:.45rem; }
+    .logrow time { color:var(--mut); }
+    .logrow .lv { width:42px; }
+    .lv.ERROR{color:var(--down)} .lv.WARN{color:var(--warn)} .lv.INFO{color:var(--dim)} .lv.DEBUG{color:var(--mut)}
+    .corr { color:var(--blue); cursor:pointer; }
+    .msg { color:var(--tx); overflow:hidden; text-overflow:ellipsis; }
+    .ctrls { display:flex; gap:.4rem; align-items:center; }
+    .ctrls select, .ctrls input { background:var(--card2); border:1px solid var(--bd); color:var(--tx); border-radius:6px; padding:.2rem .4rem; font-family:inherit; font-size:11px; }
+    .feedrow { padding:.12rem 0; border-bottom:1px solid #15181d; display:flex; gap:.5rem; }
+    .feedrow time { color:var(--mut); }
+    .err { color:var(--down); }
+    .empty { color:var(--mut); padding:.3rem 0; }
+    ::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-thumb{background:#252a31;border-radius:8px}
   </style>
 </head>
 <body>
-  <header>
-    <h1>Altune · Mission Control</h1>
+  <div class="top">
+    <div class="brand"><span class="dot">◆</span> Altune · Mission&nbsp;Control</div>
+    <div id="tiles" class="pills"></div>
+    <div class="spacer"></div>
+    <span id="conn" class="mut">not connected</span>
+    <div class="auth">
+      <input id="email" type="email" placeholder="email" autocomplete="username">
+      <input id="password" type="password" placeholder="password" autocomplete="current-password">
+      <button id="signin" class="btn">Sign in</button>
+      <a id="tokenToggle" href="#" class="mut" style="font-size:10.5px">token</a>
+    </div>
+  </div>
+  <div id="tokenRow" class="tokenrow">
     <input id="token" type="password" placeholder="operator JWT (Bearer token)" autocomplete="off">
-    <button id="save">Connect</button>
-    <span id="conn" class="muted">not connected</span>
-  </header>
+    <button id="useToken" class="btn ghost">Use token</button>
+  </div>
 
-  <div class="grid">
-    <div class="panel"><h2>Service health</h2><div id="tiles" class="tiles"><span class="muted">—</span></div></div>
-    <div class="panel"><h2>Providers</h2><div id="providers"><span class="muted">—</span></div></div>
-    <div class="panel"><h2>Discovery eval</h2><div id="eval"><span class="muted">—</span></div></div>
-    <div class="panel"><h2>Acquisition</h2><div id="acq"><span class="muted">—</span></div></div>
-    <div class="panel"><h2>Event rates <span class="muted">(live)</span></h2><div id="rates"></div><div id="feed" class="feed"></div></div>
-    <div class="panel">
-      <h2>Logs <span class="muted">(live tail)</span></h2>
-      <div class="controls">
-        <select id="level"><option value="">all</option><option>DEBUG</option><option>INFO</option><option>WARN</option><option>ERROR</option></select>
-        <input id="corrFilter" placeholder="filter corr_id" style="flex:1;background:#16161c;border:1px solid #2a2a33;color:#e6e6e6;border-radius:6px;padding:.2rem .4rem;font-family:inherit;">
+  <div class="wrap">
+    <div class="row summary">
+      <div class="card">
+        <div class="hd"><h2>Providers</h2><span id="provMeta" class="meta"></span></div>
+        <div class="bd" id="providers"><div class="empty">—</div></div>
       </div>
-      <div id="logs" class="logs"></div>
+      <div class="card">
+        <div class="hd"><h2>Acquisition</h2></div>
+        <div class="bd" id="acq"><div class="empty">—</div></div>
+      </div>
+      <div class="card">
+        <div class="hd"><h2>Discovery eval</h2></div>
+        <div class="bd" id="eval"><div class="empty">—</div></div>
+      </div>
+    </div>
+
+    <div class="row live">
+      <div class="card live">
+        <div class="hd">
+          <h2>Logs <span class="mut">live</span></h2>
+          <div class="ctrls">
+            <select id="level"><option value="">all</option><option>DEBUG</option><option>INFO</option><option>WARN</option><option>ERROR</option></select>
+            <input id="corrFilter" placeholder="corr_id" style="width:120px">
+          </div>
+        </div>
+        <div class="bd logs" id="logs"></div>
+      </div>
+      <div class="card live">
+        <div class="hd"><h2>Events <span class="mut">live</span></h2></div>
+        <div class="bd">
+          <div id="rates" class="ratebar"></div>
+          <div id="feed" class="feed"></div>
+        </div>
+      </div>
     </div>
   </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 let token = sessionStorage.getItem("altune_op_token") || "";
-$("token").value = token;
+let refreshToken = sessionStorage.getItem("altune_op_refresh") || "";
+let sbConfig = null;
 
 function authHeaders() { return token ? { "Authorization": "Bearer " + token } : {}; }
 function rank(l){ return ({DEBUG:0,INFO:1,WARN:2,ERROR:3})[(l||"").replace(/[+-].*/,"").toUpperCase()] ?? 0; }
 
+function setTokens(access, refresh) {
+  token = access || "";
+  refreshToken = refresh || refreshToken;
+  sessionStorage.setItem("altune_op_token", token);
+  sessionStorage.setItem("altune_op_refresh", refreshToken);
+}
+
+async function loadConfig() {
+  if (sbConfig) return sbConfig;
+  sbConfig = await (await fetch("/admin/config")).json();
+  return sbConfig;
+}
+
+async function supabaseToken(grant, body) {
+  const c = await loadConfig();
+  const r = await fetch(`${c.supabase_url}/auth/v1/token?grant_type=${grant}`, {
+    method: "POST",
+    headers: { "apikey": c.anon_key, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.access_token) throw new Error(data.error_description || data.msg || data.error || ("auth " + r.status));
+  setTokens(data.access_token, data.refresh_token);
+  return data;
+}
+
+async function tryRefresh() {
+  if (!refreshToken) return false;
+  try { await supabaseToken("refresh_token", { refresh_token: refreshToken }); return true; } catch { return false; }
+}
+
 async function getJSON(path) {
-  const r = await fetch(path, { headers: authHeaders() });
+  let r = await fetch(path, { headers: authHeaders() });
+  if (r.status === 401 && await tryRefresh()) r = await fetch(path, { headers: authHeaders() });
   if (!r.ok) throw new Error(path + " → " + r.status);
   return r.json();
 }
 
-// fetch-based SSE so we can attach the Authorization header (EventSource cannot).
 async function streamSSE(path, onEvent, signal) {
   const r = await fetch(path, { headers: authHeaders(), signal });
   if (!r.ok || !r.body) throw new Error(path + " → " + r.status);
-  const reader = r.body.getReader();
-  const dec = new TextDecoder();
+  const reader = r.body.getReader(), dec = new TextDecoder();
   let buf = "";
   for (;;) {
     const { done, value } = await reader.read();
@@ -92,115 +215,118 @@ async function streamSSE(path, onEvent, signal) {
   }
 }
 
-function tileClass(s){ return s === "ok" ? "ok" : s === "down" ? "down" : "na"; }
-
+/* ---------- panels ---------- */
 async function pollHealth() {
   try {
     const h = await getJSON("/admin/health");
-    $("tiles").innerHTML = ["api:ok", "db:"+h.db, "redis:"+h.redis].map((kv) => {
-      const [n, s] = kv.split(":");
-      return `<div class="tile"><div class="name">${n}</div><div class="state ${tileClass(s)}">${s}</div></div>`;
+    const items = [["api","ok"],["db",h.db],["redis",h.redis]];
+    $("tiles").innerHTML = items.map(([k,s]) => {
+      const cls = s === "ok" ? "up" : s === "down" ? "bad" : "";
+      return `<span class="pill ${cls}"><span class="led"></span><span class="k">${k}</span> ${s}</span>`;
     }).join("");
-  } catch (e) { $("tiles").innerHTML = `<span class="err">${e.message}</span>`; }
+  } catch (e) { $("tiles").innerHTML = `<span class="pill bad"><span class="led"></span>${e.message}</span>`; }
 }
 
 async function pollProviders() {
   try {
     const ps = await getJSON("/admin/providers");
-    if (!ps.length) { $("providers").innerHTML = `<span class="muted">no traffic yet</span>`; return; }
-    $("providers").innerHTML = `<table><tr><th>provider</th><th>state</th><th>calls</th><th>p~ms</th></tr>` +
+    if (!ps.length) { $("providers").innerHTML = `<div class="empty">no provider traffic yet</div>`; $("provMeta").textContent=""; return; }
+    $("provMeta").textContent = ps.length + " providers";
+    $("providers").innerHTML = `<table><tr><th>provider</th><th>state</th><th class="num">calls</th><th class="num">p~ms</th></tr>` +
       ps.map((p) => {
-        const cls = p.current === "ok" ? "ok" : (p.current === "circuit_open" || p.current === "error" || p.current === "timeout") ? "down" : "warn";
-        return `<tr><td>${p.provider}</td><td class="${cls}">${p.current||"—"}</td><td>${p.total}</td><td>${p.avg_latency_ms}</td></tr>`;
+        const bad = ["circuit_open","error","timeout","rate_limited"].includes(p.current);
+        const cls = p.current === "ok" ? "ok" : bad ? "bad" : "warn";
+        return `<tr><td>${p.provider}</td><td><span class="badge ${cls}">${p.current||"—"}</span></td><td class="num">${p.total}</td><td class="num">${p.avg_latency_ms}</td></tr>`;
       }).join("") + `</table>`;
-  } catch (e) { $("providers").innerHTML = `<span class="err">${e.message}</span>`; }
+  } catch (e) { $("providers").innerHTML = `<div class="err">${e.message}</div>`; }
 }
 
 async function pollEval() {
   try {
     const e = await getJSON("/admin/eval");
-    const map = { disabled:"na", no_data:"na", ok:"ok", regression:"down", error:"down" };
-    let body = `<div class="big ${map[e.state]||'na'}">${e.state}</div>`;
-    if (e.score != null) body += `<div>score ${e.score.toFixed(3)} vs baseline ${e.baseline?.toFixed(3)}</div>`;
-    if (e.error) body += `<div class="err">${e.error}</div>`;
+    const cls = {ok:"ok",regression:"down",error:"down",disabled:"na",no_data:"na"}[e.state]||"na";
+    let body = `<div class="big ${cls}">${e.state.replace("_"," ")}</div>`;
+    if (e.score != null) body += `<div class="dim">score <b class="cy">${e.score.toFixed(2)}</b> vs baseline ${e.baseline?.toFixed(2)}</div>`;
+    if (e.error) body += `<div class="err" style="margin-top:.3rem">${e.error}</div>`;
     $("eval").innerHTML = body;
-  } catch (e) { $("eval").innerHTML = `<span class="err">${e.message}</span>`; }
+  } catch (e) { $("eval").innerHTML = `<div class="err">${e.message}</div>`; }
 }
 
 async function pollAcq() {
   try {
     const a = await getJSON("/admin/acquisition");
-    let body = `<div>in-flight <b>${a.in_flight}</b> · ok <b class="ok">${a.succeeded}</b> · failed <b class="down">${a.failed}</b></div>`;
+    let body = `<div class="stat"><span><b class="cy">${a.in_flight}</b><div class="mut">in-flight</div></span>`
+      + `<span><b class="ok">${a.succeeded}</b><div class="mut">ok</div></span>`
+      + `<span><b class="${a.failed?'down':''}">${a.failed}</b><div class="mut">failed</div></span></div>`;
     if (a.recent_failures?.length) {
-      body += `<table><tr><th>track</th><th>reason</th></tr>` +
-        a.recent_failures.slice(-6).reverse().map((f) => `<tr><td>${f.track_id.slice(0,8)}</td><td>${f.reason}</td></tr>`).join("") + `</table>`;
+      body += `<table style="margin-top:.5rem"><tr><th>track</th><th>reason</th></tr>` +
+        a.recent_failures.slice(-5).reverse().map((f) => `<tr><td>${(f.track_id||"").slice(0,8)}</td><td class="down">${f.reason}</td></tr>`).join("") + `</table>`;
     }
     $("acq").innerHTML = body;
-  } catch (e) { $("acq").innerHTML = `<span class="err">${e.message}</span>`; }
+  } catch (e) { $("acq").innerHTML = `<div class="err">${e.message}</div>`; }
 }
 
 let rates = {};
 function renderRates() {
   const keys = Object.keys(rates).sort();
-  $("rates").innerHTML = keys.length
-    ? keys.map((k) => `<span class="muted">${k}</span> ${rates[k]}`).join(" · ")
-    : `<span class="muted">no events in window</span>`;
+  $("rates").innerHTML = keys.length ? keys.map((k) => `<span class="chip">${k} <b>${rates[k]}</b></span>`).join("") : `<span class="empty">no events in window</span>`;
 }
 async function pollRates() { try { rates = await getJSON("/admin/events/rates"); renderRates(); } catch {} }
 
 const logBuf = [];
 function renderLogs() {
-  const min = rank($("level").value || "DEBUG");
   const cf = $("corrFilter").value.trim();
+  const min = $("level").value ? rank($("level").value) : 0;
   $("logs").innerHTML = logBuf.filter((r) =>
-    rank(r.level) >= ($("level").value ? rank($("level").value) : 0) &&
-    (!cf || (r.attrs && r.attrs.corr_id && r.attrs.corr_id.includes(cf)))
-  ).slice(-200).map((r) => {
+    rank(r.level) >= min && (!cf || (r.attrs && r.attrs.corr_id && r.attrs.corr_id.includes(cf)))
+  ).slice(-300).map((r) => {
     const t = (r.time || "").slice(11, 23);
-    const corr = r.attrs && r.attrs.corr_id ? `<span class="corr" onclick="document.getElementById('corrFilter').value='${r.attrs.corr_id}';renderLogs()">${r.attrs.corr_id}</span> ` : "";
-    return `<div class="logline lvl-${(r.level||'').replace(/[+-].*/,'')}">${t} ${r.level} ${corr}${r.msg}</div>`;
+    const corr = r.attrs && r.attrs.corr_id ? `<span class="corr" data-c="${r.attrs.corr_id}">${r.attrs.corr_id}</span>` : "";
+    const lv = (r.level||"").replace(/[+-].*/,"");
+    return `<div class="logrow"><time>${t}</time><span class="lv ${lv}">${lv}</span>${corr}<span class="msg">${escapeHtml(r.msg)}</span></div>`;
   }).join("");
   $("logs").scrollTop = $("logs").scrollHeight;
 }
-window.renderLogs = renderLogs;
+function escapeHtml(s){ return (s||"").replace(/[&<>]/g, (c)=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+$("logs").addEventListener("click", (e) => { const c = e.target.dataset.c; if (c) { $("corrFilter").value = c; renderLogs(); } });
 
+/* ---------- connect / auth ---------- */
 let abort = null;
 async function connect() {
   if (abort) abort.abort();
   abort = new AbortController();
-  $("conn").textContent = "connecting…"; $("conn").className = "muted";
+  $("conn").textContent = "connecting…"; $("conn").className = "mut";
+  try { await getJSON("/admin/health"); }
+  catch (e) { $("conn").textContent = "auth failed (" + e.message + ")"; $("conn").className = "err"; return; }
+  $("conn").textContent = "● connected"; $("conn").className = "ok";
 
-  // Snapshots + polling
   const tick = () => { pollHealth(); pollProviders(); pollEval(); pollAcq(); pollRates(); };
-  try {
-    // verify token with one gated call before declaring connected
-    await getJSON("/admin/health");
-    $("conn").textContent = "connected"; $("conn").className = "ok";
-  } catch (e) {
-    $("conn").textContent = "auth failed (" + e.message + ")"; $("conn").className = "err"; return;
-  }
   tick();
   clearInterval(window._poll); window._poll = setInterval(tick, 5000);
 
-  // log snapshot then live tail
+  logBuf.length = 0;
   try { (await getJSON("/admin/logs")).forEach((r) => logBuf.push(r)); renderLogs(); } catch {}
-  streamSSE("/admin/logs/stream", (r) => { logBuf.push(r); if (logBuf.length > 2000) logBuf.shift(); renderLogs(); }, abort.signal).catch(() => {});
+  streamSSE("/admin/logs/stream", (r) => { logBuf.push(r); if (logBuf.length > 2500) logBuf.shift(); renderLogs(); }, abort.signal).catch(() => {});
   streamSSE("/admin/events/stream", (e) => {
-    const div = document.createElement("div");
-    div.className = "logline";
-    div.textContent = (e.timestamp || "").slice(11, 19) + "  " + e.type;
-    $("feed").prepend(div);
-    while ($("feed").childNodes.length > 100) $("feed").lastChild.remove();
+    const d = document.createElement("div");
+    d.className = "feedrow";
+    d.innerHTML = `<time>${(e.timestamp||"").slice(11,19)}</time><span>${e.type}</span>`;
+    $("feed").prepend(d);
+    while ($("feed").childNodes.length > 120) $("feed").lastChild.remove();
   }, abort.signal).catch(() => {});
 }
 
-$("save").onclick = () => {
-  token = $("token").value.trim();
-  sessionStorage.setItem("altune_op_token", token);
-  connect();
+$("signin").onclick = async () => {
+  $("conn").textContent = "signing in…"; $("conn").className = "mut";
+  try { await supabaseToken("password", { email: $("email").value.trim(), password: $("password").value }); $("password").value=""; connect(); }
+  catch (e) { $("conn").textContent = "sign-in failed: " + e.message; $("conn").className = "err"; }
 };
+$("password").addEventListener("keydown", (e) => { if (e.key === "Enter") $("signin").click(); });
+$("tokenToggle").onclick = (e) => { e.preventDefault(); const r = $("tokenRow"); r.style.display = r.style.display === "flex" ? "none" : "flex"; };
+$("useToken").onclick = () => { token = $("token").value.trim(); sessionStorage.setItem("altune_op_token", token); $("tokenRow").style.display="none"; connect(); };
 $("level").onchange = renderLogs;
 $("corrFilter").oninput = renderLogs;
+
 if (token) connect();
 </script>
 </body>
