@@ -241,6 +241,7 @@ func (s *Service) Execute(
 		"corrected", correctedQuery,
 		"related_groups", len(related),
 		"cached", cached,
+		"tail_noise_top5", TailNoiseInTopK(ranked, 5),
 	)
 
 	return &SearchOutput{
@@ -275,23 +276,6 @@ func (s *Service) mergeRankEnrich(
 		demote = isLowConfidenceTail
 	}
 	ranked := rankPipelineWith(perProvider, queryNorm, demote)
-	// Observability for the demotion experiment: how much low-confidence noise
-	// remained in the visible top-5 after demotion (residual is the genuinely-
-	// underground case where no cleaner result exists to promote). Flag-gated, so
-	// zero cost on the default path. Debug level.
-	if s.tailDemotion {
-		noiseTop5, noiseTotal := 0, 0
-		for i, r := range ranked {
-			if isLowConfidenceTail(r) {
-				noiseTotal++
-				if i < 5 {
-					noiseTop5++
-				}
-			}
-		}
-		slog.DebugContext(ctx, "search.v2.tailnoise", "query", queryNorm,
-			"noise_top5", noiseTop5, "noise_total", noiseTotal, "results", len(ranked))
-	}
 
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)

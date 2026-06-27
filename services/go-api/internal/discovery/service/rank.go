@@ -206,6 +206,23 @@ func tokenSet(s string) map[string]bool {
 // (Deezer/iTunes/MusicBrainz) are never flagged. The demotion is uniform, so on a
 // purely-underground query where every candidate is UGC it does not change relative
 // order. See docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
+// TailNoiseInTopK counts how many of the first k results are low-confidence tail
+// noise (see isLowConfidenceTail) — the tail-quality signal the search log and
+// discoveryeval track over time to catch result-quality regressions that
+// target-recall is blind to (the noise sits below the answer).
+func TailNoiseInTopK(results []domain.SearchResult, k int) int {
+	n := 0
+	for i, r := range results {
+		if i >= k {
+			break
+		}
+		if isLowConfidenceTail(r) {
+			n++
+		}
+	}
+	return n
+}
+
 func isLowConfidenceTail(r domain.SearchResult) bool {
 	provs := providersOf(r)
 	if len(provs) != 1 {
