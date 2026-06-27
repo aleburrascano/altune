@@ -24,6 +24,8 @@ package service
 import (
 	"context"
 	"log/slog"
+	"math/rand/v2"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -75,6 +77,12 @@ type Service struct {
 	behavioralConsumer ports.EventConsumer
 	behavioralScores   atomic.Pointer[map[string]float64]
 
+	// explorationRate, 0 = off, is the fraction of searches whose result order is
+	// randomized (and logged as exploration) for unbiased propensity data — the
+	// small-scale bandit substitute for IPS. The one user-facing behavior change,
+	// shipped behind a flag so it needs no live sign-off.
+	explorationRate float64
+
 	bgWg sync.WaitGroup
 }
 
@@ -84,7 +92,9 @@ type SearchOutput struct {
 	// SearchId is the keystone minted per search_performed and returned to the
 	// client, which threads it back onto every downstream engagement event so the
 	// impression/click/play funnel joins to the search that produced it.
-	SearchId         string
+	SearchId string
+	// Explored is true when this search served a randomized (exploration) order.
+	Explored         bool
 	Results          []domain.SearchResult
 	ProviderStatuses []domain.ProviderSearchResponse
 	Partial          bool
@@ -175,6 +185,34 @@ func WithBehavioralRanking(consumer ports.EventConsumer) Option {
 	}
 }
 
+// WithExploration enables exploration randomization: a `rate` fraction of
+// searches (e.g. 0.03) have their result order shuffled and the search stamped
+// as exploration, generating the unbiased propensity data offline counterfactual
+// eval needs. Off by default (rate 0); gated by EXPLORATION_ENABLED at the
+// composition root — the one user-facing change, shipped dark.
+func WithExploration(rate float64) Option {
+	return func(s *Service) {
+		if rate > 0 {
+			s.explorationRate = rate
+		}
+	}
+}
+
+// maybeExplore returns a possibly-randomized copy of ranked plus whether this
+// search was selected for exploration. It clones before shuffling so a cached
+// (shared) result list is never mutated. Inert when the rate is 0.
+func (s *Service) maybeExplore(ranked []domain.SearchResult) ([]domain.SearchResult, bool) {
+	if s.explorationRate <= 0 || len(ranked) < 2 {
+		return ranked, false
+	}
+	if rand.Float64() >= s.explorationRate {
+		return ranked, false
+	}
+	out := slices.Clone(ranked)
+	rand.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
+	return out, true
+}
+
 // NewService constructs the rebuilt search orchestrator.
 func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker, opts ...Option) *Service {
 	s := &Service{
@@ -255,10 +293,14 @@ func (s *Service) Execute(
 		ranked = ranked[:query.Limit]
 	}
 
+	// Exploration: a small fraction of searches serve a randomized order (cloned
+	// so the cache is never mutated) and are logged as exploration for propensity.
+	ranked, explored := s.maybeExplore(ranked)
+
 	partial := anyProviderFailed(statuses)
 
 	s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
-	s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked)
+	s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked, explored)
 	ingestQuery := query.Raw
 	if correctedQuery != "" {
 		ingestQuery = correctedQuery
@@ -277,6 +319,7 @@ func (s *Service) Execute(
 
 	return &SearchOutput{
 		SearchId:         searchId,
+		Explored:         explored,
 		Results:          ranked,
 		ProviderStatuses: statuses,
 		Partial:          partial,

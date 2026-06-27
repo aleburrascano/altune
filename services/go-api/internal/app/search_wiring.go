@@ -74,6 +74,11 @@ func BuildSearchServiceWithTransport(
 	if cfg.TailDemotionEnabled {
 		opts = append(opts, discoveryService.WithTailDemotion())
 	}
+	// Exploration randomization (off unless EXPLORATION_ENABLED). Never on the
+	// rankingOnly eval path — the eval must see the deterministic order it scores.
+	if cfg.ExplorationEnabled && !rankingOnly {
+		opts = append(opts, discoveryService.WithExploration(cfg.ExplorationRate))
+	}
 	if !rankingOnly {
 		deezerContent := providers.NewDeezerAdapter(cf.discovery())
 		relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)

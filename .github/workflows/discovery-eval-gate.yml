@@ -1,0 +1,46 @@
+# Discovery ranking eval gate.
+#
+# Triggers only when a PR touches ranking-path code (merge/rank/diversity/
+# pipeline, the eval harness, or the providers that feed them). Ranking changes
+# are the ones the discovery-eval-harness program guards against silent
+# regressions — a plausible "+7pp" once turned out to be a same-sample regression
+# (the popularity attempt). This gate runs the deterministic, provider-free parts
+# of the harness so a ranking diff cannot merge without the rank/merge/eval
+# checks going green.
+#
+# The full positional eval (cmd/discoveryeval -mode eval) needs live providers +
+# DB/Redis and is nightly/on-demand, NOT per-commit — so it is intentionally not
+# run here. This gate runs: the harness compiles, and the deterministic rank /
+# merge / eval / behavioral-corpus / replay unit tests pass.
+name: Discovery eval gate
+
+on:
+  pull_request:
+    paths:
+      - 'services/go-api/internal/discovery/service/rank*.go'
+      - 'services/go-api/internal/discovery/service/merge*.go'
+      - 'services/go-api/internal/discovery/service/diversity*.go'
+      - 'services/go-api/internal/discovery/service/pipeline*.go'
+      - 'services/go-api/internal/discovery/service/behavioral_signals*.go'
+      - 'services/go-api/internal/discovery/service/eval/**'
+      - 'services/go-api/cmd/discoveryeval/**'
+
+jobs:
+  eval-gate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/go-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: services/go-api/go.sum
+
+      - name: harness compiles
+        run: go build ./cmd/discoveryeval
+
+      - name: deterministic ranking + eval tests
+        run: go test -count=1 ./internal/discovery/service/... ./internal/discovery/service/eval/...

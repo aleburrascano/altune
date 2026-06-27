@@ -78,6 +78,12 @@ type Config struct {
 	// disabled. When set to a writable path, the job materializes search→engagement
 	// labels (positive) + wrong_album (hard negative) into the eval corpus format.
 	BehavioralCorpusPath string `env:"BEHAVIORAL_CORPUS_PATH"`
+	// Exploration randomization. OFF by default: a small fraction of searches
+	// serve a randomized result order (logged as exploration) so offline
+	// counterfactual eval has unbiased propensity data. The one user-facing
+	// behavior change — shipped dark behind this flag so it needs no live sign-off.
+	ExplorationEnabled bool    `env:"EXPLORATION_ENABLED" envDefault:"false"`
+	ExplorationRate    float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
 }
 
 func Load() (*Config, error) {
