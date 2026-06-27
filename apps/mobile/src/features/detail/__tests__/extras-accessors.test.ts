@@ -59,6 +59,14 @@ describe('trackExtras', () => {
     expect(result.previewUrl).toBeNull();
   });
 
+  it('reads duration from the provider `duration` key', () => {
+    expect(trackExtras({ duration: 240 }).durationSeconds).toBe(240);
+  });
+
+  it('falls back to legacy `duration_seconds` when `duration` is absent', () => {
+    expect(trackExtras({ duration_seconds: 199 }).durationSeconds).toBe(199);
+  });
+
   it('rejects non-finite duration', () => {
     expect(trackExtras({ duration_seconds: Infinity }).durationSeconds).toBeNull();
     expect(trackExtras({ duration_seconds: NaN }).durationSeconds).toBeNull();
