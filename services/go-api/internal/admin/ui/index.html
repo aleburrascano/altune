@@ -318,7 +318,9 @@ function renderReqList(){
   $("reqMeta").textContent = requests.length+" recent";
   $("reqList").innerHTML = requests.length ? requests.map((r,i)=>{
     const t = new Date(r.started_at).toLocaleTimeString();
-    return `<div class="req" data-i="${i}"><div class="q">${esc(r.query||'(no query)')} <span class="mut">${(r.kinds||[]).join(',')}</span></div><div class="m">${esc((r.corr_id||'').slice(0,8))} · ${esc(r.user||'?').slice(0,12)} · ${t} · ${(r.providers||[]).length} prov · ${(r.final||[]).length} final · ${(r.exchanges||[]).length} calls</div></div>`;
+    const label = r.detail ? `🎵 ${esc(r.detail.kind)}: ${esc(r.detail.artist||r.detail.provider)}` : `${esc(r.query||'(no query)')} <span class="mut">${(r.kinds||[]).join(',')}</span>`;
+    const counts = r.detail ? `${(r.detail.items||[]).length} items` : `${(r.providers||[]).length} prov · ${(r.final||[]).length} final`;
+    return `<div class="req" data-i="${i}"><div class="q">${label}</div><div class="m">${esc((r.corr_id||'').slice(0,8))} · ${esc(r.user||'?').slice(0,12)} · ${t} · ${counts} · ${(r.exchanges||[]).length} calls</div></div>`;
   }).join("") : `<div class="empty" style="padding:.6rem">no requests yet</div>`;
 }
 function renderReqDetail(r){
@@ -326,8 +328,11 @@ function renderReqDetail(r){
     (p.results||[]).slice(0,4).map(resultRow).join("")).join("");
   const exch = (r.exchanges||[]).map(x=>`<div class="row2"><span class="lbl">${esc((x.url||'').replace(/^https?:\/\//,'').slice(0,40))}</span>${badge(String(x.status||x.error||'—'))}<span class="mut">${x.latency_ms}ms${x.truncated?' · truncated':''}</span></div><pre class="json">${esc((x.response_body||'').slice(0,1200))}</pre>`).join("");
   const final = (r.final||[]).map((x,i)=>`<div class="row2"><span class="mut">${i+1}</span>${resultRow(x)}</div>`).join("");
+  const det = r.detail ? (r.detail.items||[]).map((x,i)=>`<div class="row2"><span class="mut">${i+1}</span><span class="lbl">${esc(x.title)}</span>${x.year?`<span class="mut">${x.year}</span>`:'<span class="mut" style="color:#c66">no year</span>'}${x.status?badge(x.status):''}</div>`).join("") : "";
+  const detailStage = r.detail ? `<div class="stage"><div class="sh"><span>discography · ${esc(r.detail.kind)} · ${esc(r.detail.provider)}${r.detail.artist?(' · '+esc(r.detail.artist)):''} (${(r.detail.items||[]).length}, chronological)</span></div><div class="sb">${det||'<span class="empty">—</span>'}</div></div>` : "";
   $("reqDetail").innerHTML =
-    `<div class="cy" style="margin-bottom:.4rem">${esc(r.corr_id)} · ${esc(r.query||'')} · ${esc(r.user||'')}</div>`+
+    `<div class="cy" style="margin-bottom:.4rem">${esc(r.corr_id)} · ${esc(r.detail?r.detail.kind:(r.query||''))} · ${esc(r.user||'')}</div>`+
+    detailStage+
     `<div class="stage"><div class="sh"><span>providers (${(r.providers||[]).length})</span></div><div class="sb">${provs||'<span class="empty">—</span>'}</div></div>`+
     `<div class="stage"><div class="sh"><span>final results (${(r.final||[]).length})</span></div><div class="sb">${final||'<span class="empty">—</span>'}</div></div>`+
     `<div class="stage"><div class="sh"><span>raw exchanges (${(r.exchanges||[]).length})</span></div><div class="sb">${exch||'<span class="empty">—</span>'}</div></div>`;

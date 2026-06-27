@@ -35,6 +35,65 @@ func (s *Store) RecordSearch(
 	rec.Final = ProjectResults(final)
 }
 
+// RecordContentFetch attaches a detail-screen fetch (artist discography,
+// top-tracks, related) to the request record keyed by the context's correlation id
+// — the trace an operator reads to see what came up when a detail screen was
+// opened, including each item's year and consensus verdict so ordering/metadata
+// bugs are visible. Raw provider exchanges live under the same key. No-op without a
+// correlation id.
+func (s *Store) RecordContentFetch(
+	ctx context.Context,
+	kind, provider, artist, status string,
+	items []domain.SearchResult,
+) {
+	corrID := httputil.GetCorrelationID(ctx)
+	if corrID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec := s.getOrCreateLocked(corrID, time.Now().UTC())
+	rec.Detail = &DetailTrace{
+		Kind:     kind,
+		Provider: provider,
+		Artist:   artist,
+		Status:   status,
+		Items:    projectDetailRows(items),
+	}
+}
+
+func projectDetailRows(items []domain.SearchResult) []DetailRow {
+	out := make([]DetailRow, 0, len(items))
+	for _, it := range items {
+		out = append(out, DetailRow{
+			Title:  it.Title,
+			Year:   detailYear(it),
+			Status: extraStr(it, "consensus_status"),
+		})
+	}
+	return out
+}
+
+// detailYear reads the release year from Extras, tolerating provider shape variance.
+func detailYear(r domain.SearchResult) int {
+	switch y := r.Extras["year"].(type) {
+	case int:
+		return y
+	case int64:
+		return int(y)
+	case float64:
+		return int(y)
+	}
+	return 0
+}
+
+func extraStr(r domain.SearchResult, key string) string {
+	if v, ok := r.Extras[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
 // ProjectStatuses projects per-provider search responses into the display rows the
 // console reads. Exported so the re-run inspector can reuse the same shape.
 func ProjectStatuses(statuses []domain.ProviderSearchResponse) []ProviderTrace {
