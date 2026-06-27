@@ -1,5 +1,5 @@
-import { Component, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from './primitives/Button';
 import { Text } from './primitives/Text';
@@ -13,9 +13,17 @@ import { useTheme } from './theme/useTheme';
 // Keep the themed fallback a functional child so it can still use useTheme().
 
 type ScreenBoundaryProps = { children: ReactNode };
-type ScreenBoundaryState = { error: Error | null };
+type ScreenBoundaryState = { error: Error | null; componentStack: string | null };
 
-function ScreenErrorFallback({ onRetry }: { onRetry: () => void }): ReactNode {
+function ScreenErrorFallback({
+  error,
+  componentStack,
+  onRetry,
+}: {
+  error: Error;
+  componentStack: string | null;
+  onRetry: () => void;
+}): ReactNode {
   const theme = useTheme();
   return (
     <View testID="screen-error" style={[styles.container, { backgroundColor: theme.color.canvas }]}>
@@ -26,6 +34,21 @@ function ScreenErrorFallback({ onRetry }: { onRetry: () => void }): ReactNode {
         This screen hit an unexpected error. You can try again.
       </Text>
       <Button testID="screen-error-retry" label="Try again" onPress={onRetry} />
+      {/* Dev-only: surface the actual error + the component that threw, so a
+          crash is diagnosable on-device without digging through Metro logs.
+          Stripped in production builds (__DEV__ is false). */}
+      {__DEV__ ? (
+        <ScrollView style={styles.devBox} contentContainerStyle={styles.devContent}>
+          <Text testID="screen-error-detail" variant="label" tone="tertiary" style={styles.devText}>
+            {error.message}
+          </Text>
+          {componentStack !== null ? (
+            <Text variant="caption" tone="tertiary" style={styles.devText}>
+              {componentStack.trim()}
+            </Text>
+          ) : null}
+        </ScrollView>
+      ) : null}
     </View>
   );
 }
@@ -39,24 +62,31 @@ function ScreenErrorFallback({ onRetry }: { onRetry: () => void }): ReactNode {
  * instead of taking down the whole app.
  */
 export class ScreenBoundary extends Component<ScreenBoundaryProps, ScreenBoundaryState> {
-  state: ScreenBoundaryState = { error: null };
+  state: ScreenBoundaryState = { error: null, componentStack: null };
 
-  static getDerivedStateFromError(error: Error): ScreenBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<ScreenBoundaryState> {
     return { error };
   }
 
-  componentDidCatch(error: Error): void {
+  componentDidCatch(error: Error, info: ErrorInfo): void {
     // Don't swallow it — surface the crash until a structured logger lands.
-    console.error('[ScreenBoundary] render error', error);
+    console.error('[ScreenBoundary] render error', error, info.componentStack);
+    this.setState({ componentStack: info.componentStack ?? null });
   }
 
   private reset = (): void => {
-    this.setState({ error: null });
+    this.setState({ error: null, componentStack: null });
   };
 
   render(): ReactNode {
     if (this.state.error !== null) {
-      return <ScreenErrorFallback onRetry={this.reset} />;
+      return (
+        <ScreenErrorFallback
+          error={this.state.error}
+          componentStack={this.state.componentStack}
+          onRetry={this.reset}
+        />
+      );
     }
     return this.props.children;
   }
@@ -72,4 +102,7 @@ const styles = StyleSheet.create({
   },
   title: { textAlign: 'center' },
   body: { textAlign: 'center' },
+  devBox: { maxHeight: 220, marginTop: spacing.lg, alignSelf: 'stretch' },
+  devContent: { gap: spacing.sm },
+  devText: { textAlign: 'left' },
 });
