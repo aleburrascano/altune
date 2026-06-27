@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,11 +44,13 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.events = pub }
 }
 
-// Execute acquires audio for a track. When sourceURL is a directly-downloadable
-// source (a SoundCloud link — the only discovery provider that is also a download
-// source), it downloads that exact track instead of re-searching by metadata; on
-// any failure it falls back to the search pipeline. sourceURL is empty for
-// retries and stream-triggered re-acquisition, which always use search.
+// Execute acquires audio for a track via the search pipeline (YouTube-first,
+// SoundCloud gap-fill). It always re-searches by metadata. The previous
+// direct-download path (download a saved SoundCloud permalink verbatim) was
+// removed: SoundCloud's public stream for many tracks is only a ~30s preview,
+// which yt-dlp would store as if it were the full track. sourceURL is retained
+// on the signature for the scheduler contract — and a future direct path gated
+// by post-download duration validation — but is currently unused.
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -79,15 +80,8 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		"has_isrc", track.ISRC != nil,
 	)
 
-	// Direct path: the saved result carries the exact SoundCloud URL the user
-	// discovered, so download that exact track instead of re-searching by metadata
-	// (which can grab a wrong reupload). On any failure it falls back to search.
-	if s.tryDirectAcquire(ctx, userId, trackId, track, sourceURL) {
-		return nil
-	}
-
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
-	err = RunPipeline(ctx, s.buildSteps(userId, trackId, false), ac)
+	err = RunPipeline(ctx, s.buildSteps(userId, trackId), ac)
 	cleanupTemp(ctx, ac)
 
 	if err != nil {
@@ -109,41 +103,6 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 
 	s.onAcquireCompleted(ctx, userId, trackId, ac.AudioRef)
 	return nil
-}
-
-// tryDirectAcquire attempts the direct-download path for a directly-downloadable
-// source URL, skipping search. It reports whether acquisition completed; on any
-// failure it returns false so the caller falls back to the search pipeline.
-func (s *AcquireTrackAudioService) tryDirectAcquire(
-	ctx context.Context,
-	userId shared.UserId,
-	trackId domain.TrackId,
-	track *domain.Track,
-	sourceURL string,
-) bool {
-	if !isDirectAcquireURL(sourceURL) {
-		return false
-	}
-	direct := &AcquisitionContext{
-		Track: buildTrackRef(track),
-		Selected: &Candidate{
-			URL:      sourceURL,
-			Title:    track.Title,
-			Artist:   track.Artist,
-			Duration: derefFloat(track.DurationSeconds),
-		},
-	}
-	err := RunPipeline(ctx, s.buildSteps(userId, trackId, true), direct)
-	cleanupTemp(ctx, direct)
-	if err != nil {
-		slog.WarnContext(ctx, "acquisition.direct_failed_falling_back",
-			"track_id", trackId.String(), "url", sourceURL, "error", err)
-		return false
-	}
-	slog.InfoContext(ctx, "acquisition.direct_source_used",
-		"track_id", trackId.String(), "url", sourceURL)
-	s.onAcquireCompleted(ctx, userId, trackId, direct.AudioRef)
-	return true
 }
 
 // failureReason maps an internal pipeline error to a short, stable, client-safe
@@ -241,21 +200,17 @@ func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, tr
 	return true, nil
 }
 
-// buildSteps assembles the acquisition pipeline. The direct path pre-seeds a
-// known downloadable source as Selected, so it skips Search+Select and goes
-// straight to download; the search path discovers a candidate first. Both share
-// the download → tag → store → update-track tail.
-func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId, direct bool) []Step {
-	var steps []Step
-	if !direct {
-		steps = append(steps, NewSearchStep(s.audioSearcher), NewSelectStep())
-	}
-	return append(steps,
+// buildSteps assembles the acquisition pipeline: discover a candidate
+// (search + select), then the shared download → tag → store → update-track tail.
+func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId) []Step {
+	return []Step{
+		NewSearchStep(s.audioSearcher),
+		NewSelectStep(),
 		NewDownloadStep(s.audioSearcher),
 		NewTagStep(),
 		NewStoreStep(s.audioStore),
 		NewUpdateTrackStep(s.trackRepo, userId, trackId),
-	)
+	}
 }
 
 func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userId shared.UserId, trackId domain.TrackId, audioRef string) {
@@ -270,27 +225,6 @@ func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userI
 			"audio_ref": audioRef,
 		})
 	}
-}
-
-// isDirectAcquireURL reports whether the URL is one acquisition can download
-// directly (skipping metadata search). Only SoundCloud qualifies today: among the
-// discovery providers it is the only one that is both a search source and a
-// yt-dlp-downloadable audio source (Deezer/iTunes/MusicBrainz are DRM/metadata).
-func isDirectAcquireURL(rawURL string) bool {
-	if rawURL == "" {
-		return false
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	host := strings.ToLower(u.Hostname())
-	if host != "soundcloud.com" && !strings.HasSuffix(host, ".soundcloud.com") {
-		return false
-	}
-	// A SoundCloud set/playlist URL downloads multiple tracks; the direct path
-	// must fetch exactly one, so reject sets and let the search pipeline handle it.
-	return !strings.Contains(strings.ToLower(u.Path), "/sets/")
 }
 
 func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) {
