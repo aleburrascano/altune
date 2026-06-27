@@ -84,6 +84,14 @@ func BuildSearchServiceWithTransport(
 		)
 	}
 	if redisClient != nil {
+		// App-wide consistency cache (shared, short-TTL): identical query → identical
+		// ranked list for everyone within the window. Skipped on the rankingOnly eval
+		// path so the eval always exercises the live pipeline, never a cached list.
+		if !rankingOnly {
+			opts = append(opts, discoveryService.WithResultCache(
+				discoveryCacheAdapters.NewRedisResultCache(redisClient),
+			))
+		}
 		opts = append(opts, discoveryService.WithArtworkCache(
 			discoveryCacheAdapters.NewRedisArtworkCache(redisClient),
 		))
