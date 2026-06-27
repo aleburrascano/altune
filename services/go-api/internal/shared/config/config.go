@@ -84,6 +84,9 @@ type Config struct {
 	// behavior change — shipped dark behind this flag so it needs no live sign-off.
 	ExplorationEnabled bool    `env:"EXPLORATION_ENABLED" envDefault:"false"`
 	ExplorationRate    float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
+	// Coverage alert: page the operator when zero-result searches in the last 24h
+	// exceed this count. 0 → disabled. Aggregate count only, never the query text.
+	AlertZeroResultThreshold int `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
 }
 
 func Load() (*Config, error) {

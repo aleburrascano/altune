@@ -298,6 +298,10 @@ func (a *App) setup(ctx context.Context) error {
 	// into the eval corpus format. Off when the path is empty.
 	a.startCorpusRefresh(ctx, eventStore)
 
+	// Mission Control metrics rollup: persist the daily aggregate gauges so the
+	// console's history survives restart. Always on (cheap aggregate upsert).
+	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
+
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 
 	// MusicBrainz detail-open enrichment: genres/year/rating/external-ids + the
@@ -495,7 +499,43 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 		},
 	}
 
-	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, dependencyDown)
+	conditions := []adminAlert.Condition{dependencyDown}
+
+	// Coverage alert: page when zero-result searches in the last 24h exceed the
+	// threshold — the computed-but-unwatched coverage signal now pages the operator
+	// instead of waiting to be noticed. Disabled when the threshold is 0. The
+	// message carries the aggregate count only — never the query text or any user
+	// id (cardinality / privacy).
+	if a.cfg.AlertZeroResultThreshold > 0 {
+		eventQuery := discoveryPersistence.NewPgxEventStore(a.pool)
+		threshold := a.cfg.AlertZeroResultThreshold
+		coverage := adminAlert.Condition{
+			Key: "coverage_zero_result",
+			Eval: func(ctx context.Context) *adminAlert.Alert {
+				since := time.Now().UTC().Add(-24 * time.Hour)
+				rows, err := eventQuery.ZeroResultQueries(ctx, since, 1000)
+				if err != nil {
+					slog.WarnContext(ctx, "coverage alert query failed", "error", err)
+					return nil
+				}
+				total := 0
+				for _, r := range rows {
+					total += r.Count
+				}
+				if total < threshold {
+					return nil
+				}
+				return &adminAlert.Alert{
+					Title:    "altune discovery coverage gap",
+					Message:  fmt.Sprintf("zero-result searches in 24h: %d (threshold %d)", total, threshold),
+					Severity: adminAlert.SeveritySignal,
+				}
+			},
+		}
+		conditions = append(conditions, coverage)
+	}
+
+	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...)
 	a.alertMonitor.Start(ctx)
 }
 
@@ -661,6 +701,37 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 		}
 	}()
 	slog.Info("behavioral corpus refresh started", "path", a.cfg.BehavioralCorpusPath)
+}
+
+// startMetricsRollup rolls up today's (and yesterday's, for late-arriving
+// events) Mission Control gauges every 6 hours, persisting them to
+// discovery_metrics so the console's week-over-week history survives restart.
+// Best-effort; bound to the app context for graceful shutdown.
+func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.MetricsRollupStore) {
+	run := func() {
+		now := time.Now().UTC()
+		for _, day := range []time.Time{now, now.Add(-24 * time.Hour)} {
+			if err := store.RollupDay(ctx, day); err != nil {
+				slog.WarnContext(ctx, "discovery metrics rollup failed", "error", err)
+			}
+		}
+	}
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		run()
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				run()
+			}
+		}
+	}()
+	slog.Info("discovery metrics rollup started")
 }
 
 func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) {
