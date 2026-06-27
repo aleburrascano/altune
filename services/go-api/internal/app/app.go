@@ -202,7 +202,6 @@ func (a *App) setup(ctx context.Context) error {
 		)
 	}
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
-	clickRepo := discoveryPersistence.NewPgxSearchClickRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
 
 	// vocabStore is shared by suggest + the periodic vocabulary refresh; the
@@ -216,7 +215,6 @@ func (a *App) setup(ctx context.Context) error {
 		)
 	}
 
-	clickSvc := discoveryService.NewRecordClickService(clickRepo)
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 
 	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc)
@@ -306,7 +304,6 @@ func (a *App) setup(ctx context.Context) error {
 
 	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
 		Search:  searchSvc,
-		Click:   clickSvc,
 		History: historySvc,
 		Album:   albumSvc,
 		Artist:  artistSvc,

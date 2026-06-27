@@ -335,17 +335,6 @@ type SearchHistoryEntry struct {
 	ResultClickedSignature *string
 }
 
-// SearchClick is a persisted click on a discovery result.
-type SearchClick struct {
-	ID              uuid.UUID
-	UserId          shared.UserId
-	QueryNorm       string
-	ResultSignature string
-	Position        int
-	Confidence      Confidence
-	ClickedAt       time.Time
-}
-
 // ProviderSearchResponse wraps a provider's results with metadata.
 type ProviderSearchResponse struct {
 	Provider    ProviderName

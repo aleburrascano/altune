@@ -7,19 +7,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// --- SearchClickRepository fake ---
-
-type fakeSearchClickRepository struct {
-	insertIfOutsideWindowFn func(ctx context.Context, click *domain.SearchClick, windowSeconds int) (bool, error)
-}
-
-func (f *fakeSearchClickRepository) InsertIfOutsideWindow(ctx context.Context, click *domain.SearchClick, windowSeconds int) (bool, error) {
-	if f.insertIfOutsideWindowFn != nil {
-		return f.insertIfOutsideWindowFn(ctx, click, windowSeconds)
-	}
-	return true, nil
-}
-
 // --- SearchHistoryRepository fake ---
 
 type fakeSearchHistoryRepository struct {
