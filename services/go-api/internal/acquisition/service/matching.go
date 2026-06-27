@@ -14,6 +14,15 @@ const (
 	identityMin   = 60.0
 	durationTight = 3
 	durationLoose = 15
+
+	// Duration gate — hard reject of candidates grossly off from the track's
+	// expected length (a 3:46 track must not match a 14:00 mix/loop/full-album
+	// upload, nor a ~30s preview). Only applies when both durations are known.
+	// durationGateSlackSecs lets small absolute differences pass regardless of
+	// ratio, so short tracks aren't gated by a few seconds of swing.
+	durationGateSlackSecs = 60.0
+	durationGateMinRatio  = 0.5
+	durationGateMaxRatio  = 2.0
 )
 
 func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
@@ -64,6 +73,24 @@ func durationScore(expected, actual float64) float64 {
 		return 0.5
 	}
 	return 0.0
+}
+
+// durationPlausible reports whether a candidate's duration is close enough to the
+// track's expected duration to be the same recording. It gates only when both
+// durations are known (expected from the saved track, actual from the search
+// result); an unknown duration on either side cannot gate and returns true.
+// Unlike durationScore (a soft ranking signal), this is a hard admission gate so
+// a wrong-length upload can never be selected, in either the Topic or non-Topic
+// bucket.
+func durationPlausible(expected, actual float64) bool {
+	if expected <= 0 || actual <= 0 {
+		return true
+	}
+	if math.Abs(expected-actual) <= durationGateSlackSecs {
+		return true
+	}
+	ratio := actual / expected
+	return ratio >= durationGateMinRatio && ratio <= durationGateMaxRatio
 }
 
 func viewScore(viewCount, maxViews int64) float64 {
@@ -169,6 +196,15 @@ func classifyCandidates(ctx context.Context, track TrackRef, candidates []Candid
 		)
 
 		if ident < identityMin {
+			continue
+		}
+
+		if !durationPlausible(track.Duration, c.Duration) {
+			slog.InfoContext(ctx, "candidate_rejected_duration",
+				"candidate_title", c.Title,
+				"candidate_duration", c.Duration,
+				"expected_duration", track.Duration,
+			)
 			continue
 		}
 
