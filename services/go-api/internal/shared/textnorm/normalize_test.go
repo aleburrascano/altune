@@ -1,6 +1,7 @@
 package textnorm
 
 import (
+	"regexp"
 	"testing"
 )
 
@@ -114,5 +115,81 @@ func TestNormalizeForMatch(t *testing.T) {
 				t.Errorf("NormalizeForMatch(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestNormalizeForMatchNonLatin pins the CJK fix: non-Latin letters now survive
+// (the query is rankable) while symbols/hyphens are still stripped, and matching
+// stays symmetric.
+func TestNormalizeForMatchNonLatin(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "japanese kanji preserved (was empty)",
+			input: "坂本龍一",
+			want:  "坂本龍一",
+		},
+		{
+			name:  "japanese mixed kanji-katakana preserved",
+			input: "宇多田ヒカル",
+			want:  "宇多田ヒカル",
+		},
+		{
+			name:  "korean hangul preserved",
+			input: "뉴진스",
+			want:  "뉴진스",
+		},
+		{
+			name:  "cyrillic preserved",
+			input: "Молчат Дома",
+			want:  "молчат дома",
+		},
+		{
+			name:  "non-decomposable latin letter preserved",
+			input: "Sæglópur",
+			want:  "sæglopur",
+		},
+		{
+			name:  "cjk with latin and symbols",
+			input: "m-flo loves 坂本龍一",
+			want:  "m flo loves 坂本龍一",
+		},
+		{
+			name:  "symbols still stripped",
+			input: "¥$",
+			want:  "",
+		},
+		{
+			name:  "hyphen still becomes space",
+			input: "blink-182",
+			want:  "blink 182",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeForMatch(tt.input)
+			if got != tt.want {
+				t.Errorf("NormalizeForMatch(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestStripSymbolsASCIIByteIdentical guards the load-bearing safety property: for
+// ASCII input, stripSymbols must produce exactly what the old `[^\w\s]` regex did
+// (ASCII alphanumerics and `_` kept, every other byte → space). If this drifts, the
+// CJK change is no longer additive-only and could perturb the Latin eval corpus.
+func TestStripSymbolsASCIIByteIdentical(t *testing.T) {
+	oldRe := regexp.MustCompile(`[^\w\s]`)
+	for b := 0; b < 128; b++ {
+		in := string(rune(b)) // single ASCII byte
+		got := stripSymbols(in)
+		want := oldRe.ReplaceAllString(in, " ")
+		if got != want {
+			t.Errorf("stripSymbols(%q) = %q, old regex = %q", in, got, want)
+		}
 	}
 }
