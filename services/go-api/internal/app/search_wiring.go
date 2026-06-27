@@ -69,6 +69,11 @@ func BuildSearchServiceWithTransport(
 	opts := []discoveryService.Option{
 		discoveryService.WithHistoryRepository(historyRepo),
 	}
+	// Tail-noise demotion experiment (off unless TAIL_DEMOTION_ENABLED). Pure
+	// ranking concern, applied regardless of rankingOnly so the eval A/B exercises it.
+	if cfg.TailDemotionEnabled {
+		opts = append(opts, discoveryService.WithTailDemotion())
+	}
 	if !rankingOnly {
 		deezerContent := providers.NewDeezerAdapter(cf.discovery())
 		relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)

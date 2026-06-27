@@ -23,17 +23,32 @@ import (
 // only as a within-tie tiebreak.
 const rrfK = 60
 
+// demoteFunc flags a result for tail demotion. nil on the default path.
+type demoteFunc func(domain.SearchResult) bool
+
 type scored struct {
 	result    domain.SearchResult
 	relevance float64
 	pop       float64
 	rrf       float64
 	multi     bool
+	demoted   bool
 }
 
 // Rank applies the eligibility gates and sorts by continuous relevance,
-// returning handler-ready results. queryNorm is the normalized query.
+// returning handler-ready results. queryNorm is the normalized query. This is the
+// default production behavior (no tail demotion) and the surface the sacred
+// rank/pipeline tests assert; it delegates to rankWith with no predicate.
 func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
+	return rankWith(entities, queryNorm, nil)
+}
+
+// rankWith is Rank with an optional tail-demotion predicate. A non-nil demote
+// pushes flagged results (single-source UGC/scrobble noise — see isLowConfidenceTail)
+// below every non-demoted result, overriding their query-word relevance. demote is
+// nil on the default path, making the demotion branch inert. EXPERIMENTAL,
+// eval-gated — see docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
+func rankWith(entities []Entity, queryNorm string, demote demoteFunc) []domain.SearchResult {
 	// queryNorm is already normalized by the caller (Execute); use it directly.
 	q := queryNorm
 
@@ -55,12 +70,17 @@ func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
 	results := make([]scored, 0, len(eligible))
 	for _, e := range eligible {
 		r := e.Result
+		demoted := false
+		if demote != nil {
+			demoted = demote(r)
+		}
 		results = append(results, scored{
 			result:    r,
 			relevance: idfWeightedCoverage(r, q, rarity),
 			pop:       popularityOf(r),
 			rrf:       rrfScore(e.BestRank),
 			multi:     len(providersOf(r)) > 1,
+			demoted:   demoted,
 		})
 	}
 
@@ -73,9 +93,15 @@ func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
 	return out
 }
 
-// rankLess orders by relevance, then popularity, then multi-source, then RRF,
-// with a stable subtitle/title tiebreak.
+// rankLess orders by demotion, then relevance, then popularity, then multi-source,
+// then RRF, with a stable subtitle/title tiebreak.
 func rankLess(a, b scored) bool {
+	// Tail demotion (experimental, off by default): a flagged low-confidence result
+	// sorts below every non-demoted one, overriding relevance. Inert when no demote
+	// predicate is set — both false, so this never fires. See isLowConfidenceTail.
+	if a.demoted != b.demoted {
+		return !a.demoted
+	}
 	if a.relevance != b.relevance {
 		return a.relevance > b.relevance
 	}
@@ -168,4 +194,28 @@ func tokenSet(s string) map[string]bool {
 		}
 	}
 	return m
+}
+
+// isLowConfidenceTail flags a result as tail noise: a single entry from a UGC /
+// scrobble provider (SoundCloud uploads, Last.fm scrobbles) that carries no
+// corroborating identity (no ISRC, MBID, or album). These dominate the result tail
+// — 61% of tail positions are single-source, ~72% of that from these two providers
+// (prod telemetry, Jun 2026) — and are the reupload / type-beat / reaction /
+// scrobble-fragment noise users mistake for the real recording. Multi-source
+// results (corroborated) and single-source results from curated catalogs
+// (Deezer/iTunes/MusicBrainz) are never flagged. The demotion is uniform, so on a
+// purely-underground query where every candidate is UGC it does not change relative
+// order. See docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
+func isLowConfidenceTail(r domain.SearchResult) bool {
+	provs := providersOf(r)
+	if len(provs) != 1 {
+		return false
+	}
+	if !provs[domain.ProviderSoundCloud] && !provs[domain.ProviderLastFM] {
+		return false
+	}
+	hasIdentity := stringExtra(r, "isrc") != "" ||
+		stringExtra(r, "mbid") != "" ||
+		stringExtra(r, "album") != ""
+	return !hasIdentity
 }

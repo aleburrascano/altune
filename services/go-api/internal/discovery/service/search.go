@@ -61,6 +61,7 @@ type Service struct {
 	mbidIndex       ports.MBIDIndex
 	correctionSvc   *CorrectionService
 	findRelatedSvc  *FindRelatedService
+	tailDemotion    bool
 	bgWg            sync.WaitGroup
 }
 
@@ -127,6 +128,14 @@ func WithMBIDIndex(idx ports.MBIDIndex) Option {
 // WithFindRelatedService attaches the "more from this album/artist" groups.
 func WithFindRelatedService(r *FindRelatedService) Option {
 	return func(s *Service) { s.findRelatedSvc = r }
+}
+
+// WithTailDemotion enables the experimental tail-noise demotion: single-source
+// UGC/scrobble results with no identity (see isLowConfidenceTail) sort below every
+// corroborated result. Off by default; flipped on via TAIL_DEMOTION_ENABLED for
+// eval A/B. See docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
+func WithTailDemotion() Option {
+	return func(s *Service) { s.tailDemotion = true }
 }
 
 // NewService constructs the rebuilt search orchestrator.
@@ -229,7 +238,28 @@ func (s *Service) mergeRankEnrich(
 	s.stampIdentities(ctx, perProvider)
 
 	// pure decision core: merge → rank → list-shaping (no ports, no I/O).
-	ranked := rankPipeline(perProvider, queryNorm)
+	var demote demoteFunc
+	if s.tailDemotion {
+		demote = isLowConfidenceTail
+	}
+	ranked := rankPipelineWith(perProvider, queryNorm, demote)
+	// Observability for the demotion experiment: how much low-confidence noise
+	// remained in the visible top-5 after demotion (residual is the genuinely-
+	// underground case where no cleaner result exists to promote). Flag-gated, so
+	// zero cost on the default path. Debug level.
+	if s.tailDemotion {
+		noiseTop5, noiseTotal := 0, 0
+		for i, r := range ranked {
+			if isLowConfidenceTail(r) {
+				noiseTotal++
+				if i < 5 {
+					noiseTop5++
+				}
+			}
+		}
+		slog.DebugContext(ctx, "search.v2.tailnoise", "query", queryNorm,
+			"noise_top5", noiseTop5, "noise_total", noiseTotal, "results", len(ranked))
+	}
 
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
