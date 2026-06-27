@@ -30,11 +30,17 @@ type FailureRecord struct {
 }
 
 // JobRecord is one acquisition job's lifecycle as the scheduler observes it:
-// queued → running → succeeded/failed/cancelled. In-memory only.
+// queued → running → succeeded/failed/cancelled. Title/Artist/Album and Stage are
+// filled live by the pipeline via the job reporter. In-memory only.
 type JobRecord struct {
 	TrackID     string    `json:"track_id"`
+	Title       string    `json:"title,omitempty"`
+	Artist      string    `json:"artist,omitempty"`
+	Album       string    `json:"album,omitempty"`
 	SourceURL   string    `json:"source_url,omitempty"`
-	State       string    `json:"state"` // queued | running | succeeded | failed | cancelled
+	Source      string    `json:"source,omitempty"` // resolved download source (selected candidate)
+	State       string    `json:"state"`            // queued | running | succeeded | failed | cancelled
+	Stage       string    `json:"stage,omitempty"`  // current pipeline step: search|select|download|tag|store|update_track
 	ScheduledAt time.Time `json:"scheduled_at"`
 	ElapsedMs   int64     `json:"elapsed_ms"`
 	Reason      string    `json:"reason,omitempty"`
@@ -129,7 +135,8 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 		}
 
 		s.markRunning(key)
-		if err := s.svc.Execute(s.baseCtx, userId, trackId, sourceURL); err != nil {
+		jobCtx := withJobReporter(s.baseCtx, schedulerJobReporter{s: s, trackID: key})
+		if err := s.svc.Execute(jobCtx, userId, trackId, sourceURL); err != nil {
 			s.failed.Add(1)
 			s.recordFailure(key, err.Error())
 			s.completeJob(key, "failed", err.Error())
@@ -161,6 +168,37 @@ func (s *BackgroundAcquisitionScheduler) markRunning(trackID string) {
 		j.State = "running"
 	}
 	s.jobsMu.Unlock()
+}
+
+// updateJob applies fn to the in-flight job record under the lock, if present.
+func (s *BackgroundAcquisitionScheduler) updateJob(trackID string, fn func(*JobRecord)) {
+	s.jobsMu.Lock()
+	if j := s.jobs[trackID]; j != nil {
+		fn(j)
+	}
+	s.jobsMu.Unlock()
+}
+
+// schedulerJobReporter is the per-job jobReporter the scheduler hands the acquire
+// pipeline via context, so live metadata + stage transitions land on the job
+// record the operator console reads.
+type schedulerJobReporter struct {
+	s       *BackgroundAcquisitionScheduler
+	trackID string
+}
+
+func (r schedulerJobReporter) meta(title, artist, album string) {
+	r.s.updateJob(r.trackID, func(j *JobRecord) { j.Title, j.Artist, j.Album = title, artist, album })
+}
+func (r schedulerJobReporter) stage(name string) {
+	r.s.updateJob(r.trackID, func(j *JobRecord) { j.Stage = name })
+}
+func (r schedulerJobReporter) source(url string) {
+	r.s.updateJob(r.trackID, func(j *JobRecord) {
+		if j.Source == "" {
+			j.Source = url
+		}
+	})
 }
 
 // completeJob moves a job to the recent-terminal ring with its outcome.
