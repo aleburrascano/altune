@@ -15,6 +15,7 @@ import type { InfiniteData } from '@tanstack/react-query';
 
 import { createTrack } from '@shared/api-client/tracks';
 import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '@shared/api-client/types';
+import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
 import { insertOptimisticTrack, optimisticTrack } from '../save-cache';
 
@@ -25,9 +26,16 @@ type SaveContext = { previous: LibraryData | undefined };
 
 export function useSaveTrack() {
   const queryClient = useQueryClient();
+  const recordEvent = useRecordEvent();
 
   return useMutation<TrackResponse, Error, CreateTrackRequest, SaveContext>({
     mutationFn: (body) => createTrack(body),
+    onSuccess: (_data, body) => {
+      recordEvent.mutate({
+        type: 'library_add',
+        payload: { title: body.title, artist: body.artist, album: body.album, year: body.year },
+      });
+    },
     onMutate: async (body) => {
       await queryClient.cancelQueries({ queryKey: LIBRARY_KEY });
       const previous = queryClient.getQueryData<LibraryData>(LIBRARY_KEY);

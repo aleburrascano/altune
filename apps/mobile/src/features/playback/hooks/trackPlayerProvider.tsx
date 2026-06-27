@@ -8,6 +8,7 @@ import TrackPlayer, {
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '@shared/playback/types';
+import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
 import { ensurePlayerSetup } from '../initPlayer';
 import { loadNativeTrack } from '../loadNativeTrack';
@@ -35,6 +36,12 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const playbackState = usePlaybackState();
   const progress = useProgress(500);
   const isForeground = useIsForeground();
+
+  // Behavioral telemetry, via a ref so `play`'s identity stays stable (it is
+  // load-bearing for the background-CPU memoization below). Fire-and-forget.
+  const recordEvent = useRecordEvent();
+  const recordEventRef = useRef(recordEvent);
+  recordEventRef.current = recordEvent;
 
   useEffect(() => {
     void ensurePlayerSetup();
@@ -88,6 +95,10 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     setErrorMessage(null);
     setTrack(newTrack);
     lastPlayedTrack.current = newTrack;
+    recordEventRef.current.mutate({
+      type: 'play',
+      payload: { title: newTrack.title, artist: newTrack.artist },
+    });
 
     try {
       await loadNativeTrack(newTrack);
