@@ -107,6 +107,11 @@ export type DiscoveryEvent = {
   // The originating search's keystone. Threaded onto every engagement event so
   // the backend can join the impression/click/play funnel back to its search.
   search_id?: string | undefined;
+  // Two-tier reliability fields, set only for the label-critical outbox tier
+  // (library_add, wrong_album): an idempotency key the server dedups on, and the
+  // client's record time (vs the server received_at).
+  event_id?: string | undefined;
+  client_occurred_at?: string | undefined;
   payload?: Record<string, unknown>;
 };
 
