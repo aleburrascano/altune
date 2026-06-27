@@ -14,6 +14,11 @@ const logRingCapacity = 1000
 // subscriberChanSize buffers a live-tail subscriber before drops kick in.
 const subscriberChanSize = 64
 
+// ringCaptureFloor is the lowest level the ring retains, independent of stdout's
+// level. DEBUG so the operator console keeps the rich provider/breaker lines even
+// when production stdout runs at INFO.
+const ringCaptureFloor = slog.LevelDebug
+
 // CapturedRecord is a flattened copy of a log line retained for the Mission
 // Control logs panel. The originating slog.Record is never retained — its
 // Attrs are unsafe to read after Handle returns.
@@ -108,8 +113,12 @@ func newRingHandler(inner slog.Handler, ring *RingBuffer) *ringHandler {
 	return &ringHandler{inner: inner, ring: ring}
 }
 
+// Enabled returns true for anything at or above the ring's capture floor (DEBUG)
+// OR anything stdout wants — so the operator console retains the rich DEBUG
+// provider/breaker lines even when stdout runs at INFO. Whether a record is also
+// printed to stdout is decided per-record in Handle against the inner handler.
 func (h *ringHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return h.inner.Enabled(ctx, level)
+	return level >= ringCaptureFloor || h.inner.Enabled(ctx, level)
 }
 
 func (h *ringHandler) Handle(ctx context.Context, r slog.Record) error {
@@ -129,7 +138,12 @@ func (h *ringHandler) Handle(ctx context.Context, r slog.Record) error {
 		Message: r.Message,
 		Attrs:   attrs,
 	})
-	return h.inner.Handle(ctx, r)
+	// Forward to stdout only when stdout's own level wants this record — so DEBUG
+	// captured for the console below the stdout level isn't also printed.
+	if h.inner.Enabled(ctx, r.Level) {
+		return h.inner.Handle(ctx, r)
+	}
+	return nil
 }
 
 func (h *ringHandler) WithAttrs(attrs []slog.Attr) slog.Handler {

@@ -19,9 +19,15 @@ const (
 // TapEvent is a redacted, system-wide view of a published event for the
 // operator console: event type and time only. It deliberately omits user id and
 // payload — one user must never see another's activity through the feed.
+// TapEvent is one system-wide tap event for the operator console. It carries the
+// user and a short subject summary (operator full-visibility — the console is a
+// single-operator, auth-gated surface; see the verbosity-rework decision). Still
+// lossy and single-consumer per ADR-0012.
 type TapEvent struct {
 	Type      string    `json:"type"`
 	Timestamp time.Time `json:"timestamp"`
+	User      string    `json:"user,omitempty"`
+	Subject   string    `json:"subject,omitempty"`
 }
 
 type userState struct {
@@ -107,13 +113,14 @@ func (b *InProcessBus) Publish(userId shared.UserId, eventType string, payload m
 		}
 	}
 
-	// System-wide tap: redacted (type + time only), non-blocking, single
-	// consumer. The tiny critical section guards against a concurrent cancel
-	// closing the channel mid-send; the send itself never blocks.
+	// System-wide tap: type + time + user + a short subject (operator
+	// full-visibility), non-blocking, single consumer. The tiny critical section
+	// guards against a concurrent cancel closing the channel mid-send; the send
+	// itself never blocks.
 	b.tapMu.Lock()
 	if b.tap != nil {
 		select {
-		case b.tap <- TapEvent{Type: eventType, Timestamp: evt.Timestamp}:
+		case b.tap <- TapEvent{Type: eventType, Timestamp: evt.Timestamp, User: userId.String(), Subject: tapSubject(payload)}:
 		default:
 			b.tapDropped.Add(1)
 		}
@@ -121,9 +128,23 @@ func (b *InProcessBus) Publish(userId shared.UserId, eventType string, payload m
 	b.tapMu.Unlock()
 }
 
-// SubscribeAll returns a redacted, system-wide tap of every published event
-// (type + time only — never user id or payload). At most one consumer at a
-// time; a second subscribe returns an error. Lossy: a slow consumer drops
+// tapSubject extracts a concise human subject from an event payload for the
+// operator feed, trying the common identifying keys in order. Empty when none
+// are present (the row then shows just type + user).
+func tapSubject(payload map[string]any) string {
+	for _, key := range []string{"query", "title", "name", "track_id", "entity_id", "result_signature"} {
+		if v, ok := payload[key]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+// SubscribeAll returns the system-wide tap of every published event (type, time,
+// user, and a short subject — operator full-visibility). At most one consumer at
+// a time; a second subscribe returns an error. Lossy: a slow consumer drops
 // events, consistent with the per-user bus (ADR-0012).
 func (b *InProcessBus) SubscribeAll() (<-chan TapEvent, func(), error) {
 	b.tapMu.Lock()

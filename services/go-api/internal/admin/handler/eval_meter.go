@@ -11,11 +11,21 @@ import (
 // APIs and competes with user traffic for per-provider quota.
 const evalDefaultInterval = 6 * time.Hour
 
+// EvalQueryResult is one smoke query's outcome in an eval run: whether the
+// expected result landed in the top-K, and at what position (-1 if absent).
+type EvalQueryResult struct {
+	Query    string `json:"query"`
+	Expect   string `json:"expect"`
+	Passed   bool   `json:"passed"`
+	Position int    `json:"position"`
+}
+
 // EvalResult is the outcome of one discovery-eval run.
 type EvalResult struct {
 	Score     float64
 	Baseline  float64
 	Regressed bool
+	Queries   []EvalQueryResult
 }
 
 // EvalRunner performs one eval run. It MUST use a dedicated client that bypasses
@@ -103,10 +113,11 @@ func (m *EvalMeter) runOnce(ctx context.Context) {
 type EvalStatus struct {
 	Enabled  bool       `json:"enabled"`
 	State    string     `json:"state"` // disabled | no_data | ok | regression | error
-	Score    *float64   `json:"score,omitempty"`
-	Baseline *float64   `json:"baseline,omitempty"`
-	LastRun  *time.Time `json:"last_run,omitempty"`
-	Error    string     `json:"error,omitempty"`
+	Score    *float64          `json:"score,omitempty"`
+	Baseline *float64          `json:"baseline,omitempty"`
+	LastRun  *time.Time        `json:"last_run,omitempty"`
+	Error    string            `json:"error,omitempty"`
+	Queries  []EvalQueryResult `json:"queries,omitempty"`
 }
 
 func (m *EvalMeter) Status() EvalStatus {
@@ -133,6 +144,7 @@ func (m *EvalMeter) Status() EvalStatus {
 		}
 		score, base, lr := m.last.Score, m.last.Baseline, m.lastRun
 		st.Score, st.Baseline, st.LastRun = &score, &base, &lr
+		st.Queries = m.last.Queries
 	}
 	return st
 }
