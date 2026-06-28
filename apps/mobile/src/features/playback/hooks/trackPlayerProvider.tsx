@@ -1,19 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import TrackPlayer, {
+  RepeatMode,
   State,
   usePlaybackState,
   useProgress,
 } from 'react-native-track-player';
 
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
-import { useQueueStore } from '@shared/playback/queueStore';
-import type { PlaybackContextValue, PlaybackState, PlaybackTrack } from '@shared/playback/types';
+import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
+import type {
+  PlaybackContextValue,
+  PlaybackState,
+  PlaybackTrack,
+  RepeatMode as QueueRepeatMode,
+} from '@shared/playback/types';
 
 import { ensurePlayerSetup } from '../initPlayer';
-import { loadNativeTrack } from '../loadNativeTrack';
+import { loadNativeQueue, loadNativeTrack } from '../loadNativeTrack';
 import { useIsForeground } from './useIsForeground';
 import { usePlaybackSignals } from './usePlaybackSignals';
 import { useQueueResume } from './useQueueResume';
+
+const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
+  off: RepeatMode.Off,
+  all: RepeatMode.Queue,
+  one: RepeatMode.Track,
+};
 
 // AIDEV-NOTE: The real, track-player-backed playback provider. It is imported
 // ONLY outside Expo Go (via the PlaybackProvider selector), because the
@@ -93,7 +105,6 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     track,
     positionMs: livePositionMs,
     durationMs,
-    isEnded,
   });
 
   const play = useCallback(async (newTrack: PlaybackTrack) => {
@@ -109,6 +120,42 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     }
   }, []);
 
+  const startQueue = useCallback<PlaybackContextValue['startQueue']>(
+    async (orderedTracks, startIndex, options) => {
+      setErrorMessage(null);
+      try {
+        await loadNativeQueue(orderedTracks, startIndex, options);
+      } catch (err) {
+        setErrorMessage(err instanceof Error ? err.message : 'Failed to load audio');
+      }
+    },
+    [],
+  );
+
+  // Native transitions: the next track is already buffered, so these are
+  // instant and gapless. The store's currentIndex follows via the
+  // PlaybackActiveTrackChanged listener in the playback service.
+  const skipToQueueIndex = useCallback(async (index: number) => {
+    try {
+      await TrackPlayer.skip(index);
+      await TrackPlayer.play();
+    } catch {
+      // index out of range / player not ready — ignore
+    }
+  }, []);
+
+  const skipNext = useCallback(async () => {
+    try { await TrackPlayer.skipToNext(); } catch { /* at end / not ready */ }
+  }, []);
+
+  const skipPrevious = useCallback(async () => {
+    try { await TrackPlayer.skipToPrevious(); } catch { /* at start / not ready */ }
+  }, []);
+
+  const removeQueueIndex = useCallback(async (index: number) => {
+    try { await TrackPlayer.remove(index); } catch { /* already gone / not ready */ }
+  }, []);
+
   const pause = useCallback(() => { void TrackPlayer.pause(); }, []);
   const resume = useCallback(() => { void TrackPlayer.play(); }, []);
   const seekTo = useCallback((ms: number) => { void TrackPlayer.seekTo(ms / 1000); }, []);
@@ -120,10 +167,23 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   }, []);
 
   const retry = useCallback(() => {
+    // Rebuild the native queue at the current position if there is one;
+    // otherwise replay the last standalone (preview) track.
+    const s = useQueueStore.getState();
+    if (s.currentTrack()) {
+      void startQueue(orderedQueueTracks(s), s.currentIndex);
+      return;
+    }
     const trackToRetry = lastPlayedTrack.current;
-    if (!trackToRetry) return;
-    void play(trackToRetry);
-  }, [play]);
+    if (trackToRetry) void play(trackToRetry);
+  }, [play, startQueue]);
+
+  // Mirror the queue's repeat mode onto the native player so auto-advance and
+  // repeat are enforced natively (no JS wake to load the next track).
+  const repeatMode = useQueueStore((s) => s.repeatMode);
+  useEffect(() => {
+    void TrackPlayer.setRepeatMode(NATIVE_REPEAT[repeatMode]);
+  }, [repeatMode]);
 
   const currentQueueTrack = useQueueStore((s) => s.currentTrack());
 
@@ -140,6 +200,11 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const value: PlaybackContextValue = {
     ...state,
     play,
+    startQueue,
+    skipToQueueIndex,
+    skipNext,
+    skipPrevious,
+    removeQueueIndex,
     pause,
     resume,
     seekTo,
