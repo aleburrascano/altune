@@ -64,6 +64,7 @@ type Service struct {
 	albumValidator  ports.AlbumValidator
 	identityBridge  ports.IdentityBridge
 	mbidIndex       ports.MBIDIndex
+	identityStore   ports.IdentityStore
 	correctionSvc   *CorrectionService
 	findRelatedSvc  *FindRelatedService
 	resultCache     ports.ResultCache
@@ -150,6 +151,15 @@ func WithIdentityBridge(b ports.IdentityBridge) Option {
 // on the list too. Off → non-MB results keep their provider thumbnail.
 func WithMBIDIndex(idx ports.MBIDIndex) Option {
 	return func(s *Service) { s.mbidIndex = idx }
+}
+
+// WithIdentityStore attaches the durable reverse identity map. When MusicBrainz is
+// present in a fan-out, learned bridges are persisted; on later MB-absent searches
+// a provider-only result resolves its identity from here, keeping artwork
+// identity-first instead of falling back to a name guess. Off → identity is only
+// as good as the current fan-out (the prior, non-deterministic behavior).
+func WithIdentityStore(store ports.IdentityStore) Option {
+	return func(s *Service) { s.identityStore = store }
 }
 
 // WithFindRelatedService attaches the "more from this album/artist" groups.
@@ -370,6 +380,15 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 	if s.identityBridge == nil {
 		return
 	}
+	// Bridges learned this fan-out (MB present) are persisted to the durable
+	// identity store so a later MB-absent search can resolve the same entity.
+	type learnedBridge struct {
+		kind domain.ResultKind
+		mbid string
+		ids  map[string]string
+	}
+	var learned []learnedBridge
+
 	for gi := range perProvider {
 		for ri := range perProvider[gi] {
 			r := &perProvider[gi][ri]
@@ -387,8 +406,28 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 			r.Extras["xref"] = ids
 			slog.DebugContext(ctx, "merge.identity_bridge_stamped",
 				"kind", r.Kind.String(), "mbid", mbid, "ids", len(ids))
+			if s.identityStore != nil {
+				learned = append(learned, learnedBridge{kind: r.Kind, mbid: mbid, ids: ids})
+			}
 		}
 	}
+
+	if len(learned) == 0 {
+		return
+	}
+	// Persist off the request path: the durable write must not add latency to the
+	// search, and it must outlive the request, so use a detached context.
+	bgCtx := context.WithoutCancel(ctx)
+	s.bgWg.Add(1)
+	go func() {
+		defer s.bgWg.Done()
+		for _, b := range learned {
+			if err := s.identityStore.PersistBridges(bgCtx, b.kind, b.mbid, b.ids); err != nil {
+				slog.WarnContext(bgCtx, "identity.persist_failed",
+					"kind", b.kind.String(), "mbid", b.mbid, "error", err)
+			}
+		}
+	}()
 }
 
 // fanOut queries every provider in parallel, each bounded by a timeout and

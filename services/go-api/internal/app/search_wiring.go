@@ -87,6 +87,18 @@ func BuildSearchServiceWithTransport(
 			discoveryService.WithArtworkResolver(buildArtworkChain(cf, cfg)),
 			discoveryService.WithFindRelatedService(findRelatedSvc),
 		)
+		// Durable identity store: Postgres is the source of truth (survives Redis
+		// flushes), Redis fronts it as a read-through. Persists the cross-provider
+		// bridges the merge learns when MusicBrainz is present, and resolves them on
+		// later MB-absent searches so artwork stays identity-first. redisClient may be
+		// nil — the read-through degrades to PG-direct.
+		if pool != nil {
+			identityStore := discoveryCacheAdapters.NewRedisIdentityStore(
+				discoveryPersistence.NewPgxIdentityStore(pool),
+				redisClient,
+			)
+			opts = append(opts, discoveryService.WithIdentityStore(identityStore))
+		}
 	}
 	if redisClient != nil {
 		// App-wide consistency cache (shared, short-TTL): identical query → identical
