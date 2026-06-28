@@ -1,10 +1,12 @@
 /**
- * useArtistContent — backend-validated discography ordering.
+ * useArtistContent — discography ordering.
  *
- * When artistName is provided, the backend applies MB cross-reference
- * validation and returns confirmed albums first, unconfirmed last.
- * The hook must preserve this ordering (no client-side re-sort by date).
- * Without artistName, the hook sorts by release date descending.
+ * The backend owns the data (MB cross-reference validation decides which albums
+ * are included, and normalizes a year onto each), and the client owns final
+ * display order: it always sorts the unioned albums newest-first by release date,
+ * whether or not artistName was provided. (Previously the client trusted the
+ * backend's confirmed-first order when validated, which left the discography
+ * non-chronological — the bug this fixes.) The MB-authority *filter* is unchanged.
  */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -55,13 +57,14 @@ beforeEach(() => {
 
 const _SOURCES = [_src('deezer', '234701081')];
 
-it('preserves backend ordering when artistName is provided', async () => {
-  // Backend returns confirmed first (REST IN BASS), unconfirmed last (Samsonite)
+it('sorts by release date even when artistName is provided', async () => {
+  // Backend returned a non-chronological order (Samsonite, newer, last); the
+  // client must still display newest-first regardless of backend order.
   mockGetArtistAlbums.mockResolvedValue({
     items: [
       _album('REST IN BASS', 'deezer', 'alb-1', '2022'),
       _album('Sayso Says', 'deezer', 'alb-2', '2021'),
-      _album('Samsonite', 'deezer', 'alb-3', '2023'), // unconfirmed, newer but last
+      _album('Samsonite', 'deezer', 'alb-3', '2023'),
     ],
     provider: 'deezer',
     status: 'ok',
@@ -74,11 +77,11 @@ it('preserves backend ordering when artistName is provided', async () => {
   );
 
   await waitFor(() => expect(result.current.isLoadingAlbums).toBe(false));
-  // Order preserved from backend — NOT re-sorted by date
+  // Newest-first by release date — the client always sorts, backend order is not trusted.
   expect(result.current.albums.map((a) => a.title)).toEqual([
+    'Samsonite',
     'REST IN BASS',
     'Sayso Says',
-    'Samsonite',
   ]);
 });
 
