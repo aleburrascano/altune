@@ -58,9 +58,21 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: View };
 });
 
-// react-native-svg: stub Svg + Path to plain Views so the Google logo renders
-// in tests without the native module.
+// react-native-svg: stub every SVG primitive to a plain View so anything built
+// on it renders in tests without the native module. The elements MUST be real
+// enumerable own properties (not a Proxy): lucide-react-native builds its
+// namespace via `Object.keys(require('react-native-svg'))`, so primitives that
+// aren't enumerated come back undefined and crash any icon (e.g. MoreVertical =
+// Circle). A partial stub (only Svg/Path) was why every icon row failed.
 jest.mock('react-native-svg', () => {
   const { View } = require('react-native');
-  return { __esModule: true, default: View, Svg: View, Path: View };
+  const elements = [
+    'Svg', 'Circle', 'Ellipse', 'G', 'Text', 'TSpan', 'TextPath', 'Path',
+    'Polygon', 'Polyline', 'Line', 'Rect', 'Use', 'Image', 'Symbol', 'Defs',
+    'LinearGradient', 'RadialGradient', 'Stop', 'ClipPath', 'Pattern', 'Mask',
+    'Marker', 'ForeignObject',
+  ];
+  const mod = { __esModule: true, default: View };
+  for (const name of elements) mod[name] = View;
+  return mod;
 });
