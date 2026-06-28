@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -57,7 +58,7 @@ func TestRedisArtworkCache_SetAndGet_CacheHit(t *testing.T) {
 	cleanKeys(t, client, key)
 
 	// Act
-	err := cache.Set(ctx, kind, title, subtitle, mbid, url, "fanart")
+	err := cache.Set(ctx, kind, title, subtitle, mbid, url, "fanart", ports.ArtworkConfidenceIdentity)
 	if err != nil {
 		t.Fatalf("Set returned unexpected error: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestRedisArtworkCache_SetEmpty_NegativeCache(t *testing.T) {
 	cleanKeys(t, client, key)
 
 	// Act
-	err := cache.Set(ctx, kind, title, subtitle, mbid, "", "")
+	err := cache.Set(ctx, kind, title, subtitle, mbid, "", "", ports.ArtworkConfidenceNone)
 	if err != nil {
 		t.Fatalf("Set returned unexpected error: %v", err)
 	}
@@ -110,6 +111,51 @@ func TestRedisArtworkCache_SetEmpty_NegativeCache(t *testing.T) {
 	}
 	if got != "" {
 		t.Errorf("expected empty URL for negative cache entry, got %q", got)
+	}
+}
+
+func TestRedisArtworkCache_IdentityNotOverwrittenByName(t *testing.T) {
+	client := testRedisClient(t)
+	cache := NewRedisArtworkCache(client)
+	ctx := context.Background()
+
+	kind := domain.ResultKindArtist
+	title := fmt.Sprintf("Guarded Artist %s", t.Name())
+	subtitle := ""
+	mbid := "mbid-guard"
+	key := artworkCacheKey(kind, title, subtitle, mbid)
+	cleanKeys(t, client, key)
+
+	// A proven-identity image is cached.
+	identityURL := "https://caa/identity.jpg"
+	if err := cache.Set(ctx, kind, title, subtitle, mbid, identityURL, "discogs", ports.ArtworkConfidenceIdentity); err != nil {
+		t.Fatalf("seed identity: %v", err)
+	}
+
+	// A weaker name-resolved image must NOT overwrite the identity image.
+	if err := cache.Set(ctx, kind, title, subtitle, mbid, "https://name/guess.jpg", "deezer", ports.ArtworkConfidenceName); err != nil {
+		t.Fatalf("name set: %v", err)
+	}
+	got, gotSource, hit, _ := cache.Get(ctx, kind, title, subtitle, mbid)
+	if !hit || got != identityURL || gotSource != "discogs" {
+		t.Errorf("identity image was overwritten: got (%q,%q), want (%q,discogs)", got, gotSource, identityURL)
+	}
+
+	// A later failure (negative) must NOT wipe the identity image either.
+	if err := cache.Set(ctx, kind, title, subtitle, mbid, "", "", ports.ArtworkConfidenceNone); err != nil {
+		t.Fatalf("negative set: %v", err)
+	}
+	if got, _, _, _ := cache.Get(ctx, kind, title, subtitle, mbid); got != identityURL {
+		t.Errorf("identity image wiped by a later failure: got %q, want %q", got, identityURL)
+	}
+
+	// An equal-or-higher confidence result DOES refresh.
+	newIdentityURL := "https://caa/identity-v2.jpg"
+	if err := cache.Set(ctx, kind, title, subtitle, mbid, newIdentityURL, "caa", ports.ArtworkConfidenceIdentity); err != nil {
+		t.Fatalf("identity refresh: %v", err)
+	}
+	if got, _, _, _ := cache.Get(ctx, kind, title, subtitle, mbid); got != newIdentityURL {
+		t.Errorf("equal-confidence refresh failed: got %q, want %q", got, newIdentityURL)
 	}
 }
 

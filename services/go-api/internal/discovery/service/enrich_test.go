@@ -32,7 +32,7 @@ func (c *fakeArtworkCache) Get(_ context.Context, _ domain.ResultKind, title, _,
 	return url, "", ok, nil
 }
 
-func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _, _, url, _ string) error {
+func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _, _, url, _ string, _ ports.ArtworkConfidence) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.store[title] = url
