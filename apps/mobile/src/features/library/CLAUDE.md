@@ -1,48 +1,50 @@
-# view-library — feature-local context
+# library — feature-local context
 
-Sectioned library home (revamp-library-v1 spec). Replaces the original flat FlatList with a scrollable dashboard: Playlists (placeholder), Recently Added tracks, horizontal Album carousel, horizontal Artist carousel. Each section expands in-place with sort chips (Recent / A–Z / Year). Profile avatar in header opens a bottom sheet with email + sign out.
+Single chip-filtered Library screen (library-redesign, `docs/superpowers/specs/2026-06-28-library-redesign-design.md`). Opens to **Playlists**; a persistent search + chip bar swaps one focused view at a time — no stacked overview. Model: **spine + lenses** — Songs and Playlists are what the user owns (primary); Albums and Artists are derived groupings of saved songs (lenses).
 
 ## Key terms
 
-- **Track** — single audio recording with title + artist (+ optional album, duration, artwork, year, genre, track_number, album_artist, isrc, audio_ref). Mirror of `services/api/src/altune/domain/catalog/Track`. Defined globally in `docs/ubiquitous-language.md`.
-- **AlbumGroup** / **ArtistGroup** — client-side groupings derived from library tracks by `album + album_artist` or `artist`. Not domain types — UI read-side concerns only.
-- **`apiBase`** — the resolved API URL the bundle was built with. Comes from `EXPO_PUBLIC_API_URL`.
+- **Track** — single audio recording with title + artist (+ optional album, duration, artwork, year, genre, track_number, album_artist, isrc, audio_ref). Defined globally in `docs/ubiquitous-language.md`.
+- **AlbumGroup** / **ArtistGroup** — client-side groupings derived from library tracks (`@shared/lib/derive-library-groups`). Not domain types — UI read-side lenses.
+- **LibraryChip** — the active view: `'playlists' | 'songs' | 'albums' | 'artists'` (`ui/LibraryChips.tsx`).
 
 ## Layout
 
-- `ui/LibraryScreen.tsx` — sectioned home with expand/collapse state machine. Handles loading/error/empty states. Wires navigation to Detail screen for tracks, albums, artists.
-- `ui/LibraryRow.tsx` — rich track row: `Artwork` (48px) + title + artist · album + duration (M:SS).
-- `ui/AlbumCarousel.tsx` — horizontal FlatList of album covers with title + artist.
-- `ui/ArtistCarousel.tsx` — horizontal FlatList of circular artist avatars.
-- `ui/PlaylistPlaceholder.tsx` — dashed-border "Coming Soon" card.
-- `ui/ProfileSheet.tsx` — Modal bottom sheet with avatar, email, sign out.
-- `hooks/useLibraryHome.ts` — fetches all tracks (limit 2000) via `useQuery`, derives recent + groups.
-- `hooks/useLibraryGrouping.ts` — memoized client-side album/artist derivation. Pure functions `deriveAlbums` / `deriveArtists` exported for testing.
-- `ui/PlaylistCarousel.tsx` — horizontal FlatList of playlist cards with collage cover + "Create" button.
-- `ui/PlaylistCover.tsx` — 2x2 collage from up to 4 artwork URLs.
-- `ui/PlaylistDetailScreen.tsx` — playlist detail: cover, rename (tap name), delete, tracklist with per-track remove. Route: `/library/playlist/[id]`.
-- `ui/CreatePlaylistModal.tsx` — modal with text input for naming a new playlist.
-- `hooks/useLibrary.ts` — pure pagination helpers (`_nextOffsetFromPage`, `_flattenPages`) + the `LibraryState` shape. The `useInfiniteQuery` hook was removed (no live caller); rebuild fresh on these helpers when the expanded Songs view ships.
-- `ui/library-to-discovery.ts` — pure `albumToDiscoveryResult` / `artistToDiscoveryResult` mappers (siblings of shared `trackToDiscoveryResult`); feature-local until a 2nd consumer.
+- `ui/LibraryScreen.tsx` — orchestrator. Owns `chip`, per-chip `sortByChip`, search, and the track action sheet; renders header + search + chip bar + sort control + the active view. Handles loading/error/empty (`_viewForState`); empty-library (no tracks **and** no playlists) shows the Discover CTA.
+- `ui/LibraryChips.tsx` — the type chip bar (`Playlists · Songs · Albums · Artists`), horizontally scrollable.
+- `ui/SortControl.tsx` — count + tappable sort label opening an `ActionSheet` of the view's sort options.
+- `ui/PlaylistsGrid.tsx` — 2-col grid of `PlaylistCover` collages + a "New Playlist" tile (cover size from `useWindowDimensions`).
+- `ui/SongsList.tsx` — `LibraryRow` list (the spine). Play context `{ kind: 'library' }`.
+- `ui/AlbumsGrid.tsx` — 2-col album cover grid (lens).
+- `ui/ArtistsGrid.tsx` — 3-col circular artist grid (lens).
+- `ui/LibraryRow.tsx` — rich track row: `Artwork` (48px) + title + artist · album + duration; inline pending/failed + retry.
+- `ui/PlaylistDetailScreen.tsx` / `ui/PlaylistHero.tsx` — playlist detail (centered hero), unchanged. Route `/library/playlist/[id]`.
+- `ui/sort.ts` — pure `sortPlaylists` / `sortTracks` / `sortAlbums` / `sortArtists` + `*_SORT_OPTIONS`. `SortKey = 'recent' | 'az' | 'year'`.
+- `hooks/useLibraryHome.ts` — fetches all tracks (limit 2000, polls while any track is pending) + derives album/artist groups.
+- `hooks/useLibrarySearch.ts` — debounced search: `filter(tracks)` for songs, `matches(text)` predicate for album/artist/playlist names.
 - `state.ts` — `_viewForState` pure helper (loading > error > empty > list).
 
 ## Patterns
 
-- **Client-side grouping** (AC#11): albums/artists derived from `TrackResponse[]` keyed by normalized album+artist / artist. No backend endpoint needed.
-- **In-place expand**: state variable `expanded: 'recent' | 'albums' | 'artists' | null` swaps the ScrollView sections for a full-screen FlatList with sort chips. "Collapse" returns to the sectioned home.
-- **Profile via Modal**: `ProfileSheet` uses RN `Modal` (portal-based) — no external dependency.
-- **Navigation to Detail**: library tracks/albums/artists build a `DiscoveryResult` and use the existing detail handoff pattern. Navigates to `/library/detail` (within the library tab's stack).
+- **One screen, chip-filtered**: the chips are the navigation. Selecting a chip swaps only the content area; search and per-chip sort persist. Replaces the old stacked home + separate `all-tracks`/`all-albums`/`all-artists` routes.
+- **Client-side grouping**: albums/artists derived from `TrackResponse[]`. No backend endpoint.
+- **Recently Added = Songs sorted Recent** — not a separate section.
+- **Navigation to Detail**: tracks/albums/artists build a `DiscoveryResult` and navigate to `/library/detail` via `useLibraryNavigation` + the detail handoff seam.
+
+## Deferred
+
+- **Favorites / Liked** — not built; saving is already the deliberate act. A pinned slot can be added later.
+- **Jump back in / recently played** — a Home concern, reserved for a future Home tab; not in Library.
 
 ## Dependencies
 
-- `@shared/ui` — Artwork, Row, Chip, Text, Button, Screen, Skeleton, spacing, useTheme.
-- `@shared/lib/format` — `formatDuration` (promoted from detail/extras.ts).
-- `@shared/lib/detail-handoff` — the discover↔detail seam.
-- `features/auth/hooks/useSession` — email for profile avatar.
-- `features/auth/hooks/useSignOut` — sign-out from profile sheet.
+- `@shared/ui` — Screen, SearchBar, Chip, Artwork, Row, Text, Button, Skeleton, spacing, radius, useTheme; `primitives/ActionSheet`.
+- `@shared/lib/format` — `formatDuration`. `@shared/lib/derive-library-groups` — grouping. `@shared/lib/detail-handoff` — discover↔detail seam.
+- `@shared/playback` — queue/playback for in-library play.
 
 ## Test files
 
-- `__tests__/LibraryRow.test.tsx` — row rendering.
-- `__tests__/LibraryScreen.test.ts` — screen state machine (may need updating for sectioned home).
-- `__tests__/useLibrary.test.ts` — pagination helpers.
+- `__tests__/LibraryScreen.test.ts` — `_viewForState` state machine.
+- `__tests__/sort.test.ts` — sort helpers (playlists/tracks/albums/artists).
+- `__tests__/LibraryRow.test.tsx` / `LibraryRow.retry.test.tsx` — row rendering + retry.
+- `__tests__/useLibraryGrouping.test.ts`, `library-to-discovery.test.ts`, `formatFailureReason.test.ts`, `useLibrary.test.ts`.
