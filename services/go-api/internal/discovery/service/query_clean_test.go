@@ -83,3 +83,70 @@ func TestCleanQuery(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanQueryTrailingFeat(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "strips trailing feat",
+			raw:  "Calvin Harris feat",
+			want: "Calvin Harris",
+		},
+		{
+			name: "strips trailing feat with period",
+			raw:  "Calvin Harris feat.",
+			want: "Calvin Harris",
+		},
+		{
+			name: "strips trailing ft",
+			raw:  "Drake ft",
+			want: "Drake",
+		},
+		{
+			name: "strips trailing featuring",
+			raw:  "Metro Boomin featuring",
+			want: "Metro Boomin",
+		},
+		{
+			name: "case insensitive trailing FEAT",
+			raw:  "Calvin Harris FEAT",
+			want: "Calvin Harris",
+		},
+		{
+			name: "keeps mid-query feat with featured artist",
+			raw:  "Drake feat Rihanna",
+			want: "Drake feat Rihanna",
+		},
+		{
+			name: "keeps mid-query ft with featured artist",
+			raw:  "Calvin Harris ft Rihanna",
+			want: "Calvin Harris ft Rihanna",
+		},
+		{
+			name: "does not strip word ending in ft",
+			raw:  "Daft Punk",
+			want: "Daft Punk",
+		},
+		{
+			name: "does not strip word ending in feat",
+			raw:  "great feat of strength",
+			want: "great feat of strength",
+		},
+		{
+			name: "lone feat returns original",
+			raw:  "feat",
+			want: "feat",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CleanQuery(tt.raw)
+			if got != tt.want {
+				t.Errorf("CleanQuery(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
