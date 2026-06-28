@@ -243,3 +243,107 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 		})
 	}
 }
+
+func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
+	album := func(title, releaseDate, extID string) domain.SearchResult {
+		extras := map[string]any{}
+		if releaseDate != "" {
+			extras["release_date"] = releaseDate
+		}
+		return domain.SearchResult{
+			Kind:    domain.ResultKindAlbum,
+			Title:   title,
+			Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: extID}},
+			Extras:  extras,
+		}
+	}
+
+	t.Run("sorts newest-first and normalizes year from release_date", func(t *testing.T) {
+		providers := map[string]ports.ArtistContentProvider{
+			"deezer": &fakeArtistContentProvider{
+				getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+					// Deliberately out of order.
+					return []domain.SearchResult{
+						album("Older", "2016-09-09", "a1"),
+						album("Newest", "2022-01-07", "a3"),
+						album("Middle", "2020-03-20", "a2"),
+					}, nil
+				},
+			},
+		}
+		svc := NewGetArtistContentService(providers)
+
+		resp, err := svc.GetAlbums(context.Background(), "deezer", "artist-1", "", 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		wantOrder := []string{"Newest", "Middle", "Older"}
+		wantYear := map[string]int{"Newest": 2022, "Middle": 2020, "Older": 2016}
+		if len(resp.Items) != len(wantOrder) {
+			t.Fatalf("expected %d items, got %d", len(wantOrder), len(resp.Items))
+		}
+		for i, want := range wantOrder {
+			got := resp.Items[i]
+			if got.Title != want {
+				t.Errorf("position %d: expected %q, got %q", i, want, got.Title)
+			}
+			if y, ok := got.Extras["year"].(int); !ok || y != wantYear[want] {
+				t.Errorf("%q: expected year %d, got %v", want, wantYear[want], got.Extras["year"])
+			}
+		}
+	})
+
+	t.Run("albums with no date sort to the end", func(t *testing.T) {
+		providers := map[string]ports.ArtistContentProvider{
+			"deezer": &fakeArtistContentProvider{
+				getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{
+						album("NoDate", "", "a1"),
+						album("Dated", "2019-05-01", "a2"),
+					}, nil
+				},
+			},
+		}
+		svc := NewGetArtistContentService(providers)
+
+		resp, err := svc.GetAlbums(context.Background(), "deezer", "artist-1", "", 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(resp.Items) != 2 || resp.Items[0].Title != "Dated" || resp.Items[1].Title != "NoDate" {
+			t.Errorf("expected [Dated, NoDate], got %v", albumTitles(resp.Items))
+		}
+	})
+
+	t.Run("limit keeps the newest after sorting", func(t *testing.T) {
+		providers := map[string]ports.ArtistContentProvider{
+			"deezer": &fakeArtistContentProvider{
+				getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+					return []domain.SearchResult{
+						album("Old", "2010-01-01", "a1"),
+						album("New", "2024-01-01", "a2"),
+						album("Mid", "2017-01-01", "a3"),
+					}, nil
+				},
+			},
+		}
+		svc := NewGetArtistContentService(providers)
+
+		resp, err := svc.GetAlbums(context.Background(), "deezer", "artist-1", "", 2)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(resp.Items) != 2 || resp.Items[0].Title != "New" || resp.Items[1].Title != "Mid" {
+			t.Errorf("expected [New, Mid], got %v", albumTitles(resp.Items))
+		}
+	})
+}
+
+func albumTitles(items []domain.SearchResult) []string {
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.Title)
+	}
+	return out
+}

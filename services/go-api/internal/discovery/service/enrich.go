@@ -79,6 +79,32 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 		return result
 	}
 	mbid := stringExtra(result, "mbid")
+	// Durable identity (the deterministic fix): a provider-only result (MusicBrainz
+	// absent from this fan-out, so no xref was stamped in merge) resolves its MBID +
+	// bridged ids from the persisted identity store, keyed on its OWN provider id.
+	// This makes artwork identity-first — the correct same-name entity — even when
+	// MB never answered this search, instead of gambling on a name lookup. Skipped
+	// when the merge already stamped xref (MB was present).
+	if _, hasXref := result.Extras["xref"]; !hasXref && s.identityStore != nil && len(result.Sources) > 0 {
+		src := result.Sources[0]
+		if m, xref, ok := s.identityStore.LookupByProviderID(ctx, result.Kind, src.Provider.String(), src.ExternalID); ok {
+			if mbid == "" {
+				mbid = m
+			}
+			if len(xref) > 0 {
+				if result.Extras == nil {
+					result.Extras = map[string]any{}
+				}
+				result.Extras["xref"] = xref
+			}
+			// Visible only when MB was absent for this result (xref wasn't stamped in
+			// merge) yet identity was recovered from the durable store — i.e. exactly
+			// the deterministic-fix path firing.
+			slog.DebugContext(ctx, "identity.durable_resolved",
+				"kind", result.Kind.String(), "provider", src.Provider.String(),
+				"external_id", src.ExternalID, "mbid", m, "bridged_ids", len(xref))
+		}
+	}
 	if mbid == "" && s.mbidIndex != nil {
 		// Non-MB result with no MBID: attach a cached one (warmed by detail-opens)
 		// so the MBID-keyed artwork tier (CAA/Fanart) can fire on the search card.
@@ -95,7 +121,8 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 				result.ArtworkSource = cachedSource
 				return result
 			}
-			// Cached miss/placeholder: only artists retry (track-image fallback).
+			// Cached miss/placeholder: only artists retry — a durable identity may
+			// now resolve the exact entity where a prior name-only attempt missed.
 			if result.Kind != domain.ResultKindArtist {
 				return result
 			}
@@ -119,8 +146,11 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 // resolveArtwork resolves artwork identity-first: when the entity carries a
 // proven identity (MBID + bridged provider ids), the identity-aware chain fetches
 // the exact entity's image before any name search — the only way to get the right
-// face for a same-name artist. Falls back to the name chain (no identity), then a
-// same-name track image for artists whose direct lookup returns nothing.
+// face for a same-name artist. Falls back to the name chain when no identity is
+// known. It deliberately does NOT fall back to a same-name *track* cover for an
+// artist: that "confidently wrong" guess slapped a stranger's release art onto an
+// ambiguous artist. With no identity and no name match, it returns "" so the
+// client renders an honest placeholder instead of the wrong face.
 func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult, mbid string) (string, string) {
 	identity := artworkIdentity(result, mbid)
 
@@ -133,11 +163,6 @@ func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult
 		} else if url, src, _ := tagger.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
 			return url, src
 		}
-		if result.Kind == domain.ResultKindArtist {
-			if url, src, _ := tagger.ResolveTagged(ctx, domain.ResultKindTrack, result.Title, "", ""); url != "" {
-				return url, src
-			}
-		}
 		return "", ""
 	}
 
@@ -148,11 +173,6 @@ func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult
 		}
 	} else if url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
 		return url, ""
-	}
-	if result.Kind == domain.ResultKindArtist {
-		if url, _ := s.artworkResolver.Resolve(ctx, domain.ResultKindTrack, result.Title, "", ""); url != "" {
-			return url, ""
-		}
 	}
 	return "", ""
 }

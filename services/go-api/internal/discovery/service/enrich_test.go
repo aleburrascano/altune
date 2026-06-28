@@ -130,6 +130,56 @@ func TestService_MBIDIndexAttachesMBIDForArtwork(t *testing.T) {
 	}
 }
 
+type fakeIdentityStore struct {
+	mbid      string
+	xref      map[string]string
+	lookups   int32
+	persisted int32
+}
+
+func (f *fakeIdentityStore) PersistBridges(_ context.Context, _ domain.ResultKind, _ string, _ map[string]string) error {
+	atomic.AddInt32(&f.persisted, 1)
+	return nil
+}
+
+func (f *fakeIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, _, _ string) (string, map[string]string, bool) {
+	atomic.AddInt32(&f.lookups, 1)
+	if f.mbid == "" {
+		return "", nil, false
+	}
+	return f.mbid, f.xref, true
+}
+
+func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
+	// The deterministic fix: a provider-only result (MusicBrainz absent from this
+	// fan-out, so merge stamped no xref) resolves its identity from the durable
+	// store, keyed on its own provider id. The bridged ids + MBID reach the artwork
+	// resolver so it stays identity-first — the right entity — even though MB never
+	// answered this search.
+	resolver := &capturingArtworkResolver{url: "https://caa/right-face.jpg"}
+	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[string]string{"discogs": "123"}}
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService(
+		[]ports.SearchProvider{p},
+		NewCircuitBreaker(),
+		WithArtworkResolver(resolver),
+		WithIdentityStore(store),
+	)
+
+	out := runSearch(t, svc, "humble")
+
+	if atomic.LoadInt32(&store.lookups) == 0 {
+		t.Error("identity store was never consulted")
+	}
+	if resolver.gotMBID != "durable-mbid" {
+		t.Errorf("resolver got mbid %q, want the durable MBID attached from the store", resolver.gotMBID)
+	}
+	xref, ok := out.Results[0].Extras["xref"].(map[string]string)
+	if !ok || xref["discogs"] != "123" {
+		t.Errorf("xref = %v, want the bridged ids attached from the store", out.Results[0].Extras["xref"])
+	}
+}
+
 func TestService_ArtworkCacheShortCircuits(t *testing.T) {
 	resolver := &fakeArtworkResolver{url: "https://art/resolved.jpg"}
 	cache := &fakeArtworkCache{store: map[string]string{"Humble": "https://art/cached.jpg"}}
