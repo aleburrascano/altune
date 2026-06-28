@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
+import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackContextValue } from '@shared/playback/types';
 
 // AIDEV-NOTE: No-op playback backend used in Expo Go, where
@@ -23,6 +24,17 @@ export function ExpoGoPlaybackProvider({ children }: { children: ReactNode }) {
           );
         }
       },
+      // Audio is inert in Expo Go, but the queue store still drives the UI, so
+      // skips advance the store to keep screens testable without a dev build.
+      startQueue: async () => {},
+      skipToQueueIndex: async () => {},
+      skipNext: async () => {
+        useQueueStore.getState().skipToNext();
+      },
+      skipPrevious: async () => {
+        useQueueStore.getState().skipToPrevious();
+      },
+      removeQueueIndex: async () => {},
       pause: () => {},
       resume: () => {},
       seekTo: () => {},

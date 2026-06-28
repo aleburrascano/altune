@@ -26,7 +26,22 @@ export interface PlaybackState {
 }
 
 export interface PlaybackControls {
+  /** Play a single track immediately (search/detail previews). Bypasses the queue. */
   play(track: PlaybackTrack): Promise<void>;
+  /** Load an ordered track list into the native queue and start at startIndex. */
+  startQueue(
+    orderedTracks: readonly PlaybackTrack[],
+    startIndex: number,
+    options?: { autoplay?: boolean; startPositionMs?: number },
+  ): Promise<void>;
+  /** Jump to an already-loaded queue position (instant — track is prefetched). */
+  skipToQueueIndex(index: number): Promise<void>;
+  /** Advance to the next queued track natively (gapless, no JS cold-load). */
+  skipNext(): Promise<void>;
+  /** Return to the previous queued track natively. */
+  skipPrevious(): Promise<void>;
+  /** Remove a queued track by its play-order position. */
+  removeQueueIndex(index: number): Promise<void>;
   pause(): void;
   resume(): void;
   seekTo(positionMs: number): void;

@@ -16,6 +16,7 @@ interface QueueActions {
   skipToNext: () => PlaybackTrack | null;
   skipToPrevious: () => PlaybackTrack | null;
   skipToIndex: (index: number) => PlaybackTrack | null;
+  syncCurrentIndex: (index: number) => void;
   toggleShuffle: () => void;
   cycleRepeatMode: () => void;
   setRepeatMode: (mode: RepeatMode) => void;
@@ -121,6 +122,17 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     return trackAt(tracks, playOrder, index);
   },
 
+  // Reconcile currentIndex with the native player after a native-driven
+  // transition (auto-advance, lock-screen next/prev). The native queue is the
+  // transition engine; this keeps the store — the UI read-model — in lockstep.
+  // A no-op when already aligned, so it can't feed back into another native skip.
+  syncCurrentIndex: (index) => {
+    const { playOrder, currentIndex } = get();
+    if (index < 0 || index >= playOrder.length) return;
+    if (index === currentIndex) return;
+    set({ currentIndex: index });
+  },
+
   toggleShuffle: () => {
     const { tracks, playOrder, currentIndex, shuffled } = get();
     if (tracks.length <= 1) return;
@@ -205,3 +217,15 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     return currentIndex > 0;
   },
 }));
+
+// The queue flattened into play-order — the exact sequence the native player
+// loads. Native queue index == play-order position == store currentIndex, so
+// transitions and removals map 1:1 between the store and TrackPlayer.
+export function orderedQueueTracks(state: {
+  tracks: readonly PlaybackTrack[];
+  playOrder: readonly number[];
+}): PlaybackTrack[] {
+  return state.playOrder
+    .map((i) => state.tracks[i])
+    .filter((t): t is PlaybackTrack => t != null);
+}

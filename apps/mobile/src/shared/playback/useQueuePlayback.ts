@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
 import { usePlayback } from './usePlayback';
-import { useQueueStore } from './queueStore';
+import { orderedQueueTracks, useQueueStore } from './queueStore';
 import type { PlaybackTrack, QueueSource } from './types';
 
 interface QueuePlaybackControls {
@@ -14,38 +14,41 @@ interface QueuePlaybackControls {
 
 export function useQueuePlayback(): QueuePlaybackControls {
   const loadQueue = useQueueStore((s) => s.loadQueue);
-  const { play } = usePlayback();
+  const { startQueue, skipNext, skipPrevious } = usePlayback();
 
   const playFromList = useCallback(
     (tracks: readonly PlaybackTrack[], startIndex: number, source: QueueSource | null) => {
       loadQueue(tracks, startIndex, source);
-      const track = tracks[startIndex];
-      if (track) void play(track);
+      const s = useQueueStore.getState();
+      void startQueue(orderedQueueTracks(s), s.currentIndex);
     },
-    [loadQueue, play],
+    [loadQueue, startQueue],
   );
 
   const playTrack = useCallback(
     (track: PlaybackTrack) => {
       loadQueue([track], 0, null);
-      void play(track);
+      void startQueue([track], 0);
     },
-    [loadQueue, play],
+    [loadQueue, startQueue],
   );
 
+  // Skips are native: the next track is already buffered, so the switch is
+  // instant and gapless. The store's currentIndex follows from the native
+  // PlaybackActiveTrackChanged event (see service.ts).
   const skipToNext = useCallback(() => {
-    const nextTrack = useQueueStore.getState().skipToNext();
-    if (nextTrack) void play(nextTrack);
-  }, [play]);
+    void skipNext();
+  }, [skipNext]);
 
   const skipToPrevious = useCallback(() => {
-    const prevTrack = useQueueStore.getState().skipToPrevious();
-    if (prevTrack) void play(prevTrack);
-  }, [play]);
+    void skipPrevious();
+  }, [skipPrevious]);
 
   const toggleShuffle = useCallback(() => {
     useQueueStore.getState().toggleShuffle();
-  }, []);
+    const s = useQueueStore.getState();
+    void startQueue(orderedQueueTracks(s), s.currentIndex);
+  }, [startQueue]);
 
   return { playFromList, playTrack, skipToNext, skipToPrevious, toggleShuffle };
 }
