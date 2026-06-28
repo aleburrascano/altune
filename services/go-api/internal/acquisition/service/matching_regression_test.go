@@ -157,6 +157,38 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 			description: "completely unrelated candidates must be filtered by identity threshold",
 		},
 		{
+			name: "feat track prefers candidate naming the featured artist",
+			track: TrackRef{
+				Title:    "Smaxk Or Die (feat. Playboi Carti)",
+				Artist:   "Fatt Smaxk",
+				Duration: 0, // unknown — must still pick the feat cut by feature, not duration
+			},
+			candidates: []Candidate{
+				{
+					// The wrong pick the bug shipped: a high-view solo official video.
+					// NormalizeForMatch strips "(Official Music Video)" AND the track's
+					// "(feat. Playboi Carti)", so its identity ties the feat cut — and
+					// it wins on views/category unless feature-consistency intervenes.
+					Title:      "Fatt Smaxk - Smaxk Or Die (Official Music Video) | [Dir. By Kharkee]",
+					Channel:    "FattSmaxkVEVO",
+					Duration:   150,
+					URL:        "https://youtube.com/watch?v=solo",
+					Categories: []string{"Music"},
+					ViewCount:  2_000_000,
+				},
+				{
+					Title:      "Fatt Smaxk - Smaxk Or Die (feat. Playboi Carti)",
+					Channel:    "FattSmaxk",
+					Duration:   181,
+					URL:        "https://youtube.com/watch?v=feat",
+					Categories: []string{"Music"},
+					ViewCount:  50_000,
+				},
+			},
+			wantContains: "feat. Playboi Carti",
+			description:  "a (feat. X) track must prefer a candidate naming X over an equally-scored, higher-view solo cut",
+		},
+		{
 			name: "same title different artists picks correct one by channel",
 			track: TrackRef{
 				Title:    "Circles",

@@ -134,10 +134,20 @@ export async function searchDiscovery(
   if (params.saveHistory === false) {
     qs.set('save_history', 'false');
   }
-  return apiFetch<DiscoverySearchResponse>(
+  const response = await apiFetch<DiscoverySearchResponse>(
     `/v1/discovery/search?${qs.toString()}`,
     signal ? { signal } : undefined,
   );
+  return { ...response, results: (response.results ?? []).map(normalizeResult) };
+}
+
+// The wire omits an empty `subtitle`/`image_url` (Go `omitempty`), so an absent
+// value arrives as `undefined` despite the declared `string | null` type. Coerce
+// to null at the boundary so every `!== null` guard downstream behaves as the
+// type promises — otherwise a result with the artist baked into its title and no
+// separate subtitle crashes the detail screen on `undefined.length`.
+function normalizeResult(r: DiscoveryResult): DiscoveryResult {
+  return { ...r, subtitle: r.subtitle ?? null, image_url: r.image_url ?? null };
 }
 
 export async function suggestDiscovery(params: {
