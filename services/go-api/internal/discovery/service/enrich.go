@@ -129,9 +129,9 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 		}
 	}
 
-	resolved, source := s.resolveArtwork(ctx, result, mbid)
+	resolved, source, confidence := s.resolveArtwork(ctx, result, mbid)
 	if s.artworkCache != nil {
-		_ = s.artworkCache.Set(ctx, result.Kind, result.Title, result.Subtitle, mbid, resolved, source)
+		_ = s.artworkCache.Set(ctx, result.Kind, result.Title, result.Subtitle, mbid, resolved, source, confidence)
 	}
 	if resolved != "" {
 		result.ImageURL = resolved
@@ -151,30 +151,30 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 // artist: that "confidently wrong" guess slapped a stranger's release art onto an
 // ambiguous artist. With no identity and no name match, it returns "" so the
 // client renders an honest placeholder instead of the wrong face.
-func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult, mbid string) (string, string) {
+func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult, mbid string) (string, string, ports.ArtworkConfidence) {
 	identity := artworkIdentity(result, mbid)
 
 	// Tagged path (production chain): also reports which source supplied the URL.
 	if tagger, ok := s.artworkResolver.(ports.TaggingArtworkResolver); ok {
 		if identity.HasLinks() {
 			if url, src, _ := tagger.ResolveWithIdentityTagged(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
-				return url, src
+				return url, src, ports.ArtworkConfidenceIdentity
 			}
 		} else if url, src, _ := tagger.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
-			return url, src
+			return url, src, ports.ArtworkConfidenceName
 		}
-		return "", ""
+		return "", "", ports.ArtworkConfidenceNone
 	}
 
 	// Untagged fallback (a resolver without tagging, e.g. test fakes): no source.
 	if aware, ok := s.artworkResolver.(ports.IdentityAwareArtworkResolver); ok && identity.HasLinks() {
 		if url, _ := aware.ResolveWithIdentity(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
-			return url, ""
+			return url, "", ports.ArtworkConfidenceIdentity
 		}
 	} else if url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
-		return url, ""
+		return url, "", ports.ArtworkConfidenceName
 	}
-	return "", ""
+	return "", "", ports.ArtworkConfidenceNone
 }
 
 // artworkIdentity assembles the proven cross-provider identity for artwork

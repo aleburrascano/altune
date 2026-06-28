@@ -124,6 +124,7 @@ surface — may land as a follow-up slice.)
 
 **Shipped (backend green: `go build`/`go vet`/`go test ./...` = 1255 pass; mobile `tsc` + detail jest green):**
 - **A — durable identity store:** migration `008_discovery_entity_identity.sql` (applied to local dev; **prod application pending human review**); `IdentityStore` port; `PgxIdentityStore` (Postgres source of truth) + `RedisIdentityStore` (read-through, nil-safe); write path in `stampIdentities` (backgrounded via `bgWg` + `context.WithoutCancel`); read path in `enrichOne`; wired in `search_wiring.go`. Integration round-trip test (`-tags=integration`) + unit test for the enrich read path.
+- **B — cache quality-gating:** artwork resolution now reports an `ArtworkConfidence` (`identity` / `name` / `none`). The cache stores it and gives identity images the long TTL, name-resolved images a short provisional TTL (so a guess re-checks soon and can upgrade once identity is learned), and an **overwrite guard** so a weaker result (name guess, or a later failure) can never clobber a real higher-confidence image. (The mbid-in-key scheme already separates most identity vs name entries; the guard is correctness insurance.)
 - **C (core):** removed the artist→track artwork fallback — an identity-less artist now yields empty `image_url` (honest placeholder) instead of a stranger's track cover.
 - **Discography:** backend sorts albums newest-first + normalizes `year` before truncation; client always sorts the union (the `dzValidated` skip is gone); tests updated.
 - **Observability:** `identity.durable_resolved` debug log fires exactly when the durable store recovers identity on an MB-absent search (the fix firing).
@@ -131,6 +132,5 @@ surface — may land as a follow-up slice.)
 **Verified end-to-end (local replay, `discoveryeval -query "Che"`):** with MusicBrainz absent (`src=[deezer]`), the durable store resolved the artist's MBID from Postgres and artwork resolved (`resolved=true had_mbid=true`) where the same MB-absent run previously produced Deezer's empty-hash placeholder.
 
 **Deferred (follow-ups):**
-- **B — cache overwrite-protection:** make an identity result always overwrite a stored name/fallback result and give name-based entries a short TTL. Needs an `ArtworkCache` signature change (confidence/TTL) + read-before-write; not done to keep this change focused. With A in place, identity now wins most resolutions, so the frozen-guess window is much smaller.
 - **C — client initials avatar:** the client already renders a blank for empty `image_url` (honest, per the agreed "blank beats wrong"); a nicer initials/letter avatar is polish.
 - **Write-path live demo with MB present** was blocked by MusicBrainz rate-limiting during the session; the write path is proven by the integration round-trip test instead.
