@@ -87,6 +87,7 @@ export function QueueSheet(): ReactElement {
         onPress: () => {
           for (let i = playOrder.length - 1; i > currentIndex; i--) {
             removeFromQueue(i);
+            void playback.removeQueueIndex(i);
           }
         },
       },
@@ -99,12 +100,15 @@ export function QueueSheet(): ReactElement {
         friction={2}
         rightThreshold={40}
         renderRightActions={RemoveAction}
-        onSwipeableOpen={() => removeFromQueue(item.queueIndex)}
+        onSwipeableOpen={() => {
+          removeFromQueue(item.queueIndex);
+          void playback.removeQueueIndex(item.queueIndex);
+        }}
       >
         <Pressable
           onPress={() => {
-            const t = useQueueStore.getState().skipToIndex(item.queueIndex);
-            if (t) playback.play(t);
+            useQueueStore.getState().skipToIndex(item.queueIndex);
+            void playback.skipToQueueIndex(item.queueIndex);
           }}
           style={[styles.row, { backgroundColor: theme.color.canvas }]}
           accessibilityRole="button"
