@@ -1,0 +1,69 @@
+import type { ReactElement } from 'react';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+
+import type { TrackResponse } from '@shared/api-client/types';
+import { Text, spacing, useTheme } from '@shared/ui';
+
+import { LibraryRow } from './LibraryRow';
+
+type SongsListProps = {
+  tracks: TrackResponse[];
+  emptyLabel: string;
+  onPlay: (track: TrackResponse) => void;
+  onPress: (track: TrackResponse) => void;
+  onMore: (track: TrackResponse) => void;
+  onRetry: (track: TrackResponse) => void;
+  retryingTrackId: string | undefined;
+  isPlaying: (trackId: string) => boolean;
+  onRefresh: () => void;
+};
+
+export function SongsList({
+  tracks,
+  emptyLabel,
+  onPlay,
+  onPress,
+  onMore,
+  onRetry,
+  retryingTrackId,
+  isPlaying,
+  onRefresh,
+}: SongsListProps): ReactElement {
+  const theme = useTheme();
+  return (
+    <FlatList
+      testID="library-songs-list"
+      data={tracks}
+      keyExtractor={(t) => t.id}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={tracks.length === 0 ? styles.emptyList : styles.list}
+      refreshControl={
+        <RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={theme.color.accent} colors={[theme.color.accent]} />
+      }
+      ListEmptyComponent={
+        <View style={styles.empty}>
+          <Text variant="body" tone="secondary">
+            {emptyLabel}
+          </Text>
+        </View>
+      }
+      renderItem={({ item }) => (
+        <LibraryRow
+          track={item}
+          {...(item.acquisition_status === 'ready' ? { onPlay: () => onPlay(item) } : {})}
+          onPress={() => onPress(item)}
+          onMore={() => onMore(item)}
+          {...(item.acquisition_status === 'failed' ? { onRetry: () => onRetry(item) } : {})}
+          retrying={retryingTrackId === item.id}
+          isPlaying={isPlaying(item.id)}
+        />
+      )}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  list: { paddingBottom: spacing['3xl'] },
+  emptyList: { flexGrow: 1 },
+  empty: { flex: 1, alignItems: 'center', paddingTop: spacing['3xl'] },
+});

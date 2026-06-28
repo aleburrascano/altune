@@ -1,8 +1,20 @@
-import type { TrackResponse } from '@shared/api-client/types';
+import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
 
 import type { AlbumGroup, ArtistGroup } from '../hooks/useLibraryGrouping';
 
 export type SortKey = 'recent' | 'az' | 'year';
+
+export function sortPlaylists(playlists: PlaylistResponse[], key: SortKey): PlaylistResponse[] {
+  const sorted = [...playlists];
+  switch (key) {
+    case 'recent':
+      return sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    case 'az':
+      return sorted.sort((a, b) => a.name.localeCompare(b.name));
+    case 'year':
+      return sorted;
+  }
+}
 
 export function sortAlbums(albums: AlbumGroup[], key: SortKey): AlbumGroup[] {
   const sorted = [...albums];
@@ -52,6 +64,12 @@ export const ARTIST_SORT_OPTIONS: { key: SortKey; label: string }[] = [
 ];
 
 export const TRACK_SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'recent', label: 'Recent' },
+  { key: 'az', label: 'A–Z' },
+  { key: 'year', label: 'Year' },
+];
+
+export const PLAYLIST_SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: 'recent', label: 'Recent' },
   { key: 'az', label: 'A–Z' },
 ];
