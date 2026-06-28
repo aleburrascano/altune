@@ -39,8 +39,9 @@ type AdminHandler struct {
 	providerHealth providerHealthReader
 	acquisition    AcquisitionStatusReader
 	evalMeter      *EvalMeter
-	requests       requestStoreReader
-	reRunner       ReRunner
+	requests        requestStoreReader
+	reRunner        ReRunner
+	searchInspector SearchInspector
 
 	supabaseURL     string
 	supabaseAnonKey string
@@ -102,4 +103,5 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/requests", h.serveRequests)
 	r.Get("/requests/{corrID}", h.serveRequestDetail)
 	r.Post("/rerun", h.serveReRun)
+	r.Post("/search", h.serveTestSearch)
 }

@@ -180,6 +180,45 @@ func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 	}
 }
 
+// fakeIdentityAwareResolver resolves only when given a proven identity — exercising
+// the identity-first branch so the resolution path is reported as identity.
+type fakeIdentityAwareResolver struct{ url string }
+
+func (r *fakeIdentityAwareResolver) Resolve(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
+	return "", nil
+}
+
+func (r *fakeIdentityAwareResolver) ResolveWithIdentity(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, error) {
+	if id.HasLinks() {
+		return r.url, nil
+	}
+	return "", nil
+}
+
+func TestService_ArtworkPathIsDurableIdentityWhenStoreResolves(t *testing.T) {
+	// When MB is absent (no xref in merge) but the durable store supplies identity,
+	// and artwork then resolves identity-first, the resolution path stamped for the
+	// operator console must read "durable-identity" — the fix, made visible.
+	resolver := &fakeIdentityAwareResolver{url: "https://caa/right.jpg"}
+	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[string]string{"discogs": "123"}}
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService(
+		[]ports.SearchProvider{p},
+		NewCircuitBreaker(),
+		WithArtworkResolver(resolver),
+		WithIdentityStore(store),
+	)
+
+	out := runSearch(t, svc, "humble")
+
+	if out.Results[0].ImageURL != "https://caa/right.jpg" {
+		t.Errorf("artwork = %q, want the identity-resolved image", out.Results[0].ImageURL)
+	}
+	if got, _ := out.Results[0].Extras["artwork_path"].(string); got != "durable-identity" {
+		t.Errorf("artwork_path = %q, want durable-identity", got)
+	}
+}
+
 func TestService_ArtworkCacheShortCircuits(t *testing.T) {
 	resolver := &fakeArtworkResolver{url: "https://art/resolved.jpg"}
 	cache := &fakeArtworkCache{store: map[string]string{"Humble": "https://art/cached.jpg"}}

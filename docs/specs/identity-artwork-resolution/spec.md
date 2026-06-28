@@ -128,6 +128,7 @@ surface — may land as a follow-up slice.)
 - **C (core):** removed the artist→track artwork fallback — an identity-less artist now yields empty `image_url` (honest placeholder) instead of a stranger's track cover.
 - **Discography:** backend sorts albums newest-first + normalizes `year` before truncation; client always sorts the union (the `dzValidated` skip is gone); tests updated.
 - **Observability:** `identity.durable_resolved` debug log fires exactly when the durable store recovers identity on an MB-absent search (the fix firing).
+- **Operator testing (Mission Control):** a **Test Search** box on the Discovery tab runs the real pipeline (artwork + durable identity) for any query — bypassing the result cache, warming the identity store, writing no telemetry — and every result shows an **artwork badge** (`source · path`, where path ∈ `identity` / `durable-identity` / `name` / `provider` / `cache` / `none`). The passive request drill-down carries the same fields. This lets the fix be tested end-to-end from a local backend with no app/curl/JWT-for-search dance: `POST /admin/search` powered by `Service.InspectSearch`.
 
 **Verified end-to-end (local replay, `discoveryeval -query "Che"`):** with MusicBrainz absent (`src=[deezer]`), the durable store resolved the artist's MBID from Postgres and artwork resolved (`resolved=true had_mbid=true`) where the same MB-absent run previously produced Deezer's empty-hash placeholder.
 

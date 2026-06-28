@@ -46,6 +46,25 @@ func TestRecordSearch_MergesWithExchangesUnderSameCorrID(t *testing.T) {
 	}
 }
 
+func TestProjectResults_CarriesArtworkSourceAndPath(t *testing.T) {
+	rows := ProjectResults([]domain.SearchResult{{
+		Kind:          domain.ResultKindArtist,
+		Title:         "Che",
+		ImageURL:      "https://art/che.jpg",
+		ArtworkSource: "discogs",
+		Extras:        map[string]any{"artwork_path": "durable-identity"},
+	}})
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].ArtworkSource != "discogs" {
+		t.Errorf("artwork_source = %q, want discogs", rows[0].ArtworkSource)
+	}
+	if rows[0].ArtworkPath != "durable-identity" {
+		t.Errorf("artwork_path = %q, want durable-identity", rows[0].ArtworkPath)
+	}
+}
+
 func TestRecordSearch_NoCorrID_IsNoOp(t *testing.T) {
 	s := New()
 	s.RecordSearch(t.Context(), "q", nil, "u", nil, nil)
