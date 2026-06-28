@@ -137,8 +137,13 @@
     <!-- DISCOVERY -->
     <div class="pane" data-pane="discovery">
       <div class="card" style="margin-bottom:.7rem"><div class="bd">
-        <div class="ctrls"><input id="rrQuery" placeholder="re-run a query…" style="flex:1"><input id="rrKinds" placeholder="kinds (artist,track,album)" style="width:200px"><button id="rrRun" class="btn">⟲ Run</button></div>
-        <div class="mut" style="font-size:9.5px;margin-top:4px">live — hits provider APIs · bypasses circuit breakers · shares live keys</div>
+        <div class="ctrls"><input id="tsQuery" placeholder="test search — see resolved artwork…" style="flex:1"><input id="tsKinds" placeholder="kinds (artist,track,album)" style="width:200px"><button id="tsRun" class="btn">▶ Search</button></div>
+        <div class="mut" style="font-size:9.5px;margin-top:4px">live full pipeline — artwork + durable-identity resolution · bypasses the result cache · warms the identity store · the <b>art</b> badge shows how each image resolved</div>
+        <div id="tsOut"></div>
+      </div></div>
+      <div class="card" style="margin-bottom:.7rem"><div class="bd">
+        <div class="ctrls"><input id="rrQuery" placeholder="re-run a query (stage waterfall)…" style="flex:1"><input id="rrKinds" placeholder="kinds (artist,track,album)" style="width:200px"><button id="rrRun" class="btn">⟲ Run</button></div>
+        <div class="mut" style="font-size:9.5px;margin-top:4px">stage-by-stage waterfall (merge → rank → reshape) · no artwork enrichment · bypasses circuit breakers</div>
         <div id="rrOut"></div>
       </div></div>
       <div class="grid disc">
@@ -227,7 +232,11 @@ async function streamSSE(path, onEvent, signal){
 function badge(s){ const bad=["circuit_open","error","timeout","rate_limited","failed","down","regression"].includes(s); const warn=["queued","running","soft","no_data"].includes(s);
   return `<span class="badge ${s==='ok'||s==='succeeded'||s==='running'?'ok':bad?'bad':warn?'warn':''}">${esc(s||'—')}</span>`; }
 function img(u){ return u ? `<img class="art" src="${esc(u)}" onerror="this.style.visibility='hidden'">` : `<span class="art" style="display:inline-block"></span>`; }
-function resultRow(r){ return `<div class="row2">${img(r.image_url)}<span>${esc(r.title)}</span><span class="mut">· ${esc(r.kind)}${r.subtitle?' · '+esc(r.subtitle):''}${r.sources&&r.sources.length?' · src='+r.sources.length+' ['+r.sources.map(esc).join(',')+']':''}</span></div>`; }
+function artTag(r){ if(!r.artwork_path && !r.artwork_source) return '';
+  const p=r.artwork_path||''; const good=['identity','durable-identity','provider','cache'].includes(p), warn=(p==='name'), bad=(p==='none');
+  const cls=bad?'bad':warn?'warn':good?'ok':''; const lbl=(r.artwork_source?esc(r.artwork_source):'—')+(p?' · '+esc(p):'');
+  return ` <span class="badge ${cls}" title="how the artwork was resolved">art ${lbl}</span>`; }
+function resultRow(r){ return `<div class="row2">${img(r.image_url)}<span>${esc(r.title)}</span><span class="mut">· ${esc(r.kind)}${r.subtitle?' · '+esc(r.subtitle):''}${r.sources&&r.sources.length?' · src=['+r.sources.map(esc).join(',')+']':''}</span>${artTag(r)}</div>`; }
 
 /* ---------- providers ---------- */
 function renderProviders(el, ps){
@@ -340,6 +349,20 @@ function renderReqDetail(r){
 $("reqList").addEventListener("click",(e)=>{ const el=e.target.closest(".req"); if(!el) return;
   $("reqList").querySelectorAll(".req").forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); renderReqDetail(requests[+el.dataset.i]); });
 $("acqList").addEventListener("click",(e)=>{ const el=e.target.closest(".req"); if(!el) return; const j=acqJobs[+el.dataset.i]; if(j) renderAcqDetail(j); });
+
+/* ---------- test search (full pipeline, artwork) ---------- */
+$("tsRun").onclick = async () => {
+  const q=$("tsQuery").value.trim(); if(!q) return;
+  $("tsOut").innerHTML=`<div class="mut" style="margin-top:.5rem">searching…</div>`;
+  try{
+    const kinds = $("tsKinds").value.trim()? $("tsKinds").value.split(",").map(s=>s.trim()).filter(Boolean):[];
+    const w = await postJSON("/admin/search",{query:q,kinds});
+    const rows=(w.results||[]);
+    $("tsOut").innerHTML = `<div class="cy" style="margin:.5rem 0">"${esc(w.query)}" · ${rows.length} results</div>`+
+      (rows.length? rows.map((x,i)=>`<div class="row2"><span class="mut">${i+1}</span>${resultRow(x)}</div>`).join("") : `<div class="empty">no results</div>`);
+  }catch(e){ $("tsOut").innerHTML=`<div class="err" style="margin-top:.5rem">${esc(e.message)}</div>`; }
+};
+$("tsQuery").addEventListener("keydown",e=>{ if(e.key==="Enter") $("tsRun").click(); });
 
 /* ---------- re-run ---------- */
 $("rrRun").onclick = async () => {

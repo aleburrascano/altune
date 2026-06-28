@@ -76,9 +76,11 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 		if result.ArtworkSource == "" && len(result.Sources) > 0 {
 			result.ArtworkSource = result.Sources[0].Provider.String()
 		}
+		setArtworkPath(&result, "provider")
 		return result
 	}
 	mbid := stringExtra(result, "mbid")
+	fromDurable := false
 	// Durable identity (the deterministic fix): a provider-only result (MusicBrainz
 	// absent from this fan-out, so no xref was stamped in merge) resolves its MBID +
 	// bridged ids from the persisted identity store, keyed on its OWN provider id.
@@ -88,6 +90,7 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 	if _, hasXref := result.Extras["xref"]; !hasXref && s.identityStore != nil && len(result.Sources) > 0 {
 		src := result.Sources[0]
 		if m, xref, ok := s.identityStore.LookupByProviderID(ctx, result.Kind, src.Provider.String(), src.ExternalID); ok {
+			fromDurable = true
 			if mbid == "" {
 				mbid = m
 			}
@@ -119,11 +122,13 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 			if usable {
 				result.ImageURL = cachedURL
 				result.ArtworkSource = cachedSource
+				setArtworkPath(&result, "cache")
 				return result
 			}
 			// Cached miss/placeholder: only artists retry — a durable identity may
 			// now resolve the exact entity where a prior name-only attempt missed.
 			if result.Kind != domain.ResultKindArtist {
+				setArtworkPath(&result, "none")
 				return result
 			}
 		}
@@ -137,10 +142,40 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 		result.ImageURL = resolved
 		result.ArtworkSource = source
 	}
+	setArtworkPath(&result, artworkPathFor(resolved, confidence, fromDurable))
 	slog.DebugContext(ctx, "artwork.enriched",
 		"kind", result.Kind.String(), "source", source,
 		"resolved", resolved != "", "had_mbid", mbid != "")
 	return result
+}
+
+// setArtworkPath records, in extras, HOW a result's artwork was resolved
+// (provider / cache / identity / durable-identity / name / none) — operator-only
+// diagnostics surfaced in Mission Control, never on the public wire.
+func setArtworkPath(r *domain.SearchResult, path string) {
+	if r.Extras == nil {
+		r.Extras = map[string]any{}
+	}
+	r.Extras["artwork_path"] = path
+}
+
+// artworkPathFor names the resolution path from the chain's outcome. "durable-
+// identity" means the identity came from the persisted store (MusicBrainz was
+// absent this search) — the deterministic fix firing.
+func artworkPathFor(resolved string, confidence ports.ArtworkConfidence, fromDurable bool) string {
+	if resolved == "" {
+		return "none"
+	}
+	switch {
+	case confidence >= ports.ArtworkConfidenceIdentity && fromDurable:
+		return "durable-identity"
+	case confidence >= ports.ArtworkConfidenceIdentity:
+		return "identity"
+	case confidence == ports.ArtworkConfidenceName:
+		return "name"
+	default:
+		return "provider"
+	}
 }
 
 // resolveArtwork resolves artwork identity-first: when the entity carries a

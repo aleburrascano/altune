@@ -558,6 +558,22 @@ func (s *Service) RankVariantsForEval(
 	return rankPipeline(perProvider, queryNorm), rankPipelineNoReshape(perProvider, queryNorm)
 }
 
+// InspectSearch runs the full live pipeline (fan-out → merge → rank → enrich) for
+// an operator query, bypassing the app-wide result cache so every call exercises
+// live providers and artwork/identity resolution (and warms the durable identity
+// store, exactly like a real search). Diagnostic only — writes no history or
+// telemetry. Powers the Mission Control test-search.
+func (s *Service) InspectSearch(ctx context.Context, query *domain.SearchQuery) []domain.SearchResult {
+	searchQuery := CleanQuery(query.Raw)
+	queryNorm := textnorm.NormalizeForMatch(searchQuery)
+	perProvider, _ := s.fanOut(ctx, searchQuery, query.Kinds)
+	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm)
+	if query.Limit > 0 && len(ranked) > query.Limit {
+		ranked = ranked[:query.Limit]
+	}
+	return ranked
+}
+
 // WaitForBackground blocks until all best-effort background work (telemetry
 // emission, vocabulary ingest) finishes. The composition root calls it on
 // graceful shutdown; tests call it to observe background effects deterministically.
