@@ -74,6 +74,12 @@ func BuildSearchServiceWithTransport(
 	if cfg.TailDemotionEnabled {
 		opts = append(opts, discoveryService.WithTailDemotion())
 	}
+	// Cross-kind prominence tiebreak (off unless CROSS_KIND_PROMINENCE_ENABLED).
+	// Pure ranking concern, applied regardless of rankingOnly so the eval A/B
+	// exercises it.
+	if cfg.CrossKindProminenceEnabled {
+		opts = append(opts, discoveryService.WithCrossKindProminence())
+	}
 	// Exploration randomization (off unless EXPLORATION_ENABLED). Never on the
 	// rankingOnly eval path — the eval must see the deterministic order it scores.
 	if cfg.ExplorationEnabled && !rankingOnly {

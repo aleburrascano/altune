@@ -263,6 +263,26 @@ func ambiguousArtistNames(perProvider [][]domain.SearchResult) map[string]bool {
 	return ambiguous
 }
 
+// numericExtra reads a numeric extras value as a float64, tolerating the type
+// the value arrives as: int64/int on the live path (provider adapters stamp Go
+// ints) and float64 after a JSON fixture round-trip (record/replay). Absent or
+// non-numeric → 0.
+func numericExtra(r domain.SearchResult, key string) float64 {
+	if r.Extras == nil {
+		return 0
+	}
+	switch v := r.Extras[key].(type) {
+	case int64:
+		return float64(v)
+	case int:
+		return float64(v)
+	case float64:
+		return v
+	default:
+		return 0
+	}
+}
+
 func stringExtra(r domain.SearchResult, key string) string {
 	if r.Extras == nil {
 		return ""

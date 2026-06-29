@@ -70,6 +70,13 @@ type Service struct {
 	resultCache     ports.ResultCache
 	tailDemotion    bool
 
+	// crossKindProminence, default off, gates the cross-kind prominence tiebreak:
+	// among equally relevant results of different kinds, the more prominent entity
+	// (Deezer nb_fan/rank, log-compressed) sorts first. Fixes bare-name artist-
+	// intent burial without touching track-vs-track order. eval A/B-gated exactly
+	// like tailDemotion (CROSS_KIND_PROMINENCE_ENABLED).
+	crossKindProminence bool
+
 	// behavioralRanking, default off, gates the EventConsumer-derived satisfaction
 	// signal as a within-tie ranking input. behavioralScores is the published
 	// snapshot (atomic, refreshed off the request path); behavioralConsumer is its
@@ -180,6 +187,15 @@ func WithResultCache(c ports.ResultCache) Option {
 // eval A/B. See docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
 func WithTailDemotion() Option {
 	return func(s *Service) { s.tailDemotion = true }
+}
+
+// WithCrossKindProminence enables the experimental cross-kind prominence
+// tiebreak: among equally relevant results of different kinds, the more prominent
+// entity sorts first (see rankWithProminence). Off by default; the composition
+// root applies it under CROSS_KIND_PROMINENCE_ENABLED, eval A/B-gated like tail
+// demotion. Track-vs-track order is never affected.
+func WithCrossKindProminence() Option {
+	return func(s *Service) { s.crossKindProminence = true }
 }
 
 // WithBehavioralRanking enables the EventConsumer-derived satisfaction signal as
@@ -363,7 +379,7 @@ func (s *Service) mergeRankEnrich(
 	// Behavioral satisfaction signal: a published snapshot (nil when the flag is
 	// off / not yet refreshed), read without locking and applied as a within-tie
 	// rank input only.
-	ranked := rankPipelineWith(perProvider, queryNorm, demote, s.behavioralScoresSnapshot())
+	ranked := rankPipelineWith(perProvider, queryNorm, demote, s.behavioralScoresSnapshot(), s.crossKindProminence)
 
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
