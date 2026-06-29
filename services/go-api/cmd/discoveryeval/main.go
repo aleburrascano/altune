@@ -70,7 +70,7 @@ type options struct {
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | diversity | health | signal-a | signal-b | consensus")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -142,8 +142,14 @@ func run(opts options) error {
 		return runSignalB(ctx, cfg, pool, opts)
 	case "consensus":
 		return runConsensus(ctx, cfg, pool, opts)
+	case "artwork":
+		return runArtworkEval(ctx, cfg, pool, redisClient, opts)
+	case "artist-intent":
+		return runArtistIntent(ctx, cfg, pool, redisClient, opts)
+	case "corpus-build":
+		return runCorpusBuild(ctx, pool, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | merge | correction | diversity | health | signal-a | signal-b | consensus)", opts.mode)
+		return fmt.Errorf("unknown mode %q (want eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build)", opts.mode)
 	}
 }
 
@@ -522,6 +528,136 @@ func (a searchAdapter) Search(ctx context.Context, query string) ([]domain.Searc
 	return out.Results, nil
 }
 
+// ---- artist-intent mode -------------------------------------------------
+
+// runArtistIntent evaluates bare-artist-name queries against the artist-card
+// oracle — the corpus the library eval (track-only) is blind to. Corpus is the
+// distinct library artists; same deterministic sample discipline as eval.
+func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+	artists, err := loadDistinctArtists(ctx, pool, 0)
+	if err != nil {
+		return fmt.Errorf("load artists: %w", err)
+	}
+	// corpus=hard isolates the bug's actual home: single-token artist names, where
+	// bare-token relevance ties at 1.0 and the kind-blind tiebreak can bury the
+	// artist under a same-name track. Multi-token names engage the IDF path and
+	// don't tie, so they never exhibit the burial. Filter BEFORE -limit so the
+	// limit caps the single-token corpus, not the full list.
+	if opts.corpus == "hard" {
+		single := artists[:0:0]
+		for _, a := range artists {
+			if discoveryEval.TokenCount(a) == 1 {
+				single = append(single, a)
+			}
+		}
+		artists = single
+	}
+	if opts.limit > 0 && len(artists) > opts.limit {
+		artists = artists[:opts.limit]
+	}
+
+	progress := func(done, total int) {
+		fmt.Fprintf(os.Stderr, "\r  %d/%d (%d%%)", done, total, done*100/total)
+		if done == total {
+			fmt.Fprintln(os.Stderr)
+		}
+	}
+	corpusLabel := ""
+	if opts.corpus == "hard" {
+		corpusLabel = "hard"
+	}
+	human := func(r discoveryEval.HarnessReport) string {
+		return renderArtistIntent(r.(discoveryEval.ArtistIntentReport))
+	}
+
+	// Fixtures path: record the artist queries' provider traffic, or replay it
+	// deterministically — the seam that lets a ranking change (e.g. cross-kind
+	// prominence) be A/B'd over frozen provider responses, free of iTunes-dropout noise.
+	if opts.fixtures != "" {
+		if opts.record {
+			if err := os.MkdirAll(opts.fixtures, 0o755); err != nil {
+				return fmt.Errorf("mkdir fixtures %s: %w", opts.fixtures, err)
+			}
+			recProgress := func(done, total int) {
+				if done == total || done%25 == 0 {
+					fmt.Fprintf(os.Stderr, "recorded %d/%d\n", done, total)
+				}
+			}
+			once := func() (discoveryEval.HarnessReport, error) {
+				fmt.Fprintf(os.Stderr, "RECORDING %d artists to %s (corpus=%s, concurrency=%d, top-%d)...\n", len(artists), opts.fixtures, opts.corpus, opts.concurrency, opts.topK)
+				return recordArtistCorpus(ctx, cfg, pool, opts.fixtures, artists, corpusLabel, opts.concurrency, opts.topK, recProgress)
+			}
+			return runHarness("artist-intent", once, human, opts)
+		}
+		once := func() (discoveryEval.HarnessReport, error) {
+			fmt.Fprintf(os.Stderr, "REPLAYING %d artists from %s (corpus=%s, prominence=%v, concurrency=%d, top-%d)...\n", len(artists), opts.fixtures, opts.corpus, cfg.CrossKindProminenceEnabled, opts.concurrency, opts.topK)
+			searcher, err := buildReplaySearcher(cfg, pool, opts.fixtures)
+			if err != nil {
+				return discoveryEval.ArtistIntentReport{}, err
+			}
+			report := discoveryEval.RunArtistIntentEval(ctx, artists, searcher, opts.concurrency, opts.topK, corpusLabel, progress)
+			return report, nil
+		}
+		return runHarness("artist-intent", once, human, opts)
+	}
+
+	once := func() (discoveryEval.HarnessReport, error) {
+		fmt.Fprintf(os.Stderr, "artist-intent over %d distinct artists (corpus=%s, concurrency=%d, top-%d)...\n", len(artists), opts.corpus, opts.concurrency, opts.topK)
+		searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
+		report := discoveryEval.RunArtistIntentEval(ctx, artists, searcher, opts.concurrency, opts.topK, corpusLabel, progress)
+		drain()
+		return report, nil
+	}
+	return runHarness("artist-intent", once, human, opts)
+}
+
+// ---- corpus-build mode --------------------------------------------------
+
+// runCorpusBuild materializes the self-growing behavioral eval corpus on demand
+// (the same thing the API's nightly job does, runnable now for validation). It
+// mines search→engagement labels from discovery_events — completed/library_add ⇒
+// +1, wrong_album ⇒ −1 — over the -since-days window, prints a summary + samples,
+// and writes the corpus to -json when given. Report-only; never gates.
+func runCorpusBuild(ctx context.Context, pool *pgxpool.Pool, opts options) error {
+	eventStore := discoveryPersistence.NewPgxEventStore(pool)
+	builder := discoveryEval.NewCorpusBuilder(eventStore)
+
+	since := time.Now().UTC().AddDate(0, 0, -opts.sinceDays)
+	corpus, err := builder.Build(ctx, since, since.Format("2006-01-02"))
+	if err != nil {
+		return fmt.Errorf("build behavioral corpus: %w", err)
+	}
+
+	pos, neg := corpus.Positives(), corpus.Negatives()
+	fmt.Printf("# Discovery behavioral corpus — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Printf("- Window: last %d days (since %s)\n", opts.sinceDays, since.Format("2006-01-02"))
+	fmt.Printf("- Entries: %d (%d positive, %d negative)\n", len(corpus.Entries), len(pos), len(neg))
+	if len(corpus.Entries) == 0 {
+		fmt.Printf("\n_Empty — no completed / library_add / wrong_album events in the window yet._\n")
+		fmt.Printf("_The corpus grows as users engage; re-run after more usage (or widen -since-days)._\n")
+	} else {
+		fmt.Printf("\n## Sample labels\n\n")
+		for i, e := range corpus.Entries {
+			if i >= 12 {
+				break
+			}
+			sign := "+"
+			if e.Polarity < 0 {
+				sign = "−"
+			}
+			fmt.Printf("  %s %-24q → [%s] %q — %s\n", sign, e.Query, "", e.Title, e.Subtitle)
+		}
+	}
+
+	if opts.jsonPath != "" {
+		if err := discoveryEval.NewCorpusBuilder(eventStore).Materialize(ctx, since, since.Format("2006-01-02"), opts.jsonPath); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "wrote behavioral corpus to %s\n", opts.jsonPath)
+	}
+	return nil
+}
+
 // ---- signal-a mode ------------------------------------------------------
 
 func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
@@ -770,6 +906,43 @@ func renderEval(report discoveryEval.EvalReport) string {
 		}
 	}
 	if failures == 0 {
+		out += "_none_\n"
+	}
+	return out
+}
+
+func renderArtistIntent(report discoveryEval.ArtistIntentReport) string {
+	out := fmt.Sprintf("# Discovery artist-intent eval — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	out += fmt.Sprintf("- Total: %d (evaluated %d, skipped %d)\n", report.Total, report.Evaluated, report.Skipped)
+	out += fmt.Sprintf("- Top-1: %d (%.1f%%)\n", report.Top1Passed, report.Top1Rate()*100)
+	out += fmt.Sprintf("- Top-%d: %d (%.1f%%) — the product bar\n", report.K, report.TopKPassed, report.TopKRate()*100)
+	out += fmt.Sprintf("- BURIED (ranker bug): %d (%.1f%%) — artist present but a same-name track out-ranked it\n", report.Buried, report.BuriedRate()*100)
+	out += fmt.Sprintf("- ABSENT (recall gap): %d (%.1f%%) — artist card never surfaced; no reorder can fix\n", report.Absent, report.AbsentRate()*100)
+	out += fmt.Sprintf("- Below-K (other): %d · No-results: %d\n", report.BelowK, report.NoResults)
+
+	out += "\n## Buried — artist out-ranked by a same-name track (ranker-fixable)\n\n"
+	buried, absent := 0, 0
+	for _, r := range report.Results {
+		if r.Outcome != discoveryEval.ArtistIntentBuried {
+			continue
+		}
+		buried++
+		out += fmt.Sprintf("- %q → artist at #%d, first same-name track at #%d (top: [%s] %q)\n",
+			r.Artist, r.ArtistPos+1, r.FirstTrackPos+1, r.Top.Kind, r.Top.Title)
+	}
+	if buried == 0 {
+		out += "_none_\n"
+	}
+
+	out += "\n## Absent — artist card never surfaced (recall/identity gap)\n\n"
+	for _, r := range report.Results {
+		if r.Outcome != discoveryEval.ArtistIntentAbsent {
+			continue
+		}
+		absent++
+		out += fmt.Sprintf("- %q (top: [%s] %q — %s)\n", r.Artist, r.Top.Kind, r.Top.Title, r.Top.Subtitle)
+	}
+	if absent == 0 {
 		out += "_none_\n"
 	}
 	return out

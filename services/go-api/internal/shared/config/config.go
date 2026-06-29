@@ -69,6 +69,14 @@ type Config struct {
 	// for eval A/B before any production rollout. See
 	// docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
 	TailDemotionEnabled bool `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
+	// Cross-kind prominence tiebreak. Among equally relevant results of different
+	// kinds, the more prominent entity (Deezer nb_fan/rank, log-compressed) sorts
+	// first — fixes bare-name artist-intent burial without touching track-vs-track
+	// order. ON by default: the fixture A/B (2026-06-29) proved it lifts artist-
+	// intent top-1 +7.8pp AND track-hard top-3 +3.4pp (−38 obscure-artist-on-top
+	// failures), with track-exact byte-identical. Set false to disable. See
+	// docs/solutions/2026-06-29-cross-kind-ranking-ties.md.
+	CrossKindProminenceEnabled bool `env:"CROSS_KIND_PROMINENCE_ENABLED" envDefault:"true"`
 	// Behavioral ranking. OFF by default: feeds the EventConsumer-derived
 	// satisfaction signal (play-to-completion +, skip-after-click −) into ranking
 	// as a within-tie input. A new ranking consumer, so it ships dark until eval

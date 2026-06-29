@@ -1,53 +1,90 @@
 import { useRouter } from 'expo-router';
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
+import type { TrackResponse } from '@shared/api-client/types';
+import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
+import { buildPlayableQueue } from '@shared/playback/playFromList';
+import { usePlayback } from '@shared/playback/usePlayback';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { Button, Screen, SearchBar, Skeleton, Text, spacing, useTheme } from '@shared/ui';
+import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useLibraryHome } from '../hooks/useLibraryHome';
+import { useLibrarySearch } from '../hooks/useLibrarySearch';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
+import { _viewForState } from '../state';
+import { AddToPlaylistSheet } from './AddToPlaylistSheet';
+import { AlbumsGrid } from './AlbumsGrid';
+import { ArtistsGrid } from './ArtistsGrid';
+import { CreatePlaylistModal } from './CreatePlaylistModal';
+import { LibraryChips, type LibraryChip } from './LibraryChips';
 import { LibraryHeader } from './LibraryHeader';
-import { LibraryHome } from './LibraryHome';
+import { PlaylistsGrid } from './PlaylistsGrid';
+import { SongsList } from './SongsList';
+import { SortControl } from './SortControl';
+import {
+  ALBUM_SORT_OPTIONS,
+  ARTIST_SORT_OPTIONS,
+  PLAYLIST_SORT_OPTIONS,
+  TRACK_SORT_OPTIONS,
+  sortAlbums,
+  sortArtists,
+  sortPlaylists,
+  sortTracks,
+  type SortKey,
+} from './sort';
 import { useLibraryNavigation } from './useLibraryNavigation';
+
+const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {
+  playlists: 'recent',
+  songs: 'recent',
+  albums: 'az',
+  artists: 'az',
+};
 
 export function LibraryScreen(): ReactElement {
   const router = useRouter();
+  const theme = useTheme();
   const state = useLibraryHome();
+  const pl = usePlaylistActions();
+  const search = useLibrarySearch();
   const { navigateToTrack, navigateToAlbum, navigateToArtist } = useLibraryNavigation(router);
   const deleteMutation = useDeleteTrack();
   const retryMutation = useRetryAcquisition();
-  const pl = usePlaylistActions();
+  const playback = usePlayback();
+  const queue = useQueuePlayback();
 
-  if (state.isLoading) {
+  const [chip, setChip] = useState<LibraryChip>('playlists');
+  const [sortByChip, setSortByChip] = useState<Record<LibraryChip, SortKey>>(DEFAULT_SORTS);
+  const [actionTrack, setActionTrack] = useState<TrackResponse | null>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  const sortKey = sortByChip[chip];
+  const setSort = (key: SortKey): void => setSortByChip((prev) => ({ ...prev, [chip]: key }));
+  const refresh = (): void => {
+    state.refetch();
+    pl.invalidatePlaylists();
+  };
+
+  const view = _viewForState({ isLoading: state.isLoading, error: state.error, items: state.allTracks });
+
+  if (view === 'loading') {
     return (
       <Screen>
         <LibraryHeader />
-        <View testID="library-loading" style={styles.body}>
-          <View style={styles.skeletonSection}>
-            <Skeleton width={120} height={16} />
-            <View style={styles.skeletonCarousel}>
-              {[0, 1, 2].map((i) => (
-                <Skeleton key={i} width={110} height={110} radius={8} />
-              ))}
-            </View>
-          </View>
+        <View testID="library-loading" style={styles.skeletonGrid}>
           {[0, 1, 2, 3].map((i) => (
-            <View key={i} style={styles.skeletonRow}>
-              <Skeleton width={48} height={48} radius={6} />
-              <View style={styles.skeletonText}>
-                <Skeleton width="70%" height={14} />
-                <Skeleton width="50%" height={12} />
-              </View>
-            </View>
+            <Skeleton key={i} width="47%" height={140} radius={8} />
           ))}
         </View>
       </Screen>
     );
   }
 
-  if (state.error != null) {
+  if (view === 'error') {
     return (
       <Screen>
         <LibraryHeader />
@@ -62,7 +99,7 @@ export function LibraryScreen(): ReactElement {
     );
   }
 
-  if (state.total === 0) {
+  if (view === 'empty' && pl.playlists.length === 0) {
     return (
       <Screen>
         <LibraryHeader />
@@ -78,48 +115,153 @@ export function LibraryScreen(): ReactElement {
   }
 
   const retryingTrackId = retryMutation.isPending ? retryMutation.variables : undefined;
+  const active = buildActiveView();
 
   return (
-    <LibraryHome
-      playlists={pl.playlists}
-      allTracks={state.allTracks}
-      recentTracks={state.recentTracks}
-      albums={state.albums}
-      artists={state.artists}
-      navigateToTrack={navigateToTrack}
-      navigateToAlbum={navigateToAlbum}
-      navigateToArtist={navigateToArtist}
-      onExpandRecent={() => router.push('/library/all-tracks')}
-      onExpandAlbums={() => router.push('/library/all-albums')}
-      onExpandArtists={() => router.push('/library/all-artists')}
-      onPlaylistPress={(playlist) => router.push(`/library/playlist/${playlist.id}`)}
-      onRefresh={() => {
-          state.refetch();
-          pl.invalidatePlaylists();
-        }}
-      playlistActions={{
-        createModalVisible: pl.createModalVisible,
-        onCreateModalToggle: pl.setCreateModalVisible,
-        onCreatePlaylist: pl.createPlaylist,
-        createLoading: pl.createLoading,
-        addToPlaylistTrack: pl.addToPlaylistTrack,
-        onAddToPlaylistTrackChange: pl.setAddToPlaylistTrack,
-      }}
-      trackActions={{
-        onDeleteTrack: (trackId) => deleteMutation.mutate(trackId),
-        onRetryTrack: (trackId) => retryMutation.mutate(trackId),
-        retryingTrackId,
-      }}
-    />
+    <Screen>
+      <LibraryHeader />
+      <SearchBar
+        value={search.inputValue}
+        onChangeText={search.onChangeText}
+        onSubmitEditing={search.onSubmit}
+        onClear={search.onClear}
+        onFocus={() => setSearchFocused(true)}
+        onBlur={() => setSearchFocused(false)}
+        focused={searchFocused}
+        placeholder="Search your library"
+        testID="library-search-input"
+        theme={theme}
+      />
+      <LibraryChips value={chip} onChange={setChip} />
+      <SortControl
+        count={active.count}
+        noun={active.noun}
+        sortKey={sortKey}
+        options={active.options}
+        onSortChange={setSort}
+      />
+      <View style={styles.body}>{active.content}</View>
+
+      <CreatePlaylistModal
+        visible={pl.createModalVisible}
+        onClose={() => pl.setCreateModalVisible(false)}
+        onCreate={pl.createPlaylist}
+        loading={pl.createLoading}
+      />
+      <AddToPlaylistSheet
+        visible={pl.addToPlaylistTrack != null}
+        trackId={pl.addToPlaylistTrack?.id ?? ''}
+        trackTitle={pl.addToPlaylistTrack != null ? `${pl.addToPlaylistTrack.title} — ${pl.addToPlaylistTrack.artist}` : ''}
+        onClose={() => pl.setAddToPlaylistTrack(null)}
+      />
+      <ActionSheet
+        visible={actionTrack != null}
+        title={actionTrack?.title}
+        subtitle={actionTrack != null ? `${actionTrack.artist}${actionTrack.album != null ? ` · ${actionTrack.album}` : ''}` : undefined}
+        options={actionTrack != null ? [
+          { label: 'View Details', onPress: () => navigateToTrack(actionTrack) },
+          { label: 'Add to Playlist', onPress: () => pl.setAddToPlaylistTrack(actionTrack) },
+          { label: 'Remove from Library', tone: 'danger' as const, onPress: () => deleteMutation.mutate(actionTrack.id) },
+        ] : []}
+        onClose={() => setActionTrack(null)}
+      />
+    </Screen>
   );
+
+  function buildActiveView(): {
+    content: ReactElement;
+    count: number;
+    noun: string;
+    options: { key: SortKey; label: string }[];
+  } {
+    switch (chip) {
+      case 'playlists': {
+        const items = sortPlaylists(pl.playlists.filter((p) => search.matches(p.name)), sortKey);
+        return {
+          count: items.length,
+          noun: 'playlist',
+          options: PLAYLIST_SORT_OPTIONS,
+          content: (
+            <PlaylistsGrid
+              playlists={items}
+              onPlaylistPress={(playlist) => router.push(`/library/playlist/${playlist.id}`)}
+              onCreatePress={() => pl.setCreateModalVisible(true)}
+              onRefresh={refresh}
+            />
+          ),
+        };
+      }
+      case 'songs': {
+        const items = sortTracks([...search.filter(state.allTracks)], sortKey);
+        return {
+          count: items.length,
+          noun: 'song',
+          options: TRACK_SORT_OPTIONS,
+          content: (
+            <SongsList
+              tracks={items}
+              emptyLabel={search.hasQuery ? 'No songs found' : 'No songs yet'}
+              onPlay={(track) => {
+                const { playable, startIndex } = buildPlayableQueue(items, track.id);
+                queue.playFromList(playable, startIndex, { kind: 'library' });
+              }}
+              onPress={navigateToTrack}
+              onMore={setActionTrack}
+              onRetry={(track) => retryMutation.mutate(track.id)}
+              retryingTrackId={retryingTrackId}
+              isPlaying={(id) => isCurrentlyPlaying(playback, { kind: 'library', trackId: id })}
+              onRefresh={refresh}
+            />
+          ),
+        };
+      }
+      case 'albums': {
+        const items = sortAlbums(
+          state.albums.filter((a) => search.matches(a.album) || search.matches(a.artist)),
+          sortKey,
+        );
+        return {
+          count: items.length,
+          noun: 'album',
+          options: ALBUM_SORT_OPTIONS,
+          content: (
+            <AlbumsGrid
+              albums={items}
+              emptyLabel={search.hasQuery ? 'No albums found' : 'No albums yet'}
+              onAlbumPress={navigateToAlbum}
+              onRefresh={refresh}
+            />
+          ),
+        };
+      }
+      case 'artists': {
+        const items = sortArtists(state.artists.filter((a) => search.matches(a.artist)), sortKey);
+        return {
+          count: items.length,
+          noun: 'artist',
+          options: ARTIST_SORT_OPTIONS,
+          content: (
+            <ArtistsGrid
+              artists={items}
+              emptyLabel={search.hasQuery ? 'No artists found' : 'No artists yet'}
+              onArtistPress={navigateToArtist}
+              onRefresh={refresh}
+            />
+          ),
+        };
+      }
+    }
+  }
 }
 
 const styles = StyleSheet.create({
   body: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
   centerSub: { marginTop: spacing.xs, marginBottom: spacing.lg, textAlign: 'center' },
-  skeletonSection: { gap: spacing.md, paddingTop: spacing.xl },
-  skeletonCarousel: { flexDirection: 'row', gap: spacing.md },
-  skeletonRow: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm },
-  skeletonText: { flex: 1, gap: spacing.xs, justifyContent: 'center' },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    paddingTop: spacing.xl,
+  },
 });

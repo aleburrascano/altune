@@ -89,11 +89,13 @@ type ProviderTrace struct {
 // correctness (title, artwork, contributing providers) without retaining the full
 // domain object.
 type ResultRow struct {
-	Kind     string   `json:"kind"`
-	Title    string   `json:"title"`
-	Subtitle string   `json:"subtitle,omitempty"`
-	ImageURL string   `json:"image_url,omitempty"`
-	Sources  []string `json:"sources,omitempty"`
+	Kind          string   `json:"kind"`
+	Title         string   `json:"title"`
+	Subtitle      string   `json:"subtitle,omitempty"`
+	ImageURL      string   `json:"image_url,omitempty"`
+	Sources       []string `json:"sources,omitempty"`
+	ArtworkSource string   `json:"artwork_source,omitempty"` // provider that supplied the image
+	ArtworkPath   string   `json:"artwork_path,omitempty"`   // how it resolved (identity/durable-identity/name/…)
 }
 
 // Store is concurrency-safe. The recording transport writes exchanges; the
