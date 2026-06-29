@@ -178,24 +178,31 @@ func artworkPathFor(resolved string, confidence ports.ArtworkConfidence, fromDur
 	}
 }
 
-// resolveArtwork resolves artwork identity-first: when the entity carries a
-// proven identity (MBID + bridged provider ids), the identity-aware chain fetches
-// the exact entity's image before any name search — the only way to get the right
-// face for a same-name artist. Falls back to the name chain when no identity is
-// known. It deliberately does NOT fall back to a same-name *track* cover for an
-// artist: that "confidently wrong" guess slapped a stranger's release art onto an
-// ambiguous artist. With no identity and no name match, it returns "" so the
-// client renders an honest placeholder instead of the wrong face.
+// resolveArtwork resolves artwork identity-first and reports a confidence so the
+// cache can trust the result accordingly. When the entity carries a proven identity
+// (bridged provider ids), an identity source (Discogs by id) fetches the exact
+// entity's image → ArtworkConfidenceIdentity. Only if no identity source has the
+// image does it fall back to a NAME search → ArtworkConfidenceName: provisional,
+// short-TTL, overwritable, because for a same-name artist that may be the wrong
+// face — it must never masquerade as identity. (It does NOT fall back to a same-
+// name *track* cover for an artist.) Nothing resolved → "" / None → honest
+// placeholder, never a stranger's face frozen as identity.
 func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult, mbid string) (string, string, ports.ArtworkConfidence) {
 	identity := artworkIdentity(result, mbid)
 
 	// Tagged path (production chain): also reports which source supplied the URL.
 	if tagger, ok := s.artworkResolver.(ports.TaggingArtworkResolver); ok {
+		// Identity-first: a proven bridged id (Discogs) returns the exact entity's
+		// image — the only trustworthy result for a same-name artist.
 		if identity.HasLinks() {
 			if url, src, _ := tagger.ResolveWithIdentityTagged(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
 				return url, src, ports.ArtworkConfidenceIdentity
 			}
-		} else if url, src, _ := tagger.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
+		}
+		// No identity image: a NAME search, labeled provisional (short TTL,
+		// overwritable). For an ambiguous artist this may be the wrong face, so it
+		// must never be labeled identity — a real identity image can replace it later.
+		if url, src, _ := tagger.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
 			return url, src, ports.ArtworkConfidenceName
 		}
 		return "", "", ports.ArtworkConfidenceNone
@@ -206,7 +213,8 @@ func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult
 		if url, _ := aware.ResolveWithIdentity(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
 			return url, "", ports.ArtworkConfidenceIdentity
 		}
-	} else if url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
+	}
+	if url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
 		return url, "", ports.ArtworkConfidenceName
 	}
 	return "", "", ports.ArtworkConfidenceNone
