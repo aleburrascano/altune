@@ -1,4 +1,32 @@
 {
+  "artist_intent.hard_absent_rate": {
+    "metric": "artist_intent.hard_absent_rate",
+    "value": 0,
+    "margin": 0,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  },
+  "artist_intent.hard_buried_rate": {
+    "metric": "artist_intent.hard_buried_rate",
+    "value": 0.059895833333333336,
+    "margin": 0.03515625,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  },
+  "artist_intent.hard_top1_rate": {
+    "metric": "artist_intent.hard_top1_rate",
+    "value": 0.7864583333333334,
+    "margin": 0.05859375,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
+  "artist_intent.hard_topk_rate": {
+    "metric": "artist_intent.hard_topk_rate",
+    "value": 0.9375,
+    "margin": 0.0234375,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
   "correction.precision_rate": {
     "metric": "correction.precision_rate",
     "value": 1,
