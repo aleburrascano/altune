@@ -23,6 +23,7 @@ export function LibraryChips({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={styles.scroll}
       contentContainerStyle={styles.row}
     >
       {CHIPS.map((chip) => (
@@ -39,5 +40,6 @@ export function LibraryChips({
 }
 
 const styles = StyleSheet.create({
+  scroll: { flexGrow: 0 },
   row: { gap: spacing.sm, paddingVertical: spacing.xs },
 });
