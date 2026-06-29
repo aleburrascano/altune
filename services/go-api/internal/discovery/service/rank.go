@@ -1,6 +1,7 @@
 package service
 
 import (
+	"math"
 	"sort"
 	"strings"
 
@@ -30,6 +31,7 @@ type scored struct {
 	result     domain.SearchResult
 	relevance  float64
 	behavioral float64
+	prominence float64
 	pop        float64
 	rrf        float64
 	multi      bool
@@ -55,6 +57,20 @@ func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
 // default. behavioral is the EventConsumer-derived satisfaction signal, applied
 // only as a within-tie input below relevance (see rankLess), eval A/B-gated.
 func rankWith(entities []Entity, queryNorm string, demote demoteFunc, behavioral map[string]float64) []domain.SearchResult {
+	return rankWithProminence(entities, queryNorm, demote, behavioral, false)
+}
+
+// rankWithProminence is rankWith plus the EXPERIMENTAL cross-kind prominence
+// tiebreak. When crossKindProminence is true, each scored entity carries a
+// log-compressed provider prominence (Deezer nb_fan for artist/album, rank for
+// track) and rankLess breaks a relevance tie BETWEEN DIFFERENT KINDS by it — so a
+// prominent artist rises above a same-name track on a bare-name query, while a
+// prominent track still beats an obscure same-name artist. It NEVER compares
+// within a kind, so track-vs-track ordering (the bare-title corpus the popularity
+// attempt regressed) is untouched. Off by default — the 4-arg rankWith and every
+// sacred rank/pipeline test leave prominence at 0, making the rung inert.
+// eval A/B-gated via Service.crossKindProminence (CROSS_KIND_PROMINENCE_ENABLED).
+func rankWithProminence(entities []Entity, queryNorm string, demote demoteFunc, behavioral map[string]float64, crossKindProminence bool) []domain.SearchResult {
 	// queryNorm is already normalized by the caller (Execute); use it directly.
 	q := queryNorm
 
@@ -80,10 +96,15 @@ func rankWith(entities []Entity, queryNorm string, demote demoteFunc, behavioral
 		if demote != nil {
 			demoted = demote(r)
 		}
+		prominence := 0.0
+		if crossKindProminence {
+			prominence = prominenceOf(r)
+		}
 		results = append(results, scored{
 			result:     r,
 			relevance:  idfWeightedCoverage(r, q, rarity),
 			behavioral: behavioral[resultSignature(r)], // nil map read → 0 (inert)
+			prominence: prominence,                     // 0 unless the experiment is on (inert)
 			pop:        popularityOf(r),
 			rrf:        rrfScore(e.BestRank),
 			multi:      len(providersOf(r)) > 1,
@@ -111,6 +132,15 @@ func rankLess(a, b scored) bool {
 	}
 	if a.relevance != b.relevance {
 		return a.relevance > b.relevance
+	}
+	// Cross-kind prominence (experimental, off by default): among equally relevant
+	// results OF DIFFERENT KINDS, the more prominent entity sorts first — a famous
+	// artist above a same-name track, a famous track above an obscure same-name
+	// artist. Gated to kind-difference so it never reorders track-vs-track (the
+	// bare-title corpus the popularity attempt regressed). Inert when prominence is
+	// 0 (the experiment off, or no provider prominence data). See rankWithProminence.
+	if a.result.Kind != b.result.Kind && a.prominence != b.prominence {
+		return a.prominence > b.prominence
 	}
 	// Behavioral satisfaction (experimental, off by default): among equally
 	// relevant results, the one users actually played-to-completion sorts above
@@ -163,7 +193,6 @@ func queryTokenRarity(q string, eligible []Entity) map[string]float64 {
 	return rarity
 }
 
-
 // sharesQueryWord drops results that share no content word with the query.
 func sharesQueryWord(r domain.SearchResult, queryNorm string) bool {
 	if queryNorm == "" {
@@ -190,6 +219,23 @@ func hasBrowseableSource(r domain.SearchResult) bool {
 		}
 	}
 	return false
+}
+
+// prominenceOf is the cross-kind prominence signal: the provider popularity a
+// result already carries (Deezer nb_fan for artist/album, rank for track),
+// log-compressed so the differing raw scales are roughly comparable. Parameter-
+// free (log1p, no tuned cut), 0 when the entity carries no prominence data.
+func prominenceOf(r domain.SearchResult) float64 {
+	var raw float64
+	if r.Kind == domain.ResultKindTrack {
+		raw = numericExtra(r, "rank")
+	} else {
+		raw = numericExtra(r, "nb_fan")
+	}
+	if raw <= 0 {
+		return 0
+	}
+	return math.Log1p(raw)
 }
 
 func rrfScore(bestRank map[domain.ProviderName]int) float64 {
