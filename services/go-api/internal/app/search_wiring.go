@@ -237,6 +237,12 @@ func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.Artw
 	var artworkResolvers []discoveryPorts.ArtworkResolver
 	artworkResolvers = append(artworkResolvers,
 		providers.NewCoverArtArchiveResolver(cf.discovery()))
+	// Spotify is identity-only: it resolves the exact bridged Spotify entity by id
+	// via the public oEmbed endpoint (no key). The broadest artist-image source, so
+	// it leads the identity phase. Like Discogs, it never name-searches — id-pinned,
+	// so a same-name artist can't get another's face.
+	artworkResolvers = append(artworkResolvers,
+		providers.NewSpotifyArtworkResolver(cf.discovery()))
 	// Discogs is identity-only: it resolves the exact bridged Discogs artist by id
 	// (the right face for same-name artists), never by name. The chain tries it in
 	// the identity phase and excludes it from the name phase.

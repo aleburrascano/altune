@@ -142,8 +142,10 @@ func run(opts options) error {
 		return runSignalB(ctx, cfg, pool, opts)
 	case "consensus":
 		return runConsensus(ctx, cfg, pool, opts)
+	case "artwork":
+		return runArtworkEval(ctx, cfg, pool, redisClient, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | merge | correction | diversity | health | signal-a | signal-b | consensus)", opts.mode)
+		return fmt.Errorf("unknown mode %q (want eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork)", opts.mode)
 	}
 }
 
