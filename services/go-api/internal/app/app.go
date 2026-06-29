@@ -397,7 +397,8 @@ func (a *App) setup(ctx context.Context) error {
 	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader, a.evalMeter).
 		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).
 		WithRequestStore(requestStore).
-		WithReRunner(a.buildReRunner())
+		WithReRunner(a.buildReRunner()).
+		WithSearchInspector(a.buildSearchInspector(searchSvc))
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Get("/", adminH.ServeIndex)         // public shell — holds no data
 		ar.Get("/config", adminH.ServeConfig)  // public client config for sign-in

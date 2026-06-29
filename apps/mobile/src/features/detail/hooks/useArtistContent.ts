@@ -143,7 +143,6 @@ export function useArtistAlbums({
   const deezerSource = sources.find((s) => s.provider === 'deezer') ?? null;
   const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
   const itunesSource = sources.find((s) => s.provider === 'itunes') ?? null;
-  const dzValidated = Boolean(artistName);
 
   const {
     data: dzData,
@@ -213,9 +212,11 @@ export function useArtistAlbums({
   );
   const isErrorAlbums = albumOutcomes.length > 0 && albumOutcomes.every(Boolean);
 
-  // When the backend applied MB validation (artistName was passed), trust its
-  // confirmed-first ordering. Only sort by date when no validation occurred.
-  const finalAlbums = dzValidated ? albumsWithArt : sortByReleaseDateDesc(albumsWithArt);
+  // The client unions albums across providers, so it owns final ordering: always
+  // sort newest-first by release date. The backend normalizes a numeric year onto
+  // every album (derived from release_date), so the sort key is present whichever
+  // provider supplied the album — MB-validated lists are no longer left unsorted.
+  const finalAlbums = sortByReleaseDateDesc(albumsWithArt);
 
   return {
     albums: finalAlbums,

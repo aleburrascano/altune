@@ -74,6 +74,12 @@ func BuildSearchServiceWithTransport(
 	if cfg.TailDemotionEnabled {
 		opts = append(opts, discoveryService.WithTailDemotion())
 	}
+	// Cross-kind prominence tiebreak (off unless CROSS_KIND_PROMINENCE_ENABLED).
+	// Pure ranking concern, applied regardless of rankingOnly so the eval A/B
+	// exercises it.
+	if cfg.CrossKindProminenceEnabled {
+		opts = append(opts, discoveryService.WithCrossKindProminence())
+	}
 	// Exploration randomization (off unless EXPLORATION_ENABLED). Never on the
 	// rankingOnly eval path — the eval must see the deterministic order it scores.
 	if cfg.ExplorationEnabled && !rankingOnly {
@@ -87,6 +93,18 @@ func BuildSearchServiceWithTransport(
 			discoveryService.WithArtworkResolver(buildArtworkChain(cf, cfg)),
 			discoveryService.WithFindRelatedService(findRelatedSvc),
 		)
+		// Durable identity store: Postgres is the source of truth (survives Redis
+		// flushes), Redis fronts it as a read-through. Persists the cross-provider
+		// bridges the merge learns when MusicBrainz is present, and resolves them on
+		// later MB-absent searches so artwork stays identity-first. redisClient may be
+		// nil — the read-through degrades to PG-direct.
+		if pool != nil {
+			identityStore := discoveryCacheAdapters.NewRedisIdentityStore(
+				discoveryPersistence.NewPgxIdentityStore(pool),
+				redisClient,
+			)
+			opts = append(opts, discoveryService.WithIdentityStore(identityStore))
+		}
 	}
 	if redisClient != nil {
 		// App-wide consistency cache (shared, short-TTL): identical query → identical
@@ -225,6 +243,12 @@ func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.Artw
 	var artworkResolvers []discoveryPorts.ArtworkResolver
 	artworkResolvers = append(artworkResolvers,
 		providers.NewCoverArtArchiveResolver(cf.discovery()))
+	// Spotify is identity-only: it resolves the exact bridged Spotify entity by id
+	// via the public oEmbed endpoint (no key). The broadest artist-image source, so
+	// it leads the identity phase. Like Discogs, it never name-searches — id-pinned,
+	// so a same-name artist can't get another's face.
+	artworkResolvers = append(artworkResolvers,
+		providers.NewSpotifyArtworkResolver(cf.discovery()))
 	// Discogs is identity-only: it resolves the exact bridged Discogs artist by id
 	// (the right face for same-name artists), never by name. The chain tries it in
 	// the identity phase and excludes it from the name phase.

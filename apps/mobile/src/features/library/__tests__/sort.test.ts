@@ -1,7 +1,19 @@
-import type { TrackResponse } from '@shared/api-client/types';
+import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
 
 import type { AlbumGroup, ArtistGroup } from '../hooks/useLibraryGrouping';
-import { sortAlbums, sortArtists, sortTracks } from '../ui/sort';
+import { sortAlbums, sortArtists, sortPlaylists, sortTracks } from '../ui/sort';
+
+function playlist(overrides: Partial<PlaylistResponse> = {}): PlaylistResponse {
+  return {
+    id: 'p1',
+    name: 'Playlist',
+    track_count: 0,
+    preview_artwork_urls: [],
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
 
 function albumGroup(overrides: Partial<AlbumGroup> = {}): AlbumGroup {
   return {
@@ -47,6 +59,42 @@ function track(overrides: Partial<TrackResponse> = {}): TrackResponse {
     ...overrides,
   };
 }
+
+describe('sortPlaylists', () => {
+  it('sorts by created_at descending (newest first)', () => {
+    const playlists = [
+      playlist({ id: 'old', name: 'Old', created_at: '2025-01-01T00:00:00Z' }),
+      playlist({ id: 'new', name: 'New', created_at: '2026-06-01T00:00:00Z' }),
+    ];
+    const result = sortPlaylists(playlists, 'recent');
+    expect(result[0]!.name).toBe('New');
+  });
+
+  it('sorts alphabetically by name', () => {
+    const playlists = [
+      playlist({ id: 'z', name: 'Zen' }),
+      playlist({ id: 'a', name: 'Ambient' }),
+    ];
+    const result = sortPlaylists(playlists, 'az');
+    expect(result[0]!.name).toBe('Ambient');
+  });
+
+  it('returns input order for year (no year on playlists)', () => {
+    const playlists = [playlist({ id: 'a', name: 'First' }), playlist({ id: 'b', name: 'Second' })];
+    const result = sortPlaylists(playlists, 'year');
+    expect(result[0]!.name).toBe('First');
+  });
+
+  it('returns a new array, does not mutate input', () => {
+    const playlists = [playlist()];
+    const result = sortPlaylists(playlists, 'recent');
+    expect(result).not.toBe(playlists);
+  });
+
+  it('handles empty array', () => {
+    expect(sortPlaylists([], 'recent')).toEqual([]);
+  });
+});
 
 describe('sortAlbums', () => {
   it('sorts by most recent added_at descending', () => {

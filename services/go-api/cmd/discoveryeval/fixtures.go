@@ -131,6 +131,34 @@ func recordCorpus(
 	return report, nil
 }
 
+// recordArtistCorpus is recordCorpus for the artist-intent driver: it issues the
+// bare-artist-name queries through one shared recording Service to capture all
+// provider HTTP exchanges, then writes the deduped fixture. The captured traffic
+// is identical whatever the ranking flags — replay then A/Bs the ranker over it.
+func recordArtistCorpus(
+	ctx context.Context,
+	cfg *config.Config,
+	pool *pgxpool.Pool,
+	dir string,
+	artists []string,
+	corpus string,
+	concurrency, topK int,
+	progress func(done, total int),
+) (discoveryEval.HarnessReport, error) {
+	rec := httptrace.NewRecorder(app.NewLiveTransport())
+	svc := app.BuildSearchServiceWithTransport(cfg, pool, nil, nil, rec, true)
+	searcher := searchAdapter{svc: svc}
+
+	report := discoveryEval.RunArtistIntentEval(ctx, artists, searcher, concurrency, topK, corpus, progress)
+	svc.WaitForBackground()
+
+	exchanges := dedupExchanges(rec.Exchanges())
+	if err := saveExchanges(dir, "corpus", exchanges); err != nil {
+		return nil, err
+	}
+	return report, nil
+}
+
 // buildReplaySearcher loads every fixture into one combined Replayer and builds a
 // single Service over it: the deterministic, offline searcher. Redis is left nil
 // so cache state cannot add variance — the frozen provider responses are the only

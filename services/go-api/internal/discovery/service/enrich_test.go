@@ -32,7 +32,7 @@ func (c *fakeArtworkCache) Get(_ context.Context, _ domain.ResultKind, title, _,
 	return url, "", ok, nil
 }
 
-func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _, _, url, _ string) error {
+func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _, _, url, _ string, _ ports.ArtworkConfidence) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.store[title] = url
@@ -127,6 +127,95 @@ func TestService_MBIDIndexAttachesMBIDForArtwork(t *testing.T) {
 	}
 	if atomic.LoadInt32(&idx.lookups) == 0 {
 		t.Error("MBID index was never consulted")
+	}
+}
+
+type fakeIdentityStore struct {
+	mbid      string
+	xref      map[string]string
+	lookups   int32
+	persisted int32
+}
+
+func (f *fakeIdentityStore) PersistBridges(_ context.Context, _ domain.ResultKind, _ string, _ map[string]string) error {
+	atomic.AddInt32(&f.persisted, 1)
+	return nil
+}
+
+func (f *fakeIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, _, _ string) (string, map[string]string, bool) {
+	atomic.AddInt32(&f.lookups, 1)
+	if f.mbid == "" {
+		return "", nil, false
+	}
+	return f.mbid, f.xref, true
+}
+
+func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
+	// The deterministic fix: a provider-only result (MusicBrainz absent from this
+	// fan-out, so merge stamped no xref) resolves its identity from the durable
+	// store, keyed on its own provider id. The bridged ids + MBID reach the artwork
+	// resolver so it stays identity-first — the right entity — even though MB never
+	// answered this search.
+	resolver := &capturingArtworkResolver{url: "https://caa/right-face.jpg"}
+	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[string]string{"discogs": "123"}}
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService(
+		[]ports.SearchProvider{p},
+		NewCircuitBreaker(),
+		WithArtworkResolver(resolver),
+		WithIdentityStore(store),
+	)
+
+	out := runSearch(t, svc, "humble")
+
+	if atomic.LoadInt32(&store.lookups) == 0 {
+		t.Error("identity store was never consulted")
+	}
+	if resolver.gotMBID != "durable-mbid" {
+		t.Errorf("resolver got mbid %q, want the durable MBID attached from the store", resolver.gotMBID)
+	}
+	xref, ok := out.Results[0].Extras["xref"].(map[string]string)
+	if !ok || xref["discogs"] != "123" {
+		t.Errorf("xref = %v, want the bridged ids attached from the store", out.Results[0].Extras["xref"])
+	}
+}
+
+// fakeIdentityAwareResolver resolves only when given a proven identity — exercising
+// the identity-first branch so the resolution path is reported as identity.
+type fakeIdentityAwareResolver struct{ url string }
+
+func (r *fakeIdentityAwareResolver) Resolve(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
+	return "", nil
+}
+
+func (r *fakeIdentityAwareResolver) ResolveWithIdentity(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, error) {
+	if id.HasLinks() {
+		return r.url, nil
+	}
+	return "", nil
+}
+
+func TestService_ArtworkPathIsDurableIdentityWhenStoreResolves(t *testing.T) {
+	// When MB is absent (no xref in merge) but the durable store supplies identity,
+	// and artwork then resolves identity-first, the resolution path stamped for the
+	// operator console must read "durable-identity" — the fix, made visible.
+	resolver := &fakeIdentityAwareResolver{url: "https://caa/right.jpg"}
+	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[string]string{"discogs": "123"}}
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService(
+		[]ports.SearchProvider{p},
+		NewCircuitBreaker(),
+		WithArtworkResolver(resolver),
+		WithIdentityStore(store),
+	)
+
+	out := runSearch(t, svc, "humble")
+
+	if out.Results[0].ImageURL != "https://caa/right.jpg" {
+		t.Errorf("artwork = %q, want the identity-resolved image", out.Results[0].ImageURL)
+	}
+	if got, _ := out.Results[0].Extras["artwork_path"].(string); got != "durable-identity" {
+		t.Errorf("artwork_path = %q, want durable-identity", got)
 	}
 }
 

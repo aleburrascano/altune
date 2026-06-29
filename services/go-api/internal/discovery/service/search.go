@@ -64,10 +64,18 @@ type Service struct {
 	albumValidator  ports.AlbumValidator
 	identityBridge  ports.IdentityBridge
 	mbidIndex       ports.MBIDIndex
+	identityStore   ports.IdentityStore
 	correctionSvc   *CorrectionService
 	findRelatedSvc  *FindRelatedService
 	resultCache     ports.ResultCache
 	tailDemotion    bool
+
+	// crossKindProminence, default off, gates the cross-kind prominence tiebreak:
+	// among equally relevant results of different kinds, the more prominent entity
+	// (Deezer nb_fan/rank, log-compressed) sorts first. Fixes bare-name artist-
+	// intent burial without touching track-vs-track order. eval A/B-gated exactly
+	// like tailDemotion (CROSS_KIND_PROMINENCE_ENABLED).
+	crossKindProminence bool
 
 	// behavioralRanking, default off, gates the EventConsumer-derived satisfaction
 	// signal as a within-tie ranking input. behavioralScores is the published
@@ -152,6 +160,15 @@ func WithMBIDIndex(idx ports.MBIDIndex) Option {
 	return func(s *Service) { s.mbidIndex = idx }
 }
 
+// WithIdentityStore attaches the durable reverse identity map. When MusicBrainz is
+// present in a fan-out, learned bridges are persisted; on later MB-absent searches
+// a provider-only result resolves its identity from here, keeping artwork
+// identity-first instead of falling back to a name guess. Off → identity is only
+// as good as the current fan-out (the prior, non-deterministic behavior).
+func WithIdentityStore(store ports.IdentityStore) Option {
+	return func(s *Service) { s.identityStore = store }
+}
+
 // WithFindRelatedService attaches the "more from this album/artist" groups.
 func WithFindRelatedService(r *FindRelatedService) Option {
 	return func(s *Service) { s.findRelatedSvc = r }
@@ -170,6 +187,15 @@ func WithResultCache(c ports.ResultCache) Option {
 // eval A/B. See docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
 func WithTailDemotion() Option {
 	return func(s *Service) { s.tailDemotion = true }
+}
+
+// WithCrossKindProminence enables the experimental cross-kind prominence
+// tiebreak: among equally relevant results of different kinds, the more prominent
+// entity sorts first (see rankWithProminence). Off by default; the composition
+// root applies it under CROSS_KIND_PROMINENCE_ENABLED, eval A/B-gated like tail
+// demotion. Track-vs-track order is never affected.
+func WithCrossKindProminence() Option {
+	return func(s *Service) { s.crossKindProminence = true }
 }
 
 // WithBehavioralRanking enables the EventConsumer-derived satisfaction signal as
@@ -353,7 +379,7 @@ func (s *Service) mergeRankEnrich(
 	// Behavioral satisfaction signal: a published snapshot (nil when the flag is
 	// off / not yet refreshed), read without locking and applied as a within-tie
 	// rank input only.
-	ranked := rankPipelineWith(perProvider, queryNorm, demote, s.behavioralScoresSnapshot())
+	ranked := rankPipelineWith(perProvider, queryNorm, demote, s.behavioralScoresSnapshot(), s.crossKindProminence)
 
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
@@ -370,6 +396,15 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 	if s.identityBridge == nil {
 		return
 	}
+	// Bridges learned this fan-out (MB present) are persisted to the durable
+	// identity store so a later MB-absent search can resolve the same entity.
+	type learnedBridge struct {
+		kind domain.ResultKind
+		mbid string
+		ids  map[string]string
+	}
+	var learned []learnedBridge
+
 	for gi := range perProvider {
 		for ri := range perProvider[gi] {
 			r := &perProvider[gi][ri]
@@ -387,8 +422,28 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 			r.Extras["xref"] = ids
 			slog.DebugContext(ctx, "merge.identity_bridge_stamped",
 				"kind", r.Kind.String(), "mbid", mbid, "ids", len(ids))
+			if s.identityStore != nil {
+				learned = append(learned, learnedBridge{kind: r.Kind, mbid: mbid, ids: ids})
+			}
 		}
 	}
+
+	if len(learned) == 0 {
+		return
+	}
+	// Persist off the request path: the durable write must not add latency to the
+	// search, and it must outlive the request, so use a detached context.
+	bgCtx := context.WithoutCancel(ctx)
+	s.bgWg.Add(1)
+	go func() {
+		defer s.bgWg.Done()
+		for _, b := range learned {
+			if err := s.identityStore.PersistBridges(bgCtx, b.kind, b.mbid, b.ids); err != nil {
+				slog.WarnContext(bgCtx, "identity.persist_failed",
+					"kind", b.kind.String(), "mbid", b.mbid, "error", err)
+			}
+		}
+	}()
 }
 
 // fanOut queries every provider in parallel, each bounded by a timeout and
@@ -517,6 +572,22 @@ func (s *Service) RankVariantsForEval(
 	perProvider, _ := s.fanOut(ctx, searchQuery, query.Kinds)
 	s.stampIdentities(ctx, perProvider)
 	return rankPipeline(perProvider, queryNorm), rankPipelineNoReshape(perProvider, queryNorm)
+}
+
+// InspectSearch runs the full live pipeline (fan-out → merge → rank → enrich) for
+// an operator query, bypassing the app-wide result cache so every call exercises
+// live providers and artwork/identity resolution (and warms the durable identity
+// store, exactly like a real search). Diagnostic only — writes no history or
+// telemetry. Powers the Mission Control test-search.
+func (s *Service) InspectSearch(ctx context.Context, query *domain.SearchQuery) []domain.SearchResult {
+	searchQuery := CleanQuery(query.Raw)
+	queryNorm := textnorm.NormalizeForMatch(searchQuery)
+	perProvider, _ := s.fanOut(ctx, searchQuery, query.Kinds)
+	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm)
+	if query.Limit > 0 && len(ranked) > query.Limit {
+		ranked = ranked[:query.Limit]
+	}
+	return ranked
 }
 
 // WaitForBackground blocks until all best-effort background work (telemetry

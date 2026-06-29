@@ -115,11 +115,13 @@ func ProjectResults(results []domain.SearchResult) []ResultRow {
 	out := make([]ResultRow, 0, len(results))
 	for _, r := range results {
 		out = append(out, ResultRow{
-			Kind:     r.Kind.String(),
-			Title:    r.Title,
-			Subtitle: r.Subtitle,
-			ImageURL: r.ImageURL,
-			Sources:  sourceNames(r.Sources),
+			Kind:          r.Kind.String(),
+			Title:         r.Title,
+			Subtitle:      r.Subtitle,
+			ImageURL:      r.ImageURL,
+			Sources:       sourceNames(r.Sources),
+			ArtworkSource: r.ArtworkSource,
+			ArtworkPath:   extraStr(r, "artwork_path"),
 		})
 	}
 	return out

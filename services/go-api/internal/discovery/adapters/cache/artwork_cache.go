@@ -7,21 +7,30 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 
 	goredis "github.com/redis/go-redis/v9"
 )
 
+var _ ports.ArtworkCache = (*RedisArtworkCache)(nil)
+
 // artworkEntry is the cached value: the resolved URL plus the source that
 // supplied it ("fanart", "discogs", …), so a cache hit still reports who
-// resolved the artwork for per-provider coverage visibility. A negative entry
-// has an empty URL.
+// resolved the artwork for per-provider coverage visibility, plus the confidence
+// it was resolved at (so a name guess can't overwrite a proven-identity image and
+// gets a shorter TTL). A negative entry has an empty URL.
 type artworkEntry struct {
-	URL    string `json:"u"`
-	Source string `json:"s"`
+	URL        string `json:"u"`
+	Source     string `json:"s"`
+	Confidence int    `json:"c,omitempty"`
 }
 
 const (
-	artworkPositiveTTL = 14 * 24 * time.Hour
+	// Proven-identity images are effectively permanent; provisional name-resolved
+	// images get a short TTL so they re-check soon and can upgrade to an identity
+	// image once the durable identity store learns the entity.
+	artworkPositiveTTL    = 14 * 24 * time.Hour
+	artworkProvisionalTTL = 48 * time.Hour
 
 	// Negative (no-artwork) TTLs are per-kind: a missing image is cached so the
 	// 8-provider chain isn't re-run every search, but the wait before newly-added
@@ -73,23 +82,51 @@ func (c *RedisArtworkCache) Get(ctx context.Context, kind domain.ResultKind, tit
 	return entry.URL, entry.Source, true, nil
 }
 
-func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid, url, source string) error {
+func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid, url, source string, confidence ports.ArtworkConfidence) error {
 	if c.client == nil {
 		return nil
 	}
 
-	payload, err := json.Marshal(artworkEntry{URL: url, Source: source})
+	key := artworkCacheKey(kind, title, subtitle, mbid)
+
+	// Overwrite guard: never let a weaker result replace a real, higher-confidence
+	// image — a name guess (or a later failure) must not clobber a proven-identity
+	// photo. Equal or higher confidence refreshes normally.
+	if existing, ok := c.read(ctx, key); ok && existing.URL != "" && int(confidence) < existing.Confidence {
+		return nil
+	}
+
+	payload, err := json.Marshal(artworkEntry{URL: url, Source: source, Confidence: int(confidence)})
 	if err != nil {
 		return err
 	}
 
-	key := artworkCacheKey(kind, title, subtitle, mbid)
-	ttl := artworkPositiveTTL
-	if url == "" {
-		ttl = negativeTTL(kind)
-	}
+	return c.client.Set(ctx, key, payload, artworkTTL(kind, url, confidence)).Err()
+}
 
-	return c.client.Set(ctx, key, payload, ttl).Err()
+// read fetches and decodes a cached entry, or ok=false on miss / corrupt value.
+func (c *RedisArtworkCache) read(ctx context.Context, key string) (artworkEntry, bool) {
+	val, err := c.client.Get(ctx, key).Result()
+	if err != nil {
+		return artworkEntry{}, false
+	}
+	var entry artworkEntry
+	if json.Unmarshal([]byte(val), &entry) != nil {
+		return artworkEntry{}, false
+	}
+	return entry, true
+}
+
+// artworkTTL picks the TTL: negative (no image) by kind, identity images long,
+// name-resolved images provisional so they can upgrade to identity later.
+func artworkTTL(kind domain.ResultKind, url string, confidence ports.ArtworkConfidence) time.Duration {
+	if url == "" {
+		return negativeTTL(kind)
+	}
+	if confidence >= ports.ArtworkConfidenceIdentity {
+		return artworkPositiveTTL
+	}
+	return artworkProvisionalTTL
 }
 
 func artworkCacheKey(kind domain.ResultKind, title, subtitle, mbid string) string {

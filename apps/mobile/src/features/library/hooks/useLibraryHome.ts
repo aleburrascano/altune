@@ -5,7 +5,6 @@ import { getTracks } from '@shared/api-client/tracks';
 import { useLibraryGrouping } from './useLibraryGrouping';
 
 const ALL_TRACKS_LIMIT = 2000;
-const RECENT_COUNT = 5;
 const PENDING_POLL_MS = 5000;
 
 export function useLibraryHome() {
@@ -21,12 +20,10 @@ export function useLibraryHome() {
   });
 
   const allTracks = data?.items ?? [];
-  const recentTracks = allTracks.slice(0, RECENT_COUNT);
   const { albums, artists } = useLibraryGrouping(allTracks);
 
   return {
     allTracks,
-    recentTracks,
     albums,
     artists,
     total: data?.total ?? 0,

@@ -11,6 +11,8 @@ interface UseLibrarySearchReturn {
   onSubmit: () => void;
   onClear: () => void;
   filter: (tracks: readonly TrackResponse[]) => readonly TrackResponse[];
+  /** Predicate over arbitrary text (album/artist/playlist names). True when the query is empty. */
+  matches: (text: string) => boolean;
   hasQuery: boolean;
 }
 
@@ -62,12 +64,18 @@ export function useLibrarySearch(): UseLibrarySearchReturn {
       );
   }, [queryLower]);
 
+  const matches = useMemo(() => {
+    if (!queryLower) return () => true;
+    return (text: string) => text.toLowerCase().includes(queryLower);
+  }, [queryLower]);
+
   return {
     inputValue,
     onChangeText,
     onSubmit,
     onClear,
     filter: filterFn,
+    matches,
     hasQuery: committedQuery.length > 0,
   };
 }
