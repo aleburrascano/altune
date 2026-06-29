@@ -70,7 +70,7 @@ type options struct {
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -146,8 +146,10 @@ func run(opts options) error {
 		return runArtworkEval(ctx, cfg, pool, redisClient, opts)
 	case "artist-intent":
 		return runArtistIntent(ctx, cfg, pool, redisClient, opts)
+	case "corpus-build":
+		return runCorpusBuild(ctx, pool, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent)", opts.mode)
+		return fmt.Errorf("unknown mode %q (want eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build)", opts.mode)
 	}
 }
 
@@ -607,6 +609,53 @@ func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool
 		return report, nil
 	}
 	return runHarness("artist-intent", once, human, opts)
+}
+
+// ---- corpus-build mode --------------------------------------------------
+
+// runCorpusBuild materializes the self-growing behavioral eval corpus on demand
+// (the same thing the API's nightly job does, runnable now for validation). It
+// mines search→engagement labels from discovery_events — completed/library_add ⇒
+// +1, wrong_album ⇒ −1 — over the -since-days window, prints a summary + samples,
+// and writes the corpus to -json when given. Report-only; never gates.
+func runCorpusBuild(ctx context.Context, pool *pgxpool.Pool, opts options) error {
+	eventStore := discoveryPersistence.NewPgxEventStore(pool)
+	builder := discoveryEval.NewCorpusBuilder(eventStore)
+
+	since := time.Now().UTC().AddDate(0, 0, -opts.sinceDays)
+	corpus, err := builder.Build(ctx, since, since.Format("2006-01-02"))
+	if err != nil {
+		return fmt.Errorf("build behavioral corpus: %w", err)
+	}
+
+	pos, neg := corpus.Positives(), corpus.Negatives()
+	fmt.Printf("# Discovery behavioral corpus — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	fmt.Printf("- Window: last %d days (since %s)\n", opts.sinceDays, since.Format("2006-01-02"))
+	fmt.Printf("- Entries: %d (%d positive, %d negative)\n", len(corpus.Entries), len(pos), len(neg))
+	if len(corpus.Entries) == 0 {
+		fmt.Printf("\n_Empty — no completed / library_add / wrong_album events in the window yet._\n")
+		fmt.Printf("_The corpus grows as users engage; re-run after more usage (or widen -since-days)._\n")
+	} else {
+		fmt.Printf("\n## Sample labels\n\n")
+		for i, e := range corpus.Entries {
+			if i >= 12 {
+				break
+			}
+			sign := "+"
+			if e.Polarity < 0 {
+				sign = "−"
+			}
+			fmt.Printf("  %s %-24q → [%s] %q — %s\n", sign, e.Query, "", e.Title, e.Subtitle)
+		}
+	}
+
+	if opts.jsonPath != "" {
+		if err := discoveryEval.NewCorpusBuilder(eventStore).Materialize(ctx, since, since.Format("2006-01-02"), opts.jsonPath); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "wrote behavioral corpus to %s\n", opts.jsonPath)
+	}
+	return nil
 }
 
 // ---- signal-a mode ------------------------------------------------------
