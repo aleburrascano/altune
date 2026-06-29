@@ -6,6 +6,7 @@ import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
+import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import { canPlay } from '@shared/playback/canPlay';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { spacing } from '@shared/ui/theme/tokens';
@@ -96,6 +97,12 @@ export function TrackDetailBody({
         artist: result.subtitle ?? '',
         artworkUrl: result.image_url,
         durationSeconds: te.durationSeconds ?? undefined,
+        // Provenance: stamp the originating search_id (from the detail handoff)
+        // and the result_signature so the play/completed events join back to the
+        // search that produced them — without this the satisfaction signal and the
+        // behavioral corpus get a play with no search context (the empty-corpus bug).
+        searchId: getDetailHandoffSearchId() ?? undefined,
+        resultSignature: result.result_signature ?? undefined,
       });
     }
   };
