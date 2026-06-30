@@ -1,8 +1,13 @@
 import { QueryClient } from '@tanstack/react-query';
 
+import { useAcquisitionStageStore } from '@shared/acquisition/stageStore';
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
 
 import { applyServerEvent } from '../applyServerEvent';
+
+beforeEach(() => {
+  useAcquisitionStageStore.setState({ stages: {} });
+});
 
 function makeTrack(overrides: Partial<TrackResponse>): TrackResponse {
   return {
@@ -36,7 +41,7 @@ function seedLibraryHome(qc: QueryClient): void {
 }
 
 describe('applyServerEvent', () => {
-  it('patches the acquisition stage on a progress event without invalidating', () => {
+  it('records the stage in the ephemeral store on a progress event, without invalidating', () => {
     const qc = new QueryClient();
     seedLibraryHome(qc);
     const spy = jest.spyOn(qc, 'invalidateQueries');
@@ -47,14 +52,14 @@ describe('applyServerEvent', () => {
       data: { track_id: 'track-1', stage: 'download' },
     });
 
-    const data = qc.getQueryData<ListTracksResponse>(['library-home']);
-    expect(data?.items[0]?.acquisition_stage).toBe('download');
+    expect(useAcquisitionStageStore.getState().stages['track-1']).toBe('download');
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('patches a completed acquisition to ready with audio_ref', () => {
+  it('patches a completed acquisition to ready and clears its stage', () => {
     const qc = new QueryClient();
     seedLibraryHome(qc);
+    useAcquisitionStageStore.setState({ stages: { 'track-1': 'download' } });
 
     applyServerEvent(qc, {
       id: '1',
@@ -64,6 +69,7 @@ describe('applyServerEvent', () => {
 
     const data = qc.getQueryData<ListTracksResponse>(['library-home']);
     expect(data?.items[0]).toMatchObject({ acquisition_status: 'ready', audio_ref: 'ref-1' });
+    expect(useAcquisitionStageStore.getState().stages['track-1']).toBeUndefined();
   });
 
   it('patches a failed acquisition to failed with reason and clears audio_ref', () => {
