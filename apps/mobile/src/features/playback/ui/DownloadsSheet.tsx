@@ -94,6 +94,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   list: { flexGrow: 0 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
-  rowBody: { flex: 1, gap: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  rowBody: { flex: 1, gap: 3 },
 });

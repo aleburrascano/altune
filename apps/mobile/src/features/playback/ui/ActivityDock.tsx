@@ -21,7 +21,9 @@ export function ActivityDock(): ReactElement {
 
   return (
     <View>
-      <DownloadsBar items={downloads} onPress={() => setSheetOpen(true)} />
+      {downloads.length > 0 ? (
+        <DownloadsBar items={downloads} onPress={() => setSheetOpen(true)} />
+      ) : null}
       <MiniPlayer />
       <DownloadsSheet
         visible={sheetOpen && downloads.length > 0}
