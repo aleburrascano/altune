@@ -49,6 +49,12 @@ describe('LibraryRow', () => {
     expect(queryByTestId('library-row-pending-t1')).toBeNull();
   });
 
+  it('shows the live phase caption when an acquisition stage is present', () => {
+    const track = { ..._track('pending'), acquisition_stage: 'download' };
+    const { getByText } = render(<LibraryRow track={track} onPress={noop} onMore={noop} />);
+    expect(getByText('Downloading…')).toBeTruthy();
+  });
+
   it('shows error text when acquisition_status is failed', () => {
     const { getByTestId } = render(
       <LibraryRow track={_track('failed', 'no_match_found')} onPress={noop} onMore={noop} />,
