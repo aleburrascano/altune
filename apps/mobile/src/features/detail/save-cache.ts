@@ -79,3 +79,49 @@ export function insertOptimisticTrack(
   };
   return { ...data, pages: [updatedFirst, ...data.pages.slice(1)] };
 }
+
+/**
+ * Upsert the optimistic placeholder into the `['library-home']` snapshot too,
+ * creating the snapshot if it doesn't exist yet. Readers (the detail
+ * save-control via findTrackInLibraryCache, and the Activity Dock) consult
+ * library-home first, so without this a save from Detail shows no feedback once
+ * Library has been opened. Idempotent on the placeholder id.
+ */
+export function insertOptimisticTrackHome(
+  data: ListTracksResponse | undefined,
+  track: TrackResponse,
+): ListTracksResponse {
+  if (data === undefined) {
+    return { items: [track], total: 1, limit: PAGE_SIZE, offset: 0, has_more: false };
+  }
+  if (data.items.some((t) => t.id === track.id)) return data;
+  return { ...data, items: [track, ...data.items], total: data.total + 1 };
+}
+
+/**
+ * Swap the optimistic placeholder for the real server row once the POST returns,
+ * so subsequent acquisition SSE events (which carry the real track id) match it.
+ */
+export function replaceOptimisticTrackInfinite(
+  data: InfiniteData<ListTracksResponse> | undefined,
+  optimisticId: string,
+  real: TrackResponse,
+): InfiniteData<ListTracksResponse> | undefined {
+  if (data === undefined) return data;
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      items: page.items.map((t) => (t.id === optimisticId ? real : t)),
+    })),
+  };
+}
+
+export function replaceOptimisticTrackHome(
+  data: ListTracksResponse | undefined,
+  optimisticId: string,
+  real: TrackResponse,
+): ListTracksResponse | undefined {
+  if (data === undefined) return data;
+  return { ...data, items: data.items.map((t) => (t.id === optimisticId ? real : t)) };
+}
