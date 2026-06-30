@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { MoreVertical } from 'lucide-react-native';
 
 import { stageLabel } from '@shared/acquisition/stagePhase';
+import { useTrackStage } from '@shared/acquisition/stageStore';
 import { formatDuration } from '@shared/lib/format';
 import { Artwork, Row, Text, spacing, useTheme } from '@shared/ui';
 
@@ -22,6 +23,7 @@ type LibraryRowProps = {
 
 export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, isPlaying }: LibraryRowProps): ReactElement {
   const theme = useTheme();
+  const stage = useTrackStage(track.id);
   const isReady = track.acquisition_status === 'ready';
   const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
   const retryLabel = retrying ? ', retrying' : onRetry != null ? ', retry available' : '';
@@ -92,7 +94,7 @@ export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, 
             tone="tertiary"
             style={styles.pending}
           >
-            {track.acquisition_stage != null ? stageLabel(track.acquisition_stage) : 'Pending'}
+            {stage != null ? stageLabel(stage) : 'Pending'}
           </Text>
         ) : null}
         {track.acquisition_status === 'failed' ? (

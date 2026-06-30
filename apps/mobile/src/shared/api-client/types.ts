@@ -25,10 +25,6 @@ export type TrackResponse = {
   album_artist: string | null;
   isrc: string | null;
   audio_ref: string | null;
-  // Client-populated from `track_acquisition_progress` SSE events (not sent by
-  // the list endpoints). The current pipeline stage while acquisition_status is
-  // 'pending': search|select|download|tag|store|update_track.
-  acquisition_stage?: string;
 };
 
 export type CreateTrackRequest = {

@@ -13,6 +13,8 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
+import { clearTrackStage, setTrackStage } from '@shared/acquisition/stageStore';
+
 import { patchTrackInCaches } from './trackCachePatch';
 import type { ServerEvent } from './sse-client';
 
@@ -38,8 +40,11 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
   if (event.type === 'track_acquisition_progress') {
     const trackId = asString(event.data.track_id);
     const stage = asString(event.data.stage);
+    // Ephemeral UI state in the stage store, NOT the query cache — a library
+    // refetch must not be able to wipe it (that caused the pending→download→
+    // pending flicker). No invalidation: progress events fire frequently.
     if (trackId && stage) {
-      patchTrackInCaches(queryClient, trackId, { acquisition_stage: stage });
+      setTrackStage(trackId, stage);
     }
     return;
   }
@@ -51,6 +56,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
         acquisition_status: 'ready',
         audio_ref: asString(event.data.audio_ref),
       });
+      clearTrackStage(trackId);
     }
     invalidateLibrary(queryClient);
     return;
@@ -64,6 +70,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
         failure_reason: asString(event.data.reason),
         audio_ref: null,
       });
+      clearTrackStage(trackId);
     }
     invalidateLibrary(queryClient);
     return;
