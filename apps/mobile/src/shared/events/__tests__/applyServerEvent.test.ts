@@ -36,6 +36,22 @@ function seedLibraryHome(qc: QueryClient): void {
 }
 
 describe('applyServerEvent', () => {
+  it('patches the acquisition stage on a progress event without invalidating', () => {
+    const qc = new QueryClient();
+    seedLibraryHome(qc);
+    const spy = jest.spyOn(qc, 'invalidateQueries');
+
+    applyServerEvent(qc, {
+      id: '0',
+      type: 'track_acquisition_progress',
+      data: { track_id: 'track-1', stage: 'download' },
+    });
+
+    const data = qc.getQueryData<ListTracksResponse>(['library-home']);
+    expect(data?.items[0]?.acquisition_stage).toBe('download');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('patches a completed acquisition to ready with audio_ref', () => {
     const qc = new QueryClient();
     seedLibraryHome(qc);

@@ -1,4 +1,4 @@
-/**
+  /**
  * applyServerEvent — pure router from a server event to a cache effect.
  *
  * Acquisition events patch the track by id across all caches (cache-as-truth,
@@ -35,6 +35,15 @@ function invalidateLibrary(queryClient: QueryClient): void {
 }
 
 export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): void {
+  if (event.type === 'track_acquisition_progress') {
+    const trackId = asString(event.data.track_id);
+    const stage = asString(event.data.stage);
+    if (trackId && stage) {
+      patchTrackInCaches(queryClient, trackId, { acquisition_stage: stage });
+    }
+    return;
+  }
+
   if (event.type === 'track_acquisition_completed') {
     const trackId = asString(event.data.track_id);
     if (trackId) {
