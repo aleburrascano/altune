@@ -15,19 +15,9 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { apiBase } from '../api-client';
 import { supabase } from '../auth/supabaseClient';
+import { applyServerEvent } from './applyServerEvent';
 import { SSEClient } from './sse-client';
 import type { ServerEvent } from './sse-client';
-
-const EVENT_INVALIDATION_MAP: Record<string, string[][]> = {
-  track_added_to_library: [['library-home'], ['library']],
-  track_acquisition_completed: [['library-home'], ['library']],
-  track_acquisition_failed: [['library-home'], ['library']],
-  track_deleted: [['library-home'], ['library'], ['playlists']],
-  playlist_created: [['playlists']],
-  playlist_deleted: [['playlists'], ['playlist']],
-  track_added_to_playlist: [['playlist'], ['playlists']],
-  track_removed_from_playlist: [['playlist'], ['playlists']],
-};
 
 async function getAccessToken(): Promise<string | null> {
   try {
@@ -46,11 +36,7 @@ export function useServerEvents(): void {
     const url = `${apiBase}/v1/events`;
 
     const handleEvent = (event: ServerEvent): void => {
-      const keys = EVENT_INVALIDATION_MAP[event.type];
-      if (!keys) return;
-      for (const queryKey of keys) {
-        void queryClient.invalidateQueries({ queryKey });
-      }
+      applyServerEvent(queryClient, event);
     };
 
     const handleError = (): void => {

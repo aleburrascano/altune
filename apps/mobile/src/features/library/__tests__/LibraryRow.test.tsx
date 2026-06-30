@@ -9,6 +9,7 @@
 import { render } from '@testing-library/react-native';
 
 import { LibraryRow } from '../ui/LibraryRow';
+import { useAcquisitionStageStore } from '@shared/acquisition/stageStore';
 import type { AcquisitionStatus, TrackResponse } from '../../../shared/api-client/types';
 
 jest.mock('expo-image', () => ({ Image: () => null }));
@@ -47,6 +48,13 @@ describe('LibraryRow', () => {
   it('omits the pending marker for any other status', () => {
     const { queryByTestId } = render(<LibraryRow track={_track('ready')} onPress={noop} onMore={noop} />);
     expect(queryByTestId('library-row-pending-t1')).toBeNull();
+  });
+
+  it('shows the live phase caption when an acquisition stage is present', () => {
+    useAcquisitionStageStore.setState({ stages: { t1: 'download' } });
+    const { getByText } = render(<LibraryRow track={_track('pending')} onPress={noop} onMore={noop} />);
+    expect(getByText('Downloading…')).toBeTruthy();
+    useAcquisitionStageStore.setState({ stages: {} });
   });
 
   it('shows error text when acquisition_status is failed', () => {

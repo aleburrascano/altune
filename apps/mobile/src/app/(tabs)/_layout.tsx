@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 
-import { MiniPlayer } from '../../features/playback/ui/MiniPlayer';
+import { ActivityDock } from '../../features/playback/ui/ActivityDock';
 import { TabBar } from '../../shared/ui/navigation/TabBar';
 
 // AIDEV-NOTE: tabbed app shell (Discover + Library) with the custom docked
@@ -14,7 +14,7 @@ export default function TabsLayout() {
     <View style={{ flex: 1 }}>
       <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => (
         <>
-          <MiniPlayer />
+          <ActivityDock />
           <TabBar {...props} />
         </>
       )}>
