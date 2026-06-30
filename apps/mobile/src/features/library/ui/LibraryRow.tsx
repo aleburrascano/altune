@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { MoreVertical } from 'lucide-react-native';
 
+import { stageLabel } from '@shared/acquisition/stagePhase';
 import { formatDuration } from '@shared/lib/format';
 import { Artwork, Row, Text, spacing, useTheme } from '@shared/ui';
 
@@ -91,7 +92,7 @@ export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, 
             tone="tertiary"
             style={styles.pending}
           >
-            Pending
+            {track.acquisition_stage != null ? stageLabel(track.acquisition_stage) : 'Pending'}
           </Text>
         ) : null}
         {track.acquisition_status === 'failed' ? (
