@@ -135,7 +135,7 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 		}
 
 		s.markRunning(key)
-		jobCtx := withJobReporter(s.baseCtx, schedulerJobReporter{s: s, trackID: key})
+		jobCtx := withJobReporter(s.baseCtx, schedulerJobReporter{s: s, trackID: key, userId: userId})
 		if err := s.svc.Execute(jobCtx, userId, trackId, sourceURL); err != nil {
 			s.failed.Add(1)
 			s.recordFailure(key, err.Error())
@@ -185,6 +185,7 @@ func (s *BackgroundAcquisitionScheduler) updateJob(trackID string, fn func(*JobR
 type schedulerJobReporter struct {
 	s       *BackgroundAcquisitionScheduler
 	trackID string
+	userId  shared.UserId
 }
 
 func (r schedulerJobReporter) meta(title, artist, album string) {
@@ -192,6 +193,15 @@ func (r schedulerJobReporter) meta(title, artist, album string) {
 }
 func (r schedulerJobReporter) stage(name string) {
 	r.s.updateJob(r.trackID, func(j *JobRecord) { j.Stage = name })
+	// Push the stage transition to the user's event stream so the client can
+	// show "Finding source… / Downloading… / Finishing up…" live. Guarded for
+	// the eval/test paths that build the service without an event publisher.
+	if r.s.svc != nil && r.s.svc.events != nil {
+		r.s.svc.events.Publish(r.userId, "track_acquisition_progress", map[string]any{
+			"track_id": r.trackID,
+			"stage":    name,
+		})
+	}
 }
 func (r schedulerJobReporter) source(url string) {
 	r.s.updateJob(r.trackID, func(j *JobRecord) {
