@@ -64,7 +64,14 @@ describe('patchTrackInCaches', () => {
 
   it('patches the track in every cached playlist detail', () => {
     const qc = new QueryClient();
-    const base = { id: 'pl-1', name: 'Faves', created_at: '', updated_at: '' };
+    const base = {
+      id: 'pl-1',
+      name: 'Faves',
+      track_count: 1,
+      preview_artwork_urls: [],
+      created_at: '',
+      updated_at: '',
+    };
     qc.setQueryData<PlaylistDetailResponse>(['playlist', 'pl-1'], {
       ...base,
       tracks: [makeTrack({ id: 'track-1' })],

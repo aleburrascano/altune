@@ -2,9 +2,13 @@
  * applyServerEvent — pure router from a server event to a cache effect.
  *
  * Acquisition events patch the track by id across all caches (cache-as-truth,
- * so every screen is coherent at once). Membership/list events invalidate the
- * affected lists. Unknown types are ignored. Extracted from useServerEvents so
- * the routing is unit-testable without the SSE transport or AppState.
+ * so every screen — incl. the playlist that was stuck on 'pending' — is
+ * coherent at once), AND invalidate the library lists. The invalidation is kept
+ * deliberately: it re-syncs the detail save-control (which reads the library
+ * cache imperatively) and acts as a reconciliation backstop. Membership/list
+ * events invalidate the affected lists. Unknown types are ignored. Extracted
+ * from useServerEvents so the routing is unit-testable without the SSE
+ * transport or AppState.
  */
 
 import type { QueryClient } from '@tanstack/react-query';
@@ -25,6 +29,11 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+function invalidateLibrary(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: ['library-home'] });
+  void queryClient.invalidateQueries({ queryKey: ['library'] });
+}
+
 export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): void {
   if (event.type === 'track_acquisition_completed') {
     const trackId = asString(event.data.track_id);
@@ -34,6 +43,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
         audio_ref: asString(event.data.audio_ref),
       });
     }
+    invalidateLibrary(queryClient);
     return;
   }
 
@@ -46,6 +56,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
         audio_ref: null,
       });
     }
+    invalidateLibrary(queryClient);
     return;
   }
 
