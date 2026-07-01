@@ -53,7 +53,7 @@ func buildAudioRef(track TrackRef) string {
 	album = sanitizePathComponent(album)
 	title := sanitizePathComponent(track.Title)
 
-	return strings.Join([]string{track.UserID, artist, album, title + ".mp3"}, "/")
+	return strings.Join([]string{track.UserID, artist, album, title + ".m4a"}, "/")
 }
 
 func sanitizePathComponent(s string) string {
