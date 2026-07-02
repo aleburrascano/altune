@@ -14,7 +14,7 @@ interface QueuePlaybackControls {
 
 export function useQueuePlayback(): QueuePlaybackControls {
   const loadQueue = useQueueStore((s) => s.loadQueue);
-  const { startQueue, skipNext, skipPrevious } = usePlayback();
+  const { startQueue, skipNext, skipPrevious, positionMs } = usePlayback();
 
   const playFromList = useCallback(
     (tracks: readonly PlaybackTrack[], startIndex: number, source: QueueSource | null) => {
@@ -44,11 +44,17 @@ export function useQueuePlayback(): QueuePlaybackControls {
     void skipPrevious();
   }, [skipPrevious]);
 
+  // Toggling shuffle reorders playOrder, so the native queue must be rebuilt to
+  // match — otherwise the store's index (which follows native by position) maps
+  // onto the new order and the UI desyncs from audio. The current track stays
+  // current (pinned at playOrder[0]); resume it at its live position so shuffle
+  // doesn't restart the song from 0.
   const toggleShuffle = useCallback(() => {
+    const resumeAtMs = positionMs;
     useQueueStore.getState().toggleShuffle();
     const s = useQueueStore.getState();
-    void startQueue(orderedQueueTracks(s), s.currentIndex);
-  }, [startQueue]);
+    void startQueue(orderedQueueTracks(s), s.currentIndex, { startPositionMs: resumeAtMs });
+  }, [startQueue, positionMs]);
 
   return { playFromList, playTrack, skipToNext, skipToPrevious, toggleShuffle };
 }
