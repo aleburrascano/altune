@@ -13,6 +13,8 @@ interface QueueState {
 
 interface QueueActions {
   loadQueue: (tracks: readonly PlaybackTrack[], startIndex: number, source: QueueSource | null) => void;
+  enqueue: (track: PlaybackTrack) => void;
+  playNext: (track: PlaybackTrack) => void;
   skipToNext: () => PlaybackTrack | null;
   skipToPrevious: () => PlaybackTrack | null;
   skipToIndex: (index: number) => PlaybackTrack | null;
@@ -77,6 +79,28 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   loadQueue: (tracks, startIndex, source) => {
     const order = identityOrder(tracks.length);
     set({ tracks, playOrder: order, currentIndex: startIndex, shuffled: false, source });
+  },
+
+  // AIDEV-WARNING: enqueue/playNext mutate tracks + playOrder, so any caller
+  // MUST also add to the native queue in lockstep (TrackPlayer.add). The new
+  // track's index is tracks.length (its slot in the appended `tracks`); native
+  // queue position == play-order position, so append maps to add-at-end and
+  // "play next" maps to add-at(currentIndex+1). See useQueuePlayback.
+  enqueue: (track) => {
+    const { tracks, playOrder } = get();
+    set({ tracks: [...tracks, track], playOrder: [...playOrder, tracks.length] });
+  },
+
+  playNext: (track) => {
+    const { tracks, playOrder, currentIndex } = get();
+    const newTrackIndex = tracks.length;
+    const insertAt = currentIndex + 1;
+    const newOrder = [
+      ...playOrder.slice(0, insertAt),
+      newTrackIndex,
+      ...playOrder.slice(insertAt),
+    ];
+    set({ tracks: [...tracks, track], playOrder: newOrder });
   },
 
   skipToNext: () => {

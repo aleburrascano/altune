@@ -28,6 +28,8 @@ export function ExpoGoPlaybackProvider({ children }: { children: ReactNode }) {
       // skips advance the store to keep screens testable without a dev build.
       startQueue: async () => {},
       reorderUpcoming: async () => {},
+      appendToQueue: async () => {},
+      insertNext: async () => {},
       skipToQueueIndex: async () => {},
       skipNext: async () => {
         useQueueStore.getState().skipToNext();

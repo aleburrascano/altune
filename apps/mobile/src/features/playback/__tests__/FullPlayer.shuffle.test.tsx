@@ -46,6 +46,8 @@ function _contextValue(overrides: Partial<PlaybackContextValue>): PlaybackContex
     play: jest.fn(),
     startQueue: jest.fn().mockResolvedValue(undefined),
     reorderUpcoming: jest.fn().mockResolvedValue(undefined),
+    appendToQueue: jest.fn().mockResolvedValue(undefined),
+    insertNext: jest.fn().mockResolvedValue(undefined),
     skipToQueueIndex: jest.fn().mockResolvedValue(undefined),
     skipNext: jest.fn().mockResolvedValue(undefined),
     skipPrevious: jest.fn().mockResolvedValue(undefined),

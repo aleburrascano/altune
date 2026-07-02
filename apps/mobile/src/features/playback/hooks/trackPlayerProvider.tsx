@@ -16,7 +16,13 @@ import type {
 } from '@shared/playback/types';
 
 import { ensurePlayerSetup } from '../initPlayer';
-import { loadNativeQueue, loadNativeTrack, reorderUpcomingNative } from '../loadNativeTrack';
+import {
+  appendNativeTrack,
+  insertNativeTrackNext,
+  loadNativeQueue,
+  loadNativeTrack,
+  reorderUpcomingNative,
+} from '../loadNativeTrack';
 import { useIsForeground } from './useIsForeground';
 import { usePlaybackSignals } from './usePlaybackSignals';
 import { useQueueResume } from './useQueueResume';
@@ -147,6 +153,25 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     [],
   );
 
+  // Add to Queue / Play Next. Best-effort, same as reorderUpcoming: the store's
+  // play order is already updated by useQueuePlayback, so a failed native add
+  // only means the audio queue lags the UI until the next queue rebuild.
+  const appendToQueue = useCallback<PlaybackContextValue['appendToQueue']>(async (track) => {
+    try {
+      await appendNativeTrack(track);
+    } catch {
+      // native queue not ready — ignore
+    }
+  }, []);
+
+  const insertNext = useCallback<PlaybackContextValue['insertNext']>(async (track, position) => {
+    try {
+      await insertNativeTrackNext(track, position);
+    } catch {
+      // native queue not ready — ignore
+    }
+  }, []);
+
   // Native transitions: the next track is already buffered, so these are
   // instant and gapless. The store's currentIndex follows via the
   // PlaybackActiveTrackChanged listener in the playback service.
@@ -217,6 +242,8 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     play,
     startQueue,
     reorderUpcoming,
+    appendToQueue,
+    insertNext,
     skipToQueueIndex,
     skipNext,
     skipPrevious,

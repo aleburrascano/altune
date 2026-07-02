@@ -205,6 +205,72 @@ describe('clearQueue', () => {
   });
 });
 
+describe('enqueue', () => {
+  it('appends a track to the end of the play order', () => {
+    useQueueStore.getState().loadQueue(tracks, 0, null);
+    const extra = makeTrack('z');
+    useQueueStore.getState().enqueue(extra);
+    const s = useQueueStore.getState();
+    expect(s.tracks).toHaveLength(6);
+    expect(s.playOrder).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(s.tracks[5]).toEqual(extra);
+    expect(s.currentIndex).toBe(0);
+  });
+
+  it('appends at the tail even when shuffled, without disturbing current/history', () => {
+    useQueueStore.getState().loadQueue(tracks, 2, null);
+    useQueueStore.getState().toggleShuffle();
+    const orderBefore = [...useQueueStore.getState().playOrder];
+    const extra = makeTrack('z');
+    useQueueStore.getState().enqueue(extra);
+    const s = useQueueStore.getState();
+    // the new track's index (5) lands last in the play sequence...
+    expect(s.playOrder[s.playOrder.length - 1]).toBe(5);
+    // ...and the existing order (current + history + upcoming) is untouched.
+    expect(s.playOrder.slice(0, orderBefore.length)).toEqual(orderBefore);
+    expect(s.currentIndex).toBe(2);
+    expect(s.currentTrack()).toEqual(tracks[2]);
+  });
+
+  it('starts a one-track order from an empty queue', () => {
+    const extra = makeTrack('z');
+    useQueueStore.getState().enqueue(extra);
+    const s = useQueueStore.getState();
+    expect(s.tracks).toEqual([extra]);
+    expect(s.playOrder).toEqual([0]);
+  });
+});
+
+describe('playNext', () => {
+  it('inserts a track right after the current one', () => {
+    useQueueStore.getState().loadQueue(tracks, 1, null);
+    const extra = makeTrack('z');
+    useQueueStore.getState().playNext(extra);
+    const s = useQueueStore.getState();
+    expect(s.tracks).toHaveLength(6);
+    // new track index is 5; it sits at play-order position currentIndex+1 = 2.
+    expect(s.playOrder).toEqual([0, 1, 5, 2, 3, 4]);
+    // current track and index are unchanged.
+    expect(s.currentIndex).toBe(1);
+    expect(s.currentTrack()).toEqual(tracks[1]);
+    // the very next track is now the inserted one.
+    const next = useQueueStore.getState().skipToNext();
+    expect(next).toEqual(extra);
+  });
+
+  it('inserts after current even when shuffled', () => {
+    useQueueStore.getState().loadQueue(tracks, 2, null);
+    useQueueStore.getState().toggleShuffle();
+    const insertAt = useQueueStore.getState().currentIndex + 1;
+    const extra = makeTrack('z');
+    useQueueStore.getState().playNext(extra);
+    const s = useQueueStore.getState();
+    expect(s.playOrder[insertAt]).toBe(5);
+    expect(s.currentIndex).toBe(2);
+    expect(s.currentTrack()).toEqual(tracks[2]);
+  });
+});
+
 describe('removeFromQueue', () => {
   it('removes a track and adjusts indices', () => {
     useQueueStore.getState().loadQueue(tracks, 0, null);
