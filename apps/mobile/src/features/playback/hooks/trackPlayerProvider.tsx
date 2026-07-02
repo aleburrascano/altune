@@ -16,7 +16,7 @@ import type {
 } from '@shared/playback/types';
 
 import { ensurePlayerSetup } from '../initPlayer';
-import { loadNativeQueue, loadNativeTrack } from '../loadNativeTrack';
+import { loadNativeQueue, loadNativeTrack, reorderUpcomingNative } from '../loadNativeTrack';
 import { useIsForeground } from './useIsForeground';
 import { usePlaybackSignals } from './usePlaybackSignals';
 import { useQueueResume } from './useQueueResume';
@@ -132,6 +132,21 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     [],
   );
 
+  // Shuffle reorders only the upcoming tracks; the active track keeps playing
+  // untouched. Best-effort: the store's play order is already updated, so a
+  // failed native reorder just means the upcoming order lags until the next
+  // queue rebuild.
+  const reorderUpcoming = useCallback<PlaybackContextValue['reorderUpcoming']>(
+    async (upcoming) => {
+      try {
+        await reorderUpcomingNative(upcoming);
+      } catch {
+        // native queue not ready — ignore
+      }
+    },
+    [],
+  );
+
   // Native transitions: the next track is already buffered, so these are
   // instant and gapless. The store's currentIndex follows via the
   // PlaybackActiveTrackChanged listener in the playback service.
@@ -201,6 +216,7 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     ...state,
     play,
     startQueue,
+    reorderUpcoming,
     skipToQueueIndex,
     skipNext,
     skipPrevious,

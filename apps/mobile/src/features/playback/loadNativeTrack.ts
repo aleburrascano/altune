@@ -70,3 +70,22 @@ export async function loadNativeQueue(
   if (startPositionMs > 0) await TrackPlayer.seekTo(startPositionMs / 1000);
   if (autoplay) await TrackPlayer.play();
 }
+
+// AIDEV-NOTE: Replace only the upcoming tracks (everything after the active
+// one) — removeUpcomingTracks + re-add. The currently-playing track is never
+// removed, re-added, or reindexed, so audio continues uninterrupted and no
+// PlaybackActiveTrackChanged fires. Because only positions after the active
+// index change, native index still mirrors the store's play order. Shuffle
+// toggles route through here so they're seamless. Auth headers are fetched once
+// and reused across library items, same as loadNativeQueue.
+export async function reorderUpcomingNative(
+  upcoming: readonly PlaybackTrack[],
+): Promise<void> {
+  await ensurePlayerSetup();
+  await TrackPlayer.removeUpcomingTracks();
+  if (upcoming.length === 0) return;
+
+  const needsAuth = upcoming.some((t) => t.source.kind === 'library');
+  const headers = needsAuth ? await audioRequestHeaders() : {};
+  await TrackPlayer.add(upcoming.map((t) => toNativeTrack(t, headers)));
+}

@@ -43,21 +43,20 @@ function identityOrder(length: number): number[] {
   return Array.from({ length }, (_, i) => i);
 }
 
-function fisherYatesShuffle(arr: number[], pinIndex: number): number[] {
-  const result = [...arr];
-  const pinPos = result.indexOf(pinIndex);
-  if (pinPos > 0) {
-    const pinVal = result[pinPos]!;
-    result[pinPos] = result[0]!;
-    result[0] = pinVal;
+// Shuffle only the tail after `keepThrough` (inclusive), leaving the head — the
+// already-played history and the current track — untouched. Keeping the current
+// track's position fixed is what lets the native queue reorder around the
+// active track without ever touching it (seamless, no re-buffer).
+function shuffleTail(order: readonly number[], keepThrough: number): number[] {
+  const head = order.slice(0, keepThrough + 1);
+  const tail = order.slice(keepThrough + 1);
+  for (let i = tail.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = tail[i]!;
+    tail[i] = tail[j]!;
+    tail[j] = tmp;
   }
-  for (let i = result.length - 1; i > 1; i--) {
-    const j = 1 + Math.floor(Math.random() * i);
-    const tmp = result[i]!;
-    result[i] = result[j]!;
-    result[j] = tmp;
-  }
-  return result;
+  return [...head, ...tail];
 }
 
 function trackAt(tracks: readonly PlaybackTrack[], playOrder: readonly number[], index: number): PlaybackTrack | null {
@@ -133,18 +132,21 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({ currentIndex: index });
   },
 
+  // Shuffle/unshuffle only the upcoming tracks; the current track and history
+  // keep their positions so currentIndex is stable and the native player never
+  // has to touch the playing track. Turning shuffle off restores the upcoming
+  // tracks to their natural (ascending) order rather than rebuilding the whole
+  // queue — history stays as played, which is what keeps the toggle seamless.
   toggleShuffle: () => {
     const { tracks, playOrder, currentIndex, shuffled } = get();
     if (tracks.length <= 1) return;
 
-    const currentTrackIndex = playOrder[currentIndex] ?? 0;
     if (shuffled) {
-      const order = identityOrder(tracks.length);
-      const newCurrent = order.indexOf(currentTrackIndex);
-      set({ playOrder: order, currentIndex: newCurrent >= 0 ? newCurrent : 0, shuffled: false });
+      const head = playOrder.slice(0, currentIndex + 1);
+      const tail = [...playOrder.slice(currentIndex + 1)].sort((a, b) => a - b);
+      set({ playOrder: [...head, ...tail], shuffled: false });
     } else {
-      const newOrder = fisherYatesShuffle(identityOrder(tracks.length), currentTrackIndex);
-      set({ playOrder: newOrder, currentIndex: 0, shuffled: true });
+      set({ playOrder: shuffleTail(playOrder, currentIndex), shuffled: true });
     }
   },
 

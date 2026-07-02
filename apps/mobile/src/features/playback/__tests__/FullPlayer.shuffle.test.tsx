@@ -4,12 +4,13 @@
  *
  * The store's currentIndex is kept in lockstep with the native player via
  * syncCurrentIndex, which assumes native queue order == store playOrder. So a
- * shuffle from the UI MUST rebuild the native queue (startQueue), not just
- * reshuffle the store — otherwise the next native track-changed event maps its
- * index onto the freshly-shuffled playOrder and resolves to the wrong track.
+ * shuffle from the UI MUST reorder the native queue to match, not just reshuffle
+ * the store — otherwise the next native track-changed event maps its index onto
+ * the freshly-shuffled playOrder and resolves to the wrong track.
  *
- * FullPlayer must therefore drive shuffle through useQueuePlayback (store
- * reshuffle + native rebuild), never the raw store toggleShuffle.
+ * FullPlayer must therefore drive shuffle through useQueuePlayback, which
+ * reshuffles the upcoming tracks in the store AND reorders them natively
+ * (reorderUpcoming), never the raw store toggleShuffle.
  */
 
 import { render, fireEvent } from '@testing-library/react-native';
@@ -44,6 +45,7 @@ function _contextValue(overrides: Partial<PlaybackContextValue>): PlaybackContex
     errorMessage: null,
     play: jest.fn(),
     startQueue: jest.fn().mockResolvedValue(undefined),
+    reorderUpcoming: jest.fn().mockResolvedValue(undefined),
     skipToQueueIndex: jest.fn().mockResolvedValue(undefined),
     skipNext: jest.fn().mockResolvedValue(undefined),
     skipPrevious: jest.fn().mockResolvedValue(undefined),
@@ -58,13 +60,14 @@ function _contextValue(overrides: Partial<PlaybackContextValue>): PlaybackContex
 }
 
 describe('FullPlayer shuffle', () => {
-  it('rebuilds the native queue when shuffle is toggled', () => {
+  it('reorders the native upcoming queue when shuffle is toggled', () => {
     const first = _track('a');
     const tracks = [first, _track('b'), _track('c'), _track('d')];
+    // Play from the top so the current track is index 0 and b/c/d are upcoming.
     useQueueStore.getState().loadQueue(tracks, 0, { kind: 'library' });
 
-    const startQueue = jest.fn().mockResolvedValue(undefined);
-    const value = _contextValue({ track: first, startQueue, positionMs: 42000 });
+    const reorderUpcoming = jest.fn().mockResolvedValue(undefined);
+    const value = _contextValue({ track: first, reorderUpcoming });
 
     const { getByLabelText } = render(
       <PlaybackContext.Provider value={value}>
@@ -76,11 +79,12 @@ describe('FullPlayer shuffle', () => {
 
     // The store must have shuffled...
     expect(useQueueStore.getState().shuffled).toBe(true);
-    // ...AND the native queue must have been rebuilt to match, or the UI will
-    // desync from audio on the next track-changed event.
-    expect(startQueue).toHaveBeenCalledTimes(1);
-    // ...resuming the current track at its live position (not restarting at 0).
-    const [, , options] = startQueue.mock.calls[0];
-    expect(options).toEqual({ startPositionMs: 42000 });
+    // ...AND the native upcoming tracks must be reordered to match, or the UI
+    // will desync from audio on the next track-changed event.
+    expect(reorderUpcoming).toHaveBeenCalledTimes(1);
+    // The current track is never handed to reorderUpcoming — only the tail, as
+    // the same set of upcoming tracks (b, c, d) in some order.
+    const [upcoming] = reorderUpcoming.mock.calls[0];
+    expect(upcoming.map((t: PlaybackTrack) => t.title).sort()).toEqual(['b', 'c', 'd']);
   });
 });

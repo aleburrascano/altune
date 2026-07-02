@@ -124,15 +124,18 @@ describe('skipToIndex', () => {
 });
 
 describe('toggleShuffle', () => {
-  it('shuffles play order with current track pinned at index 0', () => {
+  it('shuffles only the upcoming tracks, keeping current and history in place', () => {
     useQueueStore.getState().loadQueue(tracks, 2, null);
     useQueueStore.getState().toggleShuffle();
     const s = useQueueStore.getState();
     expect(s.shuffled).toBe(true);
-    expect(s.currentIndex).toBe(0);
-    expect(s.playOrder[0]).toBe(2);
-    expect(s.playOrder.length).toBe(5);
+    // current track and everything before it are untouched...
+    expect(s.currentIndex).toBe(2);
+    expect(s.playOrder.slice(0, 3)).toEqual([0, 1, 2]);
     expect(s.currentTrack()).toEqual(tracks[2]);
+    // ...only the upcoming tail is reordered (still the same set of tracks).
+    expect([...s.playOrder.slice(3)].sort()).toEqual([3, 4]);
+    expect(s.playOrder.length).toBe(5);
   });
 
   it('unshuffles and finds current track in identity order', () => {
