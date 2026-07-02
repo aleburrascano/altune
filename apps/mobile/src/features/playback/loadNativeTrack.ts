@@ -89,3 +89,26 @@ export async function reorderUpcomingNative(
   const headers = needsAuth ? await audioRequestHeaders() : {};
   await TrackPlayer.add(upcoming.map((t) => toNativeTrack(t, headers)));
 }
+
+// AIDEV-NOTE: Append one track to the end of the native queue (Add to Queue).
+// TrackPlayer.add with no insert index appends, which mirrors the store's
+// enqueue (new track lands last in play order). The currently-playing track is
+// untouched, so audio continues uninterrupted.
+export async function appendNativeTrack(track: PlaybackTrack): Promise<void> {
+  await ensurePlayerSetup();
+  const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
+  await TrackPlayer.add(toNativeTrack(track, headers));
+}
+
+// AIDEV-NOTE: Insert one track at `position` in the native queue (Play Next).
+// TrackPlayer.add(track, insertBeforeIndex) inserts before that index; passing
+// currentIndex+1 places it right after the active track. Native queue position
+// == store play-order position, so this stays in lockstep with playNext.
+export async function insertNativeTrackNext(
+  track: PlaybackTrack,
+  position: number,
+): Promise<void> {
+  await ensurePlayerSetup();
+  const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
+  await TrackPlayer.add(toNativeTrack(track, headers), position);
+}
