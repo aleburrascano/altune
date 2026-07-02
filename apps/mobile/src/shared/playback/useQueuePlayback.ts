@@ -14,7 +14,7 @@ interface QueuePlaybackControls {
 
 export function useQueuePlayback(): QueuePlaybackControls {
   const loadQueue = useQueueStore((s) => s.loadQueue);
-  const { startQueue, skipNext, skipPrevious, positionMs } = usePlayback();
+  const { startQueue, skipNext, skipPrevious, reorderUpcoming } = usePlayback();
 
   const playFromList = useCallback(
     (tracks: readonly PlaybackTrack[], startIndex: number, source: QueueSource | null) => {
@@ -44,17 +44,16 @@ export function useQueuePlayback(): QueuePlaybackControls {
     void skipPrevious();
   }, [skipPrevious]);
 
-  // Toggling shuffle reorders playOrder, so the native queue must be rebuilt to
-  // match — otherwise the store's index (which follows native by position) maps
-  // onto the new order and the UI desyncs from audio. The current track stays
-  // current (pinned at playOrder[0]); resume it at its live position so shuffle
-  // doesn't restart the song from 0.
+  // Shuffle only reorders the upcoming tracks (queueStore keeps the current
+  // track's position), so the native side just replaces the tracks after the
+  // current one — the playing track is never touched, so no re-buffer and no
+  // UI/audio desync. Native index still mirrors the store's play order.
   const toggleShuffle = useCallback(() => {
-    const resumeAtMs = positionMs;
     useQueueStore.getState().toggleShuffle();
     const s = useQueueStore.getState();
-    void startQueue(orderedQueueTracks(s), s.currentIndex, { startPositionMs: resumeAtMs });
-  }, [startQueue, positionMs]);
+    const upcoming = orderedQueueTracks(s).slice(s.currentIndex + 1);
+    void reorderUpcoming(upcoming);
+  }, [reorderUpcoming]);
 
   return { playFromList, playTrack, skipToNext, skipToPrevious, toggleShuffle };
 }
