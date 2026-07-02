@@ -64,7 +64,7 @@ describe('FullPlayer shuffle', () => {
     useQueueStore.getState().loadQueue(tracks, 0, { kind: 'library' });
 
     const startQueue = jest.fn().mockResolvedValue(undefined);
-    const value = _contextValue({ track: first, startQueue });
+    const value = _contextValue({ track: first, startQueue, positionMs: 42000 });
 
     const { getByLabelText } = render(
       <PlaybackContext.Provider value={value}>
@@ -79,5 +79,8 @@ describe('FullPlayer shuffle', () => {
     // ...AND the native queue must have been rebuilt to match, or the UI will
     // desync from audio on the next track-changed event.
     expect(startQueue).toHaveBeenCalledTimes(1);
+    // ...resuming the current track at its live position (not restarting at 0).
+    const [, , options] = startQueue.mock.calls[0];
+    expect(options).toEqual({ startPositionMs: 42000 });
   });
 });

@@ -156,6 +156,11 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({ repeatMode: mode });
   },
 
+  // AIDEV-WARNING: reorderQueue mutates playOrder, so any caller MUST also
+  // reorder the native queue (TrackPlayer.move) in lockstep. The store's
+  // currentIndex follows native by position (syncCurrentIndex); a store-only
+  // reorder desyncs the UI from audio — the same class of bug that store-only
+  // shuffle caused. Currently unused (drag-to-reorder isn't wired up yet).
   reorderQueue: (fromIndex, toIndex) => {
     const { playOrder, currentIndex } = get();
     if (fromIndex === toIndex) return;
