@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronDown, ListMusic, Pause, Play, Repeat, Repeat1, RotateCcw, Shuffle, SkipBack, SkipForward } from 'lucide-react-native';
 
+import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
@@ -15,8 +16,6 @@ import { Button } from '@shared/ui/primitives/Button';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
-
-const RESTART_THRESHOLD_MS = 3_000;
 
 /** The now-playing label + tone for the current playback status. */
 function getStatusDisplay(
