@@ -5,10 +5,12 @@ import { StyleSheet, View } from 'react-native';
 import type { TrackResponse } from '@shared/api-client/types';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
+import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, SearchBar, Skeleton, Text, spacing, useTheme } from '@shared/ui';
-import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
+import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
+import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useLibraryHome } from '../hooks/useLibraryHome';
@@ -59,8 +61,23 @@ export function LibraryScreen(): ReactElement {
 
   const [chip, setChip] = useState<LibraryChip>('playlists');
   const [sortByChip, setSortByChip] = useState<Record<LibraryChip, SortKey>>(DEFAULT_SORTS);
-  const [actionTrack, setActionTrack] = useState<TrackResponse | null>(null);
+  const [action, setAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
+
+  const trackMenuItems = (track: TrackResponse): ContextMenuItem[] => {
+    const ready = track.acquisition_status === 'ready';
+    return [
+      ...(ready
+        ? [
+            { label: 'Play Next', onPress: () => queue.playNext(toPlaybackTrack(track)) },
+            { label: 'Add to Queue', onPress: () => queue.addToQueue(toPlaybackTrack(track)) },
+          ]
+        : []),
+      { label: 'Add to Playlist', onPress: () => pl.setAddToPlaylistTrack(track) },
+      { label: 'View Details', onPress: () => navigateToTrack(track) },
+      { label: 'Remove from Library', tone: 'danger', onPress: () => deleteMutation.mutate(track.id) },
+    ];
+  };
 
   const sortKey = sortByChip[chip];
   const setSort = (key: SortKey): void => setSortByChip((prev) => ({ ...prev, [chip]: key }));
@@ -154,16 +171,11 @@ export function LibraryScreen(): ReactElement {
         trackTitle={pl.addToPlaylistTrack != null ? `${pl.addToPlaylistTrack.title} — ${pl.addToPlaylistTrack.artist}` : ''}
         onClose={() => pl.setAddToPlaylistTrack(null)}
       />
-      <ActionSheet
-        visible={actionTrack != null}
-        title={actionTrack?.title}
-        subtitle={actionTrack != null ? `${actionTrack.artist}${actionTrack.album != null ? ` · ${actionTrack.album}` : ''}` : undefined}
-        options={actionTrack != null ? [
-          { label: 'View Details', onPress: () => navigateToTrack(actionTrack) },
-          { label: 'Add to Playlist', onPress: () => pl.setAddToPlaylistTrack(actionTrack) },
-          { label: 'Remove from Library', tone: 'danger' as const, onPress: () => deleteMutation.mutate(actionTrack.id) },
-        ] : []}
-        onClose={() => setActionTrack(null)}
+      <ContextMenu
+        visible={action != null}
+        anchor={action?.anchor}
+        items={action != null ? trackMenuItems(action.track) : []}
+        onClose={() => setAction(null)}
       />
     </Screen>
   );
@@ -206,7 +218,7 @@ export function LibraryScreen(): ReactElement {
                 queue.playFromList(playable, startIndex, { kind: 'library' });
               }}
               onPress={navigateToTrack}
-              onMore={setActionTrack}
+              onMore={(track, anchor) => setAction({ track, anchor })}
               onRetry={(track) => retryMutation.mutate(track.id)}
               retryingTrackId={retryingTrackId}
               isPlaying={(id) => isCurrentlyPlaying(playback, { kind: 'library', trackId: id })}

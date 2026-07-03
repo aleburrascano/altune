@@ -14,12 +14,13 @@ import {
 } from '@shared/api-client/playlists';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
+import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
-import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
-import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
+import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
+import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { TrackResponse } from '@shared/api-client/types';
 
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
@@ -114,7 +115,21 @@ export function PlaylistDetailScreen(): ReactElement {
   const { navigateToTrack } = useLibraryNavigation(router);
   const playback = usePlayback();
   const queue = useQueuePlayback();
-  const [actionTrack, setActionTrack] = useState<TrackResponse | null>(null);
+  const [songAction, setSongAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
+
+  const songMenuItems = (track: TrackResponse): ContextMenuItem[] => {
+    const ready = track.acquisition_status === 'ready';
+    return [
+      ...(ready
+        ? [
+            { label: 'Play Next', onPress: () => queue.playNext(toPlaybackTrack(track)) },
+            { label: 'Add to Queue', onPress: () => queue.addToQueue(toPlaybackTrack(track)) },
+          ]
+        : []),
+      { label: 'View Details', onPress: () => navigateToTrack(track) },
+      { label: 'Remove from Playlist', tone: 'danger', onPress: () => removeMut.mutate(track.id) },
+    ];
+  };
 
   const handleDelete = () => {
     Alert.alert('Delete Playlist', 'This cannot be undone.', [
@@ -242,7 +257,7 @@ export function PlaylistDetailScreen(): ReactElement {
                 queue.playFromList(playable, startIndex, { kind: 'playlist', playlistId, name: pl.name });
               } } : {})}
               onPress={() => navigateToTrack(item)}
-              onMore={() => setActionTrack(item)}
+              onMore={(anchor) => setSongAction({ track: item, anchor })}
               {...(item.acquisition_status === 'failed' ? { onRetry: () => retryMut.mutate(item.id) } : {})}
               retrying={retryingTrackId === item.id}
               isPlaying={isCurrentlyPlaying(playback, { kind: 'library', trackId: item.id })}
@@ -256,15 +271,11 @@ export function PlaylistDetailScreen(): ReactElement {
           </View>
         }
       />
-      <ActionSheet
-        visible={actionTrack != null}
-        title={actionTrack?.title}
-        subtitle={actionTrack != null ? actionTrack.artist : undefined}
-        options={actionTrack != null ? [
-          { label: 'View Details', onPress: () => navigateToTrack(actionTrack) },
-          { label: 'Remove from Playlist', tone: 'danger', onPress: () => removeMut.mutate(actionTrack.id) },
-        ] : []}
-        onClose={() => setActionTrack(null)}
+      <ContextMenu
+        visible={songAction != null}
+        anchor={songAction?.anchor}
+        items={songAction != null ? songMenuItems(songAction.track) : []}
+        onClose={() => setSongAction(null)}
       />
     </Screen>
   );

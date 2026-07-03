@@ -224,17 +224,17 @@ func TestAcqStage_BuildAudioRef(t *testing.T) {
 		{
 			name:  "basic",
 			track: TrackRef{UserID: "user-1", Artist: "The Weeknd", Album: "After Hours", Title: "Blinding Lights"},
-			want:  "user-1/The Weeknd/After Hours/Blinding Lights.mp3",
+			want:  "user-1/The Weeknd/After Hours/Blinding Lights.m4a",
 		},
 		{
 			name:  "empty album uses unknown",
 			track: TrackRef{UserID: "user-1", Artist: "Drake", Album: "", Title: "God's Plan"},
-			want:  "user-1/Drake/Unknown Album/God's Plan.mp3",
+			want:  "user-1/Drake/Unknown Album/God's Plan.m4a",
 		},
 		{
 			name:  "special chars stripped",
 			track: TrackRef{UserID: "user-1", Artist: "AC/DC", Album: "Back in Black", Title: "Thunderstruck"},
-			want:  "user-1/ACDC/Back in Black/Thunderstruck.mp3",
+			want:  "user-1/ACDC/Back in Black/Thunderstruck.m4a",
 		},
 	}
 
