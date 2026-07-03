@@ -16,7 +16,14 @@ import type {
 } from '@shared/playback/types';
 
 import { ensurePlayerSetup } from '../initPlayer';
-import { loadNativeQueue, loadNativeTrack } from '../loadNativeTrack';
+import { seekPreservingPlayback } from '../seekControls';
+import {
+  appendNativeTrack,
+  insertNativeTrackNext,
+  loadNativeQueue,
+  loadNativeTrack,
+  reorderUpcomingNative,
+} from '../loadNativeTrack';
 import { useIsForeground } from './useIsForeground';
 import { usePlaybackSignals } from './usePlaybackSignals';
 import { useQueueResume } from './useQueueResume';
@@ -82,6 +89,11 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const isBuffering = tpState === State.Buffering || tpState === State.Loading;
   const isEnded = tpState === State.Ended;
 
+  // Latest committed playing state, read by seekTo to decide whether to
+  // re-assert play() after a seek (see seekPreservingPlayback).
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+
   const state: PlaybackState = useMemo(() => {
     if (!track) return INITIAL_STATE;
     if (errorMessage) return { status: 'error', track, positionMs: 0, durationMs: 0, errorMessage };
@@ -132,6 +144,40 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     [],
   );
 
+  // Shuffle reorders only the upcoming tracks; the active track keeps playing
+  // untouched. Best-effort: the store's play order is already updated, so a
+  // failed native reorder just means the upcoming order lags until the next
+  // queue rebuild.
+  const reorderUpcoming = useCallback<PlaybackContextValue['reorderUpcoming']>(
+    async (upcoming) => {
+      try {
+        await reorderUpcomingNative(upcoming);
+      } catch {
+        // native queue not ready — ignore
+      }
+    },
+    [],
+  );
+
+  // Add to Queue / Play Next. Best-effort, same as reorderUpcoming: the store's
+  // play order is already updated by useQueuePlayback, so a failed native add
+  // only means the audio queue lags the UI until the next queue rebuild.
+  const appendToQueue = useCallback<PlaybackContextValue['appendToQueue']>(async (track) => {
+    try {
+      await appendNativeTrack(track);
+    } catch {
+      // native queue not ready — ignore
+    }
+  }, []);
+
+  const insertNext = useCallback<PlaybackContextValue['insertNext']>(async (track, position) => {
+    try {
+      await insertNativeTrackNext(track, position);
+    } catch {
+      // native queue not ready — ignore
+    }
+  }, []);
+
   // Native transitions: the next track is already buffered, so these are
   // instant and gapless. The store's currentIndex follows via the
   // PlaybackActiveTrackChanged listener in the playback service.
@@ -158,7 +204,9 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   const pause = useCallback(() => { void TrackPlayer.pause(); }, []);
   const resume = useCallback(() => { void TrackPlayer.play(); }, []);
-  const seekTo = useCallback((ms: number) => { void TrackPlayer.seekTo(ms / 1000); }, []);
+  const seekTo = useCallback((ms: number) => {
+    void seekPreservingPlayback(ms / 1000, isPlayingRef.current);
+  }, []);
 
   const stop = useCallback(() => {
     void TrackPlayer.reset();
@@ -201,6 +249,9 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     ...state,
     play,
     startQueue,
+    reorderUpcoming,
+    appendToQueue,
+    insertNext,
     skipToQueueIndex,
     skipNext,
     skipPrevious,

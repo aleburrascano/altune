@@ -1,5 +1,5 @@
-import type { ReactElement } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { useRef, type ReactElement } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { MoreVertical } from 'lucide-react-native';
 
@@ -7,6 +7,7 @@ import { stageLabel } from '@shared/acquisition/stagePhase';
 import { useTrackStage } from '@shared/acquisition/stageStore';
 import { formatDuration } from '@shared/lib/format';
 import { Artwork, Row, Text, spacing, useTheme } from '@shared/ui';
+import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import type { TrackResponse } from '../../../shared/api-client/types';
 import { formatFailureReason } from './formatFailureReason';
@@ -15,7 +16,7 @@ type LibraryRowProps = {
   track: TrackResponse;
   onPlay?: () => void;
   onPress: () => void;
-  onMore: () => void;
+  onMore: (anchor: MenuAnchor) => void;
   onRetry?: (() => void) | undefined;
   retrying?: boolean;
   isPlaying?: boolean;
@@ -23,6 +24,19 @@ type LibraryRowProps = {
 
 export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, isPlaying }: LibraryRowProps): ReactElement {
   const theme = useTheme();
+  const moreRef = useRef<View>(null);
+  const { width: windowWidth } = useWindowDimensions();
+
+  // Measure the ⋮ button so the menu floats anchored to it (measureInWindow
+  // gives window coordinates; right offset = distance from the window's right
+  // edge). A null ref (not yet laid out) just skips opening.
+  const handleMore = () => {
+    const node = moreRef.current;
+    if (node == null) return;
+    node.measureInWindow((x, y, width, height) => {
+      onMore({ top: y, bottom: y + height, right: windowWidth - (x + width) });
+    });
+  };
   const stage = useTrackStage(track.id);
   const isReady = track.acquisition_status === 'ready';
   const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
@@ -68,8 +82,9 @@ export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, 
               </Text>
             ) : null}
             <Pressable
+              ref={moreRef}
               testID={`library-row-more-${track.id}`}
-              onPress={(e) => { e.stopPropagation?.(); onMore(); }}
+              onPress={(e) => { e.stopPropagation?.(); handleMore(); }}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel={`More options for ${track.title}`}

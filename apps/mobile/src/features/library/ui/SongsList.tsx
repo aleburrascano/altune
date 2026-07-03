@@ -3,6 +3,7 @@ import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 
 import type { TrackResponse } from '@shared/api-client/types';
 import { Text, spacing, useTheme } from '@shared/ui';
+import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { LibraryRow } from './LibraryRow';
 
@@ -11,7 +12,7 @@ type SongsListProps = {
   emptyLabel: string;
   onPlay: (track: TrackResponse) => void;
   onPress: (track: TrackResponse) => void;
-  onMore: (track: TrackResponse) => void;
+  onMore: (track: TrackResponse, anchor: MenuAnchor) => void;
   onRetry: (track: TrackResponse) => void;
   retryingTrackId: string | undefined;
   isPlaying: (trackId: string) => boolean;
@@ -52,7 +53,7 @@ export function SongsList({
           track={item}
           {...(item.acquisition_status === 'ready' ? { onPlay: () => onPlay(item) } : {})}
           onPress={() => onPress(item)}
-          onMore={() => onMore(item)}
+          onMore={(anchor) => onMore(item, anchor)}
           {...(item.acquisition_status === 'failed' ? { onRetry: () => onRetry(item) } : {})}
           retrying={retryingTrackId === item.id}
           isPlaying={isPlaying(item.id)}

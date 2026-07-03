@@ -1,6 +1,9 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
 
+import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
+
+const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
 
 // AIDEV-NOTE: Background playback service. With the native queue holding the
 // full play order, transitions, auto-advance, and repeat are all native — there
@@ -17,8 +20,17 @@ export async function playbackService() {
   TrackPlayer.addEventListener(Event.RemoteNext, () => {
     void TrackPlayer.skipToNext();
   });
-  TrackPlayer.addEventListener(Event.RemotePrevious, () => {
-    void TrackPlayer.skipToPrevious();
+  // Match the in-app previous button (FullPlayer.handlePrevious): past the
+  // threshold, restart the current track; only step back a track when already
+  // near the start. Read the position from the native player — the JS-side
+  // position is frozen while the app is backgrounded/locked.
+  TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
+    const { position } = await TrackPlayer.getProgress();
+    if (position > RESTART_THRESHOLD_SECONDS) {
+      await TrackPlayer.seekTo(0);
+    } else {
+      await TrackPlayer.skipToPrevious();
+    }
   });
   TrackPlayer.addEventListener(Event.RemoteSeek, (data) => {
     void TrackPlayer.seekTo(data.position);

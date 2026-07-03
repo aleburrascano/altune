@@ -275,8 +275,8 @@ func TestStoreStep_Execute(t *testing.T) {
 	if ac.AudioRef == "" {
 		t.Fatal("expected ac.AudioRef to be set, got empty string")
 	}
-	// Verify the audio ref follows the expected pattern: userID/artist/album/title.mp3
-	wantRef := "user-123/Artist Name/Album Name/Song Title.mp3"
+	// Verify the audio ref follows the expected pattern: userID/artist/album/title.m4a
+	wantRef := "user-123/Artist Name/Album Name/Song Title.m4a"
 	if ac.AudioRef != wantRef {
 		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, wantRef)
 	}
@@ -487,7 +487,7 @@ func TestBuildAudioRef(t *testing.T) {
 				Album:  "After Hours",
 				Title:  "Blinding Lights",
 			},
-			want: "uid/The Weeknd/After Hours/Blinding Lights.mp3",
+			want: "uid/The Weeknd/After Hours/Blinding Lights.m4a",
 		},
 		{
 			name: "empty album defaults to Unknown Album",
@@ -497,7 +497,7 @@ func TestBuildAudioRef(t *testing.T) {
 				Album:  "",
 				Title:  "Song",
 			},
-			want: "uid/Artist/Unknown Album/Song.mp3",
+			want: "uid/Artist/Unknown Album/Song.m4a",
 		},
 		{
 			name: "forbidden chars stripped",
@@ -507,7 +507,7 @@ func TestBuildAudioRef(t *testing.T) {
 				Album:  `The "Best" Album`,
 				Title:  "Song: Title?",
 			},
-			want: "uid/ACDC/The Best Album/Song Title.mp3",
+			want: "uid/ACDC/The Best Album/Song Title.m4a",
 		},
 	}
 

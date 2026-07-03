@@ -27,6 +27,9 @@ export function ExpoGoPlaybackProvider({ children }: { children: ReactNode }) {
       // Audio is inert in Expo Go, but the queue store still drives the UI, so
       // skips advance the store to keep screens testable without a dev build.
       startQueue: async () => {},
+      reorderUpcoming: async () => {},
+      appendToQueue: async () => {},
+      insertNext: async () => {},
       skipToQueueIndex: async () => {},
       skipNext: async () => {
         useQueueStore.getState().skipToNext();
