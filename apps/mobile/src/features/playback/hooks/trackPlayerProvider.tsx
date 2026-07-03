@@ -16,6 +16,7 @@ import type {
 } from '@shared/playback/types';
 
 import { ensurePlayerSetup } from '../initPlayer';
+import { seekPreservingPlayback } from '../seekControls';
 import {
   appendNativeTrack,
   insertNativeTrackNext,
@@ -87,6 +88,11 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const isPlaying = tpState === State.Playing;
   const isBuffering = tpState === State.Buffering || tpState === State.Loading;
   const isEnded = tpState === State.Ended;
+
+  // Latest committed playing state, read by seekTo to decide whether to
+  // re-assert play() after a seek (see seekPreservingPlayback).
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
 
   const state: PlaybackState = useMemo(() => {
     if (!track) return INITIAL_STATE;
@@ -198,7 +204,9 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   const pause = useCallback(() => { void TrackPlayer.pause(); }, []);
   const resume = useCallback(() => { void TrackPlayer.play(); }, []);
-  const seekTo = useCallback((ms: number) => { void TrackPlayer.seekTo(ms / 1000); }, []);
+  const seekTo = useCallback((ms: number) => {
+    void seekPreservingPlayback(ms / 1000, isPlayingRef.current);
+  }, []);
 
   const stop = useCallback(() => {
     void TrackPlayer.reset();
