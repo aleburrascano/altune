@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 
 import { Text, radius, spacing, useTheme } from '@shared/ui';
@@ -10,12 +10,11 @@ type ArtistsGridProps = {
   artists: ArtistGroup[];
   emptyLabel: string;
   onArtistPress: (artist: ArtistGroup) => void;
-  onRefresh: () => void;
 };
 
 const AVATAR_SIZE = 100;
 
-export function ArtistsGrid({ artists, emptyLabel, onArtistPress, onRefresh }: ArtistsGridProps): ReactElement {
+export function ArtistsGrid({ artists, emptyLabel, onArtistPress }: ArtistsGridProps): ReactElement {
   const theme = useTheme();
   return (
     <FlatList
@@ -26,9 +25,6 @@ export function ArtistsGrid({ artists, emptyLabel, onArtistPress, onRefresh }: A
       columnWrapperStyle={styles.gridRow}
       contentContainerStyle={artists.length === 0 ? styles.emptyList : styles.list}
       showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={theme.color.accent} colors={[theme.color.accent]} />
-      }
       ListEmptyComponent={
         <View style={styles.empty}>
           <Text variant="body" tone="secondary">

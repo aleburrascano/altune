@@ -81,10 +81,6 @@ export function LibraryScreen(): ReactElement {
 
   const sortKey = sortByChip[chip];
   const setSort = (key: SortKey): void => setSortByChip((prev) => ({ ...prev, [chip]: key }));
-  const refresh = (): void => {
-    state.refetch();
-    pl.invalidatePlaylists();
-  };
 
   const view = _viewForState({ isLoading: state.isLoading, error: state.error, items: state.allTracks });
 
@@ -198,7 +194,6 @@ export function LibraryScreen(): ReactElement {
               playlists={items}
               onPlaylistPress={(playlist) => router.push(`/library/playlist/${playlist.id}`)}
               onCreatePress={() => pl.setCreateModalVisible(true)}
-              onRefresh={refresh}
             />
           ),
         };
@@ -222,7 +217,6 @@ export function LibraryScreen(): ReactElement {
               onRetry={(track) => retryMutation.mutate(track.id)}
               retryingTrackId={retryingTrackId}
               isPlaying={(id) => isCurrentlyPlaying(playback, { kind: 'library', trackId: id })}
-              onRefresh={refresh}
             />
           ),
         };
@@ -241,7 +235,6 @@ export function LibraryScreen(): ReactElement {
               albums={items}
               emptyLabel={search.hasQuery ? 'No albums found' : 'No albums yet'}
               onAlbumPress={navigateToAlbum}
-              onRefresh={refresh}
             />
           ),
         };
@@ -257,7 +250,6 @@ export function LibraryScreen(): ReactElement {
               artists={items}
               emptyLabel={search.hasQuery ? 'No artists found' : 'No artists yet'}
               onArtistPress={navigateToArtist}
-              onRefresh={refresh}
             />
           ),
         };
