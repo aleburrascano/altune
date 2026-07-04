@@ -1,23 +1,17 @@
 /**
  * Reactive list of in-flight downloads for the Activity Dock.
  *
- * Reads the shared `['library-home']` cache with `enabled: false` — it never
- * fetches from the dock (no startup cost), but re-renders when the cache
- * changes (SSE patches, optimistic saves, or the library screen's own fetch).
- * So the dock reflects pending tracks once the library cache is populated.
+ * Membership is now driven entirely by the SSE-fed download lifecycle store
+ * (keyed by track_id), NOT by deriving `acquisition_status === 'pending'` from
+ * the library cache. That single source of truth is what fixes the "row vanishes
+ * the instant it completes" bug — a cache status flip no longer changes dock
+ * membership. Thin re-export so callers keep a stable import site.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useActiveDownloadItems, type DownloadEntry } from './downloadStore';
 
-import { getTracks } from '@shared/api-client/tracks';
-
-import { deriveActiveDownloads, type DownloadItem } from './activeDownloads';
-
-export function useActiveDownloads(): DownloadItem[] {
-  const { data } = useQuery({
-    queryKey: ['library-home'],
-    queryFn: () => getTracks({ limit: 2000, offset: 0 }),
-    enabled: false,
-  });
-  return deriveActiveDownloads(data, undefined);
+export function useActiveDownloads(): DownloadEntry[] {
+  return useActiveDownloadItems();
 }
+
+export type { DownloadEntry as DownloadItem };

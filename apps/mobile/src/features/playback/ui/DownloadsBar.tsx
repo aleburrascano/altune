@@ -13,21 +13,19 @@ import { Animated, Pressable, StyleSheet, View } from 'react-native';
 
 import { ChevronUp } from 'lucide-react-native';
 
-import type { DownloadItem } from '@shared/acquisition/activeDownloads';
-import { ACQUISITION_PHASES, phaseLabel, stageToPhase } from '@shared/acquisition/stagePhase';
-import { useTrackStage } from '@shared/acquisition/stageStore';
+import { aggregatePhase, type DownloadEntry } from '@shared/acquisition/downloadStore';
+import { ACQUISITION_PHASES, phaseLabel } from '@shared/acquisition/stagePhase';
 import { Artwork, Text, spacing, useTheme } from '@shared/ui';
 import { radius } from '@shared/ui/theme/tokens';
 
 interface DownloadsBarProps {
-  items: DownloadItem[];
+  items: DownloadEntry[];
   onPress: () => void;
 }
 
 export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElement | null {
   const theme = useTheme();
   const first = items[0];
-  const stage = useTrackStage(first?.id ?? '');
 
   const enter = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0.5)).current;
@@ -45,10 +43,20 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
 
   if (first == null) return null;
 
-  const phase = stageToPhase(stage);
-  const activeIndex = ACQUISITION_PHASES.indexOf(phase); // -1 while 'working'
-  const count = items.length;
-  const heading = count === 1 ? `Downloading "${first.title}"` : `Downloading ${count} songs`;
+  // Aggregate phase across the whole batch (F9): the least-advanced active item,
+  // so the bar reflects the earliest work still happening — not just items[0].
+  const phase = aggregatePhase(items) ?? 'finding';
+  // 'done' fills every segment (indexOf returns -1); the 3 progress phases map
+  // to their segment index.
+  const activeIndex = phase === 'done' ? ACQUISITION_PHASES.length : ACQUISITION_PHASES.indexOf(phase);
+  const active = items.filter((i) => i.phase !== 'done').length;
+  const count = active > 0 ? active : items.length;
+  const heading =
+    phase === 'done'
+      ? 'Done'
+      : count === 1
+        ? `Downloading "${first.title ?? 'track'}"`
+        : `Downloading ${count} songs`;
 
   return (
     <Animated.View
