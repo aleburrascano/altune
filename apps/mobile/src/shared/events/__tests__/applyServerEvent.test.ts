@@ -123,6 +123,65 @@ describe('applyServerEvent', () => {
     expect(phaseOf('track-1')).toBe('failed');
   });
 
+  it('inserts a full track from a track_added_to_library payload without refetching (F10)', () => {
+    const qc = new QueryClient();
+    qc.setQueryData<ListTracksResponse>(['library-home'], {
+      items: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      has_more: false,
+    });
+    const spy = jest.spyOn(qc, 'invalidateQueries');
+
+    applyServerEvent(qc, {
+      id: '9',
+      type: 'track_added_to_library',
+      data: {
+        id: 'track-9',
+        title: 'New',
+        artist: 'Artist',
+        album: null,
+        duration_seconds: 100,
+        added_at: '2026-07-04T00:00:00Z',
+        acquisition_status: 'pending',
+        artwork_url: null,
+      },
+    });
+
+    const data = qc.getQueryData<ListTracksResponse>(['library-home']);
+    expect(data?.items.map((t) => t.id)).toEqual(['track-9']);
+    expect(data?.total).toBe(1);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('falls back to invalidate for a thin track_added payload (track_id only)', () => {
+    const qc = new QueryClient();
+    const spy = jest.spyOn(qc, 'invalidateQueries');
+
+    applyServerEvent(qc, {
+      id: '9',
+      type: 'track_added_to_library',
+      data: { track_id: 'track-9' },
+    });
+
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['library-home'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['library'] });
+  });
+
+  it('removes the row on track_deleted instead of refetching the library (F11)', () => {
+    const qc = new QueryClient();
+    seedLibraryHome(qc);
+    const spy = jest.spyOn(qc, 'invalidateQueries');
+
+    applyServerEvent(qc, { id: '10', type: 'track_deleted', data: { track_id: 'track-1' } });
+
+    expect(qc.getQueryData<ListTracksResponse>(['library-home'])?.items).toEqual([]);
+    expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library-home'] });
+    expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] }); // counts reconcile
+  });
+
   it('invalidates list queries for membership events', () => {
     const qc = new QueryClient();
     const spy = jest.spyOn(qc, 'invalidateQueries');

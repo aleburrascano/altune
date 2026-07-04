@@ -23,12 +23,15 @@ import {
 import { stageToPhase } from '@shared/acquisition/stagePhase';
 import type { TrackResponse } from '@shared/api-client/types';
 
-import { getTrackFromCaches, patchTrackInCaches } from './trackCachePatch';
+import {
+  getTrackFromCaches,
+  patchTrackInCaches,
+  removeTrackFromCaches,
+  upsertTrackInCaches,
+} from './trackCachePatch';
 import type { ServerEvent } from './sse-client';
 
 const INVALIDATION_MAP: Record<string, string[][]> = {
-  track_added_to_library: [['library-home'], ['library']],
-  track_deleted: [['library-home'], ['library'], ['playlists']],
   playlist_created: [['playlists']],
   playlist_deleted: [['playlists'], ['playlist']],
   track_added_to_playlist: [['playlist'], ['playlists']],
@@ -45,9 +48,37 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function invalidateLibrary(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: ['library-home'] });
-  void queryClient.invalidateQueries({ queryKey: ['library'] });
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' ? value : null;
+}
+
+// Reconstructs a full TrackResponse from a track_added_to_library payload (F10).
+// Returns null if the required identity/display fields are missing, so the
+// caller can fall back to an invalidate for an older/thin payload.
+function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
+  const id = asString(data.id) ?? asString(data.track_id);
+  const title = asString(data.title);
+  const artist = asString(data.artist);
+  const addedAt = asString(data.added_at);
+  const status = asString(data.acquisition_status);
+  if (!id || !title || !artist || !addedAt || !status) return null;
+  return {
+    id,
+    title,
+    artist,
+    album: asString(data.album),
+    duration_seconds: asNumber(data.duration_seconds),
+    added_at: addedAt,
+    acquisition_status: status as TrackResponse['acquisition_status'],
+    artwork_url: asString(data.artwork_url),
+    failure_reason: asString(data.failure_reason),
+    year: asNumber(data.year),
+    genre: asString(data.genre),
+    track_number: asNumber(data.track_number),
+    album_artist: asString(data.album_artist),
+    isrc: asString(data.isrc),
+    audio_ref: asString(data.audio_ref),
+  };
 }
 
 // Snapshot display metadata for the download store from whatever cache holds the
@@ -70,6 +101,29 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     for (const queryKey of RESYNC_KEYS) {
       void queryClient.invalidateQueries({ queryKey });
     }
+    return;
+  }
+
+  if (event.type === 'track_added_to_library') {
+    const track = parseAddedTrack(event.data);
+    if (track) {
+      upsertTrackInCaches(queryClient, track); // insert instantly, no refetch (F10)
+    } else {
+      // Older/thin payload (track_id only): fall back to a refetch.
+      void queryClient.invalidateQueries({ queryKey: ['library-home'] });
+      void queryClient.invalidateQueries({ queryKey: ['library'] });
+    }
+    return;
+  }
+
+  if (event.type === 'track_deleted') {
+    const trackId = asString(event.data.track_id);
+    if (trackId) {
+      removeTrackFromCaches(queryClient, trackId); // drop the row everywhere (F11)
+    }
+    // The playlist summary track-counts can't be patched by id alone; a single
+    // targeted refetch keeps them accurate without the two big library refetches.
+    void queryClient.invalidateQueries({ queryKey: ['playlists'] });
     return;
   }
 
@@ -109,7 +163,9 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
       // cache status flip no longer unmounts it (membership is store-driven).
       completeDownload(trackId);
     }
-    invalidateLibrary(queryClient);
+    // No invalidate (F12): patchTrackInCaches already flipped every cache to
+    // ready, and the detail save-control now reads the library reactively — so
+    // the old 2000-row refetch on every finished download is gone.
     return;
   }
 
@@ -123,7 +179,6 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
       });
       failDownload(trackId);
     }
-    invalidateLibrary(queryClient);
     return;
   }
 

@@ -43,6 +43,65 @@ export function getTrackFromCaches(
   return undefined;
 }
 
+/**
+ * Inserts (or refreshes) a full track into the library caches from a
+ * track_added_to_library event (F10), so a receiving device renders the new row
+ * instantly instead of refetching. Prepended (most-recent-first; the screens
+ * re-sort). No-op on caches that aren't loaded yet — they'll fetch it fresh.
+ * Playlists are untouched: a newly-saved library track is in no playlist.
+ */
+export function upsertTrackInCaches(queryClient: QueryClient, track: TrackResponse): void {
+  queryClient.setQueryData<ListTracksResponse>(['library-home'], (prev) => {
+    if (!prev) return prev;
+    if (prev.items.some((t) => t.id === track.id)) {
+      return { ...prev, items: prev.items.map((t) => (t.id === track.id ? { ...t, ...track } : t)) };
+    }
+    return { ...prev, items: [track, ...prev.items], total: prev.total + 1 };
+  });
+
+  queryClient.setQueryData<InfiniteData<ListTracksResponse>>(['library'], (prev) => {
+    if (!prev || prev.pages.length === 0) return prev;
+    if (prev.pages.some((p) => p.items.some((t) => t.id === track.id))) {
+      return {
+        ...prev,
+        pages: prev.pages.map((p) => ({
+          ...p,
+          items: p.items.map((t) => (t.id === track.id ? { ...t, ...track } : t)),
+        })),
+      };
+    }
+    const [first, ...rest] = prev.pages;
+    return {
+      ...prev,
+      pages: [{ ...first!, items: [track, ...first!.items], total: first!.total + 1 }, ...rest],
+    };
+  });
+}
+
+/**
+ * Removes a track by id from every cache that can hold it (F11) — the library
+ * home snapshot, the library infinite query, and every playlist detail — so a
+ * delete (incl. from another device) drops the row instantly instead of firing
+ * three refetches.
+ */
+export function removeTrackFromCaches(queryClient: QueryClient, trackId: string): void {
+  queryClient.setQueryData<ListTracksResponse>(['library-home'], (prev) => {
+    if (!prev) return prev;
+    const items = prev.items.filter((t) => t.id !== trackId);
+    return { ...prev, items, total: prev.total - (items.length < prev.items.length ? 1 : 0) };
+  });
+
+  queryClient.setQueryData<InfiniteData<ListTracksResponse>>(['library'], (prev) =>
+    prev
+      ? { ...prev, pages: prev.pages.map((p) => ({ ...p, items: p.items.filter((t) => t.id !== trackId) })) }
+      : prev,
+  );
+
+  queryClient.setQueriesData<PlaylistDetailResponse>({ queryKey: ['playlist'] }, (prev) =>
+    prev ? { ...prev, tracks: prev.tracks.filter((t) => t.id !== trackId) } : prev,
+  );
+}
+
 export function patchTrackInCaches(
   queryClient: QueryClient,
   trackId: string,
