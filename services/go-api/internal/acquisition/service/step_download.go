@@ -97,6 +97,20 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) erro
 			}
 		}
 
+		// Decode gate: a candidate can have the right duration and a valid container
+		// yet corrupt samples (the shipped-m4a defect). Reject it and try the next
+		// rather than store audio that no player can decode. Runs whenever a prober
+		// is wired, independent of expected duration.
+		if s.prober != nil {
+			if derr := s.prober.ValidateDecodable(ctx, filePath); derr != nil {
+				slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
+					"url", c.URL, "error", derr)
+				os.RemoveAll(tmpDir)
+				lastErr = fmt.Errorf("candidate %q undecodable: %w", c.URL, derr)
+				continue
+			}
+		}
+
 		sel := c
 		ac.Selected = &sel
 		ac.TempPath = filePath
