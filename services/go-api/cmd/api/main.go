@@ -50,8 +50,12 @@ func main() {
 		execute := hasFlag("--execute")
 		limit := flagInt("--limit", 0)
 		commands.RunBackfillM4a(cfg, execute, limit)
+	case "reacquire-corrupt-m4a":
+		execute := hasFlag("--execute")
+		limit := flagInt("--limit", 0)
+		commands.RunReacquireCorruptM4a(cfg, execute, limit)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated|backfill-m4a]\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated|backfill-m4a|reacquire-corrupt-m4a]\n", os.Args[1])
 		os.Exit(1)
 	}
 }
