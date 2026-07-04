@@ -1,12 +1,12 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import { useAcquisitionStageStore } from '@shared/acquisition/stageStore';
+import { useDownloadStore } from '@shared/acquisition/downloadStore';
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
 
 import { applyServerEvent } from '../applyServerEvent';
 
 beforeEach(() => {
-  useAcquisitionStageStore.setState({ stages: {} });
+  useDownloadStore.getState().reset();
 });
 
 function makeTrack(overrides: Partial<TrackResponse>): TrackResponse {
@@ -30,9 +30,9 @@ function makeTrack(overrides: Partial<TrackResponse>): TrackResponse {
   };
 }
 
-function seedLibraryHome(qc: QueryClient): void {
+function seedLibraryHome(qc: QueryClient, track = makeTrack({ id: 'track-1' })): void {
   qc.setQueryData<ListTracksResponse>(['library-home'], {
-    items: [makeTrack({ id: 'track-1' })],
+    items: [track],
     total: 1,
     limit: 50,
     offset: 0,
@@ -40,8 +40,28 @@ function seedLibraryHome(qc: QueryClient): void {
   });
 }
 
+const entries = (): Record<string, unknown> => useDownloadStore.getState().entries;
+const phaseOf = (id: string): string | undefined =>
+  useDownloadStore.getState().entries[id]?.phase;
+
 describe('applyServerEvent', () => {
-  it('records the stage in the ephemeral store on a progress event, without invalidating', () => {
+  it('seeds the download store and flips the row to pending on a started event', () => {
+    const qc = new QueryClient();
+    seedLibraryHome(qc, makeTrack({ id: 'track-1', acquisition_status: 'failed', failure_reason: 'x' }));
+
+    applyServerEvent(qc, { id: '0', type: 'track_acquisition_started', data: { track_id: 'track-1' } });
+
+    expect(phaseOf('track-1')).toBe('finding');
+    const data = qc.getQueryData<ListTracksResponse>(['library-home']);
+    expect(data?.items[0]).toMatchObject({ acquisition_status: 'pending', failure_reason: null });
+    // Meta is snapshotted from the cache so the dock can render without a fetch.
+    expect(useDownloadStore.getState().entries['track-1']).toMatchObject({
+      title: 'Midnight City',
+      artist: 'M83',
+    });
+  });
+
+  it('records the phase in the download store on a progress event, without invalidating', () => {
     const qc = new QueryClient();
     seedLibraryHome(qc);
     const spy = jest.spyOn(qc, 'invalidateQueries');
@@ -52,14 +72,24 @@ describe('applyServerEvent', () => {
       data: { track_id: 'track-1', stage: 'download' },
     });
 
-    expect(useAcquisitionStageStore.getState().stages['track-1']).toBe('download');
+    expect(phaseOf('track-1')).toBe('downloading');
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('patches a completed acquisition to ready and clears its stage', () => {
+  it('ignores a progress event with an unknown stage', () => {
+    const qc = new QueryClient();
+    applyServerEvent(qc, {
+      id: '0',
+      type: 'track_acquisition_progress',
+      data: { track_id: 'track-1', stage: 'bogus' },
+    });
+    expect(phaseOf('track-1')).toBeUndefined();
+  });
+
+  it('patches a completed acquisition to ready and runs the terminal sequence', () => {
     const qc = new QueryClient();
     seedLibraryHome(qc);
-    useAcquisitionStageStore.setState({ stages: { 'track-1': 'download' } });
+    useDownloadStore.getState().progress('track-1', 'downloading');
 
     applyServerEvent(qc, {
       id: '1',
@@ -69,12 +99,14 @@ describe('applyServerEvent', () => {
 
     const data = qc.getQueryData<ListTracksResponse>(['library-home']);
     expect(data?.items[0]).toMatchObject({ acquisition_status: 'ready', audio_ref: 'ref-1' });
-    expect(useAcquisitionStageStore.getState().stages['track-1']).toBeUndefined();
+    // Not cleared in the same tick — the finishing → done ✓ tail keeps it mounted.
+    expect(phaseOf('track-1')).toBe('finishing');
   });
 
-  it('patches a failed acquisition to failed with reason and clears audio_ref', () => {
+  it('patches a failed acquisition to failed with reason and marks the store failed', () => {
     const qc = new QueryClient();
     seedLibraryHome(qc);
+    useDownloadStore.getState().progress('track-1', 'downloading');
 
     applyServerEvent(qc, {
       id: '2',
@@ -88,6 +120,7 @@ describe('applyServerEvent', () => {
       failure_reason: 'no source found',
       audio_ref: null,
     });
+    expect(phaseOf('track-1')).toBe('failed');
   });
 
   it('invalidates list queries for membership events', () => {
@@ -98,6 +131,18 @@ describe('applyServerEvent', () => {
 
     expect(spy).toHaveBeenCalledWith({ queryKey: ['playlist'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] });
+  });
+
+  it('fully reconciles every SSE-covered family on a resync control event', () => {
+    const qc = new QueryClient();
+    const spy = jest.spyOn(qc, 'invalidateQueries');
+
+    applyServerEvent(qc, { id: '', type: 'resync', data: {} });
+
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['library-home'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['library'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['playlist'] });
   });
 
   it('ignores unknown event types', () => {
@@ -118,5 +163,6 @@ describe('applyServerEvent', () => {
     expect(qc.getQueryData<ListTracksResponse>(['library-home'])?.items[0]?.acquisition_status).toBe(
       'pending',
     );
+    expect(entries()).toEqual({});
   });
 });

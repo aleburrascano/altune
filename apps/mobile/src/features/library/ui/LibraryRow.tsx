@@ -3,8 +3,8 @@ import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } f
 
 import { MoreVertical } from 'lucide-react-native';
 
-import { stageLabel } from '@shared/acquisition/stagePhase';
-import { useTrackStage } from '@shared/acquisition/stageStore';
+import { useDownloadPhase } from '@shared/acquisition/downloadStore';
+import { phaseLabel } from '@shared/acquisition/stagePhase';
 import { formatDuration } from '@shared/lib/format';
 import { Artwork, Row, Text, spacing, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
@@ -37,7 +37,7 @@ export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, 
       onMore({ top: y, bottom: y + height, right: windowWidth - (x + width) });
     });
   };
-  const stage = useTrackStage(track.id);
+  const phase = useDownloadPhase(track.id);
   const isReady = track.acquisition_status === 'ready';
   const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
   const retryLabel = retrying ? ', retrying' : onRetry != null ? ', retry available' : '';
@@ -102,14 +102,26 @@ export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, 
           {track.artist}
           {albumLabel}
         </Text>
-        {track.acquisition_status === 'pending' ? (
+        {phase != null && phase !== 'failed' ? (
+          // A live download phase shows regardless of cache status (F7) — so
+          // re-acquire/retry/recovery of a ready/failed track shows progress too,
+          // not only a fresh 'pending' row.
           <Text
             testID={`library-row-pending-${track.id}`}
             variant="caption"
             tone="tertiary"
             style={styles.pending}
           >
-            {stage != null ? stageLabel(stage) : 'Pending'}
+            {phaseLabel(phase)}
+          </Text>
+        ) : track.acquisition_status === 'pending' ? (
+          <Text
+            testID={`library-row-pending-${track.id}`}
+            variant="caption"
+            tone="tertiary"
+            style={styles.pending}
+          >
+            Pending
           </Text>
         ) : null}
         {track.acquisition_status === 'failed' ? (

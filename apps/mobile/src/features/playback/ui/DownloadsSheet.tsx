@@ -7,31 +7,30 @@
 import type { ReactElement } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import type { DownloadItem } from '@shared/acquisition/activeDownloads';
-import { stageLabel } from '@shared/acquisition/stagePhase';
-import { useTrackStage } from '@shared/acquisition/stageStore';
+import { useDownloadPhase, type DownloadEntry } from '@shared/acquisition/downloadStore';
+import { phaseLabel } from '@shared/acquisition/stagePhase';
 import { Artwork, Text, radius, spacing, useTheme } from '@shared/ui';
 
 interface DownloadsSheetProps {
   visible: boolean;
-  items: DownloadItem[];
+  items: DownloadEntry[];
   onClose: () => void;
 }
 
-function DownloadRow({ item }: { item: DownloadItem }): ReactElement {
-  const stage = useTrackStage(item.id);
+function DownloadRow({ item }: { item: DownloadEntry }): ReactElement {
+  const phase = useDownloadPhase(item.trackId);
   return (
     <View style={styles.row}>
       <Artwork uri={item.artworkUrl} size={44} radius={radius.sm} accessibilityLabel="Album art" />
       <View style={styles.rowBody}>
         <Text variant="bodyStrong" numberOfLines={1}>
-          {item.title}
+          {item.title ?? 'Track'}
         </Text>
         <Text variant="caption" tone="secondary" numberOfLines={1}>
-          {item.artist}
+          {item.artist ?? ''}
         </Text>
         <Text variant="caption" tone="accent">
-          {stageLabel(stage)}
+          {phaseLabel(phase ?? 'working')}
         </Text>
       </View>
     </View>
@@ -63,7 +62,7 @@ export function DownloadsSheet({ visible, items, onClose }: DownloadsSheetProps)
         </View>
         <ScrollView style={styles.list}>
           {items.map((item) => (
-            <DownloadRow key={item.id} item={item} />
+            <DownloadRow key={item.trackId} item={item} />
           ))}
         </ScrollView>
       </View>

@@ -6,7 +6,13 @@
  * backend rename never breaks the UI.
  */
 
-export type AcquisitionPhase = 'finding' | 'downloading' | 'finishing' | 'working';
+export type AcquisitionPhase =
+  | 'finding'
+  | 'downloading'
+  | 'finishing'
+  | 'done'
+  | 'failed'
+  | 'working';
 
 const STAGE_TO_PHASE: Record<string, AcquisitionPhase> = {
   search: 'finding',
@@ -21,6 +27,8 @@ const PHASE_LABEL: Record<AcquisitionPhase, string> = {
   finding: 'Finding source…',
   downloading: 'Downloading…',
   finishing: 'Finishing up…',
+  done: 'Done',
+  failed: 'Failed',
   working: 'Working…',
 };
 
