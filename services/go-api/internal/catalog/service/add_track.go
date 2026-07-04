@@ -82,9 +82,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 			"user_id", userId.String(),
 		)
 		if s.events != nil {
-			s.events.Publish(userId, "track_added_to_library", map[string]any{
-				"track_id": track.ID.String(),
-			})
+			s.events.Publish(userId, "track_added_to_library", trackAddedPayload(track))
 		}
 		if s.scheduler != nil {
 			sourceURL := ""
@@ -98,4 +96,35 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	}
 
 	return &AddTrackOutput{Track: track, Created: created}, nil
+}
+
+// trackAddedPayload builds the full track object embedded in the
+// track_added_to_library event (F10), so a receiving client inserts the row
+// directly instead of forcing a refetch. The JSON keys mirror the handler's
+// TrackResponse wire shape — kept in sync with trackToResponse. `album` is null
+// when empty, matching the wire contract.
+func trackAddedPayload(t *domain.Track) map[string]any {
+	var album *string
+	if t.Album != "" {
+		a := t.Album
+		album = &a
+	}
+	return map[string]any{
+		"track_id":           t.ID.String(), // retained for older clients
+		"id":                 t.ID.String(),
+		"title":              t.Title,
+		"artist":             t.Artist,
+		"album":              album,
+		"duration_seconds":   t.DurationSeconds,
+		"added_at":           t.AddedAt,
+		"acquisition_status": t.AcquisitionStatus.String(),
+		"artwork_url":        t.ArtworkURL,
+		"year":               t.Year,
+		"genre":              t.Genre,
+		"track_number":       t.TrackNumber,
+		"album_artist":       t.AlbumArtist,
+		"isrc":               t.ISRC,
+		"audio_ref":          t.AudioRef,
+		"failure_reason":     t.FailureReason,
+	}
 }
