@@ -6,8 +6,11 @@ MSG_FILE="$1"
 
 # 1. Strip AI co-author lines (Claude / Anthropic / generic AI / emoji-generated footers)
 if [ -f "$MSG_FILE" ]; then
-  # Use Python for cross-platform sed-equivalent
-  python - "$MSG_FILE" <<'PYEOF'
+  # Use Python for cross-platform sed-equivalent. Prefer python3 — many systems
+  # (incl. modern macOS) ship only python3; a bare `python` may not exist.
+  PYTHON="$(command -v python3 || command -v python || true)"
+  if [ -n "$PYTHON" ]; then
+    "$PYTHON" - "$MSG_FILE" <<'PYEOF'
 import re, sys, pathlib
 
 path = pathlib.Path(sys.argv[1])
@@ -26,6 +29,7 @@ for p in patterns:
 text = re.sub(r'\n{3,}', '\n\n', text)
 path.write_text(text, encoding="utf-8")
 PYEOF
+  fi
 fi
 
 # 2. Run commitlint (only if node_modules present)
