@@ -1,7 +1,12 @@
 import { QueryClient } from '@tanstack/react-query';
 
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
-import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
+import type {
+  ListPlaylistsResponse,
+  ListTracksResponse,
+  PlaylistDetailResponse,
+  TrackResponse,
+} from '@shared/api-client/types';
 
 import { applyServerEvent } from '../applyServerEvent';
 
@@ -202,6 +207,102 @@ describe('applyServerEvent', () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ['library'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['playlist'] });
+  });
+
+  it('patches the playlist name on playlist_renamed (F13)', () => {
+    const qc = new QueryClient();
+    qc.setQueryData<PlaylistDetailResponse>(['playlist', 'p1'], {
+      id: 'p1',
+      name: 'Old',
+      track_count: 0,
+      preview_artwork_urls: [],
+      created_at: 'x',
+      updated_at: 'x',
+      tracks: [],
+    });
+    const spy = jest.spyOn(qc, 'invalidateQueries');
+
+    applyServerEvent(qc, {
+      id: '1',
+      type: 'playlist_renamed',
+      data: { playlist_id: 'p1', name: 'New' },
+    });
+
+    expect(qc.getQueryData<PlaylistDetailResponse>(['playlist', 'p1'])?.name).toBe('New');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('removes a track from the playlist detail on track_removed_from_playlist (F13)', () => {
+    const qc = new QueryClient();
+    qc.setQueryData<PlaylistDetailResponse>(['playlist', 'p1'], {
+      id: 'p1',
+      name: 'PL',
+      track_count: 2,
+      preview_artwork_urls: [],
+      created_at: 'x',
+      updated_at: 'x',
+      tracks: [makeTrack({ id: 'a' }), makeTrack({ id: 'b' })],
+    });
+
+    applyServerEvent(qc, {
+      id: '2',
+      type: 'track_removed_from_playlist',
+      data: { playlist_id: 'p1', track_id: 'a' },
+    });
+
+    const detail = qc.getQueryData<PlaylistDetailResponse>(['playlist', 'p1']);
+    expect(detail?.tracks.map((t) => t.id)).toEqual(['b']);
+    expect(detail?.track_count).toBe(1);
+  });
+
+  it('reorders the playlist detail tracks on playlist_reordered (F13)', () => {
+    const qc = new QueryClient();
+    qc.setQueryData<PlaylistDetailResponse>(['playlist', 'p1'], {
+      id: 'p1',
+      name: 'PL',
+      track_count: 3,
+      preview_artwork_urls: [],
+      created_at: 'x',
+      updated_at: 'x',
+      tracks: [makeTrack({ id: 'a' }), makeTrack({ id: 'b' }), makeTrack({ id: 'c' })],
+    });
+
+    applyServerEvent(qc, {
+      id: '3',
+      type: 'playlist_reordered',
+      data: { playlist_id: 'p1', track_ids: ['c', 'a', 'b'] },
+    });
+
+    expect(
+      qc.getQueryData<PlaylistDetailResponse>(['playlist', 'p1'])?.tracks.map((t) => t.id),
+    ).toEqual(['c', 'a', 'b']);
+  });
+
+  it('reconciles playlist list counts alongside a removal (F13)', () => {
+    const qc = new QueryClient();
+    qc.setQueryData<ListPlaylistsResponse>(['playlists'], {
+      items: [
+        { id: 'p1', name: 'PL', track_count: 2, preview_artwork_urls: [], created_at: 'x', updated_at: 'x' },
+      ],
+      total: 1,
+    });
+    qc.setQueryData<PlaylistDetailResponse>(['playlist', 'p1'], {
+      id: 'p1',
+      name: 'PL',
+      track_count: 2,
+      preview_artwork_urls: [],
+      created_at: 'x',
+      updated_at: 'x',
+      tracks: [makeTrack({ id: 'a' })],
+    });
+
+    applyServerEvent(qc, {
+      id: '4',
+      type: 'track_removed_from_playlist',
+      data: { playlist_id: 'p1', track_id: 'a' },
+    });
+
+    expect(qc.getQueryData<ListPlaylistsResponse>(['playlists'])?.items[0]?.track_count).toBe(1);
   });
 
   it('ignores unknown event types', () => {

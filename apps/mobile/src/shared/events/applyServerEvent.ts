@@ -24,6 +24,11 @@ import { stageToPhase } from '@shared/acquisition/stagePhase';
 import type { TrackResponse } from '@shared/api-client/types';
 
 import {
+  patchPlaylistName,
+  removeTrackFromPlaylistCache,
+  reorderPlaylistCache,
+} from './playlistCachePatch';
+import {
   getTrackFromCaches,
   patchTrackInCaches,
   removeTrackFromCaches,
@@ -35,7 +40,6 @@ const INVALIDATION_MAP: Record<string, string[][]> = {
   playlist_created: [['playlists']],
   playlist_deleted: [['playlists'], ['playlist']],
   track_added_to_playlist: [['playlist'], ['playlists']],
-  track_removed_from_playlist: [['playlist'], ['playlists']],
 };
 
 // A resync control event (F4) means the server could not guarantee the client
@@ -179,6 +183,29 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
       });
       failDownload(trackId);
     }
+    return;
+  }
+
+  if (event.type === 'playlist_renamed') {
+    const playlistId = asString(event.data.playlist_id);
+    const name = asString(event.data.name);
+    if (playlistId && name != null) patchPlaylistName(queryClient, playlistId, name);
+    return;
+  }
+
+  if (event.type === 'track_removed_from_playlist') {
+    const playlistId = asString(event.data.playlist_id);
+    const trackId = asString(event.data.track_id);
+    if (playlistId && trackId) removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
+    return;
+  }
+
+  if (event.type === 'playlist_reordered') {
+    const playlistId = asString(event.data.playlist_id);
+    const trackIds = Array.isArray(event.data.track_ids)
+      ? event.data.track_ids.filter((v): v is string => typeof v === 'string')
+      : null;
+    if (playlistId && trackIds) reorderPlaylistCache(queryClient, playlistId, trackIds);
     return;
   }
 
