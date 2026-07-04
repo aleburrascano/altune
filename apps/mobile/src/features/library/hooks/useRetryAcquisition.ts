@@ -18,12 +18,9 @@ export function useRetryAcquisition() {
         failure_reason: null,
       });
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['library-home'] });
-      void queryClient.invalidateQueries({ queryKey: ['library'] });
-      void queryClient.invalidateQueries({ queryKey: ['playlist'] });
-      void queryClient.invalidateQueries({ queryKey: ['playlists'] });
-    },
+    // No onSuccess invalidate (F17): the optimistic pending patch covers every
+    // cache, and the re-queued acquisition's SSE events (started → progress →
+    // completed/failed) drive the rest — the four refetches were redundant.
     onError: () => {
       Alert.alert('Retry failed', 'Could not restart acquisition. Please try again later.');
     },
