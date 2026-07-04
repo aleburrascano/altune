@@ -87,6 +87,14 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		"user_id", userId.String(),
 		"has_isrc", track.ISRC != nil,
 	)
+	// Server-authoritative "it's acquiring now" signal (F7/F8): the client seeds
+	// its download UI from this and flips a re-acquired ready/failed track back
+	// to pending, instead of depending on the optimistic save or the poll.
+	if s.events != nil {
+		s.events.Publish(userId, "track_acquisition_started", map[string]any{
+			"track_id": trackId.String(),
+		})
+	}
 
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
 	err = RunPipeline(ctx, s.buildSteps(userId, trackId), ac)
