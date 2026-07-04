@@ -216,7 +216,7 @@ func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId doma
 		NewSelectStep(),
 		NewDownloadStep(s.audioSearcher, WithDownloadProber(s.audioProber)),
 		NewTagStep(),
-		NewStoreStep(s.audioStore),
+		NewStoreStep(s.audioStore, WithStoreProber(s.audioProber)),
 		NewUpdateTrackStep(s.trackRepo, userId, trackId),
 	}
 }

@@ -15,6 +15,32 @@ func TestTagStep_Execute_NoTempPath_NoOp(t *testing.T) {
 	}
 }
 
+// ID3v2 tags are MP3-only; writing them to an m4a/MP4 corrupts the container. The
+// tag step must skip non-MP3 files entirely, leaving the bytes untouched.
+func TestTagStep_Execute_SkipsNonMp3(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "track.m4a")
+	original := []byte("\x00\x00\x00\x1cftypM4A original bytes")
+	if err := os.WriteFile(file, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ac := &AcquisitionContext{
+		Track:    TrackRef{Title: "T", Artist: "A"},
+		TempPath: file,
+	}
+
+	if err := NewTagStep().Execute(context.Background(), ac); err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+
+	after, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(original) {
+		t.Error("m4a file was modified by the tag step; non-MP3 bytes must be left untouched")
+	}
+}
+
 // Tagging failures must never fail the pipeline — a missing/unreadable file is
 // logged and swallowed.
 func TestTagStep_Execute_BadPath_Swallowed(t *testing.T) {

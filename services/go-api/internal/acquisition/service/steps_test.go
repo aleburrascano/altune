@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -275,14 +276,34 @@ func TestStoreStep_Execute(t *testing.T) {
 	if ac.AudioRef == "" {
 		t.Fatal("expected ac.AudioRef to be set, got empty string")
 	}
-	// Verify the audio ref follows the expected pattern: userID/artist/album/title.m4a
-	wantRef := "user-123/Artist Name/Album Name/Song Title.m4a"
+	// Verify the audio ref follows the expected pattern: userID/artist/album/title.mp3
+	wantRef := "user-123/Artist Name/Album Name/Song Title.mp3"
 	if ac.AudioRef != wantRef {
 		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, wantRef)
 	}
 	// Verify the fake store actually stored it
 	if !store.stored[ac.AudioRef] {
 		t.Error("expected audio ref to be stored in fake store")
+	}
+}
+
+// TestStoreStep_Execute_RejectsUndecodable is the final safety net: even a file
+// that reached the store step is decode-validated first, so corruption introduced
+// after download (e.g. a format-mismatched tagger) never reaches the library.
+func TestStoreStep_Execute_RejectsUndecodable(t *testing.T) {
+	store := newFakeAudioStore()
+	prober := &queueProber{decodeErrs: []error{errors.New("audio stream failed to decode")}}
+	step := NewStoreStep(store, WithStoreProber(prober))
+	ac := &AcquisitionContext{
+		Track:    TrackRef{UserID: "u", Title: "T", Artist: "A"},
+		TempPath: "/tmp/altune-test/song.mp3",
+	}
+
+	if err := step.Execute(context.Background(), ac); err == nil {
+		t.Fatal("expected store to reject an undecodable final file")
+	}
+	if len(store.stored) != 0 {
+		t.Errorf("nothing should be stored when validation fails, got %d", len(store.stored))
 	}
 }
 
@@ -487,7 +508,7 @@ func TestBuildAudioRef(t *testing.T) {
 				Album:  "After Hours",
 				Title:  "Blinding Lights",
 			},
-			want: "uid/The Weeknd/After Hours/Blinding Lights.m4a",
+			want: "uid/The Weeknd/After Hours/Blinding Lights.mp3",
 		},
 		{
 			name: "empty album defaults to Unknown Album",
@@ -497,7 +518,7 @@ func TestBuildAudioRef(t *testing.T) {
 				Album:  "",
 				Title:  "Song",
 			},
-			want: "uid/Artist/Unknown Album/Song.m4a",
+			want: "uid/Artist/Unknown Album/Song.mp3",
 		},
 		{
 			name: "forbidden chars stripped",
@@ -507,7 +528,7 @@ func TestBuildAudioRef(t *testing.T) {
 				Album:  `The "Best" Album`,
 				Title:  "Song: Title?",
 			},
-			want: "uid/ACDC/The Best Album/Song Title.m4a",
+			want: "uid/ACDC/The Best Album/Song Title.mp3",
 		},
 	}
 

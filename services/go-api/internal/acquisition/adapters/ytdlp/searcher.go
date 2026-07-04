@@ -142,9 +142,9 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 
 	outTemplate := filepath.Join(outDir, "%(title)s.%(ext)s")
 	args := []string{
-		"-f", "bestaudio[ext=m4a]/bestaudio",
+		"-f", "bestaudio",
 		"-x",
-		"--audio-format", "m4a",
+		"--audio-format", "mp3",
 		"--audio-quality", "0",
 		"--no-progress",
 		"-o", outTemplate,
@@ -171,12 +171,12 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 		return "", fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr.String())
 	}
 
-	matches, err := filepath.Glob(filepath.Join(outDir, "*.m4a"))
+	matches, err := filepath.Glob(filepath.Join(outDir, "*.mp3"))
 	if err != nil || len(matches) == 0 {
-		return "", fmt.Errorf("no m4a file produced in %s", outDir)
+		return "", fmt.Errorf("no mp3 file produced in %s", outDir)
 	}
 
-	// Pick the largest m4a: a single-track download yields one file, but if
+	// Pick the largest mp3: a single-track download yields one file, but if
 	// several appear, the full track is the largest (partial/sidecar files are
 	// smaller).
 	best, bestSize := "", int64(-1)
