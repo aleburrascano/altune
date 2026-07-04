@@ -102,7 +102,7 @@ func RunBackfillM4a(cfg *config.Config, execute bool, limit int) {
 		acqService.NewSelectStep(),
 		acqService.NewDownloadStep(searcher, acqService.WithDownloadProber(prober)),
 		acqService.NewTagStep(),
-		acqService.NewStoreStep(audioStore),
+		acqService.NewStoreStep(audioStore, acqService.WithStoreProber(prober)),
 	}
 
 	converted, skipped := 0, 0
