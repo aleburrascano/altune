@@ -14,8 +14,14 @@ import type { InfiniteData, QueryClient } from '@tanstack/react-query';
 
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
 
-export function findTrackInLibraryCache(
-  queryClient: QueryClient,
+/**
+ * Pure lookup over already-read cache data. Split out so the reactive hooks can
+ * subscribe to the queries (re-rendering on a setQueryData patch, per F12) and
+ * pass their data in, while the imperative wrapper below reads via getQueryData.
+ */
+export function findTrackInData(
+  homeData: ListTracksResponse | undefined,
+  infiniteData: InfiniteData<ListTracksResponse> | undefined,
   title: string,
   artist: string | null,
 ): TrackResponse | null {
@@ -24,12 +30,10 @@ export function findTrackInLibraryCache(
   const matches = (t: TrackResponse): boolean =>
     t.title.toLowerCase().trim() === normalTitle && t.artist.toLowerCase().trim() === normalArtist;
 
-  const homeData = queryClient.getQueryData<ListTracksResponse>(['library-home']);
   if (homeData) {
     return homeData.items.find(matches) ?? null;
   }
 
-  const infiniteData = queryClient.getQueryData<InfiniteData<ListTracksResponse>>(['library']);
   if (!infiniteData) return null;
 
   for (const page of infiniteData.pages) {
@@ -37,4 +41,17 @@ export function findTrackInLibraryCache(
     if (match) return match;
   }
   return null;
+}
+
+export function findTrackInLibraryCache(
+  queryClient: QueryClient,
+  title: string,
+  artist: string | null,
+): TrackResponse | null {
+  return findTrackInData(
+    queryClient.getQueryData<ListTracksResponse>(['library-home']),
+    queryClient.getQueryData<InfiniteData<ListTracksResponse>>(['library']),
+    title,
+    artist,
+  );
 }

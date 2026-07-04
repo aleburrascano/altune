@@ -1,8 +1,9 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useLibraryTrackMatch } from './useLibraryTrackMatch';
 
-import { findTrackInLibraryCache } from '../helpers/find-track-in-library-cache';
-
+/**
+ * Reactive "is this track already in my library" flag. Thin reader over the
+ * reactive useLibraryTrackMatch so it re-renders on cache patches (F12).
+ */
 export function useIsTrackSaved(title: string, artist: string | null): boolean {
-  const queryClient = useQueryClient();
-  return findTrackInLibraryCache(queryClient, title, artist) !== null;
+  return useLibraryTrackMatch(title, artist) !== null;
 }
