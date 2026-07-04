@@ -42,6 +42,7 @@ export function PlaylistDetailScreen(): ReactElement {
     queryKey: ['playlist', playlistId],
     queryFn: () => getPlaylist(playlistId),
     enabled: playlistId.length > 0,
+    staleTime: Infinity, // SSE-covered (rename/remove/reorder patch it); F15
   });
 
   const renameMut = useMutation({

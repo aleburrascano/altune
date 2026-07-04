@@ -30,6 +30,7 @@ export function AddToPlaylistSheet({
     queryKey: ['playlists'],
     queryFn: getPlaylists,
     enabled: visible,
+    staleTime: Infinity, // SSE-covered; event patches keep it fresh (F15)
   });
 
   const addMut = useMutation({

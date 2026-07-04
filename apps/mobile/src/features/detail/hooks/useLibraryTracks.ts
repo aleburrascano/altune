@@ -11,7 +11,7 @@ function useLibraryHomeData(): ListTracksResponse | undefined {
     queryKey: ['library-home'],
     queryFn: () => getTracks({ limit: 2000, offset: 0 }),
     enabled: cached == null,
-    staleTime: 30_000,
+    staleTime: Infinity, // SSE-covered; matches useLibraryHome (F15)
   });
 
   return cached ?? data;
