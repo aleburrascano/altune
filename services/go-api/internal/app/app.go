@@ -13,12 +13,12 @@ import (
 
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	acqPorts "altune/go-api/internal/acquisition/ports"
+	acqService "altune/go-api/internal/acquisition/service"
 	adminAlert "altune/go-api/internal/admin/alert"
 	adminHandler "altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/admin/requeststore"
-	acqPorts "altune/go-api/internal/acquisition/ports"
-	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
 	authAdapters "altune/go-api/internal/auth/adapters"
 	catalogHandler "altune/go-api/internal/catalog/adapters/handler"
@@ -31,9 +31,9 @@ import (
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service/eval"
 	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/discovery/service/eval"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
 	playbackService "altune/go-api/internal/playback/service"
@@ -52,16 +52,16 @@ import (
 )
 
 type App struct {
-	cfg          *config.Config
-	pool         *pgxpool.Pool
-	redisClient  *goredis.Client
-	server       *http.Server
-	wg           sync.WaitGroup
-	sem          chan struct{}
-	scheduler    *acqService.BackgroundAcquisitionScheduler
-	vocabRefresh *discoveryService.VocabularyRefreshService
-	eventBus     *events.InProcessBus
-	alertMonitor *adminAlert.Monitor
+	cfg            *config.Config
+	pool           *pgxpool.Pool
+	redisClient    *goredis.Client
+	server         *http.Server
+	wg             sync.WaitGroup
+	sem            chan struct{}
+	scheduler      *acqService.BackgroundAcquisitionScheduler
+	vocabRefresh   *discoveryService.VocabularyRefreshService
+	eventBus       *events.InProcessBus
+	alertMonitor   *adminAlert.Monitor
 	logRing        *logging.RingBuffer
 	eventFeed      *adminHandler.EventFeed
 	providerHealth *providerhealth.Store
@@ -217,6 +217,7 @@ func (a *App) setup(ctx context.Context) error {
 	}
 
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
+	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
 	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
@@ -323,14 +324,15 @@ func (a *App) setup(ctx context.Context) error {
 	}
 
 	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
-		Search:  searchSvc,
-		History: historySvc,
-		Album:   albumSvc,
-		Artist:  artistSvc,
-		Related: relatedSvc,
-		Enrich:  enrichSvc,
-		Suggest: suggestSvc,
-		Event:   eventSvc,
+		Search:       searchSvc,
+		History:      historySvc,
+		ClearHistory: clearHistorySvc,
+		Album:        albumSvc,
+		Artist:       artistSvc,
+		Related:      relatedSvc,
+		Enrich:       enrichSvc,
+		Suggest:      suggestSvc,
+		Event:        eventSvc,
 	})
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
 	a.providerHealth = providerhealth.NewStore()
@@ -404,9 +406,9 @@ func (a *App) setup(ctx context.Context) error {
 		WithReRunner(a.buildReRunner()).
 		WithSearchInspector(a.buildSearchInspector(searchSvc))
 	r.Route("/admin", func(ar chi.Router) {
-		ar.Get("/", adminH.ServeIndex)         // public shell — holds no data
-		ar.Get("/config", adminH.ServeConfig)  // public client config for sign-in
-		ar.Group(func(gr chi.Router) {         // gated data: auth, then operator check
+		ar.Get("/", adminH.ServeIndex)        // public shell — holds no data
+		ar.Get("/config", adminH.ServeConfig) // public client config for sign-in
+		ar.Group(func(gr chi.Router) {        // gated data: auth, then operator check
 			gr.Use(auth.Middleware(verifier))
 			gr.Use(adminHandler.OperatorOnly(a.cfg.OperatorUserID))
 			adminH.RegisterData(gr)

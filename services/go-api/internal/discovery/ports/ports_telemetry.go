@@ -12,6 +12,7 @@ type SearchHistoryRepository interface {
 	Insert(ctx context.Context, entry *domain.SearchHistoryEntry) error
 	TrimToN(ctx context.Context, userId shared.UserId, n int) error
 	ListDistinctRecent(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error)
+	DeleteAllForUser(ctx context.Context, userId shared.UserId) error
 }
 
 // EventStore appends telemetry interaction events (§8 of the discovery rebuild
