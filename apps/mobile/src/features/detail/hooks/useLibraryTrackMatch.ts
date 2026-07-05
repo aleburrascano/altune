@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
@@ -16,13 +16,18 @@ import { findTrackInData } from '../helpers/find-track-in-library-cache';
  * invalidate the completed/failed handlers used to fire (F12).
  */
 export function useLibraryTrackMatch(title: string, artist: string | null): TrackResponse | null {
+  // skipToken: these observers only READ the cache (populated by useLibraryHome /
+  // the acquisition SSE setQueryData patches) — they must never fetch. Without a
+  // queryFn, React Query logs "No queryFn was passed" whenever this renders while
+  // the owning query isn't mounted (e.g. cold-start into a detail screen before
+  // the Library tab initializes). skipToken is the v5 way to say "never fetch".
   const { data: home } = useQuery<ListTracksResponse>({
     queryKey: ['library-home'],
-    enabled: false,
+    queryFn: skipToken,
   });
   const { data: infinite } = useQuery<InfiniteData<ListTracksResponse>>({
     queryKey: ['library'],
-    enabled: false,
+    queryFn: skipToken,
   });
   return useMemo(
     () => findTrackInData(home, infinite, title, artist),
