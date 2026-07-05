@@ -2,6 +2,7 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { audioRequestHeaders, audioStreamUrl, fetchAudioUrls } from './api/audio';
 import { ensurePlayerSetup } from './initPlayer';
+import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 export interface LoadNativeTrackOptions {
@@ -106,10 +107,22 @@ export async function loadNativeQueue(
   const headers = needsAuth ? await audioRequestHeaders() : {};
   // Sign the window from the start index forward — that's what plays next.
   const resolved = await resolveLibraryUrls(tracks.slice(startIndex));
-  await TrackPlayer.add(tracks.map((t) => toNativeTrack(t, headers, resolved)));
 
   const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
-  if (idx > 0) await TrackPlayer.skip(idx);
+  // Pin the target index so the add()-induced index-0 transient doesn't flash
+  // the wrong track into the store (see nativeSyncGuard). The guard self-clears
+  // when the target-index event is applied — we do NOT clear it here on success,
+  // because TrackPlayer delivers the event asynchronously (a synchronous clear
+  // could lift the guard before the transient is processed). On failure we clear
+  // explicitly so a failed prime can't leave the guard pinned.
+  beginNativeLoad(idx);
+  try {
+    await TrackPlayer.add(tracks.map((t) => toNativeTrack(t, headers, resolved)));
+    if (idx > 0) await TrackPlayer.skip(idx);
+  } catch (err) {
+    endNativeLoad();
+    throw err;
+  }
   if (startPositionMs > 0) await TrackPlayer.seekTo(startPositionMs / 1000);
   if (autoplay) await TrackPlayer.play();
 }
