@@ -3,6 +3,7 @@ import TrackPlayer, { Event } from 'react-native-track-player';
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 
+import { recoverAudio } from './api/audio';
 import { prefetchNext } from './audioPrefetch';
 
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
@@ -36,6 +37,17 @@ export async function playbackService() {
   });
   TrackPlayer.addEventListener(Event.RemoteSeek, (data) => {
     void TrackPlayer.seekTo(data.position);
+  });
+
+  // Presigned streams hit storage directly and bypass the proxy's missing-file
+  // recovery, so when a library track fails to play, ask the server to reconcile
+  // it (mark failed + re-acquire when the file is genuinely gone; a no-op when it
+  // is actually present). Best-effort.
+  TrackPlayer.addEventListener(Event.PlaybackError, () => {
+    const track = useQueueStore.getState().currentTrack();
+    if (track && track.source.kind === 'library') {
+      void recoverAudio(track.source.trackId).catch(() => {});
+    }
   });
 
   // The native player drives transitions (manual skip, gapless auto-advance,

@@ -19,6 +19,18 @@ export interface ResolvedAudioUrl {
   url: string;
 }
 
+// Ask the server to reconcile a library track after a playback failure. Presigned
+// streams hit storage directly and bypass the proxy's missing-file recovery, so
+// this restores it: the server marks a genuinely-gone file failed and schedules
+// re-acquisition (a no-op when the file is actually present). Fire-and-forget.
+export async function recoverAudio(trackId: string): Promise<void> {
+  const headers = await audioRequestHeaders();
+  await fetch(`${apiBase}/v1/tracks/${trackId}/audio/recover`, {
+    method: 'POST',
+    headers,
+  });
+}
+
 // Mint short-lived, directly-streamable URLs for library tracks so the native
 // player streams straight from storage instead of proxying every byte through
 // the API. Tracks the server can't sign (local dev / not ready) are absent from
