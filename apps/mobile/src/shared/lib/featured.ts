@@ -25,15 +25,11 @@ export function featuredArtistsFromExtras(raw: unknown): FeaturedArtist[] {
   return out;
 }
 
-/** "feat. A, B" from a list of featured artists, or null when there are none.
- * Shared across the players, library rows, and discovery rows. */
-export function formatFeaturing(featured: readonly FeaturedArtist[] | undefined): string | null {
-  if (!featured || featured.length === 0) return null;
-  return `feat. ${featured.map((f) => f.name).join(', ')}`;
-}
-
-/** Append "(feat. …)" to an artist/subtitle string when featured artists exist. */
+/** Comma-join a base artist with its collaborating/featured artists:
+ * "Ken Carson, Playboi Carti". Returns the base unchanged when there are none.
+ * Reads as a combined credit — fits the scene where guests are co-billed rather
+ * than "feat."-ed, and stays short so it doesn't crowd out the album on a row. */
 export function withFeaturing(base: string, featured: readonly FeaturedArtist[] | undefined): string {
-  const feat = formatFeaturing(featured);
-  return feat ? `${base} · ${feat}` : base;
+  if (!featured || featured.length === 0) return base;
+  return [base, ...featured.map((f) => f.name)].join(', ');
 }

@@ -3,7 +3,7 @@ import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react-native';
 
-import { formatFeaturing } from '@shared/lib/featured';
+import { withFeaturing } from '@shared/lib/featured';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { usePlayback } from '@shared/playback/usePlayback';
@@ -40,8 +40,7 @@ export function MiniPlayer() {
   const isEnded = status === 'ended';
   const isPreview = track.source.kind === 'preview';
 
-  const featuring = formatFeaturing(track.featuredArtists);
-  const artistText = featuring ? `${track.artist} · ${featuring}` : track.artist;
+  const artistText = withFeaturing(track.artist, track.featuredArtists);
 
   const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
