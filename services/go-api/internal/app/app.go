@@ -21,6 +21,7 @@ import (
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/auth"
 	authAdapters "altune/go-api/internal/auth/adapters"
+	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	catalogHandler "altune/go-api/internal/catalog/adapters/handler"
 	"altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/adapters/storage"
@@ -224,7 +225,19 @@ func (a *App) setup(ctx context.Context) error {
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc)
+	// Featured-artist resolver (discovery-sourced) + catalog bridge. The resolver
+	// tolerates a nil MB searcher (MusicBrainz not configured) and degrades to
+	// Deezer-only; a nil interface (not a typed-nil pointer) keeps that safe.
+	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
+	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
+	if sharedMB != nil {
+		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
+	}
+	featuredBridge := discoverybridge.NewFeaturedResolver(featuredResolver)
+	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(trackRepo, featuredBridge)
+	listFeaturingSvc := catalogService.NewListFeaturingService(trackRepo)
+
+	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, backfillFeaturedSvc, listFeaturingSvc)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
 	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, scheduler)
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
