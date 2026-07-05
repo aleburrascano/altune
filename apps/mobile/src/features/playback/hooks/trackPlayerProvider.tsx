@@ -15,6 +15,7 @@ import type {
   RepeatMode as QueueRepeatMode,
 } from '@shared/playback/types';
 
+import { derivePlaybackState } from '../derivePlaybackState';
 import { ensurePlayerSetup } from '../initPlayer';
 import { seekPreservingPlayback } from '../seekControls';
 import {
@@ -38,14 +39,6 @@ const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
 // ONLY outside Expo Go (via the PlaybackProvider selector), because the
 // top-level `react-native-track-player` import touches a native module that
 // Expo Go does not bundle. In Expo Go, expoGoPlaybackProvider is used instead.
-
-const INITIAL_STATE: PlaybackState = {
-  status: 'idle',
-  track: null,
-  positionMs: 0,
-  durationMs: 0,
-  errorMessage: null,
-};
 
 export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
@@ -101,20 +94,19 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
 
-  const state: PlaybackState = useMemo(() => {
-    if (!track) return INITIAL_STATE;
-    if (errorMessage) return { status: 'error', track, positionMs: 0, durationMs: 0, errorMessage };
-    if (isBuffering) return { status: 'loading', track, positionMs: 0, durationMs, errorMessage: null };
-    if (isEnded) return { status: 'ended', track, positionMs: durationMs, durationMs, errorMessage: null };
-
-    return {
-      status: isPlaying ? 'playing' : 'paused',
-      track,
-      positionMs,
-      durationMs,
-      errorMessage: null,
-    };
-  }, [track, errorMessage, isEnded, isPlaying, isBuffering, positionMs, durationMs]);
+  const state: PlaybackState = useMemo(
+    () =>
+      derivePlaybackState({
+        track,
+        errorMessage,
+        isBuffering,
+        isEnded,
+        isPlaying,
+        positionMs,
+        durationMs,
+      }),
+    [track, errorMessage, isEnded, isPlaying, isBuffering, positionMs, durationMs],
+  );
 
   // Behavioral play/skip/completed are derived from live playback state (listen
   // threshold + dwell), not fired on play-start — see usePlaybackSignals. The
