@@ -5,6 +5,7 @@ import { Banner } from '@shared/ui/primitives/Banner';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { FeaturedArtist } from '@shared/api-client/types';
 
 import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import { canPlay } from '@shared/playback/canPlay';
@@ -59,10 +60,14 @@ export function TrackDetailBody({
   // `!== null` check passes for undefined and then `.length` crashes the screen.
   const canSave = (result.subtitle ?? '').length > 0;
   const albumName = te.album;
-  const featured =
+  const featured: FeaturedArtist[] =
     te.featuredArtists.length > 0
       ? te.featuredArtists
-      : (extractFeaturedFromText(result.title, result.subtitle)?.split(', ') ?? []);
+      : (extractFeaturedFromText(result.title, result.subtitle)?.split(', ') ?? []).map((name) => ({
+          name,
+          mbid: null,
+          deezer_id: null,
+        }));
 
   const source =
     isPlayable && effectiveTrackId !== null
@@ -185,17 +190,17 @@ export function TrackDetailBody({
             Featuring
           </Text>
           <View style={styles.featured}>
-            {featured.map((name, i) => (
+            {featured.map((f, i) => (
               <Pressable
-                key={name}
-                onPress={() => void lateralNav.navigateTo(name, 'artist')}
+                key={f.mbid ?? f.name}
+                onPress={() => void lateralNav.navigateTo(f.name, 'artist')}
                 disabled={lateralNav.state === 'searching'}
                 accessibilityRole="link"
-                accessibilityLabel={`View artist ${name}`}
+                accessibilityLabel={`View artist ${f.name}`}
               >
                 {({ pressed }) => (
                   <Text variant="body" tone="accent" style={pressed ? { opacity: 0.6 } : undefined}>
-                    {i > 0 ? `, ${name}` : name}
+                    {i > 0 ? `, ${f.name}` : f.name}
                   </Text>
                 )}
               </Pressable>

@@ -1,4 +1,4 @@
-import type { AcquisitionStatus } from '@shared/api-client/types';
+import type { AcquisitionStatus, FeaturedArtist } from '@shared/api-client/types';
 
 export type TrackExtras = {
   durationSeconds: number | null;
@@ -7,7 +7,7 @@ export type TrackExtras = {
   year: number | null;
   genre: string | null;
   albumArtist: string | null;
-  featuredArtists: string[];
+  featuredArtists: FeaturedArtist[];
   trackId: string | null;
   acquisitionStatus: AcquisitionStatus | null;
   previewUrl: string | null;
@@ -39,9 +39,7 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
     year: typeof year === 'number' && Number.isFinite(year) ? year : null,
     genre: typeof genre === 'string' && genre.length > 0 ? genre : null,
     albumArtist: typeof albumArtist === 'string' && albumArtist.length > 0 ? albumArtist : null,
-    featuredArtists: Array.isArray(featured)
-      ? (featured as unknown[]).filter((n): n is string => typeof n === 'string' && n.length > 0)
-      : [],
+    featuredArtists: parseFeaturedArtists(featured),
     trackId: typeof trackId === 'string' ? trackId : null,
     acquisitionStatus: typeof status === 'string' && (status === 'ready' || status === 'pending' || status === 'failed') ? status : null,
     previewUrl: typeof preview === 'string' && preview.length > 0 ? preview : null,
@@ -49,6 +47,31 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
     trackPosition:
       typeof trackPosition === 'number' && Number.isFinite(trackPosition) ? trackPosition : null,
   };
+}
+
+/** Parse the `featured_artists` extras key. The wire shape is an array of
+ * `{name, mbid?, deezer_id?}` objects; legacy payloads carried bare name
+ * strings, which map to id-less credits. */
+function parseFeaturedArtists(raw: unknown): FeaturedArtist[] {
+  if (!Array.isArray(raw)) return [];
+  const out: FeaturedArtist[] = [];
+  for (const item of raw as unknown[]) {
+    if (typeof item === 'string') {
+      if (item.length > 0) out.push({ name: item, mbid: null, deezer_id: null });
+      continue;
+    }
+    if (item !== null && typeof item === 'object') {
+      const rec = item as Record<string, unknown>;
+      const name = typeof rec['name'] === 'string' ? rec['name'] : '';
+      if (name.length === 0) continue;
+      out.push({
+        name,
+        mbid: typeof rec['mbid'] === 'string' ? rec['mbid'] : null,
+        deezer_id: typeof rec['deezer_id'] === 'number' ? rec['deezer_id'] : null,
+      });
+    }
+  }
+  return out;
 }
 
 export type AlbumExtrasResult = {

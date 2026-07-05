@@ -36,6 +36,7 @@ export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackReques
     year: te.year,
     genre: te.genre,
     album_artist: te.albumArtist,
+    ...(te.featuredArtists.length > 0 ? { featured_artists: te.featuredArtists } : {}),
     source_url: soundcloudUrl,
   };
 }
@@ -58,6 +59,7 @@ export function optimisticTrack(body: CreateTrackRequest, addedAt: string): Trac
     album_artist: body.album_artist ?? null,
     isrc: body.isrc ?? null,
     audio_ref: null,
+    ...(body.featured_artists ? { featured_artists: body.featured_artists } : {}),
   };
 }
 
