@@ -1,3 +1,5 @@
+import type { FeaturedArtist } from '@shared/api-client/types';
+
 export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'ended' | 'error';
 
 export type PlaybackSource =
@@ -10,6 +12,7 @@ export interface PlaybackTrack {
   readonly artist: string;
   readonly artworkUrl: string | null;
   readonly durationSeconds?: number | undefined;
+  readonly featuredArtists?: readonly FeaturedArtist[] | undefined;
   // Discovery provenance, present only when the track was queued from a search
   // result. Carried onto play/skip/completed events so behavioral satisfaction
   // joins back to the search and the result_signature it scores.

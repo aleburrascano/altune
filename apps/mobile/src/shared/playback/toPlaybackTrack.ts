@@ -10,6 +10,7 @@ export function toPlaybackTrack(t: TrackResponse): PlaybackTrack {
     artist: t.artist,
     artworkUrl: t.artwork_url ?? null,
     durationSeconds: t.duration_seconds ?? undefined,
+    featuredArtists: t.featured_artists,
   };
 }
 

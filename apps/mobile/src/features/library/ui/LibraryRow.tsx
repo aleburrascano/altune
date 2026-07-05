@@ -5,6 +5,7 @@ import { MoreVertical } from 'lucide-react-native';
 
 import { useDownloadPhase } from '@shared/acquisition/downloadStore';
 import { phaseLabel } from '@shared/acquisition/stagePhase';
+import { withFeaturing } from '@shared/lib/featured';
 import { formatDuration } from '@shared/lib/format';
 import { Artwork, Row, Text, spacing, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
@@ -99,7 +100,7 @@ export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, 
           {track.title}
         </Text>
         <Text variant="label" tone="secondary" numberOfLines={1} style={styles.subtitle}>
-          {track.artist}
+          {withFeaturing(track.artist, track.featured_artists)}
           {albumLabel}
         </Text>
         {phase != null && phase !== 'failed' ? (
