@@ -20,6 +20,10 @@ type DeezerEnrichment struct {
 	Genres     []string // album: Deezer genre names
 	UPC        string   // album: barcode (payload only — not user-facing)
 	RecordType string   // album: "album" / "single" / "ep" / "compilation"
+	// Featured: track's guest ("Featured"-role) contributors, fetched from the same
+	// /track/{id} detail call. Empty for albums / tracks with no guests. Consumed
+	// by the "Featuring" row, not the Deezer detail section — so not in IsZero.
+	Featured []FeaturedArtist
 }
 
 // EmptyDeezerEnrichment returns a zero-value enrichment with a non-nil Genres

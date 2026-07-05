@@ -68,9 +68,10 @@ func (a *DeezerAdapter) Lookup(
 
 func (a *DeezerAdapter) lookupTrackDetail(ctx context.Context, id string) (domain.DeezerEnrichment, error) {
 	var detail struct {
-		BPM      float64 `json:"bpm"`
-		Gain     float64 `json:"gain"`
-		Explicit bool    `json:"explicit_lyrics"`
+		BPM          float64             `json:"bpm"`
+		Gain         float64             `json:"gain"`
+		Explicit     bool                `json:"explicit_lyrics"`
+		Contributors []deezerContributor `json:"contributors"`
 	}
 	u := fmt.Sprintf("https://api.deezer.com/track/%s", url.PathEscape(id))
 	if err := a.getJSON(ctx, u, &detail); err != nil {
@@ -80,6 +81,7 @@ func (a *DeezerAdapter) lookupTrackDetail(ctx context.Context, id string) (domai
 	e.BPM = int(math.Round(detail.BPM))
 	e.Gain = detail.Gain
 	e.Explicit = detail.Explicit
+	e.Featured = extractDeezerFeatured(detail.Contributors)
 	return e, nil
 }
 
