@@ -48,6 +48,19 @@ describe('replaceOptimisticTrack*', () => {
     const out = replaceOptimisticTrackInfinite(_data([_track('opt')], 1), 'opt', _track('real'));
     expect(out?.pages[0]?.items.map((t) => t.id)).toEqual(['real']);
   });
+
+  it('dedups when the SSE already inserted the real row (home)', () => {
+    // Race: SSE upserted `real` before onSuccess; the placeholder must not
+    // produce a second `real` entry, and total drops back to 1.
+    const out = replaceOptimisticTrackHome(_home([_track('real'), _track('opt')]), 'opt', _track('real'));
+    expect(out?.items.map((t) => t.id)).toEqual(['real']);
+    expect(out?.total).toBe(1);
+  });
+
+  it('dedups when the SSE already inserted the real row (infinite)', () => {
+    const out = replaceOptimisticTrackInfinite(_data([_track('real'), _track('opt')], 2), 'opt', _track('real'));
+    expect(out?.pages.flatMap((p) => p.items.map((t) => t.id))).toEqual(['real']);
+  });
 });
 
 function _track(id: string): TrackResponse {
