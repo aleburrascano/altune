@@ -952,19 +952,21 @@ type DeezerEnrichmentResponseDTO struct {
 	Explicit   bool     `json:"explicit"`
 	Label      string   `json:"label"`
 	Genres     []string `json:"genres"`
-	UPC        string   `json:"upc"`
-	RecordType string   `json:"record_type"`
+	UPC             string           `json:"upc"`
+	RecordType      string           `json:"record_type"`
+	FeaturedArtists []map[string]any `json:"featured_artists,omitempty"`
 }
 
 func deezerEnrichmentToDTO(e domain.DeezerEnrichment) DeezerEnrichmentResponseDTO {
 	return DeezerEnrichmentResponseDTO{
-		BPM:        e.BPM,
-		Gain:       e.Gain,
-		Explicit:   e.Explicit,
-		Label:      e.Label,
-		Genres:     nonNilStrings(e.Genres),
-		UPC:        e.UPC,
-		RecordType: e.RecordType,
+		BPM:             e.BPM,
+		Gain:            e.Gain,
+		Explicit:        e.Explicit,
+		Label:           e.Label,
+		Genres:          nonNilStrings(e.Genres),
+		UPC:             e.UPC,
+		RecordType:      e.RecordType,
+		FeaturedArtists: domain.FeaturedArtistsToExtras(e.Featured),
 	}
 }
 

@@ -275,7 +275,10 @@ func (a *App) setup(ctx context.Context) error {
 	}
 	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
 
-	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
+	albumSvc := discoveryService.NewGetAlbumTracksService(
+		albumProviders,
+		discoveryService.WithTrackFeatured(deezerContent),
+	)
 
 	// Multi-provider consensus: ALL providers are equal sources, merged into a
 	// union. Built via the shared BuildConsensusProviders so coverage signal B
