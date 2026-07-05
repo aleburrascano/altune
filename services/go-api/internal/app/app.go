@@ -370,6 +370,7 @@ func (a *App) setup(ctx context.Context) error {
 
 		r.Mount("/tracks", trackHandler.Routes())
 		r.Get("/tracks/{trackId}/audio", streamHandler.HandleStreamAudio)
+		r.Post("/tracks/{trackId}/audio/recover", streamHandler.HandleRecover)
 		r.Post("/audio-urls", audioURLHandler.HandleResolve)
 		if retryH != nil {
 			r.Post("/tracks/{trackId}/retry", retryH.HandleRetryAcquisition)
