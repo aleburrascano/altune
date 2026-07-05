@@ -21,6 +21,7 @@ type AddTrackInput struct {
 	TrackNumber     *int
 	AlbumArtist     *string
 	ISRC            *string
+	FeaturedArtists []domain.FeaturedArtist
 	// SourceURL is a transient acquisition hint (e.g. a SoundCloud permalink),
 	// not a domain attribute — it is never written to the Track. When set and the
 	// track is freshly created, it is forwarded to the acquisition scheduler so
@@ -67,6 +68,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	track.TrackNumber = input.TrackNumber
 	track.AlbumArtist = input.AlbumArtist
 	track.ISRC = input.ISRC
+	track.FeaturedArtists = input.FeaturedArtists
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
 	if err != nil {
@@ -126,5 +128,26 @@ func trackAddedPayload(t *domain.Track) map[string]any {
 		"isrc":               t.ISRC,
 		"audio_ref":          t.AudioRef,
 		"failure_reason":     t.FailureReason,
+		"featured_artists":   featuredArtistsPayload(t.FeaturedArtists),
 	}
+}
+
+// featuredArtistsPayload mirrors the handler's FeaturedArtistDTO wire shape for
+// the embedded event, omitting empty ids. Returns nil for no credits.
+func featuredArtistsPayload(feats []domain.FeaturedArtist) []map[string]any {
+	if len(feats) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(feats))
+	for _, f := range feats {
+		m := map[string]any{"name": f.Name}
+		if f.MBID != "" {
+			m["mbid"] = f.MBID
+		}
+		if f.DeezerID != 0 {
+			m["deezer_id"] = f.DeezerID
+		}
+		out = append(out, m)
+	}
+	return out
 }

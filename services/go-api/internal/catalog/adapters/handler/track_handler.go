@@ -55,6 +55,9 @@ type CreateTrackRequest struct {
 	Year            *int     `json:"year,omitempty"`
 	Genre           *string  `json:"genre,omitempty"`
 	AlbumArtist     *string  `json:"album_artist,omitempty"`
+	// FeaturedArtists are the guest ("feat.") credits carried from the discovery
+	// result the client saved, persisted on the track.
+	FeaturedArtists []FeaturedArtistDTO `json:"featured_artists,omitempty"`
 	// SourceURL is the exact provider URL the saved result was discovered at
 	// (e.g. a SoundCloud permalink). When it is a directly-downloadable source,
 	// acquisition grabs that exact track instead of re-searching by metadata.
@@ -78,6 +81,7 @@ type TrackResponse struct {
 	ISRC              *string   `json:"isrc,omitempty"`
 	AudioRef          *string   `json:"audio_ref,omitempty"`
 	FailureReason     *string   `json:"failure_reason,omitempty"`
+	FeaturedArtists   []FeaturedArtistDTO `json:"featured_artists,omitempty"`
 }
 
 type ListTracksResponse struct {
@@ -109,6 +113,7 @@ func trackToResponse(t *domain.Track) TrackResponse {
 		ISRC:              t.ISRC,
 		AudioRef:          t.AudioRef,
 		FailureReason:     t.FailureReason,
+		FeaturedArtists:   featuredToDTOs(t.FeaturedArtists),
 	}
 }
 
@@ -179,6 +184,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		Genre:           req.Genre,
 		ISRC:            req.ISRC,
 		AlbumArtist:     req.AlbumArtist,
+		FeaturedArtists: domainFeaturedFromDTOs(req.FeaturedArtists),
 		SourceURL:       req.SourceURL,
 	}
 
