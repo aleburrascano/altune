@@ -174,6 +174,10 @@ export async function listSearchHistory(params?: {
   );
 }
 
+export async function clearSearchHistory(): Promise<void> {
+  await apiFetch<void>('/v1/discovery/search-history', { method: 'DELETE' });
+}
+
 export async function recordEvent(event: DiscoveryEvent): Promise<void> {
   // Stamp the rotating session_id onto every event's payload (no column — it
   // rides in JSONB) so the backend can derive session-arc signals (abandonment,

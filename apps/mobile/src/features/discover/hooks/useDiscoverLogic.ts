@@ -9,8 +9,9 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'expo-router';
 import { Keyboard } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { clearSearchHistory } from '../../../shared/api-client/discovery';
 import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { useDiscoverSearch } from './useDiscoverSearch';
@@ -104,8 +105,19 @@ export function useDiscoverLogic(): DiscoverLogic {
   const onHistoryTap = (item: SearchHistoryItem): void => {
     search.setQuery(item.query);
   };
+  // Clearing recent searches must delete the rows server-side, not just the
+  // cache — otherwise they reappear on the next mount when useSearchHistory
+  // refetches. Optimistically empty the cache for an instant UI; on failure,
+  // invalidate to restore the true (still-populated) history.
+  const clearHistoryMutation = useMutation({
+    mutationFn: clearSearchHistory,
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ['discovery', 'history'] });
+    },
+  });
   const onClearHistory = (): void => {
     queryClient.setQueryData(['discovery', 'history'], { items: [] });
+    clearHistoryMutation.mutate();
   };
   const onResultTap = (result: DiscoveryResult, position: number): void => {
     Keyboard.dismiss();

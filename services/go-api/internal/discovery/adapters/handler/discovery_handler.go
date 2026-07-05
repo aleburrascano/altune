@@ -23,14 +23,15 @@ import (
 )
 
 type DiscoveryHandler struct {
-	searchSvc  *service.Service
-	historySvc *service.ListSearchHistoryService
-	albumSvc   *service.GetAlbumTracksService
-	artistSvc  *service.GetArtistContentService
-	relatedSvc *service.GetRelatedTracksService
-	enrichSvc  *service.EnrichmentService
-	suggestSvc *service.SuggestService
-	eventSvc   *service.RecordEventService
+	searchSvc       *service.Service
+	historySvc      *service.ListSearchHistoryService
+	clearHistorySvc *service.ClearSearchHistoryService
+	albumSvc        *service.GetAlbumTracksService
+	artistSvc       *service.GetArtistContentService
+	relatedSvc      *service.GetRelatedTracksService
+	enrichSvc       *service.EnrichmentService
+	suggestSvc      *service.SuggestService
+	eventSvc        *service.RecordEventService
 
 	// enrichers holds the optional detail-open enrichment use cases, wired
 	// post-construction via WithDetailEnrichers so the positional constructor
@@ -115,26 +116,28 @@ func (h *DiscoveryHandler) WithDetailEnrichers(e DetailEnrichers) *DiscoveryHand
 // 9-positional constructor: callers (the composition root, tests) name what they
 // pass, and adding an endpoint is one field here, not another positional arg.
 type DiscoveryServices struct {
-	Search  *service.Service
-	History *service.ListSearchHistoryService
-	Album   *service.GetAlbumTracksService
-	Artist  *service.GetArtistContentService
-	Related *service.GetRelatedTracksService
-	Enrich  *service.EnrichmentService
-	Suggest *service.SuggestService
-	Event   *service.RecordEventService
+	Search       *service.Service
+	History      *service.ListSearchHistoryService
+	ClearHistory *service.ClearSearchHistoryService
+	Album        *service.GetAlbumTracksService
+	Artist       *service.GetArtistContentService
+	Related      *service.GetRelatedTracksService
+	Enrich       *service.EnrichmentService
+	Suggest      *service.SuggestService
+	Event        *service.RecordEventService
 }
 
 func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
 	return &DiscoveryHandler{
-		searchSvc:  svcs.Search,
-		historySvc: svcs.History,
-		albumSvc:   svcs.Album,
-		artistSvc:  svcs.Artist,
-		relatedSvc: svcs.Related,
-		enrichSvc:  svcs.Enrich,
-		suggestSvc: svcs.Suggest,
-		eventSvc:   svcs.Event,
+		searchSvc:       svcs.Search,
+		historySvc:      svcs.History,
+		clearHistorySvc: svcs.ClearHistory,
+		albumSvc:        svcs.Album,
+		artistSvc:       svcs.Artist,
+		relatedSvc:      svcs.Related,
+		enrichSvc:       svcs.Enrich,
+		suggestSvc:      svcs.Suggest,
+		eventSvc:        svcs.Event,
 	}
 }
 
@@ -143,6 +146,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/search", h.handleSearch)
 	r.Get("/suggest", h.handleSuggest)
 	r.Get("/search-history", h.handleSearchHistory)
+	r.Delete("/search-history", h.handleClearSearchHistory)
 	r.Post("/events", h.handleRecordEvent)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
@@ -379,6 +383,21 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 		Items: items,
 		Total: len(items),
 	})
+}
+
+func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.clearHistorySvc.Execute(r.Context(), userId); err != nil {
+		slog.ErrorContext(r.Context(), "clear search history failed", "error", err)
+		httputil.InternalError(w)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Request) {
