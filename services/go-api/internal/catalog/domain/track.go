@@ -86,6 +86,9 @@ type Track struct {
 	ISRC              *string
 	AudioRef          *string
 	FailureReason     *string
+	// FeaturedArtists are the ordered guest ("feat.") credits on this track,
+	// sourced from the discovery resolver. Empty for tracks not yet resolved.
+	FeaturedArtists []FeaturedArtist
 }
 
 func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {
