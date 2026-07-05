@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"altune/go-api/internal/auth"
-	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/service"
 	"altune/go-api/internal/shared/httputil"
 )
@@ -29,21 +28,35 @@ func (h *QueueHandler) Routes() chi.Router {
 }
 
 type saveQueueRequest struct {
-	TrackIds   []string `json:"track_ids"`
-	CurrentIdx int      `json:"current_index"`
-	PositionMs int64    `json:"position_ms"`
-	Shuffled   bool     `json:"shuffled"`
-	RepeatMode string   `json:"repeat_mode"`
-	SourceId   string   `json:"source_id"`
+	TrackIds     []string `json:"track_ids"`
+	CurrentIdx   int      `json:"current_index"`
+	PositionMs   int64    `json:"position_ms"`
+	Shuffled     bool     `json:"shuffled"`
+	RepeatMode   string   `json:"repeat_mode"`
+	SourceId     string   `json:"source_id"`
+	NaturalOrder []string `json:"natural_order"`
 }
 
 type queueStateResponse struct {
-	TrackIds   []string `json:"track_ids"`
-	CurrentIdx int      `json:"current_index"`
-	PositionMs int64    `json:"position_ms"`
-	Shuffled   bool     `json:"shuffled"`
-	RepeatMode string   `json:"repeat_mode"`
-	SourceId   string   `json:"source_id"`
+	TrackIds     []string              `json:"track_ids"`
+	CurrentIdx   int                   `json:"current_index"`
+	PositionMs   int64                 `json:"position_ms"`
+	Shuffled     bool                  `json:"shuffled"`
+	RepeatMode   string                `json:"repeat_mode"`
+	SourceId     string                `json:"source_id"`
+	NaturalOrder []string              `json:"natural_order"`
+	CurrentTrack *currentTrackResponse `json:"current_track,omitempty"`
+}
+
+// currentTrackResponse is the display-ready snapshot of the currently-playing
+// track, embedded so the client renders now-playing from this call alone.
+type currentTrackResponse struct {
+	Id                string   `json:"id"`
+	Title             string   `json:"title"`
+	Artist            string   `json:"artist"`
+	ArtworkURL        *string  `json:"artwork_url"`
+	DurationSeconds   *float64 `json:"duration_seconds"`
+	AcquisitionStatus string   `json:"acquisition_status"`
 }
 
 func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
@@ -59,12 +72,13 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := h.svc.Save(r.Context(), userId, service.SaveQueueStateInput{
-		TrackIds:   body.TrackIds,
-		CurrentIdx: body.CurrentIdx,
-		PositionMs: body.PositionMs,
-		Shuffled:   body.Shuffled,
-		RepeatMode: body.RepeatMode,
-		SourceId:   body.SourceId,
+		TrackIds:     body.TrackIds,
+		CurrentIdx:   body.CurrentIdx,
+		PositionMs:   body.PositionMs,
+		Shuffled:     body.Shuffled,
+		RepeatMode:   body.RepeatMode,
+		SourceId:     body.SourceId,
+		NaturalOrder: body.NaturalOrder,
 	})
 	if err != nil {
 		slog.ErrorContext(r.Context(), "playback.queue_state.save_failed", "error", err)
@@ -81,25 +95,38 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state, err := h.svc.Resume(r.Context(), userId)
+	view, err := h.svc.ResumeView(r.Context(), userId)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "playback.queue_state.resume_failed", "error", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to get queue state")
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, toResponse(state))
+	httputil.WriteJSON(w, http.StatusOK, toResponse(view))
 }
 
-func toResponse(state *domain.QueueState) queueStateResponse {
+func toResponse(view *service.ResumeView) queueStateResponse {
 	// QueueState guarantees a non-nil TrackIds (EmptyQueueState / RehydrateQueueState
 	// both initialise it), so no nil-to-empty normalization is needed here.
-	return queueStateResponse{
-		TrackIds:   state.TrackIds,
-		CurrentIdx: state.CurrentIdx,
-		PositionMs: state.PositionMs,
-		Shuffled:   state.Shuffled,
-		RepeatMode: state.RepeatMode.String(),
-		SourceId:   state.SourceId,
+	state := view.State
+	resp := queueStateResponse{
+		TrackIds:     state.TrackIds,
+		CurrentIdx:   state.CurrentIdx,
+		PositionMs:   state.PositionMs,
+		Shuffled:     state.Shuffled,
+		RepeatMode:   state.RepeatMode.String(),
+		SourceId:     state.SourceId,
+		NaturalOrder: state.NaturalOrder,
 	}
+	if c := view.CurrentTrack; c != nil {
+		resp.CurrentTrack = &currentTrackResponse{
+			Id:                c.Id,
+			Title:             c.Title,
+			Artist:            c.Artist,
+			ArtworkURL:        c.ArtworkURL,
+			DurationSeconds:   c.DurationSeconds,
+			AcquisitionStatus: c.AcquisitionStatus,
+		}
+	}
+	return resp
 }

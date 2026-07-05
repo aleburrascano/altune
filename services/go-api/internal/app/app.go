@@ -34,6 +34,7 @@ import (
 	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/discovery/service/eval"
+	"altune/go-api/internal/playback/adapters/catalogbridge"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
 	playbackService "altune/go-api/internal/playback/service"
@@ -192,7 +193,11 @@ func (a *App) setup(ctx context.Context) error {
 	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(a.eventBus))
 
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
-	queueSvc := playbackService.NewQueueService(queueStateRepo)
+	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo)
+	queueSvc := playbackService.NewQueueService(
+		queueStateRepo,
+		playbackService.WithNowPlayingReader(nowPlayingReader),
+	)
 	queueHandler := playbackHandler.NewQueueHandler(queueSvc)
 
 	var sharedMB *providers.MusicBrainzAdapter
