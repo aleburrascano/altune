@@ -110,12 +110,18 @@ export function replaceOptimisticTrackInfinite(
   real: TrackResponse,
 ): InfiniteData<ListTracksResponse> | undefined {
   if (data === undefined) return data;
+  // Same race as the home cache: dedup real.id across pages (keep first) after
+  // swapping the placeholder, so an SSE-upserted row + the replaced placeholder
+  // don't both survive.
+  const seen = new Set<string>();
   return {
     ...data,
-    pages: data.pages.map((page) => ({
-      ...page,
-      items: page.items.map((t) => (t.id === optimisticId ? real : t)),
-    })),
+    pages: data.pages.map((page) => {
+      const items = page.items
+        .map((t) => (t.id === optimisticId ? real : t))
+        .filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
+      return { ...page, items };
+    }),
   };
 }
 
@@ -125,5 +131,16 @@ export function replaceOptimisticTrackHome(
   real: TrackResponse,
 ): ListTracksResponse | undefined {
   if (data === undefined) return data;
-  return { ...data, items: data.items.map((t) => (t.id === optimisticId ? real : t)) };
+  // The acquisition SSE (track_added_to_library) may have already upserted the
+  // real row by the time onSuccess runs; a bare replace would then leave two
+  // entries with real.id. Replace the placeholder, then dedup by id (keep first)
+  // and correct total by however many duplicates were removed.
+  const replaced = data.items.map((t) => (t.id === optimisticId ? real : t));
+  const items = dedupById(replaced);
+  return { ...data, items, total: Math.max(0, data.total - (replaced.length - items.length)) };
+}
+
+function dedupById<T extends { id: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
 }
