@@ -1,0 +1,70 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
+)
+
+// audioURLTTL bounds how long a minted URL streams. Short enough that a leaked
+// URL grants one object for a listening session, not indefinitely; long enough
+// to outlast a queue the user leaves paused for a while.
+const audioURLTTL = time.Hour
+
+// ResolvedAudioURL is one track's short-lived, directly-streamable audio URL.
+type ResolvedAudioURL struct {
+	TrackID   domain.TrackId
+	URL       string
+	ExpiresAt time.Time
+}
+
+// AudioURLService mints presigned, directly-streamable URLs for a user's ready
+// tracks so the native player streams from storage instead of proxying every
+// byte through the API. Tracks the caller can't stream (not found, not owned,
+// not ready) are omitted; the client falls back to the proxy endpoint for those.
+// When the audio store cannot sign (filesystem / local dev), nothing is returned
+// and every track falls back to the proxy.
+type AudioURLService struct {
+	trackRepo ports.TrackRepository
+	signer    ports.AudioURLSigner // nil when the store can't presign
+	ttl       time.Duration
+}
+
+func NewAudioURLService(trackRepo ports.TrackRepository, store ports.AudioStore) *AudioURLService {
+	signer, _ := store.(ports.AudioURLSigner)
+	return &AudioURLService{trackRepo: trackRepo, signer: signer, ttl: audioURLTTL}
+}
+
+// Resolve returns a presigned URL per streamable track. Non-streamable or unknown
+// tracks are silently skipped (the client proxies them). A presign failure on one
+// track skips only that track, never the batch.
+func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, trackIds []domain.TrackId) ([]ResolvedAudioURL, error) {
+	if s.signer == nil {
+		return nil, nil
+	}
+
+	expiresAt := time.Now().Add(s.ttl)
+	out := make([]ResolvedAudioURL, 0, len(trackIds))
+	for _, id := range trackIds {
+		track, err := s.trackRepo.GetByID(ctx, id, userId)
+		if err != nil {
+			return nil, fmt.Errorf("resolve audio url: %w", err)
+		}
+		if track == nil || !track.IsStreamable() {
+			continue
+		}
+
+		url, err := s.signer.PresignGet(ctx, *track.AudioRef, s.ttl)
+		if err != nil {
+			slog.WarnContext(ctx, "audio_url.presign_failed", "track_id", id.String(), "error", err)
+			continue
+		}
+		out = append(out, ResolvedAudioURL{TrackID: id, URL: url, ExpiresAt: expiresAt})
+	}
+	return out, nil
+}
