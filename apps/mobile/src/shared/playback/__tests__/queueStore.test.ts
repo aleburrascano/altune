@@ -1,4 +1,4 @@
-import { useQueueStore } from '../queueStore';
+import { orderedQueueTracks, useQueueStore } from '../queueStore';
 
 import type { PlaybackTrack } from '../types';
 
@@ -285,5 +285,71 @@ describe('removeFromQueue', () => {
     useQueueStore.getState().loadQueue([tracks[0]!], 0, null);
     useQueueStore.getState().removeFromQueue(0);
     expect(useQueueStore.getState().tracks.length).toBe(0);
+  });
+});
+
+describe('setShuffled (resume order preservation)', () => {
+  it('marks the queue shuffled without reordering', () => {
+    // Resume loads track_ids already in (shuffled) play order, then marks it
+    // shuffled — the order must be preserved exactly, unlike toggleShuffle which
+    // re-randomizes the tail.
+    const savedShuffledOrder = [makeTrack('c'), makeTrack('a'), makeTrack('e'), makeTrack('b')];
+    useQueueStore.getState().loadQueue(savedShuffledOrder, 1, null);
+
+    useQueueStore.getState().setShuffled(true);
+
+    const s = useQueueStore.getState();
+    expect(s.shuffled).toBe(true);
+    expect(orderedQueueTracks(s)).toEqual(savedShuffledOrder);
+    // Current track is unchanged by the flag flip.
+    expect(s.currentTrack()).toEqual(savedShuffledOrder[1]);
+  });
+
+  it('can clear the shuffled flag', () => {
+    useQueueStore.getState().loadQueue(tracks, 0, null);
+    useQueueStore.getState().setShuffled(true);
+    useQueueStore.getState().setShuffled(false);
+    expect(useQueueStore.getState().shuffled).toBe(false);
+  });
+});
+
+describe('restoreQueue (full-fidelity resume)', () => {
+  // tracks in NATURAL order [a,b,c,d,e]; a shuffled play order [c,a,e,b,d].
+  const natural = tracks; // a,b,c,d,e
+  const playOrder = [2, 0, 4, 1, 3];
+
+  it('restores the exact shuffled play sequence with natural-order tracks', () => {
+    useQueueStore.getState().restoreQueue(natural, playOrder, 1, null, true);
+    const s = useQueueStore.getState();
+
+    expect(s.shuffled).toBe(true);
+    // Plays in the shuffled order...
+    expect(orderedQueueTracks(s).map((t) => t.source)).toEqual(
+      [2, 0, 4, 1, 3].map((i) => natural[i]!.source),
+    );
+    // ...current is the play-order position 1 → natural[0] === 'a'.
+    expect(s.currentTrack()).toEqual(natural[0]);
+  });
+
+  it('un-shuffle returns upcoming tracks to the original natural order', () => {
+    useQueueStore.getState().restoreQueue(natural, playOrder, 1, null, true);
+    // Toggle shuffle off — upcoming (after the current) should sort back to natural.
+    useQueueStore.getState().toggleShuffle();
+    const s = useQueueStore.getState();
+
+    expect(s.shuffled).toBe(false);
+    // Head (played + current) is preserved: [c, a]; upcoming sorts to natural: [b, d, e].
+    expect(orderedQueueTracks(s)).toEqual([
+      natural[2]!, // c (played)
+      natural[0]!, // a (current)
+      natural[1]!, // b
+      natural[3]!, // d
+      natural[4]!, // e
+    ]);
+  });
+
+  it('clamps an out-of-range currentIndex', () => {
+    useQueueStore.getState().restoreQueue(natural, playOrder, 99, null, true);
+    expect(useQueueStore.getState().currentIndex).toBe(playOrder.length - 1);
   });
 });

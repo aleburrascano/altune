@@ -7,10 +7,11 @@ import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import { getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
+import { currentTrackToPlaybackTrack, toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { RepeatMode } from '@shared/playback/types';
 
 import { loadNativeQueue } from '../loadNativeTrack';
+import { currentTrackId, reconstructPlayOrder, resolveResumeStartIndex } from '../resumeQueue';
 
 const SAVE_INTERVAL_MS = 15_000;
 // Mirror of the library-home page size — resume rehydrates from the same
@@ -42,9 +43,26 @@ export function useQueueResume() {
     const s = useQueueStore.getState();
     if (s.tracks.length === 0) return;
 
-    const trackIds = s.tracks
+    // Persist in PLAY ORDER with current_index pointing into that same library-only
+    // list, so track_ids[current_index] is unambiguously the current track. The old
+    // format sent track_ids in natural order but current_index as a play-order
+    // position, so they disagreed whenever the queue was shuffled or reordered —
+    // restoring (and the server-embedded now-playing snapshot) landed on the wrong
+    // track.
+    const trackIds = orderedQueueTracks(s)
       .map((t) => (t.source.kind === 'library' ? t.source.trackId : ''))
       .filter(Boolean);
+    // natural_order is the same library tracks in their pre-shuffle (album/playlist)
+    // order — s.tracks is natural order; track_ids above is play order. Persisting
+    // both lets restore rebuild the exact shuffled sequence AND un-shuffle back to
+    // the original order after relaunch.
+    const naturalOrder = s.tracks
+      .map((t) => (t.source.kind === 'library' ? t.source.trackId : ''))
+      .filter(Boolean);
+    const current = s.currentTrack();
+    const currentId =
+      current && current.source.kind === 'library' ? current.source.trackId : '';
+    const currentIndex = currentId ? Math.max(0, trackIds.indexOf(currentId)) : 0;
 
     let posMs = 0;
     try {
@@ -57,11 +75,12 @@ export function useQueueResume() {
     try {
       await saveQueueState({
         track_ids: trackIds,
-        current_index: s.currentIndex,
+        current_index: currentIndex,
         position_ms: posMs,
         shuffled: s.shuffled,
         repeat_mode: s.repeatMode,
         source_id: buildSourceId(s.source),
+        natural_order: naturalOrder,
       });
     } catch {
       // Best-effort persistence — don't spam errors
@@ -77,6 +96,17 @@ export function useQueueResume() {
         const saved = await getQueueState();
         if (!saved.track_ids.length) return;
 
+        // Instant now-playing: the server embeds the current track's metadata, so
+        // render it (and the saved scrubber position) from this small call before
+        // the slow full-library rehydrate below. A one-track placeholder queue is
+        // display-only — the native player is primed later with the full queue.
+        // Same trackId identity as the rehydrated entry, so the swap is seamless.
+        if (saved.current_track && saved.current_track.acquisition_status === 'ready') {
+          const current = currentTrackToPlaybackTrack(saved.current_track);
+          useQueueStore.getState().loadQueue([current], 0, parseSourceId(saved.source_id));
+          useQueueStore.getState().setResumePosition(saved.position_ms);
+        }
+
         // Rehydrate full track data through the shared api-client transport
         // rather than reaching into the library feature's React Query cache.
         // Resume no longer silently no-ops when the library screen hasn't loaded.
@@ -84,23 +114,56 @@ export function useQueueResume() {
         if (!home.items.length) return;
 
         const trackMap = new Map(home.items.map((t) => [t.id, t]));
-        const validTracks = saved.track_ids
-          .map((id) => trackMap.get(id))
-          .filter((t): t is TrackResponse => t != null && t.acquisition_status === 'ready');
-
-        if (!validTracks.length) return;
-
-        const playbackTracks = validTracks.map(toPlaybackTrack);
-        const startIdx = Math.min(saved.current_index, playbackTracks.length - 1);
+        const isReady = (id: string): boolean => {
+          const t = trackMap.get(id);
+          return t != null && t.acquisition_status === 'ready';
+        };
         const source = parseSourceId(saved.source_id);
 
-        useQueueStore.getState().loadQueue(playbackTracks, startIdx, source);
+        // Path 1 — full fidelity: with the persisted natural (unshuffled) order we
+        // rebuild the store with an explicit play-order permutation, so the exact
+        // shuffled sequence resumes AND un-shuffle returns to the album/playlist
+        // order. tracks stays in natural order; playOrder carries the shuffle.
+        let loaded = false;
+        if (saved.natural_order.length) {
+          const naturalIds = saved.natural_order.filter(isReady);
+          const playIds = saved.track_ids.filter(isReady);
+          const currentId = currentTrackId(saved.track_ids, saved.current_index);
+          const { playOrder, currentIndex } = reconstructPlayOrder(naturalIds, playIds, currentId);
+          if (naturalIds.length && playOrder.length) {
+            const naturalTracks = naturalIds.map((id) => toPlaybackTrack(trackMap.get(id)!));
+            useQueueStore
+              .getState()
+              .restoreQueue(naturalTracks, playOrder, currentIndex, source, saved.shuffled);
+            loaded = true;
+          }
+        }
+
+        // Path 2 — fallback for older rows without natural_order: treat track_ids as
+        // the queue and locate the current track by id (robust to filter shifts).
+        if (!loaded) {
+          const validTracks = saved.track_ids
+            .map((id) => trackMap.get(id))
+            .filter((t): t is TrackResponse => t != null && t.acquisition_status === 'ready');
+          if (!validTracks.length) return;
+
+          const startIdx = resolveResumeStartIndex(
+            saved.track_ids,
+            saved.current_index,
+            validTracks.map((t) => t.id),
+          );
+          useQueueStore.getState().loadQueue(validTracks.map(toPlaybackTrack), startIdx, source);
+          if (saved.shuffled) useQueueStore.getState().setShuffled(true);
+        }
+
+        // Both paths cleared resumePositionMs; re-seed so the scrubber keeps showing
+        // the saved offset until the native player seeks and reports live progress.
+        useQueueStore.getState().setResumePosition(saved.position_ms);
 
         const repeatMode = saved.repeat_mode as RepeatMode;
         if (repeatMode === 'all' || repeatMode === 'one') {
           useQueueStore.getState().setRepeatMode(repeatMode);
         }
-        if (saved.shuffled) useQueueStore.getState().toggleShuffle();
 
         // Prime the native player with the full restored queue, paused and
         // seeked to the saved position. loadQueue only updates the store;

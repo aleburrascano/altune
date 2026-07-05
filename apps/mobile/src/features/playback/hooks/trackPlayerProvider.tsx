@@ -69,8 +69,15 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   // player (and its lock-screen position) is driven natively, unaffected.
   const frozenPositionMs = useRef(0);
   const livePositionMs = progress.position * 1000;
-  if (isForeground) frozenPositionMs.current = livePositionMs;
-  const positionMs = isForeground ? livePositionMs : frozenPositionMs.current;
+  // Before the native player loads (progress is 0), show the saved resume offset
+  // so the scrubber lands at the right spot on relaunch instead of snapping from
+  // 0 a beat later. Once native progress goes live (> 0), it always wins — so the
+  // resume seed never fights real playback. Display-only: usePlaybackSignals below
+  // still reads the raw livePositionMs so the listen threshold isn't spoofed.
+  const resumePositionMs = useQueueStore((s) => s.resumePositionMs);
+  const displayPositionMs = livePositionMs > 0 ? livePositionMs : resumePositionMs;
+  if (isForeground) frozenPositionMs.current = displayPositionMs;
+  const positionMs = isForeground ? displayPositionMs : frozenPositionMs.current;
   const rawDurationMs = progress.duration * 1000;
 
   // The track carries its own duration (set at queue-build time by
