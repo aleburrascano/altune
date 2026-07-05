@@ -9,6 +9,14 @@
 
 export type AcquisitionStatus = 'pending' | 'ready' | 'failed';
 
+/** A guest ("feat.") credit. Ids are present when a provider (MusicBrainz /
+ * Deezer) resolved them and drive tappable navigation + "featuring X" grouping. */
+export type FeaturedArtist = {
+  name: string;
+  mbid: string | null;
+  deezer_id: number | null;
+};
+
 export type TrackResponse = {
   id: string; // UUID string from the wire
   title: string;
@@ -25,6 +33,7 @@ export type TrackResponse = {
   album_artist: string | null;
   isrc: string | null;
   audio_ref: string | null;
+  featured_artists?: FeaturedArtist[];
 };
 
 export type CreateTrackRequest = {
@@ -37,6 +46,8 @@ export type CreateTrackRequest = {
   year: number | null;
   genre: string | null;
   album_artist: string | null;
+  /** Guest ("feat.") credits carried from the discovery result being saved. */
+  featured_artists?: FeaturedArtist[];
   /** Exact provider URL the result was discovered at (e.g. a SoundCloud
    * permalink). When it's a directly-downloadable source the backend acquires
    * that exact track instead of re-searching. Optional; not persisted. */

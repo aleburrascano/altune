@@ -20,7 +20,7 @@ import { GenrePills } from './GenrePills';
 
 function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   const base = track.subtitle ?? '';
-  const names = trackExtras(track.extras).featuredArtists;
+  const names = trackExtras(track.extras).featuredArtists.map((f) => f.name);
   if (names.length > 0) return `${base}, ${names.join(', ')}`;
   const parsed = extractFeaturedFromText(track.title, track.subtitle);
   if (parsed) return `${base}, ${parsed}`;
