@@ -1,6 +1,6 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
-import { audioRequestHeaders, audioStreamUrl } from './api/audio';
+import { audioRequestHeaders, audioStreamUrl, fetchAudioUrls } from './api/audio';
 import { ensurePlayerSetup } from './initPlayer';
 import type { PlaybackTrack } from '@shared/playback/types';
 
@@ -12,10 +12,49 @@ export interface LoadNativeTrackOptions {
   startPositionMs?: number;
 }
 
-function toNativeTrack(track: PlaybackTrack, headers: Record<string, string>): AddTrack {
+// Cap on presigned URLs minted per load: only the near-term window is signed so
+// the resolve stays fast (it blocks queue start). Tracks past the window fall
+// back to the proxy until reached; download-ahead covers the imminent next track
+// regardless.
+const MAX_PRESIGN = 25;
+
+// AIDEV-NOTE: Resolve short-lived presigned URLs for the library tracks so the
+// native player streams straight from object storage instead of proxying every
+// byte through the API (auth + Postgres + storage round-trips per range request).
+// Best-effort: any failure yields an empty map and callers fall back to the proxy
+// URL (with auth headers). Preview tracks never need resolution.
+async function resolveLibraryUrls(
+  tracks: readonly PlaybackTrack[],
+): Promise<Map<string, string>> {
+  const ids: string[] = [];
+  for (const t of tracks) {
+    if (t.source.kind === 'library') ids.push(t.source.trackId);
+    if (ids.length >= MAX_PRESIGN) break;
+  }
+  if (ids.length === 0) return new Map();
+  try {
+    const resolved = await fetchAudioUrls(ids);
+    return new Map(resolved.map((r) => [r.trackId, r.url]));
+  } catch {
+    return new Map();
+  }
+}
+
+// A presigned URL is self-authorizing (the signature rides in the query string),
+// so it carries no auth headers; the proxy fallback URL does. Preview tracks
+// stream their external URL directly.
+function toNativeTrack(
+  track: PlaybackTrack,
+  headers: Record<string, string>,
+  resolved: Map<string, string>,
+): AddTrack {
   const artwork = track.artworkUrl ?? '';
   if (track.source.kind === 'preview') {
     return { url: track.source.previewUrl, title: track.title, artist: track.artist, artwork };
+  }
+  const signed = resolved.get(track.source.trackId);
+  if (signed) {
+    return { url: signed, title: track.title, artist: track.artist, artwork };
   }
   return {
     url: audioStreamUrl(track.source.trackId),
@@ -35,7 +74,8 @@ export async function loadNativeTrack(
   await ensurePlayerSetup();
   await TrackPlayer.reset();
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
-  await TrackPlayer.add(toNativeTrack(track, headers));
+  const resolved = await resolveLibraryUrls([track]);
+  await TrackPlayer.add(toNativeTrack(track, headers, resolved));
 
   if (startPositionMs > 0) {
     await TrackPlayer.seekTo(startPositionMs / 1000);
@@ -45,11 +85,12 @@ export async function loadNativeTrack(
   }
 }
 
-// AIDEV-NOTE: Loads the whole ordered queue into the native player in one pass
-// so TrackPlayer prefetches the next track and transitions are gapless — the
-// fix for the "not playing" flash + slow switch that single-track reset+load
-// caused. The native queue mirrors play order, so its index == store
-// currentIndex. Auth headers are fetched once and reused across library items.
+// AIDEV-NOTE: Loads the whole ordered queue into the native player in one pass so
+// TrackPlayer holds the full play order. Library tracks stream via short-lived
+// presigned URLs (resolveLibraryUrls) — direct from storage, no per-byte proxy —
+// falling back to the proxy URL on any resolve failure. The native queue mirrors
+// play order, so its index == store currentIndex. Auth headers are fetched once
+// and reused across proxy-fallback items.
 export async function loadNativeQueue(
   tracks: readonly PlaybackTrack[],
   startIndex: number,
@@ -63,7 +104,9 @@ export async function loadNativeQueue(
 
   const needsAuth = tracks.some((t) => t.source.kind === 'library');
   const headers = needsAuth ? await audioRequestHeaders() : {};
-  await TrackPlayer.add(tracks.map((t) => toNativeTrack(t, headers)));
+  // Sign the window from the start index forward — that's what plays next.
+  const resolved = await resolveLibraryUrls(tracks.slice(startIndex));
+  await TrackPlayer.add(tracks.map((t) => toNativeTrack(t, headers, resolved)));
 
   const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
   if (idx > 0) await TrackPlayer.skip(idx);
@@ -76,8 +119,8 @@ export async function loadNativeQueue(
 // removed, re-added, or reindexed, so audio continues uninterrupted and no
 // PlaybackActiveTrackChanged fires. Because only positions after the active
 // index change, native index still mirrors the store's play order. Shuffle
-// toggles route through here so they're seamless. Auth headers are fetched once
-// and reused across library items, same as loadNativeQueue.
+// toggles route through here so they're seamless. Presigned URLs are resolved for
+// the re-added upcoming items, same as loadNativeQueue.
 export async function reorderUpcomingNative(
   upcoming: readonly PlaybackTrack[],
 ): Promise<void> {
@@ -87,7 +130,8 @@ export async function reorderUpcomingNative(
 
   const needsAuth = upcoming.some((t) => t.source.kind === 'library');
   const headers = needsAuth ? await audioRequestHeaders() : {};
-  await TrackPlayer.add(upcoming.map((t) => toNativeTrack(t, headers)));
+  const resolved = await resolveLibraryUrls(upcoming);
+  await TrackPlayer.add(upcoming.map((t) => toNativeTrack(t, headers, resolved)));
 }
 
 // AIDEV-NOTE: Append one track to the end of the native queue (Add to Queue).
@@ -97,7 +141,8 @@ export async function reorderUpcomingNative(
 export async function appendNativeTrack(track: PlaybackTrack): Promise<void> {
   await ensurePlayerSetup();
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
-  await TrackPlayer.add(toNativeTrack(track, headers));
+  const resolved = await resolveLibraryUrls([track]);
+  await TrackPlayer.add(toNativeTrack(track, headers, resolved));
 }
 
 // AIDEV-NOTE: Insert one track at `position` in the native queue (Play Next).
@@ -110,5 +155,6 @@ export async function insertNativeTrackNext(
 ): Promise<void> {
   await ensurePlayerSetup();
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
-  await TrackPlayer.add(toNativeTrack(track, headers), position);
+  const resolved = await resolveLibraryUrls([track]);
+  await TrackPlayer.add(toNativeTrack(track, headers, resolved), position);
 }

@@ -3,6 +3,8 @@ import TrackPlayer, { Event } from 'react-native-track-player';
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 
+import { prefetchNext } from './audioPrefetch';
+
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
 
 // AIDEV-NOTE: Background playback service. With the native queue holding the
@@ -42,6 +44,9 @@ export async function playbackService() {
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data) => {
     if (typeof data.index === 'number') {
       useQueueStore.getState().syncCurrentIndex(data.index);
+      // Download-ahead the next track (and swap its queue entry to the local
+      // file) so the following auto-advance plays from disk with no buffering.
+      void prefetchNext(data.index);
     }
   });
 }
