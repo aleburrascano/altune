@@ -50,6 +50,29 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 	http.ServeContent(w, r, "", time.Time{}, out.Reader)
 }
 
+// HandleRecover is the client's playback-error hook for presigned streams: since
+// those bypass the proxy (and its missing-file recovery), the client calls this
+// when a library track fails to play so a genuinely-gone file still gets marked
+// failed and re-acquired. Idempotent and a no-op when the file is actually there.
+func (h *StreamHandler) HandleRecover(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
+	if err != nil {
+		httputil.BadRequest(w, "invalid track ID")
+		return
+	}
+
+	if err := h.svc.RecoverIfMissing(r.Context(), userId, trackId); err != nil {
+		httputil.HandleServiceError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
 // audioContentType maps a stored audio ref to its MIME type. The serve path must
 // label the container correctly — iOS/expo-audio decodes progressive audio by the
 // Content-Type, so an m4a sent as audio/mpeg fails to play. Mirrors the mapping the
