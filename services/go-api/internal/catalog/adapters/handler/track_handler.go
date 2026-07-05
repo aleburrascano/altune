@@ -17,20 +17,26 @@ import (
 )
 
 type TrackHandler struct {
-	addTrack    *service.AddTrackService
-	listTracks  *service.ListTracksService
-	deleteTrack *service.DeleteTrackService
+	addTrack         *service.AddTrackService
+	listTracks       *service.ListTracksService
+	deleteTrack      *service.DeleteTrackService
+	backfillFeatured *service.BackfillFeaturedService
+	listFeaturing    *service.ListFeaturingService
 }
 
 func NewTrackHandler(
 	addTrack *service.AddTrackService,
 	listTracks *service.ListTracksService,
 	deleteTrack *service.DeleteTrackService,
+	backfillFeatured *service.BackfillFeaturedService,
+	listFeaturing *service.ListFeaturingService,
 ) *TrackHandler {
 	return &TrackHandler{
-		addTrack:    addTrack,
-		listTracks:  listTracks,
-		deleteTrack: deleteTrack,
+		addTrack:         addTrack,
+		listTracks:       listTracks,
+		deleteTrack:      deleteTrack,
+		backfillFeatured: backfillFeatured,
+		listFeaturing:    listFeaturing,
 	}
 }
 
@@ -38,9 +44,69 @@ func (h *TrackHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.handleListTracks)
 	r.Post("/", h.handleCreateTrack)
+	r.Get("/featuring", h.handleListFeaturing)
+	r.Post("/featured-backfill", h.handleBackfillFeatured)
 	r.Get("/{trackId}/status", h.handleGetTrackStatus)
 	r.Delete("/{trackId}", h.handleDeleteTrack)
 	return r
+}
+
+// handleBackfillFeatured resolves and persists featured artists for the authed
+// user's existing tracks (idempotent). Synchronous — the library is small.
+func (h *TrackHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.backfillFeatured.Execute(r.Context(), userId)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "featured backfill failed", "error", err)
+		httputil.InternalError(w)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, result)
+}
+
+// handleListFeaturing returns the user's tracks crediting a featured artist,
+// identified by mbid, deezer_id, or name (in that precedence).
+func (h *TrackHandler) handleListFeaturing(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	name := q.Get("name")
+	mbid := q.Get("mbid")
+	var deezerID int64
+	if v := q.Get("deezer_id"); v != "" {
+		deezerID, _ = strconv.ParseInt(v, 10, 64)
+	}
+	if name == "" && mbid == "" && deezerID == 0 {
+		httputil.BadRequest(w, "one of name, mbid, or deezer_id is required")
+		return
+	}
+
+	fa, valid := domain.NewFeaturedArtist(name, mbid, deezerID)
+	if !valid {
+		// Identity present but no display name — construct directly so the
+		// identity key still resolves.
+		fa = domain.FeaturedArtist{Name: name, MBID: mbid, DeezerID: deezerID, Role: domain.RoleFeatured}
+	}
+
+	tracks, err := h.listFeaturing.Execute(r.Context(), userId, fa)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "list featuring failed", "error", err)
+		httputil.InternalError(w)
+		return
+	}
+
+	items := make([]TrackResponse, len(tracks))
+	for i, t := range tracks {
+		items[i] = trackToResponse(t)
+	}
+	httputil.WriteJSON(w, http.StatusOK, ListTracksResponse{
+		Items: items, Total: len(items), Limit: len(items), Offset: 0, HasMore: false,
+	})
 }
 
 // --- DTOs ---

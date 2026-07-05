@@ -134,6 +134,29 @@ func (r *fakeTrackRepo) GetByDedupKey(_ context.Context, userId shared.UserId, d
 	return nil, nil
 }
 
+func (r *fakeTrackRepo) ReplaceFeaturedArtists(_ context.Context, id catdomain.TrackId, userId shared.UserId, feats []catdomain.FeaturedArtist) error {
+	if t, ok := r.tracks[id.String()]; ok && t.UserId == userId {
+		t.FeaturedArtists = feats
+	}
+	return nil
+}
+
+func (r *fakeTrackRepo) ListTracksFeaturing(_ context.Context, userId shared.UserId, fa catdomain.FeaturedArtist) ([]*catdomain.Track, error) {
+	var out []*catdomain.Track
+	for _, t := range r.tracks {
+		if t.UserId != userId {
+			continue
+		}
+		for _, f := range t.FeaturedArtists {
+			if f.IdentityKey() == fa.IdentityKey() {
+				out = append(out, t)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 func (r *fakeTrackRepo) seed(t *catdomain.Track) {
 	r.tracks[t.ID.String()] = t
 }
@@ -391,7 +414,9 @@ func buildTrackHandler(trackRepo *fakeTrackRepo, scheduler *fakeScheduler) (*Tra
 	listSvc := service.NewListTracksService(trackRepo)
 	deleteSvc := service.NewDeleteTrackService(trackRepo, newFakeAudioStore())
 
-	h := NewTrackHandler(addSvc, listSvc, deleteSvc)
+	backfillSvc := service.NewBackfillFeaturedService(trackRepo, nil)
+	listFeaturingSvc := service.NewListFeaturingService(trackRepo)
+	h := NewTrackHandler(addSvc, listSvc, deleteSvc, backfillSvc, listFeaturingSvc)
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(&fakeTokenVerifier{userId: testUserId}))
 	r.Mount("/tracks", h.Routes())

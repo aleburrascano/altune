@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -101,6 +102,82 @@ func loadFeaturedForTracks(ctx context.Context, q querier, tracks []*domain.Trac
 		t.FeaturedArtists = append(t.FeaturedArtists, fa)
 	}
 	return rows.Err()
+}
+
+// ReplaceFeaturedArtists deletes the track's existing featured-artist links and
+// writes the new set in one transaction. Verifies the track belongs to the user
+// first so the backfill can't cross tenants.
+func (r *PgxTrackRepository) ReplaceFeaturedArtists(
+	ctx context.Context,
+	id domain.TrackId,
+	userId shared.UserId,
+	feats []domain.FeaturedArtist,
+) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var owned bool
+	err = tx.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM tracks WHERE id = $1 AND user_id = $2)`,
+		id.UUID(), userId.UUID(),
+	).Scan(&owned)
+	if err != nil {
+		return err
+	}
+	if !owned {
+		return fmt.Errorf("track %s not found for user", id.String())
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM track_featured_artists WHERE track_id = $1`, id.UUID()); err != nil {
+		return fmt.Errorf("clear featured artists: %w", err)
+	}
+	if err := writeTrackFeatured(ctx, tx, userId.UUID(), id.UUID(), feats); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// ListTracksFeaturing returns the user's tracks crediting the featured artist,
+// matched on its identity key. Ordered newest-first.
+func (r *PgxTrackRepository) ListTracksFeaturing(
+	ctx context.Context,
+	userId shared.UserId,
+	fa domain.FeaturedArtist,
+) ([]*domain.Track, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT t.id, t.user_id, t.title, t.artist, t.album, t.duration_seconds,
+			t.added_at, t.artwork_url, t.acquisition_status, t.dedup_key,
+			t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason
+		FROM tracks t
+		JOIN track_featured_artists tfa ON tfa.track_id = t.id
+		JOIN featured_artists fa ON fa.id = tfa.featured_artist_id
+		WHERE t.user_id = $1 AND fa.identity_key = $2
+		ORDER BY t.added_at DESC, t.id DESC`,
+		userId.UUID(), fa.IdentityKey(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list tracks featuring: %w", err)
+	}
+	defer rows.Close()
+
+	var tracks []*domain.Track
+	for rows.Next() {
+		t, err := scanTrackFromRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := loadFeaturedForTracks(ctx, r.pool, tracks); err != nil {
+		return nil, err
+	}
+	return tracks, nil
 }
 
 func nullString(s string) any {
