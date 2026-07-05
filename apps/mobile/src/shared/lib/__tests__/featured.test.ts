@@ -1,23 +1,17 @@
-import { featuredArtistsFromExtras, formatFeaturing, withFeaturing } from '../featured';
-
-describe('formatFeaturing', () => {
-  it('formats a list', () => {
-    expect(formatFeaturing([{ name: 'A', mbid: null, deezer_id: null }, { name: 'B', mbid: null, deezer_id: null }])).toBe(
-      'feat. A, B',
-    );
-  });
-  it('returns null for empty/undefined', () => {
-    expect(formatFeaturing([])).toBeNull();
-    expect(formatFeaturing(undefined)).toBeNull();
-  });
-});
+import { featuredArtistsFromExtras, withFeaturing } from '../featured';
 
 describe('withFeaturing', () => {
-  it('appends when present', () => {
-    expect(withFeaturing('Drake', [{ name: 'Rihanna', mbid: null, deezer_id: null }])).toBe('Drake · feat. Rihanna');
+  it('comma-joins guests into the base artist', () => {
+    expect(
+      withFeaturing('Ken Carson', [
+        { name: 'Playboi Carti', mbid: null, deezer_id: null },
+        { name: 'Destroy Lonely', mbid: null, deezer_id: null },
+      ]),
+    ).toBe('Ken Carson, Playboi Carti, Destroy Lonely');
   });
   it('returns base when absent', () => {
     expect(withFeaturing('Drake', [])).toBe('Drake');
+    expect(withFeaturing('Drake', undefined)).toBe('Drake');
   });
 });
 
