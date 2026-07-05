@@ -9,17 +9,31 @@ interface QueueState {
   repeatMode: RepeatMode;
   shuffled: boolean;
   source: QueueSource | null;
+  // Saved playback offset (ms) restored on relaunch, shown on the scrubber before
+  // the native player loads and reports live progress. 0 in every fresh queue;
+  // set only by the resume flow. Once native progress goes live (> 0) the provider
+  // ignores it, so it never fights real playback.
+  resumePositionMs: number;
 }
 
 interface QueueActions {
   loadQueue: (tracks: readonly PlaybackTrack[], startIndex: number, source: QueueSource | null) => void;
+  restoreQueue: (
+    tracks: readonly PlaybackTrack[],
+    playOrder: readonly number[],
+    currentIndex: number,
+    source: QueueSource | null,
+    shuffled: boolean,
+  ) => void;
   enqueue: (track: PlaybackTrack) => void;
   playNext: (track: PlaybackTrack) => void;
   skipToNext: () => PlaybackTrack | null;
   skipToPrevious: () => PlaybackTrack | null;
   skipToIndex: (index: number) => PlaybackTrack | null;
   syncCurrentIndex: (index: number) => void;
+  setResumePosition: (positionMs: number) => void;
   toggleShuffle: () => void;
+  setShuffled: (shuffled: boolean) => void;
   cycleRepeatMode: () => void;
   setRepeatMode: (mode: RepeatMode) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
@@ -39,6 +53,7 @@ const INITIAL: QueueState = {
   repeatMode: 'off',
   shuffled: false,
   source: null,
+  resumePositionMs: 0,
 };
 
 function identityOrder(length: number): number[] {
@@ -78,7 +93,18 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
 
   loadQueue: (tracks, startIndex, source) => {
     const order = identityOrder(tracks.length);
-    set({ tracks, playOrder: order, currentIndex: startIndex, shuffled: false, source });
+    set({ tracks, playOrder: order, currentIndex: startIndex, shuffled: false, source, resumePositionMs: 0 });
+  },
+
+  // Restore a snapshot with an EXPLICIT play-order permutation (unlike loadQueue,
+  // which forces identity order). Resume uses this to rebuild the exact shuffled
+  // sequence from the persisted natural + play orders, so tracks stays in natural
+  // (album/playlist) order and un-shuffle returns to it. currentIndex is a
+  // position in playOrder.
+  restoreQueue: (tracks, playOrder, currentIndex, source, shuffled) => {
+    const clampedIdx =
+      playOrder.length === 0 ? -1 : Math.max(0, Math.min(currentIndex, playOrder.length - 1));
+    set({ tracks, playOrder, currentIndex: clampedIdx, shuffled, source, resumePositionMs: 0 });
   },
 
   // AIDEV-WARNING: enqueue/playNext mutate tracks + playOrder, so any caller
@@ -156,6 +182,10 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({ currentIndex: index });
   },
 
+  setResumePosition: (positionMs) => {
+    set({ resumePositionMs: Math.max(0, positionMs) });
+  },
+
   // Shuffle/unshuffle only the upcoming tracks; the current track and history
   // keep their positions so currentIndex is stable and the native player never
   // has to touch the playing track. Turning shuffle off restores the upcoming
@@ -172,6 +202,14 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     } else {
       set({ playOrder: shuffleTail(playOrder, currentIndex), shuffled: true });
     }
+  },
+
+  // Set the shuffled flag WITHOUT reordering. Used by resume: the saved queue is
+  // already persisted in play order, so the loaded order IS the shuffled order —
+  // marking it shuffled (rather than calling toggleShuffle, which re-randomizes
+  // the tail) preserves the exact order the user was listening to.
+  setShuffled: (shuffled) => {
+    set({ shuffled });
   },
 
   cycleRepeatMode: () => {

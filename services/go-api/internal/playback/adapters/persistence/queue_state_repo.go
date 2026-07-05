@@ -26,8 +26,8 @@ func NewPgxQueueStateRepository(pool *pgxpool.Pool) *PgxQueueStateRepository {
 
 func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.QueueState) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO playback_queue_state (user_id, track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`INSERT INTO playback_queue_state (user_id, track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (user_id) DO UPDATE SET
 		   track_ids = EXCLUDED.track_ids,
 		   current_idx = EXCLUDED.current_idx,
@@ -35,6 +35,7 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		   shuffled = EXCLUDED.shuffled,
 		   repeat_mode = EXCLUDED.repeat_mode,
 		   source_id = EXCLUDED.source_id,
+		   natural_order = EXCLUDED.natural_order,
 		   updated_at = EXCLUDED.updated_at`,
 		state.UserId.UUID(),
 		state.TrackIds,
@@ -43,6 +44,7 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		state.Shuffled,
 		state.RepeatMode.String(),
 		state.SourceId,
+		state.NaturalOrder,
 		state.UpdatedAt,
 	)
 	return err
@@ -53,21 +55,22 @@ func (r *PgxQueueStateRepository) GetForUser(
 	userId shared.UserId,
 ) (*domain.QueueState, error) {
 	var (
-		trackIds   []string
-		currentIdx int
-		positionMs int64
-		shuffled   bool
-		repeatMode string
-		sourceId   string
-		updatedAt  time.Time
+		trackIds     []string
+		currentIdx   int
+		positionMs   int64
+		shuffled     bool
+		repeatMode   string
+		sourceId     string
+		naturalOrder []string
+		updatedAt    time.Time
 	)
 
 	err := r.pool.QueryRow(ctx,
-		`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, updated_at
+		`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at
 		 FROM playback_queue_state
 		 WHERE user_id = $1`,
 		userId.UUID(),
-	).Scan(&trackIds, &currentIdx, &positionMs, &shuffled, &repeatMode, &sourceId, &updatedAt)
+	).Scan(&trackIds, &currentIdx, &positionMs, &shuffled, &repeatMode, &sourceId, &naturalOrder, &updatedAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -81,7 +84,10 @@ func (r *PgxQueueStateRepository) GetForUser(
 		return nil, fmt.Errorf("parse repeat mode: %w", err)
 	}
 
-	state, err := domain.RehydrateQueueState(userId, trackIds, currentIdx, positionMs, shuffled, rm, sourceId, updatedAt)
+	state, err := domain.RehydrateQueueState(
+		userId, trackIds, currentIdx, positionMs, shuffled, rm, sourceId, updatedAt,
+		domain.WithNaturalOrder(naturalOrder),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("rehydrate queue state: %w", err)
 	}

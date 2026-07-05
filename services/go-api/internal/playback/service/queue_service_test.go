@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
 )
 
@@ -31,6 +32,86 @@ func (r *inMemoryQueueRepo) GetForUser(_ context.Context, userId shared.UserId) 
 
 func testUser() shared.UserId {
 	return shared.NewUserId(uuid.New())
+}
+
+// fakeNowPlaying is an in-memory NowPlayingReader keyed by track id.
+type fakeNowPlaying struct {
+	tracks map[string]*ports.NowPlayingTrack
+}
+
+func (f *fakeNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*ports.NowPlayingTrack, bool, error) {
+	t, ok := f.tracks[trackId]
+	return t, ok, nil
+}
+
+func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	reader := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{
+		"y": {Id: "y", Title: "Song Y", Artist: "Artist", AcquisitionStatus: "ready"},
+	}}
+	svc := NewQueueService(repo, WithNowPlayingReader(reader))
+	user := testUser()
+
+	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
+		TrackIds:   []string{"x", "y"},
+		CurrentIdx: 1,
+		RepeatMode: "off",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	view, err := svc.ResumeView(context.Background(), user)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if view.CurrentTrack == nil {
+		t.Fatal("expected current track to be embedded")
+	}
+	if view.CurrentTrack.Id != "y" || view.CurrentTrack.Title != "Song Y" {
+		t.Errorf("wrong current track embedded: %+v", view.CurrentTrack)
+	}
+}
+
+func TestQueueService_ResumeView_NoReaderOmitsCurrentTrack(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	svc := NewQueueService(repo) // no NowPlayingReader wired
+	user := testUser()
+
+	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
+		TrackIds:   []string{"x", "y"},
+		CurrentIdx: 1,
+		RepeatMode: "off",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	view, err := svc.ResumeView(context.Background(), user)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if view.CurrentTrack != nil {
+		t.Errorf("expected no current track without a reader, got %+v", view.CurrentTrack)
+	}
+	if view.State.CurrentIdx != 1 {
+		t.Errorf("state should still resume: idx=%d", view.State.CurrentIdx)
+	}
+}
+
+func TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	reader := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{}}
+	svc := NewQueueService(repo, WithNowPlayingReader(reader))
+	user := testUser()
+
+	// Empty queue → CurrentIdx normalizes to 0 but TrackIds is empty, so the
+	// index is out of range and no lookup happens.
+	view, err := svc.ResumeView(context.Background(), user)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if view.CurrentTrack != nil {
+		t.Errorf("expected no current track for empty queue, got %+v", view.CurrentTrack)
+	}
 }
 
 func TestQueueService_Save_PersistsValidState(t *testing.T) {
