@@ -4,6 +4,8 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Banner } from '@shared/ui/primitives/Banner';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
+import { useRouter, type Href } from 'expo-router';
+
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { FeaturedArtist } from '@shared/api-client/types';
 
@@ -43,6 +45,7 @@ export function TrackDetailBody({
   detailRoute: string;
   genres: string[];
 }): ReactElement {
+  const router = useRouter();
   const save = useSaveTrack();
   const wrongAlbum = useReportWrongAlbum(result);
   const playback = usePlayback();
@@ -193,10 +196,20 @@ export function TrackDetailBody({
             {featured.map((f, i) => (
               <Pressable
                 key={f.mbid ?? f.name}
-                onPress={() => void lateralNav.navigateTo(f.name, 'artist')}
-                disabled={lateralNav.state === 'searching'}
+                onPress={() =>
+                  // Cast: the /library/featuring route's generated type is stale
+                  // until expo regenerates typed routes on next start.
+                  router.push({
+                    pathname: '/library/featuring',
+                    params: {
+                      name: f.name,
+                      ...(f.mbid ? { mbid: f.mbid } : {}),
+                      ...(f.deezer_id != null ? { deezer_id: String(f.deezer_id) } : {}),
+                    },
+                  } as unknown as Href)
+                }
                 accessibilityRole="link"
-                accessibilityLabel={`View artist ${f.name}`}
+                accessibilityLabel={`Tracks featuring ${f.name}`}
               >
                 {({ pressed }) => (
                   <Text variant="body" tone="accent" style={pressed ? { opacity: 0.6 } : undefined}>
