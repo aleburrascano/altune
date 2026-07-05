@@ -423,6 +423,9 @@ export type DeezerEnrichmentResponse = {
   genres: string[];
   upc: string;
   record_type: string;
+  /** Guest ("Featured"-role) contributors from the track detail fetch. Wire shape
+   * is `[{name, mbid?, deezer_id?}]`; parse via featuredArtistsFromExtras. */
+  featured_artists?: unknown[];
 };
 
 export async function getDeezerEnrichment(params: {
