@@ -236,6 +236,10 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 		subtitle = rec.ArtistCredit[0].Name
 	}
 
+	if feats := domain.FeaturedArtistsToExtras(extractMBFeatured(rec.ArtistCredit)); feats != nil {
+		extras["featured_artists"] = feats
+	}
+
 	return domain.NewProviderResult(domain.ResultKindTrack, rec.Title, subtitle, "",
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rec.ID, URL: "https://musicbrainz.org/recording/" + rec.ID},
 		extras)
@@ -296,8 +300,9 @@ type mbRecording struct {
 }
 
 type mbArtistRef struct {
-	Name   string        `json:"name"`
-	Artist *mbArtistLink `json:"artist,omitempty"`
+	Name       string        `json:"name"`
+	JoinPhrase string        `json:"joinphrase"`
+	Artist     *mbArtistLink `json:"artist,omitempty"`
 }
 
 type mbArtistLink struct {
