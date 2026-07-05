@@ -5,6 +5,7 @@ import { useQueueStore } from '@shared/playback/queueStore';
 
 import { recoverAudio } from './api/audio';
 import { prefetchNext } from './audioPrefetch';
+import { shouldApplyActiveIndex } from './nativeSyncGuard';
 
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
 
@@ -55,6 +56,9 @@ export async function playbackService() {
   // the queue UI stay in lockstep. syncCurrentIndex no-ops when already aligned.
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data) => {
     if (typeof data.index === 'number') {
+      // Drop the spurious index-0 transient emitted while a queue is being primed
+      // (see nativeSyncGuard) so the store never flashes the wrong track.
+      if (!shouldApplyActiveIndex(data.index)) return;
       useQueueStore.getState().syncCurrentIndex(data.index);
       // Download-ahead the next track (and swap its queue entry to the local
       // file) so the following auto-advance plays from disk with no buffering.

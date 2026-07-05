@@ -58,8 +58,29 @@ type QueueState struct {
 	Shuffled   bool
 	RepeatMode RepeatMode
 	// SourceId identifies what the queue was built from (e.g. playlist ID, "library", "search").
-	SourceId  string
-	UpdatedAt time.Time
+	SourceId string
+	// NaturalOrder is the same tracks as TrackIds but in their pre-shuffle
+	// (album/playlist/library) order. TrackIds is play order; NaturalOrder lets the
+	// client rebuild the exact shuffled sequence AND un-shuffle back to the original
+	// order after relaunch. Opaque to the server — carried through, never reasoned
+	// over. Empty for older rows / clients that don't send it.
+	NaturalOrder []string
+	UpdatedAt    time.Time
+}
+
+// QueueStateOption configures optional snapshot fields (functional options — the
+// house constructor idiom). Appended variadically so the positional constructors
+// stay source-compatible.
+type QueueStateOption func(*QueueState)
+
+// WithNaturalOrder attaches the pre-shuffle track order to the snapshot.
+func WithNaturalOrder(naturalOrder []string) QueueStateOption {
+	return func(s *QueueState) {
+		if naturalOrder == nil {
+			naturalOrder = []string{}
+		}
+		s.NaturalOrder = naturalOrder
+	}
 }
 
 // newQueueState is the single door every QueueState passes through. Empty queues
@@ -74,6 +95,7 @@ func newQueueState(
 	repeatMode RepeatMode,
 	sourceId string,
 	updatedAt time.Time,
+	opts ...QueueStateOption,
 ) (*QueueState, error) {
 	if positionMs < 0 {
 		return nil, fmt.Errorf("positionMs must be non-negative, got %d", positionMs)
@@ -89,16 +111,21 @@ func newQueueState(
 	} else if currentIdx < 0 || currentIdx >= len(trackIds) {
 		return nil, fmt.Errorf("currentIdx %d out of range [0, %d)", currentIdx, len(trackIds))
 	}
-	return &QueueState{
-		UserId:     userId,
-		TrackIds:   trackIds,
-		CurrentIdx: currentIdx,
-		PositionMs: positionMs,
-		Shuffled:   shuffled,
-		RepeatMode: repeatMode,
-		SourceId:   sourceId,
-		UpdatedAt:  updatedAt,
-	}, nil
+	state := &QueueState{
+		UserId:       userId,
+		TrackIds:     trackIds,
+		CurrentIdx:   currentIdx,
+		PositionMs:   positionMs,
+		Shuffled:     shuffled,
+		RepeatMode:   repeatMode,
+		SourceId:     sourceId,
+		NaturalOrder: []string{},
+		UpdatedAt:    updatedAt,
+	}
+	for _, opt := range opts {
+		opt(state)
+	}
+	return state, nil
 }
 
 // NewQueueState builds a fresh snapshot, stamping UpdatedAt to now.
@@ -110,8 +137,9 @@ func NewQueueState(
 	shuffled bool,
 	repeatMode RepeatMode,
 	sourceId string,
+	opts ...QueueStateOption,
 ) (*QueueState, error) {
-	return newQueueState(userId, trackIds, currentIdx, positionMs, shuffled, repeatMode, sourceId, time.Now().UTC())
+	return newQueueState(userId, trackIds, currentIdx, positionMs, shuffled, repeatMode, sourceId, time.Now().UTC(), opts...)
 }
 
 // RehydrateQueueState reconstitutes a snapshot read from storage, preserving its
@@ -126,20 +154,22 @@ func RehydrateQueueState(
 	repeatMode RepeatMode,
 	sourceId string,
 	updatedAt time.Time,
+	opts ...QueueStateOption,
 ) (*QueueState, error) {
-	return newQueueState(userId, trackIds, currentIdx, positionMs, shuffled, repeatMode, sourceId, updatedAt)
+	return newQueueState(userId, trackIds, currentIdx, positionMs, shuffled, repeatMode, sourceId, updatedAt, opts...)
 }
 
 // EmptyQueueState is the canonical "no queue" snapshot for a user — the single
 // definition of what an absent queue looks like.
 func EmptyQueueState(userId shared.UserId) *QueueState {
 	return &QueueState{
-		UserId:     userId,
-		TrackIds:   []string{},
-		CurrentIdx: 0,
-		PositionMs: 0,
-		Shuffled:   false,
-		RepeatMode: RepeatOff,
-		UpdatedAt:  time.Now().UTC(),
+		UserId:       userId,
+		TrackIds:     []string{},
+		CurrentIdx:   0,
+		PositionMs:   0,
+		Shuffled:     false,
+		RepeatMode:   RepeatOff,
+		NaturalOrder: []string{},
+		UpdatedAt:    time.Now().UTC(),
 	}
 }
