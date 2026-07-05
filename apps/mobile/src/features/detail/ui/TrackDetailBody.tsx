@@ -201,10 +201,11 @@ export function TrackDetailBody({
               <Pressable
                 key={f.mbid ?? f.name}
                 onPress={() =>
-                  // Cast: the /library/featuring route's generated type is stale
-                  // until expo regenerates typed routes on next start.
+                  // Navigate to the featuring browse in the CURRENT tab stack
+                  // (derived from detailRoute) so back returns to this detail.
+                  // Cast: the generated route type is stale until expo restarts.
                   router.push({
-                    pathname: '/library/featuring',
+                    pathname: detailRoute.replace('/detail', '/featuring'),
                     params: {
                       name: f.name,
                       ...(f.mbid ? { mbid: f.mbid } : {}),
