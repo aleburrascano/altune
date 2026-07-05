@@ -15,7 +15,10 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-var _ ports.AudioStore = (*ObjectStorageAudioStore)(nil)
+var (
+	_ ports.AudioStore     = (*ObjectStorageAudioStore)(nil)
+	_ ports.AudioURLSigner = (*ObjectStorageAudioStore)(nil)
+)
 
 type ObjectStorageAudioStore struct {
 	client *minio.Client
@@ -100,6 +103,17 @@ func (s *ObjectStorageAudioStore) Stream(ctx context.Context, audioRef string) (
 	}
 
 	return obj, stat.Size, nil
+}
+
+// PresignGet mints a short-lived presigned GET URL for the object. Signing is a
+// local operation (HMAC over the request with the access key) — no network call
+// to storage — so this is cheap enough to mint per track at queue-build time.
+func (s *ObjectStorageAudioStore) PresignGet(ctx context.Context, audioRef string, ttl time.Duration) (string, error) {
+	u, err := s.client.PresignedGetObject(ctx, s.bucket, audioRef, ttl, nil)
+	if err != nil {
+		return "", fmt.Errorf("presign get %q: %w", audioRef, err)
+	}
+	return u.String(), nil
 }
 
 func contentTypeFromRef(audioRef string) string {

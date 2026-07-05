@@ -222,6 +222,8 @@ func (a *App) setup(ctx context.Context) error {
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
 	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, scheduler)
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
+	audioURLSvc := catalogService.NewAudioURLService(trackRepo, audioStore)
+	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc)
 	deezerContentClient := newDiscoveryClient()
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
 	// iTunes is a second mainstream source of truth for discography/tracklist
@@ -368,6 +370,7 @@ func (a *App) setup(ctx context.Context) error {
 
 		r.Mount("/tracks", trackHandler.Routes())
 		r.Get("/tracks/{trackId}/audio", streamHandler.HandleStreamAudio)
+		r.Post("/audio-urls", audioURLHandler.HandleResolve)
 		if retryH != nil {
 			r.Post("/tracks/{trackId}/retry", retryH.HandleRetryAcquisition)
 		}
