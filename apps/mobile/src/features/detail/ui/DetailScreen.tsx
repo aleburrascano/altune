@@ -23,6 +23,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
+import { featuredArtistsFromExtras } from '@shared/lib/featured';
 
 import { trackExtras } from '../extras-accessors';
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
@@ -188,7 +189,13 @@ export function DetailScreen(): ReactElement {
         {heroContent}
 
         {result.kind === 'track' ? (
-          <TrackDetailBody result={result} lateralNav={lateralNav} detailRoute={detailRoute} genres={genres} />
+          <TrackDetailBody
+            result={result}
+            lateralNav={lateralNav}
+            detailRoute={detailRoute}
+            genres={genres}
+            deezerFeatured={featuredArtistsFromExtras(enrichments.deezer?.featured_artists)}
+          />
         ) : null}
 
         {result.kind === 'album' ? (

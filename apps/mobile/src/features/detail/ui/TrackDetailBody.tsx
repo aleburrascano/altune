@@ -39,11 +39,13 @@ export function TrackDetailBody({
   lateralNav,
   detailRoute,
   genres,
+  deezerFeatured,
 }: {
   result: DiscoveryResult;
   lateralNav: LateralNavHandle;
   detailRoute: string;
   genres: string[];
+  deezerFeatured?: FeaturedArtist[];
 }): ReactElement {
   const router = useRouter();
   const save = useSaveTrack();
@@ -66,11 +68,13 @@ export function TrackDetailBody({
   const featured: FeaturedArtist[] =
     te.featuredArtists.length > 0
       ? te.featuredArtists
-      : (extractFeaturedFromText(result.title, result.subtitle)?.split(', ') ?? []).map((name) => ({
-          name,
-          mbid: null,
-          deezer_id: null,
-        }));
+      : deezerFeatured && deezerFeatured.length > 0
+        ? deezerFeatured
+        : (extractFeaturedFromText(result.title, result.subtitle)?.split(', ') ?? []).map((name) => ({
+            name,
+            mbid: null,
+            deezer_id: null,
+          }));
 
   const source =
     isPlayable && effectiveTrackId !== null
