@@ -27,3 +27,31 @@ func TestExtractDeezerFeatured_NoneWhenAllMain(t *testing.T) {
 		t.Errorf("expected no featured, got %+v", got)
 	}
 }
+
+func TestExtractDeezerFeatured_CoPrimaryMain(t *testing.T) {
+	// Opium-style co-billing: the collaborator is credited "Main", not "Featured".
+	cs := []deezerContributor{
+		{ID: 1, Name: "Ken Carson", Role: "Main"}, // primary — skipped
+		{ID: 2, Name: "Playboi Carti", Role: "Main"},
+	}
+	got := extractDeezerFeatured(cs)
+	if len(got) != 1 || got[0].Name != "Playboi Carti" || got[0].DeezerID != 2 {
+		t.Fatalf("expected [Playboi Carti/2], got %+v", got)
+	}
+}
+
+func TestExtractDeezerFeatured_DedupesAndKeepsFeaturedAfterCoMain(t *testing.T) {
+	cs := []deezerContributor{
+		{ID: 1, Name: "Ken Carson", Role: "Main"},   // primary — skipped
+		{ID: 2, Name: "Destroy Lonely", Role: "Main"}, // co-primary
+		{ID: 3, Name: "Lil Uzi Vert", Role: "Featured"},
+		{ID: 4, Name: "destroy lonely", Role: "Featured"}, // dup by name
+	}
+	got := extractDeezerFeatured(cs)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 (dedup), got %+v", got)
+	}
+	if got[0].Name != "Destroy Lonely" || got[1].Name != "Lil Uzi Vert" {
+		t.Errorf("order/dedup wrong: %+v", got)
+	}
+}

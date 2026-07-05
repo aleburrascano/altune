@@ -33,16 +33,30 @@ func (a *DeezerAdapter) LookupTrackFeatured(ctx context.Context, trackID string)
 
 // extractDeezerFeatured keeps only the "Featured"-role contributors, mapping each
 // to a FeaturedArtist with its Deezer artist id.
+// extractDeezerFeatured surfaces a track's collaborators: every "Featured"
+// contributor, plus co-primary artists (a 2nd+ "Main"). The scene the app is used
+// for credits guests as co-primary "Main" rather than "Featured", so the first
+// "Main" is treated as the track's own artist (skipped) and everyone after —
+// whatever their role — is a credit. Deduped by name; blanks dropped.
 func extractDeezerFeatured(cs []deezerContributor) []domain.FeaturedArtist {
 	out := make([]domain.FeaturedArtist, 0, len(cs))
+	seen := make(map[string]bool, len(cs))
+	primarySkipped := false
 	for _, c := range cs {
-		if !strings.EqualFold(strings.TrimSpace(c.Role), "featured") {
-			continue
-		}
 		name := strings.TrimSpace(c.Name)
 		if name == "" {
 			continue
 		}
+		// The first "Main" contributor is the primary artist — skip it once.
+		if !primarySkipped && strings.EqualFold(strings.TrimSpace(c.Role), "main") {
+			primarySkipped = true
+			continue
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		out = append(out, domain.FeaturedArtist{Name: name, DeezerID: c.ID, Role: domain.RoleFeatured})
 	}
 	return out
