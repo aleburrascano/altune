@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronDown, ListMusic, Pause, Play, Repeat, Repeat1, RotateCcw, Shuffle, SkipBack, SkipForward } from 'lucide-react-native';
 
+import { formatFeaturing } from '@shared/lib/featured';
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
@@ -79,6 +80,7 @@ export function FullPlayer() {
 
   const isPlaying = status === 'playing';
   const isPreview = track.source.kind === 'preview';
+  const featuring = formatFeaturing(track.featuredArtists);
   const isError = status === 'error';
   const isEnded = status === 'ended';
 
@@ -144,7 +146,7 @@ export function FullPlayer() {
           {track.title}
         </Text>
         <Text variant="body" tone="secondary" numberOfLines={1}>
-          {track.artist}
+          {featuring ? `${track.artist} · ${featuring}` : track.artist}
         </Text>
       </View>
 
