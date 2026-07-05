@@ -95,6 +95,7 @@ func (a *DeezerAdapter) lookupAlbumDetail(ctx context.Context, id string) (domai
 				Name string `json:"name"`
 			} `json:"data"`
 		} `json:"genres"`
+		Contributors []deezerContributor `json:"contributors"`
 	}
 	u := fmt.Sprintf("https://api.deezer.com/album/%s", url.PathEscape(id))
 	if err := a.getJSON(ctx, u, &detail); err != nil {
@@ -105,6 +106,9 @@ func (a *DeezerAdapter) lookupAlbumDetail(ctx context.Context, id string) (domai
 	e.Label = strings.TrimSpace(detail.Label)
 	e.RecordType = strings.TrimSpace(detail.RecordType)
 	e.Genres = dedupeDeezerGenres(detail.Genres.Data)
+	// Collab albums (e.g. "Her Loss" — Drake & 21 Savage) list co-primary artists
+	// as contributors; surface the non-primary ones for the album artist line.
+	e.Featured = extractDeezerFeatured(detail.Contributors)
 	return e, nil
 }
 
