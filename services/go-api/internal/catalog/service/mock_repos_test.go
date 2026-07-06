@@ -88,6 +88,15 @@ func (r *mockTrackRepo) Update(_ context.Context, track *domain.Track) error {
 	return nil
 }
 
+func (r *mockTrackRepo) SetTrackNumber(_ context.Context, id domain.TrackId, _ shared.UserId, n int) (bool, error) {
+	t, ok := r.tracks[id.String()]
+	if !ok || t.TrackNumber != nil {
+		return false, nil
+	}
+	t.TrackNumber = &n
+	return true, nil
+}
+
 func (r *mockTrackRepo) Delete(_ context.Context, id domain.TrackId, userId shared.UserId) (bool, error) {
 	if r.errOnDelete != nil {
 		return false, r.errOnDelete

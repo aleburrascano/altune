@@ -109,6 +109,15 @@ func (r *fakeTrackRepo) Update(_ context.Context, track *catdomain.Track) error 
 	return nil
 }
 
+func (r *fakeTrackRepo) SetTrackNumber(_ context.Context, id catdomain.TrackId, _ shared.UserId, n int) (bool, error) {
+	t, ok := r.tracks[id.String()]
+	if !ok || t.TrackNumber != nil {
+		return false, nil
+	}
+	t.TrackNumber = &n
+	return true, nil
+}
+
 func (r *fakeTrackRepo) Delete(_ context.Context, id catdomain.TrackId, userId shared.UserId) (bool, error) {
 	if r.deleteErr != nil {
 		return false, r.deleteErr
@@ -413,10 +422,11 @@ func buildTrackHandler(trackRepo *fakeTrackRepo, scheduler *fakeScheduler) (*Tra
 	addSvc := service.NewAddTrackService(trackRepo, addOpts...)
 	listSvc := service.NewListTracksService(trackRepo)
 	deleteSvc := service.NewDeleteTrackService(trackRepo, newFakeAudioStore())
+	setTrackNumberSvc := service.NewSetTrackNumberService(trackRepo)
 
 	backfillSvc := service.NewBackfillFeaturedService(trackRepo, nil)
 	listFeaturingSvc := service.NewListFeaturingService(trackRepo)
-	h := NewTrackHandler(addSvc, listSvc, deleteSvc, backfillSvc, listFeaturingSvc)
+	h := NewTrackHandler(addSvc, listSvc, deleteSvc, setTrackNumberSvc, backfillSvc, listFeaturingSvc)
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(&fakeTokenVerifier{userId: testUserId}))
 	r.Mount("/tracks", h.Routes())
