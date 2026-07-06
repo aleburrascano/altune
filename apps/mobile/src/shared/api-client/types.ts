@@ -46,6 +46,9 @@ export type CreateTrackRequest = {
   year: number | null;
   genre: string | null;
   album_artist: string | null;
+  /** 1-based position within its album, when saved from an album context. Lets
+   * the library render the real tracklist order instead of counting 1..N. */
+  track_number: number | null;
   /** Guest ("feat.") credits carried from the discovery result being saved. */
   featured_artists?: FeaturedArtist[];
   /** Exact provider URL the result was discovered at (e.g. a SoundCloud
