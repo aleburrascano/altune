@@ -36,6 +36,10 @@ export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackReques
     year: te.year,
     genre: te.genre,
     album_artist: te.albumArtist,
+    // Present when saving from an album context (the provider tracklist carries
+    // the position); null for a bare search-result save. Populating it fixes the
+    // library falling back to 1..N ordering.
+    track_number: te.trackPosition,
     ...(te.featuredArtists.length > 0 ? { featured_artists: te.featuredArtists } : {}),
     source_url: soundcloudUrl,
   };
@@ -55,7 +59,7 @@ export function optimisticTrack(body: CreateTrackRequest, addedAt: string): Trac
     failure_reason: null,
     year: body.year ?? null,
     genre: body.genre ?? null,
-    track_number: null,
+    track_number: body.track_number ?? null,
     album_artist: body.album_artist ?? null,
     isrc: body.isrc ?? null,
     audio_ref: null,
