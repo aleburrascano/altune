@@ -191,6 +191,7 @@ func (a *App) setup(ctx context.Context) error {
 	)
 	listTracksSvc := catalogService.NewListTracksService(trackRepo)
 	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore, catalogService.WithDeleteTrackEvents(a.eventBus))
+	setTrackNumberSvc := catalogService.NewSetTrackNumberService(trackRepo)
 	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(a.eventBus))
 
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
@@ -237,7 +238,7 @@ func (a *App) setup(ctx context.Context) error {
 	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(trackRepo, featuredBridge)
 	listFeaturingSvc := catalogService.NewListFeaturingService(trackRepo)
 
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, backfillFeaturedSvc, listFeaturingSvc)
+	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, setTrackNumberSvc, backfillFeaturedSvc, listFeaturingSvc)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
 	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, scheduler)
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)

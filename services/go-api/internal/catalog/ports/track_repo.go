@@ -16,6 +16,12 @@ type TrackRepository interface {
 	GetByDedupKey(ctx context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error)
 	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
 	Update(ctx context.Context, track *domain.Track) error
+	// SetTrackNumber fills a track's album position when it is currently unset.
+	// Fill-only (WHERE track_number IS NULL): it never overwrites an existing
+	// value, so it is idempotent and safe to call repeatedly. Reports whether a
+	// row was actually updated. Used to persist positions the client derived from
+	// the album tracklist for tracks saved before track_number was captured.
+	SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (updated bool, err error)
 	Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, err error)
 	// ReplaceFeaturedArtists replaces the full featured-artist set of a track
 	// (used by the backfill). Idempotent — re-running with the same set is a no-op.

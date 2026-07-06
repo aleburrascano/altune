@@ -20,6 +20,7 @@ type TrackHandler struct {
 	addTrack         *service.AddTrackService
 	listTracks       *service.ListTracksService
 	deleteTrack      *service.DeleteTrackService
+	setTrackNumber   *service.SetTrackNumberService
 	backfillFeatured *service.BackfillFeaturedService
 	listFeaturing    *service.ListFeaturingService
 }
@@ -28,6 +29,7 @@ func NewTrackHandler(
 	addTrack *service.AddTrackService,
 	listTracks *service.ListTracksService,
 	deleteTrack *service.DeleteTrackService,
+	setTrackNumber *service.SetTrackNumberService,
 	backfillFeatured *service.BackfillFeaturedService,
 	listFeaturing *service.ListFeaturingService,
 ) *TrackHandler {
@@ -35,6 +37,7 @@ func NewTrackHandler(
 		addTrack:         addTrack,
 		listTracks:       listTracks,
 		deleteTrack:      deleteTrack,
+		setTrackNumber:   setTrackNumber,
 		backfillFeatured: backfillFeatured,
 		listFeaturing:    listFeaturing,
 	}
@@ -47,8 +50,43 @@ func (h *TrackHandler) Routes() chi.Router {
 	r.Get("/featuring", h.handleListFeaturing)
 	r.Post("/featured-backfill", h.handleBackfillFeatured)
 	r.Get("/{trackId}/status", h.handleGetTrackStatus)
+	r.Patch("/{trackId}/track-number", h.handleSetTrackNumber)
 	r.Delete("/{trackId}", h.handleDeleteTrack)
 	return r
+}
+
+// handleSetTrackNumber persists a track's album position (fill-only — never
+// overwrites). Backs the client persisting positions it derived from the album
+// tracklist for tracks saved before track_number was captured.
+func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
+	if err != nil {
+		httputil.BadRequest(w, "invalid track ID")
+		return
+	}
+	var req SetTrackNumberRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if req.TrackNumber <= 0 {
+		httputil.BadRequest(w, "track_number must be positive")
+		return
+	}
+	if _, err := h.setTrackNumber.Execute(r.Context(), userId, trackId, req.TrackNumber); err != nil {
+		slog.ErrorContext(r.Context(), "set track number failed", "error", err)
+		httputil.InternalError(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type SetTrackNumberRequest struct {
+	TrackNumber int `json:"track_number"`
 }
 
 // handleBackfillFeatured resolves and persists featured artists for the authed

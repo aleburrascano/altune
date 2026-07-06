@@ -150,6 +150,20 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) er
 	return nil
 }
 
+// SetTrackNumber fills the album position only when unset (WHERE track_number IS
+// NULL), so it never clobbers a real value and is safe to call repeatedly.
+func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (bool, error) {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE tracks SET track_number=$3
+		 WHERE id=$1 AND user_id=$2 AND track_number IS NULL`,
+		id.UUID(), userId.UUID(), trackNumber,
+	)
+	if err != nil {
+		return false, fmt.Errorf("set track number for %s: %w", id.String(), err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (bool, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
