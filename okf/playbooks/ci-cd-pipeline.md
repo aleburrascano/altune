@@ -1,0 +1,22 @@
+---
+type: Playbook
+title: CI/CD pipeline
+description: The five GitHub Actions workflows that gate, test, and ship the altune backend and mobile client.
+resource: .github/workflows/deploy-backend.yml, .github/workflows/discovery-eval-gate.yml, .github/workflows/release-ios.yml, .github/workflows/test-backend.yml, .github/workflows/uptime-check.yml
+tags: [ci-cd, workflow, deployment, testing, discovery, ios]
+verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+---
+
+Five independent workflows, each scoped to a path or schedule.
+
+**test-backend.yml** — the baseline gate. Triggers on PRs and pushes to `main` touching `services/go-api/**`. Runs `go vet ./...` then `go test -race -count=1 ./...` with `CGO_ENABLED=1` on an ubuntu-latest runner (the race detector needs cgo, which the dev box — Windows, no C toolchain — can't provide locally; this is where data races in concurrent telemetry code, e.g. the log ring, event tap, provider store, scheduler counters, alert monitor, are actually caught).
+
+**discovery-eval-gate.yml** — a narrower quality gate layered on top, scoped only to PRs touching ranking-path files: `service/rank*.go`, `merge*.go`, `diversity*.go`, `pipeline*.go`, `behavioral_signals*.go`, `service/eval/**`, `cmd/discoveryeval/**`. It checks the harness compiles (`go build ./cmd/discoveryeval`) and runs the deterministic rank/merge/eval/behavioral-corpus/replay unit tests (`go test ./internal/discovery/service/... ./internal/discovery/service/eval/...`). It deliberately does NOT run the full positional eval (`cmd/discoveryeval -mode eval`, needs live providers + DB/Redis, see [[eval-harness]]) — that stays nightly/on-demand. Exists because a plausible ranking improvement once turned out to be a same-sample regression (per `discovery-eval-harness-program` project memory) — this gate stops a ranking diff merging without deterministic checks passing.
+
+**deploy-backend.yml** — triggers on push to `main` touching `services/go-api/**`, or manual dispatch. `concurrency.group: deploy-backend` with `cancel-in-progress: false` serializes deploys. Steps: warns (doesn't block) if the push touched `services/go-api/migrations/` — schema migrations are applied manually via psql, by design, never by the pipeline; verifies `DEPLOY_HOST`/`DEPLOY_USER`/`DEPLOY_SSH_KEY` secrets are present; SSHes in (`appleboy/ssh-action`) and runs `git pull --ff-only origin main` + `docker compose -f docker-compose.prod.yml up --build -d` on the VM, clearing any stale renamed container left by an interrupted recreate first (`docker ps -aq --filter "name=_altune-go-api" | xargs -r docker rm -f`); polls `https://$DEPLOY_HOST/health` up to 5 times (10s apart) and fails the workflow if it never returns 200. See [[production-deployment]] for the topology this ships to.
+
+**release-ios.yml** — triggers on a `v*` tag push or manual dispatch with a version input. Builds an **unsigned** iOS `.ipa` on macos-15 (Expo prebuild → CocoaPods → `xcodebuild archive` with `CODE_SIGNING_ALLOWED=NO`) for sideloading via AltStore/SideStore (which re-sign on-device with the user's own Apple ID — no Apple Developer account needed). Publishes a GitHub Release with the `.ipa`, then a second job updates the AltStore manifest (`apps.json`) on a dedicated, unprotected `altstore` branch via `scripts/update-altstore-source.mjs` so existing installs see the new version.
+
+**uptime-check.yml** — cron `*/5 * * * *` (GitHub's minimum granularity) plus manual dispatch. Curls `UPTIME_HEALTH_URL` (a repo Environment secret named "uptime") and, on non-200 or unreachable, pushes an ntfy alert (`UPTIME_NTFY_URL`, optional). Exists because the in-process alert monitor (see [[admin-mission-control]]) dies with the box and can't report total outage — this runs off-box on GitHub's infrastructure, $0 cost, storing no topology (only the health URL/ntfy URL as secrets).
+
+**Gotcha**: only `test-backend.yml` and `discovery-eval-gate.yml` gate PRs. `deploy-backend.yml` fires on push to `main` (post-merge), so a merged PR auto-deploys to production — the only manual step left is applying migrations.

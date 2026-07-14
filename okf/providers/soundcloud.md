@@ -1,0 +1,18 @@
+---
+type: Provider Integration
+title: SoundCloud
+description: Reverse-engineered SoundCloud api-v2 client providing track/album/artist search, artwork, discography, related-tracks, and permalink resolution, with a yt-dlp adapter as fallback.
+resource: services/go-api/internal/discovery/adapters/providers/soundcloud.go, services/go-api/internal/discovery/adapters/providers/soundcloud_ytdlp.go
+tags: [discovery, provider, soundcloud, artwork, long-tail, acquisition]
+verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+---
+
+SoundCloud is altune's sole source for the unreleased/leaked/underground long tail — no mainstream catalog (Deezer, iTunes, MusicBrainz) indexes it. `SoundCloudAPIAdapter` (`soundcloud.go`) talks directly to SoundCloud's internal `api-v2.soundcloud.com` JSON backend (the same one the website calls) rather than scraping HTML or shelling to yt-dlp for search.
+
+**Auth model.** No user auth — gated only by a public `client_id` query param embedded in the site's JS bundles. `clientIDResolver` (`newClientIDResolver`, `soundcloud.go`, constructor near line 672) fetches `https://soundcloud.com/`, regexes the `/assets/*.js` bundle URLs (`scAssetURLRe`), scans them from the end for `client_id:"<32 alnum>"` (`scClientIDRe`), and caches the result. Concurrent cold-start callers collapse via `singleflight`. On a 401/403 (`isAuthStatus`), the adapter calls `resolver.invalidate()` and re-resolves once. This is reverse-engineered and against SoundCloud's ToS — accepted per `AIDEV-DECISION` in the file for self-hosted personal/family use.
+
+**Capabilities (all in `soundcloud.go`).** `Search` dispatches per requested kind: `searchTracks` (paginated via `next_href` up to `scMaxResults=40`), `searchAlbums` (`/search/albums`, typed playlists with `set_type` album/ep/single), `searchArtists` (`/search/users`). `Resolve` implements `ports.ArtworkResolver`, wired last in the artwork chain so it only fires when ID-based sources miss (see [[artwork-chain]]). `GetArtistTopTracks`/`GetArtistAlbums` implement `ports.ArtistContentProvider` keyed by the numeric SoundCloud user id. `GetRelatedTracks` implements `ports.RelatedTracksProvider` via `/tracks/{id}/related`. `ResolvePermalink` turns a pasted SoundCloud URL into a track via `/resolve?url=`, feeding the import/acquisition workflow (see [[acquisition]]). `mapSoundCloudAPITrack` lifts a `publisher_metadata.isrc` into `extras["isrc"]` when present, letting an officially-distributed SoundCloud upload merge with the same recording from Deezer/MusicBrainz.
+
+**Rate limits / caveats.** `api-v2` throttles; the codebase discipline is "don't run concurrent evals against it." `client_id` rotates a few times/month — self-healing, not per-request. Public-only reach (private/unlisted tracks never surface). `SoundCloudAdapter` (`soundcloud_ytdlp.go`) is the original yt-dlp-subprocess adapter, track-only, retained as `searchFallback` when `client_id` resolution is down (wired as `NewSoundCloudAdapter()`, passed as the `fallback` argument to `NewSoundCloudAPIAdapter`).
+
+**Doc drift (`docs/providers/soundcloud.md`).** The doc is otherwise accurate against the code (entity model, endpoint catalog, `resolveAndFetch` retry shape, and the ISRC-merge comment all match verbatim). One staleness note: the doc's "current implementation state" section still frames capabilities 1–4 as living on an unpushed branch (`refactor/discovery-pipeline-clarity`) with per-capability commit hashes — but the code is already live-wired into `internal/app/search_wiring.go` and `app.go` today. Not a functional drift, just narration worth updating whenever the doc is next touched.

@@ -1,0 +1,14 @@
+---
+type: Subsystem
+title: Discovery vocabulary
+description: The term-frequency vocabulary store (vocab.go ingestion, vocabulary_refresh.go periodic chart-seeding, and the Redis-backed VocabularyStore adapter) backing correction and suggest.
+resource: services/go-api/internal/discovery/service/vocab.go, services/go-api/internal/discovery/service/vocabulary_refresh.go, services/go-api/internal/discovery/adapters/cache/vocabulary_store.go
+tags: [discovery, vocabulary, redis, autocomplete, background-job]
+verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+---
+
+`vocab.go`'s `ingestVocabulary` is the traffic-learning path: on every search with results, `Service` builds `domain.VocabularyEntry` rows via `buildVocabEntries` — the raw query itself (`VocabKindQuery`), the top `vocabIngestTop=5` results' title(+subtitle) keyed by `resultKindToVocabKind` (artist/track/album), and each track result's subtitle re-added as a separate `VocabKindArtist` entry — then writes them asynchronously (`context.WithoutCancel`, `vocabIngestTimeout=3s`, `Service.bgWg`-tracked, panic-recovered) so Layer-0 intent detection and correction (see [[query-correction]]) improve from real usage without blocking the request.
+
+`VocabularyRefreshService` (vocabulary_refresh.go) is the complementary periodic seeding job: `RunOnce` fan-outs `ports.ChartProvider.FetchCharts` across configured chart providers, normalizes each entry's `TermNorm`, `BulkAdd`s them, then trims. `Start`/`loop`/`tick` run this on `interval` via a background goroutine with panic recovery (`recoverPanic`) and clean shutdown (`Shutdown` cancels + waits on a `done` channel via `sync.Once`). `maxVocabEntries=50000` bounds total vocabulary size — generous relative to the household+chart corpus — enforced only on this periodic path via `trim`, which type-asserts the store for an optional `Trim(ctx, maxEntries)` capability (kept off the shared `ports.VocabularyStore` interface deliberately, per ISP, since only this maintenance path needs it).
+
+`RedisVocabularyStore` (adapters/cache/vocabulary_store.go) is the concrete backing: a sorted set (`vocabTermsKey`, scored by popularity) plus a parallel equal-score sorted set (`vocabLexKey`) for `ZRANGEBYLEX` prefix queries (`SuggestByPrefix`/`prefixSearch`), per-trigram sets (`vocabTriPrefix`) and optional per-metaphone-code sets (`vocabMetaPrefix`, injected via `WithMetaphone`) for `FindClosest`/`fuzzySearch`, and per-term JSON blobs (`vocabEntryPfx`, 90-day TTL) for full entry data. `fuzzySearch` gathers trigram-overlap candidates, unions in phonetic-match candidates, and scores via `domain.VocabularyMatchScore` (a composite of Jaccard trigram overlap, Levenshtein similarity, phonetic-match boolean, and length similarity) filtered by `maxLevenshtein`. `Trim` is the store's owned retention: it evicts the lowest-scored overflow across all five key families atomically via one pipeline, so no caller needs to know the multi-key model.
