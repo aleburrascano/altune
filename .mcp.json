@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "waymark": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@aleburrascano/waymark"
+      ]
+    }
+  }
+}
