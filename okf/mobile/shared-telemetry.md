@@ -1,0 +1,16 @@
+---
+type: Subsystem
+title: Shared telemetry
+description: Rotating session-id correlation, a two-tier reliability outbox for label-critical events, and the unified recordEvent hook for behavioral telemetry.
+resource: apps/mobile/src/shared/telemetry/
+tags: [mobile, shared, telemetry, events, reliability]
+verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+---
+
+`session.ts` implements the **session_id** ubiquitous-language term: a rotating correlation id grouping a search arc (search → click → play) so server-side session-signal derivation (abandoned-search, pogo-sticking — see [[telemetry]]) can reason over query chains. `SessionState = { sessionId, lastActivity }`; the pure `advanceSession(state, now)` rotates the id (`makeSessionId`, a base36-timestamp + random suffix) after `SESSION_INACTIVITY_MS` (30 min) of inactivity — unit-testable with no RN dependency. The stateful wrapper (`_state` module-level variable) is a thin shell: `getSessionId()` calls `advanceSession` on every read, and `ensureForegroundRotation` (idempotent, guarded by `_listening`) registers an `AppState` listener that force-rotates on `active` regardless of inactivity, so every fresh app open starts a new arc. This split — pure logic function tested directly, stateful wrapper untested but trivial — is the pattern repeated in `outbox.ts`.
+
+`outbox.ts` implements the **two-tier reliability** term: `library_add` and `wrong_album` are label-critical (a lost event is a lost relevance label for the behavioral eval corpus, see [[eval-harness]]), so they route through `enqueueCritical` instead of firing directly. Each entry gets a client-minted `event_id` (`makeEventId`, an RFC4122-v4-shaped id — explicitly *not* a security token, so `Math.random` is acceptable) and a `client_occurred_at` timestamp (`withEnvelope`). The server dedups inserts on `event_id` (`ON CONFLICT … DO NOTHING`), making retry safe. `flushOutbox` drains the in-memory `_queue` (capped at `MAX_ENTRIES = 50` via `capEntries`, deduped by `dedupeById` keeping the last entry per id), stopping at the first POST failure and leaving the remainder for the next trigger — either another `enqueueCritical` call or an `AppState → active` transition (`ensureFlushOnForeground`). Explicitly documented as NOT surviving a hard app-kill while offline (would need AsyncStorage/SQLite — an ADR-gated future addition); the durable write itself (`createTrack`) is already server-side safe, this only protects the telemetry label. `_resetOutboxForTest` clears module state for tests.
+
+`useRecordEvent.ts` is the shared entry point for *everything else* — a `useMutation` wrapping `recordEvent` (from `@shared/api-client/discovery`, see [[shared-api-client]]) fire-and-forget, swallowing errors to a `console.warn` per ADR-0007 §3.12 ("telemetry is best-effort, never surfaced to the user"). It replaced a legacy per-feature `useRecordClick` + `/clicks` endpoint; now one hook serves `results_shown`, `result_clicked`, `play`, `skip`, `completed`, `library_add`, `wrong_album` across discover, detail, and playback.
+
+Consumed by discover, track-detail, and playback UI wherever a behavioral event fires.

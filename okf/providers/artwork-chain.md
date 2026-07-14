@@ -1,0 +1,26 @@
+---
+type: Provider Integration
+title: Artwork Resolution Chain
+description: The ordered fallback chain of artwork-only providers (identity-keyed then name-search) tried when Deezer's primary artwork is missing.
+resource: services/go-api/internal/discovery/adapters/providers/artwork_chain.go, services/go-api/internal/discovery/adapters/providers/fanarttv.go, services/go-api/internal/discovery/adapters/providers/coverartarchive.go, services/go-api/internal/discovery/adapters/providers/spotify_artwork.go
+tags: [discovery, provider, artwork, fallback-chain, identity-resolution]
+verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+---
+
+`ChainedArtworkResolver` (`artwork_chain.go`) composes a list of `ports.ArtworkResolver`s, tried in order, returning the first non-empty URL that isn't a Deezer placeholder (`IsDeezerPlaceholder`). It exposes two distinct resolution paths, consumed by [[identity-artwork]]:
+
+**Name-search path (`Resolve`/`ResolveTagged`).** Iterates every resolver in the chain, but **skips any resolver that also implements `ports.IdentityArtworkResolver`** — identity-only resolvers never name-search, so a missing bridged identity can't trigger a same-name guess. `ResolveTagged` additionally returns which resolver supplied the URL (via the optional `ports.SourcedArtworkResolver.ArtworkSource()` capability) for coverage visibility.
+
+**Identity path (`ResolveWithIdentity`/`ResolveWithIdentityTagged`).** Tries only resolvers implementing `IdentityArtworkResolver.ResolveByIdentity(ctx, kind, ArtworkIdentity{MBID, ExternalIDs})` — resolvers that fetch by a MusicBrainz-bridged id rather than a name. This is what prevents the "two artists named Che" problem: an id-pinned lookup can't return the wrong person's face. The caller decides whether to fall back to the name-search path on a miss, and must label that result as provisional per the code's own doc comment.
+
+**Chain order (`buildArtworkChain`, `internal/app/search_wiring.go`)**, identity-keyed sources first, name-search fallbacks last:
+1. `CoverArtArchiveResolver` (`coverartarchive.go`) — MBID-keyed, album-only (`kind == artist` short-circuits to `""`). Issues a `HEAD` to `coverartarchive.org/release-group/{mbid}/front-1200`, following a redirect's `Location` header or, on a bare 200, returning the constructed URL itself. 404/400 → clean miss.
+2. `SpotifyArtworkResolver` (`spotify_artwork.go`) — identity-only (`Resolve` is a deliberate no-op; only `ResolveByIdentity` does work), via Spotify's public, keyless oEmbed endpoint (`open.spotify.com/oembed?url=...`) keyed by `id.ExternalIDs["spotify"]`. Broadest artist-image identity source, so it leads the identity phase.
+3. `DiscogsAdapter` as an identity resolver via `ResolveByIdentity` — gated by `cfg.HasDiscogs()` (see [[discogs]]). Its regular `Resolve` method still contains a name-search path, but the chain's `IdentityArtworkResolver` type-assertion skips it entirely on the name-search phase, so behaviorally it's identity-only here.
+4. `FanartTvArtworkResolver` (`fanarttv.go`) — gated by `cfg.HasFanartTV()`, MBID-keyed. Artist art hits `/v3/music/{mbid}` (`artistthumb` then `artistbackground`); album art hits the separate `/v3/music/albums/{mbid}` endpoint. `bestFanartImage` scores candidates by `likes` count with an English/neutral-`lang` bonus that dominates the tiebreak, rather than blindly taking the first image.
+5. `GeniusArtworkResolver` — gated by `cfg.HasGenius()`, name-search (see [[genius]]).
+6. `TheAudioDBAdapter`, 7. `DeezerAdapter` (see [[deezer]]), 8. `ITunesAdapter` (see [[itunes]]) — always-on, name-search.
+9. `YouTubeMusicArtworkResolver` — keyless, artist-only hi-res fallback (see [[youtube-music]]).
+10. `SoundCloudAPIAdapter` — last, name-search fallback for the underground long tail no ID-based source reaches (see [[soundcloud]]); wired here with a `nil` fallback since artwork resolution never shells to yt-dlp.
+
+**Caveats.** Every resolver in the chain swallows its own errors and returns `("", nil)` on failure/miss so a single provider outage degrades to "try the next resolver," never to a broken search. `FanartTvArtworkResolver` and `CoverArtArchiveResolver` are useless without an MBID (both return `""` immediately when `mbid == ""`), so their effective coverage is bounded by how often the cross-provider identity bridge resolves an MBID upstream. `docs/providers/*` has no existing doc for this chain; the closest reference is `services/go-api/internal/discovery/ARCHITECTURE.md`, whose printed chain diagram (CAA → Fanart.tv → Genius → TheAudioDB → Deezer → iTunes → YouTube Music → SoundCloud) predates the Spotify and Discogs identity-resolver additions and the reordering into an explicit identity-phase/name-phase split.

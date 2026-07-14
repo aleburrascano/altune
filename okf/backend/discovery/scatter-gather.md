@@ -1,0 +1,16 @@
+---
+type: Subsystem
+title: Discovery scatter-gather orchestration
+description: The Service facade in service/search.go fans a query out across search providers in parallel and coordinates identity-stamping, merge, rank, and enrichment into one ranked result list.
+resource: services/go-api/internal/discovery/service/search.go, services/go-api/internal/discovery/service/pipeline.go
+tags: [discovery, service-layer, orchestration, facade, concurrency]
+verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+---
+
+`Service` (search.go) is the orchestrator for discovery's rebuilt pipeline: Layer 0 query cleanup → Layer 1 fan-out → Layer 2 merge → Layer 3 rank, plus orthogonal concerns (artist-dedup, disambiguation, artwork, correction, related groups, telemetry, vocabulary learning). `Service.Execute` is the entry point: it cleans the query (`CleanQuery`, see [[query-correction]]), normalizes it (`textnorm.NormalizeForMatch`), mints a `searchId` (the keystone joining downstream engagement events, see [[telemetry]]), checks the app-wide `resultCache` (query+kinds keyed, TTL'd, only cached when complete and non-empty), and on a miss calls `fanOut` then `mergeRankEnrich`.
+
+`fanOut` queries every `ports.SearchProvider` concurrently, each bounded by `defaultProviderTimeout` (1500ms, overridable per-provider via an optional `SearchTimeout()` method) and gated by a `CircuitBreaker`. Each goroutine writes only its own slot in a fixed-size, provider-ordered slice — never goroutine-completion order — so downstream ranking of tied results is deterministic run-to-run. Results collapse to `perProvider [][]domain.SearchResult` (only non-empty groups) plus per-provider `ProviderSearchResponse` statuses for the wire.
+
+`mergeRankEnrich` is the decision core: `stampIdentities` (cache-only read of the `IdentityBridge`, annotating MB-sourced results with bridged cross-provider ids so Merge can resolve identity across providers — see [[identity-artwork]]) runs pre-merge; `pipeline.go`'s `rankPipelineWith` (Merge → rankWithProminence → EnforceDiversity → CollapseArtistDuplicates) is the pure, no-I/O decision core (see [[merge-dedup]] and [[ranking]]); then `applyArtistDisambiguation` and `enrich` fill fields without reordering. Zero results triggers `tryCorrection` (re-fanout on a corrected query). `pipeline.go` also exposes `rankPipeline` (nil demote/behavioral/prominence — the sacred-test default) and `rankPipelineNoReshape` (skips the diversity/collapse tier, the eval baseline for `cmd/discoveryeval -mode diversity`).
+
+Optional dependencies are wired via functional options (`WithHistoryRepository`, `WithVocabularyStore`, `WithArtworkResolver`, `WithIdentityBridge`, `WithIdentityStore`, `WithResultCache`, `WithTailDemotion`, `WithCrossKindProminence`, `WithBehavioralRanking`, `WithExploration`) — each is a no-op/inert path when absent, so the composition root (`internal/app/app.go`) toggles experiments without touching `Service` internals. `Service.bgWg` (a `sync.WaitGroup`) tracks best-effort background work (identity-bridge persistence, vocabulary ingest); `WaitForBackground` blocks until it drains, used by graceful shutdown and tests.

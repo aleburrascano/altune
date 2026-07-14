@@ -1,0 +1,16 @@
+---
+type: Database Table
+title: discovery_events
+description: The unified InteractionEvent telemetry envelope, evolved across three migrations to add a search-attribution join key and idempotent two-tier delivery.
+resource: services/go-api/migrations/004_discovery_telemetry_events.sql, services/go-api/migrations/005_discovery_event_search_id.sql, services/go-api/migrations/006_discovery_event_idempotency.sql, services/go-api/internal/discovery/adapters/persistence/event_repo.go
+tags: [database-table, discovery, telemetry, events, idempotency]
+verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+---
+
+`discovery_events` began in `004_discovery_telemetry_events.sql` as an append-only envelope: `id UUID PK`, `user_id UUID NOT NULL`, `event_type TEXT NOT NULL`, `query_norm TEXT` (nullable), `payload JSONB NOT NULL DEFAULT '{}'::jsonb`, `occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()` — "collect richly, model lazily": new fields ride in `payload` rather than triggering schema migrations. Indexed on `(event_type, occurred_at DESC)` and `(user_id, occurred_at DESC)`.
+
+`005_discovery_event_search_id.sql` added `search_id UUID` (nullable, partial index `WHERE search_id IS NOT NULL`) — the keystone join key threaded from `search_performed` onto every downstream engagement event, enabling CTR@position/MRR/NDCG/counterfactual-replay joins.
+
+`006_discovery_event_idempotency.sql` added the two-tier reliability columns: `event_id UUID` (client-minted idempotency key, only set by the label-critical outbox tier — `library_add`/`wrong_album`), `client_occurred_at TIMESTAMPTZ`, and `received_at TIMESTAMPTZ NOT NULL DEFAULT now()` (server-insert time; the gap from `client_occurred_at` measures outbox lag). A partial unique index `uq_discovery_events_event_id ON (event_id) WHERE event_id IS NOT NULL` lets `ON CONFLICT (event_id) WHERE event_id IS NOT NULL DO NOTHING` make retried critical events no-ops without affecting NULL-`event_id` fire-and-forget events.
+
+`PgxEventStore` (`event_repo.go`) implements five ports (`EventStore`, `EventQuery`, `BehavioralSignalStore`, `BehavioralLabelStore`, `SessionSignalStore`) over this one table (see [[telemetry]]): `Append` (the insert above), `ZeroResultQueries`/`NonZeroNoClickQueries` (coverage-gap SQL over `payload->>'zero_result'`), `SatisfactionSignals` (nets `play`/`completed` (+1) against short-dwell `skip` (−1) per `result_signature`, threshold `shortDwellThresholdMs = 20000`), `BehavioralLabels` (joins engagement events back to their `search_performed` via `search_id` to mine free relevance labels, `wrong_album` ⇒ Polarity −1 else +1), and `AbandonedSearches` (no-click search reformulated within 60s, joined via `payload->>'session_id'`).

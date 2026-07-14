@@ -1,0 +1,16 @@
+---
+type: Subsystem
+title: Discovery merge & dedup
+description: Layer 2's identity-tiered entity resolution (Merge in merge.go) plus the artist-identity consensus (consensus.go) and disambiguation (disambiguation.go) surfaces that depend on it.
+resource: services/go-api/internal/discovery/service/merge.go, services/go-api/internal/discovery/service/consensus.go, services/go-api/internal/discovery/service/disambiguation.go
+tags: [discovery, merge, dedup, entity-resolution, identity, consensus]
+verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+---
+
+`Merge` (merge.go) collapses per-provider result groups into deduped `Entity` values (a `domain.SearchResult` plus per-provider `BestRank`, feeding Layer 3's RRF tiebreak — see [[ranking]]). `sameEntity` decides identity strictly by tier, strongest first: ISRC exact match (`EntityResolutionISRC`) → shared MBID (`EntityResolutionMBID`, and a *mismatched* MBID is a hard "not the same" even if titles match) → cross-provider identity bridge (`bridgeMatch`/`EntityResolutionBridge`, via a stamped `extras["xref"]` that must be present on at least one side, see [[identity-artwork]]) → bare canonical-name match for artists, or exact canonical title+subtitle for tracks/albums (both `EntityResolutionNone`). There is deliberately no fuzzy threshold or version-marker vocabulary — `textnorm` canonical normalization is the one structural decision defining "same title."
+
+The **ambiguous-artist merge gate** is the one correctness fix layered on top: `ambiguousArtistNames` flags any normalized artist name for which MusicBrainz surfaced ≥2 distinct MBIDs (the "Che" problem — same-name, different humans). `Merge`'s loop refuses a bare-name merge for those names (identifier/bridge tiers still merge freely); `CollapseArtistDuplicates` (diversity.go) is likewise mbid-aware, keying ambiguous names by `name\x00mbid` so distinct identities stay as separate result cards. `mergeInto` folds the loser into the more-complete (`completenessOf`) canonical result, unions `Sources` (deduped by provider+externalID), takes max popularity, and stamps `Confidence` (High for identifier/bridge tiers, Medium for multi-source name matches, Low otherwise — display-only per ADR-0007).
+
+`ConsensusService` (consensus.go) is the detail-screen counterpart: every album provider is an equal source (`ConsensusProvider`, gathered via the generic `FanOutConsensus[T]`), clustered categorically by exact canonical title (no TokenSortRatio threshold) into `ConsensusAlbum` verdicts (confirmed/unconfirmed/rejected). `applyMBAuthority` anchors the union on MusicBrainz's bulk release-group discography when MB resolves the artist: confirmed-by-MB albums are kept, everything else is **rejected** as same-name contamination — replacing a capped, timeout-prone per-album probe. A per-artist TTL cache (`artistConsensusCache`, 6h) short-circuits the whole fan-out+MB pass; a timeout-truncated result is never cached.
+
+`applyArtistDisambiguation` (disambiguation.go) fills empty artist subtitles ("American rapper") from a pre-resolved `extras["disambiguation"]` or, budget-permitting (`disambigMaxLookups = 3`, `disambigTimeout = 2s` — MB is rate-limited to ~1 req/s), a live `ResolveArtistIdentity` MB call, so only the top few displayed same-name artists pay the live-lookup cost.
