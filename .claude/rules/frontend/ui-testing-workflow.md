@@ -1,3 +1,8 @@
+---
+paths:
+  - "apps/mobile/**"
+---
+
 # UI testing workflow — agent-browser + Expo web
 
 When making frontend changes that affect layout, navigation, or interactive behavior, **test visually before reporting done**. Use `agent-browser` (a CLI browser automation tool) with Expo's web target.
