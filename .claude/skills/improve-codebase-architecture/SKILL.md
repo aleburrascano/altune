@@ -39,7 +39,7 @@ For each candidate, render a card with:
 - **Files** — which files/modules are involved
 - **Problem** — why the current architecture is causing friction
 - **Solution** — plain English description of what would change
-- **Refactoring move** — the named technique(s) from `.claude/rules/refactoring/` (the Fowler catalog, adapted to altune's Go + RN/TS) that this deepening is composed of — e.g. _Extract Class_ + _Hide Delegate_. A card cites a move, not a vibe; if no catalogued technique fits, say so and name the novel move explicitly.
+- **Refactoring move** — the named technique(s) from `docs/refactoring/` (the Fowler catalog, adapted to altune's Go + RN/TS) that this deepening is composed of — e.g. _Extract Class_ + _Hide Delegate_. A card cites a move, not a vibe; if no catalogued technique fits, say so and name the novel move explicitly.
 - **Benefits** — explained in terms of locality and leverage, and how tests would improve
 - **Before / After diagram** — side-by-side, custom-drawn, illustrating the shallowness and the deepening
 - **Recommendation strength** — one of `Strong`, `Worth exploring`, `Speculative`, rendered as a badge
