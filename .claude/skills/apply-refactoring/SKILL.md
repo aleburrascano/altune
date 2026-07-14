@@ -11,7 +11,7 @@ argument-hint: "[path|context|feature]   # default: current diff"
 
 # Apply Refactoring
 
-A find-and-fix pass over a single scope. The catalog of moves is `.claude/rules/refactoring/` — Fowler's techniques in six groups, adapted to altune's Go and RN/TS, each with smell · move · altune-form · when-to-skip. Read its [README.md](../../rules/refactoring/README.md) to pick the group, then the group file before applying.
+A find-and-fix pass over a single scope. The catalog of moves is `docs/refactoring/` — Fowler's techniques in six groups, adapted to altune's Go and RN/TS, each with smell · move · altune-form · when-to-skip. Read its [README.md](../../../docs/refactoring/README.md) to pick the group, then the group file before applying.
 
 ## Scope
 Default: the current working diff (`git diff` + staged). An argument narrows to a Go bounded context (`services/go-api/internal/<context>/`), a mobile feature (`apps/mobile/src/features/<feat>/`), or an explicit path.
