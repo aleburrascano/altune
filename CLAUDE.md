@@ -11,8 +11,8 @@ Altune — music manager. Expo (React Native + TS) mobile + Go (hexagonal, modul
 
 ## Architectural rules
 
-- **Hexagonal boundary:** `services/go-api/internal/<context>/domain/` imports nothing from `adapters/` or framework code. Service layer depends only on domain and the ports it defines.
-- **Vertical-slice:** feature work belongs in `apps/mobile/src/features/<feat>/` or under a bounded context in `services/go-api/internal/<context>/`. Extraction to `shared/` requires **2+ real consumers** (YAGNI).
+Hexagonal-boundary and vertical-slice rules live in `docs/architecture.md` (imported above) — don't restate them here.
+
 - **AIDEV-* anchors:** `# AIDEV-NOTE:`, `# AIDEV-DECISION:`, `# AIDEV-WARNING:` are durable — never strip them.
 
 ## Tools
@@ -23,7 +23,7 @@ Altune — music manager. Expo (React Native + TS) mobile + Go (hexagonal, modul
 
 ## Workflow
 
-- Invoke skills by name (`/feature-spec`, `/feature-plan`, `/common-ground`, `/audit-codebase`) or use CE plugin skills (`/ce-brainstorm`, `/ce-plan`, `/ce-work`).
+- Invoke skills by name (`/feature-spec`, `/feature-plan`, `/common-ground`, `/audit-codebase`, `/ce-brainstorm`).
 
 ## Git
 
@@ -33,3 +33,15 @@ Altune — music manager. Expo (React Native + TS) mobile + Go (hexagonal, modul
 ## Nested context
 
 Look for `CLAUDE.md` files closer to the file you're editing — feature- and layer-specific rules live near the code. See `docs/claude-md-map.md` for the index.
+
+<!-- waymark:okf-context:start -->
+## OKF context
+
+This repo has an `okf/` knowledge bundle describing domain concepts (APIs, data models, playbooks).
+
+- Before editing a file, call `find_concept_by_resource` via the okf MCP server to check if a concept describes it — read it for context first.
+- Use `list_concepts(type?, tags?)` to browse, `read_concept(path)` for full detail.
+- If the okf MCP server is unavailable, fall back to reading `okf/` directly with Read/Grep — and say so explicitly in your response.
+- Do not hand-edit `verified_commit` or `okf/log.md` — the `okf-staleness-fix` skill manages these automatically when it finalizes a fix.
+- If a commit is blocked by the OKF staleness pre-commit hook, use the `okf-staleness-fix` skill to draft and verify the concept update before recommitting.
+<!-- waymark:okf-context:end -->
