@@ -52,8 +52,19 @@ function toLocalNative(track: PlaybackTrack, uri: string): AddTrack {
   return { url: uri, title: track.title, artist: track.artist, artwork: track.artworkUrl ?? '' };
 }
 
-async function swapUpcomingToLocal(index: number, track: PlaybackTrack, uri: string): Promise<void> {
+// AIDEV-WARNING: Only ever swap a track that is strictly AFTER the active one.
+// RNTP activates the next track when the active one is removed, so swapping the
+// playing track would skip it — audible as the next button jumping two tracks.
+// The caller's index comes from an event/store read that a skip can invalidate
+// before we get here, so re-check against the live native index, not the store.
+export async function swapUpcomingToLocal(
+  index: number,
+  track: PlaybackTrack,
+  uri: string,
+): Promise<void> {
   try {
+    const activeIndex = await TrackPlayer.getActiveTrackIndex();
+    if (activeIndex != null && index <= activeIndex) return;
     await TrackPlayer.remove(index);
     await TrackPlayer.add(toLocalNative(track, uri), index);
   } catch {
