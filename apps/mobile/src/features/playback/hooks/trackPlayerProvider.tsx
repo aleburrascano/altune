@@ -69,6 +69,16 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   // still reads the raw livePositionMs so the listen threshold isn't spoofed.
   const resumePositionMs = useQueueStore((s) => s.resumePositionMs);
   const displayPositionMs = livePositionMs > 0 ? livePositionMs : resumePositionMs;
+  // livePositionMs returns to exactly 0 at the top of EVERY track (and after any
+  // seek to 0), not just before the first load — so a resume seed left in place
+  // would re-appear as a ~500ms jump to the old offset at the start of each
+  // subsequent track. Retire the seed the moment live progress proves the player
+  // is reporting: it has done its job.
+  useEffect(() => {
+    if (livePositionMs > 0 && resumePositionMs > 0) {
+      useQueueStore.getState().setResumePosition(0);
+    }
+  }, [livePositionMs, resumePositionMs]);
   if (isForeground) frozenPositionMs.current = displayPositionMs;
   const positionMs = isForeground ? displayPositionMs : frozenPositionMs.current;
   const rawDurationMs = progress.duration * 1000;
@@ -234,9 +244,20 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   // Mirror the queue's repeat mode onto the native player so auto-advance and
   // repeat are enforced natively (no JS wake to load the next track).
+  // Await setup first: this effect runs in the same commit as the mount effect
+  // that kicks ensurePlayerSetup off, so calling straight through rejected with
+  // "player is not initialized" on every cold start. ensurePlayerSetup is
+  // idempotent, so awaiting it here just sequences behind the in-flight setup.
   const repeatMode = useQueueStore((s) => s.repeatMode);
   useEffect(() => {
-    void TrackPlayer.setRepeatMode(NATIVE_REPEAT[repeatMode]);
+    void (async () => {
+      try {
+        await ensurePlayerSetup();
+        await TrackPlayer.setRepeatMode(NATIVE_REPEAT[repeatMode]);
+      } catch {
+        // player torn down — the mode re-applies on the next queue load
+      }
+    })();
   }, [repeatMode]);
 
   const currentQueueTrack = useQueueStore((s) => s.currentTrack());

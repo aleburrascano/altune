@@ -152,10 +152,14 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({ tracks: [...tracks, track], playOrder: newOrder });
   },
 
+  // AIDEV-NOTE: Mirrors what the native player does on skipToNext, because the
+  // native provider is what ships — this action only drives the Expo Go stub, and
+  // the two silently disagreeing is worse than either behaviour. Repeat 'one'
+  // therefore advances (it loops on auto-advance, not on an explicit next);
+  // only 'all' wraps past the end.
   skipToNext: () => {
     const { tracks, playOrder, currentIndex, repeatMode } = get();
     if (tracks.length === 0) return null;
-    if (repeatMode === 'one') return trackAt(tracks, playOrder, currentIndex);
 
     const next = currentIndex + 1;
     if (next < playOrder.length) {
@@ -295,10 +299,14 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     return trackAt(tracks, playOrder, currentIndex);
   },
 
+  // Repeat 'one' loops the track on AUTO-advance only; pressing next still moves
+  // on, and at the last track there is nothing to move to — native
+  // RepeatMode.Track rejects skipToNext there. Claiming a next exists under
+  // 'one' rendered an enabled Next button that silently did nothing.
   hasNext: () => {
     const { playOrder, currentIndex, repeatMode } = get();
     if (playOrder.length === 0) return false;
-    if (repeatMode === 'all' || repeatMode === 'one') return true;
+    if (repeatMode === 'all') return true;
     return currentIndex < playOrder.length - 1;
   },
 

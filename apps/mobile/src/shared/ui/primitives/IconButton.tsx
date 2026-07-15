@@ -10,6 +10,8 @@ export type IconButtonProps = {
   accessibilityLabel: string;
   size?: number;
   color?: string;
+  /** Blocks presses and announces the disabled state. Pass a dimmed `color` too — this doesn't tint. */
+  disabled?: boolean;
   testID?: string;
 };
 
@@ -20,6 +22,7 @@ export function IconButton({
   accessibilityLabel,
   size = 24,
   color,
+  disabled = false,
   testID,
 }: IconButtonProps) {
   const theme = useTheme();
@@ -27,8 +30,10 @@ export function IconButton({
     <Pressable
       testID={testID}
       onPress={onPress}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}
       hitSlop={12}
       style={({ pressed }) => [
         { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },

@@ -70,13 +70,27 @@ describe('skipToNext', () => {
     expect(useQueueStore.getState().currentIndex).toBe(0);
   });
 
-  it('returns same track with repeat one', () => {
+  // Repeat 'one' loops the track on AUTO-advance; an explicit next still moves on.
+  // This mirrors the native player (RepeatMode.Track), which is what ships — the
+  // store's skip actions only drive the Expo Go stub, so a store that stayed put
+  // here would mean next did different things in Expo Go and in a real build.
+  it('advances with repeat one', () => {
     useQueueStore.getState().loadQueue(tracks, 2, null);
     useQueueStore.getState().cycleRepeatMode(); // off -> all
     useQueueStore.getState().cycleRepeatMode(); // all -> one
     const next = useQueueStore.getState().skipToNext();
-    expect(next).toEqual(tracks[2]);
-    expect(useQueueStore.getState().currentIndex).toBe(2);
+    expect(next).toEqual(tracks[3]);
+    expect(useQueueStore.getState().currentIndex).toBe(3);
+  });
+
+  // ...and at the end there is nothing to advance to: native rejects skipToNext
+  // under RepeatMode.Track, so hasNext must not claim otherwise.
+  it('does not wrap at the end with repeat one', () => {
+    useQueueStore.getState().loadQueue(tracks, 4, null);
+    useQueueStore.getState().cycleRepeatMode(); // off -> all
+    useQueueStore.getState().cycleRepeatMode(); // all -> one
+    expect(useQueueStore.getState().hasNext()).toBe(false);
+    expect(useQueueStore.getState().skipToNext()).toBeNull();
   });
 
   it('returns null for empty queue', () => {
