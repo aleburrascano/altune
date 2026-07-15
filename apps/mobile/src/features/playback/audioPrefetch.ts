@@ -4,7 +4,7 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { fetchAudioUrls } from './api/audio';
+import { audioRequestHeaders, audioStreamUrl, fetchAudioUrls } from './api/audio';
 
 // AIDEV-NOTE: Download-ahead cache. RNTP's iOS backend does not pre-buffer the
 // next queue item, so every auto-advance stalls ~1s buffering the next remote
@@ -21,6 +21,24 @@ const KEEP_WINDOW = 4;
 
 // Dedupe concurrent prefetches of the same track.
 const inflight = new Set<string>();
+
+// Library trackIds whose native queue entry we've pointed at a local file.
+// `evict` can delete that file while the entry still references it (skip forward
+// past the keep window, then skip back), and the resulting PlaybackError looks
+// exactly like a genuinely missing server-side file — which would make us tell
+// the server to re-acquire a perfectly healthy track. This set lets the error
+// handler tell "our cache went stale" from "the file is really gone".
+const swappedToLocal = new Set<string>();
+
+export function wasSwappedToLocal(trackId: string): boolean {
+  return swappedToLocal.has(trackId);
+}
+
+// Called when the native queue is rebuilt from streaming URLs — no entry points
+// at a local file any more, so the set must not claim otherwise.
+export function forgetAllSwaps(): void {
+  swappedToLocal.clear();
+}
 
 function cacheDir(): Directory {
   const dir = new Directory(Paths.cache, CACHE_SUBDIR);
@@ -52,6 +70,38 @@ function toLocalNative(track: PlaybackTrack, uri: string): AddTrack {
   return { url: uri, title: track.title, artist: track.artist, artwork: track.artworkUrl ?? '' };
 }
 
+// The streamable form of a track — presigned when the server will sign it, the
+// authenticated proxy otherwise (same fallback ladder as loadNativeTrack). Used
+// to put a queue entry back when the local file it pointed at is unusable.
+async function toStreamingNative(track: PlaybackTrack): Promise<AddTrack> {
+  const artwork = track.artworkUrl ?? '';
+  if (track.source.kind === 'preview') {
+    return { url: track.source.previewUrl, title: track.title, artist: track.artist, artwork };
+  }
+  const trackId = track.source.trackId;
+  try {
+    const [resolved] = await fetchAudioUrls([trackId]);
+    if (resolved) return { url: resolved.url, title: track.title, artist: track.artist, artwork };
+  } catch {
+    // fall through to the proxy — it always works, it's just slower
+  }
+  const headers = await audioRequestHeaders();
+  return { url: audioStreamUrl(trackId), title: track.title, artist: track.artist, artwork, headers };
+}
+
+// Repair the ACTIVE entry after its local file turned out to be unusable, by
+// reloading it from the stream. Uses TrackPlayer.load, which replaces the current
+// track in place — remove+add would reindex the queue out from under the store.
+export async function repairActiveToStreaming(track: PlaybackTrack): Promise<void> {
+  if (track.source.kind === 'library') swappedToLocal.delete(track.source.trackId);
+  try {
+    await TrackPlayer.load(await toStreamingNative(track));
+    await TrackPlayer.play();
+  } catch {
+    // best-effort — the user can still skip or retry
+  }
+}
+
 // AIDEV-WARNING: Only ever swap a track that is strictly AFTER the active one.
 // RNTP activates the next track when the active one is removed, so swapping the
 // playing track would skip it — audible as the next button jumping two tracks.
@@ -62,13 +112,30 @@ export async function swapUpcomingToLocal(
   track: PlaybackTrack,
   uri: string,
 ): Promise<void> {
+  const activeIndex = await TrackPlayer.getActiveTrackIndex().catch(() => undefined);
+  if (activeIndex != null && index <= activeIndex) return;
+
   try {
-    const activeIndex = await TrackPlayer.getActiveTrackIndex();
-    if (activeIndex != null && index <= activeIndex) return;
     await TrackPlayer.remove(index);
-    await TrackPlayer.add(toLocalNative(track, uri), index);
   } catch {
     // native queue shifted (advanced / rebuilt) — leave the streaming URL as is
+    return;
+  }
+
+  // The slot is gone now. If the re-add fails we MUST put a playable entry back:
+  // a missing slot offsets every later native index from the store's play order
+  // permanently, and silently — wrong artwork, wrong song on queue taps, wrong
+  // row removed. Restoring the streaming entry costs a re-buffer, nothing worse.
+  try {
+    await TrackPlayer.add(toLocalNative(track, uri), index);
+    if (track.source.kind === 'library') swappedToLocal.add(track.source.trackId);
+  } catch {
+    try {
+      await TrackPlayer.add(await toStreamingNative(track), index);
+    } catch {
+      // Both adds failed — the queue is almost certainly being torn down or
+      // rebuilt anyway, which restores the mapping from the store.
+    }
   }
 }
 

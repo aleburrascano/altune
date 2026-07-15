@@ -4,7 +4,7 @@ import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 
 import { recoverAudio } from './api/audio';
-import { prefetchNext } from './audioPrefetch';
+import { prefetchNext, repairActiveToStreaming, wasSwappedToLocal } from './audioPrefetch';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
 
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
@@ -46,9 +46,16 @@ export async function playbackService() {
   // is actually present). Best-effort.
   TrackPlayer.addEventListener(Event.PlaybackError, () => {
     const track = useQueueStore.getState().currentTrack();
-    if (track && track.source.kind === 'library') {
-      void recoverAudio(track.source.trackId).catch(() => {});
+    if (!track || track.source.kind !== 'library') return;
+    // A track whose entry we swapped to a locally-cached file can fail purely
+    // because eviction deleted that file — the server's copy is fine. Reloading
+    // it from the stream repairs it in place; calling recoverAudio here would
+    // tell the server to mark a healthy track failed and re-acquire it.
+    if (wasSwappedToLocal(track.source.trackId)) {
+      void repairActiveToStreaming(track);
+      return;
     }
+    void recoverAudio(track.source.trackId).catch(() => {});
   });
 
   // The native player drives transitions (manual skip, gapless auto-advance,
