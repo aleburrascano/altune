@@ -4,11 +4,12 @@
 // moves to the real one — without this guard the store flips to track[0] for a
 // beat, flashing the wrong song on relaunch/queue-start.
 //
-// While a native load is in flight we pin the *target* index: the service
-// listener applies only the event matching the target (or any event once no load
-// is pending) and drops the intermediate index-0. shouldApplyActiveIndex is
-// self-clearing on the target, and endNativeLoad is a safety net so a load that
-// never reaches its target can't leave the guard stuck.
+// While a native load is in flight we drop only the index-0 priming transient.
+// Any other index is a real position — the target, or a transition that raced
+// past it (a next press landing before skip(target) does) — so the guard
+// releases and lets native stay authoritative. Releasing on the first real index
+// rather than only on an exact target match is what keeps a missed target from
+// pinning the guard forever and silently dropping every later transition.
 let pendingTargetIndex: number | null = null;
 
 export function beginNativeLoad(targetIndex: number): void {
@@ -20,13 +21,11 @@ export function endNativeLoad(): void {
 }
 
 // Returns whether a native active-track index should be applied to the store.
-// Normal operation (no load pending) always applies. During a load, only the
-// target index applies — and doing so ends the load window.
+// Normal operation (no load pending) always applies. During a load, the index-0
+// transient is dropped — unless 0 IS the target, where it's the real position.
 export function shouldApplyActiveIndex(index: number): boolean {
   if (pendingTargetIndex === null) return true;
-  if (index === pendingTargetIndex) {
-    pendingTargetIndex = null;
-    return true;
-  }
-  return false;
+  if (index === 0 && pendingTargetIndex !== 0) return false;
+  pendingTargetIndex = null;
+  return true;
 }
