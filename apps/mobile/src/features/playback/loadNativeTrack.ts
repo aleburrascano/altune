@@ -19,6 +19,22 @@ export interface LoadNativeTrackOptions {
 // regardless.
 const MAX_PRESIGN = 25;
 
+// AIDEV-NOTE: Last-write-wins token for native loads. A load is a multi-await
+// sequence (setup → resolve URLs → reset → add → skip), so two overlapping loads
+// would interleave their reset()/add() calls and leave the native queue a mix of
+// both. Every load claims a token first; after each await it bails if a newer
+// load has claimed one. The newest caller always wins, which is what the user
+// expects: tapping a track must beat an in-flight resume, not race it.
+let loadToken = 0;
+
+function claimLoad(): number {
+  return ++loadToken;
+}
+
+function isStale(token: number): boolean {
+  return token !== loadToken;
+}
+
 // AIDEV-NOTE: Resolve short-lived presigned URLs for the library tracks so the
 // native player streams straight from object storage instead of proxying every
 // byte through the API (auth + Postgres + storage round-trips per range request).
@@ -72,10 +88,18 @@ export async function loadNativeTrack(
 ): Promise<void> {
   const { autoplay = true, startPositionMs = 0 } = options;
 
+  // AIDEV-WARNING: this reset() drops the native queue, so the caller MUST also
+  // clear the queue store (see PlaybackProvider.play) — otherwise the store still
+  // describes a queue the player no longer holds, and the add()-induced
+  // ActiveTrackChanged(0) repoints the UI at the old queue's first track.
+  const token = claimLoad();
   await ensurePlayerSetup();
+  if (isStale(token)) return;
   await TrackPlayer.reset();
+  if (isStale(token)) return;
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
   const resolved = await resolveLibraryUrls([track]);
+  if (isStale(token)) return;
   await TrackPlayer.add(toNativeTrack(track, headers, resolved));
 
   if (startPositionMs > 0) {
@@ -99,7 +123,9 @@ export async function loadNativeQueue(
 ): Promise<void> {
   const { autoplay = true, startPositionMs = 0 } = options;
 
+  const token = claimLoad();
   await ensurePlayerSetup();
+  if (isStale(token)) return;
   await TrackPlayer.reset();
   if (tracks.length === 0) return;
 
@@ -107,6 +133,9 @@ export async function loadNativeQueue(
   const headers = needsAuth ? await audioRequestHeaders() : {};
   // Sign the window from the start index forward — that's what plays next.
   const resolved = await resolveLibraryUrls(tracks.slice(startIndex));
+  // A newer load (a user tap beating an in-flight resume) already owns the
+  // player — bail before add() so the two don't interleave into one queue.
+  if (isStale(token)) return;
 
   const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
   // Pin the target index so the add()-induced index-0 transient doesn't flash
