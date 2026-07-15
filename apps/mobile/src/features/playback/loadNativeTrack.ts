@@ -1,6 +1,7 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { audioRequestHeaders, audioStreamUrl, fetchAudioUrls } from './api/audio';
+import { forgetAllSwaps } from './audioPrefetch';
 import { ensurePlayerSetup } from './initPlayer';
 import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -96,6 +97,8 @@ export async function loadNativeTrack(
   await ensurePlayerSetup();
   if (isStale(token)) return;
   await TrackPlayer.reset();
+  // Every entry below is built from a streaming URL — no local-file entries survive.
+  forgetAllSwaps();
   if (isStale(token)) return;
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
   const resolved = await resolveLibraryUrls([track]);
@@ -127,6 +130,8 @@ export async function loadNativeQueue(
   await ensurePlayerSetup();
   if (isStale(token)) return;
   await TrackPlayer.reset();
+  // Every entry below is built from a streaming URL — no local-file entries survive.
+  forgetAllSwaps();
   if (tracks.length === 0) return;
 
   const needsAuth = tracks.some((t) => t.source.kind === 'library');

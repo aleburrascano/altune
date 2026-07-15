@@ -89,8 +89,15 @@ export function QueueSheet(): ReactElement {
         text: 'Clear',
         style: 'destructive',
         onPress: () => {
-          for (let i = playOrder.length - 1; i > currentIndex; i--) {
-            removeFromQueue(i);
+          // Read the queue at press time, not from the render closure: this
+          // Alert is modal and can sit open for minutes while the track
+          // auto-advances. A stale-low currentIndex would put the playing track
+          // inside `i > currentIndex` and delete it — audio would jump and
+          // tracks that should have survived would be destroyed. Descending
+          // iteration keeps the indices valid as entries are removed.
+          const s = useQueueStore.getState();
+          for (let i = s.playOrder.length - 1; i > s.currentIndex; i--) {
+            s.removeFromQueue(i);
             void playback.removeQueueIndex(i);
           }
         },
@@ -185,7 +192,13 @@ export function QueueSheet(): ReactElement {
 
       <FlatList
         data={upNextItems}
-        keyExtractor={(item) => `${item.queueIndex}`}
+        // Key by the entry's slot in `tracks`, not its play-order position:
+        // queueIndex shifts down on every advance and removal, so React
+        // reconciles a different track onto the same key — remounting every row
+        // (and its swipeable's gesture handler) on each transition, and leaving
+        // the row that inherits a removed row's key rendered swiped-open.
+        // trackIndex is unique across the queue and stable across advances.
+        keyExtractor={(item) => `${item.trackIndex}`}
         renderItem={renderUpNextItem}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
