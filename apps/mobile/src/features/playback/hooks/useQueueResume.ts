@@ -19,19 +19,49 @@ const SAVE_INTERVAL_MS = 15_000;
 // depending on the library screen having warmed its cache first.
 const REHYDRATE_LIMIT = 2000;
 
+// source_id wire format:
+//   library
+//   playlist:<playlistId>[:<url-encoded name>]
+//   search[:<url-encoded query>]
+// The trailing name/query are encoded so a ':' or space in either can't be
+// mistaken for a separator. Both are optional: rows written before they were
+// persisted parse to '' rather than failing.
 function buildSourceId(source: ReturnType<typeof useQueueStore.getState>['source']): string {
   if (!source) return '';
-  if (source.kind === 'playlist') return `playlist:${source.playlistId}`;
+  if (source.kind === 'playlist') {
+    return `playlist:${source.playlistId}:${encodeURIComponent(source.name)}`;
+  }
+  if (source.kind === 'search') return `search:${encodeURIComponent(source.query)}`;
   return source.kind;
+}
+
+function decodeOrEmpty(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return '';
+  }
 }
 
 function parseSourceId(sourceId: string): ReturnType<typeof useQueueStore.getState>['source'] {
   if (!sourceId) return null;
   if (sourceId.startsWith('playlist:')) {
-    return { kind: 'playlist', playlistId: sourceId.slice('playlist:'.length), name: '' };
+    const rest = sourceId.slice('playlist:'.length);
+    const sep = rest.indexOf(':');
+    // Dropping the name here rendered the queue sheet's "Playing from <name>"
+    // with an empty name after every resume from a playlist.
+    if (sep === -1) return { kind: 'playlist', playlistId: rest, name: '' };
+    return {
+      kind: 'playlist',
+      playlistId: rest.slice(0, sep),
+      name: decodeOrEmpty(rest.slice(sep + 1)),
+    };
   }
   if (sourceId === 'library') return { kind: 'library' };
-  if (sourceId.startsWith('search')) return { kind: 'search', query: '' };
+  if (sourceId === 'search') return { kind: 'search', query: '' };
+  if (sourceId.startsWith('search:')) {
+    return { kind: 'search', query: decodeOrEmpty(sourceId.slice('search:'.length)) };
+  }
   return null;
 }
 

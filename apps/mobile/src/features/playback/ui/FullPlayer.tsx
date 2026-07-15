@@ -187,6 +187,7 @@ export function FullPlayer() {
             size={24}
             color={hasNext ? theme.color.textPrimary : dimColor}
             onPress={skipToNext}
+            disabled={!hasNext}
             accessibilityLabel="Next track"
           />
           <IconButton
