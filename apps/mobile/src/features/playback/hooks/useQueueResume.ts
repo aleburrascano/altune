@@ -38,10 +38,19 @@ function parseSourceId(sourceId: string): ReturnType<typeof useQueueStore.getSta
 export function useQueueResume() {
   const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restoredRef = useRef(false);
+  // Generation of the deliberate one-track placeholder restore loads before it
+  // rehydrates the full queue. Persisting THAT would overwrite the real saved
+  // queue with a single track — and a slow or failed rehydrate (bad network on
+  // launch) would make the truncation permanent. Pinning the exact generation
+  // rather than a "restoring" flag keeps the gate narrow: the moment the queue
+  // becomes anything else — rehydrated, or replaced by a user tap — it is real
+  // again and saving resumes, even if the rehydrate never finished.
+  const placeholderGenerationRef = useRef<number | null>(null);
 
   const save = useCallback(async () => {
     const s = useQueueStore.getState();
     if (s.tracks.length === 0) return;
+    if (placeholderGenerationRef.current === s.generation) return;
 
     // Persist in PLAY ORDER with current_index pointing into that same library-only
     // list, so track_ids[current_index] is unambiguously the current track. The old
@@ -92,9 +101,18 @@ export function useQueueResume() {
     restoredRef.current = true;
 
     void (async () => {
+      // Resume owns the queue only until the user picks something. Every await
+      // below is a window in which a tap can start real playback; `owned` is the
+      // generation resume last wrote, so a mismatch means the user took over and
+      // restoring would silently stop their music and swap in yesterday's queue.
+      const userTookOver = (owned: number): boolean =>
+        useQueueStore.getState().generation !== owned;
+
       try {
+        let owned = useQueueStore.getState().generation;
         const saved = await getQueueState();
         if (!saved.track_ids.length) return;
+        if (userTookOver(owned)) return;
 
         // Instant now-playing: the server embeds the current track's metadata, so
         // render it (and the saved scrubber position) from this small call before
@@ -105,6 +123,8 @@ export function useQueueResume() {
           const current = currentTrackToPlaybackTrack(saved.current_track);
           useQueueStore.getState().loadQueue([current], 0, parseSourceId(saved.source_id));
           useQueueStore.getState().setResumePosition(saved.position_ms);
+          owned = useQueueStore.getState().generation;
+          placeholderGenerationRef.current = owned;
         }
 
         // Rehydrate full track data through the shared api-client transport
@@ -112,6 +132,8 @@ export function useQueueResume() {
         // Resume no longer silently no-ops when the library screen hasn't loaded.
         const home = await getTracks({ limit: REHYDRATE_LIMIT, offset: 0 });
         if (!home.items.length) return;
+        // The widest window — this fetch is the whole library by design.
+        if (userTookOver(owned)) return;
 
         const trackMap = new Map(home.items.map((t) => [t.id, t]));
         const isReady = (id: string): boolean => {
@@ -171,8 +193,11 @@ export function useQueueResume() {
         // relaunch does nothing. Read state AFTER shuffle/repeat so the native
         // order matches the pinned-current play order. autoplay:false leaves it
         // paused so the app never blares audio on its own — the user taps play.
+        // Re-read: the store writes above bumped the generation, and a tap during
+        // them means the user's queue is live and must not be primed over.
+        owned = useQueueStore.getState().generation;
         const s = useQueueStore.getState();
-        if (s.currentTrack()) {
+        if (s.currentTrack() && !userTookOver(owned)) {
           await loadNativeQueue(orderedQueueTracks(s), s.currentIndex, {
             autoplay: false,
             startPositionMs: saved.position_ms,

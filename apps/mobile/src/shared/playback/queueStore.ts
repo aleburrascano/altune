@@ -14,6 +14,12 @@ interface QueueState {
   // set only by the resume flow. Once native progress goes live (> 0) the provider
   // ignores it, so it never fights real playback.
   resumePositionMs: number;
+  // Bumped every time the queue is REPLACED (load/restore/clear) — i.e. whenever
+  // a different queue takes ownership. Lets a slow async flow prove the queue it
+  // started against is still the queue in play before it writes: resume reads it
+  // before its network fetches and bails if a user tap replaced the queue
+  // meanwhile. Transitions within a queue (skip/enqueue/shuffle) don't bump it.
+  generation: number;
 }
 
 interface QueueActions {
@@ -54,6 +60,7 @@ const INITIAL: QueueState = {
   shuffled: false,
   source: null,
   resumePositionMs: 0,
+  generation: 0,
 };
 
 function identityOrder(length: number): number[] {
@@ -93,7 +100,15 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
 
   loadQueue: (tracks, startIndex, source) => {
     const order = identityOrder(tracks.length);
-    set({ tracks, playOrder: order, currentIndex: startIndex, shuffled: false, source, resumePositionMs: 0 });
+    set({
+      tracks,
+      playOrder: order,
+      currentIndex: startIndex,
+      shuffled: false,
+      source,
+      resumePositionMs: 0,
+      generation: get().generation + 1,
+    });
   },
 
   // Restore a snapshot with an EXPLICIT play-order permutation (unlike loadQueue,
@@ -104,7 +119,15 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   restoreQueue: (tracks, playOrder, currentIndex, source, shuffled) => {
     const clampedIdx =
       playOrder.length === 0 ? -1 : Math.max(0, Math.min(currentIndex, playOrder.length - 1));
-    set({ tracks, playOrder, currentIndex: clampedIdx, shuffled, source, resumePositionMs: 0 });
+    set({
+      tracks,
+      playOrder,
+      currentIndex: clampedIdx,
+      shuffled,
+      source,
+      resumePositionMs: 0,
+      generation: get().generation + 1,
+    });
   },
 
   // AIDEV-WARNING: enqueue/playNext mutate tracks + playOrder, so any caller
@@ -250,7 +273,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     const trackIdx = playOrder[index]!;
     const newTracks = tracks.filter((_, i) => i !== trackIdx);
     if (newTracks.length === 0) {
-      set(INITIAL);
+      set({ ...INITIAL, generation: get().generation + 1 });
       return;
     }
     const newOrder = playOrder
@@ -264,7 +287,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({ tracks: newTracks, playOrder: newOrder, currentIndex: newCurrent, shuffled: shuffled && newTracks.length > 1 });
   },
 
-  clearQueue: () => set(INITIAL),
+  clearQueue: () => set({ ...INITIAL, generation: get().generation + 1 }),
 
   currentTrack: () => {
     const { tracks, playOrder, currentIndex } = get();

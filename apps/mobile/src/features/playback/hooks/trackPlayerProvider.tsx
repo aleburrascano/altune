@@ -122,6 +122,13 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     setErrorMessage(null);
     setTrack(newTrack);
     lastPlayedTrack.current = newTrack;
+    // loadNativeTrack reset()s the native queue, so the store's queue is gone
+    // too — clear it in the same tick. Leaving it would make the store describe
+    // a queue the player no longer holds: the add()-induced ActiveTrackChanged(0)
+    // would sync currentIndex to 0 and repoint the UI at the old queue's first
+    // track while this one plays. With the queue cleared, syncCurrentIndex(0)
+    // no-ops (empty playOrder) and retry() correctly falls back to this track.
+    useQueueStore.getState().clearQueue();
 
     try {
       await loadNativeTrack(newTrack);
@@ -234,33 +241,60 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   const currentQueueTrack = useQueueStore((s) => s.currentTrack());
 
+  // Follow the queue's current track. Only when there IS one: a queue-less track
+  // (a preview via play()) owns `track` itself, and clearing it here on the
+  // resulting null would blank the player mid-preview.
   useEffect(() => {
+    if (!currentQueueTrack) return;
     setTrack(currentQueueTrack);
-    if (currentQueueTrack) {
-      setErrorMessage(null);
-      lastPlayedTrack.current = currentQueueTrack;
-    }
+    setErrorMessage(null);
+    lastPlayedTrack.current = currentQueueTrack;
   }, [currentQueueTrack]);
 
   useQueueResume();
 
-  const value: PlaybackContextValue = {
-    ...state,
-    play,
-    startQueue,
-    reorderUpcoming,
-    appendToQueue,
-    insertNext,
-    skipToQueueIndex,
-    skipNext,
-    skipPrevious,
-    removeQueueIndex,
-    pause,
-    resume,
-    seekTo,
-    stop,
-    retry,
-  };
+  // Memoized so the frozen-position optimization above actually pays off: every
+  // control below is a stable useCallback, so while backgrounded (positionMs
+  // frozen => `state` identity stable) this value keeps its identity too and
+  // useProgress's twice-a-second setState re-renders nothing downstream. A bare
+  // object literal here would mint a new identity on every one of those ticks
+  // and re-render every usePlayback() consumer in the tree regardless.
+  const value = useMemo<PlaybackContextValue>(
+    () => ({
+      ...state,
+      play,
+      startQueue,
+      reorderUpcoming,
+      appendToQueue,
+      insertNext,
+      skipToQueueIndex,
+      skipNext,
+      skipPrevious,
+      removeQueueIndex,
+      pause,
+      resume,
+      seekTo,
+      stop,
+      retry,
+    }),
+    [
+      state,
+      play,
+      startQueue,
+      reorderUpcoming,
+      appendToQueue,
+      insertNext,
+      skipToQueueIndex,
+      skipNext,
+      skipPrevious,
+      removeQueueIndex,
+      pause,
+      resume,
+      seekTo,
+      stop,
+      retry,
+    ],
+  );
 
   return <PlaybackContext.Provider value={value}>{children}</PlaybackContext.Provider>;
 }
