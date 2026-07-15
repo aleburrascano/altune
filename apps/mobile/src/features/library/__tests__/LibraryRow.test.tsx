@@ -9,6 +9,7 @@
 import { render } from '@testing-library/react-native';
 
 import { LibraryRow } from '../ui/LibraryRow';
+import { progressDownload, useDownloadStore } from '@shared/acquisition/downloadStore';
 import type { AcquisitionStatus, TrackResponse } from '../../../shared/api-client/types';
 
 jest.mock('expo-image', () => ({ Image: () => null }));
@@ -39,14 +40,30 @@ function _track(
 const noop = (): void => {};
 
 describe('LibraryRow', () => {
+  beforeEach(() => {
+    useDownloadStore.getState().reset();
+  });
+
   it('shows the pending marker when acquisition_status is pending', () => {
     const { getByTestId } = render(<LibraryRow track={_track('pending')} onPress={noop} onMore={noop} />);
     expect(getByTestId('library-row-pending-t1')).toBeTruthy();
   });
 
-  it('omits the pending marker for any other status', () => {
+  it('omits the pending marker for a ready track with no live download', () => {
     const { queryByTestId } = render(<LibraryRow track={_track('ready')} onPress={noop} onMore={noop} />);
     expect(queryByTestId('library-row-pending-t1')).toBeNull();
+  });
+
+  it('shows the live phase caption when a download is in flight', () => {
+    progressDownload('t1', 'downloading');
+    const { getByText } = render(<LibraryRow track={_track('pending')} onPress={noop} onMore={noop} />);
+    expect(getByText('Downloading…')).toBeTruthy();
+  });
+
+  it('shows the live phase caption on a re-acquired ready track (F7 ungate)', () => {
+    progressDownload('t1', 'finishing');
+    const { getByText } = render(<LibraryRow track={_track('ready')} onPress={noop} onMore={noop} />);
+    expect(getByText('Finishing up…')).toBeTruthy();
   });
 
   it('shows error text when acquisition_status is failed', () => {

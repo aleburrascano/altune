@@ -31,11 +31,15 @@ type AudioSearcher interface {
 	Download(ctx context.Context, url string, outDir string) (filePath string, err error)
 }
 
-// AudioProber reads the actual duration (seconds) of a downloaded audio file.
-// Implemented by the ffprobe adapter. Used to verify a downloaded file is the
-// right recording before it is stored.
+// AudioProber inspects a downloaded audio file before it is stored. ProbeDuration
+// reads its true length (to reject wrong-recording matches). ValidateDecodable
+// decodes the stream to confirm the samples are actually playable: a container can
+// carry valid metadata (duration, codec) over corrupt audio data that no player
+// can decode, which ProbeDuration alone (metadata-only) does not catch. Implemented
+// by the ffprobe/ffmpeg adapter.
 type AudioProber interface {
 	ProbeDuration(ctx context.Context, filePath string) (float64, error)
+	ValidateDecodable(ctx context.Context, filePath string) error
 }
 
 // AudioWriter is the write-side of audio storage acquisition needs: persist a

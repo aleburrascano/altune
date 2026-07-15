@@ -11,10 +11,23 @@ import (
 
 type StoreStep struct {
 	audioStore ports.AudioWriter
+	prober     ports.AudioProber
 }
 
-func NewStoreStep(audioStore ports.AudioWriter) *StoreStep {
-	return &StoreStep{audioStore: audioStore}
+func NewStoreStep(audioStore ports.AudioWriter, opts ...func(*StoreStep)) *StoreStep {
+	s := &StoreStep{audioStore: audioStore}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+// WithStoreProber validates that the final file decodes before it is persisted.
+// This is the last gate — after download and tagging — so corruption introduced
+// by any earlier step (a format-mismatched tagger, a truncated write) is caught
+// before it reaches the library, not after a user tries to play it.
+func WithStoreProber(p ports.AudioProber) func(*StoreStep) {
+	return func(s *StoreStep) { s.prober = p }
 }
 
 func (s *StoreStep) Name() string { return "store" }
@@ -22,6 +35,12 @@ func (s *StoreStep) Name() string { return "store" }
 func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	if ac.TempPath == "" {
 		return fmt.Errorf("no temp file to store")
+	}
+
+	if s.prober != nil {
+		if err := s.prober.ValidateDecodable(ctx, ac.TempPath); err != nil {
+			return fmt.Errorf("final audio failed decode validation: %w", err)
+		}
 	}
 
 	audioRef := buildAudioRef(ac.Track)

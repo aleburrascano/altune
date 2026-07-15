@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"github.com/bogem/id3v2/v2"
 )
@@ -16,6 +17,15 @@ func (s *TagStep) Name() string { return "tag" }
 
 func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	if ac.TempPath == "" {
+		return nil
+	}
+
+	// ID3v2 is an MP3-only container convention: the tagger prepends an ID3 block
+	// at byte 0. That is correct for MP3 but corrupts any other container (e.g. an
+	// m4a/MP4 must start with `ftyp`, and the shifted bytes invalidate its sample
+	// offset table). Only tag MP3; other formats carry their metadata in the DB.
+	if !strings.HasSuffix(strings.ToLower(ac.TempPath), ".mp3") {
+		slog.InfoContext(ctx, "tag_skipped_non_mp3", "path", ac.TempPath)
 		return nil
 	}
 

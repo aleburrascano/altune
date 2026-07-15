@@ -10,9 +10,10 @@ import (
 // --- SearchHistoryRepository fake ---
 
 type fakeSearchHistoryRepository struct {
-	insertFn           func(ctx context.Context, entry *domain.SearchHistoryEntry) error
-	trimToNFn          func(ctx context.Context, userId shared.UserId, n int) error
-	listDistinctFn     func(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error)
+	insertFn       func(ctx context.Context, entry *domain.SearchHistoryEntry) error
+	trimToNFn      func(ctx context.Context, userId shared.UserId, n int) error
+	listDistinctFn func(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error)
+	deleteAllFn    func(ctx context.Context, userId shared.UserId) error
 }
 
 func (f *fakeSearchHistoryRepository) Insert(ctx context.Context, entry *domain.SearchHistoryEntry) error {
@@ -34,6 +35,13 @@ func (f *fakeSearchHistoryRepository) ListDistinctRecent(ctx context.Context, us
 		return f.listDistinctFn(ctx, userId, limit)
 	}
 	return nil, nil
+}
+
+func (f *fakeSearchHistoryRepository) DeleteAllForUser(ctx context.Context, userId shared.UserId) error {
+	if f.deleteAllFn != nil {
+		return f.deleteAllFn(ctx, userId)
+	}
+	return nil
 }
 
 // --- AlbumContentProvider fake ---

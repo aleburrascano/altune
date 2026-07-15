@@ -43,6 +43,12 @@ type userState struct {
 type InProcessBus struct {
 	users   sync.Map
 	ringCap int
+	// idBase seeds every user's monotonic event counter at process start. The
+	// per-user nextID resets to 0 on restart otherwise (F5), so a client that
+	// had already seen low ids from the previous process would mis-dedupe /
+	// stop on reconnect. Seeding from the wall clock makes ids monotonic across
+	// restarts: a later process always starts above the earlier one's range.
+	idBase  uint64
 	dropped atomic.Uint64
 
 	// System-wide tap (operator console). Single consumer, guarded by tapMu so
@@ -59,7 +65,7 @@ func (b *InProcessBus) Dropped() uint64 { return b.dropped.Load() }
 var _ Bus = (*InProcessBus)(nil)
 
 func NewInProcessBus() *InProcessBus {
-	return &InProcessBus{ringCap: defaultRingSize}
+	return &InProcessBus{ringCap: defaultRingSize, idBase: uint64(time.Now().UnixNano())}
 }
 
 func (b *InProcessBus) getOrCreateUser(userId shared.UserId) *userState {
@@ -70,6 +76,7 @@ func (b *InProcessBus) getOrCreateUser(userId shared.UserId) *userState {
 	us := &userState{
 		ring:        make([]Event, b.ringCap),
 		subscribers: make(map[uint64]chan Event),
+		nextID:      b.idBase,
 	}
 	actual, _ := b.users.LoadOrStore(key, us)
 	return actual.(*userState)

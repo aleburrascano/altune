@@ -53,6 +53,7 @@ const _BODY: CreateTrackRequest = {
   year: null,
   genre: null,
   album_artist: null,
+  track_number: null,
 };
 
 function _seededClient(): QueryClient {

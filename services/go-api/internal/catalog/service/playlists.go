@@ -118,6 +118,12 @@ func (s *PlaylistService) Rename(ctx context.Context, userId shared.UserId, play
 	if err := s.playlistRepo.Update(ctx, playlist); err != nil {
 		return fmt.Errorf("rename playlist: %w", err)
 	}
+	if s.events != nil {
+		s.events.Publish(userId, "playlist_renamed", map[string]any{
+			"playlist_id": playlistId.String(),
+			"name":        playlist.Name,
+		})
+	}
 	return nil
 }
 
@@ -185,6 +191,12 @@ func (s *PlaylistService) RemoveTrack(ctx context.Context, userId shared.UserId,
 	if err := s.playlistRepo.RemoveTrack(ctx, playlistId, trackId); err != nil {
 		return false, fmt.Errorf("remove track from playlist: %w", err)
 	}
+	if s.events != nil {
+		s.events.Publish(userId, "track_removed_from_playlist", map[string]any{
+			"playlist_id": playlistId.String(),
+			"track_id":    trackId.String(),
+		})
+	}
 	return true, nil
 }
 
@@ -203,6 +215,16 @@ func (s *PlaylistService) Reorder(ctx context.Context, userId shared.UserId, pla
 
 	if err := s.playlistRepo.ReorderTracks(ctx, playlistId, playlist.Tracks); err != nil {
 		return fmt.Errorf("reorder playlist: %w", err)
+	}
+	if s.events != nil {
+		ids := make([]string, len(playlist.Tracks))
+		for i, pt := range playlist.Tracks {
+			ids[i] = pt.TrackId.String()
+		}
+		s.events.Publish(userId, "playlist_reordered", map[string]any{
+			"playlist_id": playlistId.String(),
+			"track_ids":   ids,
+		})
 	}
 	return nil
 }

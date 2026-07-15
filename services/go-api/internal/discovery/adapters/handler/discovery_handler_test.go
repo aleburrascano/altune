@@ -90,6 +90,14 @@ func (r *fakeSearchHistoryRepo) ListDistinctRecent(_ context.Context, _ shared.U
 	return r.entries[:limit], nil
 }
 
+func (r *fakeSearchHistoryRepo) DeleteAllForUser(_ context.Context, _ shared.UserId) error {
+	if r.err != nil {
+		return r.err
+	}
+	r.entries = nil
+	return nil
+}
+
 // --- fake album content provider ---
 
 type fakeAlbumContentProvider struct {
@@ -199,6 +207,7 @@ func buildDiscoveryRouter(
 	}
 	searchSvc := service.NewService(providers, cb, searchOpts...)
 	historySvc := service.NewListSearchHistoryService(historyRepo)
+	clearHistorySvc := service.NewClearSearchHistoryService(historyRepo)
 
 	var albumSvc *service.GetAlbumTracksService
 	if albumProviders != nil {
@@ -211,10 +220,11 @@ func buildDiscoveryRouter(
 	}
 
 	h := NewDiscoveryHandler(DiscoveryServices{
-		Search:  searchSvc,
-		History: historySvc,
-		Album:   albumSvc,
-		Artist:  artistSvc,
+		Search:       searchSvc,
+		History:      historySvc,
+		ClearHistory: clearHistorySvc,
+		Album:        albumSvc,
+		Artist:       artistSvc,
 	})
 
 	r := chi.NewRouter()
@@ -422,6 +432,39 @@ func TestHandleSearchHistory(t *testing.T) {
 				t.Errorf("Total = %d, want %d", resp.Total, tt.wantItemsLen)
 			}
 		})
+	}
+}
+
+func TestHandleClearSearchHistory(t *testing.T) {
+	// Arrange — seed a few entries.
+	historyRepo := &fakeSearchHistoryRepo{}
+	for i := 0; i < 3; i++ {
+		historyRepo.entries = append(historyRepo.entries, &discdomain.SearchHistoryEntry{
+			ID:         uuid.New(),
+			UserId:     discTestUserId,
+			Query:      "test query",
+			QueryNorm:  "test query",
+			ExecutedAt: time.Now().UTC(),
+		})
+	}
+	router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
+
+	// Act — clear.
+	rec := discServe(t, router, http.MethodDelete, "/discovery/search-history", nil)
+
+	// Assert — 204 and the entries are gone from the repo (persisted delete).
+	discAssertStatus(t, rec, http.StatusNoContent)
+	if len(historyRepo.entries) != 0 {
+		t.Errorf("expected repo entries cleared, got %d", len(historyRepo.entries))
+	}
+
+	// A follow-up GET returns empty — the clear survived at the repo layer.
+	getRec := discServe(t, router, http.MethodGet, "/discovery/search-history?limit=10", nil)
+	discAssertStatus(t, getRec, http.StatusOK)
+	var resp DiscoverySearchHistoryResponse
+	discDecodeJSON(t, getRec, &resp)
+	if len(resp.Items) != 0 {
+		t.Errorf("expected 0 items after clear, got %d", len(resp.Items))
 	}
 }
 

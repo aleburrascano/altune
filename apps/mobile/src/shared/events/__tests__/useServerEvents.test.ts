@@ -1,16 +1,19 @@
 /**
- * useServerEvents — the event-type → React Query invalidation contract.
+ * useServerEvents — the event-type → React Query effect contract.
  *
  * The SSEClient is mocked to capture the onEvent handler the hook installs, so
- * the test can fire a server event and assert the right caches are invalidated.
- * This is the seam that keeps the UI (incl. the detail save-control lifecycle)
- * in sync when acquisition completes.
+ * the test can fire a server event and assert the right cache effect. Acquisition
+ * completed/failed events PATCH caches (and drive the download store) rather than
+ * invalidate (F12) — the detail save-control reads the library reactively, so the
+ * old library-wide refetch on every finished download is gone.
  */
 
 import { renderHook } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
+
+import { useDownloadStore } from '@shared/acquisition/downloadStore';
 
 type ServerEvent = { id: string; type: string; data: Record<string, unknown> };
 const captured: { onEvent?: ((event: ServerEvent) => void) | undefined } = {};
@@ -52,23 +55,26 @@ function setup(): jest.SpyInstance {
 
 afterEach(() => {
   captured.onEvent = undefined;
+  useDownloadStore.getState().reset();
 });
 
 describe('useServerEvents', () => {
-  it('invalidates the library caches when acquisition completes', () => {
+  it('does not invalidate the library on completion — it patches (F12)', () => {
     const invalidate = setup();
     captured.onEvent!({ id: '1', type: 'track_acquisition_completed', data: { track_id: 't1' } });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['library-home'] });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['library'] });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['library-home'] });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['library'] });
+    expect(useDownloadStore.getState().entries['t1']?.phase).toBe('finishing');
   });
 
-  it('invalidates the library caches when acquisition fails', () => {
+  it('does not invalidate the library on failure — it patches (F12)', () => {
     const invalidate = setup();
     captured.onEvent!({ id: '2', type: 'track_acquisition_failed', data: { track_id: 't2' } });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['library'] });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['library'] });
+    expect(useDownloadStore.getState().entries['t2']?.phase).toBe('failed');
   });
 
-  it('ignores event types that are not in the invalidation map', () => {
+  it('ignores event types that are not handled', () => {
     const invalidate = setup();
     captured.onEvent!({ id: '3', type: 'something_unmapped', data: {} });
     expect(invalidate).not.toHaveBeenCalled();

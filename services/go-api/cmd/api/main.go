@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
@@ -44,8 +46,16 @@ func main() {
 	case "reconcile-truncated":
 		execute := hasFlag("--execute")
 		commands.RunReconcileTruncated(cfg, execute)
+	case "backfill-m4a":
+		execute := hasFlag("--execute")
+		limit := flagInt("--limit", 0)
+		commands.RunBackfillM4a(cfg, execute, limit)
+	case "reacquire-corrupt-m4a":
+		execute := hasFlag("--execute")
+		limit := flagInt("--limit", 0)
+		commands.RunReacquireCorruptM4a(cfg, execute, limit)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated]\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated|backfill-m4a|reacquire-corrupt-m4a]\n", os.Args[1])
 		os.Exit(1)
 	}
 }
@@ -65,4 +75,23 @@ func hasFlag(flag string) bool {
 		}
 	}
 	return false
+}
+
+// flagInt reads an int flag in either "--name=5" or "--name 5" form, returning
+// def when absent or unparseable.
+func flagInt(name string, def int) int {
+	args := os.Args[2:]
+	for i, arg := range args {
+		if strings.HasPrefix(arg, name+"=") {
+			if v, err := strconv.Atoi(strings.TrimPrefix(arg, name+"=")); err == nil {
+				return v
+			}
+		}
+		if arg == name && i+1 < len(args) {
+			if v, err := strconv.Atoi(args[i+1]); err == nil {
+				return v
+			}
+		}
+	}
+	return def
 }

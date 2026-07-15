@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
@@ -87,6 +88,15 @@ func (r *mockTrackRepo) Update(_ context.Context, track *domain.Track) error {
 	return nil
 }
 
+func (r *mockTrackRepo) SetTrackNumber(_ context.Context, id domain.TrackId, _ shared.UserId, n int) (bool, error) {
+	t, ok := r.tracks[id.String()]
+	if !ok || t.TrackNumber != nil {
+		return false, nil
+	}
+	t.TrackNumber = &n
+	return true, nil
+}
+
 func (r *mockTrackRepo) Delete(_ context.Context, id domain.TrackId, userId shared.UserId) (bool, error) {
 	if r.errOnDelete != nil {
 		return false, r.errOnDelete
@@ -113,6 +123,31 @@ func (r *mockTrackRepo) GetByDedupKey(_ context.Context, userId shared.UserId, d
 }
 
 // seed adds a track directly into the mock store.
+func (r *mockTrackRepo) ReplaceFeaturedArtists(_ context.Context, id domain.TrackId, userId shared.UserId, feats []domain.FeaturedArtist) error {
+	t, ok := r.tracks[id.String()]
+	if !ok || t.UserId != userId {
+		return fmt.Errorf("track %s not found", id.String())
+	}
+	t.FeaturedArtists = feats
+	return nil
+}
+
+func (r *mockTrackRepo) ListTracksFeaturing(_ context.Context, userId shared.UserId, fa domain.FeaturedArtist) ([]*domain.Track, error) {
+	var out []*domain.Track
+	for _, t := range r.tracks {
+		if t.UserId != userId {
+			continue
+		}
+		for _, f := range t.FeaturedArtists {
+			if f.IdentityKey() == fa.IdentityKey() {
+				out = append(out, t)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 func (r *mockTrackRepo) seed(track *domain.Track) {
 	r.tracks[track.ID.String()] = track
 }

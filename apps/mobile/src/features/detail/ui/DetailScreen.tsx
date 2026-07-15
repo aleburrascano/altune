@@ -23,6 +23,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
+import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
 
 import { trackExtras } from '../extras-accessors';
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
@@ -35,9 +36,6 @@ import { TrackDetailBody } from './TrackDetailBody';
 import { AlbumDetailBody } from './AlbumDetailBody';
 import { ArtistDetailBody } from './ArtistDetailBody';
 import { Disclosure } from './Disclosure';
-import { DiscogsArtistSection } from './DiscogsArtistSection';
-import { DeezerEnrichmentSection } from './DeezerEnrichmentSection';
-import { DiscogsEnrichmentSection } from './DiscogsEnrichmentSection';
 import { LastFmEnrichmentSection } from './LastFmEnrichmentSection';
 
 const HERO_SIZE = 200;
@@ -101,7 +99,6 @@ export function DetailScreen(): ReactElement {
         ? artistDiscovery.imageUrl
         : result.image_url;
 
-  const genres = enrichments.musicbrainz?.genres ?? [];
   const yearLabel = _headerYear(rawResult, enrichments.musicbrainz?.year ?? 0);
   const canNavToArtist = result.subtitle !== null && result.kind !== 'artist';
 
@@ -111,8 +108,7 @@ export function DetailScreen(): ReactElement {
     }
   };
 
-  const albumHasDetails = enrichments.discogsAlbum !== null || enrichments.deezer !== null;
-  const artistHasAbout = enrichments.lastfm !== null || enrichments.discogsArtist !== null;
+  const artistHasAbout = enrichments.lastfm !== null;
 
   const backButton = (
     <Pressable
@@ -133,6 +129,14 @@ export function DetailScreen(): ReactElement {
       </Text>
     </Pressable>
   );
+
+  // For a collab album, append its co-primary artists to the header artist line
+  // ("Drake, 21 Savage"). The tap target stays the primary (result.subtitle);
+  // tracks keep their own "Featuring" row, so only albums augment the header.
+  const albumCollaborators =
+    result.kind === 'album' ? featuredArtistsFromExtras(enrichments.deezer?.featured_artists) : [];
+  const subtitleDisplay =
+    result.subtitle !== null ? withFeaturing(result.subtitle, albumCollaborators) : null;
 
   const heroContent = (
     <View style={styles.hero}>
@@ -159,12 +163,12 @@ export function DetailScreen(): ReactElement {
                 style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
               >
                 <Text variant="body" tone="accent" numberOfLines={1}>
-                  {result.subtitle}
+                  {subtitleDisplay}
                 </Text>
               </Pressable>
             ) : (
               <Text variant="body" tone="secondary" numberOfLines={1}>
-                {result.subtitle}
+                {subtitleDisplay}
               </Text>
             )
           ) : null}
@@ -188,26 +192,24 @@ export function DetailScreen(): ReactElement {
         {heroContent}
 
         {result.kind === 'track' ? (
-          <TrackDetailBody result={result} lateralNav={lateralNav} detailRoute={detailRoute} genres={genres} />
+          <TrackDetailBody
+            result={result}
+            lateralNav={lateralNav}
+            detailRoute={detailRoute}
+            deezerFeatured={featuredArtistsFromExtras(enrichments.deezer?.featured_artists)}
+          />
         ) : null}
 
         {result.kind === 'album' ? (
-          <AlbumDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} genres={genres} />
-        ) : null}
-        {result.kind === 'album' && albumHasDetails ? (
-          <Disclosure label="Details & credits" testID="detail-album-details">
-            <DiscogsEnrichmentSection enrichment={enrichments.discogsAlbum} />
-            <DeezerEnrichmentSection kind="album" enrichment={enrichments.deezer} />
-          </Disclosure>
+          <AlbumDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} />
         ) : null}
 
         {result.kind === 'artist' ? (
-          <ArtistDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} genres={genres} />
+          <ArtistDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} />
         ) : null}
         {result.kind === 'artist' && artistHasAbout ? (
           <Disclosure label={`About ${result.title}`} testID="detail-artist-about">
             <LastFmEnrichmentSection kind="artist" enrichment={enrichments.lastfm} />
-            <DiscogsArtistSection enrichment={enrichments.discogsArtist} />
           </Disclosure>
         ) : null}
       </ScrollView>

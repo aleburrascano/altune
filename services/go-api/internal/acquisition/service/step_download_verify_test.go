@@ -2,22 +2,35 @@ package service
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
 // queueProber returns canned durations in order, one per ProbeDuration call —
-// simulating ffprobe reporting each downloaded candidate's true length.
+// simulating ffprobe reporting each downloaded candidate's true length. decodeErrs
+// canned per ValidateDecodable call simulate the ffmpeg decode gate (nil = decodes).
 type queueProber struct {
-	durations []float64
-	calls     int
+	durations  []float64
+	calls      int
+	decodeErrs []error
+	decCalls   int
 }
 
 func (p *queueProber) ProbeDuration(_ context.Context, _ string) (float64, error) {
 	d := p.durations[p.calls]
 	p.calls++
 	return d, nil
+}
+
+func (p *queueProber) ValidateDecodable(_ context.Context, _ string) error {
+	var err error
+	if p.decCalls < len(p.decodeErrs) {
+		err = p.decodeErrs[p.decCalls]
+	}
+	p.decCalls++
+	return err
 }
 
 func TestDurationWithinTolerance(t *testing.T) {
@@ -115,6 +128,58 @@ func TestDownloadStep_NoExpectedDuration_SkipsVerification(t *testing.T) {
 	}
 	if ac.TempPath == "" {
 		t.Error("expected the first candidate accepted unverified")
+	}
+}
+
+// TestDownloadStep_RejectsUndecodableAudio reproduces the corrupt-m4a incident:
+// the first candidate downloads with the right duration but its samples don't
+// decode; it is discarded and the next (decodable) candidate is accepted.
+func TestDownloadStep_RejectsUndecodableAudio(t *testing.T) {
+	searcher := &fileWritingSearcher{writeFile: true}
+	prober := &queueProber{
+		durations:  []float64{226, 226},
+		decodeErrs: []error{errors.New("audio stream failed to decode"), nil},
+	}
+	step := NewDownloadStep(searcher, WithDownloadProber(prober))
+
+	ac := &AcquisitionContext{
+		Track: TrackRef{Title: "X", Artist: "Y", Duration: 226},
+		Ranked: []Candidate{
+			{URL: "https://youtube.com/watch?v=corrupt", Duration: 226},
+			{URL: "https://youtube.com/watch?v=good", Duration: 226},
+		},
+	}
+
+	if err := step.Execute(context.Background(), ac); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if ac.Selected == nil || ac.Selected.URL != "https://youtube.com/watch?v=good" {
+		t.Fatalf("expected corrupt candidate rejected and decodable one accepted, got %+v", ac.Selected)
+	}
+}
+
+// TestDownloadStep_AllUndecodable_Errors: when every candidate's audio is corrupt,
+// the step fails (leaving the track un-stored) rather than persisting garbage.
+func TestDownloadStep_AllUndecodable_Errors(t *testing.T) {
+	searcher := &fileWritingSearcher{writeFile: true}
+	prober := &queueProber{
+		durations:  []float64{226},
+		decodeErrs: []error{errors.New("audio stream failed to decode")},
+	}
+	step := NewDownloadStep(searcher, WithDownloadProber(prober))
+
+	ac := &AcquisitionContext{
+		Track:  TrackRef{Title: "X", Artist: "Y", Duration: 226},
+		Ranked: []Candidate{{URL: "https://youtube.com/watch?v=corrupt", Duration: 226}},
+	}
+
+	if err := step.Execute(context.Background(), ac); err == nil {
+		t.Fatal("expected an error when the only candidate is undecodable")
+	}
+	if ac.TempPath != "" {
+		t.Errorf("TempPath must stay empty when the candidate is rejected, got %q", ac.TempPath)
 	}
 }
 

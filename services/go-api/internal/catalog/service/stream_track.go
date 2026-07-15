@@ -61,6 +61,31 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 	return &StreamOutput{Reader: reader, Size: size, Track: track}, nil
 }
 
+// RecoverIfMissing reconciles a track after a client-side playback failure on a
+// presigned URL. Presigned streams bypass Execute (they hit storage directly),
+// so the "file gone -> mark failed + re-acquire" safety net Execute provides is
+// missing on that path. The client calls this on a playback error; it only acts
+// when the object is genuinely absent, so a transient network failure over a file
+// that is actually present is a no-op (no spurious re-acquisition).
+func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
+	if err != nil {
+		return fmt.Errorf("recover audio: %w", err)
+	}
+	if track == nil || !track.IsStreamable() {
+		return nil
+	}
+
+	exists, err := s.audioStore.Exists(ctx, *track.AudioRef)
+	if err != nil {
+		return fmt.Errorf("recover audio: exists check: %w", err)
+	}
+	if exists {
+		return nil
+	}
+	return s.recoverMissingAudio(ctx, userId, track)
+}
+
 // recoverMissingAudio reconciles a track whose audio failed to stream: if the
 // file is genuinely gone from storage it is marked failed, and re-acquisition is
 // scheduled regardless. The track is already loaded and known streamable here, so

@@ -30,6 +30,7 @@ export function usePlaylistActions(): PlaylistActionsState {
   const { data: playlistsData } = useQuery({
     queryKey: ['playlists'],
     queryFn: getPlaylists,
+    staleTime: Infinity, // SSE-covered; event patches keep it fresh (F15)
   });
   const playlists = playlistsData?.items ?? [];
 

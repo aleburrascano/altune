@@ -151,6 +151,7 @@ describe('DetailScreen', () => {
         year: null,
         genre: null,
         album_artist: null,
+        track_number: null,
         source_url: null,
       }),
     );

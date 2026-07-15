@@ -26,8 +26,14 @@ func NewPgxTrackRepository(pool *pgxpool.Pool) *PgxTrackRepository {
 }
 
 func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	defer tx.Rollback(ctx)
+
 	var returnedID uuid.UUID
-	err := r.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO tracks (
 			id, user_id, title, artist, album, duration_seconds,
 			added_at, artwork_url, acquisition_status, dedup_key,
@@ -43,8 +49,9 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Dedup-key conflict: the row already exists. Return it so the caller does
-		// not have to issue its own lookup.
+		// Dedup-key conflict: the row already exists — nothing was inserted (the
+		// deferred rollback disposes the empty tx). Return the existing track so
+		// the caller does not have to issue its own lookup.
 		existing, lookupErr := r.GetByDedupKey(ctx, track.UserId, track.DedupKey)
 		if lookupErr != nil {
 			return nil, false, lookupErr
@@ -52,6 +59,13 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 		return existing, false, nil
 	}
 	if err != nil {
+		return nil, false, err
+	}
+
+	if err := writeTrackFeatured(ctx, tx, track.UserId.UUID(), track.ID.UUID(), track.FeaturedArtists); err != nil {
+		return nil, false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return nil, false, err
 	}
 	return track, true, nil
@@ -65,7 +79,14 @@ func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, use
 		FROM tracks WHERE id = $1 AND user_id = $2`,
 		id.UUID(), userId.UUID(),
 	)
-	return scanTrack(row)
+	track, err := scanTrack(row)
+	if err != nil || track == nil {
+		return track, err
+	}
+	if err := loadFeaturedForTracks(ctx, r.pool, []*domain.Track{track}); err != nil {
+		return nil, err
+	}
+	return track, nil
 }
 
 func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
@@ -97,7 +118,13 @@ func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.User
 		}
 		tracks = append(tracks, t)
 	}
-	return tracks, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if err := loadFeaturedForTracks(ctx, r.pool, tracks); err != nil {
+		return nil, 0, err
+	}
+	return tracks, total, nil
 }
 
 func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) error {
@@ -121,6 +148,20 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) er
 		return fmt.Errorf("track %s not found or was deleted", track.ID.String())
 	}
 	return nil
+}
+
+// SetTrackNumber fills the album position only when unset (WHERE track_number IS
+// NULL), so it never clobbers a real value and is safe to call repeatedly.
+func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (bool, error) {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE tracks SET track_number=$3
+		 WHERE id=$1 AND user_id=$2 AND track_number IS NULL`,
+		id.UUID(), userId.UUID(), trackNumber,
+	)
+	if err != nil {
+		return false, fmt.Errorf("set track number for %s: %w", id.String(), err)
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (bool, error) {
@@ -157,7 +198,14 @@ func (r *PgxTrackRepository) GetByDedupKey(ctx context.Context, userId shared.Us
 		FROM tracks WHERE user_id = $1 AND dedup_key = $2`,
 		userId.UUID(), dedupKey,
 	)
-	return scanTrack(row)
+	track, err := scanTrack(row)
+	if err != nil || track == nil {
+		return track, err
+	}
+	if err := loadFeaturedForTracks(ctx, r.pool, []*domain.Track{track}); err != nil {
+		return nil, err
+	}
+	return track, nil
 }
 
 type scanner interface {

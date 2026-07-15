@@ -1,46 +1,56 @@
 package ytdlp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
-// FfprobeProber reads an audio file's actual duration via ffprobe. It implements
-// acquisition's AudioProber port, used to verify a downloaded file is the right
-// recording before it is stored.
+// FfprobeProber inspects a downloaded audio file with ffmpeg tooling: ffprobe for
+// duration, ffmpeg for decode validation. It implements acquisition's AudioProber
+// port, used to verify a downloaded file before it is stored.
 type FfprobeProber struct {
-	binary string
+	ffprobe string
+	ffmpeg  string
 }
 
-// NewFfprobeProber resolves the ffprobe binary near the configured ffmpeg
-// location (yt-dlp's --ffmpeg-location dir), falling back to "ffprobe" on PATH.
+// NewFfprobeProber resolves the ffprobe/ffmpeg binaries near the configured ffmpeg
+// location (yt-dlp's --ffmpeg-location dir), falling back to the bare name on PATH.
 func NewFfprobeProber(ffmpegLocation string) *FfprobeProber {
-	binary := "ffprobe"
+	return &FfprobeProber{
+		ffprobe: resolveBinary("ffprobe", ffmpegLocation),
+		ffmpeg:  resolveBinary("ffmpeg", ffmpegLocation),
+	}
+}
+
+func resolveBinary(name, ffmpegLocation string) string {
 	if ffmpegLocation != "" {
-		name := "ffprobe"
+		candidate := name
 		if runtime.GOOS == "windows" {
-			name = "ffprobe.exe"
+			candidate = name + ".exe"
 		}
-		candidate := filepath.Join(ffmpegLocation, name)
-		if _, err := os.Stat(candidate); err == nil {
-			binary = candidate
+		full := filepath.Join(ffmpegLocation, candidate)
+		if _, err := os.Stat(full); err == nil {
+			return full
 		}
 	}
-	return &FfprobeProber{binary: binary}
+	return name
 }
 
 func (p *FfprobeProber) ProbeDuration(ctx context.Context, filePath string) (float64, error) {
 	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(probeCtx, p.binary,
+	cmd := exec.CommandContext(probeCtx, p.ffprobe,
 		"-v", "quiet",
 		"-print_format", "json",
 		"-show_format",
@@ -68,4 +78,49 @@ func (p *FfprobeProber) ProbeDuration(ctx context.Context, filePath string) (flo
 		return 0, fmt.Errorf("invalid duration: %.2f", duration)
 	}
 	return duration, nil
+}
+
+// ValidateDecodable decodes the whole stream to null and reports an error if the
+// decoder rejects the audio. ffprobe/ProbeDuration only reads container metadata,
+// so a file with a valid header but corrupt samples passes duration verification
+// yet fails here — the exact defect that shipped undecodable m4a files. A non-zero
+// ffmpeg exit means the samples don't decode. If ffmpeg itself cannot be run
+// (missing binary, timeout), validation is skipped rather than blocking acquisition
+// on an unavailable validator — mirroring ProbeDuration's fail-open stance.
+func (p *FfprobeProber) ValidateDecodable(ctx context.Context, filePath string) error {
+	decodeCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(decodeCtx, p.ffmpeg,
+		"-v", "error",
+		"-i", filePath,
+		"-f", "null",
+		"-",
+	)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err == nil {
+		return nil
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return fmt.Errorf("audio stream failed to decode: %s", firstLine(stderr.String()))
+	}
+	return nil
+}
+
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	if len(s) > 200 {
+		s = s[:200]
+	}
+	if s == "" {
+		return "decoder produced no diagnostic output"
+	}
+	return s
 }

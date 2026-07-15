@@ -17,20 +17,29 @@ import (
 )
 
 type TrackHandler struct {
-	addTrack    *service.AddTrackService
-	listTracks  *service.ListTracksService
-	deleteTrack *service.DeleteTrackService
+	addTrack         *service.AddTrackService
+	listTracks       *service.ListTracksService
+	deleteTrack      *service.DeleteTrackService
+	setTrackNumber   *service.SetTrackNumberService
+	backfillFeatured *service.BackfillFeaturedService
+	listFeaturing    *service.ListFeaturingService
 }
 
 func NewTrackHandler(
 	addTrack *service.AddTrackService,
 	listTracks *service.ListTracksService,
 	deleteTrack *service.DeleteTrackService,
+	setTrackNumber *service.SetTrackNumberService,
+	backfillFeatured *service.BackfillFeaturedService,
+	listFeaturing *service.ListFeaturingService,
 ) *TrackHandler {
 	return &TrackHandler{
-		addTrack:    addTrack,
-		listTracks:  listTracks,
-		deleteTrack: deleteTrack,
+		addTrack:         addTrack,
+		listTracks:       listTracks,
+		deleteTrack:      deleteTrack,
+		setTrackNumber:   setTrackNumber,
+		backfillFeatured: backfillFeatured,
+		listFeaturing:    listFeaturing,
 	}
 }
 
@@ -38,9 +47,104 @@ func (h *TrackHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.handleListTracks)
 	r.Post("/", h.handleCreateTrack)
+	r.Get("/featuring", h.handleListFeaturing)
+	r.Post("/featured-backfill", h.handleBackfillFeatured)
 	r.Get("/{trackId}/status", h.handleGetTrackStatus)
+	r.Patch("/{trackId}/track-number", h.handleSetTrackNumber)
 	r.Delete("/{trackId}", h.handleDeleteTrack)
 	return r
+}
+
+// handleSetTrackNumber persists a track's album position (fill-only — never
+// overwrites). Backs the client persisting positions it derived from the album
+// tracklist for tracks saved before track_number was captured.
+func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
+	if err != nil {
+		httputil.BadRequest(w, "invalid track ID")
+		return
+	}
+	var req SetTrackNumberRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if req.TrackNumber <= 0 {
+		httputil.BadRequest(w, "track_number must be positive")
+		return
+	}
+	if _, err := h.setTrackNumber.Execute(r.Context(), userId, trackId, req.TrackNumber); err != nil {
+		slog.ErrorContext(r.Context(), "set track number failed", "error", err)
+		httputil.InternalError(w)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type SetTrackNumberRequest struct {
+	TrackNumber int `json:"track_number"`
+}
+
+// handleBackfillFeatured resolves and persists featured artists for the authed
+// user's existing tracks (idempotent). Synchronous — the library is small.
+func (h *TrackHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.backfillFeatured.Execute(r.Context(), userId)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "featured backfill failed", "error", err)
+		httputil.InternalError(w)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, result)
+}
+
+// handleListFeaturing returns the user's tracks crediting a featured artist,
+// identified by mbid, deezer_id, or name (in that precedence).
+func (h *TrackHandler) handleListFeaturing(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	name := q.Get("name")
+	mbid := q.Get("mbid")
+	var deezerID int64
+	if v := q.Get("deezer_id"); v != "" {
+		deezerID, _ = strconv.ParseInt(v, 10, 64)
+	}
+	if name == "" && mbid == "" && deezerID == 0 {
+		httputil.BadRequest(w, "one of name, mbid, or deezer_id is required")
+		return
+	}
+
+	fa, valid := domain.NewFeaturedArtist(name, mbid, deezerID)
+	if !valid {
+		// Identity present but no display name — construct directly so the
+		// identity key still resolves.
+		fa = domain.FeaturedArtist{Name: name, MBID: mbid, DeezerID: deezerID, Role: domain.RoleFeatured}
+	}
+
+	tracks, err := h.listFeaturing.Execute(r.Context(), userId, fa)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "list featuring failed", "error", err)
+		httputil.InternalError(w)
+		return
+	}
+
+	items := make([]TrackResponse, len(tracks))
+	for i, t := range tracks {
+		items[i] = trackToResponse(t)
+	}
+	httputil.WriteJSON(w, http.StatusOK, ListTracksResponse{
+		Items: items, Total: len(items), Limit: len(items), Offset: 0, HasMore: false,
+	})
 }
 
 // --- DTOs ---
@@ -55,6 +159,9 @@ type CreateTrackRequest struct {
 	Year            *int     `json:"year,omitempty"`
 	Genre           *string  `json:"genre,omitempty"`
 	AlbumArtist     *string  `json:"album_artist,omitempty"`
+	// FeaturedArtists are the guest ("feat.") credits carried from the discovery
+	// result the client saved, persisted on the track.
+	FeaturedArtists []FeaturedArtistDTO `json:"featured_artists,omitempty"`
 	// SourceURL is the exact provider URL the saved result was discovered at
 	// (e.g. a SoundCloud permalink). When it is a directly-downloadable source,
 	// acquisition grabs that exact track instead of re-searching by metadata.
@@ -78,6 +185,7 @@ type TrackResponse struct {
 	ISRC              *string   `json:"isrc,omitempty"`
 	AudioRef          *string   `json:"audio_ref,omitempty"`
 	FailureReason     *string   `json:"failure_reason,omitempty"`
+	FeaturedArtists   []FeaturedArtistDTO `json:"featured_artists,omitempty"`
 }
 
 type ListTracksResponse struct {
@@ -109,6 +217,7 @@ func trackToResponse(t *domain.Track) TrackResponse {
 		ISRC:              t.ISRC,
 		AudioRef:          t.AudioRef,
 		FailureReason:     t.FailureReason,
+		FeaturedArtists:   featuredToDTOs(t.FeaturedArtists),
 	}
 }
 
@@ -179,6 +288,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		Genre:           req.Genre,
 		ISRC:            req.ISRC,
 		AlbumArtist:     req.AlbumArtist,
+		FeaturedArtists: domainFeaturedFromDTOs(req.FeaturedArtists),
 		SourceURL:       req.SourceURL,
 	}
 

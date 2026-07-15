@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react';
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 
 import type { TrackResponse } from '@shared/api-client/types';
-import { Text, spacing, useTheme } from '@shared/ui';
+import { Text, spacing } from '@shared/ui';
+import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { LibraryRow } from './LibraryRow';
 
@@ -11,11 +12,10 @@ type SongsListProps = {
   emptyLabel: string;
   onPlay: (track: TrackResponse) => void;
   onPress: (track: TrackResponse) => void;
-  onMore: (track: TrackResponse) => void;
+  onMore: (track: TrackResponse, anchor: MenuAnchor) => void;
   onRetry: (track: TrackResponse) => void;
   retryingTrackId: string | undefined;
   isPlaying: (trackId: string) => boolean;
-  onRefresh: () => void;
 };
 
 export function SongsList({
@@ -27,9 +27,7 @@ export function SongsList({
   onRetry,
   retryingTrackId,
   isPlaying,
-  onRefresh,
 }: SongsListProps): ReactElement {
-  const theme = useTheme();
   return (
     <FlatList
       testID="library-songs-list"
@@ -37,9 +35,6 @@ export function SongsList({
       keyExtractor={(t) => t.id}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={tracks.length === 0 ? styles.emptyList : styles.list}
-      refreshControl={
-        <RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={theme.color.accent} colors={[theme.color.accent]} />
-      }
       ListEmptyComponent={
         <View style={styles.empty}>
           <Text variant="body" tone="secondary">
@@ -52,7 +47,7 @@ export function SongsList({
           track={item}
           {...(item.acquisition_status === 'ready' ? { onPlay: () => onPlay(item) } : {})}
           onPress={() => onPress(item)}
-          onMore={() => onMore(item)}
+          onMore={(anchor) => onMore(item, anchor)}
           {...(item.acquisition_status === 'failed' ? { onRetry: () => onRetry(item) } : {})}
           retrying={retryingTrackId === item.id}
           isPlaying={isPlaying(item.id)}

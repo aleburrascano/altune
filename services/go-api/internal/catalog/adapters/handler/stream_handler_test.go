@@ -16,15 +16,39 @@ func TestHandleStreamAudio(t *testing.T) {
 		wantBodyLen     int
 	}{
 		{
-			name: "ready track streams audio bytes",
+			name: "mp3 track serves audio/mpeg",
 			setup: func(repo *fakeTrackRepo, store *fakeAudioStore) string {
-				track := makeReadyTrack(testUserId, "Song", "Artist", "Album", "audio/123.opus")
+				track := makeReadyTrack(testUserId, "Song", "Artist", "Album", "audio/123.mp3")
 				repo.seed(track)
-				store.seed("audio/123.opus", []byte("fake-audio-data"))
+				store.seed("audio/123.mp3", []byte("fake-audio-data"))
 				return track.ID.UUID().String()
 			},
 			wantStatus:      http.StatusOK,
 			wantContentType: "audio/mpeg",
+			wantBodyLen:     len("fake-audio-data"),
+		},
+		{
+			name: "m4a track serves audio/mp4",
+			setup: func(repo *fakeTrackRepo, store *fakeAudioStore) string {
+				track := makeReadyTrack(testUserId, "Song", "Artist", "Album", "audio/456.m4a")
+				repo.seed(track)
+				store.seed("audio/456.m4a", []byte("fake-audio-data"))
+				return track.ID.UUID().String()
+			},
+			wantStatus:      http.StatusOK,
+			wantContentType: "audio/mp4",
+			wantBodyLen:     len("fake-audio-data"),
+		},
+		{
+			name: "opus track serves audio/opus",
+			setup: func(repo *fakeTrackRepo, store *fakeAudioStore) string {
+				track := makeReadyTrack(testUserId, "Song", "Artist", "Album", "audio/789.opus")
+				repo.seed(track)
+				store.seed("audio/789.opus", []byte("fake-audio-data"))
+				return track.ID.UUID().String()
+			},
+			wantStatus:      http.StatusOK,
+			wantContentType: "audio/opus",
 			wantBodyLen:     len("fake-audio-data"),
 		},
 		{
