@@ -1,5 +1,5 @@
 /**
- * RelatedTracksSection — "Related on SoundCloud" rail on track detail.
+ * RelatedTracksSection — "Tracks you might like" rail on track detail.
  *
  * Renders nothing unless the track carries a SoundCloud source and the endpoint
  * returns a non-empty set (spec AC#4/AC#6/AC#7). Cards reuse the content-item
@@ -48,7 +48,7 @@ export function RelatedTracksSection({
   return (
     <View testID="detail-related" style={styles.section}>
       <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
-        Related on SoundCloud
+        Tracks you might like
       </Text>
       <ScrollView
         horizontal

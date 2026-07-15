@@ -1,12 +1,5 @@
 import { useCallback, type ReactElement } from 'react';
-import {
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
@@ -19,14 +12,12 @@ type PlaylistsGridProps = {
   playlists: PlaylistResponse[];
   onPlaylistPress: (playlist: PlaylistResponse) => void;
   onCreatePress: () => void;
-  onRefresh: () => void;
 };
 
 export function PlaylistsGrid({
   playlists,
   onPlaylistPress,
   onCreatePress,
-  onRefresh,
 }: PlaylistsGridProps): ReactElement {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -96,9 +87,6 @@ export function PlaylistsGrid({
       contentContainerStyle={styles.list}
       showsVerticalScrollIndicator={false}
       renderItem={renderItem}
-      refreshControl={
-        <RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={theme.color.accent} colors={[theme.color.accent]} />
-      }
     />
   );
 }

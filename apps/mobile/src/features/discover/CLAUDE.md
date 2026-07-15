@@ -57,7 +57,7 @@ Mobile screen for the unified music search surface. A greeting + "Discover" titl
 
 ### Dependencies on other features / shared
 
-- `@shared/api-client/discovery` — `searchDiscovery`, `listSearchHistory`, `recordEvent` + wire types.
+- `@shared/api-client/discovery` — `searchDiscovery`, `listSearchHistory`, `clearSearchHistory`, `recordEvent` + wire types.
 - `@shared/telemetry/useRecordEvent` — shared fire-and-forget behavioral-event hook (`result_clicked`).
 - `@shared/api-client/index` — `apiFetch` underlying transport (transitively).
 - `@tanstack/react-query` — `useQuery` + `useMutation`, via the root `QueryClientProvider`.

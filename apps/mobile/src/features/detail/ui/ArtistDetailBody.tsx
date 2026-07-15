@@ -1,4 +1,4 @@
-import { type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
@@ -17,17 +17,23 @@ import { useArtistDetailState } from '../hooks/useArtistDetailState';
 
 import { sharedStyles } from './helpers';
 import { DiscographySections } from './DiscographySections';
-import { GenrePills } from './GenrePills';
 import { TrackSaveControl } from './TrackSaveControl';
 
-export function ArtistDetailBody({ result, detailRoute, isFromLibrary, genres }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean; genres: string[] }): ReactElement {
+// Your library can hold dozens of tracks by one artist; showing them all buries
+// the discography below an endless scroll. Cap the collapsed view and reveal the
+// rest on demand. (Discovery "Popular Tracks" is already API-limited, so the cap
+// only bites the library "Your Tracks" list.)
+const TRACK_CAP = 5;
+
+export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean }): ReactElement {
   const theme = useTheme();
   const artist = useArtistDetailState(result, detailRoute, isFromLibrary);
+  const [showAllTracks, setShowAllTracks] = useState(false);
+  const visibleTracks =
+    artist.hasSources || showAllTracks ? artist.topTracks : artist.topTracks.slice(0, TRACK_CAP);
 
   return (
     <View testID="detail-artist-content" style={styles.artistContent}>
-      <GenrePills genres={genres} />
-
       {/* Your Tracks */}
       <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
         {artist.hasSources ? 'Popular Tracks' : 'Your Tracks'}
@@ -48,42 +54,57 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary, genres }:
           No tracks found.
         </Text>
       ) : (
-        artist.topTracks.map((track, index) => {
-          const durationSeconds = trackExtras(track.extras).durationSeconds;
-          return (
+        <>
+          {visibleTracks.map((track, index) => {
+            const durationSeconds = trackExtras(track.extras).durationSeconds;
+            return (
+              <Pressable
+                key={track.sources[0]?.external_id ?? index}
+                testID={`detail-top-track-${index}`}
+                onPress={() => artist.onTrackPress(track)}
+                accessibilityRole="button"
+                accessibilityLabel={`Play ${track.title}`}
+                style={({ pressed }) => [sharedStyles.trackRow, pressed ? { opacity: 0.6 } : null]}
+              >
+                <Artwork
+                  uri={track.image_url}
+                  size={40}
+                  radius={radius.sm}
+                  accessibilityLabel={track.title}
+                />
+                <View style={sharedStyles.trackInfo}>
+                  <Text variant="body" numberOfLines={1}>
+                    {track.title}
+                  </Text>
+                </View>
+                {durationSeconds != null ? (
+                  <Text variant="label" tone="tertiary" style={styles.trackDuration}>
+                    {formatDuration(durationSeconds)}
+                  </Text>
+                ) : null}
+                <TrackSaveControl
+                  testID={`detail-top-track-save-${index}`}
+                  state={artist.saveStateFor(track.title, track.subtitle)}
+                  title={track.title}
+                  onPress={() => artist.onQuickSave(track)}
+                />
+              </Pressable>
+            );
+          })}
+          {!artist.hasSources && !showAllTracks && artist.topTracks.length > TRACK_CAP ? (
             <Pressable
-              key={track.sources[0]?.external_id ?? index}
-              testID={`detail-top-track-${index}`}
-              onPress={() => artist.onTrackPress(track)}
+              testID="detail-show-all-tracks"
+              onPress={() => setShowAllTracks(true)}
               accessibilityRole="button"
-              accessibilityLabel={`Play ${track.title}`}
-              style={({ pressed }) => [sharedStyles.trackRow, pressed ? { opacity: 0.6 } : null]}
+              accessibilityLabel={`Show all ${artist.topTracks.length} tracks`}
+              style={({ pressed }) => [styles.showAll, pressed ? { opacity: 0.6 } : null]}
             >
-              <Artwork
-                uri={track.image_url}
-                size={40}
-                radius={radius.sm}
-                accessibilityLabel={track.title}
-              />
-              <View style={sharedStyles.trackInfo}>
-                <Text variant="body" numberOfLines={1}>
-                  {track.title}
-                </Text>
-              </View>
-              {durationSeconds != null ? (
-                <Text variant="label" tone="tertiary" style={styles.trackDuration}>
-                  {formatDuration(durationSeconds)}
-                </Text>
-              ) : null}
-              <TrackSaveControl
-                testID={`detail-top-track-save-${index}`}
-                state={artist.saveStateFor(track.title, track.subtitle)}
-                title={track.title}
-                onPress={() => artist.onQuickSave(track)}
-              />
+              <Text variant="label" tone="accent">
+                Show all {artist.topTracks.length} tracks
+              </Text>
             </Pressable>
-          );
-        })
+          ) : null}
+        </>
       )}
 
       {/* Library Albums (when from library) */}
@@ -167,6 +188,7 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary, genres }:
 const styles = StyleSheet.create({
   artistContent: { marginTop: spacing.lg },
   trackDuration: { marginRight: spacing.xs, fontVariant: ['tabular-nums'] },
+  showAll: { paddingVertical: spacing.md, alignItems: 'center' },
   sectionLoading: { paddingVertical: spacing.lg, alignItems: 'center' },
   sectionError: { paddingVertical: spacing.md, alignItems: 'center' },
   emptySection: { paddingVertical: spacing.md },

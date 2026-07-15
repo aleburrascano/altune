@@ -9,7 +9,10 @@ describe('trackExtras', () => {
       year: 1997,
       genre: 'Alternative',
       album_artist: 'Radiohead',
-      featured_artists: ['Thom Yorke', 'Jonny Greenwood'],
+      featured_artists: [
+        { name: 'Thom Yorke', mbid: 'mb-thom', deezer_id: 7 },
+        { name: 'Jonny Greenwood' },
+      ],
       track_id: 'abc-123',
       acquisition_status: 'ready',
       preview_url: 'https://preview.mp3',
@@ -22,7 +25,10 @@ describe('trackExtras', () => {
     expect(result.year).toBe(1997);
     expect(result.genre).toBe('Alternative');
     expect(result.albumArtist).toBe('Radiohead');
-    expect(result.featuredArtists).toEqual(['Thom Yorke', 'Jonny Greenwood']);
+    expect(result.featuredArtists).toEqual([
+      { name: 'Thom Yorke', mbid: 'mb-thom', deezer_id: 7 },
+      { name: 'Jonny Greenwood', mbid: null, deezer_id: null },
+    ]);
     expect(result.trackId).toBe('abc-123');
     expect(result.acquisitionStatus).toBe('ready');
     expect(result.previewUrl).toBe('https://preview.mp3');
@@ -72,9 +78,20 @@ describe('trackExtras', () => {
     expect(trackExtras({ duration_seconds: NaN }).durationSeconds).toBeNull();
   });
 
-  it('filters non-string items from featured_artists', () => {
-    const result = trackExtras({ featured_artists: ['Valid', 42, '', null] });
-    expect(result.featuredArtists).toEqual(['Valid']);
+  it('parses featured_artists objects and tolerates legacy strings, dropping junk', () => {
+    const result = trackExtras({
+      featured_artists: [
+        { name: 'Obj Artist', mbid: 'm1', deezer_id: 9 },
+        'Legacy String', // legacy bare-name entry
+        { name: '' }, // dropped: empty name
+        42, // dropped: not string/object
+        null, // dropped
+      ],
+    });
+    expect(result.featuredArtists).toEqual([
+      { name: 'Obj Artist', mbid: 'm1', deezer_id: 9 },
+      { name: 'Legacy String', mbid: null, deezer_id: null },
+    ]);
   });
 
   it('rejects wrong types gracefully', () => {

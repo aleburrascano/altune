@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -283,6 +284,26 @@ func TestStoreStep_Execute(t *testing.T) {
 	// Verify the fake store actually stored it
 	if !store.stored[ac.AudioRef] {
 		t.Error("expected audio ref to be stored in fake store")
+	}
+}
+
+// TestStoreStep_Execute_RejectsUndecodable is the final safety net: even a file
+// that reached the store step is decode-validated first, so corruption introduced
+// after download (e.g. a format-mismatched tagger) never reaches the library.
+func TestStoreStep_Execute_RejectsUndecodable(t *testing.T) {
+	store := newFakeAudioStore()
+	prober := &queueProber{decodeErrs: []error{errors.New("audio stream failed to decode")}}
+	step := NewStoreStep(store, WithStoreProber(prober))
+	ac := &AcquisitionContext{
+		Track:    TrackRef{UserID: "u", Title: "T", Artist: "A"},
+		TempPath: "/tmp/altune-test/song.mp3",
+	}
+
+	if err := step.Execute(context.Background(), ac); err == nil {
+		t.Fatal("expected store to reject an undecodable final file")
+	}
+	if len(store.stored) != 0 {
+		t.Errorf("nothing should be stored when validation fails, got %d", len(store.stored))
 	}
 }
 

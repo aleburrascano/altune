@@ -6,6 +6,8 @@ import { ChevronDown, GripVertical, Play } from 'lucide-react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
+import { withFeaturing } from '@shared/lib/featured';
+import type { FeaturedArtist } from '@shared/api-client/types';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { Artwork } from '@shared/ui/primitives/Artwork';
@@ -21,6 +23,7 @@ type QueueItem = {
   artist: string;
   artworkUrl: string | null;
   durationSeconds: number | undefined;
+  featuredArtists: readonly FeaturedArtist[] | undefined;
 };
 
 function formatTime(sec: number | undefined): string {
@@ -75,6 +78,7 @@ export function QueueSheet(): ReactElement {
       artist: t.artist,
       artworkUrl: t.artworkUrl,
       durationSeconds: t.durationSeconds,
+      featuredArtists: t.featuredArtists,
     });
   }
 
@@ -118,7 +122,7 @@ export function QueueSheet(): ReactElement {
           <Artwork uri={item.artworkUrl} size={40} radius={radius.sm} />
           <View style={styles.rowInfo}>
             <Text variant="label" numberOfLines={1}>{item.title}</Text>
-            <Text variant="caption" tone="secondary" numberOfLines={1}>{item.artist}</Text>
+            <Text variant="caption" tone="secondary" numberOfLines={1}>{withFeaturing(item.artist, item.featuredArtists)}</Text>
           </View>
           <Text variant="caption" tone="tertiary">{formatTime(item.durationSeconds)}</Text>
         </Pressable>
@@ -163,7 +167,7 @@ export function QueueSheet(): ReactElement {
             <View style={styles.nowPlayingInfo}>
               <Text variant="caption" tone="accent" style={styles.nowPlayingLabel}>NOW PLAYING</Text>
               <Text variant="bodyStrong" numberOfLines={1}>{currentTrackData.title}</Text>
-              <Text variant="caption" tone="secondary" numberOfLines={1}>{currentTrackData.artist}</Text>
+              <Text variant="caption" tone="secondary" numberOfLines={1}>{withFeaturing(currentTrackData.artist, currentTrackData.featuredArtists)}</Text>
             </View>
             <Text variant="caption" tone="tertiary">{formatTime(currentTrackData.durationSeconds)}</Text>
           </View>

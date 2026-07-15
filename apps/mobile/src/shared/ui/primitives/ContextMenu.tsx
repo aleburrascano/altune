@@ -1,7 +1,9 @@
 import { useCallback, type ReactElement } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from './Text';
+import { resolveMenuPlacement, type MenuAnchor } from './menuPlacement';
 import { useTheme } from '../theme/useTheme';
 import { radius, spacing } from '../theme/tokens';
 
@@ -15,8 +17,13 @@ type ContextMenuProps = {
   visible: boolean;
   items: ContextMenuItem[];
   onClose: () => void;
+  // Legacy fixed positioning (used by the playlist header menu).
   anchorRight?: number;
   anchorTop?: number;
+  // Measured trigger rect (used by row menus). When set, the menu floats next to
+  // the trigger and flips above it when there isn't room below — overrides the
+  // fixed anchorRight/anchorTop.
+  anchor?: MenuAnchor | undefined;
 };
 
 export function ContextMenu({
@@ -25,8 +32,11 @@ export function ContextMenu({
   onClose,
   anchorRight = spacing.lg,
   anchorTop = 52,
+  anchor,
 }: ContextMenuProps): ReactElement | null {
   const theme = useTheme();
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const handlePress = useCallback(
     (item: ContextMenuItem) => {
@@ -38,6 +48,15 @@ export function ContextMenu({
 
   if (!visible) return null;
 
+  const position = anchor
+    ? resolveMenuPlacement({
+        anchor,
+        itemCount: items.length,
+        windowHeight,
+        insetBottom: insets.bottom,
+      })
+    : { right: anchorRight, top: anchorTop };
+
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
@@ -46,9 +65,8 @@ export function ContextMenu({
       <View
         style={[
           styles.menu,
+          position,
           {
-            right: anchorRight,
-            top: anchorTop,
             backgroundColor: theme.color.surface2,
             borderColor: theme.color.border,
           },

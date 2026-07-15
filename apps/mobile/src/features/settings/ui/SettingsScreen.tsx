@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button, Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSession } from '../../auth/hooks/useSession';
+import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useSignOut } from '@shared/auth/useSignOut';
 
 export function SettingsScreen(): ReactElement {
@@ -10,6 +11,13 @@ export function SettingsScreen(): ReactElement {
   const sessionState = useSession();
   const { state: signOutState, signOut } = useSignOut();
   const isPending = signOutState.kind === 'pending';
+  const backfill = useBackfillFeatured();
+
+  const backfillLabel = backfill.isPending
+    ? 'Resolving featured artists…'
+    : backfill.isSuccess
+      ? `Updated ${backfill.data.updated} of ${backfill.data.scanned} tracks`
+      : 'Resolve featured artists';
 
   const email =
     sessionState.status === 'signed-in' ? (sessionState.session.user.email ?? '') : '';
@@ -30,6 +38,15 @@ export function SettingsScreen(): ReactElement {
       </View>
 
       <View style={[styles.divider, { backgroundColor: theme.color.border }]} />
+
+      <Button
+        testID="settings-backfill-featured"
+        label={backfillLabel}
+        variant="ghost"
+        loading={backfill.isPending}
+        onPress={() => { backfill.mutate(); }}
+        style={styles.signOutBtn}
+      />
 
       <Button
         testID="settings-sign-out"

@@ -94,6 +94,7 @@ describe('createTrack', () => {
       year: null,
       genre: null,
       album_artist: null,
+      track_number: null,
     });
     expect(result.id).toBe(_SAMPLE_TRACK.id);
     expect(result.acquisition_status).toBe('pending');
@@ -121,6 +122,7 @@ describe('createTrack', () => {
         year: null,
         genre: null,
         album_artist: null,
+        track_number: null,
       }),
     ).rejects.toBeInstanceOf(ApiError);
   });

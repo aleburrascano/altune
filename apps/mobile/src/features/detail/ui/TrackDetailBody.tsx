@@ -1,26 +1,31 @@
 import type { ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
+import { Check, Plus, RotateCw } from 'lucide-react-native';
+
 import { Banner } from '@shared/ui/primitives/Banner';
-import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
+import { useTheme } from '@shared/ui/theme';
+import { useRouter, type Href } from 'expo-router';
+
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { FeaturedArtist } from '@shared/api-client/types';
 
 import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import { canPlay } from '@shared/playback/canPlay';
 import { usePlayback } from '@shared/playback/usePlayback';
-import { spacing } from '@shared/ui/theme/tokens';
+import { radius, spacing } from '@shared/ui/theme/tokens';
 
-import { extractFeaturedFromText, formatDuration } from '../extras';
+import { extractFeaturedFromText } from '../extras';
 import { trackExtras } from '../extras-accessors';
-import { useIsTrackSaved } from '../hooks/useIsTrackSaved';
 import { useLibraryTrackMatch } from '../hooks/useLibraryTrackMatch';
 import { useReportWrongAlbum } from '../hooks/useReportWrongAlbum';
 import { useSaveTrack } from '../hooks/useSaveTrack';
+import { saveControlState, type SaveControlState } from '../save-control-state';
 import { toCreateTrackRequest } from '../save-cache';
 
 import { isCurrentlyPlaying } from './helpers';
-import { GenrePills } from './GenrePills';
+import { PlayButton } from './PlayButton';
 import { RelatedTracksSection } from './RelatedTracksSection';
 
 export type LateralNavHandle = {
@@ -30,39 +35,49 @@ export type LateralNavHandle = {
   clearError: () => void;
 };
 
-/** Track body: play / save actions, identity genres, and light navigation. */
+/** The hero Save control's state: the acquire lifecycle, plus a disabled state
+ * when the track has no artist (an invalid save). */
+type SaveState = SaveControlState | 'disabled';
+
+/** Track body: the play/save hero controls plus light navigation. */
 export function TrackDetailBody({
   result,
   lateralNav,
   detailRoute,
-  genres,
+  deezerFeatured,
 }: {
   result: DiscoveryResult;
   lateralNav: LateralNavHandle;
   detailRoute: string;
-  genres: string[];
+  deezerFeatured?: FeaturedArtist[];
 }): ReactElement {
+  const theme = useTheme();
+  const router = useRouter();
   const save = useSaveTrack();
   const wrongAlbum = useReportWrongAlbum(result);
   const playback = usePlayback();
-  const alreadySaved = useIsTrackSaved(result.title, result.subtitle);
   const libraryMatch = useLibraryTrackMatch(result.title, result.subtitle);
   const te = trackExtras(result.extras);
   const effectiveTrackId = te.trackId ?? libraryMatch?.id ?? null;
   const effectiveAcqStatus = te.acquisitionStatus ?? libraryMatch?.acquisition_status ?? null;
   const isPlayable = canPlay(effectiveAcqStatus) && effectiveTrackId !== null;
   const previewUrl = te.previewUrl;
-  const duration = te.durationSeconds != null ? formatDuration(te.durationSeconds) : null;
 
   // `?? ''` guards against an absent subtitle arriving as `undefined` (the wire
   // omits an empty subtitle, despite the `string | null` type) — a bare
   // `!== null` check passes for undefined and then `.length` crashes the screen.
   const canSave = (result.subtitle ?? '').length > 0;
   const albumName = te.album;
-  const featured =
+  const featured: FeaturedArtist[] =
     te.featuredArtists.length > 0
       ? te.featuredArtists
-      : (extractFeaturedFromText(result.title, result.subtitle)?.split(', ') ?? []);
+      : deezerFeatured && deezerFeatured.length > 0
+        ? deezerFeatured
+        : (extractFeaturedFromText(result.title, result.subtitle)?.split(', ') ?? []).map((name) => ({
+            name,
+            mbid: null,
+            deezer_id: null,
+          }));
 
   const source =
     isPlayable && effectiveTrackId !== null
@@ -71,14 +86,25 @@ export function TrackDetailBody({
         ? ({ kind: 'preview', previewUrl } as const)
         : null;
   const playing = source !== null && isCurrentlyPlaying(playback, source);
-  const playLabel = playing
-    ? 'Pause'
-    : source?.kind === 'preview'
-      ? 'Preview'
-      : `Play${duration ? `  ·  ${duration}` : ''}`;
+  const isPreview = source?.kind === 'preview';
+  const playTestID = isPreview ? 'detail-preview' : 'detail-play';
+  const playA11y = playing ? 'Pause' : isPreview ? 'Play preview' : 'Play';
+
+  // The hero Save runs the full acquire lifecycle off the library cache (add →
+  // saving → ready → failed), exactly like the row control — with a leading
+  // `disabled` when the track has no artist and a transient mutation error
+  // surfacing as `failed` before the optimistic row reconciles.
+  const saveState: SaveState = !canSave
+    ? 'disabled'
+    : save.isError
+      ? 'failed'
+      : save.isPending
+        ? 'saving'
+        : saveControlState(libraryMatch);
+  const saveInteractive = saveState === 'add' || saveState === 'failed';
 
   const onSave = (): void => {
-    if (!canSave) {
+    if (!saveInteractive) {
       return;
     }
     save.mutate(toCreateTrackRequest(result));
@@ -115,33 +141,39 @@ export function TrackDetailBody({
 
   return (
     <View testID="detail-track-info" style={styles.body}>
-      <View style={styles.actions}>
-        {source !== null ? (
-          <View style={styles.flex}>
-            <Button
-              testID={source.kind === 'library' ? 'detail-play' : 'detail-preview'}
-              variant="primary"
-              label={playLabel}
-              onPress={onTogglePlay}
-              disabled={playback.status === 'loading'}
-              haptic
-            />
-          </View>
+      <View style={styles.hero}>
+        <PlayButton
+          testID={playTestID}
+          playing={playing}
+          disabled={source === null || playback.status === 'loading'}
+          onPress={onTogglePlay}
+          accessibilityLabel={playA11y}
+        />
+        {isPreview ? (
+          <Text variant="caption" tone="tertiary" style={styles.previewTag}>
+            30s preview
+          </Text>
         ) : null}
-        <View style={styles.flex}>
-          <Button
-            testID="detail-save"
-            variant={source !== null ? 'secondary' : 'primary'}
-            label={alreadySaved || save.isSuccess ? 'Saved' : 'Save'}
-            onPress={onSave}
-            disabled={!canSave || save.isPending || save.isSuccess || alreadySaved}
-            loading={save.isPending}
-            haptic
-          />
-        </View>
-      </View>
 
-      <GenrePills genres={genres} />
+        <Pressable
+          testID="detail-save"
+          onPress={onSave}
+          disabled={!saveInteractive}
+          accessibilityRole="button"
+          accessibilityLabel={saveLabel(saveState, result.title)}
+          accessibilityState={{ disabled: !saveInteractive, busy: saveState === 'saving' }}
+          style={({ pressed }) => [
+            styles.save,
+            { borderColor: theme.color.border },
+            pressed && saveInteractive ? { opacity: 0.6 } : null,
+          ]}
+        >
+          <SaveGlyph state={saveState} theme={theme} />
+          <Text variant="label" tone={saveState === 'ready' ? 'success' : 'primary'}>
+            {saveText(saveState)}
+          </Text>
+        </Pressable>
+      </View>
 
       {albumName !== null ? (
         <Pressable
@@ -162,6 +194,42 @@ export function TrackDetailBody({
         </Pressable>
       ) : null}
 
+      {featured.length > 0 ? (
+        <View testID="detail-info-featuring" style={styles.navRow}>
+          <Text variant="label" tone="tertiary">
+            Featuring
+          </Text>
+          <View style={styles.featured}>
+            {featured.map((f, i) => (
+              <Pressable
+                key={f.mbid ?? f.name}
+                onPress={() =>
+                  // Navigate to the featuring browse in the CURRENT tab stack
+                  // (derived from detailRoute) so back returns to this detail.
+                  // Cast: the generated route type is stale until expo restarts.
+                  router.push({
+                    pathname: detailRoute.replace('/detail', '/featuring'),
+                    params: {
+                      name: f.name,
+                      ...(f.mbid ? { mbid: f.mbid } : {}),
+                      ...(f.deezer_id != null ? { deezer_id: String(f.deezer_id) } : {}),
+                    },
+                  } as unknown as Href)
+                }
+                accessibilityRole="link"
+                accessibilityLabel={`Tracks featuring ${f.name}`}
+              >
+                {({ pressed }) => (
+                  <Text variant="body" tone="accent" style={pressed ? { opacity: 0.6 } : undefined}>
+                    {i > 0 ? `, ${f.name}` : f.name}
+                  </Text>
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       {albumName !== null ? (
         <Pressable
           testID="detail-wrong-album"
@@ -179,34 +247,9 @@ export function TrackDetailBody({
         </Pressable>
       ) : null}
 
-      {featured.length > 0 ? (
-        <View testID="detail-info-featuring" style={styles.navRow}>
-          <Text variant="label" tone="tertiary">
-            Featuring
-          </Text>
-          <View style={styles.featured}>
-            {featured.map((name, i) => (
-              <Pressable
-                key={name}
-                onPress={() => void lateralNav.navigateTo(name, 'artist')}
-                disabled={lateralNav.state === 'searching'}
-                accessibilityRole="link"
-                accessibilityLabel={`View artist ${name}`}
-              >
-                {({ pressed }) => (
-                  <Text variant="body" tone="accent" style={pressed ? { opacity: 0.6 } : undefined}>
-                    {i > 0 ? `, ${name}` : name}
-                  </Text>
-                )}
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      ) : null}
-
       {save.isError ? (
         <Banner testID="detail-save-error" tone="danger">
-          Couldn't save this track. Tap Save to retry.
+          Couldn't save this track. Tap Retry.
         </Banner>
       ) : null}
       {lateralNav.error !== null ? (
@@ -228,10 +271,64 @@ export function TrackDetailBody({
   );
 }
 
+function saveText(state: SaveState): string {
+  switch (state) {
+    case 'saving':
+      return 'Saving…';
+    case 'ready':
+      return 'Saved';
+    case 'failed':
+      return 'Retry';
+    default:
+      return 'Save';
+  }
+}
+
+function saveLabel(state: SaveState, title: string): string {
+  switch (state) {
+    case 'saving':
+      return `${title} downloading`;
+    case 'ready':
+      return `${title} in library`;
+    case 'failed':
+      return `Retry saving ${title}`;
+    default:
+      return `Save ${title}`;
+  }
+}
+
+function SaveGlyph({
+  state,
+  theme,
+}: {
+  state: SaveState;
+  theme: ReturnType<typeof useTheme>;
+}): ReactElement {
+  if (state === 'saving') {
+    return <ActivityIndicator size="small" color={theme.color.accent} />;
+  }
+  if (state === 'ready') {
+    return <Check size={18} color={theme.color.success} />;
+  }
+  if (state === 'failed') {
+    return <RotateCw size={17} color={theme.color.danger} />;
+  }
+  return <Plus size={18} color={theme.color.textPrimary} />;
+}
+
 const styles = StyleSheet.create({
-  body: { marginTop: spacing.xl, gap: spacing.md },
-  actions: { flexDirection: 'row', gap: spacing.md },
-  flex: { flex: 1 },
+  body: { marginTop: spacing.xl, gap: spacing.lg },
+  hero: { alignItems: 'center', gap: spacing.md },
+  previewTag: { letterSpacing: 0.6, textTransform: 'uppercase' },
+  save: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: 40,
+    paddingHorizontal: spacing.xl,
+    borderWidth: 1,
+    borderRadius: radius.full,
+  },
   navRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

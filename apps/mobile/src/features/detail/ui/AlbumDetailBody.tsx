@@ -16,18 +16,17 @@ import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
 
 import { _albumYear, sharedStyles } from './helpers';
 import { AlbumTrackRow } from './AlbumTrackRow';
-import { GenrePills } from './GenrePills';
 
 function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   const base = track.subtitle ?? '';
-  const names = trackExtras(track.extras).featuredArtists;
+  const names = trackExtras(track.extras).featuredArtists.map((f) => f.name);
   if (names.length > 0) return `${base}, ${names.join(', ')}`;
   const parsed = extractFeaturedFromText(track.title, track.subtitle);
   if (parsed) return `${base}, ${parsed}`;
   return base;
 }
 
-export function AlbumDetailBody({ result, detailRoute, isFromLibrary, genres }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean; genres: string[] }): ReactElement {
+export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean }): ReactElement {
   const theme = useTheme();
   const album = useAlbumDetailState(result, detailRoute, isFromLibrary);
 
@@ -89,8 +88,6 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary, genres }: 
         />
       ) : null}
 
-      <GenrePills genres={genres} />
-
       <Text variant="label" tone="tertiary" style={styles.tracksTitle}>
         Tracks
       </Text>
@@ -111,7 +108,7 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary, genres }: 
         {metaParts.join(' · ')}
       </Text>
 
-      {!album.hasSources ? (
+      {!album.hasSources && album.moreTracks.length > 0 ? (
         <View style={styles.moreSection}>
           <Pressable
             testID="detail-more-from-album"
@@ -131,42 +128,26 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary, genres }: 
           </Pressable>
 
           {album.moreExpanded ? (
-            album.discoveryLoading ? (
-              <View style={styles.moreLoading}>
-                <ActivityIndicator size="small" />
-              </View>
-            ) : album.discoveryError ? (
-              <View style={styles.moreError}>
-                <Text variant="caption" tone="secondary">
-                  Couldn't load additional tracks.
-                </Text>
-                <Button label="Retry" onPress={() => album.discoveryRefetch()} style={sharedStyles.retryButton} />
-              </View>
-            ) : album.moreTracks.length === 0 ? (
-              <Text variant="caption" tone="tertiary" style={styles.moreEmpty}>
-                You have all tracks from this album.
-              </Text>
-            ) : (
-              <>
-                {album.moreTracks.map((track, index) => (
-                  <AlbumTrackRow
-                    key={track.sources[0]?.external_id ?? `more-${index}`}
-                    track={track}
-                    index={album.tracks.length + index}
-                    subtitle={_trackSubtitleWithFeaturing(track)}
-                    saveState={album.saveStateFor(track.title, track.subtitle)}
-                    onPress={() => album.onTrackPress(track)}
-                    onQuickSave={() => album.onQuickSave(track)}
-                  />
-                ))}
-                <Button
-                  testID="detail-save-all-more"
-                  label="Save All to Library"
-                  onPress={album.onSaveAll}
-                  style={styles.saveAllButton}
+            <>
+              {album.moreTracks.map((track, index) => (
+                <AlbumTrackRow
+                  key={track.sources[0]?.external_id ?? `more-${index}`}
+                  track={track}
+                  index={album.tracks.length + index}
+                  subtitle={_trackSubtitleWithFeaturing(track)}
+                  saveState={album.saveStateFor(track.title, track.subtitle)}
+                  onPress={() => album.onTrackPress(track)}
+                  onQuickSave={() => album.onQuickSave(track)}
                 />
-              </>
-            )
+              ))}
+              <Button
+                testID="detail-save-all-more"
+                label="Save all"
+                variant="secondary"
+                onPress={album.onSaveAll}
+                style={styles.moreSaveAll}
+              />
+            </>
           ) : null}
         </View>
       ) : null}
@@ -180,6 +161,7 @@ const styles = StyleSheet.create({
   tracksTitle: { marginTop: spacing.xl, marginBottom: spacing.sm },
   albumMeta: { marginTop: spacing.lg, textAlign: 'center' as const },
   saveAllButton: { marginBottom: spacing.md },
+  moreSaveAll: { marginTop: spacing.lg },
   moreSection: { marginTop: spacing.xl },
   moreHeader: {
     flexDirection: 'row',
@@ -187,7 +169,4 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: spacing.md,
   },
-  moreLoading: { paddingVertical: spacing.lg, alignItems: 'center' },
-  moreError: { paddingVertical: spacing.md, alignItems: 'center' },
-  moreEmpty: { paddingVertical: spacing.md },
 });

@@ -1,3 +1,5 @@
+import type { FeaturedArtist } from '@shared/api-client/types';
+
 export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'ended' | 'error';
 
 export type PlaybackSource =
@@ -10,6 +12,7 @@ export interface PlaybackTrack {
   readonly artist: string;
   readonly artworkUrl: string | null;
   readonly durationSeconds?: number | undefined;
+  readonly featuredArtists?: readonly FeaturedArtist[] | undefined;
   // Discovery provenance, present only when the track was queued from a search
   // result. Carried onto play/skip/completed events so behavioral satisfaction
   // joins back to the search and the result_signature it scores.
@@ -36,6 +39,16 @@ export interface PlaybackControls {
   ): Promise<void>;
   /** Jump to an already-loaded queue position (instant — track is prefetched). */
   skipToQueueIndex(index: number): Promise<void>;
+  /**
+   * Replace the upcoming tracks (everything after the current one) in place,
+   * without disturbing the currently-playing track. Used by shuffle so toggling
+   * never re-buffers or interrupts audio.
+   */
+  reorderUpcoming(upcomingTracks: readonly PlaybackTrack[]): Promise<void>;
+  /** Append a track to the end of the native queue (Add to Queue). */
+  appendToQueue(track: PlaybackTrack): Promise<void>;
+  /** Insert a track into the native queue at the given play-order position (Play Next). */
+  insertNext(track: PlaybackTrack, position: number): Promise<void>;
   /** Advance to the next queued track natively (gapless, no JS cold-load). */
   skipNext(): Promise<void>;
   /** Return to the previous queued track natively. */

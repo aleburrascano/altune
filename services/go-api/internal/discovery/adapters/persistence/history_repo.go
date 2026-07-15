@@ -53,6 +53,17 @@ func (r *PgxSearchHistoryRepository) TrimToN(ctx context.Context, userId shared.
 	return nil
 }
 
+func (r *PgxSearchHistoryRepository) DeleteAllForUser(ctx context.Context, userId shared.UserId) error {
+	_, err := r.pool.Exec(ctx,
+		`DELETE FROM discovery_search_history WHERE user_id = $1`,
+		userId.UUID(),
+	)
+	if err != nil {
+		return fmt.Errorf("delete search history: %w", err)
+	}
+	return nil
+}
+
 func (r *PgxSearchHistoryRepository) ListDistinctRecent(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT h.id, h.user_id, h.query, h.query_norm, h.executed_at, h.result_clicked_signature

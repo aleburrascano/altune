@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 
 import { Artwork, Row, Text, radius, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
+import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
 
 import type { DiscoveryResult } from '../../../shared/api-client/discovery';
 import { usePlayback } from '@shared/playback/usePlayback';
@@ -42,7 +43,10 @@ function _secondaryLine(result: DiscoveryResult): string {
     return parts.join(' · ');
   }
   const parts = [kind];
-  if (result.subtitle) parts.push(result.subtitle);
+  if (result.subtitle) {
+    const guests = featuredArtistsFromExtras(result.extras['featured_artists']);
+    parts.push(withFeaturing(result.subtitle, guests));
+  }
   const count = result.extras['variant_count'];
   if (typeof count === 'number' && count > 1) {
     parts.push(`+${count - 1} version${count > 2 ? 's' : ''}`);

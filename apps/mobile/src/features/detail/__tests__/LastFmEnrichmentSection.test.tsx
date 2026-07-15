@@ -41,10 +41,14 @@ describe('LastFmEnrichmentSection', () => {
     expect(getByTestId('detail-lastfm-tag-0')).toBeTruthy();
   });
 
-  it('shows similar artists for an artist but not their bio (Discogs owns it)', () => {
-    const { getByTestId, queryByTestId } = _render('artist', _enrichment());
-    expect(getByTestId('detail-lastfm-similar')).toHaveTextContent(/Baby Keem, Jay Rock/);
-    expect(queryByTestId('detail-lastfm-bio')).toBeNull();
+  it('shows the bio and similar artists as chips for an artist (Editorial About)', () => {
+    const { getByTestId } = _render('artist', _enrichment());
+    // The Editorial About owns the artist bio now (Discogs facts were dropped),
+    // and similar artists render as individual chips, not a comma-joined line.
+    expect(getByTestId('detail-lastfm-bio')).toHaveTextContent('A song blurb.');
+    expect(getByTestId('detail-lastfm-similar')).toBeTruthy();
+    expect(getByTestId('detail-lastfm-similar-0')).toHaveTextContent('Baby Keem');
+    expect(getByTestId('detail-lastfm-similar-1')).toHaveTextContent('Jay Rock');
   });
 
   it('shows the bio/blurb for a track but no similar-artist line', () => {

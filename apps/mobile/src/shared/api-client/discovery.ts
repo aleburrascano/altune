@@ -174,6 +174,10 @@ export async function listSearchHistory(params?: {
   );
 }
 
+export async function clearSearchHistory(): Promise<void> {
+  await apiFetch<void>('/v1/discovery/search-history', { method: 'DELETE' });
+}
+
 export async function recordEvent(event: DiscoveryEvent): Promise<void> {
   // Stamp the rotating session_id onto every event's payload (no column — it
   // rides in JSONB) so the backend can derive session-arc signals (abandonment,
@@ -419,6 +423,9 @@ export type DeezerEnrichmentResponse = {
   genres: string[];
   upc: string;
   record_type: string;
+  /** Guest ("Featured"-role) contributors from the track detail fetch. Wire shape
+   * is `[{name, mbid?, deezer_id?}]`; parse via featuredArtistsFromExtras. */
+  featured_artists?: unknown[];
 };
 
 export async function getDeezerEnrichment(params: {

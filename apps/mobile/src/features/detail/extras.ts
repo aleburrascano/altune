@@ -30,7 +30,11 @@ export function trackInfoRows(extras: Record<string, unknown>): InfoRow[] {
   }
 
   if (te.featuredArtists.length > 0) {
-    rows.push({ key: 'featuring', label: 'Featuring', value: te.featuredArtists.join(', ') });
+    rows.push({
+      key: 'featuring',
+      label: 'Featuring',
+      value: te.featuredArtists.map((f) => f.name).join(', '),
+    });
   }
 
   return rows;

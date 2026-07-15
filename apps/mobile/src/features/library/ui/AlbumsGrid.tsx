@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 
 import { Text, radius, spacing, useTheme } from '@shared/ui';
@@ -10,10 +10,9 @@ type AlbumsGridProps = {
   albums: AlbumGroup[];
   emptyLabel: string;
   onAlbumPress: (album: AlbumGroup) => void;
-  onRefresh: () => void;
 };
 
-export function AlbumsGrid({ albums, emptyLabel, onAlbumPress, onRefresh }: AlbumsGridProps): ReactElement {
+export function AlbumsGrid({ albums, emptyLabel, onAlbumPress }: AlbumsGridProps): ReactElement {
   const theme = useTheme();
   return (
     <FlatList
@@ -24,9 +23,6 @@ export function AlbumsGrid({ albums, emptyLabel, onAlbumPress, onRefresh }: Albu
       columnWrapperStyle={styles.gridRow}
       contentContainerStyle={albums.length === 0 ? styles.emptyList : styles.list}
       showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={theme.color.accent} colors={[theme.color.accent]} />
-      }
       ListEmptyComponent={
         <View style={styles.empty}>
           <Text variant="body" tone="secondary">

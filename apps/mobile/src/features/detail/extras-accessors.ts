@@ -1,4 +1,5 @@
-import type { AcquisitionStatus } from '@shared/api-client/types';
+import type { AcquisitionStatus, FeaturedArtist } from '@shared/api-client/types';
+import { featuredArtistsFromExtras } from '@shared/lib/featured';
 
 export type TrackExtras = {
   durationSeconds: number | null;
@@ -7,7 +8,7 @@ export type TrackExtras = {
   year: number | null;
   genre: string | null;
   albumArtist: string | null;
-  featuredArtists: string[];
+  featuredArtists: FeaturedArtist[];
   trackId: string | null;
   acquisitionStatus: AcquisitionStatus | null;
   previewUrl: string | null;
@@ -39,9 +40,7 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
     year: typeof year === 'number' && Number.isFinite(year) ? year : null,
     genre: typeof genre === 'string' && genre.length > 0 ? genre : null,
     albumArtist: typeof albumArtist === 'string' && albumArtist.length > 0 ? albumArtist : null,
-    featuredArtists: Array.isArray(featured)
-      ? (featured as unknown[]).filter((n): n is string => typeof n === 'string' && n.length > 0)
-      : [],
+    featuredArtists: featuredArtistsFromExtras(featured),
     trackId: typeof trackId === 'string' ? trackId : null,
     acquisitionStatus: typeof status === 'string' && (status === 'ready' || status === 'pending' || status === 'failed') ? status : null,
     previewUrl: typeof preview === 'string' && preview.length > 0 ? preview : null,

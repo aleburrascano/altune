@@ -13,14 +13,15 @@ import (
 
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	acqPorts "altune/go-api/internal/acquisition/ports"
+	acqService "altune/go-api/internal/acquisition/service"
 	adminAlert "altune/go-api/internal/admin/alert"
 	adminHandler "altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/admin/requeststore"
-	acqPorts "altune/go-api/internal/acquisition/ports"
-	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
 	authAdapters "altune/go-api/internal/auth/adapters"
+	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	catalogHandler "altune/go-api/internal/catalog/adapters/handler"
 	"altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/adapters/storage"
@@ -31,9 +32,10 @@ import (
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service/eval"
 	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/discovery/service/eval"
+	"altune/go-api/internal/playback/adapters/catalogbridge"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
 	playbackService "altune/go-api/internal/playback/service"
@@ -52,16 +54,16 @@ import (
 )
 
 type App struct {
-	cfg          *config.Config
-	pool         *pgxpool.Pool
-	redisClient  *goredis.Client
-	server       *http.Server
-	wg           sync.WaitGroup
-	sem          chan struct{}
-	scheduler    *acqService.BackgroundAcquisitionScheduler
-	vocabRefresh *discoveryService.VocabularyRefreshService
-	eventBus     *events.InProcessBus
-	alertMonitor *adminAlert.Monitor
+	cfg            *config.Config
+	pool           *pgxpool.Pool
+	redisClient    *goredis.Client
+	server         *http.Server
+	wg             sync.WaitGroup
+	sem            chan struct{}
+	scheduler      *acqService.BackgroundAcquisitionScheduler
+	vocabRefresh   *discoveryService.VocabularyRefreshService
+	eventBus       *events.InProcessBus
+	alertMonitor   *adminAlert.Monitor
 	logRing        *logging.RingBuffer
 	eventFeed      *adminHandler.EventFeed
 	providerHealth *providerhealth.Store
@@ -189,10 +191,15 @@ func (a *App) setup(ctx context.Context) error {
 	)
 	listTracksSvc := catalogService.NewListTracksService(trackRepo)
 	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore, catalogService.WithDeleteTrackEvents(a.eventBus))
+	setTrackNumberSvc := catalogService.NewSetTrackNumberService(trackRepo)
 	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(a.eventBus))
 
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
-	queueSvc := playbackService.NewQueueService(queueStateRepo)
+	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo)
+	queueSvc := playbackService.NewQueueService(
+		queueStateRepo,
+		playbackService.WithNowPlayingReader(nowPlayingReader),
+	)
 	queueHandler := playbackHandler.NewQueueHandler(queueSvc)
 
 	var sharedMB *providers.MusicBrainzAdapter
@@ -217,11 +224,26 @@ func (a *App) setup(ctx context.Context) error {
 	}
 
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
+	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc)
+	// Featured-artist resolver (discovery-sourced) + catalog bridge. The resolver
+	// tolerates a nil MB searcher (MusicBrainz not configured) and degrades to
+	// Deezer-only; a nil interface (not a typed-nil pointer) keeps that safe.
+	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
+	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
+	if sharedMB != nil {
+		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
+	}
+	featuredBridge := discoverybridge.NewFeaturedResolver(featuredResolver)
+	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(trackRepo, featuredBridge)
+	listFeaturingSvc := catalogService.NewListFeaturingService(trackRepo)
+
+	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, setTrackNumberSvc, backfillFeaturedSvc, listFeaturingSvc)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
 	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, scheduler)
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
+	audioURLSvc := catalogService.NewAudioURLService(trackRepo, audioStore)
+	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc)
 	deezerContentClient := newDiscoveryClient()
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
 	// iTunes is a second mainstream source of truth for discography/tracklist
@@ -254,7 +276,10 @@ func (a *App) setup(ctx context.Context) error {
 	}
 	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
 
-	albumSvc := discoveryService.NewGetAlbumTracksService(albumProviders)
+	albumSvc := discoveryService.NewGetAlbumTracksService(
+		albumProviders,
+		discoveryService.WithTrackFeatured(deezerContent),
+	)
 
 	// Multi-provider consensus: ALL providers are equal sources, merged into a
 	// union. Built via the shared BuildConsensusProviders so coverage signal B
@@ -321,14 +346,15 @@ func (a *App) setup(ctx context.Context) error {
 	}
 
 	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
-		Search:  searchSvc,
-		History: historySvc,
-		Album:   albumSvc,
-		Artist:  artistSvc,
-		Related: relatedSvc,
-		Enrich:  enrichSvc,
-		Suggest: suggestSvc,
-		Event:   eventSvc,
+		Search:       searchSvc,
+		History:      historySvc,
+		ClearHistory: clearHistorySvc,
+		Album:        albumSvc,
+		Artist:       artistSvc,
+		Related:      relatedSvc,
+		Enrich:       enrichSvc,
+		Suggest:      suggestSvc,
+		Event:        eventSvc,
 	})
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
 	a.providerHealth = providerhealth.NewStore()
@@ -368,6 +394,8 @@ func (a *App) setup(ctx context.Context) error {
 
 		r.Mount("/tracks", trackHandler.Routes())
 		r.Get("/tracks/{trackId}/audio", streamHandler.HandleStreamAudio)
+		r.Post("/tracks/{trackId}/audio/recover", streamHandler.HandleRecover)
+		r.Post("/audio-urls", audioURLHandler.HandleResolve)
 		if retryH != nil {
 			r.Post("/tracks/{trackId}/retry", retryH.HandleRetryAcquisition)
 		}
@@ -400,9 +428,9 @@ func (a *App) setup(ctx context.Context) error {
 		WithReRunner(a.buildReRunner()).
 		WithSearchInspector(a.buildSearchInspector(searchSvc))
 	r.Route("/admin", func(ar chi.Router) {
-		ar.Get("/", adminH.ServeIndex)         // public shell — holds no data
-		ar.Get("/config", adminH.ServeConfig)  // public client config for sign-in
-		ar.Group(func(gr chi.Router) {         // gated data: auth, then operator check
+		ar.Get("/", adminH.ServeIndex)        // public shell — holds no data
+		ar.Get("/config", adminH.ServeConfig) // public client config for sign-in
+		ar.Group(func(gr chi.Router) {        // gated data: auth, then operator check
 			gr.Use(auth.Middleware(verifier))
 			gr.Use(adminHandler.OperatorOnly(a.cfg.OperatorUserID))
 			adminH.RegisterData(gr)
