@@ -31,7 +31,7 @@ func TestNewQueueState_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			state, err := NewQueueState(testUser(), tt.trackIds, tt.currentIdx, tt.positionMs, false, RepeatOff, "")
+			state, err := NewQueueState(testUser(), tt.trackIds, tt.currentIdx, tt.positionMs, false, RepeatOff, "", nil)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
@@ -51,7 +51,7 @@ func TestNewQueueState_Validation(t *testing.T) {
 func TestRehydrateQueueState_RejectsCorruptRow(t *testing.T) {
 	// A stored row whose current_idx points past the end must fail to
 	// reconstitute rather than ship an invalid snapshot to the client.
-	_, err := RehydrateQueueState(testUser(), []string{"a", "b"}, 9, 0, false, RepeatOff, "", time.Now())
+	_, err := RehydrateQueueState(testUser(), []string{"a", "b"}, 9, 0, false, RepeatOff, "", nil, time.Now())
 	if err == nil {
 		t.Fatal("expected out-of-range current_idx to be rejected on rehydrate")
 	}
@@ -59,7 +59,7 @@ func TestRehydrateQueueState_RejectsCorruptRow(t *testing.T) {
 
 func TestRehydrateQueueState_PreservesUpdatedAt(t *testing.T) {
 	stored := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-	state, err := RehydrateQueueState(testUser(), []string{"a"}, 0, 0, false, RepeatOff, "", stored)
+	state, err := RehydrateQueueState(testUser(), []string{"a"}, 0, 0, false, RepeatOff, "", nil, stored)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

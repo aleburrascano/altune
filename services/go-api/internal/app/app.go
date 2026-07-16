@@ -196,10 +196,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
 	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo)
-	queueSvc := playbackService.NewQueueService(
-		queueStateRepo,
-		playbackService.WithNowPlayingReader(nowPlayingReader),
-	)
+	queueSvc := playbackService.NewQueueService(queueStateRepo, nowPlayingReader)
 	queueHandler := playbackHandler.NewQueueHandler(queueSvc)
 
 	var sharedMB *providers.MusicBrainzAdapter
