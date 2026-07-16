@@ -5,9 +5,11 @@ Hexagonal: dependencies point inward only (`adapters → service → domain`); p
 on demand). Bounded contexts carry their own nested `CLAUDE.md` (e.g.
 `internal/discovery/CLAUDE.md`).
 
-Go pattern vocabulary (index only — full entries under `~/.claude/lexicon/site/`, read on demand):
-
-@~/.claude/lexicon/MANIFEST-go.md
+Go pattern vocabulary: **Read `~/.claude/lexicon/MANIFEST-go.md` before proposing
+or rejecting any abstraction** (an `@`-import here does not expand — nested
+CLAUDE.md files load on demand, imports only expand at launch). Full entries under
+`~/.claude/lexicon/site/{path}/index.html` — Grep an entry for `Avoid|Cost` and
+quote its cost line when tradeoffs matter; never read a whole entry (~40k chars).
 
 ```bash
 cd services/go-api
