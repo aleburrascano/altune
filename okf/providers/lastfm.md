@@ -4,7 +4,7 @@ title: Last.fm Adapter
 description: Last.fm supplies listen-based popularity, a relatedness graph, and weighted folksonomy tags/bio via *.getInfo — the listening-behavior axis MusicBrainz and Discogs both lack.
 resource: services/go-api/internal/discovery/adapters/providers/lastfm.go, services/go-api/internal/discovery/adapters/providers/lastfm_enrichment.go
 tags: [discovery, provider, lastfm, popularity, relatedness]
-verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
 ---
 
 `LastFmAdapter` (`lastfm.go`) calls `ws.audioscrobbler.com/2.0` with a static `api_key` query param (`cfg.LastFMAPIKey`, gated by `cfg.HasLastFM()`) — no rotation/self-heal needed. `SearchTimeout` is 4s (bumped up from a too-tight 1.5s default that produced spurious timeouts). `Search` covers track/album/artist via `*.search` (`parseLastFmResponse`); `GetArtistTopTracks` accepts either an artist name or an MBID (`looksLikeMBID` prefers `mbid=` over `artist=` for identity-safe lookups, avoiding ambiguous-name collisions); `GetArtistAlbums` is capped at `lastfmAlbumsLimit = 50` — deliberately, since beyond ~50-by-playcount `artist.gettopalbums` returns the artist's entire credited-on graph (compilations, "various artists" appearances) rather than real discography, per a prod coverage scan that exploded the album union 21× at `limit=500`. `FetchCharts` implements `ChartProvider` via `chart.gettop{artists,tracks}`. `parseListeners` normalizes `listeners`/`playcount`, which arrive as strings on search/getInfo but numbers on toptracks/getsimilar.

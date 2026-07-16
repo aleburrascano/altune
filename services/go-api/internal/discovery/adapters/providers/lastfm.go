@@ -312,15 +312,14 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 		// mbid bridges the album into identifier-based merge; playcount is a
 		// popularity signal — both were previously dropped on the floor.
 		extras := make(map[string]any)
-		if al.MBID != "" {
-			extras["mbid"] = al.MBID
-		}
 		if al.PlayCount > 0 {
 			extras["playcount"] = int64(al.PlayCount)
 		}
-		results = append(results, domain.NewProviderResult(domain.ResultKindAlbum, al.Name, al.Artist.Name, imageURL,
+		r := domain.NewProviderResult(domain.ResultKindAlbum, al.Name, al.Artist.Name, imageURL,
 			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(al.URL), URL: al.URL},
-			extras))
+			extras)
+		r.MBID = al.MBID
+		results = append(results, r)
 	}
 	return results, nil
 }

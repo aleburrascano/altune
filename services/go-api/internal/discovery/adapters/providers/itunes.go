@@ -160,12 +160,6 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	case domain.ResultKindAlbum:
 		title = item.CollectionName
 		subtitle = item.ArtistName
-		if item.TrackCount > 0 {
-			extras["track_count"] = item.TrackCount
-		}
-		if item.ReleaseDate != "" {
-			extras["release_date"] = item.ReleaseDate
-		}
 		if item.Copyright != "" {
 			extras["copyright"] = item.Copyright
 		}
@@ -174,9 +168,14 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	}
 
 	externalID, sourceURL := itunesSourceRef(item, kind)
-	return domain.NewProviderResult(kind, title, subtitle, artworkURL,
+	r := domain.NewProviderResult(kind, title, subtitle, artworkURL,
 		domain.SourceRef{Provider: domain.ProviderITunes, ExternalID: externalID, URL: sourceURL},
 		extras)
+	if kind == domain.ResultKindAlbum {
+		r.TrackCount = item.TrackCount
+		r.ReleaseDate = item.ReleaseDate
+	}
+	return r
 }
 
 // itunesSourceRef returns the entity's own iTunes id + view URL for the kind:

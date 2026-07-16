@@ -63,7 +63,7 @@ func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user share
 	passed := 0
 	queries := make([]adminHandler.EvalQueryResult, 0, len(evalSmokeChecks))
 	for _, check := range evalSmokeChecks {
-		query, err := domain.NewSearchQuery(check.query, "", kinds, evalLimit)
+		query, err := domain.NewSearchQuery(check.query, kinds, evalLimit)
 		if err != nil {
 			return adminHandler.EvalResult{}, fmt.Errorf("eval query %q: %w", check.query, err)
 		}

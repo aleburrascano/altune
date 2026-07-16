@@ -67,24 +67,11 @@ func projectDetailRows(items []domain.SearchResult) []DetailRow {
 	for _, it := range items {
 		out = append(out, DetailRow{
 			Title:  it.Title,
-			Year:   detailYear(it),
+			Year:   it.Year,
 			Status: extraStr(it, "consensus_status"),
 		})
 	}
 	return out
-}
-
-// detailYear reads the release year from Extras, tolerating provider shape variance.
-func detailYear(r domain.SearchResult) int {
-	switch y := r.Extras["year"].(type) {
-	case int:
-		return y
-	case int64:
-		return int(y)
-	case float64:
-		return int(y)
-	}
-	return 0
 }
 
 func extraStr(r domain.SearchResult, key string) string {

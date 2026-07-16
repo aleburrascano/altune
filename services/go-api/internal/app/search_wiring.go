@@ -239,7 +239,7 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 
 // buildArtworkChain assembles the artwork resolver chain: ID-based sources first
 // (always correct for the entity), name-search fallbacks last.
-func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.ArtworkResolver {
+func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
 	var artworkResolvers []discoveryPorts.ArtworkResolver
 	artworkResolvers = append(artworkResolvers,
 		providers.NewCoverArtArchiveResolver(cf.discovery()))

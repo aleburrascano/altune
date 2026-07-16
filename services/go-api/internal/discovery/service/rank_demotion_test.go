@@ -6,6 +6,12 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
+// withISRC returns r with the typed ISRC identity key set.
+func withISRC(r domain.SearchResult, isrc string) domain.SearchResult {
+	r.ISRC = isrc
+	return r
+}
+
 // multiSource returns r with a second provider source appended (corroborated).
 func multiSource(r domain.SearchResult, p domain.ProviderName) domain.SearchResult {
 	r.Sources = append(r.Sources, domain.SourceRef{Provider: p, ExternalID: "x", URL: "https://x"})
@@ -35,7 +41,7 @@ func TestIsLowConfidenceTail(t *testing.T) {
 		},
 		{
 			name: "single-source soundcloud but carries isrc → rescued",
-			r:    track("Real Song", "Artist", domain.ProviderSoundCloud, map[string]any{"isrc": "US1234567890"}),
+			r:    withISRC(track("Real Song", "Artist", domain.ProviderSoundCloud, nil), "US1234567890"),
 			want: false,
 		},
 		{
@@ -79,7 +85,7 @@ func TestRankWith_DemotesUGCNoiseBelowCleanResult(t *testing.T) {
 	}
 
 	// With demotion: the corroborated catalog result rises despite lower relevance.
-	got := rankWith([]Entity{ent(clean), ent(junk)}, "rest in bass encore", isLowConfidenceTail, nil)
+	got := rankWith([]Entity{ent(clean), ent(junk)}, "rest in bass encore", rankConfig{demote: isLowConfidenceTail})
 	if len(got) != 2 || got[0].Subtitle != "Che" {
 		t.Fatalf("with demotion: expected clean 'Che' first, got %v", titles(got))
 	}
@@ -89,14 +95,14 @@ func TestRankWith_DemotesUGCNoiseBelowCleanResult(t *testing.T) {
 }
 
 func TestRankWith_NilPredicateMatchesRank(t *testing.T) {
-	// rankWith(nil) must be byte-identical in ordering to Rank — the inertness that
+	// rankWith with a zero config must be byte-identical in ordering to Rank — the inertness that
 	// keeps the default path and the sacred tests unchanged.
 	junk := track("crazy bootleg edit", "uploader", domain.ProviderSoundCloud, nil)
 	clean := deezerTrack("Crazy", "Gnarls Barkley", 50)
 	entities := []Entity{ent(clean), ent(junk)}
 
 	a := Rank(entities, "crazy")
-	b := rankWith(entities, "crazy", nil, nil)
+	b := rankWith(entities, "crazy", rankConfig{})
 	if len(a) != len(b) {
 		t.Fatalf("length mismatch: %v vs %v", titles(a), titles(b))
 	}

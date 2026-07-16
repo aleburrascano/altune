@@ -112,18 +112,9 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 			extras["album"] = item.Album.Title
 			extras["deezer_album_id"] = fmt.Sprintf("%d", item.Album.ID)
 		}
-		if item.ISRC != "" {
-			extras["isrc"] = item.ISRC
-		}
 		extras["duration"] = item.Duration
 		if item.Preview != "" {
 			extras["preview_url"] = item.Preview
-		}
-		if item.Rank > 0 {
-			extras["rank"] = item.Rank
-		}
-		if item.NbFan > 0 {
-			extras["nb_fan"] = item.NbFan
 		}
 	case domain.ResultKindAlbum:
 		title = item.Title
@@ -134,29 +125,27 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		if item.RecordType != "" {
 			extras["record_type"] = item.RecordType
 		}
-		if item.ReleaseDate != "" {
-			extras["release_date"] = item.ReleaseDate
-		}
-		if item.NbTracks > 0 {
-			extras["track_count"] = item.NbTracks
-		}
-		if item.NbFan > 0 {
-			extras["nb_fan"] = item.NbFan
-		}
 		if item.GenreID > 0 {
 			extras["genre_id"] = item.GenreID
 		}
 	case domain.ResultKindArtist:
 		title = item.Name
 		imageURL = item.PictureBig
-		if item.NbFan > 0 {
-			extras["nb_fan"] = item.NbFan
-		}
 	}
 
-	return domain.NewProviderResult(kind, title, subtitle, imageURL,
+	r := domain.NewProviderResult(kind, title, subtitle, imageURL,
 		domain.SourceRef{Provider: domain.ProviderDeezer, ExternalID: fmt.Sprintf("%d", item.ID), URL: item.Link},
 		extras)
+	if kind == domain.ResultKindTrack {
+		r.ISRC = item.ISRC
+		r.ProviderRank = item.Rank
+	}
+	if kind == domain.ResultKindAlbum {
+		r.ReleaseDate = item.ReleaseDate
+		r.TrackCount = item.NbTracks
+	}
+	r.FanCount = item.NbFan
+	return r
 }
 
 // Deezer API response types

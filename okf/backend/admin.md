@@ -4,7 +4,7 @@ title: Admin / Mission Control
 description: The single-operator observability console under /admin — an unauthenticated shell plus operator-gated data endpoints for request tracing, live event/log streams, alerting, provider health, and operator-triggered re-runs.
 resource: services/go-api/internal/admin/
 tags: [bounded-context, admin, mission-control, observability, sse, alerting, operator]
-verified_commit: e238cc3671d1719837686c667242c7d88fc376d2
+verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
 ---
 
 Mission Control is **deliberately not hexagonal** — no domain/ports/service/adapters split; it's a flat set of observability packages (`handler/`, `alert/`, `providerhealth/`, `requeststore/`, `ui/`) sized for the 4 GB production box. It still honors interfaces-belong-to-consumers: `AdminHandler` depends on small locally-defined interfaces (`providerHealthReader`, `requestStoreReader`, `ReRunner`, `SearchInspector`, `AcquisitionStatusReader`), whose heavy implementations live in the composition root (see [app-wiring](app-wiring.md)). **Dependency direction**: admin imports `discovery/domain` (trace projections); discovery and acquisition never import admin — they feed it through consumer-defined seams (`providerHealthRecorder`/`searchTraceRecorder` in the discovery handler; the acquisition scheduler satisfies `AcquisitionStatusReader` structurally).

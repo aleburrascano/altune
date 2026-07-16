@@ -38,39 +38,41 @@ type scored struct {
 	demoted    bool
 }
 
+// rankConfig carries the optional, experiment-gated ranking inputs. The zero
+// value is the production default (every branch inert) — the surface the sacred
+// rank/pipeline tests assert. Each field is one eval-gated experiment:
+//
+//   - demote: tail-noise demotion predicate (TAIL_DEMOTION_ENABLED). A non-nil
+//     predicate pushes flagged results (single-source UGC/scrobble noise — see
+//     isLowConfidenceTail) below every non-demoted result.
+//   - behavioral: the EventConsumer-derived satisfaction score map, keyed by
+//     result_signature (BEHAVIORAL_RANKING_ENABLED). Applied only as a
+//     within-tie input below relevance (see rankLess).
+//   - prominence: the cross-kind prominence tiebreak (CROSS_KIND_PROMINENCE_
+//     ENABLED). Each scored entity carries a log-compressed provider prominence
+//     (Deezer nb_fan for artist/album, rank for track) and rankLess breaks a
+//     relevance tie BETWEEN DIFFERENT KINDS by it — so a prominent artist rises
+//     above a same-name track on a bare-name query. It NEVER compares within a
+//     kind, so track-vs-track ordering (the bare-title corpus the popularity
+//     attempt regressed) is untouched.
+//
+// A future experiment is one field here, not a new positional parameter and
+// wrapper (the ladder this struct replaced).
+type rankConfig struct {
+	demote     demoteFunc
+	behavioral map[string]float64
+	prominence bool
+}
+
 // Rank applies the eligibility gates and sorts by continuous relevance,
-// returning handler-ready results. queryNorm is the normalized query. This is the
-// default production behavior (no tail demotion) and the surface the sacred
-// rank/pipeline tests assert; it delegates to rankWith with no predicate.
+// returning handler-ready results. queryNorm is the normalized query. This is
+// the default production behavior (zero-value config, every experiment inert).
 func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
-	return rankWith(entities, queryNorm, nil, nil)
+	return rankWith(entities, queryNorm, rankConfig{})
 }
 
-// rankWith is Rank with an optional tail-demotion predicate. A non-nil demote
-// pushes flagged results (single-source UGC/scrobble noise — see isLowConfidenceTail)
-// below every non-demoted result, overriding their query-word relevance. demote is
-// nil on the default path, making the demotion branch inert. EXPERIMENTAL,
-// eval-gated — see docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
-// rankWith is Rank with an optional tail-demotion predicate and an optional
-// behavioral score map (keyed by result_signature). Both are nil on the default
-// path, making their branches inert — the sacred rank/pipeline tests assert that
-// default. behavioral is the EventConsumer-derived satisfaction signal, applied
-// only as a within-tie input below relevance (see rankLess), eval A/B-gated.
-func rankWith(entities []Entity, queryNorm string, demote demoteFunc, behavioral map[string]float64) []domain.SearchResult {
-	return rankWithProminence(entities, queryNorm, demote, behavioral, false)
-}
-
-// rankWithProminence is rankWith plus the EXPERIMENTAL cross-kind prominence
-// tiebreak. When crossKindProminence is true, each scored entity carries a
-// log-compressed provider prominence (Deezer nb_fan for artist/album, rank for
-// track) and rankLess breaks a relevance tie BETWEEN DIFFERENT KINDS by it — so a
-// prominent artist rises above a same-name track on a bare-name query, while a
-// prominent track still beats an obscure same-name artist. It NEVER compares
-// within a kind, so track-vs-track ordering (the bare-title corpus the popularity
-// attempt regressed) is untouched. Off by default — the 4-arg rankWith and every
-// sacred rank/pipeline test leave prominence at 0, making the rung inert.
-// eval A/B-gated via Service.crossKindProminence (CROSS_KIND_PROMINENCE_ENABLED).
-func rankWithProminence(entities []Entity, queryNorm string, demote demoteFunc, behavioral map[string]float64, crossKindProminence bool) []domain.SearchResult {
+// rankWith is Rank with the experiment-gated inputs threaded in (see rankConfig).
+func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.SearchResult {
 	// queryNorm is already normalized by the caller (Execute); use it directly.
 	q := queryNorm
 
@@ -93,18 +95,18 @@ func rankWithProminence(entities []Entity, queryNorm string, demote demoteFunc, 
 	for _, e := range eligible {
 		r := e.Result
 		demoted := false
-		if demote != nil {
-			demoted = demote(r)
+		if cfg.demote != nil {
+			demoted = cfg.demote(r)
 		}
 		prominence := 0.0
-		if crossKindProminence {
+		if cfg.prominence {
 			prominence = prominenceOf(r)
 		}
 		results = append(results, scored{
 			result:     r,
 			relevance:  idfWeightedCoverage(r, q, rarity),
-			behavioral: behavioral[resultSignature(r)], // nil map read → 0 (inert)
-			prominence: prominence,                     // 0 unless the experiment is on (inert)
+			behavioral: cfg.behavioral[domain.ResultSignature(r)], // nil map read → 0 (inert)
+			prominence: prominence,                                // 0 unless the experiment is on (inert)
 			pop:        popularityOf(r),
 			rrf:        rrfScore(e.BestRank),
 			multi:      len(providersOf(r)) > 1,
@@ -222,20 +224,19 @@ func hasBrowseableSource(r domain.SearchResult) bool {
 }
 
 // prominenceOf is the cross-kind prominence signal: the provider popularity a
-// result already carries (Deezer nb_fan for artist/album, rank for track),
-// log-compressed so the differing raw scales are roughly comparable. Parameter-
-// free (log1p, no tuned cut), 0 when the entity carries no prominence data.
+// result already carries (Deezer FanCount for artist/album, ProviderRank for
+// track), log-compressed so the differing raw scales are roughly comparable.
+// Parameter-free (log1p, no tuned cut), 0 when the entity carries no prominence
+// data.
 func prominenceOf(r domain.SearchResult) float64 {
-	var raw float64
+	raw := r.FanCount
 	if r.Kind == domain.ResultKindTrack {
-		raw = numericExtra(r, "rank")
-	} else {
-		raw = numericExtra(r, "nb_fan")
+		raw = r.ProviderRank
 	}
 	if raw <= 0 {
 		return 0
 	}
-	return math.Log1p(raw)
+	return math.Log1p(float64(raw))
 }
 
 func rrfScore(bestRank map[domain.ProviderName]int) float64 {
@@ -244,16 +245,6 @@ func rrfScore(bestRank map[domain.ProviderName]int) float64 {
 		s += 1.0 / float64(rrfK+rank)
 	}
 	return s
-}
-
-// resultSignature is the canonical cross-query join key — (kind, normalized
-// title, normalized subtitle) — identical to the one the handler emits on the
-// wire and the client echoes on engagement events, so behavioral scores keyed by
-// the stored signature line up with the live results being ranked.
-func resultSignature(r domain.SearchResult) string {
-	return r.Kind.String() + "|" +
-		textnorm.NormalizeForMatch(r.Title) + "|" +
-		textnorm.NormalizeForMatch(r.Subtitle)
 }
 
 func tokenSet(s string) map[string]bool {
@@ -301,8 +292,8 @@ func isLowConfidenceTail(r domain.SearchResult) bool {
 	if !provs[domain.ProviderSoundCloud] && !provs[domain.ProviderLastFM] {
 		return false
 	}
-	hasIdentity := stringExtra(r, "isrc") != "" ||
-		stringExtra(r, "mbid") != "" ||
+	hasIdentity := r.ISRC != "" ||
+		r.MBID != "" ||
 		stringExtra(r, "album") != ""
 	return !hasIdentity
 }

@@ -226,10 +226,6 @@ func mbEntity(kind domain.ResultKind) string {
 
 func mapMBRecording(rec mbRecording) domain.SearchResult {
 	extras := make(map[string]any)
-	extras["mbid"] = rec.ID
-	if len(rec.ISRCs) > 0 {
-		extras["isrc"] = rec.ISRCs[0]
-	}
 
 	var subtitle string
 	if len(rec.ArtistCredit) > 0 {
@@ -240,14 +236,18 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 		extras["featured_artists"] = feats
 	}
 
-	return domain.NewProviderResult(domain.ResultKindTrack, rec.Title, subtitle, "",
+	r := domain.NewProviderResult(domain.ResultKindTrack, rec.Title, subtitle, "",
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rec.ID, URL: "https://musicbrainz.org/recording/" + rec.ID},
 		extras)
+	r.MBID = rec.ID
+	if len(rec.ISRCs) > 0 {
+		r.ISRC = rec.ISRCs[0]
+	}
+	return r
 }
 
 func mapMBArtist(art mbArtistItem) domain.SearchResult {
 	extras := make(map[string]any)
-	extras["mbid"] = art.ID
 	if art.Disambiguation != "" {
 		extras["disambiguation"] = art.Disambiguation
 	}
@@ -269,23 +269,24 @@ func mapMBArtist(art mbArtistItem) domain.SearchResult {
 		}
 	}
 
-	return domain.NewProviderResult(domain.ResultKindArtist, art.Name, "", "",
+	r := domain.NewProviderResult(domain.ResultKindArtist, art.Name, "", "",
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: art.ID, URL: "https://musicbrainz.org/artist/" + art.ID},
 		extras)
+	r.MBID = art.ID
+	return r
 }
 
 func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
-	extras := make(map[string]any)
-	extras["mbid"] = rg.ID
-
 	var subtitle string
 	if len(rg.ArtistCredit) > 0 {
 		subtitle = rg.ArtistCredit[0].Name
 	}
 
-	return domain.NewProviderResult(domain.ResultKindAlbum, rg.Title, subtitle, "",
+	r := domain.NewProviderResult(domain.ResultKindAlbum, rg.Title, subtitle, "",
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rg.ID, URL: "https://musicbrainz.org/release-group/" + rg.ID},
-		extras)
+		nil)
+	r.MBID = rg.ID
+	return r
 }
 
 type mbRecordingResponse struct {

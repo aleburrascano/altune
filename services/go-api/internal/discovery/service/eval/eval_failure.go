@@ -107,7 +107,7 @@ func PopBand(r domain.SearchResult) string {
 // HasIdentifier reports whether a result carries an isrc or mbid — the merge
 // oracle's slice axis and a free attribute everywhere a result is in hand.
 func HasIdentifier(r domain.SearchResult) bool {
-	return stringExtra(r, "isrc") != "" || stringExtra(r, "mbid") != ""
+	return r.ISRC != "" || r.MBID != ""
 }
 
 // SliceFailures groups records by one attribute key into value→count. Values are

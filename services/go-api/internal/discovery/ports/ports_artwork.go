@@ -6,6 +6,10 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
+// ArtworkResolver is the chain-member port: one artwork source (CAA, Fanart,
+// Deezer, iTunes, …) resolving by name/MBID. The chained resolver iterates
+// these; the search service consumes the chain through TaggingArtworkResolver,
+// never this interface directly.
 type ArtworkResolver interface {
 	Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error)
 }
@@ -18,10 +22,12 @@ type SourcedArtworkResolver interface {
 	ArtworkSource() string
 }
 
-// TaggingArtworkResolver resolves artwork AND reports which source supplied it.
-// The chain implements it; the enrichment use case type-asserts for it to record
-// SearchResult.ArtworkSource, falling back to the plain (untagged) resolver when
-// absent. Source is "" when nothing resolved.
+// TaggingArtworkResolver is the service-side artwork port: resolve artwork AND
+// report which source supplied it (recorded as SearchResult.ArtworkSource for
+// per-provider coverage visibility). ResolveWithIdentityTagged resolves strictly
+// by proven identity (bridged ids) and never name-searches; ResolveTagged is the
+// name path. Source is "" when nothing resolved. Implemented by the chained
+// resolver wired at the composition root.
 type TaggingArtworkResolver interface {
 	ResolveTagged(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (url, source string, err error)
 	ResolveWithIdentityTagged(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ArtworkIdentity) (url, source string, err error)
@@ -50,14 +56,6 @@ type IdentityArtworkResolver interface {
 	ResolveByIdentity(ctx context.Context, kind domain.ResultKind, id ArtworkIdentity) (string, error)
 }
 
-// IdentityAwareArtworkResolver is an ArtworkResolver that also resolves from a
-// full proven identity. The chain implements it; callers type-assert for it and
-// fall back to the name-only Resolve when an entity has no identity.
-type IdentityAwareArtworkResolver interface {
-	ArtworkResolver
-	ResolveWithIdentity(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ArtworkIdentity) (string, error)
-}
-
 // ArtworkConfidence grades how trustworthy a resolved artwork URL is, so the
 // cache can treat a proven-identity image as authoritative (long TTL, not
 // overwritable by a weaker result) and a name-searched one as provisional (short
@@ -74,14 +72,6 @@ const (
 type ArtworkCache interface {
 	Get(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (url, source string, found bool, err error)
 	Set(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid, url, source string, confidence ArtworkConfidence) error
-}
-
-type PopularityResolver interface {
-	GetPopularity(ctx context.Context, title, artist string) (int64, error)
-}
-
-type MbidResolver interface {
-	Resolve(ctx context.Context, url string) (string, error)
 }
 
 // MBIDIndex is a cache-only name→MBID memo. A detail-open's strict name

@@ -90,11 +90,11 @@ func sameEntity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
 	}
 
 	// Identifier authority.
-	if ie, ic := stringExtra(e, "isrc"), stringExtra(c, "isrc"); ie != "" && ic != "" && ie == ic {
+	if e.ISRC != "" && c.ISRC != "" && e.ISRC == c.ISRC {
 		return domain.EntityResolutionISRC, true
 	}
-	if me, mc := stringExtra(e, "mbid"), stringExtra(c, "mbid"); me != "" && mc != "" {
-		if me == mc {
+	if e.MBID != "" && c.MBID != "" {
+		if e.MBID == c.MBID {
 			return domain.EntityResolutionMBID, true
 		}
 		return domain.EntityResolutionNone, false
@@ -169,7 +169,7 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 		}
 	}
 
-	return domain.SearchResult{
+	merged := domain.SearchResult{
 		Kind:       canonical.Kind,
 		Title:      canonical.Title,
 		Subtitle:   canonical.Subtitle,
@@ -179,6 +179,34 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 		Popularity: math.Max(canonical.Popularity, other.Popularity),
 		Extras:     extras,
 	}
+	// Typed metadata: canonical wins when set, else the other side fills the gap
+	// (the same present-beats-absent rule the Extras overlay applies).
+	merged.ISRC = firstNonEmpty(canonical.ISRC, other.ISRC)
+	merged.MBID = firstNonEmpty(canonical.MBID, other.MBID)
+	merged.Xref = canonical.Xref
+	if len(merged.Xref) == 0 {
+		merged.Xref = other.Xref
+	}
+	merged.Year = firstNonZero(canonical.Year, other.Year)
+	merged.ReleaseDate = firstNonEmpty(canonical.ReleaseDate, other.ReleaseDate)
+	merged.TrackCount = firstNonZero(canonical.TrackCount, other.TrackCount)
+	merged.ProviderRank = firstNonZero(canonical.ProviderRank, other.ProviderRank)
+	merged.FanCount = firstNonZero(canonical.FanCount, other.FanCount)
+	return merged
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func firstNonZero[T int | int64](a, b T) T {
+	if a != 0 {
+		return a
+	}
+	return b
 }
 
 // providerID is one (provider, external id) identity claim.
@@ -188,15 +216,13 @@ type providerID struct {
 }
 
 // bridgeMatch reports whether e and c share any cross-provider identity claim.
-// A claim is either a native source id or a bridged id stamped into extras["xref"]
+// A claim is either a native source id or a bridged id carried in Xref
 // (MB → provider, populated pre-merge from the IdentityBridge). At least one
 // bridged claim must participate — two native ids alone are same-provider dups,
-// not a cross-provider bridge — so e must carry an xref for this to fire.
+// not a cross-provider bridge — so one side must carry an Xref for this to fire.
 func bridgeMatch(e, c domain.SearchResult) bool {
-	if _, ok := e.Extras["xref"].(map[string]string); !ok {
-		if _, ok := c.Extras["xref"].(map[string]string); !ok {
-			return false
-		}
+	if len(e.Xref) == 0 && len(c.Xref) == 0 {
+		return false
 	}
 	ec := identityClaims(e)
 	if len(ec) == 0 {
@@ -211,7 +237,7 @@ func bridgeMatch(e, c domain.SearchResult) bool {
 }
 
 // identityClaims gathers a result's (provider, id) claims: native source ids plus
-// any bridged ids stamped into extras["xref"].
+// any bridged ids carried in Xref.
 func identityClaims(r domain.SearchResult) map[providerID]bool {
 	claims := make(map[providerID]bool, len(r.Sources)+1)
 	for _, s := range r.Sources {
@@ -219,14 +245,12 @@ func identityClaims(r domain.SearchResult) map[providerID]bool {
 			claims[providerID{s.Provider, s.ExternalID}] = true
 		}
 	}
-	if xref, ok := r.Extras["xref"].(map[string]string); ok {
-		for name, id := range xref {
-			if id == "" {
-				continue
-			}
-			if p, err := domain.ParseProviderName(name); err == nil {
-				claims[providerID{p, id}] = true
-			}
+	for name, id := range r.Xref {
+		if id == "" {
+			continue
+		}
+		if p, err := domain.ParseProviderName(name); err == nil {
+			claims[providerID{p, id}] = true
 		}
 	}
 	return claims
@@ -243,10 +267,10 @@ func ambiguousArtistNames(perProvider [][]domain.SearchResult) map[string]bool {
 			if r.Kind != domain.ResultKindArtist {
 				continue
 			}
-			mbid := stringExtra(r, "mbid")
-			if mbid == "" {
+			if r.MBID == "" {
 				continue
 			}
+			mbid := r.MBID
 			name := textnorm.NormalizeForMatch(r.Title)
 			if mbidsByName[name] == nil {
 				mbidsByName[name] = make(map[string]bool)
@@ -261,26 +285,6 @@ func ambiguousArtistNames(perProvider [][]domain.SearchResult) map[string]bool {
 		}
 	}
 	return ambiguous
-}
-
-// numericExtra reads a numeric extras value as a float64, tolerating the type
-// the value arrives as: int64/int on the live path (provider adapters stamp Go
-// ints) and float64 after a JSON fixture round-trip (record/replay). Absent or
-// non-numeric → 0.
-func numericExtra(r domain.SearchResult, key string) float64 {
-	if r.Extras == nil {
-		return 0
-	}
-	switch v := r.Extras[key].(type) {
-	case int64:
-		return float64(v)
-	case int:
-		return float64(v)
-	case float64:
-		return v
-	default:
-		return 0
-	}
 }
 
 func stringExtra(r domain.SearchResult, key string) string {
@@ -304,7 +308,7 @@ func completenessOf(r domain.SearchResult) int {
 	if r.ImageURL != "" {
 		n++
 	}
-	if stringExtra(r, "isrc") != "" {
+	if r.ISRC != "" {
 		n++
 	}
 	if r.Extras != nil {

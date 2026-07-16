@@ -142,9 +142,7 @@ func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
 	for _, r := range results {
 		normTitle := textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
 		if idx, ok := seen[normTitle]; ok {
-			existingCount := getTrackCount(deduped[idx])
-			newCount := getTrackCount(r)
-			if newCount > existingCount {
+			if r.TrackCount > deduped[idx].TrackCount {
 				deduped[idx] = r
 			}
 			continue
@@ -153,26 +151,6 @@ func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
 		deduped = append(deduped, r)
 	}
 	return deduped
-}
-
-func getTrackCount(r domain.SearchResult) int {
-	if r.Extras == nil {
-		return 0
-	}
-	v, ok := r.Extras["track_count"]
-	if !ok {
-		return 0
-	}
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case float64:
-		return int(n)
-	default:
-		return 0
-	}
 }
 
 // sortAlbumsByReleaseDateDesc orders albums newest-first by their release-date
@@ -190,60 +168,29 @@ func sortAlbumsByReleaseDateDesc(results []domain.SearchResult) {
 }
 
 // albumReleaseSortKey returns the comparable date string for ordering: the ISO
-// release_date when present (Deezer/iTunes), else the bare year, else "".
+// ReleaseDate when present (Deezer/iTunes), else the bare year, else "".
 func albumReleaseSortKey(r domain.SearchResult) string {
-	if r.Extras == nil {
-		return ""
+	if r.ReleaseDate != "" {
+		return r.ReleaseDate
 	}
-	if rd, ok := r.Extras["release_date"].(string); ok && rd != "" {
-		return rd
-	}
-	return yearString(r.Extras["year"])
-}
-
-// normalizeAlbumYears derives a numeric extras["year"] from release_date for any
-// album missing one, so the client always has a year to display without parsing
-// dates itself. Idempotent; leaves albums with no date untouched.
-func normalizeAlbumYears(results []domain.SearchResult) {
-	for i := range results {
-		if results[i].Extras == nil {
-			continue
-		}
-		if _, ok := results[i].Extras["year"]; ok {
-			continue
-		}
-		rd, ok := results[i].Extras["release_date"].(string)
-		if !ok || len(rd) < 4 {
-			continue
-		}
-		if y := parseYear(rd[:4]); y > 0 {
-			results[i].Extras["year"] = y
-		}
-	}
-}
-
-// yearString renders an extras["year"] value (int/int64/float64/string) as a bare
-// year string for sorting, or "" when absent/unparseable.
-func yearString(v any) string {
-	switch y := v.(type) {
-	case int:
-		if y > 0 {
-			return strconv.Itoa(y)
-		}
-	case int64:
-		if y > 0 {
-			return strconv.FormatInt(y, 10)
-		}
-	case float64:
-		if y > 0 {
-			return strconv.Itoa(int(y))
-		}
-	case string:
-		if len(y) >= 4 {
-			return y[:4]
-		}
+	if r.Year > 0 {
+		return strconv.Itoa(r.Year)
 	}
 	return ""
+}
+
+// normalizeAlbumYears derives a numeric Year from ReleaseDate for any album
+// missing one, so the client always has a year to display without parsing dates
+// itself. Idempotent; leaves albums with no date untouched.
+func normalizeAlbumYears(results []domain.SearchResult) {
+	for i := range results {
+		if results[i].Year != 0 || len(results[i].ReleaseDate) < 4 {
+			continue
+		}
+		if y := parseYear(results[i].ReleaseDate[:4]); y > 0 {
+			results[i].Year = y
+		}
+	}
 }
 
 // parseYear parses a 4-char year prefix into a positive int, or 0 if invalid.

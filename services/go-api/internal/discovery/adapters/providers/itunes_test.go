@@ -181,8 +181,8 @@ func TestITunesAdapter_GetArtistAlbums(t *testing.T) {
 	if first.Sources[0].ExternalID != "1440881047" {
 		t.Errorf("externalID: got %q, want collectionId 1440881047", first.Sources[0].ExternalID)
 	}
-	if tc, ok := first.Extras["track_count"].(int); !ok || tc != 15 {
-		t.Errorf("extras.track_count: got %v, want 15", first.Extras["track_count"])
+	if first.TrackCount != 15 {
+		t.Errorf("TrackCount: got %d, want 15", first.TrackCount)
 	}
 }
 

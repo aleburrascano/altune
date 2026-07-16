@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 )
 
 type fakeEnricher struct {
@@ -34,9 +35,13 @@ type fakeArtwork struct {
 	url   string
 }
 
-func (f *fakeArtwork) Resolve(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
+func (f *fakeArtwork) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, string, error) {
 	f.calls++
-	return f.url, nil
+	return f.url, "", nil
+}
+
+func (f *fakeArtwork) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, string, error) {
+	return "", "", nil
 }
 
 // memEnrichmentCache is an in-memory EnrichmentCache.

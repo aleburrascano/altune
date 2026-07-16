@@ -73,11 +73,11 @@ func TestMusicBrainzAdapter_Search_Recordings(t *testing.T) {
 	if r.Sources[0].URL != "https://musicbrainz.org/recording/abc-123-def" {
 		t.Errorf("source URL: got %q, want musicbrainz recording URL", r.Sources[0].URL)
 	}
-	if r.Extras["mbid"] != "abc-123-def" {
-		t.Errorf("extras.mbid: got %v, want %q", r.Extras["mbid"], "abc-123-def")
+	if r.MBID != "abc-123-def" {
+		t.Errorf("MBID: got %q, want %q", r.MBID, "abc-123-def")
 	}
-	if r.Extras["isrc"] != "GBAYE9700011" {
-		t.Errorf("extras.isrc: got %v, want %q", r.Extras["isrc"], "GBAYE9700011")
+	if r.ISRC != "GBAYE9700011" {
+		t.Errorf("ISRC: got %q, want %q", r.ISRC, "GBAYE9700011")
 	}
 }
 
@@ -127,8 +127,8 @@ func TestMusicBrainzAdapter_Search_Artists(t *testing.T) {
 	if r.Sources[0].URL != "https://musicbrainz.org/artist/a74b1b7f-71a5-4011-9441-d0b5e4122711" {
 		t.Errorf("source URL: got %q, want musicbrainz artist URL", r.Sources[0].URL)
 	}
-	if r.Extras["mbid"] != "a74b1b7f-71a5-4011-9441-d0b5e4122711" {
-		t.Errorf("extras.mbid: got %v, want the artist MBID", r.Extras["mbid"])
+	if r.MBID != "a74b1b7f-71a5-4011-9441-d0b5e4122711" {
+		t.Errorf("MBID: got %q, want the artist MBID", r.MBID)
 	}
 	if r.Extras["artist_type"] != "Group" {
 		t.Errorf("extras.artist_type: got %v, want %q", r.Extras["artist_type"], "Group")
@@ -182,8 +182,8 @@ func TestMusicBrainzAdapter_Search_ReleaseGroups(t *testing.T) {
 	if r.Sources[0].URL != "https://musicbrainz.org/release-group/rg-001-abc" {
 		t.Errorf("source URL: got %q, want musicbrainz release-group URL", r.Sources[0].URL)
 	}
-	if r.Extras["mbid"] != "rg-001-abc" {
-		t.Errorf("extras.mbid: got %v, want %q", r.Extras["mbid"], "rg-001-abc")
+	if r.MBID != "rg-001-abc" {
+		t.Errorf("MBID: got %q, want %q", r.MBID, "rg-001-abc")
 	}
 }
 

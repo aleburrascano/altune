@@ -53,8 +53,8 @@ func TestMerge_AmbiguousArtistNameKeepsIdentitiesSeparate(t *testing.T) {
 	// MB returns two distinct "Che" artists (different MBIDs) → the name is
 	// ambiguous. A no-identifier provider artist of the same name must NOT be
 	// absorbed by name alone — every entity keeps only its own source.
-	mb1 := res(domain.ResultKindArtist, "Che", "", domain.ProviderMusicBrainz, map[string]any{"mbid": "mbid-1"})
-	mb2 := res(domain.ResultKindArtist, "Che", "", domain.ProviderMusicBrainz, map[string]any{"mbid": "mbid-2"})
+	mb1 := withMBID(res(domain.ResultKindArtist, "Che", "", domain.ProviderMusicBrainz, nil), "mbid-1")
+	mb2 := withMBID(res(domain.ResultKindArtist, "Che", "", domain.ProviderMusicBrainz, nil), "mbid-2")
 	itunes := res(domain.ResultKindArtist, "Che", "", domain.ProviderITunes, nil)
 
 	entities := Merge([][]domain.SearchResult{{mb1, mb2}, {itunes}})
@@ -72,7 +72,7 @@ func TestMerge_AmbiguousArtistNameKeepsIdentitiesSeparate(t *testing.T) {
 func TestMerge_UnambiguousArtistNameStillNameMerges(t *testing.T) {
 	// One MB identity for the name → unambiguous → a no-identifier provider artist
 	// of the same name merges by name as before (no regression for e.g. Drake).
-	mb := res(domain.ResultKindArtist, "Drake", "", domain.ProviderMusicBrainz, map[string]any{"mbid": "mbid-drake"})
+	mb := withMBID(res(domain.ResultKindArtist, "Drake", "", domain.ProviderMusicBrainz, nil), "mbid-drake")
 	itunes := res(domain.ResultKindArtist, "Drake", "", domain.ProviderITunes, nil)
 
 	entities := Merge([][]domain.SearchResult{{mb}, {itunes}})
@@ -86,7 +86,7 @@ func TestMerge_UnambiguousArtistNameStillNameMerges(t *testing.T) {
 }
 
 func TestMerge_ITunesBridgesIntoMBIdentityDespiteAmbiguousName(t *testing.T) {
-	// MB "Che" is stamped with its Apple Music id (xref["itunes"]); the iTunes
+	// MB "Che" is stamped with its Apple Music id (Xref["itunes"]); the iTunes
 	// "Che" carries that same artistId natively. They bridge and merge even though
 	// the name is ambiguous (a second distinct MB "Che" exists) — identity beats
 	// the name-ambiguity gate.
@@ -94,13 +94,14 @@ func TestMerge_ITunesBridgesIntoMBIdentityDespiteAmbiguousName(t *testing.T) {
 		Kind:    domain.ResultKindArtist,
 		Title:   "Che",
 		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-1", URL: "https://mb/1"}},
-		Extras:  map[string]any{"mbid": "mbid-che-1", "xref": map[string]string{"itunes": "5468295"}},
+		MBID:    "mbid-che-1",
+		Xref:    map[string]string{"itunes": "5468295"},
 	}
 	mb2 := domain.SearchResult{
 		Kind:    domain.ResultKindArtist,
 		Title:   "Che",
 		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-2", URL: "https://mb/2"}},
-		Extras:  map[string]any{"mbid": "mbid-che-2"},
+		MBID:    "mbid-che-2",
 	}
 	itunes := domain.SearchResult{
 		Kind:    domain.ResultKindArtist,
@@ -127,8 +128,8 @@ func TestMerge_ITunesBridgesIntoMBIdentityDespiteAmbiguousName(t *testing.T) {
 
 func TestMerge_IdentifierMatch(t *testing.T) {
 	t.Run("same isrc merges across providers", func(t *testing.T) {
-		a := track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, map[string]any{"isrc": "USUM71703089"})
-		b := track("Humble", "Kendrick Lamar", domain.ProviderITunes, map[string]any{"isrc": "USUM71703089"})
+		a := withISRC(track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil), "USUM71703089")
+		b := withISRC(track("Humble", "Kendrick Lamar", domain.ProviderITunes, nil), "USUM71703089")
 		entities := Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 1 {
 			t.Fatalf("got %d entities, want 1", len(entities))
@@ -145,8 +146,8 @@ func TestMerge_IdentifierMatch(t *testing.T) {
 	})
 
 	t.Run("distinct mbid stays separate", func(t *testing.T) {
-		a := track("Intro", "Artist A", domain.ProviderMusicBrainz, map[string]any{"mbid": "mbid-1"})
-		b := track("Intro", "Artist A", domain.ProviderMusicBrainz, map[string]any{"mbid": "mbid-2"})
+		a := withMBID(track("Intro", "Artist A", domain.ProviderMusicBrainz, nil), "mbid-1")
+		b := withMBID(track("Intro", "Artist A", domain.ProviderMusicBrainz, nil), "mbid-2")
 		entities := Merge([][]domain.SearchResult{{a, b}})
 		if len(entities) != 2 {
 			t.Fatalf("got %d entities, want 2 (distinct MBIDs)", len(entities))
@@ -156,17 +157,15 @@ func TestMerge_IdentifierMatch(t *testing.T) {
 
 func TestMerge_IdentityBridge(t *testing.T) {
 	// MB artist "Ye" carries an mbid and a bridged Deezer id (stamped pre-merge
-	// from the IdentityBridge via extras["xref"]). The Deezer result "Kanye West"
+	// from the IdentityBridge onto Xref). The Deezer result "Kanye West"
 	// has that exact native id. The titles differ, so only the stated id proves
 	// they are the same entity — name similarity never would.
 	mb := domain.SearchResult{
 		Kind:    domain.ResultKindArtist,
 		Title:   "Ye",
 		Sources: []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-ye"}},
-		Extras: map[string]any{
-			"mbid": "mbid-ye",
-			"xref": map[string]string{"deezer": "230"},
-		},
+		MBID:    "mbid-ye",
+		Xref:    map[string]string{"deezer": "230"},
 	}
 	dz := domain.SearchResult{
 		Kind:    domain.ResultKindArtist,
@@ -192,7 +191,7 @@ func TestMerge_IdentityBridge(t *testing.T) {
 
 	t.Run("without the stated id they stay separate", func(t *testing.T) {
 		bare := mb
-		bare.Extras = map[string]any{"mbid": "mbid-ye"} // no xref
+		bare.Xref = nil // no xref
 		entities := Merge([][]domain.SearchResult{{bare}, {dz}})
 		if len(entities) != 2 {
 			t.Fatalf("got %d entities, want 2 — no stated id, differing titles must not merge", len(entities))
@@ -201,7 +200,7 @@ func TestMerge_IdentityBridge(t *testing.T) {
 
 	t.Run("a non-matching stated id does not merge", func(t *testing.T) {
 		wrong := mb
-		wrong.Extras = map[string]any{"mbid": "mbid-ye", "xref": map[string]string{"deezer": "999"}}
+		wrong.Xref = map[string]string{"deezer": "999"}
 		entities := Merge([][]domain.SearchResult{{wrong}, {dz}})
 		if len(entities) != 2 {
 			t.Fatalf("got %d entities, want 2 — a mismatched stated id must not merge", len(entities))

@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -188,7 +187,7 @@ func (s *ConsensusService) BuildConsensus(
 // secondary provider when the canonical pick lacks one is a separate concern.
 func sortChronological(results []ConsensusAlbum) {
 	slices.SortStableFunc(results, func(a, b ConsensusAlbum) int {
-		ya, yb := yearOf(a.Album), yearOf(b.Album)
+		ya, yb := a.Album.Year, b.Album.Year
 		switch {
 		case ya == 0 && yb != 0:
 			return 1
@@ -199,27 +198,6 @@ func sortChronological(results []ConsensusAlbum) {
 		}
 		return strings.Compare(a.Album.Title, b.Album.Title)
 	})
-}
-
-// yearOf reads the release year from an album's Extras, tolerating the int /
-// int64 / float64 / string shapes different providers store. 0 = unknown.
-func yearOf(album domain.SearchResult) int {
-	v, ok := album.Extras["year"]
-	if !ok {
-		return 0
-	}
-	switch y := v.(type) {
-	case int:
-		return y
-	case int64:
-		return int(y)
-	case float64:
-		return int(y)
-	case string:
-		n, _ := strconv.Atoi(strings.TrimSpace(y))
-		return n
-	}
-	return 0
 }
 
 func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName string) map[string][]domain.SearchResult {

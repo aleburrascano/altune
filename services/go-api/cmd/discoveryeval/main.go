@@ -507,7 +507,7 @@ func evalQuery(query string) (*domain.SearchQuery, error) {
 		domain.ResultKindAlbum:  true,
 		domain.ResultKindTrack:  true,
 	}
-	return domain.NewSearchQuery(query, "", kinds, 20)
+	return domain.NewSearchQuery(query, kinds, 20)
 }
 
 // searchAdapter wraps the search service as the eval's narrow Searcher.

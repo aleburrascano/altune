@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/textnorm"
 
 	"github.com/google/uuid"
 )
@@ -234,14 +235,6 @@ type SourceRef struct {
 	URL        string
 }
 
-// QualityScore is a composite quality signal.
-type QualityScore struct {
-	Completeness float64
-	Agreement    float64
-	EntityTier   EntityResolutionTier
-	FetchSuccess float64
-}
-
 // SearchResult is the merged + deduped discovery result.
 type SearchResult struct {
 	Kind       ResultKind
@@ -270,13 +263,35 @@ type SearchResult struct {
 	// canonical ambiguous-query set before it is wired. The machinery (merge max,
 	// Rank tier) is live and unit-tested; only the producer is deliberately absent.
 	Popularity float64
-	// Extras carries provider-specific metadata. Expected keys:
-	//   "year" (int), "disambiguation" (string), "mbid" (string),
-	//   "record_type" (string: "album"|"single"|"ep"),
-	//   "release_date" (string), "track_count" (int), "featured_artists" ([]map[string]any),
-	//   "collapsed_artists" ([]map[string]any), "deezer_rank" (int64).
-	Extras  map[string]any
-	Quality QualityScore
+	// Identity keys, typed for the same reason as Popularity: merge's identity
+	// tiers branch on them, so the producer→consumer link must be compile-checked
+	// rather than a silently-absent (or type-drifted) map entry. ""/nil = absent.
+	ISRC string
+	MBID string
+	// Xref carries the bridged cross-provider ids (provider name → external id)
+	// stamped pre-merge from the identity bridge (MusicBrainz url-relations) or
+	// recovered from the durable identity store. Merge and artwork resolution
+	// read it as identity proof.
+	Xref map[string]string
+	// Release metadata read by consensus clustering and discography ordering.
+	// 0/"" = unknown. Year is derived from ReleaseDate when a provider carries
+	// only the date (see normalizeAlbumYears).
+	Year        int
+	ReleaseDate string
+	TrackCount  int
+	// Provider prominence raw signals read by the cross-kind prominence
+	// tiebreak: Deezer's track rank and artist/album fan count. 0 = none.
+	ProviderRank int64
+	FanCount     int64
+	// Extras carries provider-specific DISPLAY/TELEMETRY metadata only — nothing
+	// merge, rank, or consensus branches on (those keys are typed fields above).
+	// Current keys: "album", "duration", "preview_url", "record_type", "genre",
+	// "genre_id", "disambiguation", "artist_type", "area", "mb_tags",
+	// "playcount", "playback_count", "likes_count", "reposts_count",
+	// "deezer_album_id", "track_number", "disc_number", "explicit", "copyright",
+	// "featured_artists" ([]map[string]any), "collapsed_artists"
+	// ([]map[string]any), "resolution_tier", "consensus_*", "artwork_path".
+	Extras map[string]any
 }
 
 // NewProviderResult builds the standard single-source, low-confidence result a
@@ -299,15 +314,27 @@ func NewProviderResult(kind ResultKind, title, subtitle, imageURL string, source
 	}
 }
 
-// SearchQuery is the validated user search input.
-type SearchQuery struct {
-	Raw       string
-	QueryNorm string
-	Kinds     map[ResultKind]bool
-	Limit     int
+// ResultSignature is the server-computed stable identity of a result —
+// (kind, normalized title, normalized subtitle). It is the cross-query,
+// cross-provider join key for the engagement funnel: the handler emits it on
+// the wire, the client echoes it on every engagement event, and behavioral
+// ranking keys its score map by it. Single definition on purpose — the rank
+// pipeline and the wire mapper MUST compute the same bytes or behavioral
+// scores silently stop joining.
+func ResultSignature(r SearchResult) string {
+	return r.Kind.String() + "|" +
+		textnorm.NormalizeForMatch(r.Title) + "|" +
+		textnorm.NormalizeForMatch(r.Subtitle)
 }
 
-func NewSearchQuery(raw, queryNorm string, kinds map[ResultKind]bool, limit int) (*SearchQuery, error) {
+// SearchQuery is the validated user search input.
+type SearchQuery struct {
+	Raw   string
+	Kinds map[ResultKind]bool
+	Limit int
+}
+
+func NewSearchQuery(raw string, kinds map[ResultKind]bool, limit int) (*SearchQuery, error) {
 	if raw == "" {
 		return nil, fmt.Errorf("raw query cannot be empty")
 	}
@@ -318,10 +345,9 @@ func NewSearchQuery(raw, queryNorm string, kinds map[ResultKind]bool, limit int)
 		return nil, fmt.Errorf("limit must be between 1 and 50")
 	}
 	return &SearchQuery{
-		Raw:       raw,
-		QueryNorm: queryNorm,
-		Kinds:     kinds,
-		Limit:     limit,
+		Raw:   raw,
+		Kinds: kinds,
+		Limit: limit,
 	}, nil
 }
 

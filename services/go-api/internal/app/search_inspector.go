@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 // inspectionSearchLimit caps test-search results — plenty to eyeball correctness.
@@ -27,7 +26,7 @@ func (a *App) buildSearchInspector(svc *discoveryService.Service) adminHandler.S
 // InspectSearch satisfies adminHandler.SearchInspector.
 func (si *searchInspector) InspectSearch(ctx context.Context, query string, kinds []string) ([]requeststore.ResultRow, error) {
 	kindSet := parseRerunKinds(kinds) // reused: defaults to all kinds when empty
-	sq, err := domain.NewSearchQuery(query, textnorm.NormalizeForMatch(query), kindSet, inspectionSearchLimit)
+	sq, err := domain.NewSearchQuery(query, kindSet, inspectionSearchLimit)
 	if err != nil {
 		return nil, err
 	}

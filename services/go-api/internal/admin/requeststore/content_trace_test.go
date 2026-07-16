@@ -12,7 +12,7 @@ func TestRecordContentFetch_AttachesDetailWithYearAndStatus(t *testing.T) {
 	ctx := httputil.WithCorrelationID(t.Context(), "c-detail")
 
 	items := []domain.SearchResult{
-		{Kind: domain.ResultKindAlbum, Title: "Newest", Extras: map[string]any{"year": 2024, "consensus_status": "confirmed"}},
+		{Kind: domain.ResultKindAlbum, Title: "Newest", Year: 2024, Extras: map[string]any{"consensus_status": "confirmed"}},
 		{Kind: domain.ResultKindAlbum, Title: "NoYear", Extras: map[string]any{"consensus_status": "unconfirmed"}},
 	}
 	s.RecordContentFetch(ctx, "albums", "deezer", "Che", "ok", items)

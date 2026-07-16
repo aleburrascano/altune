@@ -158,20 +158,20 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 							{
 								Kind:    domain.ResultKindAlbum,
 								Title:   "After Hours",
-								Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a1"}},
-								Extras:  map[string]any{"track_count": 14},
+								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a1"}},
+								TrackCount: 14,
 							},
 							{
 								Kind:    domain.ResultKindAlbum,
 								Title:   "After Hours (Deluxe)",
-								Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a2"}},
-								Extras:  map[string]any{"track_count": 18},
+								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a2"}},
+								TrackCount: 18,
 							},
 							{
 								Kind:    domain.ResultKindAlbum,
 								Title:   "Starboy",
-								Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a3"}},
-								Extras:  map[string]any{"track_count": 18},
+								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a3"}},
+								TrackCount: 18,
 							},
 						}, nil
 					},
@@ -192,14 +192,14 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 							{
 								Kind:    domain.ResultKindAlbum,
 								Title:   "Dawn FM",
-								Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a1"}},
-								Extras:  map[string]any{"track_count": 10},
+								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a1"}},
+								TrackCount: 10,
 							},
 							{
 								Kind:    domain.ResultKindAlbum,
 								Title:   "Dawn FM (Alternate World)",
-								Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a2"}},
-								Extras:  map[string]any{"track_count": 20},
+								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a2"}},
+								TrackCount: 20,
 							},
 						}, nil
 					},
@@ -246,15 +246,11 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 
 func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 	album := func(title, releaseDate, extID string) domain.SearchResult {
-		extras := map[string]any{}
-		if releaseDate != "" {
-			extras["release_date"] = releaseDate
-		}
 		return domain.SearchResult{
-			Kind:    domain.ResultKindAlbum,
-			Title:   title,
-			Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: extID}},
-			Extras:  extras,
+			Kind:        domain.ResultKindAlbum,
+			Title:       title,
+			Sources:     []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: extID}},
+			ReleaseDate: releaseDate,
 		}
 	}
 
@@ -288,8 +284,8 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 			if got.Title != want {
 				t.Errorf("position %d: expected %q, got %q", i, want, got.Title)
 			}
-			if y, ok := got.Extras["year"].(int); !ok || y != wantYear[want] {
-				t.Errorf("%q: expected year %d, got %v", want, wantYear[want], got.Extras["year"])
+			if got.Year != wantYear[want] {
+				t.Errorf("%q: expected year %d, got %d", want, wantYear[want], got.Year)
 			}
 		}
 	})
