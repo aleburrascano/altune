@@ -82,3 +82,7 @@ Rebuilt into a Spotify-style sectioned UI:
 
 - **Tapping a result opens the detail screen.** `onResultTap` calls `stashHandoffForDetail(result)` (in [tap.ts](tap.ts)) to stash the result into the shared `@shared/lib/detail-handoff`, then `router.push('/discover/detail')`. The click-tracking mutation stays fire-and-forget and is **not** awaited before navigating.
 - `tap.ts` is a pure helper (matches the `state.ts` pattern) so the navigation seam is unit-testable without rendering the screen — see [__tests__/tap.test.ts](__tests__/tap.test.ts).
+
+## Knowledge base
+
+`okf/mobile/discover-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

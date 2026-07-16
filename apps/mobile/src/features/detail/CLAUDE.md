@@ -75,3 +75,7 @@ Detail is a **stack screen nested within each tab**: `src/app/(tabs)/discover/de
 - `__tests__/useSaveTrack.test.ts` — optimistic insert + rollback against a real QueryClient.
 - `__tests__/useLateralNav.test.ts` — search-and-navigate for lateral browsing.
 - `__tests__/DetailScreen.test.tsx` — header, redirect, per-kind bodies, Save press + disable, lateral navigation links, catalog browse mocks.
+
+## Knowledge base
+
+`okf/mobile/detail-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

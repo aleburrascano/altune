@@ -48,3 +48,7 @@ Maestro is the chosen e2e runner. Local prerequisite: iOS Simulator OR
 Android Emulator. CLI install: `brew install maestro` (macOS) or
 equivalent. Flows live under `apps/mobile/e2e/`; the auth-session
 persistence flow at `e2e/auth-session-persistence.yaml` is the first.
+
+## Knowledge base
+
+`okf/mobile/auth-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

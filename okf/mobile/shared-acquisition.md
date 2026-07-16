@@ -1,0 +1,21 @@
+---
+type: Subsystem
+title: Shared acquisition (download tracking)
+description: SSE-fed client-side lifecycle store that tracks in-flight Track downloads by track id, mapping the backend pipeline's six stages onto three display phases with a guaranteed terminal animation.
+resource: apps/mobile/src/shared/acquisition/
+tags: [mobile, shared, acquisition, downloads]
+verified_commit: e238cc3671d1719837686c667242c7d88fc376d2
+---
+
+The client-side mirror of the backend [acquisition pipeline](../backend/acquisition.md). The backend reports a raw stage name per `track_acquisition_progress` event — no percentage — and `stagePhase.ts` maps its six pipeline steps onto three human phases: `search`/`select` → `finding`, `download` → `downloading`, `tag`/`store`/`update_track` → `finishing`, each with display copy (`phaseLabel`/`stageLabel`). Unknown or new stage names fall back to `working`, so a backend stage rename never breaks the UI. `ACQUISITION_PHASES` is the ordered visible triple (excluding the `working` fallback) for the segmented progress indicator.
+
+`downloadStore.ts` (`useDownloadStore`, Zustand) is **the single source of truth for both membership and phase** of in-flight downloads, keyed by track id. This one-store design is the fix for the "Finishing up… never paints, then the row vanishes" bug: membership used to come from the cached `acquisition_status === 'pending'` field while the phase came from a separate stage store, so the `completed` event's cache flip (status → ready) unmounted the row in the same tick it set the last phase. `DownloadPhase` is `finding | downloading | finishing | done | failed` (stagePhase's `working` is a display fallback only, never stored). Invariants enforced by the store:
+
+- **Forward-only phases** — `PHASE_RANK` rejects any progress event that would regress the displayed phase (late/out-of-order SSE delivery), and any progress after a terminal `done`/`failed` is ignored (a re-acquire arrives via `start()`, which resets to `finding`).
+- **Guaranteed terminal sequence** — `complete()` forces `finishing` first (even when the backend's tag/store/update_track steps fire back-to-back in milliseconds), holds it `FINISHING_DWELL_MS` (500 ms), shows `done` for `DONE_HOLD_MS` (1 200 ms), then removes the entry. `fail()` holds `failed` for `FAILED_HOLD_MS` (4 s) then removes — the persistent failure surface is the library row (from the cache), not the dock.
+- **Timers are scheduling, not state** — they live in a module-level `Map` keyed by track id outside the store; `start()` on a re-acquire cancels any lingering terminal sequence so a stale removal timer can't delete the restarted entry (covered in `__tests__/downloadStore.test.ts`).
+- `fail` seeds a minimal entry if the download was never seen (client connected late, terminal event with no prior progress).
+
+The store is fed exclusively by the SSE event router (`apps/mobile/src/shared/events/applyServerEvent.ts`) via the imperative API (`startDownload`/`progressDownload`/`completeDownload`/`failDownload` — callable outside React): `started`/`progress` events carry only a `track_id`, so display meta (title/artist/artwork) is snapshotted from whatever query cache holds the Track and merged sticky per-field (`mergeMeta`). Progress deliberately goes to this store and **not** the query cache — a library refetch must not wipe live download state.
+
+Read side: `useDownloadPhase(trackId)` gives one Track's reactive phase (LibraryRow in [library-feature](library-feature.md), DownloadsSheet); `useActiveDownloadItems()` is the dock's list — failed entries excluded, the brief `done` tail included so it animates, sorted by id for stable order; `aggregatePhase(items)` picks the **least-advanced** active phase for the DownloadsBar so a heterogeneous batch shows the earliest work still happening, returning `done` only when every item finished. `useActiveDownloads.ts` is a thin re-export of the active-items selector as a stable import site for the Activity Dock (dock/bar/sheet UI lives in [playback-feature](playback-feature.md)). Tests: `__tests__/downloadStore.test.ts` (lifecycle, ordering guards, timer cancellation, aggregate), `__tests__/stagePhase.test.ts` (stage grouping, `working` fallback).

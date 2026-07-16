@@ -1,0 +1,39 @@
+[
+  {
+    "name": "repairs-a-blocked-commit",
+    "skills": ["okf-staleness-fix"],
+    "query": "my commit was blocked: 'internal/catalog/service.go changed but okf/backend/catalog.md was not updated' — fix it",
+    "expected_behavior": [
+      "Reads the concept and `git diff --cached -- internal/catalog/service.go` before drafting",
+      "Writer changes only the concept body; untouched frontmatter fields stay byte-identical",
+      "Judge subagent receives only the diff, the original concept, and the draft — not the writer's reasoning",
+      "`verified_commit` is set from `git rev-parse HEAD` only after judge approval",
+      "Recommits reusing the original commit message or hands the commit back to the user"
+    ],
+    "gap_tested": "The happy path done in the right order. Baseline edits the concept and bumps verified_commit in one unverified step."
+  },
+  {
+    "name": "deprecates-instead-of-deleting",
+    "skills": ["okf-staleness-fix"],
+    "query": "commit blocked because I deleted the resource file a concept points at",
+    "expected_behavior": [
+      "Does not delete the concept file",
+      "Adds `status: deprecated` and a short body note referencing the removal",
+      "Keeps the `resource:` field pointing at the removed path (history, not a broken promise)"
+    ],
+    "gap_tested": "Deletion handling. Baseline mirrors the deletion by deleting the concept, erasing the knowledge that the thing existed."
+  },
+  {
+    "name": "leaves-blocked-after-two-strikes",
+    "skills": ["okf-staleness-fix"],
+    "query": "fix the okf staleness; assume the judge rejects the draft twice",
+    "expected_behavior": [
+      "Redrafts once using the judge's specifics, never a third attempt",
+      "Leaves the commit blocked for that pair — no recommit, no --no-verify",
+      "Does not bump `verified_commit` on the failed concept",
+      "Surfaces the diff and the judge's rejection reason to the user",
+      "Other pairs in the same block are still resolved independently"
+    ],
+    "gap_tested": "Failure discipline. Baseline pushes through — rubber-stamps the draft or bypasses the hook to get the commit in."
+  }
+]

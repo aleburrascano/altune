@@ -24,3 +24,7 @@ go vet ./...
 ```
 
 Code changes don't take effect until you rebuild and restart the process.
+
+## Knowledge base
+
+`okf/backend/index.md` indexes the curated concept docs for every context and subsystem — read the relevant one before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

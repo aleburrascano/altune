@@ -51,3 +51,7 @@ Single chip-filtered Library screen (library-redesign, `docs/superpowers/specs/2
 - `__tests__/useLibraryGrouping.test.ts`, `library-to-discovery.test.ts`, `formatFailureReason.test.ts`, `useLibrary.test.ts`.
 - `__tests__/useLibrarySearch.test.ts` — debounce/commit + the stale-committed-query regression (deleting to 1 char must lift the filter).
 - `__tests__/LibraryNoResults.test.tsx` — no-results view names the query and clears on tap.
+
+## Knowledge base
+
+`okf/mobile/library-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
