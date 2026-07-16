@@ -44,7 +44,7 @@ One assertion concept per test (multiple assert lines OK if they're the same con
 
 ## Test doubles
 
-Consult `[vault: wiki/concepts/Test Double.md]`. Choose the right kind:
+Choose the right kind:
 
 - **Fake** — working implementation simpler than production (`InMemoryTrackRepository`). **Default choice for unit tests.**
 - **Stub** — returns canned data for a specific test scenario.
@@ -59,7 +59,7 @@ Consult `[vault: wiki/concepts/Test Double.md]`. Choose the right kind:
 
 ## Property-based testing
 
-For domain invariants and value-object behavior, use `hypothesis` (Python) — see `[vault: wiki/concepts/Property-Based Testing.md]`. Cheap insurance for invariant-heavy code.
+For domain invariants and value-object behavior, use property-based testing. Cheap insurance for invariant-heavy code.
 
 ## Naming
 

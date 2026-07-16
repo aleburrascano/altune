@@ -39,10 +39,9 @@ Explicit non-goals. Things people might assume but we're not doing:
 
 ## Design considerations
 
-Patterns + trade-offs surfaced by the vault lookup (see `.claude/rules/vault-consultation.md`):
+Patterns + trade-offs surfaced by the lexicon lookup (`~/.claude/lexicon/` manifests; full entries under `site/`):
 
-- [vault: wiki/concepts/<pattern>.md] — why it applies here
-- [vault: wiki/topics/<topic>.md] — broader context
+- [lexicon: <lang>/<section>/<pattern>] — why it applies here (and its *Cost:* line)
 
 High-level approach (not implementation detail — that's the plan):
 

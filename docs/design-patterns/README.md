@@ -2,13 +2,13 @@
 
 The 23 Gang-of-Four design patterns (via [refactoring.guru/design-patterns/catalog](https://refactoring.guru/design-patterns/catalog)), adapted to altune's stack: Go (hexagonal, **no classes / no inheritance**) and React Native + TypeScript (function components + hooks, vertical slices). Each pattern carries its **intent**, the **problem** it answers, the canonical **solution** shape, how it **maps in altune** (Go and RN/TS, with verified file references where a real instance exists), and **when to skip it**.
 
-These are **on-demand reference docs**, living under `docs/` rather than `.claude/rules/` — a file in `.claude/rules/` without `paths:` frontmatter loads globally on every session (that's how always-on rules like `vault-consultation.md` work), so on-demand catalogs must live outside that directory to carry zero standing token cost. Skills consult them by name via Read; they don't auto-load on every edit. This catalog is the sibling of [`../refactoring/`](../refactoring/README.md): refactorings are the *moves* (transformations), design patterns are the *target shapes*. They cross-link.
+These are **on-demand reference docs**, living under `docs/` rather than `.claude/rules/` — a file in `.claude/rules/` without `paths:` frontmatter loads globally on every session (that's how always-on rules like `mcp-tool-routing.md` work), so on-demand catalogs must live outside that directory to carry zero standing token cost. Skills consult them by name via Read; they don't auto-load on every edit. This catalog is the sibling of [`../refactoring/`](../refactoring/README.md): refactorings are the *moves* (transformations), design patterns are the *target shapes*. They cross-link.
 
 ## How to use this
 
 The point is to flip the default from *recall-if-prompted* to *recognize-and-name*. When a skill is designing a seam or reviewing structure, it should **name the specific pattern from this catalog and apply (or consciously reject) it** — turning "this needs polymorphism" into "this is *Strategy* — here's the function-value form, and here's why not *State*." A design choice that names a pattern is grounded; one that doesn't is a vibe.
 
-Consumed by (among others): `/tighten-backend`, `/tighten-frontend`, `/improve-codebase-architecture`, `/feature-plan`, and the `codebase-design` / `domain-modeling` skills. The `software-architecture-design` vault remains the authoritative deep reference per `../vault-consultation.md`; this catalog is the fast, altune-specific, zero-cost layer.
+Consumed by (among others): `/tighten-backend`, `/tighten-frontend`, `/improve-codebase-architecture`, `/feature-plan`, and the `codebase-design` / `domain-modeling` skills. The pattern lexicon (`~/.claude/lexicon/`) is the authoritative deep reference; this catalog is the fast, altune-specific, zero-cost layer.
 
 ## Stack caveat (read this first)
 
@@ -57,5 +57,4 @@ GoF is class- and inheritance-centric. altune has **neither** classes (Go) nor c
 ## See also
 
 - [`../refactoring/README.md`](../refactoring/README.md) — Fowler's refactoring catalog (the *moves* that arrive at these shapes)
-- [`../backend/go-design-patterns.md`](../backend/go-design-patterns.md) — Go idioms (functional options, enums, no-`init()`) — the path-scoped enforcement layer
-- [`../vault-consultation.md`](../vault-consultation.md) — the `software-architecture-design` vault: authoritative deep pattern reference
+- `~/.claude/lexicon/` — the pattern lexicon: authoritative deep pattern reference (per-language manifests + full entries under `site/`)

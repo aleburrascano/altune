@@ -29,7 +29,7 @@ If you've been away from the project for >1 day, start with `/common-ground` to 
 
 Picks a kebab-case name. Walks user through framing. Writes `docs/specs/<name>/spec.md` from `docs/specs/_template/spec.md`.
 
-The skill **queries the software-architecture-design vault MCP first** to surface relevant patterns + trade-offs (per `.claude/rules/vault-consultation.md`).
+The skill **consults the pattern lexicon first** (`~/.claude/lexicon/` manifests; full entries under `site/`) to surface relevant patterns + trade-offs.
 
 After draft: `spec-reviewer` subagent runs the clarify-gate. Resolve blocking findings before proceeding.
 
