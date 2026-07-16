@@ -24,7 +24,10 @@ Ask which feature if it isn't named. Never audit two at once.
 
 **Start from the code, not the manifest.** Find where it hurts, then name the fix.
 The manifest is vocabulary for a fix already justified on its own terms. Reading a
-catalog produces catalog-shaped findings.
+catalog produces catalog-shaped findings. But the inverse failure is asserting
+"no pattern — direct code" without ever checking: after drafting, every verdict
+is reconciled against the lexicon (step 6) — an unchecked "no pattern" is as
+invented as an unresolved citation.
 
 **Ten detailed findings maximum — but nothing gets dropped.** The cap is a detail
 budget, not an attention budget. Rank by concrete pain; findings 11+ become
@@ -43,8 +46,9 @@ Audit Progress:
 - [ ] 3. Read only what the boundary contains
 - [ ] 4. Draft findings, ranked, ten detailed + deferred one-liners
 - [ ] 5. Write Considered and rejected
-- [ ] 6. Run verify_citations.py, fix, repeat until clean
-- [ ] 7. Write the report
+- [ ] 6. Reconcile every verdict against the lexicon (manifests + targeted entry reads)
+- [ ] 7. Run verify_citations.py, fix, repeat until clean
+- [ ] 8. Write the report
 ```
 
 ### 1-2. Locate and survey
@@ -68,14 +72,49 @@ Only what's inside the boundary. Prefer symbol-level navigation over whole files
 If the boundary is wide, read the fan-in points first — that's where the coupling
 is.
 
-### 4-6. Draft, reject, verify
+### 4-5. Draft and reject
+
+Draft from the code alone — the manifest stays closed until every finding and
+rejection exists. That ordering is what keeps findings code-shaped.
+
+### 6. Reconcile against the lexicon
+
+Now — and only now — open the lexicon (`~/.claude/lexicon/`):
+
+1. Read `INDEX.md`, then the audited language's manifest (`MANIFEST-go.md` /
+   `MANIFEST-ts.md`) and `MANIFEST-universal.md`. If the findings touch a
+   cross-cutting domain with its own manifest (caching, event-driven,
+   observability, microservice boundaries…), read that one too.
+2. Anchor **every** finding: the accepted pattern's entry, or — for
+   "no pattern — direct code" — the **closest** manifest entry and why it
+   loses. Cite entries as `` `lexicon:go/…/strategy-pattern` `` (the manifest
+   gives the path).
+3. For every cited entry, open the full entry at
+   `~/.claude/lexicon/site/<path>/index.html` and quote its cost text verbatim
+   into the finding's **Cost:** line. Entries run ~40k chars — never read one
+   whole; Grep the HTML for `Avoid|Cost|when` and read that window. The
+   verifier checks the quote actually appears in the entry, so paraphrase fails.
+4. Rejections get the same treatment: `lexicon:` path + quoted cost line (the
+   cost line usually IS the rejection). A rejection with no adjacent entry says
+   "no manifest entry" instead.
+5. Reconciliation must not mint findings. If a manifest read reveals something
+   real the code pass missed, it goes under **Deferred** for the next run —
+   that keeps rule 1 honest.
+
+A cost line quoted from the entry is the point of the whole lexicon: it states
+when NOT to use the pattern. An entry without one is unproven, not free.
+
+### 7. Verify
 
 ```bash
-python3 scripts/verify_citations.py <tmp>/structure-audits/<feature>/STRUCTURE-AUDIT-<feature>-<timestamp>.md
+python3 verify_citations.py <tmp>/structure-audits/<feature>/STRUCTURE-AUDIT-<feature>-<timestamp>.md
 ```
 
-Every `file:line` must resolve. Fix and re-run until it exits clean. A finding
-whose citation doesn't resolve is a finding that was invented.
+Every `file:line` must resolve; every finding must carry a resolving `lexicon:`
+citation and a cost quote that appears verbatim in the cited entry; every
+rejection must cite an entry or say "no manifest entry". Fix and re-run until
+clean. A finding whose citation doesn't resolve — file or lexicon — is a
+finding that was invented.
 
 ## Report format
 
@@ -96,7 +135,9 @@ State plainly whether it could be lifted out without breaking callers.
 - **Severity:** high | medium | low
 - **Evidence:** `playback/service.go:42`, `playback/service.go:12`
 - **Pain:** what is concretely hard or broken now. Not "this is coupled."
-- **Fix:** <pattern name from manifest> | no pattern — direct code
+- **Fix:** <pattern> (`lexicon:go/…`) | no pattern — direct code
+  (closest: <entry> (`lexicon:go/…`) — why it loses)
+- **Cost:** "<verbatim quote from the cited entry's cost/avoid-when text>"
 - **What varies:** the concrete second implementation or future change.
   "Nothing — this is a direct fix" is a valid and common answer.
 - **Tracing cost:** what go-to-definition must do after this change
@@ -114,10 +155,15 @@ Real but lower-ranked. One line each, no cap. Not dismissed — next run's findi
 
 ## Considered and rejected
 
-- **Repository over `storage/`** — one database, no second planned. Buys nothing,
-  costs a hop on every trace.
-- **Strategy for the shuffle modes** — three modes, one file, none swapped at
-  runtime. A switch is clearer than an interface here.
+- **Repository over `storage/`** (`lexicon:go/domain-driven-design-ddd-patterns-in-go/repositories`) —
+  one database, no second planned. Its own cost line rules it out: "Skip or
+  delay a repository when: the service is a small CRUD API with little domain
+  behavior."
+- **Strategy for the shuffle modes** (`lexicon:go/behavioral-patterns-in-go/strategy-pattern`) —
+  three modes, one file, none swapped at runtime. "Avoid Strategy when: there
+  is only one algorithm and no realistic alternative."
+- **Splitting the queue into a subpackage** — no manifest entry; rejected on
+  tracing cost alone.
 
 ## Not found
 
@@ -128,7 +174,10 @@ Checked for and absent. Keeps the next run from re-litigating.
 
 **Required on every detailed finding:**
 
-1. Fix names a manifest pattern, or says "no pattern — direct code"
+1. Fix names a manifest pattern with its `lexicon:` path, or says "no pattern —
+   direct code" and names the **closest** entry with its path plus why it loses.
+   Either way the finding quotes the cited entry's cost text — verified, so it
+   must come from the actual entry, not from memory
 2. What varies names something concrete. "Flexibility" and "testability" are not
    answers — they describe wanting to do it, not a reason to
 3. Tracing cost is stated
@@ -167,6 +216,10 @@ Tracing cost unstated. → Considered and rejected.
 >   is imported by six unrelated features, so any change there risks all of them.
 > - **Fix:** no pattern — direct code. Create `playback/`, move the four files in,
 >   split `common/audio.go` so only the playback half moves.
+>   (closest: Go Package Organization (`lexicon:go/idiomatic-go-design-patterns/package-organization-patterns`)
+>   — this fix IS that entry's advice; no runtime pattern applies.)
+> - **Cost:** "Too many packages add friction: Excessive splitting creates
+>   navigation overhead."
 > - **What varies:** nothing. This is a direct fix.
 > - **Tracing cost:** improves — one package instead of four.
 > - **Effort:** L
@@ -180,7 +233,9 @@ Tracing cost unstated. → Considered and rejected.
 > - **Pain:** every stream start retries the transcoder three times with no
 >   backoff. Under partial outage this amplifies load on the failing service and
 >   holds goroutines until the pool exhausts, taking playback down with it.
-> - **Fix:** Circuit Breaker (`patterns-go/9/4`)
+> - **Fix:** Circuit Breaker (`lexicon:go/concurrency-design-patterns-in-go/circuit-breaker`)
+> - **Cost:** "State and tuning complexity: thresholds, windows, and half-open
+>   behavior need real-world calibration."
 > - **What varies:** nothing structural — this is about failure mode. Concretely:
 >   playback fails fast with a cached-stream fallback instead of hanging.
 > - **Tracing cost:** one hop, `stream → breaker.Do → transcoder.Start`. Concrete

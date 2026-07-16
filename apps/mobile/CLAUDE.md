@@ -2,9 +2,11 @@
 
 Vertical slices under `src/features/` — a feature owns its UI/hooks/api/tests end-to-end. No cross-feature imports; extraction to `shared/` requires 2+ real consumers. **Rest of this file: Expo / RN platform quirks.**
 
-TS pattern vocabulary (index only — full entries under `~/.claude/lexicon/site/`, read on demand):
-
-@~/.claude/lexicon/MANIFEST-ts.md
+TS pattern vocabulary: **Read `~/.claude/lexicon/MANIFEST-ts.md` before proposing
+or rejecting any abstraction** (an `@`-import here does not expand — nested
+CLAUDE.md files load on demand, imports only expand at launch). Full entries under
+`~/.claude/lexicon/site/{path}/index.html` — Grep an entry for `Avoid|Cost` and
+quote its cost line when tradeoffs matter; never read a whole entry (~40k chars).
 
 ## Stack
 
