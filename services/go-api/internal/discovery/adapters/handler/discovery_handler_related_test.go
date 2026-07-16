@@ -36,7 +36,7 @@ func buildRelatedRouter(provider *fakeRelatedTracksProvider) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{Related: svc})
 
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(&discFakeTokenVerifier{userId: discTestUserId}))
+	r.Use(auth.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }

@@ -4,7 +4,7 @@ title: Catalog
 description: The Track and Playlist aggregate context — a user's owned music metadata, dedup, playlist ordering, and audio file storage/streaming.
 resource: services/go-api/internal/catalog/
 tags: [bounded-context, hexagonal, go-api, domain-model, track, playlist, aggregate]
-verified_commit: e238cc3671d1719837686c667242c7d88fc376d2
+verified_commit: cae1959c18ded17f587561e0893a35767ab0540d
 ---
 
 Catalog is the identity-and-metadata bounded context for a user's saved music. Its two aggregate roots are `Track` (`domain/track.go`) and `Playlist` (`domain/playlist.go`), both identified by wrapped-UUID value objects (`TrackId`, `PlaylistId`) and owned by a `shared.UserId`.
