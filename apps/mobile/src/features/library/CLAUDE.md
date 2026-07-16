@@ -18,6 +18,7 @@ Single chip-filtered Library screen (library-redesign, `docs/superpowers/specs/2
 - `ui/AlbumsGrid.tsx` — 2-col album cover grid (lens).
 - `ui/ArtistsGrid.tsx` — 3-col circular artist grid (lens).
 - `ui/LibraryRow.tsx` — rich track row: `Artwork` (48px) + title + artist · album + duration; inline pending/failed + retry.
+- `ui/LibraryNoResults.tsx` — shown when the search filters the active view to zero: names the query, states the library is intact, offers one-tap clear. A filtered-out library must never look like a missing one (the 2026-07-14 "entire library is missing" report was a persisted search filter).
 - `ui/PlaylistDetailScreen.tsx` / `ui/PlaylistHero.tsx` — playlist detail (centered hero), unchanged. Route `/library/playlist/[id]`.
 - `ui/sort.ts` — pure `sortPlaylists` / `sortTracks` / `sortAlbums` / `sortArtists` + `*_SORT_OPTIONS`. `SortKey = 'recent' | 'az' | 'year'`.
 - `hooks/useLibraryHome.ts` — fetches all tracks (limit 2000, polls while any track is pending) + derives album/artist groups.
@@ -48,3 +49,5 @@ Single chip-filtered Library screen (library-redesign, `docs/superpowers/specs/2
 - `__tests__/sort.test.ts` — sort helpers (playlists/tracks/albums/artists).
 - `__tests__/LibraryRow.test.tsx` / `LibraryRow.retry.test.tsx` — row rendering + retry.
 - `__tests__/useLibraryGrouping.test.ts`, `library-to-discovery.test.ts`, `formatFailureReason.test.ts`, `useLibrary.test.ts`.
+- `__tests__/useLibrarySearch.test.ts` — debounce/commit + the stale-committed-query regression (deleting to 1 char must lift the filter).
+- `__tests__/LibraryNoResults.test.tsx` — no-results view names the query and clears on tap.
