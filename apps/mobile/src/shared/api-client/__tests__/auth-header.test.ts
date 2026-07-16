@@ -42,15 +42,28 @@ describe('apiFetch auth header injection', () => {
     expect(headers.Authorization).toBe('Bearer AT123');
   });
 
-  it('omits Authorization when session is null', async () => {
+  it('fails fast without a request when session is null', async () => {
+    // Every apiFetch path is /v1/* and requires auth, so a null session means
+    // the request is already doomed. Previously it went out unauthenticated and
+    // the resulting 401 was reported as if the server had an opinion.
     mockGetSession.mockResolvedValueOnce({ data: { session: null } });
+    const { apiFetch, ApiError } = require('../index');
+
+    await expect(apiFetch('/v1/tracks')).rejects.toThrow(ApiError);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('fails fast when getSession reports a stale refresh token', async () => {
+    // getSession RESOLVES with {session: null, error} on refresh failure — it
+    // does not throw — so the error field has to be read explicitly.
+    mockGetSession.mockResolvedValueOnce({
+      data: { session: null },
+      error: { message: 'Invalid Refresh Token' },
+    } as never);
     const { apiFetch } = require('../index');
 
-    await apiFetch('/v1/tracks');
-
-    const call = mockFetch.mock.calls[0] as [string, RequestInit];
-    const headers = call[1].headers as Record<string, string>;
-    expect(headers.Authorization).toBeUndefined();
+    await expect(apiFetch('/v1/tracks')).rejects.toThrow(/Invalid Refresh Token/);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('preserves custom headers alongside Authorization', async () => {

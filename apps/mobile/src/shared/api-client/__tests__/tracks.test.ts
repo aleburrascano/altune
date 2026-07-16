@@ -9,6 +9,14 @@ import { ApiError } from '../index';
 import { createTrack, getTracks } from '../tracks';
 import type { ListTracksResponse, TrackResponse } from '../types';
 
+// apiFetch fails fast without a session (every /v1 path is authenticated).
+// These tests are about the tracks contract, so mock the auth boundary.
+jest.mock('../../auth/supabaseClient', () => ({
+  supabase: {
+    auth: { getSession: async () => ({ data: { session: { access_token: 'test-token' } } }) },
+  },
+}));
+
 const _SAMPLE_TRACK: TrackResponse = {
   id: '11111111-1111-1111-1111-000000000001',
   title: 'Blinding Lights',

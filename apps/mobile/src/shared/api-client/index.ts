@@ -14,6 +14,7 @@
  *   EXPO_PUBLIC_API_URL=https://altune.example.com npm start
  */
 import { supabase } from '../auth/supabaseClient';
+import { markSessionExpired } from '../auth/sessionExpired';
 
 const DEFAULT_BASE = 'http://127.0.0.1:8000';
 
@@ -39,22 +40,35 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   // Bearer injection (ADR-0006). The SDK keeps the current session in-memory
   // after restore from secure-store, so getSession is fast and synchronous-
-  // looking. If no session, we omit the header entirely (backend returns 401).
-  try {
-    const { data } = await supabase.auth.getSession();
-    if (data.session?.access_token) {
-      baseHeaders.Authorization = `Bearer ${data.session.access_token}`;
-    }
-  } catch {
-    // Stale refresh token — proceed without auth; backend returns 401,
-    // and the AuthGate redirect will handle sign-in.
+  // looking.
+  //
+  // AIDEV-NOTE: getSession RESOLVES with `{ session: null, error }` when the
+  // refresh token is stale — it does not throw (auth-js GoTrueClient
+  // __loadSession). The `error` field must be read explicitly; a try/catch here
+  // catches nothing. Every apiFetch path is /v1/* and requires auth, so a
+  // missing session means the request is already doomed: fail with a legible
+  // reason instead of sending an unauthenticated request and reporting the
+  // resulting 401 as if the server had an opinion. (Add a `skipAuth` option
+  // here if an unauthenticated endpoint ever needs calling — /health today is
+  // not routed through apiFetch.)
+  const { data, error } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (error != null || accessToken == null) {
+    throw new ApiError(401, `API ${path} requires a session: ${error?.message ?? 'no active session'}`);
   }
+  baseHeaders.Authorization = `Bearer ${accessToken}`;
 
   const headers = {
     ...baseHeaders,
     ...(init?.headers ?? {}),
   };
   const response = await fetch(`${apiBase}${path}`, { ...init, headers });
+  if (response.status === 401) {
+    // The SDK handed us a token the backend rejected — the session is dead
+    // server-side but the SDK has no idea. Nothing here acts on it; AuthGate
+    // offers the user an explicit re-auth. See shared/auth/sessionExpired.
+    markSessionExpired();
+  }
   if (!response.ok) {
     throw new ApiError(response.status, `API ${path} returned ${response.status}`);
   }

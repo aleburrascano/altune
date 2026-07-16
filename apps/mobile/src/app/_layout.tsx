@@ -14,6 +14,7 @@ import { AppState, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ApiError } from '../shared/api-client';
 import { AuthGate } from '../features/auth/ui/AuthGate';
 import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
 import { useServerEvents } from '../shared/events/useServerEvents';
@@ -51,8 +52,19 @@ function AuthDeepLinkBridge() {
 }
 
 export default function RootLayout() {
+  // AIDEV-NOTE: a 401 is a verdict, not a hiccup — retrying it 3x with backoff
+  // (React Query's default) just delays the error the user needs to see.
   const [queryClient] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } }),
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30_000,
+            retry: (failureCount, error) =>
+              !(error instanceof ApiError && error.status === 401) && failureCount < 3,
+          },
+        },
+      }),
   );
 
   const [fontsLoaded, fontError] = useFonts({

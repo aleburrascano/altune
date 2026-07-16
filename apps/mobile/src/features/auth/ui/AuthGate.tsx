@@ -1,11 +1,13 @@
 import { Redirect, useSegments } from 'expo-router';
 import { View } from 'react-native';
 
+import { useSessionExpired } from '@shared/auth/sessionExpired';
 import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 import { spacing, useTheme } from '@shared/ui/theme';
 
 import { useSession } from '../hooks/useSession';
+import { SessionExpiredNotice } from './SessionExpiredNotice';
 
 // Splash while we don't know yet; redirect into / out of the (auth) group
 // based on session state. Per ADR-0006 / spec AC#6.
@@ -16,6 +18,7 @@ import { useSession } from '../hooks/useSession';
 // Redirect mounts, sees signed-out again, redirects again, ad infinitum.
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const session = useSession();
+  const sessionExpired = useSessionExpired();
   const segments = useSegments();
   const inAuthGroup = segments[0] === '(auth)';
   // AIDEV-NOTE: password-recovery establishes a real (signed-in) session, but
@@ -34,6 +37,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (session.status === 'signed-out' && !inAuthGroup) {
     return <Redirect href="/sign-in" />;
+  }
+
+  // Signed-in per the SDK, but the backend is rejecting the token. Offer an
+  // explicit re-auth rather than letting every screen fail with no way out.
+  if (session.status === 'signed-in' && sessionExpired && !inAuthGroup) {
+    return <SessionExpiredNotice />;
   }
 
   if (session.status === 'signed-in' && inAuthGroup) {
