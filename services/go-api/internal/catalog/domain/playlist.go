@@ -65,8 +65,12 @@ type Playlist struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Tracks    []PlaylistTrack
-	// TrackCount is a read-side projection populated by list queries.
+	// TrackCount is a read-side projection populated by list/get queries.
 	TrackCount int
+	// PreviewArtworkURLs is a read-side projection populated by list queries:
+	// up to four distinct track artwork URLs in position order, for the
+	// playlist's preview tile.
+	PreviewArtworkURLs []string
 }
 
 func NewPlaylist(userId shared.UserId, name string) (*Playlist, error) {

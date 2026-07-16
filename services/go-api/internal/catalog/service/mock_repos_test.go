@@ -80,6 +80,19 @@ func (r *mockTrackRepo) ListForUser(_ context.Context, userId shared.UserId, lim
 	return all[offset:end], total, nil
 }
 
+func (r *mockTrackRepo) ListByIDs(_ context.Context, userId shared.UserId, ids []domain.TrackId) ([]*domain.Track, error) {
+	if r.errOnList != nil {
+		return nil, r.errOnList
+	}
+	var out []*domain.Track
+	for _, id := range ids {
+		if t, ok := r.tracks[id.String()]; ok && t.UserId == userId {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
 func (r *mockTrackRepo) Update(_ context.Context, track *domain.Track) error {
 	if r.errOnUpdate != nil {
 		return r.errOnUpdate
@@ -265,10 +278,6 @@ func (r *mockPlaylistRepo) ReorderTracks(_ context.Context, _ domain.PlaylistId,
 		return r.errOnReorder
 	}
 	return nil
-}
-
-func (r *mockPlaylistRepo) GetPreviewArtwork(_ context.Context, _ domain.PlaylistId) ([]string, error) {
-	return nil, nil
 }
 
 // seed adds a playlist directly into the mock store.

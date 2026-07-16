@@ -48,13 +48,22 @@ func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, tra
 		return nil, nil
 	}
 
+	// One batch read for the whole request (up to the handler's 200-id cap) —
+	// per-id GetByID here cost two queries per track on the hottest path after
+	// search (every queue build).
+	tracks, err := s.trackRepo.ListByIDs(ctx, userId, trackIds)
+	if err != nil {
+		return nil, fmt.Errorf("resolve audio url: %w", err)
+	}
+	byID := make(map[domain.TrackId]*domain.Track, len(tracks))
+	for _, t := range tracks {
+		byID[t.ID] = t
+	}
+
 	expiresAt := time.Now().Add(s.ttl)
 	out := make([]ResolvedAudioURL, 0, len(trackIds))
 	for _, id := range trackIds {
-		track, err := s.trackRepo.GetByID(ctx, id, userId)
-		if err != nil {
-			return nil, fmt.Errorf("resolve audio url: %w", err)
-		}
+		track := byID[id]
 		if track == nil || !track.IsStreamable() {
 			continue
 		}

@@ -1,14 +1,14 @@
 package handler
 
-import "altune/go-api/internal/catalog/domain"
+import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/service"
+)
 
-// FeaturedArtistDTO is the wire shape of one featured ("feat.") credit. Optional
-// ids are omitted when unknown so absence stays distinct from a zero id.
-type FeaturedArtistDTO struct {
-	Name     string  `json:"name"`
-	MBID     *string `json:"mbid,omitempty"`
-	DeezerID *int64  `json:"deezer_id,omitempty"`
-}
+// FeaturedArtistDTO is the wire shape of one featured ("feat.") credit — owned by
+// the service layer (see service.TrackDTO) so the event payload and the HTTP
+// responses share it.
+type FeaturedArtistDTO = service.FeaturedArtistDTO
 
 // domainFeaturedFromDTOs converts request DTOs into domain value objects, dropping
 // entries with an empty name.
@@ -29,27 +29,6 @@ func domainFeaturedFromDTOs(dtos []FeaturedArtistDTO) []domain.FeaturedArtist {
 		if fa, ok := domain.NewFeaturedArtist(d.Name, mbid, deezerID); ok {
 			out = append(out, fa)
 		}
-	}
-	return out
-}
-
-// featuredToDTOs converts domain value objects into wire DTOs.
-func featuredToDTOs(feats []domain.FeaturedArtist) []FeaturedArtistDTO {
-	if len(feats) == 0 {
-		return nil
-	}
-	out := make([]FeaturedArtistDTO, 0, len(feats))
-	for _, f := range feats {
-		dto := FeaturedArtistDTO{Name: f.Name}
-		if f.MBID != "" {
-			mbid := f.MBID
-			dto.MBID = &mbid
-		}
-		if f.DeezerID != 0 {
-			id := f.DeezerID
-			dto.DeezerID = &id
-		}
-		out = append(out, dto)
 	}
 	return out
 }

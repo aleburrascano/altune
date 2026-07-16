@@ -30,9 +30,9 @@ func TestTrackAddedPayload(t *testing.T) {
 	if p["title"] != "Midnight City" || p["artist"] != "M83" {
 		t.Errorf("title/artist = %v/%v", p["title"], p["artist"])
 	}
-	album, ok := p["album"].(*string)
-	if !ok || album == nil || *album != "Hurry Up, We're Dreaming" {
-		t.Errorf("album = %v, want pointer to the album", p["album"])
+	// The payload is the marshaled TrackDTO, so values carry JSON types.
+	if album, ok := p["album"].(string); !ok || album != "Hurry Up, We're Dreaming" {
+		t.Errorf("album = %v, want the album string", p["album"])
 	}
 	if p["acquisition_status"] != track.AcquisitionStatus.String() {
 		t.Errorf("acquisition_status = %v", p["acquisition_status"])
@@ -46,7 +46,7 @@ func TestTrackAddedPayload_EmptyAlbumIsNil(t *testing.T) {
 		t.Fatalf("new track: %v", err)
 	}
 
-	if album := trackAddedPayload(track)["album"]; album != (*string)(nil) {
-		t.Errorf("empty album = %v, want nil *string", album)
+	if album := trackAddedPayload(track)["album"]; album != nil {
+		t.Errorf("empty album = %v, want JSON null", album)
 	}
 }
