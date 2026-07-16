@@ -27,3 +27,7 @@ The single source of visual truth. Every screen composes these primitives and re
 ## Consumers
 
 `features/auth`, `features/discover`, `features/library`, and `app/(tabs)/_layout.tsx`. Per the root CLAUDE.md promotion rule, an item earns a place here at **2+ feature consumers**.
+
+## Knowledge base
+
+`okf/mobile/shared-ui.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

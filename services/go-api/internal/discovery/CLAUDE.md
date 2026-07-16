@@ -105,3 +105,7 @@ a held-in-reserve, non-query-fit tiebreak for strict-#1 polish — not the gate.
 - `service/enrich/` — detail-open enrichers (Deezer, Last.fm, Discogs, lyrics) + the `CachedLookup` read-through helper
 - `service/eval/` + `cmd/discoveryeval/` — the offline regression harnesses (eval, merge, correction, diversity, health, coverage signals)
 - `adapters/providers/` — one file per provider (Deezer, Last.fm, MusicBrainz, iTunes, SoundCloud, YouTube/YT Music, Discogs, Genius)
+
+## Knowledge base
+
+`okf/backend/discovery/index.md` indexes the nine discovery subsystem concept docs — read the relevant one before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

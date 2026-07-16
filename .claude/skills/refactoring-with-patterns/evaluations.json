@@ -1,0 +1,75 @@
+[
+  {
+    "name": "rejects-the-speculative-abstraction",
+    "skills": ["refactoring-with-patterns"],
+    "query": "Audit my Go backend. OrderService calls Stripe directly - I want it behind a payment gateway interface so it's decoupled and testable.",
+    "expected_behavior": [
+      "Does not produce a finding for the interface just because it was requested",
+      "Puts it in 'Considered and rejected' if there is no second provider, with the reason",
+      "Or produces it as a finding only if it can name a concrete second implementation",
+      "Never accepts 'decoupled' or 'testable' as the 'What varies' value"
+    ],
+    "gap_tested": "Baseline complies with the explicit request. The skill exists to make it ask what varies first."
+  },
+  {
+    "name": "discriminates-under-a-cap",
+    "skills": ["refactoring-with-patterns"],
+    "query": "Audit the backend and find every design pattern I could apply from the manifest.",
+    "expected_behavior": [
+      "Does not enumerate pattern applications from the catalog",
+      "Surveys the import graph before reading any file contents",
+      "Produces at most ten findings, ranked by concrete pain",
+      "'Considered and rejected' is non-empty and longer than the findings list",
+      "verify_citations.py exits 0"
+    ],
+    "gap_tested": "Pattern shopping. Baseline produces an unranked menu."
+  },
+  {
+    "name": "prefers-structural-fix-over-pattern",
+    "skills": ["refactoring-with-patterns"],
+    "query": "handlers imports storage and storage imports handlers' request types. What pattern fixes this?",
+    "expected_behavior": [
+      "Identifies inverted dependency direction, not a pattern-shaped problem",
+      "Fix is 'no pattern - direct code': move the shared type down",
+      "'What varies' is 'nothing - this is a direct fix'",
+      "Proposes a lint rule (go-arch-lint or depguard) so it cannot regress",
+      "Does not propose Repository, Adapter, or an interface"
+    ],
+    "gap_tested": "The question presupposes a pattern answer. The skill should reject the premise."
+  },
+  {
+    "name": "finds-abstractions-to-delete",
+    "skills": ["refactoring-with-patterns"],
+    "query": "Audit the backend.",
+    "expected_behavior": [
+      "Reports at least one interface, factory, or wrapper with a single implementation as a finding, if one exists",
+      "Fix for those is removal, not replacement with a different pattern",
+      "Cites the concrete file:line of the single implementation"
+    ],
+    "gap_tested": "AI-written code accumulates single-implementation abstractions. Baseline treats existing abstractions as load-bearing and never proposes deleting one."
+  },
+  {
+    "name": "citations-resolve",
+    "skills": ["refactoring-with-patterns"],
+    "query": "Audit the backend and write the report.",
+    "expected_behavior": [
+      "Runs scripts/verify_citations.py before declaring done",
+      "Re-runs it after fixing, until it exits 0",
+      "Every finding carries at least one file:line",
+      "Reports the verifier output rather than claiming success without running it"
+    ],
+    "gap_tested": "Plausible-but-wrong line numbers are the main failure mode of an unsupervised audit."
+  },
+  {
+    "name": "does-not-fire-on-bug-fixes",
+    "skills": ["refactoring-with-patterns"],
+    "query": "parseAmount panics on empty input, fix the nil check",
+    "expected_behavior": [
+      "Fixes the nil check directly",
+      "Does not run an import graph survey",
+      "Does not write a report",
+      "Does not mention design patterns"
+    ],
+    "gap_tested": "Over-triggering. A skill that fires on every task gets disabled within a week."
+  }
+]

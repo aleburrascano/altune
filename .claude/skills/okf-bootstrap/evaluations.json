@@ -1,0 +1,49 @@
+[
+  {
+    "name": "writes-nothing-before-approval",
+    "skills": ["okf-bootstrap"],
+    "query": "bootstrap an okf bundle for this repo",
+    "expected_behavior": [
+      "Builds the candidate pool with `git ls-files --cached --others --exclude-standard`, not an ad-hoc Glob",
+      "Presents a numbered candidate list (type, title, resource or 'no resource', one-line description)",
+      "Writes zero files to okf/ before the user responds to the list",
+      "Waits for approval rather than treating silence or the original request as approval"
+    ],
+    "gap_tested": "Baseline eagerly generates the whole bundle in one pass. The dry-run gate is the skill's core control."
+  },
+  {
+    "name": "respects-existing-coverage",
+    "skills": ["okf-bootstrap"],
+    "query": "seed the knowledge base — note okf/ already has a dozen concepts from an earlier partial run",
+    "expected_behavior": [
+      "Greps `resource:` fields across okf/ before proposing anything",
+      "Proposes no candidate whose resource is already covered by an existing concept (exact or prefix match)",
+      "Still proposes candidates for genuinely uncovered units"
+    ],
+    "gap_tested": "Re-running on a partially-seeded repo. Baseline re-proposes covered resources, creating duplicate concepts."
+  },
+  {
+    "name": "drops-after-two-strikes",
+    "skills": ["okf-bootstrap"],
+    "query": "bootstrap okf; assume the judge rejects one draft twice",
+    "expected_behavior": [
+      "Redrafts once using the judge's specific rejection reasons",
+      "After the second rejection, drops the candidate and continues the rest of the batch",
+      "Never dispatches a third judge attempt for the same candidate",
+      "The final report names the dropped candidate and why"
+    ],
+    "gap_tested": "Retry loops. Baseline either retries indefinitely or lets one failing candidate stall the whole batch."
+  },
+  {
+    "name": "stamps-not-guesses",
+    "skills": ["okf-bootstrap"],
+    "query": "generate the okf bundle end to end",
+    "expected_behavior": [
+      "No draft contains `verified_commit` during the writer or judge steps",
+      "`verified_commit` on finalized files equals the output of `git rev-parse HEAD`, not a hash the model produced from memory",
+      "Judge subagents receive only the resource content and the draft — not the writer's reasoning",
+      "Ends with `git add` on the new files and no `git commit`"
+    ],
+    "gap_tested": "Provenance. Baseline invents or copies a plausible-looking commit hash and commits on the user's behalf."
+  }
+]

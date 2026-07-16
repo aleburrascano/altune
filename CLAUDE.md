@@ -2,6 +2,10 @@
 
 Music manager. Expo (RN + TS) mobile in `apps/mobile/` + Go hexagonal modular monolith in `services/go-api/`. Solo + Claude, production-grade.
 
+## Knowledge base
+
+`okf/` is the curated knowledge bundle (OKF format: markdown concepts, YAML frontmatter, one concept per file). Start at `okf/index.md` and descend only into the branch you need — before exploring an unfamiliar module, read its concept doc first. A pre-commit hook blocks commits that change a concept's `resource:` files without updating the concept.
+
 ## Always in force
 
 - Domain terms come from `docs/ubiquitous-language.md`; code matches it verbatim, and a new term gets its glossary entry in the same commit. **"Song" is banned — the noun is `Track`.**

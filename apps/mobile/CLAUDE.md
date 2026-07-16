@@ -73,3 +73,7 @@ Use aliases over relative `../../` imports beyond one level.
 - Inline styles that should be theme tokens.
 - Class components.
 - Native modules from React Native packages that aren't Expo-compatible without checking `expo install` resolves them.
+
+## Knowledge base
+
+`okf/mobile/index.md` indexes the curated concept docs for every feature and shared subsystem — read the relevant one before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

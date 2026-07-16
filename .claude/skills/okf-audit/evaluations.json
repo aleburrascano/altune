@@ -1,0 +1,49 @@
+[
+  {
+    "name": "proposes-before-writing",
+    "skills": ["okf-audit"],
+    "query": "audit the okf bundle",
+    "expected_behavior": [
+      "Runs `python .claude/skills/okf-audit/scripts/okf-lint.py` before any judgment work",
+      "Adds judgment findings the lint can't produce (coverage, filing, granularity), not just a lint echo",
+      "Presents one findings list grouped by action (RE-VERIFY/MOVE/SPLIT/ADD/FIX)",
+      "Writes nothing to okf/ before the user responds to the list"
+    ],
+    "gap_tested": "Baseline starts fixing as it finds. The single approved findings list is the skill's core control."
+  },
+  {
+    "name": "never-launders-staleness",
+    "skills": ["okf-audit"],
+    "query": "the lint says 8 concepts are STALE — clear them",
+    "expected_behavior": [
+      "Every STALE concept gets a writer pass against `git diff <verified_commit>..HEAD -- <resources>` and a blind judge pass before its stamp",
+      "No concept's `verified_commit` is bumped without that pass, even when the diff looks trivial",
+      "For a cosmetic-only diff, the body may stay unchanged but the writer/judge pass still happens",
+      "A judge-rejected (two strikes) concept keeps its old `verified_commit` and is reported"
+    ],
+    "gap_tested": "Laundering. Baseline clears STALE by bumping verified_commit — the bundle looks healthy while staying wrong."
+  },
+  {
+    "name": "move-repoints-the-graph",
+    "skills": ["okf-audit"],
+    "query": "this concept is filed under the wrong directory, move it",
+    "expected_behavior": [
+      "Uses `git mv`, not delete-and-recreate",
+      "Greps okf/ for the old slug/path and repoints every inbound link",
+      "Updates both the source and destination directory's index.md",
+      "Re-runs the lint until 0 errors before declaring done"
+    ],
+    "gap_tested": "Graph integrity. Baseline moves the file and leaves broken links and index entries behind."
+  },
+  {
+    "name": "does-not-fire-on-a-blocked-commit",
+    "skills": ["okf-audit", "okf-staleness-fix"],
+    "query": "my commit just got blocked by the okf hook, sort it out",
+    "expected_behavior": [
+      "Routes to okf-staleness-fix, not a full audit",
+      "No lint run, no coverage scan, no findings list",
+      "Only the hook-named pairs are touched"
+    ],
+    "gap_tested": "Sibling discrimination. An audit fired on every hook block turns a 2-minute fix into a 20-agent pass."
+  }
+]

@@ -34,3 +34,7 @@ _(empty)_
 _(empty)_
 
 <!-- AUTO-MAINTAINED:END -->
+
+## Knowledge base
+
+A new feature ships with its okf concept doc (`okf/mobile/<feature>.md`, listed in `okf/mobile/index.md`) and a Knowledge base pointer like this one in its CLAUDE.md.
