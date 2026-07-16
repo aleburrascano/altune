@@ -103,7 +103,7 @@ func run(opts options) error {
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
-	logging.Setup(cfg)
+	logging.Setup(cfg.LogLevel, cfg.IsDevelopment())
 
 	ctx := context.Background()
 

@@ -32,6 +32,14 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # Import direction (structure audit F1): domain purity + shared never
+      # imports features. Rules live in services/go-api/.golangci.yml.
+      - name: import direction (depguard)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.3.0
+          working-directory: services/go-api
+
       - name: go test -race
         env:
           CGO_ENABLED: "1"

@@ -9,7 +9,7 @@ import (
 
 func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
-		return nil, nil
+		return nil, fmt.Errorf("DATABASE_URL not set")
 	}
 
 	cfg, err := pgxpool.ParseConfig(databaseURL)
@@ -36,9 +36,6 @@ type HealthStatus struct {
 }
 
 func CheckHealth(ctx context.Context, pool *pgxpool.Pool) HealthStatus {
-	if pool == nil {
-		return HealthStatus{OK: false, Err: fmt.Errorf("not configured")}
-	}
 	err := pool.Ping(ctx)
 	return HealthStatus{OK: err == nil, Err: err}
 }

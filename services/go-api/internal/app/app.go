@@ -16,6 +16,7 @@ import (
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
 	adminAlert "altune/go-api/internal/admin/alert"
+	"altune/go-api/internal/admin/eventtap"
 	adminHandler "altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/admin/requeststore"
@@ -159,6 +160,10 @@ func (a *App) setup(ctx context.Context) error {
 	}
 
 	a.eventBus = events.NewInProcessBus()
+	// Publishers go through the Mission Control tap decorator; subscribers (the
+	// per-user SSE stream) read the inner bus directly. Keeps the operator
+	// console's vocabulary out of internal/shared/events.
+	tap := eventtap.New(a.eventBus)
 
 	audioStore := a.buildAudioStore()
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
@@ -176,7 +181,7 @@ func (a *App) setup(ctx context.Context) error {
 			trackRepo,
 			audioSearcher,
 			audioStore,
-			acqService.WithAcquireEvents(a.eventBus),
+			acqService.WithAcquireEvents(tap),
 			acqService.WithAudioProber(audioProber),
 		)
 		bgScheduler := acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem)
@@ -186,13 +191,13 @@ func (a *App) setup(ctx context.Context) error {
 
 	addTrackSvc := catalogService.NewAddTrackService(
 		trackRepo,
-		catalogService.WithAddTrackEvents(a.eventBus),
+		catalogService.WithAddTrackEvents(tap),
 		catalogService.WithAcquisitionScheduler(scheduler),
 	)
 	listTracksSvc := catalogService.NewListTracksService(trackRepo)
-	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore, catalogService.WithDeleteTrackEvents(a.eventBus))
+	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore, catalogService.WithDeleteTrackEvents(tap))
 	setTrackNumberSvc := catalogService.NewSetTrackNumberService(trackRepo)
-	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(a.eventBus))
+	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(tap))
 
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
 	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo)
@@ -406,7 +411,7 @@ func (a *App) setup(ctx context.Context) error {
 	// operator-only check inside adminH.Routes(). Fails closed when
 	// OperatorUserID is unset.
 	a.eventFeed = adminHandler.NewEventFeed()
-	a.eventFeed.Start(ctx, a.eventBus)
+	a.eventFeed.Start(ctx, tap)
 	var acqReader adminHandler.AcquisitionStatusReader
 	if a.scheduler != nil {
 		acqReader = a.scheduler

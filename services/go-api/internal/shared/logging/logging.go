@@ -11,18 +11,18 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/shared/config"
 )
 
 // Setup installs the default slog logger and returns the in-memory ring that
 // tees every record for the Mission Control logs panel. Callers that don't need
-// the ring (e.g. CLI subcommands) may ignore the return value.
-func Setup(cfg *config.Config) *RingBuffer {
-	level := parseLevel(cfg.LogLevel)
+// the ring (e.g. CLI subcommands) may ignore the return value. Takes the two
+// config values it needs rather than *config.Config so logging has no
+// intra-shared dependency.
+func Setup(logLevel string, development bool) *RingBuffer {
+	level := parseLevel(logLevel)
 
 	var base slog.Handler
-	if cfg.IsDevelopment() {
+	if development {
 		base = &prettyHandler{
 			level:     level,
 			w:         os.Stdout,
@@ -111,13 +111,13 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 		}
 	}
 
-	// pre-set attrs
+	// pre-set attrs (already group-qualified at WithAttrs time)
 	for _, a := range h.attrs {
-		writeAttr(&b, a)
+		writeAttr(&b, a, "")
 	}
-	// record attrs
+	// record attrs, qualified with the handler's open group
 	r.Attrs(func(a slog.Attr) bool {
-		writeAttr(&b, a)
+		writeAttr(&b, a, h.group)
 		return true
 	})
 
@@ -127,21 +127,29 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 }
 
 func (h *prettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	// Qualify now so the open group at attach time sticks to these attrs.
+	qualified := make([]slog.Attr, 0, len(attrs))
+	for _, a := range attrs {
+		qualified = append(qualified, slog.Attr{Key: h.group + a.Key, Value: a.Value})
+	}
 	return &prettyHandler{
 		level:     h.level,
 		w:         h.w,
-		attrs:     append(append([]slog.Attr{}, h.attrs...), attrs...),
+		attrs:     append(append([]slog.Attr{}, h.attrs...), qualified...),
 		group:     h.group,
 		addSource: h.addSource,
 	}
 }
 
 func (h *prettyHandler) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return h
+	}
 	return &prettyHandler{
 		level:     h.level,
 		w:         h.w,
 		attrs:     h.attrs,
-		group:     name,
+		group:     h.group + name + ".",
 		addSource: h.addSource,
 	}
 }
@@ -159,15 +167,18 @@ func formatLevel(level slog.Level) (string, string) {
 	}
 }
 
-func writeAttr(b *strings.Builder, a slog.Attr) {
+// writeAttr renders one attr, prefixing its key with the handler's open group
+// (dot-joined). Group-valued attrs flatten to parent.child keys.
+func writeAttr(b *strings.Builder, a slog.Attr, prefix string) {
 	if a.Equal(slog.Attr{}) {
 		return
 	}
 
+	key := prefix + a.Key
 	val := a.Value.Resolve()
 	if val.Kind() == slog.KindGroup {
 		for _, ga := range val.Group() {
-			writeAttr(b, ga)
+			writeAttr(b, ga, key+".")
 		}
 		return
 	}
@@ -175,15 +186,15 @@ func writeAttr(b *strings.Builder, a slog.Attr) {
 	switch val.Kind() {
 	case slog.KindTime:
 		fmt.Fprintf(b, " %s%s%s=%s%s%s",
-			colorCyan, a.Key, colorReset,
+			colorCyan, key, colorReset,
 			colorGray, val.Time().Format(time.RFC3339), colorReset)
 	case slog.KindDuration:
 		fmt.Fprintf(b, " %s%s%s=%s%s%s",
-			colorCyan, a.Key, colorReset,
+			colorCyan, key, colorReset,
 			colorGray, val.Duration(), colorReset)
 	default:
 		fmt.Fprintf(b, " %s%s%s=%s%s%s",
-			colorCyan, a.Key, colorReset,
+			colorCyan, key, colorReset,
 			colorGray, val.String(), colorReset)
 	}
 }

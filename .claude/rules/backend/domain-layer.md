@@ -12,6 +12,11 @@ The domain layer is the **inner hexagon**. It models the business and nothing el
 - Go standard library
 - Other modules within `domain/`
 - Shared value objects from `internal/shared/` (e.g., `shared.UserId`)
+- `internal/shared/textnorm` — pure text-canonicalization functions, sanctioned
+  because `ResultSignature` is a cross-layer contract shared with the wire mapper
+
+Enforced by depguard (`services/go-api/.golangci.yml`, CI: test-backend.yml) —
+changing this list means changing that config in the same commit.
 
 ## Imports FORBIDDEN
 

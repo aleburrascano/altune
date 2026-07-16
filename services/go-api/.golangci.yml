@@ -1,0 +1,58 @@
+# Import-direction enforcement (structure audit F1, 2026-07-16).
+# The rules in .claude/rules/backend/domain-layer.md and docs/architecture.md
+# are convention; this file is what fails CI when they erode.
+#
+# Run locally:
+#   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.0 run
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        # Domain is the inner ring: stdlib, other domain packages, and from
+        # internal/shared only the root value objects (UserId) plus the pure
+        # textnorm functions (sanctioned — ResultSignature is a cross-layer
+        # contract shared with the wire mapper).
+        domain-purity:
+          list-mode: strict
+          files:
+            - "**/internal/catalog/domain/**"
+            - "**/internal/discovery/domain/**"
+            - "**/internal/playback/domain/**"
+          allow:
+            - $gostd
+            - altune/go-api/internal/catalog/domain
+            - altune/go-api/internal/discovery/domain
+            - altune/go-api/internal/playback/domain
+            - altune/go-api/internal/shared$
+            - altune/go-api/internal/shared/textnorm
+            - github.com/google/uuid
+            - golang.org/x/text
+          deny:
+            - pkg: altune/go-api/internal/shared/
+              desc: domain may import from internal/shared only the root value objects and textnorm (.claude/rules/backend/domain-layer.md)
+
+        # Shared is the bottom of the import graph: it never imports a feature,
+        # the composition root, or auth.
+        shared-bottom:
+          files:
+            - "**/internal/shared/**"
+          deny:
+            - pkg: altune/go-api/internal/acquisition
+              desc: internal/shared never imports feature packages
+            - pkg: altune/go-api/internal/admin
+              desc: internal/shared never imports feature packages
+            - pkg: altune/go-api/internal/app
+              desc: internal/shared never imports the composition root
+            - pkg: altune/go-api/internal/auth
+              desc: internal/shared never imports auth
+            - pkg: altune/go-api/internal/catalog
+              desc: internal/shared never imports feature packages
+            - pkg: altune/go-api/internal/discovery
+              desc: internal/shared never imports feature packages
+            - pkg: altune/go-api/internal/playback
+              desc: internal/shared never imports feature packages

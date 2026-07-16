@@ -4,18 +4,18 @@ import (
 	"testing"
 	"time"
 
-	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/admin/eventtap"
 )
 
 func TestEventFeed_Rates(t *testing.T) {
 	f := NewEventFeed()
 	now := time.Now().UTC()
 
-	f.record(events.TapEvent{Type: "search", Timestamp: now})
-	f.record(events.TapEvent{Type: "search", Timestamp: now})
-	f.record(events.TapEvent{Type: "track_added", Timestamp: now})
+	f.record(eventtap.TapEvent{Type: "search", Timestamp: now})
+	f.record(eventtap.TapEvent{Type: "search", Timestamp: now})
+	f.record(eventtap.TapEvent{Type: "track_added", Timestamp: now})
 	// Stale event outside the window must not count.
-	f.record(events.TapEvent{Type: "search", Timestamp: now.Add(-2 * time.Minute)})
+	f.record(eventtap.TapEvent{Type: "search", Timestamp: now.Add(-2 * time.Minute)})
 
 	rates := f.Rates()
 	if rates["search"] != 2 {
@@ -31,7 +31,7 @@ func TestEventFeed_FanOutToSubscribers(t *testing.T) {
 	ch, cancel := f.subscribe()
 	defer cancel()
 
-	f.record(events.TapEvent{Type: "live", Timestamp: time.Now().UTC()})
+	f.record(eventtap.TapEvent{Type: "live", Timestamp: time.Now().UTC()})
 
 	select {
 	case evt := <-ch:
