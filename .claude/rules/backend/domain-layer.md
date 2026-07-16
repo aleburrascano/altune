@@ -22,7 +22,7 @@ The domain layer is the **inner hexagon**. It models the business and nothing el
 
 ## Building blocks (DDD tactical)
 
-Consult `[vault: wiki/concepts/Domain-Driven Design.md]` before defining new domain types.
+Consult `docs/ubiquitous-language.md` before defining new domain types.
 
 - **Entity** — has identity that persists. Identity is an opaque `Id` value object (wrapping `uuid.UUID`), not raw `string`. Equality by id.
 - **Value Object** — immutable, defined by attributes. Use unexported fields + exported getters. Equality by attribute values.

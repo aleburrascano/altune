@@ -14,9 +14,9 @@ when_to_use: |
 
 ## Mandatory first step
 
-Read the spec at `docs/specs/<feat>/spec.md`. Then query the software-architecture-design vault MCP:
-1. `mcp__software-architecture-design__vk_search` for the patterns the spec mentions or implies.
-2. `mcp__software-architecture-design__vk_get_note` on top 2–3 hits; lift anti-patterns into the plan's "Risks" section.
+Read the spec at `docs/specs/<feat>/spec.md`. Then consult the pattern lexicon (`~/.claude/lexicon/`):
+1. Scan the relevant manifest(s) for the patterns the spec mentions or implies.
+2. `Read` the full entry for the top 2–3 hits at `~/.claude/lexicon/site/{path}/index.html`; lift each entry's *Cost:* line and anti-pattern guidance into the plan's "Risks" section.
 
 ## What this skill does
 

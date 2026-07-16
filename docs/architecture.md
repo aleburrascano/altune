@@ -121,7 +121,7 @@ A feature folder owns everything for that feature **end-to-end**: UI, hooks, API
 Supabase-issued JWTs verified by `internal/auth` middleware; handlers read the user id via `auth.RequireUserID`. Mobile integrates through `shared/api-client/`.
 
 ### Persistence
-Postgres (Supabase) for durable data; Redis (Upstash) for caches. Repository adapters live under `internal/<context>/adapters/persistence/`; cache adapters under `adapters/cache/`. Migrations via an external tool, human-reviewed (see `.claude/rules/backend/go-database.md`).
+Postgres (Supabase) for durable data; Redis (Upstash) for caches. Repository adapters live under `internal/<context>/adapters/persistence/`; cache adapters under `adapters/cache/`. Migrations via an external tool, human-reviewed (see `.claude/rules/migrations.md`).
 
 ### Observability
 - Structured logging (`log/slog`) in backend; correlation id per request (`httputil.CorrelationID`).
@@ -162,6 +162,4 @@ The implementation discipline is in `docs/workflows/new-feature.md`. Read it.
 
 - `docs/workflows/new-feature.md` — the feature loop
 - `docs/ubiquitous-language.md` — domain glossary
-- `docs/claude-md-map.md` — index of all CLAUDE.md files in the repo
 - `.claude/rules/` — path-scoped rules enforcing architecture decisions
-- `[vault: wiki/concepts/Hexagonal Architecture.md]`, `[vault: wiki/concepts/Vertical Slice Architecture.md]`, `[vault: wiki/concepts/Domain-Driven Design.md]`

@@ -1,6 +1,10 @@
 # Altune mobile (Expo + React Native + TS) — local rules
 
-Universal coding discipline → `~/.claude/CLAUDE.md`. Project constitution → `<repo>/CLAUDE.md`. TypeScript-wide rules → `.claude/rules/typescript-frontend.md`. **This file: Expo / RN platform quirks only.**
+Vertical slices under `src/features/` — a feature owns its UI/hooks/api/tests end-to-end. No cross-feature imports; extraction to `shared/` requires 2+ real consumers. **Rest of this file: Expo / RN platform quirks.**
+
+TS pattern vocabulary (index only — full entries under `~/.claude/lexicon/site/`, read on demand):
+
+@~/.claude/lexicon/MANIFEST-ts.md
 
 ## Stack
 

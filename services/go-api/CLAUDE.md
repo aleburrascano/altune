@@ -1,8 +1,13 @@
-# Go API — how to run
+# Go API
 
-Parent rules: `<repo>/CLAUDE.md`, `~/.claude/CLAUDE.md`. Bounded contexts carry
-their own nested `CLAUDE.md` (e.g. `internal/discovery/CLAUDE.md`) — read the one
-closest to the code you're editing.
+Hexagonal: dependencies point inward only (`adapters → service → domain`); ports in
+`ports/`, wiring in `internal/app/`. Full layout: `<repo>/docs/architecture.md` (read
+on demand). Bounded contexts carry their own nested `CLAUDE.md` (e.g.
+`internal/discovery/CLAUDE.md`).
+
+Go pattern vocabulary (index only — full entries under `~/.claude/lexicon/site/`, read on demand):
+
+@~/.claude/lexicon/MANIFEST-go.md
 
 ```bash
 cd services/go-api

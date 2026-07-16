@@ -24,7 +24,7 @@ The repo is set up for Claude-first development. The shape:
 | Fix a bug | `/feature-spec`-light + [`docs/workflows/bug-fix.md`](docs/workflows/bug-fix.md) |
 | Refactor | [`docs/workflows/refactor.md`](docs/workflows/refactor.md) |
 | Decide an architecture question | `/brainstorm-tech-choice` → ADR in `docs/adr/` |
-| Look up a pattern | `software-architecture-design` vault MCP (see [`.claude/rules/vault-consultation.md`](.claude/rules/vault-consultation.md)) |
+| Look up a pattern | Pattern lexicon (`~/.claude/lexicon/` — manifests load via nested `CLAUDE.md`; full entries under `site/`) |
 
 ## Conventions
 

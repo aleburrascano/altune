@@ -15,12 +15,12 @@ when_to_use: |
 
 ## Mandatory first step
 
-Query the software-architecture-design vault MCP:
-1. `mcp__software-architecture-design__vk_search` for the **kind of feature** being specced (e.g., "saga" for async multi-step, "event sourcing" for audit-heavy, "CQRS" for read/write asymmetry, "REST" / "GraphQL" if API-shape question).
-2. `mcp__software-architecture-design__vk_get_note` on top 2–3 hits.
-3. Surface relevant patterns + trade-offs in the spec's "Design considerations" section.
+Consult the pattern lexicon (`~/.claude/lexicon/`):
+1. Scan the relevant manifest(s) (`MANIFEST-go.md` / `MANIFEST-ts.md`, plus a topic manifest if one fits — e.g. `MANIFEST-caching-patterns-and-invalidation.md`, `MANIFEST-event-driven-architecture-patterns.md`) for the **kind of feature** being specced.
+2. `Read` the full entry for the top 2–3 candidates at `~/.claude/lexicon/site/{path}/index.html`.
+3. Surface relevant patterns + trade-offs (including each entry's *Cost:* line) in the spec's "Design considerations" section.
 
-If no relevant vault note: `"vault returned no matches for <topic>"` — proceed but flag in the spec.
+If no relevant lexicon entry: `"lexicon has no entry for <topic>"` — proceed but flag in the spec.
 
 ## What this skill does
 

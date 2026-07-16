@@ -19,7 +19,7 @@ Adapters are the **outer ring**. They translate between the framework world (HTT
   - Providers: third-party API clients (SoundCloud, iTunes, MusicBrainz, etc.)
   - Cache: Redis, in-memory caches
 
-See `[vault: wiki/concepts/Hexagonal Architecture.md]`.
+See `docs/architecture.md` (hexagonal layout).
 
 ## Imports allowed
 
