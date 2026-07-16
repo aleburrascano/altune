@@ -10,43 +10,69 @@
  * Per ADR-0006: the SDK auto-refreshes access tokens; on refresh failure the
  * SDK emits SIGNED_OUT which flips this hook to `signed-out` — the root
  * layout's redirect then routes to /sign-in (Slice 10).
+ *
+ * AIDEV-WARNING: this hook owns the cache boundary for SDK-initiated identity
+ * changes. `queryClient.clear()` in shared/auth/useSignOut covers only the
+ * explicit Settings sign-out; an SDK-emitted SIGNED_OUT (refresh failure) or a
+ * setSession user switch bypasses it entirely, leaving user A's cached library
+ * readable by user B — the exact leak useSignOut's docstring exists to prevent.
+ * Clear on identity CHANGE, never on every event: TOKEN_REFRESHED fires with
+ * the same user and must not nuke the cache.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import type { Session } from '@supabase/supabase-js';
+
+import { clearSessionExpired } from '@shared/auth/sessionExpired';
 
 import { supabase } from '../api/supabaseClient';
 import type { SessionState } from '../types';
 
 export function useSession(): SessionState {
   const [state, setState] = useState<SessionState>({ status: 'loading' });
+  const queryClient = useQueryClient();
+  // null is a real identity ("signed out"), so track "seen anything yet"
+  // separately rather than overloading null as the seed value.
+  const seededRef = useRef(false);
+  const userIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
 
+    function apply(session: Session | null): void {
+      if (!active) return;
+      const userId = session?.user.id ?? null;
+      if (seededRef.current && userIdRef.current !== userId) {
+        queryClient.clear();
+        clearSessionExpired();
+      }
+      seededRef.current = true;
+      userIdRef.current = userId;
+      setState(session ? { status: 'signed-in', session } : { status: 'signed-out' });
+    }
+
     // Initial state — getSession returns the SDK's currently-known session
     // (restored from storage by the SDK at construction).
     void supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setState(
-        data.session ? { status: 'signed-in', session: data.session } : { status: 'signed-out' },
-      );
+      apply(data.session);
     }).catch(() => {
-      // Stale or revoked refresh token — redirect to sign-in.
-      if (active) setState({ status: 'signed-out' });
+      // Defensive: getSession resolves with {session: null, error} rather than
+      // rejecting, but a storage-layer throw would surface here.
+      apply(null);
     });
 
     // Subsequent updates — any SIGNED_IN / SIGNED_OUT / TOKEN_REFRESHED event.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return;
-      setState(session ? { status: 'signed-in', session } : { status: 'signed-out' });
+      apply(session);
     });
 
     return () => {
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [queryClient]);
 
   return state;
 }

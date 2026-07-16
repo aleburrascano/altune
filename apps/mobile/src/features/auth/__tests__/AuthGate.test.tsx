@@ -24,9 +24,20 @@ jest.mock('expo-router', () => ({
   useSegments: () => mockSegments,
 }));
 
+// Stubbed so these stay routing tests: the real notice pulls in useSignOut ->
+// the Supabase singleton. Its own behaviour is covered in
+// SessionExpiredNotice.test.tsx.
+jest.mock('../ui/SessionExpiredNotice', () => {
+  const { Text } = require('react-native');
+  return { SessionExpiredNotice: () => <Text testID="session-expired">expired</Text> };
+});
+
+const { clearSessionExpired, markSessionExpired } = require('@shared/auth/sessionExpired');
+
 beforeEach(() => {
   mockRedirect.mockClear();
   mockSegments = [];
+  clearSessionExpired();
 });
 
 describe('AuthGate', () => {
@@ -89,5 +100,37 @@ describe('AuthGate', () => {
     );
     expect(getByTestId('protected')).toBeTruthy();
     expect(mockRedirect).not.toHaveBeenCalled();
+  });
+
+  it('shows the expired notice when the backend rejected the token', () => {
+    // The soft-lock: SDK says signed-in, backend says 401. Without this the
+    // user sees a permanently-failing screen and no way to re-authenticate.
+    mockSessionState = { status: 'signed-in', session: { access_token: 'abc' } };
+    mockSegments = ['library'];
+    markSessionExpired();
+    const { AuthGate } = require('../ui/AuthGate');
+    const { getByTestId, queryByTestId } = render(
+      <AuthGate>
+        <Text testID="protected">Protected</Text>
+      </AuthGate>,
+    );
+    expect(getByTestId('session-expired')).toBeTruthy();
+    expect(queryByTestId('protected')).toBeNull();
+  });
+
+  it('does not show the expired notice to a signed-out user', () => {
+    // Signed-out already redirects to /sign-in; the notice would be redundant
+    // and would swallow the redirect.
+    mockSessionState = { status: 'signed-out' };
+    mockSegments = ['(app)'];
+    markSessionExpired();
+    const { AuthGate } = require('../ui/AuthGate');
+    const { queryByTestId } = render(
+      <AuthGate>
+        <Text testID="protected">Protected</Text>
+      </AuthGate>,
+    );
+    expect(queryByTestId('session-expired')).toBeNull();
+    expect(mockRedirect).toHaveBeenCalledWith({ href: '/sign-in' });
   });
 });
