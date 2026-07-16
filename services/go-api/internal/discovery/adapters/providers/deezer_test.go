@@ -87,8 +87,8 @@ func TestDeezerAdapter_Search_Tracks(t *testing.T) {
 	if r.Sources[0].ExternalID != "123456" {
 		t.Errorf("source externalID: got %q, want %q", r.Sources[0].ExternalID, "123456")
 	}
-	if r.Extras["isrc"] != "GBAYE7500101" {
-		t.Errorf("extras.isrc: got %v, want %q", r.Extras["isrc"], "GBAYE7500101")
+	if r.ISRC != "GBAYE7500101" {
+		t.Errorf("ISRC: got %q, want %q", r.ISRC, "GBAYE7500101")
 	}
 	if r.Extras["album"] != "A Night at the Opera" {
 		t.Errorf("extras.album: got %v, want %q", r.Extras["album"], "A Night at the Opera")
@@ -97,8 +97,8 @@ func TestDeezerAdapter_Search_Tracks(t *testing.T) {
 	if dur, ok := r.Extras["duration"].(int); !ok || dur != 355 {
 		t.Errorf("extras.duration: got %v (%T), want 355", r.Extras["duration"], r.Extras["duration"])
 	}
-	if rank, ok := r.Extras["rank"].(int64); !ok || rank != 150000 {
-		t.Errorf("extras.rank: got %v (%T), want 150000", r.Extras["rank"], r.Extras["rank"])
+	if r.ProviderRank != 150000 {
+		t.Errorf("ProviderRank: got %d, want 150000", r.ProviderRank)
 	}
 }
 
@@ -142,9 +142,8 @@ func TestDeezerAdapter_Search_Artists(t *testing.T) {
 	if r.ImageURL != "https://cdn.deezer.com/artist.jpg" {
 		t.Errorf("imageURL: got %q, want picture_big", r.ImageURL)
 	}
-	nbFan, ok := r.Extras["nb_fan"].(int64)
-	if !ok || nbFan != 5000000 {
-		t.Errorf("extras.nb_fan: got %v (%T), want 5000000", r.Extras["nb_fan"], r.Extras["nb_fan"])
+	if r.FanCount != 5000000 {
+		t.Errorf("FanCount: got %d, want 5000000", r.FanCount)
 	}
 }
 
@@ -199,15 +198,15 @@ func TestDeezerAdapter_Search_Albums(t *testing.T) {
 	if r.Extras["record_type"] != "album" {
 		t.Errorf("extras.record_type: got %v, want %q", r.Extras["record_type"], "album")
 	}
-	if r.Extras["release_date"] != "1997-05-21" {
-		t.Errorf("extras.release_date: got %v, want %q", r.Extras["release_date"], "1997-05-21")
+	if r.ReleaseDate != "1997-05-21" {
+		t.Errorf("ReleaseDate: got %q, want %q", r.ReleaseDate, "1997-05-21")
 	}
-	// nb_tracks is an int in the struct, mapped to extras["track_count"]
-	if tc, ok := r.Extras["track_count"].(int); !ok || tc != 12 {
-		t.Errorf("extras.track_count: got %v (%T), want 12", r.Extras["track_count"], r.Extras["track_count"])
+	// nb_tracks is an int in the struct, mapped to TrackCount
+	if r.TrackCount != 12 {
+		t.Errorf("TrackCount: got %d, want 12", r.TrackCount)
 	}
-	if nbFan, ok := r.Extras["nb_fan"].(int64); !ok || nbFan != 50000 {
-		t.Errorf("extras.nb_fan: got %v (%T), want 50000", r.Extras["nb_fan"], r.Extras["nb_fan"])
+	if r.FanCount != 50000 {
+		t.Errorf("FanCount: got %d, want 50000", r.FanCount)
 	}
 	if gid, ok := r.Extras["genre_id"].(int); !ok || gid != 152 {
 		t.Errorf("extras.genre_id: got %v (%T), want 152", r.Extras["genre_id"], r.Extras["genre_id"])
@@ -261,10 +260,10 @@ func TestDeezerAdapter_Search_Track_MissingPopularity(t *testing.T) {
 	}
 
 	r := results[0]
-	if _, ok := r.Extras["rank"]; ok {
+	if r.ProviderRank != 0 {
 		t.Errorf("extras should not contain 'rank' when API returns 0")
 	}
-	if _, ok := r.Extras["nb_fan"]; ok {
+	if r.FanCount != 0 {
 		t.Errorf("extras should not contain 'nb_fan' when API returns 0")
 	}
 }

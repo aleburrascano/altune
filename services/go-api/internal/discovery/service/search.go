@@ -59,7 +59,7 @@ type Service struct {
 	historyRepo     ports.SearchHistoryRepository
 	vocabStore      ports.VocabularyStore
 	eventStore      ports.EventStore
-	artworkResolver ports.ArtworkResolver
+	artworkResolver ports.TaggingArtworkResolver
 	artworkCache    ports.ArtworkCache
 	albumValidator  ports.AlbumValidator
 	identityBridge  ports.IdentityBridge
@@ -131,7 +131,7 @@ func WithEventStore(e ports.EventStore) Option {
 }
 
 // WithArtworkResolver enables artwork enrichment via the chained resolver.
-func WithArtworkResolver(r ports.ArtworkResolver) Option {
+func WithArtworkResolver(r ports.TaggingArtworkResolver) Option {
 	return func(s *Service) { s.artworkResolver = r }
 }
 
@@ -372,14 +372,17 @@ func (s *Service) mergeRankEnrich(
 	s.stampIdentities(ctx, perProvider)
 
 	// pure decision core: merge → rank → list-shaping (no ports, no I/O).
-	var demote demoteFunc
-	if s.tailDemotion {
-		demote = isLowConfidenceTail
+	cfg := rankConfig{
+		// Behavioral satisfaction signal: a published snapshot (nil when the flag
+		// is off / not yet refreshed), read without locking and applied as a
+		// within-tie rank input only.
+		behavioral: s.behavioralScoresSnapshot(),
+		prominence: s.crossKindProminence,
 	}
-	// Behavioral satisfaction signal: a published snapshot (nil when the flag is
-	// off / not yet refreshed), read without locking and applied as a within-tie
-	// rank input only.
-	ranked := rankPipelineWith(perProvider, queryNorm, demote, s.behavioralScoresSnapshot(), s.crossKindProminence)
+	if s.tailDemotion {
+		cfg.demote = isLowConfidenceTail
+	}
+	ranked := rankPipelineWith(perProvider, queryNorm, cfg)
 
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
@@ -388,10 +391,11 @@ func (s *Service) mergeRankEnrich(
 }
 
 // stampIdentities annotates MB-sourced results with their bridged cross-provider
-// ids (Deezer/Spotify/...), read from the IdentityBridge (the enrichment cache),
-// so Merge can resolve identity across providers instead of by name alone. It is
-// a cache-only read — no MB round-trip on the search path — and a no-op when the
-// bridge is unset or an entity was never enriched. Mutates perProvider in place.
+// ids (Deezer/Spotify/..., set on Xref), read from the IdentityBridge (the
+// enrichment cache), so Merge can resolve identity across providers instead of by
+// name alone. It is a cache-only read — no MB round-trip on the search path — and
+// a no-op when the bridge is unset or an entity was never enriched. Mutates
+// perProvider in place.
 func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.SearchResult) {
 	if s.identityBridge == nil {
 		return
@@ -408,22 +412,18 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 	for gi := range perProvider {
 		for ri := range perProvider[gi] {
 			r := &perProvider[gi][ri]
-			mbid := stringExtra(*r, "mbid")
-			if mbid == "" {
+			if r.MBID == "" {
 				continue
 			}
-			ids, ok := s.identityBridge.ExternalIDs(ctx, r.Kind, mbid)
+			ids, ok := s.identityBridge.ExternalIDs(ctx, r.Kind, r.MBID)
 			if !ok {
 				continue
 			}
-			if r.Extras == nil {
-				r.Extras = make(map[string]any, 1)
-			}
-			r.Extras["xref"] = ids
+			r.Xref = ids
 			slog.DebugContext(ctx, "merge.identity_bridge_stamped",
-				"kind", r.Kind.String(), "mbid", mbid, "ids", len(ids))
+				"kind", r.Kind.String(), "mbid", r.MBID, "ids", len(ids))
 			if s.identityStore != nil {
-				learned = append(learned, learnedBridge{kind: r.Kind, mbid: mbid, ids: ids})
+				learned = append(learned, learnedBridge{kind: r.Kind, mbid: r.MBID, ids: ids})
 			}
 		}
 	}

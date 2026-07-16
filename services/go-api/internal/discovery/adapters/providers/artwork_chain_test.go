@@ -25,9 +25,9 @@ func TestChainedArtworkResolver_ReturnsFirstNonEmpty(t *testing.T) {
 		&fakeArtworkResolver{url: "https://images.example.com/other.jpg", err: nil},
 	)
 
-	url, err := chain.Resolve(context.Background(), domain.ResultKindTrack, "Song", "Artist", "mbid")
+	url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindTrack, "Song", "Artist", "mbid")
 	if err != nil {
-		t.Fatalf("Resolve returned error: %v", err)
+		t.Fatalf("ResolveTagged returned error: %v", err)
 	}
 	if url != "https://images.example.com/cover.jpg" {
 		t.Errorf("expected second resolver's URL, got %q", url)
@@ -40,9 +40,9 @@ func TestChainedArtworkResolver_SkipsErrors(t *testing.T) {
 		&fakeArtworkResolver{url: "https://images.example.com/fallback.jpg", err: nil},
 	)
 
-	url, err := chain.Resolve(context.Background(), domain.ResultKindArtist, "Artist", "", "mbid")
+	url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "Artist", "", "mbid")
 	if err != nil {
-		t.Fatalf("Resolve returned error: %v", err)
+		t.Fatalf("ResolveTagged returned error: %v", err)
 	}
 	if url != "https://images.example.com/fallback.jpg" {
 		t.Errorf("expected fallback URL after error, got %q", url)
@@ -55,9 +55,9 @@ func TestChainedArtworkResolver_AllEmpty(t *testing.T) {
 		&fakeArtworkResolver{url: "", err: nil},
 	)
 
-	url, err := chain.Resolve(context.Background(), domain.ResultKindTrack, "Song", "Artist", "mbid")
+	url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindTrack, "Song", "Artist", "mbid")
 	if err != nil {
-		t.Fatalf("Resolve returned error: %v", err)
+		t.Fatalf("ResolveTagged returned error: %v", err)
 	}
 	if url != "" {
 		t.Errorf("expected empty URL when all resolvers return empty, got %q", url)
@@ -67,9 +67,9 @@ func TestChainedArtworkResolver_AllEmpty(t *testing.T) {
 func TestChainedArtworkResolver_NoResolvers(t *testing.T) {
 	chain := NewChainedArtworkResolver()
 
-	url, err := chain.Resolve(context.Background(), domain.ResultKindTrack, "Song", "Artist", "mbid")
+	url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindTrack, "Song", "Artist", "mbid")
 	if err != nil {
-		t.Fatalf("Resolve returned error: %v", err)
+		t.Fatalf("ResolveTagged returned error: %v", err)
 	}
 	if url != "" {
 		t.Errorf("expected empty URL with no resolvers, got %q", url)
@@ -84,9 +84,9 @@ func TestChainedArtworkResolver_SkipsDeezerPlaceholder(t *testing.T) {
 		&fakeArtworkResolver{url: "https://images.example.com/real.jpg", err: nil},
 	)
 
-	url, err := chain.Resolve(context.Background(), domain.ResultKindArtist, "Artist", "", "mbid")
+	url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "Artist", "", "mbid")
 	if err != nil {
-		t.Fatalf("Resolve returned error: %v", err)
+		t.Fatalf("ResolveTagged returned error: %v", err)
 	}
 	if url != "https://images.example.com/real.jpg" {
 		t.Errorf("expected real URL after skipping Deezer placeholder, got %q", url)

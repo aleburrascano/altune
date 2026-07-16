@@ -539,18 +539,17 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 	if g := strings.TrimSpace(t.Genre); g != "" {
 		extras["genre"] = g
 	}
-	// ISRC lifts the track from EntityResolutionNone into the isrc merge tier —
-	// SoundCloud tracks otherwise never merge with other providers (see merge.go).
-	if isrc := strings.TrimSpace(t.PublisherMetadata.ISRC); isrc != "" {
-		extras["isrc"] = isrc
-	}
 	if al := strings.TrimSpace(t.PublisherMetadata.AlbumTitle); al != "" {
 		extras["album"] = al
 	}
 
-	return domain.NewProviderResult(domain.ResultKindTrack, t.Title, t.User.Username, upgradeArtworkResolution(t.ArtworkURL),
+	r := domain.NewProviderResult(domain.ResultKindTrack, t.Title, t.User.Username, upgradeArtworkResolution(t.ArtworkURL),
 		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(t.ID, 10), URL: t.PermalinkURL},
-		extras), true
+		extras)
+	// ISRC lifts the track from EntityResolutionNone into the isrc merge tier —
+	// SoundCloud tracks otherwise never merge with other providers (see merge.go).
+	r.ISRC = strings.TrimSpace(t.PublisherMetadata.ISRC)
+	return r, true
 }
 
 // scAlbumSearchResponse is one page of api-v2 /search/albums.

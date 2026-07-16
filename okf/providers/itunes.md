@@ -4,7 +4,7 @@ title: iTunes Search API Adapter
 description: The keyless iTunes Search API supplies a mainstream search/identity surface and — its one non-duplicative axis — a 1500px hero-artwork fallback above Cover Art Archive's ceiling.
 resource: services/go-api/internal/discovery/adapters/providers/itunes.go
 tags: [discovery, provider, itunes, artwork]
-verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
 ---
 
 `ITunesAdapter` (`itunes.go`) calls `itunes.apple.com/search` and `/lookup` with no key, token, or required User-Agent (a custom UA — `itunesUserAgent` — is still sent to soften Apple's abuse heuristics on the default Go UA). `rateLimit` implements a GCRA token bucket (`itunesEmitInterval = 4s` sustained ~15 req/min, `itunesBurst = 4`) rather than a fixed-gap sleep, so a single search's 3 sequential kind calls fire back-to-back instead of being spaced ~3.5s apart — the old fixed-gap limiter blew the search SLA. `SearchTimeout` is 4s. Unconditionally wired (no config gate, like Deezer).

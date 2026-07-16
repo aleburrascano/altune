@@ -43,7 +43,7 @@ func (p *fakeProvider) SupportedKinds() map[domain.ResultKind]bool {
 
 func newQuery(t *testing.T, raw string) *domain.SearchQuery {
 	t.Helper()
-	q, err := domain.NewSearchQuery(raw, "", map[domain.ResultKind]bool{
+	q, err := domain.NewSearchQuery(raw, map[domain.ResultKind]bool{
 		domain.ResultKindTrack:  true,
 		domain.ResultKindAlbum:  true,
 		domain.ResultKindArtist: true,
@@ -70,8 +70,8 @@ func runSearch(t *testing.T, svc *Service, raw string) *SearchOutput {
 func TestService_EndToEnd_MergesAndRanks(t *testing.T) {
 	// Same ISRC across two providers must merge to one entity with two sources;
 	// the more popular track outranks the same-named album (bare query).
-	trackP1 := withPop(track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, map[string]any{"isrc": "X"}), 90)
-	trackP2 := withPop(track("Humble", "Kendrick Lamar", domain.ProviderITunes, map[string]any{"isrc": "X"}), 90)
+	trackP1 := withPop(withISRC(track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil), "X"), 90)
+	trackP2 := withPop(withISRC(track("Humble", "Kendrick Lamar", domain.ProviderITunes, nil), "X"), 90)
 	album := deezerAlbum("Humble", "Kendrick Lamar", 40)
 
 	p1 := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{trackP1, album}}
@@ -132,7 +132,7 @@ func TestService_LimitTruncates(t *testing.T) {
 	p := &fakeProvider{name: domain.ProviderDeezer, results: results}
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker())
 
-	q, err := domain.NewSearchQuery("song", "", map[domain.ResultKind]bool{domain.ResultKindTrack: true}, 3)
+	q, err := domain.NewSearchQuery("song", map[domain.ResultKind]bool{domain.ResultKindTrack: true}, 3)
 	if err != nil {
 		t.Fatal(err)
 	}

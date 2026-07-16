@@ -20,7 +20,7 @@ import (
 // surfaced error. See docs/specs/musicbrainz-enrichment/spec.md.
 type EnrichmentService struct {
 	enricher  ports.MetadataEnricher
-	artwork   ports.ArtworkResolver
+	artwork   ports.TaggingArtworkResolver
 	cache     ports.EnrichmentCache
 	mbidIndex ports.MBIDIndex
 }
@@ -38,7 +38,7 @@ func WithMBIDMemo(idx ports.MBIDIndex) EnrichmentOption {
 // resolver and cache. nil artwork/cache are tolerated (no-op).
 func NewEnrichmentService(
 	enricher ports.MetadataEnricher,
-	artwork ports.ArtworkResolver,
+	artwork ports.TaggingArtworkResolver,
 	cache ports.EnrichmentCache,
 	opts ...EnrichmentOption,
 ) *EnrichmentService {
@@ -84,7 +84,7 @@ func (s *EnrichmentService) Execute(
 	}
 
 	if s.artwork != nil {
-		if url, _ := s.artwork.Resolve(ctx, kind, title, subtitle, mbid); url != "" {
+		if url, _, _ := s.artwork.ResolveTagged(ctx, kind, title, subtitle, mbid); url != "" {
 			e.ArtworkURL = url
 		}
 	}

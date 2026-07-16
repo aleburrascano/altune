@@ -79,15 +79,15 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 		setArtworkPath(&result, "provider")
 		return result
 	}
-	mbid := stringExtra(result, "mbid")
+	mbid := result.MBID
 	fromDurable := false
 	// Durable identity (the deterministic fix): a provider-only result (MusicBrainz
-	// absent from this fan-out, so no xref was stamped in merge) resolves its MBID +
+	// absent from this fan-out, so no Xref was stamped in merge) resolves its MBID +
 	// bridged ids from the persisted identity store, keyed on its OWN provider id.
 	// This makes artwork identity-first — the correct same-name entity — even when
 	// MB never answered this search, instead of gambling on a name lookup. Skipped
-	// when the merge already stamped xref (MB was present).
-	if _, hasXref := result.Extras["xref"]; !hasXref && s.identityStore != nil && len(result.Sources) > 0 {
+	// when the merge already stamped Xref (MB was present).
+	if len(result.Xref) == 0 && s.identityStore != nil && len(result.Sources) > 0 {
 		src := result.Sources[0]
 		if m, xref, ok := s.identityStore.LookupByProviderID(ctx, result.Kind, src.Provider.String(), src.ExternalID); ok {
 			fromDurable = true
@@ -95,10 +95,7 @@ func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) dom
 				mbid = m
 			}
 			if len(xref) > 0 {
-				if result.Extras == nil {
-					result.Extras = map[string]any{}
-				}
-				result.Extras["xref"] = xref
+				result.Xref = xref
 			}
 			// Visible only when MB was absent for this result (xref wasn't stamped in
 			// merge) yet identity was recovered from the durable store — i.e. exactly
@@ -190,43 +187,29 @@ func artworkPathFor(resolved string, confidence ports.ArtworkConfidence, fromDur
 func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult, mbid string) (string, string, ports.ArtworkConfidence) {
 	identity := artworkIdentity(result, mbid)
 
-	// Tagged path (production chain): also reports which source supplied the URL.
-	if tagger, ok := s.artworkResolver.(ports.TaggingArtworkResolver); ok {
-		// Identity-first: a proven bridged id (Discogs) returns the exact entity's
-		// image — the only trustworthy result for a same-name artist.
-		if identity.HasLinks() {
-			if url, src, _ := tagger.ResolveWithIdentityTagged(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
-				return url, src, ports.ArtworkConfidenceIdentity
-			}
-		}
-		// No identity image: a NAME search, labeled provisional (short TTL,
-		// overwritable). For an ambiguous artist this may be the wrong face, so it
-		// must never be labeled identity — a real identity image can replace it later.
-		if url, src, _ := tagger.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
-			return url, src, ports.ArtworkConfidenceName
-		}
-		return "", "", ports.ArtworkConfidenceNone
-	}
-
-	// Untagged fallback (a resolver without tagging, e.g. test fakes): no source.
-	if aware, ok := s.artworkResolver.(ports.IdentityAwareArtworkResolver); ok && identity.HasLinks() {
-		if url, _ := aware.ResolveWithIdentity(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
-			return url, "", ports.ArtworkConfidenceIdentity
+	// Identity-first: a proven bridged id (Discogs) returns the exact entity's
+	// image — the only trustworthy result for a same-name artist.
+	if identity.HasLinks() {
+		if url, src, _ := s.artworkResolver.ResolveWithIdentityTagged(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
+			return url, src, ports.ArtworkConfidenceIdentity
 		}
 	}
-	if url, _ := s.artworkResolver.Resolve(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
-		return url, "", ports.ArtworkConfidenceName
+	// No identity image: a NAME search, labeled provisional (short TTL,
+	// overwritable). For an ambiguous artist this may be the wrong face, so it
+	// must never be labeled identity — a real identity image can replace it later.
+	if url, src, _ := s.artworkResolver.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
+		return url, src, ports.ArtworkConfidenceName
 	}
 	return "", "", ports.ArtworkConfidenceNone
 }
 
 // artworkIdentity assembles the proven cross-provider identity for artwork
-// resolution: the MBID plus the bridged provider ids the merge stamped into
-// extras["xref"] (MB → discogs/spotify/deezer/…).
+// resolution: the MBID plus the bridged provider ids the merge stamped on Xref
+// (MB → discogs/spotify/deezer/…).
 func artworkIdentity(result domain.SearchResult, mbid string) ports.ArtworkIdentity {
 	id := ports.ArtworkIdentity{MBID: mbid}
-	if xref, ok := result.Extras["xref"].(map[string]string); ok && len(xref) > 0 {
-		id.ExternalIDs = xref
+	if len(result.Xref) > 0 {
+		id.ExternalIDs = result.Xref
 	}
 	return id
 }

@@ -251,35 +251,30 @@ func TestNewSearchQuery_Valid(t *testing.T) {
 	tests := []struct {
 		name  string
 		raw   string
-		norm  string
 		kinds map[ResultKind]bool
 		limit int
 	}{
 		{
 			name:  "typical query",
 			raw:   "radiohead",
-			norm:  "radiohead",
 			kinds: map[ResultKind]bool{ResultKindTrack: true},
 			limit: 25,
 		},
 		{
 			name:  "limit lower bound",
 			raw:   "query",
-			norm:  "query",
 			kinds: map[ResultKind]bool{ResultKindArtist: true},
 			limit: 1,
 		},
 		{
 			name:  "limit upper bound",
 			raw:   "query",
-			norm:  "query",
 			kinds: map[ResultKind]bool{ResultKindAlbum: true},
 			limit: 50,
 		},
 		{
 			name: "multiple kinds",
 			raw:  "beatles",
-			norm: "beatles",
 			kinds: map[ResultKind]bool{
 				ResultKindTrack:  true,
 				ResultKindAlbum:  true,
@@ -292,15 +287,12 @@ func TestNewSearchQuery_Valid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			q, err := NewSearchQuery(tt.raw, tt.norm, tt.kinds, tt.limit)
+			q, err := NewSearchQuery(tt.raw, tt.kinds, tt.limit)
 			if err != nil {
 				t.Fatalf("NewSearchQuery() unexpected error: %v", err)
 			}
 			if q.Raw != tt.raw {
 				t.Errorf("Raw = %q, want %q", q.Raw, tt.raw)
-			}
-			if q.QueryNorm != tt.norm {
-				t.Errorf("QueryNorm = %q, want %q", q.QueryNorm, tt.norm)
 			}
 			if q.Limit != tt.limit {
 				t.Errorf("Limit = %d, want %d", q.Limit, tt.limit)
@@ -318,7 +310,6 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 	tests := []struct {
 		name    string
 		raw     string
-		norm    string
 		kinds   map[ResultKind]bool
 		limit   int
 		wantMsg string
@@ -326,7 +317,6 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 		{
 			name:    "empty raw",
 			raw:     "",
-			norm:    "",
 			kinds:   validKinds,
 			limit:   10,
 			wantMsg: "raw query cannot be empty",
@@ -334,7 +324,6 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 		{
 			name:    "empty kinds",
 			raw:     "query",
-			norm:    "query",
 			kinds:   map[ResultKind]bool{},
 			limit:   10,
 			wantMsg: "kinds cannot be empty",
@@ -342,7 +331,6 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 		{
 			name:    "nil kinds",
 			raw:     "query",
-			norm:    "query",
 			kinds:   nil,
 			limit:   10,
 			wantMsg: "kinds cannot be empty",
@@ -350,7 +338,6 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 		{
 			name:    "limit too low",
 			raw:     "query",
-			norm:    "query",
 			kinds:   validKinds,
 			limit:   0,
 			wantMsg: "limit must be between 1 and 50",
@@ -358,7 +345,6 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 		{
 			name:    "limit negative",
 			raw:     "query",
-			norm:    "query",
 			kinds:   validKinds,
 			limit:   -1,
 			wantMsg: "limit must be between 1 and 50",
@@ -366,7 +352,6 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 		{
 			name:    "limit too high",
 			raw:     "query",
-			norm:    "query",
 			kinds:   validKinds,
 			limit:   51,
 			wantMsg: "limit must be between 1 and 50",
@@ -376,7 +361,7 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			q, err := NewSearchQuery(tt.raw, tt.norm, tt.kinds, tt.limit)
+			q, err := NewSearchQuery(tt.raw, tt.kinds, tt.limit)
 			if err == nil {
 				t.Fatalf("NewSearchQuery() expected error containing %q, got nil (result: %+v)", tt.wantMsg, q)
 			}

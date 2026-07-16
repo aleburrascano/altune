@@ -15,9 +15,13 @@ type fakeArtworkResolver struct {
 	calls int32
 }
 
-func (r *fakeArtworkResolver) Resolve(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
+func (r *fakeArtworkResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, string, error) {
 	atomic.AddInt32(&r.calls, 1)
-	return r.url, nil
+	return r.url, "", nil
+}
+
+func (r *fakeArtworkResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, string, error) {
+	return "", "", nil
 }
 
 type fakeArtworkCache struct {
@@ -78,13 +82,17 @@ type capturingArtworkResolver struct {
 	gotMBID string
 }
 
-func (r *capturingArtworkResolver) Resolve(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, error) {
+func (r *capturingArtworkResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if mbid != "" {
 		r.gotMBID = mbid
 	}
-	return r.url, nil
+	return r.url, "", nil
+}
+
+func (r *capturingArtworkResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, string, error) {
+	return "", "", nil
 }
 
 type fakeMBIDIndex struct {
@@ -174,9 +182,8 @@ func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 	if resolver.gotMBID != "durable-mbid" {
 		t.Errorf("resolver got mbid %q, want the durable MBID attached from the store", resolver.gotMBID)
 	}
-	xref, ok := out.Results[0].Extras["xref"].(map[string]string)
-	if !ok || xref["discogs"] != "123" {
-		t.Errorf("xref = %v, want the bridged ids attached from the store", out.Results[0].Extras["xref"])
+	if out.Results[0].Xref["discogs"] != "123" {
+		t.Errorf("xref = %v, want the bridged ids attached from the store", out.Results[0].Xref)
 	}
 }
 
@@ -184,15 +191,15 @@ func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 // the identity-first branch so the resolution path is reported as identity.
 type fakeIdentityAwareResolver struct{ url string }
 
-func (r *fakeIdentityAwareResolver) Resolve(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, error) {
-	return "", nil
+func (r *fakeIdentityAwareResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, string, error) {
+	return "", "", nil
 }
 
-func (r *fakeIdentityAwareResolver) ResolveWithIdentity(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, error) {
+func (r *fakeIdentityAwareResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, string, error) {
 	if id.HasLinks() {
-		return r.url, nil
+		return r.url, "", nil
 	}
-	return "", nil
+	return "", "", nil
 }
 
 func TestService_ArtworkPathIsDurableIdentityWhenStoreResolves(t *testing.T) {

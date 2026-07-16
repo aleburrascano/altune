@@ -4,14 +4,14 @@ title: Artwork Resolution Chain
 description: The ordered fallback chain of artwork-only providers (identity-keyed then name-search) tried when Deezer's primary artwork is missing.
 resource: services/go-api/internal/discovery/adapters/providers/artwork_chain.go, services/go-api/internal/discovery/adapters/providers/fanarttv.go, services/go-api/internal/discovery/adapters/providers/coverartarchive.go, services/go-api/internal/discovery/adapters/providers/spotify_artwork.go
 tags: [discovery, provider, artwork, fallback-chain, identity-resolution]
-verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
 ---
 
-`ChainedArtworkResolver` (`artwork_chain.go`) composes a list of `ports.ArtworkResolver`s, tried in order, returning the first non-empty URL that isn't a Deezer placeholder (`IsDeezerPlaceholder`). It exposes two distinct resolution paths, consumed by [identity-artwork](../backend/discovery/identity-artwork.md):
+`ChainedArtworkResolver` (`artwork_chain.go`) composes a list of `ports.ArtworkResolver`s, tried in order, returning the first non-empty URL that isn't a Deezer placeholder (`IsDeezerPlaceholder`). It implements the service-side `ports.TaggingArtworkResolver` port — two distinct resolution paths, consumed by [identity-artwork](../backend/discovery/identity-artwork.md):
 
-**Name-search path (`Resolve`/`ResolveTagged`).** Iterates every resolver in the chain, but **skips any resolver that also implements `ports.IdentityArtworkResolver`** — identity-only resolvers never name-search, so a missing bridged identity can't trigger a same-name guess. `ResolveTagged` additionally returns which resolver supplied the URL (via the optional `ports.SourcedArtworkResolver.ArtworkSource()` capability) for coverage visibility.
+**Name-search path (`ResolveTagged`).** Iterates every resolver in the chain, but **skips any resolver that also implements `ports.IdentityArtworkResolver`** — identity-only resolvers never name-search, so a missing bridged identity can't trigger a same-name guess. `ResolveTagged` additionally returns which resolver supplied the URL (via the optional `ports.SourcedArtworkResolver.ArtworkSource()` capability) for coverage visibility.
 
-**Identity path (`ResolveWithIdentity`/`ResolveWithIdentityTagged`).** Tries only resolvers implementing `IdentityArtworkResolver.ResolveByIdentity(ctx, kind, ArtworkIdentity{MBID, ExternalIDs})` — resolvers that fetch by a MusicBrainz-bridged id rather than a name. This is what prevents the "two artists named Che" problem: an id-pinned lookup can't return the wrong person's face. The caller decides whether to fall back to the name-search path on a miss, and must label that result as provisional per the code's own doc comment.
+**Identity path (`ResolveWithIdentityTagged`).** Tries only resolvers implementing `IdentityArtworkResolver.ResolveByIdentity(ctx, kind, ArtworkIdentity{MBID, ExternalIDs})` — resolvers that fetch by a MusicBrainz-bridged id rather than a name. This is what prevents the "two artists named Che" problem: an id-pinned lookup can't return the wrong person's face. The caller decides whether to fall back to the name-search path on a miss, and must label that result as provisional per the code's own doc comment.
 
 **Chain order (`buildArtworkChain`, `internal/app/search_wiring.go`)**, identity-keyed sources first, name-search fallbacks last:
 1. `CoverArtArchiveResolver` (`coverartarchive.go`) — MBID-keyed, album-only (`kind == artist` short-circuits to `""`). Issues a `HEAD` to `coverartarchive.org/release-group/{mbid}/front-1200`, following a redirect's `Location` header or, on a bare 200, returning the constructed URL itself. 404/400 → clean miss.

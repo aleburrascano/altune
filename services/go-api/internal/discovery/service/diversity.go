@@ -79,7 +79,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		// identities stay as separate cards instead of folding into one. Unambiguous
 		// names collapse by name as before.
 		if ambiguous[norm] {
-			key = norm + "\x00" + stringExtra(r, "mbid")
+			key = norm + "\x00" + r.MBID
 		}
 		pop := popularityOf(r)
 		g, exists := groups[key]
@@ -106,11 +106,17 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		collapsedList := make([]map[string]any, len(g.otherIdxs))
 		for j, idx := range g.otherIdxs {
 			other := results[idx]
+			// The collapsed entry's extras keep carrying mbid on the wire (it was an
+			// Extras key before the typed-field promotion; clients key on it).
+			otherExtras := copyExtras(other.Extras)
+			if other.MBID != "" {
+				otherExtras["mbid"] = other.MBID
+			}
 			collapsedList[j] = map[string]any{
 				"title":    other.Title,
 				"subtitle": other.Subtitle,
 				"sources":  other.Sources,
-				"extras":   other.Extras,
+				"extras":   otherExtras,
 			}
 			if other.ImageURL != "" {
 				collapsedList[j]["image_url"] = other.ImageURL

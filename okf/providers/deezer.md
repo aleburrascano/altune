@@ -4,7 +4,7 @@ title: Deezer Adapter
 description: Deezer's public API and internal pipe GraphQL power search, artwork fallback, charts, content, ISRC lookup, detail-open metadata (bpm/gain/genres/label), and time-synced lyrics.
 resource: services/go-api/internal/discovery/adapters/providers/deezer.go, services/go-api/internal/discovery/adapters/providers/deezer_enrichment.go, services/go-api/internal/discovery/adapters/providers/deezer_featured.go, services/go-api/internal/discovery/adapters/providers/deezer_lyrics.go
 tags: [discovery, provider, deezer, lyrics, artwork]
-verified_commit: e238cc3671d1719837686c667242c7d88fc376d2
+verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
 ---
 
 Deezer is altune's popularity primary (`nb_fan`/`rank`) and the only wired provider carrying lyrics. Two access tiers: the public `api.deezer.com` (no auth, no key — every call in `deezer.go` fires a bare `GET`) and the internal `pipe.deezer.com` GraphQL, reached via an anonymous JWT bootstrapped from `auth.deezer.com/login/anonymous` (reverse-engineered, against ToS, accepted for self-hosted personal/family use per the README doctrine).

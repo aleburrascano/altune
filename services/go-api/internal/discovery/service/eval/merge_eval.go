@@ -188,11 +188,11 @@ func detectUnderMerge(results []domain.SearchResult) (incidents int, example str
 // obligated to collapse them: same ISRC, or same MBID, or — lacking identifiers —
 // identical canonical kind+title+subtitle.
 func provableIdentityKey(r domain.SearchResult) string {
-	if isrc := stringExtra(r, "isrc"); isrc != "" {
-		return "isrc:" + isrc
+	if r.ISRC != "" {
+		return "isrc:" + r.ISRC
 	}
-	if mbid := stringExtra(r, "mbid"); mbid != "" {
-		return "mbid:" + mbid
+	if r.MBID != "" {
+		return "mbid:" + r.MBID
 	}
 	return "t:" + r.Kind.String() + "|" + textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
 }

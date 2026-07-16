@@ -4,7 +4,7 @@ title: Discovery eval harness
 description: The offline discoveryeval CLI and its baseline/gate substrate that measure ranking, merge, diversity, coverage, and behavioral-replay quality against committed baselines, nightly rather than per-commit.
 resource: services/go-api/cmd/discoveryeval/, services/go-api/internal/discovery/service/eval/
 tags: [discovery, eval, regression-gate, behavioral-corpus, replay, subsystem]
-verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
 ---
 
 `cmd/discoveryeval` (`main.go`) runs the real search pipeline in-process (`app.BuildSearchService`) against cloned prod data, never per-commit (see [ci-cd-pipeline](../../playbooks/ci-cd-pipeline.md) for the narrower gated subset that does run per-commit). Modes: `eval` (library "artist title → top-K", gated top1/topk), `merge` (under/over-merge), `correction` (synthetic-typo precision/recall), `diversity` (reshaping cost), `signal-a`/`signal-b` (telemetry coverage gaps / cross-provider imbalance, gated), `health`/`consensus` (report-only gauges, never gated), `artwork`, `artist-intent`, and `corpus-build`. Eval searches use a nil event store so synthetic runs never pollute telemetry.

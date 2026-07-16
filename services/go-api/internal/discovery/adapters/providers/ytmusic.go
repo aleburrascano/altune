@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -224,16 +225,18 @@ func mapYTMusicAlbum(a *ytmAlbum) domain.SearchResult {
 		imageURL = a.Thumbnails[len(a.Thumbnails)-1].URL
 	}
 	extras := make(map[string]any)
-	if a.Year != "" {
-		extras["year"] = a.Year
-	}
 	if a.Type != "" {
 		extras["record_type"] = a.Type
 	}
 
-	return domain.NewProviderResult(domain.ResultKindAlbum, a.Title, subtitle, imageURL,
+	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, subtitle, imageURL,
 		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: a.BrowseID, URL: "https://music.youtube.com/browse/" + a.BrowseID},
 		extras)
+	// YT Music carries the year as a display string; parse it into the typed field.
+	if y, err := strconv.Atoi(strings.TrimSpace(a.Year)); err == nil && y > 0 {
+		r.Year = y
+	}
+	return r
 }
 
 // ytArtworkHeroSize is the square dimension the artist-artwork hero is resized

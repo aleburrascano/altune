@@ -4,7 +4,7 @@ title: MusicBrainz Adapter
 description: MusicBrainz is the identity hub — it mints MBIDs that unlock HD Cover Art Archive/Fanart.tv artwork and bridges every result to its Deezer/Spotify/Discogs/Last.fm/Wikidata/Apple ids.
 resource: services/go-api/internal/discovery/adapters/providers/musicbrainz.go, services/go-api/internal/discovery/adapters/providers/musicbrainz_featured.go, services/go-api/internal/discovery/adapters/providers/musicbrainz_enrichment.go
 tags: [discovery, provider, musicbrainz, identity, artwork]
-verified_commit: e238cc3671d1719837686c667242c7d88fc376d2
+verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
 ---
 
 `MusicBrainzAdapter` (`musicbrainz.go`) hits `musicbrainz.org/ws/2` keylessly, gated only by a required User-Agent (`cfg.MusicBrainzUserAgent`) — a missing UA returns 403. `rateLimit(ctx)` enforces the hard 1 req/sec ceiling via a mutex that reserves a future slot per caller (fixing an earlier bug where concurrent callers could stamp the same baseline and burst together, triggering MB 503s). `Search`/`SearchStructured` cover artist/recording/release-group (`searchKind`, `mbEntity`); recording results additionally carry a `featured_artists` extra parsed from multi-artist credits (`extractMBFeatured` over the joinphrase-aware artist-credit list). `ResolveArtistIdentity` resolves a name to an `ArtistIdentity` (MBID, disambiguation, birth year, area, type); `ValidateArtistAlbums`/`LookupAlbumArtist` feed the consensus/contamination-check engine (see [merge-dedup](../backend/discovery/merge-dedup.md)).

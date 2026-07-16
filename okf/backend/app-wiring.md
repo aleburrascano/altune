@@ -4,7 +4,7 @@ title: App wiring (composition root)
 description: internal/app — the single place the object graph is assembled — plus the shared rate-limited HTTP transport, SSE seam, and the eval/re-run/inspector surfaces that reuse production wiring.
 resource: services/go-api/internal/app/
 tags: [subsystem, composition-root, wiring, lifecycle, http-transport, sse, eval]
-verified_commit: dd08bd04f9c52b634e7761d07f1abd67b086c78a
+verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
 ---
 
 `internal/app` is the composition root: the only place adapters are chosen and injected into ports, per the project rule that the object graph is wired explicitly. `App` (`app.go`) owns config, the pgx pool, the (nilable) Redis client, the HTTP server, and every lifecycle-bound background component (acquisition scheduler, vocab refresh, event bus/feed, alert monitor, log ring, provider health, eval meter). `setup(ctx)` assembles in order: pools → auth verifier → event bus → catalog+acquisition → playback → discovery content/consensus → search service → background tickers → enrichment → discovery handler → vocab refresh → chi router → admin (Mission Control) → alert monitor. **Nil-tolerant degradation pervades**: nil Redis, nil MusicBrainz, nil audio store, nil enrichment all switch features off rather than fail — e.g. without an audio store the acquisition scheduler is nil, the retry endpoint isn't mounted, and shutdown falls back to bare `wg.Wait()`. Playback's `NowPlayingReader` is deliberately *not* in that set: it is built from the always-present catalog `trackRepo` and passed to `NewQueueService` as a required parameter, so a miswired graph fails at construction instead of silently dropping `current_track` from every resume.

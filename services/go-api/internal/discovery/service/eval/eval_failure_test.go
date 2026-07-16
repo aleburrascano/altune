@@ -44,11 +44,7 @@ func TestScriptClass(t *testing.T) {
 
 func TestPopBandAndHasIdentifier(t *testing.T) {
 	mk := func(pop float64, isrc string) domain.SearchResult {
-		extras := map[string]any{}
-		if isrc != "" {
-			extras["isrc"] = isrc
-		}
-		return domain.SearchResult{Popularity: pop, Extras: extras}
+		return domain.SearchResult{Popularity: pop, ISRC: isrc}
 	}
 	if got := PopBand(mk(0, "")); got != "none" {
 		t.Errorf("pop 0 → %q, want none", got)

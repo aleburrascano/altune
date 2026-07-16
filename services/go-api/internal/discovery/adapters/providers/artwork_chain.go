@@ -15,13 +15,9 @@ func NewChainedArtworkResolver(resolvers ...ports.ArtworkResolver) *ChainedArtwo
 	return &ChainedArtworkResolver{resolvers: resolvers}
 }
 
-func (c *ChainedArtworkResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
-	url, _, err := c.ResolveTagged(ctx, kind, title, subtitle, mbid)
-	return url, err
-}
-
-// ResolveTagged is Resolve plus the source that supplied the URL (for
-// per-provider coverage visibility). Source is "" when nothing resolved.
+// ResolveTagged resolves artwork by name/MBID through the chain, returning the
+// source that supplied the URL (for per-provider coverage visibility). Source is
+// "" when nothing resolved.
 func (c *ChainedArtworkResolver) ResolveTagged(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, string, error) {
 	for _, resolver := range c.resolvers {
 		// Identity-only resolvers (fetch by bridged id) never name-search — skip
@@ -48,20 +44,13 @@ func artworkSourceOf(r ports.ArtworkResolver) string {
 	return ""
 }
 
-// ResolveWithIdentity resolves artwork strictly by proven identity: every resolver
-// that can fetch by a bridged id (Discogs by its MB-asserted id, …) is tried, and
-// nothing else. This is what stops a same-name artist (the "Che" problem) getting
-// another Che's face — the bridged id pins the exact entity. Returns "" when no
-// identity source has the image; the CALLER decides whether to fall back to a name
-// search and MUST label that result as provisional (not identity), so a same-name
-// guess can never masquerade as a proven-identity image.
-func (c *ChainedArtworkResolver) ResolveWithIdentity(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ports.ArtworkIdentity) (string, error) {
-	url, _, err := c.ResolveWithIdentityTagged(ctx, kind, title, subtitle, id)
-	return url, err
-}
-
-// ResolveWithIdentityTagged is ResolveWithIdentity plus the source that supplied
-// the URL. Identity-only — no name fallback (see ResolveWithIdentity).
+// ResolveWithIdentityTagged resolves artwork strictly by proven identity: every
+// resolver that can fetch by a bridged id (Discogs by its MB-asserted id, …) is
+// tried, and nothing else. This is what stops a same-name artist (the "Che"
+// problem) getting another Che's face — the bridged id pins the exact entity.
+// Returns "" when no identity source has the image; the CALLER decides whether
+// to fall back to a name search and MUST label that result as provisional (not
+// identity), so a same-name guess can never masquerade as a proven-identity image.
 func (c *ChainedArtworkResolver) ResolveWithIdentityTagged(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ports.ArtworkIdentity) (string, string, error) {
 	for _, resolver := range c.resolvers {
 		ir, ok := resolver.(ports.IdentityArtworkResolver)
