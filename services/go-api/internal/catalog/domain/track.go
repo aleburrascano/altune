@@ -93,10 +93,10 @@ type Track struct {
 
 func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {
 	if title == "" {
-		return nil, errors.New("track title required")
+		return nil, &ValidationError{Message: "track title required"}
 	}
 	if artist == "" {
-		return nil, errors.New("track artist required")
+		return nil, &ValidationError{Message: "track artist required"}
 	}
 	return &Track{
 		ID:                NewTrackId(),

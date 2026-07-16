@@ -101,6 +101,19 @@ func (r *fakeTrackRepo) ListForUser(_ context.Context, userId shared.UserId, lim
 	return all[offset:end], total, nil
 }
 
+func (r *fakeTrackRepo) ListByIDs(_ context.Context, userId shared.UserId, ids []catdomain.TrackId) ([]*catdomain.Track, error) {
+	if r.listErr != nil {
+		return nil, r.listErr
+	}
+	var out []*catdomain.Track
+	for _, id := range ids {
+		if t, ok := r.tracks[id.String()]; ok && t.UserId == userId {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
 func (r *fakeTrackRepo) Update(_ context.Context, track *catdomain.Track) error {
 	if r.updateErr != nil {
 		return r.updateErr
@@ -270,10 +283,6 @@ func (r *fakePlaylistRepo) RemoveTrack(_ context.Context, _ catdomain.PlaylistId
 
 func (r *fakePlaylistRepo) ReorderTracks(_ context.Context, _ catdomain.PlaylistId, _ []catdomain.PlaylistTrack) error {
 	return r.reorderErr
-}
-
-func (r *fakePlaylistRepo) GetPreviewArtwork(_ context.Context, _ catdomain.PlaylistId) ([]string, error) {
-	return nil, nil
 }
 
 func (r *fakePlaylistRepo) seed(pl *catdomain.Playlist) {

@@ -3,7 +3,6 @@ package handler
 import (
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"altune/go-api/internal/auth"
@@ -46,7 +45,7 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 		"size_bytes", out.Size,
 	)
 
-	w.Header().Set("Content-Type", audioContentType(*out.Track.AudioRef))
+	w.Header().Set("Content-Type", domain.AudioContentType(*out.Track.AudioRef))
 	http.ServeContent(w, r, "", time.Time{}, out.Reader)
 }
 
@@ -71,21 +70,4 @@ func (h *StreamHandler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
-}
-
-// audioContentType maps a stored audio ref to its MIME type. The serve path must
-// label the container correctly — iOS/expo-audio decodes progressive audio by the
-// Content-Type, so an m4a sent as audio/mpeg fails to play. Mirrors the mapping the
-// storage adapter sets on upload. Defaults to audio/mpeg for legacy mp3 refs.
-func audioContentType(audioRef string) string {
-	switch {
-	case strings.HasSuffix(audioRef, ".m4a"):
-		return "audio/mp4"
-	case strings.HasSuffix(audioRef, ".opus"):
-		return "audio/opus"
-	case strings.HasSuffix(audioRef, ".ogg"):
-		return "audio/ogg"
-	default:
-		return "audio/mpeg"
-	}
 }

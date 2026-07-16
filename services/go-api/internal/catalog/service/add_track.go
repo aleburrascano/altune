@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 
 	"altune/go-api/internal/catalog/domain"
@@ -102,52 +103,14 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 
 // trackAddedPayload builds the full track object embedded in the
 // track_added_to_library event (F10), so a receiving client inserts the row
-// directly instead of forcing a refetch. The JSON keys mirror the handler's
-// TrackResponse wire shape — kept in sync with trackToResponse. `album` is null
-// when empty, matching the wire contract.
+// directly instead of forcing a refetch. It marshals the same TrackDTO the HTTP
+// handler serializes and re-opens it as the bus's map payload, so the event can
+// never drift from the wire shape — they are the same struct.
 func trackAddedPayload(t *domain.Track) map[string]any {
-	var album *string
-	if t.Album != "" {
-		a := t.Album
-		album = &a
-	}
-	return map[string]any{
-		"track_id":           t.ID.String(), // retained for older clients
-		"id":                 t.ID.String(),
-		"title":              t.Title,
-		"artist":             t.Artist,
-		"album":              album,
-		"duration_seconds":   t.DurationSeconds,
-		"added_at":           t.AddedAt,
-		"acquisition_status": t.AcquisitionStatus.String(),
-		"artwork_url":        t.ArtworkURL,
-		"year":               t.Year,
-		"genre":              t.Genre,
-		"track_number":       t.TrackNumber,
-		"album_artist":       t.AlbumArtist,
-		"isrc":               t.ISRC,
-		"audio_ref":          t.AudioRef,
-		"failure_reason":     t.FailureReason,
-		"featured_artists":   featuredArtistsPayload(t.FeaturedArtists),
-	}
-}
-
-// featuredArtistsPayload mirrors the handler's FeaturedArtistDTO wire shape for
-// the embedded event, omitting empty ids. Returns nil for no credits.
-func featuredArtistsPayload(feats []domain.FeaturedArtist) []map[string]any {
-	if len(feats) == 0 {
-		return nil
-	}
-	out := make([]map[string]any, 0, len(feats))
-	for _, f := range feats {
-		m := map[string]any{"name": f.Name}
-		if f.MBID != "" {
-			m["mbid"] = f.MBID
-		}
-		if f.DeezerID != 0 {
-			m["deezer_id"] = f.DeezerID
-		}
-		out = append(out, m)
-	}
-	return out
+	// A DTO of plain values cannot fail to (un)marshal.
+	b, _ := json.Marshal(TrackToDTO(t))
+	var m map[string]any
+	_ = json.Unmarshal(b, &m)
+	m["track_id"] = t.ID.String() // retained for older clients
+	return m
 }

@@ -127,6 +127,42 @@ func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.User
 	return tracks, total, nil
 }
 
+// ListByIDs batch-loads the user's tracks matching ids in one query. Unknown or
+// foreign ids are absent from the result; order is not guaranteed. Does not load
+// featured credits (see the port doc) — the hot caller is audio-URL presigning,
+// which only needs the acquisition status and audio ref.
+func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId, ids []domain.TrackId) ([]*domain.Track, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	uuids := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		uuids[i] = id.UUID()
+	}
+
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, user_id, title, artist, album, duration_seconds,
+			added_at, artwork_url, acquisition_status, dedup_key,
+			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason
+		FROM tracks WHERE user_id = $1 AND id = ANY($2)`,
+		userId.UUID(), uuids,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tracks []*domain.Track
+	for rows.Next() {
+		t, err := scanTrackFromRows(rows)
+		if err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, t)
+	}
+	return tracks, rows.Err()
+}
+
 func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) error {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE tracks SET

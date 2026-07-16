@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"time"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
@@ -73,13 +72,8 @@ func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Reque
 		httputil.BadRequest(w, "invalid request body")
 		return
 	}
-	if req.TrackNumber <= 0 {
-		httputil.BadRequest(w, "track_number must be positive")
-		return
-	}
 	if _, err := h.setTrackNumber.Execute(r.Context(), userId, trackId, req.TrackNumber); err != nil {
-		slog.ErrorContext(r.Context(), "set track number failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -98,8 +92,7 @@ func (h *TrackHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Req
 	}
 	result, err := h.backfillFeatured.Execute(r.Context(), userId)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "featured backfill failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)
@@ -133,8 +126,7 @@ func (h *TrackHandler) handleListFeaturing(w http.ResponseWriter, r *http.Reques
 
 	tracks, err := h.listFeaturing.Execute(r.Context(), userId, fa)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list featuring failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -169,24 +161,10 @@ type CreateTrackRequest struct {
 	SourceURL *string `json:"source_url,omitempty"`
 }
 
-type TrackResponse struct {
-	ID                uuid.UUID `json:"id"`
-	Title             string    `json:"title"`
-	Artist            string    `json:"artist"`
-	Album             *string   `json:"album"`
-	DurationSeconds   *float64  `json:"duration_seconds"`
-	AddedAt           time.Time `json:"added_at"`
-	AcquisitionStatus string    `json:"acquisition_status"`
-	ArtworkURL        *string   `json:"artwork_url"`
-	Year              *int      `json:"year,omitempty"`
-	Genre             *string   `json:"genre,omitempty"`
-	TrackNumber       *int      `json:"track_number,omitempty"`
-	AlbumArtist       *string   `json:"album_artist,omitempty"`
-	ISRC              *string   `json:"isrc,omitempty"`
-	AudioRef          *string   `json:"audio_ref,omitempty"`
-	FailureReason     *string   `json:"failure_reason,omitempty"`
-	FeaturedArtists   []FeaturedArtistDTO `json:"featured_artists,omitempty"`
-}
+// TrackResponse is the track wire shape, owned by the service layer so the
+// track_added_to_library event payload and this HTTP response can never drift —
+// they serialize the same struct (service.TrackDTO).
+type TrackResponse = service.TrackDTO
 
 type ListTracksResponse struct {
 	Items   []TrackResponse `json:"items"`
@@ -197,28 +175,7 @@ type ListTracksResponse struct {
 }
 
 func trackToResponse(t *domain.Track) TrackResponse {
-	var album *string
-	if t.Album != "" {
-		album = &t.Album
-	}
-	return TrackResponse{
-		ID:                t.ID.UUID(),
-		Title:             t.Title,
-		Artist:            t.Artist,
-		Album:             album,
-		DurationSeconds:   t.DurationSeconds,
-		AddedAt:           t.AddedAt,
-		AcquisitionStatus: t.AcquisitionStatus.String(),
-		ArtworkURL:        t.ArtworkURL,
-		Year:              t.Year,
-		Genre:             t.Genre,
-		TrackNumber:       t.TrackNumber,
-		AlbumArtist:       t.AlbumArtist,
-		ISRC:              t.ISRC,
-		AudioRef:          t.AudioRef,
-		FailureReason:     t.FailureReason,
-		FeaturedArtists:   featuredToDTOs(t.FeaturedArtists),
-	}
+	return service.TrackToDTO(t)
 }
 
 // --- Handlers ---
@@ -237,8 +194,7 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 
 	result, err := h.listTracks.Execute(r.Context(), userId, limit, offset)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list tracks failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -268,11 +224,6 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.Title == "" || req.Artist == "" {
-		httputil.BadRequest(w, "title and artist are required")
-		return
-	}
-
 	album := ""
 	if req.Album != nil {
 		album = *req.Album
@@ -292,10 +243,11 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		SourceURL:       req.SourceURL,
 	}
 
+	// Validation lives in the domain (NewTrack returns a coded 400) — no
+	// duplicated pre-checks here; HandleServiceError renders the status.
 	result, err := h.addTrack.Execute(r.Context(), userId, input)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "add track failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -339,8 +291,7 @@ func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Reque
 
 	track, err := h.listTracks.GetByID(r.Context(), userId, trackId)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "get track status failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 	if track == nil {

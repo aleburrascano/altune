@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -145,12 +144,9 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]PlaylistResponse, len(playlists))
 	for i, p := range playlists {
-		artworkURLs, err := h.svc.GetPreviewArtwork(r.Context(), p.ID)
-		if err != nil {
-			slog.ErrorContext(r.Context(), "get preview artwork failed", "error", err, "playlist_id", p.ID.String())
-			artworkURLs = []string{}
-		}
-		items[i] = playlistToResponse(p, p.TrackCount, artworkURLs)
+		// Track count and preview artwork are projections the list query
+		// already computed — no per-playlist follow-up queries.
+		items[i] = playlistToResponse(p, p.TrackCount, p.PreviewArtworkURLs)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, ListPlaylistsResponse{
@@ -222,7 +218,9 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, playlistToResponse(playlist, len(playlist.Tracks), nil))
+	// TrackCount is the GetByID projection — playlist.Tracks is never loaded on
+	// this path, so len(playlist.Tracks) would always report 0.
+	httputil.WriteJSON(w, http.StatusOK, playlistToResponse(playlist, playlist.TrackCount, nil))
 }
 
 func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {

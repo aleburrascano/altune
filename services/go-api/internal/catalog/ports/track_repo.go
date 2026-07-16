@@ -15,6 +15,12 @@ type TrackRepository interface {
 	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
 	GetByDedupKey(ctx context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error)
 	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
+	// ListByIDs returns the user's tracks matching the given ids in one query —
+	// the batch read for hot paths that would otherwise loop GetByID (audio-URL
+	// presigning resolves up to 200 tracks per request). Unknown or foreign ids
+	// are simply absent from the result; order is not guaranteed. Like the
+	// playlist-track joins, it does not load featured credits.
+	ListByIDs(ctx context.Context, userId shared.UserId, ids []domain.TrackId) ([]*domain.Track, error)
 	Update(ctx context.Context, track *domain.Track) error
 	// SetTrackNumber fills a track's album position when it is currently unset.
 	// Fill-only (WHERE track_number IS NULL): it never overwrites an existing

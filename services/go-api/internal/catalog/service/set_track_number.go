@@ -32,7 +32,7 @@ func (s *SetTrackNumberService) Execute(
 	trackNumber int,
 ) (updated bool, err error) {
 	if trackNumber <= 0 {
-		return false, fmt.Errorf("track number must be positive, got %d", trackNumber)
+		return false, &domain.ValidationError{Message: "track_number must be positive"}
 	}
 	updated, err = s.trackRepo.SetTrackNumber(ctx, trackId, userId, trackNumber)
 	if err != nil {

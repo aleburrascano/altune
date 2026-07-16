@@ -33,9 +33,24 @@ func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Pla
 }
 
 func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, error) {
+	// track_count and preview_artwork are read-side projections computed in the
+	// same query — one round-trip for the whole playlists screen, no per-playlist
+	// follow-up. preview_artwork: up to four distinct artwork URLs in position
+	// order (the playlist tile).
 	rows, err := r.pool.Query(ctx,
 		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
-			(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id) AS track_count
+			(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id) AS track_count,
+			COALESCE((
+				SELECT array_agg(url) FROM (
+					SELECT t.artwork_url AS url
+					FROM playlist_tracks pt
+					JOIN tracks t ON t.id = pt.track_id
+					WHERE pt.playlist_id = p.id AND t.artwork_url IS NOT NULL
+					GROUP BY t.artwork_url
+					ORDER BY MIN(pt.position) ASC
+					LIMIT 4
+				) sub
+			), '{}') AS preview_artwork
 		FROM playlists p
 		WHERE p.user_id = $1
 		ORDER BY p.created_at DESC`,
@@ -55,8 +70,9 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 			createdAt  time.Time
 			updatedAt  time.Time
 			trackCount int
+			artwork    []string
 		)
-		err := rows.Scan(&id, &uid, &name, &createdAt, &updatedAt, &trackCount)
+		err := rows.Scan(&id, &uid, &name, &createdAt, &updatedAt, &trackCount, &artwork)
 		if err != nil {
 			return nil, err
 		}
@@ -68,24 +84,31 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 			UpdatedAt: updatedAt,
 		}
 		p.TrackCount = trackCount
+		p.PreviewArtworkURLs = artwork
 		playlists = append(playlists, p)
 	}
 	return playlists, rows.Err()
 }
 
 func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, error) {
+	// track_count is projected here too (not just on ListForUser) so single-
+	// playlist responses (e.g. rename) report the real count without loading the
+	// track rows.
 	row := r.pool.QueryRow(ctx,
-		`SELECT id, user_id, name, created_at, updated_at FROM playlists WHERE id = $1 AND user_id = $2`,
+		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
+			(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id) AS track_count
+		FROM playlists p WHERE p.id = $1 AND p.user_id = $2`,
 		id.UUID(), userId.UUID(),
 	)
 	var (
-		pid       uuid.UUID
-		uid       uuid.UUID
-		name      string
-		createdAt time.Time
-		updatedAt time.Time
+		pid        uuid.UUID
+		uid        uuid.UUID
+		name       string
+		createdAt  time.Time
+		updatedAt  time.Time
+		trackCount int
 	)
-	err := row.Scan(&pid, &uid, &name, &createdAt, &updatedAt)
+	err := row.Scan(&pid, &uid, &name, &createdAt, &updatedAt, &trackCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -93,11 +116,12 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 		return nil, err
 	}
 	return &domain.Playlist{
-		ID:        domain.PlaylistIdFromUUID(pid),
-		UserId:    shared.NewUserId(uid),
-		Name:      name,
-		CreatedAt: createdAt,
-		UpdatedAt: updatedAt,
+		ID:         domain.PlaylistIdFromUUID(pid),
+		UserId:     shared.NewUserId(uid),
+		Name:       name,
+		CreatedAt:  createdAt,
+		UpdatedAt:  updatedAt,
+		TrackCount: trackCount,
 	}, nil
 }
 
@@ -231,31 +255,4 @@ func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, playlistId do
 	br.Close()
 
 	return tx.Commit(ctx)
-}
-
-func (r *PgxPlaylistRepository) GetPreviewArtwork(ctx context.Context, playlistId domain.PlaylistId) ([]string, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT t.artwork_url
-		FROM playlist_tracks pt
-		JOIN tracks t ON t.id = pt.track_id
-		WHERE pt.playlist_id = $1 AND t.artwork_url IS NOT NULL
-		GROUP BY t.artwork_url
-		ORDER BY MIN(pt.position) ASC
-		LIMIT 4`,
-		playlistId.UUID(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var urls []string
-	for rows.Next() {
-		var url string
-		if err := rows.Scan(&url); err != nil {
-			return nil, err
-		}
-		urls = append(urls, url)
-	}
-	return urls, rows.Err()
 }
