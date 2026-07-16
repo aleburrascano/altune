@@ -85,8 +85,7 @@ func (r *PgxQueueStateRepository) GetForUser(
 	}
 
 	state, err := domain.RehydrateQueueState(
-		userId, trackIds, currentIdx, positionMs, shuffled, rm, sourceId, updatedAt,
-		domain.WithNaturalOrder(naturalOrder),
+		userId, trackIds, currentIdx, positionMs, shuffled, rm, sourceId, naturalOrder, updatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("rehydrate queue state: %w", err)

@@ -49,7 +49,7 @@ func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
 	reader := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{
 		"y": {Id: "y", Title: "Song Y", Artist: "Artist", AcquisitionStatus: "ready"},
 	}}
-	svc := NewQueueService(repo, WithNowPlayingReader(reader))
+	svc := NewQueueService(repo, reader)
 	user := testUser()
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
@@ -72,9 +72,12 @@ func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
 	}
 }
 
-func TestQueueService_ResumeView_NoReaderOmitsCurrentTrack(t *testing.T) {
+func TestQueueService_ResumeView_UnknownTrackOmitsCurrentTrack(t *testing.T) {
+	// The reader is wired but doesn't know the current track (deleted, unknown
+	// id) — resume degrades to "no snapshot" instead of failing.
 	repo := newInMemoryQueueRepo()
-	svc := NewQueueService(repo) // no NowPlayingReader wired
+	reader := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{}}
+	svc := NewQueueService(repo, reader)
 	user := testUser()
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
@@ -90,7 +93,7 @@ func TestQueueService_ResumeView_NoReaderOmitsCurrentTrack(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if view.CurrentTrack != nil {
-		t.Errorf("expected no current track without a reader, got %+v", view.CurrentTrack)
+		t.Errorf("expected no current track for unknown id, got %+v", view.CurrentTrack)
 	}
 	if view.State.CurrentIdx != 1 {
 		t.Errorf("state should still resume: idx=%d", view.State.CurrentIdx)
@@ -100,7 +103,7 @@ func TestQueueService_ResumeView_NoReaderOmitsCurrentTrack(t *testing.T) {
 func TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	reader := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{}}
-	svc := NewQueueService(repo, WithNowPlayingReader(reader))
+	svc := NewQueueService(repo, reader)
 	user := testUser()
 
 	// Empty queue → CurrentIdx normalizes to 0 but TrackIds is empty, so the
@@ -116,7 +119,7 @@ func TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack(t *testing.T) {
 
 func TestQueueService_Save_PersistsValidState(t *testing.T) {
 	repo := newInMemoryQueueRepo()
-	svc := NewQueueService(repo)
+	svc := NewQueueService(repo, &fakeNowPlaying{})
 	user := testUser()
 
 	err := svc.Save(context.Background(), user, SaveQueueStateInput{
@@ -140,7 +143,7 @@ func TestQueueService_Save_PersistsValidState(t *testing.T) {
 }
 
 func TestQueueService_Save_RejectsInvalidRepeatMode(t *testing.T) {
-	svc := NewQueueService(newInMemoryQueueRepo())
+	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
 	err := svc.Save(context.Background(), testUser(), SaveQueueStateInput{
 		TrackIds:   []string{"a"},
 		RepeatMode: "bogus",
@@ -151,7 +154,7 @@ func TestQueueService_Save_RejectsInvalidRepeatMode(t *testing.T) {
 }
 
 func TestQueueService_Resume_ReturnsEmptyWhenNoneStored(t *testing.T) {
-	svc := NewQueueService(newInMemoryQueueRepo())
+	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
 
 	state, err := svc.Resume(context.Background(), testUser())
 	if err != nil {
@@ -167,7 +170,7 @@ func TestQueueService_Resume_ReturnsEmptyWhenNoneStored(t *testing.T) {
 
 func TestQueueService_Resume_ReturnsStored(t *testing.T) {
 	repo := newInMemoryQueueRepo()
-	svc := NewQueueService(repo)
+	svc := NewQueueService(repo, &fakeNowPlaying{})
 	user := testUser()
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{

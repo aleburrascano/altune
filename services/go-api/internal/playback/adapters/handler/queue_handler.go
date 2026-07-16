@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -81,8 +80,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		NaturalOrder: body.NaturalOrder,
 	})
 	if err != nil {
-		slog.ErrorContext(r.Context(), "playback.queue_state.save_failed", "error", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "failed to save queue state")
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -97,8 +95,7 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	view, err := h.svc.ResumeView(r.Context(), userId)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "playback.queue_state.resume_failed", "error", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "failed to get queue state")
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 

@@ -7,6 +7,17 @@ import (
 	"altune/go-api/internal/shared"
 )
 
+// ValidationError is a client-caused construction failure. It structurally
+// implements httputil.StatusError (the status is a plain int so the domain
+// layer stays free of net/http), so handlers map it to 400 via
+// httputil.HandleServiceError instead of a blanket 500.
+type ValidationError struct {
+	Message string
+}
+
+func (e *ValidationError) Error() string   { return e.Message }
+func (e *ValidationError) HTTPStatus() int { return 400 }
+
 type RepeatMode int
 
 const (
@@ -37,7 +48,7 @@ func ParseRepeatMode(s string) (RepeatMode, error) {
 	case "one":
 		return RepeatOne, nil
 	default:
-		return RepeatOff, fmt.Errorf("unknown repeat mode: %q", s)
+		return RepeatOff, &ValidationError{Message: fmt.Sprintf("unknown repeat mode: %q", s)}
 	}
 }
 
@@ -68,21 +79,6 @@ type QueueState struct {
 	UpdatedAt    time.Time
 }
 
-// QueueStateOption configures optional snapshot fields (functional options — the
-// house constructor idiom). Appended variadically so the positional constructors
-// stay source-compatible.
-type QueueStateOption func(*QueueState)
-
-// WithNaturalOrder attaches the pre-shuffle track order to the snapshot.
-func WithNaturalOrder(naturalOrder []string) QueueStateOption {
-	return func(s *QueueState) {
-		if naturalOrder == nil {
-			naturalOrder = []string{}
-		}
-		s.NaturalOrder = naturalOrder
-	}
-}
-
 // newQueueState is the single door every QueueState passes through. Empty queues
 // normalize CurrentIdx to 0; non-empty queues must index in range. Used by both
 // fresh construction and storage reconstitution so the invariant has one home.
@@ -94,24 +90,27 @@ func newQueueState(
 	shuffled bool,
 	repeatMode RepeatMode,
 	sourceId string,
+	naturalOrder []string,
 	updatedAt time.Time,
-	opts ...QueueStateOption,
 ) (*QueueState, error) {
 	if positionMs < 0 {
-		return nil, fmt.Errorf("positionMs must be non-negative, got %d", positionMs)
+		return nil, &ValidationError{Message: fmt.Sprintf("positionMs must be non-negative, got %d", positionMs)}
 	}
-	// Normalize a nil slice (NULL/empty array from storage, omitted JSON field)
-	// to empty so TrackIds is never nil — callers and JSON serialization can rely
-	// on it. This is the single home for the invariant.
+	// Normalize nil slices (NULL/empty array from storage, omitted JSON field)
+	// to empty so TrackIds and NaturalOrder are never nil — callers and JSON
+	// serialization can rely on it. This is the single home for the invariant.
 	if trackIds == nil {
 		trackIds = []string{}
+	}
+	if naturalOrder == nil {
+		naturalOrder = []string{}
 	}
 	if len(trackIds) == 0 {
 		currentIdx = 0
 	} else if currentIdx < 0 || currentIdx >= len(trackIds) {
-		return nil, fmt.Errorf("currentIdx %d out of range [0, %d)", currentIdx, len(trackIds))
+		return nil, &ValidationError{Message: fmt.Sprintf("currentIdx %d out of range [0, %d)", currentIdx, len(trackIds))}
 	}
-	state := &QueueState{
+	return &QueueState{
 		UserId:       userId,
 		TrackIds:     trackIds,
 		CurrentIdx:   currentIdx,
@@ -119,13 +118,9 @@ func newQueueState(
 		Shuffled:     shuffled,
 		RepeatMode:   repeatMode,
 		SourceId:     sourceId,
-		NaturalOrder: []string{},
+		NaturalOrder: naturalOrder,
 		UpdatedAt:    updatedAt,
-	}
-	for _, opt := range opts {
-		opt(state)
-	}
-	return state, nil
+	}, nil
 }
 
 // NewQueueState builds a fresh snapshot, stamping UpdatedAt to now.
@@ -137,9 +132,9 @@ func NewQueueState(
 	shuffled bool,
 	repeatMode RepeatMode,
 	sourceId string,
-	opts ...QueueStateOption,
+	naturalOrder []string,
 ) (*QueueState, error) {
-	return newQueueState(userId, trackIds, currentIdx, positionMs, shuffled, repeatMode, sourceId, time.Now().UTC(), opts...)
+	return newQueueState(userId, trackIds, currentIdx, positionMs, shuffled, repeatMode, sourceId, naturalOrder, time.Now().UTC())
 }
 
 // RehydrateQueueState reconstitutes a snapshot read from storage, preserving its
@@ -153,10 +148,10 @@ func RehydrateQueueState(
 	shuffled bool,
 	repeatMode RepeatMode,
 	sourceId string,
+	naturalOrder []string,
 	updatedAt time.Time,
-	opts ...QueueStateOption,
 ) (*QueueState, error) {
-	return newQueueState(userId, trackIds, currentIdx, positionMs, shuffled, repeatMode, sourceId, updatedAt, opts...)
+	return newQueueState(userId, trackIds, currentIdx, positionMs, shuffled, repeatMode, sourceId, naturalOrder, updatedAt)
 }
 
 // EmptyQueueState is the canonical "no queue" snapshot for a user — the single
