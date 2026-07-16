@@ -4,7 +4,7 @@ title: Acquisition
 description: The yt-dlp-backed pipeline that finds, ranks, downloads, verifies, tags, and stores audio for a saved Track, with retry/scheduling and rich telemetry.
 resource: services/go-api/internal/acquisition/
 tags: [bounded-context, hexagonal, go-api, pipeline, ytdlp, background-jobs, retry]
-verified_commit: e238cc3671d1719837686c667242c7d88fc376d2
+verified_commit: cae1959c18ded17f587561e0893a35767ab0540d
 ---
 
 Acquisition is a customer of the catalog context: it consumes `catalog/domain.Track` and its `MarkReady`/`MarkFailed`/`RevertToPending` invariants rather than owning its own aggregate. There is no `domain/` folder — `AudioCandidate` lives in `ports/ports.go` and the pipeline-scoped types (`TrackRef`, `Candidate`, `AcquisitionContext`) in `service/pipeline.go` — this context is process/orchestration-heavy, not aggregate-heavy.

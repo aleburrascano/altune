@@ -192,6 +192,72 @@ func TestSupabaseJWTVerifier_InvalidSignature(t *testing.T) {
 	}
 }
 
+// TestSupabaseJWTVerifier_UnknownKeyID pins classifyJWTError's
+// "failed to find key" substring against the real library: a token whose kid
+// is absent from the JWKS must classify as signature_invalid, not malformed.
+// (TestSupabaseJWTVerifier_InvalidSignature pins "could not verify message".)
+func TestSupabaseJWTVerifier_UnknownKeyID(t *testing.T) {
+	f := newTestJWTFixture(t)
+	verifier := f.newVerifier(t)
+
+	strayKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate stray key: %v", err)
+	}
+	strayJWK, err := jwk.FromRaw(strayKey)
+	if err != nil {
+		t.Fatalf("create stray JWK: %v", err)
+	}
+	_ = strayJWK.Set(jwk.KeyIDKey, "not-in-jwks")
+	_ = strayJWK.Set(jwk.AlgorithmKey, jwa.RS256)
+
+	builder := jwt.New()
+	_ = builder.Set("sub", uuid.New().String())
+	_ = builder.Set("iss", f.issuer)
+	_ = builder.Set("aud", f.audience)
+	_ = builder.Set("exp", time.Now().Add(1*time.Hour))
+
+	signed, err := jwt.Sign(builder, jwt.WithKey(jwa.RS256, strayJWK))
+	if err != nil {
+		t.Fatalf("sign with stray key: %v", err)
+	}
+
+	_, err = verifier.Verify(context.Background(), string(signed))
+	if err == nil {
+		t.Fatal("expected error for unknown key id, got nil")
+	}
+
+	var tokenErr *auth.InvalidTokenError
+	if !errors.As(err, &tokenErr) {
+		t.Fatalf("expected InvalidTokenError, got %T: %v", err, err)
+	}
+	if tokenErr.Reason != auth.ReasonSignatureInvalid {
+		t.Errorf("reason: got %q, want %q (jwx may have reworded 'failed to find key')", tokenErr.Reason, auth.ReasonSignatureInvalid)
+	}
+}
+
+// TestSupabaseJWTVerifier_JWKSUnavailable asserts that a JWKS fetch failure is
+// an infrastructure error, not an InvalidTokenError — the middleware maps it
+// to a 503 instead of rejecting the token as invalid.
+func TestSupabaseJWTVerifier_JWKSUnavailable(t *testing.T) {
+	ctx := context.Background()
+	// Port 1 refuses connections; the initial refresh warns, Verify's fetch fails.
+	verifier, err := NewSupabaseJWTVerifier(ctx, "http://127.0.0.1:1/jwks", "https://test-project.supabase.co", "authenticated")
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+
+	_, err = verifier.Verify(ctx, "any-token")
+	if err == nil {
+		t.Fatal("expected error when JWKS is unreachable, got nil")
+	}
+
+	var tokenErr *auth.InvalidTokenError
+	if errors.As(err, &tokenErr) {
+		t.Fatalf("JWKS unavailability must not be an InvalidTokenError, got reason %q", tokenErr.Reason)
+	}
+}
+
 func TestSupabaseJWTVerifier_MissingSub(t *testing.T) {
 	f := newTestJWTFixture(t)
 	verifier := f.newVerifier(t)

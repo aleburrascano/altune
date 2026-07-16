@@ -27,14 +27,10 @@ var (
 
 // --- fake token verifier ---
 
-// fakeTokenVerifier always succeeds and returns the configured userId.
-type fakeTokenVerifier struct {
-	userId shared.UserId
-}
-
-func (v *fakeTokenVerifier) Verify(_ context.Context, _ string) (shared.UserId, error) {
-	return v.userId, nil
-}
+// verifyAsTestUser always succeeds and returns testUserId.
+var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+	return testUserId, nil
+})
 
 // --- fake track repo ---
 
@@ -437,7 +433,7 @@ func buildTrackHandler(trackRepo *fakeTrackRepo, scheduler *fakeScheduler) (*Tra
 	listFeaturingSvc := service.NewListFeaturingService(trackRepo)
 	h := NewTrackHandler(addSvc, listSvc, deleteSvc, setTrackNumberSvc, backfillSvc, listFeaturingSvc)
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(&fakeTokenVerifier{userId: testUserId}))
+	r.Use(auth.Middleware(verifyAsTestUser))
 	r.Mount("/tracks", h.Routes())
 	return h, r
 }
@@ -446,7 +442,7 @@ func buildPlaylistHandler(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) (*Pla
 	svc := service.NewPlaylistService(plRepo, trRepo)
 	h := NewPlaylistHandler(svc)
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(&fakeTokenVerifier{userId: testUserId}))
+	r.Use(auth.Middleware(verifyAsTestUser))
 	r.Mount("/playlists", h.Routes())
 	return h, r
 }
@@ -459,7 +455,7 @@ func buildStreamHandler(trackRepo *fakeTrackRepo, audioStore *fakeAudioStore, sc
 	streamSvc := service.NewStreamTrackService(trackRepo, audioStore, sched)
 	h := NewStreamHandler(streamSvc)
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(&fakeTokenVerifier{userId: testUserId}))
+	r.Use(auth.Middleware(verifyAsTestUser))
 	r.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)
 	return h, r
 }

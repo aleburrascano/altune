@@ -24,13 +24,10 @@ var (
 
 // --- fake token verifier ---
 
-type retryFakeTokenVerifier struct {
-	userId shared.UserId
-}
-
-func (v *retryFakeTokenVerifier) Verify(_ context.Context, _ string) (shared.UserId, error) {
-	return v.userId, nil
-}
+// retryVerifyAsTestUser always succeeds and returns retryTestUserId.
+var retryVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+	return retryTestUserId, nil
+})
 
 // --- fake track repo ---
 
@@ -137,7 +134,7 @@ func makeReadyRetryTrack(userId shared.UserId, title, artist, album, audioRef st
 func buildRetryRouter(trackRepo *retryFakeTrackRepo, scheduler *retryFakeScheduler) chi.Router {
 	h := NewRetryHandler(trackRepo, scheduler)
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(&retryFakeTokenVerifier{userId: retryTestUserId}))
+	r.Use(auth.Middleware(retryVerifyAsTestUser))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
 	return r
 }

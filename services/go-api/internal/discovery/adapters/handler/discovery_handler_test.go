@@ -30,13 +30,10 @@ var (
 
 // --- fake token verifier ---
 
-type discFakeTokenVerifier struct {
-	userId shared.UserId
-}
-
-func (v *discFakeTokenVerifier) Verify(_ context.Context, _ string) (shared.UserId, error) {
-	return v.userId, nil
-}
+// discVerifyAsTestUser always succeeds and returns discTestUserId.
+var discVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+	return discTestUserId, nil
+})
 
 // --- fake search provider ---
 
@@ -228,7 +225,7 @@ func buildDiscoveryRouter(
 	})
 
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(&discFakeTokenVerifier{userId: discTestUserId}))
+	r.Use(auth.Middleware(discVerifyAsTestUser))
 	r.Mount("/discovery", h.Routes())
 	return r
 }

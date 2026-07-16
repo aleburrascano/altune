@@ -15,13 +15,10 @@ import (
 
 // --- stub TokenVerifier ---
 
-type stubVerifier struct {
-	userID shared.UserId
-	err    error
-}
-
-func (s *stubVerifier) Verify(_ context.Context, _ string) (shared.UserId, error) {
-	return s.userID, s.err
+func stubVerifier(userID shared.UserId, err error) VerifierFunc {
+	return func(context.Context, string) (shared.UserId, error) {
+		return userID, err
+	}
 }
 
 // --- helpers ---
@@ -49,7 +46,7 @@ func decodeRejectBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]s
 
 func TestMiddleware_MissingHeader(t *testing.T) {
 	next, called := noopHandler()
-	handler := Middleware(&stubVerifier{})(next)
+	handler := Middleware(stubVerifier(shared.UserId{}, nil))(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -81,7 +78,7 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			next, called := noopHandler()
-			handler := Middleware(&stubVerifier{})(next)
+			handler := Middleware(stubVerifier(shared.UserId{}, nil))(next)
 
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.Header.Set("Authorization", tt.header)
@@ -105,7 +102,7 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 
 func TestMiddleware_ValidToken(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
-	verifier := &stubVerifier{userID: uid}
+	verifier := stubVerifier(uid, nil)
 
 	var capturedUID shared.UserId
 	var uidFound bool
@@ -134,9 +131,8 @@ func TestMiddleware_ValidToken(t *testing.T) {
 }
 
 func TestMiddleware_InvalidToken(t *testing.T) {
-	verifier := &stubVerifier{
-		err: &InvalidTokenError{Reason: ReasonExpired, Detail: "token expired"},
-	}
+	verifier := stubVerifier(shared.UserId{},
+		&InvalidTokenError{Reason: ReasonExpired, Detail: "token expired"})
 	next, called := noopHandler()
 	handler := Middleware(verifier)(next)
 
@@ -159,9 +155,9 @@ func TestMiddleware_InvalidToken(t *testing.T) {
 }
 
 func TestMiddleware_VerifierError(t *testing.T) {
-	verifier := &stubVerifier{
-		err: errors.New("JWKS fetch failed"),
-	}
+	// A non-InvalidTokenError means the verifier could not run (e.g. JWKS
+	// unreachable) — infrastructure failure, not a bad token: 503, not 401.
+	verifier := stubVerifier(shared.UserId{}, errors.New("fetch JWKS: connection refused"))
 	next, called := noopHandler()
 	handler := Middleware(verifier)(next)
 
@@ -171,12 +167,12 @@ func TestMiddleware_VerifierError(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusServiceUnavailable)
 	}
 	body := decodeRejectBody(t, rec)
-	if body["reason"] != string(ReasonSignatureInvalid) {
-		t.Errorf("reason: got %q, want %q", body["reason"], ReasonSignatureInvalid)
+	if body["reason"] != "" {
+		t.Errorf("reason: got %q, want none (infra failure is not a token rejection)", body["reason"])
 	}
 	if *called {
 		t.Error("next handler should not have been called")

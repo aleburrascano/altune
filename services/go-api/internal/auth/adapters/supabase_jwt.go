@@ -15,6 +15,10 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
+// acceptableSkew tolerates small clock drift between Supabase and this host
+// when validating exp/iat/nbf.
+const acceptableSkew = 5 * time.Second
+
 type SupabaseJWTVerifier struct {
 	cache    *jwk.Cache
 	jwksURL  string
@@ -46,10 +50,9 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shared.UserId, error) {
 	keySet, err := v.cache.Get(ctx, v.jwksURL)
 	if err != nil {
-		return shared.UserId{}, &auth.InvalidTokenError{
-			Reason: auth.ReasonSignatureInvalid,
-			Detail: "failed to fetch JWKS",
-		}
+		// Deliberately NOT an InvalidTokenError: the verifier failed to run,
+		// the token was never judged. The middleware maps this to a 503.
+		return shared.UserId{}, fmt.Errorf("fetch JWKS: %w", err)
 	}
 
 	token, err := jwt.Parse(
@@ -58,7 +61,7 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 		jwt.WithValidate(true),
 		jwt.WithIssuer(v.issuer),
 		jwt.WithAudience(v.audience),
-		jwt.WithAcceptableSkew(5*time.Second),
+		jwt.WithAcceptableSkew(acceptableSkew),
 	)
 	if err != nil {
 		reason := classifyJWTError(err)
@@ -98,6 +101,11 @@ func classifyJWTError(err error) auth.TokenRejectReason {
 		return auth.ReasonClaimInvalidAUD
 	}
 
+	// jwx v2 exposes no typed sentinels for these two failures. The substrings
+	// are pinned by TestSupabaseJWTVerifier_InvalidSignature and
+	// TestSupabaseJWTVerifier_UnknownKeyID, which exercise the real library —
+	// a jwx upgrade that rewords them fails those tests instead of silently
+	// reclassifying signature failures as malformed.
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "failed to find key"),

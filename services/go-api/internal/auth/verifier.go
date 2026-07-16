@@ -10,6 +10,15 @@ type TokenVerifier interface {
 	Verify(ctx context.Context, token string) (shared.UserId, error)
 }
 
+// VerifierFunc adapts a plain function to TokenVerifier, mirroring
+// http.HandlerFunc. Tests pass a closure instead of each package defining its
+// own stub type.
+type VerifierFunc func(ctx context.Context, token string) (shared.UserId, error)
+
+func (f VerifierFunc) Verify(ctx context.Context, token string) (shared.UserId, error) {
+	return f(ctx, token)
+}
+
 type TokenRejectReason string
 
 const (
