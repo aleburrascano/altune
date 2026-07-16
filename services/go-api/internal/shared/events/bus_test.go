@@ -2,6 +2,7 @@ package events
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -38,6 +39,12 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	defer cancel1()
 	bus1.Publish(user, "e", nil)
 	id1 := (<-ch1).ID
+
+	// The F5 property is about process *restarts* (seconds apart). Back-to-back
+	// constructions can land in the same clock tick on a coarse timer, so step
+	// the wall clock past the earlier seed before constructing the "later
+	// process" bus.
+	time.Sleep(time.Millisecond)
 
 	bus2 := NewInProcessBus()
 	ch2, cancel2 := bus2.Subscribe(user)

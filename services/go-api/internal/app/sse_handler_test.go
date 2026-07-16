@@ -19,7 +19,7 @@ import (
 // newTestSSEServer wraps the sseHandler in an httptest server that injects a
 // fixed authenticated user id, so the handler can be exercised end-to-end over a
 // real HTTP stream.
-func newTestSSEServer(t *testing.T, bus events.Bus, uid shared.UserId, heartbeat time.Duration) *httptest.Server {
+func newTestSSEServer(t *testing.T, bus *events.InProcessBus, uid shared.UserId, heartbeat time.Duration) *httptest.Server {
 	t.Helper()
 	h := &sseHandler{bus: bus, heartbeat: heartbeat}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

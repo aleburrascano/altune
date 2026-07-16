@@ -23,7 +23,7 @@ const defaultHeartbeatInterval = 25 * time.Second
 // keeping it here stops shared/events from importing auth (which would invert the
 // dependency ring).
 type sseHandler struct {
-	bus events.Bus
+	bus events.Subscriber
 	// heartbeat overrides the ping interval; zero uses defaultHeartbeatInterval.
 	// Present so tests can drive a short interval.
 	heartbeat time.Duration

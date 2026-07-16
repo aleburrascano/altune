@@ -22,8 +22,3 @@ type Subscriber interface {
 	Subscribe(userId shared.UserId) (ch <-chan Event, cancel func())
 	Replay(userId shared.UserId, afterID uint64) []Event
 }
-
-type Bus interface {
-	Publisher
-	Subscriber
-}

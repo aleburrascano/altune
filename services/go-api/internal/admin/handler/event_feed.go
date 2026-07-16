@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/admin/eventtap"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 
 // eventTapper is the consumer-defined view of the bus the feed needs.
 type eventTapper interface {
-	SubscribeAll() (<-chan events.TapEvent, func(), error)
+	SubscribeAll() (<-chan eventtap.TapEvent, func(), error)
 }
 
 // EventFeed is the single consumer of the bus system-wide tap. It keeps
@@ -28,7 +28,7 @@ type eventTapper interface {
 type EventFeed struct {
 	mu      sync.Mutex
 	recent  map[string][]time.Time
-	subs    map[int]chan events.TapEvent
+	subs    map[int]chan eventtap.TapEvent
 	nextSub int
 
 	cancel context.CancelFunc
@@ -38,7 +38,7 @@ type EventFeed struct {
 func NewEventFeed() *EventFeed {
 	return &EventFeed{
 		recent: make(map[string][]time.Time),
-		subs:   make(map[int]chan events.TapEvent),
+		subs:   make(map[int]chan eventtap.TapEvent),
 	}
 }
 
@@ -59,7 +59,7 @@ func (f *EventFeed) Start(ctx context.Context, tapper eventTapper) {
 	go f.loop(loopCtx, ch)
 }
 
-func (f *EventFeed) loop(ctx context.Context, ch <-chan events.TapEvent) {
+func (f *EventFeed) loop(ctx context.Context, ch <-chan eventtap.TapEvent) {
 	defer close(f.done)
 	for {
 		select {
@@ -74,7 +74,7 @@ func (f *EventFeed) loop(ctx context.Context, ch <-chan events.TapEvent) {
 	}
 }
 
-func (f *EventFeed) record(evt events.TapEvent) {
+func (f *EventFeed) record(evt eventtap.TapEvent) {
 	f.mu.Lock()
 	times := append(f.recent[evt.Type], evt.Timestamp)
 	if len(times) > perTypeCap {
@@ -112,12 +112,12 @@ func (f *EventFeed) Rates() map[string]int {
 	return out
 }
 
-func (f *EventFeed) subscribe() (<-chan events.TapEvent, func()) {
+func (f *EventFeed) subscribe() (<-chan eventtap.TapEvent, func()) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	id := f.nextSub
 	f.nextSub++
-	ch := make(chan events.TapEvent, eventFeedSubSize)
+	ch := make(chan eventtap.TapEvent, eventFeedSubSize)
 	f.subs[id] = ch
 	return ch, func() {
 		f.mu.Lock()

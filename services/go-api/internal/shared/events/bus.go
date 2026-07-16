@@ -1,7 +1,6 @@
 package events
 
 import (
-	"errors"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -13,22 +12,7 @@ import (
 const (
 	defaultRingSize    = 100
 	subscriberChanSize = 16
-	tapChanSize        = 256
 )
-
-// TapEvent is a redacted, system-wide view of a published event for the
-// operator console: event type and time only. It deliberately omits user id and
-// payload — one user must never see another's activity through the feed.
-// TapEvent is one system-wide tap event for the operator console. It carries the
-// user and a short subject summary (operator full-visibility — the console is a
-// single-operator, auth-gated surface; see the verbosity-rework decision). Still
-// lossy and single-consumer per ADR-0012.
-type TapEvent struct {
-	Type      string    `json:"type"`
-	Timestamp time.Time `json:"timestamp"`
-	User      string    `json:"user,omitempty"`
-	Subject   string    `json:"subject,omitempty"`
-}
 
 type userState struct {
 	mu          sync.RWMutex
@@ -41,6 +25,9 @@ type userState struct {
 }
 
 type InProcessBus struct {
+	// users grows one entry per distinct UserId and is never evicted — a few
+	// hundred bytes per user, bounded in practice by the family-scale user base,
+	// and reset on restart like all in-memory state.
 	users   sync.Map
 	ringCap int
 	// idBase seeds every user's monotonic event counter at process start. The
@@ -50,19 +37,16 @@ type InProcessBus struct {
 	// restarts: a later process always starts above the earlier one's range.
 	idBase  uint64
 	dropped atomic.Uint64
-
-	// System-wide tap (operator console). Single consumer, guarded by tapMu so
-	// a concurrent cancel can't close the channel mid-send.
-	tapMu      sync.Mutex
-	tap        chan TapEvent
-	tapDropped atomic.Uint64
 }
 
 // Dropped reports the total number of events dropped because a subscriber's
 // buffer was full — the lossy-by-design backpressure made observable.
 func (b *InProcessBus) Dropped() uint64 { return b.dropped.Load() }
 
-var _ Bus = (*InProcessBus)(nil)
+var (
+	_ Publisher  = (*InProcessBus)(nil)
+	_ Subscriber = (*InProcessBus)(nil)
+)
 
 func NewInProcessBus() *InProcessBus {
 	return &InProcessBus{ringCap: defaultRingSize, idBase: uint64(time.Now().UnixNano())}
@@ -119,68 +103,15 @@ func (b *InProcessBus) Publish(userId shared.UserId, eventType string, payload m
 				"event_id", evt.ID, "dropped_total", total)
 		}
 	}
-
-	// System-wide tap: type + time + user + a short subject (operator
-	// full-visibility), non-blocking, single consumer. The tiny critical section
-	// guards against a concurrent cancel closing the channel mid-send; the send
-	// itself never blocks.
-	b.tapMu.Lock()
-	if b.tap != nil {
-		select {
-		case b.tap <- TapEvent{Type: eventType, Timestamp: evt.Timestamp, User: userId.String(), Subject: tapSubject(payload)}:
-		default:
-			b.tapDropped.Add(1)
-		}
-	}
-	b.tapMu.Unlock()
 }
-
-// tapSubject extracts a concise human subject from an event payload for the
-// operator feed, trying the common identifying keys in order. Empty when none
-// are present (the row then shows just type + user).
-func tapSubject(payload map[string]any) string {
-	for _, key := range []string{"query", "title", "name", "track_id", "entity_id", "result_signature"} {
-		if v, ok := payload[key]; ok {
-			if s, ok := v.(string); ok && s != "" {
-				return s
-			}
-		}
-	}
-	return ""
-}
-
-// SubscribeAll returns the system-wide tap of every published event (type, time,
-// user, and a short subject — operator full-visibility). At most one consumer at
-// a time; a second subscribe returns an error. Lossy: a slow consumer drops
-// events, consistent with the per-user bus (ADR-0012).
-func (b *InProcessBus) SubscribeAll() (<-chan TapEvent, func(), error) {
-	b.tapMu.Lock()
-	defer b.tapMu.Unlock()
-	if b.tap != nil {
-		return nil, nil, errors.New("events: system-wide tap already has a subscriber")
-	}
-	ch := make(chan TapEvent, tapChanSize)
-	b.tap = ch
-	cancel := func() {
-		b.tapMu.Lock()
-		defer b.tapMu.Unlock()
-		if b.tap == ch {
-			b.tap = nil
-			close(ch)
-		}
-	}
-	return ch, cancel, nil
-}
-
-// TapDropped reports events dropped because the tap consumer was too slow.
-func (b *InProcessBus) TapDropped() uint64 { return b.tapDropped.Load() }
 
 func (b *InProcessBus) Subscribe(userId shared.UserId) (<-chan Event, func()) {
 	us := b.getOrCreateUser(userId)
 	ch := make(chan Event, subscriberChanSize)
 
 	us.mu.Lock()
-	id := atomic.AddUint64(&us.subCounter, 1)
+	us.subCounter++
+	id := us.subCounter
 	us.subscribers[id] = ch
 	us.mu.Unlock()
 

@@ -51,7 +51,7 @@ app/ → everything (it wires)
 - `service/` imports `domain/` + `ports/` + standard library. **Ports** live in `ports/`. Adapters implement them.
 - `adapters/` imports `ports/` interfaces + `domain/` types + framework code (`chi`, `net/http`, Redis).
 
-Path-scoped rules in `.claude/rules/backend/domain-layer.md`, `application-layer.md`, `adapters-layer.md` enforce this; the `architecture-reviewer` subagent grades against it.
+Path-scoped rules in `.claude/rules/backend/domain-layer.md`, `application-layer.md`, `adapters-layer.md` enforce this; the `architecture-reviewer` subagent grades against it. Two invariants are additionally lint-enforced by depguard (`services/go-api/.golangci.yml`, run in the test-backend CI workflow): `domain/` may import from `internal/shared/` only the root value objects and `textnorm`, and nothing under `internal/shared/` imports a feature package.
 
 ### Bounded contexts
 
