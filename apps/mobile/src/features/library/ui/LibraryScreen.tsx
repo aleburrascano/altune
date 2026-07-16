@@ -24,6 +24,7 @@ import { ArtistsGrid } from './ArtistsGrid';
 import { CreatePlaylistModal } from './CreatePlaylistModal';
 import { LibraryChips, type LibraryChip } from './LibraryChips';
 import { LibraryHeader } from './LibraryHeader';
+import { LibraryNoResults } from './LibraryNoResults';
 import { PlaylistsGrid } from './PlaylistsGrid';
 import { SongsList } from './SongsList';
 import { SortControl } from './SortControl';
@@ -153,7 +154,13 @@ export function LibraryScreen(): ReactElement {
         options={active.options}
         onSortChange={setSort}
       />
-      <View style={styles.body}>{active.content}</View>
+      <View style={styles.body}>
+        {search.hasQuery && active.count === 0 ? (
+          <LibraryNoResults query={search.query} onClear={search.onClear} />
+        ) : (
+          active.content
+        )}
+      </View>
 
       <CreatePlaylistModal
         visible={pl.createModalVisible}
@@ -207,7 +214,7 @@ export function LibraryScreen(): ReactElement {
           content: (
             <SongsList
               tracks={items}
-              emptyLabel={search.hasQuery ? 'No songs found' : 'No songs yet'}
+              emptyLabel={'No songs yet'}
               onPlay={(track) => {
                 const { playable, startIndex } = buildPlayableQueue(items, track.id);
                 queue.playFromList(playable, startIndex, { kind: 'library' });
@@ -233,7 +240,7 @@ export function LibraryScreen(): ReactElement {
           content: (
             <AlbumsGrid
               albums={items}
-              emptyLabel={search.hasQuery ? 'No albums found' : 'No albums yet'}
+              emptyLabel={'No albums yet'}
               onAlbumPress={navigateToAlbum}
             />
           ),
@@ -248,7 +255,7 @@ export function LibraryScreen(): ReactElement {
           content: (
             <ArtistsGrid
               artists={items}
-              emptyLabel={search.hasQuery ? 'No artists found' : 'No artists yet'}
+              emptyLabel={'No artists yet'}
               onArtistPress={navigateToArtist}
             />
           ),

@@ -14,6 +14,8 @@ interface UseLibrarySearchReturn {
   /** Predicate over arbitrary text (album/artist/playlist names). True when the query is empty. */
   matches: (text: string) => boolean;
   hasQuery: boolean;
+  /** The query actually filtering right now (committed, not the raw input) — for "No results for X". */
+  query: string;
 }
 
 export function useLibrarySearch(): UseLibrarySearchReturn {
@@ -32,9 +34,13 @@ export function useLibrarySearch(): UseLibrarySearchReturn {
     setInputValue(text);
     clearDebounce();
     const trimmed = text.trim();
-    if (trimmed.length === 0) {
+    if (trimmed.length < MIN_CHARS) {
+      // Below the commit threshold there is no active query — clear it
+      // immediately. Leaving the previous committedQuery in place (the old
+      // length===1 gap) kept filtering the library by "keep on lov" while the
+      // box showed a single character.
       setCommittedQuery('');
-    } else if (trimmed.length >= MIN_CHARS) {
+    } else {
       debounceRef.current = setTimeout(() => {
         setCommittedQuery(trimmed);
       }, DEBOUNCE_MS);
@@ -77,5 +83,6 @@ export function useLibrarySearch(): UseLibrarySearchReturn {
     filter: filterFn,
     matches,
     hasQuery: committedQuery.length > 0,
+    query: committedQuery,
   };
 }
