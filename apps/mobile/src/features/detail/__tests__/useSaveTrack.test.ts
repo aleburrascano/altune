@@ -99,6 +99,25 @@ describe('useSaveTrack', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
   });
 
+  it('does not fabricate a one-track library when library-home never loaded', async () => {
+    // Regression: a user whose library-home query errored (stale-token 401)
+    // saved a song and the optimistic insert invented {total: 1} over the error
+    // state. Because albums/artists are grouped client-side from that array, a
+    // 273-track library rendered as one song, one album, one artist — and
+    // staleTime: Infinity pinned it there for the rest of the session.
+    const qc = _seededClient();
+    expect(qc.getQueryData(['library-home'])).toBeUndefined();
+    mockCreateTrack.mockResolvedValueOnce(_existing('real'));
+
+    const { result } = renderHook(() => useSaveTrack(), { wrapper: _wrapper(qc) });
+    act(() => {
+      result.current.mutate(_BODY);
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(qc.getQueryData(['library-home'])).toBeUndefined();
+  });
+
   it('rolls back the optimistic insert when the save fails', async () => {
     const qc = _seededClient();
     mockCreateTrack.mockRejectedValueOnce(new Error('boom'));

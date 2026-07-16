@@ -15,8 +15,6 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { trackExtras } from './extras-accessors';
 
-const PAGE_SIZE = 50;
-
 /** Map a tapped track result into the POST body. Artist comes from subtitle;
  * album + duration are narrowed out of the untyped extras; artwork from the
  * result image. Title/artist invariants are enforced server-side (and the Save
@@ -70,14 +68,9 @@ export function optimisticTrack(body: CreateTrackRequest, addedAt: string): Trac
 export function insertOptimisticTrack(
   data: InfiniteData<ListTracksResponse> | undefined,
   track: TrackResponse,
-): InfiniteData<ListTracksResponse> {
+): InfiniteData<ListTracksResponse> | undefined {
   const first = data?.pages[0];
-  if (data === undefined || first === undefined) {
-    return {
-      pageParams: [0],
-      pages: [{ items: [track], total: 1, limit: PAGE_SIZE, offset: 0, has_more: false }],
-    };
-  }
+  if (data === undefined || first === undefined) return data;
   const updatedFirst: ListTracksResponse = {
     ...first,
     items: [track, ...first.items],
@@ -87,19 +80,25 @@ export function insertOptimisticTrack(
 }
 
 /**
- * Upsert the optimistic placeholder into the `['library-home']` snapshot too,
- * creating the snapshot if it doesn't exist yet. Readers (the detail
- * save-control via findTrackInLibraryCache, and the Activity Dock) consult
- * library-home first, so without this a save from Detail shows no feedback once
- * Library has been opened. Idempotent on the placeholder id.
+ * Upsert the optimistic placeholder into the `['library-home']` snapshot too.
+ * Readers (the detail save-control via findTrackInLibraryCache, and the Activity
+ * Dock) consult library-home first, so without this a save from Detail shows no
+ * feedback once Library has been opened. Idempotent on the placeholder id.
+ *
+ * AIDEV-WARNING: never seed a snapshot from `undefined` — an absent cache means
+ * the library failed to load (401 / network error) or hasn't fetched yet, NOT
+ * that it's empty (an empty library is `{items: []}`). Seeding here fabricated a
+ * `total: 1` library out of an error state and, because setQueryData also flips
+ * the query to `success`, replaced the error screen with a confident lie that
+ * `staleTime: Infinity` then pinned for the whole session — a user with 273
+ * saved tracks saw exactly one song, one album, one artist. Returning undefined
+ * leaves the cache untouched (setQueryData no-ops on it) so the real fetch wins.
  */
 export function insertOptimisticTrackHome(
   data: ListTracksResponse | undefined,
   track: TrackResponse,
-): ListTracksResponse {
-  if (data === undefined) {
-    return { items: [track], total: 1, limit: PAGE_SIZE, offset: 0, has_more: false };
-  }
+): ListTracksResponse | undefined {
+  if (data === undefined) return data;
   if (data.items.some((t) => t.id === track.id)) return data;
   return { ...data, items: [track, ...data.items], total: data.total + 1 };
 }
