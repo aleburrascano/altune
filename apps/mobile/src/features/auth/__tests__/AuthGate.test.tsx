@@ -14,7 +14,7 @@ type SessionState =
 
 let mockSessionState: SessionState = { status: 'loading' };
 let mockSegments: string[] = [];
-jest.mock('../hooks/useSession', () => ({
+jest.mock('@shared/auth/useSession', () => ({
   useSession: () => mockSessionState,
 }));
 

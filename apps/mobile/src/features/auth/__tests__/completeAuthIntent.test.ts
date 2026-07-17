@@ -7,7 +7,7 @@ const mockVerifyOtp = jest.fn();
 const mockSetSession = jest.fn();
 const mockExchange = jest.fn();
 
-jest.mock('../api/supabaseClient', () => ({
+jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {
     auth: {
       verifyOtp: (a: unknown) => mockVerifyOtp(a),
@@ -17,7 +17,7 @@ jest.mock('../api/supabaseClient', () => ({
   },
 }));
 
-const { completeAuthIntent } = require('../hooks/useAuthDeepLink');
+const { completeAuthIntent } = require('../lib/completeAuthIntent');
 
 beforeEach(() => {
   mockVerifyOtp.mockReset().mockResolvedValue({ error: null });

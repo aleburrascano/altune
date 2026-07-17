@@ -2,11 +2,11 @@ import { Redirect, useSegments } from 'expo-router';
 import { View } from 'react-native';
 
 import { useSessionExpired } from '@shared/auth/sessionExpired';
+import { useSession } from '@shared/auth/useSession';
 import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 import { spacing, useTheme } from '@shared/ui/theme';
 
-import { useSession } from '../hooks/useSession';
 import { SessionExpiredNotice } from './SessionExpiredNotice';
 
 // Splash while we don't know yet; redirect into / out of the (auth) group

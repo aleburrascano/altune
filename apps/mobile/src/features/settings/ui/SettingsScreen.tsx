@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, Screen, Text, spacing, useTheme } from '@shared/ui';
-import { useSession } from '../../auth/hooks/useSession';
+import { useSession } from '@shared/auth/useSession';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useSignOut } from '@shared/auth/useSignOut';
 

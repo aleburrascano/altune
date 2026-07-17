@@ -8,7 +8,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockSignInWithOAuth = jest.fn();
-jest.mock('../api/supabaseClient', () => ({
+jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { signInWithOAuth: (a: unknown) => mockSignInWithOAuth(a) } },
 }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn(), push: jest.fn() }) }));

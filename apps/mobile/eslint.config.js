@@ -29,6 +29,40 @@ module.exports = [
     },
   },
   {
+    // Feature isolation (see apps/mobile/CLAUDE.md): features must not import
+    // each other — code with 2+ feature consumers gets promoted to src/shared
+    // (see src/shared/auth/* promotion notes) — and shared must never import
+    // features. The TS resolver from config-expo resolves both alias and
+    // relative imports, so `../../auth/...` escapes are caught too. Tests are
+    // exempt: they compose features the way the app/ composition root does
+    // (e.g. rendering a screen inside another feature's provider).
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['**/__tests__/**'],
+    rules: {
+      'import/no-restricted-paths': [
+        'error',
+        {
+          basePath: __dirname,
+          zones: [
+            ...['auth', 'detail', 'discover', 'library', 'playback', 'settings'].map(
+              (feature) => ({
+                target: `./src/features/${feature}`,
+                from: './src/features',
+                except: [`./${feature}`],
+                message: 'Features must not import each other — promote shared code to src/shared.',
+              }),
+            ),
+            {
+              target: './src/shared',
+              from: './src/features',
+              message: 'src/shared must not import from src/features.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     rules: {
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       // Web-only rule: React Native <Text> renders apostrophes/quotes natively,

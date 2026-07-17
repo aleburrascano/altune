@@ -72,7 +72,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   if (!response.ok) {
     throw new ApiError(response.status, `API ${path} returned ${response.status}`);
   }
-  if (response.status === 204 || response.status === 304) {
+  // 202 (audio/recover) is accepted-with-empty-body like 204 — parsing it as
+  // JSON would throw on every success.
+  if (response.status === 202 || response.status === 204 || response.status === 304) {
     return undefined as T;
   }
   return (await response.json()) as T;
