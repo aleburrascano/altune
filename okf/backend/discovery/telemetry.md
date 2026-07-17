@@ -4,7 +4,7 @@ title: Discovery telemetry & behavioral signals
 description: The InteractionEvent pipeline that persists every search/engagement event correlated by search_id, and the SatisfactionConsumer that turns play/skip/completed into a ranking signal.
 resource: services/go-api/internal/discovery/domain/events.go, services/go-api/internal/discovery/service/behavioral_signals.go, services/go-api/internal/discovery/service/record_event.go, services/go-api/internal/discovery/service/telemetry.go, services/go-api/internal/discovery/adapters/persistence/event_repo.go, services/go-api/internal/discovery/ports/ports_telemetry.go
 tags: [discovery, telemetry, events, behavioral-ranking, persistence, subsystem]
-verified_commit: e238cc3671d1719837686c667242c7d88fc376d2
+verified_commit: 0352abc38e1235b81f063759748d2c01dfa9b9af
 ---
 
 `domain.InteractionEvent` (`domain/events.go`) is the single append-only envelope for every behavioral event: `EventType` (search_performed, results_shown, result_clicked, play, skip, completed, library_add, wrong_album — closed vocabulary, zero-value `EventTypeUnknown` sentinel), `SearchId` (the keystone join key back to the originating search), `EventId` (client-minted idempotency key for the label-critical outbox tier), `ClientOccurredAt` vs. server `OccurredAt`, and a JSONB `Payload` for schema-free growth. Persisted in `discovery_events` (see [discovery-events-table](../../data/discovery-events-table.md)).
