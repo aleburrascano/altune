@@ -16,7 +16,7 @@ import type { ViewToken } from 'react-native';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
 import { buildImpressionRows } from '../impressions';
-import type { DiscoverySearchResponse } from '../../../shared/api-client/discovery';
+import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 export type ImpressionHandlers = {
   viewabilityConfig: { itemVisiblePercentThreshold: number };

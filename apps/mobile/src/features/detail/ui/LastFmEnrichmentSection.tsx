@@ -17,10 +17,8 @@ import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme/useTheme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-import type {
-  DiscoveryKind,
-  LastFmEnrichmentResponse,
-} from '@shared/api-client/discovery';
+import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
+import type { DiscoveryKind } from '@shared/api-client/discovery';
 
 const MAX_TAGS = 4;
 const MAX_SIMILAR = 6;

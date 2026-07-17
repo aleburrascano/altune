@@ -12,11 +12,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-import {
-  getAlbumTracks,
-  type DiscoveryResult,
-  type DiscoverySource,
-} from '@shared/api-client/discovery';
+import { getAlbumTracks } from '@shared/api-client/enrichment';
+import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
 type UseAlbumTracksParams = {
   provider: string;

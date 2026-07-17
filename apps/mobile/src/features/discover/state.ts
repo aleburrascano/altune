@@ -8,7 +8,10 @@
 
 import { asyncView } from '@shared/lib/async-view';
 
-import type { DiscoveryResult, DiscoverySearchResponse } from '../../shared/api-client/discovery';
+import type { DiscoveryKind, DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
+
+/** The active results filter: the blended "All" view or a single kind. */
+export type ResultsFilter = 'all' | DiscoveryKind;
 
 export type DiscoverView =
   | 'loading'
@@ -112,4 +115,30 @@ export function _sectionOrder(results: DiscoveryResult[]): SectionKey[] {
 /** First `cap` items — used to cap each section in the blended view. */
 export function _cap<T>(items: T[], cap: number = SECTION_CAP): T[] {
   return items.slice(0, cap);
+}
+
+const KIND_LABELS: Record<DiscoveryKind, readonly [string, string]> = {
+  artist: ['Artist', 'Artists'],
+  album: ['Album', 'Albums'],
+  track: ['Song', 'Songs'],
+};
+
+/**
+ * Display copy for a result kind — the one definition all four surfaces
+ * (row, top-result card, filter chips, filtered-empty copy) render from.
+ * The UI noun for `track` is "Song" per the discover-music-v2 chips; code
+ * identifiers keep the domain noun Track (ubiquitous language).
+ */
+export function kindLabel(kind: DiscoveryKind, opts?: { plural?: boolean }): string {
+  return KIND_LABELS[kind][opts?.plural ? 1 : 0];
+}
+
+/**
+ * Stable list key for a rendered result row. Provider identity first; falls
+ * back to title+index so two same-title results without sources can't collide.
+ * One definition — the two lists' hand-rolled keys had already drifted apart.
+ */
+export function resultKey(result: DiscoveryResult, index: number): string {
+  const source = result.sources[0];
+  return `${result.kind}-${source?.provider ?? 'x'}-${source?.external_id || `${result.title}-${index}`}`;
 }

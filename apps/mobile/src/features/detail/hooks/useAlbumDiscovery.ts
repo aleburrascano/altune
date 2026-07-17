@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getAlbumTracks } from '@shared/api-client/discovery';
+import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { resolveEntityQuery } from '../resolve-entity-query';

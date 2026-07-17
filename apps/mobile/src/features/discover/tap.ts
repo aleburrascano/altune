@@ -10,7 +10,7 @@
 
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
 
-import type { DiscoveryResult } from '../../shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 export function stashHandoffForDetail(
   result: DiscoveryResult,

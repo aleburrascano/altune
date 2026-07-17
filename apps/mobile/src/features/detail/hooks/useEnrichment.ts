@@ -7,11 +7,8 @@
  * path — one cached call per open (spec AC#8).
  */
 
-import {
-  getEnrichment,
-  type DiscoveryKind,
-  type EnrichmentResponse,
-} from '@shared/api-client/discovery';
+import { getEnrichment, type EnrichmentResponse } from '@shared/api-client/enrichment';
+import type { DiscoveryKind } from '@shared/api-client/discovery';
 
 import { useEnrichmentQuery } from './useEnrichmentQuery';
 

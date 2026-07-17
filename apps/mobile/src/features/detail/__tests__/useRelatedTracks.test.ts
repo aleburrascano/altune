@@ -8,14 +8,14 @@ import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
+import type { ContentFetchResponse } from '../../../shared/api-client/enrichment';
 import type {
-  ContentFetchResponse,
   DiscoveryResult,
   DiscoverySource,
 } from '../../../shared/api-client/discovery';
 
 const mockGetRelatedTracks = jest.fn();
-jest.mock('../../../shared/api-client/discovery', () => ({
+jest.mock('../../../shared/api-client/enrichment', () => ({
   getRelatedTracks: (...args: unknown[]) => mockGetRelatedTracks(...args),
 }));
 

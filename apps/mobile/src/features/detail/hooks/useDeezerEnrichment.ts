@@ -8,11 +8,8 @@
  * search path — one cached call per open (docs/providers/deezer.md caps 7–8).
  */
 
-import {
-  getDeezerEnrichment,
-  type DeezerEnrichmentResponse,
-  type DiscoveryKind,
-} from '@shared/api-client/discovery';
+import { getDeezerEnrichment, type DeezerEnrichmentResponse } from '@shared/api-client/enrichment';
+import type { DiscoveryKind } from '@shared/api-client/discovery';
 
 import { useEnrichmentQuery } from './useEnrichmentQuery';
 

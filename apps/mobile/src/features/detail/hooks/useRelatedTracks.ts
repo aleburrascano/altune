@@ -10,11 +10,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-import {
-  getRelatedTracks,
-  type DiscoveryResult,
-  type DiscoverySource,
-} from '@shared/api-client/discovery';
+import { getRelatedTracks } from '@shared/api-client/enrichment';
+import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
 type UseRelatedTracksParams = {
   sources: DiscoverySource[];

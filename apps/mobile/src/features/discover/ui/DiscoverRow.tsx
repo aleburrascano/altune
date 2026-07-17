@@ -17,7 +17,8 @@ import { Artwork, Row, Text, radius, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
 
-import type { DiscoveryResult } from '../../../shared/api-client/discovery';
+import { kindLabel } from '../state';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { getPreviewUrl } from '@shared/playback/previewUrl';
 
@@ -30,7 +31,7 @@ export type DiscoverRowProps = {
 const ART_SIZE = 56;
 
 function _secondaryLine(result: DiscoveryResult): string {
-  const kind = result.kind === 'artist' ? 'Artist' : result.kind === 'album' ? 'Album' : 'Song';
+  const kind = kindLabel(result.kind);
 
   if (result.kind === 'artist') {
     return kind;

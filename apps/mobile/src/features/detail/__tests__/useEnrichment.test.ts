@@ -8,10 +8,10 @@ import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
 import { useEnrichment } from '../hooks/useEnrichment';
-import type { EnrichmentResponse } from '../../../shared/api-client/discovery';
+import type { EnrichmentResponse } from '../../../shared/api-client/enrichment';
 
 const mockGetEnrichment = jest.fn();
-jest.mock('../../../shared/api-client/discovery', () => ({
+jest.mock('../../../shared/api-client/enrichment', () => ({
   getEnrichment: (...args: unknown[]) => mockGetEnrichment(...args),
 }));
 

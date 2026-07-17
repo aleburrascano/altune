@@ -9,13 +9,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   searchDiscovery,
   type DiscoverySearchResponse,
-} from '../../../shared/api-client/discovery';
+} from '@shared/api-client/discovery';
+
+import { discoveryKeys } from '../keys';
 
 export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
   const trimmed = query.trim();
   const queryClient = useQueryClient();
   return useQuery<DiscoverySearchResponse>({
-    queryKey: ['discovery', 'search', trimmed],
+    queryKey: discoveryKeys.search(trimmed),
     queryFn: ({ signal }) => {
       // Abort any superseded as-you-type searches still in flight. Without this,
       // a slow search outlives the 300ms debounce, so fast typing leaves several
@@ -23,7 +25,7 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
       // provider rate-limit budgets (iTunes/MB then time out). The aborted fetch
       // cancels the request, which cancels the server's request context.
       void queryClient.cancelQueries({
-        queryKey: ['discovery', 'search'],
+        queryKey: discoveryKeys.searchPrefix,
         predicate: (q) => q.queryKey[2] !== trimmed,
       });
       return searchDiscovery({ q: trimmed, saveHistory }, signal);

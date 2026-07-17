@@ -10,11 +10,12 @@ import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
 import { useArtistContent } from '../hooks/useArtistContent';
-import type { ContentFetchResponse, DiscoverySource } from '../../../shared/api-client/discovery';
+import type { ContentFetchResponse } from '../../../shared/api-client/enrichment';
+import type { DiscoverySource } from '../../../shared/api-client/discovery';
 
 const mockGetArtistAlbums = jest.fn();
 const mockGetArtistTopTracks = jest.fn();
-jest.mock('../../../shared/api-client/discovery', () => ({
+jest.mock('../../../shared/api-client/enrichment', () => ({
   getArtistAlbums: (...args: unknown[]) => mockGetArtistAlbums(...args),
   getArtistTopTracks: (...args: unknown[]) => mockGetArtistTopTracks(...args),
 }));

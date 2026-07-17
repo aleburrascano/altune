@@ -2,13 +2,21 @@
  * State machine helpers for the discover feature — slice 44.
  */
 
-import { _cap, _groupByKind, _sectionOrder, _topResult, _viewForState } from '../state';
+import {
+  _cap,
+  _groupByKind,
+  _sectionOrder,
+  _topResult,
+  _viewForState,
+  kindLabel,
+  resultKey,
+} from '../state';
 
 import type {
   DiscoveryKind,
   DiscoveryResult,
   DiscoverySearchResponse,
-} from '../../../shared/api-client/discovery';
+} from '@shared/api-client/discovery';
 
 const _result = (kind: DiscoveryKind, title: string): DiscoveryResult => ({
   kind,
@@ -148,6 +156,46 @@ describe('_cap', () => {
 
   it('returns all items when fewer than the cap', () => {
     expect(_cap([1, 2, 3], 10)).toEqual([1, 2, 3]);
+  });
+});
+
+
+describe('kindLabel', () => {
+  it('maps track to the UI noun Song, singular and plural', () => {
+    expect(kindLabel('track')).toBe('Song');
+    expect(kindLabel('track', { plural: true })).toBe('Songs');
+  });
+
+  it('maps album and artist', () => {
+    expect(kindLabel('album')).toBe('Album');
+    expect(kindLabel('album', { plural: true })).toBe('Albums');
+    expect(kindLabel('artist')).toBe('Artist');
+    expect(kindLabel('artist', { plural: true })).toBe('Artists');
+  });
+});
+
+describe('resultKey', () => {
+  it('keys on kind + provider identity when a source exists', () => {
+    const r = {
+      ..._result('track', 'Midnight City'),
+      sources: [{ provider: 'deezer', external_id: '42', url: 'https://x/42' }],
+    };
+    expect(resultKey(r, 3)).toBe('track-deezer-42');
+  });
+
+  it('falls back to title+index so sourceless same-title results cannot collide', () => {
+    const a = _result('track', 'Intro');
+    const b = _result('track', 'Intro');
+    expect(resultKey(a, 0)).toBe('track-x-Intro-0');
+    expect(resultKey(a, 0)).not.toBe(resultKey(b, 1));
+  });
+
+  it('falls back to title+index when external_id is empty', () => {
+    const r = {
+      ..._result('album', 'Hurry Up'),
+      sources: [{ provider: 'itunes', external_id: '', url: 'https://x' }],
+    };
+    expect(resultKey(r, 2)).toBe('album-itunes-Hurry Up-2');
   });
 });
 

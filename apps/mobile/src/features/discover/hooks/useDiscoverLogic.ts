@@ -11,7 +11,8 @@ import { useRouter } from 'expo-router';
 import { Keyboard } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { clearSearchHistory } from '../../../shared/api-client/discovery';
+import { clearSearchHistory } from '@shared/api-client/discovery';
+import { discoveryKeys } from '../keys';
 import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { useDiscoverSearch } from './useDiscoverSearch';
@@ -22,15 +23,12 @@ import { useSearchHistory } from './useSearchHistory';
 import { stashHandoffForDetail } from '../tap';
 import { _viewForState } from '../state';
 import type {
-  DiscoveryKind,
   DiscoveryResult,
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
-} from '../../../shared/api-client/discovery';
-import type { DiscoverView } from '../state';
-
-export type ResultsFilter = 'all' | DiscoveryKind;
+} from '@shared/api-client/discovery';
+import type { DiscoverView, ResultsFilter } from '../state';
 
 export type DiscoverLogic = {
   inputValue: string;
@@ -46,7 +44,7 @@ export type DiscoverLogic = {
   onSuggestionSelect: (text: string) => void;
   view: DiscoverView;
   searchData: DiscoverySearchResponse | undefined;
-  history: ReturnType<typeof useSearchHistory>;
+  historyItems: SearchHistoryItem[];
   filter: ResultsFilter;
   setFilter: Dispatch<SetStateAction<ResultsFilter>>;
   onHistoryTap: (item: SearchHistoryItem) => void;
@@ -85,7 +83,7 @@ export function useDiscoverLogic(): DiscoverLogic {
 
   useEffect(() => {
     if (searchData) {
-      void queryClient.invalidateQueries({ queryKey: ['discovery', 'history'] });
+      void queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
     }
   }, [searchData, queryClient]);
 
@@ -112,15 +110,20 @@ export function useDiscoverLogic(): DiscoverLogic {
   const clearHistoryMutation = useMutation({
     mutationFn: clearSearchHistory,
     onError: () => {
-      void queryClient.invalidateQueries({ queryKey: ['discovery', 'history'] });
+      void queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
     },
   });
   const onClearHistory = (): void => {
-    queryClient.setQueryData(['discovery', 'history'], { items: [] });
+    queryClient.setQueryData(discoveryKeys.history, { items: [] });
     clearHistoryMutation.mutate();
   };
   const onResultTap = (result: DiscoveryResult, position: number): void => {
     Keyboard.dismiss();
+    // Telemetry position is the GLOBAL rank in results[] — the same coordinate
+    // space buildImpressionRows logs on results_shown — so CTR@position joins
+    // line up. The incoming `position` is the row's section-/filter-local index
+    // (display + testID only); it's only a fallback for results not in the slate.
+    const globalIndex = searchData?.results.indexOf(result) ?? -1;
     recordEvent.mutate({
       type: 'result_clicked',
       query_norm: searchData?.query_norm ?? search.committedQuery,
@@ -129,7 +132,7 @@ export function useDiscoverLogic(): DiscoverLogic {
         kind: result.kind,
         title: result.title,
         subtitle: result.subtitle ?? null,
-        position,
+        position: globalIndex >= 0 ? globalIndex : position,
         confidence: result.confidence,
         provider: result.sources[0]?.provider ?? null,
         result_signature: result.result_signature ?? null,
@@ -145,8 +148,10 @@ export function useDiscoverLogic(): DiscoverLogic {
     setSuggestionsHidden(true);
     search.onSubmit();
   };
+  // Refetch directly: re-setting the same committedQuery doesn't change the
+  // query key, so React Query would never re-run a failed query from it.
   const onRetry = (): void => {
-    search.setQuery(search.committedQuery.trim() || search.committedQuery);
+    void refetch();
   };
   const onSuggestionSelect = (text: string): void => {
     setSuggestionsHidden(true);
@@ -172,7 +177,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     onSuggestionSelect,
     view,
     searchData,
-    history,
+    historyItems: history.data?.items ?? [],
     filter,
     setFilter,
     onHistoryTap,
