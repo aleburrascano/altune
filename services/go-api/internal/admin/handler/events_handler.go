@@ -21,7 +21,7 @@ func (h *AdminHandler) streamEvents(w http.ResponseWriter, r *http.Request) {
 		httputil.InternalError(w, "event feed unavailable")
 		return
 	}
-	ch, cancel := h.eventFeed.subscribe()
+	ch, cancel := h.eventFeed.Subscribe()
 	defer cancel()
 	streamSSE(w, r, ch)
 }

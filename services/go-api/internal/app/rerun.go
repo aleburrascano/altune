@@ -2,13 +2,11 @@ package app
 
 import (
 	"context"
-	"net/http"
 	"sync"
 	"time"
 
 	adminHandler "altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/admin/requeststore"
-	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
@@ -21,27 +19,28 @@ import (
 const rerunBodyCap = 64 * 1024
 
 // reRunner runs an operator-supplied query live through the real discovery
-// decision core (the same exported Merge → Rank → reshape the search path uses),
-// over a recording HTTP client, and returns the full stage-by-stage waterfall. It
+// decision core (the same exported Merge → RankWith → Reshape composition the
+// search path uses, including the flag-gated experiment stages), over a
+// recording HTTP client, and returns the full stage-by-stage waterfall. It
 // builds providers directly — no Service — so it bypasses the live circuit
 // breakers by construction (a re-run can't trip a breaker live users depend on).
 type reRunner struct {
 	cfg *config.Config
+	// behavioralScores reads the live Service's published satisfaction snapshot,
+	// so a re-run ranks with the same behavioral input production applies. Reading
+	// the snapshot touches no breaker.
+	behavioralScores func() map[string]float64
 }
 
-func (a *App) buildReRunner() *reRunner { return &reRunner{cfg: a.cfg} }
+func (a *App) buildReRunner(svc *discoveryService.Service) *reRunner {
+	return &reRunner{cfg: a.cfg, behavioralScores: svc.BehavioralScoresSnapshot}
+}
 
 // ReRun satisfies adminHandler.ReRunner.
 func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (adminHandler.ReRunResult, error) {
 	kindSet := parseRerunKinds(kinds)
 	rec := requeststore.NewExchangeRecorder(defaultLiveTransport, rerunBodyCap)
-	client := &http.Client{Timeout: discoveryHTTPTimeout, Transport: rec}
-
-	var sharedMB *providers.MusicBrainzAdapter
-	if rr.cfg.HasMusicBrainz() {
-		sharedMB = providers.NewMusicBrainzAdapter(client, rr.cfg.MusicBrainzUserAgent)
-	}
-	provs := buildDiscoveryProviders(clientFactory{transport: rec}, rr.cfg, sharedMB)
+	provs := BuildDiscoveryProviders(rr.cfg, rec)
 
 	cleaned := discoveryService.CleanQuery(query)
 	queryNorm := textnorm.NormalizeForMatch(cleaned)
@@ -49,8 +48,15 @@ func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (ad
 	start := time.Now()
 	perProvider, providerTraces := fanOutRerun(ctx, provs, cleaned, kindSet)
 	merged := discoveryService.Merge(perProvider)
-	ranked := discoveryService.Rank(merged, queryNorm)
-	final := discoveryService.CollapseArtistDuplicates(discoveryService.EnforceDiversity(ranked))
+	// Rank with the same flag-gated experiment stages production applies — a
+	// zero-value config here once made the waterfall silently diverge from live
+	// ranking whenever a flag was on (cross-kind prominence defaults on).
+	ranked := discoveryService.RankWith(merged, queryNorm, discoveryService.RankOptions{
+		TailDemotion:        rr.cfg.TailDemotionEnabled,
+		CrossKindProminence: rr.cfg.CrossKindProminenceEnabled,
+		Behavioral:          rr.behavioralScores(),
+	})
+	final := discoveryService.Reshape(ranked)
 
 	return adminHandler.ReRunResult{
 		Query:     query,

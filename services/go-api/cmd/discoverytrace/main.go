@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"altune/go-api/internal/app"
 	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -60,18 +61,20 @@ func main() {
 		runSingle(*provider, client, rec, *query, kinds, *out)
 		return
 	}
-	runPipeline(client, rec, *query, kinds, *out)
+	runPipeline(rec, *query, kinds, *out)
 }
 
 // runPipeline runs every search provider, then the real exported decision core
-// (Merge → Rank → EnforceDiversity → CollapseArtistDuplicates), dumping each stage.
-func runPipeline(client *http.Client, rec *httptrace.Recorder, query string, kinds map[domain.ResultKind]bool, out string) {
+// (Merge → RankWith → Reshape, flag-gated stages included), dumping each stage.
+func runPipeline(rec *httptrace.Recorder, query string, kinds map[domain.ResultKind]bool, out string) {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: config.Load: %v\n", err)
 		os.Exit(1)
 	}
-	provs := buildProviders(cfg, client)
+	// The production provider set over the recording transport — no hand-mirror
+	// (a local copy drifted once: SoundCloud lost its yt-dlp fallback).
+	provs := app.BuildDiscoveryProviders(cfg, rec)
 	qNorm := textnorm.NormalizeForMatch(service.CleanQuery(query))
 
 	fmt.Printf("discoverytrace pipeline: query=%q qnorm=%q kinds=%v providers=%d\n\n", query, qNorm, flagList(kinds), len(provs))
@@ -106,14 +109,18 @@ func runPipeline(client *http.Client, rec *httptrace.Recorder, query string, kin
 	fmt.Printf("\n=== STAGE 2: merged — %d entities (from %d raw) ===\n", len(entities), countAll(perProvider))
 	writeJSON(out, "02-merged.json", entities)
 
-	// Stage 3 — Rank.
-	ranked := service.Rank(entities, qNorm)
+	// Stage 3 — Rank, with the same flag-gated experiment stages production
+	// applies (behavioral is a live-Service snapshot, unavailable offline → nil).
+	ranked := service.RankWith(entities, qNorm, service.RankOptions{
+		TailDemotion:        cfg.TailDemotionEnabled,
+		CrossKindProminence: cfg.CrossKindProminenceEnabled,
+	})
 	fmt.Printf("\n=== STAGE 3: ranked — %d results (top 20) ===\n", len(ranked))
 	printRanked(ranked, 20)
 	writeJSON(out, "03-ranked.json", ranked)
 
 	// Stage 4 — reshape (diversity + collapse).
-	final := service.CollapseArtistDuplicates(service.EnforceDiversity(ranked))
+	final := service.Reshape(ranked)
 	fmt.Printf("\n=== STAGE 4: final (diversity + collapse) — %d results (top 20) ===\n", len(final))
 	printRanked(final, 20)
 	writeJSON(out, "04-final.json", final)
@@ -145,25 +152,6 @@ func runSingle(name string, client *http.Client, rec *httptrace.Recorder, query 
 		fmt.Printf("\nsearch error: %v\n", err)
 	}
 	fmt.Printf("\nwrote raw exchanges + mapped.json to %s\n", out)
-}
-
-// buildProviders mirrors app.buildDiscoveryProviders with an injected (recording)
-// client. YouTube Music takes the recording transport too (client.Transport), so
-// its raw InnerTube JSON is now captured like every other provider.
-func buildProviders(cfg *config.Config, client *http.Client) []ports.SearchProvider {
-	provs := []ports.SearchProvider{
-		providers.NewDeezerAdapter(client),
-		providers.NewITunesAdapter(client),
-	}
-	if cfg.HasMusicBrainz() {
-		provs = append(provs, providers.NewMusicBrainzAdapter(client, cfg.MusicBrainzUserAgent))
-	}
-	if cfg.HasLastFM() {
-		provs = append(provs, providers.NewLastFmAdapter(client, cfg.LastFMAPIKey))
-	}
-	provs = append(provs, providers.NewSoundCloudAPIAdapter(client, nil))
-	provs = append(provs, providers.NewYouTubeMusicAdapter(client.Transport))
-	return provs
 }
 
 // printRanked shows each result's final rank position, kind, title/subtitle,

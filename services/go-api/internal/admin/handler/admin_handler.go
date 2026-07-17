@@ -12,34 +12,26 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"altune/go-api/internal/admin/evalmeter"
+	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/admin/ui"
 	"altune/go-api/internal/shared/logging"
 )
 
-// providerHealthReader is the read side of the provider status board, satisfied
-// by *providerhealth.Store.
-type providerHealthReader interface {
-	Snapshot() []providerhealth.ProviderSnapshot
-}
-
-// requestStoreReader is the read side of the discovery request drill-down,
-// satisfied by *requeststore.Store.
-type requestStoreReader interface {
-	Snapshot() []requeststore.Record
-	Get(corrID string) (requeststore.Record, bool)
-}
-
+// AdminHandler serves the console. New takes the two always-present
+// collaborators; every nil-tolerant panel dependency arrives via a WithX setter
+// and its absence degrades that panel (empty JSON or 503), never the console.
 type AdminHandler struct {
-	operatorUserID string
-	probe          HealthProbe
-	logRing        *logging.RingBuffer
-	eventFeed      *EventFeed
-	providerHealth providerHealthReader
-	acquisition    AcquisitionStatusReader
-	evalMeter      *EvalMeter
-	requests        requestStoreReader
+	probe   HealthProbe
+	logRing *logging.RingBuffer
+
+	eventFeed       *eventtap.Feed
+	providerHealth  *providerhealth.Store
+	acquisition     AcquisitionStatusReader
+	evalMeter       *evalmeter.Meter
+	requests        *requeststore.Store
 	reRunner        ReRunner
 	searchInspector SearchInspector
 
@@ -47,9 +39,38 @@ type AdminHandler struct {
 	supabaseAnonKey string
 }
 
+func New(probe HealthProbe, logRing *logging.RingBuffer) *AdminHandler {
+	return &AdminHandler{probe: probe, logRing: logRing}
+}
+
+// WithEventFeed attaches the system-wide event stream (rates + SSE). Nil leaves
+// the events panel empty.
+func (h *AdminHandler) WithEventFeed(f *eventtap.Feed) *AdminHandler {
+	h.eventFeed = f
+	return h
+}
+
+// WithProviderHealth attaches the provider status board. Nil leaves it empty.
+func (h *AdminHandler) WithProviderHealth(s *providerhealth.Store) *AdminHandler {
+	h.providerHealth = s
+	return h
+}
+
+// WithAcquisition attaches the acquisition pipeline panel. Nil leaves it empty.
+func (h *AdminHandler) WithAcquisition(r AcquisitionStatusReader) *AdminHandler {
+	h.acquisition = r
+	return h
+}
+
+// WithEvalMeter attaches the discovery-eval meter. Nil reports it disabled.
+func (h *AdminHandler) WithEvalMeter(m *evalmeter.Meter) *AdminHandler {
+	h.evalMeter = m
+	return h
+}
+
 // WithRequestStore attaches the discovery request-drill-down store. A nil store
 // leaves the /requests endpoints answering empty.
-func (h *AdminHandler) WithRequestStore(r requestStoreReader) *AdminHandler {
+func (h *AdminHandler) WithRequestStore(r *requeststore.Store) *AdminHandler {
 	h.requests = r
 	return h
 }
@@ -61,26 +82,6 @@ func (h *AdminHandler) WithSupabaseLogin(url, anonKey string) *AdminHandler {
 	h.supabaseURL = url
 	h.supabaseAnonKey = anonKey
 	return h
-}
-
-func New(
-	operatorUserID string,
-	probe HealthProbe,
-	logRing *logging.RingBuffer,
-	eventFeed *EventFeed,
-	providerHealth providerHealthReader,
-	acquisition AcquisitionStatusReader,
-	evalMeter *EvalMeter,
-) *AdminHandler {
-	return &AdminHandler{
-		operatorUserID: operatorUserID,
-		probe:          probe,
-		logRing:        logRing,
-		eventFeed:      eventFeed,
-		providerHealth: providerHealth,
-		acquisition:    acquisition,
-		evalMeter:      evalMeter,
-	}
 }
 
 // ServeIndex serves the unauthenticated console shell.

@@ -1,6 +1,6 @@
 # Admin / Mission Control — router
 
-Single-operator observability console under /admin. Deliberately NOT hexagonal — flat observability packages (`handler/`, `alert/`, `eventtap/`, `providerhealth/`, `requeststore/`, `ui/`) with consumer-defined interfaces implemented in the composition root. `eventtap.Tap` is the admin-owned `events.Publisher` decorator that feeds the console's system-wide event stream — its payload-key vocabulary stays here, not in `internal/shared/events`.
+Single-operator observability console under /admin. Deliberately NOT hexagonal — flat observability packages (`handler/`, `alert/`, `evalmeter/`, `eventtap/`, `providerhealth/`, `requeststore/`, `ui/`). Interfaces exist only where the implementation lives in the composition root (`ReRunner`, `SearchInspector`, `AcquisitionStatusReader`, `HealthProbe`, `evalmeter.Runner`); same-feature collaborators are concrete pointers — don't reintroduce single-impl reader interfaces. `handler/` is transport only; background lifecycle components live in their own packages (`evalmeter.Meter`, `eventtap.Feed`). `eventtap.Tap` is the admin-owned `events.Publisher` decorator that feeds the console's system-wide event stream — its payload-key vocabulary stays here, not in `internal/shared/events`.
 
 Invariants:
 

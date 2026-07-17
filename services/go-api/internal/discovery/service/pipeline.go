@@ -17,23 +17,58 @@ import "altune/go-api/internal/discovery/domain"
 //	EnforceDiversity         : per-artist cap within the top window (product rule)
 //	CollapseArtistDuplicates : fold same-name artists into one (product rule)
 func rankPipeline(perProvider [][]domain.SearchResult, queryNorm string) []domain.SearchResult {
-	return rankPipelineWith(perProvider, queryNorm, rankConfig{})
+	return rankPipelineWith(perProvider, queryNorm, RankOptions{})
+}
+
+// RankOptions mirrors rankConfig's experiment-gated ranking inputs for callers
+// outside the Service — the Mission Control re-run must rank with the same
+// flag-gated stages the live search applies, or its waterfall misrepresents
+// production. The zero value is the production default (every branch inert).
+type RankOptions struct {
+	// TailDemotion applies the tail-noise demotion predicate
+	// (TAIL_DEMOTION_ENABLED).
+	TailDemotion bool
+	// CrossKindProminence applies the cross-kind prominence tiebreak
+	// (CROSS_KIND_PROMINENCE_ENABLED).
+	CrossKindProminence bool
+	// Behavioral is the published satisfaction score map (nil = off), keyed by
+	// result_signature (BEHAVIORAL_RANKING_ENABLED). Read-only.
+	Behavioral map[string]float64
+}
+
+// config maps the exported options onto the internal rankConfig — the single
+// flag→config site, so the live path and the re-run cannot diverge.
+func (o RankOptions) config() rankConfig {
+	cfg := rankConfig{behavioral: o.Behavioral, prominence: o.CrossKindProminence}
+	if o.TailDemotion {
+		cfg.demote = isLowConfidenceTail
+	}
+	return cfg
+}
+
+// RankWith is Rank with the experiment-gated inputs threaded in. Exported (with
+// Merge and Reshape) so the re-run's stage-by-stage waterfall runs the identical
+// composition the live pipeline does.
+func RankWith(entities []Entity, queryNorm string, opts RankOptions) []domain.SearchResult {
+	return rankWith(entities, queryNorm, opts.config())
+}
+
+// Reshape applies the post-rank list-shaping product rules in their canonical
+// order (EnforceDiversity, then CollapseArtistDuplicates).
+func Reshape(ranked []domain.SearchResult) []domain.SearchResult {
+	return CollapseArtistDuplicates(EnforceDiversity(ranked))
 }
 
 // rankPipelineWith is rankPipeline with the experiment-gated ranking inputs
-// threaded into the rank step (see rankConfig). The live search path builds the
-// config from the Service's eval-gated flags; rankPipeline and the pipeline tests
-// keep the zero-value default.
+// threaded into the rank step (see RankOptions). The live search path builds the
+// options from the Service's eval-gated flags; rankPipeline and the pipeline
+// tests keep the zero-value default.
 func rankPipelineWith(
 	perProvider [][]domain.SearchResult,
 	queryNorm string,
-	cfg rankConfig,
+	opts RankOptions,
 ) []domain.SearchResult {
-	entities := Merge(perProvider)
-	ranked := rankWith(entities, queryNorm, cfg)
-	ranked = EnforceDiversity(ranked)
-	ranked = CollapseArtistDuplicates(ranked)
-	return ranked
+	return Reshape(RankWith(Merge(perProvider), queryNorm, opts))
 }
 
 // rankPipelineNoReshape is rankPipeline minus the post-rank list-shaping tier

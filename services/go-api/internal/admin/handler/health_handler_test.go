@@ -37,7 +37,7 @@ func TestAdminHealthEndpoint(t *testing.T) {
 	probe := func(context.Context) DependencyHealth {
 		return DependencyHealth{DB: "ok", Redis: "down"}
 	}
-	h := New("op", probe, nil, nil, nil, nil, nil)
+	h := New(probe, nil)
 
 	r := chi.NewRouter()
 	h.RegisterData(r)
