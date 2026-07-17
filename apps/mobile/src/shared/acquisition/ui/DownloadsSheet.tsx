@@ -9,7 +9,8 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useDownloadPhase, type DownloadEntry } from '@shared/acquisition/downloadStore';
 import { phaseLabel } from '@shared/acquisition/stagePhase';
-import { Artwork, Text, radius, spacing, useTheme } from '@shared/ui';
+import { Text, radius, spacing, useTheme } from '@shared/ui';
+import { Artwork } from '@shared/ui/primitives/Artwork';
 
 interface DownloadsSheetProps {
   visible: boolean;

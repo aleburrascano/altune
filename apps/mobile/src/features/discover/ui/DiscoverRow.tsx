@@ -13,7 +13,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Pause, Play } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
-import { Artwork, Row, Text, radius, spacing, useTheme } from '@shared/ui';
+import { Row, Text, radius, spacing, useTheme } from '@shared/ui';
+import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
 

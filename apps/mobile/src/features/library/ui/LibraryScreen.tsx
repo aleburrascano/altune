@@ -7,8 +7,9 @@ import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { Button, Screen, SearchBar, Skeleton, Text, spacing, useTheme } from '@shared/ui';
+import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
+import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';

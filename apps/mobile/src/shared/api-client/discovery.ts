@@ -1,13 +1,13 @@
 /**
  * Typed client for the discovery search surface: search, suggest, history,
- * and the behavioral /events envelope, plus the core wire types.
+ * plus the core wire types. The behavioral /events send (`recordEvent`) lives in
+ * `@shared/telemetry` — it is telemetry, not a search call, and keeping it here
+ * made api-client import up into telemetry (structure audit F1).
  *
  * Slice 43 of discover-music-v1. Mirrors the wire shape in
  * docs/specs/discover-music-v1/spec.md §3.7. The detail-open surface
  * (catalog browse + per-provider enrichment) lives in enrichment.ts.
  */
-
-import { getSessionId } from '@shared/telemetry/session';
 
 import { apiFetch } from './index';
 
@@ -90,33 +90,6 @@ export type DiscoverySearchHistoryResponse = {
   total: number;
 };
 
-// Behavioral interaction events, all routed through the unified /events envelope
-// (the legacy /clicks endpoint was folded into this — clicks are now a
-// result_clicked event). query_norm is top-level so the no-click coverage signal
-// can match it; everything else rides in payload.
-export type DiscoveryEventType =
-  | 'results_shown'
-  | 'result_clicked'
-  | 'play'
-  | 'skip'
-  | 'completed'
-  | 'library_add'
-  | 'wrong_album';
-
-export type DiscoveryEvent = {
-  type: DiscoveryEventType;
-  query_norm?: string;
-  // The originating search's keystone. Threaded onto every engagement event so
-  // the backend can join the impression/click/play funnel back to its search.
-  search_id?: string | undefined;
-  // Two-tier reliability fields, set only for the label-critical outbox tier
-  // (library_add, wrong_album): an idempotency key the server dedups on, and the
-  // client's record time (vs the server received_at).
-  event_id?: string | undefined;
-  client_occurred_at?: string | undefined;
-  payload?: Record<string, unknown>;
-};
-
 export async function searchDiscovery(
   params: {
     q: string;
@@ -180,17 +153,3 @@ export async function clearSearchHistory(): Promise<void> {
   await apiFetch<void>('/v1/discovery/search-history', { method: 'DELETE' });
 }
 
-export async function recordEvent(event: DiscoveryEvent): Promise<void> {
-  // Stamp the rotating session_id onto every event's payload (no column — it
-  // rides in JSONB) so the backend can derive session-arc signals (abandonment,
-  // pogo-sticking) without each call site threading it.
-  const body: DiscoveryEvent = {
-    ...event,
-    payload: { ...(event.payload ?? {}), session_id: getSessionId() },
-  };
-  await apiFetch<void>('/v1/discovery/events', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-}

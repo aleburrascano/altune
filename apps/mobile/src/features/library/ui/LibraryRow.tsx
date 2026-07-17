@@ -7,7 +7,8 @@ import { useDownloadPhase } from '@shared/acquisition/downloadStore';
 import { phaseLabel } from '@shared/acquisition/stagePhase';
 import { withFeaturing } from '@shared/lib/featured';
 import { formatDuration } from '@shared/lib/format';
-import { Artwork, Row, Text, spacing, useTheme } from '@shared/ui';
+import { Row, Text, spacing, useTheme } from '@shared/ui';
+import { Artwork } from '@shared/ui/primitives/Artwork';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import type { TrackResponse } from '../../../shared/api-client/types';

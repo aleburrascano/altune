@@ -11,7 +11,7 @@ The single source of visual truth. Every screen composes these primitives and re
 
 ## Conventions
 
-- **Import from `@shared/ui`** (barrel = theme + primitives + motion). Components that render in jest (e.g. the auth screens) import primitives **directly** (`@shared/ui/primitives/Button`) to avoid loading `Artwork`→`expo-image` transitively.
+- **Import from `@shared/ui`** (barrel = theme + primitives + motion). The barrel is heavy-dep-free (structure audit F2): the two native-module primitives — `Artwork` (`expo-image`) and `SearchBar` (`lucide-react-native`) — are **not** re-exported, so importing `@shared/ui` never drags a native module into jest. Import those two **directly** by path (`@shared/ui/primitives/Artwork`, `@shared/ui/primitives/SearchBar`); everything else comes from the barrel.
 - **`useTheme()` is the only color source.** The context default *is* `darkTheme`, so a component with no `ThemeProvider` mounted (bare-rendered tests) resolves to dark instead of throwing — load-bearing for the auth component tests.
 - **Dark is the only v1 mode.** `lightTheme` is a drafted, inactive counterpart (satisfies the `.claude/rules/typescript-frontend.md` "every token has light + dark" rule); it is NOT visually tuned — don't ship light mode without a dedicated design pass.
 - **Semantic colors stay off the brand accent** — cobalt always means "interactive", never "data" (confidence/warning/danger have their own roles).

@@ -16,7 +16,8 @@
 import type { ReactElement } from 'react';
 import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
 
-import { Screen, SearchBar, Text, spacing, useTheme } from '@shared/ui';
+import { Screen, Text, spacing, useTheme } from '@shared/ui';
+import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import { DiscoverBody } from './DiscoverBody';
 import { SuggestionsList } from './SuggestionsList';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';

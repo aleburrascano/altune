@@ -4,7 +4,7 @@ title: Library
 description: Single chip-filtered personal-collection screen (Playlists/Tracks/Albums/Artists) with client-side grouping and acquisition retry.
 resource: apps/mobile/src/features/library/
 tags: [mobile, feature, library, playlists, react-query, grouping]
-verified_commit: 088f954bbb7ca36e7bb99d929f388f356df3019a
+verified_commit: 93c5bc09ecd9649b027a203516a10282a8f0cfda
 ---
 
 The user's personal collection screen (`docs/superpowers/specs/2026-06-28-library-redesign-design.md`). Model: **spine + lenses** — the Tracks and Playlists chips are what the user owns (primary, fetched/mutated), while Albums and Artists are client-derived groupings of saved tracks (lenses, no backend endpoint). `ui/LibraryScreen.tsx` is the orchestrator: it owns the active `LibraryChip` (`'playlists'|'tracks'|'albums'|'artists'`, opens on Playlists), a per-chip sort key, search, and the track context menu, and renders header → search → chip bar → sort control → the one active view — no stacked overview, selecting a chip swaps only the content area. (The chip/list vocabulary was renamed songs→tracks in the 2026-07-16 structure audit — `Track` is the glossary noun; "song" is banned.)
