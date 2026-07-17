@@ -8,11 +8,8 @@
  * per open (docs/providers/lastfm.md cap 3).
  */
 
-import {
-  getLastFmEnrichment,
-  type DiscoveryKind,
-  type LastFmEnrichmentResponse,
-} from '@shared/api-client/discovery';
+import { getLastFmEnrichment, type LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
+import type { DiscoveryKind } from '@shared/api-client/discovery';
 
 import { useEnrichmentQuery } from './useEnrichmentQuery';
 

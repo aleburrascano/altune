@@ -13,12 +13,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-import {
-  getArtistAlbums,
-  getArtistTopTracks,
-  type DiscoveryResult,
-  type DiscoverySource,
-} from '@shared/api-client/discovery';
+import { getArtistAlbums, getArtistTopTracks } from '@shared/api-client/enrichment';
+import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 import {
   backfillAlbumArt,
   dedupAlbumsByTitle,

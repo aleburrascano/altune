@@ -8,7 +8,7 @@
  * useImpressionLogger.
  */
 
-import type { DiscoveryResult } from '../../shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 export type ImpressionRow = {
   result_signature: string;

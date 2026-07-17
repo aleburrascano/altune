@@ -62,7 +62,8 @@ Detail is a **stack screen nested within each tab**: `src/app/(tabs)/discover/de
 
 - `@shared/lib/detail-handoff` — the discover↔detail seam.
 - `@shared/api-client/tracks` (`createTrack`) + `types` (`CreateTrackRequest`, `TrackResponse`).
-- `@shared/api-client/discovery` (`DiscoveryResult`, `getAlbumTracks`, `getArtistTopTracks`, `getArtistAlbums`, `ContentFetchResponse`).
+- `@shared/api-client/discovery` (`DiscoveryResult` + core wire types, `searchDiscovery`).
+- `@shared/api-client/enrichment` (catalog browse: `getAlbumTracks`, `getArtistTopTracks`, `getArtistAlbums`, `getRelatedTracks`, `ContentFetchResponse`; enrichment: `getEnrichment`, `getLastFmEnrichment`, `getDeezerEnrichment`) — the detail-open surface, split out of `discovery.ts`.
 - `@tanstack/react-query` — `useSaveTrack` mutation, via the root `QueryClientProvider`.
 - `@shared/ui/primitives/*` — `Screen`, `Text`, `Artwork`, `Button`, `Banner`.
 - No cross-feature imports (vertical-slice rule).

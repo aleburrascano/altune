@@ -14,17 +14,17 @@ import {
 
 import { BlendedSection } from './BlendedSection';
 import { FilteredResults } from './FilteredResults';
-import type { DiscoveryKind, DiscoveryResult, SearchHistoryItem } from '../../../shared/api-client/discovery';
-import type { DiscoverView } from '../state';
+import { kindLabel } from '../state';
+import type { DiscoveryResult, SearchHistoryItem } from '@shared/api-client/discovery';
+import type { DiscoverView, ResultsFilter } from '../state';
 import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
-
-type ResultsFilter = 'all' | DiscoveryKind;
+import type { ResultsCommonProps } from './ResultsList';
 
 const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: string }[] = [
   { filter: 'all', label: 'All', testID: 'discover-filter-all' },
-  { filter: 'album', label: 'Albums', testID: 'discover-filter-album' },
-  { filter: 'track', label: 'Songs', testID: 'discover-filter-track' },
-  { filter: 'artist', label: 'Artists', testID: 'discover-filter-artist' },
+  { filter: 'album', label: kindLabel('album', { plural: true }), testID: 'discover-filter-album' },
+  { filter: 'track', label: kindLabel('track', { plural: true }), testID: 'discover-filter-track' },
+  { filter: 'artist', label: kindLabel('artist', { plural: true }), testID: 'discover-filter-artist' },
 ];
 
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
@@ -37,7 +37,7 @@ interface SearchData {
 interface DiscoverBodyProps {
   view: DiscoverView;
   searchData: SearchData | undefined;
-  history: { data?: { items: SearchHistoryItem[] } | undefined };
+  historyItems: SearchHistoryItem[];
   filter: ResultsFilter;
   onFilterChange: (filter: ResultsFilter) => void;
   onHistoryTap: (item: SearchHistoryItem) => void;
@@ -55,7 +55,7 @@ interface DiscoverBodyProps {
 export function DiscoverBody({
   view,
   searchData,
-  history,
+  historyItems,
   filter,
   onFilterChange,
   onHistoryTap,
@@ -114,10 +114,9 @@ export function DiscoverBody({
   }
 
   if (view === 'empty-no-query') {
-    const items = history.data?.items ?? [];
     return (
       <View testID="discover-empty-no-query" style={styles.list}>
-        {items.length === 0 ? (
+        {historyItems.length === 0 ? (
           <View style={styles.emptyCenter}>
             <Search size={32} color={theme.color.textTertiary} />
             <Text variant="body" tone="secondary" style={styles.emptyText}>
@@ -143,7 +142,7 @@ export function DiscoverBody({
             ) : null}
           </View>
           <View style={styles.chipCloud}>
-            {items.map((item, index) => (
+            {historyItems.map((item, index) => (
               <Chip
                 key={item.query_norm}
                 testID={`discover-history-row-${index}`}
@@ -160,33 +159,22 @@ export function DiscoverBody({
 
   // view === 'results'
   const results = searchData?.results ?? [];
+  const common: ResultsCommonProps = {
+    onResultTap,
+    impression,
+    onRefresh,
+    isRefreshing,
+    correctedQuery,
+    originalQuery,
+    onSearchOriginal,
+  };
   return (
     <View testID="discover-results" style={styles.results}>
       <FilterChips active={filter} onSelect={onFilterChange} />
       {filter === 'all' ? (
-        <BlendedSection
-          results={results}
-          onResultTap={onResultTap}
-          impression={impression}
-          onSeeAll={onFilterChange}
-          onRefresh={onRefresh}
-          isRefreshing={isRefreshing}
-          correctedQuery={correctedQuery}
-          originalQuery={originalQuery}
-          onSearchOriginal={onSearchOriginal}
-        />
+        <BlendedSection results={results} onSeeAll={onFilterChange} common={common} />
       ) : (
-        <FilteredResults
-          kind={filter}
-          results={results}
-          onResultTap={onResultTap}
-          impression={impression}
-          onRefresh={onRefresh}
-          isRefreshing={isRefreshing}
-          correctedQuery={correctedQuery}
-          originalQuery={originalQuery}
-          onSearchOriginal={onSearchOriginal}
-        />
+        <FilteredResults kind={filter} results={results} common={common} />
       )}
     </View>
   );

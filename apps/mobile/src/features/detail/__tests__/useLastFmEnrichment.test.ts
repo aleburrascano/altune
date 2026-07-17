@@ -8,10 +8,10 @@ import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
 import { useLastFmEnrichment } from '../hooks/useLastFmEnrichment';
-import type { LastFmEnrichmentResponse } from '../../../shared/api-client/discovery';
+import type { LastFmEnrichmentResponse } from '../../../shared/api-client/enrichment';
 
 const mockGet = jest.fn();
-jest.mock('../../../shared/api-client/discovery', () => ({
+jest.mock('../../../shared/api-client/enrichment', () => ({
   getLastFmEnrichment: (...args: unknown[]) => mockGet(...args),
 }));
 

@@ -15,11 +15,11 @@
  */
 
 import type {
-  DiscoveryResult,
   DeezerEnrichmentResponse,
   EnrichmentResponse,
   LastFmEnrichmentResponse,
-} from '@shared/api-client/discovery';
+} from '@shared/api-client/enrichment';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { trackExtras } from '../extras-accessors';
 import { useDeezerEnrichment } from './useDeezerEnrichment';

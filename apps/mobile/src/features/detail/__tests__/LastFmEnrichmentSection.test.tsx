@@ -9,10 +9,8 @@ import { render } from '@testing-library/react-native';
 import { createElement } from 'react';
 
 import { LastFmEnrichmentSection } from '../ui/LastFmEnrichmentSection';
-import type {
-  DiscoveryKind,
-  LastFmEnrichmentResponse,
-} from '../../../shared/api-client/discovery';
+import type { LastFmEnrichmentResponse } from '../../../shared/api-client/enrichment';
+import type { DiscoveryKind } from '../../../shared/api-client/discovery';
 
 function _enrichment(over: Partial<LastFmEnrichmentResponse> = {}): LastFmEnrichmentResponse {
   return {

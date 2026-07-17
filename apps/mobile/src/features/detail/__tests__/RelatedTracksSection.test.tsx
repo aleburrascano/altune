@@ -23,7 +23,7 @@ jest.mock('expo-router', () => ({
 }));
 
 const mockGetRelatedTracks = jest.fn();
-jest.mock('../../../shared/api-client/discovery', () => ({
+jest.mock('../../../shared/api-client/enrichment', () => ({
   getRelatedTracks: (...args: unknown[]) => mockGetRelatedTracks(...args),
 }));
 

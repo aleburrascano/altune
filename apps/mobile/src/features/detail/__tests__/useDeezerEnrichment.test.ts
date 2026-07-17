@@ -8,10 +8,10 @@ import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
 import { useDeezerEnrichment } from '../hooks/useDeezerEnrichment';
-import type { DeezerEnrichmentResponse } from '../../../shared/api-client/discovery';
+import type { DeezerEnrichmentResponse } from '../../../shared/api-client/enrichment';
 
 const mockGet = jest.fn();
-jest.mock('../../../shared/api-client/discovery', () => ({
+jest.mock('../../../shared/api-client/enrichment', () => ({
   getDeezerEnrichment: (...args: unknown[]) => mockGet(...args),
 }));
 

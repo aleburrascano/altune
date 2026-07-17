@@ -60,6 +60,8 @@ const mockGetEnrichment = jest.fn(() =>
 );
 jest.mock('../../../shared/api-client/discovery', () => ({
   searchDiscovery: (params: unknown) => mockSearchDiscovery(params),
+}));
+jest.mock('../../../shared/api-client/enrichment', () => ({
   getAlbumTracks: () => mockGetAlbumTracks(),
   getArtistTopTracks: () => mockGetArtistTopTracks(),
   getArtistAlbums: () => mockGetArtistAlbums(),
