@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
 
@@ -18,6 +18,7 @@ import { useArtistDetailState } from '../hooks/useArtistDetailState';
 import type { DetailRoute } from '../navigation';
 
 import { sharedStyles } from './helpers';
+import { AlbumCardsSkeleton, TrackRowsSkeleton } from './DetailSkeleton';
 import { DiscographySections } from './DiscographySections';
 import { TrackSaveControl } from './TrackSaveControl';
 
@@ -41,9 +42,7 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
         {artist.hasSources ? 'Popular Tracks' : 'Your Tracks'}
       </Text>
       {artist.isLoadingTracks ? (
-        <View testID="detail-top-tracks-loading" style={styles.sectionLoading}>
-          <ActivityIndicator />
-        </View>
+        <TrackRowsSkeleton testID="detail-top-tracks-loading" count={5} />
       ) : artist.isErrorTracks ? (
         <View testID="detail-top-tracks-error" style={styles.sectionError}>
           <Text variant="body" tone="danger">
@@ -123,8 +122,8 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
       {artist.hasSources ? (
         <>
           {artist.isLoadingAlbums ? (
-            <View testID="detail-albums-loading" style={[styles.sectionLoading, sharedStyles.albumsSection]}>
-              <ActivityIndicator />
+            <View testID="detail-albums-loading" style={sharedStyles.albumsSection}>
+              <AlbumCardsSkeleton />
             </View>
           ) : artist.isErrorAlbums ? (
             <View testID="detail-albums-error" style={[styles.sectionError, sharedStyles.albumsSection]}>
@@ -163,9 +162,7 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
 
           {artist.exploreExpanded ? (
             artist.discoveryLoading || artist.isLoadingAlbums ? (
-              <View style={styles.sectionLoading}>
-                <ActivityIndicator />
-              </View>
+              <AlbumCardsSkeleton />
             ) : artist.discoveryError || artist.isErrorAlbums ? (
               <View style={styles.sectionError}>
                 <Text variant="caption" tone="secondary">
@@ -191,7 +188,6 @@ const styles = StyleSheet.create({
   artistContent: { marginTop: spacing.lg },
   trackDuration: { marginRight: spacing.xs, fontVariant: ['tabular-nums'] },
   showAll: { paddingVertical: spacing.md, alignItems: 'center' },
-  sectionLoading: { paddingVertical: spacing.lg, alignItems: 'center' },
   sectionError: { paddingVertical: spacing.md, alignItems: 'center' },
   emptySection: { paddingVertical: spacing.md },
   exploreSection: { marginTop: spacing.xl },
