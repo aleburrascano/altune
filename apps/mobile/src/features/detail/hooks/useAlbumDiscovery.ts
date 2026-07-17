@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { searchDiscovery, getAlbumTracks } from '@shared/api-client/discovery';
+import { getAlbumTracks } from '@shared/api-client/discovery';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+
+import { resolveEntityQuery } from '../resolve-entity-query';
 
 export function useAlbumDiscovery({
   albumTitle,
@@ -14,20 +16,11 @@ export function useAlbumDiscovery({
 }) {
   const searchQuery = `${albumTitle} ${artist ?? ''}`.trim();
 
-  const { data: searchResult, isLoading: isSearching, isError: isSearchError } = useQuery({
-    queryKey: ['album-discovery-search', searchQuery],
-    queryFn: async () => {
-      const res = await searchDiscovery({
-        q: searchQuery,
-        kinds: ['album'],
-        limit: 1,
-        saveHistory: false,
-      });
-      return res.results[0] ?? null;
-    },
+  const { data, isLoading: isSearching, isError: isSearchError } = useQuery({
+    ...resolveEntityQuery('album', searchQuery, 1),
     enabled,
-    staleTime: 30 * 60 * 1000,
   });
+  const searchResult = data?.[0] ?? null;
 
   const source = searchResult?.sources[0];
 
@@ -41,7 +34,7 @@ export function useAlbumDiscovery({
   const tracks: DiscoveryResult[] = tracksData?.items ?? [];
 
   return {
-    albumResult: searchResult ?? null,
+    albumResult: searchResult,
     tracks,
     isLoading: isSearching || isLoadingTracks,
     isError: isSearchError || isTracksError,

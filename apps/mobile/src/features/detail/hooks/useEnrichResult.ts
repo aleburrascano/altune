@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { searchDiscovery, type DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
+
+import { resolveEntityQuery } from '../resolve-entity-query';
 
 const norm = (s: string): string => s.toLowerCase().trim();
 
@@ -25,22 +27,15 @@ export function useEnrichResult(result: DiscoveryResult): {
   const searchTerm = result.subtitle ? `${result.title} ${result.subtitle}` : result.title;
 
   const { data } = useQuery({
-    queryKey: ['enrich', result.kind, searchTerm],
-    queryFn: () => searchDiscovery({
-      q: searchTerm,
-      kinds: [result.kind],
-      limit: 5,
-      saveHistory: false,
-    }),
+    ...resolveEntityQuery(result.kind, searchTerm, 5),
     enabled: needsEnrichment,
-    staleTime: 1000 * 60 * 30,
   });
 
   if (!needsEnrichment) {
     return { enriched: result, isEnriching: false };
   }
 
-  if (!data?.results?.length) {
+  if (!data?.length) {
     return { enriched: result, isEnriching: !data };
   }
 
@@ -50,7 +45,7 @@ export function useEnrichResult(result: DiscoveryResult): {
   // No fuzzy fallback: a wrong match is worse than no enrichment (we keep the
   // stored metadata either way; we'd only be borrowing sources we can't trust).
   const match =
-    data.results.find(
+    data.find(
       (r) =>
         r.kind === result.kind &&
         norm(r.title) === titleNorm &&

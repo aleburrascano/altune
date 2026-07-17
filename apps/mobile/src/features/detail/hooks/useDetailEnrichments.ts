@@ -4,46 +4,35 @@
  *
  * Owns the kind → enrichments decision that used to be smeared across
  * DetailScreen: which providers a result of each kind fetches, and the params
- * each needs. The six underlying hooks stay (each fetches a different shape and
- * renders a different section), but they are composed here behind one interface
- * so the screen asks once and reads a content-gated plan.
+ * each needs. The three underlying hooks stay (each fetches a different shape)
+ * but they are composed here behind one interface so the screen asks once and
+ * reads a content-gated plan. Only fields the screen actually renders live
+ * here — the retired Discogs/lyrics surface was deleted, not disabled.
  *
- * React's rules of hooks require all six to be called unconditionally; the
+ * React's rules of hooks require all three to be called unconditionally; the
  * kind gating is expressed as each hook's `enabled` flag, not as a conditional
- * call. A disabled or empty enrichment comes back `null` so its section hides.
+ * call. A disabled or empty enrichment comes back `null`.
  */
 
 import type {
   DiscoveryResult,
   DeezerEnrichmentResponse,
-  DiscogsArtistEnrichmentResponse,
-  DiscogsEnrichmentResponse,
   EnrichmentResponse,
   LastFmEnrichmentResponse,
-  LyricsResponse,
 } from '@shared/api-client/discovery';
 
 import { trackExtras } from '../extras-accessors';
 import { useDeezerEnrichment } from './useDeezerEnrichment';
-import { useDiscogsArtistEnrichment } from './useDiscogsArtistEnrichment';
-import { useDiscogsEnrichment } from './useDiscogsEnrichment';
 import { useEnrichment } from './useEnrichment';
 import { useLastFmEnrichment } from './useLastFmEnrichment';
-import { useLyrics } from './useLyrics';
 
 export type DetailEnrichments = {
-  /** MusicBrainz — genres / year / rating + HD cover. All kinds. */
+  /** MusicBrainz — the header year. All kinds. */
   musicbrainz: EnrichmentResponse | null;
-  /** Deezer — track tempo/explicit or album label/genres. Track + album. */
+  /** Deezer — `featured_artists` for the header collab line + track Featuring row. Track + album. */
   deezer: DeezerEnrichmentResponse | null;
-  /** Last.fm — listen popularity, tags, similar artists, bio. All kinds. */
+  /** Last.fm — the artist About block (bio, counts, tags, similar). Artist only. */
   lastfm: LastFmEnrichmentResponse | null;
-  /** Discogs — album credits / styles / labels / community. Album only. */
-  discogsAlbum: DiscogsEnrichmentResponse | null;
-  /** Discogs — artist bio / aliases / groups / links. Artist only. */
-  discogsArtist: DiscogsArtistEnrichmentResponse | null;
-  /** Deezer — synced + plain lyrics. Track only. */
-  lyrics: LyricsResponse | null;
 };
 
 export function useDetailEnrichments(result: DiscoveryResult): DetailEnrichments {
@@ -60,17 +49,12 @@ export function useDetailEnrichments(result: DiscoveryResult): DetailEnrichments
     subtitle,
     enabled: isTrack || isAlbum,
   });
-  const { enrichment: lastfm } = useLastFmEnrichment({ kind, title, subtitle });
-  const { enrichment: discogsAlbum } = useDiscogsEnrichment({
-    album: title,
-    artist: subtitle,
-    enabled: isAlbum,
-  });
-  const { enrichment: discogsArtist } = useDiscogsArtistEnrichment({
-    name: title,
+  const { enrichment: lastfm } = useLastFmEnrichment({
+    kind,
+    title,
+    subtitle,
     enabled: isArtist,
   });
-  const { lyrics } = useLyrics({ title, subtitle, enabled: isTrack });
 
-  return { musicbrainz, deezer, lastfm, discogsAlbum, discogsArtist, lyrics };
+  return { musicbrainz, deezer, lastfm };
 }

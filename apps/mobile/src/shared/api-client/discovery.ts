@@ -294,76 +294,6 @@ export async function getEnrichment(params: {
   return apiFetch<EnrichmentResponse>(`/v1/discovery/enrichment?${qs.toString()}`);
 }
 
-// --- Discogs detail-open album enrichment (docs/providers/discogs.md caps 3–6) ---
-
-export type DiscogsCredit = { name: string; role: string };
-export type DiscogsLabel = { name: string; catno: string };
-export type DiscogsCompany = { name: string; role: string };
-export type DiscogsCommunity = {
-  have: number;
-  want: number;
-  rating: number;
-  votes: number;
-};
-
-/**
- * Discogs-derived album enrichment: credits/personnel, styles (the sub-genre
- * layer MusicBrainz lacks), label + catalog, formats, companies, and community
- * demand/rating. Collections are always present (never null). An unresolved
- * album returns an empty payload (`master_id: 0`, empty lists).
- */
-export type DiscogsEnrichmentResponse = {
-  master_id: number;
-  genres: string[];
-  styles: string[];
-  year: number;
-  credits: DiscogsCredit[];
-  labels: DiscogsLabel[];
-  formats: string[];
-  country: string;
-  companies: DiscogsCompany[];
-  community: DiscogsCommunity;
-};
-
-export async function getDiscogsEnrichment(params: {
-  album: string;
-  artist?: string | null | undefined;
-}): Promise<DiscogsEnrichmentResponse> {
-  const qs = new URLSearchParams({ album: params.album });
-  if (params.artist) qs.set('artist', params.artist);
-  return apiFetch<DiscogsEnrichmentResponse>(
-    `/v1/discovery/enrichment/discogs?${qs.toString()}`,
-  );
-}
-
-export type DiscogsLink = { label: string; url: string };
-
-/**
- * Discogs-derived artist enrichment: biography, name history (real name,
- * aliases, name variations), group/member relationships, and external links.
- * Collections are always present (never null). An unresolved artist returns an
- * empty payload (`artist_id: 0`, empty fields).
- */
-export type DiscogsArtistEnrichmentResponse = {
-  artist_id: number;
-  profile: string;
-  real_name: string;
-  aliases: string[];
-  name_variations: string[];
-  members: string[];
-  groups: string[];
-  links: DiscogsLink[];
-};
-
-export async function getDiscogsArtistEnrichment(params: {
-  name: string;
-}): Promise<DiscogsArtistEnrichmentResponse> {
-  const qs = new URLSearchParams({ name: params.name });
-  return apiFetch<DiscogsArtistEnrichmentResponse>(
-    `/v1/discovery/enrichment/discogs/artist?${qs.toString()}`,
-  );
-}
-
 // --- Last.fm detail-open enrichment (docs/providers/lastfm.md cap 3) ---
 
 /**
@@ -436,40 +366,4 @@ export async function getDeezerEnrichment(params: {
   return apiFetch<DeezerEnrichmentResponse>(
     `/v1/discovery/enrichment/deezer?${kindTitleQs(params.kind, params.title, params.subtitle)}`,
   );
-}
-
-// --- Deezer lyrics (docs/providers/deezer.md cap 6) ---
-
-/**
- * One time-synced lyric line: the LRC-style timecode marker, the line text, and
- * the start offset + duration in milliseconds (for player-driven scrubbing).
- */
-export type SyncedLyricLine = {
-  timecode: string;
-  line: string;
-  milliseconds: number;
-  duration: number;
-};
-
-/**
- * Deezer-derived lyrics for a track: the full plain text, the time-synced lines
- * (empty when only plain text exists), the songwriter credits, and the copyright
- * line. Lyrics are the one metadata axis no other provider carries. A track with
- * no lyrics (or none for this region) returns an empty payload (`plain: ''`,
- * `synced_lines: []`). Tracks only — there is no album/artist lyrics surface.
- */
-export type LyricsResponse = {
-  plain: string;
-  synced_lines: SyncedLyricLine[];
-  writers: string[];
-  copyright: string;
-};
-
-export async function getLyrics(params: {
-  title: string;
-  subtitle?: string | null | undefined;
-}): Promise<LyricsResponse> {
-  const qs = new URLSearchParams({ title: params.title });
-  if (params.subtitle) qs.set('subtitle', params.subtitle);
-  return apiFetch<LyricsResponse>(`/v1/discovery/lyrics?${qs.toString()}`);
 }

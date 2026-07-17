@@ -13,6 +13,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { extractFeaturedFromText } from '../extras';
 import { trackExtras } from '../extras-accessors';
 import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
+import type { DetailRoute } from '../navigation';
 
 import { _albumYear, sharedStyles } from './helpers';
 import { AlbumTrackRow } from './AlbumTrackRow';
@@ -26,7 +27,7 @@ function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   return base;
 }
 
-export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean }): ReactElement {
+export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: DetailRoute; isFromLibrary?: boolean }): ReactElement {
   const theme = useTheme();
   const album = useAlbumDetailState(result, detailRoute, isFromLibrary);
 

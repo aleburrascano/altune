@@ -11,11 +11,11 @@ import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
 import { deriveAlbums } from '@shared/lib/derive-library-groups';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
 import { trackExtras } from '../extras-accessors';
+import { openDetail, type DetailRoute } from '../navigation';
 import { findTrackInLibraryCache } from '../helpers/find-track-in-library-cache';
 import { saveControlState, type SaveControlState } from '../save-control-state';
 import { toCreateTrackRequest } from '../save-cache';
@@ -47,7 +47,7 @@ export type ArtistDetailState = {
 
 export function useArtistDetailState(
   result: DiscoveryResult,
-  detailRoute: string,
+  detailRoute: DetailRoute,
   isFromLibrary?: boolean,
 ): ArtistDetailState {
   const router = useRouter();
@@ -112,16 +112,14 @@ export function useArtistDetailState(
   const isErrorTracks = hasSources ? apiErrorTracks : false;
 
   const onTrackPress = (track: DiscoveryResult): void => {
-    setDetailHandoff({
+    openDetail(router, detailRoute, {
       ...track,
       image_url: track.image_url ?? result.image_url,
     });
-    router.push(detailRoute as '/discover/detail');
   };
 
   const onAlbumPress = (album: DiscoveryResult): void => {
-    setDetailHandoff({ ...album, subtitle: album.subtitle ?? result.title });
-    router.push(detailRoute as '/discover/detail');
+    openDetail(router, detailRoute, { ...album, subtitle: album.subtitle ?? result.title });
   };
 
   const onQuickSave = (track: DiscoveryResult): void => {

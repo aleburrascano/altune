@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { searchDiscovery } from '@shared/api-client/discovery';
-
 import { trackExtras } from '../extras-accessors';
+import { resolveEntityQuery } from '../resolve-entity-query';
+
+// Last.fm's stock star placeholder — an artist it can't picture. Treat as no image.
+const LASTFM_PLACEHOLDER_HASH = '2a96cbd8b46e442fc41c2b86b821562f';
 
 export function useArtistDiscovery({
   artistName,
@@ -11,27 +13,18 @@ export function useArtistDiscovery({
   artistName: string;
   enabled: boolean;
 }) {
-  const { data: searchResult, isLoading, isError } = useQuery({
-    queryKey: ['artist-discovery-search', artistName],
-    queryFn: async () => {
-      const res = await searchDiscovery({
-        q: artistName,
-        kinds: ['artist'],
-        limit: 1,
-        saveHistory: false,
-      });
-      return res.results[0] ?? null;
-    },
+  const { data, isLoading, isError } = useQuery({
+    ...resolveEntityQuery('artist', artistName, 1),
     enabled,
-    staleTime: 30 * 60 * 1000,
   });
+  const searchResult = data?.[0] ?? null;
 
   const rawImageUrl = searchResult?.image_url ?? null;
-  const isPlaceholder = rawImageUrl != null && rawImageUrl.includes('2a96cbd8b46e442fc41c2b86b821562f');
+  const isPlaceholder = rawImageUrl != null && rawImageUrl.includes(LASTFM_PLACEHOLDER_HASH);
   const imageUrl = isPlaceholder ? null : rawImageUrl;
 
   return {
-    artistResult: searchResult ?? null,
+    artistResult: searchResult,
     imageUrl,
     sources: searchResult?.sources ?? [],
     mbid: searchResult ? trackExtras(searchResult.extras).mbid : null,

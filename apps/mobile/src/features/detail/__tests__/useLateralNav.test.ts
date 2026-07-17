@@ -3,8 +3,20 @@
  */
 
 import { renderHook, act, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createElement } from 'react';
+import type { ReactNode } from 'react';
 
 import { useLateralNav } from '../hooks/useLateralNav';
+
+// The lookup now routes through the shared resolve-entity query cache, so the
+// hook needs a QueryClient. Fresh per render so no results leak across tests.
+function renderLateralNav(): ReturnType<typeof renderHook<ReturnType<typeof useLateralNav>, void>> {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }): ReactNode =>
+    createElement(QueryClientProvider, { client: qc }, children);
+  return renderHook(() => useLateralNav(), { wrapper });
+}
 
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
@@ -39,7 +51,7 @@ describe('useLateralNav', () => {
     };
     mockSearchDiscovery.mockResolvedValueOnce({ results: [artistResult] });
 
-    const { result } = renderHook(() => useLateralNav());
+    const { result } = renderLateralNav();
 
     await act(async () => {
       await result.current.navigateTo('M83', 'artist');
@@ -54,7 +66,7 @@ describe('useLateralNav', () => {
   it('sets error when no result found', async () => {
     mockSearchDiscovery.mockResolvedValueOnce({ results: [] });
 
-    const { result } = renderHook(() => useLateralNav());
+    const { result } = renderLateralNav();
 
     await act(async () => {
       await result.current.navigateTo('Unknown Artist', 'artist');
@@ -68,7 +80,7 @@ describe('useLateralNav', () => {
   it('sets Album label in error for album kind', async () => {
     mockSearchDiscovery.mockResolvedValueOnce({ results: [] });
 
-    const { result } = renderHook(() => useLateralNav());
+    const { result } = renderLateralNav();
 
     await act(async () => {
       await result.current.navigateTo('Unknown Album', 'album');
@@ -80,7 +92,7 @@ describe('useLateralNav', () => {
   it('clears error on clearError call', async () => {
     mockSearchDiscovery.mockResolvedValueOnce({ results: [] });
 
-    const { result } = renderHook(() => useLateralNav());
+    const { result } = renderLateralNav();
 
     await act(async () => {
       await result.current.navigateTo('Unknown Artist', 'artist');
@@ -98,7 +110,7 @@ describe('useLateralNav', () => {
   it('clears error when starting new navigation', async () => {
     mockSearchDiscovery.mockResolvedValueOnce({ results: [] });
 
-    const { result } = renderHook(() => useLateralNav());
+    const { result } = renderLateralNav();
 
     await act(async () => {
       await result.current.navigateTo('Unknown Artist', 'artist');
@@ -132,7 +144,7 @@ describe('useLateralNav', () => {
       }),
     );
 
-    const { result } = renderHook(() => useLateralNav());
+    const { result } = renderLateralNav();
 
     expect(result.current.state).toBe('idle');
 
@@ -161,7 +173,7 @@ describe('useLateralNav', () => {
       }),
     );
 
-    const { result } = renderHook(() => useLateralNav());
+    const { result } = renderLateralNav();
 
     act(() => {
       void result.current.navigateTo('M83', 'artist');
