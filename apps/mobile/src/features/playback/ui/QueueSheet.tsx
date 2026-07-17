@@ -1,8 +1,8 @@
-import { useCallback, type ReactElement } from 'react';
+import { useCallback, useState, type ReactElement } from 'react';
 import { Alert, FlatList, type ListRenderItemInfo, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronDown, Play, X } from 'lucide-react-native';
+import { ChevronDown, EllipsisVertical, Play } from 'lucide-react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
@@ -10,6 +10,7 @@ import { withFeaturing } from '@shared/lib/featured';
 import type { FeaturedArtist } from '@shared/api-client/types';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { ActionSheet, type ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Text } from '@shared/ui/primitives/Text';
@@ -53,7 +54,8 @@ export function QueueSheet(): ReactElement {
   const playOrder = useQueueStore((s) => s.playOrder);
   const currentIndex = useQueueStore((s) => s.currentIndex);
   const source = useQueueStore((s) => s.source);
-  const { skipToIndex, removeFromQueue, clearUpcoming } = useQueuePlayback();
+  const { skipToIndex, removeFromQueue, moveQueueItem, clearUpcoming } = useQueuePlayback();
+  const [menuItem, setMenuItem] = useState<QueueItem | null>(null);
 
   const sourceLabel = source
     ? source.kind === 'playlist' ? `Playing from ${source.name}`
@@ -96,6 +98,29 @@ export function QueueSheet(): ReactElement {
     ]);
   };
 
+  // Row overflow menu: reorder within the upcoming region + remove. "Move Up"/
+  // "to Top" hide for the first upcoming track, "Move Down" for the last, so
+  // every option is always valid. Reorder targets stay > currentIndex, so the
+  // playing track is never moved.
+  const menuOptions = (item: QueueItem): ActionSheetOption[] => {
+    const isFirst = item.queueIndex === currentIndex + 1;
+    const isLast = item.queueIndex === playOrder.length - 1;
+    const opts: ActionSheetOption[] = [];
+    if (!isFirst) {
+      opts.push({ label: 'Move to Top', onPress: () => moveQueueItem(item.queueIndex, currentIndex + 1) });
+      opts.push({ label: 'Move Up', onPress: () => moveQueueItem(item.queueIndex, item.queueIndex - 1) });
+    }
+    if (!isLast) {
+      opts.push({ label: 'Move Down', onPress: () => moveQueueItem(item.queueIndex, item.queueIndex + 1) });
+    }
+    opts.push({
+      label: 'Remove from Queue',
+      tone: 'danger',
+      onPress: () => removeFromQueue(item.queueIndex),
+    });
+    return opts;
+  };
+
   const renderUpNextItem = useCallback(
     ({ item }: ListRenderItemInfo<QueueItem>) => (
       <ReanimatedSwipeable
@@ -117,10 +142,10 @@ export function QueueSheet(): ReactElement {
           </View>
           <Text variant="caption" tone="tertiary">{formatTime(item.durationSeconds)}</Text>
           <IconButton
-            icon={X}
+            icon={EllipsisVertical}
             size={18}
-            onPress={() => removeFromQueue(item.queueIndex)}
-            accessibilityLabel={`Remove ${item.title} from queue`}
+            onPress={() => setMenuItem(item)}
+            accessibilityLabel={`Options for ${item.title}`}
           />
         </Pressable>
       </ReanimatedSwipeable>
@@ -197,6 +222,14 @@ export function QueueSheet(): ReactElement {
             <Text variant="label" tone="secondary">No upcoming tracks</Text>
           </View>
         }
+      />
+
+      <ActionSheet
+        visible={menuItem != null}
+        title={menuItem?.title}
+        subtitle={menuItem != null ? withFeaturing(menuItem.artist, menuItem.featuredArtists) : undefined}
+        options={menuItem != null ? menuOptions(menuItem) : []}
+        onClose={() => setMenuItem(null)}
       />
     </View>
   );
