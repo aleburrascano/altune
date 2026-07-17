@@ -92,6 +92,7 @@ export function AuthForm({
           keyboardType="email-address"
           textContentType="emailAddress"
           autoComplete="email"
+          error={showEmailError}
         />
         {showEmailError ? (
           <Text testID="email-error" variant="caption" tone="danger">
@@ -107,6 +108,7 @@ export function AuthForm({
           autoCapitalize="none"
           textContentType={passwordContentType}
           autoComplete={passwordAutoComplete}
+          error={showPasswordError}
         />
         {showPasswordError ? (
           <Text testID="password-error" variant="caption" tone="danger">
@@ -123,6 +125,7 @@ export function AuthForm({
             autoCapitalize="none"
             textContentType="newPassword"
             autoComplete="new-password"
+            error={showConfirmError}
           />
         ) : null}
         {showConfirmError ? (

@@ -15,9 +15,11 @@
 
 import { Redirect, useRouter, useSegments } from 'expo-router';
 import type { ReactElement } from 'react';
+import { ChevronLeft } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Artwork } from '@shared/ui/primitives/Artwork';
+import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Screen } from '@shared/ui/primitives/Screen';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme/tokens';
@@ -112,23 +114,21 @@ export function DetailScreen(): ReactElement {
   const artistHasAbout = enrichments.lastfm !== null;
 
   const backButton = (
-    <Pressable
-      testID="detail-back"
-      onPress={() => {
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace(`/${tabRoot}` as '/discover' | '/library');
-        }
-      }}
-      accessibilityRole="button"
-      accessibilityLabel="Go back"
-      style={({ pressed }) => [styles.back, pressed ? { opacity: 0.6 } : null]}
-    >
-      <Text variant="label" tone="accent">
-        ‹ Back
-      </Text>
-    </Pressable>
+    <View style={styles.back}>
+      <IconButton
+        testID="detail-back"
+        icon={ChevronLeft}
+        size={24}
+        onPress={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace(`/${tabRoot}` as '/discover' | '/library');
+          }
+        }}
+        accessibilityLabel="Go back"
+      />
+    </View>
   );
 
   // For a collab album, append its co-primary artists to the header artist line

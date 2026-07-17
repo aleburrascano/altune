@@ -1,11 +1,12 @@
 import { Link } from 'expo-router';
 import { useState, type ReactElement } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Banner } from '@shared/ui/primitives/Banner';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
-import { radius, spacing, useTheme } from '@shared/ui/theme';
+import { TextField } from '@shared/ui/primitives/TextField';
+import { spacing } from '@shared/ui/theme';
 
 import { useResetPassword } from '../hooks/useResetPassword';
 import { authErrorText } from '../lib/errorCopy';
@@ -18,7 +19,6 @@ const SENT_COPY =
   "If an account exists for that email, we've sent a reset link. Check your email and follow it to choose a new password.";
 
 export function ForgotPasswordScreen(): ReactElement {
-  const theme = useTheme();
   const { state, requestReset } = useResetPassword();
   const [email, setEmail] = useState('');
 
@@ -47,22 +47,17 @@ export function ForgotPasswordScreen(): ReactElement {
           <Text variant="label" tone="secondary">
             Enter your email and we&apos;ll send you a link to choose a new password.
           </Text>
-          <TextInput
+          <TextField
             testID="email-input"
             value={email}
             onChangeText={setEmail}
             placeholder="Email"
-            placeholderTextColor={theme.color.textTertiary}
             autoCapitalize="none"
+            autoCorrect={false}
             keyboardType="email-address"
-            style={[
-              styles.input,
-              {
-                borderColor: theme.color.border,
-                backgroundColor: theme.color.surface1,
-                color: theme.color.textPrimary,
-              },
-            ]}
+            textContentType="emailAddress"
+            autoComplete="email"
+            error={showEmailError}
           />
           {showEmailError ? (
             <Text testID="email-error" variant="caption" tone="danger">
@@ -96,11 +91,5 @@ export function ForgotPasswordScreen(): ReactElement {
 
 const styles = StyleSheet.create({
   form: { gap: spacing.md },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
   linkWrap: { alignItems: 'center', paddingTop: spacing.sm },
 });

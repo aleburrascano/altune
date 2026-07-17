@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactElement } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Banner } from '@shared/ui/primitives/Banner';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
-import { radius, spacing, useTheme } from '@shared/ui/theme';
+import { TextField } from '@shared/ui/primitives/TextField';
+import { spacing } from '@shared/ui/theme';
 
 import { useUpdatePassword } from '../hooks/useUpdatePassword';
 import { authErrorText } from '../lib/errorCopy';
@@ -15,7 +16,6 @@ import { AuthHeroLayout } from './hero/AuthHeroLayout';
 const GENERIC_ERROR = "Couldn't update your password. Please try again.";
 
 export function SetNewPasswordScreen(): ReactElement {
-  const theme = useTheme();
   const router = useRouter();
   const { state, updatePassword } = useUpdatePassword();
   const [password, setPassword] = useState('');
@@ -31,33 +31,31 @@ export function SetNewPasswordScreen(): ReactElement {
     }
   }, [state.kind, router]);
 
-  const fieldColors = {
-    borderColor: theme.color.border,
-    backgroundColor: theme.color.surface1,
-    color: theme.color.textPrimary,
-  };
-
   return (
     <AuthHeroLayout testID="set-new-password-screen">
       <View style={styles.form}>
         <Text variant="title">Choose a new password</Text>
-        <TextInput
+        <TextField
           testID="password-input"
           value={password}
           onChangeText={setPassword}
           placeholder="New password"
-          placeholderTextColor={theme.color.textTertiary}
-          secureTextEntry
-          style={[styles.input, fieldColors]}
+          secure
+          autoCapitalize="none"
+          textContentType="newPassword"
+          autoComplete="new-password"
+          error={passwordIssues.length > 0 && password.length > 0}
         />
-        <TextInput
+        <TextField
           testID="confirm-input"
           value={confirm}
           onChangeText={setConfirm}
           placeholder="Confirm new password"
-          placeholderTextColor={theme.color.textTertiary}
-          secureTextEntry
-          style={[styles.input, fieldColors]}
+          secure
+          autoCapitalize="none"
+          textContentType="newPassword"
+          autoComplete="new-password"
+          error={confirm.length > 0 && !matches}
         />
         {passwordIssues.length > 0 && password.length > 0 ? (
           <Text testID="password-error" variant="caption" tone="danger">
@@ -88,10 +86,4 @@ export function SetNewPasswordScreen(): ReactElement {
 
 const styles = StyleSheet.create({
   form: { gap: spacing.sm },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
 });

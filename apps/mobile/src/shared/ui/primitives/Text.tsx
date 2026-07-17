@@ -30,7 +30,7 @@ function toneColor(theme: Theme, tone: TextTone): string {
     case 'tertiary':
       return theme.color.textTertiary;
     case 'accent':
-      return theme.color.accent;
+      return theme.color.accentText;
     case 'onAccent':
       return theme.color.onAccent;
     case 'danger':

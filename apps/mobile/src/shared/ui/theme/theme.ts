@@ -18,6 +18,8 @@ export type ThemeColors = {
   accent: string;
   accentPressed: string;
   accentTint: string;
+  /** Accent for text/links — lighter than `accent` so it clears AA on dark. */
+  accentText: string;
   /** Foreground (text/icon) color on top of an accent fill. */
   onAccent: string;
   confHigh: string;

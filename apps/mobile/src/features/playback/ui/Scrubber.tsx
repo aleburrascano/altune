@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, type LayoutChangeEvent, PanResponder, StyleSheet, View } from 'react-native';
+import {
+  type AccessibilityActionEvent,
+  Animated,
+  type LayoutChangeEvent,
+  PanResponder,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
+
+/** Seek step for assistive-technology increment/decrement gestures. */
+const A11Y_SEEK_STEP_MS = 15000;
 
 interface ScrubberProps {
   positionMs: number;
@@ -123,6 +133,14 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
     [remeasure],
   );
 
+  const onAccessibilityAction = useCallback((e: AccessibilityActionEvent) => {
+    const dur = durationRef.current;
+    if (dur <= 0) return;
+    const delta = e.nativeEvent.actionName === 'decrement' ? -A11Y_SEEK_STEP_MS : A11Y_SEEK_STEP_MS;
+    const next = Math.max(0, Math.min(dur, positionRef.current + delta));
+    onSeekRef.current(next);
+  }, []);
+
   const fillWidth = progress.interpolate({
     inputRange: [0, 1],
     outputRange: ['0%', '100%'],
@@ -141,6 +159,8 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
         accessibilityRole="adjustable"
         accessibilityLabel={`Playback position: ${formatTime(labelMs)} of ${formatTime(durationMs)}`}
         accessibilityValue={{ min: 0, max: 100, now: Math.round(durationMs > 0 ? (labelMs / durationMs) * 100 : 0) }}
+        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+        onAccessibilityAction={onAccessibilityAction}
         {...panResponder.panHandlers}
       >
         <View style={[styles.trackBg, { backgroundColor: theme.color.border }]} />

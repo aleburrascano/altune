@@ -26,6 +26,10 @@ export const palette = {
   cobaltPressed: '#244BD6',
   cobaltTint: 'rgba(45,91,255,0.25)',
   cobaltSoft: '#5B82FF',
+  // Accent for text/links: lightened so cobalt-on-dark clears WCAG AA 4.5:1
+  // at body/caption sizes (the #2D5BFF fill is only ~3:1 as text). Fills and
+  // large hero type keep `cobalt`.
+  cobaltText: '#6B8FFF',
   // semantic
   green: '#3DD68C',
   amber: '#F5B544',
