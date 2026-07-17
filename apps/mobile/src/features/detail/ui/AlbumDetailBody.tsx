@@ -1,5 +1,5 @@
 import { type ReactElement } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
 
@@ -17,6 +17,7 @@ import type { DetailRoute } from '../navigation';
 
 import { _albumYear, sharedStyles } from './helpers';
 import { AlbumTrackRow } from './AlbumTrackRow';
+import { TrackRowsSkeleton } from './DetailSkeleton';
 
 function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   const base = track.subtitle ?? '';
@@ -33,8 +34,11 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
 
   if (album.isLoading) {
     return (
-      <View testID="detail-tracklist-loading" style={styles.placeholder}>
-        <ActivityIndicator />
+      <View style={styles.trackList}>
+        <Text variant="label" tone="tertiary" style={styles.tracksTitle}>
+          Tracks
+        </Text>
+        <TrackRowsSkeleton testID="detail-tracklist-loading" />
       </View>
     );
   }
