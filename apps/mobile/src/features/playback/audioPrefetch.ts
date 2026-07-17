@@ -4,7 +4,8 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { audioRequestHeaders, audioStreamUrl, fetchAudioUrls } from './api/audio';
+import { audioRequestHeaders, fetchAudioUrls } from './api/audio';
+import { toNativeTrack } from './nativeTrack';
 
 // AIDEV-NOTE: Download-ahead cache. RNTP's iOS backend does not pre-buffer the
 // next queue item, so every auto-advance stalls ~1s buffering the next remote
@@ -66,27 +67,21 @@ function findCached(trackId: string): File | null {
   return null;
 }
 
-function toLocalNative(track: PlaybackTrack, uri: string): AddTrack {
-  return { url: uri, title: track.title, artist: track.artist, artwork: track.artworkUrl ?? '' };
-}
-
 // The streamable form of a track — presigned when the server will sign it, the
-// authenticated proxy otherwise (same fallback ladder as loadNativeTrack). Used
-// to put a queue entry back when the local file it pointed at is unusable.
+// authenticated proxy otherwise (same fallback ladder as loadNativeTrack, via the
+// shared toNativeTrack builder). Used to put a queue entry back when the local
+// file it pointed at is unusable.
 async function toStreamingNative(track: PlaybackTrack): Promise<AddTrack> {
-  const artwork = track.artworkUrl ?? '';
-  if (track.source.kind === 'preview') {
-    return { url: track.source.previewUrl, title: track.title, artist: track.artist, artwork };
-  }
+  if (track.source.kind === 'preview') return toNativeTrack(track);
   const trackId = track.source.trackId;
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
-    if (resolved) return { url: resolved.url, title: track.title, artist: track.artist, artwork };
+    if (resolved) return toNativeTrack(track, { streamUrl: resolved.url });
   } catch {
     // fall through to the proxy — it always works, it's just slower
   }
   const headers = await audioRequestHeaders();
-  return { url: audioStreamUrl(trackId), title: track.title, artist: track.artist, artwork, headers };
+  return toNativeTrack(track, { headers });
 }
 
 // Repair the ACTIVE entry after its local file turned out to be unusable, by
@@ -127,7 +122,7 @@ export async function swapUpcomingToLocal(
   // permanently, and silently — wrong artwork, wrong song on queue taps, wrong
   // row removed. Restoring the streaming entry costs a re-buffer, nothing worse.
   try {
-    await TrackPlayer.add(toLocalNative(track, uri), index);
+    await TrackPlayer.add(toNativeTrack(track, { streamUrl: uri }), index);
     if (track.source.kind === 'library') swappedToLocal.add(track.source.trackId);
   } catch {
     try {

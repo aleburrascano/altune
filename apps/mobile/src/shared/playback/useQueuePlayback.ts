@@ -11,13 +11,25 @@ interface QueuePlaybackControls {
   playNext: (track: PlaybackTrack) => void;
   skipToNext: () => void;
   skipToPrevious: () => void;
+  skipToIndex: (index: number) => void;
+  removeFromQueue: (index: number) => void;
+  clearUpcoming: () => void;
   toggleShuffle: () => void;
+  cycleRepeatMode: () => void;
 }
 
 export function useQueuePlayback(): QueuePlaybackControls {
   const loadQueue = useQueueStore((s) => s.loadQueue);
-  const { startQueue, skipNext, skipPrevious, reorderUpcoming, appendToQueue, insertNext } =
-    usePlayback();
+  const {
+    startQueue,
+    skipNext,
+    skipPrevious,
+    skipToQueueIndex,
+    removeQueueIndex,
+    reorderUpcoming,
+    appendToQueue,
+    insertNext,
+  } = usePlayback();
 
   const playFromList = useCallback(
     (tracks: readonly PlaybackTrack[], startIndex: number, source: QueueSource | null) => {
@@ -85,6 +97,39 @@ export function useQueuePlayback(): QueuePlaybackControls {
     void skipPrevious();
   }, [skipPrevious]);
 
+  // Jump to an already-loaded queue position. Store cursor + native skip stay in
+  // lockstep (the native track is already buffered, so the switch is instant).
+  const skipToIndex = useCallback(
+    (index: number) => {
+      useQueueStore.getState().skipToIndex(index);
+      void skipToQueueIndex(index);
+    },
+    [skipToQueueIndex],
+  );
+
+  // Remove one queued track. Store mutation + native remove stay in lockstep
+  // (see queueStore removeFromQueue AIDEV-WARNING); the playing track is never
+  // the target here — callers pass an upcoming position.
+  const removeFromQueue = useCallback(
+    (index: number) => {
+      useQueueStore.getState().removeFromQueue(index);
+      void removeQueueIndex(index);
+    },
+    [removeQueueIndex],
+  );
+
+  // Clear every upcoming track (everything after the current one). Reads the
+  // store at call time — a confirm dialog can sit open across auto-advances, and
+  // a stale currentIndex would delete the playing track. Descending iteration
+  // keeps the indices valid as entries are removed; store + native stay locked.
+  const clearUpcoming = useCallback(() => {
+    const s = useQueueStore.getState();
+    for (let i = s.playOrder.length - 1; i > s.currentIndex; i--) {
+      s.removeFromQueue(i);
+      void removeQueueIndex(i);
+    }
+  }, [removeQueueIndex]);
+
   // Shuffle only reorders the upcoming tracks (queueStore keeps the current
   // track's position), so the native side just replaces the tracks after the
   // current one — the playing track is never touched, so no re-buffer and no
@@ -96,5 +141,24 @@ export function useQueuePlayback(): QueuePlaybackControls {
     void reorderUpcoming(upcoming);
   }, [reorderUpcoming]);
 
-  return { playFromList, playTrack, addToQueue, playNext, skipToNext, skipToPrevious, toggleShuffle };
+  // Repeat mode is mirrored onto the native player by an effect in the provider,
+  // so this only advances the store — exposed through the facade so callers stop
+  // reaching into the store directly for it.
+  const cycleRepeatMode = useCallback(() => {
+    useQueueStore.getState().cycleRepeatMode();
+  }, []);
+
+  return {
+    playFromList,
+    playTrack,
+    addToQueue,
+    playNext,
+    skipToNext,
+    skipToPrevious,
+    skipToIndex,
+    removeFromQueue,
+    clearUpcoming,
+    toggleShuffle,
+    cycleRepeatMode,
+  };
 }

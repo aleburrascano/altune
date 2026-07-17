@@ -1,8 +1,9 @@
-import TrackPlayer, { type AddTrack } from 'react-native-track-player';
+import TrackPlayer from 'react-native-track-player';
 
-import { audioRequestHeaders, audioStreamUrl, fetchAudioUrls } from './api/audio';
+import { audioRequestHeaders, fetchAudioUrls } from './api/audio';
 import { forgetAllSwaps } from './audioPrefetch';
 import { ensurePlayerSetup } from './initPlayer';
+import { toNativeTrack } from './nativeTrack';
 import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
 import type { PlaybackTrack } from '@shared/playback/types';
 
@@ -58,29 +59,11 @@ async function resolveLibraryUrls(
   }
 }
 
-// A presigned URL is self-authorizing (the signature rides in the query string),
-// so it carries no auth headers; the proxy fallback URL does. Preview tracks
-// stream their external URL directly.
-function toNativeTrack(
-  track: PlaybackTrack,
-  headers: Record<string, string>,
-  resolved: Map<string, string>,
-): AddTrack {
-  const artwork = track.artworkUrl ?? '';
-  if (track.source.kind === 'preview') {
-    return { url: track.source.previewUrl, title: track.title, artist: track.artist, artwork };
-  }
-  const signed = resolved.get(track.source.trackId);
-  if (signed) {
-    return { url: signed, title: track.title, artist: track.artist, artwork };
-  }
-  return {
-    url: audioStreamUrl(track.source.trackId),
-    title: track.title,
-    artist: track.artist,
-    artwork,
-    headers,
-  };
+// The signed (presigned) URL for a library track from a batch-resolved map, or
+// undefined for previews and unresolved library tracks (which fall back to the
+// proxy inside toNativeTrack).
+function signedUrl(track: PlaybackTrack, resolved: Map<string, string>): string | undefined {
+  return track.source.kind === 'library' ? resolved.get(track.source.trackId) : undefined;
 }
 
 export async function loadNativeTrack(
@@ -103,7 +86,7 @@ export async function loadNativeTrack(
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
   const resolved = await resolveLibraryUrls([track]);
   if (isStale(token)) return;
-  await TrackPlayer.add(toNativeTrack(track, headers, resolved));
+  await TrackPlayer.add(toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }));
 
   if (startPositionMs > 0) {
     await TrackPlayer.seekTo(startPositionMs / 1000);
@@ -151,7 +134,7 @@ export async function loadNativeQueue(
   // explicitly so a failed prime can't leave the guard pinned.
   beginNativeLoad(idx);
   try {
-    await TrackPlayer.add(tracks.map((t) => toNativeTrack(t, headers, resolved)));
+    await TrackPlayer.add(tracks.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })));
     if (idx > 0) await TrackPlayer.skip(idx);
   } catch (err) {
     endNativeLoad();
@@ -178,7 +161,7 @@ export async function reorderUpcomingNative(
   const needsAuth = upcoming.some((t) => t.source.kind === 'library');
   const headers = needsAuth ? await audioRequestHeaders() : {};
   const resolved = await resolveLibraryUrls(upcoming);
-  await TrackPlayer.add(upcoming.map((t) => toNativeTrack(t, headers, resolved)));
+  await TrackPlayer.add(upcoming.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })));
 }
 
 // AIDEV-NOTE: Append one track to the end of the native queue (Add to Queue).
@@ -189,7 +172,7 @@ export async function appendNativeTrack(track: PlaybackTrack): Promise<void> {
   await ensurePlayerSetup();
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
   const resolved = await resolveLibraryUrls([track]);
-  await TrackPlayer.add(toNativeTrack(track, headers, resolved));
+  await TrackPlayer.add(toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }));
 }
 
 // AIDEV-NOTE: Insert one track at `position` in the native queue (Play Next).
@@ -203,5 +186,5 @@ export async function insertNativeTrackNext(
   await ensurePlayerSetup();
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
   const resolved = await resolveLibraryUrls([track]);
-  await TrackPlayer.add(toNativeTrack(track, headers, resolved), position);
+  await TrackPlayer.add(toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }), position);
 }
