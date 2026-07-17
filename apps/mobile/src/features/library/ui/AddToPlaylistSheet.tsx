@@ -106,7 +106,12 @@ export function AddToPlaylistSheet({
         animationType="slide"
         onRequestClose={handleClose}
       >
-        <Pressable style={styles.backdrop} onPress={handleClose}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={handleClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
           <View />
         </Pressable>
         <View style={[styles.sheet, { backgroundColor: theme.color.surface1 }]}>

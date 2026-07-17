@@ -1,11 +1,12 @@
 import { Link } from 'expo-router';
 import { useState, type ReactElement } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Banner } from '@shared/ui/primitives/Banner';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
-import { radius, spacing, useTheme } from '@shared/ui/theme';
+import { TextField } from '@shared/ui/primitives/TextField';
+import { spacing } from '@shared/ui/theme';
 
 import {
   PASSWORD_REQUIREMENTS_HINT,
@@ -59,16 +60,13 @@ export function AuthForm({
   enforcePasswordPolicy = false,
   showForgotPassword = false,
 }: AuthFormProps): ReactElement {
-  const theme = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
 
-  const fieldColors = {
-    borderColor: theme.color.border,
-    backgroundColor: theme.color.surface1,
-    color: theme.color.textPrimary,
-  };
+  // Sign-up wants a brand-new credential; sign-in wants the saved one.
+  const passwordContentType = showConfirm ? 'newPassword' : 'password';
+  const passwordAutoComplete = showConfirm ? 'new-password' : 'password';
 
   const emailValid = isValidEmail(email);
   const passwordIssues = enforcePasswordPolicy ? validatePassword(password) : [];
@@ -84,29 +82,31 @@ export function AuthForm({
   return (
     <AuthHeroLayout testID={screenTestID} tagline={tagline} background={false}>
       <View style={styles.form}>
-        <TextInput
+        <TextField
           testID="email-input"
           value={email}
           onChangeText={setEmail}
           placeholder="Email"
-          placeholderTextColor={theme.color.textTertiary}
           autoCapitalize="none"
+          autoCorrect={false}
           keyboardType="email-address"
-          style={[styles.input, fieldColors]}
+          textContentType="emailAddress"
+          autoComplete="email"
         />
         {showEmailError ? (
           <Text testID="email-error" variant="caption" tone="danger">
             Enter a valid email address.
           </Text>
         ) : null}
-        <TextInput
+        <TextField
           testID="password-input"
           value={password}
           onChangeText={setPassword}
           placeholder="Password"
-          placeholderTextColor={theme.color.textTertiary}
-          secureTextEntry
-          style={[styles.input, fieldColors]}
+          secure
+          autoCapitalize="none"
+          textContentType={passwordContentType}
+          autoComplete={passwordAutoComplete}
         />
         {showPasswordError ? (
           <Text testID="password-error" variant="caption" tone="danger">
@@ -114,14 +114,15 @@ export function AuthForm({
           </Text>
         ) : null}
         {showConfirm ? (
-          <TextInput
+          <TextField
             testID="confirm-input"
             value={confirm}
             onChangeText={setConfirm}
             placeholder="Confirm password"
-            placeholderTextColor={theme.color.textTertiary}
-            secureTextEntry
-            style={[styles.input, fieldColors]}
+            secure
+            autoCapitalize="none"
+            textContentType="newPassword"
+            autoComplete="new-password"
           />
         ) : null}
         {showConfirmError ? (
@@ -168,12 +169,6 @@ export function AuthForm({
 
 const styles = StyleSheet.create({
   form: { gap: spacing.sm },
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
   forgotRow: { alignItems: 'flex-end', marginVertical: spacing.xs },
   linkWrap: { alignItems: 'center', paddingTop: spacing.sm },
 });

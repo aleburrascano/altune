@@ -15,6 +15,10 @@ export const palette = {
   // text (dark)
   white: '#F4F4F6',
   gray400: '#A6A6AE',
+  // Tertiary text: lightened from gray600 so captions/placeholders clear WCAG AA
+  // 4.5:1 on every dark surface (canvas/surface1/surface2). gray600 stays for
+  // the low-confidence dot, where the 3:1 UI-component floor already holds.
+  gray500: '#8C8C96',
   gray600: '#74747E',
   pureWhite: '#FFFFFF',
   // brand — Cobalt
