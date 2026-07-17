@@ -163,6 +163,9 @@ func (a *App) drainBackground(timeout time.Duration) {
 	}
 }
 
+// setup assembles the object graph in dependency order. Each wire* stage owns
+// one context's construction; the values crossing contexts travel explicitly
+// through the small *Wiring structs.
 func (a *App) setup(ctx context.Context) error {
 	var err error
 
@@ -184,6 +187,41 @@ func (a *App) setup(ctx context.Context) error {
 	// console's vocabulary out of internal/shared/events.
 	tap := eventtap.New(a.eventBus)
 
+	disc := a.wireDiscovery(ctx)
+	cat := a.wireCatalog(tap, disc.featuredBridge)
+	queueHandler := a.wirePlayback(cat.trackRepo)
+
+	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler)
+	a.wireAdmin(ctx, r, verifier, tap, disc)
+
+	a.startAlertMonitor(ctx)
+
+	a.server = &http.Server{
+		Addr:              fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	return nil
+}
+
+// catalogWiring carries the catalog+acquisition values other stages consume:
+// the track repository (playback's now-playing reader is built from it) and
+// the handlers mountRoutes mounts.
+type catalogWiring struct {
+	trackRepo       *persistence.PgxTrackRepository
+	trackHandler    *catalogHandler.TrackHandler
+	playlistHandler *catalogHandler.PlaylistHandler
+	streamHandler   *catalogHandler.StreamHandler
+	audioURLHandler *catalogHandler.AudioURLHandler
+	retryH          *acqHandler.RetryHandler // nil when acquisition is off
+}
+
+// wireCatalog builds the catalog context plus the acquisition scheduler that
+// backs it (nil-degraded when no audio store is configured).
+func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.FeaturedResolver) catalogWiring {
 	audioStore := a.buildAudioStore()
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
 	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
@@ -220,11 +258,54 @@ func (a *App) setup(ctx context.Context) error {
 	setTrackNumberSvc := catalogService.NewSetTrackNumberService(trackRepo)
 	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(tap))
 
+	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(trackRepo, featuredBridge)
+	listFeaturingSvc := catalogService.NewListFeaturingService(trackRepo)
+
+	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, setTrackNumberSvc, backfillFeaturedSvc, listFeaturingSvc)
+	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
+	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, scheduler)
+	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
+	audioURLSvc := catalogService.NewAudioURLService(trackRepo, audioStore)
+	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc)
+
+	var retryH *acqHandler.RetryHandler
+	if scheduler != nil {
+		retryH = acqHandler.NewRetryHandler(trackRepo, scheduler)
+	}
+
+	return catalogWiring{
+		trackRepo:       trackRepo,
+		trackHandler:    trackHandler,
+		playlistHandler: playlistHandler,
+		streamHandler:   streamHandler,
+		audioURLHandler: audioURLHandler,
+		retryH:          retryH,
+	}
+}
+
+// wirePlayback builds the playback context. The now-playing reader is a
+// required parameter by design: a miswired graph fails at construction instead
+// of silently dropping current_track from every resume.
+func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) *playbackHandler.QueueHandler {
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
 	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo)
 	queueSvc := playbackService.NewQueueService(queueStateRepo, nowPlayingReader)
-	queueHandler := playbackHandler.NewQueueHandler(queueSvc)
+	return playbackHandler.NewQueueHandler(queueSvc)
+}
 
+// discoveryWiring carries the discovery-context values other stages consume:
+// the mounted handler, the operator-surface inputs (request store + live search
+// service), and the catalog-facing featured-artist bridge.
+type discoveryWiring struct {
+	handler        *discoveryHandler.DiscoveryHandler
+	requestStore   *requeststore.Store
+	searchSvc      *discoveryService.Service
+	featuredBridge *discoverybridge.FeaturedResolver
+}
+
+// wireDiscovery builds the discovery context: search pipeline, content/detail
+// services, telemetry-fed background tickers, and the mounted handler.
+func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	var sharedMB *providers.MusicBrainzAdapter
 	if a.cfg.HasMusicBrainz() {
 		sharedMB = providers.NewMusicBrainzAdapter(
@@ -251,15 +332,7 @@ func (a *App) setup(ctx context.Context) error {
 		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
 	}
 	featuredBridge := discoverybridge.NewFeaturedResolver(featuredResolver)
-	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(trackRepo, featuredBridge)
-	listFeaturingSvc := catalogService.NewListFeaturingService(trackRepo)
 
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, setTrackNumberSvc, backfillFeaturedSvc, listFeaturingSvc)
-	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
-	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, scheduler)
-	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
-	audioURLSvc := catalogService.NewAudioURLService(trackRepo, audioStore)
-	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc)
 	deezerContentClient := newDiscoveryClient()
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
 	// iTunes is a second mainstream source of truth for discography/tracklist
@@ -379,11 +452,22 @@ func (a *App) setup(ctx context.Context) error {
 
 	a.startVocabularyRefresh(vocabStore)
 
-	var retryH *acqHandler.RetryHandler
-	if scheduler != nil {
-		retryH = acqHandler.NewRetryHandler(trackRepo, scheduler)
+	return discoveryWiring{
+		handler:        discoveryH,
+		requestStore:   requestStore,
+		searchSvc:      searchSvc,
+		featuredBridge: featuredBridge,
 	}
+}
 
+// mountRoutes builds the router: middleware, the public health probe, and the
+// auth-gated /v1 API. Admin routes are mounted separately by wireAdmin.
+func (a *App) mountRoutes(
+	verifier auth.TokenVerifier,
+	cat catalogWiring,
+	queueHandler *playbackHandler.QueueHandler,
+	discoveryH *discoveryHandler.DiscoveryHandler,
+) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(httputil.CorrelationID)
@@ -408,22 +492,32 @@ func (a *App) setup(ctx context.Context) error {
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(auth.Middleware(verifier))
 
-		r.Mount("/tracks", trackHandler.Routes())
-		r.Get("/tracks/{trackId}/audio", streamHandler.HandleStreamAudio)
-		r.Post("/tracks/{trackId}/audio/recover", streamHandler.HandleRecover)
-		r.Post("/audio-urls", audioURLHandler.HandleResolve)
-		if retryH != nil {
-			r.Post("/tracks/{trackId}/retry", retryH.HandleRetryAcquisition)
+		r.Mount("/tracks", cat.trackHandler.Routes())
+		r.Get("/tracks/{trackId}/audio", cat.streamHandler.HandleStreamAudio)
+		r.Post("/tracks/{trackId}/audio/recover", cat.streamHandler.HandleRecover)
+		r.Post("/audio-urls", cat.audioURLHandler.HandleResolve)
+		if cat.retryH != nil {
+			r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
 		}
-		r.Mount("/playlists", playlistHandler.Routes())
+		r.Mount("/playlists", cat.playlistHandler.Routes())
 		r.Mount("/playback", queueHandler.Routes())
 		r.Mount("/discovery", discoveryH.Routes())
 		r.Handle("/events", &sseHandler{bus: a.eventBus})
 	})
 
-	// Mission Control operator console — two-layer gate: auth first, then the
-	// operator-only check inside adminH.Routes(). Fails closed when
-	// OperatorUserID is unset.
+	return r
+}
+
+// wireAdmin builds the Mission Control operator console — two-layer gate: auth
+// first, then the operator-only check inside adminH's data routes. Fails closed
+// when OperatorUserID is unset.
+func (a *App) wireAdmin(
+	ctx context.Context,
+	r *chi.Mux,
+	verifier auth.TokenVerifier,
+	tap *eventtap.Tap,
+	disc discoveryWiring,
+) {
 	a.eventFeed = eventtap.NewFeed()
 	a.eventFeed.Start(ctx, tap)
 	var acqReader adminHandler.AcquisitionStatusReader
@@ -444,9 +538,9 @@ func (a *App) setup(ctx context.Context) error {
 		WithProviderHealth(a.providerHealth).
 		WithAcquisition(acqReader).
 		WithEvalMeter(a.evalMeter).
-		WithRequestStore(requestStore).
-		WithReRunner(a.buildReRunner(searchSvc)).
-		WithSearchInspector(a.buildSearchInspector(searchSvc))
+		WithRequestStore(disc.requestStore).
+		WithReRunner(a.buildReRunner(disc.searchSvc)).
+		WithSearchInspector(a.buildSearchInspector(disc.searchSvc))
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Get("/", adminH.ServeIndex)        // public shell — holds no data
 		ar.Get("/config", adminH.ServeConfig) // public client config for sign-in
@@ -456,18 +550,6 @@ func (a *App) setup(ctx context.Context) error {
 			adminH.RegisterData(gr)
 		})
 	})
-
-	a.startAlertMonitor(ctx)
-
-	a.server = &http.Server{
-		Addr:              fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
-		Handler:           r,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
-
-	return nil
 }
 
 // handleHealth is the public readiness probe. It deliberately exposes no
