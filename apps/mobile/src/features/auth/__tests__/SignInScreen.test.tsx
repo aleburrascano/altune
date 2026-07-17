@@ -10,7 +10,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockSignIn = jest.fn();
-jest.mock('../api/supabaseClient', () => ({
+jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {
     auth: {
       signInWithPassword: (args: unknown) => mockSignIn(args),

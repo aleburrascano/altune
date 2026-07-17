@@ -6,24 +6,24 @@ dependency consumes the JWT this feature obtains via Supabase.
 
 ## Layout
 
-- `api/supabaseClient.ts` — the singleton SDK client. Session storage is
-  wired to `expo-secure-store` (NOT AsyncStorage; per spec Risk-#3). If a
-  second feature ever imports this, promote to `shared/auth/`.
-- `types.ts` — trimmed re-exports of Supabase SDK types + `SessionState`
-  discriminated union.
-- `hooks/useSession.ts` — subscribes to `supabase.auth.onAuthStateChange`,
-  exposes `{ session, status }` for protected-route logic.
-- `hooks/useSignIn.ts`, `useSignUp.ts`, `useSignOut.ts` — thin wrappers
-  around the SDK that surface a typed error result.
-- `ui/SignInScreen.tsx`, `SignUpScreen.tsx`, `SignOutButton.tsx`.
-- `__tests__/__mocks__/supabaseClient.ts` — the shared Jest mock that
-  every test in this folder (and slices 11–14) uses.
+The singleton SDK client, `useSession` (+ `SessionState`), `useSignOut`, and
+the session-expired store live in `shared/auth/` — promoted because 2+
+features consume them (see the promotion notes in each file). This feature
+owns the auth *flows*:
+
+- `hooks/useSignIn.ts`, `useSignUp.ts`, `useResetPassword.ts`,
+  `useUpdatePassword.ts`, `useOAuth.ts`, `useAuthDeepLink.ts` — thin SDK
+  wrappers that surface a typed result union.
+- `lib/parseAuthLink.ts` + `lib/completeAuthIntent.ts` — the deep-link spine:
+  pure classifier + token-exchange/routing.
+- `lib/validation.ts`, `lib/errorCopy.ts`, `lib/isNetworkError.ts` — form
+  policy, copy, and the shared transport-failure classifier.
+- `ui/` — `AuthGate`, `AuthForm`, the screens, and the `hero/` visuals.
 
 ## Conventions
 
-- **No direct `@supabase/supabase-js` import** outside `api/` and
-  `types.ts`. Everything else imports the singleton via
-  `features/auth/api/supabaseClient`.
+- **No direct `@supabase/supabase-js` value import** — the singleton comes
+  from `@shared/auth/supabaseClient`; `import type` is fine.
 - **No JWT manipulation** in this feature. The mobile app receives an
   opaque session from the SDK; the backend verifies. Don't decode the
   access token here.

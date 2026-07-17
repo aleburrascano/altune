@@ -18,15 +18,26 @@
  * readable by user B — the exact leak useSignOut's docstring exists to prevent.
  * Clear on identity CHANGE, never on every event: TOKEN_REFRESHED fires with
  * the same user and must not nuke the cache.
+ *
+ * Promoted from features/auth/hooks/ to shared/auth/ because 2+ features
+ * consume it (auth/AuthGate, settings).
  */
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 
-import { clearSessionExpired } from '@shared/auth/sessionExpired';
+import { clearSessionExpired } from './sessionExpired';
+import { supabase } from './supabaseClient';
 
-import { supabase } from '../api/supabaseClient';
-import type { SessionState } from '../types';
+/**
+ * `useSession`'s exposed state, modeled as a discriminated union per
+ * `.claude/rules/typescript-frontend.md`. Components branch on `status`
+ * without checking nullable fields.
+ */
+export type SessionState =
+  | { status: 'loading' }
+  | { status: 'signed-in'; session: Session }
+  | { status: 'signed-out' };
 
 export function useSession(): SessionState {
   const [state, setState] = useState<SessionState>({ status: 'loading' });

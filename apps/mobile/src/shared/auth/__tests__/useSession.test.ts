@@ -19,7 +19,7 @@ const mockOnAuthStateChange = jest.fn((cb: AuthChangeCallback) => {
   return { data: { subscription: { unsubscribe: mockUnsubscribe } } };
 });
 
-jest.mock('../api/supabaseClient', () => ({
+jest.mock('../supabaseClient', () => ({
   supabase: {
     auth: {
       getSession: () => mockGetSession(),
@@ -45,13 +45,13 @@ beforeEach(() => {
 
 describe('useSession', () => {
   it('starts in loading status', () => {
-    const { useSession } = require('../hooks/useSession');
+    const { useSession } = require('../useSession');
     const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
     expect(result.current.status).toBe('loading');
   });
 
   it('transitions to signed-out when getSession returns no session', async () => {
-    const { useSession } = require('../hooks/useSession');
+    const { useSession } = require('../useSession');
     const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
     await waitFor(() => expect(result.current.status).toBe('signed-out'));
   });
@@ -59,7 +59,7 @@ describe('useSession', () => {
   it('transitions to signed-in when getSession returns a session', async () => {
     const fakeSession = { access_token: 'abc', user: { id: 'u1' } };
     mockGetSession.mockResolvedValueOnce({ data: { session: fakeSession } } as never);
-    const { useSession } = require('../hooks/useSession');
+    const { useSession } = require('../useSession');
     const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
     await waitFor(() => expect(result.current.status).toBe('signed-in'));
     if (result.current.status === 'signed-in') {
@@ -70,7 +70,7 @@ describe('useSession', () => {
   it('transitions to signed-out on a SIGNED_OUT auth event', async () => {
     const fakeSession = { access_token: 'abc', user: { id: 'u1' } };
     mockGetSession.mockResolvedValueOnce({ data: { session: fakeSession } } as never);
-    const { useSession } = require('../hooks/useSession');
+    const { useSession } = require('../useSession');
     const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
     await waitFor(() => expect(result.current.status).toBe('signed-in'));
 
@@ -87,7 +87,7 @@ describe('useSession', () => {
     // user A's cached library readable by whoever signs in next.
     const fakeSession = { access_token: 'abc', user: { id: 'u1' } };
     mockGetSession.mockResolvedValueOnce({ data: { session: fakeSession } } as never);
-    const { useSession } = require('../hooks/useSession');
+    const { useSession } = require('../useSession');
     const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
     await waitFor(() => expect(result.current.status).toBe('signed-in'));
 
@@ -103,7 +103,7 @@ describe('useSession', () => {
     const sessionA = { access_token: 'a', user: { id: 'u1' } };
     const sessionB = { access_token: 'b', user: { id: 'u2' } };
     mockGetSession.mockResolvedValueOnce({ data: { session: sessionA } } as never);
-    const { useSession } = require('../hooks/useSession');
+    const { useSession } = require('../useSession');
     const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
     await waitFor(() => expect(result.current.status).toBe('signed-in'));
 
@@ -118,7 +118,7 @@ describe('useSession', () => {
     // library on a routine refresh.
     const fakeSession = { access_token: 'abc', user: { id: 'u1' } };
     mockGetSession.mockResolvedValueOnce({ data: { session: fakeSession } } as never);
-    const { useSession } = require('../hooks/useSession');
+    const { useSession } = require('../useSession');
     const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
     await waitFor(() => expect(result.current.status).toBe('signed-in'));
 

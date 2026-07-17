@@ -31,7 +31,7 @@ describe('supabaseClient', () => {
 
   it('constructs the SDK with the expo-secure-store storage adapter', () => {
     jest.isolateModules(() => {
-      require('../api/supabaseClient');
+      require('../supabaseClient');
     });
 
     expect(mockCreateClient).toHaveBeenCalledTimes(1);
@@ -56,7 +56,7 @@ describe('supabaseClient', () => {
 
   it('configures persistSession and autoRefreshToken', () => {
     jest.isolateModules(() => {
-      require('../api/supabaseClient');
+      require('../supabaseClient');
     });
 
     const args = mockCreateClient.mock.calls[0] as unknown[];

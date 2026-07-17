@@ -6,7 +6,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockReset = jest.fn();
-jest.mock('../api/supabaseClient', () => ({
+jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { resetPasswordForEmail: (...a: unknown[]) => mockReset(...a) } },
 }));
 jest.mock('expo-router', () => {

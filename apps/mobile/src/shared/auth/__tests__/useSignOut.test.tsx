@@ -8,7 +8,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
 const mockSdkSignOut = jest.fn();
-jest.mock('../../../shared/auth/supabaseClient', () => ({
+jest.mock('../supabaseClient', () => ({
   supabase: {
     auth: { signOut: () => mockSdkSignOut() },
   },
@@ -30,7 +30,7 @@ describe('useSignOut', () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(['library', 'page', 0], { items: ['a', 'b'] });
 
-    const { useSignOut } = require('../hooks/useSignOut');
+    const { useSignOut } = require('../useSignOut');
     const { result } = renderHook(() => useSignOut(), { wrapper: wrapper(queryClient) });
 
     await act(async () => {
@@ -47,7 +47,7 @@ describe('useSignOut', () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(['anything'], 'stale');
 
-    const { useSignOut } = require('../hooks/useSignOut');
+    const { useSignOut } = require('../useSignOut');
     const { result } = renderHook(() => useSignOut(), { wrapper: wrapper(queryClient) });
 
     await act(async () => {

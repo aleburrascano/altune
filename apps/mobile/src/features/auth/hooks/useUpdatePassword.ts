@@ -5,7 +5,9 @@
  */
 import { useState } from 'react';
 
-import { supabase } from '../api/supabaseClient';
+import { supabase } from '@shared/auth/supabaseClient';
+
+import { isNetworkError } from '../lib/isNetworkError';
 
 export type UpdatePasswordResult =
   | { kind: 'idle' }
@@ -26,9 +28,7 @@ export function useUpdatePassword() {
       }
       setState({ kind: 'ok' });
     } catch (err) {
-      const isNetwork =
-        err instanceof Error && /network|fetch|timeout|connection/i.test(err.message);
-      setState({ kind: 'error', reason: isNetwork ? 'network' : 'unknown' });
+      setState({ kind: 'error', reason: isNetworkError(err) ? 'network' : 'unknown' });
     }
   }
 

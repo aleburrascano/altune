@@ -15,7 +15,9 @@
  */
 import { useState } from 'react';
 
-import { supabase } from '../api/supabaseClient';
+import { supabase } from '@shared/auth/supabaseClient';
+
+import { isNetworkError } from '../lib/isNetworkError';
 
 /** Confirmation link target — whitelisted in parseAuthLink + Supabase redirects. */
 export const CONFIRM_REDIRECT_URL = 'altune://auth/confirm';
@@ -47,9 +49,7 @@ export function useSignUp() {
       // exists). Either way: tell the user to check their email.
       setState(data?.session ? { kind: 'ok' } : { kind: 'awaiting-confirmation' });
     } catch (err) {
-      const isNetwork =
-        err instanceof Error && /network|fetch|timeout|connection/i.test(err.message);
-      setState({ kind: 'error', reason: isNetwork ? 'network' : 'unknown' });
+      setState({ kind: 'error', reason: isNetworkError(err) ? 'network' : 'unknown' });
     }
   }
 

@@ -8,7 +8,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockUpdateUser = jest.fn();
 const mockReplace = jest.fn();
-jest.mock('../api/supabaseClient', () => ({
+jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { updateUser: (a: unknown) => mockUpdateUser(a) } },
 }));
 jest.mock('expo-router', () => ({

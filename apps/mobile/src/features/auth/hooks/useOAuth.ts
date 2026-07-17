@@ -14,8 +14,8 @@ import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 
-import { supabase } from '../api/supabaseClient';
-import { completeAuthIntent } from './useAuthDeepLink';
+import { supabase } from '@shared/auth/supabaseClient';
+import { completeAuthIntent } from '../lib/completeAuthIntent';
 import { parseAuthLink } from '../lib/parseAuthLink';
 
 // Required by expo-web-browser to settle any pending auth session on web.
