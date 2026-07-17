@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { FlatList, type ListRenderItemInfo, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 
@@ -26,6 +26,8 @@ export function AddToPlaylistSheet({
   const theme = useTheme();
   const [createVisible, setCreateVisible] = useState(false);
   const [addedTo, setAddedTo] = useState<string | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
   const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
     queryKey: playlistKeys.list,
@@ -42,10 +44,15 @@ export function AddToPlaylistSheet({
   const addToPlaylist = useCallback(
     (playlistId: string): void => {
       addMut.mutate(playlistId, {
-        onSuccess: () => setAddedTo(playlistId),
-        onSettled: () => {
-          setAddedTo(null);
-          onClose();
+        // Hold the "Added ✓" confirmation briefly so it's actually seen, then
+        // close. On error the sheet stays open (the mutation hook alerts) so
+        // the user can retry.
+        onSuccess: () => {
+          setAddedTo(playlistId);
+          closeTimer.current = setTimeout(() => {
+            setAddedTo(null);
+            onClose();
+          }, 700);
         },
       });
     },
@@ -107,7 +114,7 @@ export function AddToPlaylistSheet({
         onRequestClose={handleClose}
       >
         <Pressable
-          style={styles.backdrop}
+          style={[styles.backdrop, { backgroundColor: theme.color.scrim }]}
           onPress={handleClose}
           accessibilityRole="button"
           accessibilityLabel="Close"
@@ -126,6 +133,8 @@ export function AddToPlaylistSheet({
           <Pressable
             testID="add-to-playlist-create-new"
             onPress={() => setCreateVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Create new playlist"
             style={({ pressed }) => [
               styles.playlistRow,
               { borderBottomColor: theme.color.border },
@@ -165,7 +174,7 @@ export function AddToPlaylistSheet({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  backdrop: { flex: 1 },
   sheet: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,

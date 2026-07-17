@@ -10,7 +10,7 @@ export type IconButtonProps = {
   accessibilityLabel: string;
   size?: number;
   color?: string;
-  /** Blocks presses and announces the disabled state. Pass a dimmed `color` too — this doesn't tint. */
+  /** Blocks presses, announces the disabled state, and dims the icon (unless `color` is set). */
   disabled?: boolean;
   testID?: string;
 };
@@ -40,7 +40,10 @@ export function IconButton({
         pressed ? { opacity: 0.6 } : null,
       ]}
     >
-      <Icon size={size} color={color ?? theme.color.textPrimary} />
+      <Icon
+        size={size}
+        color={color ?? (disabled ? theme.color.textTertiary : theme.color.textPrimary)}
+      />
     </Pressable>
   );
 }

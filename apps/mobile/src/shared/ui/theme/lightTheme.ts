@@ -19,6 +19,7 @@ export const lightTheme: Theme = {
     accent: '#2D5BFF',
     accentPressed: '#244BD6',
     accentTint: 'rgba(45,91,255,0.12)',
+    accentText: '#2D5BFF',
     onAccent: '#FFFFFF',
     confHigh: '#1FB873',
     confMed: '#C77F12',

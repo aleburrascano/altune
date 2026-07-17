@@ -16,6 +16,7 @@ export const darkTheme: Theme = {
     accent: palette.cobalt,
     accentPressed: palette.cobaltPressed,
     accentTint: palette.cobaltTint,
+    accentText: palette.cobaltText,
     onAccent: palette.pureWhite,
     confHigh: palette.green,
     confMed: palette.amber,

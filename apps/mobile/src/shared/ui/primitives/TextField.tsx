@@ -11,6 +11,8 @@ export interface TextFieldProps
   secure?: boolean;
   /** Fill color role — pick the surface that contrasts with the field's parent. */
   surface?: 'surface1' | 'surface2';
+  /** Render a danger border (the field failed validation). */
+  error?: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ export interface TextFieldProps
 export function TextField({
   secure = false,
   surface = 'surface1',
+  error = false,
   onFocus,
   onBlur,
   placeholder,
@@ -56,7 +59,11 @@ export function TextField({
           {
             color: theme.color.textPrimary,
             backgroundColor: theme.color[surface],
-            borderColor: focused ? theme.color.accent : theme.color.border,
+            borderColor: error
+              ? theme.color.danger
+              : focused
+                ? theme.color.accent
+                : theme.color.border,
           },
           secure ? styles.inputSecure : null,
         ]}
