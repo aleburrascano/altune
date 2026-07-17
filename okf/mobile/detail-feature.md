@@ -4,7 +4,7 @@ title: Detail
 description: Read-only track/album/artist detail screen fed by an in-memory handoff, with multi-provider enrichment and optimistic save-to-library.
 resource: apps/mobile/src/features/detail/
 tags: [mobile, feature, detail, enrichment, react-query, optimistic-update]
-verified_commit: f7f4c8a1153ea5f98c57423debfca4351d2bf9de
+verified_commit: 7bda67e8aaea57e67526c36fca140ab5709b6099
 ---
 
 Renders the detail screen for a tapped discovery result. It is fed entirely by an in-memory handoff (`@shared/lib/detail-handoff`, written by [discover-feature](discover-feature.md)) — there is no per-item backend fetch on open; an empty handoff (cold start/reload/deep link) redirects to `/discover`. `ui/DetailScreen.tsx` is one vertical scroll: sticky back button → hero (artwork + title + tappable `artist · year` subtitle; for a collab album the subtitle appends Deezer co-primary artists via `withFeaturing` — "Drake, 21 Savage" — while the tap target stays the primary) → a per-kind body (`TrackDetailBody`/`AlbumDetailBody`/`ArtistDetailBody`) → the single remaining `Disclosure`, artist-only ("About <artist>"). There are no tabs, no always-on provider slabs, and no genre pills (`GenrePills` was deleted in the declutter pass — genres surface only inside the artist About).

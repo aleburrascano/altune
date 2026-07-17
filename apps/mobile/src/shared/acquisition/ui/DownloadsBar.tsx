@@ -28,8 +28,12 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
   const theme = useTheme();
   const first = items[0];
 
-  const enter = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0.5)).current;
+  const enterRef = useRef<Animated.Value | null>(null);
+  if (enterRef.current === null) enterRef.current = new Animated.Value(0);
+  const enter = enterRef.current;
+  const pulseRef = useRef<Animated.Value | null>(null);
+  if (pulseRef.current === null) pulseRef.current = new Animated.Value(0.5);
+  const pulse = pulseRef.current;
   useEffect(() => {
     Animated.timing(enter, { toValue: 1, duration: 240, useNativeDriver: true }).start();
     const loop = Animated.loop(

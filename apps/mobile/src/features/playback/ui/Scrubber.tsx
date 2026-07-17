@@ -54,8 +54,9 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
     return Math.max(0, Math.min(1, x / (layoutRef.current.width || 1)));
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
+  const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
+  if (panResponderRef.current === null) {
+    panResponderRef.current = PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
@@ -107,8 +108,9 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
           seekHoldTimer.current = null;
         }
       },
-    }),
-  ).current;
+    });
+  }
+  const panResponder = panResponderRef.current;
 
   const remeasure = useCallback(() => {
     trackRef.current?.measureInWindow((x, _y, width) => {
