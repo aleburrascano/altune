@@ -4,7 +4,7 @@ title: Discovery scatter-gather orchestration
 description: The Service facade in service/search.go fans a query out across search providers in parallel and coordinates identity-stamping, merge, rank, and enrichment into one ranked result list.
 resource: services/go-api/internal/discovery/service/search.go, services/go-api/internal/discovery/service/pipeline.go
 tags: [discovery, service-layer, orchestration, facade, concurrency]
-verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
+verified_commit: 0352abc38e1235b81f063759748d2c01dfa9b9af
 ---
 
 `Service` (search.go) is the orchestrator for discovery's rebuilt pipeline: Layer 0 query cleanup → Layer 1 fan-out → Layer 2 merge → Layer 3 rank, plus orthogonal concerns (artist-dedup, disambiguation, artwork, correction, related groups, telemetry, vocabulary learning). `Service.Execute` is the entry point: it cleans the query (`CleanQuery`, see [query-correction](query-correction.md)), normalizes it (`textnorm.NormalizeForMatch`), mints a `searchId` (the keystone joining downstream engagement events, see [telemetry](telemetry.md)), checks the app-wide `resultCache` (query+kinds keyed, TTL'd, only cached when complete and non-empty), and on a miss calls `fanOut` then `mergeRankEnrich`.
