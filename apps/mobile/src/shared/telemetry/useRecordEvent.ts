@@ -9,7 +9,7 @@
 
 import { useMutation } from '@tanstack/react-query';
 
-import { recordEvent, type DiscoveryEvent } from '../api-client/discovery';
+import { recordEvent, type DiscoveryEvent } from './recordEvent';
 
 export function useRecordEvent() {
   return useMutation<void, Error, DiscoveryEvent>({

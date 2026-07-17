@@ -42,7 +42,7 @@ Single chip-filtered Library screen (library-redesign, `docs/superpowers/specs/2
 
 ## Dependencies
 
-- `@shared/ui` — Screen, SearchBar, Chip, Artwork, Row, Text, Button, Skeleton, spacing, radius, useTheme; `primitives/ActionSheet`.
+- `@shared/ui` — Screen, Chip, Row, Text, Button, Skeleton, spacing, radius, useTheme; `primitives/ActionSheet`, `primitives/Artwork`, `primitives/SearchBar` (the last two live outside the barrel — native deps, structure audit F2).
 - `@shared/lib/format` — `formatDuration`. `@shared/lib/derive-library-groups` — grouping. `@shared/lib/detail-handoff` — discover↔detail seam. `@shared/lib/query-keys` — cache keys.
 - `@shared/playback` — queue/playback for in-library play.
 

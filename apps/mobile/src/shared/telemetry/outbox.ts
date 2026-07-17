@@ -18,7 +18,7 @@
 
 import { AppState } from 'react-native';
 
-import { recordEvent, type DiscoveryEvent } from '@shared/api-client/discovery';
+import { recordEvent, type DiscoveryEvent } from './recordEvent';
 
 export type OutboxEntry = DiscoveryEvent & {
   event_id: string;

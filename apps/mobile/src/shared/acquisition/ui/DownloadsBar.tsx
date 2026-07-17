@@ -15,7 +15,8 @@ import { ChevronUp } from 'lucide-react-native';
 
 import { aggregatePhase, type DownloadEntry } from '@shared/acquisition/downloadStore';
 import { ACQUISITION_PHASES, phaseLabel } from '@shared/acquisition/stagePhase';
-import { Artwork, Text, spacing, useTheme } from '@shared/ui';
+import { Text, spacing, useTheme } from '@shared/ui';
+import { Artwork } from '@shared/ui/primitives/Artwork';
 import { radius } from '@shared/ui/theme/tokens';
 
 interface DownloadsBarProps {
