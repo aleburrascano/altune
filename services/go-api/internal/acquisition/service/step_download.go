@@ -49,7 +49,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) erro
 		if ac.Selected == nil {
 			return fmt.Errorf("no candidate selected")
 		}
-		candidates = []Candidate{*ac.Selected}
+		candidates = []ports.AudioCandidate{*ac.Selected}
 	}
 
 	verify := s.prober != nil && ac.Track.Duration > 0

@@ -1,6 +1,10 @@
 package service
 
-import "testing"
+import (
+	"testing"
+
+	"altune/go-api/internal/acquisition/ports"
+)
 
 // These characterization tests lock the behaviour the acquire-soundcloud spec
 // relies on: a SoundCloud upload (a non-Topic channel) can WIN selection when it
@@ -14,7 +18,7 @@ func TestSelectBestCandidate_SoundCloudFillsGap(t *testing.T) {
 	// Only candidate: a SoundCloud upload (non-Topic channel) with a strong title
 	// match and matching duration. No qualifying YouTube candidate exists — this
 	// is the underground long tail YouTube does not index.
-	candidates := []Candidate{
+	candidates := []ports.AudioCandidate{
 		{
 			Title:    "Lil Tecca - Fell In Love",
 			Channel:  "Lil Tecca",
@@ -35,7 +39,7 @@ func TestSelectBestCandidate_SoundCloudFillsGap(t *testing.T) {
 func TestSelectBestCandidate_TopicChannelBeatsSoundCloud(t *testing.T) {
 	track := TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200}
 
-	candidates := []Candidate{
+	candidates := []ports.AudioCandidate{
 		// SoundCloud re-upload (non-Topic).
 		{
 			Title:    "The Weeknd - Blinding Lights",

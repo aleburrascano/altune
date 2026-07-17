@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -11,10 +12,18 @@ import (
 // for a single track.
 const RetryCooldown = 60 * time.Second
 
-// RetryAdmission rate-limits manual re-acquisition retries to at most one per
-// track per cooldown window. It holds the admission state the retry endpoint
-// previously kept inline in its HTTP handler — a second "should this run now?"
-// guard that belongs beside the scheduler's inflight dedup, not in an adapter.
+// Retry admission outcomes, mapped to transport codes by the handler.
+var (
+	// ErrRetryNotFailed rejects retries for tracks not in AcquisitionFailed state.
+	ErrRetryNotFailed = errors.New("track is not in failed state")
+	// ErrRetryCooldown rejects retries admitted less than RetryCooldown ago.
+	ErrRetryCooldown = errors.New("retry cooldown active")
+)
+
+// RetryAdmission decides whether a manual re-acquisition retry may run: only
+// tracks in AcquisitionFailed state, at most one per track per cooldown window.
+// It holds the whole admission policy — the failed-state check previously lived
+// in the HTTP handler — so a second retry entry point cannot skip half of it.
 type RetryAdmission struct {
 	mu        sync.Mutex
 	cooldown  time.Duration
@@ -28,18 +37,21 @@ func NewRetryAdmission() *RetryAdmission {
 	}
 }
 
-// Allow reports whether a retry for trackId may proceed now. When it returns
-// true it records the admission; while the cooldown window is open it returns
-// false. Stale entries are pruned opportunistically on each call.
-func (a *RetryAdmission) Allow(trackId domain.TrackId) bool {
-	key := trackId.String()
+// Admit reports whether a retry for track may proceed now. A nil return records
+// the admission; otherwise it returns ErrRetryNotFailed or ErrRetryCooldown.
+// Stale entries are pruned opportunistically on each call.
+func (a *RetryAdmission) Admit(track *domain.Track) error {
+	if track.AcquisitionStatus != domain.AcquisitionFailed {
+		return ErrRetryNotFailed
+	}
+	key := track.ID.String()
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	now := time.Now()
 	if last, ok := a.lastRetry[key]; ok && now.Sub(last) < a.cooldown {
-		return false
+		return ErrRetryCooldown
 	}
 	a.lastRetry[key] = now
 	for k, v := range a.lastRetry {
@@ -47,5 +59,5 @@ func (a *RetryAdmission) Allow(trackId domain.TrackId) bool {
 			delete(a.lastRetry, k)
 		}
 	}
-	return true
+	return nil
 }

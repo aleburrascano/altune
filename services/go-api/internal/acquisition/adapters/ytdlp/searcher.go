@@ -122,14 +122,12 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 		}
 
 		candidates = append(candidates, ports.AudioCandidate{
-			Title:         entry.Title,
-			Artist:        entry.Uploader,
-			DurationSecs:  entry.Duration,
-			URL:           entry.WebpageURL,
-			Channel:       entry.Channel,
-			Categories:    entry.Categories,
-			ViewCount:     entry.ViewCount,
-			FollowerCount: entry.FollowerCount,
+			Title:      entry.Title,
+			Duration:   entry.Duration,
+			URL:        entry.WebpageURL,
+			Channel:    entry.Channel,
+			Categories: entry.Categories,
+			ViewCount:  entry.ViewCount,
 		})
 	}
 
@@ -201,12 +199,10 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 }
 
 type ytDlpEntry struct {
-	Title         string   `json:"title"`
-	Uploader      string   `json:"uploader"`
-	Duration      float64  `json:"duration"`
-	WebpageURL    string   `json:"webpage_url"`
-	Channel       string   `json:"channel"`
-	Categories    []string `json:"categories"`
-	ViewCount     int64    `json:"view_count"`
-	FollowerCount int64    `json:"channel_follower_count"`
+	Title      string   `json:"title"`
+	Duration   float64  `json:"duration"`
+	WebpageURL string   `json:"webpage_url"`
+	Channel    string   `json:"channel"`
+	Categories []string `json:"categories"`
+	ViewCount  int64    `json:"view_count"`
 }

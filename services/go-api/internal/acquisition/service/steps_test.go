@@ -20,22 +20,20 @@ func TestSearchStep_Execute(t *testing.T) {
 	searcher := &fakeAudioSearcher{
 		searchResults: []ports.AudioCandidate{
 			{
-				Title:        "Artist - Song Title",
-				Artist:       "Artist",
-				DurationSecs: 200,
-				URL:          "https://youtube.com/watch?v=abc",
-				Channel:      "Artist - Topic",
-				Categories:   []string{"Music"},
-				ViewCount:    1_000_000,
+				Title:      "Artist - Song Title",
+				Duration:   200,
+				URL:        "https://youtube.com/watch?v=abc",
+				Channel:    "Artist - Topic",
+				Categories: []string{"Music"},
+				ViewCount:  1_000_000,
 			},
 			{
-				Title:        "Artist - Song Title (Lyrics)",
-				Artist:       "Artist",
-				DurationSecs: 201,
-				URL:          "https://youtube.com/watch?v=def",
-				Channel:      "LyricsChannel",
-				Categories:   []string{"Music"},
-				ViewCount:    500_000,
+				Title:      "Artist - Song Title (Lyrics)",
+				Duration:   201,
+				URL:        "https://youtube.com/watch?v=def",
+				Channel:    "LyricsChannel",
+				Categories: []string{"Music"},
+				ViewCount:  500_000,
 			},
 		},
 	}
@@ -121,11 +119,11 @@ func TestSearchStep_Execute_DeduplicatesByURL(t *testing.T) {
 	searcher := &fakeAudioSearcher{
 		searchResults: []ports.AudioCandidate{
 			{
-				Title:        "Artist - Song",
-				DurationSecs: 200,
-				URL:          "https://youtube.com/watch?v=same",
-				Channel:      "ArtistVEVO",
-				Categories:   []string{"Music"},
+				Title:      "Artist - Song",
+				Duration:   200,
+				URL:        "https://youtube.com/watch?v=same",
+				Channel:    "ArtistVEVO",
+				Categories: []string{"Music"},
 			},
 		},
 	}
@@ -170,7 +168,7 @@ func TestSelectStep_Execute(t *testing.T) {
 			Artist:   "The Weeknd",
 			Duration: 200,
 		},
-		Candidates: []Candidate{
+		Candidates: []ports.AudioCandidate{
 			{
 				Title:      "Blinding Lights",
 				Channel:    "The Weeknd - Topic",
@@ -202,7 +200,7 @@ func TestSelectStep_Execute_NoCandidates(t *testing.T) {
 	step := NewSelectStep()
 	ac := &AcquisitionContext{
 		Track:      TrackRef{Title: "Song", Artist: "Artist", Duration: 200},
-		Candidates: []Candidate{},
+		Candidates: []ports.AudioCandidate{},
 	}
 
 	// Act
@@ -222,7 +220,7 @@ func TestSelectStep_Execute_AllCandidatesBelowThreshold(t *testing.T) {
 	step := NewSelectStep()
 	ac := &AcquisitionContext{
 		Track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
-		Candidates: []Candidate{
+		Candidates: []ports.AudioCandidate{
 			{
 				Title:      "Cooking Tutorial Episode 47",
 				Channel:    "CookingChannel",
@@ -534,7 +532,7 @@ func TestBuildAudioRef(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildAudioRef(tt.track)
+			got := buildAudioRef(tt.track, "/tmp/acquire/downloaded.mp3")
 			if got != tt.want {
 				t.Errorf("buildAudioRef() = %q, want %q", got, tt.want)
 			}

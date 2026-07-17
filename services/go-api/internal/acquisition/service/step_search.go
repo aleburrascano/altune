@@ -22,7 +22,7 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext) error 
 	queries := buildSearchQueries(ac.Track)
 
 	seen := make(map[string]bool)
-	var allCandidates []Candidate
+	var allCandidates []ports.AudioCandidate
 
 	for _, query := range queries {
 		slog.InfoContext(ctx, "acquisition.search_query", "query", query)
@@ -37,16 +37,7 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext) error 
 				continue
 			}
 			seen[r.URL] = true
-			allCandidates = append(allCandidates, Candidate{
-				Title:         r.Title,
-				Artist:        r.Artist,
-				Duration:      r.DurationSecs,
-				URL:           r.URL,
-				Channel:       r.Channel,
-				Categories:    r.Categories,
-				ViewCount:     r.ViewCount,
-				FollowerCount: r.FollowerCount,
-			})
+			allCandidates = append(allCandidates, r)
 		}
 	}
 

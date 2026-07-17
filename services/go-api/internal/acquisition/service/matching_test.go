@@ -1,6 +1,8 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+
 	"testing"
 )
 
@@ -8,7 +10,7 @@ func TestSelectBestCandidate(t *testing.T) {
 	tests := []struct {
 		name       string
 		track      TrackRef
-		candidates []Candidate
+		candidates []ports.AudioCandidate
 		wantNil    bool
 		wantTitle  string
 		wantReason string // human-readable why this candidate wins
@@ -20,7 +22,7 @@ func TestSelectBestCandidate(t *testing.T) {
 				Artist:   "The Weeknd",
 				Duration: 200,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "The Weeknd - Blinding Lights",
 					Channel:    "TheWeekndVEVO",
@@ -48,7 +50,7 @@ func TestSelectBestCandidate(t *testing.T) {
 				Artist:   "The Weeknd",
 				Duration: 230,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "The Weeknd - Starboy (Extended Remix)",
 					Channel:    "RandomUploader",
@@ -75,7 +77,7 @@ func TestSelectBestCandidate(t *testing.T) {
 				Title:  "Nonexistent",
 				Artist: "Nobody",
 			},
-			candidates: []Candidate{},
+			candidates: []ports.AudioCandidate{},
 			wantNil:    true,
 			wantReason: "empty candidate list must return nil",
 		},
@@ -86,7 +88,7 @@ func TestSelectBestCandidate(t *testing.T) {
 				Artist:   "The Weeknd",
 				Duration: 215,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "Cooking Tutorial Episode 47",
 					Channel:    "CookingChannel",
@@ -114,7 +116,7 @@ func TestSelectBestCandidate(t *testing.T) {
 				Artist:   "The Weeknd",
 				Duration: 260,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "The Weeknd - Die For You (Official Video)",
 					Channel:    "TheWeekndVEVO",
@@ -152,7 +154,7 @@ func TestSelectBestCandidate(t *testing.T) {
 				Artist:   "The Weeknd",
 				Duration: 361,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "The Weeknd - After Hours (Official Video)",
 					Channel:    "TheWeekndVEVO",

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"altune/go-api/internal/acquisition/ports"
 )
 
 type Step interface {
@@ -16,7 +18,7 @@ type Step interface {
 // StepError identifies which pipeline step failed. It carries the step name as a
 // field so callers (failureReason) map outcomes on the structured Step, not by
 // parsing an error-message prefix. Its Error() preserves the historical
-// "step <name>: <err>" format so logs and any string matchers stay stable.
+// "step <name>: <err>" format so logs stay stable.
 type StepError struct {
 	Step string
 	Err  error
@@ -69,11 +71,11 @@ func rollback(ctx context.Context, completed []Step, ac *AcquisitionContext) {
 
 type AcquisitionContext struct {
 	Track      TrackRef
-	Candidates []Candidate
+	Candidates []ports.AudioCandidate
 	// Ranked is the best-first candidate list produced by SelectStep; DownloadStep
 	// walks it, downloading and verifying each until one passes.
-	Ranked   []Candidate
-	Selected *Candidate
+	Ranked   []ports.AudioCandidate
+	Selected *ports.AudioCandidate
 	TempPath string
 	AudioRef string
 }
@@ -90,15 +92,4 @@ type TrackRef struct {
 	TrackNumber  int
 	AlbumArtist  string
 	Genre        string
-}
-
-type Candidate struct {
-	Title        string
-	Artist       string
-	Duration     float64
-	URL          string
-	Channel      string
-	Categories   []string
-	ViewCount    int64
-	FollowerCount int64
 }

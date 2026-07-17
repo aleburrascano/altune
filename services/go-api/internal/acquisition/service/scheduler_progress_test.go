@@ -27,11 +27,8 @@ func (p *recordingProgressPublisher) Publish(_ shared.UserId, eventType string, 
 
 func TestSchedulerJobReporter_PublishesProgressOnStage(t *testing.T) {
 	pub := &recordingProgressPublisher{}
-	s := &BackgroundAcquisitionScheduler{
-		svc:  &AcquireTrackAudioService{events: pub},
-		jobs: map[string]*JobRecord{"t1": {TrackID: "t1"}},
-	}
-	r := schedulerJobReporter{s: s, trackID: "t1", userId: shared.NewUserId(uuid.New())}
+	log := &jobLog{jobs: map[string]*JobRecord{"t1": {TrackID: "t1"}}}
+	r := schedulerJobReporter{log: log, events: pub, trackID: "t1", userId: shared.NewUserId(uuid.New())}
 
 	r.stage("download")
 
@@ -48,15 +45,12 @@ func TestSchedulerJobReporter_PublishesProgressOnStage(t *testing.T) {
 }
 
 func TestSchedulerJobReporter_NoPublishWhenEventsNil(t *testing.T) {
-	s := &BackgroundAcquisitionScheduler{
-		svc:  &AcquireTrackAudioService{}, // events nil — eval/test path
-		jobs: map[string]*JobRecord{"t1": {TrackID: "t1"}},
-	}
-	r := schedulerJobReporter{s: s, trackID: "t1", userId: shared.NewUserId(uuid.New())}
+	log := &jobLog{jobs: map[string]*JobRecord{"t1": {TrackID: "t1"}}}
+	r := schedulerJobReporter{log: log, trackID: "t1", userId: shared.NewUserId(uuid.New())} // events nil — eval/test path
 
 	r.stage("search") // must not panic
 
-	if s.jobs["t1"].Stage != "search" {
+	if log.jobs["t1"].Stage != "search" {
 		t.Fatalf("stage not recorded on job record")
 	}
 }

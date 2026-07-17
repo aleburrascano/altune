@@ -18,7 +18,7 @@ func TestAcquisitionStatus_Counts(t *testing.T) {
 	s.inflightCount.Add(2)
 	s.succeeded.Add(5)
 	s.failed.Add(1)
-	s.recordFailure("track-1", "yt-dlp exited 1")
+	s.log.recordFailure("track-1", "yt-dlp exited 1")
 
 	got := s.Status()
 	if got.InFlight != 2 {
@@ -38,7 +38,7 @@ func TestAcquisitionStatus_Counts(t *testing.T) {
 func TestAcquisitionStatus_RecentFailsBounded(t *testing.T) {
 	s := newStatusTestScheduler()
 	for i := 0; i < recentFailCap+10; i++ {
-		s.recordFailure("t", "boom")
+		s.log.recordFailure("t", "boom")
 	}
 	if got := len(s.Status().RecentFails); got != recentFailCap {
 		t.Errorf("recent fails = %d, want capped at %d", got, recentFailCap)
@@ -47,7 +47,7 @@ func TestAcquisitionStatus_RecentFailsBounded(t *testing.T) {
 
 func TestAcquisitionStatus_SnapshotIsACopy(t *testing.T) {
 	s := newStatusTestScheduler()
-	s.recordFailure("t", "boom")
+	s.log.recordFailure("t", "boom")
 	snap := s.Status()
 	snap.RecentFails[0].Reason = "mutated"
 	// Recording more must not be affected by the caller mutating the snapshot.

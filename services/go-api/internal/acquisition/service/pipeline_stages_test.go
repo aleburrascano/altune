@@ -1,6 +1,8 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+
 	"strings"
 	"testing"
 
@@ -173,19 +175,19 @@ func TestAcqStage_ArtistMatchesChannel(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestAcqStage_MetadataRank(t *testing.T) {
-	topic := Candidate{
+	topic := ports.AudioCandidate{
 		Channel:    "Artist - Topic",
 		Categories: []string{"Music"},
 		Duration:   200,
 		ViewCount:  10_000_000,
 	}
-	vevo := Candidate{
+	vevo := ports.AudioCandidate{
 		Channel:    "ArtistVEVO",
 		Categories: []string{"Music"},
 		Duration:   203,
 		ViewCount:  500_000_000,
 	}
-	random := Candidate{
+	random := ports.AudioCandidate{
 		Channel:    "RandomUploader",
 		Categories: []string{"Entertainment"},
 		Duration:   600,
@@ -217,30 +219,48 @@ func TestAcqStage_MetadataRank(t *testing.T) {
 
 func TestAcqStage_BuildAudioRef(t *testing.T) {
 	tests := []struct {
-		name  string
-		track TrackRef
-		want  string
+		name     string
+		track    TrackRef
+		tempPath string
+		want     string
 	}{
 		{
-			name:  "basic",
-			track: TrackRef{UserID: "user-1", Artist: "The Weeknd", Album: "After Hours", Title: "Blinding Lights"},
-			want:  "user-1/The Weeknd/After Hours/Blinding Lights.mp3",
+			name:     "basic",
+			track:    TrackRef{UserID: "user-1", Artist: "The Weeknd", Album: "After Hours", Title: "Blinding Lights"},
+			tempPath: "/tmp/acquire/Blinding Lights.mp3",
+			want:     "user-1/The Weeknd/After Hours/Blinding Lights.mp3",
 		},
 		{
-			name:  "empty album uses unknown",
-			track: TrackRef{UserID: "user-1", Artist: "Drake", Album: "", Title: "God's Plan"},
-			want:  "user-1/Drake/Unknown Album/God's Plan.mp3",
+			name:     "empty album uses unknown",
+			track:    TrackRef{UserID: "user-1", Artist: "Drake", Album: "", Title: "God's Plan"},
+			tempPath: "/tmp/acquire/God's Plan.mp3",
+			want:     "user-1/Drake/Unknown Album/God's Plan.mp3",
 		},
 		{
-			name:  "special chars stripped",
-			track: TrackRef{UserID: "user-1", Artist: "AC/DC", Album: "Back in Black", Title: "Thunderstruck"},
-			want:  "user-1/ACDC/Back in Black/Thunderstruck.mp3",
+			name:     "special chars stripped",
+			track:    TrackRef{UserID: "user-1", Artist: "AC/DC", Album: "Back in Black", Title: "Thunderstruck"},
+			tempPath: "/tmp/acquire/Thunderstruck.mp3",
+			want:     "user-1/ACDC/Back in Black/Thunderstruck.mp3",
+		},
+		{
+			// The ref's extension follows the downloaded file, not a hardcoded
+			// format — refs must never lie about the bytes they name (m4a era).
+			name:     "extension follows downloaded file",
+			track:    TrackRef{UserID: "user-1", Artist: "Drake", Album: "Views", Title: "One Dance"},
+			tempPath: "/tmp/acquire/One Dance.m4a",
+			want:     "user-1/Drake/Views/One Dance.m4a",
+		},
+		{
+			name:     "no extension falls back to mp3",
+			track:    TrackRef{UserID: "user-1", Artist: "Drake", Album: "Views", Title: "One Dance"},
+			tempPath: "",
+			want:     "user-1/Drake/Views/One Dance.mp3",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildAudioRef(tt.track)
+			got := buildAudioRef(tt.track, tt.tempPath)
 			if got != tt.want {
 				t.Errorf("buildAudioRef = %q, want %q", got, tt.want)
 			}
@@ -260,7 +280,7 @@ func TestAcqStage_FullSelectionTrace(t *testing.T) {
 		ISRC:     "USUM71922973",
 	}
 
-	candidates := []Candidate{
+	candidates := []ports.AudioCandidate{
 		{
 			Title:      "The Weeknd - Blinding Lights (Official Video)",
 			Channel:    "TheWeekndVEVO",
