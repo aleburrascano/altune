@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -60,12 +61,11 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if track.AcquisitionStatus != domain.AcquisitionFailed {
+	switch err := h.admission.Admit(track); {
+	case errors.Is(err, service.ErrRetryNotFailed):
 		httputil.Conflict(w, "track is not in failed state")
 		return
-	}
-
-	if !h.admission.Allow(trackId) {
+	case errors.Is(err, service.ErrRetryCooldown):
 		httputil.WriteJSON(w, http.StatusTooManyRequests, map[string]string{
 			"error": "retry cooldown active, try again later",
 		})

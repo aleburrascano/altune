@@ -1,6 +1,8 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+
 	"fmt"
 	"strings"
 	"testing"
@@ -16,7 +18,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 	tests := []struct {
 		name         string
 		track        TrackRef
-		candidates   []Candidate
+		candidates   []ports.AudioCandidate
 		wantNil      bool
 		wantChannel  string
 		wantContains string // substring in selected candidate's title
@@ -29,7 +31,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:   "Dr. Dre",
 				Duration: 280,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "DIE HARD",
 					Channel:    "Kendrick Lamar - Topic",
@@ -58,7 +60,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:   "Kendrick Lamar",
 				Duration: 238,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "Kendrick Lamar - DIE HARD (Official Audio)",
 					Channel:    "Kendrick Lamar - Topic",
@@ -87,7 +89,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:   "The Weeknd",
 				Duration: 200,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "The Weeknd - Blinding Lights (Official Video)",
 					Channel:    "TheWeekndVEVO",
@@ -115,7 +117,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:   "Eminem",
 				Duration: 326,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "Eminem - Lose Yourself (Official Video)",
 					Channel:    "EminemVEVO",
@@ -143,7 +145,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:   "The Weeknd",
 				Duration: 215,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "Cooking Tutorial Episode 47",
 					Channel:    "CookingChannel",
@@ -163,7 +165,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:   "Fatt Smaxk",
 				Duration: 0, // unknown — must still pick the feat cut by feature, not duration
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					// The wrong pick the bug shipped: a high-view solo official video.
 					// NormalizeForMatch strips "(Official Music Video)" AND the track's
@@ -195,7 +197,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 				Artist:   "Post Malone",
 				Duration: 215,
 			},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{
 					Title:      "Circles",
 					Channel:    "Post Malone - Topic",
@@ -248,7 +250,7 @@ func TestAcquisitionMatchingReport(t *testing.T) {
 	type testCase struct {
 		query       string
 		track       TrackRef
-		candidates  []Candidate
+		candidates  []ports.AudioCandidate
 		wantChannel string
 	}
 
@@ -256,7 +258,7 @@ func TestAcquisitionMatchingReport(t *testing.T) {
 		{
 			query: "Die Hard (Dr. Dre)",
 			track: TrackRef{Title: "Die Hard", Artist: "Dr. Dre", Duration: 280},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{Title: "DIE HARD", Channel: "Kendrick Lamar - Topic", Duration: 240, Categories: []string{"Music"}, ViewCount: 65_000_000},
 				{Title: "Die Hard", Channel: "Dr. Dre - Topic", Duration: 282, Categories: []string{"Music"}, ViewCount: 5_000_000},
 			},
@@ -265,7 +267,7 @@ func TestAcquisitionMatchingReport(t *testing.T) {
 		{
 			query: "Blinding Lights (The Weeknd)",
 			track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{Title: "The Weeknd - Blinding Lights", Channel: "TheWeekndVEVO", Duration: 203, Categories: []string{"Music"}, ViewCount: 500_000_000},
 				{Title: "Blinding Lights", Channel: "The Weeknd - Topic", Duration: 200, Categories: []string{"Music"}, ViewCount: 10_000_000},
 			},
@@ -274,7 +276,7 @@ func TestAcquisitionMatchingReport(t *testing.T) {
 		{
 			query: "Circles (Post Malone)",
 			track: TrackRef{Title: "Circles", Artist: "Post Malone", Duration: 215},
-			candidates: []Candidate{
+			candidates: []ports.AudioCandidate{
 				{Title: "Circles", Channel: "Post Malone - Topic", Duration: 215, Categories: []string{"Music"}, ViewCount: 20_000_000},
 				{Title: "Circles", Channel: "Mac Miller - Topic", Duration: 283, Categories: []string{"Music"}, ViewCount: 15_000_000},
 			},

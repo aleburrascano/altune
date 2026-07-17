@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"testing"
+
+	"altune/go-api/internal/acquisition/ports"
 )
 
 type recordingReporter struct {
@@ -23,7 +25,7 @@ func (s passStep) Rollback(context.Context, *AcquisitionContext) error { return 
 func TestRunPipeline_ReportsStageAndSource(t *testing.T) {
 	rep := &recordingReporter{}
 	ctx := withJobReporter(context.Background(), rep)
-	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}, Selected: &Candidate{URL: "https://src/x"}}
+	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}, Selected: &ports.AudioCandidate{URL: "https://src/x"}}
 
 	if err := RunPipeline(ctx, []Step{passStep{"search"}, passStep{"download"}}, ac); err != nil {
 		t.Fatal(err)

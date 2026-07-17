@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -129,7 +130,7 @@ func viewScore(viewCount, maxViews int64) float64 {
 	return math.Min(float64(viewCount)/float64(maxViews), 1.0)
 }
 
-func metadataRank(c Candidate, expectedDuration float64, maxViews int64) float64 {
+func metadataRank(c ports.AudioCandidate, expectedDuration float64, maxViews int64) float64 {
 	ch := channelScore(c.Channel)
 	cat := categoryScore(c.Categories)
 	dur := durationScore(expectedDuration, c.Duration)
@@ -153,24 +154,24 @@ type topicEntry struct {
 	ident       float64
 	artistMatch bool
 	featMatch   bool
-	candidate   Candidate
+	candidate   ports.AudioCandidate
 }
 
 type otherEntry struct {
 	meta      float64
 	ident     float64
 	featMatch bool
-	candidate Candidate
+	candidate ports.AudioCandidate
 }
 
 // SelectBestCandidate is the context-less entry point retained for tests and
 // callers without a request context. Production calls selectBestCandidate with a
 // context so candidate-evaluation logs carry the correlation id.
-func SelectBestCandidate(track TrackRef, candidates []Candidate) *Candidate {
+func SelectBestCandidate(track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {
 	return selectBestCandidate(context.Background(), track, candidates)
 }
 
-func selectBestCandidate(ctx context.Context, track TrackRef, candidates []Candidate) *Candidate {
+func selectBestCandidate(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {
 	ranked := rankCandidates(ctx, track, candidates)
 	if len(ranked) == 0 {
 		slog.WarnContext(ctx, "no_candidates_passed",
@@ -189,7 +190,7 @@ func selectBestCandidate(ctx context.Context, track TrackRef, candidates []Candi
 // then by identity); non-Topic candidates follow, ordered by identity then
 // metadata. Selection takes element 0; the acquisition pipeline walks the rest as
 // fallbacks when a downloaded file fails duration verification.
-func rankCandidates(ctx context.Context, track TrackRef, candidates []Candidate) []Candidate {
+func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate) []ports.AudioCandidate {
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -219,7 +220,7 @@ func rankCandidates(ctx context.Context, track TrackRef, candidates []Candidate)
 		return other[i].meta > other[j].meta
 	})
 
-	ranked := make([]Candidate, 0, len(topic)+len(other))
+	ranked := make([]ports.AudioCandidate, 0, len(topic)+len(other))
 	for _, e := range topic {
 		ranked = append(ranked, e.candidate)
 	}
@@ -237,7 +238,7 @@ func durationWithinTolerance(expected, actual float64) bool {
 	return math.Abs(expected-actual) <= tolerance
 }
 
-func maxViewCount(candidates []Candidate) int64 {
+func maxViewCount(candidates []ports.AudioCandidate) int64 {
 	var maxViews int64
 	for _, c := range candidates {
 		if c.ViewCount > maxViews {
@@ -249,7 +250,7 @@ func maxViewCount(candidates []Candidate) int64 {
 
 // classifyCandidates scores every candidate, drops those below the identity
 // gate, and splits the survivors into Topic-channel and other buckets.
-func classifyCandidates(ctx context.Context, track TrackRef, candidates []Candidate, maxViews int64) ([]topicEntry, []otherEntry) {
+func classifyCandidates(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate, maxViews int64) ([]topicEntry, []otherEntry) {
 	var topic []topicEntry
 	var other []otherEntry
 

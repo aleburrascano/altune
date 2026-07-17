@@ -36,8 +36,8 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 	if first.URL == "" {
 		t.Error("first candidate has empty URL")
 	}
-	if first.DurationSecs <= 0 {
-		t.Errorf("first candidate DurationSecs = %v, want > 0", first.DurationSecs)
+	if first.Duration <= 0 {
+		t.Errorf("first candidate Duration = %v, want > 0", first.Duration)
 	}
 }
 

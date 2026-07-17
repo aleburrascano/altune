@@ -2,90 +2,75 @@ package service
 
 import (
 	"context"
-	"os"
-	"path/filepath"
+	"errors"
 	"testing"
 
-	"github.com/bogem/id3v2/v2"
+	"altune/go-api/internal/acquisition/ports"
 )
 
+type fakeTagger struct {
+	calls []string
+	err   error
+}
+
+func (f *fakeTagger) Tag(_ context.Context, filePath string, _ ports.TrackTags) error {
+	f.calls = append(f.calls, filePath)
+	return f.err
+}
+
 func TestTagStep_Execute_NoTempPath_NoOp(t *testing.T) {
-	if err := NewTagStep().Execute(context.Background(), &AcquisitionContext{TempPath: ""}); err != nil {
+	tagger := &fakeTagger{}
+	if err := NewTagStep(tagger).Execute(context.Background(), &AcquisitionContext{TempPath: ""}); err != nil {
 		t.Fatalf("expected nil for empty temp path, got %v", err)
 	}
-}
-
-// ID3v2 tags are MP3-only; writing them to an m4a/MP4 corrupts the container. The
-// tag step must skip non-MP3 files entirely, leaving the bytes untouched.
-func TestTagStep_Execute_SkipsNonMp3(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "track.m4a")
-	original := []byte("\x00\x00\x00\x1cftypM4A original bytes")
-	if err := os.WriteFile(file, original, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	ac := &AcquisitionContext{
-		Track:    TrackRef{Title: "T", Artist: "A"},
-		TempPath: file,
-	}
-
-	if err := NewTagStep().Execute(context.Background(), ac); err != nil {
-		t.Fatalf("expected nil, got %v", err)
-	}
-
-	after, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(after) != string(original) {
-		t.Error("m4a file was modified by the tag step; non-MP3 bytes must be left untouched")
+	if len(tagger.calls) != 0 {
+		t.Fatalf("tagger called for empty temp path: %v", tagger.calls)
 	}
 }
 
-// Tagging failures must never fail the pipeline — a missing/unreadable file is
-// logged and swallowed.
-func TestTagStep_Execute_BadPath_Swallowed(t *testing.T) {
+func TestTagStep_Execute_NoTagger_NoOp(t *testing.T) {
+	if err := NewTagStep(nil).Execute(context.Background(), &AcquisitionContext{TempPath: "/tmp/x.mp3"}); err != nil {
+		t.Fatalf("expected nil without a tagger, got %v", err)
+	}
+}
+
+// Tagging failures must never fail the pipeline — they are logged and swallowed.
+func TestTagStep_Execute_TaggerError_Swallowed(t *testing.T) {
+	tagger := &fakeTagger{err: errors.New("boom")}
 	ac := &AcquisitionContext{
 		Track:    TrackRef{Title: "T", Artist: "A"},
-		TempPath: filepath.Join(t.TempDir(), "does-not-exist.mp3"),
+		TempPath: "/tmp/x.mp3",
 	}
-	if err := NewTagStep().Execute(context.Background(), ac); err != nil {
+	if err := NewTagStep(tagger).Execute(context.Background(), ac); err != nil {
 		t.Fatalf("expected tagging failure to be swallowed, got %v", err)
 	}
 }
 
-func TestTagStep_Execute_WritesTags(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "track.mp3")
-	if err := os.WriteFile(file, []byte{}, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
+func TestTagStep_Execute_PassesTrackTags(t *testing.T) {
+	var got ports.TrackTags
+	tagger := &recordingTagger{tags: &got}
 	ac := &AcquisitionContext{
 		Track: TrackRef{
-			Title:  "Blinding Lights",
-			Artist: "The Weeknd",
-			Album:  "After Hours",
-			Year:   2020,
-			Genre:  "Pop",
+			Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
+			AlbumArtist: "The Weeknd", Genre: "Pop", Year: 2020, TrackNumber: 4,
 		},
-		TempPath: file,
+		TempPath: "/tmp/x.mp3",
 	}
-	if err := NewTagStep().Execute(context.Background(), ac); err != nil {
+	if err := NewTagStep(tagger).Execute(context.Background(), ac); err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
+	want := ports.TrackTags{
+		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
+		AlbumArtist: "The Weeknd", Genre: "Pop", Year: 2020, TrackNumber: 4,
+	}
+	if got != want {
+		t.Errorf("tags = %+v, want %+v", got, want)
+	}
+}
 
-	tag, err := id3v2.Open(file, id3v2.Options{Parse: true})
-	if err != nil {
-		t.Fatalf("reopen tagged file: %v", err)
-	}
-	defer tag.Close()
+type recordingTagger struct{ tags *ports.TrackTags }
 
-	if got := tag.Title(); got != "Blinding Lights" {
-		t.Errorf("title = %q, want %q", got, "Blinding Lights")
-	}
-	if got := tag.Artist(); got != "The Weeknd" {
-		t.Errorf("artist = %q, want %q", got, "The Weeknd")
-	}
-	if got := tag.Album(); got != "After Hours" {
-		t.Errorf("album = %q, want %q", got, "After Hours")
-	}
+func (r *recordingTagger) Tag(_ context.Context, _ string, tags ports.TrackTags) error {
+	*r.tags = tags
+	return nil
 }

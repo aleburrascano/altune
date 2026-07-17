@@ -21,6 +21,7 @@ type AcquireTrackAudioService struct {
 	audioSearcher ports.AudioSearcher
 	audioStore    ports.AudioWriter
 	audioProber   ports.AudioProber
+	audioTagger   ports.AudioTagger
 	events        events.Publisher
 }
 
@@ -50,6 +51,12 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 // duration, falling through to the next-best candidate.
 func WithAudioProber(p ports.AudioProber) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.audioProber = p }
+}
+
+// WithAudioTagger enables metadata tagging of the downloaded file before it is
+// stored. Without it the tag step is a no-op.
+func WithAudioTagger(t ports.AudioTagger) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.audioTagger = t }
 }
 
 // Execute acquires audio for a track via the search pipeline (YouTube-first,
@@ -124,10 +131,9 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 // failureReason maps an internal pipeline error to a short, stable, client-safe
 // reason. The full error chain (which can carry yt-dlp stderr, file paths, and
 // other internals) is logged at the call site and never stored on the track or
-// returned over the wire. Both paths route through reasonForStep so the
-// step→reason mapping lives in exactly one place.
+// returned over the wire. RunPipeline produces exactly two shapes: a *StepError
+// for a failing step, or a "pipeline cancelled" error for context cancellation.
 func failureReason(err error) string {
-	// Preferred path: map on the structured step name, robust to message changes.
 	var stepErr *StepError
 	if errors.As(err, &stepErr) {
 		if reason, ok := reasonForStep(stepErr.Step); ok {
@@ -135,33 +141,10 @@ func failureReason(err error) string {
 		}
 		return "audio acquisition failed"
 	}
-
-	// Fallback for plain-string errors not produced by RunPipeline: recover the
-	// step name from the stable "step <name>: ..." prefix and reuse the same
-	// mapping. Keeps "pipeline cancelled: ..." distinct.
-	msg := err.Error()
-	if strings.HasPrefix(msg, "pipeline cancelled") {
+	if strings.HasPrefix(err.Error(), "pipeline cancelled") {
 		return "audio acquisition cancelled"
 	}
-	if step, ok := stepFromPrefix(msg); ok {
-		if reason, ok := reasonForStep(step); ok {
-			return reason
-		}
-	}
 	return "audio acquisition failed"
-}
-
-// stepFromPrefix recovers a step name from a "step <name>: ..." error string.
-func stepFromPrefix(msg string) (string, bool) {
-	rest, ok := strings.CutPrefix(msg, "step ")
-	if !ok {
-		return "", false
-	}
-	name, _, found := strings.Cut(rest, ":")
-	if !found {
-		return "", false
-	}
-	return name, true
 }
 
 // reasonForStep maps a pipeline step name to its client-safe failure reason.
@@ -223,7 +206,7 @@ func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId doma
 		NewSearchStep(s.audioSearcher),
 		NewSelectStep(),
 		NewDownloadStep(s.audioSearcher, WithDownloadProber(s.audioProber)),
-		NewTagStep(),
+		NewTagStep(s.audioTagger),
 		NewStoreStep(s.audioStore, WithStoreProber(s.audioProber)),
 		NewUpdateTrackStep(s.trackRepo, userId, trackId),
 	}

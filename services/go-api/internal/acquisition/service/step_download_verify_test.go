@@ -1,6 +1,8 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+
 	"context"
 	"errors"
 	"os"
@@ -66,7 +68,7 @@ func TestDownloadStep_VerifiesAndFallsBack(t *testing.T) {
 
 	ac := &AcquisitionContext{
 		Track: TrackRef{Title: "How Sweet", Artist: "NewJeans", Duration: 226},
-		Ranked: []Candidate{
+		Ranked: []ports.AudioCandidate{
 			{URL: "https://youtube.com/watch?v=bloated", Duration: 840},
 			{URL: "https://youtube.com/watch?v=correct", Duration: 227},
 		},
@@ -95,7 +97,7 @@ func TestDownloadStep_AllCandidatesWrongDuration_Errors(t *testing.T) {
 
 	ac := &AcquisitionContext{
 		Track:  TrackRef{Title: "How Sweet", Artist: "NewJeans", Duration: 226},
-		Ranked: []Candidate{{URL: "https://youtube.com/watch?v=bloated", Duration: 840}},
+		Ranked: []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=bloated", Duration: 840}},
 	}
 
 	if err := step.Execute(context.Background(), ac); err == nil {
@@ -115,7 +117,7 @@ func TestDownloadStep_NoExpectedDuration_SkipsVerification(t *testing.T) {
 
 	ac := &AcquisitionContext{
 		Track:  TrackRef{Title: "Unknown", Artist: "Artist", Duration: 0},
-		Ranked: []Candidate{{URL: "https://youtube.com/watch?v=whatever", Duration: 840}},
+		Ranked: []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=whatever", Duration: 840}},
 	}
 
 	if err := step.Execute(context.Background(), ac); err != nil {
@@ -144,7 +146,7 @@ func TestDownloadStep_RejectsUndecodableAudio(t *testing.T) {
 
 	ac := &AcquisitionContext{
 		Track: TrackRef{Title: "X", Artist: "Y", Duration: 226},
-		Ranked: []Candidate{
+		Ranked: []ports.AudioCandidate{
 			{URL: "https://youtube.com/watch?v=corrupt", Duration: 226},
 			{URL: "https://youtube.com/watch?v=good", Duration: 226},
 		},
@@ -172,7 +174,7 @@ func TestDownloadStep_AllUndecodable_Errors(t *testing.T) {
 
 	ac := &AcquisitionContext{
 		Track:  TrackRef{Title: "X", Artist: "Y", Duration: 226},
-		Ranked: []Candidate{{URL: "https://youtube.com/watch?v=corrupt", Duration: 226}},
+		Ranked: []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=corrupt", Duration: 226}},
 	}
 
 	if err := step.Execute(context.Background(), ac); err == nil {
@@ -185,7 +187,7 @@ func TestDownloadStep_AllUndecodable_Errors(t *testing.T) {
 
 func TestRankCandidates_TopicFirstThenOrdered(t *testing.T) {
 	track := TrackRef{Title: "How Sweet", Artist: "NewJeans", Duration: 226}
-	candidates := []Candidate{
+	candidates := []ports.AudioCandidate{
 		{Title: "How Sweet", Channel: "HALLYUSOUND", Duration: 227, URL: "other", Categories: []string{"Music"}, ViewCount: 1000},
 		{Title: "How Sweet", Channel: "NewJeans - Topic", Duration: 840, URL: "topic", Categories: []string{"Music"}, ViewCount: 9_000_000},
 	}

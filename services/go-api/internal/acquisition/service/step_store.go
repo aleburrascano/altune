@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 
 	"altune/go-api/internal/acquisition/ports"
@@ -43,7 +44,7 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 		}
 	}
 
-	audioRef := buildAudioRef(ac.Track)
+	audioRef := buildAudioRef(ac.Track, ac.TempPath)
 	ac.AudioRef = audioRef
 
 	if err := s.audioStore.Store(ctx, ac.TempPath, audioRef); err != nil {
@@ -63,7 +64,11 @@ func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error 
 	return nil
 }
 
-func buildAudioRef(track TrackRef) string {
+// buildAudioRef derives the ref's extension from the downloaded file itself, so
+// the ref always names what the download actually produced. The format is
+// decided once, by the searcher adapter — hardcoding it here again is how refs
+// ended up lying about their bytes during the m4a era.
+func buildAudioRef(track TrackRef, tempPath string) string {
 	artist := sanitizePathComponent(track.Artist)
 	album := track.Album
 	if album == "" {
@@ -72,7 +77,11 @@ func buildAudioRef(track TrackRef) string {
 	album = sanitizePathComponent(album)
 	title := sanitizePathComponent(track.Title)
 
-	return strings.Join([]string{track.UserID, artist, album, title + ".mp3"}, "/")
+	ext := filepath.Ext(tempPath)
+	if ext == "" {
+		ext = ".mp3"
+	}
+	return strings.Join([]string{track.UserID, artist, album, title + ext}, "/")
 }
 
 func sanitizePathComponent(s string) string {

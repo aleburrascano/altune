@@ -3,67 +3,38 @@ package service
 import (
 	"context"
 	"log/slog"
-	"strconv"
-	"strings"
 
-	"github.com/bogem/id3v2/v2"
+	"altune/go-api/internal/acquisition/ports"
 )
 
-type TagStep struct{}
+type TagStep struct {
+	tagger ports.AudioTagger
+}
 
-func NewTagStep() *TagStep { return &TagStep{} }
+func NewTagStep(tagger ports.AudioTagger) *TagStep { return &TagStep{tagger: tagger} }
 
 func (s *TagStep) Name() string { return "tag" }
 
+// Execute writes the track's metadata into the downloaded file via the tagger
+// port. Tagging failure is logged and swallowed — it must never fail the
+// pipeline. Without a tagger wired the step is a no-op.
 func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
-	if ac.TempPath == "" {
+	if ac.TempPath == "" || s.tagger == nil {
 		return nil
 	}
 
-	// ID3v2 is an MP3-only container convention: the tagger prepends an ID3 block
-	// at byte 0. That is correct for MP3 but corrupts any other container (e.g. an
-	// m4a/MP4 must start with `ftyp`, and the shifted bytes invalidate its sample
-	// offset table). Only tag MP3; other formats carry their metadata in the DB.
-	if !strings.HasSuffix(strings.ToLower(ac.TempPath), ".mp3") {
-		slog.InfoContext(ctx, "tag_skipped_non_mp3", "path", ac.TempPath)
-		return nil
+	tags := ports.TrackTags{
+		Title:       ac.Track.Title,
+		Artist:      ac.Track.Artist,
+		Album:       ac.Track.Album,
+		AlbumArtist: ac.Track.AlbumArtist,
+		Genre:       ac.Track.Genre,
+		Year:        ac.Track.Year,
+		TrackNumber: ac.Track.TrackNumber,
 	}
-
-	tag, err := id3v2.Open(ac.TempPath, id3v2.Options{Parse: false})
-	if err != nil {
-		slog.WarnContext(ctx, "id3_tagging_failed: could not open file", "error", err)
-		return nil
+	if err := s.tagger.Tag(ctx, ac.TempPath, tags); err != nil {
+		slog.WarnContext(ctx, "tagging_failed", "track_id", ac.Track.ID, "error", err)
 	}
-	defer tag.Close()
-
-	tag.SetDefaultEncoding(id3v2.EncodingUTF8)
-	tag.SetVersion(4)
-
-	tag.SetTitle(ac.Track.Title)
-	tag.SetArtist(ac.Track.Artist)
-
-	if ac.Track.Album != "" {
-		tag.SetAlbum(ac.Track.Album)
-	}
-	if ac.Track.Year > 0 {
-		tag.AddTextFrame(tag.CommonID("Year"), id3v2.EncodingUTF8, strconv.Itoa(ac.Track.Year))
-	}
-	if ac.Track.TrackNumber > 0 {
-		tag.AddTextFrame(tag.CommonID("Track number/Position in set"), id3v2.EncodingUTF8, strconv.Itoa(ac.Track.TrackNumber))
-	}
-	if ac.Track.AlbumArtist != "" {
-		tag.AddTextFrame(tag.CommonID("Band/Orchestra/Accompaniment"), id3v2.EncodingUTF8, ac.Track.AlbumArtist)
-	}
-	if ac.Track.Genre != "" {
-		tag.SetGenre(ac.Track.Genre)
-	}
-
-	if err := tag.Save(); err != nil {
-		slog.WarnContext(ctx, "id3_tagging_failed: could not save tags", "error", err)
-		return nil
-	}
-
-	slog.InfoContext(ctx, "id3_tags_written", "track_id", ac.Track.ID)
 	return nil
 }
 

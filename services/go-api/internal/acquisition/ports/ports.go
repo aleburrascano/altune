@@ -12,16 +12,16 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// AudioCandidate is one downloadable result surfaced by an AudioSearcher.
+// AudioCandidate is one downloadable result surfaced by an AudioSearcher. It is
+// also the pipeline's candidate type — same bounded context, same shape, so a
+// service-side twin would only duplicate these fields. Duration is in seconds.
 type AudioCandidate struct {
-	Title         string
-	Artist        string
-	DurationSecs  float64
-	URL           string
-	Channel       string
-	Categories    []string
-	ViewCount     int64
-	FollowerCount int64
+	Title      string
+	Duration   float64
+	URL        string
+	Channel    string
+	Categories []string
+	ViewCount  int64
 }
 
 // AudioSearcher finds and downloads audio for a query. Implemented by the
@@ -29,6 +29,25 @@ type AudioCandidate struct {
 type AudioSearcher interface {
 	Search(ctx context.Context, query string) ([]AudioCandidate, error)
 	Download(ctx context.Context, url string, outDir string) (filePath string, err error)
+}
+
+// TrackTags is the metadata an AudioTagger writes into an audio file.
+type TrackTags struct {
+	Title       string
+	Artist      string
+	Album       string
+	AlbumArtist string
+	Genre       string
+	Year        int
+	TrackNumber int
+}
+
+// AudioTagger writes track metadata into a downloaded audio file. Implementations
+// decide per-container applicability (ID3v2 is MP3-only; skipping an unsupported
+// container is not an error). Failures are returned for the pipeline to swallow —
+// tagging must never fail acquisition. Implemented by the id3 adapter.
+type AudioTagger interface {
+	Tag(ctx context.Context, filePath string, tags TrackTags) error
 }
 
 // AudioProber inspects a downloaded audio file before it is stored. ProbeDuration
