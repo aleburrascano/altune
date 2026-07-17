@@ -40,21 +40,24 @@ export function SettingsScreen(): ReactElement {
       <View style={[styles.divider, { backgroundColor: theme.color.border }]} />
 
       <Button
-        testID="settings-backfill-featured"
-        label={backfillLabel}
-        variant="ghost"
-        loading={backfill.isPending}
-        onPress={() => { backfill.mutate(); }}
-        style={styles.signOutBtn}
-      />
-
-      <Button
         testID="settings-sign-out"
         label={isPending ? 'Signing out…' : 'Sign Out'}
         variant="ghost"
         loading={isPending}
         onPress={() => { void signOut(); }}
-        style={styles.signOutBtn}
+        style={styles.action}
+      />
+
+      <Text variant="caption" tone="tertiary" style={styles.sectionLabel}>
+        Library maintenance
+      </Text>
+      <Button
+        testID="settings-backfill-featured"
+        label={backfillLabel}
+        variant="ghost"
+        loading={backfill.isPending}
+        onPress={() => { backfill.mutate(); }}
+        style={styles.action}
       />
     </Screen>
   );
@@ -77,5 +80,6 @@ const styles = StyleSheet.create({
   },
   profileInfo: { flex: 1, gap: spacing.xs },
   divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.lg },
-  signOutBtn: { alignSelf: 'flex-start' },
+  action: { alignSelf: 'flex-start' },
+  sectionLabel: { marginTop: spacing.xl, marginBottom: spacing.xs },
 });

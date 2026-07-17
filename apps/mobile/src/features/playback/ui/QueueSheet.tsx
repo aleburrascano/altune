@@ -2,7 +2,7 @@ import { useCallback, type ReactElement } from 'react';
 import { Alert, FlatList, type ListRenderItemInfo, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronDown, GripVertical, Play } from 'lucide-react-native';
+import { ChevronDown, Play, X } from 'lucide-react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
@@ -13,8 +13,9 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Text } from '@shared/ui/primitives/Text';
+import type { Theme } from '@shared/ui/theme';
 import { useTheme } from '@shared/ui/theme';
-import { radius, spacing } from '@shared/ui/theme/tokens';
+import { fontFamily, radius, spacing } from '@shared/ui/theme/tokens';
 
 type QueueItem = {
   trackIndex: number;
@@ -33,13 +34,13 @@ function formatTime(sec: number | undefined): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function RemoveAction(_prog: SharedValue<number>, drag: SharedValue<number>) {
+function RemoveAction(_prog: SharedValue<number>, drag: SharedValue<number>, theme: Theme) {
   const style = useAnimatedStyle(() => ({
     transform: [{ translateX: drag.value + 80 }],
   }));
   return (
-    <Reanimated.View style={[styles.removeAction, style]}>
-      <Text variant="label" style={styles.removeText}>Remove</Text>
+    <Reanimated.View style={[styles.removeAction, { backgroundColor: theme.color.danger }, style]}>
+      <Text variant="label" style={{ color: theme.color.onAccent }}>Remove</Text>
     </Reanimated.View>
   );
 }
@@ -100,7 +101,7 @@ export function QueueSheet(): ReactElement {
       <ReanimatedSwipeable
         friction={2}
         rightThreshold={40}
-        renderRightActions={RemoveAction}
+        renderRightActions={(prog, drag) => RemoveAction(prog, drag, theme)}
         onSwipeableOpen={() => removeFromQueue(item.queueIndex)}
       >
         <Pressable
@@ -109,17 +110,22 @@ export function QueueSheet(): ReactElement {
           accessibilityRole="button"
           accessibilityLabel={`${item.title} by ${item.artist}`}
         >
-          <GripVertical size={16} color={theme.color.textTertiary} style={{ opacity: 0.5 }} />
           <Artwork uri={item.artworkUrl} size={40} radius={radius.sm} />
           <View style={styles.rowInfo}>
             <Text variant="label" numberOfLines={1}>{item.title}</Text>
             <Text variant="caption" tone="secondary" numberOfLines={1}>{withFeaturing(item.artist, item.featuredArtists)}</Text>
           </View>
           <Text variant="caption" tone="tertiary">{formatTime(item.durationSeconds)}</Text>
+          <IconButton
+            icon={X}
+            size={18}
+            onPress={() => removeFromQueue(item.queueIndex)}
+            accessibilityLabel={`Remove ${item.title} from queue`}
+          />
         </Pressable>
       </ReanimatedSwipeable>
     ),
-    [theme.color.canvas, theme.color.textTertiary, removeFromQueue, skipToIndex],
+    [theme, removeFromQueue, skipToIndex],
   );
 
   return (
@@ -147,7 +153,7 @@ export function QueueSheet(): ReactElement {
 
       {/* Now Playing */}
       {currentTrackData ? (
-        <View style={[styles.nowPlaying, { borderLeftColor: theme.color.accent }]}>
+        <View style={[styles.nowPlaying, { backgroundColor: theme.color.surface1 }]}>
           <View style={styles.nowPlayingContent}>
             <View style={styles.artworkWrap}>
               <Artwork uri={currentTrackData.artworkUrl} size={48} radius={radius.sm} />
@@ -208,11 +214,10 @@ const styles = StyleSheet.create({
   headerCenter: { alignItems: 'center' },
   headerSpacer: { width: 44 },
   nowPlaying: {
-    borderLeftWidth: 3,
-    marginHorizontal: 0,
+    marginHorizontal: spacing.lg,
+    borderRadius: radius.md,
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingLeft: spacing.lg - 3,
+    paddingHorizontal: spacing.md,
   },
   nowPlayingContent: {
     flexDirection: 'row',
@@ -234,8 +239,7 @@ const styles = StyleSheet.create({
   nowPlayingLabel: {
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    fontSize: 10,
-    fontWeight: '700',
+    fontFamily: fontFamily.bodySemiBold,
   },
   sectionHeader: {
     paddingHorizontal: spacing.lg,
@@ -245,7 +249,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    fontWeight: '600',
+    fontFamily: fontFamily.bodySemiBold,
   },
   row: {
     flexDirection: 'row',
@@ -256,12 +260,10 @@ const styles = StyleSheet.create({
   },
   rowInfo: { flex: 1, gap: 2 },
   removeAction: {
-    backgroundColor: '#e55',
     justifyContent: 'center',
     alignItems: 'center',
     width: 80,
   },
-  removeText: { color: '#fff' },
   list: { paddingBottom: spacing['3xl'] },
   empty: {
     alignItems: 'center',

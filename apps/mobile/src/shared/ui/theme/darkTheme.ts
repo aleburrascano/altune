@@ -12,7 +12,7 @@ export const darkTheme: Theme = {
     scrim: palette.scrimDark,
     textPrimary: palette.white,
     textSecondary: palette.gray400,
-    textTertiary: palette.gray600,
+    textTertiary: palette.gray500,
     accent: palette.cobalt,
     accentPressed: palette.cobaltPressed,
     accentTint: palette.cobaltTint,

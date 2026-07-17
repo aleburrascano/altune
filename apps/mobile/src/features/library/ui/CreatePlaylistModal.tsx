@@ -1,7 +1,8 @@
 import { useState, type ReactElement } from 'react';
-import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { Button, Text, radius, spacing, useTheme } from '@shared/ui';
+import { TextField } from '@shared/ui/primitives/TextField';
 
 type CreatePlaylistModalProps = {
   visible: boolean;
@@ -40,7 +41,12 @@ export function CreatePlaylistModal({
       animationType="fade"
       onRequestClose={handleClose}
     >
-      <Pressable style={styles.backdrop} onPress={handleClose}>
+      <Pressable
+        style={[styles.backdrop, { backgroundColor: theme.color.scrim }]}
+        onPress={handleClose}
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+      >
         <View />
       </Pressable>
       <View style={styles.centered}>
@@ -48,23 +54,19 @@ export function CreatePlaylistModal({
           <Text variant="title" style={styles.title}>
             New Playlist
           </Text>
-          <TextInput
-            testID="create-playlist-input"
-            value={name}
-            onChangeText={setName}
-            placeholder="Playlist name"
-            placeholderTextColor={theme.color.textTertiary}
-            maxLength={100}
-            autoFocus
-            style={[
-              styles.input,
-              {
-                color: theme.color.textPrimary,
-                backgroundColor: theme.color.surface2,
-                borderColor: theme.color.border,
-              },
-            ]}
-          />
+          <View style={styles.field}>
+            <TextField
+              testID="create-playlist-input"
+              value={name}
+              onChangeText={setName}
+              placeholder="Playlist name"
+              maxLength={100}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleCreate}
+              surface="surface2"
+            />
+          </View>
           <View style={styles.actions}>
             <Button label="Cancel" variant="ghost" onPress={handleClose} />
             <Button
@@ -84,7 +86,6 @@ export function CreatePlaylistModal({
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   centered: {
     flex: 1,
@@ -98,13 +99,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
   },
   title: { marginBottom: spacing.lg },
-  input: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    fontSize: 16,
-    marginBottom: spacing.lg,
-  },
+  field: { marginBottom: spacing.lg },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',

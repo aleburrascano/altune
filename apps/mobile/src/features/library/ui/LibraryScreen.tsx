@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import type { TrackResponse } from '@shared/api-client/types';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
@@ -66,12 +66,19 @@ export function LibraryScreen(): ReactElement {
   const [action, setAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
 
+  const confirmRemoveTrack = (track: TrackResponse): void => {
+    Alert.alert('Remove from Library', `Remove "${track.title}" from your library?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => deleteMutation.mutate(track.id) },
+    ]);
+  };
+
   const trackMenuItems = (track: TrackResponse) =>
     buildTrackMenuItems(track, {
       queue,
       onViewDetails: () => navigateToTrack(track),
       onAddToPlaylist: () => pl.setAddToPlaylistTrack(track),
-      danger: { label: 'Remove from Library', onPress: () => deleteMutation.mutate(track.id) },
+      danger: { label: 'Remove from Library', onPress: () => confirmRemoveTrack(track) },
     });
 
   const sortKey = sortByChip[chip];
