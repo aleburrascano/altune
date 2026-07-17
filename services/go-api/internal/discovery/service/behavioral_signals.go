@@ -85,9 +85,11 @@ func (s *Service) StartBehavioralRefresh(ctx context.Context, interval time.Dura
 	}()
 }
 
-// behavioralScoresSnapshot returns the currently published score map (nil when
-// disabled or not yet refreshed). nil-safe: ranking reads it without locking.
-func (s *Service) behavioralScoresSnapshot() map[string]float64 {
+// BehavioralScoresSnapshot returns the currently published score map (nil when
+// disabled or not yet refreshed). nil-safe and read-only: ranking reads it
+// without locking. Exported so the Mission Control re-run ranks with the same
+// snapshot the live search applies.
+func (s *Service) BehavioralScoresSnapshot() map[string]float64 {
 	if !s.behavioralRanking {
 		return nil
 	}

@@ -372,17 +372,14 @@ func (s *Service) mergeRankEnrich(
 	s.stampIdentities(ctx, perProvider)
 
 	// pure decision core: merge → rank → list-shaping (no ports, no I/O).
-	cfg := rankConfig{
+	ranked := rankPipelineWith(perProvider, queryNorm, RankOptions{
+		TailDemotion:        s.tailDemotion,
+		CrossKindProminence: s.crossKindProminence,
 		// Behavioral satisfaction signal: a published snapshot (nil when the flag
 		// is off / not yet refreshed), read without locking and applied as a
 		// within-tie rank input only.
-		behavioral: s.behavioralScoresSnapshot(),
-		prominence: s.crossKindProminence,
-	}
-	if s.tailDemotion {
-		cfg.demote = isLowConfidenceTail
-	}
-	ranked := rankPipelineWith(perProvider, queryNorm, cfg)
+		Behavioral: s.BehavioralScoresSnapshot(),
+	})
 
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)

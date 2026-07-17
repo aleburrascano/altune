@@ -150,6 +150,20 @@ func BuildSearchServiceWithTransport(
 	return discoveryService.NewService(searchProviders, circuitBreaker, opts...)
 }
 
+// BuildDiscoveryProviders builds the production search-provider set over the
+// given transport (nil → the shared rate-limiting live transport). Exported so
+// offline tooling (cmd/discoverytrace) and the Mission Control re-run exercise
+// the exact provider set the app wires instead of mirroring it by hand — a
+// hand-mirror already drifted once (SoundCloud lost its yt-dlp fallback).
+func BuildDiscoveryProviders(cfg *config.Config, transport http.RoundTripper) []discoveryPorts.SearchProvider {
+	cf := clientFactory{transport: transport}
+	var mb *providers.MusicBrainzAdapter
+	if cfg.HasMusicBrainz() {
+		mb = providers.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
+	}
+	return buildDiscoveryProviders(cf, cfg, mb)
+}
+
 // BuildConsensusProviders builds the multi-provider album fan-out used by the
 // artist-content consensus AND the offline coverage signal B. One definition so
 // the diagnostic measures the same provider set the app uses. Config-gated

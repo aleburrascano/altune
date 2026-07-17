@@ -12,10 +12,12 @@ import (
 	"time"
 
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
+	"altune/go-api/internal/acquisition/adapters/id3"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
 	adminAlert "altune/go-api/internal/admin/alert"
+	"altune/go-api/internal/admin/evalmeter"
 	"altune/go-api/internal/admin/eventtap"
 	adminHandler "altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/admin/providerhealth"
@@ -46,7 +48,6 @@ import (
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
 	sharedRedis "altune/go-api/internal/shared/redis"
-	"altune/go-api/internal/shared/textnorm"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -66,9 +67,9 @@ type App struct {
 	eventBus       *events.InProcessBus
 	alertMonitor   *adminAlert.Monitor
 	logRing        *logging.RingBuffer
-	eventFeed      *adminHandler.EventFeed
+	eventFeed      *eventtap.Feed
 	providerHealth *providerhealth.Store
-	evalMeter      *adminHandler.EvalMeter
+	evalMeter      *evalmeter.Meter
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
@@ -135,13 +136,31 @@ func (a *App) Run(ctx context.Context) error {
 		bgCtx, bgCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer bgCancel()
 		a.scheduler.Shutdown(bgCtx)
-	} else {
-		a.wg.Wait()
 	}
+	// Always drain the shared background group (corpus refresh, metrics rollup —
+	// and in-flight acquisitions when the scheduler exists) with a bound. The
+	// drain is owned here, not by the scheduler: without it, the no-audio-store
+	// path used to block shutdown forever on a bare wg.Wait().
+	a.drainBackground(30 * time.Second)
 
 	a.cleanup()
 	slog.Info("shutdown complete")
 	return nil
+}
+
+// drainBackground waits for every goroutine registered on the App's WaitGroup,
+// giving up after the timeout so a hung background task can never wedge shutdown.
+func (a *App) drainBackground(timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		a.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		slog.Warn("background task drain timed out")
+	}
 }
 
 func (a *App) setup(ctx context.Context) error {
@@ -183,8 +202,10 @@ func (a *App) setup(ctx context.Context) error {
 			audioStore,
 			acqService.WithAcquireEvents(tap),
 			acqService.WithAudioProber(audioProber),
+			acqService.WithAudioTagger(id3.NewTagger()),
 		)
-		bgScheduler := acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem)
+		bgScheduler := acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem,
+			acqService.WithSchedulerEvents(tap))
 		a.scheduler = bgScheduler
 		scheduler = bgScheduler
 	}
@@ -216,14 +237,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	// vocabStore is shared by suggest + the periodic vocabulary refresh; the
 	// search pipeline builds its own inside BuildSearchService.
-	var vocabStore discoveryPorts.VocabularyStore
-	if a.redisClient != nil {
-		vocabStore = discoveryCacheAdapters.NewVocabularyStore(
-			a.redisClient,
-			textnorm.NormalizeForMatch,
-			discoveryCacheAdapters.WithMetaphone(discoveryService.MetaphoneKey),
-		)
-	}
+	vocabStore := BuildVocabularyStore(a.redisClient)
 
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
@@ -410,7 +424,7 @@ func (a *App) setup(ctx context.Context) error {
 	// Mission Control operator console — two-layer gate: auth first, then the
 	// operator-only check inside adminH.Routes(). Fails closed when
 	// OperatorUserID is unset.
-	a.eventFeed = adminHandler.NewEventFeed()
+	a.eventFeed = eventtap.NewFeed()
 	a.eventFeed.Start(ctx, tap)
 	var acqReader adminHandler.AcquisitionStatusReader
 	if a.scheduler != nil {
@@ -422,12 +436,16 @@ func (a *App) setup(ctx context.Context) error {
 	// instance whose per-provider circuit breakers are isolated from production's,
 	// so eval failures can't trip the breakers live search depends on. When
 	// disabled, buildEvalRunner returns nil and no second provider stack is built.
-	a.evalMeter = adminHandler.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, a.buildEvalRunner())
+	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.buildEvalRunner())
 	a.evalMeter.Start(ctx)
-	adminH := adminHandler.New(a.cfg.OperatorUserID, a.dependencyHealth, a.logRing, a.eventFeed, a.providerHealth, acqReader, a.evalMeter).
+	adminH := adminHandler.New(a.dependencyHealth, a.logRing).
 		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).
+		WithEventFeed(a.eventFeed).
+		WithProviderHealth(a.providerHealth).
+		WithAcquisition(acqReader).
+		WithEvalMeter(a.evalMeter).
 		WithRequestStore(requestStore).
-		WithReRunner(a.buildReRunner()).
+		WithReRunner(a.buildReRunner(searchSvc)).
 		WithSearchInspector(a.buildSearchInspector(searchSvc))
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Get("/", adminH.ServeIndex)        // public shell — holds no data

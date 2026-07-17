@@ -24,14 +24,14 @@ func TestSatisfactionConsumer_RefreshPublishesScores(t *testing.T) {
 	}}
 	svc := NewService(nil, NewCircuitBreaker(), WithBehavioralRanking(NewSatisfactionConsumer(store)))
 
-	if got := svc.behavioralScoresSnapshot(); got != nil {
+	if got := svc.BehavioralScoresSnapshot(); got != nil {
 		t.Fatalf("snapshot should be nil before first refresh, got %v", got)
 	}
 	if err := svc.RefreshBehavioralScores(context.Background()); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 
-	scores := svc.behavioralScoresSnapshot()
+	scores := svc.BehavioralScoresSnapshot()
 	if scores["track|hello|adele"] != 3 || scores["track|noise|ugc"] != -2 {
 		t.Errorf("published scores = %v, want hello=3 noise=-2", scores)
 	}
@@ -42,7 +42,7 @@ func TestBehavioralRankingDisabled_SnapshotNil(t *testing.T) {
 	// No WithBehavioralRanking → flag off → snapshot stays nil even if a consumer existed.
 	svc := NewService(nil, NewCircuitBreaker())
 	svc.behavioralConsumer = NewSatisfactionConsumer(store) // present but flag off
-	if got := svc.behavioralScoresSnapshot(); got != nil {
+	if got := svc.BehavioralScoresSnapshot(); got != nil {
 		t.Errorf("snapshot must be nil when behavioral ranking is off, got %v", got)
 	}
 }
