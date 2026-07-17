@@ -30,6 +30,7 @@ import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
 import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
 import { useEnrichResult } from '../hooks/useEnrichResult';
 import { useLateralNav } from '../hooks/useLateralNav';
+import { detailRouteFor, tabRootFromSegments } from '../navigation';
 
 import { _albumYear } from './helpers';
 import { TrackDetailBody } from './TrackDetailBody';
@@ -63,8 +64,8 @@ function _headerYear(
 export function DetailScreen(): ReactElement {
   const router = useRouter();
   const segments = useSegments();
-  const tabRoot = segments[1] === 'library' ? 'library' : 'discover';
-  const detailRoute = `/${tabRoot}/detail` as const;
+  const tabRoot = tabRootFromSegments(segments);
+  const detailRoute = detailRouteFor(tabRoot);
   const rawResult = getDetailHandoff();
   const { enriched: result } = useEnrichResult(rawResult ?? { kind: 'track', title: '', subtitle: null, image_url: null, confidence: 'low', sources: [], extras: {} });
   const lateralNav = useLateralNav();
@@ -76,9 +77,9 @@ export function DetailScreen(): ReactElement {
     artistName: result.title,
     enabled: isLibraryArtist,
   });
-  // All provider enrichments, fetched behind one seam. The resolved MusicBrainz
-  // HD artwork wins for the hero; its genres become the identity pill row and
-  // its year the header subtitle; the deep cuts live behind a Disclosure.
+  // The rendered provider enrichments, fetched behind one seam: the
+  // MusicBrainz year for the header, Deezer featured_artists for the collab
+  // line / Featuring row, and the Last.fm artist About block.
   const enrichments = useDetailEnrichments(result);
 
   // All hooks are called above; only now is it safe to bail on an empty

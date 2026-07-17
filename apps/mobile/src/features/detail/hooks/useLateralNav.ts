@@ -3,14 +3,20 @@
  *
  * AC#11-13: From track/album detail, tapping artist or album name searches for
  * that entity and navigates to its detail. Uses router.push to build a proper
- * back stack — back returns through the chain of detail screens.
+ * back stack — back returns through the chain of detail screens. The lookup
+ * goes through the shared resolve-entity cache, so the landed screen's own
+ * name-resolution (useArtistDiscovery / useAlbumDiscovery) reuses this fetch
+ * instead of re-hitting the backend.
  */
 
 import { useCallback, useRef, useState } from 'react';
 import { useRouter, useSegments } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 
-import { searchDiscovery, type DiscoveryKind } from '@shared/api-client/discovery';
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
+import type { DiscoveryKind } from '@shared/api-client/discovery';
+
+import { detailRouteFor, openDetail, tabRootFromSegments } from '../navigation';
+import { resolveEntityQuery } from '../resolve-entity-query';
 
 type LateralNavState = 'idle' | 'searching';
 
@@ -24,7 +30,8 @@ type UseLateralNavReturn = {
 export function useLateralNav(): UseLateralNavReturn {
   const router = useRouter();
   const segments = useSegments();
-  const tabRoot = segments[1] === 'library' ? 'library' : 'discover';
+  const queryClient = useQueryClient();
+  const tabRoot = tabRootFromSegments(segments);
   const [state, setState] = useState<LateralNavState>('idle');
   const [error, setError] = useState<string | null>(null);
   const searchingRef = useRef(false);
@@ -40,8 +47,12 @@ export function useLateralNav(): UseLateralNavReturn {
       setError(null);
       setState('searching');
       try {
-        const response = await searchDiscovery({ q: query, kinds: [kind], limit: 1, saveHistory: false });
-        const result = response.results[0];
+        // retry: false preserves the pre-cache behavior — one attempt, fail fast.
+        const results = await queryClient.fetchQuery({
+          ...resolveEntityQuery(kind, query, 1),
+          retry: false,
+        });
+        const result = results[0];
 
         if (result === undefined) {
           const kindLabel = kind === 'artist' ? 'Artist' : 'Album';
@@ -51,8 +62,7 @@ export function useLateralNav(): UseLateralNavReturn {
           return;
         }
 
-        setDetailHandoff(result);
-        router.push(`/${tabRoot}/detail` as '/discover/detail');
+        openDetail(router, detailRouteFor(tabRoot), result);
         // Never reset searchingRef after a successful push — this screen
         // is now buried in the stack. The new detail screen gets its own
         // useLateralNav with a fresh ref. Resetting here causes duplicates.
@@ -61,7 +71,7 @@ export function useLateralNav(): UseLateralNavReturn {
         setState('idle');
       }
     },
-    [router, tabRoot],
+    [router, tabRoot, queryClient],
   );
 
   return { navigateTo, state, error, clearError };

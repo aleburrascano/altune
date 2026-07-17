@@ -1,42 +1,58 @@
 /**
- * trackInfoRows / formatDuration — present extras render in order; absent or
- * empty keys are omitted (view-result-detail slice 13, AC#3).
- *
- * Updated: ISRC and popularity removed from display per UX audit (not user-facing).
+ * extractFeaturedFromText / resolveFeatured — the track body's three-tier
+ * featured-artist fallback: structured extras → Deezer enrichment → regex
+ * parse of "feat./ft./with" in title/subtitle.
  */
 
-import { formatDuration, trackInfoRows } from '../extras';
+import { extractFeaturedFromText, resolveFeatured } from '../extras';
 
-describe('formatDuration', () => {
-  it('formats seconds as M:SS with zero-padding', () => {
-    expect(formatDuration(244)).toBe('4:04');
-    expect(formatDuration(9)).toBe('0:09');
-    expect(formatDuration(600)).toBe('10:00');
+describe('extractFeaturedFromText', () => {
+  it('parses feat./ft./featuring/with markers from the title', () => {
+    expect(extractFeaturedFromText('Song (feat. Artist A)', null)).toBe('Artist A');
+    expect(extractFeaturedFromText('Song ft. Artist B', null)).toBe('Artist B');
+    expect(extractFeaturedFromText('Song featuring Artist C', null)).toBe('Artist C');
+    expect(extractFeaturedFromText('Song [with Artist D]', null)).toBe('Artist D');
+  });
+
+  it('falls back to the subtitle when the title has no marker', () => {
+    expect(extractFeaturedFromText('Song', 'Main Artist feat. Guest')).toBe('Guest');
+  });
+
+  it('returns null when neither carries a marker', () => {
+    expect(extractFeaturedFromText('Song', 'Main Artist')).toBeNull();
+    expect(extractFeaturedFromText('Song', null)).toBeNull();
   });
 });
 
-describe('trackInfoRows', () => {
-  it('returns duration and album in order when present', () => {
-    const rows = trackInfoRows({
-      duration_seconds: 244,
-      album: 'After Hours',
-      isrc: 'USUG11904206',
-      popularity: 0.72,
-      preview_url: 'https://x',
-    });
-    expect(rows.map((r) => r.key)).toEqual(['duration', 'album']);
-    expect(rows[0]?.value).toBe('4:04');
-    expect(rows[1]?.value).toBe('After Hours');
+describe('resolveFeatured', () => {
+  const structured = [{ name: 'Structured Guest', mbid: 'mb-1', deezer_id: 5 }];
+  const deezer = [{ name: 'Deezer Guest', mbid: null, deezer_id: 9 }];
+
+  it('prefers structured extras.featured_artists over everything', () => {
+    const featured = resolveFeatured(
+      { featured_artists: structured },
+      deezer,
+      'Song (feat. Text Guest)',
+      'Main',
+    );
+    expect(featured).toEqual(structured);
   });
 
-  it('omits absent, null, and empty values', () => {
-    expect(trackInfoRows({})).toEqual([]);
-    expect(trackInfoRows({ duration_seconds: null, album: '' })).toEqual([]);
-    expect(trackInfoRows({ duration_seconds: 0 })).toEqual([]);
+  it('falls back to Deezer enrichment contributors when extras carry none', () => {
+    expect(resolveFeatured({}, deezer, 'Song (feat. Text Guest)', 'Main')).toEqual(deezer);
   });
 
-  it('keeps only the present subset', () => {
-    const rows = trackInfoRows({ album: 'Hurry Up', duration_seconds: 180 });
-    expect(rows.map((r) => r.key)).toEqual(['duration', 'album']);
+  it('falls back to regex-parsed bare names last', () => {
+    expect(resolveFeatured({}, undefined, 'Song (feat. Guest A, Guest B)', 'Main')).toEqual([
+      { name: 'Guest A', mbid: null, deezer_id: null },
+      { name: 'Guest B', mbid: null, deezer_id: null },
+    ]);
+    expect(resolveFeatured({}, [], 'Song (feat. Guest A)', 'Main')).toEqual([
+      { name: 'Guest A', mbid: null, deezer_id: null },
+    ]);
+  });
+
+  it('resolves to empty when no tier matches', () => {
+    expect(resolveFeatured({}, undefined, 'Song', 'Main')).toEqual([]);
   });
 });

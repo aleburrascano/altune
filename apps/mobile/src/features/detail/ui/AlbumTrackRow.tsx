@@ -6,7 +6,8 @@ import { spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { formatDuration } from '../extras';
+import { formatDuration } from '@shared/lib/format';
+
 import { trackExtras } from '../extras-accessors';
 import type { SaveControlState } from '../save-control-state';
 import { sharedStyles } from './helpers';

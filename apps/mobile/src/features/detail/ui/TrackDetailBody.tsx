@@ -1,8 +1,6 @@
 import type { ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
-import { Check, Plus, RotateCw } from 'lucide-react-native';
-
 import { Banner } from '@shared/ui/primitives/Banner';
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
@@ -12,21 +10,28 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { FeaturedArtist } from '@shared/api-client/types';
 
 import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
-import { canPlay } from '@shared/playback/canPlay';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-import { extractFeaturedFromText } from '../extras';
+import { resolveFeatured } from '../extras';
 import { trackExtras } from '../extras-accessors';
 import { useLibraryTrackMatch } from '../hooks/useLibraryTrackMatch';
 import { useReportWrongAlbum } from '../hooks/useReportWrongAlbum';
 import { useSaveTrack } from '../hooks/useSaveTrack';
-import { saveControlState, type SaveControlState } from '../save-control-state';
+import { featuringRouteFor, type DetailRoute } from '../navigation';
+import { resolvePlaySource } from '../play-source';
 import { toCreateTrackRequest } from '../save-cache';
+import {
+  saveControlLabel,
+  saveControlState,
+  saveControlText,
+  type SaveControlState,
+} from '../save-control-state';
 
 import { isCurrentlyPlaying } from './helpers';
 import { PlayButton } from './PlayButton';
 import { RelatedTracksSection } from './RelatedTracksSection';
+import { SaveGlyph } from './SaveGlyph';
 
 export type LateralNavHandle = {
   navigateTo: (query: string, kind: 'artist' | 'album' | 'track') => Promise<void>;
@@ -48,7 +53,7 @@ export function TrackDetailBody({
 }: {
   result: DiscoveryResult;
   lateralNav: LateralNavHandle;
-  detailRoute: string;
+  detailRoute: DetailRoute;
   deezerFeatured?: FeaturedArtist[];
 }): ReactElement {
   const theme = useTheme();
@@ -58,33 +63,15 @@ export function TrackDetailBody({
   const playback = usePlayback();
   const libraryMatch = useLibraryTrackMatch(result.title, result.subtitle);
   const te = trackExtras(result.extras);
-  const effectiveTrackId = te.trackId ?? libraryMatch?.id ?? null;
-  const effectiveAcqStatus = te.acquisitionStatus ?? libraryMatch?.acquisition_status ?? null;
-  const isPlayable = canPlay(effectiveAcqStatus) && effectiveTrackId !== null;
-  const previewUrl = te.previewUrl;
 
   // `?? ''` guards against an absent subtitle arriving as `undefined` (the wire
   // omits an empty subtitle, despite the `string | null` type) — a bare
   // `!== null` check passes for undefined and then `.length` crashes the screen.
   const canSave = (result.subtitle ?? '').length > 0;
   const albumName = te.album;
-  const featured: FeaturedArtist[] =
-    te.featuredArtists.length > 0
-      ? te.featuredArtists
-      : deezerFeatured && deezerFeatured.length > 0
-        ? deezerFeatured
-        : (extractFeaturedFromText(result.title, result.subtitle)?.split(', ') ?? []).map((name) => ({
-            name,
-            mbid: null,
-            deezer_id: null,
-          }));
+  const featured = resolveFeatured(result.extras, deezerFeatured, result.title, result.subtitle);
 
-  const source =
-    isPlayable && effectiveTrackId !== null
-      ? ({ kind: 'library', trackId: effectiveTrackId } as const)
-      : previewUrl !== null
-        ? ({ kind: 'preview', previewUrl } as const)
-        : null;
+  const source = resolvePlaySource(te, libraryMatch);
   const playing = source !== null && isCurrentlyPlaying(playback, source);
   const isPreview = source?.kind === 'preview';
   const playTestID = isPreview ? 'detail-preview' : 'detail-play';
@@ -102,6 +89,8 @@ export function TrackDetailBody({
         ? 'saving'
         : saveControlState(libraryMatch);
   const saveInteractive = saveState === 'add' || saveState === 'failed';
+  // 'disabled' shares the 'add' presentation — same glyph/caption, just inert.
+  const saveDisplayState: SaveControlState = saveState === 'disabled' ? 'add' : saveState;
 
   const onSave = (): void => {
     if (!saveInteractive) {
@@ -160,7 +149,7 @@ export function TrackDetailBody({
           onPress={onSave}
           disabled={!saveInteractive}
           accessibilityRole="button"
-          accessibilityLabel={saveLabel(saveState, result.title)}
+          accessibilityLabel={saveControlLabel(saveDisplayState, result.title)}
           accessibilityState={{ disabled: !saveInteractive, busy: saveState === 'saving' }}
           style={({ pressed }) => [
             styles.save,
@@ -168,9 +157,9 @@ export function TrackDetailBody({
             pressed && saveInteractive ? { opacity: 0.6 } : null,
           ]}
         >
-          <SaveGlyph state={saveState} theme={theme} />
+          <SaveGlyph state={saveDisplayState} addSize={18} addTone="primary" />
           <Text variant="label" tone={saveState === 'ready' ? 'success' : 'primary'}>
-            {saveText(saveState)}
+            {saveControlText(saveDisplayState)}
           </Text>
         </Pressable>
       </View>
@@ -208,7 +197,7 @@ export function TrackDetailBody({
                   // (derived from detailRoute) so back returns to this detail.
                   // Cast: the generated route type is stale until expo restarts.
                   router.push({
-                    pathname: detailRoute.replace('/detail', '/featuring'),
+                    pathname: featuringRouteFor(detailRoute),
                     params: {
                       name: f.name,
                       ...(f.mbid ? { mbid: f.mbid } : {}),
@@ -269,51 +258,6 @@ export function TrackDetailBody({
       <RelatedTracksSection result={result} detailRoute={detailRoute} />
     </View>
   );
-}
-
-function saveText(state: SaveState): string {
-  switch (state) {
-    case 'saving':
-      return 'Saving…';
-    case 'ready':
-      return 'Saved';
-    case 'failed':
-      return 'Retry';
-    default:
-      return 'Save';
-  }
-}
-
-function saveLabel(state: SaveState, title: string): string {
-  switch (state) {
-    case 'saving':
-      return `${title} downloading`;
-    case 'ready':
-      return `${title} in library`;
-    case 'failed':
-      return `Retry saving ${title}`;
-    default:
-      return `Save ${title}`;
-  }
-}
-
-function SaveGlyph({
-  state,
-  theme,
-}: {
-  state: SaveState;
-  theme: ReturnType<typeof useTheme>;
-}): ReactElement {
-  if (state === 'saving') {
-    return <ActivityIndicator size="small" color={theme.color.accent} />;
-  }
-  if (state === 'ready') {
-    return <Check size={18} color={theme.color.success} />;
-  }
-  if (state === 'failed') {
-    return <RotateCw size={17} color={theme.color.danger} />;
-  }
-  return <Plus size={18} color={theme.color.textPrimary} />;
 }
 
 const styles = StyleSheet.create({

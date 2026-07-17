@@ -25,3 +25,34 @@ export function saveControlState(match: TrackResponse | null): SaveControlState 
   }
   return 'ready';
 }
+
+/**
+ * The lifecycle's accessibility label, shared by the hero save pill and the
+ * row control so the vocabulary can't drift between them.
+ */
+export function saveControlLabel(state: SaveControlState, title: string): string {
+  switch (state) {
+    case 'saving':
+      return `${title} downloading`;
+    case 'ready':
+      return `${title} in library`;
+    case 'failed':
+      return `Retry saving ${title}`;
+    default:
+      return `Save ${title}`;
+  }
+}
+
+/** The lifecycle's visible caption (hero save pill). */
+export function saveControlText(state: SaveControlState): string {
+  switch (state) {
+    case 'saving':
+      return 'Saving…';
+    case 'ready':
+      return 'Saved';
+    case 'failed':
+      return 'Retry';
+    default:
+      return 'Save';
+  }
+}

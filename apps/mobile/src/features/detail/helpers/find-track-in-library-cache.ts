@@ -6,8 +6,8 @@
  * but lacks the track, the answer is "not saved" — we do not fall through.)
  *
  * The single source of truth for the "is this track already in my library"
- * lookup. `useIsTrackSaved` (→ boolean) and `useLibraryTrackMatch` (→ the row)
- * are thin readers over it; `_isTrackInLibraryCache` delegates here too.
+ * lookup. `useLibraryTrackMatch` (→ the row) is a thin reader over it;
+ * `_isTrackInLibraryCache` delegates here too.
  */
 
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';

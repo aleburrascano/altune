@@ -8,14 +8,14 @@
  */
 
 import type { ReactElement } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
-
-import { Check, Plus, RotateCw } from 'lucide-react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
 import { useTheme } from '@shared/ui/theme';
 import { radius } from '@shared/ui/theme/tokens';
 
-import type { SaveControlState } from '../save-control-state';
+import { saveControlLabel, type SaveControlState } from '../save-control-state';
+
+import { SaveGlyph } from './SaveGlyph';
 
 const SIZE = 40;
 
@@ -33,15 +33,6 @@ export function TrackSaveControl({
   const theme = useTheme();
   const interactive = state === 'add' || state === 'failed';
 
-  const label =
-    state === 'add'
-      ? `Save ${title}`
-      : state === 'saving'
-        ? `${title} downloading`
-        : state === 'ready'
-          ? `${title} in library`
-          : `Retry saving ${title}`;
-
   return (
     <Pressable
       testID={testID}
@@ -53,7 +44,7 @@ export function TrackSaveControl({
       }}
       disabled={!interactive}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={saveControlLabel(state, title)}
       hitSlop={8}
       style={({ pressed }) => [
         styles.base,
@@ -63,15 +54,7 @@ export function TrackSaveControl({
         pressed && interactive ? { opacity: 0.6 } : null,
       ]}
     >
-      {state === 'saving' ? (
-        <ActivityIndicator size="small" color={theme.color.accent} />
-      ) : state === 'ready' ? (
-        <Check size={18} color={theme.color.success} />
-      ) : state === 'failed' ? (
-        <RotateCw size={17} color={theme.color.danger} />
-      ) : (
-        <Plus size={20} color={theme.color.accent} />
-      )}
+      <SaveGlyph state={state} addSize={20} addTone="accent" />
     </Pressable>
   );
 }

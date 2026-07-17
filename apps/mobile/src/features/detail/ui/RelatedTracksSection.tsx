@@ -17,9 +17,9 @@ import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
+import { openDetail, type DetailRoute } from '../navigation';
 import { sharedStyles } from './helpers';
 
 const CARD_WIDTH = 132;
@@ -29,7 +29,7 @@ export function RelatedTracksSection({
   detailRoute,
 }: {
   result: DiscoveryResult;
-  detailRoute: string;
+  detailRoute: DetailRoute;
 }): ReactElement | null {
   const router = useRouter();
   const { relatedTracks } = useRelatedTracks({ sources: result.sources });
@@ -41,8 +41,7 @@ export function RelatedTracksSection({
   }
 
   const onRelatedPress = (track: DiscoveryResult): void => {
-    setDetailHandoff({ ...track, image_url: track.image_url ?? result.image_url });
-    router.push(detailRoute as '/discover/detail');
+    openDetail(router, detailRoute, { ...track, image_url: track.image_url ?? result.image_url });
   };
 
   return (

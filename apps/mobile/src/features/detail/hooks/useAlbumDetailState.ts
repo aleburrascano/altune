@@ -11,9 +11,9 @@ import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
+import { openDetail, type DetailRoute } from '../navigation';
 import { useAlbumDiscovery } from './useAlbumDiscovery';
 import { useAlbumTracks } from './useAlbumTracks';
 import { useLibraryTracksForAlbum } from './useLibraryTracks';
@@ -97,7 +97,7 @@ export type AlbumDetailState = {
 
 export function useAlbumDetailState(
   result: DiscoveryResult,
-  detailRoute: string,
+  detailRoute: DetailRoute,
   isFromLibrary?: boolean,
 ): AlbumDetailState {
   const router = useRouter();
@@ -174,8 +174,7 @@ export function useAlbumDetailState(
   const isError = hasSources ? apiError : false;
 
   const onTrackPress = (track: DiscoveryResult): void => {
-    setDetailHandoff(_enrichAlbumTrack(track, result));
-    router.push(detailRoute as '/discover/detail');
+    openDetail(router, detailRoute, _enrichAlbumTrack(track, result));
   };
 
   const onQuickSave = (track: DiscoveryResult): void => {

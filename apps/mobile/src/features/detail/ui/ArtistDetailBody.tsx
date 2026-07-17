@@ -11,9 +11,11 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { formatDuration } from '../extras';
+import { formatDuration } from '@shared/lib/format';
+
 import { trackExtras } from '../extras-accessors';
 import { useArtistDetailState } from '../hooks/useArtistDetailState';
+import type { DetailRoute } from '../navigation';
 
 import { sharedStyles } from './helpers';
 import { DiscographySections } from './DiscographySections';
@@ -25,7 +27,7 @@ import { TrackSaveControl } from './TrackSaveControl';
 // only bites the library "Your Tracks" list.)
 const TRACK_CAP = 5;
 
-export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: string; isFromLibrary?: boolean }): ReactElement {
+export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: DetailRoute; isFromLibrary?: boolean }): ReactElement {
   const theme = useTheme();
   const artist = useArtistDetailState(result, detailRoute, isFromLibrary);
   const [showAllTracks, setShowAllTracks] = useState(false);
