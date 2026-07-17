@@ -60,8 +60,7 @@ export function PlayButton({
               : pressed
                 ? theme.color.accentPressed
                 : theme.color.accent,
-            shadowColor: theme.color.accent,
-            shadowOpacity: disabled ? 0 : 0.45,
+            boxShadow: disabled ? 'none' : `0px 8px 16px ${theme.color.accent}73`,
           },
         ]}
       >
@@ -88,9 +87,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 16,
-    elevation: 6,
   },
   // optical-center the triangle (its visual mass sits left of geometric center)
   playGlyph: { marginLeft: 3 },

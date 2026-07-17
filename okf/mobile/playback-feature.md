@@ -4,7 +4,7 @@ title: Playback (mobile)
 description: react-native-track-player integration with an Expo-Go-compatible no-op fallback, native gapless queueing, and mini/full player UI.
 resource: apps/mobile/src/features/playback/
 tags: [mobile, feature, playback, track-player, expo-go, background-audio]
-verified_commit: ef83a2d01b540b40e2240917e2ee6caaca30ab7d
+verified_commit: 7bda67e8aaea57e67526c36fca140ab5709b6099
 ---
 
 Owns audio playback end-to-end: mini/full player UI, the native queue, lock-screen controls, download-ahead caching, server-side queue resume, and behavioral telemetry. The central design constraint is that `react-native-track-player`'s top-level import touches a native module Expo Go doesn't bundle — importing it unconditionally would crash the app in Expo Go.

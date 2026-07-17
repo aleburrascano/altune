@@ -4,7 +4,7 @@ title: Shared acquisition (download tracking)
 description: SSE-fed client-side lifecycle store that tracks in-flight Track downloads by track id, mapping the backend pipeline's six stages onto three display phases with a guaranteed terminal animation.
 resource: apps/mobile/src/shared/acquisition/
 tags: [mobile, shared, acquisition, downloads]
-verified_commit: 93c5bc09ecd9649b027a203516a10282a8f0cfda
+verified_commit: 7bda67e8aaea57e67526c36fca140ab5709b6099
 ---
 
 The client-side mirror of the backend [acquisition pipeline](../backend/acquisition.md). The backend reports a raw stage name per `track_acquisition_progress` event — no percentage — and `stagePhase.ts` maps its six pipeline steps onto three human phases: `search`/`select` → `finding`, `download` → `downloading`, `tag`/`store`/`update_track` → `finishing`, each with display copy (`phaseLabel`/`stageLabel`). Unknown or new stage names fall back to `working`, so a backend stage rename never breaks the UI. `ACQUISITION_PHASES` is the ordered visible triple (excluding the `working` fallback) for the segmented progress indicator.

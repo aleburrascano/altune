@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   coverShadow: {
-    elevation: 16,
+    boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.45)',
   },
   name: {
     textAlign: 'center',

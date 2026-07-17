@@ -20,7 +20,9 @@ export function MiniPlayer() {
   const theme = useTheme();
   const router = useRouter();
 
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const progressRef = useRef<Animated.Value | null>(null);
+  if (progressRef.current === null) progressRef.current = new Animated.Value(0);
+  const progressAnim = progressRef.current;
 
   useEffect(() => {
     const target = durationMs > 0 ? positionMs / durationMs : 0;

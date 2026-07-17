@@ -134,7 +134,7 @@ export function FullPlayer() {
       </View>
 
       <View style={styles.artworkContainer}>
-        <View style={[styles.artworkShadow, shadowStyle]}>
+        <View style={shadowStyle}>
           <Artwork uri={track.artworkUrl} size={artworkSize} radius={radius.lg} />
         </View>
       </View>
@@ -220,9 +220,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing['3xl'],
     paddingBottom: spacing['3xl'],
-  },
-  artworkShadow: {
-    elevation: 16,
   },
   info: {
     paddingHorizontal: spacing['2xl'],
