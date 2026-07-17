@@ -57,10 +57,9 @@ function PlayButton({
 
 export function FullPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, seekTo, retry } = usePlayback();
-  const { skipToNext, skipToPrevious, toggleShuffle } = useQueuePlayback();
+  const { skipToNext, skipToPrevious, toggleShuffle, cycleRepeatMode } = useQueuePlayback();
   const shuffled = useQueueStore((s) => s.shuffled);
   const repeatMode = useQueueStore((s) => s.repeatMode);
-  const cycleRepeatMode = useQueueStore((s) => s.cycleRepeatMode);
   const hasNext = useQueueStore((s) => s.hasNext());
   const hasPrevious = useQueueStore((s) => s.hasPrevious());
   const queueLength = useQueueStore((s) => s.playOrder.length);

@@ -9,7 +9,7 @@ import Reanimated, { type SharedValue, useAnimatedStyle } from 'react-native-rea
 import { withFeaturing } from '@shared/lib/featured';
 import type { FeaturedArtist } from '@shared/api-client/types';
 import { useQueueStore } from '@shared/playback/queueStore';
-import { usePlayback } from '@shared/playback/usePlayback';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Text } from '@shared/ui/primitives/Text';
@@ -52,8 +52,7 @@ export function QueueSheet(): ReactElement {
   const playOrder = useQueueStore((s) => s.playOrder);
   const currentIndex = useQueueStore((s) => s.currentIndex);
   const source = useQueueStore((s) => s.source);
-  const removeFromQueue = useQueueStore((s) => s.removeFromQueue);
-  const playback = usePlayback();
+  const { skipToIndex, removeFromQueue, clearUpcoming } = useQueuePlayback();
 
   const sourceLabel = source
     ? source.kind === 'playlist' ? `Playing from ${source.name}`
@@ -88,19 +87,10 @@ export function QueueSheet(): ReactElement {
       {
         text: 'Clear',
         style: 'destructive',
-        onPress: () => {
-          // Read the queue at press time, not from the render closure: this
-          // Alert is modal and can sit open for minutes while the track
-          // auto-advances. A stale-low currentIndex would put the playing track
-          // inside `i > currentIndex` and delete it — audio would jump and
-          // tracks that should have survived would be destroyed. Descending
-          // iteration keeps the indices valid as entries are removed.
-          const s = useQueueStore.getState();
-          for (let i = s.playOrder.length - 1; i > s.currentIndex; i--) {
-            s.removeFromQueue(i);
-            void playback.removeQueueIndex(i);
-          }
-        },
+        // clearUpcoming reads the queue at press time (this Alert is modal and can
+        // sit open across auto-advances) and keeps the store and native queue in
+        // lockstep — see useQueuePlayback.
+        onPress: clearUpcoming,
       },
     ]);
   };
@@ -111,16 +101,10 @@ export function QueueSheet(): ReactElement {
         friction={2}
         rightThreshold={40}
         renderRightActions={RemoveAction}
-        onSwipeableOpen={() => {
-          removeFromQueue(item.queueIndex);
-          void playback.removeQueueIndex(item.queueIndex);
-        }}
+        onSwipeableOpen={() => removeFromQueue(item.queueIndex)}
       >
         <Pressable
-          onPress={() => {
-            useQueueStore.getState().skipToIndex(item.queueIndex);
-            void playback.skipToQueueIndex(item.queueIndex);
-          }}
+          onPress={() => skipToIndex(item.queueIndex)}
           style={[styles.row, { backgroundColor: theme.color.canvas }]}
           accessibilityRole="button"
           accessibilityLabel={`${item.title} by ${item.artist}`}
@@ -135,7 +119,7 @@ export function QueueSheet(): ReactElement {
         </Pressable>
       </ReanimatedSwipeable>
     ),
-    [theme.color.canvas, theme.color.textTertiary, removeFromQueue, playback],
+    [theme.color.canvas, theme.color.textTertiary, removeFromQueue, skipToIndex],
   );
 
   return (
