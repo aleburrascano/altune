@@ -367,3 +367,41 @@ describe('restoreQueue (full-fidelity resume)', () => {
     expect(useQueueStore.getState().currentIndex).toBe(playOrder.length - 1);
   });
 });
+
+describe('reorderQueue', () => {
+  it('moves an upcoming track up without touching the current index', () => {
+    useQueueStore.getState().loadQueue(tracks, 1, null); // current at 1; upcoming c,d,e
+    useQueueStore.getState().reorderQueue(3, 2); // d above c
+    const s = useQueueStore.getState();
+    expect(s.playOrder).toEqual([0, 1, 3, 2, 4]);
+    expect(s.currentIndex).toBe(1);
+  });
+
+  it('moves an upcoming track down', () => {
+    useQueueStore.getState().loadQueue(tracks, 0, null);
+    useQueueStore.getState().reorderQueue(1, 3);
+    const s = useQueueStore.getState();
+    expect(s.playOrder).toEqual([0, 2, 3, 1, 4]);
+    expect(s.currentIndex).toBe(0);
+  });
+
+  it('is a no-op when from === to', () => {
+    useQueueStore.getState().loadQueue(tracks, 0, null);
+    useQueueStore.getState().reorderQueue(2, 2);
+    expect(useQueueStore.getState().playOrder).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('ignores out-of-range indices', () => {
+    useQueueStore.getState().loadQueue(tracks, 0, null);
+    useQueueStore.getState().reorderQueue(2, 99);
+    expect(useQueueStore.getState().playOrder).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('shifts currentIndex when a track moves from before it to after it', () => {
+    useQueueStore.getState().loadQueue(tracks, 2, null);
+    useQueueStore.getState().reorderQueue(0, 3);
+    const s = useQueueStore.getState();
+    expect(s.playOrder).toEqual([1, 2, 3, 0, 4]);
+    expect(s.currentIndex).toBe(1);
+  });
+});

@@ -13,6 +13,7 @@ interface QueuePlaybackControls {
   skipToPrevious: () => void;
   skipToIndex: (index: number) => void;
   removeFromQueue: (index: number) => void;
+  moveQueueItem: (fromIndex: number, toIndex: number) => void;
   clearUpcoming: () => void;
   toggleShuffle: () => void;
   cycleRepeatMode: () => void;
@@ -118,6 +119,21 @@ export function useQueuePlayback(): QueuePlaybackControls {
     [removeQueueIndex],
   );
 
+  // Move one upcoming track to another upcoming position (drag/menu reorder).
+  // Same lockstep shape as shuffle: mutate the store's play order, then replace
+  // the native tracks after the current one with the new upcoming slice. Both
+  // ends stay after currentIndex, so the playing track is never touched (no
+  // re-buffer, no UI/audio desync). See queueStore.reorderQueue AIDEV-WARNING.
+  const moveQueueItem = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      useQueueStore.getState().reorderQueue(fromIndex, toIndex);
+      const s = useQueueStore.getState();
+      const upcoming = orderedQueueTracks(s).slice(s.currentIndex + 1);
+      void reorderUpcoming(upcoming);
+    },
+    [reorderUpcoming],
+  );
+
   // Clear every upcoming track (everything after the current one). Reads the
   // store at call time — a confirm dialog can sit open across auto-advances, and
   // a stale currentIndex would delete the playing track. Descending iteration
@@ -157,6 +173,7 @@ export function useQueuePlayback(): QueuePlaybackControls {
     skipToPrevious,
     skipToIndex,
     removeFromQueue,
+    moveQueueItem,
     clearUpcoming,
     toggleShuffle,
     cycleRepeatMode,
