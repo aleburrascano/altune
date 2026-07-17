@@ -22,6 +22,7 @@ import {
 } from '@shared/acquisition/downloadStore';
 import { stageToPhase } from '@shared/acquisition/stagePhase';
 import type { TrackResponse } from '@shared/api-client/types';
+import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
 import {
   patchPlaylistName,
@@ -36,17 +37,22 @@ import {
 } from './trackCachePatch';
 import type { ServerEvent } from './sse-client';
 
-const INVALIDATION_MAP: Record<string, string[][]> = {
-  playlist_created: [['playlists']],
-  playlist_deleted: [['playlists'], ['playlist']],
-  track_added_to_playlist: [['playlist'], ['playlists']],
+const INVALIDATION_MAP: Record<string, readonly (readonly string[])[]> = {
+  playlist_created: [playlistKeys.list],
+  playlist_deleted: [playlistKeys.list, playlistKeys.details],
+  track_added_to_playlist: [playlistKeys.details, playlistKeys.list],
 };
 
 // A resync control event (F4) means the server could not guarantee the client
 // saw every event since its cursor (a replay gap after eviction, or a restart).
 // The client cannot patch what it never received, so it fully reconciles every
 // SSE-covered family.
-const RESYNC_KEYS: string[][] = [['library-home'], ['library'], ['playlists'], ['playlist']];
+const RESYNC_KEYS: readonly (readonly string[])[] = [
+  libraryKeys.home,
+  libraryKeys.featuringPrefix,
+  playlistKeys.list,
+  playlistKeys.details,
+];
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
@@ -113,9 +119,10 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     if (track) {
       upsertTrackInCaches(queryClient, track); // insert instantly, no refetch (F10)
     } else {
-      // Older/thin payload (track_id only): fall back to a refetch.
-      void queryClient.invalidateQueries({ queryKey: ['library-home'] });
-      void queryClient.invalidateQueries({ queryKey: ['library'] });
+      // Older/thin payload (track_id only): fall back to a refetch. Featuring
+      // lists refetch too — the new track may credit a featured artist.
+      void queryClient.invalidateQueries({ queryKey: libraryKeys.home });
+      void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
     }
     return;
   }
@@ -127,7 +134,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     }
     // The playlist summary track-counts can't be patched by id alone; a single
     // targeted refetch keeps them accurate without the two big library refetches.
-    void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+    void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
     return;
   }
 

@@ -9,18 +9,18 @@ import { setDetailHandoff } from '@shared/lib/detail-handoff';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
-import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
-import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
+import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { useTracksFeaturing } from '../hooks/useTracksFeaturing';
-import { SongsList } from './SongsList';
+import { buildTrackMenuItems } from './trackMenu';
+import { TracksList } from './TracksList';
 
 export function FeaturingScreen(): ReactElement {
   const params = useLocalSearchParams<{ name?: string; mbid?: string; deezer_id?: string }>();
@@ -74,19 +74,12 @@ export function FeaturingScreen(): ReactElement {
     }
   };
 
-  const trackMenuItems = (track: TrackResponse): ContextMenuItem[] => {
-    const ready = track.acquisition_status === 'ready';
-    return [
-      ...(ready
-        ? [
-            { label: 'Play Next', onPress: () => queue.playNext(toPlaybackTrack(track)) },
-            { label: 'Add to Queue', onPress: () => queue.addToQueue(toPlaybackTrack(track)) },
-          ]
-        : []),
-      { label: 'View Details', onPress: () => openTrackDetail(track) },
-      { label: 'Remove from Library', tone: 'danger', onPress: () => deleteMutation.mutate(track.id) },
-    ];
-  };
+  const trackMenuItems = (track: TrackResponse) =>
+    buildTrackMenuItems(track, {
+      queue,
+      onViewDetails: () => openTrackDetail(track),
+      danger: { label: 'Remove from Library', onPress: () => deleteMutation.mutate(track.id) },
+    });
 
   return (
     <Screen>
@@ -125,7 +118,7 @@ export function FeaturingScreen(): ReactElement {
           />
         </View>
       ) : (
-        <SongsList
+        <TracksList
           tracks={tracks}
           emptyLabel=""
           onPlay={(track) => {

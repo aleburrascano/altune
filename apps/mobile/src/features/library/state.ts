@@ -5,9 +5,8 @@
  * `__tests__/` can import these without jest needing RN transforms.
  */
 
+import type { TrackResponse } from '@shared/api-client/types';
 import { asyncView } from '@shared/lib/async-view';
-
-import type { LibraryState } from './hooks/useLibrary';
 
 export type ScreenView = 'loading' | 'error' | 'empty' | 'list';
 
@@ -20,9 +19,11 @@ export type ScreenView = 'loading' | 'error' | 'empty' | 'list';
  *   - error over empty because a fetch failure is a real surface, not "no
  *     data" — AC#6 requires the retry path.
  */
-export function _viewForState(
-  state: Pick<LibraryState, 'isLoading' | 'error' | 'items'>,
-): ScreenView {
+export function _viewForState(state: {
+  isLoading: boolean;
+  error: Error | null;
+  items: readonly TrackResponse[];
+}): ScreenView {
   const view = asyncView({
     isLoading: state.isLoading,
     isError: Boolean(state.error),

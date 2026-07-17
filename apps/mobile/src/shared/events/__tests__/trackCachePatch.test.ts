@@ -1,4 +1,4 @@
-import { QueryClient, type InfiniteData } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 
 import type {
   ListTracksResponse,
@@ -45,21 +45,6 @@ describe('patchTrackInCaches', () => {
     const data = qc.getQueryData<ListTracksResponse>(['library-home']);
     expect(data?.items[0]).toMatchObject({ acquisition_status: 'ready', audio_ref: 'ref-1' });
     expect(data?.items[1]?.acquisition_status).toBe('pending');
-  });
-
-  it('patches the track across library infinite-query pages', () => {
-    const qc = new QueryClient();
-    qc.setQueryData<InfiniteData<ListTracksResponse>>(['library'], {
-      pageParams: [0],
-      pages: [
-        { items: [makeTrack({ id: 'track-1' })], total: 1, limit: 50, offset: 0, has_more: false },
-      ],
-    });
-
-    patchTrackInCaches(qc, 'track-1', { acquisition_status: 'ready' });
-
-    const data = qc.getQueryData<InfiniteData<ListTracksResponse>>(['library']);
-    expect(data?.pages[0]?.items[0]?.acquisition_status).toBe('ready');
   });
 
   it('patches the track in every cached playlist detail', () => {

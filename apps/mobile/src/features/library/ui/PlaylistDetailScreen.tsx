@@ -1,36 +1,36 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { Alert, FlatList, StyleSheet, View } from 'react-native';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 
-import {
-  deletePlaylist,
-  getPlaylist,
-  removeTrackFromPlaylist,
-  renamePlaylist,
-} from '@shared/api-client/playlists';
+import { getPlaylist } from '@shared/api-client/playlists';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
-import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { playlistKeys } from '@shared/lib/query-keys';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
-import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
+import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { TrackResponse } from '@shared/api-client/types';
 
+import {
+  useDeletePlaylist,
+  useRemoveTrackFromPlaylist,
+  useRenamePlaylist,
+} from '../hooks/usePlaylistMutations';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { LibraryRow } from './LibraryRow';
 import { PlaylistHero } from './PlaylistHero';
+import { buildTrackMenuItems } from './trackMenu';
 import { useLibraryNavigation } from './useLibraryNavigation';
 
 export function PlaylistDetailScreen(): ReactElement {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ id: string }>();
   const playlistId = params.id ?? '';
 
@@ -39,75 +39,17 @@ export function PlaylistDetailScreen(): ReactElement {
   const [menuVisible, setMenuVisible] = useState(false);
 
   const { data: playlistData, isLoading: playlistLoading, error: playlistError } = useQuery({
-    queryKey: ['playlist', playlistId],
+    queryKey: playlistKeys.detail(playlistId),
     queryFn: () => getPlaylist(playlistId),
     enabled: playlistId.length > 0,
     staleTime: Infinity, // SSE-covered (rename/remove/reorder patch it); F15
   });
 
-  const renameMut = useMutation({
-    mutationFn: (name: string) => renamePlaylist(playlistId, name),
-    onMutate: async (name) => {
-      await queryClient.cancelQueries({ queryKey: ['playlist', playlistId] });
-      const previous = queryClient.getQueryData(['playlist', playlistId]);
-      if (previous) {
-        queryClient.setQueryData(['playlist', playlistId], { ...previous, name });
-      }
-      return { previous };
-    },
-    onError: (_err, _name, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(['playlist', playlistId], context.previous);
-      }
-      Alert.alert('Rename failed', 'Could not rename the playlist. Please try again.');
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
-      void queryClient.invalidateQueries({ queryKey: ['playlists'] });
-      setIsEditing(false);
-    },
-  });
-
-  const deleteMut = useMutation({
-    mutationFn: () => deletePlaylist(playlistId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['playlists'] });
-      void queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/library');
-      }
-    },
-    onError: () => {
-      Alert.alert('Delete failed', 'Could not delete the playlist. Please try again.');
-    },
-  });
-
-  const removeMut = useMutation({
-    mutationFn: (trackId: string) => removeTrackFromPlaylist(playlistId, trackId),
-    onMutate: async (trackId) => {
-      await queryClient.cancelQueries({ queryKey: ['playlist', playlistId] });
-      const previous = queryClient.getQueryData<{ tracks: { id: string }[] }>(['playlist', playlistId]);
-      if (previous) {
-        queryClient.setQueryData(['playlist', playlistId], {
-          ...previous,
-          tracks: previous.tracks.filter((t) => t.id !== trackId),
-        });
-      }
-      return { previous };
-    },
-    onError: (_err, _trackId, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(['playlist', playlistId], context.previous);
-      }
-      Alert.alert('Remove failed', 'Could not remove the track. Please try again.');
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
-      void queryClient.invalidateQueries({ queryKey: ['playlists'] });
-    },
-  });
+  // Cache policy (optimistic patch, rollback, invalidate, failure alerts)
+  // lives in usePlaylistMutations; this screen keeps navigation + edit state.
+  const renameMut = useRenamePlaylist(playlistId);
+  const deleteMut = useDeletePlaylist(playlistId);
+  const removeMut = useRemoveTrackFromPlaylist(playlistId);
 
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -116,26 +58,32 @@ export function PlaylistDetailScreen(): ReactElement {
   const { navigateToTrack } = useLibraryNavigation(router);
   const playback = usePlayback();
   const queue = useQueuePlayback();
-  const [songAction, setSongAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
+  const [trackAction, setTrackAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
 
-  const songMenuItems = (track: TrackResponse): ContextMenuItem[] => {
-    const ready = track.acquisition_status === 'ready';
-    return [
-      ...(ready
-        ? [
-            { label: 'Play Next', onPress: () => queue.playNext(toPlaybackTrack(track)) },
-            { label: 'Add to Queue', onPress: () => queue.addToQueue(toPlaybackTrack(track)) },
-          ]
-        : []),
-      { label: 'View Details', onPress: () => navigateToTrack(track) },
-      { label: 'Remove from Playlist', tone: 'danger', onPress: () => removeMut.mutate(track.id) },
-    ];
-  };
+  const trackMenuItems = (track: TrackResponse) =>
+    buildTrackMenuItems(track, {
+      queue,
+      onViewDetails: () => navigateToTrack(track),
+      danger: { label: 'Remove from Playlist', onPress: () => removeMut.mutate(track.id) },
+    });
 
   const handleDelete = () => {
     Alert.alert('Delete Playlist', 'This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteMut.mutate() },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () =>
+          deleteMut.mutate(undefined, {
+            onSuccess: () => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/library');
+              }
+            },
+          }),
+      },
     ]);
   };
 
@@ -149,7 +97,7 @@ export function PlaylistDetailScreen(): ReactElement {
   const confirmRename = () => {
     const trimmed = editName.trim();
     if (trimmed.length > 0 && trimmed !== playlistData?.name) {
-      renameMut.mutate(trimmed);
+      renameMut.mutate(trimmed, { onSettled: () => setIsEditing(false) });
     } else {
       setIsEditing(false);
     }
@@ -258,7 +206,7 @@ export function PlaylistDetailScreen(): ReactElement {
                 queue.playFromList(playable, startIndex, { kind: 'playlist', playlistId, name: pl.name });
               } } : {})}
               onPress={() => navigateToTrack(item)}
-              onMore={(anchor) => setSongAction({ track: item, anchor })}
+              onMore={(anchor) => setTrackAction({ track: item, anchor })}
               {...(item.acquisition_status === 'failed' ? { onRetry: () => retryMut.mutate(item.id) } : {})}
               retrying={retryingTrackId === item.id}
               isPlaying={isCurrentlyPlaying(playback, { kind: 'library', trackId: item.id })}
@@ -273,10 +221,10 @@ export function PlaylistDetailScreen(): ReactElement {
         }
       />
       <ContextMenu
-        visible={songAction != null}
-        anchor={songAction?.anchor}
-        items={songAction != null ? songMenuItems(songAction.track) : []}
-        onClose={() => setSongAction(null)}
+        visible={trackAction != null}
+        anchor={trackAction?.anchor}
+        items={trackAction != null ? trackMenuItems(trackAction.track) : []}
+        onClose={() => setTrackAction(null)}
       />
     </Screen>
   );

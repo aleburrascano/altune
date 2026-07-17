@@ -1,17 +1,12 @@
 /**
- * insertOptimisticTrack / optimisticTrack — prepend to the first library page
- * and bump its total; seed a fresh page when the cache is empty
- * (view-result-detail slice 15).
+ * insertOptimisticTrackHome / optimisticTrack — prepend to the library-home
+ * snapshot and bump its total (view-result-detail slice 15).
  */
 
-import type { InfiniteData } from '@tanstack/react-query';
-
 import {
-  insertOptimisticTrack,
   insertOptimisticTrackHome,
   optimisticTrack,
   replaceOptimisticTrackHome,
-  replaceOptimisticTrackInfinite,
 } from '../save-cache';
 import type { ListTracksResponse, TrackResponse } from '../../../shared/api-client/types';
 
@@ -47,28 +42,18 @@ describe('insertOptimisticTrackHome', () => {
   });
 });
 
-describe('replaceOptimisticTrack*', () => {
+describe('replaceOptimisticTrackHome', () => {
   it('swaps the placeholder for the real row in the home snapshot', () => {
     const out = replaceOptimisticTrackHome(_home([_track('opt'), _track('a')]), 'opt', _track('real'));
     expect(out?.items.map((t) => t.id)).toEqual(['real', 'a']);
   });
 
-  it('swaps the placeholder across infinite-query pages', () => {
-    const out = replaceOptimisticTrackInfinite(_data([_track('opt')], 1), 'opt', _track('real'));
-    expect(out?.pages[0]?.items.map((t) => t.id)).toEqual(['real']);
-  });
-
-  it('dedups when the SSE already inserted the real row (home)', () => {
+  it('dedups when the SSE already inserted the real row', () => {
     // Race: SSE upserted `real` before onSuccess; the placeholder must not
     // produce a second `real` entry, and total drops back to 1.
     const out = replaceOptimisticTrackHome(_home([_track('real'), _track('opt')]), 'opt', _track('real'));
     expect(out?.items.map((t) => t.id)).toEqual(['real']);
     expect(out?.total).toBe(1);
-  });
-
-  it('dedups when the SSE already inserted the real row (infinite)', () => {
-    const out = replaceOptimisticTrackInfinite(_data([_track('real'), _track('opt')], 2), 'opt', _track('real'));
-    expect(out?.pages.flatMap((p) => p.items.map((t) => t.id))).toEqual(['real']);
   });
 });
 
@@ -92,13 +77,6 @@ function _track(id: string): TrackResponse {
   };
 }
 
-function _data(items: TrackResponse[], total: number): InfiniteData<ListTracksResponse> {
-  return {
-    pageParams: [0],
-    pages: [{ items, total, limit: 50, offset: 0, has_more: false }],
-  };
-}
-
 describe('optimisticTrack', () => {
   it('maps a create request into a pending TrackResponse', () => {
     const t = optimisticTrack(
@@ -108,26 +86,5 @@ describe('optimisticTrack', () => {
     expect(t.title).toBe('Midnight City');
     expect(t.acquisition_status).toBe('pending');
     expect(t.id).toContain('optimistic:');
-  });
-});
-
-describe('insertOptimisticTrack', () => {
-  it('prepends to the first page and bumps total', () => {
-    const data = _data([_track('a'), _track('b')], 2);
-    const next = insertOptimisticTrack(data, _track('new'));
-    expect(next?.pages[0]?.items.map((t) => t.id)).toEqual(['new', 'a', 'b']);
-    expect(next?.pages[0]?.total).toBe(3);
-  });
-
-  it('leaves an absent cache untouched rather than seeding a page', () => {
-    // Same invariant as insertOptimisticTrackHome: no cache means "not loaded",
-    // so there is nothing to optimistically prepend to.
-    expect(insertOptimisticTrack(undefined, _track('new'))).toBeUndefined();
-  });
-
-  it('does not mutate the input data', () => {
-    const data = _data([_track('a')], 1);
-    insertOptimisticTrack(data, _track('new'));
-    expect(data.pages[0]?.items.map((t) => t.id)).toEqual(['a']);
   });
 });

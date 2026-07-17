@@ -1,12 +1,11 @@
 /**
  * useSaveTrack — optimistic insert on mutate, rollback on error
  * (view-result-detail slice 15). Renders the hook against a real QueryClient
- * seeded with a ['library'] cache; createTrack is mocked.
+ * seeded with a ['library-home'] snapshot; createTrack is mocked.
  */
- 
+
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { InfiniteData } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
@@ -56,13 +55,20 @@ const _BODY: CreateTrackRequest = {
   track_number: null,
 };
 
+function _client(): QueryClient {
+  return new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+}
+
 function _seededClient(): QueryClient {
-  const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-  const data: InfiniteData<ListTracksResponse> = {
-    pageParams: [0],
-    pages: [{ items: [_existing('a')], total: 1, limit: 50, offset: 0, has_more: false }],
+  const qc = _client();
+  const data: ListTracksResponse = {
+    items: [_existing('a')],
+    total: 1,
+    limit: 50,
+    offset: 0,
+    has_more: false,
   };
-  qc.setQueryData(['library'], data);
+  qc.setQueryData(['library-home'], data);
   return qc;
 }
 
@@ -76,8 +82,8 @@ afterEach(() => {
 });
 
 function _libraryIds(qc: QueryClient): string[] {
-  const data = qc.getQueryData<InfiniteData<ListTracksResponse>>(['library']);
-  return data?.pages.flatMap((p) => p.items.map((t) => t.id)) ?? [];
+  const data = qc.getQueryData<ListTracksResponse>(['library-home']);
+  return data?.items.map((t) => t.id) ?? [];
 }
 
 describe('useSaveTrack', () => {
@@ -101,11 +107,11 @@ describe('useSaveTrack', () => {
 
   it('does not fabricate a one-track library when library-home never loaded', async () => {
     // Regression: a user whose library-home query errored (stale-token 401)
-    // saved a song and the optimistic insert invented {total: 1} over the error
+    // saved a track and the optimistic insert invented {total: 1} over the error
     // state. Because albums/artists are grouped client-side from that array, a
-    // 273-track library rendered as one song, one album, one artist — and
+    // 273-track library rendered as one track, one album, one artist — and
     // staleTime: Infinity pinned it there for the rest of the session.
-    const qc = _seededClient();
+    const qc = _client();
     expect(qc.getQueryData(['library-home'])).toBeUndefined();
     mockCreateTrack.mockResolvedValueOnce(_existing('real'));
 

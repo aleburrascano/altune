@@ -3,8 +3,8 @@
  * rename / remove-track / reorder on another device propagates instantly instead
  * of forcing a refetch (or, before F13, not propagating at all).
  *
- * Detail is cached at ['playlist', playlistId] (a PlaylistDetailResponse); the
- * list is ['playlists'] (a ListPlaylistsResponse).
+ * Detail is cached at playlistKeys.detail(playlistId) (a PlaylistDetailResponse);
+ * the list is playlistKeys.list (a ListPlaylistsResponse).
  */
 
 import type { QueryClient } from '@tanstack/react-query';
@@ -14,12 +14,13 @@ import type {
   PlaylistDetailResponse,
   TrackResponse,
 } from '@shared/api-client/types';
+import { playlistKeys } from '@shared/lib/query-keys';
 
 export function patchPlaylistName(queryClient: QueryClient, playlistId: string, name: string): void {
-  queryClient.setQueryData<PlaylistDetailResponse>(['playlist', playlistId], (prev) =>
+  queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) =>
     prev ? { ...prev, name } : prev,
   );
-  queryClient.setQueryData<ListPlaylistsResponse>(['playlists'], (prev) =>
+  queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, (prev) =>
     prev
       ? { ...prev, items: prev.items.map((p) => (p.id === playlistId ? { ...p, name } : p)) }
       : prev,
@@ -31,12 +32,12 @@ export function removeTrackFromPlaylistCache(
   playlistId: string,
   trackId: string,
 ): void {
-  queryClient.setQueryData<PlaylistDetailResponse>(['playlist', playlistId], (prev) => {
+  queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
     if (!prev) return prev;
     const tracks = prev.tracks.filter((t) => t.id !== trackId);
     return { ...prev, tracks, track_count: tracks.length };
   });
-  queryClient.setQueryData<ListPlaylistsResponse>(['playlists'], (prev) =>
+  queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, (prev) =>
     prev
       ? {
           ...prev,
@@ -53,7 +54,7 @@ export function reorderPlaylistCache(
   playlistId: string,
   trackIds: string[],
 ): void {
-  queryClient.setQueryData<PlaylistDetailResponse>(['playlist', playlistId], (prev) => {
+  queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
     if (!prev) return prev;
     const byId = new Map<string, TrackResponse>(prev.tracks.map((t) => [t.id, t]));
     // Follow the new id order; keep any track not named in the event at the end
