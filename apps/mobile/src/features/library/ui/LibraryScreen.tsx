@@ -5,11 +5,10 @@ import { StyleSheet, View } from 'react-native';
 import type { TrackResponse } from '@shared/api-client/types';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
-import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, SearchBar, Skeleton, Text, spacing, useTheme } from '@shared/ui';
-import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
+import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
@@ -26,8 +25,9 @@ import { LibraryChips, type LibraryChip } from './LibraryChips';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryNoResults } from './LibraryNoResults';
 import { PlaylistsGrid } from './PlaylistsGrid';
-import { SongsList } from './SongsList';
 import { SortControl } from './SortControl';
+import { buildTrackMenuItems } from './trackMenu';
+import { TracksList } from './TracksList';
 import {
   ALBUM_SORT_OPTIONS,
   ARTIST_SORT_OPTIONS,
@@ -43,7 +43,7 @@ import { useLibraryNavigation } from './useLibraryNavigation';
 
 const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {
   playlists: 'recent',
-  songs: 'recent',
+  tracks: 'recent',
   albums: 'az',
   artists: 'az',
 };
@@ -65,20 +65,13 @@ export function LibraryScreen(): ReactElement {
   const [action, setAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
 
-  const trackMenuItems = (track: TrackResponse): ContextMenuItem[] => {
-    const ready = track.acquisition_status === 'ready';
-    return [
-      ...(ready
-        ? [
-            { label: 'Play Next', onPress: () => queue.playNext(toPlaybackTrack(track)) },
-            { label: 'Add to Queue', onPress: () => queue.addToQueue(toPlaybackTrack(track)) },
-          ]
-        : []),
-      { label: 'Add to Playlist', onPress: () => pl.setAddToPlaylistTrack(track) },
-      { label: 'View Details', onPress: () => navigateToTrack(track) },
-      { label: 'Remove from Library', tone: 'danger', onPress: () => deleteMutation.mutate(track.id) },
-    ];
-  };
+  const trackMenuItems = (track: TrackResponse) =>
+    buildTrackMenuItems(track, {
+      queue,
+      onViewDetails: () => navigateToTrack(track),
+      onAddToPlaylist: () => pl.setAddToPlaylistTrack(track),
+      danger: { label: 'Remove from Library', onPress: () => deleteMutation.mutate(track.id) },
+    });
 
   const sortKey = sortByChip[chip];
   const setSort = (key: SortKey): void => setSortByChip((prev) => ({ ...prev, [chip]: key }));
@@ -205,16 +198,16 @@ export function LibraryScreen(): ReactElement {
           ),
         };
       }
-      case 'songs': {
+      case 'tracks': {
         const items = sortTracks([...search.filter(state.allTracks)], sortKey);
         return {
           count: items.length,
-          noun: 'song',
+          noun: 'track',
           options: TRACK_SORT_OPTIONS,
           content: (
-            <SongsList
+            <TracksList
               tracks={items}
-              emptyLabel={'No songs yet'}
+              emptyLabel={'No tracks yet'}
               onPlay={(track) => {
                 const { playable, startIndex } = buildPlayableQueue(items, track.id);
                 queue.playFromList(playable, startIndex, { kind: 'library' });

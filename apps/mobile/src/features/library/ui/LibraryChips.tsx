@@ -3,11 +3,11 @@ import { ScrollView, StyleSheet } from 'react-native';
 
 import { Chip, spacing } from '@shared/ui';
 
-export type LibraryChip = 'playlists' | 'songs' | 'albums' | 'artists';
+export type LibraryChip = 'playlists' | 'tracks' | 'albums' | 'artists';
 
 const CHIPS: { key: LibraryChip; label: string }[] = [
   { key: 'playlists', label: 'Playlists' },
-  { key: 'songs', label: 'Songs' },
+  { key: 'tracks', label: 'Tracks' },
   { key: 'albums', label: 'Albums' },
   { key: 'artists', label: 'Artists' },
 ];

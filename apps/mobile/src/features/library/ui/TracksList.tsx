@@ -7,7 +7,7 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { LibraryRow } from './LibraryRow';
 
-type SongsListProps = {
+type TracksListProps = {
   tracks: TrackResponse[];
   emptyLabel: string;
   onPlay: (track: TrackResponse) => void;
@@ -18,7 +18,7 @@ type SongsListProps = {
   isPlaying: (trackId: string) => boolean;
 };
 
-export function SongsList({
+export function TracksList({
   tracks,
   emptyLabel,
   onPlay,
@@ -27,10 +27,10 @@ export function SongsList({
   onRetry,
   retryingTrackId,
   isPlaying,
-}: SongsListProps): ReactElement {
+}: TracksListProps): ReactElement {
   return (
     <FlatList
-      testID="library-songs-list"
+      testID="library-tracks-list"
       data={tracks}
       keyExtractor={(t) => t.id}
       showsVerticalScrollIndicator={false}

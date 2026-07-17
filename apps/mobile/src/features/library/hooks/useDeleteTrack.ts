@@ -3,16 +3,17 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { deleteTrack } from '@shared/api-client/tracks';
 import type { ListTracksResponse } from '@shared/api-client/types';
+import { libraryKeys } from '@shared/lib/query-keys';
 
 export function useDeleteTrack() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (trackId: string) => deleteTrack(trackId),
     onMutate: async (trackId) => {
-      await queryClient.cancelQueries({ queryKey: ['library-home'] });
-      const previous = queryClient.getQueryData<ListTracksResponse>(['library-home']);
+      await queryClient.cancelQueries({ queryKey: libraryKeys.home });
+      const previous = queryClient.getQueryData<ListTracksResponse>(libraryKeys.home);
       if (previous) {
-        queryClient.setQueryData<ListTracksResponse>(['library-home'], {
+        queryClient.setQueryData<ListTracksResponse>(libraryKeys.home, {
           ...previous,
           items: previous.items.filter((t) => t.id !== trackId),
           total: Math.max(0, previous.total - 1),
@@ -22,7 +23,7 @@ export function useDeleteTrack() {
     },
     onError: (_err, _trackId, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(['library-home'], context.previous);
+        queryClient.setQueryData(libraryKeys.home, context.previous);
       }
       Alert.alert('Delete failed', 'Could not remove the track. Please try again.');
     },

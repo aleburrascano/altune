@@ -1,27 +1,27 @@
 /**
  * Look up a track in the React Query library cache by normalized title+artist.
  *
- * Reads the `['library-home']` snapshot first; only when that key is absent does
- * it scan the `['library']` infinite-query pages. (When the home snapshot exists
- * but lacks the track, the answer is "not saved" — we do not fall through.)
+ * Reads the `['library-home']` snapshot. (When the snapshot exists but lacks
+ * the track, the answer is "not saved"; when it is absent, the library never
+ * loaded and nothing can be concluded.)
  *
  * The single source of truth for the "is this track already in my library"
  * lookup. `useLibraryTrackMatch` (→ the row) is a thin reader over it;
  * `_isTrackInLibraryCache` delegates here too.
  */
 
-import type { InfiniteData, QueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
+import { libraryKeys } from '@shared/lib/query-keys';
 
 /**
- * Pure lookup over already-read cache data. Split out so the reactive hooks can
- * subscribe to the queries (re-rendering on a setQueryData patch, per F12) and
- * pass their data in, while the imperative wrapper below reads via getQueryData.
+ * Pure lookup over already-read cache data. Split out so the reactive hook can
+ * subscribe to the query (re-rendering on a setQueryData patch, per F12) and
+ * pass its data in, while the imperative wrapper below reads via getQueryData.
  */
 export function findTrackInData(
   homeData: ListTracksResponse | undefined,
-  infiniteData: InfiniteData<ListTracksResponse> | undefined,
   title: string,
   artist: string | null,
 ): TrackResponse | null {
@@ -30,17 +30,7 @@ export function findTrackInData(
   const matches = (t: TrackResponse): boolean =>
     t.title.toLowerCase().trim() === normalTitle && t.artist.toLowerCase().trim() === normalArtist;
 
-  if (homeData) {
-    return homeData.items.find(matches) ?? null;
-  }
-
-  if (!infiniteData) return null;
-
-  for (const page of infiniteData.pages) {
-    const match = page.items.find(matches);
-    if (match) return match;
-  }
-  return null;
+  return homeData?.items.find(matches) ?? null;
 }
 
 export function findTrackInLibraryCache(
@@ -49,8 +39,7 @@ export function findTrackInLibraryCache(
   artist: string | null,
 ): TrackResponse | null {
   return findTrackInData(
-    queryClient.getQueryData<ListTracksResponse>(['library-home']),
-    queryClient.getQueryData<InfiniteData<ListTracksResponse>>(['library']),
+    queryClient.getQueryData<ListTracksResponse>(libraryKeys.home),
     title,
     artist,
   );

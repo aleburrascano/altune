@@ -171,7 +171,7 @@ describe('applyServerEvent', () => {
     });
 
     expect(spy).toHaveBeenCalledWith({ queryKey: ['library-home'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['library'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'featuring'] });
   });
 
   it('removes the row on track_deleted instead of refetching the library (F11)', () => {
@@ -204,7 +204,7 @@ describe('applyServerEvent', () => {
     applyServerEvent(qc, { id: '', type: 'resync', data: {} });
 
     expect(spy).toHaveBeenCalledWith({ queryKey: ['library-home'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['library'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'featuring'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['playlist'] });
   });

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { getTracks } from '@shared/api-client/tracks';
+import { libraryKeys } from '@shared/lib/query-keys';
 
 import { useLibraryGrouping } from './useLibraryGrouping';
 
@@ -13,7 +14,7 @@ const PENDING_POLL_MS = 60_000;
 
 export function useLibraryHome() {
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['library-home'],
+    queryKey: libraryKeys.home,
     queryFn: () => getTracks({ limit: ALL_TRACKS_LIMIT, offset: 0 }),
     // SSE patches keep this coherent; don't background-refetch on mount/nav (F15).
     // Pull-to-refresh remains as the manual escape hatch.

@@ -1,11 +1,13 @@
 import { useCallback, useState, type ReactElement } from 'react';
-import { Alert, FlatList, type ListRenderItemInfo, Modal, Pressable, StyleSheet, View } from 'react-native';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { FlatList, type ListRenderItemInfo, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 
-import { addTrackToPlaylist, createPlaylist, getPlaylists } from '@shared/api-client/playlists';
+import { getPlaylists } from '@shared/api-client/playlists';
 import type { PlaylistResponse } from '@shared/api-client/types';
+import { playlistKeys } from '@shared/lib/query-keys';
 import { Text, spacing, useTheme } from '@shared/ui';
 
+import { useAddTrackToPlaylist, useCreatePlaylistWithTrack } from '../hooks/usePlaylistMutations';
 import { CreatePlaylistModal } from './CreatePlaylistModal';
 
 type AddToPlaylistSheetProps = {
@@ -22,76 +24,42 @@ export function AddToPlaylistSheet({
   onClose,
 }: AddToPlaylistSheetProps): ReactElement {
   const theme = useTheme();
-  const queryClient = useQueryClient();
   const [createVisible, setCreateVisible] = useState(false);
   const [addedTo, setAddedTo] = useState<string | null>(null);
 
   const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
-    queryKey: ['playlists'],
+    queryKey: playlistKeys.list,
     queryFn: getPlaylists,
     enabled: visible,
     staleTime: Infinity, // SSE-covered; event patches keep it fresh (F15)
   });
 
-  const addMut = useMutation({
-    mutationFn: (playlistId: string) => addTrackToPlaylist(playlistId, { track_id: trackId }),
-    onMutate: async (playlistId) => {
-      await queryClient.cancelQueries({ queryKey: ['playlists'] });
-      const previous = queryClient.getQueryData<{ items: PlaylistResponse[] }>(['playlists']);
-      if (previous) {
-        queryClient.setQueryData<{ items: PlaylistResponse[] }>(['playlists'], {
-          ...previous,
-          items: previous.items.map((p) =>
-            p.id === playlistId ? { ...p, track_count: p.track_count + 1 } : p,
-          ),
-        });
-      }
-      return { previous };
-    },
-    onSuccess: (_data, playlistId) => {
-      setAddedTo(playlistId);
-    },
-    onError: (_err, _playlistId, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(['playlists'], context.previous);
-      }
-      Alert.alert('Add failed', 'Could not add the track to the playlist. Please try again.');
-    },
-    onSettled: async (_data, _error, playlistId) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['playlists'] }),
-        queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] }),
-      ]);
-      setAddedTo(null);
-      onClose();
-    },
-  });
+  // Cache policy (optimistic count bump, rollback, invalidate) lives in the
+  // mutation hooks; this sheet keeps only its own visibility state.
+  const addMut = useAddTrackToPlaylist(trackId);
+  const createMut = useCreatePlaylistWithTrack(trackId);
 
-  const createMut = useMutation({
-    mutationFn: async (name: string) => {
-      const pl = await createPlaylist({ name });
-      let addFailed = false;
-      try {
-        await addTrackToPlaylist(pl.id, { track_id: trackId });
-      } catch {
-        addFailed = true;
-      }
-      return { pl, addFailed };
+  const addToPlaylist = useCallback(
+    (playlistId: string): void => {
+      addMut.mutate(playlistId, {
+        onSuccess: () => setAddedTo(playlistId),
+        onSettled: () => {
+          setAddedTo(null);
+          onClose();
+        },
+      });
     },
-    onSuccess: ({ addFailed }) => {
-      if (addFailed) {
-        Alert.alert('Note', 'Playlist created, but the track could not be added. Try adding it manually.');
-      }
-    },
-    onError: () => {
-      Alert.alert('Error', 'Could not create the playlist. Please try again.');
-    },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['playlists'] });
-      setCreateVisible(false);
-      onClose();
-    },
-  });
+    [addMut, onClose],
+  );
+
+  const createAndAdd = (name: string): void => {
+    createMut.mutate(name, {
+      onSettled: () => {
+        setCreateVisible(false);
+        onClose();
+      },
+    });
+  };
 
   const playlists = playlistsData?.items ?? [];
 
@@ -99,7 +67,7 @@ export function AddToPlaylistSheet({
     ({ item }: ListRenderItemInfo<PlaylistResponse>) => (
       <Pressable
         testID={`add-to-playlist-${item.id}`}
-        onPress={() => addMut.mutate(item.id)}
+        onPress={() => addToPlaylist(item.id)}
         disabled={addMut.isPending}
         style={({ pressed }) => [
           styles.playlistRow,
@@ -121,7 +89,7 @@ export function AddToPlaylistSheet({
         ) : null}
       </Pressable>
     ),
-    [addMut, addedTo, theme.color.border, theme.color.surface2, theme.color.success],
+    [addMut.isPending, addToPlaylist, addedTo, theme.color.border, theme.color.surface2, theme.color.success],
   );
 
   const handleClose = () => {
@@ -184,7 +152,7 @@ export function AddToPlaylistSheet({
       <CreatePlaylistModal
         visible={createVisible}
         onClose={() => setCreateVisible(false)}
-        onCreate={(name) => createMut.mutate(name)}
+        onCreate={createAndAdd}
         loading={createMut.isPending}
       />
     </>
