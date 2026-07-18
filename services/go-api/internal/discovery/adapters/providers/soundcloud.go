@@ -533,6 +533,10 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 	// ISRC lifts the track from EntityResolutionNone into the isrc merge tier —
 	// SoundCloud tracks otherwise never merge with other providers (see merge.go).
 	r.ISRC = strings.TrimSpace(t.PublisherMetadata.ISRC)
+	r.Album = strings.TrimSpace(t.PublisherMetadata.AlbumTitle)
+	if t.Duration > 0 {
+		r.Duration = int(t.Duration / 1000)
+	}
 	return r, true
 }
 
