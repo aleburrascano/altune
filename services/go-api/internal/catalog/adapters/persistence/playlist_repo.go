@@ -54,13 +54,13 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 					WHERE pt.playlist_id = p.id AND t.artwork_url IS NOT NULL
 					GROUP BY t.artwork_url
 					ORDER BY MIN(pt.position) ASC
-					LIMIT 4
+					LIMIT $2
 				) sub
 			), '{}') AS preview_artwork
 		FROM playlists p
 		WHERE p.user_id = $1
 		ORDER BY p.created_at DESC`,
-		userId.UUID(),
+		userId.UUID(), domain.PreviewArtworkLimit,
 	)
 	if err != nil {
 		return nil, err

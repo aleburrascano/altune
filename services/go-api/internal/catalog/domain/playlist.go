@@ -37,6 +37,13 @@ type PlaylistTrack struct {
 	Position int
 }
 
+// PreviewArtworkLimit caps how many distinct track artwork URLs a playlist's
+// preview tile shows. Read by both the SQL projection
+// (persistence.PgxPlaylistRepository.ListForUser) and the Go fallback
+// (handler.previewArtworkFromTracks) — one definition so the cap can't drift
+// between the two independent implementations of the same selection rule.
+const PreviewArtworkLimit = 4
+
 type Playlist struct {
 	ID        PlaylistId
 	UserId    shared.UserId
