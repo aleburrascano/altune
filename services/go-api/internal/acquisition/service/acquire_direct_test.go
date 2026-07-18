@@ -22,9 +22,8 @@ func pendingTrack(t *testing.T, repo *fakeTrackRepository, userId shared.UserId)
 }
 
 // Acquisition always uses the search pipeline now (the direct SoundCloud path was
-// removed because SoundCloud's public stream is often a ~30s preview). A non-empty
-// sourceURL is ignored — Search is still consulted.
-func TestExecute_IgnoresSourceURL_AlwaysSearches(t *testing.T) {
+// removed because SoundCloud's public stream is often a ~30s preview).
+func TestExecute_AlwaysSearches(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
 	track := pendingTrack(t, repo, userId)
@@ -33,30 +32,12 @@ func TestExecute_IgnoresSourceURL_AlwaysSearches(t *testing.T) {
 	store := newFakeAudioStore()
 	svc := NewAcquireTrackAudioService(repo, searcher, store)
 
-	// Even with a SoundCloud URL supplied, Execute must search rather than download
-	// the URL directly.
-	_ = svc.Execute(context.Background(), userId, track.ID, "https://soundcloud.com/liltecca/fell-in-love")
+	_ = svc.Execute(context.Background(), userId, track.ID)
 
 	if !searcher.searchCalled {
-		t.Error("expected the search pipeline to run regardless of source URL")
+		t.Error("expected the search pipeline to run")
 	}
 	if len(searcher.downloadURLs) != 0 {
 		t.Errorf("no direct download should occur; got download URLs %v", searcher.downloadURLs)
-	}
-}
-
-func TestExecute_NoSourceURL_UsesSearch(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := pendingTrack(t, repo, userId)
-
-	searcher := &fakeAudioSearcher{}
-	store := newFakeAudioStore()
-	svc := NewAcquireTrackAudioService(repo, searcher, store)
-
-	_ = svc.Execute(context.Background(), userId, track.ID, "")
-
-	if !searcher.searchCalled {
-		t.Error("expected the search pipeline to run when no source URL is supplied")
 	}
 }

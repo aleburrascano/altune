@@ -63,10 +63,8 @@ func WithAudioTagger(t ports.AudioTagger) func(*AcquireTrackAudioService) {
 // SoundCloud gap-fill). It always re-searches by metadata. The previous
 // direct-download path (download a saved SoundCloud permalink verbatim) was
 // removed: SoundCloud's public stream for many tracks is only a ~30s preview,
-// which yt-dlp would store as if it were the full track. sourceURL is retained
-// on the signature for the scheduler contract — and a future direct path gated
-// by post-download duration validation — but is currently unused.
-func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
+// which yt-dlp would store as if it were the full track.
+func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 

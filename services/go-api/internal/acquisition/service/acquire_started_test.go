@@ -32,7 +32,7 @@ func TestExecute_PublishesStartedEvent(t *testing.T) {
 		WithAcquireEvents(pub),
 	)
 
-	_ = svc.Execute(context.Background(), userId, track.ID, "")
+	_ = svc.Execute(context.Background(), userId, track.ID)
 
 	var started *recordedProgress
 	for i := range pub.events {
