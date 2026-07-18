@@ -4,9 +4,6 @@ import (
 	"context"
 	"io"
 	"time"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 )
 
 type AudioStream interface {
@@ -29,8 +26,4 @@ type AudioStore interface {
 // proxy stream endpoint. Detected with a type assertion, never required.
 type AudioURLSigner interface {
 	PresignGet(ctx context.Context, audioRef string, ttl time.Duration) (string, error)
-}
-
-type AcquisitionScheduler interface {
-	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
 }
