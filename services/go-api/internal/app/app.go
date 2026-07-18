@@ -330,7 +330,9 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
 	vocabStore := BuildVocabularyStore(a.redisClient)
 	featuredBridge := a.buildFeaturedBridge(sharedMB)
-	historySvc, clearHistorySvc := a.buildHistoryServices()
+	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
+	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
+	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 	content := a.buildContentServices(sharedMB, vocabStore)
 	enrichSvc := a.buildEnrichmentService(sharedMB)
 
@@ -404,13 +406,6 @@ func (a *App) buildFeaturedBridge(sharedMB *providers.MusicBrainzAdapter) *disco
 	return discoverybridge.NewFeaturedResolver(
 		discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer),
 	)
-}
-
-// buildHistoryServices builds the search-history read and clear services.
-func (a *App) buildHistoryServices() (*discoveryService.ListSearchHistoryService, *discoveryService.ClearSearchHistoryService) {
-	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
-	return discoveryService.NewListSearchHistoryService(historyRepo),
-		discoveryService.NewClearSearchHistoryService(historyRepo)
 }
 
 // contentWiring carries the content-service values wireDiscovery consumes.
