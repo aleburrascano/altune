@@ -110,7 +110,6 @@ func (s *VocabularyRefreshService) Start() {
 
 func (s *VocabularyRefreshService) loop(ctx context.Context) {
 	defer close(s.done)
-	defer s.recoverPanic()
 
 	s.runSafe(ctx)
 	s.tick(ctx)
@@ -124,7 +123,10 @@ func (s *VocabularyRefreshService) tick(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.runSafe(ctx)
+			func() {
+				defer s.recoverPanic()
+				s.runSafe(ctx)
+			}()
 		}
 	}
 }
