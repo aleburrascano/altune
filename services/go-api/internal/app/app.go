@@ -601,10 +601,9 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 	detail := adminHandler.DependencyDetail{CheckedAt: time.Now().UTC()}
 
 	dbStatus := "ok"
-	switch {
-	case a.pool == nil:
+	if a.pool == nil {
 		dbStatus = "not_configured"
-	default:
+	} else {
 		start := time.Now()
 		if !database.CheckHealth(ctx, a.pool).OK {
 			dbStatus = "down"
@@ -614,10 +613,9 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 	}
 
 	redisStatus := "ok"
-	switch {
-	case a.redisClient == nil:
+	if a.redisClient == nil {
 		redisStatus = "not_configured"
-	default:
+	} else {
 		start := time.Now()
 		if err := a.redisClient.Ping(ctx).Err(); err != nil {
 			redisStatus = "down"
