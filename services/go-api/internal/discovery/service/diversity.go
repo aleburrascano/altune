@@ -65,7 +65,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		primaryPop float64
 		otherIdxs  []int
 	}
-	ambiguous := ambiguousArtistNames([][]domain.SearchResult{results})
+	ambiguous := ambiguousArtistNamesFlat(results)
 	groups := make(map[string]*group)
 	order := []string{}
 
