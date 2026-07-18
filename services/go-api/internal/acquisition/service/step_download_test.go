@@ -41,7 +41,7 @@ func (s *fileWritingSearcher) Download(_ context.Context, url, outDir string) (s
 func TestDownloadStep_Execute_Success(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	step := NewDownloadStep(searcher)
-	ac := &AcquisitionContext{Selected: &ports.AudioCandidate{URL: "https://example.com/x"}}
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/x"}}}
 
 	if err := step.Execute(context.Background(), ac); err != nil {
 		t.Fatalf("Execute error: %v", err)
@@ -69,7 +69,7 @@ func TestDownloadStep_Execute_NoSelected(t *testing.T) {
 func TestDownloadStep_Execute_DownloadError_CleansTempDir(t *testing.T) {
 	searcher := &fileWritingSearcher{err: errors.New("boom")}
 	step := NewDownloadStep(searcher)
-	ac := &AcquisitionContext{Selected: &ports.AudioCandidate{URL: "https://example.com/x"}}
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/x"}}}
 
 	if err := step.Execute(context.Background(), ac); err == nil {
 		t.Fatal("expected download error")

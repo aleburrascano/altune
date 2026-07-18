@@ -45,12 +45,6 @@ func (s *DownloadStep) Name() string { return "download" }
 // the first successful download is accepted, preserving prior behaviour.
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	candidates := ac.Ranked
-	if len(candidates) == 0 {
-		if ac.Selected == nil {
-			return fmt.Errorf("no candidate selected")
-		}
-		candidates = []ports.AudioCandidate{*ac.Selected}
-	}
 
 	verify := s.prober != nil && ac.Track.Duration > 0
 
