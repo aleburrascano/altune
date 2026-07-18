@@ -105,7 +105,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
 	err = RunPipeline(ctx, s.buildSteps(userId, trackId), ac)
-	cleanupTemp(ctx, ac)
+	CleanupTemp(ctx, ac)
 
 	if err != nil {
 		slog.WarnContext(ctx, "track_acquisition_failed",
@@ -202,13 +202,24 @@ func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, tr
 // buildSteps assembles the acquisition pipeline: discover a candidate
 // (search + select), then the shared download → tag → store → update-track tail.
 func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId) []Step {
-	return []Step{
-		NewSearchStep(s.audioSearcher),
-		NewSelectStep(),
-		NewDownloadStep(s.audioSearcher, WithDownloadProber(s.audioProber)),
-		NewTagStep(s.audioTagger),
-		NewStoreStep(s.audioStore, WithStoreProber(s.audioProber)),
+	return append(
+		CoreSteps(s.audioSearcher, s.audioTagger, s.audioStore, s.audioProber),
 		NewUpdateTrackStep(s.trackRepo, userId, trackId),
+	)
+}
+
+// CoreSteps assembles the search → select → download → tag → store sequence
+// shared by every caller that replays the acquisition pipeline: the production
+// service (via buildSteps, plus its own UpdateTrackStep) and the reacquire CLI
+// commands, which update audio_ref themselves and so stop before that step.
+// One place decides the core pipeline's shape so the two callers cannot drift.
+func CoreSteps(searcher ports.AudioSearcher, tagger ports.AudioTagger, store ports.AudioWriter, prober ports.AudioProber) []Step {
+	return []Step{
+		NewSearchStep(searcher),
+		NewSelectStep(),
+		NewDownloadStep(searcher, WithDownloadProber(prober)),
+		NewTagStep(tagger),
+		NewStoreStep(store, WithStoreProber(prober)),
 	}
 }
 
@@ -272,7 +283,12 @@ func buildTrackRef(track *domain.Track) TrackRef {
 	}
 }
 
-func cleanupTemp(ctx context.Context, ac *AcquisitionContext) {
+// CleanupTemp removes the temp directory a downloaded file lived in (the
+// parent of TempPath, not TempPath itself — DownloadStep creates one temp dir
+// per download attempt via os.MkdirTemp). Exported so the reacquire CLI
+// commands, which replay the pipeline outside Execute, clean up the same way
+// instead of re-deriving the convention.
+func CleanupTemp(ctx context.Context, ac *AcquisitionContext) {
 	if ac.TempPath == "" {
 		return
 	}
