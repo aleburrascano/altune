@@ -109,11 +109,6 @@ type MetricsRollupStore interface {
 	MetricsHistory(ctx context.Context, metric string, days int) ([]MetricPoint, error)
 }
 
-type FetchSuccessStore interface {
-	Record(ctx context.Context, provider domain.ProviderName, success bool) error
-	GetRate(ctx context.Context, provider domain.ProviderName) (float64, error)
-}
-
 type VocabularyStore interface {
 	Add(ctx context.Context, entry domain.VocabularyEntry) error
 	BulkAdd(ctx context.Context, entries []domain.VocabularyEntry) error
