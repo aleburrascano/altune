@@ -52,15 +52,9 @@ func (r *FeaturedArtistResolver) mbFeatured(ctx context.Context, artist, title s
 		if res.Kind != domain.ResultKindTrack {
 			continue
 		}
-		raw, ok := res.Extras["featured_artists"].([]map[string]any)
-		if !ok {
-			continue
+		if feats := domain.FeaturedArtistsFromExtras(res.Extras); feats != nil {
+			return feats
 		}
-		out := make([]domain.FeaturedArtist, 0, len(raw))
-		for _, m := range raw {
-			out = append(out, domain.FeaturedArtistFromMap(m))
-		}
-		return out
 	}
 	return nil
 }
