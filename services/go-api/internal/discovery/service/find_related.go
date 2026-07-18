@@ -86,14 +86,7 @@ func (s *FindRelatedService) Execute(
 
 			deezerAlbumID := stringExtra(result, "deezer_album_id")
 			if deezerAlbumID != "" && s.albumProvider != nil {
-				mu.Lock()
-				canCall := providerCalls < maxProviderLookups
-				if canCall {
-					providerCalls++
-				}
-				mu.Unlock()
-
-				if canCall {
+				if tryReserveProviderCall(&mu, &providerCalls, maxProviderLookups) {
 					wg.Add(1)
 					go func(r domain.SearchResult, albumID string) {
 						defer wg.Done()
@@ -122,14 +115,7 @@ func (s *FindRelatedService) Execute(
 				continue
 			}
 
-			mu.Lock()
-			canCall := providerCalls < maxProviderLookups
-			if canCall {
-				providerCalls++
-			}
-			mu.Unlock()
-
-			if canCall {
+			if tryReserveProviderCall(&mu, &providerCalls, maxProviderLookups) {
 				wg.Add(1)
 				go func(r domain.SearchResult, artistID string) {
 					defer wg.Done()
@@ -157,6 +143,16 @@ func (s *FindRelatedService) Execute(
 
 	slog.InfoContext(ctx, "related.complete", "groups", len(groups))
 	return groups
+}
+
+func tryReserveProviderCall(mu *sync.Mutex, calls *int, max int) bool {
+	mu.Lock()
+	ok := *calls < max
+	if ok {
+		*calls++
+	}
+	mu.Unlock()
+	return ok
 }
 
 func extractDeezerID(r domain.SearchResult) string {
