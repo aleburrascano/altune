@@ -53,7 +53,7 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 		plRepo.seed(pl)
 		svc := NewPlaylistService(plRepo, newMockTrackRepo(), WithPlaylistEvents(pub))
 
-		if err := svc.Rename(ctx, userId, pl.ID, "New Name"); err != nil {
+		if _, err := svc.Rename(ctx, userId, pl.ID, "New Name"); err != nil {
 			t.Fatalf("rename: %v", err)
 		}
 		p := pub.last("playlist_renamed")
