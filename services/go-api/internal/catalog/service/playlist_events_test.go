@@ -72,7 +72,7 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 		plRepo.SeedWithTracks(pl, []*domain.Track{track})
 		svc := NewPlaylistService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistEvents(pub))
 
-		if _, err := svc.RemoveTrack(ctx, userId, pl.ID, track.ID); err != nil {
+		if err := svc.RemoveTrack(ctx, userId, pl.ID, track.ID); err != nil {
 			t.Fatalf("remove track: %v", err)
 		}
 		p := pub.last("track_removed_from_playlist")

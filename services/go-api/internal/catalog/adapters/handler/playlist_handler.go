@@ -279,8 +279,7 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	_, err = h.svc.RemoveTrack(r.Context(), userId, playlistId, trackId)
-	if err != nil {
+	if err := h.svc.RemoveTrack(r.Context(), userId, playlistId, trackId); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}

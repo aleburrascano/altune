@@ -728,7 +728,7 @@ func TestPlaylistService_RemoveTrack(t *testing.T) {
 			playlistId, trackId := tt.setup(plRepo)
 			svc := NewPlaylistService(plRepo, trRepo)
 
-			_, err := svc.RemoveTrack(ctx, userId, playlistId, trackId)
+			err := svc.RemoveTrack(ctx, userId, playlistId, trackId)
 
 			if tt.wantErr != nil {
 				if err == nil {

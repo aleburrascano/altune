@@ -152,7 +152,7 @@ func (s *PlaylistService) AddTrack(ctx context.Context, userId shared.UserId, pl
 	return nil
 }
 
-func (s *PlaylistService) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) (bool, error) {
+func (s *PlaylistService) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
 	// AIDEV-NOTE: removal goes THROUGH the aggregate (like Reorder), not straight
 	// to the repo. Playlist.RemoveTrack is the single authority for the
 	// contiguous-position invariant — it decides membership and renumbers; the
@@ -160,25 +160,25 @@ func (s *PlaylistService) RemoveTrack(ctx context.Context, userId shared.UserId,
 	// and reorder consistent (both: GetWithTracks → aggregate op → persist).
 	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
 	if err != nil {
-		return false, fmt.Errorf("remove track from playlist: %w", err)
+		return fmt.Errorf("remove track from playlist: %w", err)
 	}
 	if playlist == nil {
-		return false, ErrPlaylistNotFound
+		return ErrPlaylistNotFound
 	}
 
 	if !playlist.RemoveTrack(trackId) {
-		// Track was not in the playlist — nothing to persist.
-		return false, nil
+		// Track was not in the playlist — idempotent no-op.
+		return nil
 	}
 
 	if err := s.playlistRepo.RemoveTrack(ctx, playlistId, trackId); err != nil {
-		return false, fmt.Errorf("remove track from playlist: %w", err)
+		return fmt.Errorf("remove track from playlist: %w", err)
 	}
 	s.events.Publish(userId, "track_removed_from_playlist", map[string]any{
 		"playlist_id": playlistId.String(),
 		"track_id":    trackId.String(),
 	})
-	return true, nil
+	return nil
 }
 
 func (s *PlaylistService) Reorder(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
