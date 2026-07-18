@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -106,13 +105,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 		return
 	}
 
-	steps := []acqService.Step{
-		acqService.NewSearchStep(searcher),
-		acqService.NewSelectStep(),
-		acqService.NewDownloadStep(searcher, acqService.WithDownloadProber(prober)),
-		acqService.NewTagStep(id3.NewTagger()),
-		acqService.NewStoreStep(audioStore, acqService.WithStoreProber(prober)),
-	}
+	steps := acqService.CoreSteps(searcher, id3.NewTagger(), audioStore, prober)
 
 	fixed, skipped := 0, 0
 	for i, t := range tracks {
@@ -204,9 +197,7 @@ func reacquireTrack(
 	}}
 
 	runErr := acqService.RunPipeline(perCtx, steps, ac)
-	if ac.TempPath != "" {
-		os.RemoveAll(filepath.Dir(ac.TempPath))
-	}
+	acqService.CleanupTemp(perCtx, ac)
 	if runErr != nil {
 		return "", runErr
 	}
