@@ -49,26 +49,15 @@ const defaultProviderTimeout = 1500 * time.Millisecond
 // operational bound (like a page size), trimmed best-effort after each insert.
 const historyRingSize = 100
 
-// Service is the orchestrator for the rebuilt pipeline:
-// Layer 0 intent → Layer 1 fan-out → Layer 2 merge → Layer 3 rank, then the
-// orthogonal enrichment carried forward from v1 (artist-dedup, disambiguation,
-// artwork, correction/suggest, related groups, telemetry, vocabulary learning).
-type Service struct {
-	providers       []ports.SearchProvider
-	circuitBreaker  *CircuitBreaker
-	historyRepo     ports.SearchHistoryRepository
-	vocabStore      ports.VocabularyStore
-	eventStore      ports.EventStore
-	artworkResolver ports.TaggingArtworkResolver
-	artworkCache    ports.ArtworkCache
-	albumValidator  ports.AlbumValidator
-	identityBridge  ports.IdentityBridge
-	mbidIndex       ports.MBIDIndex
-	identityStore   ports.IdentityStore
-	correctionSvc   *CorrectionService
-	findRelatedSvc  *FindRelatedService
-	resultCache     ports.ResultCache
-	tailDemotion    bool
+// rankingExperiments groups the ranking-pipeline flags a Service can have
+// toggled on independently (each eval A/B-gated at the composition root the
+// same way): tail-noise demotion, the cross-kind prominence tiebreak,
+// behavioral satisfaction scoring, and result-order exploration. Grouped so
+// "what experiments exist on this Service" is one type to read instead of
+// fields scattered across the struct — embedded (not a named sub-field) so
+// every existing s.tailDemotion-shaped access keeps working unchanged.
+type rankingExperiments struct {
+	tailDemotion bool
 
 	// crossKindProminence, default off, gates the cross-kind prominence tiebreak:
 	// among equally relevant results of different kinds, the more prominent entity
@@ -90,6 +79,29 @@ type Service struct {
 	// small-scale bandit substitute for IPS. The one user-facing behavior change,
 	// shipped behind a flag so it needs no live sign-off.
 	explorationRate float64
+}
+
+// Service is the orchestrator for the rebuilt pipeline:
+// Layer 0 intent → Layer 1 fan-out → Layer 2 merge → Layer 3 rank, then the
+// orthogonal enrichment carried forward from v1 (artist-dedup, disambiguation,
+// artwork, correction/suggest, related groups, telemetry, vocabulary learning).
+type Service struct {
+	providers       []ports.SearchProvider
+	circuitBreaker  *CircuitBreaker
+	historyRepo     ports.SearchHistoryRepository
+	vocabStore      ports.VocabularyStore
+	eventStore      ports.EventStore
+	artworkResolver ports.TaggingArtworkResolver
+	artworkCache    ports.ArtworkCache
+	albumValidator  ports.AlbumValidator
+	identityBridge  ports.IdentityBridge
+	mbidIndex       ports.MBIDIndex
+	identityStore   ports.IdentityStore
+	correctionSvc   *CorrectionService
+	findRelatedSvc  *FindRelatedService
+	resultCache     ports.ResultCache
+
+	rankingExperiments
 
 	bgWg sync.WaitGroup
 }
