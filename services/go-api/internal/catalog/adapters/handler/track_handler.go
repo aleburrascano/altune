@@ -119,9 +119,9 @@ func (h *TrackHandler) handleListFeaturing(w http.ResponseWriter, r *http.Reques
 
 	fa, valid := domain.NewFeaturedArtist(name, mbid, deezerID)
 	if !valid {
-		// Identity present but no display name — construct directly so the
-		// identity key still resolves.
-		fa = domain.FeaturedArtist{Name: name, MBID: mbid, DeezerID: deezerID, Role: domain.RoleFeatured}
+		// Identity present but no display name — the identity-only constructor
+		// still resolves the identity key.
+		fa = domain.NewFeaturedArtistIdentityOnly(name, mbid, deezerID)
 	}
 
 	tracks, err := h.listFeaturing.Execute(r.Context(), userId, fa)
