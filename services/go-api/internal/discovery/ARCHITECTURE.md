@@ -248,7 +248,9 @@ internal/discovery/
 │   ├── events.go             # SearchPerformed, ResultClicked
 │   └── vocabulary.go         # VocabularyEntry
 ├── ports/
-│   ├── ports.go / ports_search.go / ports_artwork.go / ports_telemetry.go
+│   ├── ports_search.go / ports_artwork.go / ports_telemetry.go / ports_result_cache.go
+│   ├── ports_enrichment.go  # MetadataEnricher, IdentityBridge, NameKeyedCache, Discogs/LastFm/Deezer/Lyrics enrichers
+│   ├── ports_content.go     # AlbumValidator, DiscographyEnricher, RelationshipQuerier
 │                             # SearchProvider, ArtistContentProvider, IdentityBridge, ArtworkResolver, …
 ├── service/
 │   ├── search.go             # Service — orchestrator (fanOut + stampIdentities + mergeRankEnrich)
