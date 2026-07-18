@@ -76,6 +76,10 @@ func (r *fakeTrackRepo) GetByID(_ context.Context, id catdomain.TrackId, userId 
 	return nil, nil
 }
 
+func (r *fakeTrackRepo) GetByIDWithFeatured(ctx context.Context, id catdomain.TrackId, userId shared.UserId) (*catdomain.Track, error) {
+	return r.GetByID(ctx, id, userId)
+}
+
 func (r *fakeTrackRepo) ListForUser(_ context.Context, userId shared.UserId, limit, offset int) ([]*catdomain.Track, int, error) {
 	if r.listErr != nil {
 		return nil, 0, r.listErr
