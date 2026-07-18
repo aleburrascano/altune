@@ -7,7 +7,6 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -42,7 +41,7 @@ func (s *LyricsService) Execute(ctx context.Context, title, subtitle string) (do
 		return domain.EmptyDeezerLyrics(), nil
 	}
 
-	return service.CachedLookup(ctx, s.cache, lyricsNameKey(artist, track), domain.EmptyDeezerLyrics(),
+	return ports.CachedLookup(ctx, s.cache, lyricsNameKey(artist, track), domain.EmptyDeezerLyrics(),
 		func(ctx context.Context) (domain.DeezerLyrics, bool, error) {
 			trackID, err := s.provider.ResolveTrackID(ctx, artist, track)
 			if err != nil {
