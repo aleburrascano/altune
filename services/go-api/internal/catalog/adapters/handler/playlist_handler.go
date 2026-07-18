@@ -15,11 +15,12 @@ import (
 )
 
 type PlaylistHandler struct {
-	svc *service.PlaylistService
+	lifecycle  *service.PlaylistLifecycleService
+	membership *service.PlaylistMembershipService
 }
 
-func NewPlaylistHandler(svc *service.PlaylistService) *PlaylistHandler {
-	return &PlaylistHandler{svc: svc}
+func NewPlaylistHandler(lifecycle *service.PlaylistLifecycleService, membership *service.PlaylistMembershipService) *PlaylistHandler {
+	return &PlaylistHandler{lifecycle: lifecycle, membership: membership}
 }
 
 func (h *PlaylistHandler) Routes() chi.Router {
@@ -108,7 +109,7 @@ func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlist, err := h.svc.Create(r.Context(), userId, req.Name)
+	playlist, err := h.lifecycle.Create(r.Context(), userId, req.Name)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
@@ -123,7 +124,7 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlists, err := h.svc.List(r.Context(), userId)
+	playlists, err := h.lifecycle.List(r.Context(), userId)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
@@ -153,7 +154,7 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlist, tracks, err := h.svc.Get(r.Context(), userId, playlistId)
+	playlist, tracks, err := h.lifecycle.Get(r.Context(), userId, playlistId)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
@@ -194,7 +195,7 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlist, err := h.svc.Rename(r.Context(), userId, playlistId, req.Name)
+	playlist, err := h.lifecycle.Rename(r.Context(), userId, playlistId, req.Name)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
@@ -216,7 +217,7 @@ func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.Delete(r.Context(), userId, playlistId); err != nil {
+	if err := h.lifecycle.Delete(r.Context(), userId, playlistId); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -242,7 +243,7 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	trackId := domain.TrackIdFromUUID(req.TrackID)
-	if err := h.svc.AddTrack(r.Context(), userId, playlistId, trackId); err != nil {
+	if err := h.membership.AddTrack(r.Context(), userId, playlistId, trackId); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -266,7 +267,7 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.svc.RemoveTrack(r.Context(), userId, playlistId, trackId); err != nil {
+	if err := h.membership.RemoveTrack(r.Context(), userId, playlistId, trackId); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -296,7 +297,7 @@ func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) 
 		trackIds[i] = domain.TrackIdFromUUID(id)
 	}
 
-	if err := h.svc.Reorder(r.Context(), userId, playlistId, trackIds); err != nil {
+	if err := h.membership.Reorder(r.Context(), userId, playlistId, trackIds); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}

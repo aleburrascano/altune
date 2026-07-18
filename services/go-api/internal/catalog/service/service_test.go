@@ -329,7 +329,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 
 // ==================== PlaylistService ====================
 
-func TestPlaylistService_Create(t *testing.T) {
+func TestPlaylistLifecycleService_Create(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
@@ -362,11 +362,10 @@ func TestPlaylistService_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
 			if tt.setup != nil {
 				tt.setup(plRepo)
 			}
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistLifecycleService(plRepo)
 
 			playlist, err := svc.Create(ctx, userId, tt.plName)
 
@@ -395,7 +394,7 @@ func TestPlaylistService_Create(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_Get(t *testing.T) {
+func TestPlaylistLifecycleService_Get(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
@@ -436,9 +435,8 @@ func TestPlaylistService_Get(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistLifecycleService(plRepo)
 
 			playlist, tracks, err := svc.Get(ctx, userId, playlistId)
 
@@ -464,7 +462,7 @@ func TestPlaylistService_Get(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_Delete(t *testing.T) {
+func TestPlaylistLifecycleService_Delete(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
@@ -502,9 +500,8 @@ func TestPlaylistService_Delete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistLifecycleService(plRepo)
 
 			err := svc.Delete(ctx, userId, playlistId)
 
@@ -524,7 +521,7 @@ func TestPlaylistService_Delete(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_Rename(t *testing.T) {
+func TestPlaylistLifecycleService_Rename(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
@@ -574,9 +571,8 @@ func TestPlaylistService_Rename(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistLifecycleService(plRepo)
 
 			_, err := svc.Rename(ctx, userId, playlistId, tt.newName)
 
@@ -604,7 +600,7 @@ func TestPlaylistService_Rename(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_AddTrack(t *testing.T) {
+func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
@@ -663,7 +659,7 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			playlistId, trackId := tt.setup(plRepo, trRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 			err := svc.AddTrack(ctx, userId, playlistId, trackId)
 
@@ -683,7 +679,7 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_RemoveTrack(t *testing.T) {
+func TestPlaylistMembershipService_RemoveTrack(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
@@ -726,7 +722,7 @@ func TestPlaylistService_RemoveTrack(t *testing.T) {
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			playlistId, trackId := tt.setup(plRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 			err := svc.RemoveTrack(ctx, userId, playlistId, trackId)
 
@@ -746,7 +742,7 @@ func TestPlaylistService_RemoveTrack(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_Reorder(t *testing.T) {
+func TestPlaylistMembershipService_Reorder(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
@@ -793,7 +789,7 @@ func TestPlaylistService_Reorder(t *testing.T) {
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			playlistId, trackIds := tt.setup(plRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 			err := svc.Reorder(ctx, userId, playlistId, trackIds)
 
