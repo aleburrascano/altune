@@ -118,7 +118,6 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 		})
 		if err := s.svc.Execute(jobCtx, userId, trackId, sourceURL); err != nil {
 			s.failed.Add(1)
-			s.log.recordFailure(key, err.Error())
 			s.log.complete(key, "failed", err.Error())
 			slog.Error("background acquisition failed",
 				"track_id", key, "error", err)

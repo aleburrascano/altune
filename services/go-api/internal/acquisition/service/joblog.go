@@ -6,10 +6,7 @@ import (
 	"time"
 )
 
-const (
-	recentFailCap = 20
-	recentJobCap  = 20
-)
+const recentJobCap = 20
 
 // FailureRecord is one recent acquisition failure, surfaced on the operator
 // console.
@@ -36,14 +33,13 @@ type JobRecord struct {
 }
 
 // jobLog is the scheduler's operator-console job telemetry: current
-// queued/running jobs plus bounded rings of recent terminal outcomes and
-// failures. One mutex owns all three; nothing here touches job execution.
-// In-memory only — resets on restart.
+// queued/running jobs plus a bounded ring of recent terminal outcomes (failures
+// included, carrying their reason). One mutex owns both; nothing here touches job
+// execution. In-memory only — resets on restart.
 type jobLog struct {
-	mu          sync.Mutex
-	jobs        map[string]*JobRecord // current queued/running jobs, keyed by track id
-	recent      []JobRecord           // recent terminal outcomes, oldest→newest
-	recentFails []FailureRecord       // failures only (retained for compatibility)
+	mu     sync.Mutex
+	jobs   map[string]*JobRecord // current queued/running jobs, keyed by track id
+	recent []JobRecord           // recent terminal outcomes, oldest→newest
 }
 
 func newJobLog() *jobLog {
@@ -98,17 +94,9 @@ func (l *jobLog) complete(trackID, state, reason string) {
 	}
 }
 
-func (l *jobLog) recordFailure(trackID, reason string) {
-	l.mu.Lock()
-	l.recentFails = append(l.recentFails, FailureRecord{TrackID: trackID, Reason: reason})
-	if len(l.recentFails) > recentFailCap {
-		l.recentFails = l.recentFails[len(l.recentFails)-recentFailCap:]
-	}
-	l.mu.Unlock()
-}
-
 // snapshot returns copies of the current jobs (scheduled-first, with live
-// elapsed times), recent terminal outcomes (newest first), and recent failures.
+// elapsed times), recent terminal outcomes (newest first), and the failures
+// among them derived from the same ring (oldest→newest).
 func (l *jobLog) snapshot() (jobs []JobRecord, recent []JobRecord, fails []FailureRecord) {
 	now := time.Now().UTC()
 
@@ -120,11 +108,13 @@ func (l *jobLog) snapshot() (jobs []JobRecord, recent []JobRecord, fails []Failu
 		jobs = append(jobs, jr)
 	}
 	recent = make([]JobRecord, len(l.recent))
+	fails = make([]FailureRecord, 0)
 	for i, j := range l.recent { // newest first
 		recent[len(l.recent)-1-i] = j
+		if j.State == "failed" {
+			fails = append(fails, FailureRecord{TrackID: j.TrackID, Reason: j.Reason})
+		}
 	}
-	fails = make([]FailureRecord, len(l.recentFails))
-	copy(fails, l.recentFails)
 	l.mu.Unlock()
 
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].ScheduledAt.Before(jobs[j].ScheduledAt) })
