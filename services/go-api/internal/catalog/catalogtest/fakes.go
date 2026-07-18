@@ -106,17 +106,18 @@ func (r *TrackRepo) SetTrackNumber(_ context.Context, id domain.TrackId, _ share
 	return true, nil
 }
 
-func (r *TrackRepo) Delete(_ context.Context, id domain.TrackId, userId shared.UserId) (bool, error) {
+func (r *TrackRepo) Delete(_ context.Context, id domain.TrackId, userId shared.UserId) (bool, *string, error) {
 	if r.ErrOnDelete != nil {
-		return false, r.ErrOnDelete
+		return false, nil, r.ErrOnDelete
 	}
 	key := id.String()
 	t, ok := r.Tracks[key]
 	if !ok || t.UserId != userId {
-		return false, nil
+		return false, nil, nil
 	}
+	audioRef := t.AudioRef
 	delete(r.Tracks, key)
-	return true, nil
+	return true, audioRef, nil
 }
 
 func (r *TrackRepo) GetByDedupKey(_ context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error) {

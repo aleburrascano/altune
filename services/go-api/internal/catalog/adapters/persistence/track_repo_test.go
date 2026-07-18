@@ -233,7 +233,7 @@ func TestPgxTrackRepo_Delete(t *testing.T) {
 	}
 
 	// Act: delete
-	deleted, err := repo.Delete(ctx, track.ID, userId)
+	deleted, _, err := repo.Delete(ctx, track.ID, userId)
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
@@ -251,7 +251,7 @@ func TestPgxTrackRepo_Delete(t *testing.T) {
 	}
 
 	// Assert: deleting again returns false
-	deleted2, err := repo.Delete(ctx, track.ID, userId)
+	deleted2, _, err := repo.Delete(ctx, track.ID, userId)
 	if err != nil {
 		t.Fatalf("second Delete() error = %v", err)
 	}

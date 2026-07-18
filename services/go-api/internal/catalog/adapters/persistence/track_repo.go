@@ -202,46 +202,50 @@ func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.Track
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (bool, error) {
+func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	defer tx.Rollback(ctx)
 
 	affectedPlaylists, err := tx.Query(ctx,
 		`SELECT DISTINCT playlist_id FROM playlist_tracks WHERE track_id = $1`, id.UUID())
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	playlistIds, err := pgx.CollectRows(affectedPlaylists, pgx.RowTo[uuid.UUID])
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 
 	_, err = tx.Exec(ctx, `DELETE FROM playlist_tracks WHERE track_id = $1`, id.UUID())
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 
 	for _, playlistId := range playlistIds {
 		if err := renumberPlaylistPositions(ctx, tx, playlistId); err != nil {
-			return false, err
+			return false, nil, err
 		}
 	}
 
-	tag, err := tx.Exec(ctx,
-		`DELETE FROM tracks WHERE id = $1 AND user_id = $2`,
+	var ref *string
+	err = tx.QueryRow(ctx,
+		`DELETE FROM tracks WHERE id = $1 AND user_id = $2 RETURNING audio_ref`,
 		id.UUID(), userId.UUID(),
-	)
+	).Scan(&ref)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil, tx.Commit(ctx)
+	}
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return false, err
+		return false, nil, err
 	}
-	return tag.RowsAffected() > 0, nil
+	return true, ref, nil
 }
 
 func (r *PgxTrackRepository) GetByDedupKey(ctx context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error) {
