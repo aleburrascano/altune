@@ -184,9 +184,6 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	if limit <= 0 {
-		limit = 50
-	}
 
 	result, err := h.listTracks.Execute(r.Context(), userId, limit, offset)
 	if err != nil {
@@ -202,7 +199,7 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 	httputil.WriteJSON(w, http.StatusOK, ListTracksResponse{
 		Items:   items,
 		Total:   result.Total,
-		Limit:   limit,
+		Limit:   result.Limit,
 		Offset:  offset,
 		HasMore: result.HasMore,
 	})
