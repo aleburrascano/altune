@@ -14,6 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// playlistTrackCountSubquery is the canonical track_count projection for a
+// playlist row, shared by ListForUser and GetByID. One definition so a change
+// to how the count is computed (e.g. excluding soft-deleted tracks) is a
+// single-line edit instead of a hand-sync across both queries.
+const playlistTrackCountSubquery = `(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id)`
+
 var _ ports.PlaylistRepository = (*PgxPlaylistRepository)(nil)
 
 type PgxPlaylistRepository struct {
@@ -39,7 +45,7 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 	// order (the playlist tile).
 	rows, err := r.pool.Query(ctx,
 		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
-			(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id) AS track_count,
+			`+playlistTrackCountSubquery+` AS track_count,
 			COALESCE((
 				SELECT array_agg(url) FROM (
 					SELECT t.artwork_url AS url
@@ -96,7 +102,7 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 	// track rows.
 	row := r.pool.QueryRow(ctx,
 		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
-			(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id) AS track_count
+			`+playlistTrackCountSubquery+` AS track_count
 		FROM playlists p WHERE p.id = $1 AND p.user_id = $2`,
 		id.UUID(), userId.UUID(),
 	)
