@@ -817,29 +817,14 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 	}
 	builder := eval.NewCorpusBuilder(store)
 	const lookback = 30 * 24 * time.Hour
-	run := func() {
+	a.startTicker(ctx, 24*time.Hour, func() {
 		since := time.Now().UTC().Add(-lookback)
 		if err := builder.Materialize(ctx, since, since.Format("2006-01-02"), a.cfg.BehavioralCorpusPath); err != nil {
 			slog.WarnContext(ctx, "behavioral corpus materialize failed", "error", err)
 			return
 		}
 		slog.InfoContext(ctx, "behavioral corpus materialized", "path", a.cfg.BehavioralCorpusPath)
-	}
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		run()
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				run()
-			}
-		}
-	}()
+	})
 	slog.Info("behavioral corpus refresh started", "path", a.cfg.BehavioralCorpusPath)
 }
 
@@ -848,30 +833,35 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 // discovery_metrics so the console's week-over-week history survives restart.
 // Best-effort; bound to the app context for graceful shutdown.
 func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.MetricsRollupStore) {
-	run := func() {
+	a.startTicker(ctx, 6*time.Hour, func() {
 		now := time.Now().UTC()
 		for _, day := range []time.Time{now, now.Add(-24 * time.Hour)} {
 			if err := store.RollupDay(ctx, day); err != nil {
 				slog.WarnContext(ctx, "discovery metrics rollup failed", "error", err)
 			}
 		}
-	}
+	})
+	slog.Info("discovery metrics rollup started")
+}
+
+// startTicker runs fn immediately, then on every interval until ctx is
+// cancelled. The goroutine is tracked on the App's WaitGroup.
+func (a *App) startTicker(ctx context.Context, interval time.Duration, fn func()) {
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		run()
-		ticker := time.NewTicker(6 * time.Hour)
+		fn()
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				run()
+				fn()
 			}
 		}
 	}()
-	slog.Info("discovery metrics rollup started")
 }
 
 func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) {
