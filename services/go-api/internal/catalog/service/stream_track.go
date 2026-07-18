@@ -83,7 +83,7 @@ func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId shared
 	if exists {
 		return nil
 	}
-	return s.recoverMissingAudio(ctx, userId, track)
+	return s.reconcileMissingAudio(ctx, userId, track, false, nil)
 }
 
 // recoverMissingAudio reconciles a track whose audio failed to stream: if the
@@ -93,8 +93,16 @@ func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId shared
 // (the caller logs once) rather than logged-and-swallowed here; scheduling stays
 // fire-and-forget and runs whether or not reconcile succeeded.
 func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId shared.UserId, track *domain.Track) error {
-	var recErr error
 	exists, err := s.audioStore.Exists(ctx, *track.AudioRef)
+	return s.reconcileMissingAudio(ctx, userId, track, exists, err)
+}
+
+// reconcileMissingAudio applies the mark-failed-and-reschedule decision for a
+// track's audio existence check already performed by the caller, so a caller
+// that has just confirmed the file is missing (RecoverIfMissing) does not pay
+// for a second storage round-trip to learn the same answer.
+func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId shared.UserId, track *domain.Track, exists bool, err error) error {
+	var recErr error
 	switch {
 	case err != nil:
 		recErr = fmt.Errorf("audio existence check: %w", err)
