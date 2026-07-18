@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"altune/go-api/internal/admin/evalmeter"
@@ -48,6 +49,7 @@ func (a *App) buildEvalRunner() evalmeter.Runner {
 
 	evalUser, err := shared.ParseUserId(a.cfg.OperatorUserID)
 	if err != nil {
+		slog.Warn("eval runner: invalid OperatorUserID, using random", "error", err)
 		evalUser = shared.NewUserId(uuid.New())
 	}
 
