@@ -8,19 +8,13 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// trackStatusReader is the narrow read this service actually calls, out of
-// ports.TrackRepository's full surface.
-type trackStatusReader interface {
-	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-}
-
 // GetTrackStatusService returns a single track for the authenticated user,
 // used by the status-polling endpoint.
 type GetTrackStatusService struct {
-	trackRepo trackStatusReader
+	trackRepo trackReader
 }
 
-func NewGetTrackStatusService(trackRepo trackStatusReader) *GetTrackStatusService {
+func NewGetTrackStatusService(trackRepo trackReader) *GetTrackStatusService {
 	return &GetTrackStatusService{trackRepo: trackRepo}
 }
 
