@@ -164,24 +164,6 @@ type otherEntry struct {
 	candidate ports.AudioCandidate
 }
 
-// SelectBestCandidate ranks candidates and returns the best, or nil when none
-// pass the identity gate. Context-less entry point retained for tests and
-// callers without a request context; production ranks through SelectStep.
-func SelectBestCandidate(track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {
-	ctx := context.Background()
-	ranked := rankCandidates(ctx, track, candidates)
-	if len(ranked) == 0 {
-		slog.WarnContext(ctx, "no_candidates_passed",
-			"track_title", track.Title,
-			"track_artist", track.Artist,
-			"total_candidates", len(candidates),
-		)
-		return nil
-	}
-	best := ranked[0]
-	return &best
-}
-
 // rankCandidates returns every identity-passing candidate ordered best-first.
 // Topic-channel candidates rank ahead of all others (artist-matching Topic first,
 // then by identity); non-Topic candidates follow, ordered by identity then

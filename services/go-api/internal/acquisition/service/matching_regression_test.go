@@ -222,7 +222,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := SelectBestCandidate(tt.track, tt.candidates)
+			got := selectBest(tt.track, tt.candidates)
 
 			if tt.wantNil {
 				if got != nil {
@@ -290,7 +290,7 @@ func TestAcquisitionMatchingReport(t *testing.T) {
 	t.Log(strings.Repeat("-", 95))
 
 	for _, tc := range cases {
-		got := SelectBestCandidate(tc.track, tc.candidates)
+		got := selectBest(tc.track, tc.candidates)
 
 		var selectedChannel string
 		if got != nil {

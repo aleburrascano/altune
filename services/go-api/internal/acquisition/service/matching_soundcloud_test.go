@@ -27,7 +27,7 @@ func TestSelectBestCandidate_SoundCloudFillsGap(t *testing.T) {
 		},
 	}
 
-	got := SelectBestCandidate(track, candidates)
+	got := selectBest(track, candidates)
 	if got == nil {
 		t.Fatal("expected the SoundCloud candidate to be selected, got nil")
 	}
@@ -57,7 +57,7 @@ func TestSelectBestCandidate_TopicChannelBeatsSoundCloud(t *testing.T) {
 		},
 	}
 
-	got := SelectBestCandidate(track, candidates)
+	got := selectBest(track, candidates)
 	if got == nil {
 		t.Fatal("expected a candidate to be selected, got nil")
 	}

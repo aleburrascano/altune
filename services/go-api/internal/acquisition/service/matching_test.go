@@ -1,10 +1,22 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/ports"
-
+	"context"
 	"testing"
+
+	"altune/go-api/internal/acquisition/ports"
 )
+
+// selectBest is the test-only equivalent of the old exported SelectBestCandidate:
+// rank candidates and return the best, or nil when none pass the identity gate.
+func selectBest(track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {
+	ranked := rankCandidates(context.Background(), track, candidates)
+	if len(ranked) == 0 {
+		return nil
+	}
+	best := ranked[0]
+	return &best
+}
 
 func TestSelectBestCandidate(t *testing.T) {
 	tests := []struct {
@@ -179,7 +191,7 @@ func TestSelectBestCandidate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := SelectBestCandidate(tt.track, tt.candidates)
+			got := selectBest(tt.track, tt.candidates)
 
 			if tt.wantNil {
 				if got != nil {
