@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
@@ -29,8 +28,6 @@ const trackColumns = `id, user_id, title, artist, album, duration_seconds,
 const trackColumnsPrefixed = `t.id, t.user_id, t.title, t.artist, t.album, t.duration_seconds,
 	t.added_at, t.artwork_url, t.acquisition_status, t.dedup_key,
 	t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason`
-
-var _ ports.TrackRepository = (*PgxTrackRepository)(nil)
 
 type PgxTrackRepository struct {
 	pool *pgxpool.Pool
