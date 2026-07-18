@@ -341,6 +341,7 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		a.redisClient,
 		eventStore,
 		requeststore.NewTransport(defaultLiveTransport, requestStore),
+		vocabStore,
 		false,
 	)
 
