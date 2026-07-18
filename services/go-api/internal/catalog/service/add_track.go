@@ -117,13 +117,16 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 
 // trackAddedPayload builds the full track object embedded in the
 // track_added_to_library event, so a receiving client inserts the row directly
-// instead of forcing a refetch. Marshals the same TrackDTO the HTTP handler
-// serializes, so the event payload and the wire response share one struct and
-// can never drift.
+// instead of forcing a refetch. The struct embed produces the same JSON shape as
+// the HTTP response (TrackDTO), extended by the legacy track_id key, in a single
+// marshal pass so the two representations share one source of truth.
 func trackAddedPayload(t *domain.Track) map[string]any {
-	b, _ := json.Marshal(TrackToDTO(t)) // plain-value DTO cannot fail to marshal
+	type withLegacy struct {
+		TrackDTO
+		LegacyTrackID string `json:"track_id"` // retained for older clients
+	}
+	b, _ := json.Marshal(withLegacy{TrackDTO: TrackToDTO(t), LegacyTrackID: t.ID.String()})
 	var m map[string]any
 	_ = json.Unmarshal(b, &m)
-	m["track_id"] = t.ID.String() // retained for older clients
 	return m
 }
