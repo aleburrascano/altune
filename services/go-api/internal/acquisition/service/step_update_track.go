@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"altune/go-api/internal/acquisition/ports"
@@ -26,35 +27,20 @@ func NewUpdateTrackStep(trackRepo ports.TrackRepository, userId shared.UserId, t
 func (s *UpdateTrackStep) Name() string { return "update_track" }
 
 func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
-	track, err := s.trackRepo.GetByID(ctx, s.trackId, s.userId)
-	if err != nil {
-		return fmt.Errorf("get track for update: %w", err)
-	}
-	if track == nil {
-		return fmt.Errorf("track not found for update")
-	}
-
-	if err := track.MarkReady(ac.AudioRef); err != nil {
-		return fmt.Errorf("mark ready: %w", err)
-	}
-
-	if ac.Selected != nil && ac.Selected.Duration > 0 {
-		track.SetDuration(ac.Selected.Duration)
-	}
-
-	if err := s.trackRepo.Update(ctx, track); err != nil {
-		return fmt.Errorf("persist track update: %w", err)
-	}
-
-	return nil
+	return loadAndUpdate(ctx, s.trackRepo, s.trackId, s.userId, errors.New("track not found for update"), func(track *domain.Track) error {
+		if err := track.MarkReady(ac.AudioRef); err != nil {
+			return fmt.Errorf("mark ready: %w", err)
+		}
+		if ac.Selected != nil && ac.Selected.Duration > 0 {
+			track.SetDuration(ac.Selected.Duration)
+		}
+		return nil
+	})
 }
 
 func (s *UpdateTrackStep) Rollback(ctx context.Context, _ *AcquisitionContext) error {
-	track, err := s.trackRepo.GetByID(ctx, s.trackId, s.userId)
-	if err != nil || track == nil {
-		return err
-	}
-
-	track.RevertToPending()
-	return s.trackRepo.Update(ctx, track)
+	return loadAndUpdate(ctx, s.trackRepo, s.trackId, s.userId, nil, func(track *domain.Track) error {
+		track.RevertToPending()
+		return nil
+	})
 }
