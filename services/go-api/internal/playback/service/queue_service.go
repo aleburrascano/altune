@@ -87,12 +87,10 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 		return view, nil
 	}
 
-	current, ok, err := s.nowPlaying.Lookup(ctx, userId, state.TrackIds[idx])
+	current, err := s.nowPlaying.Lookup(ctx, userId, state.TrackIds[idx])
 	if err != nil {
 		return nil, fmt.Errorf("resume current track: %w", err)
 	}
-	if ok {
-		view.CurrentTrack = current
-	}
+	view.CurrentTrack = current
 	return view, nil
 }
