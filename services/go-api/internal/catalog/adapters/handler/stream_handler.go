@@ -7,6 +7,7 @@ import (
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
 
@@ -45,7 +46,7 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 		"size_bytes", out.Size,
 	)
 
-	w.Header().Set("Content-Type", domain.AudioContentType(*out.Track.AudioRef))
+	w.Header().Set("Content-Type", ports.AudioContentType(*out.Track.AudioRef))
 	http.ServeContent(w, r, "", time.Time{}, out.Reader)
 }
 
