@@ -11,7 +11,6 @@ import (
 // trackLister is the narrow read this service actually calls, out of
 // ports.TrackRepository's full surface.
 type trackLister interface {
-	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
 	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
 }
 
@@ -28,10 +27,6 @@ type ListTracksService struct {
 
 func NewListTracksService(trackRepo trackLister) *ListTracksService {
 	return &ListTracksService{trackRepo: trackRepo}
-}
-
-func (s *ListTracksService) GetByID(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (*domain.Track, error) {
-	return s.trackRepo.GetByID(ctx, trackId, userId)
 }
 
 func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, limit, offset int) (*ListTracksOutput, error) {
