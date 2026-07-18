@@ -150,18 +150,16 @@ func artistMatchesChannel(trackArtist, channel string) bool {
 	return strings.Contains(channelNorm, artistNorm)
 }
 
-type topicEntry struct {
+// candidateEntry is a candidate scored against the track: identity/metadata
+// ranks plus the artist- and feature-consistency signals. classifyCandidates
+// computes all of it up front; which fields a bucket's sort.Slice comparator
+// reads depends on whether the candidate landed in the Topic or other bucket.
+type candidateEntry struct {
 	ident       float64
+	meta        float64
 	artistMatch bool
 	featMatch   bool
 	candidate   ports.AudioCandidate
-}
-
-type otherEntry struct {
-	meta      float64
-	ident     float64
-	featMatch bool
-	candidate ports.AudioCandidate
 }
 
 // rankCandidates returns every identity-passing candidate ordered best-first.
@@ -229,9 +227,7 @@ func maxViewCount(candidates []ports.AudioCandidate) int64 {
 
 // classifyCandidates scores every candidate, drops those below the identity
 // gate, and splits the survivors into Topic-channel and other buckets.
-func classifyCandidates(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate, maxViews int64) ([]topicEntry, []otherEntry) {
-	var topic []topicEntry
-	var other []otherEntry
+func classifyCandidates(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate, maxViews int64) (topic, other []candidateEntry) {
 
 	for _, c := range candidates {
 		ident := identityScore(track.Title, track.Artist, c.Title)
@@ -256,10 +252,11 @@ func classifyCandidates(ctx context.Context, track TrackRef, candidates []ports.
 			continue
 		}
 
+		entry := candidateEntry{ident: ident, meta: meta, artistMatch: artMatch, featMatch: featMatch, candidate: c}
 		if isTopicChannel(c.Channel) {
-			topic = append(topic, topicEntry{ident: ident, artistMatch: artMatch, featMatch: featMatch, candidate: c})
+			topic = append(topic, entry)
 		} else {
-			other = append(other, otherEntry{meta: meta, ident: ident, featMatch: featMatch, candidate: c})
+			other = append(other, entry)
 		}
 	}
 
