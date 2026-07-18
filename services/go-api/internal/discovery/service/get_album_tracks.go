@@ -100,6 +100,48 @@ func emptyContentResponse(providerName string) *ContentFetchResponse {
 	}
 }
 
+// fetchProviderResults runs the "provider lookup → parse name → fetch → warn-degrade"
+// prefix shared by the content use cases (top-tracks, albums, related). found is the
+// caller's typed-map lookup result — the maps hold different provider port types, so
+// the lookup stays at the call site while the degrade contract lives here. On any
+// failure it returns a nil slice and a non-nil degraded response; on success it
+// returns the raw results and a nil response for the caller to shape/truncate.
+func fetchProviderResults(
+	ctx context.Context,
+	providerName, externalID, logKey string,
+	found bool,
+	fetch func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error),
+) ([]domain.SearchResult, *ContentFetchResponse) {
+	if !found {
+		return nil, errorContentResponse(providerName)
+	}
+	pn, err := domain.ParseProviderName(providerName)
+	if err != nil {
+		return nil, errorContentResponse(providerName)
+	}
+	results, err := fetch(ctx, pn, externalID)
+	if err != nil {
+		slog.WarnContext(ctx, logKey,
+			"provider", providerName, "external_id", externalID, "error", err)
+		return nil, errorContentResponse(providerName)
+	}
+	return results, nil
+}
+
+// okContentResponse truncates results to limit (0 = no cap) and wraps them in the
+// healthy envelope — the single home for the "cap then wrap" tail every content use
+// case shared.
+func okContentResponse(providerName string, results []domain.SearchResult, limit int) *ContentFetchResponse {
+	if limit > 0 && len(results) > limit {
+		results = results[:limit]
+	}
+	return &ContentFetchResponse{
+		ProviderName: providerName,
+		Status:       domain.ProviderStatusOK,
+		Items:        results,
+	}
+}
+
 func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName]
 	if !ok {
@@ -133,17 +175,9 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 		}
 	}
 
-	if limit > 0 && len(results) > limit {
-		results = results[:limit]
-	}
-
-	s.enrichFeatured(ctx, results)
-
-	return &ContentFetchResponse{
-		ProviderName: providerName,
-		Status:       domain.ProviderStatusOK,
-		Items:        results,
-	}, nil
+	resp := okContentResponse(providerName, results, limit)
+	s.enrichFeatured(ctx, resp.Items)
+	return resp, nil
 }
 
 func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer ports.AlbumContentProvider, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
@@ -176,15 +210,9 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 		if err != nil || len(tracks) == 0 {
 			continue
 		}
-		if limit > 0 && len(tracks) > limit {
-			tracks = tracks[:limit]
-		}
-		s.enrichFeatured(ctx, tracks)
-		return &ContentFetchResponse{
-			ProviderName: "deezer",
-			Status:       domain.ProviderStatusOK,
-			Items:        tracks,
-		}, nil
+		resp := okContentResponse("deezer", tracks, limit)
+		s.enrichFeatured(ctx, resp.Items)
+		return resp, nil
 	}
 
 	return emptyContentResponse("deezer"), nil

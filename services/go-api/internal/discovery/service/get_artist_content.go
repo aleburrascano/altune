@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"log/slog"
 	"sort"
 	"strconv"
 
@@ -35,47 +34,24 @@ func WithConsensusService(c *ConsensusService) ArtistContentOption {
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName, externalID string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName]
-	if !ok {
-		return errorContentResponse(providerName), nil
+	results, degraded := fetchProviderResults(ctx, providerName, externalID, "artist_top_tracks.provider_failed", ok,
+		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			return provider.GetArtistTopTracks(ctx, pn, id)
+		})
+	if degraded != nil {
+		return degraded, nil
 	}
-
-	pn, err := domain.ParseProviderName(providerName)
-	if err != nil {
-		return errorContentResponse(providerName), nil
-	}
-	results, err := provider.GetArtistTopTracks(ctx, pn, externalID)
-	if err != nil {
-		slog.WarnContext(ctx, "artist_top_tracks.provider_failed",
-			"provider", providerName, "external_id", externalID, "error", err)
-		return errorContentResponse(providerName), nil
-	}
-
-	if limit > 0 && len(results) > limit {
-		results = results[:limit]
-	}
-
-	return &ContentFetchResponse{
-		ProviderName: providerName,
-		Status:       domain.ProviderStatusOK,
-		Items:        results,
-	}, nil
+	return okContentResponse(providerName, results, limit), nil
 }
 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName]
-	if !ok {
-		return errorContentResponse(providerName), nil
-	}
-
-	pn, err := domain.ParseProviderName(providerName)
-	if err != nil {
-		return errorContentResponse(providerName), nil
-	}
-	results, err := provider.GetArtistAlbums(ctx, pn, externalID)
-	if err != nil {
-		slog.WarnContext(ctx, "artist_albums.provider_failed",
-			"provider", providerName, "external_id", externalID, "error", err)
-		return errorContentResponse(providerName), nil
+	results, degraded := fetchProviderResults(ctx, providerName, externalID, "artist_albums.provider_failed", ok,
+		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			return provider.GetArtistAlbums(ctx, pn, id)
+		})
+	if degraded != nil {
+		return degraded, nil
 	}
 
 	results = dedupAlbums(results)
@@ -100,15 +76,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, e
 	normalizeAlbumYears(results)
 	sortAlbumsByReleaseDateDesc(results)
 
-	if limit > 0 && len(results) > limit {
-		results = results[:limit]
-	}
-
-	return &ContentFetchResponse{
-		ProviderName: providerName,
-		Status:       domain.ProviderStatusOK,
-		Items:        results,
-	}, nil
+	return okContentResponse(providerName, results, limit), nil
 }
 
 func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
