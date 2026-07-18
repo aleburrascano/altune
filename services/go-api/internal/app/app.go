@@ -206,7 +206,7 @@ func (a *App) setup(ctx context.Context) error {
 	queueHandler := a.wirePlayback(cat.trackRepo)
 
 	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler)
-	a.wireAdmin(ctx, r, verifier, tap, disc)
+	a.wireAdmin(ctx, r, verifier, tap, disc.requestStore, disc.searchSvc)
 
 	a.startAlertMonitor(ctx)
 
@@ -558,7 +558,8 @@ func (a *App) wireAdmin(
 	r *chi.Mux,
 	verifier auth.TokenVerifier,
 	tap *eventtap.Tap,
-	disc discoveryWiring,
+	requestStore *requeststore.Store,
+	searchSvc *discoveryService.Service,
 ) {
 	a.eventFeed = eventtap.NewFeed()
 	a.eventFeed.Start(ctx, tap)
@@ -580,9 +581,9 @@ func (a *App) wireAdmin(
 		WithProviderHealth(a.providerHealth).
 		WithAcquisition(acqReader).
 		WithEvalMeter(a.evalMeter).
-		WithRequestStore(disc.requestStore).
-		WithReRunner(a.buildReRunner(disc.searchSvc)).
-		WithSearchInspector(a.buildSearchInspector(disc.searchSvc))
+		WithRequestStore(requestStore).
+		WithReRunner(a.buildReRunner(searchSvc)).
+		WithSearchInspector(a.buildSearchInspector(searchSvc))
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Get("/", adminH.ServeIndex)        // public shell — holds no data
 		ar.Get("/config", adminH.ServeConfig) // public client config for sign-in
