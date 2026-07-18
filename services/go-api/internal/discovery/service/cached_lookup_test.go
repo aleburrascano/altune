@@ -124,10 +124,11 @@ func TestCachedLookup_NilCacheRunsUncached(t *testing.T) {
 	}
 }
 
-// --- enrich / disambiguation never-reorder (the display bracket fills fields, it
-// must not change the ranked order). Reuses fakeArtworkResolver from enrich_test. ---
+// --- fillArtwork / disambiguation never-reorder (the display bracket fills
+// fields, it must not change the ranked order). Reuses fakeArtworkResolver
+// from artwork_fill_test. ---
 
-func TestEnrich_FillsArtworkWithoutReordering(t *testing.T) {
+func TestFillArtwork_FillsArtworkWithoutReordering(t *testing.T) {
 	resolver := &fakeArtworkResolver{url: "art://cover.jpg"}
 	s := NewService(nil, NewCircuitBreaker(), WithArtworkResolver(resolver))
 	in := []domain.SearchResult{
@@ -135,18 +136,18 @@ func TestEnrich_FillsArtworkWithoutReordering(t *testing.T) {
 		deezerTrack("Bravo", "B", 20),
 		deezerTrack("Charlie", "C", 10),
 	}
-	got := s.enrich(context.Background(), in)
+	got := s.fillArtwork(context.Background(), in)
 
 	want := []string{"Alpha", "Bravo", "Charlie"}
 	if len(got) != len(want) {
-		t.Fatalf("enrich changed length: %v", titles(got))
+		t.Fatalf("fillArtwork changed length: %v", titles(got))
 	}
 	for i, title := range want {
 		if got[i].Title != title {
-			t.Fatalf("enrich reordered results: got %v, want %v", titles(got), want)
+			t.Fatalf("fillArtwork reordered results: got %v, want %v", titles(got), want)
 		}
 		if got[i].ImageURL != "art://cover.jpg" {
-			t.Fatalf("enrich did not fill artwork for %q (got %q) — test is not exercising enrichment", title, got[i].ImageURL)
+			t.Fatalf("fillArtwork did not fill artwork for %q (got %q) — test is not exercising enrichment", title, got[i].ImageURL)
 		}
 	}
 }
