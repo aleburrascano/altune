@@ -207,14 +207,9 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.Rename(r.Context(), userId, playlistId, req.Name); err != nil {
+	playlist, err := h.svc.Rename(r.Context(), userId, playlistId, req.Name)
+	if err != nil {
 		httputil.HandleServiceError(w, r, err)
-		return
-	}
-
-	playlist, err := h.svc.GetByID(r.Context(), userId, playlistId)
-	if err != nil || playlist == nil {
-		httputil.InternalError(w)
 		return
 	}
 

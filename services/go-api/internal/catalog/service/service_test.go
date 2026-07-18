@@ -577,7 +577,7 @@ func TestPlaylistService_Rename(t *testing.T) {
 			playlistId := tt.setup(plRepo)
 			svc := NewPlaylistService(plRepo, trRepo)
 
-			err := svc.Rename(ctx, userId, playlistId, tt.newName)
+			_, err := svc.Rename(ctx, userId, playlistId, tt.newName)
 
 			if tt.wantErr != "" {
 				if err == nil {

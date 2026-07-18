@@ -99,19 +99,19 @@ func (s *PlaylistService) Delete(ctx context.Context, userId shared.UserId, play
 	return nil
 }
 
-func (s *PlaylistService) Rename(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, name string) error {
+func (s *PlaylistService) Rename(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, name string) (*domain.Playlist, error) {
 	playlist, err := s.playlistRepo.GetByID(ctx, playlistId, userId)
 	if err != nil {
-		return fmt.Errorf("rename playlist: %w", err)
+		return nil, fmt.Errorf("rename playlist: %w", err)
 	}
 	if playlist == nil {
-		return ErrPlaylistNotFound
+		return nil, ErrPlaylistNotFound
 	}
 	if err := playlist.Rename(name); err != nil {
-		return err
+		return nil, err
 	}
 	if err := s.playlistRepo.Update(ctx, playlist); err != nil {
-		return fmt.Errorf("rename playlist: %w", err)
+		return nil, fmt.Errorf("rename playlist: %w", err)
 	}
 	if s.events != nil {
 		s.events.Publish(userId, "playlist_renamed", map[string]any{
@@ -119,7 +119,7 @@ func (s *PlaylistService) Rename(ctx context.Context, userId shared.UserId, play
 			"name":        playlist.Name,
 		})
 	}
-	return nil
+	return playlist, nil
 }
 
 // AIDEV-NOTE: AddTrack reads (track existence + playlist) then writes without a
