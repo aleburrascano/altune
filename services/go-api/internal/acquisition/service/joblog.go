@@ -8,13 +8,6 @@ import (
 
 const recentJobCap = 20
 
-// FailureRecord is one recent acquisition failure, surfaced on the operator
-// console.
-type FailureRecord struct {
-	TrackID string `json:"track_id"`
-	Reason  string `json:"reason"`
-}
-
 // JobRecord is one acquisition job's lifecycle as the scheduler observes it:
 // queued → running → succeeded/failed/cancelled. Title/Artist/Album and Stage are
 // filled live by the pipeline via the job reporter. In-memory only.
@@ -95,9 +88,9 @@ func (l *jobLog) complete(trackID, state, reason string) {
 }
 
 // snapshot returns copies of the current jobs (scheduled-first, with live
-// elapsed times), recent terminal outcomes (newest first), and the failures
-// among them derived from the same ring (oldest→newest).
-func (l *jobLog) snapshot() (jobs []JobRecord, recent []JobRecord, fails []FailureRecord) {
+// elapsed times) and recent terminal outcomes (newest first). Failed jobs ride
+// on the recent ring, carrying their reason — there is no separate failure ring.
+func (l *jobLog) snapshot() (jobs []JobRecord, recent []JobRecord) {
 	now := time.Now().UTC()
 
 	l.mu.Lock()
@@ -108,15 +101,11 @@ func (l *jobLog) snapshot() (jobs []JobRecord, recent []JobRecord, fails []Failu
 		jobs = append(jobs, jr)
 	}
 	recent = make([]JobRecord, len(l.recent))
-	fails = make([]FailureRecord, 0)
 	for i, j := range l.recent { // newest first
 		recent[len(l.recent)-1-i] = j
-		if j.State == "failed" {
-			fails = append(fails, FailureRecord{TrackID: j.TrackID, Reason: j.Reason})
-		}
 	}
 	l.mu.Unlock()
 
 	sort.Slice(jobs, func(i, j int) bool { return jobs[i].ScheduledAt.Before(jobs[j].ScheduledAt) })
-	return jobs, recent, fails
+	return jobs, recent
 }
