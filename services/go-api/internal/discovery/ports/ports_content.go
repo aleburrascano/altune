@@ -34,10 +34,6 @@ type RelatedTrackMatch struct {
 	ArtworkURL *string
 }
 
-type DiscographyEnricher interface {
-	ResolveDiscogsArtist(ctx context.Context, name string, albumTitles []string) (*DiscogsArtistInfo, error)
-	FetchArtistReleases(ctx context.Context, discogsID int) ([]DiscogsRelease, error)
-}
 
 type DiscogsArtistInfo struct {
 	ID      int
