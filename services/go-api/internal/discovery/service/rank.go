@@ -107,7 +107,7 @@ func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.Sear
 			relevance:  idfWeightedCoverage(r, q, rarity),
 			behavioral: cfg.behavioral[domain.ResultSignature(r)], // nil map read → 0 (inert)
 			prominence: prominence,                                // 0 unless the experiment is on (inert)
-			pop:        popularityOf(r),
+			pop:        r.Popularity,
 			rrf:        rrfScore(e.BestRank),
 			multi:      len(providersOf(r)) > 1,
 			demoted:    demoted,

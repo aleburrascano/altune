@@ -297,12 +297,6 @@ func stringExtra(r domain.SearchResult, key string) string {
 	return ""
 }
 
-// popularityOf is the single read accessor for the typed Popularity signal —
-// merge, rank, diversity, and vocab all read through it.
-func popularityOf(r domain.SearchResult) float64 {
-	return r.Popularity
-}
-
 func completenessOf(r domain.SearchResult) int {
 	n := 0
 	if r.ImageURL != "" {

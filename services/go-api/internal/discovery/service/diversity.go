@@ -81,7 +81,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		if ambiguous[norm] {
 			key = norm + "\x00" + r.MBID
 		}
-		pop := popularityOf(r)
+		pop := r.Popularity
 		g, exists := groups[key]
 		if !exists {
 			groups[key] = &group{primaryIdx: i, primaryPop: pop}
