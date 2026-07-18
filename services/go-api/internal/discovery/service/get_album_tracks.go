@@ -79,6 +79,27 @@ type ContentFetchResponse struct {
 	Items        []domain.SearchResult
 }
 
+// errorContentResponse is the degraded envelope every content use case returns
+// when a provider is missing, unparseable, or fails: an error status with a
+// non-nil empty item slice (so the wire serializes [] rather than null).
+func errorContentResponse(providerName string) *ContentFetchResponse {
+	return &ContentFetchResponse{
+		ProviderName: providerName,
+		Status:       domain.ProviderStatusError,
+		Items:        []domain.SearchResult{},
+	}
+}
+
+// emptyContentResponse is the OK-but-nothing-found envelope: a healthy fetch that
+// produced no items, again with a non-nil empty slice for the wire.
+func emptyContentResponse(providerName string) *ContentFetchResponse {
+	return &ContentFetchResponse{
+		ProviderName: providerName,
+		Status:       domain.ProviderStatusOK,
+		Items:        []domain.SearchResult{},
+	}
+}
+
 func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName]
 	if !ok {
@@ -88,20 +109,12 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 		if hasDeezer && albumTitle != "" {
 			return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
 		}
-		return &ContentFetchResponse{
-			ProviderName: providerName,
-			Status:       domain.ProviderStatusError,
-			Items:        []domain.SearchResult{},
-		}, nil
+		return errorContentResponse(providerName), nil
 	}
 
 	pn, err := domain.ParseProviderName(providerName)
 	if err != nil {
-		return &ContentFetchResponse{
-			ProviderName: providerName,
-			Status:       domain.ProviderStatusError,
-			Items:        []domain.SearchResult{},
-		}, nil
+		return errorContentResponse(providerName), nil
 	}
 	results, err := provider.GetAlbumTracks(ctx, pn, externalID)
 	if err != nil {
@@ -116,11 +129,7 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 			}
 		}
 		if err != nil {
-			return &ContentFetchResponse{
-				ProviderName: providerName,
-				Status:       domain.ProviderStatusError,
-				Items:        []domain.SearchResult{},
-			}, nil
+			return errorContentResponse(providerName), nil
 		}
 	}
 
@@ -140,11 +149,7 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer ports.AlbumContentProvider, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
 	searcher, ok := deezer.(ports.SearchProvider)
 	if !ok {
-		return &ContentFetchResponse{
-			ProviderName: "deezer",
-			Status:       domain.ProviderStatusError,
-			Items:        []domain.SearchResult{},
-		}, nil
+		return errorContentResponse("deezer"), nil
 	}
 
 	query := albumTitle
@@ -158,11 +163,7 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 			"query", query, "error", err)
 	}
 	if err != nil || len(results) == 0 {
-		return &ContentFetchResponse{
-			ProviderName: "deezer",
-			Status:       domain.ProviderStatusOK,
-			Items:        []domain.SearchResult{},
-		}, nil
+		return emptyContentResponse("deezer"), nil
 	}
 
 	// Use the first matching album's Deezer ID to fetch tracks
@@ -186,9 +187,5 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 		}, nil
 	}
 
-	return &ContentFetchResponse{
-		ProviderName: "deezer",
-		Status:       domain.ProviderStatusOK,
-		Items:        []domain.SearchResult{},
-	}, nil
+	return emptyContentResponse("deezer"), nil
 }
