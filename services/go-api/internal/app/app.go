@@ -112,31 +112,31 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	slog.Info("waiting for background tasks")
-	if a.alertMonitor != nil {
-		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer bgCancel()
-		a.alertMonitor.Shutdown(bgCtx)
-	}
-	if a.eventFeed != nil {
-		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer bgCancel()
-		a.eventFeed.Shutdown(bgCtx)
-	}
-	if a.evalMeter != nil {
-		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer bgCancel()
-		a.evalMeter.Shutdown(bgCtx)
-	}
-	if a.vocabRefresh != nil {
-		bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer bgCancel()
-		a.vocabRefresh.Shutdown(bgCtx)
-	}
-	if a.scheduler != nil {
-		bgCtx, bgCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer bgCancel()
-		a.scheduler.Shutdown(bgCtx)
-	}
+	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
+		if a.alertMonitor != nil {
+			a.alertMonitor.Shutdown(ctx)
+		}
+	})
+	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
+		if a.eventFeed != nil {
+			a.eventFeed.Shutdown(ctx)
+		}
+	})
+	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
+		if a.evalMeter != nil {
+			a.evalMeter.Shutdown(ctx)
+		}
+	})
+	a.shutdownComponent(10*time.Second, func(ctx context.Context) {
+		if a.vocabRefresh != nil {
+			a.vocabRefresh.Shutdown(ctx)
+		}
+	})
+	a.shutdownComponent(30*time.Second, func(ctx context.Context) {
+		if a.scheduler != nil {
+			a.scheduler.Shutdown(ctx)
+		}
+	})
 	// Always drain the shared background group (corpus refresh, metrics rollup —
 	// and in-flight acquisitions when the scheduler exists) with a bound. The
 	// drain is owned here, not by the scheduler: without it, the no-audio-store
@@ -146,6 +146,15 @@ func (a *App) Run(ctx context.Context) error {
 	a.cleanup()
 	slog.Info("shutdown complete")
 	return nil
+}
+
+// shutdownComponent calls fn with a bounded context. Used to give each
+// shutdownable component its own timeout without repeating the
+// WithTimeout/defer-cancel boilerplate at every call site.
+func (a *App) shutdownComponent(timeout time.Duration, fn func(context.Context)) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	fn(ctx)
 }
 
 // drainBackground waits for every goroutine registered on the App's WaitGroup,
