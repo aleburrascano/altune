@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -382,7 +383,7 @@ func (s *RedisVocabularyStore) scoreCandidatesWithPhonetic(
 		candTrigrams := trigrams(norm)
 		jaccard := jaccardCoefficient(shared, len(queryTrigrams), len(candTrigrams))
 
-		dist := levenshteinDist(queryNorm, norm)
+		dist := textnorm.LevenshteinDistance(queryNorm, norm)
 		maxDist := maxLevenshtein(queryNorm)
 		if dist > maxDist && !phoneticSet[norm] {
 			continue
@@ -522,43 +523,4 @@ func maxLevenshtein(query string) int {
 	return 3
 }
 
-// levenshteinDist is a local copy to avoid importing the service package.
-func levenshteinDist(s1, s2 string) int {
-	if len(s1) == 0 {
-		return len(s2)
-	}
-	if len(s2) == 0 {
-		return len(s1)
-	}
-	prev := make([]int, len(s2)+1)
-	curr := make([]int, len(s2)+1)
-	for j := range prev {
-		prev[j] = j
-	}
-	for i := 1; i <= len(s1); i++ {
-		curr[0] = i
-		for j := 1; j <= len(s2); j++ {
-			cost := 1
-			if s1[i-1] == s2[j-1] {
-				cost = 0
-			}
-			del := prev[j] + 1
-			ins := curr[j-1] + 1
-			sub := prev[j-1] + cost
-			curr[j] = minInt(del, ins, sub)
-		}
-		prev, curr = curr, prev
-	}
-	return prev[len(s2)]
-}
-
-func minInt(a, b, c int) int {
-	if b < a {
-		a = b
-	}
-	if c < a {
-		a = c
-	}
-	return a
-}
 
