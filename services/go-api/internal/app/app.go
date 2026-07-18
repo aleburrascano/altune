@@ -331,7 +331,7 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	vocabStore := BuildVocabularyStore(a.redisClient)
 	featuredBridge := a.buildFeaturedBridge(sharedMB)
 	historySvc, clearHistorySvc := a.buildHistoryServices()
-	albumSvc, artistSvc, relatedSvc, suggestSvc := a.buildContentServices(sharedMB, vocabStore)
+	content := a.buildContentServices(sharedMB, vocabStore)
 	enrichSvc := a.buildEnrichmentService(sharedMB)
 
 	requestStore := requeststore.New()
@@ -367,11 +367,11 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		Search:       searchSvc,
 		History:      historySvc,
 		ClearHistory: clearHistorySvc,
-		Album:        albumSvc,
-		Artist:       artistSvc,
-		Related:      relatedSvc,
+		Album:        content.album,
+		Artist:       content.artist,
+		Related:      content.related,
 		Enrich:       enrichSvc,
-		Suggest:      suggestSvc,
+		Suggest:      content.suggest,
 		Event:        eventSvc,
 	})
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
@@ -412,16 +412,19 @@ func (a *App) buildHistoryServices() (*discoveryService.ListSearchHistoryService
 		discoveryService.NewClearSearchHistoryService(historyRepo)
 }
 
+// contentWiring carries the content-service values wireDiscovery consumes.
+type contentWiring struct {
+	album   *discoveryService.GetAlbumTracksService
+	artist  *discoveryService.GetArtistContentService
+	related *discoveryService.GetRelatedTracksService
+	suggest *discoveryService.SuggestService
+}
+
 // buildContentServices builds the album, artist, related, and suggest services.
 func (a *App) buildContentServices(
 	sharedMB *providers.MusicBrainzAdapter,
 	vocabStore discoveryPorts.VocabularyStore,
-) (
-	*discoveryService.GetAlbumTracksService,
-	*discoveryService.GetArtistContentService,
-	*discoveryService.GetRelatedTracksService,
-	*discoveryService.SuggestService,
-) {
+) contentWiring {
 	deezerContent := providers.NewDeezerAdapter(newDiscoveryClient())
 	// iTunes is a second mainstream source of truth for discography/tracklist
 	// (docs/providers/itunes.md cap 5): an iTunes-sourced album/artist result
@@ -473,7 +476,12 @@ func (a *App) buildContentServices(
 	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
-	return albumSvc, artistSvc, relatedSvc, suggestSvc
+	return contentWiring{
+		album:   albumSvc,
+		artist:  artistSvc,
+		related: relatedSvc,
+		suggest: suggestSvc,
+	}
 }
 
 // buildEnrichmentService builds the MusicBrainz detail-open enrichment service.
