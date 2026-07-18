@@ -54,25 +54,20 @@ func (s *DeezerEnrichmentService) Execute(
 
 	return service.CachedLookup(ctx, s.cache, deezerNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
 		func(ctx context.Context) (domain.DeezerEnrichment, bool, error) {
-			id, err := s.enricher.ResolveID(ctx, kind, artist, entityTitle)
-			if err != nil {
-				slog.WarnContext(ctx, "deezer_enrichment.resolve_failed",
-					"kind", kind.String(), "artist", artist, "title", entityTitle, "error", err)
-				return domain.EmptyDeezerEnrichment(), false, err // transient; not cached negative
-			}
-			if id == "" {
-				return domain.EmptyDeezerEnrichment(), false, nil
-			}
-			e, err := s.enricher.Lookup(ctx, kind, id)
-			if err != nil {
-				slog.WarnContext(ctx, "deezer_enrichment.lookup_failed",
-					"kind", kind.String(), "id", id, "title", entityTitle, "error", err)
-				return domain.EmptyDeezerEnrichment(), false, err // best-effort; don't poison the cache
-			}
-			if e.IsZero() {
-				return domain.EmptyDeezerEnrichment(), false, nil
-			}
-			return e, true, nil
+			return resolveThenLookup(
+				ctx,
+				func(ctx context.Context) (string, error) { return s.enricher.ResolveID(ctx, kind, artist, entityTitle) },
+				func(ctx context.Context, id string) (domain.DeezerEnrichment, error) { return s.enricher.Lookup(ctx, kind, id) },
+				domain.DeezerEnrichment.IsZero,
+				func(err error) {
+					slog.WarnContext(ctx, "deezer_enrichment.resolve_failed",
+						"kind", kind.String(), "artist", artist, "title", entityTitle, "error", err)
+				},
+				func(id string, err error) {
+					slog.WarnContext(ctx, "deezer_enrichment.lookup_failed",
+						"kind", kind.String(), "id", id, "title", entityTitle, "error", err)
+				},
+			)
 		})
 }
 
