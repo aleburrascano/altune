@@ -209,9 +209,34 @@ func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, user
 	}
 	defer tx.Rollback(ctx)
 
+	affectedPlaylists, err := tx.Query(ctx,
+		`SELECT DISTINCT playlist_id FROM playlist_tracks WHERE track_id = $1`, id.UUID())
+	if err != nil {
+		return false, err
+	}
+	playlistIds, err := pgx.CollectRows(affectedPlaylists, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return false, err
+	}
+
 	_, err = tx.Exec(ctx, `DELETE FROM playlist_tracks WHERE track_id = $1`, id.UUID())
 	if err != nil {
 		return false, err
+	}
+
+	for _, playlistId := range playlistIds {
+		_, err = tx.Exec(ctx,
+			`UPDATE playlist_tracks SET position = sub.new_pos
+			FROM (
+				SELECT track_id, ROW_NUMBER() OVER (ORDER BY position) - 1 AS new_pos
+				FROM playlist_tracks WHERE playlist_id = $1
+			) sub
+			WHERE playlist_tracks.playlist_id = $1 AND playlist_tracks.track_id = sub.track_id`,
+			playlistId,
+		)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	tag, err := tx.Exec(ctx,
