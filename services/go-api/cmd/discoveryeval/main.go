@@ -689,7 +689,7 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 	if err != nil {
 		return fmt.Errorf("load artists: %w", err)
 	}
-	svc := discoveryEval.NewCoverageSignalBService(app.BuildConsensusProviders(cfg))
+	svc := discoveryEval.NewCoverageSignalBService(app.BuildConsensusProviders(cfg, nil))
 
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "scanning %d distinct artists across providers (concurrency=%d)...\n", len(artists), opts.concurrency)
@@ -717,7 +717,7 @@ func runConsensus(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, o
 		mb := providers.NewMusicBrainzAdapter(httpClient, cfg.MusicBrainzUserAgent)
 		copts = append(copts, discoveryService.WithMBAuthority(mb))
 	}
-	svc := discoveryService.NewConsensusService(app.BuildConsensusProviders(cfg), copts...)
+	svc := discoveryService.NewConsensusService(app.BuildConsensusProviders(cfg, nil), copts...)
 
 	if opts.query != "" {
 		return consensusSingle(ctx, deezer, svc, opts.query)

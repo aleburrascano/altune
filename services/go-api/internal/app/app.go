@@ -455,7 +455,7 @@ func (a *App) buildContentServices(
 	// Multi-provider consensus: ALL providers are equal sources, merged into a
 	// union. Built via the shared BuildConsensusProviders so coverage signal B
 	// measures the same provider set.
-	consensusProviders := BuildConsensusProviders(a.cfg)
+	consensusProviders := BuildConsensusProviders(a.cfg, nil)
 	var consensusOpts []discoveryService.ConsensusOption
 	if sharedMB != nil {
 		consensusOpts = append(consensusOpts, discoveryService.WithMBAuthority(sharedMB))
