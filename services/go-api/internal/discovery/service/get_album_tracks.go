@@ -144,34 +144,23 @@ func okContentResponse(providerName string, results []domain.SearchResult, limit
 
 func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName]
-	if !ok {
-		// Fallback: if the requested provider isn't supported but Deezer is,
-		// search Deezer for this album by title+artist and return those tracks.
-		deezer, hasDeezer := s.providers["deezer"]
-		if hasDeezer && albumTitle != "" {
-			return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
-		}
-		return errorContentResponse(providerName), nil
-	}
+	results, degraded := fetchProviderResults(ctx, providerName, externalID, "album_tracks.provider_failed", ok,
+		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			return provider.GetAlbumTracks(ctx, pn, id)
+		})
 
-	pn, err := domain.ParseProviderName(providerName)
-	if err != nil {
-		return errorContentResponse(providerName), nil
-	}
-	results, err := provider.GetAlbumTracks(ctx, pn, externalID)
-	if err != nil {
-		slog.WarnContext(ctx, "album_tracks.provider_failed",
-			"provider", providerName, "external_id", externalID, "error", err)
-	}
-	if err != nil || len(results) == 0 {
+	// Fallback: an unsupported/failing provider, or one that resolved zero
+	// tracks, falls back to a Deezer album search by title+artist when Deezer is
+	// available. Orthogonal to the found/parse/fetch shape fetchProviderResults
+	// owns, so it stays here rather than in the shared helper.
+	if degraded != nil || len(results) == 0 {
 		if albumTitle != "" {
-			deezer, hasDeezer := s.providers["deezer"]
-			if hasDeezer {
+			if deezer, hasDeezer := s.providers["deezer"]; hasDeezer {
 				return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
 			}
 		}
-		if err != nil {
-			return errorContentResponse(providerName), nil
+		if degraded != nil {
+			return degraded, nil
 		}
 	}
 
