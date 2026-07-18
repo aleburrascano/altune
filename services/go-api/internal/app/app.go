@@ -379,6 +379,18 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	if sharedMB != nil {
 		consensusOpts = append(consensusOpts, discoveryService.WithMBAuthority(sharedMB))
 	}
+	if a.redisClient != nil {
+		consensusOpts = append(consensusOpts, discoveryService.WithConsensusCache(
+			discoveryCacheAdapters.NewRedisNameKeyedCache[[]discoveryService.ConsensusAlbum](
+				a.redisClient,
+				"discovery:consensus:v1:",
+				"discovery:consensus:neg:v1:",
+				discoveryService.DefaultConsensusCacheTTL,
+				discoveryService.DefaultConsensusCacheTTL,
+				func() []discoveryService.ConsensusAlbum { return nil },
+			),
+		))
+	}
 	consensusSvc := discoveryService.NewConsensusService(consensusProviders, consensusOpts...)
 
 	var artistContentOpts []discoveryService.ArtistContentOption
