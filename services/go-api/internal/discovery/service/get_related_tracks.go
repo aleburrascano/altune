@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"log/slog"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -22,29 +21,12 @@ func NewGetRelatedTracksService(providers map[string]ports.RelatedTracksProvider
 
 func (s *GetRelatedTracksService) Execute(ctx context.Context, providerName, externalID string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName]
-	if !ok {
-		return errorContentResponse(providerName), nil
+	results, degraded := fetchProviderResults(ctx, providerName, externalID, "related_tracks.provider_failed", ok,
+		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			return provider.GetRelatedTracks(ctx, pn, id)
+		})
+	if degraded != nil {
+		return degraded, nil
 	}
-
-	pn, err := domain.ParseProviderName(providerName)
-	if err != nil {
-		return errorContentResponse(providerName), nil
-	}
-
-	results, err := provider.GetRelatedTracks(ctx, pn, externalID)
-	if err != nil {
-		slog.WarnContext(ctx, "related_tracks.provider_failed",
-			"provider", providerName, "external_id", externalID, "error", err)
-		return errorContentResponse(providerName), nil
-	}
-
-	if limit > 0 && len(results) > limit {
-		results = results[:limit]
-	}
-
-	return &ContentFetchResponse{
-		ProviderName: providerName,
-		Status:       domain.ProviderStatusOK,
-		Items:        results,
-	}, nil
+	return okContentResponse(providerName, results, limit), nil
 }
