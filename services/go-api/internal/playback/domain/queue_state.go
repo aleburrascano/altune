@@ -144,16 +144,10 @@ func RehydrateQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, 
 }
 
 // EmptyQueueState is the canonical "no queue" snapshot for a user — the single
-// definition of what an absent queue looks like.
+// definition of what an absent queue looks like. It routes through the same
+// newQueueState gate as every other constructor so the "single door" invariant
+// has no exception; empty input cannot fail validation, so the error is discarded.
 func EmptyQueueState(userId shared.UserId) *QueueState {
-	return &QueueState{
-		UserId:       userId,
-		TrackIds:     []string{},
-		CurrentIdx:   0,
-		PositionMs:   0,
-		Shuffled:     false,
-		RepeatMode:   RepeatOff,
-		NaturalOrder: []string{},
-		UpdatedAt:    time.Now().UTC(),
-	}
+	state, _ := newQueueState(QueueStateInput{UserId: userId}, time.Now().UTC())
+	return state
 }
