@@ -13,11 +13,8 @@ type TrackRepository interface {
 	// no second lookup needed at the call site.
 	Add(ctx context.Context, track *domain.Track) (stored *domain.Track, created bool, err error)
 	// GetByID does not load FeaturedArtists — the lean read for callers that only
-	// need status/audio-ref fields. Use GetByIDWithFeatured for a display read.
+	// need status/audio-ref fields.
 	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-	// GetByIDWithFeatured is GetByID plus the track's featured-artist credits, for
-	// callers that serialize them (e.g. a single-track display response).
-	GetByIDWithFeatured(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
 	GetByDedupKey(ctx context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error)
 	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
 	// ListByIDs returns the user's tracks matching the given ids in one query —

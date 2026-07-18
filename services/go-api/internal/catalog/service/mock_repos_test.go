@@ -59,10 +59,6 @@ func (r *mockTrackRepo) GetByID(_ context.Context, id domain.TrackId, userId sha
 	return nil, nil
 }
 
-func (r *mockTrackRepo) GetByIDWithFeatured(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
-	return r.GetByID(ctx, id, userId)
-}
-
 func (r *mockTrackRepo) ListForUser(_ context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
 	if r.errOnList != nil {
 		return nil, 0, r.errOnList
