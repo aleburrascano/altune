@@ -102,7 +102,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 			"track_id", track.ID.String(),
 			"user_id", userId.String(),
 		)
-		s.events.Publish(userId, "track_added_to_library", trackAddedPayload(ctx, track))
+		s.events.Publish(userId, "track_added_to_library", trackAddedPayload(track))
 		sourceURL := ""
 		if input.SourceURL != nil {
 			sourceURL = *input.SourceURL
@@ -116,23 +116,14 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 }
 
 // trackAddedPayload builds the full track object embedded in the
-// track_added_to_library event (F10), so a receiving client inserts the row
-// directly instead of forcing a refetch. It marshals the same TrackDTO the HTTP
-// handler serializes and re-opens it as the bus's map payload, so the event can
-// never drift from the wire shape — they are the same struct.
-func trackAddedPayload(ctx context.Context, t *domain.Track) map[string]any {
-	// A DTO of plain values cannot fail to (un)marshal; logged rather than
-	// silently dropped in case that assumption is ever wrong.
-	b, err := json.Marshal(TrackToDTO(t))
-	if err != nil {
-		slog.ErrorContext(ctx, "track_added_to_library payload marshal failed", "track_id", t.ID.String(), "error", err)
-		return map[string]any{"track_id": t.ID.String()}
-	}
+// track_added_to_library event, so a receiving client inserts the row directly
+// instead of forcing a refetch. Marshals the same TrackDTO the HTTP handler
+// serializes, so the event payload and the wire response share one struct and
+// can never drift.
+func trackAddedPayload(t *domain.Track) map[string]any {
+	b, _ := json.Marshal(TrackToDTO(t)) // plain-value DTO cannot fail to marshal
 	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		slog.ErrorContext(ctx, "track_added_to_library payload unmarshal failed", "track_id", t.ID.String(), "error", err)
-		return map[string]any{"track_id": t.ID.String()}
-	}
+	_ = json.Unmarshal(b, &m)
 	m["track_id"] = t.ID.String() // retained for older clients
 	return m
 }

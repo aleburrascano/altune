@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -20,7 +19,7 @@ func TestTrackAddedPayload(t *testing.T) {
 		t.Fatalf("new track: %v", err)
 	}
 
-	p := trackAddedPayload(context.Background(), track)
+	p := trackAddedPayload(track)
 
 	if p["id"] != track.ID.String() {
 		t.Errorf("id = %v, want %s", p["id"], track.ID.String())
@@ -47,7 +46,7 @@ func TestTrackAddedPayload_EmptyAlbumIsNil(t *testing.T) {
 		t.Fatalf("new track: %v", err)
 	}
 
-	if album := trackAddedPayload(context.Background(), track)["album"]; album != nil {
+	if album := trackAddedPayload(track)["album"]; album != nil {
 		t.Errorf("empty album = %v, want JSON null", album)
 	}
 }
