@@ -109,7 +109,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 			store := catalogtest.NewAudioStore()
 			sched := &catalogtest.Scheduler{}
 			trackId := tt.setup(trRepo, store)
-			svc := NewStreamTrackService(trRepo, store, sched)
+			svc := NewStreamTrackService(trRepo, store, WithStreamScheduler(sched))
 
 			out, err := svc.Execute(ctx, userId, trackId)
 

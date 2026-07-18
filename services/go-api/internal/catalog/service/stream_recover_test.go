@@ -22,7 +22,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		store := catalogtest.NewAudioStore() // not seeded -> Exists false
 		sched := &catalogtest.Scheduler{}
 		track := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/gone.opus")
-		svc := NewStreamTrackService(repo, store, sched)
+		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -42,7 +42,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		store.Seed("audio/here.opus", []byte("data"))
 		sched := &catalogtest.Scheduler{}
 		track := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/here.opus")
-		svc := NewStreamTrackService(repo, store, sched)
+		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -61,7 +61,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		store := catalogtest.NewAudioStore()
 		sched := &catalogtest.Scheduler{}
 		track := seedTrack(t, repo, userId, "Pending", "Artist", "Album")
-		svc := NewStreamTrackService(repo, store, sched)
+		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -77,7 +77,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		store.ErrOnExists = errors.New("storage down")
 		sched := &catalogtest.Scheduler{}
 		track := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/err.opus")
-		svc := NewStreamTrackService(repo, store, sched)
+		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err == nil {
 			t.Fatal("expected an error")

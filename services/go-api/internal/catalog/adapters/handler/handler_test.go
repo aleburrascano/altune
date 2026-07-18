@@ -126,7 +126,7 @@ func buildStreamHandler(trackRepo *catalogtest.TrackRepo, audioStore *catalogtes
 	if scheduler != nil {
 		sched = scheduler
 	}
-	streamSvc := service.NewStreamTrackService(trackRepo, audioStore, sched)
+	streamSvc := service.NewStreamTrackService(trackRepo, audioStore, service.WithStreamScheduler(sched))
 	h := NewStreamHandler(streamSvc)
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(verifyAsTestUser))

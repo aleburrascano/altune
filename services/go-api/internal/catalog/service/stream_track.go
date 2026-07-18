@@ -32,15 +32,24 @@ type StreamTrackService struct {
 func NewStreamTrackService(
 	trackRepo streamTrackRepo,
 	audioStore ports.AudioStore,
-	scheduler ports.AcquisitionScheduler,
+	opts ...func(*StreamTrackService),
 ) *StreamTrackService {
-	if scheduler == nil {
-		scheduler = ports.NoopAcquisitionScheduler()
-	}
-	return &StreamTrackService{
+	s := &StreamTrackService{
 		trackRepo:  trackRepo,
 		audioStore: audioStore,
-		scheduler:  scheduler,
+		scheduler:  ports.NoopAcquisitionScheduler(),
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func WithStreamScheduler(scheduler ports.AcquisitionScheduler) func(*StreamTrackService) {
+	return func(s *StreamTrackService) {
+		if scheduler != nil {
+			s.scheduler = scheduler
+		}
 	}
 }
 
