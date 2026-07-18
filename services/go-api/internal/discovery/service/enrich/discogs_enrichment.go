@@ -7,7 +7,6 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -44,7 +43,7 @@ func (s *DiscogsEnrichmentService) Execute(
 		return domain.EmptyDiscogsEnrichment(), nil
 	}
 
-	return service.CachedLookup(ctx, s.cache, discogsNameKey(artist, album), domain.EmptyDiscogsEnrichment(),
+	return ports.CachedLookup(ctx, s.cache, discogsNameKey(artist, album), domain.EmptyDiscogsEnrichment(),
 		func(ctx context.Context) (domain.DiscogsEnrichment, bool, error) {
 			return resolveThenLookup(
 				ctx,
@@ -98,7 +97,7 @@ func (s *DiscogsArtistEnrichmentService) Execute(
 
 	nameKey := textnorm.NormalizeForMatch(strings.TrimSpace(name))
 
-	return service.CachedLookup(ctx, s.cache, nameKey, domain.EmptyDiscogsArtistEnrichment(),
+	return ports.CachedLookup(ctx, s.cache, nameKey, domain.EmptyDiscogsArtistEnrichment(),
 		func(ctx context.Context) (domain.DiscogsArtistEnrichment, bool, error) {
 			return resolveThenLookup(
 				ctx,
