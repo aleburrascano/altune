@@ -11,11 +11,10 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-// trackDeleter is the narrow read/write this service actually calls, out of
+// trackDeleter is the narrow write this service actually calls, out of
 // ports.TrackRepository's full surface.
 type trackDeleter interface {
-	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-	Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, err error)
+	Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error)
 }
 
 type DeleteTrackService struct {
@@ -41,17 +40,7 @@ func WithDeleteTrackEvents(pub events.Publisher) func(*DeleteTrackService) {
 }
 
 func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
-	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
-	if err != nil {
-		return fmt.Errorf("get track for delete: %w", err)
-	}
-	if track == nil {
-		return ErrTrackNotFound
-	}
-
-	audioRef := track.AudioRef
-
-	deleted, err := s.trackRepo.Delete(ctx, trackId, userId)
+	deleted, audioRef, err := s.trackRepo.Delete(ctx, trackId, userId)
 	if err != nil {
 		return fmt.Errorf("delete track: %w", err)
 	}
