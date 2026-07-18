@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -459,25 +458,14 @@ func (a *SoundCloudAPIAdapter) GetRelatedTracks(ctx context.Context, _ domain.Pr
 // getJSON performs a GET and decodes a 200 body into dst, returning the HTTP
 // status (for auth-retry decisions) alongside any error.
 func (a *SoundCloudAPIAdapter) getJSON(ctx context.Context, u string, dst any) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	status, body, err := getBytes(ctx, a.client, u, withHeader("User-Agent", scUserAgent))
 	if err != nil {
-		return 0, err
+		return status, fmt.Errorf("soundcloud api-v2: status %d", status)
 	}
-	req.Header.Set("User-Agent", scUserAgent)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return 0, err
+	if err := json.Unmarshal(body, dst); err != nil {
+		return status, fmt.Errorf("decode response: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return resp.StatusCode, fmt.Errorf("soundcloud api-v2: status %d", resp.StatusCode)
-	}
-	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
-		return resp.StatusCode, fmt.Errorf("decode response: %w", err)
-	}
-	return resp.StatusCode, nil
+	return status, nil
 }
 
 // scSearchResponse is one page of api-v2 /search/tracks.
@@ -737,26 +725,14 @@ func (r *clientIDResolver) resolve(ctx context.Context) (string, error) {
 }
 
 func (r *clientIDResolver) fetchText(ctx context.Context, u string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	status, body, err := getBytesCapped(ctx, r.client, u, scMaxBodyBytes, withHeader("User-Agent", scUserAgent))
 	if err != nil {
+		if status != 0 {
+			return "", fmt.Errorf("GET %s: status %d", u, status)
+		}
 		return "", err
 	}
-	req.Header.Set("User-Agent", scUserAgent)
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET %s: status %d", u, resp.StatusCode)
-	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, scMaxBodyBytes))
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
+	return string(body), nil
 }
 
 func dedupePreserveOrder(in []string) []string {
