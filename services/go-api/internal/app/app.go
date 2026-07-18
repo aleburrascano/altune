@@ -679,38 +679,41 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 	// message carries the aggregate count only — never the query text or any user
 	// id (cardinality / privacy).
 	if a.cfg.AlertZeroResultThreshold > 0 {
-		eventQuery := discoveryPersistence.NewPgxEventStore(a.pool)
-		threshold := a.cfg.AlertZeroResultThreshold
-		coverage := adminAlert.Condition{
-			Key: "coverage_zero_result",
-			Eval: func(ctx context.Context) *adminAlert.Alert {
-				since := time.Now().UTC().Add(-24 * time.Hour)
-				rows, err := eventQuery.ZeroResultQueries(ctx, since, 1000)
-				if err != nil {
-					slog.WarnContext(ctx, "coverage alert query failed", "error", err)
-					return nil
-				}
-				total := 0
-				for _, r := range rows {
-					total += r.Count
-				}
-				if total < threshold {
-					return nil
-				}
-				return &adminAlert.Alert{
-					Title:    "altune discovery coverage gap",
-					Message:  fmt.Sprintf("zero-result searches in 24h: %d (threshold %d)", total, threshold),
-					Severity: adminAlert.SeveritySignal,
-				}
-			},
-		}
-		conditions = append(conditions, coverage)
+		conditions = append(conditions, buildCoverageCondition(a.pool, a.cfg.AlertZeroResultThreshold))
 	}
 
 	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...)
 	a.alertMonitor.Start(ctx)
 }
 
+// buildCoverageCondition returns an alert condition that pages when zero-result
+// searches in the last 24h exceed threshold.
+func buildCoverageCondition(pool *pgxpool.Pool, threshold int) adminAlert.Condition {
+	eventQuery := discoveryPersistence.NewPgxEventStore(pool)
+	return adminAlert.Condition{
+		Key: "coverage_zero_result",
+		Eval: func(ctx context.Context) *adminAlert.Alert {
+			since := time.Now().UTC().Add(-24 * time.Hour)
+			rows, err := eventQuery.ZeroResultQueries(ctx, since, 1000)
+			if err != nil {
+				slog.WarnContext(ctx, "coverage alert query failed", "error", err)
+				return nil
+			}
+			total := 0
+			for _, r := range rows {
+				total += r.Count
+			}
+			if total < threshold {
+				return nil
+			}
+			return &adminAlert.Alert{
+				Title:    "altune discovery coverage gap",
+				Message:  fmt.Sprintf("zero-result searches in 24h: %d (threshold %d)", total, threshold),
+				Severity: adminAlert.SeveritySignal,
+			}
+		},
+	}
+}
 
 func (a *App) buildAudioStore() catalogPorts.AudioStore {
 	if a.cfg.HasOCIS3() {
