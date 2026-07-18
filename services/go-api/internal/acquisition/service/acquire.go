@@ -185,18 +185,25 @@ func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, tr
 					"track_id", track.ID.String(), "audio_ref", *track.AudioRef)
 			}
 		}
-		track.RevertToPending()
-		if err := s.trackRepo.Update(ctx, track); err != nil {
-			return false, fmt.Errorf("revert to pending: %w", err)
+		if err := s.revertToPending(ctx, track); err != nil {
+			return false, err
 		}
 	case domain.AcquisitionFailed:
 		slog.InfoContext(ctx, "acquire_retrying_failed", "track_id", track.ID.String())
-		track.RevertToPending()
-		if err := s.trackRepo.Update(ctx, track); err != nil {
-			return false, fmt.Errorf("revert failed to pending: %w", err)
+		if err := s.revertToPending(ctx, track); err != nil {
+			return false, err
 		}
 	}
 	return true, nil
+}
+
+// revertToPending persists an already-loaded track back to AcquisitionPending.
+func (s *AcquireTrackAudioService) revertToPending(ctx context.Context, track *domain.Track) error {
+	track.RevertToPending()
+	if err := s.trackRepo.Update(ctx, track); err != nil {
+		return fmt.Errorf("revert to pending: %w", err)
+	}
+	return nil
 }
 
 // buildSteps assembles the acquisition pipeline: discover a candidate
@@ -238,22 +245,11 @@ func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userI
 }
 
 func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) {
-	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
+	err := loadAndUpdate(ctx, s.trackRepo, trackId, userId, nil, func(track *domain.Track) error {
+		return track.MarkFailed(reason)
+	})
 	if err != nil {
-		slog.ErrorContext(ctx, "mark_failed: get track failed",
-			"track_id", trackId.String(), "error", err)
-		return
-	}
-	if track == nil {
-		return
-	}
-	if markErr := track.MarkFailed(reason); markErr != nil {
-		slog.ErrorContext(ctx, "mark_failed: domain error",
-			"track_id", trackId.String(), "error", markErr)
-		return
-	}
-	if err := s.trackRepo.Update(ctx, track); err != nil {
-		slog.ErrorContext(ctx, "mark_failed: persist failed, track stuck in pending",
+		slog.ErrorContext(ctx, "mark_failed: could not persist failure",
 			"track_id", trackId.String(), "error", err)
 	}
 }
@@ -265,6 +261,25 @@ func deref[T any](p *T) T {
 		return zero
 	}
 	return *p
+}
+
+// loadAndUpdate fetches a track, applies mutate, and persists the result.
+// notFound is returned (nil to swallow) when the track no longer exists.
+func loadAndUpdate(ctx context.Context, repo ports.TrackRepository, id domain.TrackId, userId shared.UserId, notFound error, mutate func(*domain.Track) error) error {
+	track, err := repo.GetByID(ctx, id, userId)
+	if err != nil {
+		return fmt.Errorf("get track: %w", err)
+	}
+	if track == nil {
+		return notFound
+	}
+	if err := mutate(track); err != nil {
+		return err
+	}
+	if err := repo.Update(ctx, track); err != nil {
+		return fmt.Errorf("update track: %w", err)
+	}
+	return nil
 }
 
 func buildTrackRef(track *domain.Track) TrackRef {
