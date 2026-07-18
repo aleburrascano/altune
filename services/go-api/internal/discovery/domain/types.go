@@ -227,26 +227,6 @@ func (s ProviderStatus) String() string {
 	}
 }
 
-// ContentValidationStatus caches content fetch outcome.
-type ContentValidationStatus int
-
-const (
-	ContentValidationUnknown ContentValidationStatus = iota
-	ContentValidationFetchable
-	ContentValidationUnfetchable
-)
-
-func (s ContentValidationStatus) String() string {
-	switch s {
-	case ContentValidationFetchable:
-		return "fetchable"
-	case ContentValidationUnfetchable:
-		return "unfetchable"
-	default:
-		return "unknown"
-	}
-}
-
 // SourceRef is one provider's reference to a merged SearchResult.
 type SourceRef struct {
 	Provider   ProviderName

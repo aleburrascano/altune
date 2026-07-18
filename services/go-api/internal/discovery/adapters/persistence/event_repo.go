@@ -18,7 +18,6 @@ var _ ports.EventStore = (*PgxEventStore)(nil)
 var _ ports.EventQuery = (*PgxEventStore)(nil)
 var _ ports.BehavioralSignalStore = (*PgxEventStore)(nil)
 var _ ports.BehavioralLabelStore = (*PgxEventStore)(nil)
-var _ ports.SessionSignalStore = (*PgxEventStore)(nil)
 
 type PgxEventStore struct {
 	pool *pgxpool.Pool

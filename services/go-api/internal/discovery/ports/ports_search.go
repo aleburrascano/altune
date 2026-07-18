@@ -41,7 +41,3 @@ type RelatedTracksProvider interface {
 	GetRelatedTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
 
-type ContentValidationCache interface {
-	Get(ctx context.Context, provider domain.ProviderName, externalID string) (domain.ContentValidationStatus, error)
-	Set(ctx context.Context, provider domain.ProviderName, externalID string, status domain.ContentValidationStatus) error
-}

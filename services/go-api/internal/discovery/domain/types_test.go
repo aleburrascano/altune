@@ -226,27 +226,6 @@ func TestProviderStatus_String(t *testing.T) {
 	}
 }
 
-func TestContentValidationStatus_String(t *testing.T) {
-	tests := []struct {
-		status ContentValidationStatus
-		want   string
-	}{
-		{ContentValidationFetchable, "fetchable"},
-		{ContentValidationUnfetchable, "unfetchable"},
-		{ContentValidationUnknown, "unknown"},
-		{ContentValidationStatus(999), "unknown"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.want, func(t *testing.T) {
-			got := tt.status.String()
-			if got != tt.want {
-				t.Errorf("ContentValidationStatus(%d).String() = %q, want %q", tt.status, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestNewSearchQuery_Valid(t *testing.T) {
 	tests := []struct {
 		name  string
