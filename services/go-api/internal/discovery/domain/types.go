@@ -302,9 +302,16 @@ type SearchResult struct {
 	// tiebreak: Deezer's track rank and artist/album fan count. 0 = none.
 	ProviderRank int64
 	FanCount     int64
+	// Album and Duration are typed for the same reason as Popularity/ISRC/MBID:
+	// completenessOf (merge) and isLowConfidenceTail (rank) branch on them, so
+	// the producer→consumer link must be compile-checked rather than a
+	// silently-absent/mistyped Extras entry. ""/0 = unknown.
+	Album    string
+	Duration int
 	// Extras carries provider-specific DISPLAY/TELEMETRY metadata only — nothing
 	// merge, rank, or consensus branches on (those keys are typed fields above).
-	// Current keys: "album", "duration", "preview_url", "record_type", "genre",
+	// Current keys: "album", "duration" (mirrored from the typed fields above for
+	// wire compatibility), "preview_url", "record_type", "genre",
 	// "genre_id", "disambiguation", "artist_type", "area", "mb_tags",
 	// "playcount", "playback_count", "likes_count", "reposts_count",
 	// "deezer_album_id", "track_number", "disc_number", "explicit", "copyright",

@@ -311,12 +311,10 @@ func completenessOf(r domain.SearchResult) int {
 	if r.ISRC != "" {
 		n++
 	}
-	if r.Extras != nil {
-		if _, ok := r.Extras["duration"]; ok {
-			n++
-		}
+	if r.Duration != 0 {
+		n++
 	}
-	if stringExtra(r, "album") != "" {
+	if r.Album != "" {
 		n++
 	}
 	return n
