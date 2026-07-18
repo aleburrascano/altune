@@ -30,18 +30,20 @@ const (
 // (it was previously unbounded — one sequential rate-limited MB call per distinct
 // artist name, ~15s on multi-artist queries).
 func (s *Service) applyArtistDisambiguation(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
-	if s.albumValidator == nil {
-		for i, r := range results {
-			if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
-				continue
-			}
-			if disambig := stringExtra(r, "disambiguation"); disambig != "" {
-				results[i].Subtitle = disambig
-			}
+	// First pass: apply pre-resolved disambiguations from extras — always free.
+	for i, r := range results {
+		if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
+			continue
 		}
+		if disambig := stringExtra(r, "disambiguation"); disambig != "" {
+			results[i].Subtitle = disambig
+		}
+	}
+	if s.albumValidator == nil {
 		return results
 	}
 
+	// Second pass: live MusicBrainz resolution for artists still missing a subtitle.
 	ctx, cancel := context.WithTimeout(ctx, disambigTimeout)
 	defer cancel()
 
@@ -54,10 +56,6 @@ func (s *Service) applyArtistDisambiguation(ctx context.Context, results []domai
 
 	for i, r := range results {
 		if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
-			continue
-		}
-		if disambig := stringExtra(r, "disambiguation"); disambig != "" {
-			results[i].Subtitle = disambig
 			continue
 		}
 
