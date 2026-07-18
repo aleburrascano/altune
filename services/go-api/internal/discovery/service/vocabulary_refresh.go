@@ -110,15 +110,7 @@ func (s *VocabularyRefreshService) Start() {
 
 func (s *VocabularyRefreshService) loop(ctx context.Context) {
 	defer close(s.done)
-
-	func() {
-		defer s.recoverPanic()
-		s.runSafe(ctx)
-	}()
-	s.tick(ctx)
-}
-
-func (s *VocabularyRefreshService) tick(ctx context.Context) {
+	s.runWithRecover(ctx)
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 	for {
@@ -126,12 +118,14 @@ func (s *VocabularyRefreshService) tick(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			func() {
-				defer s.recoverPanic()
-				s.runSafe(ctx)
-			}()
+			s.runWithRecover(ctx)
 		}
 	}
+}
+
+func (s *VocabularyRefreshService) runWithRecover(ctx context.Context) {
+	defer s.recoverPanic()
+	s.runSafe(ctx)
 }
 
 func (s *VocabularyRefreshService) runSafe(ctx context.Context) {
