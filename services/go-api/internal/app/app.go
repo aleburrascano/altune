@@ -185,7 +185,12 @@ func (a *App) setup(ctx context.Context) error {
 
 	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL)
 
-	verifier, err := a.buildTokenVerifier(ctx)
+	verifier, err := authAdapters.NewSupabaseJWTVerifier(
+		ctx,
+		a.cfg.SupabaseJWTJWKSURL,
+		a.cfg.SupabaseProjectURL,
+		a.cfg.SupabaseJWTAud,
+	)
 	if err != nil {
 		return fmt.Errorf("auth: %w", err)
 	}
@@ -696,14 +701,6 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 	a.alertMonitor.Start(ctx)
 }
 
-func (a *App) buildTokenVerifier(ctx context.Context) (auth.TokenVerifier, error) {
-	return authAdapters.NewSupabaseJWTVerifier(
-		ctx,
-		a.cfg.SupabaseJWTJWKSURL,
-		a.cfg.SupabaseProjectURL,
-		a.cfg.SupabaseJWTAud,
-	)
-}
 
 func (a *App) buildAudioStore() catalogPorts.AudioStore {
 	if a.cfg.HasOCIS3() {
