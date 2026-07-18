@@ -35,13 +35,19 @@ type AddTrackOutput struct {
 	Created bool
 }
 
+// trackAdder is the narrow write this service actually calls, out of
+// ports.TrackRepository's full surface.
+type trackAdder interface {
+	Add(ctx context.Context, track *domain.Track) (stored *domain.Track, created bool, err error)
+}
+
 type AddTrackService struct {
-	trackRepo ports.TrackRepository
+	trackRepo trackAdder
 	events    events.Publisher
 	scheduler ports.AcquisitionScheduler
 }
 
-func NewAddTrackService(trackRepo ports.TrackRepository, opts ...func(*AddTrackService)) *AddTrackService {
+func NewAddTrackService(trackRepo trackAdder, opts ...func(*AddTrackService)) *AddTrackService {
 	s := &AddTrackService{trackRepo: trackRepo}
 	for _, opt := range opts {
 		opt(s)

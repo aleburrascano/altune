@@ -5,20 +5,28 @@ import (
 	"fmt"
 	"log/slog"
 
+	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 )
+
+// featuredBackfillRepo is the narrow read/write this service actually calls,
+// out of ports.TrackRepository's full surface.
+type featuredBackfillRepo interface {
+	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
+	ReplaceFeaturedArtists(ctx context.Context, id domain.TrackId, userId shared.UserId, feats []domain.FeaturedArtist) error
+}
 
 // BackfillFeaturedService resolves and persists featured artists for a user's
 // existing tracks by re-running the discovery resolver (keyed on artist+title).
 // Idempotent: re-running replaces each track's set with the freshly resolved one.
 type BackfillFeaturedService struct {
-	trackRepo ports.TrackRepository
+	trackRepo featuredBackfillRepo
 	resolver  ports.FeaturedArtistResolver
 }
 
 func NewBackfillFeaturedService(
-	trackRepo ports.TrackRepository,
+	trackRepo featuredBackfillRepo,
 	resolver ports.FeaturedArtistResolver,
 ) *BackfillFeaturedService {
 	return &BackfillFeaturedService{trackRepo: trackRepo, resolver: resolver}

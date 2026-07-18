@@ -11,13 +11,19 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
+// trackReader is the narrow read this service actually calls, out of
+// ports.TrackRepository's full surface.
+type trackReader interface {
+	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
+}
+
 type PlaylistService struct {
 	playlistRepo ports.PlaylistRepository
-	trackRepo    ports.TrackRepository
+	trackRepo    trackReader
 	events       events.Publisher
 }
 
-func NewPlaylistService(playlistRepo ports.PlaylistRepository, trackRepo ports.TrackRepository, opts ...func(*PlaylistService)) *PlaylistService {
+func NewPlaylistService(playlistRepo ports.PlaylistRepository, trackRepo trackReader, opts ...func(*PlaylistService)) *PlaylistService {
 	s := &PlaylistService{playlistRepo: playlistRepo, trackRepo: trackRepo}
 	for _, opt := range opts {
 		opt(s)
