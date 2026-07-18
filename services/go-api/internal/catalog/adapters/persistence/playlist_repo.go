@@ -133,9 +133,7 @@ func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.Pla
 
 	rows, err := r.pool.Query(ctx,
 		`SELECT pt.track_id, pt.position,
-			t.id, t.user_id, t.title, t.artist, t.album, t.duration_seconds,
-			t.added_at, t.artwork_url, t.acquisition_status, t.dedup_key,
-			t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason
+			`+trackColumnsPrefixed+`
 		FROM playlist_tracks pt
 		JOIN tracks t ON t.id = pt.track_id
 		WHERE pt.playlist_id = $1

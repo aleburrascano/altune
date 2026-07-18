@@ -15,6 +15,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// trackColumns is the canonical column list for a `tracks` SELECT, shared by
+// every query that reads a track row (bare form here; playlist_repo.go and
+// featured_artist_repo.go use trackColumnsPrefixed for their joins). One
+// definition so a schema change is a single-line edit instead of a hand-sync
+// across every query.
+const trackColumns = `id, user_id, title, artist, album, duration_seconds,
+	added_at, artwork_url, acquisition_status, dedup_key,
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason`
+
+// trackColumnsPrefixed is trackColumns qualified with the `t.` alias, for
+// queries that join tracks against another table.
+const trackColumnsPrefixed = `t.id, t.user_id, t.title, t.artist, t.album, t.duration_seconds,
+	t.added_at, t.artwork_url, t.acquisition_status, t.dedup_key,
+	t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason`
+
 var _ ports.TrackRepository = (*PgxTrackRepository)(nil)
 
 type PgxTrackRepository struct {
@@ -73,9 +88,7 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 
 func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
 	row := r.pool.QueryRow(ctx,
-		`SELECT id, user_id, title, artist, album, duration_seconds,
-			added_at, artwork_url, acquisition_status, dedup_key,
-			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason
+		`SELECT `+trackColumns+`
 		FROM tracks WHERE id = $1 AND user_id = $2`,
 		id.UUID(), userId.UUID(),
 	)
@@ -97,9 +110,7 @@ func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.User
 	}
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, title, artist, album, duration_seconds,
-			added_at, artwork_url, acquisition_status, dedup_key,
-			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason
+		`SELECT `+trackColumns+`
 		FROM tracks WHERE user_id = $1
 		ORDER BY added_at DESC, id DESC
 		LIMIT $2 OFFSET $3`,
@@ -141,9 +152,7 @@ func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId
 	}
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, title, artist, album, duration_seconds,
-			added_at, artwork_url, acquisition_status, dedup_key,
-			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason
+		`SELECT `+trackColumns+`
 		FROM tracks WHERE user_id = $1 AND id = ANY($2)`,
 		userId.UUID(), uuids,
 	)
@@ -228,9 +237,7 @@ func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, user
 
 func (r *PgxTrackRepository) GetByDedupKey(ctx context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error) {
 	row := r.pool.QueryRow(ctx,
-		`SELECT id, user_id, title, artist, album, duration_seconds,
-			added_at, artwork_url, acquisition_status, dedup_key,
-			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason
+		`SELECT `+trackColumns+`
 		FROM tracks WHERE user_id = $1 AND dedup_key = $2`,
 		userId.UUID(), dedupKey,
 	)
