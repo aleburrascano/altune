@@ -229,7 +229,7 @@ func BuildConsensusProviders(cfg *config.Config) []discoveryService.ConsensusPro
 		},
 	})
 
-	ytmusic := providers.NewYouTubeMusicAdapter(nil)
+	ytmusic := providers.NewYouTubeMusicAdapter(defaultLiveTransport)
 	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 		Name: "ytmusic",
 		Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
