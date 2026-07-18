@@ -47,24 +47,38 @@ func validateContentParams(w http.ResponseWriter, r *http.Request) (string, stri
 	return provider, externalID, true
 }
 
+// clampLimit parses the "limit" query param, falling back to def when absent
+// or non-positive and capping it at max.
+func clampLimit(r *http.Request, def, max int) int {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		return def
+	}
+	if limit > max {
+		return max
+	}
+	return limit
+}
+
+// writeContentFetchError writes the degraded envelope every content-fetch
+// handler falls back to when its service isn't wired.
+func writeContentFetchError(w http.ResponseWriter, provider string) {
+	httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
+		Provider: provider, Status: "error", Items: []SearchResultDTO{},
+	})
+}
+
 func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 	provider, externalID, ok := validateContentParams(w, r)
 	if !ok {
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 {
-		limit = 50
-	} else if limit > 100 {
-		limit = 100
-	}
+	limit := clampLimit(r, 50, 100)
 	albumTitle := strings.TrimSpace(r.URL.Query().Get("title"))
 	albumArtist := strings.TrimSpace(r.URL.Query().Get("artist"))
 
 	if h.albumSvc == nil {
-		httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
-			Provider: provider, Status: "error", Items: []SearchResultDTO{},
-		})
+		writeContentFetchError(w, provider)
 		return
 	}
 
@@ -84,17 +98,10 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 {
-		limit = 5
-	} else if limit > 50 {
-		limit = 50
-	}
+	limit := clampLimit(r, 5, 50)
 
 	if h.artistSvc == nil {
-		httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
-			Provider: provider, Status: "error", Items: []SearchResultDTO{},
-		})
+		writeContentFetchError(w, provider)
 		return
 	}
 
@@ -118,18 +125,11 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 {
-		limit = 50
-	} else if limit > 100 {
-		limit = 100
-	}
+	limit := clampLimit(r, 50, 100)
 	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
 	if h.artistSvc == nil {
-		httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
-			Provider: provider, Status: "error", Items: []SearchResultDTO{},
-		})
+		writeContentFetchError(w, provider)
 		return
 	}
 
@@ -153,17 +153,10 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 {
-		limit = 20
-	} else if limit > 50 {
-		limit = 50
-	}
+	limit := clampLimit(r, 20, 50)
 
 	if h.relatedSvc == nil {
-		httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
-			Provider: provider, Status: "error", Items: []SearchResultDTO{},
-		})
+		writeContentFetchError(w, provider)
 		return
 	}
 
