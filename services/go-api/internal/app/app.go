@@ -395,11 +395,14 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 // that safe.
 func (a *App) buildFeaturedBridge(sharedMB *providers.MusicBrainzAdapter) *discoverybridge.FeaturedResolver {
 	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
-	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
 	if sharedMB != nil {
-		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
+		return discoverybridge.NewFeaturedResolver(
+			discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer),
+		)
 	}
-	return discoverybridge.NewFeaturedResolver(featuredResolver)
+	return discoverybridge.NewFeaturedResolver(
+		discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer),
+	)
 }
 
 // buildHistoryServices builds the search-history read and clear services.
