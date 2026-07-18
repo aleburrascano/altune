@@ -96,14 +96,8 @@ func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, use
 }
 
 func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
-	var total int
-	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM tracks WHERE user_id = $1`, userId.UUID()).Scan(&total)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	rows, err := r.pool.Query(ctx,
-		`SELECT `+trackColumns+`
+		`SELECT `+trackColumns+`, COUNT(*) OVER () AS total
 		FROM tracks WHERE user_id = $1
 		ORDER BY added_at DESC, id DESC
 		LIMIT $2 OFFSET $3`,
@@ -115,8 +109,14 @@ func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.User
 	defer rows.Close()
 
 	var tracks []*domain.Track
+	total := 0
 	for rows.Next() {
-		t, err := scanTrackFromRows(rows)
+		dest, build := trackScanDest()
+		dest = append(dest, &total)
+		if err := rows.Scan(dest...); err != nil {
+			return nil, 0, err
+		}
+		t, err := build()
 		if err != nil {
 			return nil, 0, err
 		}
