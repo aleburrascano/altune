@@ -66,13 +66,7 @@ func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.
 			continue
 		}
 		slog.InfoContext(ctx, "acquisition.engine_search_results", "spec", spec, "candidates", len(candidates))
-		for _, c := range candidates {
-			if c.URL == "" || seen[c.URL] {
-				continue
-			}
-			seen[c.URL] = true
-			merged = append(merged, c)
-		}
+		merged = ports.DedupeCandidatesByURL(merged, candidates, seen)
 	}
 
 	if failures == len(searchEngines) {

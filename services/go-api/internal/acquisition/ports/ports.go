@@ -24,6 +24,22 @@ type AudioCandidate struct {
 	ViewCount  int64
 }
 
+// DedupeCandidatesByURL appends each candidate from results to merged whose URL
+// hasn't been seen yet, recording it in seen. Shared by every layer that fans a
+// search out across multiple queries or engines and must merge the results
+// without duplicates (SearchStep across query variants, the yt-dlp adapter
+// across search engines).
+func DedupeCandidatesByURL(merged []AudioCandidate, results []AudioCandidate, seen map[string]bool) []AudioCandidate {
+	for _, c := range results {
+		if c.URL == "" || seen[c.URL] {
+			continue
+		}
+		seen[c.URL] = true
+		merged = append(merged, c)
+	}
+	return merged
+}
+
 // AudioSearcher finds and downloads audio for a query. Implemented by the
 // yt-dlp adapter.
 type AudioSearcher interface {
