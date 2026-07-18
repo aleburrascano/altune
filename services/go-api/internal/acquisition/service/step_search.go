@@ -32,13 +32,7 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext) error 
 			continue
 		}
 		slog.InfoContext(ctx, "acquisition.search_query_results", "query", query, "candidates", len(results))
-		for _, r := range results {
-			if seen[r.URL] {
-				continue
-			}
-			seen[r.URL] = true
-			allCandidates = append(allCandidates, r)
-		}
+		allCandidates = ports.DedupeCandidatesByURL(allCandidates, results, seen)
 	}
 
 	if len(allCandidates) == 0 {
