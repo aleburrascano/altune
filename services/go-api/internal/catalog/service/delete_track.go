@@ -63,7 +63,7 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, 
 		"track_id": trackId.String(),
 	})
 
-	if audioRef != nil && s.audioStore != nil {
+	if audioRef != nil {
 		if err := s.audioStore.Delete(ctx, *audioRef); err != nil {
 			slog.ErrorContext(ctx, "orphaned audio file after track delete",
 				"track_id", trackId.String(),
