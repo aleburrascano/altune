@@ -71,7 +71,7 @@ func buildVocabEntries(rawQuery string, results []domain.SearchResult) []domain.
 		limit = len(results)
 	}
 	for _, r := range results[:limit] {
-		pop := popularityOf(r)
+		pop := r.Popularity
 		text := r.Title
 		if r.Subtitle != "" {
 			text = r.Title + " - " + r.Subtitle
