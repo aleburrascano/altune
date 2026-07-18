@@ -91,7 +91,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 			"user_id", userId.String(),
 		)
 		if s.events != nil {
-			s.events.Publish(userId, "track_added_to_library", trackAddedPayload(track))
+			s.events.Publish(userId, "track_added_to_library", trackAddedPayload(ctx, track))
 		}
 		if s.scheduler != nil {
 			sourceURL := ""
@@ -112,11 +112,19 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 // directly instead of forcing a refetch. It marshals the same TrackDTO the HTTP
 // handler serializes and re-opens it as the bus's map payload, so the event can
 // never drift from the wire shape — they are the same struct.
-func trackAddedPayload(t *domain.Track) map[string]any {
-	// A DTO of plain values cannot fail to (un)marshal.
-	b, _ := json.Marshal(TrackToDTO(t))
+func trackAddedPayload(ctx context.Context, t *domain.Track) map[string]any {
+	// A DTO of plain values cannot fail to (un)marshal; logged rather than
+	// silently dropped in case that assumption is ever wrong.
+	b, err := json.Marshal(TrackToDTO(t))
+	if err != nil {
+		slog.ErrorContext(ctx, "track_added_to_library payload marshal failed", "track_id", t.ID.String(), "error", err)
+		return map[string]any{"track_id": t.ID.String()}
+	}
 	var m map[string]any
-	_ = json.Unmarshal(b, &m)
+	if err := json.Unmarshal(b, &m); err != nil {
+		slog.ErrorContext(ctx, "track_added_to_library payload unmarshal failed", "track_id", t.ID.String(), "error", err)
+		return map[string]any{"track_id": t.ID.String()}
+	}
 	m["track_id"] = t.ID.String() // retained for older clients
 	return m
 }
