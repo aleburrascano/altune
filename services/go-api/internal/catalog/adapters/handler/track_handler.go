@@ -132,7 +132,7 @@ func (h *TrackHandler) handleListFeaturing(w http.ResponseWriter, r *http.Reques
 
 	items := make([]TrackResponse, len(tracks))
 	for i, t := range tracks {
-		items[i] = trackToResponse(t)
+		items[i] = service.TrackToDTO(t)
 	}
 	httputil.WriteJSON(w, http.StatusOK, ListTracksResponse{
 		Items: items, Total: len(items), Limit: len(items), Offset: 0, HasMore: false,
@@ -174,10 +174,6 @@ type ListTracksResponse struct {
 	HasMore bool            `json:"has_more"`
 }
 
-func trackToResponse(t *domain.Track) TrackResponse {
-	return service.TrackToDTO(t)
-}
-
 // --- Handlers ---
 
 func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +196,7 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 
 	items := make([]TrackResponse, len(result.Tracks))
 	for i, t := range result.Tracks {
-		items[i] = trackToResponse(t)
+		items[i] = service.TrackToDTO(t)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, ListTracksResponse{
@@ -268,7 +264,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		)
 	}
 
-	httputil.WriteJSON(w, status, trackToResponse(result.Track))
+	httputil.WriteJSON(w, status, service.TrackToDTO(result.Track))
 }
 
 type TrackStatusResponse struct {
