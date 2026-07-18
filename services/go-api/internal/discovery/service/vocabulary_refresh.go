@@ -111,7 +111,10 @@ func (s *VocabularyRefreshService) Start() {
 func (s *VocabularyRefreshService) loop(ctx context.Context) {
 	defer close(s.done)
 
-	s.runSafe(ctx)
+	func() {
+		defer s.recoverPanic()
+		s.runSafe(ctx)
+	}()
 	s.tick(ctx)
 }
 
