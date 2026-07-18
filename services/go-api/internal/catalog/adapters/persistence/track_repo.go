@@ -225,16 +225,7 @@ func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, user
 	}
 
 	for _, playlistId := range playlistIds {
-		_, err = tx.Exec(ctx,
-			`UPDATE playlist_tracks SET position = sub.new_pos
-			FROM (
-				SELECT track_id, ROW_NUMBER() OVER (ORDER BY position) - 1 AS new_pos
-				FROM playlist_tracks WHERE playlist_id = $1
-			) sub
-			WHERE playlist_tracks.playlist_id = $1 AND playlist_tracks.track_id = sub.track_id`,
-			playlistId,
-		)
-		if err != nil {
+		if err := renumberPlaylistPositions(ctx, tx, playlistId); err != nil {
 			return false, err
 		}
 	}

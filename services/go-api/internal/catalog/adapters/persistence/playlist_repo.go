@@ -219,20 +219,29 @@ func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, playlistId doma
 		return err
 	}
 
-	_, err = tx.Exec(ctx,
+	if err := renumberPlaylistPositions(ctx, tx, playlistId.UUID()); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// renumberPlaylistPositions collapses a playlist's track positions back to a
+// contiguous 0..N-1 range (order-preserving), so a removal never leaves a gap.
+// Shared by every write path that can drop a playlist_tracks row (playlist
+// track removal here; track deletion in track_repo.go) — one definition so
+// the renumbering rule can't drift between them.
+func renumberPlaylistPositions(ctx context.Context, tx pgx.Tx, playlistId uuid.UUID) error {
+	_, err := tx.Exec(ctx,
 		`UPDATE playlist_tracks SET position = sub.new_pos
 		FROM (
 			SELECT track_id, ROW_NUMBER() OVER (ORDER BY position) - 1 AS new_pos
 			FROM playlist_tracks WHERE playlist_id = $1
 		) sub
 		WHERE playlist_tracks.playlist_id = $1 AND playlist_tracks.track_id = sub.track_id`,
-		playlistId.UUID(),
+		playlistId,
 	)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
+	return err
 }
 
 func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
