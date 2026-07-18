@@ -174,7 +174,7 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	trackResponses := make([]TrackResponse, len(tracks))
 	for i, t := range tracks {
-		trackResponses[i] = trackToResponse(t)
+		trackResponses[i] = service.TrackToDTO(t)
 	}
 
 	artworkURLs := previewArtworkFromTracks(tracks)
