@@ -35,10 +35,8 @@ type BackgroundAcquisitionScheduler struct {
 	closed   atomic.Bool
 	inflight sync.Map
 
-	// Operator-console counters (in-memory).
+	// Operator-console in-flight counter; succeeded/failed totals live on log.
 	inflightCount atomic.Int64
-	succeeded     atomic.Uint64
-	failed        atomic.Uint64
 
 	log *jobLog
 }
@@ -116,13 +114,11 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 			log: s.log, events: s.events, trackID: key, userId: userId,
 		})
 		if err := s.svc.Execute(jobCtx, userId, trackId, sourceURL); err != nil {
-			s.failed.Add(1)
 			s.log.complete(key, "failed", err.Error())
 			slog.Error("background acquisition failed",
 				"track_id", key, "error", err)
 			return
 		}
-		s.succeeded.Add(1)
 		s.log.complete(key, "succeeded", "")
 	}()
 }
@@ -164,10 +160,11 @@ func (r schedulerJobReporter) source(url string) {
 // console.
 func (s *BackgroundAcquisitionScheduler) Status() AcquisitionStatus {
 	jobs, recent := s.log.snapshot()
+	succeeded, failed := s.log.counts()
 	return AcquisitionStatus{
 		InFlight:  int(s.inflightCount.Load()),
-		Succeeded: s.succeeded.Load(),
-		Failed:    s.failed.Load(),
+		Succeeded: succeeded,
+		Failed:    failed,
 		Jobs:      jobs,
 		Recent:    recent,
 	}

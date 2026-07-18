@@ -16,8 +16,9 @@ func TestAcquisitionStatus_Counts(t *testing.T) {
 	s := newStatusTestScheduler()
 
 	s.inflightCount.Add(2)
-	s.succeeded.Add(5)
-	s.failed.Add(1)
+	for i := 0; i < 5; i++ {
+		s.log.complete("succeeded-track", "succeeded", "")
+	}
 	s.log.complete("track-1", "failed", "yt-dlp exited 1")
 
 	got := s.Status()
@@ -30,9 +31,9 @@ func TestAcquisitionStatus_Counts(t *testing.T) {
 	if got.Failed != 1 {
 		t.Errorf("failed = %d, want 1", got.Failed)
 	}
-	if len(got.Recent) != 1 || got.Recent[0].TrackID != "track-1" ||
+	if len(got.Recent) != 6 || got.Recent[0].TrackID != "track-1" ||
 		got.Recent[0].State != "failed" || got.Recent[0].Reason != "yt-dlp exited 1" {
-		t.Errorf("recent = %+v, want one failed entry for track-1", got.Recent)
+		t.Errorf("recent = %+v, want 6 entries, newest a failed entry for track-1", got.Recent)
 	}
 }
 

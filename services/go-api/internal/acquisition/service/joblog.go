@@ -3,6 +3,7 @@ package service
 import (
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,13 +27,16 @@ type JobRecord struct {
 }
 
 // jobLog is the scheduler's operator-console job telemetry: current
-// queued/running jobs plus a bounded ring of recent terminal outcomes (failures
-// included, carrying their reason). One mutex owns both; nothing here touches job
-// execution. In-memory only — resets on restart.
+// queued/running jobs, running succeeded/failed totals, and a bounded ring of
+// recent terminal outcomes (failures included, carrying their reason). complete
+// is the single call site that advances all three, so they cannot drift apart.
+// In-memory only — resets on restart.
 type jobLog struct {
-	mu     sync.Mutex
-	jobs   map[string]*JobRecord // current queued/running jobs, keyed by track id
-	recent []JobRecord           // recent terminal outcomes, oldest→newest
+	mu        sync.Mutex
+	jobs      map[string]*JobRecord // current queued/running jobs, keyed by track id
+	recent    []JobRecord           // recent terminal outcomes, oldest→newest
+	succeeded atomic.Uint64
+	failed    atomic.Uint64
 }
 
 func newJobLog() *jobLog {
@@ -69,8 +73,16 @@ func (l *jobLog) update(trackID string, fn func(*JobRecord)) {
 	l.mu.Unlock()
 }
 
-// complete moves a job to the recent-terminal ring with its outcome.
+// complete moves a job to the recent-terminal ring with its outcome and, for
+// succeeded/failed outcomes, advances the matching running total.
 func (l *jobLog) complete(trackID, state, reason string) {
+	switch state {
+	case "succeeded":
+		l.succeeded.Add(1)
+	case "failed":
+		l.failed.Add(1)
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	j := l.jobs[trackID]
@@ -85,6 +97,11 @@ func (l *jobLog) complete(trackID, state, reason string) {
 	if len(l.recent) > recentJobCap {
 		l.recent = l.recent[len(l.recent)-recentJobCap:]
 	}
+}
+
+// counts returns the running succeeded/failed totals.
+func (l *jobLog) counts() (succeeded, failed uint64) {
+	return l.succeeded.Load(), l.failed.Load()
 }
 
 // snapshot returns copies of the current jobs (scheduled-first, with live
