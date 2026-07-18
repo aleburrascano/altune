@@ -247,23 +247,11 @@ func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domai
 	}
 }
 
-func derefStr(p *string) string {
+// deref returns the pointee, or the zero value of T when p is nil.
+func deref[T any](p *T) T {
 	if p == nil {
-		return ""
-	}
-	return *p
-}
-
-func derefFloat(p *float64) float64 {
-	if p == nil {
-		return 0
-	}
-	return *p
-}
-
-func derefInt(p *int) int {
-	if p == nil {
-		return 0
+		var zero T
+		return zero
 	}
 	return *p
 }
@@ -275,12 +263,12 @@ func buildTrackRef(track *domain.Track) TrackRef {
 		Title:       track.Title,
 		Artist:      track.Artist,
 		Album:       track.Album,
-		Duration:    derefFloat(track.DurationSeconds),
-		ISRC:        derefStr(track.ISRC),
-		Year:        derefInt(track.Year),
-		TrackNumber: derefInt(track.TrackNumber),
-		AlbumArtist: derefStr(track.AlbumArtist),
-		Genre:       derefStr(track.Genre),
+		Duration:    deref(track.DurationSeconds),
+		ISRC:        deref(track.ISRC),
+		Year:        deref(track.Year),
+		TrackNumber: deref(track.TrackNumber),
+		AlbumArtist: deref(track.AlbumArtist),
+		Genre:       deref(track.Genre),
 	}
 }
 
