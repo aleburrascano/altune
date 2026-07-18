@@ -48,6 +48,17 @@ func NewFeaturedArtistIdentityOnly(name, mbid string, deezerID int64) FeaturedAr
 	}
 }
 
+// FeaturedArtistForQuery builds a FeaturedArtist for query operations (e.g.
+// "list tracks featuring this artist") from raw HTTP parameters. Uses the full
+// constructor when a non-empty name is present; falls back to identity-only so
+// mbid/deezerID still resolve an IdentityKey without a display name.
+func FeaturedArtistForQuery(name, mbid string, deezerID int64) FeaturedArtist {
+	if fa, ok := NewFeaturedArtist(name, mbid, deezerID); ok {
+		return fa
+	}
+	return NewFeaturedArtistIdentityOnly(name, mbid, deezerID)
+}
+
 // NormalizedName lower-cases and collapses whitespace — the name component of the
 // identity key and the fallback grouping key.
 func (f FeaturedArtist) NormalizedName() string {
