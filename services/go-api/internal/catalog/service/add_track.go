@@ -48,7 +48,11 @@ type AddTrackService struct {
 }
 
 func NewAddTrackService(trackRepo trackAdder, opts ...func(*AddTrackService)) *AddTrackService {
-	s := &AddTrackService{trackRepo: trackRepo}
+	s := &AddTrackService{
+		trackRepo: trackRepo,
+		events:    events.NoopPublisher(),
+		scheduler: ports.NoopAcquisitionScheduler(),
+	}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -56,11 +60,19 @@ func NewAddTrackService(trackRepo trackAdder, opts ...func(*AddTrackService)) *A
 }
 
 func WithAddTrackEvents(pub events.Publisher) func(*AddTrackService) {
-	return func(s *AddTrackService) { s.events = pub }
+	return func(s *AddTrackService) {
+		if pub != nil {
+			s.events = pub
+		}
+	}
 }
 
 func WithAcquisitionScheduler(scheduler ports.AcquisitionScheduler) func(*AddTrackService) {
-	return func(s *AddTrackService) { s.scheduler = scheduler }
+	return func(s *AddTrackService) {
+		if scheduler != nil {
+			s.scheduler = scheduler
+		}
+	}
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, input AddTrackInput) (*AddTrackOutput, error) {
@@ -90,18 +102,14 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 			"track_id", track.ID.String(),
 			"user_id", userId.String(),
 		)
-		if s.events != nil {
-			s.events.Publish(userId, "track_added_to_library", trackAddedPayload(ctx, track))
+		s.events.Publish(userId, "track_added_to_library", trackAddedPayload(ctx, track))
+		sourceURL := ""
+		if input.SourceURL != nil {
+			sourceURL = *input.SourceURL
 		}
-		if s.scheduler != nil {
-			sourceURL := ""
-			if input.SourceURL != nil {
-				sourceURL = *input.SourceURL
-			}
-			slog.InfoContext(ctx, "acquisition.scheduled",
-				"track_id", track.ID.String())
-			s.scheduler.Schedule(userId, track.ID, sourceURL)
-		}
+		slog.InfoContext(ctx, "acquisition.scheduled",
+			"track_id", track.ID.String())
+		s.scheduler.Schedule(userId, track.ID, sourceURL)
 	}
 
 	return &AddTrackOutput{Track: track, Created: created}, nil

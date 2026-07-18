@@ -25,7 +25,7 @@ type DeleteTrackService struct {
 }
 
 func NewDeleteTrackService(trackRepo trackDeleter, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
-	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore}
+	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore, events: events.NoopPublisher()}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -33,7 +33,11 @@ func NewDeleteTrackService(trackRepo trackDeleter, audioStore ports.AudioStore, 
 }
 
 func WithDeleteTrackEvents(pub events.Publisher) func(*DeleteTrackService) {
-	return func(s *DeleteTrackService) { s.events = pub }
+	return func(s *DeleteTrackService) {
+		if pub != nil {
+			s.events = pub
+		}
+	}
 }
 
 func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
@@ -55,11 +59,9 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, 
 		return ErrTrackNotFound
 	}
 
-	if s.events != nil {
-		s.events.Publish(userId, "track_deleted", map[string]any{
-			"track_id": trackId.String(),
-		})
-	}
+	s.events.Publish(userId, "track_deleted", map[string]any{
+		"track_id": trackId.String(),
+	})
 
 	if audioRef != nil && s.audioStore != nil {
 		if err := s.audioStore.Delete(ctx, *audioRef); err != nil {
