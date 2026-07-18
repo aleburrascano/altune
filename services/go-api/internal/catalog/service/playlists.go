@@ -181,6 +181,20 @@ func (s *PlaylistService) RemoveTrack(ctx context.Context, userId shared.UserId,
 	return nil
 }
 
+// PreviewArtworkURLs selects up to domain.PreviewArtworkLimit distinct track
+// artwork URLs for a playlist's preview tile.
+func PreviewArtworkURLs(tracks []*domain.Track) []string {
+	urls := []string{}
+	seen := make(map[string]bool)
+	for _, t := range tracks {
+		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(urls) < domain.PreviewArtworkLimit {
+			urls = append(urls, *t.ArtworkURL)
+			seen[*t.ArtworkURL] = true
+		}
+	}
+	return urls
+}
+
 func (s *PlaylistService) Reorder(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
 	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
 	if err != nil {
