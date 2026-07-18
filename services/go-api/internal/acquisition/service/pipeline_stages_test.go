@@ -330,7 +330,7 @@ func TestAcqStage_FullSelectionTrace(t *testing.T) {
 	}
 
 	// Stage 4: Selection
-	selected := SelectBestCandidate(track, candidates)
+	selected := selectBest(track, candidates)
 	if selected == nil {
 		t.Fatal("expected a candidate to be selected")
 	}
