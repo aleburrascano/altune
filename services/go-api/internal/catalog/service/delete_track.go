@@ -11,13 +11,20 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
+// trackDeleter is the narrow read/write this service actually calls, out of
+// ports.TrackRepository's full surface.
+type trackDeleter interface {
+	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
+	Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, err error)
+}
+
 type DeleteTrackService struct {
-	trackRepo  ports.TrackRepository
+	trackRepo  trackDeleter
 	audioStore ports.AudioStore
 	events     events.Publisher
 }
 
-func NewDeleteTrackService(trackRepo ports.TrackRepository, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
+func NewDeleteTrackService(trackRepo trackDeleter, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
 	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore}
 	for _, opt := range opts {
 		opt(s)

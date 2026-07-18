@@ -16,14 +16,21 @@ type StreamOutput struct {
 	Track  *domain.Track
 }
 
+// streamTrackRepo is the narrow read/write this service actually calls, out
+// of ports.TrackRepository's full surface.
+type streamTrackRepo interface {
+	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
+	Update(ctx context.Context, track *domain.Track) error
+}
+
 type StreamTrackService struct {
-	trackRepo  ports.TrackRepository
+	trackRepo  streamTrackRepo
 	audioStore ports.AudioStore
 	scheduler  ports.AcquisitionScheduler
 }
 
 func NewStreamTrackService(
-	trackRepo ports.TrackRepository,
+	trackRepo streamTrackRepo,
 	audioStore ports.AudioStore,
 	scheduler ports.AcquisitionScheduler,
 ) *StreamTrackService {
