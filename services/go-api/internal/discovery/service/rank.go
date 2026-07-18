@@ -73,13 +73,10 @@ func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
 
 // rankWith is Rank with the experiment-gated inputs threaded in (see rankConfig).
 func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.SearchResult {
-	// queryNorm is already normalized by the caller (Execute); use it directly.
-	q := queryNorm
-
 	// Pass 1: keep only eligible entities.
 	eligible := make([]Entity, 0, len(entities))
 	for _, e := range entities {
-		if sharesQueryWord(e.Result, q) && hasBrowseableSource(e.Result) {
+		if sharesQueryWord(e.Result, queryNorm) && hasBrowseableSource(e.Result) {
 			eligible = append(eligible, e)
 		}
 	}
@@ -88,7 +85,7 @@ func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.Sear
 	// query repeats across every result and so weighs ~nothing; the token that
 	// names the specific song is rare and carries most of the weight. These weight
 	// the relevance measure directly — there is no separate tuned bonus.
-	rarity := queryTokenRarity(q, eligible)
+	rarity := queryTokenRarity(queryNorm, eligible)
 
 	// Pass 2: score.
 	results := make([]scored, 0, len(eligible))
@@ -104,7 +101,7 @@ func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.Sear
 		}
 		results = append(results, scored{
 			result:     r,
-			relevance:  idfWeightedCoverage(r, q, rarity),
+			relevance:  idfWeightedCoverage(r, queryNorm, rarity),
 			behavioral: cfg.behavioral[domain.ResultSignature(r)], // nil map read → 0 (inert)
 			prominence: prominence,                                // 0 unless the experiment is on (inert)
 			pop:        r.Popularity,
