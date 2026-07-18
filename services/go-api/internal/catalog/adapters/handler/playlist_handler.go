@@ -255,14 +255,8 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	trackId := domain.TrackIdFromUUID(req.TrackID)
-	added, err := h.svc.AddTrack(r.Context(), userId, playlistId, trackId)
-	if err != nil {
+	if err := h.svc.AddTrack(r.Context(), userId, playlistId, trackId); err != nil {
 		httputil.HandleServiceError(w, r, err)
-		return
-	}
-
-	if !added {
-		httputil.Conflict(w, "track already in playlist")
 		return
 	}
 

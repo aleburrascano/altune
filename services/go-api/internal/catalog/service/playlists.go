@@ -118,29 +118,29 @@ func (s *PlaylistService) Rename(ctx context.Context, userId shared.UserId, play
 // Outcome is a soft failure (the row's FK/next read reconciles; client retries),
 // not corruption — accepted pre-launch. Harden with a tx or FK-on-insert when a
 // spec needs stronger atomicity.
-func (s *PlaylistService) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) (bool, error) {
+func (s *PlaylistService) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
 	playlist, err := s.playlistRepo.GetByID(ctx, playlistId, userId)
 	if err != nil {
-		return false, fmt.Errorf("add track to playlist: %w", err)
+		return fmt.Errorf("add track to playlist: %w", err)
 	}
 	if playlist == nil {
-		return false, ErrPlaylistNotFound
+		return ErrPlaylistNotFound
 	}
 
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if err != nil {
-		return false, fmt.Errorf("add track to playlist: %w", err)
+		return fmt.Errorf("add track to playlist: %w", err)
 	}
 	if track == nil {
-		return false, ErrTrackNotFound
+		return ErrTrackNotFound
 	}
 
 	if err := playlist.AddTrack(trackId); err != nil {
-		return false, err
+		return err
 	}
 
 	if err := s.playlistRepo.AddTrack(ctx, playlistId, trackId, len(playlist.Tracks)-1); err != nil {
-		return false, fmt.Errorf("add track to playlist: %w", err)
+		return fmt.Errorf("add track to playlist: %w", err)
 	}
 
 	slog.InfoContext(ctx, "track added to playlist",
@@ -149,7 +149,7 @@ func (s *PlaylistService) AddTrack(ctx context.Context, userId shared.UserId, pl
 		"playlist_id": playlistId.String(),
 		"track_id":    trackId.String(),
 	})
-	return true, nil
+	return nil
 }
 
 func (s *PlaylistService) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) (bool, error) {
