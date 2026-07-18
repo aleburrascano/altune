@@ -34,6 +34,9 @@ func NewStreamTrackService(
 	audioStore ports.AudioStore,
 	scheduler ports.AcquisitionScheduler,
 ) *StreamTrackService {
+	if scheduler == nil {
+		scheduler = ports.NoopAcquisitionScheduler()
+	}
 	return &StreamTrackService{
 		trackRepo:  trackRepo,
 		audioStore: audioStore,
@@ -125,12 +128,10 @@ func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId s
 		}
 	}
 
-	if s.scheduler != nil {
-		slog.InfoContext(ctx, "stream.reacquire_scheduled",
-			"track_id", track.ID.String())
-		// Re-acquisition has no source URL (triggered by a missing file), so it
-		// falls back to the search pipeline.
-		s.scheduler.Schedule(userId, track.ID, "")
-	}
+	slog.InfoContext(ctx, "stream.reacquire_scheduled",
+		"track_id", track.ID.String())
+	// Re-acquisition has no source URL (triggered by a missing file), so it
+	// falls back to the search pipeline.
+	s.scheduler.Schedule(userId, track.ID, "")
 	return recErr
 }

@@ -24,7 +24,7 @@ type PlaylistService struct {
 }
 
 func NewPlaylistService(playlistRepo ports.PlaylistRepository, trackRepo trackReader, opts ...func(*PlaylistService)) *PlaylistService {
-	s := &PlaylistService{playlistRepo: playlistRepo, trackRepo: trackRepo}
+	s := &PlaylistService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: events.NoopPublisher()}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -32,7 +32,11 @@ func NewPlaylistService(playlistRepo ports.PlaylistRepository, trackRepo trackRe
 }
 
 func WithPlaylistEvents(pub events.Publisher) func(*PlaylistService) {
-	return func(s *PlaylistService) { s.events = pub }
+	return func(s *PlaylistService) {
+		if pub != nil {
+			s.events = pub
+		}
+	}
 }
 
 func (s *PlaylistService) Create(ctx context.Context, userId shared.UserId, name string) (*domain.Playlist, error) {
@@ -45,12 +49,10 @@ func (s *PlaylistService) Create(ctx context.Context, userId shared.UserId, name
 	}
 	slog.InfoContext(ctx, "playlist created",
 		"playlist_id", playlist.ID.String(), "user_id", userId.String())
-	if s.events != nil {
-		s.events.Publish(userId, "playlist_created", map[string]any{
-			"playlist_id": playlist.ID.String(),
-			"name":        name,
-		})
-	}
+	s.events.Publish(userId, "playlist_created", map[string]any{
+		"playlist_id": playlist.ID.String(),
+		"name":        name,
+	})
 	return playlist, nil
 }
 
@@ -91,11 +93,9 @@ func (s *PlaylistService) Delete(ctx context.Context, userId shared.UserId, play
 	}
 	slog.InfoContext(ctx, "playlist deleted",
 		"playlist_id", playlistId.String(), "user_id", userId.String())
-	if s.events != nil {
-		s.events.Publish(userId, "playlist_deleted", map[string]any{
-			"playlist_id": playlistId.String(),
-		})
-	}
+	s.events.Publish(userId, "playlist_deleted", map[string]any{
+		"playlist_id": playlistId.String(),
+	})
 	return nil
 }
 
@@ -113,12 +113,10 @@ func (s *PlaylistService) Rename(ctx context.Context, userId shared.UserId, play
 	if err := s.playlistRepo.Update(ctx, playlist); err != nil {
 		return nil, fmt.Errorf("rename playlist: %w", err)
 	}
-	if s.events != nil {
-		s.events.Publish(userId, "playlist_renamed", map[string]any{
-			"playlist_id": playlistId.String(),
-			"name":        playlist.Name,
-		})
-	}
+	s.events.Publish(userId, "playlist_renamed", map[string]any{
+		"playlist_id": playlistId.String(),
+		"name":        playlist.Name,
+	})
 	return playlist, nil
 }
 
@@ -155,12 +153,10 @@ func (s *PlaylistService) AddTrack(ctx context.Context, userId shared.UserId, pl
 
 	slog.InfoContext(ctx, "track added to playlist",
 		"playlist_id", playlistId.String(), "track_id", trackId.String())
-	if s.events != nil {
-		s.events.Publish(userId, "track_added_to_playlist", map[string]any{
-			"playlist_id": playlistId.String(),
-			"track_id":    trackId.String(),
-		})
-	}
+	s.events.Publish(userId, "track_added_to_playlist", map[string]any{
+		"playlist_id": playlistId.String(),
+		"track_id":    trackId.String(),
+	})
 	return true, nil
 }
 
@@ -186,12 +182,10 @@ func (s *PlaylistService) RemoveTrack(ctx context.Context, userId shared.UserId,
 	if err := s.playlistRepo.RemoveTrack(ctx, playlistId, trackId); err != nil {
 		return false, fmt.Errorf("remove track from playlist: %w", err)
 	}
-	if s.events != nil {
-		s.events.Publish(userId, "track_removed_from_playlist", map[string]any{
-			"playlist_id": playlistId.String(),
-			"track_id":    trackId.String(),
-		})
-	}
+	s.events.Publish(userId, "track_removed_from_playlist", map[string]any{
+		"playlist_id": playlistId.String(),
+		"track_id":    trackId.String(),
+	})
 	return true, nil
 }
 
@@ -211,15 +205,13 @@ func (s *PlaylistService) Reorder(ctx context.Context, userId shared.UserId, pla
 	if err := s.playlistRepo.ReorderTracks(ctx, playlistId, playlist.Tracks); err != nil {
 		return fmt.Errorf("reorder playlist: %w", err)
 	}
-	if s.events != nil {
-		ids := make([]string, len(playlist.Tracks))
-		for i, pt := range playlist.Tracks {
-			ids[i] = pt.TrackId.String()
-		}
-		s.events.Publish(userId, "playlist_reordered", map[string]any{
-			"playlist_id": playlistId.String(),
-			"track_ids":   ids,
-		})
+	ids := make([]string, len(playlist.Tracks))
+	for i, pt := range playlist.Tracks {
+		ids[i] = pt.TrackId.String()
 	}
+	s.events.Publish(userId, "playlist_reordered", map[string]any{
+		"playlist_id": playlistId.String(),
+		"track_ids":   ids,
+	})
 	return nil
 }
