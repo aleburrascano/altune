@@ -296,6 +296,7 @@ func (s *Service) Execute(
 		correctedQuery string
 		originalQuery  string
 		cached         bool
+		partial        bool
 	)
 	if s.resultCache != nil {
 		if hit, ok := s.resultCache.Get(ctx, cacheKey); ok {
@@ -315,9 +316,10 @@ func (s *Service) Execute(
 			correctedQuery, originalQuery, ranked = s.tryCorrection(ctx, query)
 		}
 
+		partial = anyProviderFailed(statuses)
 		// Cache only complete, non-empty results: a partial (provider-drop-out) run
 		// frozen for the TTL would serve a degraded list to everyone.
-		if s.resultCache != nil && len(ranked) > 0 && !anyProviderFailed(statuses) {
+		if s.resultCache != nil && len(ranked) > 0 && !partial {
 			s.resultCache.Set(ctx, cacheKey, ranked)
 		}
 	}
@@ -334,8 +336,6 @@ func (s *Service) Execute(
 	// Exploration: a small fraction of searches serve a randomized order (cloned
 	// so the cache is never mutated) and are logged as exploration for propensity.
 	ranked, explored := s.maybeExplore(ranked)
-
-	partial := anyProviderFailed(statuses)
 
 	s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
 	s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked, explored)
