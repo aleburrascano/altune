@@ -610,10 +610,9 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 	errRepo := errors.New("db error")
 
 	tests := []struct {
-		name      string
-		setup     func(*catalogtest.PlaylistRepo, *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId)
-		wantAdded bool
-		wantErr   error
+		name    string
+		setup   func(*catalogtest.PlaylistRepo, *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId)
+		wantErr error
 	}{
 		{
 			name: "track added to playlist",
@@ -622,7 +621,6 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
 				return pl.ID, track.ID
 			},
-			wantAdded: true,
 		},
 		{
 			name: "playlist not found returns ErrPlaylistNotFound",
@@ -641,15 +639,14 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 			wantErr: ErrTrackNotFound,
 		},
 		{
-			name: "track already in playlist returns added=false",
+			name: "track already in playlist returns ErrTrackAlreadyInPlaylist",
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
 				_ = pl.AddTrack(track.ID)
 				return pl.ID, track.ID
 			},
-			wantAdded: false,
-			wantErr:   domain.ErrTrackAlreadyInPlaylist,
+			wantErr: domain.ErrTrackAlreadyInPlaylist,
 		},
 		{
 			name: "repo error propagates",
@@ -668,7 +665,7 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 			playlistId, trackId := tt.setup(plRepo, trRepo)
 			svc := NewPlaylistService(plRepo, trRepo)
 
-			added, err := svc.AddTrack(ctx, userId, playlistId, trackId)
+			err := svc.AddTrack(ctx, userId, playlistId, trackId)
 
 			if tt.wantErr != nil {
 				if err == nil {
@@ -681,9 +678,6 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 			}
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
-			}
-			if added != tt.wantAdded {
-				t.Errorf("added = %v, want %v", added, tt.wantAdded)
 			}
 		})
 	}
