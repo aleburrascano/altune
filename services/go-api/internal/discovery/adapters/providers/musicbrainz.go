@@ -163,29 +163,19 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		u += "&inc=isrcs"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", a.userAgent)
-	req.Header.Set("Accept", "application/json")
 	a.rateLimit(ctx)
-
-	resp, err := a.client.Do(req)
+	status, rawBody, err := getBytes(ctx, a.client, u,
+		withHeader("User-Agent", a.userAgent),
+		withHeader("Accept", "application/json"))
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("musicbrainz returned %d", resp.StatusCode)
+		return nil, fmt.Errorf("musicbrainz returned %d", status)
 	}
 
 	var results []domain.SearchResult
 	switch kind {
 	case domain.ResultKindTrack:
 		var body mbRecordingResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		if err := json.Unmarshal(rawBody, &body); err != nil {
 			return nil, err
 		}
 		for _, rec := range body.Recordings {
@@ -193,7 +183,7 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		}
 	case domain.ResultKindArtist:
 		var body mbArtistResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		if err := json.Unmarshal(rawBody, &body); err != nil {
 			return nil, err
 		}
 		for _, art := range body.Artists {
@@ -201,7 +191,7 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		}
 	case domain.ResultKindAlbum:
 		var body mbReleaseGroupResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		if err := json.Unmarshal(rawBody, &body); err != nil {
 			return nil, err
 		}
 		for _, rg := range body.ReleaseGroups {
@@ -576,31 +566,9 @@ func (a *MusicBrainzAdapter) LookupAlbumArtist(
 		url.QueryEscape(q),
 	)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return domain.AlbumVerdictUnknown, "", nil
-	}
-	req.Header.Set("User-Agent", a.userAgent)
-	req.Header.Set("Accept", "application/json")
-	a.rateLimit(ctx)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		slog.DebugContext(ctx, "mb.lookup_album_artist_http_error",
-			"artist", artistName, "album", albumTitle, "error", err)
-		return domain.AlbumVerdictUnknown, "", nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		slog.DebugContext(ctx, "mb.lookup_album_artist_status",
-			"artist", artistName, "album", albumTitle, "status", resp.StatusCode)
-		return domain.AlbumVerdictUnknown, "", nil
-	}
-
 	var body mbReleaseGroupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		slog.DebugContext(ctx, "mb.lookup_album_artist_decode_error",
+	if err := a.getJSON(ctx, u, &body); err != nil {
+		slog.DebugContext(ctx, "mb.lookup_album_artist_http_error",
 			"artist", artistName, "album", albumTitle, "error", err)
 		return domain.AlbumVerdictUnknown, "", nil
 	}
