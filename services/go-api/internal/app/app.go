@@ -322,82 +322,13 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 			a.cfg.MusicBrainzUserAgent,
 		)
 	}
-	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
-
-	// vocabStore is shared by suggest + the periodic vocabulary refresh; the
-	// search pipeline builds its own inside BuildSearchService.
 	vocabStore := BuildVocabularyStore(a.redisClient)
+	featuredBridge := a.buildFeaturedBridge(sharedMB)
+	historySvc, clearHistorySvc := a.buildHistoryServices()
+	albumSvc, artistSvc, relatedSvc, suggestSvc := a.buildContentServices(sharedMB, vocabStore)
+	enrichSvc := a.buildEnrichmentService(sharedMB)
 
-	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
-	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
-
-	// Featured-artist resolver (discovery-sourced) + catalog bridge. The resolver
-	// tolerates a nil MB searcher (MusicBrainz not configured) and degrades to
-	// Deezer-only; a nil interface (not a typed-nil pointer) keeps that safe.
-	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
-	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
-	if sharedMB != nil {
-		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
-	}
-	featuredBridge := discoverybridge.NewFeaturedResolver(featuredResolver)
-
-	deezerContentClient := newDiscoveryClient()
-	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
-	// iTunes is a second mainstream source of truth for discography/tracklist
-	// (docs/providers/itunes.md cap 5): an iTunes-sourced album/artist result
-	// carries its collectionId/artistId, which keys the /lookup content endpoint.
-	itunesContent := providers.NewITunesAdapter(newDiscoveryClient())
-
-	albumProviders := map[string]discoveryPorts.AlbumContentProvider{
-		"deezer": deezerContent,
-		"itunes": itunesContent,
-	}
-	artistProviders := map[string]discoveryPorts.ArtistContentProvider{
-		"deezer": deezerContent,
-		"itunes": itunesContent,
-		// SoundCloud serves the underground long tail: an artist sourced from
-		// SoundCloud carries its numeric user id, which keys these endpoints.
-		"soundcloud": providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
-	}
-	// Last.fm top-tracks, keyed by MBID (identity-safe) — the client calls it only
-	// when the artist has a resolved MBID, so it never falls back to ambiguous
-	// name matching. Adds the scrobble-popular layer alongside Deezer/SoundCloud.
-	if a.cfg.HasLastFM() {
-		artistProviders["lastfm"] = providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
-	}
-
-	// Related tracks are track-keyed: a SoundCloud-sourced track carries its
-	// numeric track id, which keys /tracks/{id}/related. SoundCloud-only today.
-	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{
-		"soundcloud": providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
-	}
-	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
-
-	albumSvc := discoveryService.NewGetAlbumTracksService(
-		albumProviders,
-		discoveryService.WithTrackFeatured(deezerContent),
-	)
-
-	// Multi-provider consensus: ALL providers are equal sources, merged into a
-	// union. Built via the shared BuildConsensusProviders so coverage signal B
-	// measures the same provider set.
-	consensusProviders := BuildConsensusProviders(a.cfg)
-
-	var consensusOpts []discoveryService.ConsensusOption
-	if sharedMB != nil {
-		consensusOpts = append(consensusOpts, discoveryService.WithMBAuthority(sharedMB))
-	}
-	consensusSvc := discoveryService.NewConsensusService(consensusProviders, consensusOpts...)
-
-	var artistContentOpts []discoveryService.ArtistContentOption
-	artistContentOpts = append(artistContentOpts, discoveryService.WithConsensusService(consensusSvc))
-	artistSvc := discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
-	suggestSvc := discoveryService.NewSuggestService(vocabStore)
-
-	// The recording transport wraps the shared live transport so every provider
-	// call on a correlated request is captured into the drill-down store, keyed by
-	// correlation id. Bounded + degrades silently — never affects the search path.
 	requestStore := requeststore.New()
 	searchSvc := BuildSearchServiceWithTransport(
 		a.cfg,
@@ -427,22 +358,6 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 
-	// MusicBrainz detail-open enrichment: genres/year/rating/external-ids + the
-	// HD MBID-keyed cover via the existing artwork chain. Only when MB is
-	// configured; nil otherwise (the handler degrades to an empty DTO).
-	var enrichSvc *discoveryService.EnrichmentService
-	if sharedMB != nil {
-		enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
-		enrichSvc = discoveryService.NewEnrichmentService(
-			sharedMB,
-			buildArtworkChain(clientFactory{}, a.cfg),
-			enrichmentCache,
-			// Memoize each name resolution so the search path can attach the MBID to
-			// a non-MB result later (cap 5 warm).
-			discoveryService.WithMBIDMemo(enrichmentCache),
-		)
-	}
-
 	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
 		Search:       searchSvc,
 		History:      historySvc,
@@ -467,6 +382,108 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		searchSvc:      searchSvc,
 		featuredBridge: featuredBridge,
 	}
+}
+
+// buildFeaturedBridge builds the featured-artist resolver and its catalog
+// bridge. The resolver tolerates a nil MB searcher (MusicBrainz not configured)
+// and degrades to Deezer-only; a nil interface (not a typed-nil pointer) keeps
+// that safe.
+func (a *App) buildFeaturedBridge(sharedMB *providers.MusicBrainzAdapter) *discoverybridge.FeaturedResolver {
+	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
+	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
+	if sharedMB != nil {
+		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
+	}
+	return discoverybridge.NewFeaturedResolver(featuredResolver)
+}
+
+// buildHistoryServices builds the search-history read and clear services.
+func (a *App) buildHistoryServices() (*discoveryService.ListSearchHistoryService, *discoveryService.ClearSearchHistoryService) {
+	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
+	return discoveryService.NewListSearchHistoryService(historyRepo),
+		discoveryService.NewClearSearchHistoryService(historyRepo)
+}
+
+// buildContentServices builds the album, artist, related, and suggest services.
+func (a *App) buildContentServices(
+	sharedMB *providers.MusicBrainzAdapter,
+	vocabStore discoveryPorts.VocabularyStore,
+) (
+	*discoveryService.GetAlbumTracksService,
+	*discoveryService.GetArtistContentService,
+	*discoveryService.GetRelatedTracksService,
+	*discoveryService.SuggestService,
+) {
+	deezerContent := providers.NewDeezerAdapter(newDiscoveryClient())
+	// iTunes is a second mainstream source of truth for discography/tracklist
+	// (docs/providers/itunes.md cap 5): an iTunes-sourced album/artist result
+	// carries its collectionId/artistId, which keys the /lookup content endpoint.
+	itunesContent := providers.NewITunesAdapter(newDiscoveryClient())
+
+	albumProviders := map[string]discoveryPorts.AlbumContentProvider{
+		"deezer": deezerContent,
+		"itunes": itunesContent,
+	}
+	artistProviders := map[string]discoveryPorts.ArtistContentProvider{
+		"deezer": deezerContent,
+		"itunes": itunesContent,
+		// SoundCloud serves the underground long tail: an artist sourced from
+		// SoundCloud carries its numeric user id, which keys these endpoints.
+		"soundcloud": providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
+	}
+	// Last.fm top-tracks, keyed by MBID (identity-safe) — the client calls it only
+	// when the artist has a resolved MBID, so it never falls back to ambiguous
+	// name matching. Adds the scrobble-popular layer alongside Deezer/SoundCloud.
+	if a.cfg.HasLastFM() {
+		artistProviders["lastfm"] = providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
+	}
+
+	// Related tracks are track-keyed: a SoundCloud-sourced track carries its
+	// numeric track id, which keys /tracks/{id}/related. SoundCloud-only today.
+	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{
+		"soundcloud": providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
+	}
+
+	// Multi-provider consensus: ALL providers are equal sources, merged into a
+	// union. Built via the shared BuildConsensusProviders so coverage signal B
+	// measures the same provider set.
+	consensusProviders := BuildConsensusProviders(a.cfg)
+	var consensusOpts []discoveryService.ConsensusOption
+	if sharedMB != nil {
+		consensusOpts = append(consensusOpts, discoveryService.WithMBAuthority(sharedMB))
+	}
+	consensusSvc := discoveryService.NewConsensusService(consensusProviders, consensusOpts...)
+
+	albumSvc := discoveryService.NewGetAlbumTracksService(
+		albumProviders,
+		discoveryService.WithTrackFeatured(deezerContent),
+	)
+	artistSvc := discoveryService.NewGetArtistContentService(
+		artistProviders,
+		discoveryService.WithConsensusService(consensusSvc),
+	)
+	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
+	suggestSvc := discoveryService.NewSuggestService(vocabStore)
+
+	return albumSvc, artistSvc, relatedSvc, suggestSvc
+}
+
+// buildEnrichmentService builds the MusicBrainz detail-open enrichment service.
+// Returns nil when MusicBrainz is not configured; the handler degrades to an
+// empty DTO in that case.
+func (a *App) buildEnrichmentService(sharedMB *providers.MusicBrainzAdapter) *discoveryService.EnrichmentService {
+	if sharedMB == nil {
+		return nil
+	}
+	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
+	return discoveryService.NewEnrichmentService(
+		sharedMB,
+		buildArtworkChain(clientFactory{}, a.cfg),
+		enrichmentCache,
+		// Memoize each name resolution so the search path can attach the MBID to
+		// a non-MB result later (cap 5 warm).
+		discoveryService.WithMBIDMemo(enrichmentCache),
+	)
 }
 
 // mountRoutes builds the router: middleware, the public health probe, and the
