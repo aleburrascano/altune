@@ -127,8 +127,10 @@ func rewindBody(req *http.Request) (rc interface {
 // backoff waits a small linear delay before a retry, returning early if the
 // caller's context is cancelled or its deadline passes.
 func backoff(ctx context.Context, attempt int) error {
+	t := time.NewTimer(time.Duration(attempt) * 250 * time.Millisecond)
+	defer t.Stop()
 	select {
-	case <-time.After(time.Duration(attempt) * 250 * time.Millisecond):
+	case <-t.C:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
