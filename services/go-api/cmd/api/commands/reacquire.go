@@ -118,7 +118,8 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 		if t.album != nil {
 			album = *t.album
 		}
-		newRef, err := reacquireTrack(ctx, steps, audioStore, t.id, t.userId, t.title, t.artist, album, t.oldRef, t.duration)
+		track := acqService.TrackRef{ID: t.id, UserID: t.userId, Title: t.title, Artist: t.artist, Album: album}
+		newRef, err := reacquireTrack(ctx, steps, audioStore, track, t.oldRef, t.duration)
 		if err != nil {
 			fmt.Printf("  [%d/%d] SKIP: %s — %s  (%v)\n", i+1, len(tracks), t.title, t.artist, err)
 			skipped++
@@ -171,30 +172,24 @@ func reacquireTrack(
 	ctx context.Context,
 	steps []acqService.Step,
 	audioStore ports.AudioStore,
-	id, userId, title, artist, album, oldRef string,
+	track acqService.TrackRef,
+	oldRef string,
 	dbDuration *float64,
 ) (string, error) {
 	perCtx, cancel := context.WithTimeout(ctx, perTrackTimeout)
 	defer cancel()
 
-	expected := 0.0
+	track.Duration = 0
 	if dbDuration != nil {
-		expected = *dbDuration
+		track.Duration = *dbDuration
 	}
-	if expected <= 0 {
+	if track.Duration <= 0 {
 		if d, perr := probeDuration(perCtx, audioStore, oldRef); perr == nil {
-			expected = d
+			track.Duration = d
 		}
 	}
 
-	ac := &acqService.AcquisitionContext{Track: acqService.TrackRef{
-		ID:       id,
-		UserID:   userId,
-		Title:    title,
-		Artist:   artist,
-		Album:    album,
-		Duration: expected,
-	}}
+	ac := &acqService.AcquisitionContext{Track: track}
 
 	runErr := acqService.RunPipeline(perCtx, steps, ac)
 	acqService.CleanupTemp(perCtx, ac)
