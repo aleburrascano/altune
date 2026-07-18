@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 
 	"github.com/minio/minio-go/v7"
@@ -83,7 +82,7 @@ func (s *ObjectStorageAudioStore) Store(ctx context.Context, sourcePath string, 
 	}
 
 	_, err = s.client.PutObject(ctx, s.bucket, audioRef, file, stat.Size(), minio.PutObjectOptions{
-		ContentType: domain.AudioContentType(audioRef),
+		ContentType: ports.AudioContentType(audioRef),
 	})
 	if err != nil {
 		return fmt.Errorf("upload to s3: %w", err)
