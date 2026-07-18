@@ -15,12 +15,11 @@ import (
 // AcquisitionStatus is the in-memory snapshot of the background acquisition
 // pipeline for the operator console. In-memory only — resets on restart.
 type AcquisitionStatus struct {
-	InFlight    int             `json:"in_flight"`
-	Succeeded   uint64          `json:"succeeded"`
-	Failed      uint64          `json:"failed"`
-	Jobs        []JobRecord     `json:"jobs"`            // current queued/running jobs
-	Recent      []JobRecord     `json:"recent"`          // recent terminal outcomes, newest first
-	RecentFails []FailureRecord `json:"recent_failures"` // failures only (retained for compatibility)
+	InFlight  int         `json:"in_flight"`
+	Succeeded uint64      `json:"succeeded"`
+	Failed    uint64      `json:"failed"`
+	Jobs      []JobRecord `json:"jobs"`   // current queued/running jobs
+	Recent    []JobRecord `json:"recent"` // recent terminal outcomes, newest first (failures carry their reason)
 }
 
 // BackgroundAcquisitionScheduler runs acquisition jobs on goroutines gated by a
@@ -164,14 +163,13 @@ func (r schedulerJobReporter) source(url string) {
 // Status returns the in-memory acquisition pipeline snapshot for the operator
 // console.
 func (s *BackgroundAcquisitionScheduler) Status() AcquisitionStatus {
-	jobs, recent, fails := s.log.snapshot()
+	jobs, recent := s.log.snapshot()
 	return AcquisitionStatus{
-		InFlight:    int(s.inflightCount.Load()),
-		Succeeded:   s.succeeded.Load(),
-		Failed:      s.failed.Load(),
-		Jobs:        jobs,
-		Recent:      recent,
-		RecentFails: fails,
+		InFlight:  int(s.inflightCount.Load()),
+		Succeeded: s.succeeded.Load(),
+		Failed:    s.failed.Load(),
+		Jobs:      jobs,
+		Recent:    recent,
 	}
 }
 
