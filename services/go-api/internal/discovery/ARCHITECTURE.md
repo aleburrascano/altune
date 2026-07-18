@@ -255,7 +255,7 @@ internal/discovery/
 │   ├── merge.go              # Merge (Layer 2) — identity tiers; 🔨 ambiguous-artist gate goes here
 │   ├── rank.go               # Rank (Layer 3) — continuous-relevance sort + gates
 │   ├── diversity.go          # EnforceDiversity, CollapseArtistDuplicates
-│   ├── enrich.go             # artwork enrichment (top ~50, parallel)
+│   ├── artwork_fill.go       # search-path artwork fill-in (top ~50, parallel)
 │   ├── enrichment.go / enrich/  # detail-open enrichers (Deezer/Last.fm/Discogs/lyrics) + CachedLookup
 │   ├── consensus.go          # ConsensusService — album consensus; 🔨 identity-anchored rework target
 │   ├── get_artist_content.go # artist top-tracks/albums; 🔨 multi-provider top-tracks target

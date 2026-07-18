@@ -2,7 +2,7 @@
 type: Subsystem
 title: Discovery enrichment
 description: Detail-screen enrichment services that fetch MusicBrainz, Discogs, Last.fm, and Deezer metadata (including lyrics) on-demand when a user opens an entity, never on the ranking path.
-resource: services/go-api/internal/discovery/service/enrich/, services/go-api/internal/discovery/service/enrichment.go, services/go-api/internal/discovery/service/enrich.go, services/go-api/internal/discovery/domain/enrichment.go, services/go-api/internal/discovery/domain/deezer_enrichment.go, services/go-api/internal/discovery/domain/deezer_lyrics.go, services/go-api/internal/discovery/domain/discogs_enrichment.go, services/go-api/internal/discovery/domain/lastfm_enrichment.go, services/go-api/internal/discovery/service/cached_lookup.go
+resource: services/go-api/internal/discovery/service/enrich/, services/go-api/internal/discovery/service/enrichment.go, services/go-api/internal/discovery/domain/enrichment.go, services/go-api/internal/discovery/domain/deezer_enrichment.go, services/go-api/internal/discovery/domain/deezer_lyrics.go, services/go-api/internal/discovery/domain/discogs_enrichment.go, services/go-api/internal/discovery/domain/lastfm_enrichment.go, services/go-api/internal/discovery/service/cached_lookup.go
 tags: [discovery, enrichment, musicbrainz, discogs, lastfm, deezer, lyrics, cache, subsystem]
 verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
 ---

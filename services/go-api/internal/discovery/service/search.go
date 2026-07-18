@@ -373,8 +373,8 @@ func (s *Service) Execute(
 //	decision core   : Merge (entity resolution) → Rank (relevance ordering)
 //	list policy      : EnforceDiversity, CollapseArtistDuplicates (product rules
 //	                   that reshape the list; see diversity.go)
-//	display enrich   : applyArtistDisambiguation, enrich (fill subtitle/artwork;
-//	                   neither reorders)
+//	display enrich   : applyArtistDisambiguation, fillArtwork (fill subtitle/
+//	                   artwork; neither reorders)
 func (s *Service) mergeRankEnrich(
 	ctx context.Context,
 	perProvider [][]domain.SearchResult,
@@ -395,7 +395,7 @@ func (s *Service) mergeRankEnrich(
 
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
-	ranked = s.enrich(ctx, ranked)
+	ranked = s.fillArtwork(ctx, ranked)
 	return ranked
 }
 
