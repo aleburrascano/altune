@@ -3,8 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
-	"slices"
-	"strings"
+	"sort"
 	"sync"
 	"time"
 
@@ -191,23 +190,20 @@ func (s *ConsensusService) BuildConsensus(
 	return results
 }
 
-// sortChronological orders the discography newest-first by release year, with
-// unknown-year albums sinking to the end and a stable title tiebreak. The cluster
-// union is assembled in provider-fetch order (non-chronological); this makes the
-// detail-screen discography read as a real timeline. Year backfill from a
-// secondary provider when the canonical pick lacks one is a separate concern.
+// sortChronological orders the discography newest-first, with dateless albums
+// sinking to the end. Shares its ordering rule (albumReleaseSortKey, defined in
+// get_artist_content.go) with sortAlbumsByReleaseDateDesc — the same
+// artist-detail response surfaces both a discography (this) and an album list
+// (that), and the two must not disagree on "newest first". The cluster union is
+// assembled in provider-fetch order (non-chronological); this makes the
+// detail-screen discography read as a real timeline.
 func sortChronological(results []ConsensusAlbum) {
-	slices.SortStableFunc(results, func(a, b ConsensusAlbum) int {
-		ya, yb := a.Album.Year, b.Album.Year
-		switch {
-		case ya == 0 && yb != 0:
-			return 1
-		case ya != 0 && yb == 0:
-			return -1
-		case ya != yb:
-			return yb - ya // newest first
+	sort.SliceStable(results, func(i, j int) bool {
+		ki, kj := albumReleaseSortKey(results[i].Album), albumReleaseSortKey(results[j].Album)
+		if ki == "" || kj == "" {
+			return ki != "" && kj == ""
 		}
-		return strings.Compare(a.Album.Title, b.Album.Title)
+		return ki > kj // ISO dates / years are lexicographically descending = newest-first
 	})
 }
 
