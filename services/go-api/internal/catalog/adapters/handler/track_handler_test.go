@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,14 +13,14 @@ import (
 
 func TestHandleListTracks(t *testing.T) {
 	tests := []struct {
-		name           string
-		query          string
-		seedCount      int
-		wantStatus     int
-		wantItemsLen   int
-		wantTotal      int
-		wantHasMore    bool
-		wantLimit      int
+		name         string
+		query        string
+		seedCount    int
+		wantStatus   int
+		wantItemsLen int
+		wantTotal    int
+		wantHasMore  bool
+		wantLimit    int
 	}{
 		{
 			name:         "returns tracks with default limit",
@@ -66,9 +67,9 @@ func TestHandleListTracks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			repo := newFakeTrackRepo()
+			repo := catalogtest.NewTrackRepo()
 			for i := 0; i < tt.seedCount; i++ {
-				repo.seed(makeTrack(testUserId, "Track "+string(rune('A'+i)), "Artist", "Album"))
+				repo.Seed(makeTrack(testUserId, "Track "+string(rune('A'+i)), "Artist", "Album"))
 			}
 			_, router := buildTrackHandler(repo, nil)
 
@@ -99,7 +100,7 @@ func TestHandleListTracks(t *testing.T) {
 
 func TestHandleListTracks_NoAuth(t *testing.T) {
 	// Arrange
-	repo := newFakeTrackRepo()
+	repo := catalogtest.NewTrackRepo()
 	_, router := buildTrackHandler(repo, nil)
 
 	// Act
@@ -162,11 +163,11 @@ func TestHandleCreateTrack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			repo := newFakeTrackRepo()
+			repo := catalogtest.NewTrackRepo()
 			if tt.seedDedup {
-				repo.seed(makeTrack(testUserId, "Existing", "Artist", ""))
+				repo.Seed(makeTrack(testUserId, "Existing", "Artist", ""))
 			}
-			_, router := buildTrackHandler(repo, &fakeScheduler{})
+			_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
 
 			// Act
 			var rec *httptest.ResponseRecorder
@@ -201,28 +202,28 @@ func TestHandleCreateTrack(t *testing.T) {
 func TestHandleDeleteTrack(t *testing.T) {
 	tests := []struct {
 		name       string
-		trackIdFn  func(repo *fakeTrackRepo) string
+		trackIdFn  func(repo *catalogtest.TrackRepo) string
 		wantStatus int
 	}{
 		{
 			name: "existing track returns 204",
-			trackIdFn: func(repo *fakeTrackRepo) string {
+			trackIdFn: func(repo *catalogtest.TrackRepo) string {
 				track := makeTrack(testUserId, "To Delete", "Artist", "Album")
-				repo.seed(track)
+				repo.Seed(track)
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusNoContent,
 		},
 		{
 			name: "not found returns 404",
-			trackIdFn: func(repo *fakeTrackRepo) string {
+			trackIdFn: func(repo *catalogtest.TrackRepo) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "invalid UUID returns 400",
-			trackIdFn: func(repo *fakeTrackRepo) string {
+			trackIdFn: func(repo *catalogtest.TrackRepo) string {
 				return "not-a-uuid"
 			},
 			wantStatus: http.StatusBadRequest,
@@ -232,7 +233,7 @@ func TestHandleDeleteTrack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			repo := newFakeTrackRepo()
+			repo := catalogtest.NewTrackRepo()
 			trackId := tt.trackIdFn(repo)
 			_, router := buildTrackHandler(repo, nil)
 
@@ -247,8 +248,8 @@ func TestHandleDeleteTrack(t *testing.T) {
 
 func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 	// Arrange
-	repo := newFakeTrackRepo()
-	_, router := buildTrackHandler(repo, &fakeScheduler{})
+	repo := catalogtest.NewTrackRepo()
+	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
 
 	dur := 180.5
 	artwork := "https://example.com/art.jpg"
@@ -257,15 +258,15 @@ func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 	albumArtist := "Various Artists"
 	isrc := "USRC12345678"
 	body := CreateTrackRequest{
-		Title:       "Full Track",
-		Artist:      "Full Artist",
-		Album:       strPtr("Full Album"),
+		Title:           "Full Track",
+		Artist:          "Full Artist",
+		Album:           strPtr("Full Album"),
 		DurationSeconds: &dur,
-		ArtworkURL:  &artwork,
-		Year:        &year,
-		Genre:       &genre,
-		AlbumArtist: &albumArtist,
-		ISRC:        &isrc,
+		ArtworkURL:      &artwork,
+		Year:            &year,
+		Genre:           &genre,
+		AlbumArtist:     &albumArtist,
+		ISRC:            &isrc,
 	}
 
 	// Act
@@ -284,6 +285,5 @@ func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 		}
 	}
 }
-
 
 func strPtr(s string) *string { return &s }

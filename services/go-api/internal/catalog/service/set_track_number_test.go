@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 )
 
@@ -11,14 +12,14 @@ func TestSetTrackNumberService(t *testing.T) {
 	userId := testUserId()
 
 	t.Run("rejects a non-positive number", func(t *testing.T) {
-		svc := NewSetTrackNumberService(newMockTrackRepo())
+		svc := NewSetTrackNumberService(catalogtest.NewTrackRepo())
 		if _, err := svc.Execute(context.Background(), userId, domain.NewTrackId(), 0); err == nil {
 			t.Fatal("expected an error for a zero track number")
 		}
 	})
 
 	t.Run("fills an unset position and refuses to overwrite it", func(t *testing.T) {
-		repo := newMockTrackRepo()
+		repo := catalogtest.NewTrackRepo()
 		svc := NewSetTrackNumberService(repo)
 		track := seedTrack(t, repo, userId, "Sicko Mode", "Travis Scott", "ASTROWORLD")
 
@@ -29,7 +30,7 @@ func TestSetTrackNumberService(t *testing.T) {
 		if !updated {
 			t.Fatal("expected updated=true on the first fill")
 		}
-		if got := repo.tracks[track.ID.String()].TrackNumber; got == nil || *got != 3 {
+		if got := repo.Tracks[track.ID.String()].TrackNumber; got == nil || *got != 3 {
 			t.Fatalf("track number = %v, want 3", got)
 		}
 
@@ -41,7 +42,7 @@ func TestSetTrackNumberService(t *testing.T) {
 		if updated {
 			t.Fatal("expected updated=false when a number is already set")
 		}
-		if got := repo.tracks[track.ID.String()].TrackNumber; got == nil || *got != 3 {
+		if got := repo.Tracks[track.ID.String()].TrackNumber; got == nil || *got != 3 {
 			t.Fatalf("track number changed to %v, want it to stay 3", got)
 		}
 	})

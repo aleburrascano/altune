@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/catalog/catalogtest"
 	catdomain "altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/catalog/service"
@@ -31,333 +32,6 @@ var (
 var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
 	return testUserId, nil
 })
-
-// --- fake track repo ---
-
-type fakeTrackRepo struct {
-	tracks map[string]*catdomain.Track
-
-	addCreated bool
-	addErr     error
-	getErr     error
-	listErr    error
-	updateErr  error
-	deleteErr  error
-	deletedOk  bool
-}
-
-func newFakeTrackRepo() *fakeTrackRepo {
-	return &fakeTrackRepo{tracks: make(map[string]*catdomain.Track), deletedOk: true}
-}
-
-func (r *fakeTrackRepo) Add(_ context.Context, track *catdomain.Track) (*catdomain.Track, bool, error) {
-	if r.addErr != nil {
-		return nil, false, r.addErr
-	}
-	for _, t := range r.tracks {
-		if t.DedupKey == track.DedupKey && t.UserId == track.UserId {
-			return t, false, nil
-		}
-	}
-	r.tracks[track.ID.String()] = track
-	r.addCreated = true
-	return track, true, nil
-}
-
-func (r *fakeTrackRepo) GetByID(_ context.Context, id catdomain.TrackId, userId shared.UserId) (*catdomain.Track, error) {
-	if r.getErr != nil {
-		return nil, r.getErr
-	}
-	for _, t := range r.tracks {
-		if t.ID == id && t.UserId == userId {
-			return t, nil
-		}
-	}
-	return nil, nil
-}
-
-func (r *fakeTrackRepo) ListForUser(_ context.Context, userId shared.UserId, limit, offset int) ([]*catdomain.Track, int, error) {
-	if r.listErr != nil {
-		return nil, 0, r.listErr
-	}
-	var all []*catdomain.Track
-	for _, t := range r.tracks {
-		if t.UserId == userId {
-			all = append(all, t)
-		}
-	}
-	total := len(all)
-	if offset >= total {
-		return nil, total, nil
-	}
-	end := offset + limit
-	if end > total {
-		end = total
-	}
-	return all[offset:end], total, nil
-}
-
-func (r *fakeTrackRepo) ListByIDs(_ context.Context, userId shared.UserId, ids []catdomain.TrackId) ([]*catdomain.Track, error) {
-	if r.listErr != nil {
-		return nil, r.listErr
-	}
-	var out []*catdomain.Track
-	for _, id := range ids {
-		if t, ok := r.tracks[id.String()]; ok && t.UserId == userId {
-			out = append(out, t)
-		}
-	}
-	return out, nil
-}
-
-func (r *fakeTrackRepo) Update(_ context.Context, track *catdomain.Track) error {
-	if r.updateErr != nil {
-		return r.updateErr
-	}
-	r.tracks[track.ID.String()] = track
-	return nil
-}
-
-func (r *fakeTrackRepo) SetTrackNumber(_ context.Context, id catdomain.TrackId, _ shared.UserId, n int) (bool, error) {
-	t, ok := r.tracks[id.String()]
-	if !ok || t.TrackNumber != nil {
-		return false, nil
-	}
-	t.TrackNumber = &n
-	return true, nil
-}
-
-func (r *fakeTrackRepo) Delete(_ context.Context, id catdomain.TrackId, userId shared.UserId) (bool, error) {
-	if r.deleteErr != nil {
-		return false, r.deleteErr
-	}
-	key := id.String()
-	t, ok := r.tracks[key]
-	if !ok || t.UserId != userId {
-		return false, nil
-	}
-	delete(r.tracks, key)
-	return r.deletedOk, nil
-}
-
-func (r *fakeTrackRepo) GetByDedupKey(_ context.Context, userId shared.UserId, dedupKey string) (*catdomain.Track, error) {
-	if r.getErr != nil {
-		return nil, r.getErr
-	}
-	for _, t := range r.tracks {
-		if t.DedupKey == dedupKey && t.UserId == userId {
-			return t, nil
-		}
-	}
-	return nil, nil
-}
-
-func (r *fakeTrackRepo) ReplaceFeaturedArtists(_ context.Context, id catdomain.TrackId, userId shared.UserId, feats []catdomain.FeaturedArtist) error {
-	if t, ok := r.tracks[id.String()]; ok && t.UserId == userId {
-		t.FeaturedArtists = feats
-	}
-	return nil
-}
-
-func (r *fakeTrackRepo) ListTracksFeaturing(_ context.Context, userId shared.UserId, fa catdomain.FeaturedArtist) ([]*catdomain.Track, error) {
-	var out []*catdomain.Track
-	for _, t := range r.tracks {
-		if t.UserId != userId {
-			continue
-		}
-		for _, f := range t.FeaturedArtists {
-			if f.IdentityKey() == fa.IdentityKey() {
-				out = append(out, t)
-				break
-			}
-		}
-	}
-	return out, nil
-}
-
-func (r *fakeTrackRepo) seed(t *catdomain.Track) {
-	r.tracks[t.ID.String()] = t
-}
-
-// --- fake playlist repo ---
-
-type fakePlaylistRepo struct {
-	playlists      map[string]*catdomain.Playlist
-	playlistTracks map[string][]*catdomain.Track
-
-	createErr       error
-	getByIDErr      error
-	getWithTracksErr error
-	listErr         error
-	deleteErr       error
-	updateErr       error
-	addTrackErr     error
-	removeTrackErr  error
-	reorderErr      error
-	deletedOk       bool
-}
-
-func newFakePlaylistRepo() *fakePlaylistRepo {
-	return &fakePlaylistRepo{
-		playlists:      make(map[string]*catdomain.Playlist),
-		playlistTracks: make(map[string][]*catdomain.Track),
-		deletedOk:      true,
-	}
-}
-
-func (r *fakePlaylistRepo) Create(_ context.Context, pl *catdomain.Playlist) error {
-	if r.createErr != nil {
-		return r.createErr
-	}
-	r.playlists[pl.ID.String()] = pl
-	return nil
-}
-
-func (r *fakePlaylistRepo) ListForUser(_ context.Context, userId shared.UserId) ([]*catdomain.Playlist, error) {
-	if r.listErr != nil {
-		return nil, r.listErr
-	}
-	var res []*catdomain.Playlist
-	for _, p := range r.playlists {
-		if p.UserId == userId {
-			res = append(res, p)
-		}
-	}
-	return res, nil
-}
-
-func (r *fakePlaylistRepo) GetByID(_ context.Context, id catdomain.PlaylistId, userId shared.UserId) (*catdomain.Playlist, error) {
-	if r.getByIDErr != nil {
-		return nil, r.getByIDErr
-	}
-	p, ok := r.playlists[id.String()]
-	if !ok || p.UserId != userId {
-		return nil, nil
-	}
-	return p, nil
-}
-
-func (r *fakePlaylistRepo) GetWithTracks(_ context.Context, id catdomain.PlaylistId, userId shared.UserId) (*catdomain.Playlist, []*catdomain.Track, error) {
-	if r.getWithTracksErr != nil {
-		return nil, nil, r.getWithTracksErr
-	}
-	p, ok := r.playlists[id.String()]
-	if !ok || p.UserId != userId {
-		return nil, nil, nil
-	}
-	return p, r.playlistTracks[id.String()], nil
-}
-
-func (r *fakePlaylistRepo) Delete(_ context.Context, id catdomain.PlaylistId, userId shared.UserId) (bool, error) {
-	if r.deleteErr != nil {
-		return false, r.deleteErr
-	}
-	key := id.String()
-	p, ok := r.playlists[key]
-	if !ok || p.UserId != userId {
-		return false, nil
-	}
-	delete(r.playlists, key)
-	return r.deletedOk, nil
-}
-
-func (r *fakePlaylistRepo) Update(_ context.Context, pl *catdomain.Playlist) error {
-	if r.updateErr != nil {
-		return r.updateErr
-	}
-	r.playlists[pl.ID.String()] = pl
-	return nil
-}
-
-func (r *fakePlaylistRepo) AddTrack(_ context.Context, _ catdomain.PlaylistId, _ catdomain.TrackId, _ int) error {
-	return r.addTrackErr
-}
-
-func (r *fakePlaylistRepo) RemoveTrack(_ context.Context, _ catdomain.PlaylistId, _ catdomain.TrackId) error {
-	return r.removeTrackErr
-}
-
-func (r *fakePlaylistRepo) ReorderTracks(_ context.Context, _ catdomain.PlaylistId, _ []catdomain.PlaylistTrack) error {
-	return r.reorderErr
-}
-
-func (r *fakePlaylistRepo) seed(pl *catdomain.Playlist) {
-	r.playlists[pl.ID.String()] = pl
-}
-
-func (r *fakePlaylistRepo) seedWithTracks(pl *catdomain.Playlist, tracks []*catdomain.Track) {
-	r.playlists[pl.ID.String()] = pl
-	r.playlistTracks[pl.ID.String()] = tracks
-}
-
-// --- fake audio store ---
-
-type fakeAudioStore struct {
-	data      map[string][]byte
-	existsErr error
-	storeErr  error
-	streamErr error
-	deleteErr error
-}
-
-func newFakeAudioStore() *fakeAudioStore {
-	return &fakeAudioStore{data: make(map[string][]byte)}
-}
-
-func (s *fakeAudioStore) Exists(_ context.Context, audioRef string) (bool, error) {
-	if s.existsErr != nil {
-		return false, s.existsErr
-	}
-	_, ok := s.data[audioRef]
-	return ok, nil
-}
-
-func (s *fakeAudioStore) Store(_ context.Context, _ string, audioRef string) error {
-	if s.storeErr != nil {
-		return s.storeErr
-	}
-	s.data[audioRef] = []byte("audio-data")
-	return nil
-}
-
-func (s *fakeAudioStore) Stream(_ context.Context, audioRef string) (ports.AudioStream, int64, error) {
-	if s.streamErr != nil {
-		return nil, 0, s.streamErr
-	}
-	data, ok := s.data[audioRef]
-	if !ok {
-		return nil, 0, io.EOF
-	}
-	return fakeAudioStream{bytes.NewReader(data)}, int64(len(data)), nil
-}
-
-type fakeAudioStream struct{ *bytes.Reader }
-
-func (fakeAudioStream) Close() error { return nil }
-
-func (s *fakeAudioStore) Delete(_ context.Context, audioRef string) error {
-	if s.deleteErr != nil {
-		return s.deleteErr
-	}
-	delete(s.data, audioRef)
-	return nil
-}
-
-func (s *fakeAudioStore) seed(audioRef string, data []byte) {
-	s.data[audioRef] = data
-}
-
-// --- fake acquisition scheduler ---
-
-type fakeScheduler struct {
-	scheduled  []catdomain.TrackId
-	sourceURLs []string
-}
-
-func (s *fakeScheduler) Schedule(_ shared.UserId, trackId catdomain.TrackId, sourceURL string) {
-	s.scheduled = append(s.scheduled, trackId)
-	s.sourceURLs = append(s.sourceURLs, sourceURL)
-}
 
 // serve sends a request through a chi router and returns the response recorder.
 func serve(t *testing.T, router chi.Router, method, path string, body io.Reader) *httptest.ResponseRecorder {
@@ -419,14 +93,14 @@ func makePlaylist(userId shared.UserId, name string) *catdomain.Playlist {
 
 // --- service builders ---
 
-func buildTrackHandler(trackRepo *fakeTrackRepo, scheduler *fakeScheduler) (*TrackHandler, chi.Router) {
+func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.Scheduler) (*TrackHandler, chi.Router) {
 	var addOpts []func(*service.AddTrackService)
 	if scheduler != nil {
 		addOpts = append(addOpts, service.WithAcquisitionScheduler(scheduler))
 	}
 	addSvc := service.NewAddTrackService(trackRepo, addOpts...)
 	listSvc := service.NewListTracksService(trackRepo)
-	deleteSvc := service.NewDeleteTrackService(trackRepo, newFakeAudioStore())
+	deleteSvc := service.NewDeleteTrackService(trackRepo, catalogtest.NewAudioStore())
 	setTrackNumberSvc := service.NewSetTrackNumberService(trackRepo)
 
 	backfillSvc := service.NewBackfillFeaturedService(trackRepo, nil)
@@ -438,7 +112,7 @@ func buildTrackHandler(trackRepo *fakeTrackRepo, scheduler *fakeScheduler) (*Tra
 	return h, r
 }
 
-func buildPlaylistHandler(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) (*PlaylistHandler, chi.Router) {
+func buildPlaylistHandler(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (*PlaylistHandler, chi.Router) {
 	svc := service.NewPlaylistService(plRepo, trRepo)
 	h := NewPlaylistHandler(svc)
 	r := chi.NewRouter()
@@ -447,7 +121,7 @@ func buildPlaylistHandler(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) (*Pla
 	return h, r
 }
 
-func buildStreamHandler(trackRepo *fakeTrackRepo, audioStore *fakeAudioStore, scheduler *fakeScheduler) (*StreamHandler, chi.Router) {
+func buildStreamHandler(trackRepo *catalogtest.TrackRepo, audioStore *catalogtest.AudioStore, scheduler *catalogtest.Scheduler) (*StreamHandler, chi.Router) {
 	var sched ports.AcquisitionScheduler
 	if scheduler != nil {
 		sched = scheduler

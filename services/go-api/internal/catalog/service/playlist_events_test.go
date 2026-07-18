@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 )
@@ -48,10 +49,10 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 
 	t.Run("rename", func(t *testing.T) {
 		pub := &recordingPlaylistPublisher{}
-		plRepo := newMockPlaylistRepo()
+		plRepo := catalogtest.NewPlaylistRepo()
 		pl, _ := domain.NewPlaylist(userId, "Old")
-		plRepo.seed(pl)
-		svc := NewPlaylistService(plRepo, newMockTrackRepo(), WithPlaylistEvents(pub))
+		plRepo.Seed(pl)
+		svc := NewPlaylistService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistEvents(pub))
 
 		if _, err := svc.Rename(ctx, userId, pl.ID, "New Name"); err != nil {
 			t.Fatalf("rename: %v", err)
@@ -64,12 +65,12 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 
 	t.Run("remove track", func(t *testing.T) {
 		pub := &recordingPlaylistPublisher{}
-		plRepo := newMockPlaylistRepo()
+		plRepo := catalogtest.NewPlaylistRepo()
 		track, _ := domain.NewTrack(userId, "T", "A", "")
 		pl, _ := domain.NewPlaylist(userId, "PL")
 		_ = pl.AddTrack(track.ID)
-		plRepo.seedWithTracks(pl, []*domain.Track{track})
-		svc := NewPlaylistService(plRepo, newMockTrackRepo(), WithPlaylistEvents(pub))
+		plRepo.SeedWithTracks(pl, []*domain.Track{track})
+		svc := NewPlaylistService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistEvents(pub))
 
 		if _, err := svc.RemoveTrack(ctx, userId, pl.ID, track.ID); err != nil {
 			t.Fatalf("remove track: %v", err)
@@ -82,14 +83,14 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 
 	t.Run("reorder", func(t *testing.T) {
 		pub := &recordingPlaylistPublisher{}
-		plRepo := newMockPlaylistRepo()
+		plRepo := catalogtest.NewPlaylistRepo()
 		t1, _ := domain.NewTrack(userId, "T1", "A", "")
 		t2, _ := domain.NewTrack(userId, "T2", "A", "")
 		pl, _ := domain.NewPlaylist(userId, "PL")
 		_ = pl.AddTrack(t1.ID)
 		_ = pl.AddTrack(t2.ID)
-		plRepo.seedWithTracks(pl, []*domain.Track{t1, t2})
-		svc := NewPlaylistService(plRepo, newMockTrackRepo(), WithPlaylistEvents(pub))
+		plRepo.SeedWithTracks(pl, []*domain.Track{t1, t2})
+		svc := NewPlaylistService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistEvents(pub))
 
 		if err := svc.Reorder(ctx, userId, pl.ID, []domain.TrackId{t2.ID, t1.ID}); err != nil {
 			t.Fatalf("reorder: %v", err)
