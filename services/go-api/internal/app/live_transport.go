@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -111,10 +112,7 @@ func retryableStatus(code int) bool {
 // rewindBody returns a fresh copy of the request body for a retry, or nil when the
 // request has no body. A body that cannot be rewound (no GetBody) is an error so
 // the caller stops retrying rather than re-sending a consumed body.
-func rewindBody(req *http.Request) (rc interface {
-	Read([]byte) (int, error)
-	Close() error
-}, err error) {
+func rewindBody(req *http.Request) (io.ReadCloser, error) {
 	if req.Body == nil {
 		return nil, nil
 	}
