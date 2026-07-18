@@ -93,13 +93,13 @@ func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string
 	}
 }
 
-// previewArtworkFromTracks selects up to four distinct track artwork URLs for a
-// playlist's preview tile.
+// previewArtworkFromTracks selects up to domain.PreviewArtworkLimit distinct
+// track artwork URLs for a playlist's preview tile.
 func previewArtworkFromTracks(tracks []*domain.Track) []string {
 	artworkURLs := []string{}
 	seen := make(map[string]bool)
 	for _, t := range tracks {
-		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(artworkURLs) < 4 {
+		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(artworkURLs) < domain.PreviewArtworkLimit {
 			artworkURLs = append(artworkURLs, *t.ArtworkURL)
 			seen[*t.ArtworkURL] = true
 		}
