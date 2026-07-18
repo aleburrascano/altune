@@ -62,6 +62,22 @@ func FeaturedArtistsToExtras(fs []FeaturedArtist) []map[string]any {
 	return out
 }
 
+// FeaturedArtistsFromExtras is the inverse of FeaturedArtistsToExtras: it reads
+// the untyped []map[string]any extras shape back into value objects. Returns nil
+// when the key is absent or not that shape, so the untyped-any handling stays in
+// the domain that owns the serialization contract rather than at each call site.
+func FeaturedArtistsFromExtras(extras map[string]any) []FeaturedArtist {
+	raw, ok := extras["featured_artists"].([]map[string]any)
+	if !ok {
+		return nil
+	}
+	out := make([]FeaturedArtist, 0, len(raw))
+	for _, m := range raw {
+		out = append(out, FeaturedArtistFromMap(m))
+	}
+	return out
+}
+
 // FeaturedArtistFromMap parses one wire map back into a value object. Tolerant of
 // the numeric variance JSON round-trips introduce (int64 vs float64).
 func FeaturedArtistFromMap(m map[string]any) FeaturedArtist {
