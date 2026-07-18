@@ -23,31 +23,19 @@ func NewGetRelatedTracksService(providers map[string]ports.RelatedTracksProvider
 func (s *GetRelatedTracksService) Execute(ctx context.Context, providerName, externalID string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName]
 	if !ok {
-		return &ContentFetchResponse{
-			ProviderName: providerName,
-			Status:       domain.ProviderStatusError,
-			Items:        []domain.SearchResult{},
-		}, nil
+		return errorContentResponse(providerName), nil
 	}
 
 	pn, err := domain.ParseProviderName(providerName)
 	if err != nil {
-		return &ContentFetchResponse{
-			ProviderName: providerName,
-			Status:       domain.ProviderStatusError,
-			Items:        []domain.SearchResult{},
-		}, nil
+		return errorContentResponse(providerName), nil
 	}
 
 	results, err := provider.GetRelatedTracks(ctx, pn, externalID)
 	if err != nil {
 		slog.WarnContext(ctx, "related_tracks.provider_failed",
 			"provider", providerName, "external_id", externalID, "error", err)
-		return &ContentFetchResponse{
-			ProviderName: providerName,
-			Status:       domain.ProviderStatusError,
-			Items:        []domain.SearchResult{},
-		}, nil
+		return errorContentResponse(providerName), nil
 	}
 
 	if limit > 0 && len(results) > limit {
