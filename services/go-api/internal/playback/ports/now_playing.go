@@ -22,8 +22,8 @@ type NowPlayingTrack struct {
 
 // NowPlayingReader resolves one track id (owned by the catalog context) into a
 // display snapshot. Consumed by the resume use case; implemented by the catalog
-// bridge. The bool is false — with a nil error — when the track is absent
+// bridge. The result is nil — with a nil error — when the track is absent
 // (deleted, unknown, or a malformed id), which resume treats as "no snapshot".
 type NowPlayingReader interface {
-	Lookup(ctx context.Context, userId shared.UserId, trackId string) (*NowPlayingTrack, bool, error)
+	Lookup(ctx context.Context, userId shared.UserId, trackId string) (*NowPlayingTrack, error)
 }

@@ -29,20 +29,20 @@ func (r *NowPlayingReader) Lookup(
 	ctx context.Context,
 	userId shared.UserId,
 	trackId string,
-) (*ports.NowPlayingTrack, bool, error) {
+) (*ports.NowPlayingTrack, error) {
 	id, err := catalogDomain.ParseTrackId(trackId)
 	if err != nil {
 		// A malformed id can't identify a track — treat as absent, not an error,
 		// so resume degrades to "no snapshot" instead of failing the whole call.
-		return nil, false, nil
+		return nil, nil
 	}
 
 	track, err := r.tracks.GetByID(ctx, id, userId)
 	if err != nil {
-		return nil, false, fmt.Errorf("lookup now-playing track: %w", err)
+		return nil, fmt.Errorf("lookup now-playing track: %w", err)
 	}
 	if track == nil {
-		return nil, false, nil
+		return nil, nil
 	}
 
 	return &ports.NowPlayingTrack{
@@ -52,5 +52,5 @@ func (r *NowPlayingReader) Lookup(
 		ArtworkURL:        track.ArtworkURL,
 		DurationSeconds:   track.DurationSeconds,
 		AcquisitionStatus: track.AcquisitionStatus.String(),
-	}, true, nil
+	}, nil
 }
