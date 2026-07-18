@@ -18,6 +18,7 @@ type trackLister interface {
 type ListTracksOutput struct {
 	Tracks  []*domain.Track
 	Total   int
+	Limit   int
 	HasMore bool
 }
 
@@ -49,6 +50,7 @@ func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, l
 	return &ListTracksOutput{
 		Tracks:  tracks,
 		Total:   total,
+		Limit:   limit,
 		HasMore: offset+len(tracks) < total,
 	}, nil
 }
