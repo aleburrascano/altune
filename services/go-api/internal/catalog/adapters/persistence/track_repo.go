@@ -88,7 +88,7 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 
 // GetByID does not load FeaturedArtists (see the port doc) — every current
 // caller only reads status/audio-ref fields, so the join would be paid on every
-// call and discarded. Use GetByIDWithFeatured for a display read.
+// call and discarded.
 func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
 	row := r.pool.QueryRow(ctx,
 		`SELECT `+trackColumns+`
@@ -96,17 +96,6 @@ func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, use
 		id.UUID(), userId.UUID(),
 	)
 	return scanTrack(row)
-}
-
-func (r *PgxTrackRepository) GetByIDWithFeatured(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
-	track, err := r.GetByID(ctx, id, userId)
-	if err != nil || track == nil {
-		return track, err
-	}
-	if err := loadFeaturedForTracks(ctx, r.pool, []*domain.Track{track}); err != nil {
-		return nil, err
-	}
-	return track, nil
 }
 
 func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
