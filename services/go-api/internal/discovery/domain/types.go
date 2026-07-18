@@ -117,6 +117,25 @@ func (t EntityResolutionTier) String() string {
 	}
 }
 
+// ResolutionTierFromExtras reads the "resolution_tier" wire key merge.go stamps
+// on every merged result back into the typed tier. Returns EntityResolutionNone
+// when the key is absent or not a recognized tier string, so a reader outside
+// the writer's file gets a compile-checked accessor instead of a raw string
+// comparison against SearchResult.Extras.
+func ResolutionTierFromExtras(extras map[string]any) EntityResolutionTier {
+	s, _ := extras["resolution_tier"].(string)
+	switch s {
+	case "mbid":
+		return EntityResolutionMBID
+	case "isrc":
+		return EntityResolutionISRC
+	case "bridge":
+		return EntityResolutionBridge
+	default:
+		return EntityResolutionNone
+	}
+}
+
 // ProviderName identifies a music data provider.
 type ProviderName int
 
