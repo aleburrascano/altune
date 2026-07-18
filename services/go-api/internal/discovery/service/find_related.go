@@ -60,7 +60,7 @@ func (s *FindRelatedService) Execute(
 
 	for _, result := range organicResults[:topN] {
 		if result.Kind == domain.ResultKindTrack {
-			album := stringExtra(result, "album")
+			album := result.Album
 			if album != "" && s.querier != nil {
 				wg.Add(1)
 				go func(r domain.SearchResult, albumName string) {
@@ -182,6 +182,7 @@ func matchesToSearchResults(matches []ports.RelatedTrackMatch) []domain.SearchRe
 			ImageURL:   imageURL,
 			Confidence: domain.ConfidenceLow,
 			Sources:    []domain.SourceRef{},
+			Album:      m.Album,
 			Extras:     map[string]any{"album": m.Album, "source": "library"},
 		})
 	}
