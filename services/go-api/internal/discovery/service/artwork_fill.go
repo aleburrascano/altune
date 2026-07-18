@@ -49,10 +49,10 @@ func (s *Service) fillArtwork(ctx context.Context, results []domain.SearchResult
 	filled := make([]domain.SearchResult, len(top))
 
 	for i, r := range top {
+		sem <- struct{}{} // acquire before spawning so at most artworkFillConcurrency goroutines exist
 		wg.Add(1)
 		go func(idx int, result domain.SearchResult) {
 			defer wg.Done()
-			sem <- struct{}{}
 			defer func() { <-sem }()
 			filled[idx] = s.fillArtworkOne(fillCtx, result)
 		}(i, r)
