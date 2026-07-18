@@ -52,7 +52,7 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 		plRepo := catalogtest.NewPlaylistRepo()
 		pl, _ := domain.NewPlaylist(userId, "Old")
 		plRepo.Seed(pl)
-		svc := NewPlaylistService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistEvents(pub))
+		svc := NewPlaylistLifecycleService(plRepo, WithPlaylistLifecycleEvents(pub))
 
 		if _, err := svc.Rename(ctx, userId, pl.ID, "New Name"); err != nil {
 			t.Fatalf("rename: %v", err)
@@ -70,7 +70,7 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 		pl, _ := domain.NewPlaylist(userId, "PL")
 		_ = pl.AddTrack(track.ID)
 		plRepo.SeedWithTracks(pl, []*domain.Track{track})
-		svc := NewPlaylistService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistEvents(pub))
+		svc := NewPlaylistMembershipService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistMembershipEvents(pub))
 
 		if err := svc.RemoveTrack(ctx, userId, pl.ID, track.ID); err != nil {
 			t.Fatalf("remove track: %v", err)
@@ -90,7 +90,7 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 		_ = pl.AddTrack(t1.ID)
 		_ = pl.AddTrack(t2.ID)
 		plRepo.SeedWithTracks(pl, []*domain.Track{t1, t2})
-		svc := NewPlaylistService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistEvents(pub))
+		svc := NewPlaylistMembershipService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistMembershipEvents(pub))
 
 		if err := svc.Reorder(ctx, userId, pl.ID, []domain.TrackId{t2.ID, t1.ID}); err != nil {
 			t.Fatalf("reorder: %v", err)

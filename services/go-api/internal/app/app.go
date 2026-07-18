@@ -256,14 +256,15 @@ func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.Fea
 	listTracksSvc := catalogService.NewListTracksService(trackRepo)
 	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore, catalogService.WithDeleteTrackEvents(tap))
 	setTrackNumberSvc := catalogService.NewSetTrackNumberService(trackRepo)
-	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(tap))
+	playlistLifecycleSvc := catalogService.NewPlaylistLifecycleService(playlistRepo, catalogService.WithPlaylistLifecycleEvents(tap))
+	playlistMembershipSvc := catalogService.NewPlaylistMembershipService(playlistRepo, trackRepo, catalogService.WithPlaylistMembershipEvents(tap))
 
 	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(trackRepo, featuredBridge)
 	listFeaturingSvc := catalogService.NewListFeaturingService(trackRepo)
 
 	getTrackStatusSvc := catalogService.NewGetTrackStatusService(trackRepo)
 	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, getTrackStatusSvc, deleteTrackSvc, setTrackNumberSvc, backfillFeaturedSvc, listFeaturingSvc)
-	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
+	playlistHandler := catalogHandler.NewPlaylistHandler(playlistLifecycleSvc, playlistMembershipSvc)
 	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, catalogService.WithStreamScheduler(scheduler))
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
 	audioURLSvc := catalogService.NewAudioURLService(trackRepo, audioStore)

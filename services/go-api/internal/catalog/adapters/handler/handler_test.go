@@ -114,8 +114,9 @@ func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.
 }
 
 func buildPlaylistHandler(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (*PlaylistHandler, chi.Router) {
-	svc := service.NewPlaylistService(plRepo, trRepo)
-	h := NewPlaylistHandler(svc)
+	lifecycleSvc := service.NewPlaylistLifecycleService(plRepo)
+	membershipSvc := service.NewPlaylistMembershipService(plRepo, trRepo)
+	h := NewPlaylistHandler(lifecycleSvc, membershipSvc)
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(verifyAsTestUser))
 	r.Mount("/playlists", h.Routes())
