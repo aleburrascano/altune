@@ -186,10 +186,9 @@ func matchesToSearchResults(matches []ports.RelatedTrackMatch) []domain.SearchRe
 }
 
 func dedupRelatedAgainstOrganic(groups []domain.RelatedGroup, organic []domain.SearchResult) []domain.RelatedGroup {
-	organicKeys := make(map[string]bool, len(organic))
+	seen := make(map[string]bool, len(organic))
 	for _, r := range organic {
-		key := textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
-		organicKeys[key] = true
+		seen[textnorm.NormalizeForMatch(r.Title)+"|"+textnorm.NormalizeForMatch(r.Subtitle)] = true
 	}
 
 	var filtered []domain.RelatedGroup
@@ -197,7 +196,8 @@ func dedupRelatedAgainstOrganic(groups []domain.RelatedGroup, organic []domain.S
 		var items []domain.SearchResult
 		for _, item := range g.Items {
 			key := textnorm.NormalizeForMatch(item.Title) + "|" + textnorm.NormalizeForMatch(item.Subtitle)
-			if !organicKeys[key] {
+			if !seen[key] {
+				seen[key] = true
 				items = append(items, item)
 			}
 		}
