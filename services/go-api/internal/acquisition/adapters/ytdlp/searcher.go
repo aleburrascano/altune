@@ -75,6 +75,18 @@ func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.
 	return merged, nil
 }
 
+// prependAuthFlags prepends the js-runtime and cookie-file flags shared by
+// every yt-dlp invocation this adapter makes (search and download).
+func (s *YtDlpAudioSearcher) prependAuthFlags(args []string) []string {
+	if s.jsRuntime != "" {
+		args = append([]string{"--js-runtimes", s.jsRuntime, "--remote-components", "ejs:github"}, args...)
+	}
+	if s.cookieFile != "" {
+		args = append([]string{"--cookies", s.cookieFile}, args...)
+	}
+	return args
+}
+
 // runYtDlpSearch is the real subprocess implementation of searchRunner.
 func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error) {
 	searchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -87,12 +99,7 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 		"--",
 		searchSpec,
 	}
-	if s.jsRuntime != "" {
-		args = append([]string{"--js-runtimes", s.jsRuntime, "--remote-components", "ejs:github"}, args...)
-	}
-	if s.cookieFile != "" {
-		args = append([]string{"--cookies", s.cookieFile}, args...)
-	}
+	args = s.prependAuthFlags(args)
 
 	cmd := exec.CommandContext(searchCtx, "yt-dlp", args...)
 	var stdout, stderr bytes.Buffer
@@ -144,15 +151,10 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 		url,
 	}
 
-	if s.jsRuntime != "" {
-		args = append([]string{"--js-runtimes", s.jsRuntime, "--remote-components", "ejs:github"}, args...)
-	}
 	if s.ffmpegLocation != "" {
 		args = append([]string{"--ffmpeg-location", s.ffmpegLocation}, args...)
 	}
-	if s.cookieFile != "" {
-		args = append([]string{"--cookies", s.cookieFile}, args...)
-	}
+	args = s.prependAuthFlags(args)
 
 	cmd := exec.CommandContext(downloadCtx, "yt-dlp", args...)
 	var stdout, stderr bytes.Buffer
