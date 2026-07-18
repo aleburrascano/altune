@@ -31,13 +31,17 @@ func BuildSearchService(
 	redisClient *goredis.Client,
 	eventStore discoveryPorts.EventStore,
 ) *discoveryService.Service {
-	return BuildSearchServiceWithTransport(cfg, pool, redisClient, eventStore, nil, false)
+	return BuildSearchServiceWithTransport(cfg, pool, redisClient, eventStore, nil, nil, false)
 }
 
 // BuildSearchServiceWithTransport is BuildSearchService with an injectable HTTP
 // transport for every discovery provider. The server passes nil (default
 // transport); the deterministic eval passes a record/replay transport so the
 // identical wiring runs against frozen provider responses.
+//
+// vocabStore is the pre-built VocabularyStore to wire into the search pipeline.
+// Pass nil to build one internally from redisClient (offline-tooling path).
+// The server passes its already-built store so only one instance is created.
 //
 // rankingOnly skips the post-ranking display enrichment (artwork chain) and
 // related-groups — annotations that fill fields without reordering. The
@@ -50,6 +54,7 @@ func BuildSearchServiceWithTransport(
 	redisClient *goredis.Client,
 	eventStore discoveryPorts.EventStore,
 	transport http.RoundTripper,
+	vocabStore discoveryPorts.VocabularyStore,
 	rankingOnly bool,
 ) *discoveryService.Service {
 	cf := clientFactory{transport: transport}
@@ -126,8 +131,12 @@ func BuildSearchServiceWithTransport(
 		opts = append(opts, discoveryService.WithIdentityBridge(enrichmentCache))
 		opts = append(opts, discoveryService.WithMBIDIndex(enrichmentCache))
 	}
-	if vocabStore := BuildVocabularyStore(redisClient); vocabStore != nil {
-		opts = append(opts, discoveryService.WithVocabularyStore(vocabStore))
+	vs := vocabStore
+	if vs == nil {
+		vs = BuildVocabularyStore(redisClient)
+	}
+	if vs != nil {
+		opts = append(opts, discoveryService.WithVocabularyStore(vs))
 	}
 	if eventStore != nil {
 		opts = append(opts, discoveryService.WithEventStore(eventStore))
