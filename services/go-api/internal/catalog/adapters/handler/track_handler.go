@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -9,15 +10,23 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
+// trackStatusGetter is the narrow read the status endpoint calls — a pure
+// single-track fetch with no invariants, satisfied directly by PgxTrackRepository.
+type trackStatusGetter interface {
+	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
+}
+
 type TrackHandler struct {
 	addTrack         *service.AddTrackService
 	listTracks       *service.ListTracksService
+	trackGetter      trackStatusGetter
 	deleteTrack      *service.DeleteTrackService
 	setTrackNumber   *service.SetTrackNumberService
 	backfillFeatured *service.BackfillFeaturedService
@@ -27,6 +36,7 @@ type TrackHandler struct {
 func NewTrackHandler(
 	addTrack *service.AddTrackService,
 	listTracks *service.ListTracksService,
+	trackGetter trackStatusGetter,
 	deleteTrack *service.DeleteTrackService,
 	setTrackNumber *service.SetTrackNumberService,
 	backfillFeatured *service.BackfillFeaturedService,
@@ -35,6 +45,7 @@ func NewTrackHandler(
 	return &TrackHandler{
 		addTrack:         addTrack,
 		listTracks:       listTracks,
+		trackGetter:      trackGetter,
 		deleteTrack:      deleteTrack,
 		setTrackNumber:   setTrackNumber,
 		backfillFeatured: backfillFeatured,
@@ -282,7 +293,7 @@ func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	track, err := h.listTracks.GetByID(r.Context(), userId, trackId)
+	track, err := h.trackGetter.GetByID(r.Context(), trackId, userId)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return

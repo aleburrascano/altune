@@ -261,7 +261,7 @@ func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.Fea
 	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(trackRepo, featuredBridge)
 	listFeaturingSvc := catalogService.NewListFeaturingService(trackRepo)
 
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, setTrackNumberSvc, backfillFeaturedSvc, listFeaturingSvc)
+	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, trackRepo, deleteTrackSvc, setTrackNumberSvc, backfillFeaturedSvc, listFeaturingSvc)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
 	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, scheduler)
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
