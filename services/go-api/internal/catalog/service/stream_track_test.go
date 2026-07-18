@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 )
 
@@ -20,7 +21,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		setup         func(*mockTrackRepo, *mockAudioStore) domain.TrackId
+		setup         func(*catalogtest.TrackRepo, *catalogtest.AudioStore) domain.TrackId
 		wantErr       error
 		wantOutput    bool
 		wantStatus    *domain.AcquisitionStatus // nil = don't check
@@ -28,9 +29,9 @@ func TestStreamTrackService_Execute(t *testing.T) {
 	}{
 		{
 			name: "ready track with present audio streams",
-			setup: func(trRepo *mockTrackRepo, store *mockAudioStore) domain.TrackId {
+			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
 				track := seedReadyTrack(t, trRepo, userId, "Song", "Artist", "Album", "audio/ok.opus")
-				store.seed("audio/ok.opus")
+				store.Seed("audio/ok.opus", []byte("data"))
 				return track.ID
 			},
 			wantOutput:    true,
@@ -39,9 +40,9 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		},
 		{
 			name: "ready track with missing file is marked failed and reacquired",
-			setup: func(trRepo *mockTrackRepo, store *mockAudioStore) domain.TrackId {
+			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
 				track := seedReadyTrack(t, trRepo, userId, "Song", "Artist", "Album", "audio/gone.opus")
-				store.errOnStream = errors.New("not found")
+				store.ErrOnStream = errors.New("not found")
 				// file not seeded -> Exists returns false
 				return track.ID
 			},
@@ -51,10 +52,10 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		},
 		{
 			name: "transient stream error over present file stays ready",
-			setup: func(trRepo *mockTrackRepo, store *mockAudioStore) domain.TrackId {
+			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
 				track := seedReadyTrack(t, trRepo, userId, "Song", "Artist", "Album", "audio/here.opus")
-				store.seed("audio/here.opus")
-				store.errOnStream = errors.New("transient")
+				store.Seed("audio/here.opus", []byte("data"))
+				store.ErrOnStream = errors.New("transient")
 				return track.ID
 			},
 			wantErr:       ErrAudioNotAvailable,
@@ -63,10 +64,10 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		},
 		{
 			name: "exists check error does not mark failed",
-			setup: func(trRepo *mockTrackRepo, store *mockAudioStore) domain.TrackId {
+			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
 				track := seedReadyTrack(t, trRepo, userId, "Song", "Artist", "Album", "audio/err.opus")
-				store.errOnStream = errors.New("stream fail")
-				store.errOnExists = errors.New("s3 down")
+				store.ErrOnStream = errors.New("stream fail")
+				store.ErrOnExists = errors.New("s3 down")
 				return track.ID
 			},
 			wantErr:       ErrAudioNotAvailable,
@@ -75,7 +76,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		},
 		{
 			name: "pending track is not streamable",
-			setup: func(trRepo *mockTrackRepo, store *mockAudioStore) domain.TrackId {
+			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
 				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
 				return track.ID
 			},
@@ -85,7 +86,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		},
 		{
 			name: "track not found",
-			setup: func(trRepo *mockTrackRepo, store *mockAudioStore) domain.TrackId {
+			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
 				return domain.NewTrackId()
 			},
 			wantErr:       ErrTrackNotFound,
@@ -93,8 +94,8 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		},
 		{
 			name: "repo GetByID error propagates",
-			setup: func(trRepo *mockTrackRepo, store *mockAudioStore) domain.TrackId {
-				trRepo.errOnGetBy = errRepo
+			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
+				trRepo.ErrOnGetBy = errRepo
 				return domain.NewTrackId()
 			},
 			wantErr:       errRepo,
@@ -104,9 +105,9 @@ func TestStreamTrackService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			trRepo := newMockTrackRepo()
-			store := newMockAudioStore()
-			sched := &recordingScheduler{}
+			trRepo := catalogtest.NewTrackRepo()
+			store := catalogtest.NewAudioStore()
+			sched := &catalogtest.Scheduler{}
 			trackId := tt.setup(trRepo, store)
 			svc := NewStreamTrackService(trRepo, store, sched)
 
@@ -140,11 +141,11 @@ func TestStreamTrackService_Execute(t *testing.T) {
 				}
 			}
 
-			if tt.wantScheduled && len(sched.trackIds) == 0 {
+			if tt.wantScheduled && len(sched.TrackIds) == 0 {
 				t.Error("expected re-acquisition to be scheduled")
 			}
-			if !tt.wantScheduled && len(sched.trackIds) > 0 {
-				t.Errorf("expected no scheduling, got %d", len(sched.trackIds))
+			if !tt.wantScheduled && len(sched.TrackIds) > 0 {
+				t.Errorf("expected no scheduling, got %d", len(sched.TrackIds))
 			}
 		})
 	}
@@ -156,8 +157,8 @@ func TestStreamTrackService_Execute(t *testing.T) {
 func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
-	repo := newMockTrackRepo()
-	sched := &recordingScheduler{}
+	repo := catalogtest.NewTrackRepo()
+	sched := &catalogtest.Scheduler{}
 	svc := NewAddTrackService(repo, WithAcquisitionScheduler(sched))
 
 	scURL := "https://soundcloud.com/liltecca/fell-in-love"
@@ -169,8 +170,8 @@ func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(sched.sourceURLs) != 1 || sched.sourceURLs[0] != scURL {
-		t.Fatalf("scheduler should receive source URL %q, got %v", scURL, sched.sourceURLs)
+	if len(sched.SourceURLs) != 1 || sched.SourceURLs[0] != scURL {
+		t.Fatalf("scheduler should receive source URL %q, got %v", scURL, sched.SourceURLs)
 	}
 }
 
@@ -179,15 +180,15 @@ func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
 func TestAddTrackService_NoSourceURL_ForwardsEmpty(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
-	repo := newMockTrackRepo()
-	sched := &recordingScheduler{}
+	repo := catalogtest.NewTrackRepo()
+	sched := &catalogtest.Scheduler{}
 	svc := NewAddTrackService(repo, WithAcquisitionScheduler(sched))
 
 	if _, err := svc.Execute(ctx, userId, AddTrackInput{Title: "Some Track", Artist: "Some Artist"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(sched.sourceURLs) != 1 || sched.sourceURLs[0] != "" {
-		t.Fatalf("scheduler should receive an empty source URL, got %v", sched.sourceURLs)
+	if len(sched.SourceURLs) != 1 || sched.SourceURLs[0] != "" {
+		t.Fatalf("scheduler should receive an empty source URL, got %v", sched.SourceURLs)
 	}
 }

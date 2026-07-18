@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 )
 
-// stubSigner turns the plain mockAudioStore into an AudioURLSigner so
+// stubSigner turns the plain catalogtest.AudioStore into an AudioURLSigner so
 // NewAudioURLService detects a signer. err makes PresignGet fail.
 type stubSigner struct {
-	*mockAudioStore
+	*catalogtest.AudioStore
 	err error
 }
 
@@ -28,10 +29,10 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	userId := testUserId()
 
 	t.Run("ready tracks get signed urls, non-streamable are skipped", func(t *testing.T) {
-		repo := newMockTrackRepo()
+		repo := catalogtest.NewTrackRepo()
 		ready := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/ok.opus")
 		pending := seedTrack(t, repo, userId, "Pending", "Artist", "Album")
-		svc := NewAudioURLService(repo, stubSigner{mockAudioStore: newMockAudioStore()})
+		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore()})
 
 		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID, pending.ID})
 		if err != nil {
@@ -52,9 +53,9 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	})
 
 	t.Run("no signer returns nothing (client proxies)", func(t *testing.T) {
-		repo := newMockTrackRepo()
+		repo := catalogtest.NewTrackRepo()
 		ready := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/ok.opus")
-		svc := NewAudioURLService(repo, newMockAudioStore()) // plain store, not a signer
+		svc := NewAudioURLService(repo, catalogtest.NewAudioStore()) // plain store, not a signer
 
 		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
 		if err != nil {
@@ -66,9 +67,9 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	})
 
 	t.Run("presign failure skips only that track", func(t *testing.T) {
-		repo := newMockTrackRepo()
+		repo := catalogtest.NewTrackRepo()
 		ready := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/ok.opus")
-		svc := NewAudioURLService(repo, stubSigner{mockAudioStore: newMockAudioStore(), err: errors.New("boom")})
+		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore(), err: errors.New("boom")})
 
 		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
 		if err != nil {
