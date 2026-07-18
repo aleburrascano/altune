@@ -10,18 +10,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// trackFeaturedLookup fetches a track's featured artists by its provider id. The
-// Deezer adapter satisfies it (LookupTrackFeatured). Album tracklists don't carry
-// contributors inline, so we fetch them per track to populate featured_artists.
-type trackFeaturedLookup interface {
-	LookupTrackFeatured(ctx context.Context, trackID string) ([]domain.FeaturedArtist, error)
-}
-
 const albumFeaturedConcurrency = 5
 
+// Album tracklists don't carry contributors inline, so we fetch each track's
+// featured artists individually via the Deezer adapter's LookupTrackFeatured
+// (deezerFeaturedLookup, declared in featured_resolver.go).
 type GetAlbumTracksService struct {
 	providers map[string]ports.AlbumContentProvider
-	featured  trackFeaturedLookup
+	featured  deezerFeaturedLookup
 }
 
 func NewGetAlbumTracksService(
@@ -36,7 +32,7 @@ func NewGetAlbumTracksService(
 }
 
 // WithTrackFeatured enables per-track featured-artist enrichment of album tracks.
-func WithTrackFeatured(f trackFeaturedLookup) func(*GetAlbumTracksService) {
+func WithTrackFeatured(f deezerFeaturedLookup) func(*GetAlbumTracksService) {
 	return func(s *GetAlbumTracksService) { s.featured = f }
 }
 
