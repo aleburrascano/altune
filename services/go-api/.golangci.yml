@@ -36,6 +36,23 @@ linters:
             - pkg: altune/go-api/internal/shared/
               desc: domain may import from internal/shared only the root value objects and textnorm (.claude/rules/backend/domain-layer.md)
 
+        # Catalog reaches discovery only through adapters/discoverybridge (structure
+        # audit F3, 2026-07-18); it never imports another feature directly.
+        catalog-boundary:
+          files:
+            - "**/internal/catalog/service/**"
+            - "**/internal/catalog/ports/**"
+            - "**/internal/catalog/adapters/handler/**"
+            - "**/internal/catalog/adapters/persistence/**"
+            - "**/internal/catalog/adapters/storage/**"
+          deny:
+            - pkg: altune/go-api/internal/discovery
+              desc: catalog reaches discovery only through adapters/discoverybridge (internal/catalog/CLAUDE.md)
+            - pkg: altune/go-api/internal/playback
+              desc: catalog never imports playback (internal/catalog/CLAUDE.md)
+            - pkg: altune/go-api/internal/admin
+              desc: catalog never imports admin (internal/catalog/CLAUDE.md)
+
         # Shared is the bottom of the import graph: it never imports a feature,
         # the composition root, or auth.
         shared-bottom:
