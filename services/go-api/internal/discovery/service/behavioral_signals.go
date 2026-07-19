@@ -94,7 +94,12 @@ func (s *Service) BehavioralScoresSnapshot() map[string]float64 {
 		return nil
 	}
 	if p := s.behavioralScores.Load(); p != nil {
-		return *p
+		src := *p
+		out := make(map[string]float64, len(src))
+		for k, v := range src {
+			out[k] = v
+		}
+		return out
 	}
 	return nil
 }
