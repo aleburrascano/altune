@@ -61,6 +61,13 @@ type PlaylistSummary struct {
 	PreviewArtworkURLs []string
 }
 
+// PlaylistWithSummary pairs a Playlist with its read-side projections so
+// ListForUser returns one value per row instead of two parallel slices.
+type PlaylistWithSummary struct {
+	Playlist *Playlist
+	Summary  PlaylistSummary
+}
+
 func NewPlaylist(userId shared.UserId, name string) (*Playlist, error) {
 	if err := validatePlaylistName(name); err != nil {
 		return nil, err

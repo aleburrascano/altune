@@ -195,18 +195,17 @@ func (r *PlaylistRepo) Create(_ context.Context, playlist *domain.Playlist) erro
 	return nil
 }
 
-func (r *PlaylistRepo) ListForUser(_ context.Context, userId shared.UserId) ([]*domain.Playlist, []domain.PlaylistSummary, error) {
+func (r *PlaylistRepo) ListForUser(_ context.Context, userId shared.UserId) ([]domain.PlaylistWithSummary, error) {
 	if r.ErrOnList != nil {
-		return nil, nil, r.ErrOnList
+		return nil, r.ErrOnList
 	}
-	var result []*domain.Playlist
+	var result []domain.PlaylistWithSummary
 	for _, p := range r.Playlists {
 		if p.UserId == userId {
-			result = append(result, p)
+			result = append(result, domain.PlaylistWithSummary{Playlist: p})
 		}
 	}
-	summaries := make([]domain.PlaylistSummary, len(result))
-	return result, summaries, nil
+	return result, nil
 }
 
 func (r *PlaylistRepo) GetByID(_ context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {

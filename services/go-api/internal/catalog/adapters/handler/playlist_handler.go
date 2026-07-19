@@ -124,15 +124,15 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlists, summaries, err := h.lifecycle.List(r.Context(), userId)
+	playlists, err := h.lifecycle.List(r.Context(), userId)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
 	items := make([]PlaylistResponse, len(playlists))
-	for i, p := range playlists {
-		items[i] = playlistToResponse(p, summaries[i].TrackCount, summaries[i].PreviewArtworkURLs)
+	for i, ps := range playlists {
+		items[i] = playlistToResponse(ps.Playlist, ps.Summary.TrackCount, ps.Summary.PreviewArtworkURLs)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, ListPlaylistsResponse{

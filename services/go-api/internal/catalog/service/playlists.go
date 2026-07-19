@@ -49,12 +49,12 @@ func (s *PlaylistLifecycleService) Create(ctx context.Context, userId shared.Use
 	return playlist, nil
 }
 
-func (s *PlaylistLifecycleService) List(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, []domain.PlaylistSummary, error) {
-	playlists, summaries, err := s.playlistRepo.ListForUser(ctx, userId)
+func (s *PlaylistLifecycleService) List(ctx context.Context, userId shared.UserId) ([]domain.PlaylistWithSummary, error) {
+	result, err := s.playlistRepo.ListForUser(ctx, userId)
 	if err != nil {
-		return nil, nil, fmt.Errorf("list playlists: %w", err)
+		return nil, fmt.Errorf("list playlists: %w", err)
 	}
-	return playlists, summaries, nil
+	return result, nil
 }
 
 func (s *PlaylistLifecycleService) Get(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId) (*domain.Playlist, []*domain.Track, error) {
