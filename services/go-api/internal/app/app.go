@@ -211,12 +211,13 @@ func (a *App) setup(ctx context.Context) error {
 // the track repository (playback's now-playing reader is built from it) and
 // the handlers mountRoutes mounts.
 type catalogWiring struct {
-	trackRepo       *persistence.PgxTrackRepository
-	trackHandler    *catalogHandler.TrackHandler
-	playlistHandler *catalogHandler.PlaylistHandler
-	streamHandler   *catalogHandler.StreamHandler
-	audioURLHandler *catalogHandler.AudioURLHandler
-	retryH          *acqHandler.RetryHandler // nil when acquisition is off
+	trackRepo              *persistence.PgxTrackRepository
+	trackHandler           *catalogHandler.TrackHandler
+	featuredArtistHandler  *catalogHandler.FeaturedArtistHandler
+	playlistHandler        *catalogHandler.PlaylistHandler
+	streamHandler          *catalogHandler.StreamHandler
+	audioURLHandler        *catalogHandler.AudioURLHandler
+	retryH                 *acqHandler.RetryHandler // nil when acquisition is off
 }
 
 // wireCatalog builds the catalog context plus the acquisition scheduler that
@@ -263,7 +264,8 @@ func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.Fea
 	listFeaturingSvc := catalogService.NewListFeaturingService(trackRepo)
 
 	getTrackStatusSvc := catalogService.NewGetTrackStatusService(trackRepo)
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, getTrackStatusSvc, deleteTrackSvc, setTrackNumberSvc, backfillFeaturedSvc, listFeaturingSvc)
+	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, getTrackStatusSvc, deleteTrackSvc, setTrackNumberSvc)
+	featuredArtistHandler := catalogHandler.NewFeaturedArtistHandler(backfillFeaturedSvc, listFeaturingSvc)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistLifecycleSvc, playlistMembershipSvc)
 	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, catalogService.WithStreamScheduler(scheduler))
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
@@ -276,12 +278,13 @@ func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.Fea
 	}
 
 	return catalogWiring{
-		trackRepo:       trackRepo,
-		trackHandler:    trackHandler,
-		playlistHandler: playlistHandler,
-		streamHandler:   streamHandler,
-		audioURLHandler: audioURLHandler,
-		retryH:          retryH,
+		trackRepo:             trackRepo,
+		trackHandler:          trackHandler,
+		featuredArtistHandler: featuredArtistHandler,
+		playlistHandler:       playlistHandler,
+		streamHandler:         streamHandler,
+		audioURLHandler:       audioURLHandler,
+		retryH:                retryH,
 	}
 }
 
@@ -494,7 +497,10 @@ func (a *App) mountRoutes(
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(auth.Middleware(verifier))
 
-		r.Mount("/tracks", cat.trackHandler.Routes())
+		r.Route("/tracks", func(r chi.Router) {
+				r.Mount("/", cat.trackHandler.Routes())
+				cat.featuredArtistHandler.AddRoutes(r)
+			})
 		r.Get("/tracks/{trackId}/audio", cat.streamHandler.HandleStreamAudio)
 		r.Post("/tracks/{trackId}/audio/recover", cat.streamHandler.HandleRecover)
 		r.Post("/audio-urls", cat.audioURLHandler.HandleResolve)
