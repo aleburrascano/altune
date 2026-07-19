@@ -15,30 +15,31 @@ import (
 	"github.com/google/uuid"
 )
 
+
 type TrackHandler struct {
-	addTrack         *service.AddTrackService
-	listTracks       *service.ListTracksService
-	deleteTrack      *service.DeleteTrackService
-	setTrackNumber   *service.SetTrackNumberService
-	backfillFeatured *service.BackfillFeaturedService
-	listFeaturing    *service.ListFeaturingService
+	addTrack       *service.AddTrackService
+	listTracks     *service.ListTracksService
+	getTrackStatus *service.GetTrackStatusService
+	deleteTrack    *service.DeleteTrackService
+	setTrackNumber *service.SetTrackNumberService
+	featuredArtist *FeaturedArtistHandler
 }
 
 func NewTrackHandler(
 	addTrack *service.AddTrackService,
 	listTracks *service.ListTracksService,
+	getTrackStatus *service.GetTrackStatusService,
 	deleteTrack *service.DeleteTrackService,
 	setTrackNumber *service.SetTrackNumberService,
-	backfillFeatured *service.BackfillFeaturedService,
-	listFeaturing *service.ListFeaturingService,
+	featuredArtist *FeaturedArtistHandler,
 ) *TrackHandler {
 	return &TrackHandler{
-		addTrack:         addTrack,
-		listTracks:       listTracks,
-		deleteTrack:      deleteTrack,
-		setTrackNumber:   setTrackNumber,
-		backfillFeatured: backfillFeatured,
-		listFeaturing:    listFeaturing,
+		addTrack:       addTrack,
+		listTracks:     listTracks,
+		getTrackStatus: getTrackStatus,
+		deleteTrack:    deleteTrack,
+		setTrackNumber: setTrackNumber,
+		featuredArtist: featuredArtist,
 	}
 }
 
@@ -46,11 +47,10 @@ func (h *TrackHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.handleListTracks)
 	r.Post("/", h.handleCreateTrack)
-	r.Get("/featuring", h.handleListFeaturing)
-	r.Post("/featured-backfill", h.handleBackfillFeatured)
 	r.Get("/{trackId}/status", h.handleGetTrackStatus)
 	r.Patch("/{trackId}/track-number", h.handleSetTrackNumber)
 	r.Delete("/{trackId}", h.handleDeleteTrack)
+	h.featuredArtist.addRoutes(r)
 	return r
 }
 
@@ -83,62 +83,6 @@ type SetTrackNumberRequest struct {
 	TrackNumber int `json:"track_number"`
 }
 
-// handleBackfillFeatured resolves and persists featured artists for the authed
-// user's existing tracks (idempotent). Synchronous — the library is small.
-func (h *TrackHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
-	if !ok {
-		return
-	}
-	result, err := h.backfillFeatured.Execute(r.Context(), userId)
-	if err != nil {
-		httputil.HandleServiceError(w, r, err)
-		return
-	}
-	httputil.WriteJSON(w, http.StatusOK, result)
-}
-
-// handleListFeaturing returns the user's tracks crediting a featured artist,
-// identified by mbid, deezer_id, or name (in that precedence).
-func (h *TrackHandler) handleListFeaturing(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
-	if !ok {
-		return
-	}
-	q := r.URL.Query()
-	name := q.Get("name")
-	mbid := q.Get("mbid")
-	var deezerID int64
-	if v := q.Get("deezer_id"); v != "" {
-		deezerID, _ = strconv.ParseInt(v, 10, 64)
-	}
-	if name == "" && mbid == "" && deezerID == 0 {
-		httputil.BadRequest(w, "one of name, mbid, or deezer_id is required")
-		return
-	}
-
-	fa, valid := domain.NewFeaturedArtist(name, mbid, deezerID)
-	if !valid {
-		// Identity present but no display name — construct directly so the
-		// identity key still resolves.
-		fa = domain.FeaturedArtist{Name: name, MBID: mbid, DeezerID: deezerID, Role: domain.RoleFeatured}
-	}
-
-	tracks, err := h.listFeaturing.Execute(r.Context(), userId, fa)
-	if err != nil {
-		httputil.HandleServiceError(w, r, err)
-		return
-	}
-
-	items := make([]TrackResponse, len(tracks))
-	for i, t := range tracks {
-		items[i] = trackToResponse(t)
-	}
-	httputil.WriteJSON(w, http.StatusOK, ListTracksResponse{
-		Items: items, Total: len(items), Limit: len(items), Offset: 0, HasMore: false,
-	})
-}
-
 // --- DTOs ---
 
 type CreateTrackRequest struct {
@@ -153,7 +97,7 @@ type CreateTrackRequest struct {
 	AlbumArtist     *string  `json:"album_artist,omitempty"`
 	// FeaturedArtists are the guest ("feat.") credits carried from the discovery
 	// result the client saved, persisted on the track.
-	FeaturedArtists []FeaturedArtistDTO `json:"featured_artists,omitempty"`
+	FeaturedArtists []service.FeaturedArtistDTO `json:"featured_artists,omitempty"`
 	// SourceURL is the exact provider URL the saved result was discovered at
 	// (e.g. a SoundCloud permalink). When it is a directly-downloadable source,
 	// acquisition grabs that exact track instead of re-searching by metadata.
@@ -174,8 +118,12 @@ type ListTracksResponse struct {
 	HasMore bool            `json:"has_more"`
 }
 
-func trackToResponse(t *domain.Track) TrackResponse {
-	return service.TrackToDTO(t)
+func tracksToDTO(tracks []*domain.Track) []TrackResponse {
+	out := make([]TrackResponse, len(tracks))
+	for i, t := range tracks {
+		out[i] = service.TrackToDTO(t)
+	}
+	return out
 }
 
 // --- Handlers ---
@@ -188,9 +136,6 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	if limit <= 0 {
-		limit = 50
-	}
 
 	result, err := h.listTracks.Execute(r.Context(), userId, limit, offset)
 	if err != nil {
@@ -198,15 +143,10 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	items := make([]TrackResponse, len(result.Tracks))
-	for i, t := range result.Tracks {
-		items[i] = trackToResponse(t)
-	}
-
 	httputil.WriteJSON(w, http.StatusOK, ListTracksResponse{
-		Items:   items,
+		Items:   tracksToDTO(result.Tracks),
 		Total:   result.Total,
-		Limit:   limit,
+		Limit:   result.Limit,
 		Offset:  offset,
 		HasMore: result.HasMore,
 	})
@@ -268,7 +208,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		)
 	}
 
-	httputil.WriteJSON(w, status, trackToResponse(result.Track))
+	httputil.WriteJSON(w, status, service.TrackToDTO(result.Track))
 }
 
 type TrackStatusResponse struct {
@@ -289,13 +229,9 @@ func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	track, err := h.listTracks.GetByID(r.Context(), userId, trackId)
+	track, err := h.getTrackStatus.Execute(r.Context(), userId, trackId)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
-		return
-	}
-	if track == nil {
-		httputil.NotFound(w, "track not found")
 		return
 	}
 
@@ -329,4 +265,27 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// domainFeaturedFromDTOs converts request DTOs into domain value objects, dropping
+// entries with an empty name.
+func domainFeaturedFromDTOs(dtos []service.FeaturedArtistDTO) []domain.FeaturedArtist {
+	if len(dtos) == 0 {
+		return nil
+	}
+	out := make([]domain.FeaturedArtist, 0, len(dtos))
+	for _, d := range dtos {
+		mbid := ""
+		if d.MBID != nil {
+			mbid = *d.MBID
+		}
+		deezerID := int64(0)
+		if d.DeezerID != nil {
+			deezerID = *d.DeezerID
+		}
+		if fa, ok := domain.NewFeaturedArtist(d.Name, mbid, deezerID); ok {
+			out = append(out, fa)
+		}
+	}
+	return out
 }

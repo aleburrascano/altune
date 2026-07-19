@@ -11,8 +11,8 @@ import (
 )
 
 // Integration test — skips without DATABASE_URL. Verifies featured artists persist
-// on Add and reload on GetByID in position order, and that re-adding a dedup track
-// dedups the canonical featured_artists rows on identity_key.
+// on Add and reload on GetByDedupKey in position order, and that re-adding a
+// dedup track dedups the canonical featured_artists rows on identity_key.
 func TestPgxTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
@@ -33,9 +33,9 @@ func TestPgxTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	got, err := repo.GetByID(ctx, track.ID, userId)
+	got, err := repo.GetByDedupKey(ctx, userId, track.DedupKey)
 	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
+		t.Fatalf("GetByDedupKey() error = %v", err)
 	}
 	if len(got.FeaturedArtists) != 2 {
 		t.Fatalf("featured count = %d, want 2 (%+v)", len(got.FeaturedArtists), got.FeaturedArtists)

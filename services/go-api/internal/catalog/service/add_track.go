@@ -35,14 +35,24 @@ type AddTrackOutput struct {
 	Created bool
 }
 
+// trackAdder is the narrow write this service actually calls, out of
+// ports.TrackRepository's full surface.
+type trackAdder interface {
+	Add(ctx context.Context, track *domain.Track) (stored *domain.Track, created bool, err error)
+}
+
 type AddTrackService struct {
-	trackRepo ports.TrackRepository
+	trackRepo trackAdder
 	events    events.Publisher
 	scheduler ports.AcquisitionScheduler
 }
 
-func NewAddTrackService(trackRepo ports.TrackRepository, opts ...func(*AddTrackService)) *AddTrackService {
-	s := &AddTrackService{trackRepo: trackRepo}
+func NewAddTrackService(trackRepo trackAdder, opts ...func(*AddTrackService)) *AddTrackService {
+	s := &AddTrackService{
+		trackRepo: trackRepo,
+		events:    events.NoopPublisher(),
+		scheduler: ports.NoopAcquisitionScheduler(),
+	}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -50,11 +60,19 @@ func NewAddTrackService(trackRepo ports.TrackRepository, opts ...func(*AddTrackS
 }
 
 func WithAddTrackEvents(pub events.Publisher) func(*AddTrackService) {
-	return func(s *AddTrackService) { s.events = pub }
+	return func(s *AddTrackService) {
+		if pub != nil {
+			s.events = pub
+		}
+	}
 }
 
 func WithAcquisitionScheduler(scheduler ports.AcquisitionScheduler) func(*AddTrackService) {
-	return func(s *AddTrackService) { s.scheduler = scheduler }
+	return func(s *AddTrackService) {
+		if scheduler != nil {
+			s.scheduler = scheduler
+		}
+	}
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, input AddTrackInput) (*AddTrackOutput, error) {
@@ -84,33 +102,31 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 			"track_id", track.ID.String(),
 			"user_id", userId.String(),
 		)
-		if s.events != nil {
-			s.events.Publish(userId, "track_added_to_library", trackAddedPayload(track))
+		s.events.Publish(userId, "track_added_to_library", trackAddedPayload(track))
+		sourceURL := ""
+		if input.SourceURL != nil {
+			sourceURL = *input.SourceURL
 		}
-		if s.scheduler != nil {
-			sourceURL := ""
-			if input.SourceURL != nil {
-				sourceURL = *input.SourceURL
-			}
-			slog.InfoContext(ctx, "acquisition.scheduled",
-				"track_id", track.ID.String())
-			s.scheduler.Schedule(userId, track.ID, sourceURL)
-		}
+		slog.InfoContext(ctx, "acquisition.scheduled",
+			"track_id", track.ID.String())
+		s.scheduler.Schedule(userId, track.ID, sourceURL)
 	}
 
 	return &AddTrackOutput{Track: track, Created: created}, nil
 }
 
 // trackAddedPayload builds the full track object embedded in the
-// track_added_to_library event (F10), so a receiving client inserts the row
-// directly instead of forcing a refetch. It marshals the same TrackDTO the HTTP
-// handler serializes and re-opens it as the bus's map payload, so the event can
-// never drift from the wire shape — they are the same struct.
+// track_added_to_library event, so a receiving client inserts the row directly
+// instead of forcing a refetch. TrackDTO drives the JSON shape so the event
+// payload and the HTTP response can never drift; track_id is the legacy key
+// retained for older clients alongside the canonical id field.
 func trackAddedPayload(t *domain.Track) map[string]any {
-	// A DTO of plain values cannot fail to (un)marshal.
-	b, _ := json.Marshal(TrackToDTO(t))
+	type payload struct {
+		TrackDTO
+		LegacyID string `json:"track_id"`
+	}
+	b, _ := json.Marshal(payload{TrackDTO: TrackToDTO(t), LegacyID: t.ID.String()})
 	var m map[string]any
 	_ = json.Unmarshal(b, &m)
-	m["track_id"] = t.ID.String() // retained for older clients
 	return m
 }

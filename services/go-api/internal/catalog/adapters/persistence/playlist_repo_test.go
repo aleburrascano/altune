@@ -45,7 +45,7 @@ func TestPgxPlaylistRepo_CreateAndGetByID(t *testing.T) {
 	}
 
 	// Act: GetByID
-	got, err := repo.GetByID(ctx, pl.ID, userId)
+	got, _, err := repo.GetByID(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
@@ -101,7 +101,7 @@ func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 
 	// Verify descending created_at order
 	for i := 1; i < len(got); i++ {
-		if got[i-1].CreatedAt.Before(got[i].CreatedAt) {
+		if got[i-1].Playlist.CreatedAt.Before(got[i].Playlist.CreatedAt) {
 			t.Errorf("playlists not in descending created_at order at index %d", i)
 		}
 	}
@@ -130,7 +130,7 @@ func TestPgxPlaylistRepo_Delete(t *testing.T) {
 	}
 
 	// Assert: gone
-	got, err := repo.GetByID(ctx, pl.ID, userId)
+	got, _, err := repo.GetByID(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID after delete: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestPgxPlaylistRepo_GetByID_NotFound(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	got, err := repo.GetByID(ctx, domain.PlaylistIdFromUUID(uuid.New()), userId)
+	got, _, err := repo.GetByID(ctx, domain.PlaylistIdFromUUID(uuid.New()), userId)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}

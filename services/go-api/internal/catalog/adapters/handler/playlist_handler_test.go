@@ -8,6 +8,8 @@ import (
 
 	catdomain "altune/go-api/internal/catalog/domain"
 
+	"altune/go-api/internal/catalog/catalogtest"
+
 	"github.com/google/uuid"
 )
 
@@ -39,8 +41,8 @@ func TestHandleCreatePlaylist(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			plRepo := newFakePlaylistRepo()
-			trRepo := newFakeTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
 			// Act
@@ -95,10 +97,10 @@ func TestHandleListPlaylists(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			plRepo := newFakePlaylistRepo()
-			trRepo := newFakeTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			for i := 0; i < tt.seedCount; i++ {
-				plRepo.seed(makePlaylist(testUserId, "Playlist "+string(rune('A'+i))))
+				plRepo.Seed(makePlaylist(testUserId, "Playlist "+string(rune('A'+i))))
 			}
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
@@ -124,29 +126,29 @@ func TestHandleListPlaylists(t *testing.T) {
 func TestHandleGetPlaylist(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*fakePlaylistRepo, *fakeTrackRepo) string
+		setup      func(*catalogtest.PlaylistRepo, *catalogtest.TrackRepo) string
 		wantStatus int
 	}{
 		{
 			name: "found returns detail with tracks",
-			setup: func(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) string {
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) string {
 				pl := makePlaylist(testUserId, "Rock")
 				track := makeTrack(testUserId, "Song", "Artist", "Album")
-				plRepo.seedWithTracks(pl, []*catdomain.Track{track})
+				plRepo.SeedWithTracks(pl, []*catdomain.Track{track})
 				return pl.ID.UUID().String()
 			},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name: "not found returns 404",
-			setup: func(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) string {
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "invalid ID returns 400",
-			setup: func(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) string {
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) string {
 				return "not-a-uuid"
 			},
 			wantStatus: http.StatusBadRequest,
@@ -156,8 +158,8 @@ func TestHandleGetPlaylist(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			plRepo := newFakePlaylistRepo()
-			trRepo := newFakeTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo, trRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
@@ -187,28 +189,28 @@ func TestHandleGetPlaylist(t *testing.T) {
 func TestHandleDeletePlaylist(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*fakePlaylistRepo) string
+		setup      func(*catalogtest.PlaylistRepo) string
 		wantStatus int
 	}{
 		{
 			name: "existing returns 204",
-			setup: func(repo *fakePlaylistRepo) string {
+			setup: func(repo *catalogtest.PlaylistRepo) string {
 				pl := makePlaylist(testUserId, "To Delete")
-				repo.seed(pl)
+				repo.Seed(pl)
 				return pl.ID.UUID().String()
 			},
 			wantStatus: http.StatusNoContent,
 		},
 		{
 			name: "not found returns 404",
-			setup: func(repo *fakePlaylistRepo) string {
+			setup: func(repo *catalogtest.PlaylistRepo) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "invalid ID returns 400",
-			setup: func(repo *fakePlaylistRepo) string {
+			setup: func(repo *catalogtest.PlaylistRepo) string {
 				return "bad-id"
 			},
 			wantStatus: http.StatusBadRequest,
@@ -218,8 +220,8 @@ func TestHandleDeletePlaylist(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			plRepo := newFakePlaylistRepo()
-			trRepo := newFakeTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
@@ -235,15 +237,15 @@ func TestHandleDeletePlaylist(t *testing.T) {
 func TestHandleRenamePlaylist(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*fakePlaylistRepo) string
+		setup      func(*catalogtest.PlaylistRepo) string
 		body       any
 		wantStatus int
 	}{
 		{
 			name: "valid rename returns 200",
-			setup: func(repo *fakePlaylistRepo) string {
+			setup: func(repo *catalogtest.PlaylistRepo) string {
 				pl := makePlaylist(testUserId, "Old Name")
-				repo.seed(pl)
+				repo.Seed(pl)
 				return pl.ID.UUID().String()
 			},
 			body:       RenamePlaylistRequest{Name: "New Name"},
@@ -251,7 +253,7 @@ func TestHandleRenamePlaylist(t *testing.T) {
 		},
 		{
 			name: "not found returns 404",
-			setup: func(repo *fakePlaylistRepo) string {
+			setup: func(repo *catalogtest.PlaylistRepo) string {
 				return uuid.New().String()
 			},
 			body:       RenamePlaylistRequest{Name: "New Name"},
@@ -259,9 +261,9 @@ func TestHandleRenamePlaylist(t *testing.T) {
 		},
 		{
 			name: "empty name returns 400",
-			setup: func(repo *fakePlaylistRepo) string {
+			setup: func(repo *catalogtest.PlaylistRepo) string {
 				pl := makePlaylist(testUserId, "Has Name")
-				repo.seed(pl)
+				repo.Seed(pl)
 				return pl.ID.UUID().String()
 			},
 			body:       RenamePlaylistRequest{Name: ""},
@@ -272,8 +274,8 @@ func TestHandleRenamePlaylist(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			plRepo := newFakePlaylistRepo()
-			trRepo := newFakeTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
@@ -297,46 +299,46 @@ func TestHandleRenamePlaylist(t *testing.T) {
 func TestHandleAddTrack(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*fakePlaylistRepo, *fakeTrackRepo) (string, uuid.UUID)
+		setup      func(*catalogtest.PlaylistRepo, *catalogtest.TrackRepo) (string, uuid.UUID)
 		wantStatus int
 	}{
 		{
 			name: "valid add returns 204",
-			setup: func(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) (string, uuid.UUID) {
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
 				pl := makePlaylist(testUserId, "My List")
-				plRepo.seed(pl)
+				plRepo.Seed(pl)
 				track := makeTrack(testUserId, "Song", "Artist", "Album")
-				trRepo.seed(track)
+				trRepo.Seed(track)
 				return pl.ID.UUID().String(), track.ID.UUID()
 			},
 			wantStatus: http.StatusNoContent,
 		},
 		{
 			name: "duplicate track returns 409 Conflict",
-			setup: func(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) (string, uuid.UUID) {
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
 				pl := makePlaylist(testUserId, "My List")
 				track := makeTrack(testUserId, "Song", "Artist", "Album")
-				trRepo.seed(track)
+				trRepo.Seed(track)
 				_ = pl.AddTrack(track.ID) // already in playlist
-				plRepo.seed(pl)
+				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), track.ID.UUID()
 			},
 			wantStatus: http.StatusConflict,
 		},
 		{
 			name: "playlist not found returns 404",
-			setup: func(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) (string, uuid.UUID) {
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
 				track := makeTrack(testUserId, "Song", "Artist", "Album")
-				trRepo.seed(track)
+				trRepo.Seed(track)
 				return uuid.New().String(), track.ID.UUID()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "track not found returns 404",
-			setup: func(plRepo *fakePlaylistRepo, trRepo *fakeTrackRepo) (string, uuid.UUID) {
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
 				pl := makePlaylist(testUserId, "My List")
-				plRepo.seed(pl)
+				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), uuid.New()
 			},
 			wantStatus: http.StatusNotFound,
@@ -346,8 +348,8 @@ func TestHandleAddTrack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			plRepo := newFakePlaylistRepo()
-			trRepo := newFakeTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			playlistId, trackUUID := tt.setup(plRepo, trRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
@@ -365,37 +367,37 @@ func TestHandleAddTrack(t *testing.T) {
 func TestHandleRemoveTrack(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*fakePlaylistRepo) (string, string)
+		setup      func(*catalogtest.PlaylistRepo) (string, string)
 		wantStatus int
 	}{
 		{
 			name: "existing track returns 204",
-			setup: func(repo *fakePlaylistRepo) (string, string) {
+			setup: func(repo *catalogtest.PlaylistRepo) (string, string) {
 				pl := makePlaylist(testUserId, "My List")
-				repo.seed(pl)
+				repo.Seed(pl)
 				return pl.ID.UUID().String(), uuid.New().String()
 			},
 			wantStatus: http.StatusNoContent,
 		},
 		{
 			name: "playlist not found returns 404",
-			setup: func(repo *fakePlaylistRepo) (string, string) {
+			setup: func(repo *catalogtest.PlaylistRepo) (string, string) {
 				return uuid.New().String(), uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "invalid playlist ID returns 400",
-			setup: func(repo *fakePlaylistRepo) (string, string) {
+			setup: func(repo *catalogtest.PlaylistRepo) (string, string) {
 				return "bad-id", uuid.New().String()
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "invalid track ID returns 400",
-			setup: func(repo *fakePlaylistRepo) (string, string) {
+			setup: func(repo *catalogtest.PlaylistRepo) (string, string) {
 				pl := makePlaylist(testUserId, "My List")
-				repo.seed(pl)
+				repo.Seed(pl)
 				return pl.ID.UUID().String(), "bad-id"
 			},
 			wantStatus: http.StatusBadRequest,
@@ -405,8 +407,8 @@ func TestHandleRemoveTrack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			plRepo := newFakePlaylistRepo()
-			trRepo := newFakeTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			playlistId, trackId := tt.setup(plRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
@@ -422,15 +424,15 @@ func TestHandleRemoveTrack(t *testing.T) {
 func TestHandleReorder(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*fakePlaylistRepo) string
+		setup      func(*catalogtest.PlaylistRepo) string
 		body       any
 		wantStatus int
 	}{
 		{
 			name: "valid reorder returns 204",
-			setup: func(repo *fakePlaylistRepo) string {
+			setup: func(repo *catalogtest.PlaylistRepo) string {
 				pl := makePlaylist(testUserId, "My List")
-				repo.seed(pl)
+				repo.Seed(pl)
 				return pl.ID.UUID().String()
 			},
 			body:       ReorderTracksRequest{TrackIDs: []uuid.UUID{}},
@@ -438,7 +440,7 @@ func TestHandleReorder(t *testing.T) {
 		},
 		{
 			name: "playlist not found returns 404",
-			setup: func(repo *fakePlaylistRepo) string {
+			setup: func(repo *catalogtest.PlaylistRepo) string {
 				return uuid.New().String()
 			},
 			body:       ReorderTracksRequest{TrackIDs: []uuid.UUID{}},
@@ -449,8 +451,8 @@ func TestHandleReorder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			plRepo := newFakePlaylistRepo()
-			trRepo := newFakeTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 

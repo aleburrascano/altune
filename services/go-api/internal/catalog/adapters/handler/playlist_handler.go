@@ -15,11 +15,12 @@ import (
 )
 
 type PlaylistHandler struct {
-	svc *service.PlaylistService
+	lifecycle  *service.PlaylistLifecycleService
+	membership *service.PlaylistMembershipService
 }
 
-func NewPlaylistHandler(svc *service.PlaylistService) *PlaylistHandler {
-	return &PlaylistHandler{svc: svc}
+func NewPlaylistHandler(lifecycle *service.PlaylistLifecycleService, membership *service.PlaylistMembershipService) *PlaylistHandler {
+	return &PlaylistHandler{lifecycle: lifecycle, membership: membership}
 }
 
 func (h *PlaylistHandler) Routes() chi.Router {
@@ -93,19 +94,6 @@ func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string
 	}
 }
 
-// previewArtworkFromTracks selects up to four distinct track artwork URLs for a
-// playlist's preview tile.
-func previewArtworkFromTracks(tracks []*domain.Track) []string {
-	artworkURLs := []string{}
-	seen := make(map[string]bool)
-	for _, t := range tracks {
-		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(artworkURLs) < 4 {
-			artworkURLs = append(artworkURLs, *t.ArtworkURL)
-			seen[*t.ArtworkURL] = true
-		}
-	}
-	return artworkURLs
-}
 
 // --- Handlers ---
 
@@ -121,7 +109,7 @@ func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlist, err := h.svc.Create(r.Context(), userId, req.Name)
+	playlist, err := h.lifecycle.Create(r.Context(), userId, req.Name)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
@@ -136,17 +124,15 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlists, err := h.svc.List(r.Context(), userId)
+	playlists, err := h.lifecycle.List(r.Context(), userId)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
 	items := make([]PlaylistResponse, len(playlists))
-	for i, p := range playlists {
-		// Track count and preview artwork are projections the list query
-		// already computed — no per-playlist follow-up queries.
-		items[i] = playlistToResponse(p, p.TrackCount, p.PreviewArtworkURLs)
+	for i, ps := range playlists {
+		items[i] = playlistToResponse(ps.Playlist, ps.Summary.TrackCount, ps.Summary.PreviewArtworkURLs)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, ListPlaylistsResponse{
@@ -166,18 +152,15 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlist, tracks, err := h.svc.Get(r.Context(), userId, playlistId)
+	playlist, tracks, err := h.lifecycle.Get(r.Context(), userId, playlistId)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
-	trackResponses := make([]TrackResponse, len(tracks))
-	for i, t := range tracks {
-		trackResponses[i] = trackToResponse(t)
-	}
+	trackResponses := tracksToDTO(tracks)
 
-	artworkURLs := previewArtworkFromTracks(tracks)
+	artworkURLs := domain.PreviewArtworkURLs(tracks)
 
 	httputil.WriteJSON(w, http.StatusOK, PlaylistDetailResponse{
 		ID:                 playlist.ID.UUID(),
@@ -207,20 +190,13 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.Rename(r.Context(), userId, playlistId, req.Name); err != nil {
+	playlist, summary, err := h.lifecycle.Rename(r.Context(), userId, playlistId, req.Name)
+	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
-	playlist, err := h.svc.GetByID(r.Context(), userId, playlistId)
-	if err != nil || playlist == nil {
-		httputil.InternalError(w)
-		return
-	}
-
-	// TrackCount is the GetByID projection — playlist.Tracks is never loaded on
-	// this path, so len(playlist.Tracks) would always report 0.
-	httputil.WriteJSON(w, http.StatusOK, playlistToResponse(playlist, playlist.TrackCount, nil))
+	httputil.WriteJSON(w, http.StatusOK, playlistToResponse(playlist, summary.TrackCount, summary.PreviewArtworkURLs))
 }
 
 func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -234,7 +210,7 @@ func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.Delete(r.Context(), userId, playlistId); err != nil {
+	if err := h.lifecycle.Delete(r.Context(), userId, playlistId); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -260,14 +236,8 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	trackId := domain.TrackIdFromUUID(req.TrackID)
-	added, err := h.svc.AddTrack(r.Context(), userId, playlistId, trackId)
-	if err != nil {
+	if err := h.membership.AddTrack(r.Context(), userId, playlistId, trackId); err != nil {
 		httputil.HandleServiceError(w, r, err)
-		return
-	}
-
-	if !added {
-		httputil.Conflict(w, "track already in playlist")
 		return
 	}
 
@@ -290,8 +260,7 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	_, err = h.svc.RemoveTrack(r.Context(), userId, playlistId, trackId)
-	if err != nil {
+	if err := h.membership.RemoveTrack(r.Context(), userId, playlistId, trackId); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -321,7 +290,7 @@ func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) 
 		trackIds[i] = domain.TrackIdFromUUID(id)
 	}
 
-	if err := h.svc.Reorder(r.Context(), userId, playlistId, trackIds); err != nil {
+	if err := h.membership.Reorder(r.Context(), userId, playlistId, trackIds); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}

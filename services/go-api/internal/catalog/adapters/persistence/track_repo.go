@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
@@ -15,7 +14,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var _ ports.TrackRepository = (*PgxTrackRepository)(nil)
+// trackColumns is the canonical column list for a `tracks` SELECT, shared by
+// every query that reads a track row (bare form here; playlist_repo.go and
+// featured_artist_repo.go use trackColumnsPrefixed for their joins). One
+// definition so a schema change is a single-line edit instead of a hand-sync
+// across every query.
+const trackColumns = `id, user_id, title, artist, album, duration_seconds,
+	added_at, artwork_url, acquisition_status, dedup_key,
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason`
+
+// trackColumnsPrefixed is trackColumns qualified with the `t.` alias, for
+// queries that join tracks against another table.
+const trackColumnsPrefixed = `t.id, t.user_id, t.title, t.artist, t.album, t.duration_seconds,
+	t.added_at, t.artwork_url, t.acquisition_status, t.dedup_key,
+	t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason`
 
 type PgxTrackRepository struct {
 	pool *pgxpool.Pool
@@ -71,35 +83,21 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 	return track, true, nil
 }
 
+// GetByID does not load FeaturedArtists (see the port doc) — every current
+// caller only reads status/audio-ref fields, so the join would be paid on every
+// call and discarded.
 func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
 	row := r.pool.QueryRow(ctx,
-		`SELECT id, user_id, title, artist, album, duration_seconds,
-			added_at, artwork_url, acquisition_status, dedup_key,
-			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason
+		`SELECT `+trackColumns+`
 		FROM tracks WHERE id = $1 AND user_id = $2`,
 		id.UUID(), userId.UUID(),
 	)
-	track, err := scanTrack(row)
-	if err != nil || track == nil {
-		return track, err
-	}
-	if err := loadFeaturedForTracks(ctx, r.pool, []*domain.Track{track}); err != nil {
-		return nil, err
-	}
-	return track, nil
+	return scanTrack(row)
 }
 
 func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
-	var total int
-	err := r.pool.QueryRow(ctx, `SELECT count(*) FROM tracks WHERE user_id = $1`, userId.UUID()).Scan(&total)
-	if err != nil {
-		return nil, 0, err
-	}
-
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, title, artist, album, duration_seconds,
-			added_at, artwork_url, acquisition_status, dedup_key,
-			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason
+		`SELECT `+trackColumns+`, COUNT(*) OVER () AS total
 		FROM tracks WHERE user_id = $1
 		ORDER BY added_at DESC, id DESC
 		LIMIT $2 OFFSET $3`,
@@ -111,8 +109,14 @@ func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.User
 	defer rows.Close()
 
 	var tracks []*domain.Track
+	total := 0
 	for rows.Next() {
-		t, err := scanTrackFromRows(rows)
+		dest, build := trackScanDest()
+		dest = append(dest, &total)
+		if err := rows.Scan(dest...); err != nil {
+			return nil, 0, err
+		}
+		t, err := build()
 		if err != nil {
 			return nil, 0, err
 		}
@@ -141,9 +145,7 @@ func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId
 	}
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, user_id, title, artist, album, duration_seconds,
-			added_at, artwork_url, acquisition_status, dedup_key,
-			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason
+		`SELECT `+trackColumns+`
 		FROM tracks WHERE user_id = $1 AND id = ANY($2)`,
 		userId.UUID(), uuids,
 	)
@@ -200,37 +202,55 @@ func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.Track
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (bool, error) {
+func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(ctx, `DELETE FROM playlist_tracks WHERE track_id = $1`, id.UUID())
+	affectedPlaylists, err := tx.Query(ctx,
+		`SELECT DISTINCT playlist_id FROM playlist_tracks WHERE track_id = $1`, id.UUID())
 	if err != nil {
-		return false, err
+		return false, nil, err
+	}
+	playlistIds, err := pgx.CollectRows(affectedPlaylists, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return false, nil, err
 	}
 
-	tag, err := tx.Exec(ctx,
-		`DELETE FROM tracks WHERE id = $1 AND user_id = $2`,
-		id.UUID(), userId.UUID(),
-	)
+	_, err = tx.Exec(ctx, `DELETE FROM playlist_tracks WHERE track_id = $1`, id.UUID())
 	if err != nil {
-		return false, err
+		return false, nil, err
+	}
+
+	for _, playlistId := range playlistIds {
+		if err := renumberPlaylistPositions(ctx, tx, playlistId); err != nil {
+			return false, nil, err
+		}
+	}
+
+	var ref *string
+	err = tx.QueryRow(ctx,
+		`DELETE FROM tracks WHERE id = $1 AND user_id = $2 RETURNING audio_ref`,
+		id.UUID(), userId.UUID(),
+	).Scan(&ref)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil, tx.Commit(ctx)
+	}
+	if err != nil {
+		return false, nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return false, err
+		return false, nil, err
 	}
-	return tag.RowsAffected() > 0, nil
+	return true, ref, nil
 }
 
 func (r *PgxTrackRepository) GetByDedupKey(ctx context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error) {
 	row := r.pool.QueryRow(ctx,
-		`SELECT id, user_id, title, artist, album, duration_seconds,
-			added_at, artwork_url, acquisition_status, dedup_key,
-			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason
+		`SELECT `+trackColumns+`
 		FROM tracks WHERE user_id = $1 AND dedup_key = $2`,
 		userId.UUID(), dedupKey,
 	)

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
 	"net/http"
 	"testing"
 
@@ -10,17 +11,17 @@ import (
 func TestHandleStreamAudio(t *testing.T) {
 	tests := []struct {
 		name            string
-		setup           func(*fakeTrackRepo, *fakeAudioStore) string
+		setup           func(*catalogtest.TrackRepo, *catalogtest.AudioStore) string
 		wantStatus      int
 		wantContentType string
 		wantBodyLen     int
 	}{
 		{
 			name: "mp3 track serves audio/mpeg",
-			setup: func(repo *fakeTrackRepo, store *fakeAudioStore) string {
+			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
 				track := makeReadyTrack(testUserId, "Song", "Artist", "Album", "audio/123.mp3")
-				repo.seed(track)
-				store.seed("audio/123.mp3", []byte("fake-audio-data"))
+				repo.Seed(track)
+				store.Seed("audio/123.mp3", []byte("fake-audio-data"))
 				return track.ID.UUID().String()
 			},
 			wantStatus:      http.StatusOK,
@@ -29,10 +30,10 @@ func TestHandleStreamAudio(t *testing.T) {
 		},
 		{
 			name: "m4a track serves audio/mp4",
-			setup: func(repo *fakeTrackRepo, store *fakeAudioStore) string {
+			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
 				track := makeReadyTrack(testUserId, "Song", "Artist", "Album", "audio/456.m4a")
-				repo.seed(track)
-				store.seed("audio/456.m4a", []byte("fake-audio-data"))
+				repo.Seed(track)
+				store.Seed("audio/456.m4a", []byte("fake-audio-data"))
 				return track.ID.UUID().String()
 			},
 			wantStatus:      http.StatusOK,
@@ -41,10 +42,10 @@ func TestHandleStreamAudio(t *testing.T) {
 		},
 		{
 			name: "opus track serves audio/opus",
-			setup: func(repo *fakeTrackRepo, store *fakeAudioStore) string {
+			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
 				track := makeReadyTrack(testUserId, "Song", "Artist", "Album", "audio/789.opus")
-				repo.seed(track)
-				store.seed("audio/789.opus", []byte("fake-audio-data"))
+				repo.Seed(track)
+				store.Seed("audio/789.opus", []byte("fake-audio-data"))
 				return track.ID.UUID().String()
 			},
 			wantStatus:      http.StatusOK,
@@ -53,32 +54,32 @@ func TestHandleStreamAudio(t *testing.T) {
 		},
 		{
 			name: "invalid track ID returns 400",
-			setup: func(repo *fakeTrackRepo, store *fakeAudioStore) string {
+			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
 				return "not-a-uuid"
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "track not found returns 404",
-			setup: func(repo *fakeTrackRepo, store *fakeAudioStore) string {
+			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "pending track (not streamable) returns 404",
-			setup: func(repo *fakeTrackRepo, store *fakeAudioStore) string {
+			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
 				track := makeTrack(testUserId, "Pending", "Artist", "Album")
-				repo.seed(track)
+				repo.Seed(track)
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "ready track with missing audio file returns 404 and reconciles",
-			setup: func(repo *fakeTrackRepo, store *fakeAudioStore) string {
+			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
 				track := makeReadyTrack(testUserId, "Gone", "Artist", "Album", "audio/gone.opus")
-				repo.seed(track)
+				repo.Seed(track)
 				// Deliberately NOT seeding audio store, so Stream will fail with EOF
 				return track.ID.UUID().String()
 			},
@@ -89,8 +90,8 @@ func TestHandleStreamAudio(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			repo := newFakeTrackRepo()
-			store := newFakeAudioStore()
+			repo := catalogtest.NewTrackRepo()
+			store := catalogtest.NewAudioStore()
 			trackId := tt.setup(repo, store)
 			_, router := buildStreamHandler(repo, store, nil)
 
@@ -116,29 +117,29 @@ func TestHandleStreamAudio(t *testing.T) {
 }
 
 func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
-	repo := newFakeTrackRepo()
-	store := newFakeAudioStore()
-	sched := &fakeScheduler{}
+	repo := catalogtest.NewTrackRepo()
+	store := catalogtest.NewAudioStore()
+	sched := &catalogtest.Scheduler{}
 	track := makeReadyTrack(testUserId, "Gone", "Artist", "Album", "audio/gone.opus")
-	repo.seed(track)
+	repo.Seed(track)
 
 	_, router := buildStreamHandler(repo, store, sched)
 	rec := serve(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/stream", nil)
 
 	assertStatus(t, rec, http.StatusNotFound)
 
-	if len(sched.scheduled) != 1 {
-		t.Fatalf("expected 1 scheduled reacquisition, got %d", len(sched.scheduled))
+	if len(sched.TrackIds) != 1 {
+		t.Fatalf("expected 1 scheduled reacquisition, got %d", len(sched.TrackIds))
 	}
-	if sched.scheduled[0] != track.ID {
-		t.Errorf("scheduled track = %v, want %v", sched.scheduled[0], track.ID)
+	if sched.TrackIds[0] != track.ID {
+		t.Errorf("scheduled track = %v, want %v", sched.TrackIds[0], track.ID)
 	}
 }
 
 func TestHandleStreamAudio_NoAuth(t *testing.T) {
 	// Arrange
-	repo := newFakeTrackRepo()
-	store := newFakeAudioStore()
+	repo := catalogtest.NewTrackRepo()
+	store := catalogtest.NewAudioStore()
 	_, router := buildStreamHandler(repo, store, nil)
 
 	// Act

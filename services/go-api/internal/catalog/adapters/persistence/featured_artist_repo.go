@@ -148,9 +148,7 @@ func (r *PgxTrackRepository) ListTracksFeaturing(
 	fa domain.FeaturedArtist,
 ) ([]*domain.Track, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT t.id, t.user_id, t.title, t.artist, t.album, t.duration_seconds,
-			t.added_at, t.artwork_url, t.acquisition_status, t.dedup_key,
-			t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason
+		`SELECT `+trackColumnsPrefixed+`
 		FROM tracks t
 		JOIN track_featured_artists tfa ON tfa.track_id = t.id
 		JOIN featured_artists fa ON fa.id = tfa.featured_artist_id

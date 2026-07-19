@@ -8,27 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// CodedError is a domain/service error that carries its own HTTP status and a
-// client-safe message. httputil.HandleServiceError maps it without the adapter
-// re-deciding the status per handler. The status is a plain int so the domain
-// layer stays free of net/http.
-type CodedError struct {
-	Msg    string
-	Status int
-}
-
-func (e *CodedError) Error() string   { return e.Msg }
-func (e *CodedError) HTTPStatus() int { return e.Status }
-
-var ErrTrackAlreadyInPlaylist = &CodedError{Msg: "track already in playlist", Status: 409}
-
-type ValidationError struct {
-	Message string
-}
-
-func (e *ValidationError) Error() string   { return e.Message }
-func (e *ValidationError) HTTPStatus() int { return 400 }
-
 type PlaylistId struct {
 	value uuid.UUID
 }
@@ -58,6 +37,13 @@ type PlaylistTrack struct {
 	Position int
 }
 
+// PreviewArtworkLimit caps how many distinct track artwork URLs a playlist's
+// preview tile shows. Read by both the SQL projection
+// (persistence.PgxPlaylistRepository.ListForUser) and the Go fallback
+// (handler.previewArtworkFromTracks) — one definition so the cap can't drift
+// between the two independent implementations of the same selection rule.
+const PreviewArtworkLimit = 4
+
 type Playlist struct {
 	ID        PlaylistId
 	UserId    shared.UserId
@@ -65,12 +51,21 @@ type Playlist struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Tracks    []PlaylistTrack
-	// TrackCount is a read-side projection populated by list/get queries.
-	TrackCount int
-	// PreviewArtworkURLs is a read-side projection populated by list queries:
-	// up to four distinct track artwork URLs in position order, for the
-	// playlist's preview tile.
+}
+
+// PlaylistSummary carries read-side projections that list/get queries compute
+// but that the aggregate's own methods never read. Kept separate from Playlist
+// so the write model and its behaviour methods stay free of query artefacts.
+type PlaylistSummary struct {
+	TrackCount         int
 	PreviewArtworkURLs []string
+}
+
+// PlaylistWithSummary pairs a Playlist with its read-side projections so
+// ListForUser returns one value per row instead of two parallel slices.
+type PlaylistWithSummary struct {
+	Playlist *Playlist
+	Summary  PlaylistSummary
 }
 
 func NewPlaylist(userId shared.UserId, name string) (*Playlist, error) {
@@ -162,4 +157,20 @@ func validatePlaylistName(name string) error {
 		return &ValidationError{Message: "playlist name exceeds 100 characters"}
 	}
 	return nil
+}
+
+// PreviewArtworkURLs selects up to PreviewArtworkLimit distinct artwork URLs
+// from tracks in order, for a playlist's preview tile. Used on the Get handler
+// path where tracks are already loaded in Go; the List path delegates this
+// selection to the SQL projection instead.
+func PreviewArtworkURLs(tracks []*Track) []string {
+	urls := []string{}
+	seen := make(map[string]bool)
+	for _, t := range tracks {
+		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(urls) < PreviewArtworkLimit {
+			urls = append(urls, *t.ArtworkURL)
+			seen[*t.ArtworkURL] = true
+		}
+	}
+	return urls
 }

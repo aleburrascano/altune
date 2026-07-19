@@ -11,14 +11,20 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
+// trackDeleter is the narrow write this service actually calls, out of
+// ports.TrackRepository's full surface.
+type trackDeleter interface {
+	Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error)
+}
+
 type DeleteTrackService struct {
-	trackRepo  ports.TrackRepository
+	trackRepo  trackDeleter
 	audioStore ports.AudioStore
 	events     events.Publisher
 }
 
-func NewDeleteTrackService(trackRepo ports.TrackRepository, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
-	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore}
+func NewDeleteTrackService(trackRepo trackDeleter, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
+	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore, events: events.NoopPublisher()}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -26,21 +32,15 @@ func NewDeleteTrackService(trackRepo ports.TrackRepository, audioStore ports.Aud
 }
 
 func WithDeleteTrackEvents(pub events.Publisher) func(*DeleteTrackService) {
-	return func(s *DeleteTrackService) { s.events = pub }
+	return func(s *DeleteTrackService) {
+		if pub != nil {
+			s.events = pub
+		}
+	}
 }
 
 func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
-	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
-	if err != nil {
-		return fmt.Errorf("get track for delete: %w", err)
-	}
-	if track == nil {
-		return ErrTrackNotFound
-	}
-
-	audioRef := track.AudioRef
-
-	deleted, err := s.trackRepo.Delete(ctx, trackId, userId)
+	deleted, audioRef, err := s.trackRepo.Delete(ctx, trackId, userId)
 	if err != nil {
 		return fmt.Errorf("delete track: %w", err)
 	}
@@ -48,13 +48,11 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, 
 		return ErrTrackNotFound
 	}
 
-	if s.events != nil {
-		s.events.Publish(userId, "track_deleted", map[string]any{
-			"track_id": trackId.String(),
-		})
-	}
+	s.events.Publish(userId, "track_deleted", map[string]any{
+		"track_id": trackId.String(),
+	})
 
-	if audioRef != nil && s.audioStore != nil {
+	if audioRef != nil {
 		if err := s.audioStore.Delete(ctx, *audioRef); err != nil {
 			slog.ErrorContext(ctx, "orphaned audio file after track delete",
 				"track_id", trackId.String(),

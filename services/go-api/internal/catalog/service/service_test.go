@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
+	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 
@@ -17,17 +19,17 @@ func testUserId() shared.UserId {
 	return shared.NewUserId(uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
 }
 
-func seedTrack(t *testing.T, repo *mockTrackRepo, userId shared.UserId, title, artist, album string) *domain.Track {
+func seedTrack(t *testing.T, repo *catalogtest.TrackRepo, userId shared.UserId, title, artist, album string) *domain.Track {
 	t.Helper()
 	track, err := domain.NewTrack(userId, title, artist, album)
 	if err != nil {
 		t.Fatalf("seedTrack: %v", err)
 	}
-	repo.seed(track)
+	repo.Seed(track)
 	return track
 }
 
-func seedReadyTrack(t *testing.T, repo *mockTrackRepo, userId shared.UserId, title, artist, album, audioRef string) *domain.Track {
+func seedReadyTrack(t *testing.T, repo *catalogtest.TrackRepo, userId shared.UserId, title, artist, album, audioRef string) *domain.Track {
 	t.Helper()
 	track := seedTrack(t, repo, userId, title, artist, album)
 	if err := track.MarkReady(audioRef); err != nil {
@@ -36,13 +38,13 @@ func seedReadyTrack(t *testing.T, repo *mockTrackRepo, userId shared.UserId, tit
 	return track
 }
 
-func seedPlaylist(t *testing.T, repo *mockPlaylistRepo, userId shared.UserId, name string) *domain.Playlist {
+func seedPlaylist(t *testing.T, repo *catalogtest.PlaylistRepo, userId shared.UserId, name string) *domain.Playlist {
 	t.Helper()
 	playlist, err := domain.NewPlaylist(userId, name)
 	if err != nil {
 		t.Fatalf("seedPlaylist: %v", err)
 	}
-	repo.seed(playlist)
+	repo.Seed(playlist)
 	return playlist
 }
 
@@ -56,7 +58,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 	tests := []struct {
 		name        string
 		input       AddTrackInput
-		setup       func(*mockTrackRepo)
+		setup       func(*catalogtest.TrackRepo)
 		wantCreated bool
 		wantTitle   string
 		wantErr     string
@@ -78,7 +80,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 				Artist: "Artist",
 				Album:  "Album",
 			},
-			setup: func(repo *mockTrackRepo) {
+			setup: func(repo *catalogtest.TrackRepo) {
 				seedTrack(t, repo, userId, "Existing", "Artist", "Album")
 			},
 			wantCreated: false,
@@ -109,8 +111,8 @@ func TestAddTrackService_Execute(t *testing.T) {
 				Artist: "Artist",
 				Album:  "Album",
 			},
-			setup: func(repo *mockTrackRepo) {
-				repo.errOnAdd = errRepo
+			setup: func(repo *catalogtest.TrackRepo) {
+				repo.ErrOnAdd = errRepo
 			},
 			wantErr: "db connection lost",
 		},
@@ -118,7 +120,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := newMockTrackRepo()
+			repo := catalogtest.NewTrackRepo()
 			if tt.setup != nil {
 				tt.setup(repo)
 			}
@@ -130,7 +132,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if !contains(err.Error(), tt.wantErr) {
+				if !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %q, want it to contain %q", err.Error(), tt.wantErr)
 				}
 				return
@@ -163,7 +165,7 @@ func TestListTracksService_Execute(t *testing.T) {
 		limit       int
 		offset      int
 		seedCount   int
-		setup       func(*mockTrackRepo)
+		setup       func(*catalogtest.TrackRepo)
 		wantLen     int
 		wantTotal   int
 		wantHasMore bool
@@ -219,8 +221,8 @@ func TestListTracksService_Execute(t *testing.T) {
 			limit:     10,
 			offset:    0,
 			seedCount: 0,
-			setup: func(repo *mockTrackRepo) {
-				repo.errOnList = errRepo
+			setup: func(repo *catalogtest.TrackRepo) {
+				repo.ErrOnList = errRepo
 			},
 			wantErr: "db timeout",
 		},
@@ -228,7 +230,7 @@ func TestListTracksService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := newMockTrackRepo()
+			repo := catalogtest.NewTrackRepo()
 			if tt.setup != nil {
 				tt.setup(repo)
 			}
@@ -243,7 +245,7 @@ func TestListTracksService_Execute(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if !contains(err.Error(), tt.wantErr) {
+				if !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %q, want it to contain %q", err.Error(), tt.wantErr)
 				}
 				return
@@ -273,12 +275,12 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		setup   func(*mockTrackRepo) domain.TrackId
+		setup   func(*catalogtest.TrackRepo) domain.TrackId
 		wantErr error
 	}{
 		{
 			name: "existing track is deleted",
-			setup: func(repo *mockTrackRepo) domain.TrackId {
+			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
 				track := seedTrack(t, repo, userId, "Song", "Artist", "Album")
 				return track.ID
 			},
@@ -286,16 +288,16 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		},
 		{
 			name: "non-existent track returns ErrTrackNotFound",
-			setup: func(repo *mockTrackRepo) domain.TrackId {
+			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
 				return domain.NewTrackId() // not in repo
 			},
 			wantErr: ErrTrackNotFound,
 		},
 		{
 			name: "repo error propagates",
-			setup: func(repo *mockTrackRepo) domain.TrackId {
+			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
 				track := seedTrack(t, repo, userId, "Song", "Artist", "Album")
-				repo.errOnDelete = errRepo
+				repo.ErrOnDelete = errRepo
 				return track.ID
 			},
 			wantErr: errRepo,
@@ -304,9 +306,9 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := newMockTrackRepo()
+			repo := catalogtest.NewTrackRepo()
 			trackId := tt.setup(repo)
-			svc := NewDeleteTrackService(repo, newMockAudioStore())
+			svc := NewDeleteTrackService(repo, catalogtest.NewAudioStore())
 
 			err := svc.Execute(ctx, userId, trackId)
 
@@ -314,7 +316,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -328,7 +330,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 
 // ==================== PlaylistService ====================
 
-func TestPlaylistService_Create(t *testing.T) {
+func TestPlaylistLifecycleService_Create(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
@@ -336,7 +338,7 @@ func TestPlaylistService_Create(t *testing.T) {
 	tests := []struct {
 		name    string
 		plName  string
-		setup   func(*mockPlaylistRepo)
+		setup   func(*catalogtest.PlaylistRepo)
 		wantErr string
 	}{
 		{
@@ -351,8 +353,8 @@ func TestPlaylistService_Create(t *testing.T) {
 		{
 			name:   "repo error propagates",
 			plName: "Good Name",
-			setup: func(repo *mockPlaylistRepo) {
-				repo.errOnCreate = errRepo
+			setup: func(repo *catalogtest.PlaylistRepo) {
+				repo.ErrOnCreate = errRepo
 			},
 			wantErr: "db error",
 		},
@@ -360,12 +362,11 @@ func TestPlaylistService_Create(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := newMockPlaylistRepo()
-			trRepo := newMockTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
 			if tt.setup != nil {
 				tt.setup(plRepo)
 			}
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistLifecycleService(plRepo)
 
 			playlist, err := svc.Create(ctx, userId, tt.plName)
 
@@ -373,7 +374,7 @@ func TestPlaylistService_Create(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if !contains(err.Error(), tt.wantErr) {
+				if !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %q, want it to contain %q", err.Error(), tt.wantErr)
 				}
 				return
@@ -394,38 +395,38 @@ func TestPlaylistService_Create(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_Get(t *testing.T) {
+func TestPlaylistLifecycleService_Get(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
 		name       string
-		setup      func(*mockPlaylistRepo) domain.PlaylistId
+		setup      func(*catalogtest.PlaylistRepo) domain.PlaylistId
 		wantTracks int
 		wantErr    error
 	}{
 		{
 			name: "found playlist with tracks",
-			setup: func(repo *mockPlaylistRepo) domain.PlaylistId {
+			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
 				pl := seedPlaylist(t, repo, userId, "Rock")
 				track, _ := domain.NewTrack(userId, "Song", "Artist", "Album")
-				repo.seedWithTracks(pl, []*domain.Track{track})
+				repo.SeedWithTracks(pl, []*domain.Track{track})
 				return pl.ID
 			},
 			wantTracks: 1,
 		},
 		{
 			name: "not found returns ErrPlaylistNotFound",
-			setup: func(repo *mockPlaylistRepo) domain.PlaylistId {
+			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
 				return domain.NewPlaylistId() // not seeded
 			},
 			wantErr: ErrPlaylistNotFound,
 		},
 		{
 			name: "repo error propagates",
-			setup: func(repo *mockPlaylistRepo) domain.PlaylistId {
-				repo.errOnGetWithTracks = errRepo
+			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
+				repo.ErrOnGetWithTracks = errRepo
 				return domain.NewPlaylistId()
 			},
 			wantErr: errRepo,
@@ -434,10 +435,9 @@ func TestPlaylistService_Get(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := newMockPlaylistRepo()
-			trRepo := newMockTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
 			playlistId := tt.setup(plRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistLifecycleService(plRepo)
 
 			playlist, tracks, err := svc.Get(ctx, userId, playlistId)
 
@@ -445,7 +445,7 @@ func TestPlaylistService_Get(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -463,19 +463,19 @@ func TestPlaylistService_Get(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_Delete(t *testing.T) {
+func TestPlaylistLifecycleService_Delete(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
 		name    string
-		setup   func(*mockPlaylistRepo) domain.PlaylistId
+		setup   func(*catalogtest.PlaylistRepo) domain.PlaylistId
 		wantErr error
 	}{
 		{
 			name: "existing playlist is deleted",
-			setup: func(repo *mockPlaylistRepo) domain.PlaylistId {
+			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
 				pl := seedPlaylist(t, repo, userId, "To Delete")
 				return pl.ID
 			},
@@ -483,15 +483,15 @@ func TestPlaylistService_Delete(t *testing.T) {
 		},
 		{
 			name: "not found returns ErrPlaylistNotFound",
-			setup: func(repo *mockPlaylistRepo) domain.PlaylistId {
+			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
 				return domain.NewPlaylistId()
 			},
 			wantErr: ErrPlaylistNotFound,
 		},
 		{
 			name: "repo error propagates",
-			setup: func(repo *mockPlaylistRepo) domain.PlaylistId {
-				repo.errOnDelete = errRepo
+			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
+				repo.ErrOnDelete = errRepo
 				return domain.NewPlaylistId()
 			},
 			wantErr: errRepo,
@@ -500,10 +500,9 @@ func TestPlaylistService_Delete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := newMockPlaylistRepo()
-			trRepo := newMockTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
 			playlistId := tt.setup(plRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistLifecycleService(plRepo)
 
 			err := svc.Delete(ctx, userId, playlistId)
 
@@ -511,7 +510,7 @@ func TestPlaylistService_Delete(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -523,7 +522,7 @@ func TestPlaylistService_Delete(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_Rename(t *testing.T) {
+func TestPlaylistLifecycleService_Rename(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
@@ -531,13 +530,13 @@ func TestPlaylistService_Rename(t *testing.T) {
 	tests := []struct {
 		name    string
 		newName string
-		setup   func(*mockPlaylistRepo) domain.PlaylistId
+		setup   func(*catalogtest.PlaylistRepo) domain.PlaylistId
 		wantErr string
 	}{
 		{
 			name:    "valid rename succeeds",
 			newName: "New Name",
-			setup: func(repo *mockPlaylistRepo) domain.PlaylistId {
+			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
 				pl := seedPlaylist(t, repo, userId, "Old Name")
 				return pl.ID
 			},
@@ -545,7 +544,7 @@ func TestPlaylistService_Rename(t *testing.T) {
 		{
 			name:    "not found returns ErrPlaylistNotFound",
 			newName: "New Name",
-			setup: func(repo *mockPlaylistRepo) domain.PlaylistId {
+			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
 				return domain.NewPlaylistId()
 			},
 			wantErr: ErrPlaylistNotFound.Error(),
@@ -553,7 +552,7 @@ func TestPlaylistService_Rename(t *testing.T) {
 		{
 			name:    "empty name returns validation error",
 			newName: "",
-			setup: func(repo *mockPlaylistRepo) domain.PlaylistId {
+			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
 				pl := seedPlaylist(t, repo, userId, "Has Name")
 				return pl.ID
 			},
@@ -562,8 +561,8 @@ func TestPlaylistService_Rename(t *testing.T) {
 		{
 			name:    "repo error on GetByID propagates",
 			newName: "New Name",
-			setup: func(repo *mockPlaylistRepo) domain.PlaylistId {
-				repo.errOnGetByID = errRepo
+			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
+				repo.ErrOnGetByID = errRepo
 				return domain.NewPlaylistId()
 			},
 			wantErr: "db error",
@@ -572,18 +571,17 @@ func TestPlaylistService_Rename(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := newMockPlaylistRepo()
-			trRepo := newMockTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
 			playlistId := tt.setup(plRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistLifecycleService(plRepo)
 
-			err := svc.Rename(ctx, userId, playlistId, tt.newName)
+			_, _, err := svc.Rename(ctx, userId, playlistId, tt.newName)
 
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if !contains(err.Error(), tt.wantErr) {
+				if !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %q, want it to contain %q", err.Error(), tt.wantErr)
 				}
 				return
@@ -592,7 +590,7 @@ func TestPlaylistService_Rename(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			// Verify the name was actually updated in the repo
-			renamed, _ := plRepo.GetByID(ctx, playlistId, userId)
+			renamed, _, _ := plRepo.GetByID(ctx, playlistId, userId)
 			if renamed == nil {
 				t.Fatal("expected playlist to still exist after rename")
 			}
@@ -603,29 +601,27 @@ func TestPlaylistService_Rename(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_AddTrack(t *testing.T) {
+func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
-		name      string
-		setup     func(*mockPlaylistRepo, *mockTrackRepo) (domain.PlaylistId, domain.TrackId)
-		wantAdded bool
-		wantErr   error
+		name    string
+		setup   func(*catalogtest.PlaylistRepo, *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId)
+		wantErr error
 	}{
 		{
 			name: "track added to playlist",
-			setup: func(plRepo *mockPlaylistRepo, trRepo *mockTrackRepo) (domain.PlaylistId, domain.TrackId) {
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
 				return pl.ID, track.ID
 			},
-			wantAdded: true,
 		},
 		{
 			name: "playlist not found returns ErrPlaylistNotFound",
-			setup: func(plRepo *mockPlaylistRepo, trRepo *mockTrackRepo) (domain.PlaylistId, domain.TrackId) {
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
 				return domain.NewPlaylistId(), track.ID
 			},
@@ -633,27 +629,26 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 		},
 		{
 			name: "track not found returns ErrTrackNotFound",
-			setup: func(plRepo *mockPlaylistRepo, trRepo *mockTrackRepo) (domain.PlaylistId, domain.TrackId) {
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				return pl.ID, domain.NewTrackId() // not in repo
 			},
 			wantErr: ErrTrackNotFound,
 		},
 		{
-			name: "track already in playlist returns added=false",
-			setup: func(plRepo *mockPlaylistRepo, trRepo *mockTrackRepo) (domain.PlaylistId, domain.TrackId) {
+			name: "track already in playlist returns ErrTrackAlreadyInPlaylist",
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
 				_ = pl.AddTrack(track.ID)
 				return pl.ID, track.ID
 			},
-			wantAdded: false,
-			wantErr:   domain.ErrTrackAlreadyInPlaylist,
+			wantErr: domain.ErrTrackAlreadyInPlaylist,
 		},
 		{
 			name: "repo error propagates",
-			setup: func(plRepo *mockPlaylistRepo, trRepo *mockTrackRepo) (domain.PlaylistId, domain.TrackId) {
-				plRepo.errOnGetByID = errRepo
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
+				plRepo.ErrOnGetWithTracks = errRepo
 				return domain.NewPlaylistId(), domain.NewTrackId()
 			},
 			wantErr: errRepo,
@@ -662,18 +657,18 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := newMockPlaylistRepo()
-			trRepo := newMockTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			playlistId, trackId := tt.setup(plRepo, trRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistMembershipService(plRepo, trRepo)
 
-			added, err := svc.AddTrack(ctx, userId, playlistId, trackId)
+			err := svc.AddTrack(ctx, userId, playlistId, trackId)
 
 			if tt.wantErr != nil {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -681,26 +676,23 @@ func TestPlaylistService_AddTrack(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if added != tt.wantAdded {
-				t.Errorf("added = %v, want %v", added, tt.wantAdded)
-			}
 		})
 	}
 }
 
-func TestPlaylistService_RemoveTrack(t *testing.T) {
+func TestPlaylistMembershipService_RemoveTrack(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
 		name    string
-		setup   func(*mockPlaylistRepo) (domain.PlaylistId, domain.TrackId)
+		setup   func(*catalogtest.PlaylistRepo) (domain.PlaylistId, domain.TrackId)
 		wantErr error
 	}{
 		{
 			name: "track removed from playlist",
-			setup: func(plRepo *mockPlaylistRepo) (domain.PlaylistId, domain.TrackId) {
+			setup: func(plRepo *catalogtest.PlaylistRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				trackId := domain.NewTrackId()
 				return pl.ID, trackId
@@ -709,17 +701,17 @@ func TestPlaylistService_RemoveTrack(t *testing.T) {
 		},
 		{
 			name: "playlist not found returns ErrPlaylistNotFound",
-			setup: func(plRepo *mockPlaylistRepo) (domain.PlaylistId, domain.TrackId) {
+			setup: func(plRepo *catalogtest.PlaylistRepo) (domain.PlaylistId, domain.TrackId) {
 				return domain.NewPlaylistId(), domain.NewTrackId()
 			},
 			wantErr: ErrPlaylistNotFound,
 		},
 		{
 			name: "repo error propagates",
-			setup: func(plRepo *mockPlaylistRepo) (domain.PlaylistId, domain.TrackId) {
+			setup: func(plRepo *catalogtest.PlaylistRepo) (domain.PlaylistId, domain.TrackId) {
 				// RemoveTrack now loads via GetWithTracks (it routes through the
 				// aggregate), so the repo error surfaces there.
-				plRepo.errOnGetWithTracks = errRepo
+				plRepo.ErrOnGetWithTracks = errRepo
 				return domain.NewPlaylistId(), domain.NewTrackId()
 			},
 			wantErr: errRepo,
@@ -728,18 +720,18 @@ func TestPlaylistService_RemoveTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := newMockPlaylistRepo()
-			trRepo := newMockTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			playlistId, trackId := tt.setup(plRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistMembershipService(plRepo, trRepo)
 
-			_, err := svc.RemoveTrack(ctx, userId, playlistId, trackId)
+			err := svc.RemoveTrack(ctx, userId, playlistId, trackId)
 
 			if tt.wantErr != nil {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -751,19 +743,19 @@ func TestPlaylistService_RemoveTrack(t *testing.T) {
 	}
 }
 
-func TestPlaylistService_Reorder(t *testing.T) {
+func TestPlaylistMembershipService_Reorder(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
 		name    string
-		setup   func(*mockPlaylistRepo) (domain.PlaylistId, []domain.TrackId)
+		setup   func(*catalogtest.PlaylistRepo) (domain.PlaylistId, []domain.TrackId)
 		wantErr error
 	}{
 		{
 			name: "valid reorder succeeds",
-			setup: func(plRepo *mockPlaylistRepo) (domain.PlaylistId, []domain.TrackId) {
+			setup: func(plRepo *catalogtest.PlaylistRepo) (domain.PlaylistId, []domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				t1 := domain.NewTrackId()
 				t2 := domain.NewTrackId()
@@ -771,22 +763,22 @@ func TestPlaylistService_Reorder(t *testing.T) {
 					{TrackId: t1, Position: 0},
 					{TrackId: t2, Position: 1},
 				}
-				plRepo.seed(pl)
+				plRepo.Seed(pl)
 				return pl.ID, []domain.TrackId{t2, t1}
 			},
 			wantErr: nil,
 		},
 		{
 			name: "playlist not found returns ErrPlaylistNotFound",
-			setup: func(plRepo *mockPlaylistRepo) (domain.PlaylistId, []domain.TrackId) {
+			setup: func(plRepo *catalogtest.PlaylistRepo) (domain.PlaylistId, []domain.TrackId) {
 				return domain.NewPlaylistId(), []domain.TrackId{}
 			},
 			wantErr: ErrPlaylistNotFound,
 		},
 		{
 			name: "repo error propagates",
-			setup: func(plRepo *mockPlaylistRepo) (domain.PlaylistId, []domain.TrackId) {
-				plRepo.errOnGetWithTracks = errRepo
+			setup: func(plRepo *catalogtest.PlaylistRepo) (domain.PlaylistId, []domain.TrackId) {
+				plRepo.ErrOnGetWithTracks = errRepo
 				return domain.NewPlaylistId(), []domain.TrackId{}
 			},
 			wantErr: errRepo,
@@ -795,10 +787,10 @@ func TestPlaylistService_Reorder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := newMockPlaylistRepo()
-			trRepo := newMockTrackRepo()
+			plRepo := catalogtest.NewPlaylistRepo()
+			trRepo := catalogtest.NewTrackRepo()
 			playlistId, trackIds := tt.setup(plRepo)
-			svc := NewPlaylistService(plRepo, trRepo)
+			svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 			err := svc.Reorder(ctx, userId, playlistId, trackIds)
 
@@ -806,7 +798,7 @@ func TestPlaylistService_Reorder(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -819,19 +811,6 @@ func TestPlaylistService_Reorder(t *testing.T) {
 }
 
 // --- test utilities ---
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 func ptrStatus(s domain.AcquisitionStatus) *domain.AcquisitionStatus {
 	return &s
