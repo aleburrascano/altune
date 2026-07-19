@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"altune/go-api/internal/catalog/catalogtest"
@@ -131,7 +132,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if !contains(err.Error(), tt.wantErr) {
+				if !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %q, want it to contain %q", err.Error(), tt.wantErr)
 				}
 				return
@@ -244,7 +245,7 @@ func TestListTracksService_Execute(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if !contains(err.Error(), tt.wantErr) {
+				if !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %q, want it to contain %q", err.Error(), tt.wantErr)
 				}
 				return
@@ -315,7 +316,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -373,7 +374,7 @@ func TestPlaylistLifecycleService_Create(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if !contains(err.Error(), tt.wantErr) {
+				if !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %q, want it to contain %q", err.Error(), tt.wantErr)
 				}
 				return
@@ -444,7 +445,7 @@ func TestPlaylistLifecycleService_Get(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -509,7 +510,7 @@ func TestPlaylistLifecycleService_Delete(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -580,7 +581,7 @@ func TestPlaylistLifecycleService_Rename(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
 				}
-				if !contains(err.Error(), tt.wantErr) {
+				if !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("error = %q, want it to contain %q", err.Error(), tt.wantErr)
 				}
 				return
@@ -667,7 +668,7 @@ func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -730,7 +731,7 @@ func TestPlaylistMembershipService_RemoveTrack(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -797,7 +798,7 @@ func TestPlaylistMembershipService_Reorder(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
@@ -810,19 +811,6 @@ func TestPlaylistMembershipService_Reorder(t *testing.T) {
 }
 
 // --- test utilities ---
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 func ptrStatus(s domain.AcquisitionStatus) *domain.AcquisitionStatus {
 	return &s
