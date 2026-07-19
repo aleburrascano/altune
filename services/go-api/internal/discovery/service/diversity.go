@@ -154,5 +154,3 @@ func copyExtras(src map[string]any) map[string]any {
 	}
 	return dst
 }
-
-// completenessOf is defined in merge.go.
