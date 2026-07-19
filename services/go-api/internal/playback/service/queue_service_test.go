@@ -39,9 +39,8 @@ type fakeNowPlaying struct {
 	tracks map[string]*ports.NowPlayingTrack
 }
 
-func (f *fakeNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*ports.NowPlayingTrack, bool, error) {
-	t, ok := f.tracks[trackId]
-	return t, ok, nil
+func (f *fakeNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*ports.NowPlayingTrack, error) {
+	return f.tracks[trackId], nil
 }
 
 func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {

@@ -37,10 +37,16 @@ func (s *QueueService) Save(ctx context.Context, userId shared.UserId, input Sav
 	if err != nil {
 		return fmt.Errorf("invalid repeat mode: %w", err)
 	}
-	state, err := domain.NewQueueState(
-		userId, input.TrackIds, input.CurrentIdx, input.PositionMs, input.Shuffled, rm, input.SourceId,
-		input.NaturalOrder,
-	)
+	state, err := domain.NewQueueState(domain.QueueStateInput{
+		UserId:       userId,
+		TrackIds:     input.TrackIds,
+		CurrentIdx:   input.CurrentIdx,
+		PositionMs:   input.PositionMs,
+		Shuffled:     input.Shuffled,
+		RepeatMode:   rm,
+		SourceId:     input.SourceId,
+		NaturalOrder: input.NaturalOrder,
+	})
 	if err != nil {
 		return fmt.Errorf("invalid queue state: %w", err)
 	}
@@ -81,12 +87,10 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 		return view, nil
 	}
 
-	current, ok, err := s.nowPlaying.Lookup(ctx, userId, state.TrackIds[idx])
+	current, err := s.nowPlaying.Lookup(ctx, userId, state.TrackIds[idx])
 	if err != nil {
 		return nil, fmt.Errorf("resume current track: %w", err)
 	}
-	if ok {
-		view.CurrentTrack = current
-	}
+	view.CurrentTrack = current
 	return view, nil
 }
