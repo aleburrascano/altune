@@ -227,10 +227,6 @@ func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Reque
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
-	if track == nil {
-		httputil.NotFound(w, "track not found")
-		return
-	}
 
 	httputil.WriteJSON(w, http.StatusOK, TrackStatusResponse{
 		ID:                track.ID.UUID(),
