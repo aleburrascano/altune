@@ -109,16 +109,3 @@ func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.Use
 	return playlist, nil
 }
 
-// PreviewArtworkURLs selects up to domain.PreviewArtworkLimit distinct track
-// artwork URLs for a playlist's preview tile.
-func PreviewArtworkURLs(tracks []*domain.Track) []string {
-	urls := []string{}
-	seen := make(map[string]bool)
-	for _, t := range tracks {
-		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(urls) < domain.PreviewArtworkLimit {
-			urls = append(urls, *t.ArtworkURL)
-			seen[*t.ArtworkURL] = true
-		}
-	}
-	return urls
-}
