@@ -1,6 +1,10 @@
-package ports
+package enrich
 
-import "context"
+import (
+	"context"
+
+	"altune/go-api/internal/discovery/ports"
+)
 
 // CachedLookup is the read-through cache dance shared by every name-resolved
 // detail enricher (Deezer, Last.fm, Discogs album/artist, lyrics). It is the
@@ -20,7 +24,7 @@ import "context"
 // non-hit path so the caller never sees a partially-populated zero value.
 func CachedLookup[T any](
 	ctx context.Context,
-	cache NameKeyedCache[T],
+	cache ports.NameKeyedCache[T],
 	nameKey string,
 	empty T,
 	fetch func(context.Context) (T, bool, error),
