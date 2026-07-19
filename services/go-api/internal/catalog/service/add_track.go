@@ -121,9 +121,16 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 // payload and the HTTP response can never drift; track_id is the legacy key
 // retained for older clients alongside the canonical id field.
 func trackAddedPayload(t *domain.Track) map[string]any {
-	b, _ := json.Marshal(TrackToDTO(t))
+	b, err := json.Marshal(TrackToDTO(t))
+	if err != nil {
+		slog.Error("track_added_to_library: marshal failed", "error", err)
+		return nil
+	}
 	var m map[string]any
-	_ = json.Unmarshal(b, &m)
+	if err := json.Unmarshal(b, &m); err != nil {
+		slog.Error("track_added_to_library: unmarshal failed", "error", err)
+		return nil
+	}
 	m["track_id"] = t.ID.String()
 	return m
 }
