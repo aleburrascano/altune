@@ -489,11 +489,6 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 	return r, true
 }
 
-// scAlbumSearchResponse is one page of api-v2 /search/albums.
-type scAlbumSearchResponse struct {
-	Collection []scAPIAlbum `json:"collection"`
-}
-
 // scAPIAlbum is an api-v2 album — a playlist with set_type album/ep/single.
 type scAPIAlbum struct {
 	ID           int64  `json:"id"`
@@ -524,11 +519,6 @@ func mapSoundCloudAPIAlbum(a scAPIAlbum) (domain.SearchResult, bool) {
 	return domain.NewProviderResult(domain.ResultKindAlbum, a.Title, a.User.Username, upgradeArtworkResolution(a.ArtworkURL),
 		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(a.ID, 10), URL: a.PermalinkURL},
 		extras), true
-}
-
-// scUserSearchResponse is one page of api-v2 /search/users.
-type scUserSearchResponse struct {
-	Collection []scAPIUser `json:"collection"`
 }
 
 // scAPIUser is an api-v2 user — SoundCloud's notion of an artist.
