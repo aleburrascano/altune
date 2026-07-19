@@ -153,7 +153,7 @@ func (s *ConsensusService) BuildConsensus(
 
 	clusters := newAlbumClusterSet()
 	for _, album := range primaryAlbums {
-		clusters.add(album, "deezer")
+		clusters.add(album, domain.ProviderDeezer.String())
 	}
 	// Iterate providers in slice order (not map range) so the output ordering
 	// and canonical-pick are deterministic run-to-run.
