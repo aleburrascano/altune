@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"altune/go-api/internal/catalog/catalogtest"
@@ -117,7 +118,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if !errors.Is(err, tt.wantErr) && !contains(err.Error(), tt.wantErr.Error()) {
+				if !errors.Is(err, tt.wantErr) && !strings.Contains(err.Error(), tt.wantErr.Error()) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 			} else if err != nil {
