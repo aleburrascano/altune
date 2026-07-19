@@ -4,33 +4,34 @@ import (
 	"context"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+
+	"golang.org/x/sync/errgroup"
 )
 
 const (
-	// enrichLimit caps artwork enrichment to the top N results to bound latency.
-	enrichLimit = 50
-	// enrichConcurrency limits parallel enrichment goroutines.
-	enrichConcurrency = 8
-	// enrichTimeout bounds the whole enrichment pass.
-	enrichTimeout = 4 * time.Second
+	// artworkFillLimit caps artwork enrichment to the top N results to bound latency.
+	artworkFillLimit = 50
+	// artworkFillConcurrency limits parallel enrichment goroutines.
+	artworkFillConcurrency = 8
+	// artworkFillTimeout bounds the whole enrichment pass.
+	artworkFillTimeout = 4 * time.Second
 	// emptyArtHash is the md5 of the empty string — some providers return a
 	// placeholder image whose URL embeds it; treat that as "no artwork".
 	emptyArtHash = "d41d8cd98f00b204e9800998ecf8427e"
 )
 
-// enrich resolves missing artwork for the top results in parallel. Only the
+// fillArtwork resolves missing artwork for the top results in parallel. Only the
 // chained artwork resolver + cache are consulted (the production wiring); the
 // ranking is untouched, so no re-sort is needed.
-func (s *Service) enrich(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
+func (s *Service) fillArtwork(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
 	if s.artworkResolver == nil {
 		return results
 	}
-	limit := enrichLimit
+	limit := artworkFillLimit
 	if len(results) < limit {
 		limit = len(results)
 	}
@@ -38,34 +39,30 @@ func (s *Service) enrich(ctx context.Context, results []domain.SearchResult) []d
 		return results
 	}
 
-	enrichCtx, cancel := context.WithTimeout(ctx, enrichTimeout)
+	fillCtx, cancel := context.WithTimeout(ctx, artworkFillTimeout)
 	defer cancel()
 
 	top := results[:limit]
 	rest := results[limit:]
 
-	sem := make(chan struct{}, enrichConcurrency)
-	var wg sync.WaitGroup
-	enriched := make([]domain.SearchResult, len(top))
+	var g errgroup.Group
+	g.SetLimit(artworkFillConcurrency)
+	filled := make([]domain.SearchResult, len(top))
 
 	for i, r := range top {
-		wg.Add(1)
-		go func(idx int, result domain.SearchResult) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			enriched[idx] = s.enrichOne(enrichCtx, result)
-		}(i, r)
+		g.Go(func() error {
+			filled[i] = s.fillArtworkOne(fillCtx, r)
+			return nil
+		})
 	}
-
-	wg.Wait()
-	return append(enriched, rest...)
+	_ = g.Wait()
+	return append(filled, rest...)
 }
 
-// enrichOne fills a single result's MISSING artwork: a usable provider image is
+// fillArtworkOne fills a single result's MISSING artwork: a usable provider image is
 // kept as-is (R5); otherwise a usable cache hit short-circuits, else resolve via
 // the identity-aware chain and memoize.
-func (s *Service) enrichOne(ctx context.Context, result domain.SearchResult) domain.SearchResult {
+func (s *Service) fillArtworkOne(ctx context.Context, result domain.SearchResult) domain.SearchResult {
 	// R5: a valid (non-placeholder) provider image is identity-bound by the merge
 	// (the bridged source's own photo) — keep it, don't overwrite it with a
 	// lower-confidence resolved one. Only resolve when there's no usable image.

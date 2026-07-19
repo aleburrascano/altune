@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -55,12 +56,12 @@ func (s *FindRelatedService) Execute(
 		mu            sync.Mutex
 		groups        []domain.RelatedGroup
 		wg            sync.WaitGroup
-		providerCalls int
+		providerCalls atomic.Int32
 	)
 
 	for _, result := range organicResults[:topN] {
 		if result.Kind == domain.ResultKindTrack {
-			album := stringExtra(result, "album")
+			album := result.Album
 			if album != "" && s.querier != nil {
 				wg.Add(1)
 				go func(r domain.SearchResult, albumName string) {
@@ -84,16 +85,9 @@ func (s *FindRelatedService) Execute(
 				}(result, album)
 			}
 
-			deezerAlbumID := stringExtra(result, "deezer_album_id")
+			deezerAlbumID, _ := result.Extras["deezer_album_id"].(string)
 			if deezerAlbumID != "" && s.albumProvider != nil {
-				mu.Lock()
-				canCall := providerCalls < maxProviderLookups
-				if canCall {
-					providerCalls++
-				}
-				mu.Unlock()
-
-				if canCall {
+				if tryReserveProviderCall(&providerCalls, maxProviderLookups) {
 					wg.Add(1)
 					go func(r domain.SearchResult, albumID string) {
 						defer wg.Done()
@@ -122,14 +116,7 @@ func (s *FindRelatedService) Execute(
 				continue
 			}
 
-			mu.Lock()
-			canCall := providerCalls < maxProviderLookups
-			if canCall {
-				providerCalls++
-			}
-			mu.Unlock()
-
-			if canCall {
+			if tryReserveProviderCall(&providerCalls, maxProviderLookups) {
 				wg.Add(1)
 				go func(r domain.SearchResult, artistID string) {
 					defer wg.Done()
@@ -159,6 +146,18 @@ func (s *FindRelatedService) Execute(
 	return groups
 }
 
+func tryReserveProviderCall(calls *atomic.Int32, max int) bool {
+	for {
+		cur := calls.Load()
+		if cur >= int32(max) {
+			return false
+		}
+		if calls.CompareAndSwap(cur, cur+1) {
+			return true
+		}
+	}
+}
+
 func extractDeezerID(r domain.SearchResult) string {
 	for _, src := range r.Sources {
 		if src.Provider == domain.ProviderDeezer {
@@ -182,6 +181,7 @@ func matchesToSearchResults(matches []ports.RelatedTrackMatch) []domain.SearchRe
 			ImageURL:   imageURL,
 			Confidence: domain.ConfidenceLow,
 			Sources:    []domain.SourceRef{},
+			Album:      m.Album,
 			Extras:     map[string]any{"album": m.Album, "source": "library"},
 		})
 	}
@@ -189,10 +189,9 @@ func matchesToSearchResults(matches []ports.RelatedTrackMatch) []domain.SearchRe
 }
 
 func dedupRelatedAgainstOrganic(groups []domain.RelatedGroup, organic []domain.SearchResult) []domain.RelatedGroup {
-	organicKeys := make(map[string]bool, len(organic))
+	seen := make(map[string]bool, len(organic))
 	for _, r := range organic {
-		key := textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
-		organicKeys[key] = true
+		seen[textnorm.NormalizeForMatch(r.Title)+"|"+textnorm.NormalizeForMatch(r.Subtitle)] = true
 	}
 
 	var filtered []domain.RelatedGroup
@@ -200,7 +199,8 @@ func dedupRelatedAgainstOrganic(groups []domain.RelatedGroup, organic []domain.S
 		var items []domain.SearchResult
 		for _, item := range g.Items {
 			key := textnorm.NormalizeForMatch(item.Title) + "|" + textnorm.NormalizeForMatch(item.Subtitle)
-			if !organicKeys[key] {
+			if !seen[key] {
+				seen[key] = true
 				items = append(items, item)
 			}
 		}

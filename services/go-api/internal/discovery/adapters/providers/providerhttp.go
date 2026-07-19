@@ -72,6 +72,12 @@ func getJSON(ctx context.Context, client *http.Client, url string, dst any, opts
 // body is returned even on a non-200 status (with a non-nil error) so callers
 // can inspect the status; on a transport error the status is 0.
 func getBytes(ctx context.Context, client *http.Client, url string, opts ...reqOption) (int, []byte, error) {
+	return getBytesCapped(ctx, client, url, providerBodyCap, opts...)
+}
+
+// getBytesCapped is getBytes with a caller-chosen body cap, for the rare
+// payload that exceeds the default 2 MiB (e.g. SoundCloud's JS asset bundles).
+func getBytesCapped(ctx context.Context, client *http.Client, url string, cap int64, opts ...reqOption) (int, []byte, error) {
 	req, err := newGetRequest(ctx, url, opts...)
 	if err != nil {
 		return 0, nil, err
@@ -81,7 +87,7 @@ func getBytes(ctx context.Context, client *http.Client, url string, opts ...reqO
 		return 0, nil, err
 	}
 	defer resp.Body.Close()
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, providerBodyCap))
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, cap))
 	if resp.StatusCode != http.StatusOK {
 		return resp.StatusCode, body, fmt.Errorf("http status %d", resp.StatusCode)
 	}

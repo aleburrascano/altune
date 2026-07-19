@@ -117,6 +117,25 @@ func (t EntityResolutionTier) String() string {
 	}
 }
 
+// ResolutionTierFromExtras reads the "resolution_tier" wire key merge.go stamps
+// on every merged result back into the typed tier. Returns EntityResolutionNone
+// when the key is absent or not a recognized tier string, so a reader outside
+// the writer's file gets a compile-checked accessor instead of a raw string
+// comparison against SearchResult.Extras.
+func ResolutionTierFromExtras(extras map[string]any) EntityResolutionTier {
+	s, _ := extras["resolution_tier"].(string)
+	switch s {
+	case "mbid":
+		return EntityResolutionMBID
+	case "isrc":
+		return EntityResolutionISRC
+	case "bridge":
+		return EntityResolutionBridge
+	default:
+		return EntityResolutionNone
+	}
+}
+
 // ProviderName identifies a music data provider.
 type ProviderName int
 
@@ -208,26 +227,6 @@ func (s ProviderStatus) String() string {
 	}
 }
 
-// ContentValidationStatus caches content fetch outcome.
-type ContentValidationStatus int
-
-const (
-	ContentValidationUnknown ContentValidationStatus = iota
-	ContentValidationFetchable
-	ContentValidationUnfetchable
-)
-
-func (s ContentValidationStatus) String() string {
-	switch s {
-	case ContentValidationFetchable:
-		return "fetchable"
-	case ContentValidationUnfetchable:
-		return "unfetchable"
-	default:
-		return "unknown"
-	}
-}
-
 // SourceRef is one provider's reference to a merged SearchResult.
 type SourceRef struct {
 	Provider   ProviderName
@@ -283,15 +282,33 @@ type SearchResult struct {
 	// tiebreak: Deezer's track rank and artist/album fan count. 0 = none.
 	ProviderRank int64
 	FanCount     int64
+	// Album and Duration are typed for the same reason as Popularity/ISRC/MBID:
+	// completenessOf (merge) and isLowConfidenceTail (rank) branch on them, so
+	// the producer→consumer link must be compile-checked rather than a
+	// silently-absent/mistyped Extras entry. ""/0 = unknown.
+	Album    string
+	Duration int
 	// Extras carries provider-specific DISPLAY/TELEMETRY metadata only — nothing
 	// merge, rank, or consensus branches on (those keys are typed fields above).
-	// Current keys: "album", "duration", "preview_url", "record_type", "genre",
+	// Current keys: "album", "duration" (mirrored from the typed fields above for
+	// wire compatibility), "preview_url", "record_type", "genre",
 	// "genre_id", "disambiguation", "artist_type", "area", "mb_tags",
 	// "playcount", "playback_count", "likes_count", "reposts_count",
 	// "deezer_album_id", "track_number", "disc_number", "explicit", "copyright",
 	// "featured_artists" ([]map[string]any), "collapsed_artists"
-	// ([]map[string]any), "resolution_tier", "consensus_*", "artwork_path".
+	// ([]CollapsedArtistSummary), "resolution_tier", "consensus_*", "artwork_path".
 	Extras map[string]any
+}
+
+// CollapsedArtistSummary is the typed shape stored in the "collapsed_artists"
+// extra by CollapseArtistDuplicates: same-name artists folded into the primary.
+// JSON tags match the pre-existing wire keys so clients are unaffected.
+type CollapsedArtistSummary struct {
+	Title    string         `json:"title"`
+	Subtitle string         `json:"subtitle"`
+	ImageURL string         `json:"image_url,omitempty"`
+	Sources  []SourceRef    `json:"sources"`
+	Extras   map[string]any `json:"extras"`
 }
 
 // NewProviderResult builds the standard single-source, low-confidence result a

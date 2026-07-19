@@ -4,10 +4,12 @@ title: YouTube Music
 description: Keyless internal-API adapter for track/video/album/artist search plus a self-owned response parser, whose one non-duplicative contribution is hi-res artist artwork.
 resource: services/go-api/internal/discovery/adapters/providers/ytmusic.go, services/go-api/internal/discovery/adapters/providers/ytmusic_client.go, services/go-api/internal/discovery/adapters/providers/search_kinds.go
 tags: [discovery, provider, youtube-music, artwork, search]
-verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
+verified_commit: e57991f354652946745942474b04d8dac7322f27
 ---
 
 `YouTubeMusicAdapter` (`ytmusic.go`) searches YouTube Music's internal `music.youtube.com/youtubei/v1/search` endpoint — the same backend the WEB_REMIX web player calls. `Search` dispatches one unfiltered query per call and maps `result.Tracks`, `result.Videos` (obscure/UGC recordings YT Music files as videos — mapped to tracks so they aren't lost from the candidate set, per an `AIDEV-NOTE` in the file), `result.Albums`, and `result.Artists`. `GetArtistAlbums`/`GetArtistTopTracks` implement `ports.ArtistContentProvider`, filtering results to an exact case-insensitive artist-name match.
+
+`mapYTMusicTrack` and `mapYTMusicVideo` now set `domain.SearchResult.Duration` (from `t.Duration`/`v.Duration` on the parsed `ytmTrack`/`ytmVideo` structs) after constructing the result via `NewProviderResult`; `mapYTMusicTrack` additionally sets `.Album` from `t.Album.Name`. Previously `NewProviderResult`'s return value was returned directly, so these fields — already present on the parsed structs — were never carried onto the `SearchResult`.
 
 **Auth model.** Gated only by a public innertube key (`ytmSearchKey`, hardcoded in `ytmusic_client.go`) shipped in the web player's JS — no user auth, no quota. Stable since first observed; if it rotates, the fix is the same shape as SoundCloud's `client_id` scrape (see [soundcloud](soundcloud.md)) — not yet implemented, not yet needed.
 

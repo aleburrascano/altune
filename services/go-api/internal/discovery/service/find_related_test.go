@@ -76,8 +76,12 @@ func TestFindRelated_TrackWithAlbumTriggersLibraryLookup(t *testing.T) {
 	svc := NewFindRelatedService(querier, nil, nil)
 
 	organic := []domain.SearchResult{
-		trackResult(domain.ProviderDeezer, "1", "Main Track", "Same Artist",
-			map[string]any{"album": "The Album"}),
+		func() domain.SearchResult {
+			r := trackResult(domain.ProviderDeezer, "1", "Main Track", "Same Artist",
+				map[string]any{"album": "The Album"})
+			r.Album = "The Album"
+			return r
+		}(),
 	}
 
 	got := svc.Execute(context.Background(), organic)

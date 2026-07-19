@@ -82,16 +82,6 @@ type EventQuery interface {
 	NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
 }
 
-// SessionSignalStore derives session-arc dissatisfaction signals from the event
-// stream (session_id rides in the JSONB payload — no column). Read-side SQL over
-// discovery_events; analytics, never the request path.
-type SessionSignalStore interface {
-	// AbandonedSearches ranks queries that drew no click and were reformulated
-	// (the same session fired another search within 60s) — a dissatisfaction
-	// signal stronger than a bare no-click.
-	AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
-}
-
 // MetricPoint is one day's value of a rolled-up metric.
 type MetricPoint struct {
 	AsOf  time.Time
@@ -107,11 +97,6 @@ type MetricsRollupStore interface {
 	RollupDay(ctx context.Context, day time.Time) error
 	// MetricsHistory returns the last `days` daily values of `metric`, newest first.
 	MetricsHistory(ctx context.Context, metric string, days int) ([]MetricPoint, error)
-}
-
-type FetchSuccessStore interface {
-	Record(ctx context.Context, provider domain.ProviderName, success bool) error
-	GetRate(ctx context.Context, provider domain.ProviderName) (float64, error)
 }
 
 type VocabularyStore interface {

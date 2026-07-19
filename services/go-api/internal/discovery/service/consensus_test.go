@@ -10,6 +10,28 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
+// inMemoryConsensusCache is a test double for ports.NameKeyedCache[[]ConsensusAlbum]
+// — no TTL, no eviction, just enough to assert the service reads its cache
+// before re-fetching from providers.
+type inMemoryConsensusCache struct{ m map[string][]ConsensusAlbum }
+
+func newInMemoryConsensusCache() *inMemoryConsensusCache {
+	return &inMemoryConsensusCache{m: make(map[string][]ConsensusAlbum)}
+}
+
+func (c *inMemoryConsensusCache) Get(_ context.Context, key string) ([]ConsensusAlbum, bool, error) {
+	v, ok := c.m[key]
+	return v, ok, nil
+}
+func (c *inMemoryConsensusCache) Set(_ context.Context, key string, v []ConsensusAlbum) error {
+	c.m[key] = v
+	return nil
+}
+func (c *inMemoryConsensusCache) GetNegative(context.Context, string) (bool, error) { return false, nil }
+func (c *inMemoryConsensusCache) SetNegative(context.Context, string) error         { return nil }
+
+var _ ports.NameKeyedCache[[]ConsensusAlbum] = (*inMemoryConsensusCache)(nil)
+
 // provider builds a consensus provider that returns the given album titles.
 func consensusProvider(name string, albums ...string) ConsensusProvider {
 	return ConsensusProvider{
@@ -108,7 +130,7 @@ func TestConsensus_CacheSkipsProviderCalls(t *testing.T) {
 			return []domain.SearchResult{{Kind: domain.ResultKindAlbum, Title: "X", Subtitle: "Artist"}}, nil
 		},
 	}
-	svc := NewConsensusService([]ConsensusProvider{p})
+	svc := NewConsensusService([]ConsensusProvider{p}, WithConsensusCache(newInMemoryConsensusCache()))
 
 	svc.BuildConsensus(context.Background(), "Artist", nil)
 	svc.BuildConsensus(context.Background(), "Artist", nil)

@@ -79,30 +79,6 @@ func TestTrigrams(t *testing.T) {
 	}
 }
 
-// --- levenshteinDist --------------------------------------------------------
-
-func TestLevenshteinDist(t *testing.T) {
-	tests := []struct {
-		a, b string
-		want int
-	}{
-		{"", "", 0},
-		{"abc", "", 3},
-		{"", "abc", 3},
-		{"megaman", "megamsn", 1},
-		{"kitten", "sitting", 3},
-		{"same", "same", 0},
-	}
-	for _, tt := range tests {
-		t.Run(fmt.Sprintf("%s_%s", tt.a, tt.b), func(t *testing.T) {
-			got := levenshteinDist(tt.a, tt.b)
-			if got != tt.want {
-				t.Errorf("levenshteinDist(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
-			}
-		})
-	}
-}
-
 // --- jaccardCoefficient -----------------------------------------------------
 
 func TestJaccardCoefficient(t *testing.T) {

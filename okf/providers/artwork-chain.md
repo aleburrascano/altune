@@ -4,7 +4,7 @@ title: Artwork Resolution Chain
 description: The ordered fallback chain of artwork-only providers (identity-keyed then name-search) tried when Deezer's primary artwork is missing.
 resource: services/go-api/internal/discovery/adapters/providers/artwork_chain.go, services/go-api/internal/discovery/adapters/providers/fanarttv.go, services/go-api/internal/discovery/adapters/providers/coverartarchive.go, services/go-api/internal/discovery/adapters/providers/spotify_artwork.go
 tags: [discovery, provider, artwork, fallback-chain, identity-resolution]
-verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
+verified_commit: e57991f354652946745942474b04d8dac7322f27
 ---
 
 `ChainedArtworkResolver` (`artwork_chain.go`) composes a list of `ports.ArtworkResolver`s, tried in order, returning the first non-empty URL that isn't a Deezer placeholder (`IsDeezerPlaceholder`). It implements the service-side `ports.TaggingArtworkResolver` port — two distinct resolution paths, consumed by [identity-artwork](../backend/discovery/identity-artwork.md):
@@ -15,7 +15,7 @@ verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
 
 **Chain order (`buildArtworkChain`, `internal/app/search_wiring.go`)**, identity-keyed sources first, name-search fallbacks last:
 1. `CoverArtArchiveResolver` (`coverartarchive.go`) — MBID-keyed, album-only (`kind == artist` short-circuits to `""`). Issues a `HEAD` to `coverartarchive.org/release-group/{mbid}/front-1200`, following a redirect's `Location` header or, on a bare 200, returning the constructed URL itself. 404/400 → clean miss.
-2. `SpotifyArtworkResolver` (`spotify_artwork.go`) — identity-only (`Resolve` is a deliberate no-op; only `ResolveByIdentity` does work), via Spotify's public, keyless oEmbed endpoint (`open.spotify.com/oembed?url=...`) keyed by `id.ExternalIDs["spotify"]`. Broadest artist-image identity source, so it leads the identity phase.
+2. `SpotifyArtworkResolver` (`spotify_artwork.go`) — identity-only (`Resolve` is a deliberate no-op; only `ResolveByIdentity` does work), via Spotify's public, keyless oEmbed endpoint (`open.spotify.com/oembed?url=...`) keyed by `id.ExternalIDs["spotify"]`. Broadest artist-image identity source, so it leads the identity phase. Its fetch now goes through the shared `getJSON` helper (`providerhttp.go`) instead of a hand-rolled request/decode; `getJSON` returns one error for request-build, transport, non-200, and decode failures alike, and `ResolveByIdentity` swallows all of it to `("", nil)` — so a transport-level failure (e.g. DNS/connection error) now falls through to "try the next resolver" the same as a miss or bad body, where previously it surfaced as a real `error`.
 3. `DiscogsAdapter` as an identity resolver via `ResolveByIdentity` — gated by `cfg.HasDiscogs()` (see [discogs](discogs.md)). Its regular `Resolve` method still contains a name-search path, but the chain's `IdentityArtworkResolver` type-assertion skips it entirely on the name-search phase, so behaviorally it's identity-only here.
 4. `FanartTvArtworkResolver` (`fanarttv.go`) — gated by `cfg.HasFanartTV()`, MBID-keyed. Artist art hits `/v3/music/{mbid}` (`artistthumb` then `artistbackground`); album art hits the separate `/v3/music/albums/{mbid}` endpoint. `bestFanartImage` scores candidates by `likes` count with an English/neutral-`lang` bonus that dominates the tiebreak, rather than blindly taking the first image.
 5. `GeniusArtworkResolver` — gated by `cfg.HasGenius()`, name-search (see [genius](genius.md)).

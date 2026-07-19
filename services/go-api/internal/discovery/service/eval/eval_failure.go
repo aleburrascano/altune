@@ -91,7 +91,7 @@ func ScriptClass(raw string) string {
 // points are display buckets (like a page size), not query-fit ranking
 // constants — they only group the failure log, they never touch ranking.
 func PopBand(r domain.SearchResult) string {
-	p := popularityOf(r)
+	p := r.Popularity
 	switch {
 	case p <= 0:
 		return "none"

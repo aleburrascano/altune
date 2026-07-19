@@ -12,6 +12,12 @@ func withISRC(r domain.SearchResult, isrc string) domain.SearchResult {
 	return r
 }
 
+// withAlbum returns r with the typed Album field set.
+func withAlbum(r domain.SearchResult, album string) domain.SearchResult {
+	r.Album = album
+	return r
+}
+
 // multiSource returns r with a second provider source appended (corroborated).
 func multiSource(r domain.SearchResult, p domain.ProviderName) domain.SearchResult {
 	r.Sources = append(r.Sources, domain.SourceRef{Provider: p, ExternalID: "x", URL: "https://x"})
@@ -36,7 +42,7 @@ func TestIsLowConfidenceTail(t *testing.T) {
 		},
 		{
 			name: "single-source soundcloud but carries album → rescued",
-			r:    track("Real Song", "Artist", domain.ProviderSoundCloud, map[string]any{"album": "Real Album"}),
+			r:    withAlbum(track("Real Song", "Artist", domain.ProviderSoundCloud, nil), "Real Album"),
 			want: false,
 		},
 		{

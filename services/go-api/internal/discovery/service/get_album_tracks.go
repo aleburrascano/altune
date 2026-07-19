@@ -10,23 +10,22 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// trackFeaturedLookup fetches a track's featured artists by its provider id. The
-// Deezer adapter satisfies it (LookupTrackFeatured). Album tracklists don't carry
-// contributors inline, so we fetch them per track to populate featured_artists.
-type trackFeaturedLookup interface {
-	LookupTrackFeatured(ctx context.Context, trackID string) ([]domain.FeaturedArtist, error)
-}
-
 const albumFeaturedConcurrency = 5
 
+// Album tracklists don't carry contributors inline, so we fetch each track's
+// featured artists individually via the Deezer adapter's LookupTrackFeatured
+// (deezerFeaturedLookup, declared in featured_resolver.go).
 type GetAlbumTracksService struct {
-	providers map[string]ports.AlbumContentProvider
-	featured  trackFeaturedLookup
+	providers        map[domain.ProviderName]ports.AlbumContentProvider
+	featured         deezerFeaturedLookup
+	fallbackSearcher ports.SearchProvider
 }
 
+type AlbumTracksOption func(*GetAlbumTracksService)
+
 func NewGetAlbumTracksService(
-	providers map[string]ports.AlbumContentProvider,
-	opts ...func(*GetAlbumTracksService),
+	providers map[domain.ProviderName]ports.AlbumContentProvider,
+	opts ...AlbumTracksOption,
 ) *GetAlbumTracksService {
 	s := &GetAlbumTracksService{providers: providers}
 	for _, opt := range opts {
@@ -36,8 +35,16 @@ func NewGetAlbumTracksService(
 }
 
 // WithTrackFeatured enables per-track featured-artist enrichment of album tracks.
-func WithTrackFeatured(f trackFeaturedLookup) func(*GetAlbumTracksService) {
+func WithTrackFeatured(f deezerFeaturedLookup) AlbumTracksOption {
 	return func(s *GetAlbumTracksService) { s.featured = f }
+}
+
+// WithAlbumFallbackSearcher wires the SearchProvider used by the Deezer
+// search-then-fetch fallback (see deezerSearchFallback). Without this the
+// fallback never fires, which is the correct default for tests that only
+// exercise the primary provider path.
+func WithAlbumFallbackSearcher(sp ports.SearchProvider) AlbumTracksOption {
+	return func(s *GetAlbumTracksService) { s.fallbackSearcher = sp }
 }
 
 // enrichFeatured fetches each Deezer-sourced track's featured contributors
@@ -73,96 +80,52 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 	_ = g.Wait()
 }
 
-type ContentFetchResponse struct {
-	ProviderName string
-	Status       domain.ProviderStatus
-	Items        []domain.SearchResult
-}
 
-func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
-	provider, ok := s.providers[providerName]
-	if !ok {
-		// Fallback: if the requested provider isn't supported but Deezer is,
-		// search Deezer for this album by title+artist and return those tracks.
-		deezer, hasDeezer := s.providers["deezer"]
-		if hasDeezer && albumTitle != "" {
-			return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
-		}
-		return &ContentFetchResponse{
-			ProviderName: providerName,
-			Status:       domain.ProviderStatusError,
-			Items:        []domain.SearchResult{},
-		}, nil
+func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
+	var results []domain.SearchResult
+	var degraded *ContentFetchResponse
+	if provider, ok := s.providers[providerName]; ok {
+		results, degraded = fetchProviderResults(ctx, providerName, externalID, "album_tracks.provider_failed",
+			func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+				return provider.GetAlbumTracks(ctx, pn, id)
+			})
+	} else {
+		degraded = errorContentResponse(providerName)
 	}
 
-	pn, err := domain.ParseProviderName(providerName)
-	if err != nil {
-		return &ContentFetchResponse{
-			ProviderName: providerName,
-			Status:       domain.ProviderStatusError,
-			Items:        []domain.SearchResult{},
-		}, nil
-	}
-	results, err := provider.GetAlbumTracks(ctx, pn, externalID)
-	if err != nil {
-		slog.WarnContext(ctx, "album_tracks.provider_failed",
-			"provider", providerName, "external_id", externalID, "error", err)
-	}
-	if err != nil || len(results) == 0 {
-		if albumTitle != "" {
-			deezer, hasDeezer := s.providers["deezer"]
-			if hasDeezer {
+	// Fallback: an unsupported/failing provider, or one that resolved zero
+	// tracks, falls back to a Deezer album search by title+artist when Deezer is
+	// available. Orthogonal to the found/parse/fetch shape fetchProviderResults
+	// owns, so it stays here rather than in the shared helper.
+	if degraded != nil || len(results) == 0 {
+		if albumTitle != "" && s.fallbackSearcher != nil {
+			if deezer, hasDeezer := s.providers[domain.ProviderDeezer]; hasDeezer {
 				return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
 			}
 		}
-		if err != nil {
-			return &ContentFetchResponse{
-				ProviderName: providerName,
-				Status:       domain.ProviderStatusError,
-				Items:        []domain.SearchResult{},
-			}, nil
+		if degraded != nil {
+			return degraded, nil
 		}
 	}
 
-	if limit > 0 && len(results) > limit {
-		results = results[:limit]
-	}
-
-	s.enrichFeatured(ctx, results)
-
-	return &ContentFetchResponse{
-		ProviderName: providerName,
-		Status:       domain.ProviderStatusOK,
-		Items:        results,
-	}, nil
+	resp := okContentResponse(providerName, results, limit)
+	s.enrichFeatured(ctx, resp.Items)
+	return resp, nil
 }
 
 func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer ports.AlbumContentProvider, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
-	searcher, ok := deezer.(ports.SearchProvider)
-	if !ok {
-		return &ContentFetchResponse{
-			ProviderName: "deezer",
-			Status:       domain.ProviderStatusError,
-			Items:        []domain.SearchResult{},
-		}, nil
-	}
-
 	query := albumTitle
 	if albumArtist != "" {
 		query = albumArtist + " " + albumTitle
 	}
 
-	results, err := searcher.Search(ctx, query, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
+	results, err := s.fallbackSearcher.Search(ctx, query, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
 	if err != nil {
 		slog.WarnContext(ctx, "album_tracks.deezer_fallback_failed",
 			"query", query, "error", err)
 	}
 	if err != nil || len(results) == 0 {
-		return &ContentFetchResponse{
-			ProviderName: "deezer",
-			Status:       domain.ProviderStatusOK,
-			Items:        []domain.SearchResult{},
-		}, nil
+		return emptyContentResponse(domain.ProviderDeezer), nil
 	}
 
 	// Use the first matching album's Deezer ID to fetch tracks
@@ -175,20 +138,10 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 		if err != nil || len(tracks) == 0 {
 			continue
 		}
-		if limit > 0 && len(tracks) > limit {
-			tracks = tracks[:limit]
-		}
-		s.enrichFeatured(ctx, tracks)
-		return &ContentFetchResponse{
-			ProviderName: "deezer",
-			Status:       domain.ProviderStatusOK,
-			Items:        tracks,
-		}, nil
+		resp := okContentResponse(domain.ProviderDeezer, tracks, limit)
+		s.enrichFeatured(ctx, resp.Items)
+		return resp, nil
 	}
 
-	return &ContentFetchResponse{
-		ProviderName: "deezer",
-		Status:       domain.ProviderStatusOK,
-		Items:        []domain.SearchResult{},
-	}, nil
+	return emptyContentResponse(domain.ProviderDeezer), nil
 }

@@ -44,16 +44,7 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 		payload["top"] = top
 	}
 
-	ctx := context.WithoutCancel(parentCtx)
-	s.bgWg.Add(1)
-	go func() {
-		defer s.bgWg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Warn("search.v2.telemetry_emit_panic", "error", r)
-			}
-		}()
-
+	s.launchBackground(parentCtx, "telemetry.emit", func(ctx context.Context) {
 		emitCtx, cancel := context.WithTimeout(ctx, emitTimeout)
 		defer cancel()
 
@@ -68,7 +59,7 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 		if err := s.eventStore.Append(emitCtx, event); err != nil {
 			slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed", "error", err)
 		}
-	}()
+	})
 }
 
 func buildShownTop(results []domain.SearchResult) []map[string]any {
