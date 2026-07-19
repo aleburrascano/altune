@@ -18,7 +18,7 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		providerName  string
+		providerName  domain.ProviderName
 		externalID    string
 		limit         int
 		providers     map[string]ports.AlbumContentProvider
@@ -27,7 +27,7 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 	}{
 		{
 			name:         "valid provider returns tracks",
-			providerName: "deezer",
+			providerName: domain.ProviderDeezer,
 			externalID:   "album-123",
 			limit:        0,
 			providers: map[string]ports.AlbumContentProvider{
@@ -48,7 +48,7 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 		},
 		{
 			name:          "unknown provider returns error status",
-			providerName:  "nonexistent",
+			providerName:  domain.ProviderSoundCloud,
 			externalID:    "album-123",
 			limit:         0,
 			providers:     map[string]ports.AlbumContentProvider{},
@@ -57,7 +57,7 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 		},
 		{
 			name:         "provider error returns error status without propagating",
-			providerName: "deezer",
+			providerName: domain.ProviderDeezer,
 			externalID:   "album-err",
 			limit:        0,
 			providers: map[string]ports.AlbumContentProvider{
@@ -72,7 +72,7 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 		},
 		{
 			name:         "limit truncates results",
-			providerName: "deezer",
+			providerName: domain.ProviderDeezer,
 			externalID:   "album-123",
 			limit:        2,
 			providers: map[string]ports.AlbumContentProvider{

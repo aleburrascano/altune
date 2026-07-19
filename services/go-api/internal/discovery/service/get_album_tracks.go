@@ -81,8 +81,8 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 }
 
 
-func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
-	provider, ok := s.providers[providerName]
+func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
+	provider, ok := s.providers[providerName.String()]
 	results, degraded := fetchProviderResults(ctx, providerName, externalID, "album_tracks.provider_failed", ok,
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			return provider.GetAlbumTracks(ctx, pn, id)
@@ -120,7 +120,7 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 			"query", query, "error", err)
 	}
 	if err != nil || len(results) == 0 {
-		return emptyContentResponse("deezer"), nil
+		return emptyContentResponse(domain.ProviderDeezer), nil
 	}
 
 	// Use the first matching album's Deezer ID to fetch tracks
@@ -133,10 +133,10 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 		if err != nil || len(tracks) == 0 {
 			continue
 		}
-		resp := okContentResponse("deezer", tracks, limit)
+		resp := okContentResponse(domain.ProviderDeezer, tracks, limit)
 		s.enrichFeatured(ctx, resp.Items)
 		return resp, nil
 	}
 
-	return emptyContentResponse("deezer"), nil
+	return emptyContentResponse(domain.ProviderDeezer), nil
 }

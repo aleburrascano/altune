@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
 
@@ -27,7 +28,7 @@ func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseD
 		items[i] = searchResultToDTO(r)
 	}
 	return ContentFetchResponseDTO{
-		Provider: resp.ProviderName,
+		Provider: resp.ProviderName.String(),
 		Status:   resp.Status.String(),
 		Items:    items,
 	}
@@ -77,12 +78,18 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 	albumTitle := strings.TrimSpace(r.URL.Query().Get("title"))
 	albumArtist := strings.TrimSpace(r.URL.Query().Get("artist"))
 
+	pn, parseErr := domain.ParseProviderName(provider)
+	if parseErr != nil {
+		httputil.BadRequest(w, "unknown provider")
+		return
+	}
+
 	if h.albumSvc == nil {
 		writeContentFetchError(w, provider)
 		return
 	}
 
-	resp, err := h.albumSvc.Execute(r.Context(), provider, externalID, albumTitle, albumArtist, limit)
+	resp, err := h.albumSvc.Execute(r.Context(), pn, externalID, albumTitle, albumArtist, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "get album tracks failed",
 			"error", err, "provider", provider, "external_id", externalID)
@@ -100,12 +107,18 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 	}
 	limit := clampLimit(r, 5, 50)
 
+	pn, parseErr := domain.ParseProviderName(provider)
+	if parseErr != nil {
+		httputil.BadRequest(w, "unknown provider")
+		return
+	}
+
 	if h.artistSvc == nil {
 		writeContentFetchError(w, provider)
 		return
 	}
 
-	resp, err := h.artistSvc.GetTopTracks(r.Context(), provider, externalID, limit)
+	resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "get artist top tracks failed",
 			"error", err, "provider", provider, "external_id", externalID)
@@ -128,12 +141,18 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 	limit := clampLimit(r, 50, 100)
 	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
+	pn, parseErr := domain.ParseProviderName(provider)
+	if parseErr != nil {
+		httputil.BadRequest(w, "unknown provider")
+		return
+	}
+
 	if h.artistSvc == nil {
 		writeContentFetchError(w, provider)
 		return
 	}
 
-	resp, err := h.artistSvc.GetAlbums(r.Context(), provider, externalID, artistName, limit)
+	resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "get artist albums failed",
 			"error", err, "provider", provider, "external_id", externalID)
@@ -155,12 +174,18 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 	}
 	limit := clampLimit(r, 20, 50)
 
+	pn, parseErr := domain.ParseProviderName(provider)
+	if parseErr != nil {
+		httputil.BadRequest(w, "unknown provider")
+		return
+	}
+
 	if h.relatedSvc == nil {
 		writeContentFetchError(w, provider)
 		return
 	}
 
-	resp, err := h.relatedSvc.Execute(r.Context(), provider, externalID, limit)
+	resp, err := h.relatedSvc.Execute(r.Context(), pn, externalID, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "get related tracks failed",
 			"error", err, "provider", provider, "external_id", externalID)
