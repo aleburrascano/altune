@@ -82,11 +82,16 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 
 
 func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
-	provider, ok := s.providers[providerName.String()]
-	results, degraded := fetchProviderResults(ctx, providerName, externalID, "album_tracks.provider_failed", ok,
-		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
-			return provider.GetAlbumTracks(ctx, pn, id)
-		})
+	var results []domain.SearchResult
+	var degraded *ContentFetchResponse
+	if provider, ok := s.providers[providerName.String()]; ok {
+		results, degraded = fetchProviderResults(ctx, providerName, externalID, "album_tracks.provider_failed",
+			func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+				return provider.GetAlbumTracks(ctx, pn, id)
+			})
+	} else {
+		degraded = errorContentResponse(providerName)
+	}
 
 	// Fallback: an unsupported/failing provider, or one that resolved zero
 	// tracks, falls back to a Deezer album search by title+artist when Deezer is

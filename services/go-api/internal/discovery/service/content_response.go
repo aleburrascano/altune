@@ -37,22 +37,19 @@ func emptyContentResponse(providerName domain.ProviderName) *ContentFetchRespons
 	}
 }
 
-// fetchProviderResults runs the "provider lookup → fetch → warn-degrade" prefix
-// shared by the content use cases (top-tracks, albums, related). found is the
-// caller's typed-map lookup result — the maps hold different provider port types, so
-// the lookup stays at the call site while the degrade contract lives here. On any
-// failure it returns a nil slice and a non-nil degraded response; on success it
-// returns the raw results and a nil response for the caller to shape/truncate.
+// fetchProviderResults runs the fetch → warn → degrade contract shared by the
+// content use cases. The caller is responsible for the provider-not-found guard
+// (if !ok { degraded = errorContentResponse(...) }); this function is only called
+// when a real provider is available, so fetch never captures a nil interface.
+// On a fetch error it returns a nil slice and a non-nil degraded response; on
+// success it returns the raw results and a nil response for the caller to
+// shape/truncate.
 func fetchProviderResults(
 	ctx context.Context,
 	providerName domain.ProviderName,
 	externalID, logKey string,
-	found bool,
 	fetch func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error),
 ) ([]domain.SearchResult, *ContentFetchResponse) {
-	if !found {
-		return nil, errorContentResponse(providerName)
-	}
 	results, err := fetch(ctx, providerName, externalID)
 	if err != nil {
 		slog.WarnContext(ctx, logKey,

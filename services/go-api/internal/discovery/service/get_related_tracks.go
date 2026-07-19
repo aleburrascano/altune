@@ -21,7 +21,10 @@ func NewGetRelatedTracksService(providers map[string]ports.RelatedTracksProvider
 
 func (s *GetRelatedTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName.String()]
-	results, degraded := fetchProviderResults(ctx, providerName, externalID, "related_tracks.provider_failed", ok,
+	if !ok {
+		return errorContentResponse(providerName), nil
+	}
+	results, degraded := fetchProviderResults(ctx, providerName, externalID, "related_tracks.provider_failed",
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			return provider.GetRelatedTracks(ctx, pn, id)
 		})
