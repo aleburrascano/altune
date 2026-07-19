@@ -93,7 +93,7 @@ type CreateTrackRequest struct {
 	AlbumArtist     *string  `json:"album_artist,omitempty"`
 	// FeaturedArtists are the guest ("feat.") credits carried from the discovery
 	// result the client saved, persisted on the track.
-	FeaturedArtists []FeaturedArtistDTO `json:"featured_artists,omitempty"`
+	FeaturedArtists []service.FeaturedArtistDTO `json:"featured_artists,omitempty"`
 	// SourceURL is the exact provider URL the saved result was discovered at
 	// (e.g. a SoundCloud permalink). When it is a directly-downloadable source,
 	// acquisition grabs that exact track instead of re-searching by metadata.
@@ -258,4 +258,27 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// domainFeaturedFromDTOs converts request DTOs into domain value objects, dropping
+// entries with an empty name.
+func domainFeaturedFromDTOs(dtos []service.FeaturedArtistDTO) []domain.FeaturedArtist {
+	if len(dtos) == 0 {
+		return nil
+	}
+	out := make([]domain.FeaturedArtist, 0, len(dtos))
+	for _, d := range dtos {
+		mbid := ""
+		if d.MBID != nil {
+			mbid = *d.MBID
+		}
+		deezerID := int64(0)
+		if d.DeezerID != nil {
+			deezerID = *d.DeezerID
+		}
+		if fa, ok := domain.NewFeaturedArtist(d.Name, mbid, deezerID); ok {
+			out = append(out, fa)
+		}
+	}
+	return out
 }
