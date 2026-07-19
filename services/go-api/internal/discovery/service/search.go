@@ -106,6 +106,24 @@ type Service struct {
 	bgWg sync.WaitGroup
 }
 
+// launchBackground starts a best-effort fire-and-forget goroutine on Service.
+// It detaches the context from request cancellation, increments the shutdown
+// wait-group, and defers both Done and a recover+log so panics in any background
+// work do not crash the process.
+func (s *Service) launchBackground(parentCtx context.Context, label string, fn func(ctx context.Context)) {
+	ctx := context.WithoutCancel(parentCtx)
+	s.bgWg.Add(1)
+	go func() {
+		defer s.bgWg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Warn("search.v2.background_panic", "label", label, "error", r)
+			}
+		}()
+		fn(ctx)
+	}()
+}
+
 // SearchOutput is the result envelope returned by the search use case and
 // mapped to the wire by the handler.
 type SearchOutput struct {
@@ -442,17 +460,14 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 	}
 	// Persist off the request path: the durable write must not add latency to the
 	// search, and it must outlive the request, so use a detached context.
-	bgCtx := context.WithoutCancel(ctx)
-	s.bgWg.Add(1)
-	go func() {
-		defer s.bgWg.Done()
+	s.launchBackground(ctx, "identity.persist_bridges", func(bgCtx context.Context) {
 		for _, b := range learned {
 			if err := s.identityStore.PersistBridges(bgCtx, b.kind, b.mbid, b.ids); err != nil {
 				slog.WarnContext(bgCtx, "identity.persist_failed",
 					"kind", b.kind.String(), "mbid", b.mbid, "error", err)
 			}
 		}
-	}()
+	})
 }
 
 // fanOut queries every provider in parallel, each bounded by a timeout and

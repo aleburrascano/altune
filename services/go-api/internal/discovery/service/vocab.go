@@ -26,16 +26,7 @@ func (s *Service) ingestVocabulary(parentCtx context.Context, rawQuery string, r
 	}
 	entries := buildVocabEntries(rawQuery, results)
 
-	ctx := context.WithoutCancel(parentCtx)
-	s.bgWg.Add(1)
-	go func() {
-		defer s.bgWg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Warn("search.v2.vocab_ingest_panic", "error", r)
-			}
-		}()
-
+	s.launchBackground(parentCtx, "vocab.ingest", func(ctx context.Context) {
 		ingestCtx, cancel := context.WithTimeout(ctx, vocabIngestTimeout)
 		defer cancel()
 		for _, e := range entries {
@@ -43,7 +34,7 @@ func (s *Service) ingestVocabulary(parentCtx context.Context, rawQuery string, r
 				slog.WarnContext(ingestCtx, "search.v2.vocab_ingest_failed", "term", e.Term, "error", err)
 			}
 		}
-	}()
+	})
 }
 
 var vocabKindByResultKind = map[domain.ResultKind]domain.VocabularyKind{
