@@ -78,20 +78,6 @@ type PlaylistDetailResponse struct {
 	Tracks             []TrackResponse `json:"tracks"`
 }
 
-// previewArtworkURLs selects up to domain.PreviewArtworkLimit distinct track
-// artwork URLs for a playlist's preview tile.
-func previewArtworkURLs(tracks []*domain.Track) []string {
-	urls := []string{}
-	seen := make(map[string]bool)
-	for _, t := range tracks {
-		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(urls) < domain.PreviewArtworkLimit {
-			urls = append(urls, *t.ArtworkURL)
-			seen[*t.ArtworkURL] = true
-		}
-	}
-	return urls
-}
-
 // playlistToResponse maps a playlist summary to its wire DTO — one mapper for
 // the create/list/rename responses (the detail response carries tracks too).
 func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string) PlaylistResponse {
@@ -179,7 +165,7 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		trackResponses[i] = service.TrackToDTO(t)
 	}
 
-	artworkURLs := previewArtworkURLs(tracks)
+	artworkURLs := service.PreviewArtworkURLs(tracks)
 
 	httputil.WriteJSON(w, http.StatusOK, PlaylistDetailResponse{
 		ID:                 playlist.ID.UUID(),
