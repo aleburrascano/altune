@@ -19,7 +19,7 @@ type StreamOutput struct {
 // streamTrackRepo is the narrow read/write this service actually calls, out
 // of ports.TrackRepository's full surface.
 type streamTrackRepo interface {
-	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
+	trackByIDGetter
 	Update(ctx context.Context, track *domain.Track) error
 }
 
