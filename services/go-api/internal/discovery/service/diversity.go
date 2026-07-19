@@ -103,7 +103,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		if len(g.otherIdxs) == 0 {
 			continue
 		}
-		collapsedList := make([]map[string]any, len(g.otherIdxs))
+		collapsedList := make([]domain.CollapsedArtistSummary, len(g.otherIdxs))
 		for j, idx := range g.otherIdxs {
 			other := results[idx]
 			// The collapsed entry's extras keep carrying mbid on the wire (it was an
@@ -112,14 +112,12 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 			if other.MBID != "" {
 				otherExtras["mbid"] = other.MBID
 			}
-			collapsedList[j] = map[string]any{
-				"title":    other.Title,
-				"subtitle": other.Subtitle,
-				"sources":  other.Sources,
-				"extras":   otherExtras,
-			}
-			if other.ImageURL != "" {
-				collapsedList[j]["image_url"] = other.ImageURL
+			collapsedList[j] = domain.CollapsedArtistSummary{
+				Title:    other.Title,
+				Subtitle: other.Subtitle,
+				ImageURL: other.ImageURL,
+				Sources:  other.Sources,
+				Extras:   otherExtras,
 			}
 			remove[idx] = true
 		}

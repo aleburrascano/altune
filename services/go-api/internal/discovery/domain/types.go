@@ -296,8 +296,19 @@ type SearchResult struct {
 	// "playcount", "playback_count", "likes_count", "reposts_count",
 	// "deezer_album_id", "track_number", "disc_number", "explicit", "copyright",
 	// "featured_artists" ([]map[string]any), "collapsed_artists"
-	// ([]map[string]any), "resolution_tier", "consensus_*", "artwork_path".
+	// ([]CollapsedArtistSummary), "resolution_tier", "consensus_*", "artwork_path".
 	Extras map[string]any
+}
+
+// CollapsedArtistSummary is the typed shape stored in the "collapsed_artists"
+// extra by CollapseArtistDuplicates: same-name artists folded into the primary.
+// JSON tags match the pre-existing wire keys so clients are unaffected.
+type CollapsedArtistSummary struct {
+	Title    string         `json:"title"`
+	Subtitle string         `json:"subtitle"`
+	ImageURL string         `json:"image_url,omitempty"`
+	Sources  []SourceRef    `json:"sources"`
+	Extras   map[string]any `json:"extras"`
 }
 
 // NewProviderResult builds the standard single-source, low-confidence result a
