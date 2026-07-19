@@ -79,9 +79,6 @@ func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *ht
 		return
 	}
 
-	items := make([]TrackResponse, len(tracks))
-	for i, t := range tracks {
-		items[i] = service.TrackToDTO(t)
-	}
+	items := tracksToDTO(tracks)
 	httputil.WriteJSON(w, http.StatusOK, featuredTracksResponse{Items: items, Total: len(items)})
 }
