@@ -51,7 +51,7 @@ func (s *DeezerEnrichmentService) Execute(
 		return domain.EmptyDeezerEnrichment(), nil
 	}
 
-	return ports.CachedLookup(ctx, s.cache, deezerNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
+	return CachedLookup(ctx, s.cache, deezerNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
 		func(ctx context.Context) (domain.DeezerEnrichment, bool, error) {
 			return resolveThenLookup(
 				ctx,

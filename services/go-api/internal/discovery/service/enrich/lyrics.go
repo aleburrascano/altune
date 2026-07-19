@@ -41,7 +41,7 @@ func (s *LyricsService) Execute(ctx context.Context, title, subtitle string) (do
 		return domain.EmptyDeezerLyrics(), nil
 	}
 
-	return ports.CachedLookup(ctx, s.cache, lyricsNameKey(artist, track), domain.EmptyDeezerLyrics(),
+	return CachedLookup(ctx, s.cache, lyricsNameKey(artist, track), domain.EmptyDeezerLyrics(),
 		func(ctx context.Context) (domain.DeezerLyrics, bool, error) {
 			trackID, err := s.provider.ResolveTrackID(ctx, artist, track)
 			if err != nil {

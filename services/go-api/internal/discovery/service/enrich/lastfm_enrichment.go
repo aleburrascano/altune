@@ -47,7 +47,7 @@ func (s *LastFmEnrichmentService) Execute(
 		return domain.EmptyLastFmEnrichment(), nil
 	}
 
-	return ports.CachedLookup(ctx, s.cache, lastfmNameKey(kind, artistName, entityTitle), domain.EmptyLastFmEnrichment(),
+	return CachedLookup(ctx, s.cache, lastfmNameKey(kind, artistName, entityTitle), domain.EmptyLastFmEnrichment(),
 		func(ctx context.Context) (domain.LastFmEnrichment, bool, error) {
 			e, err := s.enricher.Lookup(ctx, kind, artistName, entityTitle)
 			if err != nil {
