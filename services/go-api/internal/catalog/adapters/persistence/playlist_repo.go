@@ -38,7 +38,7 @@ func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Pla
 	return err
 }
 
-func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, []domain.PlaylistSummary, error) {
+func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]domain.PlaylistWithSummary, error) {
 	// track_count and preview_artwork are read-side projections computed in the
 	// same query — one round-trip for the whole playlists screen, no per-playlist
 	// follow-up. preview_artwork: up to four distinct artwork URLs in position
@@ -63,12 +63,11 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 		userId.UUID(), domain.PreviewArtworkLimit,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer rows.Close()
 
-	var playlists []*domain.Playlist
-	var summaries []domain.PlaylistSummary
+	var result []domain.PlaylistWithSummary
 	for rows.Next() {
 		var (
 			id         uuid.UUID
@@ -81,21 +80,23 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 		)
 		err := rows.Scan(&id, &uid, &name, &createdAt, &updatedAt, &trackCount, &artwork)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		playlists = append(playlists, &domain.Playlist{
-			ID:        domain.PlaylistIdFromUUID(id),
-			UserId:    shared.NewUserId(uid),
-			Name:      name,
-			CreatedAt: createdAt,
-			UpdatedAt: updatedAt,
-		})
-		summaries = append(summaries, domain.PlaylistSummary{
-			TrackCount:         trackCount,
-			PreviewArtworkURLs: artwork,
+		result = append(result, domain.PlaylistWithSummary{
+			Playlist: &domain.Playlist{
+				ID:        domain.PlaylistIdFromUUID(id),
+				UserId:    shared.NewUserId(uid),
+				Name:      name,
+				CreatedAt: createdAt,
+				UpdatedAt: updatedAt,
+			},
+			Summary: domain.PlaylistSummary{
+				TrackCount:         trackCount,
+				PreviewArtworkURLs: artwork,
+			},
 		})
 	}
-	return playlists, summaries, rows.Err()
+	return result, rows.Err()
 }
 
 func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {

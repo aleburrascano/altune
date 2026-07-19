@@ -89,7 +89,7 @@ func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 	}
 
 	// Act
-	got, _, err := repo.ListForUser(ctx, userId)
+	got, err := repo.ListForUser(ctx, userId)
 	if err != nil {
 		t.Fatalf("ListForUser() error = %v", err)
 	}
@@ -101,7 +101,7 @@ func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 
 	// Verify descending created_at order
 	for i := 1; i < len(got); i++ {
-		if got[i-1].CreatedAt.Before(got[i].CreatedAt) {
+		if got[i-1].Playlist.CreatedAt.Before(got[i].Playlist.CreatedAt) {
 			t.Errorf("playlists not in descending created_at order at index %d", i)
 		}
 	}
