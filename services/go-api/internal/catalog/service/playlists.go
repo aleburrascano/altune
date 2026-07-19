@@ -11,10 +11,6 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-type trackReader interface {
-	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-}
-
 type PlaylistLifecycleService struct {
 	playlistRepo ports.PlaylistRepository
 	events       events.Publisher
