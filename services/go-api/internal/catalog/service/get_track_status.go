@@ -23,5 +23,8 @@ func (s *GetTrackStatusService) Execute(ctx context.Context, userId shared.UserI
 	if err != nil {
 		return nil, fmt.Errorf("get track status: %w", err)
 	}
+	if track == nil {
+		return nil, ErrTrackNotFound
+	}
 	return track, nil
 }
