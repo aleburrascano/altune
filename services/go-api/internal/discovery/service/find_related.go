@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -55,7 +56,7 @@ func (s *FindRelatedService) Execute(
 		mu            sync.Mutex
 		groups        []domain.RelatedGroup
 		wg            sync.WaitGroup
-		providerCalls int
+		providerCalls atomic.Int32
 	)
 
 	for _, result := range organicResults[:topN] {
@@ -86,7 +87,7 @@ func (s *FindRelatedService) Execute(
 
 			deezerAlbumID := stringExtra(result, "deezer_album_id")
 			if deezerAlbumID != "" && s.albumProvider != nil {
-				if tryReserveProviderCall(&mu, &providerCalls, maxProviderLookups) {
+				if tryReserveProviderCall(&providerCalls, maxProviderLookups) {
 					wg.Add(1)
 					go func(r domain.SearchResult, albumID string) {
 						defer wg.Done()
@@ -115,7 +116,7 @@ func (s *FindRelatedService) Execute(
 				continue
 			}
 
-			if tryReserveProviderCall(&mu, &providerCalls, maxProviderLookups) {
+			if tryReserveProviderCall(&providerCalls, maxProviderLookups) {
 				wg.Add(1)
 				go func(r domain.SearchResult, artistID string) {
 					defer wg.Done()
@@ -145,14 +146,16 @@ func (s *FindRelatedService) Execute(
 	return groups
 }
 
-func tryReserveProviderCall(mu *sync.Mutex, calls *int, max int) bool {
-	mu.Lock()
-	ok := *calls < max
-	if ok {
-		*calls++
+func tryReserveProviderCall(calls *atomic.Int32, max int) bool {
+	for {
+		cur := calls.Load()
+		if cur >= int32(max) {
+			return false
+		}
+		if calls.CompareAndSwap(cur, cur+1) {
+			return true
+		}
 	}
-	mu.Unlock()
-	return ok
 }
 
 func extractDeezerID(r domain.SearchResult) string {
