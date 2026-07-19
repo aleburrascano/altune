@@ -15,14 +15,13 @@ import (
 	"github.com/google/uuid"
 )
 
+
 type TrackHandler struct {
-	addTrack         *service.AddTrackService
-	listTracks       *service.ListTracksService
-	getTrackStatus   *service.GetTrackStatusService
-	deleteTrack      *service.DeleteTrackService
-	setTrackNumber   *service.SetTrackNumberService
-	backfillFeatured *service.BackfillFeaturedService
-	listFeaturing    *service.ListFeaturingService
+	addTrack       *service.AddTrackService
+	listTracks     *service.ListTracksService
+	getTrackStatus *service.GetTrackStatusService
+	deleteTrack    *service.DeleteTrackService
+	setTrackNumber *service.SetTrackNumberService
 }
 
 func NewTrackHandler(
@@ -31,17 +30,13 @@ func NewTrackHandler(
 	getTrackStatus *service.GetTrackStatusService,
 	deleteTrack *service.DeleteTrackService,
 	setTrackNumber *service.SetTrackNumberService,
-	backfillFeatured *service.BackfillFeaturedService,
-	listFeaturing *service.ListFeaturingService,
 ) *TrackHandler {
 	return &TrackHandler{
-		addTrack:         addTrack,
-		listTracks:       listTracks,
-		getTrackStatus:   getTrackStatus,
-		deleteTrack:      deleteTrack,
-		setTrackNumber:   setTrackNumber,
-		backfillFeatured: backfillFeatured,
-		listFeaturing:    listFeaturing,
+		addTrack:       addTrack,
+		listTracks:     listTracks,
+		getTrackStatus: getTrackStatus,
+		deleteTrack:    deleteTrack,
+		setTrackNumber: setTrackNumber,
 	}
 }
 
@@ -49,8 +44,6 @@ func (h *TrackHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.handleListTracks)
 	r.Post("/", h.handleCreateTrack)
-	r.Get("/featuring", h.handleListFeaturing)
-	r.Post("/featured-backfill", h.handleBackfillFeatured)
 	r.Get("/{trackId}/status", h.handleGetTrackStatus)
 	r.Patch("/{trackId}/track-number", h.handleSetTrackNumber)
 	r.Delete("/{trackId}", h.handleDeleteTrack)
@@ -84,57 +77,6 @@ func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Reque
 
 type SetTrackNumberRequest struct {
 	TrackNumber int `json:"track_number"`
-}
-
-// handleBackfillFeatured resolves and persists featured artists for the authed
-// user's existing tracks (idempotent). Synchronous — the library is small.
-func (h *TrackHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
-	if !ok {
-		return
-	}
-	result, err := h.backfillFeatured.Execute(r.Context(), userId)
-	if err != nil {
-		httputil.HandleServiceError(w, r, err)
-		return
-	}
-	httputil.WriteJSON(w, http.StatusOK, result)
-}
-
-// handleListFeaturing returns the user's tracks crediting a featured artist,
-// identified by mbid, deezer_id, or name (in that precedence).
-func (h *TrackHandler) handleListFeaturing(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
-	if !ok {
-		return
-	}
-	q := r.URL.Query()
-	name := q.Get("name")
-	mbid := q.Get("mbid")
-	var deezerID int64
-	if v := q.Get("deezer_id"); v != "" {
-		deezerID, _ = strconv.ParseInt(v, 10, 64)
-	}
-	if name == "" && mbid == "" && deezerID == 0 {
-		httputil.BadRequest(w, "one of name, mbid, or deezer_id is required")
-		return
-	}
-
-	fa := domain.FeaturedArtistForQuery(name, mbid, deezerID)
-
-	tracks, err := h.listFeaturing.Execute(r.Context(), userId, fa)
-	if err != nil {
-		httputil.HandleServiceError(w, r, err)
-		return
-	}
-
-	items := make([]TrackResponse, len(tracks))
-	for i, t := range tracks {
-		items[i] = service.TrackToDTO(t)
-	}
-	httputil.WriteJSON(w, http.StatusOK, ListTracksResponse{
-		Items: items, Total: len(items), Limit: len(items), Offset: 0, HasMore: false,
-	})
 }
 
 // --- DTOs ---
