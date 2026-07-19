@@ -11,17 +11,13 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-type trackReader interface {
-	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-}
-
 type PlaylistMembershipService struct {
 	playlistRepo ports.PlaylistRepository
-	trackRepo    trackReader
+	trackRepo    trackByIDGetter
 	events       events.Publisher
 }
 
-func NewPlaylistMembershipService(playlistRepo ports.PlaylistRepository, trackRepo trackReader, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
+func NewPlaylistMembershipService(playlistRepo ports.PlaylistRepository, trackRepo trackByIDGetter, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
 	s := &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: events.NoopPublisher()}
 	for _, opt := range opts {
 		opt(s)

@@ -8,17 +8,13 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-type getTrackStatusRepo interface {
-	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-}
-
 // GetTrackStatusService returns a single track for the authenticated user,
 // used by the status-polling endpoint.
 type GetTrackStatusService struct {
-	trackRepo getTrackStatusRepo
+	trackRepo trackByIDGetter
 }
 
-func NewGetTrackStatusService(trackRepo getTrackStatusRepo) *GetTrackStatusService {
+func NewGetTrackStatusService(trackRepo trackByIDGetter) *GetTrackStatusService {
 	return &GetTrackStatusService{trackRepo: trackRepo}
 }
 
