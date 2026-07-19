@@ -11,12 +11,12 @@ import (
 )
 
 type GetArtistContentService struct {
-	providers map[string]ports.ArtistContentProvider
+	providers map[domain.ProviderName]ports.ArtistContentProvider
 	consensus *ConsensusService
 }
 
 func NewGetArtistContentService(
-	providers map[string]ports.ArtistContentProvider,
+	providers map[domain.ProviderName]ports.ArtistContentProvider,
 	opts ...ArtistContentOption,
 ) *GetArtistContentService {
 	s := &GetArtistContentService{providers: providers}
@@ -33,7 +33,7 @@ func WithConsensusService(c *ConsensusService) ArtistContentOption {
 }
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID string, limit int) (*ContentFetchResponse, error) {
-	provider, ok := s.providers[providerName.String()]
+	provider, ok := s.providers[providerName]
 	if !ok {
 		return errorContentResponse(providerName), nil
 	}
@@ -48,7 +48,7 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 }
 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
-	provider, ok := s.providers[providerName.String()]
+	provider, ok := s.providers[providerName]
 	if !ok {
 		return errorContentResponse(providerName), nil
 	}

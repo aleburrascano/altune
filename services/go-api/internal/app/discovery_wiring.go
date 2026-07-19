@@ -13,6 +13,7 @@ import (
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/adapters/providers"
+	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 )
@@ -88,22 +89,22 @@ func (a *App) wireDiscoveryContent(
 	// carries its collectionId/artistId, which keys the /lookup content endpoint.
 	itunesContent := providers.NewITunesAdapter(newDiscoveryClient())
 
-	albumProviders := map[string]discoveryPorts.AlbumContentProvider{
-		"deezer": deezerContent,
-		"itunes": itunesContent,
+	albumProviders := map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider{
+		discoveryDomain.ProviderDeezer: deezerContent,
+		discoveryDomain.ProviderITunes: itunesContent,
 	}
-	artistProviders := map[string]discoveryPorts.ArtistContentProvider{
-		"deezer": deezerContent,
-		"itunes": itunesContent,
+	artistProviders := map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider{
+		discoveryDomain.ProviderDeezer:     deezerContent,
+		discoveryDomain.ProviderITunes:     itunesContent,
 		// SoundCloud serves the underground long tail: an artist sourced from
 		// SoundCloud carries its numeric user id, which keys these endpoints.
-		"soundcloud": providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
+		discoveryDomain.ProviderSoundCloud: providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
 	}
 	// Last.fm top-tracks, keyed by MBID (identity-safe) — the client calls it only
 	// when the artist has a resolved MBID, so it never falls back to ambiguous
 	// name matching. Adds the scrobble-popular layer alongside Deezer/SoundCloud.
 	if a.cfg.HasLastFM() {
-		artistProviders["lastfm"] = providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
+		artistProviders[discoveryDomain.ProviderLastFM] = providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
 	}
 
 	// Related tracks are track-keyed: a SoundCloud-sourced track carries its

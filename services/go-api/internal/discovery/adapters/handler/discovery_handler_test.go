@@ -189,8 +189,8 @@ func discAssertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
 func buildDiscoveryRouter(
 	searchProvider *fakeSearchProvider,
 	historyRepo *fakeSearchHistoryRepo,
-	albumProviders map[string]ports.AlbumContentProvider,
-	artistProviders map[string]ports.ArtistContentProvider,
+	albumProviders map[discdomain.ProviderName]ports.AlbumContentProvider,
+	artistProviders map[discdomain.ProviderName]ports.ArtistContentProvider,
 ) chi.Router {
 	var providers []ports.SearchProvider
 	if searchProvider != nil {
@@ -492,18 +492,18 @@ func TestHandleAlbumTracks(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "unknown provider returns OK with error status",
+			name:       "unknown provider returns 400",
 			path:       "/discovery/albums/unknown_provider/12345/tracks",
 			albumProv:  &fakeAlbumContentProvider{results: []discdomain.SearchResult{}},
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			albumProviders := map[string]ports.AlbumContentProvider{
-				"deezer": tt.albumProv,
+			albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
+				discdomain.ProviderDeezer: tt.albumProv,
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
@@ -514,10 +514,12 @@ func TestHandleAlbumTracks(t *testing.T) {
 			discAssertStatus(t, rec, tt.wantStatus)
 			discAssertJSON(t, rec)
 
-			var resp ContentFetchResponseDTO
-			discDecodeJSON(t, rec, &resp)
-			if resp.Provider == "" {
-				t.Error("expected non-empty provider_name in response")
+			if tt.wantStatus == http.StatusOK {
+				var resp ContentFetchResponseDTO
+				discDecodeJSON(t, rec, &resp)
+				if resp.Provider == "" {
+					t.Error("expected non-empty provider_name in response")
+				}
 			}
 		})
 	}
@@ -550,18 +552,18 @@ func TestHandleArtistTopTracks(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "unknown provider returns OK with error status",
+			name:       "unknown provider returns 400",
 			path:       "/discovery/artists/unknown/789/top-tracks",
 			artistProv: &fakeArtistContentProvider{},
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			artistProviders := map[string]ports.ArtistContentProvider{
-				"deezer": tt.artistProv,
+			artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
+				discdomain.ProviderDeezer: tt.artistProv,
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
@@ -602,18 +604,18 @@ func TestHandleArtistAlbums(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "unknown provider returns OK with error status",
+			name:       "unknown provider returns 400",
 			path:       "/discovery/artists/unknown/789/albums",
 			artistProv: &fakeArtistContentProvider{},
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			artistProviders := map[string]ports.ArtistContentProvider{
-				"deezer": tt.artistProv,
+			artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
+				discdomain.ProviderDeezer: tt.artistProv,
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 

@@ -21,7 +21,7 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 		providerName  domain.ProviderName
 		externalID    string
 		limit         int
-		providers     map[string]ports.AlbumContentProvider
+		providers     map[domain.ProviderName]ports.AlbumContentProvider
 		wantStatus    domain.ProviderStatus
 		wantItemCount int
 	}{
@@ -30,8 +30,8 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 			providerName: domain.ProviderDeezer,
 			externalID:   "album-123",
 			limit:        0,
-			providers: map[string]ports.AlbumContentProvider{
-				"deezer": &fakeAlbumContentProvider{
+			providers: map[domain.ProviderName]ports.AlbumContentProvider{
+				domain.ProviderDeezer: &fakeAlbumContentProvider{
 					getAlbumTracksFn: func(_ context.Context, pn domain.ProviderName, extID string) ([]domain.SearchResult, error) {
 						if pn != domain.ProviderDeezer {
 							t.Errorf("expected provider deezer, got %s", pn.String())
@@ -51,7 +51,7 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 			providerName:  domain.ProviderSoundCloud,
 			externalID:    "album-123",
 			limit:         0,
-			providers:     map[string]ports.AlbumContentProvider{},
+			providers:     map[domain.ProviderName]ports.AlbumContentProvider{},
 			wantStatus:    domain.ProviderStatusError,
 			wantItemCount: 0,
 		},
@@ -60,8 +60,8 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 			providerName: domain.ProviderDeezer,
 			externalID:   "album-err",
 			limit:        0,
-			providers: map[string]ports.AlbumContentProvider{
-				"deezer": &fakeAlbumContentProvider{
+			providers: map[domain.ProviderName]ports.AlbumContentProvider{
+				domain.ProviderDeezer: &fakeAlbumContentProvider{
 					getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return nil, errors.New("upstream timeout")
 					},
@@ -75,8 +75,8 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 			providerName: domain.ProviderDeezer,
 			externalID:   "album-123",
 			limit:        2,
-			providers: map[string]ports.AlbumContentProvider{
-				"deezer": &fakeAlbumContentProvider{
+			providers: map[domain.ProviderName]ports.AlbumContentProvider{
+				domain.ProviderDeezer: &fakeAlbumContentProvider{
 					getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return sampleTracks, nil
 					},

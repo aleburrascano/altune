@@ -16,7 +16,7 @@ const albumFeaturedConcurrency = 5
 // featured artists individually via the Deezer adapter's LookupTrackFeatured
 // (deezerFeaturedLookup, declared in featured_resolver.go).
 type GetAlbumTracksService struct {
-	providers        map[string]ports.AlbumContentProvider
+	providers        map[domain.ProviderName]ports.AlbumContentProvider
 	featured         deezerFeaturedLookup
 	fallbackSearcher ports.SearchProvider
 }
@@ -24,7 +24,7 @@ type GetAlbumTracksService struct {
 type AlbumTracksOption func(*GetAlbumTracksService)
 
 func NewGetAlbumTracksService(
-	providers map[string]ports.AlbumContentProvider,
+	providers map[domain.ProviderName]ports.AlbumContentProvider,
 	opts ...AlbumTracksOption,
 ) *GetAlbumTracksService {
 	s := &GetAlbumTracksService{providers: providers}
@@ -84,7 +84,7 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
 	var results []domain.SearchResult
 	var degraded *ContentFetchResponse
-	if provider, ok := s.providers[providerName.String()]; ok {
+	if provider, ok := s.providers[providerName]; ok {
 		results, degraded = fetchProviderResults(ctx, providerName, externalID, "album_tracks.provider_failed",
 			func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 				return provider.GetAlbumTracks(ctx, pn, id)
@@ -99,7 +99,7 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName domain
 	// owns, so it stays here rather than in the shared helper.
 	if degraded != nil || len(results) == 0 {
 		if albumTitle != "" && s.fallbackSearcher != nil {
-			if deezer, hasDeezer := s.providers[domain.ProviderDeezer.String()]; hasDeezer {
+			if deezer, hasDeezer := s.providers[domain.ProviderDeezer]; hasDeezer {
 				return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
 			}
 		}
