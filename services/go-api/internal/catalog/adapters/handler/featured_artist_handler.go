@@ -27,10 +27,7 @@ func NewFeaturedArtistHandler(
 	}
 }
 
-// AddRoutes registers the featured-artist routes onto an existing chi.Router.
-// This handler shares the /tracks prefix with TrackHandler, so the caller is
-// responsible for mounting both onto the same subrouter.
-func (h *FeaturedArtistHandler) AddRoutes(r chi.Router) {
+func (h *FeaturedArtistHandler) addRoutes(r chi.Router) {
 	r.Get("/featuring", h.handleListFeaturing)
 	r.Post("/featured-backfill", h.handleBackfillFeatured)
 }

@@ -22,6 +22,7 @@ type TrackHandler struct {
 	getTrackStatus *service.GetTrackStatusService
 	deleteTrack    *service.DeleteTrackService
 	setTrackNumber *service.SetTrackNumberService
+	featuredArtist *FeaturedArtistHandler
 }
 
 func NewTrackHandler(
@@ -30,6 +31,7 @@ func NewTrackHandler(
 	getTrackStatus *service.GetTrackStatusService,
 	deleteTrack *service.DeleteTrackService,
 	setTrackNumber *service.SetTrackNumberService,
+	featuredArtist *FeaturedArtistHandler,
 ) *TrackHandler {
 	return &TrackHandler{
 		addTrack:       addTrack,
@@ -37,6 +39,7 @@ func NewTrackHandler(
 		getTrackStatus: getTrackStatus,
 		deleteTrack:    deleteTrack,
 		setTrackNumber: setTrackNumber,
+		featuredArtist: featuredArtist,
 	}
 }
 
@@ -47,6 +50,9 @@ func (h *TrackHandler) Routes() chi.Router {
 	r.Get("/{trackId}/status", h.handleGetTrackStatus)
 	r.Patch("/{trackId}/track-number", h.handleSetTrackNumber)
 	r.Delete("/{trackId}", h.handleDeleteTrack)
+	if h.featuredArtist != nil {
+		h.featuredArtist.addRoutes(r)
+	}
 	return r
 }
 
