@@ -4,11 +4,12 @@ import (
 	"context"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -44,21 +45,17 @@ func (s *Service) fillArtwork(ctx context.Context, results []domain.SearchResult
 	top := results[:limit]
 	rest := results[limit:]
 
-	sem := make(chan struct{}, artworkFillConcurrency)
-	var wg sync.WaitGroup
+	var g errgroup.Group
+	g.SetLimit(artworkFillConcurrency)
 	filled := make([]domain.SearchResult, len(top))
 
 	for i, r := range top {
-		sem <- struct{}{} // acquire before spawning so at most artworkFillConcurrency goroutines exist
-		wg.Add(1)
-		go func(idx int, result domain.SearchResult) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			filled[idx] = s.fillArtworkOne(fillCtx, result)
-		}(i, r)
+		g.Go(func() error {
+			filled[i] = s.fillArtworkOne(fillCtx, r)
+			return nil
+		})
 	}
-
-	wg.Wait()
+	_ = g.Wait()
 	return append(filled, rest...)
 }
 
