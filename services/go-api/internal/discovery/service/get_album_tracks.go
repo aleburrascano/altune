@@ -94,7 +94,7 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName domain
 	// owns, so it stays here rather than in the shared helper.
 	if degraded != nil || len(results) == 0 {
 		if albumTitle != "" && s.fallbackSearcher != nil {
-			if deezer, hasDeezer := s.providers["deezer"]; hasDeezer {
+			if deezer, hasDeezer := s.providers[domain.ProviderDeezer.String()]; hasDeezer {
 				return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
 			}
 		}
