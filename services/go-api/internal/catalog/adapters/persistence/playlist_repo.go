@@ -14,6 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// playlistTrackCountSubquery is the canonical track_count projection for a
+// playlist row, shared by ListForUser and GetByID. One definition so a change
+// to how the count is computed (e.g. excluding soft-deleted tracks) is a
+// single-line edit instead of a hand-sync across both queries.
+const playlistTrackCountSubquery = `(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id)`
+
 var _ ports.PlaylistRepository = (*PgxPlaylistRepository)(nil)
 
 type PgxPlaylistRepository struct {
@@ -32,14 +38,14 @@ func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Pla
 	return err
 }
 
-func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, error) {
+func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]domain.PlaylistWithSummary, error) {
 	// track_count and preview_artwork are read-side projections computed in the
 	// same query — one round-trip for the whole playlists screen, no per-playlist
 	// follow-up. preview_artwork: up to four distinct artwork URLs in position
 	// order (the playlist tile).
 	rows, err := r.pool.Query(ctx,
 		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
-			(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id) AS track_count,
+			`+playlistTrackCountSubquery+` AS track_count,
 			COALESCE((
 				SELECT array_agg(url) FROM (
 					SELECT t.artwork_url AS url
@@ -48,20 +54,20 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 					WHERE pt.playlist_id = p.id AND t.artwork_url IS NOT NULL
 					GROUP BY t.artwork_url
 					ORDER BY MIN(pt.position) ASC
-					LIMIT 4
+					LIMIT $2
 				) sub
 			), '{}') AS preview_artwork
 		FROM playlists p
 		WHERE p.user_id = $1
 		ORDER BY p.created_at DESC`,
-		userId.UUID(),
+		userId.UUID(), domain.PreviewArtworkLimit,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var playlists []*domain.Playlist
+	var result []domain.PlaylistWithSummary
 	for rows.Next() {
 		var (
 			id         uuid.UUID
@@ -76,27 +82,30 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 		if err != nil {
 			return nil, err
 		}
-		p := &domain.Playlist{
-			ID:        domain.PlaylistIdFromUUID(id),
-			UserId:    shared.NewUserId(uid),
-			Name:      name,
-			CreatedAt: createdAt,
-			UpdatedAt: updatedAt,
-		}
-		p.TrackCount = trackCount
-		p.PreviewArtworkURLs = artwork
-		playlists = append(playlists, p)
+		result = append(result, domain.PlaylistWithSummary{
+			Playlist: &domain.Playlist{
+				ID:        domain.PlaylistIdFromUUID(id),
+				UserId:    shared.NewUserId(uid),
+				Name:      name,
+				CreatedAt: createdAt,
+				UpdatedAt: updatedAt,
+			},
+			Summary: domain.PlaylistSummary{
+				TrackCount:         trackCount,
+				PreviewArtworkURLs: artwork,
+			},
+		})
 	}
-	return playlists, rows.Err()
+	return result, rows.Err()
 }
 
-func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, error) {
+func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {
 	// track_count is projected here too (not just on ListForUser) so single-
 	// playlist responses (e.g. rename) report the real count without loading the
 	// track rows.
 	row := r.pool.QueryRow(ctx,
 		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
-			(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id) AS track_count
+			`+playlistTrackCountSubquery+` AS track_count
 		FROM playlists p WHERE p.id = $1 AND p.user_id = $2`,
 		id.UUID(), userId.UUID(),
 	)
@@ -110,32 +119,30 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 	)
 	err := row.Scan(&pid, &uid, &name, &createdAt, &updatedAt, &trackCount)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, domain.PlaylistSummary{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, domain.PlaylistSummary{}, err
 	}
-	return &domain.Playlist{
-		ID:         domain.PlaylistIdFromUUID(pid),
-		UserId:     shared.NewUserId(uid),
-		Name:       name,
-		CreatedAt:  createdAt,
-		UpdatedAt:  updatedAt,
-		TrackCount: trackCount,
-	}, nil
+	playlist := &domain.Playlist{
+		ID:        domain.PlaylistIdFromUUID(pid),
+		UserId:    shared.NewUserId(uid),
+		Name:      name,
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
+	}
+	return playlist, domain.PlaylistSummary{TrackCount: trackCount}, nil
 }
 
 func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {
-	playlist, err := r.GetByID(ctx, id, userId)
+	playlist, _, err := r.GetByID(ctx, id, userId)
 	if err != nil || playlist == nil {
 		return nil, nil, err
 	}
 
 	rows, err := r.pool.Query(ctx,
 		`SELECT pt.track_id, pt.position,
-			t.id, t.user_id, t.title, t.artist, t.album, t.duration_seconds,
-			t.added_at, t.artwork_url, t.acquisition_status, t.dedup_key,
-			t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason
+			`+trackColumnsPrefixed+`
 		FROM playlist_tracks pt
 		JOIN tracks t ON t.id = pt.track_id
 		WHERE pt.playlist_id = $1
@@ -215,20 +222,29 @@ func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, playlistId doma
 		return err
 	}
 
-	_, err = tx.Exec(ctx,
+	if err := renumberPlaylistPositions(ctx, tx, playlistId.UUID()); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// renumberPlaylistPositions collapses a playlist's track positions back to a
+// contiguous 0..N-1 range (order-preserving), so a removal never leaves a gap.
+// Shared by every write path that can drop a playlist_tracks row (playlist
+// track removal here; track deletion in track_repo.go) — one definition so
+// the renumbering rule can't drift between them.
+func renumberPlaylistPositions(ctx context.Context, tx pgx.Tx, playlistId uuid.UUID) error {
+	_, err := tx.Exec(ctx,
 		`UPDATE playlist_tracks SET position = sub.new_pos
 		FROM (
 			SELECT track_id, ROW_NUMBER() OVER (ORDER BY position) - 1 AS new_pos
 			FROM playlist_tracks WHERE playlist_id = $1
 		) sub
 		WHERE playlist_tracks.playlist_id = $1 AND playlist_tracks.track_id = sub.track_id`,
-		playlistId.UUID(),
+		playlistId,
 	)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
+	return err
 }
 
 func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {

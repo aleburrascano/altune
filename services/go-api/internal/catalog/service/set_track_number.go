@@ -5,9 +5,14 @@ import (
 	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 )
+
+// trackNumberSetter is the narrow write this service actually calls, out of
+// ports.TrackRepository's full surface.
+type trackNumberSetter interface {
+	SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (updated bool, err error)
+}
 
 // SetTrackNumberService persists a track's album position when it is unset.
 // Backs the client's persist-as-you-browse flow: when the album detail derives a
@@ -15,10 +20,10 @@ import (
 // saved before track_number was captured is corrected in the database. Fill-only
 // at the repository, so re-running never overwrites a real value.
 type SetTrackNumberService struct {
-	trackRepo ports.TrackRepository
+	trackRepo trackNumberSetter
 }
 
-func NewSetTrackNumberService(trackRepo ports.TrackRepository) *SetTrackNumberService {
+func NewSetTrackNumberService(trackRepo trackNumberSetter) *SetTrackNumberService {
 	return &SetTrackNumberService{trackRepo: trackRepo}
 }
 

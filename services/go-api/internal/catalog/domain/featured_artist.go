@@ -35,6 +35,30 @@ func NewFeaturedArtist(name, mbid string, deezerID int64) (FeaturedArtist, bool)
 	}, true
 }
 
+// NewFeaturedArtistIdentityOnly builds a FeaturedArtist for identity-based
+// lookups (e.g. "list tracks featuring this artist") where the caller has an
+// mbid or deezer id but no display name. Unlike NewFeaturedArtist, it does not
+// require a non-empty name — IdentityKey still resolves from mbid/deezerID.
+func NewFeaturedArtistIdentityOnly(name, mbid string, deezerID int64) FeaturedArtist {
+	return FeaturedArtist{
+		Name:     strings.TrimSpace(name),
+		MBID:     strings.TrimSpace(mbid),
+		DeezerID: deezerID,
+		Role:     RoleFeatured,
+	}
+}
+
+// FeaturedArtistForQuery builds a FeaturedArtist for query operations (e.g.
+// "list tracks featuring this artist") from raw HTTP parameters. Uses the full
+// constructor when a non-empty name is present; falls back to identity-only so
+// mbid/deezerID still resolve an IdentityKey without a display name.
+func FeaturedArtistForQuery(name, mbid string, deezerID int64) FeaturedArtist {
+	if fa, ok := NewFeaturedArtist(name, mbid, deezerID); ok {
+		return fa
+	}
+	return NewFeaturedArtistIdentityOnly(name, mbid, deezerID)
+}
+
 // NormalizedName lower-cases and collapses whitespace — the name component of the
 // identity key and the fallback grouping key.
 func (f FeaturedArtist) NormalizedName() string {

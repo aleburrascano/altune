@@ -23,6 +23,12 @@ type ResolvedAudioURL struct {
 	ExpiresAt time.Time
 }
 
+// trackBatchReader is the narrow read this service actually calls, out of
+// ports.TrackRepository's full surface.
+type trackBatchReader interface {
+	ListByIDs(ctx context.Context, userId shared.UserId, ids []domain.TrackId) ([]*domain.Track, error)
+}
+
 // AudioURLService mints presigned, directly-streamable URLs for a user's ready
 // tracks so the native player streams from storage instead of proxying every
 // byte through the API. Tracks the caller can't stream (not found, not owned,
@@ -30,12 +36,12 @@ type ResolvedAudioURL struct {
 // When the audio store cannot sign (filesystem / local dev), nothing is returned
 // and every track falls back to the proxy.
 type AudioURLService struct {
-	trackRepo ports.TrackRepository
+	trackRepo trackBatchReader
 	signer    ports.AudioURLSigner // nil when the store can't presign
 	ttl       time.Duration
 }
 
-func NewAudioURLService(trackRepo ports.TrackRepository, store ports.AudioStore) *AudioURLService {
+func NewAudioURLService(trackRepo trackBatchReader, store ports.AudioStore) *AudioURLService {
 	signer, _ := store.(ports.AudioURLSigner)
 	return &AudioURLService{trackRepo: trackRepo, signer: signer, ttl: audioURLTTL}
 }

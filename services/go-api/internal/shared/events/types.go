@@ -18,6 +18,15 @@ type Publisher interface {
 	Publish(userId shared.UserId, eventType string, payload map[string]any)
 }
 
+// NoopPublisher discards every event. Callers that don't wire a real
+// Publisher can default to this instead of guarding every Publish call
+// against a nil field.
+func NoopPublisher() Publisher { return noopPublisher{} }
+
+type noopPublisher struct{}
+
+func (noopPublisher) Publish(shared.UserId, string, map[string]any) {}
+
 type Subscriber interface {
 	Subscribe(userId shared.UserId) (ch <-chan Event, cancel func())
 	Replay(userId shared.UserId, afterID uint64) []Event

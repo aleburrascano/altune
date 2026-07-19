@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 
@@ -37,11 +38,11 @@ func TestBackfillFeaturedService(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 
 	t.Run("resolves and persists, idempotent", func(t *testing.T) {
-		repo := newMockTrackRepo()
+		repo := catalogtest.NewTrackRepo()
 		t1 := newTrackFeat(t, userId, "Song A")
 		t2 := newTrackFeat(t, userId, "Song B") // no featured
-		repo.seed(t1)
-		repo.seed(t2)
+		repo.Seed(t1)
+		repo.Seed(t2)
 
 		resolver := fakeResolver{byTitle: map[string][]domain.FeaturedArtist{
 			"Song A": {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
@@ -67,8 +68,8 @@ func TestBackfillFeaturedService(t *testing.T) {
 	})
 
 	t.Run("per-track resolver error is skipped, not fatal", func(t *testing.T) {
-		repo := newMockTrackRepo()
-		repo.seed(newTrackFeat(t, userId, "X"))
+		repo := catalogtest.NewTrackRepo()
+		repo.Seed(newTrackFeat(t, userId, "X"))
 		svc := NewBackfillFeaturedService(repo, fakeResolver{err: errors.New("provider down")})
 		res, err := svc.Execute(ctx, userId)
 		if err != nil {

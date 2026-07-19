@@ -5,26 +5,28 @@ import (
 	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 )
+
+// trackLister is the narrow read this service actually calls, out of
+// ports.TrackRepository's full surface.
+type trackLister interface {
+	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
+}
 
 type ListTracksOutput struct {
 	Tracks  []*domain.Track
 	Total   int
+	Limit   int
 	HasMore bool
 }
 
 type ListTracksService struct {
-	trackRepo ports.TrackRepository
+	trackRepo trackLister
 }
 
-func NewListTracksService(trackRepo ports.TrackRepository) *ListTracksService {
+func NewListTracksService(trackRepo trackLister) *ListTracksService {
 	return &ListTracksService{trackRepo: trackRepo}
-}
-
-func (s *ListTracksService) GetByID(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (*domain.Track, error) {
-	return s.trackRepo.GetByID(ctx, trackId, userId)
 }
 
 func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, limit, offset int) (*ListTracksOutput, error) {
@@ -43,6 +45,7 @@ func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, l
 	return &ListTracksOutput{
 		Tracks:  tracks,
 		Total:   total,
+		Limit:   limit,
 		HasMore: offset+len(tracks) < total,
 	}, nil
 }

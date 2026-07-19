@@ -270,14 +270,17 @@ func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.Fea
 	listTracksSvc := catalogService.NewListTracksService(trackRepo)
 	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore, catalogService.WithDeleteTrackEvents(tap))
 	setTrackNumberSvc := catalogService.NewSetTrackNumberService(trackRepo)
-	playlistSvc := catalogService.NewPlaylistService(playlistRepo, trackRepo, catalogService.WithPlaylistEvents(tap))
+	playlistLifecycleSvc := catalogService.NewPlaylistLifecycleService(playlistRepo, catalogService.WithPlaylistLifecycleEvents(tap))
+	playlistMembershipSvc := catalogService.NewPlaylistMembershipService(playlistRepo, trackRepo, catalogService.WithPlaylistMembershipEvents(tap))
 
 	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(trackRepo, featuredBridge)
 	listFeaturingSvc := catalogService.NewListFeaturingService(trackRepo)
 
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, deleteTrackSvc, setTrackNumberSvc, backfillFeaturedSvc, listFeaturingSvc)
-	playlistHandler := catalogHandler.NewPlaylistHandler(playlistSvc)
-	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, scheduler)
+	getTrackStatusSvc := catalogService.NewGetTrackStatusService(trackRepo)
+	featuredArtistHandler := catalogHandler.NewFeaturedArtistHandler(backfillFeaturedSvc, listFeaturingSvc)
+	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, getTrackStatusSvc, deleteTrackSvc, setTrackNumberSvc, featuredArtistHandler)
+	playlistHandler := catalogHandler.NewPlaylistHandler(playlistLifecycleSvc, playlistMembershipSvc)
+	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, catalogService.WithStreamScheduler(scheduler))
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
 	audioURLSvc := catalogService.NewAudioURLService(trackRepo, audioStore)
 	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc)
@@ -530,7 +533,9 @@ func (a *App) mountRoutes(
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(auth.Middleware(verifier))
 
-		r.Mount("/tracks", cat.trackHandler.Routes())
+		r.Route("/tracks", func(r chi.Router) {
+				r.Mount("/", cat.trackHandler.Routes())
+			})
 		r.Get("/tracks/{trackId}/audio", cat.streamHandler.HandleStreamAudio)
 		r.Post("/tracks/{trackId}/audio/recover", cat.streamHandler.HandleRecover)
 		r.Post("/audio-urls", cat.audioURLHandler.HandleResolve)

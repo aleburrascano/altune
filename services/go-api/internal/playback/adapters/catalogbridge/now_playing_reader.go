@@ -10,18 +10,23 @@ import (
 	"fmt"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
-	catalogPorts "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
 )
 
 var _ ports.NowPlayingReader = (*NowPlayingReader)(nil)
 
-type NowPlayingReader struct {
-	tracks catalogPorts.TrackRepository
+// trackReader is the narrow read this bridge actually calls, out of the
+// catalog TrackRepository adapter's full surface.
+type trackReader interface {
+	GetByID(ctx context.Context, id catalogDomain.TrackId, userId shared.UserId) (*catalogDomain.Track, error)
 }
 
-func NewNowPlayingReader(tracks catalogPorts.TrackRepository) *NowPlayingReader {
+type NowPlayingReader struct {
+	tracks trackReader
+}
+
+func NewNowPlayingReader(tracks trackReader) *NowPlayingReader {
 	return &NowPlayingReader{tracks: tracks}
 }
 
