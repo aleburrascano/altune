@@ -202,7 +202,14 @@ func (r *PlaylistRepo) ListForUser(_ context.Context, userId shared.UserId) ([]d
 	var result []domain.PlaylistWithSummary
 	for _, p := range r.Playlists {
 		if p.UserId == userId {
-			result = append(result, domain.PlaylistWithSummary{Playlist: p})
+			tracks := r.PlaylistTracks[p.ID.String()]
+			result = append(result, domain.PlaylistWithSummary{
+				Playlist: p,
+				Summary: domain.PlaylistSummary{
+					TrackCount:         len(tracks),
+					PreviewArtworkURLs: domain.PreviewArtworkURLs(tracks),
+				},
+			})
 		}
 	}
 	return result, nil
