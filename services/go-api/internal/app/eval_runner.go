@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"altune/go-api/internal/admin/evalmeter"
@@ -44,10 +45,11 @@ func (a *App) buildEvalRunner() evalmeter.Runner {
 	// shared result cache (a cached hit would score the cache, not the pipeline,
 	// masking a regression for the TTL) and display enrichment (artwork HTTP the
 	// title/subtitle match never reads) while keeping every rank-affecting flag live.
-	evalSvc := BuildSearchServiceWithTransport(a.cfg, a.pool, a.redisClient, nil, nil, true)
+	evalSvc := BuildSearchServiceWithTransport(a.cfg, a.pool, a.redisClient, nil, nil, nil, true)
 
 	evalUser, err := shared.ParseUserId(a.cfg.OperatorUserID)
 	if err != nil {
+		slog.Warn("eval runner: invalid OperatorUserID, using random", "error", err)
 		evalUser = shared.NewUserId(uuid.New())
 	}
 

@@ -118,7 +118,7 @@ func recordCorpus(
 	// paces itself within each provider's limit instead of hammering them into
 	// throttling — the captured responses are clean, not self-inflicted timeouts.
 	rec := httptrace.NewRecorder(app.NewLiveTransport())
-	svc := app.BuildSearchServiceWithTransport(cfg, pool, nil, nil, rec, true)
+	svc := app.BuildSearchServiceWithTransport(cfg, pool, nil, nil, rec, nil, true)
 	searcher := searchAdapter{svc: svc}
 
 	report := discoveryEval.RunLibraryEvalMode(ctx, ents, searcher, concurrency, topK, mode, progress)
@@ -146,7 +146,7 @@ func recordArtistCorpus(
 	progress func(done, total int),
 ) (discoveryEval.HarnessReport, error) {
 	rec := httptrace.NewRecorder(app.NewLiveTransport())
-	svc := app.BuildSearchServiceWithTransport(cfg, pool, nil, nil, rec, true)
+	svc := app.BuildSearchServiceWithTransport(cfg, pool, nil, nil, rec, nil, true)
 	searcher := searchAdapter{svc: svc}
 
 	report := discoveryEval.RunArtistIntentEval(ctx, artists, searcher, concurrency, topK, corpus, progress)
@@ -169,6 +169,6 @@ func buildReplaySearcher(cfg *config.Config, pool *pgxpool.Pool, dir string) (se
 		return searchAdapter{}, err
 	}
 	replayer := httptrace.NewReplayer(exchanges)
-	svc := app.BuildSearchServiceWithTransport(cfg, pool, nil, nil, replayer, true)
+	svc := app.BuildSearchServiceWithTransport(cfg, pool, nil, nil, replayer, nil, true)
 	return searchAdapter{svc: svc}, nil
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -133,5 +134,6 @@ func sortedKindNames(kinds map[domain.ResultKind]bool) []string {
 	for k := range kinds {
 		out = append(out, k.String())
 	}
+	sort.Strings(out)
 	return out
 }

@@ -112,31 +112,31 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	slog.Info("waiting for background tasks")
-	if a.alertMonitor != nil {
-		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer bgCancel()
-		a.alertMonitor.Shutdown(bgCtx)
-	}
-	if a.eventFeed != nil {
-		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer bgCancel()
-		a.eventFeed.Shutdown(bgCtx)
-	}
-	if a.evalMeter != nil {
-		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer bgCancel()
-		a.evalMeter.Shutdown(bgCtx)
-	}
-	if a.vocabRefresh != nil {
-		bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer bgCancel()
-		a.vocabRefresh.Shutdown(bgCtx)
-	}
-	if a.scheduler != nil {
-		bgCtx, bgCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer bgCancel()
-		a.scheduler.Shutdown(bgCtx)
-	}
+	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
+		if a.alertMonitor != nil {
+			a.alertMonitor.Shutdown(ctx)
+		}
+	})
+	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
+		if a.eventFeed != nil {
+			a.eventFeed.Shutdown(ctx)
+		}
+	})
+	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
+		if a.evalMeter != nil {
+			a.evalMeter.Shutdown(ctx)
+		}
+	})
+	a.shutdownComponent(10*time.Second, func(ctx context.Context) {
+		if a.vocabRefresh != nil {
+			a.vocabRefresh.Shutdown(ctx)
+		}
+	})
+	a.shutdownComponent(30*time.Second, func(ctx context.Context) {
+		if a.scheduler != nil {
+			a.scheduler.Shutdown(ctx)
+		}
+	})
 	// Always drain the shared background group (corpus refresh, metrics rollup —
 	// and in-flight acquisitions when the scheduler exists) with a bound. The
 	// drain is owned here, not by the scheduler: without it, the no-audio-store
@@ -146,6 +146,15 @@ func (a *App) Run(ctx context.Context) error {
 	a.cleanup()
 	slog.Info("shutdown complete")
 	return nil
+}
+
+// shutdownComponent calls fn with a bounded context. Used to give each
+// shutdownable component its own timeout without repeating the
+// WithTimeout/defer-cancel boilerplate at every call site.
+func (a *App) shutdownComponent(timeout time.Duration, fn func(context.Context)) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	fn(ctx)
 }
 
 // drainBackground waits for every goroutine registered on the App's WaitGroup,
@@ -176,7 +185,12 @@ func (a *App) setup(ctx context.Context) error {
 
 	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL)
 
-	verifier, err := a.buildTokenVerifier(ctx)
+	verifier, err := authAdapters.NewSupabaseJWTVerifier(
+		ctx,
+		a.cfg.SupabaseJWTJWKSURL,
+		a.cfg.SupabaseProjectURL,
+		a.cfg.SupabaseJWTAud,
+	)
 	if err != nil {
 		return fmt.Errorf("auth: %w", err)
 	}
@@ -192,7 +206,7 @@ func (a *App) setup(ctx context.Context) error {
 	queueHandler := a.wirePlayback(cat.trackRepo)
 
 	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler)
-	a.wireAdmin(ctx, r, verifier, tap, disc)
+	a.wireAdmin(ctx, r, verifier, tap, disc.requestStore, disc.searchSvc)
 
 	a.startAlertMonitor(ctx)
 
@@ -313,28 +327,101 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 			a.cfg.MusicBrainzUserAgent,
 		)
 	}
-	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
-
-	// vocabStore is shared by suggest + the periodic vocabulary refresh; the
-	// search pipeline builds its own inside BuildSearchService.
 	vocabStore := BuildVocabularyStore(a.redisClient)
-
+	featuredBridge := a.buildFeaturedBridge(sharedMB)
+	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
+	content := a.buildContentServices(sharedMB, vocabStore)
+	enrichSvc := a.buildEnrichmentService(sharedMB)
 
-	// Featured-artist resolver (discovery-sourced) + catalog bridge. The resolver
-	// tolerates a nil MB searcher (MusicBrainz not configured) and degrades to
-	// Deezer-only; a nil interface (not a typed-nil pointer) keeps that safe.
-	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
-	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
-	if sharedMB != nil {
-		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
+	requestStore := requeststore.New()
+	searchSvc := BuildSearchServiceWithTransport(
+		a.cfg,
+		a.pool,
+		a.redisClient,
+		eventStore,
+		requeststore.NewTransport(defaultLiveTransport, requestStore),
+		vocabStore,
+		false,
+	)
+
+	// Behavioral-ranking refresh: when the flag is on, recompute the satisfaction
+	// score map off the request path on a ticker. Inert (the option is unset)
+	// otherwise. Bound to the app context so it exits on graceful shutdown.
+	if a.cfg.BehavioralRankingEnabled {
+		searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
+		slog.Info("behavioral ranking refresh started")
 	}
-	featuredBridge := discoverybridge.NewFeaturedResolver(featuredResolver)
 
-	deezerContentClient := newDiscoveryClient()
-	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
+	// Self-growing eval corpus: when a path is configured, nightly-materialize the
+	// behavioral labels (search→engagement positives, wrong_album hard negatives)
+	// into the eval corpus format. Off when the path is empty.
+	a.startCorpusRefresh(ctx, eventStore)
+
+	// Mission Control metrics rollup: persist the daily aggregate gauges so the
+	// console's history survives restart. Always on (cheap aggregate upsert).
+	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
+
+	eventSvc := discoveryService.NewRecordEventService(eventStore)
+
+	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
+		Search:       searchSvc,
+		History:      historySvc,
+		ClearHistory: clearHistorySvc,
+		Album:        content.album,
+		Artist:       content.artist,
+		Related:      content.related,
+		Enrich:       enrichSvc,
+		Suggest:      content.suggest,
+		Event:        eventSvc,
+	})
+	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
+	a.providerHealth = providerhealth.NewStore()
+	discoveryH.WithProviderHealth(a.providerHealth)
+	discoveryH.WithRequestTrace(requestStore)
+
+	a.startVocabularyRefresh(vocabStore)
+
+	return discoveryWiring{
+		handler:        discoveryH,
+		requestStore:   requestStore,
+		searchSvc:      searchSvc,
+		featuredBridge: featuredBridge,
+	}
+}
+
+// buildFeaturedBridge builds the featured-artist resolver and its catalog
+// bridge. The resolver tolerates a nil MB searcher (MusicBrainz not configured)
+// and degrades to Deezer-only; a nil interface (not a typed-nil pointer) keeps
+// that safe.
+func (a *App) buildFeaturedBridge(sharedMB *providers.MusicBrainzAdapter) *discoverybridge.FeaturedResolver {
+	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
+	if sharedMB != nil {
+		return discoverybridge.NewFeaturedResolver(
+			discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer),
+		)
+	}
+	return discoverybridge.NewFeaturedResolver(
+		discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer),
+	)
+}
+
+// contentWiring carries the content-service values wireDiscovery consumes.
+type contentWiring struct {
+	album   *discoveryService.GetAlbumTracksService
+	artist  *discoveryService.GetArtistContentService
+	related *discoveryService.GetRelatedTracksService
+	suggest *discoveryService.SuggestService
+}
+
+// buildContentServices builds the album, artist, related, and suggest services.
+func (a *App) buildContentServices(
+	sharedMB *providers.MusicBrainzAdapter,
+	vocabStore discoveryPorts.VocabularyStore,
+) contentWiring {
+	deezerContent := providers.NewDeezerAdapter(newDiscoveryClient())
 	// iTunes is a second mainstream source of truth for discography/tracklist
 	// (docs/providers/itunes.md cap 5): an iTunes-sourced album/artist result
 	// carries its collectionId/artistId, which keys the /lookup content endpoint.
@@ -363,101 +450,52 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{
 		"soundcloud": providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
 	}
-	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
-
-	albumSvc := discoveryService.NewGetAlbumTracksService(
-		albumProviders,
-		discoveryService.WithTrackFeatured(deezerContent),
-	)
 
 	// Multi-provider consensus: ALL providers are equal sources, merged into a
 	// union. Built via the shared BuildConsensusProviders so coverage signal B
 	// measures the same provider set.
-	consensusProviders := BuildConsensusProviders(a.cfg)
-
+	consensusProviders := BuildConsensusProviders(a.cfg, nil)
 	var consensusOpts []discoveryService.ConsensusOption
 	if sharedMB != nil {
 		consensusOpts = append(consensusOpts, discoveryService.WithMBAuthority(sharedMB))
 	}
 	consensusSvc := discoveryService.NewConsensusService(consensusProviders, consensusOpts...)
 
-	var artistContentOpts []discoveryService.ArtistContentOption
-	artistContentOpts = append(artistContentOpts, discoveryService.WithConsensusService(consensusSvc))
-	artistSvc := discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
+	albumSvc := discoveryService.NewGetAlbumTracksService(
+		albumProviders,
+		discoveryService.WithTrackFeatured(deezerContent),
+	)
+	artistSvc := discoveryService.NewGetArtistContentService(
+		artistProviders,
+		discoveryService.WithConsensusService(consensusSvc),
+	)
+	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
-	// The recording transport wraps the shared live transport so every provider
-	// call on a correlated request is captured into the drill-down store, keyed by
-	// correlation id. Bounded + degrades silently — never affects the search path.
-	requestStore := requeststore.New()
-	searchSvc := BuildSearchServiceWithTransport(
-		a.cfg,
-		a.pool,
-		a.redisClient,
-		eventStore,
-		requeststore.NewTransport(defaultLiveTransport, requestStore),
-		false,
+	return contentWiring{
+		album:   albumSvc,
+		artist:  artistSvc,
+		related: relatedSvc,
+		suggest: suggestSvc,
+	}
+}
+
+// buildEnrichmentService builds the MusicBrainz detail-open enrichment service.
+// Returns nil when MusicBrainz is not configured; the handler degrades to an
+// empty DTO in that case.
+func (a *App) buildEnrichmentService(sharedMB *providers.MusicBrainzAdapter) *discoveryService.EnrichmentService {
+	if sharedMB == nil {
+		return nil
+	}
+	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
+	return discoveryService.NewEnrichmentService(
+		sharedMB,
+		buildArtworkChain(clientFactory{}, a.cfg),
+		enrichmentCache,
+		// Memoize each name resolution so the search path can attach the MBID to
+		// a non-MB result later (cap 5 warm).
+		discoveryService.WithMBIDMemo(enrichmentCache),
 	)
-
-	// Behavioral-ranking refresh: when the flag is on, recompute the satisfaction
-	// score map off the request path on a ticker. Inert (the option is unset)
-	// otherwise. Bound to the app context so it exits on graceful shutdown.
-	if a.cfg.BehavioralRankingEnabled {
-		searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
-		slog.Info("behavioral ranking refresh started")
-	}
-
-	// Self-growing eval corpus: when a path is configured, nightly-materialize the
-	// behavioral labels (search→engagement positives, wrong_album hard negatives)
-	// into the eval corpus format. Off when the path is empty.
-	a.startCorpusRefresh(ctx, eventStore)
-
-	// Mission Control metrics rollup: persist the daily aggregate gauges so the
-	// console's history survives restart. Always on (cheap aggregate upsert).
-	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
-
-	eventSvc := discoveryService.NewRecordEventService(eventStore)
-
-	// MusicBrainz detail-open enrichment: genres/year/rating/external-ids + the
-	// HD MBID-keyed cover via the existing artwork chain. Only when MB is
-	// configured; nil otherwise (the handler degrades to an empty DTO).
-	var enrichSvc *discoveryService.EnrichmentService
-	if sharedMB != nil {
-		enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
-		enrichSvc = discoveryService.NewEnrichmentService(
-			sharedMB,
-			buildArtworkChain(clientFactory{}, a.cfg),
-			enrichmentCache,
-			// Memoize each name resolution so the search path can attach the MBID to
-			// a non-MB result later (cap 5 warm).
-			discoveryService.WithMBIDMemo(enrichmentCache),
-		)
-	}
-
-	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
-		Search:       searchSvc,
-		History:      historySvc,
-		ClearHistory: clearHistorySvc,
-		Album:        albumSvc,
-		Artist:       artistSvc,
-		Related:      relatedSvc,
-		Enrich:       enrichSvc,
-		Suggest:      suggestSvc,
-		Event:        eventSvc,
-	})
-	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
-	a.providerHealth = providerhealth.NewStore()
-	discoveryH.WithProviderHealth(a.providerHealth)
-	discoveryH.WithRequestTrace(requestStore)
-
-	a.startVocabularyRefresh(vocabStore)
-
-	return discoveryWiring{
-		handler:        discoveryH,
-		requestStore:   requestStore,
-		searchSvc:      searchSvc,
-		featuredBridge: featuredBridge,
-	}
 }
 
 // mountRoutes builds the router: middleware, the public health probe, and the
@@ -516,7 +554,8 @@ func (a *App) wireAdmin(
 	r *chi.Mux,
 	verifier auth.TokenVerifier,
 	tap *eventtap.Tap,
-	disc discoveryWiring,
+	requestStore *requeststore.Store,
+	searchSvc *discoveryService.Service,
 ) {
 	a.eventFeed = eventtap.NewFeed()
 	a.eventFeed.Start(ctx, tap)
@@ -538,9 +577,9 @@ func (a *App) wireAdmin(
 		WithProviderHealth(a.providerHealth).
 		WithAcquisition(acqReader).
 		WithEvalMeter(a.evalMeter).
-		WithRequestStore(disc.requestStore).
-		WithReRunner(a.buildReRunner(disc.searchSvc)).
-		WithSearchInspector(a.buildSearchInspector(disc.searchSvc))
+		WithRequestStore(requestStore).
+		WithReRunner(a.buildReRunner(searchSvc)).
+		WithSearchInspector(a.buildSearchInspector(searchSvc))
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Get("/", adminH.ServeIndex)        // public shell — holds no data
 		ar.Get("/config", adminH.ServeConfig) // public client config for sign-in
@@ -570,10 +609,9 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 	detail := adminHandler.DependencyDetail{CheckedAt: time.Now().UTC()}
 
 	dbStatus := "ok"
-	switch {
-	case a.pool == nil:
+	if a.pool == nil {
 		dbStatus = "not_configured"
-	default:
+	} else {
 		start := time.Now()
 		if !database.CheckHealth(ctx, a.pool).OK {
 			dbStatus = "down"
@@ -583,10 +621,9 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 	}
 
 	redisStatus := "ok"
-	switch {
-	case a.redisClient == nil:
+	if a.redisClient == nil {
 		redisStatus = "not_configured"
-	default:
+	} else {
 		start := time.Now()
 		if err := a.redisClient.Ping(ctx).Err(); err != nil {
 			redisStatus = "down"
@@ -638,45 +675,40 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 	// message carries the aggregate count only — never the query text or any user
 	// id (cardinality / privacy).
 	if a.cfg.AlertZeroResultThreshold > 0 {
-		eventQuery := discoveryPersistence.NewPgxEventStore(a.pool)
-		threshold := a.cfg.AlertZeroResultThreshold
-		coverage := adminAlert.Condition{
-			Key: "coverage_zero_result",
-			Eval: func(ctx context.Context) *adminAlert.Alert {
-				since := time.Now().UTC().Add(-24 * time.Hour)
-				rows, err := eventQuery.ZeroResultQueries(ctx, since, 1000)
-				if err != nil {
-					slog.WarnContext(ctx, "coverage alert query failed", "error", err)
-					return nil
-				}
-				total := 0
-				for _, r := range rows {
-					total += r.Count
-				}
-				if total < threshold {
-					return nil
-				}
-				return &adminAlert.Alert{
-					Title:    "altune discovery coverage gap",
-					Message:  fmt.Sprintf("zero-result searches in 24h: %d (threshold %d)", total, threshold),
-					Severity: adminAlert.SeveritySignal,
-				}
-			},
-		}
-		conditions = append(conditions, coverage)
+		conditions = append(conditions, buildCoverageCondition(a.pool, a.cfg.AlertZeroResultThreshold))
 	}
 
 	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...)
 	a.alertMonitor.Start(ctx)
 }
 
-func (a *App) buildTokenVerifier(ctx context.Context) (auth.TokenVerifier, error) {
-	return authAdapters.NewSupabaseJWTVerifier(
-		ctx,
-		a.cfg.SupabaseJWTJWKSURL,
-		a.cfg.SupabaseProjectURL,
-		a.cfg.SupabaseJWTAud,
-	)
+// buildCoverageCondition returns an alert condition that pages when zero-result
+// searches in the last 24h exceed threshold.
+func buildCoverageCondition(pool *pgxpool.Pool, threshold int) adminAlert.Condition {
+	eventQuery := discoveryPersistence.NewPgxEventStore(pool)
+	return adminAlert.Condition{
+		Key: "coverage_zero_result",
+		Eval: func(ctx context.Context) *adminAlert.Alert {
+			since := time.Now().UTC().Add(-24 * time.Hour)
+			rows, err := eventQuery.ZeroResultQueries(ctx, since, 1000)
+			if err != nil {
+				slog.WarnContext(ctx, "coverage alert query failed", "error", err)
+				return nil
+			}
+			total := 0
+			for _, r := range rows {
+				total += r.Count
+			}
+			if total < threshold {
+				return nil
+			}
+			return &adminAlert.Alert{
+				Title:    "altune discovery coverage gap",
+				Message:  fmt.Sprintf("zero-result searches in 24h: %d (threshold %d)", total, threshold),
+				Severity: adminAlert.SeveritySignal,
+			}
+		},
+	}
 }
 
 func (a *App) buildAudioStore() catalogPorts.AudioStore {
@@ -808,29 +840,14 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 	}
 	builder := eval.NewCorpusBuilder(store)
 	const lookback = 30 * 24 * time.Hour
-	run := func() {
+	a.startTicker(ctx, 24*time.Hour, func() {
 		since := time.Now().UTC().Add(-lookback)
 		if err := builder.Materialize(ctx, since, since.Format("2006-01-02"), a.cfg.BehavioralCorpusPath); err != nil {
 			slog.WarnContext(ctx, "behavioral corpus materialize failed", "error", err)
 			return
 		}
 		slog.InfoContext(ctx, "behavioral corpus materialized", "path", a.cfg.BehavioralCorpusPath)
-	}
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		run()
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				run()
-			}
-		}
-	}()
+	})
 	slog.Info("behavioral corpus refresh started", "path", a.cfg.BehavioralCorpusPath)
 }
 
@@ -839,30 +856,35 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 // discovery_metrics so the console's week-over-week history survives restart.
 // Best-effort; bound to the app context for graceful shutdown.
 func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.MetricsRollupStore) {
-	run := func() {
+	a.startTicker(ctx, 6*time.Hour, func() {
 		now := time.Now().UTC()
 		for _, day := range []time.Time{now, now.Add(-24 * time.Hour)} {
 			if err := store.RollupDay(ctx, day); err != nil {
 				slog.WarnContext(ctx, "discovery metrics rollup failed", "error", err)
 			}
 		}
-	}
+	})
+	slog.Info("discovery metrics rollup started")
+}
+
+// startTicker runs fn immediately, then on every interval until ctx is
+// cancelled. The goroutine is tracked on the App's WaitGroup.
+func (a *App) startTicker(ctx context.Context, interval time.Duration, fn func()) {
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		run()
-		ticker := time.NewTicker(6 * time.Hour)
+		fn()
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				run()
+				fn()
 			}
 		}
 	}()
-	slog.Info("discovery metrics rollup started")
 }
 
 func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) {
