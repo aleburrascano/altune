@@ -194,56 +194,22 @@ func (a *SoundCloudAPIAdapter) fetchSearchPage(ctx context.Context, u string) (t
 // page is plenty — album/artist relevance lives at the head, so the deep
 // pagination the track long tail needs would only add latency here.
 func (a *SoundCloudAPIAdapter) searchAlbums(ctx context.Context, query string) ([]domain.SearchResult, error) {
-	var out []domain.SearchResult
-	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
-		u := fmt.Sprintf(
+	return scFetchList(ctx, a, func(clientID string) string {
+		return fmt.Sprintf(
 			"%s/search/albums?q=%s&client_id=%s&limit=%d",
 			a.baseURL, url.QueryEscape(query), url.QueryEscape(clientID), scSearchLimit,
 		)
-		var body scAlbumSearchResponse
-		status, err := a.getJSON(ctx, u, &body)
-		if err != nil {
-			return status, err
-		}
-		out = make([]domain.SearchResult, 0, len(body.Collection))
-		for _, al := range body.Collection {
-			if r, ok := mapSoundCloudAPIAlbum(al); ok {
-				out = append(out, r)
-			}
-		}
-		return status, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	}, mapSoundCloudAPIAlbum)
 }
 
 // searchArtists fetches one page of api-v2 user results (SoundCloud's "artist").
 func (a *SoundCloudAPIAdapter) searchArtists(ctx context.Context, query string) ([]domain.SearchResult, error) {
-	var out []domain.SearchResult
-	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
-		u := fmt.Sprintf(
+	return scFetchList(ctx, a, func(clientID string) string {
+		return fmt.Sprintf(
 			"%s/search/users?q=%s&client_id=%s&limit=%d",
 			a.baseURL, url.QueryEscape(query), url.QueryEscape(clientID), scSearchLimit,
 		)
-		var body scUserSearchResponse
-		status, err := a.getJSON(ctx, u, &body)
-		if err != nil {
-			return status, err
-		}
-		out = make([]domain.SearchResult, 0, len(body.Collection))
-		for _, u := range body.Collection {
-			if r, ok := mapSoundCloudAPIUser(u); ok {
-				out = append(out, r)
-			}
-		}
-		return status, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	}, mapSoundCloudAPIUser)
 }
 
 // resolveAndFetch runs fetch with a resolved client_id, re-resolving once on an
@@ -265,6 +231,40 @@ func (a *SoundCloudAPIAdapter) resolveAndFetch(ctx context.Context, fetch func(c
 		_, err = fetch(id)
 	}
 	return err
+}
+
+// scFetchList fetches one api-v2 collection page (client_id auth-retry included)
+// and maps each item to a SearchResult. urlFn builds the request URL from the
+// resolved client_id; mapFn maps one decoded item and drops the ones it rejects.
+// It is the shared shape behind every single-page SoundCloud search/content
+// endpoint — only the URL, the item type, and the mapper vary.
+func scFetchList[T any](
+	ctx context.Context,
+	a *SoundCloudAPIAdapter,
+	urlFn func(clientID string) string,
+	mapFn func(T) (domain.SearchResult, bool),
+) ([]domain.SearchResult, error) {
+	var out []domain.SearchResult
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		var body struct {
+			Collection []T `json:"collection"`
+		}
+		status, err := a.getJSON(ctx, urlFn(clientID), &body)
+		if err != nil {
+			return status, err
+		}
+		out = make([]domain.SearchResult, 0, len(body.Collection))
+		for _, item := range body.Collection {
+			if r, ok := mapFn(item); ok {
+				out = append(out, r)
+			}
+		}
+		return status, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // Resolve implements ports.ArtworkResolver: it searches SoundCloud for the
@@ -368,57 +368,23 @@ func (a *SoundCloudAPIAdapter) doResolve(ctx context.Context, clientID, permalin
 // popular tracks. externalID is the SoundCloud numeric user id, which a
 // SoundCloud-sourced artist result already carries in its SourceRef.
 func (a *SoundCloudAPIAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	var out []domain.SearchResult
-	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
-		u := fmt.Sprintf(
+	return scFetchList(ctx, a, func(clientID string) string {
+		return fmt.Sprintf(
 			"%s/users/%s/toptracks?client_id=%s&limit=%d",
 			a.baseURL, url.PathEscape(externalID), url.QueryEscape(clientID), scArtistContentLimit,
 		)
-		var body scSearchResponse
-		status, err := a.getJSON(ctx, u, &body)
-		if err != nil {
-			return status, err
-		}
-		out = make([]domain.SearchResult, 0, len(body.Collection))
-		for _, t := range body.Collection {
-			if r, ok := mapSoundCloudAPITrack(t); ok {
-				out = append(out, r)
-			}
-		}
-		return status, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	}, mapSoundCloudAPITrack)
 }
 
 // GetArtistAlbums implements ports.ArtistContentProvider: an artist's albums
 // (typed playlists). externalID is the SoundCloud numeric user id.
 func (a *SoundCloudAPIAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	var out []domain.SearchResult
-	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
-		u := fmt.Sprintf(
+	return scFetchList(ctx, a, func(clientID string) string {
+		return fmt.Sprintf(
 			"%s/users/%s/albums?client_id=%s&limit=%d",
 			a.baseURL, url.PathEscape(externalID), url.QueryEscape(clientID), scArtistContentLimit,
 		)
-		var body scAlbumSearchResponse
-		status, err := a.getJSON(ctx, u, &body)
-		if err != nil {
-			return status, err
-		}
-		out = make([]domain.SearchResult, 0, len(body.Collection))
-		for _, al := range body.Collection {
-			if r, ok := mapSoundCloudAPIAlbum(al); ok {
-				out = append(out, r)
-			}
-		}
-		return status, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	}, mapSoundCloudAPIAlbum)
 }
 
 // GetRelatedTracks implements ports.RelatedTracksProvider: SoundCloud's per-track
@@ -426,29 +392,12 @@ func (a *SoundCloudAPIAdapter) GetArtistAlbums(ctx context.Context, _ domain.Pro
 // SoundCloud-sourced track result already carries in its SourceRef. Reuses the
 // track mapper, so related items are ordinary track SearchResults.
 func (a *SoundCloudAPIAdapter) GetRelatedTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	var out []domain.SearchResult
-	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
-		u := fmt.Sprintf(
+	return scFetchList(ctx, a, func(clientID string) string {
+		return fmt.Sprintf(
 			"%s/tracks/%s/related?client_id=%s&limit=%d",
 			a.baseURL, url.PathEscape(externalID), url.QueryEscape(clientID), scRelatedLimit,
 		)
-		var body scSearchResponse
-		status, err := a.getJSON(ctx, u, &body)
-		if err != nil {
-			return status, err
-		}
-		out = make([]domain.SearchResult, 0, len(body.Collection))
-		for _, t := range body.Collection {
-			if r, ok := mapSoundCloudAPITrack(t); ok {
-				out = append(out, r)
-			}
-		}
-		return status, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+	}, mapSoundCloudAPITrack)
 }
 
 // getJSON performs a GET and decodes a 200 body into dst, returning the HTTP
@@ -456,7 +405,7 @@ func (a *SoundCloudAPIAdapter) GetRelatedTracks(ctx context.Context, _ domain.Pr
 func (a *SoundCloudAPIAdapter) getJSON(ctx context.Context, u string, dst any) (int, error) {
 	status, body, err := getBytes(ctx, a.client, u, withHeader("User-Agent", scUserAgent))
 	if err != nil {
-		return status, fmt.Errorf("soundcloud api-v2: status %d", status)
+		return status, fmt.Errorf("soundcloud api-v2: %w", err)
 	}
 	if err := json.Unmarshal(body, dst); err != nil {
 		return status, fmt.Errorf("decode response: %w", err)
