@@ -291,16 +291,6 @@ func ambiguousArtistNamesFlat(results []domain.SearchResult) map[string]bool {
 	return ambiguous
 }
 
-func stringExtra(r domain.SearchResult, key string) string {
-	if r.Extras == nil {
-		return ""
-	}
-	if v, ok := r.Extras[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
 func completenessOf(r domain.SearchResult) int {
 	n := 0
 	if r.ImageURL != "" {

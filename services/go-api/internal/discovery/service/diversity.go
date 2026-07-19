@@ -155,5 +155,4 @@ func copyExtras(src map[string]any) map[string]any {
 	return dst
 }
 
-// stringExtra and completenessOf (the merge.go helpers) are the single
-// definitions; find_related and consensus call through to them.
+// completenessOf is defined in merge.go.
