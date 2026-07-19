@@ -93,7 +93,7 @@ type Service struct {
 	eventStore      ports.EventStore
 	artworkResolver ports.TaggingArtworkResolver
 	artworkCache    ports.ArtworkCache
-	albumValidator  ports.AlbumValidator
+	albumValidator  ports.ArtistIdentityResolver
 	identityBridge  ports.IdentityBridge
 	mbidIndex       ports.MBIDIndex
 	identityStore   ports.IdentityStore
@@ -153,7 +153,7 @@ func WithArtworkCache(c ports.ArtworkCache) Option {
 }
 
 // WithAlbumValidator enables artist disambiguation (MusicBrainz identity).
-func WithAlbumValidator(v ports.AlbumValidator) Option {
+func WithAlbumValidator(v ports.ArtistIdentityResolver) Option {
 	return func(s *Service) { s.albumValidator = v }
 }
 
