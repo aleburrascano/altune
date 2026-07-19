@@ -21,9 +21,11 @@ type GetAlbumTracksService struct {
 	fallbackSearcher ports.SearchProvider
 }
 
+type AlbumTracksOption func(*GetAlbumTracksService)
+
 func NewGetAlbumTracksService(
 	providers map[string]ports.AlbumContentProvider,
-	opts ...func(*GetAlbumTracksService),
+	opts ...AlbumTracksOption,
 ) *GetAlbumTracksService {
 	s := &GetAlbumTracksService{providers: providers}
 	for _, opt := range opts {
@@ -33,7 +35,7 @@ func NewGetAlbumTracksService(
 }
 
 // WithTrackFeatured enables per-track featured-artist enrichment of album tracks.
-func WithTrackFeatured(f deezerFeaturedLookup) func(*GetAlbumTracksService) {
+func WithTrackFeatured(f deezerFeaturedLookup) AlbumTracksOption {
 	return func(s *GetAlbumTracksService) { s.featured = f }
 }
 
@@ -41,7 +43,7 @@ func WithTrackFeatured(f deezerFeaturedLookup) func(*GetAlbumTracksService) {
 // search-then-fetch fallback (see deezerSearchFallback). Without this the
 // fallback never fires, which is the correct default for tests that only
 // exercise the primary provider path.
-func WithAlbumFallbackSearcher(sp ports.SearchProvider) func(*GetAlbumTracksService) {
+func WithAlbumFallbackSearcher(sp ports.SearchProvider) AlbumTracksOption {
 	return func(s *GetAlbumTracksService) { s.fallbackSearcher = sp }
 }
 
