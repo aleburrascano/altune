@@ -84,22 +84,6 @@ func (s *PlaylistLifecycleService) Delete(ctx context.Context, userId shared.Use
 	return nil
 }
 
-// PreviewArtworkURLs selects up to domain.PreviewArtworkLimit distinct track
-// artwork URLs in the order they appear, for a playlist's preview tile. Used by
-// the Get handler path where tracks are already loaded in Go; the List path
-// delegates this selection to the SQL projection instead.
-func PreviewArtworkURLs(tracks []*domain.Track) []string {
-	urls := []string{}
-	seen := make(map[string]bool)
-	for _, t := range tracks {
-		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(urls) < domain.PreviewArtworkLimit {
-			urls = append(urls, *t.ArtworkURL)
-			seen[*t.ArtworkURL] = true
-		}
-	}
-	return urls
-}
-
 func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, name string) (*domain.Playlist, domain.PlaylistSummary, error) {
 	playlist, summary, err := s.playlistRepo.GetByID(ctx, playlistId, userId)
 	if err != nil {

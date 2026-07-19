@@ -151,3 +151,19 @@ func validatePlaylistName(name string) error {
 	}
 	return nil
 }
+
+// PreviewArtworkURLs selects up to PreviewArtworkLimit distinct artwork URLs
+// from tracks in order, for a playlist's preview tile. Used on the Get handler
+// path where tracks are already loaded in Go; the List path delegates this
+// selection to the SQL projection instead.
+func PreviewArtworkURLs(tracks []*Track) []string {
+	urls := []string{}
+	seen := make(map[string]bool)
+	for _, t := range tracks {
+		if t.ArtworkURL != nil && !seen[*t.ArtworkURL] && len(urls) < PreviewArtworkLimit {
+			urls = append(urls, *t.ArtworkURL)
+			seen[*t.ArtworkURL] = true
+		}
+	}
+	return urls
+}

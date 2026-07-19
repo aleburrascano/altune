@@ -160,7 +160,7 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	trackResponses := tracksToDTO(tracks)
 
-	artworkURLs := service.PreviewArtworkURLs(tracks)
+	artworkURLs := domain.PreviewArtworkURLs(tracks)
 
 	httputil.WriteJSON(w, http.StatusOK, PlaylistDetailResponse{
 		ID:                 playlist.ID.UUID(),
