@@ -196,7 +196,7 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, playlistToResponse(playlist, summary.TrackCount, nil))
+	httputil.WriteJSON(w, http.StatusOK, playlistToResponse(playlist, summary.TrackCount, summary.PreviewArtworkURLs))
 }
 
 func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
