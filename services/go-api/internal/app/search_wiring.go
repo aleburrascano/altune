@@ -11,6 +11,7 @@ import (
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/phonetics"
 	"altune/go-api/internal/shared/textnorm"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -304,6 +305,6 @@ func BuildVocabularyStore(redisClient *goredis.Client) discoveryPorts.Vocabulary
 	return discoveryCacheAdapters.NewVocabularyStore(
 		redisClient,
 		textnorm.NormalizeForMatch,
-		discoveryCacheAdapters.WithMetaphone(discoveryService.MetaphoneKey),
+		discoveryCacheAdapters.WithMetaphone(phonetics.MetaphoneKey),
 	)
 }
