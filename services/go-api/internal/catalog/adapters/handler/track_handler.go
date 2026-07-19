@@ -50,9 +50,7 @@ func (h *TrackHandler) Routes() chi.Router {
 	r.Get("/{trackId}/status", h.handleGetTrackStatus)
 	r.Patch("/{trackId}/track-number", h.handleSetTrackNumber)
 	r.Delete("/{trackId}", h.handleDeleteTrack)
-	if h.featuredArtist != nil {
-		h.featuredArtist.addRoutes(r)
-	}
+	h.featuredArtist.addRoutes(r)
 	return r
 }
 
