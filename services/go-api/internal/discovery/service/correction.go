@@ -53,12 +53,22 @@ func (s *CorrectionService) correctWholeQuery(ctx context.Context, norm string) 
 	if err != nil || len(candidates) == 0 {
 		return nil
 	}
-	for _, c := range candidates {
-		if c.TermNorm == norm && c.Kind != domain.VocabKindQuery {
-			return nil
-		}
+	if isExactVocabMatch(candidates, norm) {
+		return nil
 	}
 	return pickBestCorrection(norm, candidates)
+}
+
+// isExactVocabMatch reports whether any candidate is an exact non-query vocabulary
+// match for norm — meaning the input is already a confirmed entity term and should
+// not be corrected.
+func isExactVocabMatch(candidates []domain.VocabularyEntry, norm string) bool {
+	for _, c := range candidates {
+		if c.TermNorm == norm && c.Kind != domain.VocabKindQuery {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string) *CorrectionResult {
@@ -89,14 +99,7 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 			continue
 		}
 
-		exactMatch := false
-		for _, c := range candidates {
-			if c.TermNorm == token && c.Kind != domain.VocabKindQuery {
-				exactMatch = true
-				break
-			}
-		}
-		if exactMatch {
+		if isExactVocabMatch(candidates, token) {
 			corrected[i] = token
 			continue
 		}
