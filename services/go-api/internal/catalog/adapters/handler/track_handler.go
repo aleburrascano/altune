@@ -120,6 +120,14 @@ type ListTracksResponse struct {
 	HasMore bool            `json:"has_more"`
 }
 
+func tracksToDTO(tracks []*domain.Track) []TrackResponse {
+	out := make([]TrackResponse, len(tracks))
+	for i, t := range tracks {
+		out[i] = service.TrackToDTO(t)
+	}
+	return out
+}
+
 // --- Handlers ---
 
 func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) {
@@ -137,13 +145,8 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	items := make([]TrackResponse, len(result.Tracks))
-	for i, t := range result.Tracks {
-		items[i] = service.TrackToDTO(t)
-	}
-
 	httputil.WriteJSON(w, http.StatusOK, ListTracksResponse{
-		Items:   items,
+		Items:   tracksToDTO(result.Tracks),
 		Total:   result.Total,
 		Limit:   result.Limit,
 		Offset:  offset,
