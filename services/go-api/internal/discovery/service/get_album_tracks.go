@@ -16,8 +16,9 @@ const albumFeaturedConcurrency = 5
 // featured artists individually via the Deezer adapter's LookupTrackFeatured
 // (deezerFeaturedLookup, declared in featured_resolver.go).
 type GetAlbumTracksService struct {
-	providers map[string]ports.AlbumContentProvider
-	featured  deezerFeaturedLookup
+	providers        map[string]ports.AlbumContentProvider
+	featured         deezerFeaturedLookup
+	fallbackSearcher ports.SearchProvider
 }
 
 func NewGetAlbumTracksService(
@@ -34,6 +35,14 @@ func NewGetAlbumTracksService(
 // WithTrackFeatured enables per-track featured-artist enrichment of album tracks.
 func WithTrackFeatured(f deezerFeaturedLookup) func(*GetAlbumTracksService) {
 	return func(s *GetAlbumTracksService) { s.featured = f }
+}
+
+// WithAlbumFallbackSearcher wires the SearchProvider used by the Deezer
+// search-then-fetch fallback (see deezerSearchFallback). Without this the
+// fallback never fires, which is the correct default for tests that only
+// exercise the primary provider path.
+func WithAlbumFallbackSearcher(sp ports.SearchProvider) func(*GetAlbumTracksService) {
+	return func(s *GetAlbumTracksService) { s.fallbackSearcher = sp }
 }
 
 // enrichFeatured fetches each Deezer-sourced track's featured contributors
@@ -82,7 +91,7 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 	// available. Orthogonal to the found/parse/fetch shape fetchProviderResults
 	// owns, so it stays here rather than in the shared helper.
 	if degraded != nil || len(results) == 0 {
-		if albumTitle != "" {
+		if albumTitle != "" && s.fallbackSearcher != nil {
 			if deezer, hasDeezer := s.providers["deezer"]; hasDeezer {
 				return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
 			}
@@ -98,17 +107,12 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName, exter
 }
 
 func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer ports.AlbumContentProvider, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
-	searcher, ok := deezer.(ports.SearchProvider)
-	if !ok {
-		return errorContentResponse("deezer"), nil
-	}
-
 	query := albumTitle
 	if albumArtist != "" {
 		query = albumArtist + " " + albumTitle
 	}
 
-	results, err := searcher.Search(ctx, query, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
+	results, err := s.fallbackSearcher.Search(ctx, query, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
 	if err != nil {
 		slog.WarnContext(ctx, "album_tracks.deezer_fallback_failed",
 			"query", query, "error", err)

@@ -116,6 +116,7 @@ func (a *App) wireDiscoveryContent(
 	albumSvc := discoveryService.NewGetAlbumTracksService(
 		albumProviders,
 		discoveryService.WithTrackFeatured(deezerContent),
+		discoveryService.WithAlbumFallbackSearcher(deezerContent),
 	)
 
 	var artistContentOpts []discoveryService.ArtistContentOption
