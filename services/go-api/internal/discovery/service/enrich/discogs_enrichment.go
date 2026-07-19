@@ -7,7 +7,6 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -44,24 +43,19 @@ func (s *DiscogsEnrichmentService) Execute(
 		return domain.EmptyDiscogsEnrichment(), nil
 	}
 
-	return service.CachedLookup(ctx, s.cache, discogsNameKey(artist, album), domain.EmptyDiscogsEnrichment(),
+	return CachedLookup(ctx, s.cache, discogsNameKey(artist, album), domain.EmptyDiscogsEnrichment(),
 		func(ctx context.Context) (domain.DiscogsEnrichment, bool, error) {
-			masterID, err := s.enricher.ResolveMasterID(ctx, artist, album)
+			v, found, err := resolveThenLookup(
+				ctx,
+				func(ctx context.Context) (int, error) { return s.enricher.ResolveMasterID(ctx, artist, album) },
+				s.enricher.LookupAlbum,
+				domain.DiscogsEnrichment.IsZero,
+			)
 			if err != nil {
-				slog.WarnContext(ctx, "discogs_enrichment.resolve_failed",
+				slog.WarnContext(ctx, "discogs_enrichment.failed",
 					"artist", artist, "album", album, "error", err)
-				return domain.EmptyDiscogsEnrichment(), false, err // transient; not cached negative
 			}
-			if masterID == 0 {
-				return domain.EmptyDiscogsEnrichment(), false, nil
-			}
-			e, err := s.enricher.LookupAlbum(ctx, masterID)
-			if err != nil {
-				slog.WarnContext(ctx, "discogs_enrichment.lookup_failed",
-					"master_id", masterID, "album", album, "error", err)
-				return domain.EmptyDiscogsEnrichment(), false, err // best-effort; don't poison the cache
-			}
-			return e, true, nil
+			return v, found, err
 		})
 }
 
@@ -100,23 +94,18 @@ func (s *DiscogsArtistEnrichmentService) Execute(
 
 	nameKey := textnorm.NormalizeForMatch(strings.TrimSpace(name))
 
-	return service.CachedLookup(ctx, s.cache, nameKey, domain.EmptyDiscogsArtistEnrichment(),
+	return CachedLookup(ctx, s.cache, nameKey, domain.EmptyDiscogsArtistEnrichment(),
 		func(ctx context.Context) (domain.DiscogsArtistEnrichment, bool, error) {
-			artistID, err := s.enricher.ResolveArtistID(ctx, name)
+			v, found, err := resolveThenLookup(
+				ctx,
+				func(ctx context.Context) (int, error) { return s.enricher.ResolveArtistID(ctx, name) },
+				s.enricher.LookupArtist,
+				domain.DiscogsArtistEnrichment.IsZero,
+			)
 			if err != nil {
-				slog.WarnContext(ctx, "discogs_artist_enrichment.resolve_failed",
+				slog.WarnContext(ctx, "discogs_artist_enrichment.failed",
 					"name", name, "error", err)
-				return domain.EmptyDiscogsArtistEnrichment(), false, err
 			}
-			if artistID == 0 {
-				return domain.EmptyDiscogsArtistEnrichment(), false, nil
-			}
-			e, err := s.enricher.LookupArtist(ctx, artistID)
-			if err != nil {
-				slog.WarnContext(ctx, "discogs_artist_enrichment.lookup_failed",
-					"artist_id", artistID, "name", name, "error", err)
-				return domain.EmptyDiscogsArtistEnrichment(), false, err
-			}
-			return e, true, nil
+			return v, found, err
 		})
 }

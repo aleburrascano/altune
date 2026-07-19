@@ -100,6 +100,22 @@ func hashKey(prefix, nameKey string) string {
 	return fmt.Sprintf("%s%x", prefix, h[:16])
 }
 
+// NewRedisNameKeyedCache builds a read-through Redis-backed NameKeyedCache for
+// any value type — the general form the per-provider constructors below
+// specialize. Exported so callers whose value type isn't a domain enrichment
+// type (e.g. a service-layer read model) can still route through the one
+// generic adapter instead of hand-rolling a cache.
+func NewRedisNameKeyedCache[T any](client *goredis.Client, posPrefix, negPrefix string, posTTL, negTTL time.Duration, empty func() T) *RedisNameKeyedCache[T] {
+	return &RedisNameKeyedCache[T]{
+		client:    client,
+		posPrefix: posPrefix,
+		negPrefix: negPrefix,
+		posTTL:    posTTL,
+		negTTL:    negTTL,
+		empty:     empty,
+	}
+}
+
 // NewRedisDeezerEnrichmentCache caches DeezerEnrichment by normalized
 // (kind, artist, title) name key.
 func NewRedisDeezerEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[domain.DeezerEnrichment] {

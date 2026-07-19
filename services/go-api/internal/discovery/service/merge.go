@@ -261,22 +261,26 @@ func identityClaims(r domain.SearchResult) map[providerID]bool {
 // where a bare name match is not safe identity proof — multiple real artists
 // share it (e.g. "Che"). Computed once per merge from the raw provider groups.
 func ambiguousArtistNames(perProvider [][]domain.SearchResult) map[string]bool {
-	mbidsByName := make(map[string]map[string]bool)
+	var flat []domain.SearchResult
 	for _, group := range perProvider {
-		for _, r := range group {
-			if r.Kind != domain.ResultKindArtist {
-				continue
-			}
-			if r.MBID == "" {
-				continue
-			}
-			mbid := r.MBID
-			name := textnorm.NormalizeForMatch(r.Title)
-			if mbidsByName[name] == nil {
-				mbidsByName[name] = make(map[string]bool)
-			}
-			mbidsByName[name][mbid] = true
+		flat = append(flat, group...)
+	}
+	return ambiguousArtistNamesFlat(flat)
+}
+
+// ambiguousArtistNamesFlat is the flat-slice core of ambiguousArtistNames,
+// shared with CollapseArtistDuplicates which operates on already-merged results.
+func ambiguousArtistNamesFlat(results []domain.SearchResult) map[string]bool {
+	mbidsByName := make(map[string]map[string]bool)
+	for _, r := range results {
+		if r.Kind != domain.ResultKindArtist || r.MBID == "" {
+			continue
 		}
+		name := textnorm.NormalizeForMatch(r.Title)
+		if mbidsByName[name] == nil {
+			mbidsByName[name] = make(map[string]bool)
+		}
+		mbidsByName[name][r.MBID] = true
 	}
 	ambiguous := make(map[string]bool)
 	for name, mbids := range mbidsByName {
@@ -287,22 +291,6 @@ func ambiguousArtistNames(perProvider [][]domain.SearchResult) map[string]bool {
 	return ambiguous
 }
 
-func stringExtra(r domain.SearchResult, key string) string {
-	if r.Extras == nil {
-		return ""
-	}
-	if v, ok := r.Extras[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
-// popularityOf is the single read accessor for the typed Popularity signal —
-// merge, rank, diversity, and vocab all read through it.
-func popularityOf(r domain.SearchResult) float64 {
-	return r.Popularity
-}
-
 func completenessOf(r domain.SearchResult) int {
 	n := 0
 	if r.ImageURL != "" {
@@ -311,12 +299,10 @@ func completenessOf(r domain.SearchResult) int {
 	if r.ISRC != "" {
 		n++
 	}
-	if r.Extras != nil {
-		if _, ok := r.Extras["duration"]; ok {
-			n++
-		}
+	if r.Duration != 0 {
+		n++
 	}
-	if stringExtra(r, "album") != "" {
+	if r.Album != "" {
 		n++
 	}
 	return n

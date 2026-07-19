@@ -25,7 +25,7 @@ func relatedTrack(title string) domain.SearchResult {
 func TestGetRelatedTracksService_Execute(t *testing.T) {
 	tests := []struct {
 		name       string
-		provider   string
+		provider   domain.ProviderName
 		fake       *fakeRelatedProvider
 		limit      int
 		wantStatus domain.ProviderStatus
@@ -33,7 +33,7 @@ func TestGetRelatedTracksService_Execute(t *testing.T) {
 	}{
 		{
 			name:       "unknown provider",
-			provider:   "deezer",
+			provider:   domain.ProviderDeezer,
 			fake:       &fakeRelatedProvider{results: []domain.SearchResult{relatedTrack("a")}},
 			limit:      20,
 			wantStatus: domain.ProviderStatusError,
@@ -41,7 +41,7 @@ func TestGetRelatedTracksService_Execute(t *testing.T) {
 		},
 		{
 			name:       "provider returns error",
-			provider:   "soundcloud",
+			provider:   domain.ProviderSoundCloud,
 			fake:       &fakeRelatedProvider{err: errors.New("boom")},
 			limit:      20,
 			wantStatus: domain.ProviderStatusError,
@@ -49,7 +49,7 @@ func TestGetRelatedTracksService_Execute(t *testing.T) {
 		},
 		{
 			name:     "ok slices to limit",
-			provider: "soundcloud",
+			provider: domain.ProviderSoundCloud,
 			fake: &fakeRelatedProvider{results: []domain.SearchResult{
 				relatedTrack("a"), relatedTrack("b"), relatedTrack("c"),
 			}},
@@ -59,7 +59,7 @@ func TestGetRelatedTracksService_Execute(t *testing.T) {
 		},
 		{
 			name:     "ok no truncation when under limit",
-			provider: "soundcloud",
+			provider: domain.ProviderSoundCloud,
 			fake: &fakeRelatedProvider{results: []domain.SearchResult{
 				relatedTrack("a"),
 			}},

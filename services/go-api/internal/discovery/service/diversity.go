@@ -65,7 +65,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		primaryPop float64
 		otherIdxs  []int
 	}
-	ambiguous := ambiguousArtistNames([][]domain.SearchResult{results})
+	ambiguous := ambiguousArtistNamesFlat(results)
 	groups := make(map[string]*group)
 	order := []string{}
 
@@ -81,7 +81,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		if ambiguous[norm] {
 			key = norm + "\x00" + r.MBID
 		}
-		pop := popularityOf(r)
+		pop := r.Popularity
 		g, exists := groups[key]
 		if !exists {
 			groups[key] = &group{primaryIdx: i, primaryPop: pop}
@@ -103,7 +103,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		if len(g.otherIdxs) == 0 {
 			continue
 		}
-		collapsedList := make([]map[string]any, len(g.otherIdxs))
+		collapsedList := make([]domain.CollapsedArtistSummary, len(g.otherIdxs))
 		for j, idx := range g.otherIdxs {
 			other := results[idx]
 			// The collapsed entry's extras keep carrying mbid on the wire (it was an
@@ -112,14 +112,12 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 			if other.MBID != "" {
 				otherExtras["mbid"] = other.MBID
 			}
-			collapsedList[j] = map[string]any{
-				"title":    other.Title,
-				"subtitle": other.Subtitle,
-				"sources":  other.Sources,
-				"extras":   otherExtras,
-			}
-			if other.ImageURL != "" {
-				collapsedList[j]["image_url"] = other.ImageURL
+			collapsedList[j] = domain.CollapsedArtistSummary{
+				Title:    other.Title,
+				Subtitle: other.Subtitle,
+				ImageURL: other.ImageURL,
+				Sources:  other.Sources,
+				Extras:   otherExtras,
 			}
 			remove[idx] = true
 		}
@@ -154,6 +152,3 @@ func copyExtras(src map[string]any) map[string]any {
 	}
 	return dst
 }
-
-// stringExtra and completenessOf (the merge.go helpers) are the single
-// definitions; find_related and consensus call through to them.

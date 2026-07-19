@@ -20,6 +20,10 @@ func (f fakeTrackFeatured) LookupTrackFeatured(_ context.Context, id string) ([]
 	return f.byID[id], nil
 }
 
+func (fakeTrackFeatured) ResolveID(context.Context, domain.ResultKind, string, string) (string, error) {
+	return "", nil
+}
+
 func deezerTrackFeat(id, title string) domain.SearchResult {
 	return domain.NewProviderResult(domain.ResultKindTrack, title, "", "",
 		domain.SourceRef{Provider: domain.ProviderDeezer, ExternalID: id}, nil)

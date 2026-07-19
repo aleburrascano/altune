@@ -139,6 +139,10 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 	if kind == domain.ResultKindTrack {
 		r.ISRC = item.ISRC
 		r.ProviderRank = item.Rank
+		if item.Album != nil {
+			r.Album = item.Album.Title
+		}
+		r.Duration = item.Duration
 	}
 	if kind == domain.ResultKindAlbum {
 		r.ReleaseDate = item.ReleaseDate

@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -33,29 +32,14 @@ func (a *TheAudioDBAdapter) Search(ctx context.Context, query string, kinds map[
 
 	u := fmt.Sprintf("https://theaudiodb.com/api/v1/json/523532/search.php?s=%s", url.QueryEscape(query))
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, nil
-	}
-
 	var body struct {
 		Artists []struct {
-			IDArtist    string `json:"idArtist"`
-			StrArtist   string `json:"strArtist"`
+			IDArtist       string `json:"idArtist"`
+			StrArtist      string `json:"strArtist"`
 			StrArtistThumb string `json:"strArtistThumb"`
 		} `json:"artists"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body); err != nil {
 		return nil, nil
 	}
 

@@ -163,29 +163,19 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		u += "&inc=isrcs"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", a.userAgent)
-	req.Header.Set("Accept", "application/json")
 	a.rateLimit(ctx)
-
-	resp, err := a.client.Do(req)
+	status, rawBody, err := getBytes(ctx, a.client, u,
+		withHeader("User-Agent", a.userAgent),
+		withHeader("Accept", "application/json"))
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("musicbrainz returned %d", resp.StatusCode)
+		return nil, fmt.Errorf("musicbrainz returned %d", status)
 	}
 
 	var results []domain.SearchResult
 	switch kind {
 	case domain.ResultKindTrack:
 		var body mbRecordingResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		if err := json.Unmarshal(rawBody, &body); err != nil {
 			return nil, err
 		}
 		for _, rec := range body.Recordings {
@@ -193,7 +183,7 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		}
 	case domain.ResultKindArtist:
 		var body mbArtistResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		if err := json.Unmarshal(rawBody, &body); err != nil {
 			return nil, err
 		}
 		for _, art := range body.Artists {
@@ -201,7 +191,7 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		}
 	case domain.ResultKindAlbum:
 		var body mbReleaseGroupResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		if err := json.Unmarshal(rawBody, &body); err != nil {
 			return nil, err
 		}
 		for _, rg := range body.ReleaseGroups {
@@ -294,10 +284,10 @@ type mbRecordingResponse struct {
 }
 
 type mbRecording struct {
-	ID           string          `json:"id"`
-	Title        string          `json:"title"`
-	ISRCs        []string        `json:"isrcs"`
-	ArtistCredit []mbArtistRef   `json:"artist-credit"`
+	ID           string        `json:"id"`
+	Title        string        `json:"title"`
+	ISRCs        []string      `json:"isrcs"`
+	ArtistCredit []mbArtistRef `json:"artist-credit"`
 }
 
 type mbArtistRef struct {
@@ -343,11 +333,11 @@ type mbReleaseGroupResponse struct {
 }
 
 type mbReleaseGroup struct {
-	ID              string        `json:"id"`
-	Title           string        `json:"title"`
-	PrimaryType     string        `json:"primary-type"`
-	FirstReleaseDate string       `json:"first-release-date"`
-	ArtistCredit    []mbArtistRef `json:"artist-credit"`
+	ID               string        `json:"id"`
+	Title            string        `json:"title"`
+	PrimaryType      string        `json:"primary-type"`
+	FirstReleaseDate string        `json:"first-release-date"`
+	ArtistCredit     []mbArtistRef `json:"artist-credit"`
 }
 
 // ValidateArtistAlbums cross-references albums against MusicBrainz.
@@ -505,26 +495,8 @@ func (a *MusicBrainzAdapter) fetchArtistMatches(ctx context.Context, name string
 	u := fmt.Sprintf("https://musicbrainz.org/ws/2/artist/?query=%s&fmt=json&limit=5",
 		url.QueryEscape(name))
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", a.userAgent)
-	req.Header.Set("Accept", "application/json")
-	a.rateLimit(ctx)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("musicbrainz artist search returned %d", resp.StatusCode)
-	}
-
 	var body mbArtistResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := a.getJSON(ctx, u, &body); err != nil {
 		return nil, err
 	}
 	return body.Artists, nil
@@ -571,26 +543,8 @@ func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string
 		"https://musicbrainz.org/ws/2/release-group?artist=%s&type=album%%7Cep%%7Csingle&fmt=json&limit=100",
 		url.QueryEscape(mbid))
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", a.userAgent)
-	req.Header.Set("Accept", "application/json")
-	a.rateLimit(ctx)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("musicbrainz release-groups returned %d", resp.StatusCode)
-	}
-
 	var body mbReleaseGroupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := a.getJSON(ctx, u, &body); err != nil {
 		return nil, err
 	}
 	a.releaseMemo.put(mbid, body.ReleaseGroups)
@@ -612,31 +566,9 @@ func (a *MusicBrainzAdapter) LookupAlbumArtist(
 		url.QueryEscape(q),
 	)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return domain.AlbumVerdictUnknown, "", nil
-	}
-	req.Header.Set("User-Agent", a.userAgent)
-	req.Header.Set("Accept", "application/json")
-	a.rateLimit(ctx)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		slog.DebugContext(ctx, "mb.lookup_album_artist_http_error",
-			"artist", artistName, "album", albumTitle, "error", err)
-		return domain.AlbumVerdictUnknown, "", nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		slog.DebugContext(ctx, "mb.lookup_album_artist_status",
-			"artist", artistName, "album", albumTitle, "status", resp.StatusCode)
-		return domain.AlbumVerdictUnknown, "", nil
-	}
-
 	var body mbReleaseGroupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		slog.DebugContext(ctx, "mb.lookup_album_artist_decode_error",
+	if err := a.getJSON(ctx, u, &body); err != nil {
+		slog.DebugContext(ctx, "mb.lookup_album_artist_http_error",
 			"artist", artistName, "album", albumTitle, "error", err)
 		return domain.AlbumVerdictUnknown, "", nil
 	}
@@ -682,4 +614,3 @@ func extractCreditedMBID(rg mbReleaseGroup) string {
 	}
 	return rg.ArtistCredit[0].Artist.ID
 }
-

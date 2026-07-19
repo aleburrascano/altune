@@ -73,13 +73,10 @@ func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
 
 // rankWith is Rank with the experiment-gated inputs threaded in (see rankConfig).
 func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.SearchResult {
-	// queryNorm is already normalized by the caller (Execute); use it directly.
-	q := queryNorm
-
 	// Pass 1: keep only eligible entities.
 	eligible := make([]Entity, 0, len(entities))
 	for _, e := range entities {
-		if sharesQueryWord(e.Result, q) && hasBrowseableSource(e.Result) {
+		if sharesQueryWord(e.Result, queryNorm) && hasBrowseableSource(e.Result) {
 			eligible = append(eligible, e)
 		}
 	}
@@ -88,7 +85,7 @@ func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.Sear
 	// query repeats across every result and so weighs ~nothing; the token that
 	// names the specific song is rare and carries most of the weight. These weight
 	// the relevance measure directly — there is no separate tuned bonus.
-	rarity := queryTokenRarity(q, eligible)
+	rarity := queryTokenRarity(queryNorm, eligible)
 
 	// Pass 2: score.
 	results := make([]scored, 0, len(eligible))
@@ -104,10 +101,10 @@ func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.Sear
 		}
 		results = append(results, scored{
 			result:     r,
-			relevance:  idfWeightedCoverage(r, q, rarity),
+			relevance:  idfWeightedCoverage(r, queryNorm, rarity),
 			behavioral: cfg.behavioral[domain.ResultSignature(r)], // nil map read → 0 (inert)
 			prominence: prominence,                                // 0 unless the experiment is on (inert)
-			pop:        popularityOf(r),
+			pop:        r.Popularity,
 			rrf:        rrfScore(e.BestRank),
 			multi:      len(providersOf(r)) > 1,
 			demoted:    demoted,
@@ -267,6 +264,20 @@ func tokenSet(s string) map[string]bool {
 // (Deezer/iTunes/MusicBrainz) are never flagged. The demotion is uniform, so on a
 // purely-underground query where every candidate is UGC it does not change relative
 // order. See docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
+func isLowConfidenceTail(r domain.SearchResult) bool {
+	provs := providersOf(r)
+	if len(provs) != 1 {
+		return false
+	}
+	if !provs[domain.ProviderSoundCloud] && !provs[domain.ProviderLastFM] {
+		return false
+	}
+	hasIdentity := r.ISRC != "" ||
+		r.MBID != "" ||
+		r.Album != ""
+	return !hasIdentity
+}
+
 // TailNoiseInTopK counts how many of the first k results are low-confidence tail
 // noise (see isLowConfidenceTail) — the tail-quality signal the search log and
 // discoveryeval track over time to catch result-quality regressions that
@@ -282,18 +293,4 @@ func TailNoiseInTopK(results []domain.SearchResult, k int) int {
 		}
 	}
 	return n
-}
-
-func isLowConfidenceTail(r domain.SearchResult) bool {
-	provs := providersOf(r)
-	if len(provs) != 1 {
-		return false
-	}
-	if !provs[domain.ProviderSoundCloud] && !provs[domain.ProviderLastFM] {
-		return false
-	}
-	hasIdentity := r.ISRC != "" ||
-		r.MBID != "" ||
-		stringExtra(r, "album") != ""
-	return !hasIdentity
 }

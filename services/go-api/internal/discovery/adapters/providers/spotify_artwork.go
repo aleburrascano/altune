@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -54,25 +53,10 @@ func (a *SpotifyArtworkResolver) ResolveByIdentity(ctx context.Context, kind dom
 	}
 
 	u := fmt.Sprintf("https://open.spotify.com/oembed?url=https://open.spotify.com/%s/%s", seg, spotifyID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", spotifyOEmbedUserAgent)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", nil
-	}
-
 	var body struct {
 		ThumbnailURL string `json:"thumbnail_url"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", spotifyOEmbedUserAgent)); err != nil {
 		return "", nil
 	}
 	return upgradeSpotifyImageSize(body.ThumbnailURL), nil

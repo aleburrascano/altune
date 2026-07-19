@@ -188,9 +188,12 @@ func mapYTMusicTrack(t *ytmTrack) domain.SearchResult {
 		extras["album"] = t.Album.Name
 	}
 
-	return domain.NewProviderResult(domain.ResultKindTrack, t.Title, subtitle, imageURL,
+	r := domain.NewProviderResult(domain.ResultKindTrack, t.Title, subtitle, imageURL,
 		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: t.VideoID, URL: "https://music.youtube.com/watch?v=" + t.VideoID},
 		extras)
+	r.Album = t.Album.Name
+	r.Duration = t.Duration
+	return r
 }
 
 // mapYTMusicVideo maps a YouTube Music video result to a track. Used by the
@@ -210,9 +213,11 @@ func mapYTMusicVideo(v *ytmVideo) domain.SearchResult {
 		extras["duration"] = v.Duration
 	}
 
-	return domain.NewProviderResult(domain.ResultKindTrack, v.Title, subtitle, imageURL,
+	r := domain.NewProviderResult(domain.ResultKindTrack, v.Title, subtitle, imageURL,
 		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: v.VideoID, URL: "https://music.youtube.com/watch?v=" + v.VideoID},
 		extras)
+	r.Duration = v.Duration
+	return r
 }
 
 func mapYTMusicAlbum(a *ytmAlbum) domain.SearchResult {

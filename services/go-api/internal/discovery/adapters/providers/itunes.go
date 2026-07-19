@@ -175,6 +175,12 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 		r.TrackCount = item.TrackCount
 		r.ReleaseDate = item.ReleaseDate
 	}
+	if kind == domain.ResultKindTrack {
+		r.Album = item.CollectionName
+		if item.TrackTimeMillis > 0 {
+			r.Duration = int(item.TrackTimeMillis / 1000)
+		}
+	}
 	return r
 }
 

@@ -3,8 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
-	"slices"
-	"strings"
+	"sort"
 	"sync"
 	"time"
 
@@ -25,17 +24,20 @@ import (
 //     consensusTitleMatchMinTSR. "Scorpion" and "Scorpion (Deluxe)" are distinct
 //     releases (different tags); the same album from two providers clusters on an
 //     exact core/tags match (a fuzzy core rung catches title typos).
-//   - a per-artist TTL cache short-circuits the provider fan-out and MB calls.
+//   - an optional per-artist TTL cache (WithConsensusCache) short-circuits the
+//     provider fan-out and MB calls.
 
 // consensusTimeout bounds the whole operation (parallel fetch + MB validation).
 // Kept (principled SLA): a hung provider or slow MB loop must not keep the
 // artist-detail request open for minutes.
 const consensusTimeout = 10 * time.Second
 
-// defaultConsensusCacheTTL is how long a per-artist consensus stays fresh. A
+// DefaultConsensusCacheTTL is how long a per-artist consensus stays fresh. A
 // short TTL (not event-driven) is the OQ4 policy: a missed new release self-heals
 // within the window, and the search path surfaces new releases immediately.
-const defaultConsensusCacheTTL = 6 * time.Hour
+// Exported so the composition root can wire a Redis-backed cache (via
+// WithConsensusCache) with the same TTL this doc comment describes.
+const DefaultConsensusCacheTTL = 6 * time.Hour
 
 type ConsensusStatus string
 
@@ -96,7 +98,7 @@ type mbAuthority interface {
 type ConsensusService struct {
 	providers []ConsensusProvider
 	mb        mbAuthority
-	cache     *artistConsensusCache
+	cache     ports.NameKeyedCache[[]ConsensusAlbum]
 }
 
 type ConsensusOption func(*ConsensusService)
@@ -106,10 +108,18 @@ func WithMBAuthority(mb mbAuthority) ConsensusOption {
 	return func(s *ConsensusService) { s.mb = mb }
 }
 
+// WithConsensusCache backs the per-artist consensus cache with a shared
+// read-through store (the composition root wires a Redis-backed
+// ports.NameKeyedCache via adapters/cache.NewRedisNameKeyedCache). Left unset,
+// the service runs uncached — correct, just recomputes every call.
+func WithConsensusCache(cache ports.NameKeyedCache[[]ConsensusAlbum]) ConsensusOption {
+	return func(s *ConsensusService) { s.cache = cache }
+}
+
 func NewConsensusService(providers []ConsensusProvider, opts ...ConsensusOption) *ConsensusService {
 	s := &ConsensusService{
 		providers: providers,
-		cache:     newArtistConsensusCache(defaultConsensusCacheTTL),
+		cache:     noopConsensusCache{},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -126,7 +136,7 @@ func (s *ConsensusService) BuildConsensus(
 	primaryAlbums []domain.SearchResult,
 ) []ConsensusAlbum {
 	cacheKey := textnorm.NormalizeForMatch(artistName)
-	if cached, ok := s.cache.get(cacheKey); ok {
+	if cached, ok, err := s.cache.Get(ctx, cacheKey); err == nil && ok {
 		return cached
 	}
 
@@ -143,7 +153,7 @@ func (s *ConsensusService) BuildConsensus(
 
 	clusters := newAlbumClusterSet()
 	for _, album := range primaryAlbums {
-		clusters.add(album, "deezer")
+		clusters.add(album, domain.ProviderDeezer.String())
 	}
 	// Iterate providers in slice order (not map range) so the output ordering
 	// and canonical-pick are deterministic run-to-run.
@@ -174,29 +184,26 @@ func (s *ConsensusService) BuildConsensus(
 	// mid-MB-validation, the verdicts are partial and must not be frozen for the
 	// full TTL. A fresh request will recompute.
 	if len(results) > 0 && ctx.Err() == nil {
-		s.cache.set(cacheKey, results)
+		_ = s.cache.Set(ctx, cacheKey, results)
 	}
 	logConsensus(ctx, artistName, results, respondedCount, len(s.providers))
 	return results
 }
 
-// sortChronological orders the discography newest-first by release year, with
-// unknown-year albums sinking to the end and a stable title tiebreak. The cluster
-// union is assembled in provider-fetch order (non-chronological); this makes the
-// detail-screen discography read as a real timeline. Year backfill from a
-// secondary provider when the canonical pick lacks one is a separate concern.
+// sortChronological orders the discography newest-first, with dateless albums
+// sinking to the end. Shares its ordering rule (albumReleaseSortKey, defined in
+// get_artist_content.go) with sortAlbumsByReleaseDateDesc — the same
+// artist-detail response surfaces both a discography (this) and an album list
+// (that), and the two must not disagree on "newest first". The cluster union is
+// assembled in provider-fetch order (non-chronological); this makes the
+// detail-screen discography read as a real timeline.
 func sortChronological(results []ConsensusAlbum) {
-	slices.SortStableFunc(results, func(a, b ConsensusAlbum) int {
-		ya, yb := a.Album.Year, b.Album.Year
-		switch {
-		case ya == 0 && yb != 0:
-			return 1
-		case ya != 0 && yb == 0:
-			return -1
-		case ya != yb:
-			return yb - ya // newest first
+	sort.SliceStable(results, func(i, j int) bool {
+		ki, kj := albumReleaseSortKey(results[i].Album), albumReleaseSortKey(results[j].Album)
+		if ki == "" || kj == "" {
+			return ki != "" && kj == ""
 		}
-		return strings.Compare(a.Album.Title, b.Album.Title)
+		return ki > kj // ISO dates / years are lexicographically descending = newest-first
 	})
 }
 
@@ -340,35 +347,15 @@ func (s *albumClusterSet) add(album domain.SearchResult, provider string) {
 	s.order = append(s.order, key)
 }
 
-// --- per-artist TTL cache ---
+// noopConsensusCache is the default ports.NameKeyedCache[[]ConsensusAlbum]:
+// every Get misses, every Set is dropped. WithConsensusCache swaps in a
+// Redis-backed adapter at the composition root; without it the service still
+// runs correctly, just without the short-circuit.
+type noopConsensusCache struct{}
 
-type consensusCacheEntry struct {
-	albums    []ConsensusAlbum
-	expiresAt time.Time
+func (noopConsensusCache) Get(context.Context, string) ([]ConsensusAlbum, bool, error) {
+	return nil, false, nil
 }
-
-type artistConsensusCache struct {
-	mu  sync.RWMutex
-	ttl time.Duration
-	m   map[string]consensusCacheEntry
-}
-
-func newArtistConsensusCache(ttl time.Duration) *artistConsensusCache {
-	return &artistConsensusCache{ttl: ttl, m: make(map[string]consensusCacheEntry)}
-}
-
-func (c *artistConsensusCache) get(key string) ([]ConsensusAlbum, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	entry, ok := c.m[key]
-	if !ok || time.Now().After(entry.expiresAt) {
-		return nil, false
-	}
-	return entry.albums, true
-}
-
-func (c *artistConsensusCache) set(key string, albums []ConsensusAlbum) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.m[key] = consensusCacheEntry{albums: albums, expiresAt: time.Now().Add(c.ttl)}
-}
+func (noopConsensusCache) Set(context.Context, string, []ConsensusAlbum) error { return nil }
+func (noopConsensusCache) GetNegative(context.Context, string) (bool, error)   { return false, nil }
+func (noopConsensusCache) SetNegative(context.Context, string) error           { return nil }

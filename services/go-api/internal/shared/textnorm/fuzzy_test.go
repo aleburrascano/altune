@@ -89,6 +89,31 @@ func TestTokenSortRatio(t *testing.T) {
 	}
 }
 
+func TestLevenshteinDistance(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want int
+	}{
+		{"", "", 0},
+		{"abc", "", 3},
+		{"", "abc", 3},
+		{"megaman", "megamsn", 1},
+		{"kitten", "sitting", 3},
+		{"same", "same", 0},
+		// Rune-based, not byte-based: a single accented character must diff as
+		// one edit, not the multi-byte UTF-8 sequence it's encoded as.
+		{"beyonce", "beyoncé", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.a+"_"+tt.b, func(t *testing.T) {
+			got := LevenshteinDistance(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("LevenshteinDistance(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTokenSortRatio_Symmetry(t *testing.T) {
 	pairs := [][2]string{
 		{"hello world", "world hello"},

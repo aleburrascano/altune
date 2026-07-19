@@ -49,26 +49,15 @@ const defaultProviderTimeout = 1500 * time.Millisecond
 // operational bound (like a page size), trimmed best-effort after each insert.
 const historyRingSize = 100
 
-// Service is the orchestrator for the rebuilt pipeline:
-// Layer 0 intent → Layer 1 fan-out → Layer 2 merge → Layer 3 rank, then the
-// orthogonal enrichment carried forward from v1 (artist-dedup, disambiguation,
-// artwork, correction/suggest, related groups, telemetry, vocabulary learning).
-type Service struct {
-	providers       []ports.SearchProvider
-	circuitBreaker  *CircuitBreaker
-	historyRepo     ports.SearchHistoryRepository
-	vocabStore      ports.VocabularyStore
-	eventStore      ports.EventStore
-	artworkResolver ports.TaggingArtworkResolver
-	artworkCache    ports.ArtworkCache
-	albumValidator  ports.AlbumValidator
-	identityBridge  ports.IdentityBridge
-	mbidIndex       ports.MBIDIndex
-	identityStore   ports.IdentityStore
-	correctionSvc   *CorrectionService
-	findRelatedSvc  *FindRelatedService
-	resultCache     ports.ResultCache
-	tailDemotion    bool
+// rankingExperiments groups the ranking-pipeline flags a Service can have
+// toggled on independently (each eval A/B-gated at the composition root the
+// same way): tail-noise demotion, the cross-kind prominence tiebreak,
+// behavioral satisfaction scoring, and result-order exploration. Grouped so
+// "what experiments exist on this Service" is one type to read instead of
+// fields scattered across the struct — embedded (not a named sub-field) so
+// every existing s.tailDemotion-shaped access keeps working unchanged.
+type rankingExperiments struct {
+	tailDemotion bool
 
 	// crossKindProminence, default off, gates the cross-kind prominence tiebreak:
 	// among equally relevant results of different kinds, the more prominent entity
@@ -90,8 +79,49 @@ type Service struct {
 	// small-scale bandit substitute for IPS. The one user-facing behavior change,
 	// shipped behind a flag so it needs no live sign-off.
 	explorationRate float64
+}
+
+// Service is the orchestrator for the rebuilt pipeline:
+// Layer 0 intent → Layer 1 fan-out → Layer 2 merge → Layer 3 rank, then the
+// orthogonal enrichment carried forward from v1 (artist-dedup, disambiguation,
+// artwork, correction/suggest, related groups, telemetry, vocabulary learning).
+type Service struct {
+	providers       []ports.SearchProvider
+	circuitBreaker  *CircuitBreaker
+	historyRepo     ports.SearchHistoryRepository
+	vocabStore      ports.VocabularyStore
+	eventStore      ports.EventStore
+	artworkResolver ports.TaggingArtworkResolver
+	artworkCache    ports.ArtworkCache
+	albumValidator  ports.ArtistIdentityResolver
+	identityBridge  ports.IdentityBridge
+	mbidIndex       ports.MBIDIndex
+	identityStore   ports.IdentityStore
+	correctionSvc   *CorrectionService
+	findRelatedSvc  *FindRelatedService
+	resultCache     ports.ResultCache
+
+	rankingExperiments
 
 	bgWg sync.WaitGroup
+}
+
+// launchBackground starts a best-effort fire-and-forget goroutine on Service.
+// It detaches the context from request cancellation, increments the shutdown
+// wait-group, and defers both Done and a recover+log so panics in any background
+// work do not crash the process.
+func (s *Service) launchBackground(parentCtx context.Context, label string, fn func(ctx context.Context)) {
+	ctx := context.WithoutCancel(parentCtx)
+	s.bgWg.Add(1)
+	go func() {
+		defer s.bgWg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Warn("search.v2.background_panic", "label", label, "error", r)
+			}
+		}()
+		fn(ctx)
+	}()
 }
 
 // SearchOutput is the result envelope returned by the search use case and
@@ -141,7 +171,7 @@ func WithArtworkCache(c ports.ArtworkCache) Option {
 }
 
 // WithAlbumValidator enables artist disambiguation (MusicBrainz identity).
-func WithAlbumValidator(v ports.AlbumValidator) Option {
+func WithAlbumValidator(v ports.ArtistIdentityResolver) Option {
 	return func(s *Service) { s.albumValidator = v }
 }
 
@@ -284,6 +314,7 @@ func (s *Service) Execute(
 		correctedQuery string
 		originalQuery  string
 		cached         bool
+		partial        bool
 	)
 	if s.resultCache != nil {
 		if hit, ok := s.resultCache.Get(ctx, cacheKey); ok {
@@ -303,9 +334,10 @@ func (s *Service) Execute(
 			correctedQuery, originalQuery, ranked = s.tryCorrection(ctx, query)
 		}
 
+		partial = anyProviderFailed(statuses)
 		// Cache only complete, non-empty results: a partial (provider-drop-out) run
 		// frozen for the TTL would serve a degraded list to everyone.
-		if s.resultCache != nil && len(ranked) > 0 && !anyProviderFailed(statuses) {
+		if s.resultCache != nil && len(ranked) > 0 && !partial {
 			s.resultCache.Set(ctx, cacheKey, ranked)
 		}
 	}
@@ -322,8 +354,6 @@ func (s *Service) Execute(
 	// Exploration: a small fraction of searches serve a randomized order (cloned
 	// so the cache is never mutated) and are logged as exploration for propensity.
 	ranked, explored := s.maybeExplore(ranked)
-
-	partial := anyProviderFailed(statuses)
 
 	s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
 	s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked, explored)
@@ -361,8 +391,8 @@ func (s *Service) Execute(
 //	decision core   : Merge (entity resolution) → Rank (relevance ordering)
 //	list policy      : EnforceDiversity, CollapseArtistDuplicates (product rules
 //	                   that reshape the list; see diversity.go)
-//	display enrich   : applyArtistDisambiguation, enrich (fill subtitle/artwork;
-//	                   neither reorders)
+//	display enrich   : applyArtistDisambiguation, fillArtwork (fill subtitle/
+//	                   artwork; neither reorders)
 func (s *Service) mergeRankEnrich(
 	ctx context.Context,
 	perProvider [][]domain.SearchResult,
@@ -383,7 +413,7 @@ func (s *Service) mergeRankEnrich(
 
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
-	ranked = s.enrich(ctx, ranked)
+	ranked = s.fillArtwork(ctx, ranked)
 	return ranked
 }
 
@@ -430,17 +460,14 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 	}
 	// Persist off the request path: the durable write must not add latency to the
 	// search, and it must outlive the request, so use a detached context.
-	bgCtx := context.WithoutCancel(ctx)
-	s.bgWg.Add(1)
-	go func() {
-		defer s.bgWg.Done()
+	s.launchBackground(ctx, "identity.persist_bridges", func(bgCtx context.Context) {
 		for _, b := range learned {
 			if err := s.identityStore.PersistBridges(bgCtx, b.kind, b.mbid, b.ids); err != nil {
 				slog.WarnContext(bgCtx, "identity.persist_failed",
 					"kind", b.kind.String(), "mbid", b.mbid, "error", err)
 			}
 		}
-	}()
+	})
 }
 
 // fanOut queries every provider in parallel, each bounded by a timeout and

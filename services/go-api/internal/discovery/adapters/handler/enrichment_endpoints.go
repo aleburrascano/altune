@@ -14,18 +14,28 @@ import (
 // mapper. These change only when a provider cap changes, never with the
 // ranking pipeline.
 
-// handleEnrichment serves MusicBrainz detail-open enrichment for one entity.
-// Always 200 with the DTO (or an empty DTO) on the happy path — degradation is
-// the service's concern; only request-shape problems are 4xx.
-func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Request) {
+// parseKindParam reads and validates the required "kind" query param, writing
+// the 400 response itself on failure.
+func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, bool) {
 	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
 	if kindStr == "" {
 		httputil.BadRequest(w, "kind is required")
-		return
+		return 0, false
 	}
 	kind, err := domain.ParseResultKind(kindStr)
 	if err != nil {
 		httputil.BadRequest(w, "invalid kind")
+		return 0, false
+	}
+	return kind, true
+}
+
+// handleEnrichment serves MusicBrainz detail-open enrichment for one entity.
+// Always 200 with the DTO (or an empty DTO) on the happy path — degradation is
+// the service's concern; only request-shape problems are 4xx.
+func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Request) {
+	kind, ok := parseKindParam(w, r)
+	if !ok {
 		return
 	}
 	title := strings.TrimSpace(r.URL.Query().Get("title"))
@@ -44,7 +54,7 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 	e, err := h.enrichSvc.Execute(r.Context(), kind, title, subtitle, mbid)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "enrichment failed",
-			"error", err, "kind", kindStr, "title", title)
+			"error", err, "kind", kind.String(), "title", title)
 		httputil.InternalError(w)
 		return
 	}
@@ -270,14 +280,8 @@ func nonNilStrings(s []string) []string {
 // `title` + `subtitle`. Always 200 with the DTO (or an empty DTO); only
 // request-shape problems are 4xx.
 func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http.Request) {
-	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
-	if kindStr == "" {
-		httputil.BadRequest(w, "kind is required")
-		return
-	}
-	kind, err := domain.ParseResultKind(kindStr)
-	if err != nil {
-		httputil.BadRequest(w, "invalid kind")
+	kind, ok := parseKindParam(w, r)
+	if !ok {
 		return
 	}
 	title := strings.TrimSpace(r.URL.Query().Get("title"))
@@ -295,7 +299,7 @@ func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http
 	e, err := h.enrichers.LastFm.Execute(r.Context(), kind, title, subtitle)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "lastfm enrichment failed",
-			"error", err, "kind", kindStr, "title", title)
+			"error", err, "kind", kind.String(), "title", title)
 		httputil.InternalError(w)
 		return
 	}
@@ -333,14 +337,8 @@ func lastfmEnrichmentToDTO(e domain.LastFmEnrichment) LastFmEnrichmentResponseDT
 // Kind-dispatched from `kind` + `title` + `subtitle`. Always 200 with the DTO
 // (or an empty DTO); only request-shape problems are 4xx.
 func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http.Request) {
-	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
-	if kindStr == "" {
-		httputil.BadRequest(w, "kind is required")
-		return
-	}
-	kind, err := domain.ParseResultKind(kindStr)
-	if err != nil {
-		httputil.BadRequest(w, "invalid kind")
+	kind, ok := parseKindParam(w, r)
+	if !ok {
 		return
 	}
 	title := strings.TrimSpace(r.URL.Query().Get("title"))
@@ -358,7 +356,7 @@ func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http
 	e, err := h.enrichers.Deezer.Execute(r.Context(), kind, title, subtitle)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "deezer enrichment failed",
-			"error", err, "kind", kindStr, "title", title)
+			"error", err, "kind", kind.String(), "title", title)
 		httputil.InternalError(w)
 		return
 	}

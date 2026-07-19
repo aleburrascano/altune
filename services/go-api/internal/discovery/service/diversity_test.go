@@ -112,7 +112,7 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 		if !ok {
 			t.Fatal("expected collapsed_artists extra on primary artist")
 		}
-		list, ok := collapsed.([]map[string]any)
+		list, ok := collapsed.([]domain.CollapsedArtistSummary)
 		if !ok {
 			t.Fatalf("collapsed_artists wrong type: %T", collapsed)
 		}

@@ -53,13 +53,9 @@ Audit Progress:
 
 ### 1-2. Locate and survey
 
-Language tooling, no file contents yet:
-
-- **Go** → [reference/go.md](reference/go.md)
-- **TypeScript** → [reference/typescript.md](reference/typescript.md)
-
-The question both reference files answer: **how many packages contain this
-feature's code, what does the feature import, and what imports it?**
+Survey tooling, no file contents yet: [reference/method.md](reference/method.md)
+— detect the ecosystem, then answer, in any language, **how many directories
+contain this feature's code, what does the feature import, and what imports it?**
 
 - One or two packages, imports point outward-in → the feature has a boundary.
   Audit inside it.
@@ -81,14 +77,30 @@ rejection exists. That ordering is what keeps findings code-shaped.
 
 Now — and only now — open the lexicon (`~/.claude/lexicon/`):
 
-1. Read `INDEX.md`, then the audited language's manifest (`MANIFEST-go.md` /
-   `MANIFEST-ts.md`) and `MANIFEST-universal.md`. If the findings touch a
+1. Read `INDEX.md`, then the audited language's manifest (`MANIFEST-<lang>.md`)
+   and `MANIFEST-universal.md`. If the findings touch a
    cross-cutting domain with its own manifest (caching, event-driven,
    observability, microservice boundaries…), read that one too.
-2. Anchor **every** finding: the accepted pattern's entry, or — for
-   "no pattern — direct code" — the **closest** manifest entry and why it
-   loses. Cite entries as `` `lexicon:go/…/strategy-pattern` `` (the manifest
-   gives the path).
+
+   In that manifest, the **anti-pattern / code-smell / refactoring entries** are
+   where most findings anchor, because most fixes are "no pattern — direct code":
+   a named smell (dead code, duplicated code, god object, long function,
+   primitive obsession) with its own cost line fits a direct fix better than the
+   closest runtime pattern forced to stand in. Every language mirror carries
+   these entries; the section name varies, so scan the manifest you just read for
+   `smell`, `anti-pattern`, or `refactor` and open those before the pattern
+   catalog. The pattern catalog is for the minority where a runtime pattern
+   genuinely applies.
+2. Anchor **every** finding to the entry it is actually about:
+   - a fix that **removes a smell** (dead code, duplication, a god object, a
+     long function, a magic constant) → name that smell from the code-smell
+     catalog. The fix IS its remedy; its cost line is the "when NOT to refactor"
+     caveat.
+   - a fix that **applies a runtime pattern** (Facade, Circuit Breaker, Cache
+     Key Design) → the pattern's entry.
+   - only when neither fits → the **closest** entry and why it loses.
+   Cite entries as `` `lexicon:go/…/strategy-pattern` `` (the manifest gives the
+   path).
 3. For every cited entry, open the full entry at
    `~/.claude/lexicon/site/<path>/index.html` and quote its cost text verbatim
    into the finding's **Cost:** line. Entries run ~40k chars — never read one
@@ -99,7 +111,9 @@ Now — and only now — open the lexicon (`~/.claude/lexicon/`):
    "no manifest entry" instead.
 5. Reconciliation must not mint findings. If a manifest read reveals something
    real the code pass missed, it goes under **Deferred** for the next run —
-   that keeps rule 1 honest.
+   that keeps rule 1 honest. The smell catalog especially reads like a checklist;
+   resist grading the feature against every smell. Anchor the findings the code
+   already produced, and Defer anything new the catalog surfaces.
 
 A cost line quoted from the entry is the point of the whole lexicon: it states
 when NOT to use the pattern. An entry without one is unproven, not free.
@@ -136,7 +150,7 @@ State plainly whether it could be lifted out without breaking callers.
 - **Evidence:** `playback/service.go:42`, `playback/service.go:12`
 - **Pain:** what is concretely hard or broken now. Not "this is coupled."
 - **Fix:** <pattern> (`lexicon:go/…`) | no pattern — direct code
-  (closest: <entry> (`lexicon:go/…`) — why it loses)
+  (smell it removes, or closest entry: <entry> (`lexicon:go/…`) — why it applies / loses)
 - **Cost:** "<verbatim quote from the cited entry's cost/avoid-when text>"
 - **What varies:** the concrete second implementation or future change.
   "Nothing — this is a direct fix" is a valid and common answer.
@@ -174,10 +188,11 @@ Checked for and absent. Keeps the next run from re-litigating.
 
 **Required on every detailed finding:**
 
-1. Fix names a manifest pattern with its `lexicon:` path, or says "no pattern —
-   direct code" and names the **closest** entry with its path plus why it loses.
-   Either way the finding quotes the cited entry's cost text — verified, so it
-   must come from the actual entry, not from memory
+1. Fix names a manifest pattern with its `lexicon:` path, or — for "no pattern —
+   direct code" — names the smell it removes (from the code-smell catalog) or the
+   closest entry it beats, with the path. Either way the finding quotes the cited
+   entry's cost / when-not-to text — verified, so it must come from the actual
+   entry, not from memory
 2. What varies names something concrete. "Flexibility" and "testability" are not
    answers — they describe wanting to do it, not a reason to
 3. Tracing cost is stated
@@ -256,9 +271,9 @@ loadable in isolation:
   `shared/` imported by everything means no feature can be extracted. Splitting
   them is usually worth more than any pattern in the manifest.
 - **Imports point one direction, enforced by lint.** A config that fails CI beats
-  discipline. Linter setup per language in the reference files. If the audit finds
-  a direction problem, propose the rule alongside the fix — otherwise it regresses
-  on the next feature.
+  discipline. Linter setup per ecosystem is in [reference/method.md](reference/method.md)
+  (step 4). If the audit finds a direction problem, propose the rule alongside the
+  fix — otherwise it regresses on the next feature.
 - **Object graph constructed explicitly in main.** No reflection container. When
   main shows the whole graph, go-to-definition traverses reality and resolves to
   one candidate instead of six.

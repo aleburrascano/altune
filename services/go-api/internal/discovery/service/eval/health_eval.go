@@ -80,7 +80,7 @@ func RunHealthEval(ctx context.Context, entities []LibraryEntity, searcher Searc
 						if r.ImageURL != "" {
 							artwork++
 						}
-						if stringExtra(r, "resolution_tier") == domain.EntityResolutionBridge.String() {
+						if domain.ResolutionTierFromExtras(r.Extras) == domain.EntityResolutionBridge {
 							bridged++
 						}
 					}
