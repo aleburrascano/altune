@@ -53,20 +53,17 @@ func (s *DeezerEnrichmentService) Execute(
 
 	return CachedLookup(ctx, s.cache, deezerNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
 		func(ctx context.Context) (domain.DeezerEnrichment, bool, error) {
-			return resolveThenLookup(
+			v, found, err := resolveThenLookup(
 				ctx,
 				func(ctx context.Context) (string, error) { return s.enricher.ResolveID(ctx, kind, artist, entityTitle) },
 				func(ctx context.Context, id string) (domain.DeezerEnrichment, error) { return s.enricher.Lookup(ctx, kind, id) },
 				domain.DeezerEnrichment.IsZero,
-				func(err error) {
-					slog.WarnContext(ctx, "deezer_enrichment.resolve_failed",
-						"kind", kind.String(), "artist", artist, "title", entityTitle, "error", err)
-				},
-				func(id string, err error) {
-					slog.WarnContext(ctx, "deezer_enrichment.lookup_failed",
-						"kind", kind.String(), "id", id, "title", entityTitle, "error", err)
-				},
 			)
+			if err != nil {
+				slog.WarnContext(ctx, "deezer_enrichment.failed",
+					"kind", kind.String(), "artist", artist, "title", entityTitle, "error", err)
+			}
+			return v, found, err
 		})
 }
 
