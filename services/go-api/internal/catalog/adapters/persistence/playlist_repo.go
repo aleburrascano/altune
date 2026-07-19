@@ -38,7 +38,7 @@ func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Pla
 	return err
 }
 
-func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, error) {
+func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, []domain.PlaylistSummary, error) {
 	// track_count and preview_artwork are read-side projections computed in the
 	// same query — one round-trip for the whole playlists screen, no per-playlist
 	// follow-up. preview_artwork: up to four distinct artwork URLs in position
@@ -63,11 +63,12 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 		userId.UUID(), domain.PreviewArtworkLimit,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
 	var playlists []*domain.Playlist
+	var summaries []domain.PlaylistSummary
 	for rows.Next() {
 		var (
 			id         uuid.UUID
@@ -80,23 +81,24 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 		)
 		err := rows.Scan(&id, &uid, &name, &createdAt, &updatedAt, &trackCount, &artwork)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		p := &domain.Playlist{
+		playlists = append(playlists, &domain.Playlist{
 			ID:        domain.PlaylistIdFromUUID(id),
 			UserId:    shared.NewUserId(uid),
 			Name:      name,
 			CreatedAt: createdAt,
 			UpdatedAt: updatedAt,
-		}
-		p.TrackCount = trackCount
-		p.PreviewArtworkURLs = artwork
-		playlists = append(playlists, p)
+		})
+		summaries = append(summaries, domain.PlaylistSummary{
+			TrackCount:         trackCount,
+			PreviewArtworkURLs: artwork,
+		})
 	}
-	return playlists, rows.Err()
+	return playlists, summaries, rows.Err()
 }
 
-func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, error) {
+func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {
 	// track_count is projected here too (not just on ListForUser) so single-
 	// playlist responses (e.g. rename) report the real count without loading the
 	// track rows.
@@ -116,23 +118,23 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 	)
 	err := row.Scan(&pid, &uid, &name, &createdAt, &updatedAt, &trackCount)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, domain.PlaylistSummary{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, domain.PlaylistSummary{}, err
 	}
-	return &domain.Playlist{
-		ID:         domain.PlaylistIdFromUUID(pid),
-		UserId:     shared.NewUserId(uid),
-		Name:       name,
-		CreatedAt:  createdAt,
-		UpdatedAt:  updatedAt,
-		TrackCount: trackCount,
-	}, nil
+	playlist := &domain.Playlist{
+		ID:        domain.PlaylistIdFromUUID(pid),
+		UserId:    shared.NewUserId(uid),
+		Name:      name,
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
+	}
+	return playlist, domain.PlaylistSummary{TrackCount: trackCount}, nil
 }
 
 func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {
-	playlist, err := r.GetByID(ctx, id, userId)
+	playlist, _, err := r.GetByID(ctx, id, userId)
 	if err != nil || playlist == nil {
 		return nil, nil, err
 	}

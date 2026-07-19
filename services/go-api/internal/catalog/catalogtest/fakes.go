@@ -195,9 +195,9 @@ func (r *PlaylistRepo) Create(_ context.Context, playlist *domain.Playlist) erro
 	return nil
 }
 
-func (r *PlaylistRepo) ListForUser(_ context.Context, userId shared.UserId) ([]*domain.Playlist, error) {
+func (r *PlaylistRepo) ListForUser(_ context.Context, userId shared.UserId) ([]*domain.Playlist, []domain.PlaylistSummary, error) {
 	if r.ErrOnList != nil {
-		return nil, r.ErrOnList
+		return nil, nil, r.ErrOnList
 	}
 	var result []*domain.Playlist
 	for _, p := range r.Playlists {
@@ -205,18 +205,19 @@ func (r *PlaylistRepo) ListForUser(_ context.Context, userId shared.UserId) ([]*
 			result = append(result, p)
 		}
 	}
-	return result, nil
+	summaries := make([]domain.PlaylistSummary, len(result))
+	return result, summaries, nil
 }
 
-func (r *PlaylistRepo) GetByID(_ context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, error) {
+func (r *PlaylistRepo) GetByID(_ context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {
 	if r.ErrOnGetByID != nil {
-		return nil, r.ErrOnGetByID
+		return nil, domain.PlaylistSummary{}, r.ErrOnGetByID
 	}
 	p, ok := r.Playlists[id.String()]
 	if !ok || p.UserId != userId {
-		return nil, nil
+		return nil, domain.PlaylistSummary{}, nil
 	}
-	return p, nil
+	return p, domain.PlaylistSummary{}, nil
 }
 
 func (r *PlaylistRepo) GetWithTracks(_ context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {

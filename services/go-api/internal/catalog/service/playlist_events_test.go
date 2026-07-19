@@ -54,7 +54,7 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 		plRepo.Seed(pl)
 		svc := NewPlaylistLifecycleService(plRepo, WithPlaylistLifecycleEvents(pub))
 
-		if _, err := svc.Rename(ctx, userId, pl.ID, "New Name"); err != nil {
+		if _, _, err := svc.Rename(ctx, userId, pl.ID, "New Name"); err != nil {
 			t.Fatalf("rename: %v", err)
 		}
 		p := pub.last("playlist_renamed")

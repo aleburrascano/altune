@@ -124,7 +124,7 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlists, err := h.lifecycle.List(r.Context(), userId)
+	playlists, summaries, err := h.lifecycle.List(r.Context(), userId)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
@@ -132,9 +132,7 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]PlaylistResponse, len(playlists))
 	for i, p := range playlists {
-		// Track count and preview artwork are projections the list query
-		// already computed — no per-playlist follow-up queries.
-		items[i] = playlistToResponse(p, p.TrackCount, p.PreviewArtworkURLs)
+		items[i] = playlistToResponse(p, summaries[i].TrackCount, summaries[i].PreviewArtworkURLs)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, ListPlaylistsResponse{
@@ -192,15 +190,13 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlist, err := h.lifecycle.Rename(r.Context(), userId, playlistId, req.Name)
+	playlist, summary, err := h.lifecycle.Rename(r.Context(), userId, playlistId, req.Name)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
-	// TrackCount is the GetByID projection — playlist.Tracks is never loaded on
-	// this path, so len(playlist.Tracks) would always report 0.
-	httputil.WriteJSON(w, http.StatusOK, playlistToResponse(playlist, playlist.TrackCount, nil))
+	httputil.WriteJSON(w, http.StatusOK, playlistToResponse(playlist, summary.TrackCount, nil))
 }
 
 func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {

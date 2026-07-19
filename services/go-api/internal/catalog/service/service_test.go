@@ -575,7 +575,7 @@ func TestPlaylistLifecycleService_Rename(t *testing.T) {
 			playlistId := tt.setup(plRepo)
 			svc := NewPlaylistLifecycleService(plRepo)
 
-			_, err := svc.Rename(ctx, userId, playlistId, tt.newName)
+			_, _, err := svc.Rename(ctx, userId, playlistId, tt.newName)
 
 			if tt.wantErr != "" {
 				if err == nil {
@@ -590,7 +590,7 @@ func TestPlaylistLifecycleService_Rename(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			// Verify the name was actually updated in the repo
-			renamed, _ := plRepo.GetByID(ctx, playlistId, userId)
+			renamed, _, _ := plRepo.GetByID(ctx, playlistId, userId)
 			if renamed == nil {
 				t.Fatal("expected playlist to still exist after rename")
 			}
