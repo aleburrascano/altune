@@ -49,12 +49,12 @@ func (s *PlaylistLifecycleService) Create(ctx context.Context, userId shared.Use
 	return playlist, nil
 }
 
-func (s *PlaylistLifecycleService) List(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, error) {
-	playlists, err := s.playlistRepo.ListForUser(ctx, userId)
+func (s *PlaylistLifecycleService) List(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, []domain.PlaylistSummary, error) {
+	playlists, summaries, err := s.playlistRepo.ListForUser(ctx, userId)
 	if err != nil {
-		return nil, fmt.Errorf("list playlists: %w", err)
+		return nil, nil, fmt.Errorf("list playlists: %w", err)
 	}
-	return playlists, nil
+	return playlists, summaries, nil
 }
 
 func (s *PlaylistLifecycleService) Get(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId) (*domain.Playlist, []*domain.Track, error) {
@@ -100,24 +100,24 @@ func PreviewArtworkURLs(tracks []*domain.Track) []string {
 	return urls
 }
 
-func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, name string) (*domain.Playlist, error) {
-	playlist, err := s.playlistRepo.GetByID(ctx, playlistId, userId)
+func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, name string) (*domain.Playlist, domain.PlaylistSummary, error) {
+	playlist, summary, err := s.playlistRepo.GetByID(ctx, playlistId, userId)
 	if err != nil {
-		return nil, fmt.Errorf("rename playlist: %w", err)
+		return nil, domain.PlaylistSummary{}, fmt.Errorf("rename playlist: %w", err)
 	}
 	if playlist == nil {
-		return nil, ErrPlaylistNotFound
+		return nil, domain.PlaylistSummary{}, ErrPlaylistNotFound
 	}
 	if err := playlist.Rename(name); err != nil {
-		return nil, err
+		return nil, domain.PlaylistSummary{}, err
 	}
 	if err := s.playlistRepo.Update(ctx, playlist); err != nil {
-		return nil, fmt.Errorf("rename playlist: %w", err)
+		return nil, domain.PlaylistSummary{}, fmt.Errorf("rename playlist: %w", err)
 	}
 	s.events.Publish(userId, "playlist_renamed", map[string]any{
 		"playlist_id": playlistId.String(),
 		"name":        playlist.Name,
 	})
-	return playlist, nil
+	return playlist, summary, nil
 }
 

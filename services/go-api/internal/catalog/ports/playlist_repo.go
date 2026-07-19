@@ -14,8 +14,8 @@ import (
 // less (Go interfaces are satisfied implicitly, so that move costs nothing).
 type PlaylistRepository interface {
 	Create(ctx context.Context, playlist *domain.Playlist) error
-	ListForUser(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, error)
-	GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, error)
+	ListForUser(ctx context.Context, userId shared.UserId) ([]*domain.Playlist, []domain.PlaylistSummary, error)
+	GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error)
 	GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error)
 	Delete(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (deleted bool, err error)
 	Update(ctx context.Context, playlist *domain.Playlist) error

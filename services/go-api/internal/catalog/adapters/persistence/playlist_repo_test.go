@@ -45,7 +45,7 @@ func TestPgxPlaylistRepo_CreateAndGetByID(t *testing.T) {
 	}
 
 	// Act: GetByID
-	got, err := repo.GetByID(ctx, pl.ID, userId)
+	got, _, err := repo.GetByID(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
@@ -89,7 +89,7 @@ func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 	}
 
 	// Act
-	got, err := repo.ListForUser(ctx, userId)
+	got, _, err := repo.ListForUser(ctx, userId)
 	if err != nil {
 		t.Fatalf("ListForUser() error = %v", err)
 	}
@@ -130,7 +130,7 @@ func TestPgxPlaylistRepo_Delete(t *testing.T) {
 	}
 
 	// Assert: gone
-	got, err := repo.GetByID(ctx, pl.ID, userId)
+	got, _, err := repo.GetByID(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID after delete: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestPgxPlaylistRepo_GetByID_NotFound(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	got, err := repo.GetByID(ctx, domain.PlaylistIdFromUUID(uuid.New()), userId)
+	got, _, err := repo.GetByID(ctx, domain.PlaylistIdFromUUID(uuid.New()), userId)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
