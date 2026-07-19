@@ -106,13 +106,12 @@ func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.
 	getStatusSvc := service.NewGetTrackStatusService(trackRepo)
 	backfillSvc := service.NewBackfillFeaturedService(trackRepo, nil)
 	listFeaturingSvc := service.NewListFeaturingService(trackRepo)
-	h := NewTrackHandler(addSvc, listSvc, getStatusSvc, deleteSvc, setTrackNumberSvc)
 	featuredH := NewFeaturedArtistHandler(backfillSvc, listFeaturingSvc)
+	h := NewTrackHandler(addSvc, listSvc, getStatusSvc, deleteSvc, setTrackNumberSvc, featuredH)
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(verifyAsTestUser))
 	r.Route("/tracks", func(r chi.Router) {
 		r.Mount("/", h.Routes())
-		featuredH.AddRoutes(r)
 	})
 	return h, r
 }
