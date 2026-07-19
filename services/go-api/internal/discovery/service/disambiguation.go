@@ -35,7 +35,7 @@ func (s *Service) applyArtistDisambiguation(ctx context.Context, results []domai
 		if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
 			continue
 		}
-		if disambig := stringExtra(r, "disambiguation"); disambig != "" {
+		if disambig, _ := r.Extras["disambiguation"].(string); disambig != "" {
 			results[i].Subtitle = disambig
 		}
 	}
