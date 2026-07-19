@@ -18,7 +18,7 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		providerName  string
+		providerName  domain.ProviderName
 		externalID    string
 		limit         int
 		providers     map[string]ports.ArtistContentProvider
@@ -27,7 +27,7 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 	}{
 		{
 			name:         "valid provider returns top tracks",
-			providerName: "deezer",
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-42",
 			limit:        0,
 			providers: map[string]ports.ArtistContentProvider{
@@ -48,7 +48,7 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 		},
 		{
 			name:          "unknown provider returns error status",
-			providerName:  "nonexistent",
+			providerName:  domain.ProviderSoundCloud,
 			externalID:    "artist-42",
 			limit:         0,
 			providers:     map[string]ports.ArtistContentProvider{},
@@ -57,7 +57,7 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 		},
 		{
 			name:         "provider error returns error status",
-			providerName: "deezer",
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-err",
 			limit:        0,
 			providers: map[string]ports.ArtistContentProvider{
@@ -72,7 +72,7 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 		},
 		{
 			name:         "limit truncates results",
-			providerName: "deezer",
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-42",
 			limit:        2,
 			providers: map[string]ports.ArtistContentProvider{
@@ -112,7 +112,7 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 func TestGetArtistContentService_GetAlbums(t *testing.T) {
 	tests := []struct {
 		name          string
-		providerName  string
+		providerName  domain.ProviderName
 		externalID    string
 		limit         int
 		providers     map[string]ports.ArtistContentProvider
@@ -121,7 +121,7 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 	}{
 		{
 			name:         "valid provider returns albums",
-			providerName: "deezer",
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-42",
 			limit:        0,
 			providers: map[string]ports.ArtistContentProvider{
@@ -139,7 +139,7 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 		},
 		{
 			name:          "unknown provider returns error status",
-			providerName:  "nonexistent",
+			providerName:  domain.ProviderSoundCloud,
 			externalID:    "artist-42",
 			limit:         0,
 			providers:     map[string]ports.ArtistContentProvider{},
@@ -148,7 +148,7 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 		},
 		{
 			name:         "dedup by normalized title keeps album with higher track_count",
-			providerName: "deezer",
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-42",
 			limit:        0,
 			providers: map[string]ports.ArtistContentProvider{
@@ -182,7 +182,7 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 		},
 		{
 			name:         "dedup keeps higher track_count version",
-			providerName: "deezer",
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-42",
 			limit:        0,
 			providers: map[string]ports.ArtistContentProvider{
@@ -210,7 +210,7 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 		},
 		{
 			name:         "provider error returns error status",
-			providerName: "deezer",
+			providerName: domain.ProviderDeezer,
 			externalID:   "artist-err",
 			limit:        0,
 			providers: map[string]ports.ArtistContentProvider{
@@ -269,7 +269,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := NewGetArtistContentService(providers)
 
-		resp, err := svc.GetAlbums(context.Background(), "deezer", "artist-1", "", 0)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", "",0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -303,7 +303,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := NewGetArtistContentService(providers)
 
-		resp, err := svc.GetAlbums(context.Background(), "deezer", "artist-1", "", 0)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", "",0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -326,7 +326,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := NewGetArtistContentService(providers)
 
-		resp, err := svc.GetAlbums(context.Background(), "deezer", "artist-1", "", 2)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", "",2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

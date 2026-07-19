@@ -32,8 +32,8 @@ func WithConsensusService(c *ConsensusService) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.consensus = c }
 }
 
-func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName, externalID string, limit int) (*ContentFetchResponse, error) {
-	provider, ok := s.providers[providerName]
+func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID string, limit int) (*ContentFetchResponse, error) {
+	provider, ok := s.providers[providerName.String()]
 	results, degraded := fetchProviderResults(ctx, providerName, externalID, "artist_top_tracks.provider_failed", ok,
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			return provider.GetArtistTopTracks(ctx, pn, id)
@@ -44,8 +44,8 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 	return okContentResponse(providerName, results, limit), nil
 }
 
-func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
-	provider, ok := s.providers[providerName]
+func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
+	provider, ok := s.providers[providerName.String()]
 	results, degraded := fetchProviderResults(ctx, providerName, externalID, "artist_albums.provider_failed", ok,
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			return provider.GetArtistAlbums(ctx, pn, id)
