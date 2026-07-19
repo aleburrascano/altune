@@ -647,7 +647,7 @@ func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 		{
 			name: "repo error propagates",
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
-				plRepo.ErrOnGetByID = errRepo
+				plRepo.ErrOnGetWithTracks = errRepo
 				return domain.NewPlaylistId(), domain.NewTrackId()
 			},
 			wantErr: errRepo,

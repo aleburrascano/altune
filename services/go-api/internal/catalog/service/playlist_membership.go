@@ -33,14 +33,18 @@ func WithPlaylistMembershipEvents(pub events.Publisher) func(*PlaylistMembership
 	}
 }
 
-// AIDEV-NOTE: AddTrack reads (track existence + playlist) then writes without a
-// surrounding transaction, leaving a narrow race: a concurrent track delete
-// between the GetByID checks and repo.AddTrack can append a now-missing track.
-// Outcome is a soft failure (the row's FK/next read reconciles; client retries),
-// not corruption — accepted pre-launch. Harden with a tx or FK-on-insert when a
-// spec needs stronger atomicity.
+// AIDEV-NOTE: AddTrack reads (track existence + playlist with membership) then
+// writes without a surrounding transaction, leaving a narrow race: a concurrent
+// track delete between the GetWithTracks checks and repo.AddTrack can append a
+// now-missing track. Outcome is a soft failure (the row's FK/next read
+// reconciles; client retries), not corruption — accepted pre-launch. Harden
+// with a tx or FK-on-insert when a spec needs stronger atomicity.
+//
+// GetWithTracks (not GetByID) is required here so playlist.Tracks is populated
+// before playlist.AddTrack runs: the domain method's duplicate check and position
+// assignment both depend on the current membership list.
 func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
-	playlist, err := s.playlistRepo.GetByID(ctx, playlistId, userId)
+	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
 	if err != nil {
 		return fmt.Errorf("add track to playlist: %w", err)
 	}
