@@ -104,7 +104,7 @@ func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.
 	setTrackNumberSvc := service.NewSetTrackNumberService(trackRepo)
 
 	getStatusSvc := service.NewGetTrackStatusService(trackRepo)
-	backfillSvc := service.NewBackfillFeaturedService(trackRepo, nil)
+	backfillSvc := service.NewBackfillFeaturedService(trackRepo, ports.NoopFeaturedArtistResolver())
 	listFeaturingSvc := service.NewListFeaturingService(trackRepo)
 	featuredH := NewFeaturedArtistHandler(backfillSvc, listFeaturingSvc)
 	h := NewTrackHandler(addSvc, listSvc, getStatusSvc, deleteSvc, setTrackNumberSvc, featuredH)

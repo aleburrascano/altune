@@ -13,3 +13,14 @@ import (
 type FeaturedArtistResolver interface {
 	Resolve(ctx context.Context, artist, title string) ([]domain.FeaturedArtist, error)
 }
+
+// NoopFeaturedArtistResolver returns empty credits for every track. Callers
+// that don't wire a real resolver (e.g. tests) can default to this instead of
+// guarding every Resolve call against a nil field.
+func NoopFeaturedArtistResolver() FeaturedArtistResolver { return noopFeaturedArtistResolver{} }
+
+type noopFeaturedArtistResolver struct{}
+
+func (noopFeaturedArtistResolver) Resolve(_ context.Context, _, _ string) ([]domain.FeaturedArtist, error) {
+	return nil, nil
+}
