@@ -14,15 +14,12 @@ func resolveThenLookup[ID comparable, T any](
 	resolve func(context.Context) (ID, error),
 	lookup func(context.Context, ID) (T, error),
 	isEmpty func(T) bool,
-	onResolveErr func(error),
-	onLookupErr func(id ID, err error),
 ) (T, bool, error) {
 	var zero T
 	var zeroID ID
 
 	id, err := resolve(ctx)
 	if err != nil {
-		onResolveErr(err)
 		return zero, false, err
 	}
 	if id == zeroID {
@@ -31,7 +28,6 @@ func resolveThenLookup[ID comparable, T any](
 
 	v, err := lookup(ctx, id)
 	if err != nil {
-		onLookupErr(id, err)
 		return zero, false, err
 	}
 	if isEmpty(v) {
