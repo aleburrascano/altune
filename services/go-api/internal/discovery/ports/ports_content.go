@@ -13,6 +13,14 @@ type AlbumValidator interface {
 	ResolveArtistIdentity(ctx context.Context, artistName string) (*ArtistIdentity, error)
 }
 
+// ArtistIdentityResolver is the narrow port consumed by the search pipeline's
+// artist-disambiguation step. It is satisfied by the same MusicBrainz adapter
+// that implements AlbumValidator; the split lets Service hold only the one
+// method it actually calls.
+type ArtistIdentityResolver interface {
+	ResolveArtistIdentity(ctx context.Context, artistName string) (*ArtistIdentity, error)
+}
+
 type ArtistIdentity struct {
 	MBID           string
 	Disambiguation string
