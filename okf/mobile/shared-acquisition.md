@@ -4,10 +4,10 @@ title: Shared acquisition (download tracking)
 description: SSE-fed client-side lifecycle store that tracks in-flight Track downloads by track id, mapping the backend pipeline's six stages onto three display phases with a guaranteed terminal animation.
 resource: apps/mobile/src/shared/acquisition/
 tags: [mobile, shared, acquisition, downloads]
-verified_commit: 7bda67e8aaea57e67526c36fca140ab5709b6099
+verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ---
 
-The client-side mirror of the backend [acquisition pipeline](../backend/acquisition.md). The backend reports a raw stage name per `track_acquisition_progress` event — no percentage — and `stagePhase.ts` maps its six pipeline steps onto three human phases: `search`/`select` → `finding`, `download` → `downloading`, `tag`/`store`/`update_track` → `finishing`, each with display copy (`phaseLabel`/`stageLabel`). Unknown or new stage names fall back to `working`, so a backend stage rename never breaks the UI. `ACQUISITION_PHASES` is the ordered visible triple (excluding the `working` fallback) for the segmented progress indicator.
+The client-side mirror of the backend [acquisition pipeline](../backend/acquisition/pipeline.md). The backend reports a raw stage name per `track_acquisition_progress` event — no percentage — and `stagePhase.ts` maps its six pipeline steps onto three human phases: `search`/`select` → `finding`, `download` → `downloading`, `tag`/`store`/`update_track` → `finishing`, each with display copy (`phaseLabel`/`stageLabel`). Unknown or new stage names fall back to `working`, so a backend stage rename never breaks the UI. `ACQUISITION_PHASES` is the ordered visible triple (excluding the `working` fallback) for the segmented progress indicator.
 
 `downloadStore.ts` (`useDownloadStore`, Zustand) is **the single source of truth for both membership and phase** of in-flight downloads, keyed by track id. This one-store design is the fix for the "Finishing up… never paints, then the row vanishes" bug: membership used to come from the cached `acquisition_status === 'pending'` field while the phase came from a separate stage store, so the `completed` event's cache flip (status → ready) unmounted the row in the same tick it set the last phase. `DownloadPhase` is `finding | downloading | finishing | done | failed` (stagePhase's `working` is a display fallback only, never stored). Invariants enforced by the store:
 

@@ -4,7 +4,7 @@ title: Shared telemetry
 description: Rotating session-id correlation, a two-tier reliability outbox for label-critical events, and the unified recordEvent hook for behavioral telemetry.
 resource: apps/mobile/src/shared/telemetry/
 tags: [mobile, shared, telemetry, events, reliability]
-verified_commit: 93c5bc09ecd9649b027a203516a10282a8f0cfda
+verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ---
 
 `session.ts` implements the **session_id** ubiquitous-language term: a rotating correlation id grouping a search arc (search → click → play) so server-side session-signal derivation (abandoned-search, pogo-sticking — see [telemetry](../backend/discovery/telemetry.md)) can reason over query chains. `SessionState = { sessionId, lastActivity }`; the pure `advanceSession(state, now)` rotates the id (`makeSessionId`, a base36-timestamp + random suffix) after `SESSION_INACTIVITY_MS` (30 min) of inactivity — unit-testable with no RN dependency. The stateful wrapper (`_state` module-level variable) is a thin shell: `getSessionId()` calls `advanceSession` on every read, and `ensureForegroundRotation` (idempotent, guarded by `_listening`) registers an `AppState` listener that force-rotates on `active` regardless of inactivity, so every fresh app open starts a new arc. This split — pure logic function tested directly, stateful wrapper untested but trivial — is the pattern repeated in `outbox.ts`.

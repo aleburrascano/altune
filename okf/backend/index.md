@@ -9,12 +9,12 @@ Each bounded context is a hexagon: `domain/` (pure core) → `ports/` (interface
 
 ## Bounded contexts
 
-- [catalog](catalog.md) — Track & Playlist aggregates: owned music metadata, dedup, playlist ordering, audio storage/streaming
-- [acquisition](acquisition.md) — yt-dlp pipeline that finds, ranks, downloads, verifies, tags, and stores audio for a saved Track
+- [catalog](catalog/index.md) — Track & Playlist aggregates: owned music metadata, dedup, playlist ordering, audio storage/streaming
+- [acquisition](acquisition/index.md) — yt-dlp pipeline that finds, ranks, downloads, verifies, tags, and stores audio for a saved Track (has its own index)
 - [discovery](discovery/index.md) — multi-provider search, merge, ranking, enrichment (the largest context; has its own index)
 - [playback](playback.md) — server-side persistence of the client-owned playback Queue snapshot (resume-on-reopen)
 - [auth](auth.md) — Supabase JWT verification middleware injecting the verified user id into context
-- [admin](admin.md) — Mission Control: the single-operator observability console under /admin (deliberately not hexagonal)
+- [admin](admin/index.md) — Mission Control: the single-operator observability console under /admin (deliberately not hexagonal)
 
 ## Cross-cutting
 

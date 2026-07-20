@@ -4,7 +4,7 @@ title: Discovery identity & artwork resolution
 description: The durable EntityIdentity bridge and identity-first artwork chain that keep cross-provider merge and artwork correct for same-name entities even when MusicBrainz is absent from a given search.
 resource: services/go-api/internal/discovery/domain/identity.go, services/go-api/internal/discovery/adapters/persistence/entity_identity_repo.go, services/go-api/internal/discovery/adapters/cache/identity_store_cache.go, services/go-api/internal/discovery/adapters/cache/artwork_cache.go, services/go-api/internal/discovery/adapters/providers/artwork_chain.go, services/go-api/internal/discovery/ports/ports_artwork.go
 tags: [discovery, identity, artwork, musicbrainz, cache, persistence, subsystem]
-verified_commit: c324e0716c50cc6d5e3d7a5255ac9f7552bc0df1
+verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ---
 
 The load-bearing principle (per `ARCHITECTURE.md`): everything merges by identity, never by bare name, because same-name entities (the "Che" problem) otherwise collide. Two structures carry this in-request and durably.

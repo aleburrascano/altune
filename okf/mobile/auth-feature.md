@@ -4,7 +4,7 @@ title: Auth
 description: Supabase-backed sign-in/sign-up/OAuth/password-reset with a single deep-link spine and session-gated routing.
 resource: apps/mobile/src/features/auth/
 tags: [mobile, feature, auth, supabase, deep-linking, session]
-verified_commit: ef83a2d01b540b40e2240917e2ee6caaca30ab7d
+verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ---
 
 Owns sign-in, sign-up, sign-out, OAuth (Apple/Google), password reset, and session restoration on the mobile client (ADR-0006). The backend's `auth.RequireUserID` dependency (see [auth](../backend/auth.md)) consumes the JWT this feature obtains via Supabase; the mobile app never decodes or manipulates the token itself.

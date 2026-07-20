@@ -4,7 +4,7 @@ title: YouTube Music
 description: Keyless internal-API adapter for track/video/album/artist search plus a self-owned response parser, whose one non-duplicative contribution is hi-res artist artwork.
 resource: services/go-api/internal/discovery/adapters/providers/ytmusic.go, services/go-api/internal/discovery/adapters/providers/ytmusic_client.go, services/go-api/internal/discovery/adapters/providers/search_kinds.go
 tags: [discovery, provider, youtube-music, artwork, search]
-verified_commit: e57991f354652946745942474b04d8dac7322f27
+verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ---
 
 `YouTubeMusicAdapter` (`ytmusic.go`) searches YouTube Music's internal `music.youtube.com/youtubei/v1/search` endpoint — the same backend the WEB_REMIX web player calls. `Search` dispatches one unfiltered query per call and maps `result.Tracks`, `result.Videos` (obscure/UGC recordings YT Music files as videos — mapped to tracks so they aren't lost from the candidate set, per an `AIDEV-NOTE` in the file), `result.Albums`, and `result.Artists`. `GetArtistAlbums`/`GetArtistTopTracks` implement `ports.ArtistContentProvider`, filtering results to an exact case-insensitive artist-name match.

@@ -23,4 +23,4 @@ Discovery is the multi-provider search context (`services/go-api/internal/discov
 - [telemetry](telemetry.md) — InteractionEvent pipeline + SatisfactionConsumer turning play/skip/completed into a ranking signal
 - [eval-harness](eval-harness.md) — offline discoveryeval CLI measuring ranking/merge/diversity/coverage against committed baselines
 
-The Mission Control operator console that displays discovery's telemetry is its own module — see [admin](../admin.md); discovery feeds it through consumer-defined seams and never imports it.
+The Mission Control operator console that displays discovery's telemetry is its own module — see [admin](../admin/index.md); discovery feeds it through consumer-defined seams and never imports it.

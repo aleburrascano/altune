@@ -4,7 +4,7 @@ title: Artwork Resolution Chain
 description: The ordered fallback chain of artwork-only providers (identity-keyed then name-search) tried when Deezer's primary artwork is missing.
 resource: services/go-api/internal/discovery/adapters/providers/artwork_chain.go, services/go-api/internal/discovery/adapters/providers/fanarttv.go, services/go-api/internal/discovery/adapters/providers/coverartarchive.go, services/go-api/internal/discovery/adapters/providers/spotify_artwork.go
 tags: [discovery, provider, artwork, fallback-chain, identity-resolution]
-verified_commit: e57991f354652946745942474b04d8dac7322f27
+verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ---
 
 `ChainedArtworkResolver` (`artwork_chain.go`) composes a list of `ports.ArtworkResolver`s, tried in order, returning the first non-empty URL that isn't a Deezer placeholder (`IsDeezerPlaceholder`). It implements the service-side `ports.TaggingArtworkResolver` port — two distinct resolution paths, consumed by [identity-artwork](../backend/discovery/identity-artwork.md):

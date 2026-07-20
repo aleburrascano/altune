@@ -9,4 +9,4 @@ Invariants:
 - `failureReason` maps step errors to a small client-safe vocabulary; the raw error chain is logged, never stored on the track or sent over the wire.
 - Manual retry is admission-gated: only `AcquisitionFailed` tracks, one per track per 60s.
 
-Knowledge base: `okf/backend/acquisition.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
+Knowledge base: `okf/backend/acquisition/index.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
