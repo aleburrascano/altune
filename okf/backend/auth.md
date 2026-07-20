@@ -4,7 +4,7 @@ title: Auth
 description: Supabase-issued JWT verification middleware that authenticates every inbound request and injects the verified user id into context.
 resource: services/go-api/internal/auth/
 tags: [bounded-context, hexagonal, go-api, auth, jwt, middleware, supabase]
-verified_commit: cae1959c18ded17f587561e0893a35767ab0540d
+verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ---
 
 Auth is a small cross-cutting context, not a full hexagon with its own domain/service split — it's a chi middleware plus one adapter. It authenticates every request via a Supabase-issued JWT and threads the verified user id through `context.Context` for downstream handlers.

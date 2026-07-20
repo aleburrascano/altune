@@ -9,4 +9,4 @@ Invariants:
 - `Playlist` positions are contiguous 0..N-1 with no duplicate tracks, enforced only via `AddTrack`/`RemoveTrack`/`Reorder`.
 - Acquisition is reached only through the `AcquisitionScheduler` port — catalog never imports acquisition.
 
-Knowledge base: `okf/backend/catalog.md`; tables in `okf/data/tracks-table.md`, `okf/data/playlists-table.md` — read before structural work; update in the same commit when behavior they describe changes (pre-commit hook enforces).
+Knowledge base: `okf/backend/catalog/index.md`; tables in `okf/data/tracks-table.md`, `okf/data/playlists-table.md` — read before structural work; update in the same commit when behavior they describe changes (pre-commit hook enforces).

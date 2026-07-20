@@ -4,7 +4,7 @@ title: CI/CD pipeline
 description: The five GitHub Actions workflows that gate, test, and ship the altune backend and mobile client.
 resource: .github/workflows/deploy-backend.yml, .github/workflows/discovery-eval-gate.yml, .github/workflows/release-ios.yml, .github/workflows/test-backend.yml, .github/workflows/uptime-check.yml
 tags: [ci-cd, workflow, deployment, testing, discovery, ios]
-verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
+verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ---
 
 Five independent workflows, each scoped to a path or schedule.
@@ -17,6 +17,6 @@ Five independent workflows, each scoped to a path or schedule.
 
 **release-ios.yml** — triggers on a `v*` tag push or manual dispatch with a version input. Builds an **unsigned** iOS `.ipa` on macos-15 (Expo prebuild → CocoaPods → `xcodebuild archive` with `CODE_SIGNING_ALLOWED=NO`) for sideloading via AltStore/SideStore (which re-sign on-device with the user's own Apple ID — no Apple Developer account needed). Publishes a GitHub Release with the `.ipa`, then a second job updates the AltStore manifest (`apps.json`) on a dedicated, unprotected `altstore` branch via `scripts/update-altstore-source.mjs` so existing installs see the new version.
 
-**uptime-check.yml** — cron `*/5 * * * *` (GitHub's minimum granularity) plus manual dispatch. Curls `UPTIME_HEALTH_URL` (a repo Environment secret named "uptime") and, on non-200 or unreachable, pushes an ntfy alert (`UPTIME_NTFY_URL`, optional). Exists because the in-process alert monitor (see [admin](../backend/admin.md)) dies with the box and can't report total outage — this runs off-box on GitHub's infrastructure, $0 cost, storing no topology (only the health URL/ntfy URL as secrets).
+**uptime-check.yml** — cron `*/5 * * * *` (GitHub's minimum granularity) plus manual dispatch. Curls `UPTIME_HEALTH_URL` (a repo Environment secret named "uptime") and, on non-200 or unreachable, pushes an ntfy alert (`UPTIME_NTFY_URL`, optional). Exists because the in-process alert monitor (see [alerting](../backend/admin/alerting.md)) dies with the box and can't report total outage — this runs off-box on GitHub's infrastructure, $0 cost, storing no topology (only the health URL/ntfy URL as secrets).
 
 **Gotcha**: only `test-backend.yml` and `discovery-eval-gate.yml` gate PRs. `deploy-backend.yml` fires on push to `main` (post-merge), so a merged PR auto-deploys to production — the only manual step left is applying migrations.

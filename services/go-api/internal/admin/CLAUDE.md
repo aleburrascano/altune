@@ -10,4 +10,4 @@ Invariants:
 - Discovery/acquisition never import admin — they feed it via consumer-defined seams. Don't invert that.
 - SSE needs `http.Flusher` forwarded through every middleware wrapper.
 
-Knowledge base: `okf/backend/admin.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
+Knowledge base: `okf/backend/admin/index.md` — read before structural work; update the relevant concept file in the same commit when behavior it describes changes (pre-commit hook enforces).

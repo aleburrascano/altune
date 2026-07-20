@@ -1,0 +1,38 @@
+---
+type: Subsystem
+title: Admin console surfaces
+description: The /admin transport layer (AdminHandler) plus its three lifecycle-backed panels — the system-wide event tap, the discovery-eval meter, and the provider-health rolling window — and the embedded console UI.
+resource: services/go-api/internal/admin/handler/, services/go-api/internal/admin/eventtap/, services/go-api/internal/admin/evalmeter/, services/go-api/internal/admin/providerhealth/, services/go-api/internal/admin/ui/
+tags: [admin, handler, sse, eventtap, evalmeter, providerhealth, mission-control]
+verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
+---
+
+## Handler: gating and construction
+
+`AdminHandler` (`handler/admin_handler.go`) splits into an unauthenticated `ServeIndex` (serves the embedded `ui.IndexHTML` console shell — holds no data) and `RegisterData`, which the composition root wraps in `auth.Middleware` (see [auth](../auth.md)) + `OperatorOnly` (`handler/operator_middleware.go`). `OperatorOnly` is fail-closed by construction: an empty `operatorUserID` denies every request outright, and it re-checks for a verified user id itself via `auth.RequireUserID` rather than trusting the middleware chain — a wiring mistake that skips `auth.Middleware` still returns 401, not a panic on an empty context. `GET /admin/config` (`config_handler.go`) is also public — it returns only the public Supabase project URL + anon key so the console page can sign the operator in directly with email/password before any operator-gated call is possible.
+
+Construction follows one rule: `New(probe HealthProbe, logRing *logging.RingBuffer)` takes the two always-present collaborators; every other panel dependency arrives via a chained `WithX` setter (`WithEventFeed`, `WithProviderHealth`, `WithAcquisition`, `WithEvalMeter`, `WithRequestStore`, `WithReRunner`, `WithSearchInspector`, `WithMetricsHistory`, `WithSupabaseLogin`) and degrades its own panel to empty JSON or 503 when left nil — the console always renders, partially wired or not. Same-feature collaborators (`*eventtap.Feed`, `*providerhealth.Store`, `*requeststore.Store`, `*evalmeter.Meter`) are held as concrete pointers, not interfaces — an interface there cut no import and reintroduced the typed-nil trap (structure-audit F2, 2026-07-16). Consumer-defined interfaces (`ReRunner`, `SearchInspector`, `AcquisitionStatusReader`, `HealthProbe`, `MetricsHistoryReader`) exist only where the concrete implementation lives in the composition root, not `handler/` (see [app-wiring](../app-wiring.md)).
+
+## Data endpoints (`RegisterData`)
+
+`/health` (`health_handler.go`) reports tri-state per-dependency health (`ok`/`down`/`not_configured` — a dependency intentionally not configured is not a failure, so `Healthy()` doesn't fail readiness on it) plus goroutine count and heap MB. `/logs` + `/logs/stream` (`logs_handler.go`) read the shared logging ring buffer (see [shared-infra](../shared-infra.md)) with optional `?level=` filtering; `levelRank` ranks unknown levels lowest so they're never silently dropped rather than silently kept. `/events/rates` + `/events/stream` (`events_handler.go`) read `eventtap.Feed`. `/providers` (`providers_handler.go`) reads `providerhealth.Store`. `/acquisition` (`acquisition_handler.go`) reads the consumer-defined `AcquisitionStatusReader` the acquisition scheduler satisfies structurally. `/eval` (`eval_handler.go`) reads `evalmeter.Meter.Status()`. `/metrics?metric=&days=` (`metrics_handler.go`) is the one durable, restart-surviving panel: `MetricsHistoryReader` is the consumer-defined interface the Postgres `PgxMetricsRollup` adapter satisfies (see [discovery-metrics-table](../../data/discovery-metrics-table.md)), wired via `WithMetricsHistory` in `wireAdmin`; nil-tolerant like every other panel, and `metric` is a required query param (400 without it) while `days` defaults to 30. `/requests` + `/requests/{corrID}` (`requests_handler.go`) read `requeststore.Store` (see [request-tracing](request-tracing.md)). `POST /rerun` (`rerun_handler.go`) and `POST /search` (`search_handler.go`) both run a live, operator-supplied query — `ReRunner` returns the full stage waterfall (providers → exchanges → merged → ranked → final) bypassing production circuit breakers by construction; `SearchInspector` runs the real ranked+enriched pipeline bypassing only the app-wide result cache, with no telemetry pollution. Both interfaces are satisfied at the composition root because both need the live provider/search wiring the handler package deliberately doesn't hold.
+
+`streamSSE[T]` (`sse.go`) is the one generic behind both live streams (logs, events): it requires the `http.ResponseWriter` to assert to `http.Flusher` — a response-writer wrapper in the middleware chain that doesn't forward `Flush` silently breaks every stream, so `OperatorOnly`/`auth.Middleware` must forward it.
+
+## eventtap: the system-wide event mirror
+
+`eventtap.Tap` (`eventtap/tap.go`) is an `events.Publisher` decorator wired around the shared event bus in the composition root — deliberately admin-owned (structure-audit F3, 2026-07-16) so the console's payload vocabulary (`tapSubject`'s key list: `query`, `title`, `name`, `track_id`, `entity_id`, `result_signature`) never leaks into `internal/shared/events`, which every feature imports. `Publish` forwards to the inner bus unconditionally, then best-effort mirrors a redacted `TapEvent` (type + timestamp + user + short subject — operator full-visibility, acceptable because the console is single-operator and auth-gated) to at most one subscriber, non-blocking (a full channel increments `dropped` rather than blocking the publish path).
+
+`eventtap.Feed` (`eventtap/feed.go`, moved out of `handler/` in structure-audit F4, 2026-07-16 — background lifecycle components don't belong in the transport package) is the **single** permitted consumer of `Tap.SubscribeAll`; a second `Start` call degrades to a logged no-op, not a crash. It keeps per-type rolling counts over a 60s window (`Rates()`, pruning stale timestamps on read, capped at 1024 samples/type between prunes) and fans events out to SSE subscribers via `Subscribe`/per-subscriber channel.
+
+## evalmeter: quota-isolated live scoring
+
+`evalmeter.Meter` (`evalmeter/meter.go`) is a background ticker (default 6h — deliberately long, since a run hits real provider APIs and competes with user traffic for quota) that scores the live search pipeline against a small fixed smoke-query set via an injected `Runner` and exposes the latest `Status` (`disabled`/`no_data`/`ok`/`regression`/`error`). It is inert unless both `enabled` and `runner` are set, so it's safe to construct unconditionally. `runOnce` is skip-if-running (never overlaps eval runs) and runs once immediately on `Start` so the meter isn't empty for a full interval. Quota isolation is by *instance separation*, not a shared breaker: the composition root gives the meter its own `BuildSearchService` stack with a nil event store (synthetic searches never pollute telemetry) — see [app-wiring](../app-wiring.md).
+
+## providerhealth: the status board
+
+`providerhealth.Store` (`providerhealth/store.go`) keeps a 5-minute rolling window of per-provider scatter-gather outcomes (status mix, avg/p95 latency via nearest-rank percentile, error rate, rate-limited count), capped at 2048 samples/provider between prunes. `Record` is called off the ranking path, at the search response boundary, so it never affects search latency or correctness.
+
+## ui: the embedded shell
+
+`ui.IndexHTML` (`ui/embed.go`) is the operator console page, embedded at compile time via `//go:embed index.html` — no runtime file I/O or path dependency in production.
