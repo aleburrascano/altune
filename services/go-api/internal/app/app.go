@@ -640,6 +640,11 @@ func buildDiscoveryProviders(cf clientFactory, cfg *config.Config, mb *providers
 
 	providerList = append(providerList, providers.NewYouTubeMusicAdapter(cf.roundTripper()))
 
+	// Amazon Music via its internal web-player backend (coverage: Amazon's
+	// exclusive/timed-exclusive catalog). See amazonmusic.go's AIDEV-DECISION.
+	amazonClient := cf.discovery()
+	providerList = append(providerList, providers.NewAmazonMusicAdapter(amazonClient))
+
 	slog.Info("discovery providers configured", "count", len(providerList))
 	return providerList
 }

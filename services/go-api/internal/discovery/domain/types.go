@@ -149,6 +149,7 @@ const (
 	ProviderTheAudioDB
 	ProviderDiscogs
 	ProviderYouTube
+	ProviderAmazonMusic
 )
 
 func (p ProviderName) String() string {
@@ -171,6 +172,8 @@ func (p ProviderName) String() string {
 		return "discogs"
 	case ProviderYouTube:
 		return "youtube"
+	case ProviderAmazonMusic:
+		return "amazonmusic"
 	default:
 		return "unknown"
 	}
@@ -194,6 +197,8 @@ func ParseProviderName(s string) (ProviderName, error) {
 		return ProviderDiscogs, nil
 	case "youtube":
 		return ProviderYouTube, nil
+	case "amazonmusic":
+		return ProviderAmazonMusic, nil
 	default:
 		return 0, fmt.Errorf("unknown provider: %s", s)
 	}
