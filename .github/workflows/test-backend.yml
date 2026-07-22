@@ -37,7 +37,7 @@ jobs:
       - name: import direction (depguard)
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2.3.0
+          version: v2.12.2
           working-directory: services/go-api
 
       - name: go test -race
