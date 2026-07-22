@@ -160,20 +160,29 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
   const next = ordered[activeIndex + 1];
   if (!next || next.source.kind !== 'library') return;
   const trackId = next.source.trackId;
+  // Diagnostic-only (see AIDEV-NOTE in loadNativeTrack.ts) — the budget for
+  // this whole function is the current track's remaining playback time; if it
+  // doesn't finish before the boundary, auto-advance stalls.
+  const start = Date.now();
 
   const existing = findCached(trackId);
   if (existing) {
     await swapUpcomingToLocal(activeIndex + 1, next, existing.uri);
     evict(ordered, s.currentIndex);
+    console.log(`[audio-timing] prefetch-next track=${trackId} cache=hit swap_ms=${Date.now() - start}`);
     return;
   }
   if (inflight.has(trackId)) return;
   inflight.add(trackId);
   try {
+    const resolveStart = Date.now();
     const [resolved] = await fetchAudioUrls([trackId]);
+    const resolveMs = Date.now() - resolveStart;
     if (!resolved) return;
     const dest = new File(cacheDir(), `${trackId}${extFromUrl(resolved.url)}`);
+    const downloadStart = Date.now();
     const file = await File.downloadFileAsync(resolved.url, dest, { idempotent: true });
+    const downloadMs = Date.now() - downloadStart;
 
     // The queue may have advanced or been rebuilt during the download — only
     // swap if this is still the immediate next track.
@@ -184,6 +193,9 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
       await swapUpcomingToLocal(s2.currentIndex + 1, stillNext, file.uri);
     }
     evict(ordered2, s2.currentIndex);
+    console.log(
+      `[audio-timing] prefetch-next track=${trackId} cache=miss resolve_ms=${resolveMs} download_ms=${downloadMs} total_ms=${Date.now() - start}`,
+    );
   } catch {
     // best-effort — the streaming URL remains playable
   } finally {

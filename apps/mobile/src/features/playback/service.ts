@@ -67,6 +67,9 @@ export async function playbackService() {
       // (see nativeSyncGuard) so the store never flashes the wrong track.
       if (!shouldApplyActiveIndex(data.index)) return;
       useQueueStore.getState().syncCurrentIndex(data.index);
+      // Diagnostic-only (see AIDEV-NOTE in loadNativeTrack.ts) — the boundary
+      // timestamp to correlate against prefetch-next's timing below.
+      console.log(`[audio-timing] track-transition index=${data.index} at=${Date.now()}`);
       // Download-ahead the next track (and swap its queue entry to the local
       // file) so the following auto-advance plays from disk with no buffering.
       void prefetchNext(data.index);
