@@ -104,7 +104,7 @@ a held-in-reserve, non-query-fit tiebreak for strict-#1 polish — not the gate.
 - `service/merge.go` / `service/rank.go` / `service/diversity.go` — the Merge→Rank→reshape core
 - `service/enrich/` — detail-open enrichers (Deezer, Last.fm, Discogs, lyrics) + the `CachedLookup` read-through helper
 - `service/eval/` + `cmd/discoveryeval/` — the offline regression harnesses (eval, merge, correction, diversity, health, coverage signals)
-- `adapters/providers/` — one file per provider (Deezer, Last.fm, MusicBrainz, iTunes, SoundCloud, YouTube/YT Music, Discogs, Genius)
+- `adapters/providers/` — one file per provider (Deezer, Last.fm, MusicBrainz, iTunes, SoundCloud, YouTube/YT Music, Discogs, Genius, Amazon Music)
 
 ## Knowledge base
 
