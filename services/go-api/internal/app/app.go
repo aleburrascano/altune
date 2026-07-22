@@ -393,7 +393,8 @@ func (a *App) wireAdmin(
 		WithEvalMeter(a.evalMeter).
 		WithRequestStore(requestStore).
 		WithReRunner(a.buildReRunner(searchSvc)).
-		WithSearchInspector(a.buildSearchInspector(searchSvc))
+		WithSearchInspector(a.buildSearchInspector(searchSvc)).
+		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool))
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Get("/", adminH.ServeIndex)        // public shell — holds no data
 		ar.Get("/config", adminH.ServeConfig) // public client config for sign-in

@@ -4,7 +4,7 @@ title: Admin console surfaces
 description: The /admin transport layer (AdminHandler) plus its three lifecycle-backed panels — the system-wide event tap, the discovery-eval meter, and the provider-health rolling window — and the embedded console UI.
 resource: services/go-api/internal/admin/handler/, services/go-api/internal/admin/eventtap/, services/go-api/internal/admin/evalmeter/, services/go-api/internal/admin/providerhealth/, services/go-api/internal/admin/ui/
 tags: [admin, handler, sse, eventtap, evalmeter, providerhealth, mission-control]
-verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
+verified_commit: 6bb4093d18587407ab132e347fa057f71bdaaa5a
 ---
 
 ## Handler: gating and construction
