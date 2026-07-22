@@ -11,8 +11,9 @@ import (
 
 // fakeEventQuery returns canned aggregates; no DB.
 type fakeEventQuery struct {
-	zero    []ports.QueryCount
-	noClick []ports.QueryCount
+	zero      []ports.QueryCount
+	noClick   []ports.QueryCount
+	abandoned []ports.QueryCount
 }
 
 func (f *fakeEventQuery) ZeroResultQueries(_ context.Context, _ time.Time, _ int) ([]ports.QueryCount, error) {
@@ -21,6 +22,10 @@ func (f *fakeEventQuery) ZeroResultQueries(_ context.Context, _ time.Time, _ int
 
 func (f *fakeEventQuery) NonZeroNoClickQueries(_ context.Context, _ time.Time, _ int) ([]ports.QueryCount, error) {
 	return f.noClick, nil
+}
+
+func (f *fakeEventQuery) AbandonedSearches(_ context.Context, _ time.Time, _ int) ([]ports.QueryCount, error) {
+	return f.abandoned, nil
 }
 
 // fakeCorrector reports a correction exists for any query_norm in its set.
@@ -97,6 +102,24 @@ func TestCoverageSignalA(t *testing.T) {
 		}
 	})
 
+	t.Run("reformulated no-click queries surface as abandoned gaps", func(t *testing.T) {
+		events := &fakeEventQuery{
+			abandoned: []ports.QueryCount{{QueryNorm: "gave up and retyped", Count: 6}},
+		}
+		svc := NewCoverageSignalAService(events, nil)
+
+		report, err := svc.Execute(context.Background(), time.Time{}, 50)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(report.Abandoned) != 1 || report.Abandoned[0].Strength != GapAbandoned {
+			t.Errorf("abandoned = %+v, want one abandoned gap", report.Abandoned)
+		}
+		if report.Abandoned[0].QueryNorm != "gave up and retyped" || report.Abandoned[0].Count != 6 {
+			t.Errorf("abandoned gap = %+v, want gave up and retyped/6", report.Abandoned[0])
+		}
+	})
+
 	t.Run("empty telemetry yields an empty report, no error", func(t *testing.T) {
 		svc := NewCoverageSignalAService(&fakeEventQuery{}, nil)
 
@@ -104,7 +127,7 @@ func TestCoverageSignalA(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(report.Strong) != 0 || len(report.Weak) != 0 || report.FilteredAsTypos != 0 {
+		if len(report.Strong) != 0 || len(report.Weak) != 0 || len(report.Abandoned) != 0 || report.FilteredAsTypos != 0 {
 			t.Errorf("expected empty report, got %+v", report)
 		}
 	})

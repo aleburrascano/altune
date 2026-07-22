@@ -80,6 +80,10 @@ type EventQuery interface {
 	// NonZeroNoClickQueries ranks queries that returned results but drew no click
 	// for that query_norm in the window (a weak coverage hint).
 	NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
+	// AbandonedSearches ranks queries that drew no click and were reformulated —
+	// the same session_id fired another search within 60s (a Joachims
+	// query-chain dissatisfaction signal).
+	AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
 }
 
 // MetricPoint is one day's value of a rolled-up metric.
