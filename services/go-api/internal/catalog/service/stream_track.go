@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
@@ -54,7 +55,9 @@ func WithStreamScheduler(scheduler ports.AcquisitionScheduler) func(*StreamTrack
 }
 
 func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (*StreamOutput, error) {
+	dbStart := time.Now()
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
+	dbDuration := time.Since(dbStart)
 	if err != nil {
 		return nil, fmt.Errorf("stream track: %w", err)
 	}
@@ -66,6 +69,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 		return nil, ErrAudioNotAvailable
 	}
 
+	storageStart := time.Now()
 	reader, size, err := s.audioStore.Stream(ctx, *track.AudioRef)
 	if err != nil {
 		slog.WarnContext(ctx, "stream.audio_missing",
@@ -76,6 +80,12 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 		}
 		return nil, ErrAudioNotAvailable
 	}
+
+	slog.InfoContext(ctx, "stream.opened",
+		"track_id", trackId.String(),
+		"db_lookup_ms", dbDuration.Milliseconds(),
+		"storage_open_ms", time.Since(storageStart).Milliseconds(),
+	)
 
 	return &StreamOutput{Reader: reader, Size: size, Track: track}, nil
 }

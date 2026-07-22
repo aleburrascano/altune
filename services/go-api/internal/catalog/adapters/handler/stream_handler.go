@@ -23,6 +23,7 @@ func NewStreamHandler(svc *service.StreamTrackService) *StreamHandler {
 }
 
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
 		return
@@ -44,10 +45,19 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 	slog.InfoContext(r.Context(), "stream.serving",
 		"track_id", trackId.String(),
 		"size_bytes", out.Size,
+		"setup_ms", time.Since(start).Milliseconds(),
 	)
 
 	w.Header().Set("Content-Type", ports.AudioContentType(*out.Track.AudioRef))
 	http.ServeContent(w, r, "", time.Time{}, out.Reader)
+
+	// Includes the full byte transfer, not just setup — dominated by client
+	// read speed/range-request pattern rather than server work, but shows
+	// whether a request is stalling somewhere after the headers went out.
+	slog.InfoContext(r.Context(), "stream.served",
+		"track_id", trackId.String(),
+		"total_ms", time.Since(start).Milliseconds(),
+	)
 }
 
 // HandleRecover is the client's playback-error hook for presigned streams: since

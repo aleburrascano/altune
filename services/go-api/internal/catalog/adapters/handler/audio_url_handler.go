@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -41,6 +42,7 @@ type resolveAudioURLsResponse struct {
 // Tracks it can't sign (unknown, not owned, not ready, or no signer configured)
 // are simply absent from the response — the client streams those via the proxy.
 func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
 		return
@@ -80,5 +82,10 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 			ExpiresAt: ru.ExpiresAt.Format(time.RFC3339),
 		})
 	}
+	slog.InfoContext(r.Context(), "audio_urls.handled",
+		"requested", len(ids),
+		"resolved", len(urls),
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
 	httputil.WriteJSON(w, http.StatusOK, resolveAudioURLsResponse{URLs: urls})
 }
