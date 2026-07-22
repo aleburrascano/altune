@@ -110,7 +110,6 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		if item.Album != nil {
 			imageURL = item.Album.CoverBig
 			extras["album"] = item.Album.Title
-			extras["deezer_album_id"] = fmt.Sprintf("%d", item.Album.ID)
 		}
 		extras["duration"] = item.Duration
 		if item.Preview != "" {
@@ -141,6 +140,7 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		r.ProviderRank = item.Rank
 		if item.Album != nil {
 			r.Album = item.Album.Title
+			r.DeezerAlbumID = fmt.Sprintf("%d", item.Album.ID)
 		}
 		r.Duration = item.Duration
 	}

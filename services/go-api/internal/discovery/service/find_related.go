@@ -85,7 +85,7 @@ func (s *FindRelatedService) Execute(
 				}(result, album)
 			}
 
-			deezerAlbumID, _ := result.Extras["deezer_album_id"].(string)
+			deezerAlbumID := result.DeezerAlbumID
 			if deezerAlbumID != "" && s.albumProvider != nil {
 				if tryReserveProviderCall(&providerCalls, maxProviderLookups) {
 					wg.Add(1)

@@ -115,10 +115,9 @@ func TestFindRelated_TrackWithDeezerAlbumIDTriggersAlbumTracks(t *testing.T) {
 	}
 	svc := NewFindRelatedService(nil, albumProvider, nil)
 
-	organic := []domain.SearchResult{
-		trackResult(domain.ProviderDeezer, "1", "Main Track", "Artist",
-			map[string]any{"deezer_album_id": "12345"}),
-	}
+	mainTrack := trackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	mainTrack.DeezerAlbumID = "12345"
+	organic := []domain.SearchResult{mainTrack}
 
 	got := svc.Execute(context.Background(), organic)
 
@@ -174,10 +173,9 @@ func TestFindRelated_DedupAgainstOrganic(t *testing.T) {
 	}
 	svc := NewFindRelatedService(nil, albumProvider, nil)
 
-	organic := []domain.SearchResult{
-		trackResult(domain.ProviderDeezer, "1", "Main Track", "Artist",
-			map[string]any{"deezer_album_id": "12345"}),
-	}
+	mainTrack := trackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	mainTrack.DeezerAlbumID = "12345"
+	organic := []domain.SearchResult{mainTrack}
 
 	got := svc.Execute(context.Background(), organic)
 
@@ -205,9 +203,9 @@ func TestFindRelated_ProviderCallCap(t *testing.T) {
 
 	var organic []domain.SearchResult
 	for i := 0; i < 5; i++ {
-		organic = append(organic, trackResult(domain.ProviderDeezer, fmt.Sprintf("d%d", i),
-			fmt.Sprintf("Track %d", i), "Artist",
-			map[string]any{"deezer_album_id": fmt.Sprintf("%d", 100+i)}))
+		r := trackResult(domain.ProviderDeezer, fmt.Sprintf("d%d", i), fmt.Sprintf("Track %d", i), "Artist", nil)
+		r.DeezerAlbumID = fmt.Sprintf("%d", 100+i)
+		organic = append(organic, r)
 	}
 
 	svc.Execute(context.Background(), organic)
@@ -241,10 +239,9 @@ func TestFindRelated_TimeoutReturnsPartialResults(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 
 	svc := NewFindRelatedService(nil, slowProvider, nil)
-	organic := []domain.SearchResult{
-		trackResult(domain.ProviderDeezer, "1", "Track", "Artist",
-			map[string]any{"deezer_album_id": "123"}),
-	}
+	slowTrack := trackResult(domain.ProviderDeezer, "1", "Track", "Artist", nil)
+	slowTrack.DeezerAlbumID = "123"
+	organic := []domain.SearchResult{slowTrack}
 
 	got := svc.Execute(ctx, organic)
 	_ = got
