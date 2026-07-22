@@ -288,13 +288,18 @@ type SearchResult struct {
 	// silently-absent/mistyped Extras entry. ""/0 = unknown.
 	Album    string
 	Duration int
+	// DeezerAlbumID is typed for the same reason: FindRelatedService branches on
+	// it to decide whether to look up Deezer album tracks, so the producer
+	// (deezer.go)→consumer (find_related.go) link must be compile-checked
+	// rather than a silently-absent/mistyped Extras entry. "" = unknown.
+	DeezerAlbumID string
 	// Extras carries provider-specific DISPLAY/TELEMETRY metadata only — nothing
 	// merge, rank, or consensus branches on (those keys are typed fields above).
 	// Current keys: "album", "duration" (mirrored from the typed fields above for
 	// wire compatibility), "preview_url", "record_type", "genre",
 	// "genre_id", "disambiguation", "artist_type", "area", "mb_tags",
 	// "playcount", "playback_count", "likes_count", "reposts_count",
-	// "deezer_album_id", "track_number", "disc_number", "explicit", "copyright",
+	// "track_number", "disc_number", "explicit", "copyright",
 	// "featured_artists" ([]map[string]any), "collapsed_artists"
 	// ([]CollapsedArtistSummary), "resolution_tier", "consensus_*", "artwork_path".
 	Extras map[string]any
