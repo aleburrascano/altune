@@ -24,6 +24,7 @@ const (
 	GapStrengthUnknown GapStrength = iota
 	GapStrong                      // zero-result and not a correctable typo
 	GapWeak                        // returned results but drew no click
+	GapAbandoned                   // no click and reformulated within 60s
 )
 
 // MarshalJSON emits the strength as its label so the JSON report is readable.
@@ -37,6 +38,8 @@ func (g GapStrength) String() string {
 		return "strong"
 	case GapWeak:
 		return "weak"
+	case GapAbandoned:
+		return "abandoned"
 	default:
 		return "unknown"
 	}
@@ -53,6 +56,7 @@ type CoverageGap struct {
 type CoverageReportA struct {
 	Strong          []CoverageGap `json:"strong"`            // zero-result, not typos
 	Weak            []CoverageGap `json:"weak"`              // results shown, no click
+	Abandoned       []CoverageGap `json:"abandoned"`         // no click, reformulated within 60s
 	FilteredAsTypos int           `json:"filtered_as_typos"` // zero-result queries dropped by the correction filter
 }
 
@@ -74,7 +78,7 @@ func (s *CoverageSignalAService) Execute(ctx context.Context, since time.Time, l
 		return nil, fmt.Errorf("coverage signal a: zero-result queries: %w", err)
 	}
 
-	report := &CoverageReportA{Strong: []CoverageGap{}, Weak: []CoverageGap{}}
+	report := &CoverageReportA{Strong: []CoverageGap{}, Weak: []CoverageGap{}, Abandoned: []CoverageGap{}}
 	for _, qc := range zero {
 		if s.isCorrectableTypo(ctx, qc.QueryNorm) {
 			report.FilteredAsTypos++
@@ -96,6 +100,18 @@ func (s *CoverageSignalAService) Execute(ctx context.Context, since time.Time, l
 			QueryNorm: qc.QueryNorm,
 			Count:     qc.Count,
 			Strength:  GapWeak,
+		})
+	}
+
+	abandoned, err := s.events.AbandonedSearches(ctx, since, limit)
+	if err != nil {
+		return nil, fmt.Errorf("coverage signal a: abandoned searches: %w", err)
+	}
+	for _, qc := range abandoned {
+		report.Abandoned = append(report.Abandoned, CoverageGap{
+			QueryNorm: qc.QueryNorm,
+			Count:     qc.Count,
+			Strength:  GapAbandoned,
 		})
 	}
 

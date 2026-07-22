@@ -175,6 +175,9 @@ func renderSignalA(report *discoveryEval.CoverageReportA, sinceDays int) string 
 
 	out += fmt.Sprintf("\n## Weak hints — %d\n\n", len(report.Weak))
 	out += renderGaps(report.Weak)
+
+	out += fmt.Sprintf("\n## Abandoned — %d (no click, reformulated within 60s)\n\n", len(report.Abandoned))
+	out += renderGaps(report.Abandoned)
 	return out
 }
 

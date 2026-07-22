@@ -75,17 +75,25 @@ func (r EvalReport) Failures() []FailureRecord {
 func (r *CoverageReportA) Metrics() []NamedMetric {
 	return []NamedMetric{
 		{Name: "signal_a.strong_gaps", Value: float64(len(r.Strong)), HigherIsBetter: false},
+		{Name: "signal_a.abandoned_gaps", Value: float64(len(r.Abandoned)), HigherIsBetter: false},
 	}
 }
 
 // Failures: each strong gap is already a failed real user query — emit it with
-// its demand weight and the standard query attrs.
+// its demand weight and the standard query attrs. Abandoned gaps are demand
+// evidence of a different kind (the query returned something, but the user
+// gave up and reformulated), so they carry their own reason.
 func (r *CoverageReportA) Failures() []FailureRecord {
 	out := []FailureRecord{}
 	for _, g := range r.Strong {
 		attrs := QueryAttrs(g.QueryNorm)
 		attrs["count"] = g.Count
 		out = append(out, FailureRecord{Query: g.QueryNorm, Reason: "strong_gap", Attrs: attrs})
+	}
+	for _, g := range r.Abandoned {
+		attrs := QueryAttrs(g.QueryNorm)
+		attrs["count"] = g.Count
+		out = append(out, FailureRecord{Query: g.QueryNorm, Reason: "abandoned", Attrs: attrs})
 	}
 	return out
 }
