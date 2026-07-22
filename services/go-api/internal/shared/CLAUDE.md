@@ -1,6 +1,6 @@
 # internal/shared — router
 
-Cross-cutting infrastructure: config, DB/Redis pools, structured logging + ring buffer, HTTP trace record/replay, httputil, textnorm, `UserId`. Per `docs/architecture.md`, this is the one layer domain code may import besides stdlib — and from it, only shared value objects like `UserId` plus the pure `textnorm` functions. Enforced by depguard (`services/go-api/.golangci.yml`, CI), which also blocks anything here from importing a feature package.
+Cross-cutting infrastructure: config, DB/Redis pools, structured logging + ring buffer, HTTP trace record/replay, httputil, textnorm, `UserId`. Per `okf/backend/index.md`, this is the one layer domain code may import besides stdlib — and from it, only shared value objects like `UserId` plus the pure `textnorm` functions. Enforced by depguard (`services/go-api/.golangci.yml`, CI), which also blocks anything here from importing a feature package.
 
 Gotchas:
 
