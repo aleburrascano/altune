@@ -1,4 +1,4 @@
-import TrackPlayer from 'react-native-track-player';
+import TrackPlayer, { Event, State } from 'react-native-track-player';
 
 import { audioRequestHeaders, fetchAudioUrls } from './api/audio';
 import { forgetAllSwaps } from './audioPrefetch';
@@ -37,6 +37,33 @@ function isStale(token: number): boolean {
   return token !== loadToken;
 }
 
+// AIDEV-NOTE: Diagnostic-only instrumentation for the "audio feels slow"
+// investigation — console output, not wired to telemetry. Safe to delete
+// once that investigation is resolved.
+type TimingMarks = { start: number; [phase: string]: number };
+
+function reportTiming(scenario: string, marks: TimingMarks): void {
+  const { start, ...rest } = marks;
+  const offsets = Object.entries(rest)
+    .map(([label, t]) => `${label}=${t - start}ms`)
+    .join(' ');
+  console.log(`[audio-timing] ${scenario} total_ms=${Date.now() - start} ${offsets}`);
+}
+
+// Logs the elapsed time from `marks.start` to the native player actually
+// reaching State.Playing (i.e. buffered and audible), not just to the load
+// call returning. Self-cleans after 15s so a track that never starts
+// (autoplay=false, load error, user pauses first) doesn't leak a listener.
+function logTimeToPlaying(scenario: string, token: number, marks: TimingMarks): void {
+  const sub = TrackPlayer.addEventListener(Event.PlaybackState, (e) => {
+    if (e.state !== State.Playing || isStale(token)) return;
+    clearTimeout(timeout);
+    sub.remove();
+    reportTiming(scenario, marks);
+  });
+  const timeout = setTimeout(() => sub.remove(), 15000);
+}
+
 // AIDEV-NOTE: Resolve short-lived presigned URLs for the library tracks so the
 // native player streams straight from object storage instead of proxying every
 // byte through the API (auth + Postgres + storage round-trips per range request).
@@ -71,6 +98,7 @@ export async function loadNativeTrack(
   options: LoadNativeTrackOptions = {},
 ): Promise<void> {
   const { autoplay = true, startPositionMs = 0 } = options;
+  const marks: TimingMarks = { start: Date.now() };
 
   // AIDEV-WARNING: this reset() drops the native queue, so the caller MUST also
   // clear the queue store (see PlaybackProvider.play) — otherwise the store still
@@ -84,14 +112,18 @@ export async function loadNativeTrack(
   forgetAllSwaps();
   if (isStale(token)) return;
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
+  marks.headers = Date.now();
   const resolved = await resolveLibraryUrls([track]);
+  marks.resolve = Date.now();
   if (isStale(token)) return;
   await TrackPlayer.add(toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }));
+  marks.added = Date.now();
 
   if (startPositionMs > 0) {
     await TrackPlayer.seekTo(startPositionMs / 1000);
   }
   if (autoplay) {
+    logTimeToPlaying('play', token, marks);
     await TrackPlayer.play();
   }
 }
@@ -108,6 +140,7 @@ export async function loadNativeQueue(
   options: LoadNativeTrackOptions = {},
 ): Promise<void> {
   const { autoplay = true, startPositionMs = 0 } = options;
+  const marks: TimingMarks = { start: Date.now() };
 
   const token = claimLoad();
   await ensurePlayerSetup();
@@ -119,8 +152,10 @@ export async function loadNativeQueue(
 
   const needsAuth = tracks.some((t) => t.source.kind === 'library');
   const headers = needsAuth ? await audioRequestHeaders() : {};
+  marks.headers = Date.now();
   // Sign the window from the start index forward — that's what plays next.
   const resolved = await resolveLibraryUrls(tracks.slice(startIndex));
+  marks.resolve = Date.now();
   // A newer load (a user tap beating an in-flight resume) already owns the
   // player — bail before add() so the two don't interleave into one queue.
   if (isStale(token)) return;
@@ -140,8 +175,12 @@ export async function loadNativeQueue(
     endNativeLoad();
     throw err;
   }
+  marks.added = Date.now();
   if (startPositionMs > 0) await TrackPlayer.seekTo(startPositionMs / 1000);
-  if (autoplay) await TrackPlayer.play();
+  if (autoplay) {
+    logTimeToPlaying('queue-start', token, marks);
+    await TrackPlayer.play();
+  }
 }
 
 // AIDEV-NOTE: Replace only the upcoming tracks (everything after the active
