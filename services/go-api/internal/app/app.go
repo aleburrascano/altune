@@ -649,6 +649,13 @@ func buildDiscoveryProviders(cf clientFactory, cfg *config.Config, mb *providers
 	amazonClient := cf.discovery()
 	providerList = append(providerList, providers.NewAmazonMusicAdapter(amazonClient))
 
+	// Spotify via its anonymous web-player bootstrap (coverage: cross-check
+	// against the other three catalog sources). Materially more fragile than
+	// the other providers here — see spotify.go's AIDEV-DECISION and
+	// AIDEV-WARNING on the persisted-query hash.
+	spotifyClient := cf.discovery()
+	providerList = append(providerList, providers.NewSpotifyAdapter(spotifyClient))
+
 	slog.Info("discovery providers configured", "count", len(providerList))
 	return providerList
 }

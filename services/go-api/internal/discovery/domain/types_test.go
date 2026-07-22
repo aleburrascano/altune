@@ -151,6 +151,9 @@ func TestProviderName_String(t *testing.T) {
 		{ProviderTheAudioDB, "theaudiodb"},
 		{ProviderDiscogs, "discogs"},
 		{ProviderYouTube, "youtube"},
+		{ProviderAmazonMusic, "amazonmusic"},
+		{ProviderAppleMusic, "applemusic"},
+		{ProviderSpotify, "spotify"},
 		{ProviderName(999), "unknown"},
 	}
 
@@ -179,7 +182,10 @@ func TestParseProviderName(t *testing.T) {
 		{name: "theaudiodb", input: "theaudiodb", want: ProviderTheAudioDB},
 		{name: "discogs", input: "discogs", want: ProviderDiscogs},
 		{name: "youtube", input: "youtube", want: ProviderYouTube},
-		{name: "invalid", input: "spotify", wantErr: true},
+		{name: "amazonmusic", input: "amazonmusic", want: ProviderAmazonMusic},
+		{name: "applemusic", input: "applemusic", want: ProviderAppleMusic},
+		{name: "spotify", input: "spotify", want: ProviderSpotify},
+		{name: "invalid", input: "napster", wantErr: true},
 		{name: "empty", input: "", wantErr: true},
 	}
 
