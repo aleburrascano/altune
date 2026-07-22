@@ -148,6 +148,17 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 		return nil, resp.StatusCode, fmt.Errorf("decode search response: %w", err)
 	}
 
+	// Pathfinder signals failure at the GraphQL layer with a top-level "errors"
+	// array while still returning HTTP 200 — a stale persisted-query hash
+	// ("PersistedQueryNotFound") or a rejected integrity token both land here.
+	// Without this check the empty data.searchV2 decodes cleanly and the search
+	// silently returns zero results while reporting success, so Spotify vanishes
+	// from every query and looks healthy on the provider board (see the
+	// persisted-query AIDEV-WARNING above). Surface it as a real error instead.
+	if len(body.Errors) > 0 {
+		return nil, resp.StatusCode, fmt.Errorf("spotify graphql error: %s", body.Errors[0].Message)
+	}
+
 	sv2 := body.Data.SearchV2
 	results := make([]domain.SearchResult, 0, len(sv2.TracksV2.Items)+len(sv2.AlbumsV2.Items)+len(sv2.Artists.Items))
 	for _, t := range sv2.TracksV2.Items {
@@ -232,6 +243,11 @@ type spotifySearchResponse struct {
 			} `json:"artists"`
 		} `json:"searchV2"`
 	} `json:"data"`
+	// Errors carries pathfinder's GraphQL-layer failures (returned alongside HTTP
+	// 200). A stale persisted-query hash reports "PersistedQueryNotFound" here.
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
 }
 
 type spotifyTrackData struct {

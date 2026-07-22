@@ -51,12 +51,18 @@ func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (ad
 	merged := discoveryService.Merge(perProvider)
 	// Rank with the same flag-gated experiment stages production applies — a
 	// zero-value config here once made the waterfall silently diverge from live
-	// ranking whenever a flag was on (cross-kind prominence defaults on).
-	ranked := discoveryService.RankWith(merged, queryNorm, discoveryService.RankOptions{
+	// ranking whenever a flag was on (cross-kind prominence defaults on). RankExplain
+	// ranks identically to RankWith but keeps each result's scoring math for the
+	// console's rank explainer.
+	explained := discoveryService.RankExplain(merged, queryNorm, discoveryService.RankOptions{
 		TailDemotion:        rr.cfg.TailDemotionEnabled,
 		CrossKindProminence: rr.cfg.CrossKindProminenceEnabled,
 		Behavioral:          rr.behavioralScores(),
 	})
+	ranked := make([]domain.SearchResult, len(explained))
+	for i, s := range explained {
+		ranked[i] = s.Result
+	}
 	final := discoveryService.Reshape(ranked)
 
 	return adminHandler.ReRunResult{
@@ -65,10 +71,30 @@ func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (ad
 		Providers: providerTraces,
 		Exchanges: rec.Exchanges(),
 		Merged:    projectEntities(merged),
-		Ranked:    requeststore.ProjectResults(ranked),
+		RankTrace: projectScored(explained),
 		Final:     requeststore.ProjectResults(final),
 		TookMs:    time.Since(start).Milliseconds(),
 	}, nil
+}
+
+// projectScored pairs each ranked result's display projection with the scoring
+// provenance rankLess ordered on, for the console's rank explainer.
+func projectScored(explained []discoveryService.ScoredResult) []adminHandler.ScoredRow {
+	out := make([]adminHandler.ScoredRow, len(explained))
+	for i, s := range explained {
+		rows := requeststore.ProjectResults([]domain.SearchResult{s.Result})
+		out[i] = adminHandler.ScoredRow{
+			ResultRow:   rows[0],
+			Relevance:   s.Relevance,
+			Prominence:  s.Prominence,
+			Behavioral:  s.Behavioral,
+			Popularity:  s.Popularity,
+			RRF:         s.RRF,
+			MultiSource: s.MultiSource,
+			Demoted:     s.Demoted,
+		}
+	}
+	return out
 }
 
 // fanOutRerun queries every provider concurrently (no breaker), returning the raw
@@ -90,14 +116,17 @@ func fanOutRerun(
 			results, err := p.Search(ctx, query, kinds)
 			perProvider[i] = results
 			status := domain.ProviderStatusOK
+			errMsg := ""
 			if err != nil {
 				status = domain.ProviderStatusError
+				errMsg = err.Error()
 			}
 			traces[i] = requeststore.ProviderTrace{
 				Provider:    p.Name().String(),
 				Status:      status.String(),
 				LatencyMs:   time.Since(start).Milliseconds(),
 				ResultCount: len(results),
+				Err:         errMsg,
 				Results:     requeststore.ProjectResults(results),
 			}
 		}(i, p)

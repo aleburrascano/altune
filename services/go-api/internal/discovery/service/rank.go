@@ -73,6 +73,19 @@ func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
 
 // rankWith is Rank with the experiment-gated inputs threaded in (see rankConfig).
 func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.SearchResult {
+	results := rankScored(entities, queryNorm, cfg)
+	out := make([]domain.SearchResult, len(results))
+	for i, s := range results {
+		out[i] = s.result
+	}
+	return out
+}
+
+// rankScored is the shared scoring core: it gates eligibility, scores every
+// eligible entity, and returns the sorted scored slice. Both rankWith (the
+// production path) and RankExplain (the operator console) consume it, so the
+// explainer's per-result math can never diverge from what ranking actually used.
+func rankScored(entities []Entity, queryNorm string, cfg rankConfig) []scored {
 	// Pass 1: keep only eligible entities.
 	eligible := make([]Entity, 0, len(entities))
 	for _, e := range entities {
@@ -112,12 +125,7 @@ func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.Sear
 	}
 
 	sort.SliceStable(results, func(i, j int) bool { return rankLess(results[i], results[j]) })
-
-	out := make([]domain.SearchResult, len(results))
-	for i, s := range results {
-		out[i] = s.result
-	}
-	return out
+	return results
 }
 
 // rankLess orders by demotion, then relevance, then popularity, then multi-source,

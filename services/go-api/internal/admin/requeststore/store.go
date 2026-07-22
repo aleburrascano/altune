@@ -82,6 +82,7 @@ type ProviderTrace struct {
 	Status      string      `json:"status"`
 	LatencyMs   int64       `json:"latency_ms"`
 	ResultCount int         `json:"result_count"`
+	Err         string      `json:"error,omitempty"` // why the provider failed, when it did — the reason a lane shows nothing
 	Results     []ResultRow `json:"results,omitempty"`
 }
 
@@ -94,8 +95,10 @@ type ResultRow struct {
 	Subtitle      string   `json:"subtitle,omitempty"`
 	ImageURL      string   `json:"image_url,omitempty"`
 	Sources       []string `json:"sources,omitempty"`
-	ArtworkSource string   `json:"artwork_source,omitempty"` // provider that supplied the image
-	ArtworkPath   string   `json:"artwork_path,omitempty"`   // how it resolved (identity/durable-identity/name/…)
+	ArtworkSource string   `json:"artwork_source,omitempty"`   // provider that supplied the image
+	ArtworkPath   string   `json:"artwork_path,omitempty"`     // how it resolved (identity/durable-identity/name/…)
+	ResolutionTier string  `json:"resolution_tier,omitempty"`  // how merge bound the sources (isrc/mbid/bridge/title)
+	Confidence     string  `json:"confidence,omitempty"`       // merge confidence (high/medium/low)
 }
 
 // Store is concurrency-safe. The recording transport writes exchanges; the
