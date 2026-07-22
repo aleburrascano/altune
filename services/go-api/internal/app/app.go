@@ -613,8 +613,12 @@ func buildDiscoveryProviders(cf clientFactory, cfg *config.Config, mb *providers
 	deezerClient := cf.discovery()
 	providerList = append(providerList, providers.NewDeezerAdapter(deezerClient))
 
-	itunesClient := cf.discovery()
-	providerList = append(providerList, providers.NewITunesAdapter(itunesClient))
+	// Apple Music's Catalog API replaces plain iTunes Search here: same
+	// catalog/ids, but with ISRC, composer credits, and a lyrics flag iTunes
+	// Search never exposed. ITunesAdapter itself stays wired elsewhere
+	// (artwork chain, album consensus, content lookups) — see applemusic.go.
+	appleMusicClient := cf.discovery()
+	providerList = append(providerList, providers.NewAppleMusicAdapter(appleMusicClient))
 
 	// TheAudioDB is intentionally NOT a search provider: its free key caps artist
 	// search at 1 result and it carries no ranking signal, so it fails the

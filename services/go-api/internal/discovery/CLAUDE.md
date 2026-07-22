@@ -104,7 +104,7 @@ a held-in-reserve, non-query-fit tiebreak for strict-#1 polish — not the gate.
 - `service/merge.go` / `service/rank.go` / `service/diversity.go` — the Merge→Rank→reshape core
 - `service/enrich/` — detail-open enrichers (Deezer, Last.fm, Discogs, lyrics) + the `CachedLookup` read-through helper
 - `service/eval/` + `cmd/discoveryeval/` — the offline regression harnesses (eval, merge, correction, diversity, health, coverage signals)
-- `adapters/providers/` — one file per provider (Deezer, Last.fm, MusicBrainz, iTunes, SoundCloud, YouTube/YT Music, Discogs, Genius, Amazon Music)
+- `adapters/providers/` — one file per provider (Deezer, Last.fm, MusicBrainz, iTunes, SoundCloud, YouTube/YT Music, Discogs, Genius, Amazon Music, Apple Music). iTunes (`itunes.go`, plain Search API) and Apple Music (`applemusic.go`, official Catalog API via the anonymous web-player token) are separate adapters over the identical catalog/ids — only Apple Music sits in the search fan-out (richer: ISRC, composer credits, lyrics flag); iTunes stays wired for the artwork chain, album consensus, and content lookups.
 
 ## Knowledge base
 
