@@ -97,6 +97,48 @@
     .empty { color:var(--mut); padding:.3rem 0; } .err { color:var(--down); }
     .section-title { margin:.2rem 0 .5rem; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
     ::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-thumb{background:#252a31;border-radius:8px}
+
+    /* ---- Discovery Lab ---- */
+    .lab-bar { margin-bottom:.6rem; }
+    .qline { color:var(--cy); font-size:11px; margin:.1rem 0 .55rem; }
+    .spine { display:flex; align-items:stretch; margin-bottom:.7rem; flex-wrap:wrap; gap:0; }
+    .node { flex:1; min-width:130px; background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:.5rem .7rem; position:relative; }
+    .node + .node { margin-left:20px; }
+    .node + .node::before { content:"›"; position:absolute; left:-15px; top:50%; transform:translateY(-50%); color:var(--mut); font-size:15px; }
+    .node .nlabel { font-size:8.5px; text-transform:uppercase; letter-spacing:.12em; color:var(--dim); }
+    .node .nbig { font-size:1.45rem; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.15; }
+    .node .nsub { font-size:9.5px; color:var(--mut); }
+    .node.bad { border-color:#3a1f1f; }
+    .node .drop { color:var(--down); } .node .keep { color:var(--ok); }
+
+    .subtabs { display:flex; gap:3px; margin-bottom:.55rem; }
+    .subtab { padding:.25rem .65rem; border-radius:6px; color:var(--dim); border:1px solid transparent; cursor:pointer; font-size:10.5px; }
+    .subtab:hover { color:var(--tx); } .subtab.on { color:var(--cy); background:#0d1a20; border-color:#2a4a57; }
+    .subpane { display:none; } .subpane.on { display:block; }
+
+    .lane { display:flex; align-items:center; gap:.55rem; padding:.34rem .6rem; border-bottom:1px solid #181b21; cursor:pointer; }
+    .lane:hover { background:#0e1116; } .lane.dead { background:#150e0e; } .lane.dead:hover { background:#1a1010; }
+    .lane .pname { width:118px; display:flex; align-items:center; gap:7px; }
+    .swatch { width:8px; height:8px; border-radius:2px; flex:none; }
+    .kc { display:flex; gap:8px; } .kcp { font-size:9.5px; color:var(--mut); } .kcp b { color:var(--tx); }
+    .reason { color:var(--down); font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .laneraw { padding:.35rem .6rem .5rem 130px; background:#0a0c10; border-bottom:1px solid #181b21; }
+
+    .mrow { padding:.36rem .6rem; border-bottom:1px solid #181b21; }
+    .mhead { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .srcchip { font-size:9px; padding:1px 6px; border-radius:4px; border:1px solid var(--bd2); background:var(--card2); }
+    .tier { font-size:8.5px; text-transform:uppercase; letter-spacing:.05em; padding:1px 6px; border-radius:4px; border:1px solid #2a4a57; color:var(--cy); background:#0d1a20; }
+
+    .rrow { padding:.32rem .6rem; border-bottom:1px solid #181b21; cursor:pointer; }
+    .rrow:hover { background:#0e1116; }
+    .rhead { display:flex; align-items:center; gap:8px; }
+    .pos { min-width:24px; text-align:right; color:var(--mut); font-variant-numeric:tabular-nums; font-weight:700; flex:none; }
+    .sig { display:flex; align-items:center; gap:9px; font-size:9.5px; color:var(--dim); margin-left:auto; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .sig b { color:var(--cy); }
+    .relbar { height:4px; background:var(--card2); border:1px solid var(--bd); border-radius:3px; overflow:hidden; width:56px; }
+    .relbar i { display:block; height:100%; background:linear-gradient(90deg,var(--cy),var(--ok)); }
+    .mathkv { display:grid; grid-template-columns:auto 1fr; gap:2px 14px; padding:.45rem .6rem .5rem 34px; font-size:10px; background:#0a0c10; border-bottom:1px solid #181b21; }
+    .mathkv b { color:#7f9cc0; font-weight:500; }
   </style>
 </head>
 <body>
@@ -134,19 +176,38 @@
       </div>
     </div>
 
-    <!-- DISCOVERY -->
+    <!-- DISCOVERY LAB -->
     <div class="pane" data-pane="discovery">
-      <div class="card" style="margin-bottom:.7rem"><div class="bd">
-        <div class="ctrls"><input id="tsQuery" placeholder="test search — see resolved artwork…" style="flex:1"><input id="tsKinds" placeholder="kinds (artist,track,album)" style="width:200px"><button id="tsRun" class="btn">▶ Search</button></div>
-        <div class="mut" style="font-size:9.5px;margin-top:4px">live full pipeline — artwork + durable-identity resolution · bypasses the result cache · warms the identity store · the <b>art</b> badge shows how each image resolved</div>
-        <div id="tsOut"></div>
+      <div class="card lab-bar"><div class="bd">
+        <div class="ctrls">
+          <input id="labQuery" placeholder="trace a query through the pipeline…" style="flex:1">
+          <input id="labKinds" placeholder="kinds (artist,track,album)" style="width:190px">
+          <button id="labRun" class="btn">▶ Trace</button>
+          <button id="labArt" class="btn ghost" title="full pipeline including artwork resolution">◈ Artwork</button>
+        </div>
+        <div class="mut" style="font-size:9.5px;margin-top:5px"><b>Trace</b> follows every result from provider to merge to rank to final, with the scoring math · <b>Artwork</b> shows how each image resolved · live pipeline, bypasses the cache and circuit breakers</div>
       </div></div>
-      <div class="card" style="margin-bottom:.7rem"><div class="bd">
-        <div class="ctrls"><input id="rrQuery" placeholder="re-run a query (stage waterfall)…" style="flex:1"><input id="rrKinds" placeholder="kinds (artist,track,album)" style="width:200px"><button id="rrRun" class="btn">⟲ Run</button></div>
-        <div class="mut" style="font-size:9.5px;margin-top:4px">stage-by-stage waterfall (merge → rank → reshape) · no artwork enrichment · bypasses circuit breakers</div>
-        <div id="rrOut"></div>
-      </div></div>
-      <div class="grid disc">
+
+      <div id="labSpine"></div>
+
+      <div id="labResult" style="display:none">
+        <div class="subtabs" id="labSubtabs">
+          <span class="subtab on" data-sub="providers">Providers</span>
+          <span class="subtab" data-sub="merge">Merge</span>
+          <span class="subtab" data-sub="rank">Rank</span>
+          <span class="subtab" data-sub="final">Final</span>
+        </div>
+        <div class="card"><div class="bd" style="padding:.15rem 0">
+          <div class="subpane on" data-sub="providers" id="subProviders"></div>
+          <div class="subpane" data-sub="merge" id="subMerge"></div>
+          <div class="subpane" data-sub="rank" id="subRank"></div>
+          <div class="subpane" data-sub="final" id="subFinal"></div>
+        </div></div>
+      </div>
+
+      <div id="labArtOut"></div>
+
+      <div class="grid disc" style="margin-top:.7rem">
         <div class="card"><div class="hd"><h2>Recent requests</h2><span id="reqMeta" class="meta"></span></div><div id="reqList"><div class="empty" style="padding:.6rem">no requests yet</div></div></div>
         <div class="card"><div class="hd"><h2>Request detail</h2></div><div class="bd" id="reqDetail"><div class="empty">select a request</div></div></div>
       </div>
@@ -350,38 +411,135 @@ $("reqList").addEventListener("click",(e)=>{ const el=e.target.closest(".req"); 
   $("reqList").querySelectorAll(".req").forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); renderReqDetail(requests[+el.dataset.i]); });
 $("acqList").addEventListener("click",(e)=>{ const el=e.target.closest(".req"); if(!el) return; const j=acqJobs[+el.dataset.i]; if(j) renderAcqDetail(j); });
 
-/* ---------- test search (full pipeline, artwork) ---------- */
-$("tsRun").onclick = async () => {
-  const q=$("tsQuery").value.trim(); if(!q) return;
-  $("tsOut").innerHTML=`<div class="mut" style="margin-top:.5rem">searching…</div>`;
-  try{
-    const kinds = $("tsKinds").value.trim()? $("tsKinds").value.split(",").map(s=>s.trim()).filter(Boolean):[];
-    const w = await postJSON("/admin/search",{query:q,kinds});
-    const rows=(w.results||[]);
-    $("tsOut").innerHTML = `<div class="cy" style="margin:.5rem 0">"${esc(w.query)}" · ${rows.length} results</div>`+
-      (rows.length? rows.map((x,i)=>`<div class="row2"><span class="mut">${i+1}</span>${resultRow(x)}</div>`).join("") : `<div class="empty">no results</div>`);
-  }catch(e){ $("tsOut").innerHTML=`<div class="err" style="margin-top:.5rem">${esc(e.message)}</div>`; }
-};
-$("tsQuery").addEventListener("keydown",e=>{ if(e.key==="Enter") $("tsRun").click(); });
+/* ---------- Discovery Lab: provenance trace ---------- */
+// A provider keeps one colour across every stage — lane, merge sources, and the
+// rank rows — so the eye can follow a single provider through the whole pipeline.
+const PROV_HUES = {deezer:150,applemusic:0,itunes:16,musicbrainz:265,lastfm:344,soundcloud:26,youtubemusic:4,amazonmusic:205,spotify:141,discogs:38,genius:52,theaudiodb:190};
+function provKey(name){ return (name||'').toLowerCase().replace(/[^a-z]/g,''); }
+function provColor(name){ const k=provKey(name); let h=PROV_HUES[k]; if(h==null){ h=0; for(const c of k) h=(h*31+c.charCodeAt(0))%360; } return `hsl(${h} 58% 62%)`; }
+function provSwatch(name){ return `<span class="swatch" style="background:${provColor(name)}"></span>`; }
+function parseKinds(v){ return v.trim()? v.split(",").map(s=>s.trim()).filter(Boolean):[]; }
+function kindCounts(results){ const c={track:0,album:0,artist:0}; (results||[]).forEach(r=>{ if(c[r.kind]!=null) c[r.kind]++; }); return c; }
+// Match a captured exchange to its provider by URL host — the recorder keeps a
+// flat call-ordered list, so the lane groups them by looking at where each went.
+const HOST_PROV = [["deezer","deezer"],["apple","applemusic"],["mzstatic","applemusic"],["amazon","amazonmusic"],["musicbrainz","musicbrainz"],["coverartarchive","musicbrainz"],["last.fm","lastfm"],["audioscrobbler","lastfm"],["soundcloud","soundcloud"],["sndcdn","soundcloud"],["youtube","youtubemusic"],["googlevideo","youtubemusic"],["ytimg","youtubemusic"],["spotify","spotify"],["scdn","spotify"],["theaudiodb","theaudiodb"],["discogs","discogs"],["genius","genius"]];
+function provOfURL(u){ const s=(u||'').toLowerCase(); for(const [needle,p] of HOST_PROV){ if(s.includes(needle)) return p; } return ''; }
 
-/* ---------- re-run ---------- */
-$("rrRun").onclick = async () => {
-  const q=$("rrQuery").value.trim(); if(!q) return;
-  $("rrOut").innerHTML=`<div class="mut" style="margin-top:.5rem">running…</div>`;
+let labData = null, labSub = "providers";
+
+async function runTrace(){
+  const q=$("labQuery").value.trim(); if(!q) return;
+  $("labSpine").innerHTML=`<div class="mut" style="padding:.4rem 0">tracing the pipeline…</div>`; $("labArtOut").innerHTML="";
   try{
-    const kinds = $("rrKinds").value.trim()? $("rrKinds").value.split(",").map(s=>s.trim()).filter(Boolean):[];
-    const w = await postJSON("/admin/rerun",{query:q,kinds});
-    const stage=(t,n,rows)=>`<div class="stage"><div class="sh"><span>${t}</span><span>${n}</span></div><div class="sb">${rows||'<span class="empty">—</span>'}</div></div>`;
-    $("rrOut").innerHTML = `<div class="cy" style="margin:.5rem 0">"${esc(w.query)}" · ${w.took_ms}ms · ${(w.providers||[]).length} providers</div>`+
-      stage("① per provider (mapped)", (w.providers||[]).length+" providers",
-        (w.providers||[]).map(p=>`<div class="row2"><span class="lbl">${esc(p.provider)}</span>${badge(p.status)}<span class="mut">${p.result_count} · ${p.latency_ms}ms</span></div>`+(p.results||[]).slice(0,3).map(resultRow).join("")).join(""))+
-      stage("② raw exchanges", (w.exchanges||[]).length+" calls",
-        (w.exchanges||[]).map(x=>`<div class="row2"><span class="lbl">${esc((x.url||'').replace(/^https?:\/\//,'').slice(0,40))}</span>${badge(String(x.status||'—'))}</div><pre class="json">${esc((x.response_body||'').slice(0,800))}</pre>`).join(""))+
-      stage("③ merged", (w.merged||[]).length+" entities", (w.merged||[]).slice(0,10).map(resultRow).join(""))+
-      stage("④ ranked", (w.ranked||[]).length, (w.ranked||[]).slice(0,10).map((x,i)=>`<div class="row2"><span class="mut">${i+1}</span>${resultRow(x)}</div>`).join(""))+
-      stage("⑤ final", (w.final||[]).length, (w.final||[]).map((x,i)=>`<div class="row2"><span class="mut">${i+1}</span>${resultRow(x)}</div>`).join(""));
-  }catch(e){ $("rrOut").innerHTML=`<div class="err" style="margin-top:.5rem">${esc(e.message)}</div>`; }
-};
+    labData = await postJSON("/admin/rerun",{query:q,kinds:parseKinds($("labKinds").value)});
+    renderLab(labData);
+    $("labResult").style.display="block";
+  }catch(e){ $("labSpine").innerHTML=`<div class="err" style="padding:.4rem 0">${esc(e.message)}</div>`; $("labResult").style.display="none"; }
+}
+
+function renderLab(w){ renderSpine(w); renderLanes(w); renderMerge(w); renderRank(w); renderFinal(w); switchSub(labSub); }
+
+function renderSpine(w){
+  const provs=w.providers||[], ok=provs.filter(p=>p.status==='ok').length, err=provs.length-ok;
+  const raw=provs.reduce((n,p)=>n+(p.result_count||0),0);
+  const merged=(w.merged||[]).length, ranked=(w.rank_trace||[]).length, final=(w.final||[]).length;
+  const node=(label,big,sub,cls='')=>`<div class="node ${cls}"><div class="nlabel">${label}</div><div class="nbig">${big}</div><div class="nsub">${sub}</div></div>`;
+  const delta=(n,word)=> n>0?`<span class="drop">−${n} ${word}</span>`:`<span class="keep">${word==='deduped'?'no dupes':word==='ineligible'?'all kept':'unchanged'}</span>`;
+  $("labSpine").innerHTML =
+    `<div class="qline">"${esc(w.query)}" · ${w.took_ms}ms · kinds ${(w.kinds||[]).join(', ')||'all'}</div>`+
+    `<div class="spine">`+
+      node("Fan-out", provs.length+"<span class='nsub'> providers</span>", `<span class="keep">${ok} ok</span>${err?` · <span class="drop">${err} failed</span>`:''} · ${raw} results`, err?'bad':'')+
+      node("Merge", merged, delta(raw-merged,'deduped'))+
+      node("Rank", ranked, delta(merged-ranked,'ineligible'))+
+      node("Final", final, delta(ranked-final,'reshaped'))+
+    `</div>`;
+}
+
+function renderLanes(w){
+  const provs=w.providers||[];
+  const el=$("subProviders"); el._exch=w.exchanges||[];
+  el.innerHTML = provs.length ? provs.map(p=>{
+    const dead=p.status!=='ok', c=kindCounts(p.results);
+    const kc = dead ? '' : `<span class="kc"><span class="kcp">T <b>${c.track}</b></span><span class="kcp">Al <b>${c.album}</b></span><span class="kcp">Ar <b>${c.artist}</b></span></span>`;
+    return `<div class="lane ${dead?'dead':''}" data-p="${esc(p.provider)}"><span class="pname">${provSwatch(p.provider)}${esc(p.provider)}</span>`+
+      `${badge(p.status)}<span class="mut" style="width:50px;text-align:right">${p.latency_ms}ms</span>${kc}`+
+      `${dead&&p.error?`<span class="reason">✖ ${esc(p.error)}</span>`:''}`+
+      `<span class="mut" style="margin-left:auto;font-size:9px">${p.result_count||0} raw ▾</span></div>`+
+      `<div class="laneraw" data-raw="${esc(p.provider)}" style="display:none"></div>`;
+  }).join("") : `<div class="empty" style="padding:.6rem">no providers</div>`;
+}
+
+function renderMerge(w){
+  const m=w.merged||[];
+  $("subMerge").innerHTML = m.length ? m.map(r=>{
+    const srcs=(r.sources||[]).map(s=>`<span class="srcchip" style="color:${provColor(s)};border-color:${provColor(s)}55">${esc(s)}</span>`).join(" ");
+    const tier=r.resolution_tier?`<span class="tier" title="how merge bound these sources">${esc(r.resolution_tier)}</span>`:'';
+    return `<div class="mrow"><div class="mhead">${img(r.image_url)}<span>${esc(r.title)}</span><span class="mut">${r.subtitle?'· '+esc(r.subtitle):''} · ${esc(r.kind)}</span>${tier}${r.confidence?badge(r.confidence):''}<span class="mut" style="margin-left:auto;font-size:9px">${(r.sources||[]).length} src</span></div>`+
+      `<div class="row2" style="padding-left:28px;gap:4px">${srcs||'<span class="empty">no sources</span>'}</div></div>`;
+  }).join("") : `<div class="empty" style="padding:.6rem">nothing merged</div>`;
+}
+
+function renderRank(w){
+  const rt=w.rank_trace||[]; const maxRel=Math.max(1e-4,...rt.map(r=>r.relevance||0));
+  $("subRank").innerHTML = rt.length ? rt.map((r,i)=>{
+    const flags=[]; if(r.multi_source) flags.push('src×'+(r.sources||[]).length);
+    if(r.prominence>0) flags.push('prom '+r.prominence.toFixed(2));
+    if(r.behavioral>0) flags.push('beh '+r.behavioral.toFixed(2));
+    if(r.demoted) flags.push('<span class="down">demoted</span>');
+    return `<div class="rrow" data-i="${i}"><div class="rhead"><span class="pos">${i+1}</span>${img(r.image_url)}<span>${esc(r.title)}</span><span class="mut">${r.subtitle?'· '+esc(r.subtitle):''}</span>`+
+      `<span class="sig"><span class="relbar"><i style="width:${Math.round(100*(r.relevance||0)/maxRel)}%"></i></span><b>${(r.relevance||0).toFixed(3)}</b><span>rrf ${(r.rrf||0).toFixed(3)}</span>${flags.length?'<span>'+flags.join(' · ')+'</span>':''}</span></div></div>`+
+      `<div class="mathkv" data-math="${i}" style="display:none"></div>`;
+  }).join("") : `<div class="empty" style="padding:.6rem">nothing ranked</div>`;
+}
+
+function renderFinal(w){
+  const f=w.final||[];
+  $("subFinal").innerHTML = f.length ? f.map((x,i)=>`<div class="row2" style="padding:.32rem .6rem;border-bottom:1px solid #181b21"><span class="pos">${i+1}</span>${resultRow(x)}</div>`).join("") : `<div class="empty" style="padding:.6rem">no final results</div>`;
+}
+
+async function runArtwork(){
+  const q=$("labQuery").value.trim(); if(!q) return;
+  $("labArtOut").innerHTML=`<div class="card" style="margin-top:.7rem"><div class="bd"><div class="mut">resolving artwork…</div></div></div>`;
+  try{
+    const w = await postJSON("/admin/search",{query:q,kinds:parseKinds($("labKinds").value)});
+    const rows=(w.results||[]);
+    $("labArtOut").innerHTML = `<div class="card" style="margin-top:.7rem"><div class="hd"><h2>Artwork resolution</h2><span class="meta">${rows.length} results · the art badge shows how each image resolved</span></div><div class="bd">`+
+      (rows.length? rows.map((x,i)=>`<div class="row2"><span class="pos">${i+1}</span>${resultRow(x)}</div>`).join(""):`<div class="empty">no results</div>`)+`</div></div>`;
+  }catch(e){ $("labArtOut").innerHTML=`<div class="card" style="margin-top:.7rem"><div class="bd"><div class="err">${esc(e.message)}</div></div></div>`; }
+}
+
+function switchSub(name){ labSub=name;
+  document.querySelectorAll("#labSubtabs .subtab").forEach(t=>t.classList.toggle("on",t.dataset.sub===name));
+  document.querySelectorAll("#labResult .subpane").forEach(p=>p.classList.toggle("on",p.dataset.sub===name));
+}
+$("labSubtabs").addEventListener("click",(e)=>{ const t=e.target.closest(".subtab"); if(t) switchSub(t.dataset.sub); });
+
+// Lane expand: lazily render the raw exchanges that went to this provider.
+$("subProviders").addEventListener("click",(e)=>{
+  const lane=e.target.closest(".lane"); if(!lane) return;
+  const raw=lane.nextElementSibling, p=provKey(lane.dataset.p);
+  if(raw.style.display!=="none"){ raw.style.display="none"; return; }
+  const exs=($("subProviders")._exch||[]).filter(x=>provOfURL(x.url)===p);
+  raw.innerHTML = exs.length ? exs.map(x=>`<div class="row2"><span class="lbl">${esc((x.url||'').replace(/^https?:\/\//,'').slice(0,54))}</span>${badge(String(x.status||x.error||'—'))}<span class="mut">${x.latency_ms}ms${x.truncated?' · truncated':''}</span></div><pre class="json">${esc((x.response_body||x.error||'').slice(0,1600))}</pre>`).join("") : `<span class="empty">no raw exchange matched this provider</span>`;
+  raw.style.display="block";
+});
+
+// Rank row expand: the full scoring breakdown in tiebreak order.
+$("subRank").addEventListener("click",(e)=>{
+  const row=e.target.closest(".rrow"); if(!row) return;
+  const kv=row.nextElementSibling, r=(labData.rank_trace||[])[+row.dataset.i];
+  if(kv.style.display!=="none"){ kv.style.display="none"; return; }
+  kv.innerHTML =
+    `<b>relevance</b><span>${(r.relevance||0).toFixed(4)} · IDF-weighted token coverage (primary sort)</span>`+
+    `<b>multi-source</b><span>${r.multi_source?'yes · '+(r.sources||[]).length+' providers agree':'no · single source'}</span>`+
+    `<b>rrf</b><span>${(r.rrf||0).toFixed(4)} · reciprocal-rank fusion, within-tie tiebreak</span>`+
+    `<b>prominence</b><span>${(r.prominence||0).toFixed(4)} · ${r.prominence>0?'cross-kind tiebreak, active':'inert'}</span>`+
+    `<b>behavioral</b><span>${(r.behavioral||0).toFixed(4)} · ${r.behavioral>0?'satisfaction signal, active':'inert'}</span>`+
+    `<b>popularity</b><span>${(r.popularity||0).toFixed(4)} · inert (unpopulated by providers)</span>`+
+    `<b>demoted</b><span>${r.demoted?'yes · tail noise, sorts below all others':'no'}</span>`+
+    `<b>sources</b><span>${(r.sources||[]).join(', ')||'—'}</span>`;
+  kv.style.display="grid";
+});
 
 /* ---------- logs ---------- */
 const logBuf=[];
@@ -473,7 +631,8 @@ $("signin").onclick = async () => {
 };
 $("password").addEventListener("keydown",(e)=>{ if(e.key==="Enter") $("signin").click(); });
 $("level").onchange=renderLogsFull; $("corrFilter").oninput=renderLogsFull; $("textFilter").oninput=renderLogsFull;
-$("rrQuery").addEventListener("keydown",(e)=>{ if(e.key==="Enter") $("rrRun").click(); });
+$("labRun").onclick=runTrace; $("labArt").onclick=runArtwork;
+$("labQuery").addEventListener("keydown",(e)=>{ if(e.key==="Enter") runTrace(); });
 wireLogClicks($("logsFull")); wireLogClicks($("ovLogs"));
 
 if(token) connect();

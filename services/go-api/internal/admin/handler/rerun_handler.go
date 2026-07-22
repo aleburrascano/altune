@@ -14,12 +14,27 @@ import (
 type ReRunResult struct {
 	Query     string                       `json:"query"`
 	Kinds     []string                     `json:"kinds"`
-	Providers []requeststore.ProviderTrace `json:"providers"`           // mapped results per provider
-	Exchanges []requeststore.Exchange      `json:"exchanges"`           // raw provider JSON
-	Merged    []requeststore.ResultRow     `json:"merged"`              // after entity-resolution merge
-	Ranked    []requeststore.ResultRow     `json:"ranked"`              // after rank, before reshape
-	Final     []requeststore.ResultRow     `json:"final"`               // after diversity + collapse
+	Providers []requeststore.ProviderTrace `json:"providers"`  // mapped results per provider
+	Exchanges []requeststore.Exchange      `json:"exchanges"`  // raw provider JSON
+	Merged    []requeststore.ResultRow     `json:"merged"`     // after entity-resolution merge
+	RankTrace []ScoredRow                  `json:"rank_trace"` // after rank, before reshape — with per-result scoring math
+	Final     []requeststore.ResultRow     `json:"final"`      // after diversity + collapse
 	TookMs    int64                        `json:"took_ms"`
+}
+
+// ScoredRow is one ranked result with the scoring provenance the rank measure
+// computed for it: the display projection (embedded) plus the exact signals
+// rankLess ordered on — relevance first, then the experiment-gated tiebreaks and
+// RRF/multi-source. Lets the console explain WHY a result sits where it does.
+type ScoredRow struct {
+	requeststore.ResultRow
+	Relevance   float64 `json:"relevance"`
+	Prominence  float64 `json:"prominence"`
+	Behavioral  float64 `json:"behavioral"`
+	Popularity  float64 `json:"popularity"`
+	RRF         float64 `json:"rrf"`
+	MultiSource bool    `json:"multi_source"`
+	Demoted     bool    `json:"demoted"`
 }
 
 // ReRunner runs a fresh discovery search through a recording client and returns

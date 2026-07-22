@@ -164,6 +164,29 @@ func TestSpotifyAdapter_Search_mapsAllKinds(t *testing.T) {
 	}
 }
 
+func TestSpotifyAdapter_Search_graphqlErrorIsSurfaced(t *testing.T) {
+	// A stale persisted-query hash: pathfinder answers HTTP 200 with a GraphQL
+	// "errors" array and no data. This must surface as an error, not decode to a
+	// silent empty result set (the failure mode that made Spotify vanish from
+	// search while still looking healthy on the provider board).
+	const persistedQueryNotFound = `{"errors":[{"message":"PersistedQueryNotFound"}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(persistedQueryNotFound))
+	}))
+	defer srv.Close()
+
+	a := newTestSpotifyAdapter(srv)
+	results, err := a.Search(t.Context(), "Blinding Lights", allKinds())
+	if err == nil {
+		t.Fatalf("Search() error = nil, want a surfaced GraphQL error (got %d results)", len(results))
+	}
+	if results != nil {
+		t.Errorf("results = %+v, want nil on a GraphQL error", results)
+	}
+}
+
 func TestSpotifyAdapter_Search_explicitFlag(t *testing.T) {
 	explicitResponse := `{"data":{"searchV2":{"tracksV2":{"items":[{"item":{"data":{
 		"id":"x","name":"Explicit Track","uri":"spotify:track:x",

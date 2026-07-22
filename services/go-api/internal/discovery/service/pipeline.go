@@ -53,6 +53,43 @@ func RankWith(entities []Entity, queryNorm string, opts RankOptions) []domain.Se
 	return rankWith(entities, queryNorm, opts.config())
 }
 
+// ScoredResult is one ranked entity paired with the scoring provenance the rank
+// measure computed for it — relevance, the experiment-gated tiebreaks, and the
+// RRF/multi-source signals rankLess ordered on. The "log the math" that today
+// lives only in debug logs, surfaced in order for the Mission Control re-run.
+type ScoredResult struct {
+	Result      domain.SearchResult
+	Relevance   float64
+	Prominence  float64
+	Behavioral  float64
+	Popularity  float64
+	RRF         float64
+	MultiSource bool
+	Demoted     bool
+}
+
+// RankExplain ranks exactly like RankWith — same eligibility, scoring, and order,
+// both routed through rankScored — but returns each result with its scoring
+// provenance instead of discarding it, so the operator console's rank explainer
+// can never diverge from what production ranks. For the re-run inspector only.
+func RankExplain(entities []Entity, queryNorm string, opts RankOptions) []ScoredResult {
+	scored := rankScored(entities, queryNorm, opts.config())
+	out := make([]ScoredResult, len(scored))
+	for i, s := range scored {
+		out[i] = ScoredResult{
+			Result:      s.result,
+			Relevance:   s.relevance,
+			Prominence:  s.prominence,
+			Behavioral:  s.behavioral,
+			Popularity:  s.pop,
+			RRF:         s.rrf,
+			MultiSource: s.multi,
+			Demoted:     s.demoted,
+		}
+	}
+	return out
+}
+
 // Reshape applies the post-rank list-shaping product rules in their canonical
 // order (EnforceDiversity, then CollapseArtistDuplicates).
 func Reshape(ranked []domain.SearchResult) []domain.SearchResult {
