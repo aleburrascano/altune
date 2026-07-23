@@ -52,10 +52,10 @@ func WithIdentityFirst() ArtistContentOption {
 	return func(s *GetArtistContentService) { s.identityFirst = true }
 }
 
-func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID string, limit int) (*ContentFetchResponse, error) {
+func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityFirst {
 		if identity, ok := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID); ok {
-			if tracks := s.identityTopTracks(ctx, identity); len(tracks) > 0 {
+			if tracks := s.identityTopTracks(ctx, identity, artistName); len(tracks) > 0 {
 				return okContentResponse(providerName, tracks, limit), nil
 			}
 			// Empty fan-out (every provider missed): fall through to the single-
@@ -82,8 +82,8 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 // first. A same-name artist's tracks arrive from at most one provider (its wrong
 // id), so they never corroborate and sink below the real, multi-source tracks —
 // which is how "Agenda"/"Miley Cyrus"-style bleed gets pushed out.
-func (s *GetArtistContentService) identityTopTracks(ctx context.Context, identity ResolvedArtistIdentity) []domain.SearchResult {
-	groups := s.fanOutByIdentity(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
+func (s *GetArtistContentService) identityTopTracks(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
+	groups := s.fanOutByIdentity(ctx, identity, artistName, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistTopTracks(ctx, provider, id)
 	})
 	entities := Merge(groups)
@@ -105,7 +105,7 @@ type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvide
 // which keys top-tracks on it) — never a name — so a same-name artist can't bleed
 // in. A provider with no resolved id, or one that errors, simply doesn't
 // contribute.
-func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity ResolvedArtistIdentity, fetch identityContentFetch) [][]domain.SearchResult {
+func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity ResolvedArtistIdentity, artistName string, fetch identityContentFetch) [][]domain.SearchResult {
 	type job struct {
 		provider domain.ProviderName
 		p        ports.ArtistContentProvider
@@ -114,6 +114,13 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 	var jobs []job
 	for name, p := range s.providers {
 		id := providerContentID(identity, name)
+		if id == "" {
+			// The cross-provider identity (MB url-relations) carries no id for
+			// this provider — SoundCloud is never bridged. If the provider can
+			// resolve one from the artist name, use that single resolved id so
+			// its underground-exclusive catalogue still joins the fan-out.
+			id = resolveArtistIDByName(ctx, p, artistName)
+		}
 		if id == "" {
 			continue
 		}
@@ -217,7 +224,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 // drop the metadata-less noise that used to render as broken cards. Fixes (C):
 // same-name albums can't bleed in, and every surviving album has a cover or a year.
 func (s *GetArtistContentService) identityAlbums(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
-	groups := s.fanOutByIdentity(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
+	groups := s.fanOutByIdentity(ctx, identity, artistName, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistAlbums(ctx, provider, id)
 	})
 	entities := Merge(groups)

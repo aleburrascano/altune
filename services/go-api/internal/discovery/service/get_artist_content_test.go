@@ -91,7 +91,7 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewGetArtistContentService(tt.providers)
 
-			resp, err := svc.GetTopTracks(context.Background(), tt.providerName, tt.externalID, tt.limit)
+			resp, err := svc.GetTopTracks(context.Background(), tt.providerName, tt.externalID, "", tt.limit)
 
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

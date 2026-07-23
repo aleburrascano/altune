@@ -75,3 +75,22 @@ func providerContentID(identity ResolvedArtistIdentity, name domain.ProviderName
 	}
 	return ""
 }
+
+// resolveArtistIDByName is the fallback for a provider the cross-provider identity
+// carries no id for (SoundCloud, which MusicBrainz never bridges): if the provider
+// implements ArtistIDResolver, resolve its own id from the artist name once, so its
+// exclusive catalogue joins the id-based fan-out. Returns "" when the provider
+// can't resolve (or no name), leaving it to sit out rather than guess.
+func resolveArtistIDByName(ctx context.Context, p ports.ArtistContentProvider, artistName string) string {
+	if artistName == "" {
+		return ""
+	}
+	resolver, ok := p.(ports.ArtistIDResolver)
+	if !ok {
+		return ""
+	}
+	if id, ok := resolver.ResolveArtistID(ctx, artistName); ok {
+		return id
+	}
+	return ""
+}

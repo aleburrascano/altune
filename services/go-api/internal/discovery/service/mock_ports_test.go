@@ -62,6 +62,16 @@ func (f *fakeAlbumContentProvider) GetAlbumTracks(ctx context.Context, provider 
 type fakeArtistContentProvider struct {
 	getTopTracksFn func(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 	getAlbumsFn    func(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
+	// resolveIDFn, when set, makes the fake implement ports.ArtistIDResolver
+	// (name → this provider's id) for the SoundCloud-style fan-out fallback.
+	resolveIDFn func(ctx context.Context, name string) (string, bool)
+}
+
+func (f *fakeArtistContentProvider) ResolveArtistID(ctx context.Context, name string) (string, bool) {
+	if f.resolveIDFn != nil {
+		return f.resolveIDFn(ctx, name)
+	}
+	return "", false
 }
 
 func (f *fakeArtistContentProvider) GetArtistTopTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error) {

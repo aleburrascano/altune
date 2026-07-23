@@ -212,6 +212,26 @@ func (a *SoundCloudAPIAdapter) searchArtists(ctx context.Context, query string) 
 	}, mapSoundCloudAPIUser)
 }
 
+// ResolveArtistID implements ports.ArtistIDResolver: it maps an artist name to
+// SoundCloud's numeric user id via the top user-search hit, so the identity-first
+// content fan-out can reach SoundCloud even though MusicBrainz never bridges an
+// SC id. Returns ok=false on no match or error (the provider then sits out).
+func (a *SoundCloudAPIAdapter) ResolveArtistID(ctx context.Context, name string) (string, bool) {
+	if strings.TrimSpace(name) == "" {
+		return "", false
+	}
+	results, err := a.searchArtists(ctx, name)
+	if err != nil || len(results) == 0 {
+		return "", false
+	}
+	for _, r := range results {
+		if len(r.Sources) > 0 && r.Sources[0].ExternalID != "" {
+			return r.Sources[0].ExternalID, true
+		}
+	}
+	return "", false
+}
+
 // resolveAndFetch runs fetch with a resolved client_id, re-resolving once on an
 // auth failure (the rotation case). Single-request callers use it; the
 // paginated track search inlines the same shape because pagination restarts on
