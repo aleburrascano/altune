@@ -184,8 +184,9 @@
           <input id="labKinds" placeholder="kinds (artist,track,album)" style="width:190px">
           <button id="labRun" class="btn">▶ Trace</button>
           <button id="labArt" class="btn ghost" title="full pipeline including artwork resolution">◈ Artwork</button>
+          <button id="labPhone" class="btn ghost" title="reproduce the artist detail screen exactly as the phone loads it">📱 As phone</button>
         </div>
-        <div class="mut" style="font-size:9.5px;margin-top:5px"><b>Trace</b> follows every result from provider to merge to rank to final, with the scoring math · <b>Artwork</b> shows how each image resolved · live pipeline, bypasses the cache and circuit breakers</div>
+        <div class="mut" style="font-size:9.5px;margin-top:5px"><b>Trace</b> follows every result from provider to merge to rank to final, with the scoring math · <b>Artwork</b> shows how each image resolved · <b>As phone</b> opens the top artist's detail screen (discography + top tracks) exactly as the app fetches and merges it · live, bypasses the cache</div>
       </div></div>
 
       <div id="labSpine"></div>
@@ -206,6 +207,7 @@
       </div>
 
       <div id="labArtOut"></div>
+      <div id="labDetailOut"></div>
 
       <div class="grid disc" style="margin-top:.7rem">
         <div class="card"><div class="hd"><h2>Recent requests</h2><span id="reqMeta" class="meta"></span></div><div id="reqList"><div class="empty" style="padding:.6rem">no requests yet</div></div></div>
@@ -429,7 +431,7 @@ let labData = null, labSub = "providers";
 
 async function runTrace(){
   const q=$("labQuery").value.trim(); if(!q) return;
-  $("labSpine").innerHTML=`<div class="mut" style="padding:.4rem 0">tracing the pipeline…</div>`; $("labArtOut").innerHTML="";
+  $("labSpine").innerHTML=`<div class="mut" style="padding:.4rem 0">tracing the pipeline…</div>`; $("labArtOut").innerHTML=""; $("labDetailOut").innerHTML="";
   try{
     labData = await postJSON("/admin/rerun",{query:q,kinds:parseKinds($("labKinds").value)});
     renderLab(labData);
@@ -507,6 +509,47 @@ async function runArtwork(){
       (rows.length? rows.map((x,i)=>`<div class="row2"><span class="pos">${i+1}</span>${resultRow(x)}</div>`).join(""):`<div class="empty">no results</div>`)+`</div></div>`;
   }catch(e){ $("labArtOut").innerHTML=`<div class="card" style="margin-top:.7rem"><div class="bd"><div class="err">${esc(e.message)}</div></div></div>`; }
 }
+
+/* ---------- Discovery Lab: detail "as phone" ---------- */
+// Reproduces the artist detail screen: resolve the top artist, fan out the same
+// per-seed content calls useArtistContent makes, apply the same client merge.
+async function runDetailAsPhone(){
+  const q=$("labQuery").value.trim(); if(!q) return;
+  $("labSpine").innerHTML=""; $("labResult").style.display="none"; $("labArtOut").innerHTML="";
+  $("labDetailOut").innerHTML=`<div class="card" style="margin-top:.7rem"><div class="bd"><div class="mut">opening "${esc(q)}" as the phone would…</div></div></div>`;
+  try{ renderDetailAsPhone(await postJSON("/admin/rerun-detail",{query:q})); }
+  catch(e){ $("labDetailOut").innerHTML=`<div class="card" style="margin-top:.7rem"><div class="bd"><div class="err">${esc(e.message)}</div></div></div>`; }
+}
+function detailSrc(sources){ return (sources||[]).map(s=>`<span class="srcchip" style="color:${provColor(s)};border-color:${provColor(s)}55">${esc(s)}</span>`).join(" "); }
+function detailItemRow(x){
+  const meta=[x.year?String(x.year):'<span class="down">no yr</span>', x.track_count?x.track_count+' tk':'', x.record_type?`<span class="lbl">${esc(x.record_type)}</span>`:''].filter(Boolean).join(' · ');
+  return `<div class="mrow"><div class="mhead">${img(x.image_url)}<span>${esc(x.title)}</span><span class="mut">${x.subtitle?'· '+esc(x.subtitle)+' ':''}· ${meta}</span><span style="margin-left:auto">${detailSrc(x.sources)}</span></div></div>`;
+}
+function detailSeedBlock(title, seeds){
+  if(!seeds||!seeds.length) return '';
+  return `<div class="stage"><div class="sh"><span>${esc(title)} · per-seed fan-out · what each seed id returned, un-merged (click to expand)</span></div><div class="sb">`+
+    seeds.map(s=>`<div class="lane"><span class="pname">${provSwatch(s.provider)}${esc(s.provider)}</span>${badge(s.status)}<span class="mut">id ${esc(s.external_id)}</span><span class="mut" style="margin-left:auto;font-size:9px">${(s.items||[]).length} items ▾</span></div>`+
+      `<div class="laneraw" style="display:none">${(s.items||[]).map(detailItemRow).join('')||'<span class="empty">none</span>'}</div>`).join('')+
+    `</div></div>`;
+}
+function renderDetailAsPhone(w){
+  if(!w.resolved){ $("labDetailOut").innerHTML=`<div class="card" style="margin-top:.7rem"><div class="hd"><h2>Detail · as phone</h2></div><div class="bd"><div class="empty">no artist resolved for "${esc(w.query)}"</div></div></div>`; return; }
+  const e=w.resolved;
+  const srcs=Object.keys(e.sources||{}).map(p=>`<span class="srcchip" style="color:${provColor(p)};border-color:${provColor(p)}55">${esc(p)}=${esc(e.sources[p])}</span>`).join(" ");
+  const mbid=e.mbid?`<span class="tier" title="MBID · the Last.fm top-tracks key">mbid ${esc(e.mbid.slice(0,8))}</span>`:'<span class="badge warn">no mbid</span>';
+  const head=`<div class="mrow"><div class="mhead"><b class="cy">${esc(e.title)}</b><span class="mut">${e.subtitle?'· '+esc(e.subtitle):''}</span>${mbid}</div><div class="row2" style="padding-left:4px;gap:4px;margin-top:3px">${srcs||'<span class="empty">no seed sources</span>'}</div></div>`;
+  const albums=(w.albums||[]).map(detailItemRow).join('')||'<span class="empty" style="padding:.5rem">no albums</span>';
+  const tracks=(w.top_tracks||[]).map(detailItemRow).join('')||'<span class="empty" style="padding:.5rem">no top tracks</span>';
+  $("labDetailOut").innerHTML=
+    `<div class="card" style="margin-top:.7rem"><div class="hd"><h2>Detail · as phone</h2><span class="meta">"${esc(w.query)}" · ${w.took_ms}ms · what the app fetches + merges when it opens this artist</span></div><div class="bd" style="padding:.15rem 0">`+
+      `<div class="stage"><div class="sh"><span>resolved artist · the seeds the app fans out to</span></div><div class="sb">${head}</div></div>`+
+      `<div class="stage"><div class="sh"><span>discography · merged (${(w.albums||[]).length}) · what renders on screen</span></div><div class="sb">${albums}</div></div>`+
+      `<div class="stage"><div class="sh"><span>top tracks · merged (${(w.top_tracks||[]).length})</span></div><div class="sb">${tracks}</div></div>`+
+      detailSeedBlock('albums', w.album_seeds)+
+      detailSeedBlock('top tracks', w.track_seeds)+
+    `</div></div>`;
+}
+$("labDetailOut").addEventListener("click",(e)=>{ const lane=e.target.closest(".lane"); if(!lane) return; const raw=lane.nextElementSibling; if(raw&&raw.classList.contains("laneraw")) raw.style.display=raw.style.display==="none"?"block":"none"; });
 
 function switchSub(name){ labSub=name;
   document.querySelectorAll("#labSubtabs .subtab").forEach(t=>t.classList.toggle("on",t.dataset.sub===name));
@@ -631,7 +674,7 @@ $("signin").onclick = async () => {
 };
 $("password").addEventListener("keydown",(e)=>{ if(e.key==="Enter") $("signin").click(); });
 $("level").onchange=renderLogsFull; $("corrFilter").oninput=renderLogsFull; $("textFilter").oninput=renderLogsFull;
-$("labRun").onclick=runTrace; $("labArt").onclick=runArtwork;
+$("labRun").onclick=runTrace; $("labArt").onclick=runArtwork; $("labPhone").onclick=runDetailAsPhone;
 $("labQuery").addEventListener("keydown",(e)=>{ if(e.key==="Enter") runTrace(); });
 wireLogClicks($("logsFull")); wireLogClicks($("ovLogs"));
 
