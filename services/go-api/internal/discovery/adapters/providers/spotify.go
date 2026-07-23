@@ -31,6 +31,7 @@ type SpotifyAdapter struct {
 	client    *http.Client
 	resolver  *spotifyTokenResolver
 	searchURL string // overridable in tests
+	apiBase   string // classic Web API root (api.spotify.com/v1), overridable in tests
 }
 
 const (
@@ -56,6 +57,7 @@ func NewSpotifyAdapter(client *http.Client) *SpotifyAdapter {
 		client:    client,
 		resolver:  newSpotifyTokenResolver(client),
 		searchURL: spotifyPathfinderURL,
+		apiBase:   "https://api.spotify.com/v1",
 	}
 }
 

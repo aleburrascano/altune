@@ -29,9 +29,10 @@ import (
 // not third-party use — accepted for self-hosted personal/family use, the
 // same risk posture as the SoundCloud/Amazon Music adapters.
 type AppleMusicAdapter struct {
-	client    *http.Client
-	resolver  *appleMusicTokenResolver
-	searchURL string // overridable in tests
+	client      *http.Client
+	resolver    *appleMusicTokenResolver
+	searchURL   string // overridable in tests
+	catalogBase string // storefront catalog root, overridable in tests
 }
 
 const (
@@ -43,10 +44,12 @@ const (
 )
 
 func NewAppleMusicAdapter(client *http.Client) *AppleMusicAdapter {
+	base := fmt.Sprintf("https://api.music.apple.com/v1/catalog/%s", appleMusicStorefront)
 	return &AppleMusicAdapter{
-		client:    client,
-		resolver:  newAppleMusicTokenResolver(client),
-		searchURL: fmt.Sprintf("https://api.music.apple.com/v1/catalog/%s/search", appleMusicStorefront),
+		client:      client,
+		resolver:    newAppleMusicTokenResolver(client),
+		searchURL:   base + "/search",
+		catalogBase: base,
 	}
 }
 

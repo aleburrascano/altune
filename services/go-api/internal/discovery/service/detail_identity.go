@@ -53,3 +53,25 @@ func resolveArtistIdentity(
 	}
 	return identity, true
 }
+
+// providerContentID resolves the id to query a given content provider by, for one
+// artist. Most providers use their own bridged id; the two exceptions are the
+// essential differences imposed by their APIs, handled here in one place rather
+// than scattered per call site:
+//   - Last.fm keys artist content on the MBID (its "id" is a name, ambiguous).
+//   - Apple Music shares the iTunes catalog id space (the bridge only emits the
+//     "itunes" key), so it reuses that id.
+//
+// Returns "" when no id is available — the provider then sits out this artist.
+func providerContentID(identity ResolvedArtistIdentity, name domain.ProviderName) string {
+	if id := identity.ProviderIDs[name]; id != "" {
+		return id
+	}
+	switch name {
+	case domain.ProviderLastFM:
+		return identity.MBID
+	case domain.ProviderAppleMusic:
+		return identity.ProviderIDs[domain.ProviderITunes]
+	}
+	return ""
+}

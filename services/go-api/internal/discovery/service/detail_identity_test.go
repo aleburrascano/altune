@@ -50,6 +50,31 @@ func TestResolveArtistIdentity_miss_seedOnly(t *testing.T) {
 	}
 }
 
+func TestProviderContentID_aliases(t *testing.T) {
+	id := ResolvedArtistIdentity{
+		MBID: "mbid-x",
+		ProviderIDs: map[domain.ProviderName]string{
+			domain.ProviderDeezer: "d1",
+			domain.ProviderITunes: "it1",
+		},
+	}
+	if got := providerContentID(id, domain.ProviderDeezer); got != "d1" {
+		t.Errorf("deezer id = %q, want d1", got)
+	}
+	// Apple Music shares the iTunes catalog id (the bridge only emits "itunes").
+	if got := providerContentID(id, domain.ProviderAppleMusic); got != "it1" {
+		t.Errorf("apple music id = %q, want the shared iTunes id it1", got)
+	}
+	// Last.fm keys on MBID.
+	if got := providerContentID(id, domain.ProviderLastFM); got != "mbid-x" {
+		t.Errorf("lastfm id = %q, want mbid-x", got)
+	}
+	// A provider with no resolved id and no alias sits out.
+	if got := providerContentID(id, domain.ProviderSpotify); got != "" {
+		t.Errorf("spotify id = %q, want empty (not bridged)", got)
+	}
+}
+
 func TestResolveArtistIdentity_nilStore_seedOnly(t *testing.T) {
 	id, ok := resolveArtistIdentity(t.Context(), nil, domain.ProviderDeezer, "deezer-che")
 	if ok {
