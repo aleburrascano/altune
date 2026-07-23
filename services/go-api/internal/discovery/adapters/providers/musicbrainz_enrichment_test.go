@@ -42,6 +42,7 @@ const kendrickArtistLookup = `{
     {"type": "free streaming", "url": {"resource": "https://open.spotify.com/artist/2YZyLoL8N0Wb9xBt1NhZWg"}},
     {"type": "free streaming", "url": {"resource": "https://www.deezer.com/artist/525046"}},
     {"type": "streaming", "url": {"resource": "https://music.apple.com/us/artist/kendrick-lamar/368183298"}},
+    {"type": "soundcloud", "url": {"resource": "https://soundcloud.com/kendrick-lamar"}},
     {"type": "last.fm", "url": {"resource": "https://www.last.fm/music/Kendrick+Lamar"}},
     {"type": "official homepage", "url": {"resource": "http://www.kendricklamar.com/"}}
   ]
@@ -88,11 +89,12 @@ func TestMusicBrainzAdapter_Lookup_Artist(t *testing.T) {
 		t.Errorf("rating = %v/%d, want 4.3/18", e.Rating, e.RatingVotes)
 	}
 	wantIDs := map[string]string{
-		"discogs":  "1539549",
-		"wikidata": "Q130798",
-		"spotify":  "2YZyLoL8N0Wb9xBt1NhZWg",
-		"deezer":   "525046",
-		"itunes":   "368183298",
+		"discogs":    "1539549",
+		"wikidata":   "Q130798",
+		"spotify":    "2YZyLoL8N0Wb9xBt1NhZWg",
+		"deezer":     "525046",
+		"itunes":     "368183298",
+		"soundcloud": "kendrick-lamar", // profile handle, not a numeric id
 	}
 	for k, v := range wantIDs {
 		if e.ExternalIDs[k] != v {

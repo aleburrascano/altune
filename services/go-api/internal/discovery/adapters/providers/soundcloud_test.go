@@ -23,6 +23,94 @@ func trackKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{domain.ResultKindTrack: true}
 }
 
+// scContentServer routes the three artist-content endpoints used by the
+// discography path. The playlist "Empty Clip" (ep) owns tracks 1 & 2; the uploads
+// feed adds those two plus a standalone single (99).
+func scContentServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	const albumsJSON = `{"collection":[
+		{"id":10,"kind":"playlist","title":"Empty Clip","set_type":"ep","track_count":2,"user":{"username":"Che"},"tracks":[{"id":1},{"id":2}]}
+	]}`
+	const tracksJSON = `{"collection":[
+		{"id":99,"kind":"track","title":"14 HAHAHA LOL","user":{"username":"Che"},"display_date":"2026-07-20T00:00:00Z"},
+		{"id":1,"kind":"track","title":"Los Santos","user":{"username":"Che"}},
+		{"id":2,"kind":"track","title":"Og Ginobili","user":{"username":"Che"}}
+	]}`
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/albums"):
+			_, _ = w.Write([]byte(albumsJSON))
+		case strings.HasSuffix(r.URL.Path, "/tracks"):
+			_, _ = w.Write([]byte(tracksJSON))
+		case strings.HasSuffix(r.URL.Path, "/resolve"):
+			_, _ = w.Write([]byte(`{"id":909010162,"kind":"user","username":"Che","permalink_url":"https://soundcloud.com/che"}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+}
+
+func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T) {
+	srv := scContentServer(t)
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums: %v", err)
+	}
+	// Empty Clip (ep) + one standalone single (14 HAHAHA LOL). Tracks 1 & 2 belong
+	// to the playlist, so they must NOT also appear as singles.
+	if len(albums) != 2 {
+		t.Fatalf("got %d items, want 2 (1 EP + 1 standalone single): %+v", len(albums), albums)
+	}
+	var ep, single domain.SearchResult
+	for _, r := range albums {
+		if r.Extras["record_type"] == "single" {
+			single = r
+		} else {
+			ep = r
+		}
+	}
+	if ep.Title != "Empty Clip" || ep.Extras["record_type"] != "ep" {
+		t.Errorf("EP = %+v", ep)
+	}
+	if single.Title != "14 HAHAHA LOL" || single.Kind != domain.ResultKindAlbum || single.TrackCount != 1 {
+		t.Errorf("single = %+v", single)
+	}
+	for _, r := range albums {
+		if r.Title == "Los Santos" || r.Title == "Og Ginobili" {
+			t.Errorf("playlist track %q leaked in as a standalone single", r.Title)
+		}
+	}
+}
+
+func TestSoundCloud_GetArtistAlbums_resolvesBridgeHandle(t *testing.T) {
+	var resolvedHandle bool
+	srv := scContentServer(t)
+	defer srv.Close()
+	// Wrap to observe the /resolve call fired for the non-numeric handle.
+	inner := srv.Config.Handler
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/resolve") {
+			resolvedHandle = true
+		}
+		inner.ServeHTTP(w, r)
+	})
+	a := newTestSoundCloudAPI(srv, nil)
+
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "che") // handle, not numeric
+	if err != nil {
+		t.Fatalf("GetArtistAlbums(handle): %v", err)
+	}
+	if !resolvedHandle {
+		t.Error("expected the non-numeric handle to be resolved via /resolve")
+	}
+	if len(albums) != 2 {
+		t.Fatalf("got %d items, want 2", len(albums))
+	}
+}
+
 func TestSoundCloudAPIAdapter_Name(t *testing.T) {
 	a := NewSoundCloudAPIAdapter(http.DefaultClient, nil)
 	if got := a.Name(); got != domain.ProviderSoundCloud {
@@ -414,6 +502,8 @@ func TestSoundCloudAPIAdapter_ArtistContent(t *testing.T) {
 			_, _ = w.Write([]byte(`{"collection":[
 				{"id":9,"kind":"playlist","title":"More Chaos","set_type":"album","user":{"username":"Ken Carson"}}
 			]}`))
+		case r.URL.Path == "/users/659062284/tracks":
+			_, _ = w.Write([]byte(`{"collection":[]}`)) // no standalone uploads for this fixture
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
