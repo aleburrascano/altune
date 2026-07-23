@@ -149,6 +149,9 @@ func (a *App) wireDiscoveryContent(
 	if a.cfg.DetailIdentityFirst {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithIdentityFirst())
 	}
+	if a.cfg.DiscographyV2 {
+		artistContentOpts = append(artistContentOpts, discoveryService.WithDiscographyV2())
+	}
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
