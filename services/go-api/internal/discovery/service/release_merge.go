@@ -13,23 +13,34 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
+// ReleaseGroup is one provider's releases plus their provenance: IDVerified means
+// the provider was queried by the artist's OWN id (contamination-proof), vs a
+// by-name completeness fetch (which can surface a same-name artist's releases).
+// The keep step weighs the two very differently.
+type ReleaseGroup struct {
+	Releases   []domain.SearchResult
+	IDVerified bool
+}
+
 // MergedRelease is one release after best-of merge, plus the corroboration
 // metadata the confidence-keep step (§6 build step 2) reads: which distinct
-// providers carried it, and whether any carried a strong identifier.
+// providers carried it, whether any carried a strong identifier, and whether any
+// contributing provider was queried by the artist's own id.
 type MergedRelease struct {
 	Result      domain.SearchResult
 	Providers   map[domain.ProviderName]bool
 	HasStrongID bool
+	IDVerified  bool
 }
 
 // MergeReleases clusters release variants by canonical title and best-ofs each
-// cluster into a single record. Input is one group per provider (the id-fanout
-// results); output preserves first-seen cluster order for deterministic results.
-func MergeReleases(groups [][]domain.SearchResult) []MergedRelease {
+// cluster into a single record. Output preserves first-seen cluster order for
+// deterministic results.
+func MergeReleases(groups []ReleaseGroup) []MergedRelease {
 	byKey := make(map[string]*MergedRelease)
 	var order []string
 	for _, group := range groups {
-		for _, variant := range group {
+		for _, variant := range group.Releases {
 			key := textnorm.NormalizeForMatch(variant.Title)
 			if key == "" {
 				continue
@@ -47,6 +58,9 @@ func MergeReleases(groups [][]domain.SearchResult) []MergedRelease {
 			}
 			if hasStrongID(variant) {
 				m.HasStrongID = true
+			}
+			if group.IDVerified {
+				m.IDVerified = true
 			}
 		}
 	}

@@ -37,6 +37,13 @@ func withUPC(u string) func(*domain.SearchResult) {
 	return func(r *domain.SearchResult) { r.Extras["upc"] = u }
 }
 
+func idGroup(rs ...domain.SearchResult) ReleaseGroup {
+	return ReleaseGroup{Releases: rs, IDVerified: true}
+}
+func nameGroup(rs ...domain.SearchResult) ReleaseGroup {
+	return ReleaseGroup{Releases: rs, IDVerified: false}
+}
+
 func findRelease(t *testing.T, releases []MergedRelease, title string) MergedRelease {
 	t.Helper()
 	for _, m := range releases {
@@ -54,10 +61,10 @@ func findRelease(t *testing.T, releases []MergedRelease, title string) MergedRel
 // fields, so the album rendered with no year/tracks. Best-of merge keeps all
 // three.
 func TestMergeReleases_bestOfAcrossProviders(t *testing.T) {
-	groups := [][]domain.SearchResult{
-		{albumVariant(domain.ProviderDeezer, "d1", "Fully Loaded", withDate("2026-04-01"), withCover("cover-dz"), withType("ep"))},
-		{albumVariant(domain.ProviderAppleMusic, "a1", "Fully Loaded", withTracks(5), withType("album"))},
-		{albumVariant(domain.ProviderSoundCloud, "s1", "Fully Loaded", withTracks(5), withDate("2026-04-01T00:00:00Z"))},
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Fully Loaded", withDate("2026-04-01"), withCover("cover-dz"), withType("ep"))),
+		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Fully Loaded", withTracks(5), withType("album"))),
+		idGroup(albumVariant(domain.ProviderSoundCloud, "s1", "Fully Loaded", withTracks(5), withDate("2026-04-01T00:00:00Z"))),
 	}
 
 	got := findRelease(t, MergeReleases(groups), "Fully Loaded")
@@ -86,8 +93,8 @@ func TestMergeReleases_bestOfAcrossProviders(t *testing.T) {
 // id) carries, and MusicBrainz doesn't know. Merge must surface it intact with
 // its date; the keep step (build step 2) later keeps it on own-id provenance.
 func TestMergeReleases_singleProviderReleaseSurvivesIntact(t *testing.T) {
-	groups := [][]domain.SearchResult{
-		{albumVariant(domain.ProviderDeezer, "enc", "REST IN BASS: ENCORE", withDate("2025-12-25"), withCover("c"), withType("album"))},
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderDeezer, "enc", "REST IN BASS: ENCORE", withDate("2025-12-25"), withCover("c"), withType("album"))),
 	}
 
 	got := findRelease(t, MergeReleases(groups), "REST IN BASS: ENCORE")
@@ -107,9 +114,9 @@ func TestMergeReleases_singleProviderReleaseSurvivesIntact(t *testing.T) {
 // same release merge into one carrying BOTH — the old merge would keep whichever
 // scored higher and lose the other's field.
 func TestMergeReleases_coverAndYearCombine(t *testing.T) {
-	groups := [][]domain.SearchResult{
-		{albumVariant(domain.ProviderLastFM, "l1", "Closed Captions", withCover("cover-lfm"))},
-		{albumVariant(domain.ProviderDeezer, "d9", "closed captions", withDate("2023-07-21"))},
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderLastFM, "l1", "Closed Captions", withCover("cover-lfm"))),
+		idGroup(albumVariant(domain.ProviderDeezer, "d9", "closed captions", withDate("2023-07-21"))),
 	}
 
 	merged := MergeReleases(groups)
@@ -126,8 +133,8 @@ func TestMergeReleases_coverAndYearCombine(t *testing.T) {
 }
 
 func TestMergeReleases_strongIDDetected(t *testing.T) {
-	groups := [][]domain.SearchResult{
-		{albumVariant(domain.ProviderAppleMusic, "a1", "Sayso Says", withUPC("00888880000"))},
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Sayso Says", withUPC("00888880000"))),
 	}
 	if !findRelease(t, MergeReleases(groups), "Sayso Says").HasStrongID {
 		t.Error("HasStrongID = false, want true (UPC present)")
