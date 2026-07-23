@@ -165,3 +165,58 @@ The redesign should decouple those two roles. Candidate directions to evaluate a
 4. **Separate "coverage" from "authority."** MB as a *vote* (adds corroboration weight) rather than a *veto* (removes) — matching the "every provider is an equal source, MB is the only one that removes" doctrine that may itself be the thing to revisit.
 
 Each of these is a *layer change*, not a patch. Decide here, on the map, before touching code.
+
+---
+
+## 6. Clean-slate redesign (the decision: rebuild, not patch)
+
+Every fix this cycle was a band-aid on an algorithm that grew by accretion. The symptoms trace to **four architectural faults**, not four bugs:
+
+- **F1 — Double merge.** The backend fans out and merges a full discography; then the client *re-fetches per provider and re-merges it*, discarding the backend's work. Two merge implementations, neither authoritative.
+- **F2 — Replace, don't merge.** Both merges pick one variant of a release and drop the rest of its fields (backend `completenessOf` + consensus `add()`; client `dedupAlbumsByTitle`). A record with a cover but no year overwrites one with a year. **This is why "Fully Loaded" shows no year/tracks even though Deezer returns `release_date`.**
+- **F3 — Completeness is blind.** `completenessOf` scores `ImageURL/ISRC/Duration/Album` — not year, track-count, or record_type. The tie-breaker can't even see the fields we care about.
+- **F4 — Authority conflated with coverage.** MusicBrainz is both the contamination filter *and* a real-release purger. Loosening one role breaks the other (the `protectPrimaries` regression).
+
+### Design principles for the rebuild
+
+1. **One merge, one authority.** The backend produces the final, ranked, bucketed discography in a **single** call. The client renders it verbatim — no per-provider fetch, no client re-merge. (Deletes F1 and the client half of F2.)
+2. **Merge is field-level best-of, never wholesale replace.** Clustering the same release across providers yields one record that takes the best of *every* field (cover, year, track-count, record_type, all identifiers, union of source ids). No variant is ever discarded. (Deletes F2, F3.)
+3. **Identity-first, id-only fan-out.** Resolve the artist's full cross-provider identity once; query each provider by *its own id*. Contamination-proof by construction.
+4. **Corroboration, not veto.** A release is kept if it is *corroborated*: on ≥2 identity-safe providers, OR carries a strong identifier (UPC/MBID/ISRC), OR came from a provider queried by the artist's verified id. MusicBrainz becomes one **vote**, never a veto. Uncorroborated, name-only, single-source releases are the only ones dropped. Keeps ENCORE, drops namesakes. (Deletes F4.)
+5. **Close the id gap without name-guessing.** For providers MB never bridges (SoundCloud), acquire the id at *search* time — when a provider result provably co-identifies with the entity (shared ISRC/UPC, or exact title+artist under a non-ambiguous name) — and persist it to the `IdentityStore`. Detail then resolves it *by id*. Blind name-resolve is removed; if an id is truly unknown, the provider sits out rather than risk a wrong-artist match.
+6. **Record-type is resolved, not trusted.** One normalizer folds every provider's signal (explicit single/EP flags → MB primary-type → iTunes suffix → 1-track⇒single) into a single record_type. Bucketing reads that. (Now viable because extraction is fixed.)
+
+### Target pipeline (backend, one call)
+
+```mermaid
+flowchart TD
+    IN["GET /artist/{id}/discography\n(seed provider+id, artistName)"] --> RES["1. Resolve identity\n{MBID, providerIDs} — id-only,\nids learned at search-time, no name-guess"]
+    RES --> FAN["2. Fan out by id — each provider's\nreleases + top-tracks, concurrent"]
+    FAN --> CLU["3. Cluster by release identity\nUPC/MBID → exact title+artist → norm-title"]
+    CLU --> MER["4. Best-of merge each cluster\n(every field; union sources; resolve record_type)"]
+    MER --> CONF["5. Confidence filter\nkeep corroborated / identifier-backed / own-id\ndrop single-source name-only namesakes"]
+    CONF --> NORM["6. Normalize year + bucket (album/single/EP)"]
+    NORM --> SORT["7. Sort newest-first"]
+    SORT --> OUT["one merged discography → client renders verbatim"]
+```
+
+### What gets deleted
+
+- Client `useArtistContent` per-provider fan-out (`getArtistAlbums('deezer'|'soundcloud'|'itunes')` × N) and `dedupAlbumsByTitle` / `backfillAlbumArt` / client sort — the backend owns all of it.
+- `applyMBAuthority`'s veto role and the whole `protectPrimaries` concept.
+- `completenessOf` as the merge arbiter (replaced by field-level best-of).
+- Blind `resolveArtistIDByName` for SoundCloud (replaced by search-time id acquisition; corroboration-gated resolve only as an explicit fallback).
+
+### Build sequence (strangler, not big-bang — matches ADR-0007)
+
+The current path stays live behind `DETAIL_IDENTITY_FIRST`; build the new one behind a new flag and cut over when it's proven:
+
+1. **Best-of merge core** (pure, unit-tested): `MergeReleases([]variants) → Release` — field-level, identifier-aware clustering. Golden tests incl. the ENCORE and Fully-Loaded cases.
+2. **Confidence keep** (pure): `Keep(release) bool` from corroboration signals. Tests: ENCORE kept, namesake dropped.
+3. **Record-type normalizer** (pure) + bucketer.
+4. **Search-time id acquisition**: persist provider ids (esp. SoundCloud) into `IdentityStore` when co-identity is proven. This is what makes SC id-safe.
+5. **New single endpoint** `GET /artist/{id}/discography` wiring 1–7; old per-kind endpoints stay until the client cuts over.
+6. **Client**: replace the three-call fan-out + re-merge with one call that renders verbatim.
+7. **Verify** on Che (ENCORE present, years/tracks/buckets correct, no namesakes), then flip the flag and delete the old layers.
+
+Steps 1–3 are pure functions with no I/O — fast to write, exhaustively testable, and where all the correctness lives. That's the opposite of the band-aid pattern: the hard logic becomes small, tested, deletable-in-isolation units instead of accreted conditionals across the pipeline.
