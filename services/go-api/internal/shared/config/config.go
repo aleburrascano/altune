@@ -112,6 +112,17 @@ type Config struct {
 	// drops same-name namesakes), and record_type is normalized (fixes album/single/EP
 	// bucketing). Requires DetailIdentityFirst. Ships dark until verified on prod.
 	DiscographyV2 bool `env:"DISCOGRAPHY_V2" envDefault:"false"`
+
+	// Identity verify-on-persist — the permanent identity-bridge fix (docs/
+	// discovery-detail-pipeline.md §7). MusicBrainz url-relations are not always
+	// correct: a wrong streaming link fuses two same-name artists (the wrong Deezer
+	// "Che"). When on, each learned streaming edge is checked against the artist's
+	// MusicBrainz release-groups before the bridge is persisted, and a
+	// non-overlapping (mis-bridged) edge is dropped — so the durable identity, and
+	// the detail fan-out / artwork that read it, never inherit the contamination.
+	// Runs off the request path (the background bridge persist). Ships dark until
+	// its added MB/provider fetch load is measured.
+	IdentityVerifyOnPersist bool `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
 }
 
 func Load() (*Config, error) {
