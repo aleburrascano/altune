@@ -270,8 +270,14 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 	if a.RecordLabel != "" {
 		extras["record_label"] = a.RecordLabel
 	}
+	// record_type: Apple flags singles explicitly; everything else is an album
+	// (the Catalog API has no EP/compilation flag). Labelling the common case
+	// instead of leaving it blank is what lets the discography bucket it, rather
+	// than falling back to whatever another provider happened to say.
 	if a.IsSingle {
 		extras["record_type"] = "single"
+	} else {
+		extras["record_type"] = "album"
 	}
 	if a.UPC != "" {
 		extras["upc"] = a.UPC

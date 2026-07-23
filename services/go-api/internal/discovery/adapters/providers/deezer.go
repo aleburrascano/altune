@@ -97,6 +97,17 @@ func deezerSearchEndpoint(kind domain.ResultKind) string {
 	}
 }
 
+// preferURL returns the higher-resolution URL when present, else the fallback.
+// Deezer decodes both the 1000px (cover_xl/picture_xl) and 500px (cover_big/
+// picture_big) variants; the search mapper used to ship only the 500px one while
+// the larger was already in hand.
+func preferURL(hi, lo string) string {
+	if hi != "" {
+		return hi
+	}
+	return lo
+}
+
 func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResult {
 	var title, subtitle, imageURL string
 	extras := make(map[string]any)
@@ -108,19 +119,22 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 			subtitle = item.Artist.Name
 		}
 		if item.Album != nil {
-			imageURL = item.Album.CoverBig
+			imageURL = preferURL(item.Album.CoverXL, item.Album.CoverBig)
 			extras["album"] = item.Album.Title
 		}
 		extras["duration"] = item.Duration
 		if item.Preview != "" {
 			extras["preview_url"] = item.Preview
 		}
+		if item.ExplicitLyrics {
+			extras["explicit"] = true // explicit_lyrics rides on /search/track; was never decoded
+		}
 	case domain.ResultKindAlbum:
 		title = item.Title
 		if item.Artist != nil {
 			subtitle = item.Artist.Name
 		}
-		imageURL = item.CoverBig
+		imageURL = preferURL(item.CoverXL, item.CoverBig)
 		if item.RecordType != "" {
 			extras["record_type"] = item.RecordType
 		}
@@ -129,7 +143,7 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		}
 	case domain.ResultKindArtist:
 		title = item.Name
-		imageURL = item.PictureBig
+		imageURL = preferURL(item.PictureXL, item.PictureBig)
 	}
 
 	r := domain.NewProviderResult(kind, title, subtitle, imageURL,
@@ -159,25 +173,26 @@ type deezerSearchResponse struct {
 }
 
 type deezerItem struct {
-	ID          int64        `json:"id"`
-	Title       string       `json:"title"`
-	Name        string       `json:"name"`
-	Link        string       `json:"link"`
-	Preview     string       `json:"preview"`
-	Duration    int          `json:"duration"`
-	ISRC        string       `json:"isrc"`
-	CoverBig    string       `json:"cover_big"`
-	CoverXL     string       `json:"cover_xl"`
-	PictureBig  string       `json:"picture_big"`
-	PictureXL   string       `json:"picture_xl"`
-	Artist      *deezerRef   `json:"artist"`
-	Album       *deezerAlbum `json:"album"`
-	RecordType  string       `json:"record_type"`
-	ReleaseDate string       `json:"release_date"`
-	NbTracks    int          `json:"nb_tracks"`
-	Rank        int64        `json:"rank"`
-	NbFan       int64        `json:"nb_fan"`
-	GenreID     int          `json:"genre_id"`
+	ID             int64        `json:"id"`
+	Title          string       `json:"title"`
+	Name           string       `json:"name"`
+	Link           string       `json:"link"`
+	Preview        string       `json:"preview"`
+	Duration       int          `json:"duration"`
+	ISRC           string       `json:"isrc"`
+	CoverBig       string       `json:"cover_big"`
+	CoverXL        string       `json:"cover_xl"`
+	PictureBig     string       `json:"picture_big"`
+	PictureXL      string       `json:"picture_xl"`
+	Artist         *deezerRef   `json:"artist"`
+	Album          *deezerAlbum `json:"album"`
+	ExplicitLyrics bool         `json:"explicit_lyrics"`
+	RecordType     string       `json:"record_type"`
+	ReleaseDate    string       `json:"release_date"`
+	NbTracks       int          `json:"nb_tracks"`
+	Rank           int64        `json:"rank"`
+	NbFan          int64        `json:"nb_fan"`
+	GenreID        int          `json:"genre_id"`
 }
 
 type deezerRef struct {

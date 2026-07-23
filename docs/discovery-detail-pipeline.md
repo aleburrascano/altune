@@ -139,7 +139,7 @@ Field-level extraction audit (2026-07-23, code-cited). Ranked drops — a **DROP
 | 7 | **Spotify (search)** | albums ship blank artist subtitle (query never requests artists) | DROPPED | `spotify.go:364, 283-290` |
 | 8 | **TheAudioDB** | genre/bio/country/formed-year all dropped (marginal — artist-only, artwork use) | DROPPED | `theaudiodb.go:36-40` |
 
-**Already fixed:** SoundCloud `release_date`+`track_count` (albums), `display_date` (tracks) — `scBestReleaseDate`, 2026-07-23.
+**Fixed 2026-07-23 (extraction batch):** SoundCloud `release_date`+`track_count`; YT Music explicit (#1); Deezer track explicit + 1000px artwork (#2a,2c); iTunes album record_type + track release date (#3a,3b); Spotify content album_type + album artist + track release date (#4a,4b,4c); Apple Music album record_type default (#5a); MusicBrainz recording duration + secondary-types (#6). **Deferred (tuning/risk, not dropped data):** Deezer genre_id→name (needs extra fetch, #2b); Apple artwork resolution + multi-genre (#5b,5c — touches shared payloads/consumer type); Spotify search album artist (#7 — touches search merge keys, needs eval gate); TheAudioDB (#8 — marginal). None of the shipped changes touch ranking inputs, so no eval-gate needed.
 
 **Cross-cutting patterns the table reveals:**
 - **"Parsed then discarded"** (YT explicit, the SC year miss): the field is *in the response struct*, the mapper just doesn't copy it. Cheapest, safest fixes.
