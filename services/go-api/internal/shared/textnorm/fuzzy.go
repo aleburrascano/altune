@@ -3,6 +3,7 @@ package textnorm
 import (
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // TokenSortRatio implements rapidfuzz's token_sort_ratio algorithm:
@@ -24,7 +25,11 @@ func levenshteinRatio(s1, s2 string) float64 {
 	if s1 == s2 {
 		return 1.0
 	}
-	total := len(s1) + len(s2)
+	// Rune counts, not byte lengths: the distance below counts runes, so a
+	// byte-length total inflated the ratio for multi-byte scripts (two CJK
+	// strings sharing zero characters scored ~0.67 instead of 0). ASCII is
+	// unchanged (bytes == runes).
+	total := utf8.RuneCountInString(s1) + utf8.RuneCountInString(s2)
 	if total == 0 {
 		return 1.0
 	}

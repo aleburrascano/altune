@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -122,6 +123,89 @@ func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 	}
 	if len(resp.Items) != 1 || resp.Items[0].Title != "REST IN BASS: ENCORE" {
 		t.Fatalf("items = %+v, want just the id-verified ENCORE (namesake dropped, V2 ran on seed)", resp.Items)
+	}
+}
+
+// The fan-out order is canonical, not map range: the MergeReleases incumbent
+// (which fixes the displayed title casing/fields) must be the same provider
+// every request, not whichever the map range yielded first.
+func TestGetAlbums_v2_deterministicAcrossRuns(t *testing.T) {
+	deezer := &fakeArtistContentProvider{
+		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{
+				v2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01")),
+			}, nil
+		},
+	}
+	itunes := &fakeArtistContentProvider{
+		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			// Same release, different casing: whoever is the cluster incumbent
+			// decides the displayed title.
+			return []domain.SearchResult{
+				v2Album(domain.ProviderITunes, "i-fl", "FULLY LOADED", withTracks(5)),
+			}, nil
+		},
+	}
+	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1", "itunes": "i1"}}
+	svc := NewGetArtistContentService(
+		map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: deezer,
+			domain.ProviderITunes: itunes,
+		},
+		WithContentIdentityStore(store),
+	)
+
+	for i := 0; i < 25; i++ {
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", "Che", 50)
+		if err != nil {
+			t.Fatalf("run %d: GetAlbums error = %v", i, err)
+		}
+		if len(resp.Items) != 1 {
+			t.Fatalf("run %d: items = %d, want 1 merged", i, len(resp.Items))
+		}
+		if got := resp.Items[0].Title; got != "Fully Loaded" {
+			t.Fatalf("run %d: title = %q, want %q (Deezer is the canonical incumbent every run)", i, got, "Fully Loaded")
+		}
+	}
+}
+
+// A hung provider is cut off at detailFanOutTimeout instead of holding the
+// request open; the responsive providers' results still come back.
+func TestFanOutByIdentity_slowProviderCutOffAtTimeout(t *testing.T) {
+	old := detailFanOutTimeout
+	detailFanOutTimeout = 50 * time.Millisecond
+	defer func() { detailFanOutTimeout = old }()
+
+	fast := &fakeArtistContentProvider{
+		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{v2Album(domain.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
+		},
+	}
+	slow := &fakeArtistContentProvider{
+		getAlbumsFn: func(ctx context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			<-ctx.Done() // hangs until the fan-out deadline fires
+			return nil, ctx.Err()
+		},
+	}
+	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1", "itunes": "i1"}}
+	svc := NewGetArtistContentService(
+		map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer: fast,
+			domain.ProviderITunes: slow,
+		},
+		WithContentIdentityStore(store),
+	)
+
+	start := time.Now()
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", "Che", 50)
+	if err != nil {
+		t.Fatalf("GetAlbums error = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("fan-out took %v, want the slow provider cut off near the 50ms timeout", elapsed)
+	}
+	if len(resp.Items) != 1 || resp.Items[0].Title != "Fully Loaded" {
+		t.Fatalf("items = %+v, want just the fast provider's album (slow one degraded)", resp.Items)
 	}
 }
 

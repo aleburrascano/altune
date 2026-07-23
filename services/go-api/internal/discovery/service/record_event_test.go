@@ -81,6 +81,79 @@ func TestRecordEventService_Execute_RejectsUnknownType(t *testing.T) {
 	}
 }
 
+// assertRejected400 asserts err is a 400-status validation error (via the
+// structural httputil.StatusError contract) and that nothing was appended.
+func assertRejected400(t *testing.T, store *fakeEventStore, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected a validation error")
+	}
+	var se interface{ HTTPStatus() int }
+	if !errors.As(err, &se) || se.HTTPStatus() != 400 {
+		t.Errorf("error should carry HTTP 400, got %v", err)
+	}
+	if len(store.recorded()) != 0 {
+		t.Error("nothing should be appended for a rejected event")
+	}
+}
+
+func TestRecordEventService_Execute_RejectsServerReservedTypes(t *testing.T) {
+	for _, typ := range []domain.EventType{domain.EventTypeSearchPerformed, domain.EventTypeResultsShown} {
+		store := &fakeEventStore{}
+		svc := NewRecordEventService(store)
+		err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{Type: typ})
+		assertRejected400(t, store, err)
+	}
+}
+
+func TestRecordEventService_Execute_RejectsNonNumericDwell(t *testing.T) {
+	store := &fakeEventStore{}
+	svc := NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+		Type:    domain.EventTypeSkip,
+		Payload: map[string]any{"dwell_ms": "abc"},
+	})
+	assertRejected400(t, store, err)
+}
+
+func TestRecordEventService_Execute_RejectsNonBooleanZeroResult(t *testing.T) {
+	store := &fakeEventStore{}
+	svc := NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+		Type:    domain.EventTypePlay,
+		Payload: map[string]any{"zero_result": "false"},
+	})
+	assertRejected400(t, store, err)
+}
+
+func TestRecordEventService_Execute_RejectsNonStringSignatureAndSession(t *testing.T) {
+	for _, key := range []string{"result_signature", "session_id"} {
+		store := &fakeEventStore{}
+		svc := NewRecordEventService(store)
+		err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+			Type:    domain.EventTypePlay,
+			Payload: map[string]any{key: 42.0},
+		})
+		assertRejected400(t, store, err)
+	}
+}
+
+func TestRecordEventService_Execute_AcceptsWellTypedPayload(t *testing.T) {
+	store := &fakeEventStore{}
+	svc := NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+		Type: domain.EventTypeSkip,
+		// float64 is what encoding/json hands the handler for any JSON number.
+		Payload: map[string]any{"dwell_ms": 1500.0, "result_signature": "sig", "session_id": "s1"},
+	})
+	if err != nil {
+		t.Fatalf("well-typed payload rejected: %v", err)
+	}
+	if len(store.recorded()) != 1 {
+		t.Fatalf("want 1 event appended, got %d", len(store.recorded()))
+	}
+}
+
 func TestRecordEventService_Execute_WrapsStoreError(t *testing.T) {
 	svc := NewRecordEventService(failingEventStore{})
 

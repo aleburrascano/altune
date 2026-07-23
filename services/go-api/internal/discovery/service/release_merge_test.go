@@ -132,12 +132,64 @@ func TestMergeReleases_coverAndYearCombine(t *testing.T) {
 	}
 }
 
+// When the incumbent has no artwork, the other variant's URL and its source tag
+// adopt TOGETHER — the incumbent's stale ArtworkSource must never label the
+// adopted URL (the mislabel a pre-bestArtwork ImageURL assignment used to cause).
+func TestMergeReleases_adoptedArtworkKeepsItsSourceTag(t *testing.T) {
+	withArtworkSource := func(s string) func(*domain.SearchResult) {
+		return func(r *domain.SearchResult) { r.ArtworkSource = s }
+	}
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Nafi", withArtworkSource("deezer-stale"))), // no ImageURL
+		idGroup(albumVariant(domain.ProviderITunes, "i1", "Nafi", withCover("cover-it"), withArtworkSource("itunes"))),
+	}
+
+	got := findRelease(t, MergeReleases(groups), "Nafi")
+
+	if got.Result.ImageURL != "cover-it" {
+		t.Errorf("ImageURL = %q, want cover-it (adopted from iTunes)", got.Result.ImageURL)
+	}
+	if got.Result.ArtworkSource != "itunes" {
+		t.Errorf("ArtworkSource = %q, want itunes (must travel with the adopted URL)", got.Result.ArtworkSource)
+	}
+}
+
 func TestMergeReleases_strongIDDetected(t *testing.T) {
 	groups := []ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Sayso Says", withUPC("00888880000"))),
 	}
 	if !findRelease(t, MergeReleases(groups), "Sayso Says").HasStrongID {
 		t.Error("HasStrongID = false, want true (UPC present)")
+	}
+}
+
+// A producer that sets only the TYPED UPC field (as applemusic.go instructs —
+// "the typed field below is what merge reads") must also count as a strong
+// identifier: no split-brain between r.UPC and Extras["upc"].
+func TestMergeReleases_strongIDDetectedFromTypedUPC(t *testing.T) {
+	withTypedUPC := func(u string) func(*domain.SearchResult) {
+		return func(r *domain.SearchResult) { r.UPC = u }
+	}
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Sayso Says", withTypedUPC("00888880000"))),
+	}
+	got := findRelease(t, MergeReleases(groups), "Sayso Says")
+	if !got.HasStrongID {
+		t.Error("HasStrongID = false, want true (typed UPC present)")
+	}
+}
+
+// The typed UPC also survives the best-of fold, like ISRC/MBID.
+func TestMergeReleases_typedUPCFolds(t *testing.T) {
+	withTypedUPC := func(u string) func(*domain.SearchResult) {
+		return func(r *domain.SearchResult) { r.UPC = u }
+	}
+	groups := []ReleaseGroup{
+		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Nafi")),
+		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Nafi", withTypedUPC("00888880000"))),
+	}
+	if got := findRelease(t, MergeReleases(groups), "Nafi"); got.Result.UPC != "00888880000" {
+		t.Errorf("merged UPC = %q, want the Apple variant's typed UPC", got.Result.UPC)
 	}
 }
 

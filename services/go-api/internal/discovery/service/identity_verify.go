@@ -57,21 +57,24 @@ func verifiableEdge(key string) (domain.ProviderName, bool) {
 	return zero, false
 }
 
-// VerifyXref returns xref with each mis-bridged streaming edge removed. It fetches
-// the artist's MusicBrainz release-groups once, then each verifiable provider's
+// VerifyXref returns xref with each mis-bridged streaming edge removed, plus
+// ok=true when the caller should persist the returned set. It fetches the
+// artist's MusicBrainz release-groups once, then each verifiable provider's
 // catalogue, dropping an edge whose titles don't overlap (groupMatchesAnchor, the
-// same test the detail anchor uses). Memoized per MBID so repeated searches of the
-// same artist don't re-fetch within the window.
-func (v *IdentityVerifier) VerifyXref(ctx context.Context, kind domain.ResultKind, mbid string, xref map[string]string) map[string]string {
+// same test the detail anchor uses). Memoized per MBID: on a memo hit it returns
+// (nil, false) — the durable store already holds the verified set from the first
+// pass, and re-upserting the caller's RAW xref would re-write the very edge
+// verification dropped.
+func (v *IdentityVerifier) VerifyXref(ctx context.Context, kind domain.ResultKind, mbid string, xref map[string]string) (map[string]string, bool) {
 	if v == nil || v.anchor == nil || mbid == "" || kind != domain.ResultKindArtist || len(xref) == 0 {
-		return xref
+		return xref, true
 	}
 	if v.memo.seen(mbid) {
-		return xref
+		return nil, false
 	}
 	titles, err := v.anchor.ReleaseGroupTitles(ctx, mbid)
 	if err != nil || len(titles) < mbAnchorMinReleaseGroups {
-		return xref // fail-open: no / too few MB release-groups to judge against
+		return xref, true // fail-open: no / too few MB release-groups to judge against
 	}
 	mbSet := normalizeTitleSet(titles)
 
@@ -96,7 +99,19 @@ func (v *IdentityVerifier) VerifyXref(ctx context.Context, kind domain.ResultKin
 		}
 	}
 	v.memo.mark(mbid)
-	return out
+	return out, true
+}
+
+// Forget drops an MBID from the verify memo. Called when the persist that
+// followed a successful verification fails: the memo would otherwise claim "the
+// durable store holds the verified set" for the full TTL while the store holds
+// nothing, and every later search of the artist would skip both verification
+// and persist. nil-safe.
+func (v *IdentityVerifier) Forget(mbid string) {
+	if v == nil {
+		return
+	}
+	v.memo.forget(mbid)
 }
 
 // verifyMemo bounds re-verification cost: an MBID verified within the TTL is not
@@ -123,4 +138,10 @@ func (c *verifyMemo) mark(mbid string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.m[mbid] = time.Now().Add(c.ttl)
+}
+
+func (c *verifyMemo) forget(mbid string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.m, mbid)
 }

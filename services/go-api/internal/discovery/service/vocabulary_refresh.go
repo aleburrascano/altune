@@ -19,9 +19,15 @@ type VocabularyRefreshService struct {
 	vocab    ports.VocabularyStore
 	interval time.Duration
 	limit    int
-	cancel   context.CancelFunc
-	done     chan struct{}
-	once     sync.Once
+
+	// mu guards the Start/Shutdown lifecycle: started makes a second Start a
+	// no-op (a double Start would double-close done and leak the first cancel)
+	// and lets Shutdown-before-Start return without waiting on a loop that
+	// never ran.
+	mu      sync.Mutex
+	started bool
+	cancel  context.CancelFunc
+	done    chan struct{}
 }
 
 func NewVocabularyRefreshService(
@@ -101,8 +107,15 @@ func (s *VocabularyRefreshService) normalizeAndStore(
 	return s.vocab.BulkAdd(ctx, entries)
 }
 
-// Start launches the background refresh loop.
+// Start launches the background refresh loop. Idempotent: a second call is a
+// no-op (the loop is already running).
 func (s *VocabularyRefreshService) Start() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started {
+		return
+	}
+	s.started = true
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 	go s.loop(ctx)
@@ -143,13 +156,19 @@ func (s *VocabularyRefreshService) recoverPanic() {
 	}
 }
 
-// Shutdown cancels the background loop and waits for it to finish.
+// Shutdown cancels the background loop and waits for it to finish. Safe to call
+// before Start (returns immediately — there is no loop to wait for) and safe
+// concurrently with Start (mu orders the cancel after the launch).
 func (s *VocabularyRefreshService) Shutdown(ctx context.Context) {
-	s.once.Do(func() {
-		if s.cancel != nil {
-			s.cancel()
-		}
-	})
+	s.mu.Lock()
+	started := s.started
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.mu.Unlock()
+	if !started {
+		return
+	}
 	select {
 	case <-s.done:
 	case <-ctx.Done():

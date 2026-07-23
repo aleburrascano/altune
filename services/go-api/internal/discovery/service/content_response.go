@@ -63,6 +63,11 @@ func fetchProviderResults(
 // healthy envelope — the single home for the "cap then wrap" tail every content use
 // case shares.
 func okContentResponse(providerName domain.ProviderName, results []domain.SearchResult, limit int) *ContentFetchResponse {
+	if results == nil {
+		// A provider returning (nil, nil) must still honor the non-nil Items
+		// contract above, so the wire serializes [] rather than null.
+		results = []domain.SearchResult{}
+	}
 	if limit > 0 && len(results) > limit {
 		results = results[:limit]
 	}

@@ -87,6 +87,19 @@ func TestRank_SharesQueryWordGate(t *testing.T) {
 	}
 }
 
+func TestRank_SingleCharQueryIsNotGatedOut(t *testing.T) {
+	// tokenSet drops single-char tokens, so a one-character query ("u", "v") has
+	// an empty token set — sharesQueryWord must treat that as "no gate", not
+	// reject every candidate (which forced zero results).
+	artist := deezerTrack("U", "U", 50)
+
+	got := Rank([]Entity{ent(artist)}, "u")
+
+	if len(got) != 1 {
+		t.Fatalf("single-char query gated out every result, got %v", titles(got))
+	}
+}
+
 func TestRank_BrowseableSourceGate(t *testing.T) {
 	itunesAlbum := withPop(res(domain.ResultKindAlbum, "Humble", "Artist A", domain.ProviderITunes, nil), 99)
 	trk := deezerTrack("Humble", "Artist A", 10)

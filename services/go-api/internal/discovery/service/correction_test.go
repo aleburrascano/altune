@@ -1,10 +1,35 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
 )
+
+func TestCorrectTokens_PrefixLookupErrorDegrades(t *testing.T) {
+	// A SuggestByPrefix failure during token correction must degrade (treat as
+	// "no prefix match" and keep going), never abort the correction.
+	store := &fakeVocabularyStore{
+		suggestByPrefixFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
+			return nil, errors.New("redis down")
+		},
+		findClosestFn: func(token string, _ int) ([]domain.VocabularyEntry, error) {
+			if token == "humbel" {
+				return []domain.VocabularyEntry{{Term: "humble", TermNorm: "humble", Kind: domain.VocabKindTrack, MatchScore: 0.8}}, nil
+			}
+			// Whole-query pass and the already-correct token: no candidates.
+			return nil, nil
+		},
+	}
+	svc := NewCorrectionService(store)
+
+	result := svc.CorrectAggressive(context.Background(), "kendrick humbel")
+	if result == nil || result.Corrected != "kendrick humble" {
+		t.Fatalf("want token correction to survive the prefix-lookup error, got %+v", result)
+	}
+}
 
 func TestPickBestCorrection(t *testing.T) {
 	t.Run("picks closest by edit distance", func(t *testing.T) {

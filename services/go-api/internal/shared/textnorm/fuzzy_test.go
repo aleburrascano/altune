@@ -76,6 +76,15 @@ func TestTokenSortRatio(t *testing.T) {
 			wantMin: 0,
 			wantMax: 10,
 		},
+		{
+			// Rune-counted total: CJK strings sharing zero characters must score
+			// 0, not the ~67 a byte-length total produced (3 bytes per rune).
+			name:    "cjk no shared characters",
+			s1:      "坂本",
+			s2:      "龍一",
+			wantMin: 0,
+			wantMax: 0,
+		},
 	}
 
 	for _, tt := range tests {

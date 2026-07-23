@@ -11,18 +11,19 @@ import (
 // tryCorrection runs only when the first search returned nothing: aggressively
 // correct the query from the learned vocabulary and re-run the pipeline. The
 // trigger is principled (zero results, not a tuned threshold). Returns the
-// corrected + original query (for the wire) and the corrected results.
-func (s *Service) tryCorrection(ctx context.Context, query *domain.SearchQuery) (corrected, original string, results []domain.SearchResult) {
+// corrected + original query (for the wire), the corrected results, and the
+// corrected fan-out's provider statuses (the ones describing those results).
+func (s *Service) tryCorrection(ctx context.Context, query *domain.SearchQuery) (corrected, original string, results []domain.SearchResult, statuses []domain.ProviderSearchResponse) {
 	if s.correctionSvc == nil {
-		return "", "", nil
+		return "", "", nil, nil
 	}
 	result := s.correctionSvc.CorrectAggressive(ctx, query.Raw)
 	if result == nil {
-		return "", "", nil
+		return "", "", nil, nil
 	}
 	corrNorm := textnorm.NormalizeForMatch(result.Corrected)
 	if corrNorm == textnorm.NormalizeForMatch(query.Raw) {
-		return "", "", nil
+		return "", "", nil, nil
 	}
 
 	slog.InfoContext(ctx, "search.v2.correcting",
@@ -31,10 +32,10 @@ func (s *Service) tryCorrection(ctx context.Context, query *domain.SearchQuery) 
 		"confidence", result.Confidence,
 	)
 
-	perProvider, _ := s.fanOut(ctx, result.Corrected, query.Kinds)
+	perProvider, corrStatuses := s.fanOut(ctx, result.Corrected, query.Kinds)
 	results = s.mergeRankEnrich(ctx, perProvider, corrNorm)
 	if len(results) == 0 {
-		return "", "", nil
+		return "", "", nil, nil
 	}
-	return result.Corrected, query.Raw, results
+	return result.Corrected, query.Raw, results, corrStatuses
 }

@@ -108,16 +108,24 @@ func (u *providerUnionFind) union(a, b domain.ProviderName) {
 }
 
 // largestComponent returns the component root with the most providers, and that
-// count.
+// count. Ties break on the lexicographically smallest member name of each
+// component (NOT the root: which member ends up root depends on union order,
+// which follows a map range) — so a 2v2 fracture tie keeps the same artist's
+// discography every request instead of flipping at random.
 func (u *providerUnionFind) largestComponent() (domain.ProviderName, int) {
 	counts := make(map[domain.ProviderName]int)
+	minMember := make(map[domain.ProviderName]string)
 	for p := range u.parent {
-		counts[u.find(p)]++
+		root := u.find(p)
+		counts[root]++
+		if s := p.String(); minMember[root] == "" || s < minMember[root] {
+			minMember[root] = s
+		}
 	}
 	var best domain.ProviderName
 	max := 0
 	for root, n := range counts {
-		if n > max {
+		if n > max || (n == max && n > 0 && minMember[root] < minMember[best]) {
 			best, max = root, n
 		}
 	}

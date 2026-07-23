@@ -86,9 +86,11 @@ func (s *Service) StartBehavioralRefresh(ctx context.Context, interval time.Dura
 }
 
 // BehavioralScoresSnapshot returns the currently published score map (nil when
-// disabled or not yet refreshed). nil-safe and read-only: ranking reads it
-// without locking. Exported so the Mission Control re-run ranks with the same
-// snapshot the live search applies.
+// disabled or not yet refreshed). Read-only contract: the returned map is the
+// live published snapshot, shared by every concurrent reader without locking —
+// callers must never mutate it (a write would race the search path). A refresh
+// swaps in a NEW map; it never edits a published one. Exported so the Mission
+// Control re-run ranks with the same snapshot the live search applies.
 func (s *Service) BehavioralScoresSnapshot() map[string]float64 {
 	if !s.behavioralRanking {
 		return nil
