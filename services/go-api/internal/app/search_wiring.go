@@ -111,6 +111,21 @@ func BuildSearchServiceWithTransport(
 			)
 			opts = append(opts, discoveryService.WithIdentityStore(identityStore))
 		}
+		// Verify-on-persist (IDENTITY_VERIFY_ON_PERSIST, default off): before a
+		// learned bridge is stored, drop any streaming edge whose catalogue doesn't
+		// overlap the artist's MusicBrainz release-groups — a mis-bridged same-name
+		// artist from a wrong MB url-relation (doc §7). sharedMB supplies the
+		// release-group anchor; the content adapters fetch each edge's catalogue.
+		if cfg.IdentityVerifyOnPersist && sharedMB != nil {
+			verifyProviders := map[domain.ProviderName]discoveryPorts.ArtistContentProvider{
+				domain.ProviderDeezer:     deezerContent,
+				domain.ProviderSpotify:    providers.NewSpotifyAdapter(cf.discovery()),
+				domain.ProviderAppleMusic: providers.NewAppleMusicAdapter(cf.discovery()),
+			}
+			opts = append(opts, discoveryService.WithIdentityVerifier(
+				discoveryService.NewIdentityVerifier(sharedMB, verifyProviders),
+			))
+		}
 	}
 	if redisClient != nil {
 		// App-wide consistency cache (shared, short-TTL): identical query → identical

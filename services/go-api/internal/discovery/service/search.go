@@ -86,20 +86,21 @@ type rankingExperiments struct {
 // orthogonal enrichment carried forward from v1 (artist-dedup, disambiguation,
 // artwork, correction/suggest, related groups, telemetry, vocabulary learning).
 type Service struct {
-	providers       []ports.SearchProvider
-	circuitBreaker  *CircuitBreaker
-	historyRepo     ports.SearchHistoryRepository
-	vocabStore      ports.VocabularyStore
-	eventStore      ports.EventStore
-	artworkResolver ports.TaggingArtworkResolver
-	artworkCache    ports.ArtworkCache
-	albumValidator  ports.ArtistIdentityResolver
-	identityBridge  ports.IdentityBridge
-	mbidIndex       ports.MBIDIndex
-	identityStore   ports.IdentityStore
-	correctionSvc   *CorrectionService
-	findRelatedSvc  *FindRelatedService
-	resultCache     ports.ResultCache
+	providers        []ports.SearchProvider
+	circuitBreaker   *CircuitBreaker
+	historyRepo      ports.SearchHistoryRepository
+	vocabStore       ports.VocabularyStore
+	eventStore       ports.EventStore
+	artworkResolver  ports.TaggingArtworkResolver
+	artworkCache     ports.ArtworkCache
+	albumValidator   ports.ArtistIdentityResolver
+	identityBridge   ports.IdentityBridge
+	mbidIndex        ports.MBIDIndex
+	identityStore    ports.IdentityStore
+	identityVerifier *IdentityVerifier
+	correctionSvc    *CorrectionService
+	findRelatedSvc   *FindRelatedService
+	resultCache      ports.ResultCache
 
 	rankingExperiments
 
@@ -197,6 +198,16 @@ func WithMBIDIndex(idx ports.MBIDIndex) Option {
 // as good as the current fan-out (the prior, non-deterministic behavior).
 func WithIdentityStore(store ports.IdentityStore) Option {
 	return func(s *Service) { s.identityStore = store }
+}
+
+// WithIdentityVerifier turns on verify-on-persist (IDENTITY_VERIFY_ON_PERSIST):
+// before a learned bridge is written to the durable store, each streaming edge is
+// checked against the artist's MusicBrainz release-groups and a mis-bridged one is
+// dropped (see IdentityVerifier). Off → the raw MB url-relation bridge is persisted
+// as-is (the prior behavior). Only affects the background persist, never the
+// in-flight merge/ranking.
+func WithIdentityVerifier(v *IdentityVerifier) Option {
+	return func(s *Service) { s.identityVerifier = v }
 }
 
 // WithFindRelatedService attaches the "more from this album/artist" groups.
@@ -462,7 +473,15 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 	// search, and it must outlive the request, so use a detached context.
 	s.launchBackground(ctx, "identity.persist_bridges", func(bgCtx context.Context) {
 		for _, b := range learned {
-			if err := s.identityStore.PersistBridges(bgCtx, b.kind, b.mbid, b.ids); err != nil {
+			ids := b.ids
+			if s.identityVerifier != nil {
+				// Drop mis-bridged streaming edges before storing (doc §7): a wrong
+				// MB url-relation must not fuse two same-name artists in the durable
+				// identity. Off the request path, so its provider fetches don't add
+				// search latency.
+				ids = s.identityVerifier.VerifyXref(bgCtx, b.kind, b.mbid, b.ids)
+			}
+			if err := s.identityStore.PersistBridges(bgCtx, b.kind, b.mbid, ids); err != nil {
 				slog.WarnContext(bgCtx, "identity.persist_failed",
 					"kind", b.kind.String(), "mbid", b.mbid, "error", err)
 			}
