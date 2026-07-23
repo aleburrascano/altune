@@ -16,6 +16,7 @@ type GetArtistContentService struct {
 	providers     map[domain.ProviderName]ports.ArtistContentProvider
 	consensus     *ConsensusService
 	identityStore ports.IdentityStore
+	mbAnchor      ports.MBDiscographyAnchor
 	identityFirst bool
 	discographyV2 bool
 }
@@ -51,6 +52,14 @@ func WithContentIdentityStore(store ports.IdentityStore) ArtistContentOption {
 // provider path whenever the identity can't be resolved.
 func WithIdentityFirst() ArtistContentOption {
 	return func(s *GetArtistContentService) { s.identityFirst = true }
+}
+
+// WithMBAnchor gives the V2 discography its identity-verification anchor: the
+// MusicBrainz release-group set each fan-out provider is checked against, so a
+// mis-bridged same-name artist (doc §7) is dropped. Optional — without it, V2
+// skips MB verification and relies on the cohesion fallback.
+func WithMBAnchor(anchor ports.MBDiscographyAnchor) ArtistContentOption {
+	return func(s *GetArtistContentService) { s.mbAnchor = anchor }
 }
 
 // WithDiscographyV2 turns on the rebuilt discography core (DISCOGRAPHY_V2, doc §6):
