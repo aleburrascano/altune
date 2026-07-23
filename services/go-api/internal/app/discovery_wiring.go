@@ -88,6 +88,16 @@ func (a *App) wireDiscoveryContent(
 	// (docs/providers/itunes.md cap 5): an iTunes-sourced album/artist result
 	// carries its collectionId/artistId, which keys the /lookup content endpoint.
 	itunesContent := providers.NewITunesAdapter(newDiscoveryClient())
+	// Apple Music + Spotify join the artist-content fan-out through the same
+	// ArtistContentProvider interface (see docs/brainstorms/2026-07-22-provider-
+	// uniform-interface.md — "stop excluding them"). Apple Music replaces iTunes for
+	// artist content: same Apple catalog + ids, but the official Catalog API carries
+	// release dates, cover art, and ISRC that the plain iTunes lookup misses. Spotify
+	// uses its classic /v1 endpoints with the anonymous web-player token (no
+	// persisted-query hash). Both are keyed by their bridged id (Apple via the shared
+	// iTunes id; see providerContentID).
+	appleMusicContent := providers.NewAppleMusicAdapter(newDiscoveryClient())
+	spotifyContent := providers.NewSpotifyAdapter(newDiscoveryClient())
 
 	albumProviders := map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider{
 		discoveryDomain.ProviderDeezer: deezerContent,
@@ -95,7 +105,8 @@ func (a *App) wireDiscoveryContent(
 	}
 	artistProviders := map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider{
 		discoveryDomain.ProviderDeezer:     deezerContent,
-		discoveryDomain.ProviderITunes:     itunesContent,
+		discoveryDomain.ProviderAppleMusic: appleMusicContent,
+		discoveryDomain.ProviderSpotify:    spotifyContent,
 		// SoundCloud serves the underground long tail: an artist sourced from
 		// SoundCloud carries its numeric user id, which keys these endpoints.
 		discoveryDomain.ProviderSoundCloud: providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),

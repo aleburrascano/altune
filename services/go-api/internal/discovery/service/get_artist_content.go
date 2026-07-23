@@ -113,10 +113,7 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 	}
 	var jobs []job
 	for name, p := range s.providers {
-		id := identity.ProviderIDs[name]
-		if id == "" && name == domain.ProviderLastFM && identity.MBID != "" {
-			id = identity.MBID // Last.fm keys artist content on MBID — identity-safe.
-		}
+		id := providerContentID(identity, name)
 		if id == "" {
 			continue
 		}
