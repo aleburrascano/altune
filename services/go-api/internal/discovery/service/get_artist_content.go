@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"math"
 	"sort"
 	"strconv"
 	"sync"
@@ -70,19 +69,13 @@ func WithDiscographyV2() ArtistContentOption {
 }
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
-	if s.identityFirst {
-		identity, ok := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
-		// V2 runs on the seed identity alone (see GetAlbums); the old path needs ok.
-		if s.discographyV2 {
-			if tracks := s.v2TopTracks(ctx, identity, artistName); len(tracks) > 0 {
-				return okContentResponse(providerName, tracks, limit), nil
-			}
-		} else if ok {
-			if tracks := s.identityTopTracks(ctx, identity, artistName); len(tracks) > 0 {
-				return okContentResponse(providerName, tracks, limit), nil
-			}
-			// Empty fan-out (every provider missed): fall through to the single-
-			// provider path rather than showing an empty top-tracks list.
+	if s.identityFirst && s.discographyV2 {
+		// V2 runs on the seed identity even without a durable cross-provider bridge —
+		// the seed provider id is already id-verified. An empty fan-out falls through
+		// to the single-provider path below rather than showing an empty list.
+		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
+		if tracks := s.v2TopTracks(ctx, identity, artistName); len(tracks) > 0 {
+			return okContentResponse(providerName, tracks, limit), nil
 		}
 	}
 
@@ -98,24 +91,6 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 		return degraded, nil
 	}
 	return okContentResponse(providerName, results, limit), nil
-}
-
-// identityTopTracks fans top-tracks out across every provider that has a resolved
-// id for this artist, merges by track identity, and orders most-corroborated
-// first. A same-name artist's tracks arrive from at most one provider (its wrong
-// id), so they never corroborate and sink below the real, multi-source tracks —
-// which is how "Agenda"/"Miley Cyrus"-style bleed gets pushed out.
-func (s *GetArtistContentService) identityTopTracks(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
-	groups := s.fanOutByIdentity(ctx, identity, artistName, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
-		return p.GetArtistTopTracks(ctx, provider, id)
-	})
-	entities := Merge(groups)
-	sortByAgreement(entities)
-	out := make([]domain.SearchResult, 0, len(entities))
-	for _, e := range entities {
-		out = append(out, e.Result)
-	}
-	return out
 }
 
 // identityContentFetch is one provider's content call (top-tracks or albums),
@@ -172,45 +147,14 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 	return out
 }
 
-// sortByAgreement orders merged entities most-corroborated first: more providers
-// that returned it (agreement) beats fewer, then the best native position across
-// providers breaks the tie. Stable so equal-agreement entities keep merge order.
-func sortByAgreement(entities []Entity) {
-	sort.SliceStable(entities, func(i, j int) bool {
-		ai, aj := len(entities[i].BestRank), len(entities[j].BestRank)
-		if ai != aj {
-			return ai > aj
-		}
-		return bestRankOf(entities[i]) < bestRankOf(entities[j])
-	})
-}
-
-func bestRankOf(e Entity) int {
-	best := math.MaxInt
-	for _, r := range e.BestRank {
-		if r < best {
-			best = r
-		}
-	}
-	return best
-}
-
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
-	if s.identityFirst {
-		identity, ok := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
-		// V2 runs on the SEED identity alone — the seed provider id is already
-		// id-verified (it IS this artist for that provider), so V2 works even when
-		// the durable store has no cross-provider bridge (the common case for
-		// underground artists MusicBrainz doesn't url-relate). The old identity-
-		// first path still requires a resolved bridge (ok).
-		if s.discographyV2 {
-			if albums := s.v2Albums(ctx, identity, artistName); len(albums) > 0 {
-				return okContentResponse(providerName, albums, limit), nil
-			}
-		} else if ok {
-			if albums := s.identityAlbums(ctx, identity, artistName); len(albums) > 0 {
-				return okContentResponse(providerName, albums, limit), nil
-			}
+	if s.identityFirst && s.discographyV2 {
+		// V2 runs on the SEED identity even without a durable cross-provider bridge
+		// (the common case for underground artists MusicBrainz doesn't url-relate) —
+		// the seed provider id is already id-verified. Empty → single-provider below.
+		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
+		if albums := s.v2Albums(ctx, identity, artistName); len(albums) > 0 {
+			return okContentResponse(providerName, albums, limit), nil
 		}
 	}
 
@@ -249,53 +193,6 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 	sortAlbumsByReleaseDateDesc(results)
 
 	return okContentResponse(providerName, results, limit), nil
-}
-
-// identityAlbums builds the discography identity-first: fetch each provider's
-// albums by the artist's OWN id for that provider, merge best-of (a cover or year
-// from ANY source fills the gap), keep consensus for MB-spine completeness, then
-// drop the metadata-less noise that used to render as broken cards. Fixes (C):
-// same-name albums can't bleed in, and every surviving album has a cover or a year.
-func (s *GetArtistContentService) identityAlbums(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
-	groups := s.fanOutByIdentity(ctx, identity, artistName, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
-		return p.GetArtistAlbums(ctx, provider, id)
-	})
-	entities := Merge(groups)
-	albums := make([]domain.SearchResult, 0, len(entities))
-	for _, e := range entities {
-		albums = append(albums, e.Result)
-	}
-
-	// Completeness: consensus adds MB-spine albums the id fan-out didn't reach,
-	// anchored on the identity-safe primary set above.
-	if artistName != "" && s.consensus != nil {
-		var kept []domain.SearchResult
-		for _, cr := range s.consensus.BuildConsensus(ctx, artistName, albums) {
-			if cr.Status != ConsensusRejected {
-				kept = append(kept, cr.Album)
-			}
-		}
-		albums = kept
-	}
-
-	normalizeAlbumYears(albums)
-	albums = hideBareAlbums(albums)
-	sortAlbumsByReleaseDateDesc(albums)
-	return albums
-}
-
-// hideBareAlbums drops the metadata-less noise the discography used to render as
-// broken cards: an album with no cover AND no year AND only a single source. Any
-// album with an image, a known year, or multi-source corroboration is kept.
-func hideBareAlbums(albums []domain.SearchResult) []domain.SearchResult {
-	out := albums[:0]
-	for _, a := range albums {
-		bare := a.ImageURL == "" && a.Year == 0 && len(a.Sources) <= 1
-		if !bare {
-			out = append(out, a)
-		}
-	}
-	return out
 }
 
 func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
