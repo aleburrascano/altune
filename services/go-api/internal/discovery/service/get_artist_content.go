@@ -16,8 +16,6 @@ type GetArtistContentService struct {
 	consensus     *ConsensusService
 	identityStore ports.IdentityStore
 	mbAnchor      ports.MBDiscographyAnchor
-	identityFirst bool
-	discographyV2 bool
 }
 
 func NewGetArtistContentService(
@@ -38,19 +36,12 @@ func WithConsensusService(c *ConsensusService) ArtistContentOption {
 }
 
 // WithContentIdentityStore attaches the durable identity store the identity-first
-// path reverse-resolves a single provider id into the artist's full cross-provider
-// identity through. Without it, the identity-first path degrades to single-provider.
-// (Named apart from the search service's WithIdentityStore — same package.)
+// V2 detail path reverse-resolves a single provider id into the artist's full
+// cross-provider identity through. Its presence is what enables that path; without
+// it the service serves the single seed provider directly. (Named apart from the
+// search service's WithIdentityStore — same package.)
 func WithContentIdentityStore(store ports.IdentityStore) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.identityStore = store }
-}
-
-// WithIdentityFirst turns on the identity-first detail path (DETAIL_IDENTITY_FIRST):
-// fan out across every content provider by the artist's OWN id per provider and
-// merge, instead of trusting a single provider id. Falls back to the single-
-// provider path whenever the identity can't be resolved.
-func WithIdentityFirst() ArtistContentOption {
-	return func(s *GetArtistContentService) { s.identityFirst = true }
 }
 
 // WithMBAnchor gives the V2 discography its identity-verification anchor: the
@@ -61,18 +52,13 @@ func WithMBAnchor(anchor ports.MBDiscographyAnchor) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.mbAnchor = anchor }
 }
 
-// WithDiscographyV2 turns on the rebuilt discography core (DISCOGRAPHY_V2, doc §6):
-// best-of merge → confidence-keep → record-type-normalize, replacing the lossy
-// Merge+consensus+MB-veto path. Only takes effect on the identity-first path.
-func WithDiscographyV2() ArtistContentOption {
-	return func(s *GetArtistContentService) { s.discographyV2 = true }
-}
-
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
-	if s.identityFirst && s.discographyV2 {
-		// V2 runs on the seed identity even without a durable cross-provider bridge —
-		// the seed provider id is already id-verified. An empty fan-out falls through
-		// to the single-provider path below rather than showing an empty list.
+	if s.identityStore != nil {
+		// Identity-first V2: resolve the artist's full cross-provider identity and fan
+		// out by each provider's own id. Runs on the seed even without a durable bridge
+		// (the seed id is already id-verified); an empty fan-out falls through to the
+		// single-provider path below. Gated on the store because V2 requires it — with
+		// no store the service just serves the seed provider directly.
 		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
 		if tracks := s.v2TopTracks(ctx, identity, artistName); len(tracks) > 0 {
 			return okContentResponse(providerName, tracks, limit), nil
@@ -148,10 +134,10 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 }
 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
-	if s.identityFirst && s.discographyV2 {
-		// V2 runs on the SEED identity even without a durable cross-provider bridge
-		// (the common case for underground artists MusicBrainz doesn't url-relate) —
-		// the seed provider id is already id-verified. Empty → single-provider below.
+	if s.identityStore != nil {
+		// Identity-first V2 (see GetTopTracks): resolve the cross-provider identity and
+		// fan out by each provider's own id, gated on the store V2 requires. Runs on
+		// the seed even without a durable bridge; empty → single-provider path below.
 		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
 		if albums := s.v2Albums(ctx, identity, artistName); len(albums) > 0 {
 			return okContentResponse(providerName, albums, limit), nil

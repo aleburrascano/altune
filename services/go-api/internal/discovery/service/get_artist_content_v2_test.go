@@ -63,8 +63,6 @@ func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
 		},
 		WithConsensusService(consensus),
 		WithContentIdentityStore(store),
-		WithIdentityFirst(),
-		WithDiscographyV2(),
 	)
 
 	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "d1", "Che", 50)
@@ -116,8 +114,6 @@ func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer},
 		WithConsensusService(NewConsensusService([]ConsensusProvider{namesake})),
 		WithContentIdentityStore(&fakeIdentityStore{}), // empty → resolveArtistIdentity ok=false
-		WithIdentityFirst(),
-		WithDiscographyV2(),
 	)
 
 	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "399574001", "Che", 50)
@@ -151,8 +147,6 @@ func TestGetTopTracks_v2_corroboratedFirst(t *testing.T) {
 			domain.ProviderITunes: itunes,
 		},
 		WithContentIdentityStore(store),
-		WithIdentityFirst(),
-		WithDiscographyV2(),
 	)
 
 	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", "Che", 10)
