@@ -13,12 +13,19 @@ We rebuilt the artist **detail / discography** path from scratch (behind flags,
 live on prod) and chased a "Che" contamination bug to its real root: a **MusicBrainz
 data error** that fuses two same-name artists into one identity. Fixed it with
 **MB-anchored identity verification**, verified on the live API (the bridged Che
-card went **89 → 25 items, zero cross-artist leakage**). Several real follow-ups
-remain (top-tracks not yet verified; the permanent upstream fix isn't built).
-(Spotify content — previously dead — was fixed 2026-07-23; see §5.1.)
+card went **89 → 25 items, zero cross-artist leakage**).
 
-**Flags (both `true` in prod `.env.production`, on the VM only):**
-`DETAIL_IDENTITY_FIRST=true`, `DISCOGRAPHY_V2=true`.
+**2026-07-23 session shipped four more fixes (all live on prod):** Spotify content
+(pathfinder, not the dead classic API — §5.1); album tracklists showing the wrong
+artist (native `GetAlbumTracks` for spotify/apple/soundcloud + artist-guarded
+fallback — §5.6a); the SoundCloud discography gap (MB-bridged SC id + standalone
+uploads as singles, so Che's "14 HAHAHA LOL" appears — §5.5); and **the permanent
+identity-bridge fix** (verify-on-persist, now enabled — §6). Still open: top-tracks
+fracture (§5.2), coarser bridged-card buckets (§5.3), client double-merge (§5.4,
+needs EAS), existing-bad-row cleanup (§6 caveat).
+
+**Flags (all `true` in prod `.env.production`, on the VM only):**
+`DETAIL_IDENTITY_FIRST=true`, `DISCOGRAPHY_V2=true`, `IDENTITY_VERIFY_ON_PERSIST=true`.
 
 **Test artist "Che" (SoundCloud-native Atlanta rapper):**
 - Real Deezer artist id: **`399574001`**
@@ -187,33 +194,78 @@ leakage**, rapper's real discography with year/tracks/covers. Rapper's own card
    `dedupAlbumsByTitle`). It's now non-lossy (each backend response is complete) but
    redundant. Removing it (single call, render verbatim) needs an **EAS build** to
    ship — untestable by us server-side.
-5. **Search-time SoundCloud id acquisition** never built (persist SC id when it
-   co-identifies at search, so SC joins the id fan-out instead of being name-guessed).
+5. ~~**Search-time SoundCloud id acquisition** never built.~~ **FIXED (2026-07-23,
+   `musicbrainz_enrichment.go` + `soundcloud.go`).** The V2 discography disables the
+   blind SoundCloud name-resolve (contamination-safety) and only queries a provider
+   by a *persisted* id — but `externalIDsFromRelations` never extracted MusicBrainz's
+   `soundcloud` url-relation, so the xref carried no SC id and SoundCloud sat out
+   (zero SC sources on the bridged Che card). Fix: extract the `soundcloud` relation
+   (the profile **handle**, e.g. `che`); `SoundCloudAPIAdapter.resolveUserID`
+   resolves handle→numeric id via `/resolve` on use. SoundCloud now joins the id
+   fan-out **verified** (from the MBID's own relation) and survives the MB anchor (7
+   of Che's 9 SC albums overlap MB's release-groups, over the threshold of 4).
+   **Plus** `GetArtistAlbums` now returns the typed playlists (album/ep/single) AND
+   standalone track uploads not in any playlist as singles — SoundCloud has no
+   release objects, so a genuine single is just an ungrouped upload; without this
+   SC-exclusive drops (Che's "14 HAHAHA LOL") never reached the discography. Verified
+   on prod: Che → `{soundcloud:13, spotify:29, applemusic:25}`, "14 HAHAHA LOL" in the
+   singles row. *(Rollout note: an artist enriched **before** this change needs its
+   14-day enrichment cache to refresh — or a manual re-enrich by MBID — before SC
+   appears; new artists get it automatically.)*
+6a. ~~**Album tracklists showed the wrong artist.**~~ **FIXED (2026-07-23,
+   `spotify_content.go` + `applemusic.go` + `soundcloud.go` + `get_album_tracks.go`).**
+   Opening an identity-bridged album (Che's EP "Empty Clip") rendered a *different*
+   artist's tracklist ("Empty Clip" by Chase Fetti): only Deezer/iTunes implemented
+   `GetAlbumTracks`, but bridged cards are apple/spotify/soundcloud-sourced (the
+   deezer group was anchor-dropped), so they fell to a **blind Deezer title search**
+   that returned a same-titled album by anyone. Fix: native `GetAlbumTracks` for
+   Spotify (pathfinder `queryAlbumTracks`), Apple (catalog `/albums/{id}/tracks`), and
+   SoundCloud (playlist tracks, or a single's track id as itself), all wired into the
+   album-tracks map; plus an **artist-match guard** on the Deezer fallback (return
+   empty, never a wrong-artist album). A follow-on SoundCloud regression — a single's
+   tracklist showed "REST IN BASS" — was the same root cause, fixed by SC's
+   `GetAlbumTracks`. Verified on prod for all three providers.
 6. **Deferred extraction items** (doc §4): Deezer genre-id→name, Apple artwork
    resolution (capped 500px) + multi-genre, Spotify *search* album-artist (touches
    search merge keys → needs the discoveryeval gate), TheAudioDB fields.
 
 ---
 
-## 6. The PERMANENT fix (recommended next major piece)
+## 6. The PERMANENT fix — DONE + ENABLED (2026-07-23)
 
-The detail-time MB-anchor is a **defense**. The disease is upstream: the search
-persists a cross-provider identity bridge **without verifying the providers are the
-same artist**. Fix it at the source:
+**IMPLEMENTED and live on prod** (`identity_verify.go`, wired in
+`search_wiring.go`, flag `IDENTITY_VERIFY_ON_PERSIST=true` set in the VM's
+`.env.production`).
 
-- **At search / `stampIdentities` (identity persist time): verify catalogue overlap
-  before storing a bridge.** If a provider id from MB's url-relations resolves to an
-  artist whose releases don't overlap the MBID's (the 8%-vs-60% test), **don't
-  persist that (provider→MBID) edge.** Then the fractured identity is never stored,
-  the search would surface two *separate* "Che" cards, and detail inherits a clean
-  identity — no downstream defense needed. This also fixes the *search* results, not
-  just detail.
-- **Report the MB error upstream.** MusicBrainz accepts corrections; the wrong
-  deezer url-relation on `0a68f3b5` should be removed. External + slow, but it's the
-  actual data bug.
+`stampIdentities` used to persist MusicBrainz's raw url-relations as the xref,
+unverified — so a wrong streaming link (the wrong Deezer `234701081`) fused two
+same-name artists in the durable identity. Now, in the **background** bridge
+persist, `IdentityVerifier.VerifyXref` checks each streaming edge
+(deezer/spotify/apple) against the artist's MB release-groups — the same
+`groupMatchesAnchor` overlap test the detail anchor uses, applied per edge,
+memoized per MBID — and **drops a non-overlapping (mis-bridged) edge before it is
+stored.** Fail-open throughout; it filters only the persisted copy, never the
+in-flight `Xref`, so merge/ranking (and the `discoveryeval` gate) are untouched.
 
-Then the detail-time `FilterGroupsByMBAnchor` becomes a belt-and-suspenders guard
-against *new* un-verified bridges rather than the primary fix.
+**Verified on prod:** a `che` search logged
+`identity.verify_dropped_edge mbid=0a68f3b5… provider=deezer external_id=234701081`
+— the wrong Che rejected from the rapper's bridge. The discography stayed intact
+(`{soundcloud:13, spotify:29, applemusic:25}`). The detail-time
+`FilterGroupsByMBAnchor` is now a belt-and-suspenders guard, not the primary fix.
+
+**Two caveats (still open):**
+- **Existing bad rows aren't retroactively purged.** The verifier stops *new*
+  fusions and cleans the freshly-stamped xref, but Che's already-persisted
+  `deezer:234701081 → 0a68f3b5` row lingers (opening *that* card still resolves via
+  it; the detail anchor keeps it clean). A one-time cleanup migration (delete stale
+  edges whose catalogue fails the overlap test) would fully scrub the store.
+- **Enabled without a load-measurement pass.** It adds a few background MB/provider
+  fetches per newly-learned artist identity (memoized, off the request path,
+  fail-open). Watch the logs for MB rate-limit noise; flip the flag off the same way
+  if needed. Only deezer/spotify/apple edges are verified (soundcloud is an
+  MB-authoritative handle; discogs/wikidata aren't catalogues).
+- **Report the MB error upstream** (still worth doing): MusicBrainz accepts
+  corrections; the wrong deezer url-relation on `0a68f3b5` should be removed.
 
 ---
 
