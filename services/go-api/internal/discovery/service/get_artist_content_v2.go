@@ -26,7 +26,7 @@ func (s *GetArtistContentService) v2Albums(ctx context.Context, identity Resolve
 	groups := s.v2ReleaseGroups(ctx, identity, artistName, true, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistAlbums(ctx, provider, id)
 	})
-	kept := FilterKept(MergeReleases(groups))
+	kept := FilterCohesive(FilterKept(MergeReleases(groups)))
 	out := make([]domain.SearchResult, 0, len(kept))
 	for i := range kept {
 		r := kept[i].Result
@@ -45,7 +45,7 @@ func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity Reso
 	groups := s.v2ReleaseGroups(ctx, identity, artistName, false, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistTopTracks(ctx, provider, id)
 	})
-	kept := FilterKept(MergeReleases(groups))
+	kept := FilterCohesive(FilterKept(MergeReleases(groups)))
 	sort.SliceStable(kept, func(i, j int) bool {
 		return len(kept[i].Providers) > len(kept[j].Providers)
 	})
