@@ -25,6 +25,7 @@ type discoveryWiring struct {
 	handler        *discoveryHandler.DiscoveryHandler
 	requestStore   *requeststore.Store
 	searchSvc      *discoveryService.Service
+	artistSvc      *discoveryService.GetArtistContentService
 	featuredBridge *discoverybridge.FeaturedResolver
 }
 
@@ -279,6 +280,7 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		handler:        discoveryH,
 		requestStore:   requestStore,
 		searchSvc:      searchSvc,
+		artistSvc:      content.artistSvc,
 		featuredBridge: content.featuredBridge,
 	}
 }

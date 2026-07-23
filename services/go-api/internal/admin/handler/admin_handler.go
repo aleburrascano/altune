@@ -34,6 +34,7 @@ type AdminHandler struct {
 	requests        *requeststore.Store
 	reRunner        ReRunner
 	searchInspector SearchInspector
+	detailReRunner  DetailReRunner
 	metricsHistory  MetricsHistoryReader
 
 	supabaseURL     string
@@ -106,5 +107,6 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/requests", h.serveRequests)
 	r.Get("/requests/{corrID}", h.serveRequestDetail)
 	r.Post("/rerun", h.serveReRun)
+	r.Post("/rerun-detail", h.serveReRunDetail)
 	r.Post("/search", h.serveTestSearch)
 }
