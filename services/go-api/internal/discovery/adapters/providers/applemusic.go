@@ -283,7 +283,7 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 		extras["upc"] = a.UPC
 	}
 
-	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Name, a.ArtistName,
+	r := domain.NewProviderResult(domain.ResultKindAlbum, stripAlbumTypeSuffix(a.Name), a.ArtistName,
 		appleMusicArtworkURL(a.Artwork.URL, appleMusicArtworkSize),
 		domain.SourceRef{Provider: domain.ProviderAppleMusic, ExternalID: al.ID, URL: a.URL},
 		extras)
