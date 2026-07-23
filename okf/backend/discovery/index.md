@@ -1,7 +1,7 @@
 ---
 type: Index
 title: Discovery subsystems
-description: The discovery bounded context decomposed into its nine subsystems — search orchestration through ranking, enrichment, telemetry, and the offline eval harness.
+description: The discovery bounded context decomposed into its ten subsystems — search orchestration through ranking, artist-detail discography, enrichment, telemetry, and the offline eval harness.
 tags: [index, discovery]
 ---
 
@@ -18,6 +18,7 @@ Discovery is the multi-provider search context (`services/go-api/internal/discov
 
 ## Off the query path
 
+- [artist-detail](artist-detail.md) — the detail-open discography/top-tracks path: identity-first content fan-out by each provider's own id, the V2 best-of-merge → keep → MB-verify → bucket cores, and native album tracklists
 - [enrichment](enrichment.md) — detail-screen MusicBrainz/Discogs/Last.fm/Deezer metadata + lyrics, never on the ranking path
 - [cache-layer](cache-layer.md) — Redis read-through caches (no-op when Redis is absent); caches are app-wide, not per-user
 - [telemetry](telemetry.md) — InteractionEvent pipeline + SatisfactionConsumer turning play/skip/completed into a ranking signal
