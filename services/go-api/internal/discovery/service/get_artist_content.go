@@ -196,7 +196,9 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 	results = dedupAlbums(results)
 
 	if artistName != "" && s.consensus != nil {
-		consensusResults := s.consensus.BuildConsensus(ctx, artistName, results)
+		// Single-provider fallback path (identity unresolved): primaries are one
+		// provider's name-adjacent list, so MB stays the authority (no protection).
+		consensusResults := s.consensus.BuildConsensus(ctx, artistName, results, false)
 		var kept []domain.SearchResult
 		for _, cr := range consensusResults {
 			if cr.Status != ConsensusRejected {
@@ -237,7 +239,9 @@ func (s *GetArtistContentService) identityAlbums(ctx context.Context, identity R
 	// anchored on the identity-safe primary set above.
 	if artistName != "" && s.consensus != nil {
 		var kept []domain.SearchResult
-		for _, cr := range s.consensus.BuildConsensus(ctx, artistName, albums) {
+		// protectPrimaries=true: these albums came from the identity fan-out (each
+		// provider's own id), so MB completeness may add but never reject them.
+		for _, cr := range s.consensus.BuildConsensus(ctx, artistName, albums, true) {
 			if cr.Status != ConsensusRejected {
 				kept = append(kept, cr.Album)
 			}

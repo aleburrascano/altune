@@ -87,7 +87,7 @@ func TestConsensus_ConfirmedAndUnconfirmed(t *testing.T) {
 		consensusProvider("lastfm", "Album A", "Album B"),
 		consensusProvider("musicbrainz", "Album A"),
 	})
-	got := svc.BuildConsensus(context.Background(), "Artist", nil)
+	got := svc.BuildConsensus(context.Background(), "Artist", nil, false)
 
 	byTitle := statusByTitle(got)
 	if byTitle["Album A"] != ConsensusConfirmed {
@@ -105,7 +105,7 @@ func TestConsensus_DistinctAlbumsStaySeparate(t *testing.T) {
 		consensusProvider("lastfm", "Scorpion", "Scorpion (Deluxe)", "Take Care"),
 		consensusProvider("musicbrainz", "Scorpion"),
 	})
-	got := svc.BuildConsensus(context.Background(), "Drake", nil)
+	got := svc.BuildConsensus(context.Background(), "Drake", nil, false)
 
 	byTitle := statusByTitle(got)
 	if _, ok := byTitle["Take Care"]; !ok {
@@ -132,8 +132,8 @@ func TestConsensus_CacheSkipsProviderCalls(t *testing.T) {
 	}
 	svc := NewConsensusService([]ConsensusProvider{p}, WithConsensusCache(newInMemoryConsensusCache()))
 
-	svc.BuildConsensus(context.Background(), "Artist", nil)
-	svc.BuildConsensus(context.Background(), "Artist", nil)
+	svc.BuildConsensus(context.Background(), "Artist", nil, false)
+	svc.BuildConsensus(context.Background(), "Artist", nil, false)
 
 	if n := atomic.LoadInt32(&calls); n != 1 {
 		t.Errorf("provider fetched %d times, want 1 (second served from cache)", n)
@@ -147,7 +147,7 @@ func TestConsensus_DeterministicAcrossRuns(t *testing.T) {
 			consensusProvider("musicbrainz", "B", "D"),
 			consensusProvider("itunes", "A", "C", "E"),
 		})
-		return svc.BuildConsensus(context.Background(), "Artist", nil)
+		return svc.BuildConsensus(context.Background(), "Artist", nil, false)
 	}
 
 	first := build()
@@ -175,7 +175,7 @@ func TestConsensus_MBRejectsContaminationAndConfirms(t *testing.T) {
 		consensusProvider("lastfm", "Real Album", "Fake Album"),
 	}, WithMBAuthority(mb))
 
-	got := svc.BuildConsensus(context.Background(), "Artist", nil)
+	got := svc.BuildConsensus(context.Background(), "Artist", nil, false)
 	byTitle := statusByTitle(got)
 
 	if byTitle["Real Album"] != ConsensusConfirmed {
@@ -196,13 +196,41 @@ func TestConsensus_MBSpineRejectsAlbumsNotInDiscography(t *testing.T) {
 		consensusProvider("lastfm", "Real Album", "Other Artist Album"),
 	}, WithMBAuthority(mb))
 
-	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "Artist", nil))
+	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "Artist", nil, false))
 
 	if byTitle["Real Album"] != ConsensusConfirmed {
 		t.Errorf("Real Album = %v, want confirmed", byTitle["Real Album"])
 	}
 	if byTitle["Other Artist Album"] != ConsensusRejected {
 		t.Errorf("Other Artist Album = %v, want rejected (not in MB discography)", byTitle["Other Artist Album"])
+	}
+}
+
+func TestConsensus_ProtectPrimariesKeepsIdentitySafeAlbumMBLacks(t *testing.T) {
+	// The identity-first regression: a real album fetched by the artist's OWN id
+	// ("REST IN BASS: ENCORE") that MB simply hasn't catalogued yet must NOT be
+	// rejected when MB confirms a sibling ("REST IN BASS"). With protectPrimaries
+	// the identity-safe primary survives; a by-name union addition MB contradicts
+	// is still rejected.
+	mb := &fakeMB{mbid: "mb1", confirmed: []string{"REST IN BASS"}}
+	svc := NewConsensusService([]ConsensusProvider{
+		consensusProvider("lastfm", "Wrong Che Album"),
+	}, WithMBAuthority(mb))
+
+	primaries := []domain.SearchResult{
+		{Kind: domain.ResultKindAlbum, Title: "REST IN BASS", Subtitle: "che"},
+		{Kind: domain.ResultKindAlbum, Title: "REST IN BASS: ENCORE", Subtitle: "che"},
+	}
+	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "che", primaries, true))
+
+	if byTitle["REST IN BASS"] != ConsensusConfirmed {
+		t.Errorf("REST IN BASS = %v, want confirmed (MB-known)", byTitle["REST IN BASS"])
+	}
+	if byTitle["REST IN BASS: ENCORE"] == ConsensusRejected {
+		t.Errorf("REST IN BASS: ENCORE = rejected, want kept (identity-safe primary MB lags on)")
+	}
+	if byTitle["Wrong Che Album"] != ConsensusRejected {
+		t.Errorf("Wrong Che Album = %v, want rejected (by-name contamination, not a primary)", byTitle["Wrong Che Album"])
 	}
 }
 
@@ -216,7 +244,7 @@ func TestConsensus_MBNotCredibleKeepsUnion(t *testing.T) {
 		consensusProvider("itunes", "Album A"),
 	}, WithMBAuthority(mb))
 
-	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "Artist", nil))
+	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "Artist", nil, false))
 
 	if byTitle["Album A"] != ConsensusConfirmed {
 		t.Errorf("Album A (2 providers) = %v, want confirmed", byTitle["Album A"])
