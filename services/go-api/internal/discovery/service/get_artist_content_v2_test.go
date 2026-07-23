@@ -86,6 +86,40 @@ func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
 	}
 }
 
+// The Che case: the durable store has NO cross-provider bridge (underground
+// artist MusicBrainz doesn't url-relate), so resolveArtistIdentity returns
+// ok=false. V2 must STILL run on the seed identity alone — the seed provider id
+// is id-verified — keeping the seed's real albums and dropping a by-name namesake.
+// Before this fix V2 was gated behind ok and silently fell back to the old path.
+func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
+	deezer := &fakeArtistContentProvider{
+		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			if id != "399574001" {
+				t.Errorf("deezer queried id %q, want the seed 399574001", id)
+			}
+			return []domain.SearchResult{
+				v2Album(domain.ProviderDeezer, "d-rib", "REST IN BASS: ENCORE", withDate("2025-12-25"), withCover("c")),
+			}, nil
+		},
+	}
+	namesake := consensusProvider("lastfm", "Wrong Che Album")
+	svc := NewGetArtistContentService(
+		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer},
+		WithConsensusService(NewConsensusService([]ConsensusProvider{namesake})),
+		WithContentIdentityStore(&fakeIdentityStore{}), // empty → resolveArtistIdentity ok=false
+		WithIdentityFirst(),
+		WithDiscographyV2(),
+	)
+
+	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "399574001", "Che", 50)
+	if err != nil {
+		t.Fatalf("GetAlbums error = %v", err)
+	}
+	if len(resp.Items) != 1 || resp.Items[0].Title != "REST IN BASS: ENCORE" {
+		t.Fatalf("items = %+v, want just the id-verified ENCORE (namesake dropped, V2 ran on seed)", resp.Items)
+	}
+}
+
 // V2 top-tracks: id-verified fan-out, corroborated tracks first, no by-name feed.
 func TestGetTopTracks_v2_corroboratedFirst(t *testing.T) {
 	deezer := &fakeArtistContentProvider{
