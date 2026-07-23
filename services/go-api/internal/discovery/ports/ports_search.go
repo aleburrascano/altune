@@ -33,6 +33,14 @@ type ArtistContentProvider interface {
 	GetArtistAlbums(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
 
+// MBDiscographyAnchor returns MusicBrainz's authoritative release-group titles for
+// an artist MBID — the catalogue the identity-verification step (doc §7) checks
+// each fan-out provider against to reject a mis-bridged same-name artist (a wrong
+// MB url-relation fusing two artists). Implemented by the MusicBrainz adapter.
+type MBDiscographyAnchor interface {
+	ReleaseGroupTitles(ctx context.Context, mbid string) ([]string, error)
+}
+
 // ArtistIDResolver resolves an artist NAME to this provider's own artist id. It
 // exists for providers MusicBrainz's url-relations never bridge (SoundCloud), so
 // the identity-first content fan-out can still reach them: resolve the name once
@@ -50,4 +58,3 @@ type ArtistIDResolver interface {
 type RelatedTracksProvider interface {
 	GetRelatedTracks(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
-

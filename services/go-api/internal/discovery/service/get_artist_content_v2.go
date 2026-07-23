@@ -21,11 +21,16 @@ import (
 // by id only), and metadata-complete (every field best-of'd), so the year/track-
 // count/bucketing bugs are fixed at the source.
 
-// v2Albums builds the discography identity-first with the V2 cores.
+// v2Albums builds the discography identity-first with the V2 cores. It fans out
+// by id ONLY (no by-name completeness feed — that was a title-collision +
+// contamination source, e.g. iTunes returning a different Che), verifies each
+// provider against the MusicBrainz anchor to drop a mis-bridged same-name artist
+// (doc §7), then merges best-of.
 func (s *GetArtistContentService) v2Albums(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
-	groups := s.v2ReleaseGroups(ctx, identity, artistName, true, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
+	groups := s.v2ReleaseGroups(ctx, identity, artistName, false, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistAlbums(ctx, provider, id)
 	})
+	groups = s.verifyGroupsAgainstMB(ctx, identity, groups)
 	kept := FilterCohesive(FilterKept(MergeReleases(groups)))
 	out := make([]domain.SearchResult, 0, len(kept))
 	for i := range kept {
@@ -73,6 +78,21 @@ func (s *GetArtistContentService) v2ReleaseGroups(ctx context.Context, identity 
 		}
 	}
 	return groups
+}
+
+// verifyGroupsAgainstMB drops fan-out provider groups whose catalogue does not
+// overlap the artist's MusicBrainz release-groups — the mis-bridged same-name
+// artists (doc §7). A no-op without an MB anchor, without an MBID, or on MB error
+// (fail open: never empty the discography on a transient MB failure).
+func (s *GetArtistContentService) verifyGroupsAgainstMB(ctx context.Context, identity ResolvedArtistIdentity, groups []ReleaseGroup) []ReleaseGroup {
+	if s.mbAnchor == nil || identity.MBID == "" {
+		return groups
+	}
+	titles, err := s.mbAnchor.ReleaseGroupTitles(ctx, identity.MBID)
+	if err != nil || len(titles) == 0 {
+		return groups
+	}
+	return FilterGroupsByMBAnchor(normalizeTitleSet(titles), groups)
 }
 
 // normalizeReleaseYear derives a numeric Year from ReleaseDate when a provider

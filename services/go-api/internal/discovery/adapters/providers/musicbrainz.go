@@ -564,6 +564,25 @@ func (a *MusicBrainzAdapter) fetchRecordingMatches(ctx context.Context, query st
 	return body.Recordings, nil
 }
 
+// ReleaseGroupTitles implements ports.MBDiscographyAnchor: the artist's release-
+// group titles for MBID, used as the identity-verification anchor (doc §7). Reuses
+// the memoized release-group fetch, so a detail-open that already hit it pays no
+// extra MB round-trip.
+func (a *MusicBrainzAdapter) ReleaseGroupTitles(ctx context.Context, mbid string) ([]string, error) {
+	if mbid == "" {
+		return nil, nil
+	}
+	rgs, err := a.fetchReleaseGroups(ctx, mbid)
+	if err != nil {
+		return nil, err
+	}
+	titles := make([]string, 0, len(rgs))
+	for _, rg := range rgs {
+		titles = append(titles, rg.Title)
+	}
+	return titles, nil
+}
+
 func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {
 	if rgs, ok := a.releaseMemo.get(mbid); ok {
 		return rgs, nil

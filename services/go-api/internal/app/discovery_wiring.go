@@ -152,6 +152,12 @@ func (a *App) wireDiscoveryContent(
 	if a.cfg.DiscographyV2 {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithDiscographyV2())
 	}
+	// Identity-verification anchor: the shared MusicBrainz adapter supplies the
+	// authoritative release-group set V2 checks each fan-out provider against, so a
+	// mis-bridged same-name artist (a wrong MB url-relation) is dropped (doc §7).
+	if sharedMB != nil {
+		artistContentOpts = append(artistContentOpts, discoveryService.WithMBAnchor(sharedMB))
+	}
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
