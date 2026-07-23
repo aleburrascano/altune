@@ -46,6 +46,7 @@ go run ./cmd/discoveryeval -mode diversity            # reshaping cost (rule on 
 go run ./cmd/discoveryeval -mode signal-a|signal-b    # coverage gaps / provider imbalance
 go run ./cmd/discoveryeval -mode health|consensus     # report-only gauges (never gate)
 go run ./cmd/discoveryeval -mode artwork -limit N -random  # artwork coverage: % of library artists resolving identity/provider/name/blank + attributed gaps (flush Redis first for a cold read)
+go run ./cmd/discoveryeval -mode detail               # artist detail/discography: same-name contamination (gated =0) + recall + metadata, over seeded fractured identities (no DB needed)
 # re-baseline (explicit, reviewed): measures value + empirical noise margin
 go run ./cmd/discoveryeval -mode eval -update-baselines -noise-runs 3
 ```

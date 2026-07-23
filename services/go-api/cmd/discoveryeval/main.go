@@ -18,6 +18,8 @@
 //   - health     : fill-rate / bridge-hit / latency (report-only, never gated).
 //   - consensus  : per-artist detail dump (-query), or corpus completeness
 //     (no -query, report-only).
+//   - detail     : artist detail/discography — same-name contamination (gated
+//     =0) + recall + metadata, over seeded fractured identities + live providers.
 //
 // Telemetry emission is disabled for eval searches (nil event store) so
 // synthetic searches never pollute the telemetry the signals read.
@@ -69,7 +71,7 @@ type options struct {
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | detail")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -105,6 +107,13 @@ func run(opts options) error {
 	logging.Setup(cfg.LogLevel, cfg.IsDevelopment())
 
 	ctx := context.Background()
+
+	// detail mode runs the artist-detail path over a seeded in-memory identity
+	// store + live providers — it needs neither the library DB nor Redis, so it
+	// runs anywhere the config validates (CI, no database required).
+	if opts.mode == "detail" {
+		return runDetail(ctx, cfg, opts)
+	}
 
 	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -148,7 +157,7 @@ func run(opts options) error {
 	case "corpus-build":
 		return runCorpusBuild(ctx, pool, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build)", opts.mode)
+		return fmt.Errorf("unknown mode %q (want eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | detail)", opts.mode)
 	}
 }
 

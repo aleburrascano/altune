@@ -41,6 +41,34 @@
     "higher_is_better": true,
     "note": "measured over 3 runs"
   },
+  "detail.album_recall": {
+    "metric": "detail.album_recall",
+    "value": 1,
+    "margin": 0,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
+  "detail.contamination": {
+    "metric": "detail.contamination",
+    "value": 0,
+    "margin": 0,
+    "higher_is_better": false,
+    "note": "measured over 3 runs"
+  },
+  "detail.metadata_coverage": {
+    "metric": "detail.metadata_coverage",
+    "value": 1,
+    "margin": 0,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
+  "detail.track_recall": {
+    "metric": "detail.track_recall",
+    "value": 1,
+    "margin": 0,
+    "higher_is_better": true,
+    "note": "measured over 3 runs"
+  },
   "diversity.cost_rate": {
     "metric": "diversity.cost_rate",
     "value": 0,
