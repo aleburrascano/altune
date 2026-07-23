@@ -163,6 +163,7 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 		if item.Copyright != "" {
 			extras["copyright"] = item.Copyright
 		}
+		extras["record_type"] = iTunesRecordType(item.CollectionName)
 	case domain.ResultKindArtist:
 		title = item.ArtistName
 	}
@@ -177,6 +178,7 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	}
 	if kind == domain.ResultKindTrack {
 		r.Album = item.CollectionName
+		r.ReleaseDate = item.ReleaseDate // songs carry it too; only the album branch used to
 		if item.TrackTimeMillis > 0 {
 			r.Duration = int(item.TrackTimeMillis / 1000)
 		}
@@ -374,6 +376,22 @@ func stripITunesTypeSuffix(name string) string {
 		}
 	}
 	return name
+}
+
+// iTunesRecordType derives an album's record type from the collection-name
+// suffix iTunes appends (" - Single"/" - EP"). The Search API carries no clean
+// type field, but the suffix is authoritative, so this is how the app tells a
+// single/EP from an album for discography bucketing. Defaults to "album".
+func iTunesRecordType(collectionName string) string {
+	lower := strings.ToLower(collectionName)
+	switch {
+	case strings.Contains(lower, " - single"):
+		return "single"
+	case strings.Contains(lower, " - ep"):
+		return "ep"
+	default:
+		return "album"
+	}
 }
 
 type itunesResponse struct {

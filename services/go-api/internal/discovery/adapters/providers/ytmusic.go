@@ -187,6 +187,9 @@ func mapYTMusicTrack(t *ytmTrack) domain.SearchResult {
 	if t.Album.Name != "" {
 		extras["album"] = t.Album.Name
 	}
+	if t.IsExplicit {
+		extras["explicit"] = true // parsed by ytmHasExplicitBadge; previously dropped
+	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Title, subtitle, imageURL,
 		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: t.VideoID, URL: "https://music.youtube.com/watch?v=" + t.VideoID},
@@ -232,6 +235,9 @@ func mapYTMusicAlbum(a *ytmAlbum) domain.SearchResult {
 	extras := make(map[string]any)
 	if a.Type != "" {
 		extras["record_type"] = a.Type
+	}
+	if a.IsExplicit {
+		extras["explicit"] = true // parsed by ytmHasExplicitBadge; previously dropped
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, subtitle, imageURL,

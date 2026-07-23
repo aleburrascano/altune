@@ -111,6 +111,9 @@ type spotifyAPIAlbum struct {
 	TotalTracks int            `json:"total_tracks"`
 	Images      []spotifyImage `json:"images"`
 	URI         string         `json:"uri"`
+	Artists     []struct {
+		Name string `json:"name"`
+	} `json:"artists"`
 	ExternalURL struct {
 		Spotify string `json:"spotify"`
 	} `json:"external_urls"`
@@ -126,8 +129,9 @@ type spotifyAPITrack struct {
 	Explicit bool   `json:"explicit"`
 	Duration int64  `json:"duration_ms"`
 	Album    struct {
-		Name   string         `json:"name"`
-		Images []spotifyImage `json:"images"`
+		Name        string         `json:"name"`
+		ReleaseDate string         `json:"release_date"`
+		Images      []spotifyImage `json:"images"`
 	} `json:"album"`
 	Artists []struct {
 		Name string `json:"name"`
@@ -149,10 +153,19 @@ func mapSpotifyAPIAlbum(al spotifyAPIAlbum) (domain.SearchResult, bool) {
 		return domain.SearchResult{}, false
 	}
 	var extras map[string]any
-	if al.AlbumType == "single" {
-		extras = map[string]any{"record_type": "single"}
+	// album_type is album|single|compilation — record all of it, not just single,
+	// so the discography buckets correctly (and a Spotify-only album isn't left
+	// unlabeled). "compilation" maps onto the same key the other providers use.
+	if al.AlbumType != "" {
+		extras = map[string]any{"record_type": al.AlbumType}
 	}
-	r := domain.NewProviderResult(domain.ResultKindAlbum, al.Name, "",
+	// Album artist: without it the card renders artist-less AND can't cluster with
+	// the same album from Deezer/iTunes (merge keys on title+subtitle).
+	subtitle := ""
+	if len(al.Artists) > 0 {
+		subtitle = al.Artists[0].Name
+	}
+	r := domain.NewProviderResult(domain.ResultKindAlbum, al.Name, subtitle,
 		spotifyBestImage(al.Images),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: al.ID, URL: spotifyAPIURL(al.ExternalURL.Spotify, "album", al.ID)},
 		extras)
@@ -178,6 +191,7 @@ func mapSpotifyAPITrack(t spotifyAPITrack) (domain.SearchResult, bool) {
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: t.ID, URL: spotifyAPIURL(t.ExternalURL.Spotify, "track", t.ID)},
 		extras)
 	r.Album = t.Album.Name
+	r.ReleaseDate = t.Album.ReleaseDate // was decoded away; gives the track a year
 	if t.Duration > 0 {
 		r.Duration = int(t.Duration / 1000)
 	}

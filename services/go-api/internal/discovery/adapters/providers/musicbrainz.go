@@ -233,6 +233,10 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 	if len(rec.ISRCs) > 0 {
 		r.ISRC = rec.ISRCs[0]
 	}
+	if rec.Length > 0 {
+		r.Duration = rec.Length / 1000 // ms → seconds; was decoded-then-dropped
+		extras["duration"] = r.Duration
+	}
 	return r
 }
 
@@ -280,6 +284,14 @@ func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
 	if pt := strings.ToLower(strings.TrimSpace(rg.PrimaryType)); pt != "" {
 		extras = map[string]any{"record_type": pt}
 	}
+	// Secondary types (Compilation/Live/Soundtrack) refine the discography beyond
+	// the primary album/single/ep; previously decoded nowhere. Latent display data.
+	if len(rg.SecondaryTypes) > 0 {
+		if extras == nil {
+			extras = map[string]any{}
+		}
+		extras["secondary_types"] = strings.ToLower(strings.Join(rg.SecondaryTypes, ", "))
+	}
 
 	r := domain.NewProviderResult(domain.ResultKindAlbum, rg.Title, subtitle, "",
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rg.ID, URL: "https://musicbrainz.org/release-group/" + rg.ID},
@@ -301,6 +313,7 @@ type mbRecordingResponse struct {
 type mbRecording struct {
 	ID           string        `json:"id"`
 	Title        string        `json:"title"`
+	Length       int           `json:"length"` // milliseconds
 	ISRCs        []string      `json:"isrcs"`
 	ArtistCredit []mbArtistRef `json:"artist-credit"`
 }
@@ -351,6 +364,7 @@ type mbReleaseGroup struct {
 	ID               string        `json:"id"`
 	Title            string        `json:"title"`
 	PrimaryType      string        `json:"primary-type"`
+	SecondaryTypes   []string      `json:"secondary-types"` // Compilation/Live/Soundtrack/Remix
 	FirstReleaseDate string        `json:"first-release-date"`
 	ArtistCredit     []mbArtistRef `json:"artist-credit"`
 }
