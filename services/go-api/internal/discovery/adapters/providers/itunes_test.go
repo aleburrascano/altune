@@ -349,3 +349,18 @@ func TestITunesAdapter_Search_HTTPError(t *testing.T) {
 		t.Errorf("expected 0 results on HTTP 500, got %d", len(results))
 	}
 }
+
+func TestStripAlbumTypeSuffix(t *testing.T) {
+	cases := map[string]string{
+		"Fully Loaded - EP":                    "Fully Loaded",
+		"still freestyle r.i.p moe 3 - Single": "still freestyle r.i.p moe 3",
+		"REST IN BASS: ENCORE":                 "REST IN BASS: ENCORE", // untouched
+		"Deluxe - Remastered":                  "Deluxe - Remastered",  // not a type suffix
+		"Single Ladies":                        "Single Ladies",        // not a suffix
+	}
+	for in, want := range cases {
+		if got := stripAlbumTypeSuffix(in); got != want {
+			t.Errorf("stripAlbumTypeSuffix(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -158,7 +158,7 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 			extras["explicit"] = true
 		}
 	case domain.ResultKindAlbum:
-		title = item.CollectionName
+		title = stripAlbumTypeSuffix(item.CollectionName)
 		subtitle = item.ArtistName
 		if item.Copyright != "" {
 			extras["copyright"] = item.Copyright
@@ -376,6 +376,21 @@ func stripITunesTypeSuffix(name string) string {
 		}
 	}
 	return name
+}
+
+// stripAlbumTypeSuffix removes a trailing " - Single"/" - EP" that Apple Music
+// and iTunes append to album names, so "Fully Loaded - EP" displays as "Fully
+// Loaded" AND clusters with the same album from other providers (a suffixed title
+// would otherwise land in its own cluster). The record_type signal is derived
+// separately (iTunesRecordType from the raw name; Apple's isSingle flag), so
+// stripping the display title never loses it.
+func stripAlbumTypeSuffix(title string) string {
+	for _, suffix := range []string{" - Single", " - EP"} {
+		if len(title) >= len(suffix) && strings.EqualFold(title[len(title)-len(suffix):], suffix) {
+			return strings.TrimSpace(title[:len(title)-len(suffix)])
+		}
+	}
+	return title
 }
 
 // iTunesRecordType derives an album's record type from the collection-name

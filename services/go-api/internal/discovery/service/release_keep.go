@@ -7,21 +7,19 @@ package service
 // incomplete MB discography can never drop a real release (e.g. REST IN BASS:
 // ENCORE), while an uncorroborated same-name namesake still gets dropped. Pure.
 
-// KeepRelease reports whether a merged release belongs in the discography. It is
-// kept when ANY of these hold:
-//   - IDVerified: at least one provider returned it when queried by the artist's
-//     OWN id — definitionally the artist's, so it cannot be a namesake.
-//   - HasStrongID: it carries a UPC/MBID/ISRC — an identifier, not a name guess.
-//   - corroborated: two or more distinct providers independently list it.
+// KeepRelease reports whether a merged release belongs in the discography. The
+// only sound signal is IDVerified: at least one provider returned this release
+// when queried by the artist's VERIFIED id (own provider id or MBID) — so it is
+// definitionally this artist's, never a namesake.
 //
-// Only the residue is dropped: a single provider, reached by NAME, with no
-// identifier — the exact shape of a same-name artist's release leaking in through
-// a by-name completeness fetch.
+// A strong identifier (HasStrongID) and by-name corroboration were tried and are
+// UNSOUND for ambiguous names (doc §6 correction): a same-name artist's release
+// carries its own valid MBID, and two by-name providers can return the same wrong
+// artist. No per-release signal separates the right artist from a namesake — only
+// the provenance of the query does. By-name groups still MERGE (they enrich an
+// id-verified cluster's metadata); a cluster with no id-verified source is dropped.
 func KeepRelease(m MergedRelease) bool {
-	if m.IDVerified || m.HasStrongID {
-		return true
-	}
-	return len(m.Providers) >= 2
+	return m.IDVerified
 }
 
 // FilterKept returns only the releases KeepRelease accepts, preserving order.
