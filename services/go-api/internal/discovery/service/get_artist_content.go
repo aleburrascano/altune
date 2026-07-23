@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"log/slog"
 	"math"
 	"sort"
 	"strconv"
@@ -63,12 +62,14 @@ func WithDiscographyV2() ArtistContentOption {
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityFirst {
-		if identity, ok := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID); ok {
-			tracks := s.identityTopTracks(ctx, identity, artistName)
-			if s.discographyV2 {
-				tracks = s.v2TopTracks(ctx, identity, artistName)
+		identity, ok := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
+		// V2 runs on the seed identity alone (see GetAlbums); the old path needs ok.
+		if s.discographyV2 {
+			if tracks := s.v2TopTracks(ctx, identity, artistName); len(tracks) > 0 {
+				return okContentResponse(providerName, tracks, limit), nil
 			}
-			if len(tracks) > 0 {
+		} else if ok {
+			if tracks := s.identityTopTracks(ctx, identity, artistName); len(tracks) > 0 {
 				return okContentResponse(providerName, tracks, limit), nil
 			}
 			// Empty fan-out (every provider missed): fall through to the single-
@@ -188,14 +189,17 @@ func bestRankOf(e Entity) int {
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityFirst {
 		identity, ok := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
-		slog.InfoContext(ctx, "get_albums.diag", "seed_provider", providerName.String(), "seed_id", externalID,
-			"identity_ok", ok, "discography_v2", s.discographyV2, "mbid", identity.MBID, "provider_ids", identity.ProviderIDs)
-		if ok {
-			albums := s.identityAlbums(ctx, identity, artistName)
-			if s.discographyV2 {
-				albums = s.v2Albums(ctx, identity, artistName)
+		// V2 runs on the SEED identity alone — the seed provider id is already
+		// id-verified (it IS this artist for that provider), so V2 works even when
+		// the durable store has no cross-provider bridge (the common case for
+		// underground artists MusicBrainz doesn't url-relate). The old identity-
+		// first path still requires a resolved bridge (ok).
+		if s.discographyV2 {
+			if albums := s.v2Albums(ctx, identity, artistName); len(albums) > 0 {
+				return okContentResponse(providerName, albums, limit), nil
 			}
-			if len(albums) > 0 {
+		} else if ok {
+			if albums := s.identityAlbums(ctx, identity, artistName); len(albums) > 0 {
 				return okContentResponse(providerName, albums, limit), nil
 			}
 		}

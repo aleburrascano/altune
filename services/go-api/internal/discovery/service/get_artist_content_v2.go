@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"log/slog"
 	"sort"
 
 	"altune/go-api/internal/discovery/domain"
@@ -27,18 +26,7 @@ func (s *GetArtistContentService) v2Albums(ctx context.Context, identity Resolve
 	groups := s.v2ReleaseGroups(ctx, identity, artistName, true, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistAlbums(ctx, provider, id)
 	})
-	merged := MergeReleases(groups)
-	kept := FilterKept(merged)
-	// TEMP DIAGNOSTIC (remove after diagnosis): log path + per-release provenance.
-	for _, m := range merged {
-		provs := make([]string, 0, len(m.Providers))
-		for p := range m.Providers {
-			provs = append(provs, p.String())
-		}
-		slog.InfoContext(ctx, "v2albums.diag",
-			"title", m.Result.Title, "idverified", m.IDVerified,
-			"strongid", m.HasStrongID, "providers", provs, "kept", KeepRelease(m))
-	}
+	kept := FilterKept(MergeReleases(groups))
 	out := make([]domain.SearchResult, 0, len(kept))
 	for i := range kept {
 		r := kept[i].Result
