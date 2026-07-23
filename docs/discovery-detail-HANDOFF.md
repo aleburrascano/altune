@@ -65,9 +65,21 @@ Two prod checks and a consolidation this session:
   use it). `IDENTITY_VERIFY_ON_PERSIST` left as-is (env-gated, `=true` on prod). **1412
   backend tests green.** okf updated: `shared-infra.md` (hook-forced by config.go),
   `app-wiring.md` (accuracy).
-  - *Prod `.env.production` note:* after commit 2, `DETAIL_IDENTITY_FIRST` /
-    `DISCOGRAPHY_V2` are **dead keys** (the flags no longer exist; `env.Parse` ignores
-    unknown vars — harmless). `IDENTITY_VERIFY_ON_PERSIST` is still live. No VM edit needed.
+  - **Loose-ends sweep (session-2 close):** (1) removed the now-dead
+    `DETAIL_IDENTITY_FIRST`/`DISCOGRAPHY_V2` keys from the VM's `.env.production`
+    (backup at `services/go-api/.env.production.bak`; `IDENTITY_VERIFY_ON_PERSIST`
+    kept). (2) **Purged the lingering mis-bridged identity row** — `DELETE`d the
+    `entity_identity` row `deezer/234701081 → 0a68f3b5` (whose xref still carried the
+    wrong `deezer:234701081`) and evicted its Redis key
+    `discovery:identity:v1:artist:651ab9e287d392e92c81d68295de0ce2`; the rapper's 5
+    clean rows are intact, and seeding `234701081` now correctly returns the *soul*
+    Che's own Deezer content (was the rapper). (3) Closed the OKF coverage gap: new
+    concept `okf/backend/discovery/artist-detail.md` (+ index) covers the whole detail
+    path (it was resource of no concept). (4) MB correction now ready-to-submit (§6).
+    **Deferred-by-design, NOT loose ends:** the top-tracks read-time guard (optional —
+    verify-on-persist subsumes it), coarser buckets on an id-only card (§5.3), the
+    client single-call cutover (§5.4, needs an EAS build), remaining extraction items
+    (§5.6), and a detail-path eval harness (§7).
 
 ---
 
@@ -302,8 +314,18 @@ in-flight `Xref`, so merge/ranking (and the `discoveryeval` gate) are untouched.
   artist identity (memoized, off the request path, fail-open). Only deezer/spotify/apple
   edges are verified (soundcloud is an MB-authoritative handle; discogs/wikidata aren't
   catalogues).
-- **Report the MB error upstream** (still worth doing): MusicBrainz accepts
-  corrections; the wrong deezer url-relation on `0a68f3b5` should be removed.
+- **Report the MB error upstream** (READY TO SUBMIT — needs your MusicBrainz login;
+  the one item I can't do for you). Root cause of the whole Che saga: artist
+  `0a68f3b5` ("Che | Atlanta rapper") has a **"free streaming" relationship to the
+  WRONG Deezer artist** — `https://www.deezer.com/artist/234701081` is a *different*
+  "Che" (67 albums / 8993 fans; soul/latin). The rapper's real Deezer is
+  `https://www.deezer.com/artist/399574001` (25 albums, matches the discography).
+  **Fix:** sign in to musicbrainz.org → open
+  `https://musicbrainz.org/artist/0a68f3b5-79c2-4f81-a7bc-ebc977602e86` → Edit →
+  the Deezer "free streaming" relationship → change its URL to `.../artist/399574001`
+  (or remove it). The spotify/apple/soundcloud/tidal links are all correct. This is
+  upstream hygiene that helps everyone using that MB entity; our store stays clean
+  regardless (verify-on-persist), so it is not a prerequisite for us.
 
 ---
 
