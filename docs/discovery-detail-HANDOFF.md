@@ -76,10 +76,19 @@ Two prod checks and a consolidation this session:
     Che's own Deezer content (was the rapper). (3) Closed the OKF coverage gap: new
     concept `okf/backend/discovery/artist-detail.md` (+ index) covers the whole detail
     path (it was resource of no concept). (4) MB correction now ready-to-submit (§6).
-    **Deferred-by-design, NOT loose ends:** the top-tracks read-time guard (optional —
-    verify-on-persist subsumes it), coarser buckets on an id-only card (§5.3), the
-    client single-call cutover (§5.4, needs an EAS build), remaining extraction items
-    (§5.6), and a detail-path eval harness (§7).
+    **Deferred items — FINAL decisions (session-2 close):** (§7) the detail-path eval
+    harness is **BUILT** — `discoveryeval -mode detail` feeds seeded *fractured*
+    identities through the real service against live providers and gates same-name
+    contamination at 0 (plus recall + metadata coverage); the Che bug reincarnate
+    passes at contamination 0, and a canary proved the check has teeth. The other four
+    were **decided NOT to build** (each would be speculative/marginal): top-tracks
+    read-time guard (verify-on-persist + the row purge make the identity clean and
+    cohesion backstops top-tracks — no contamination observed, and the new harness now
+    proves it); coarser buckets §5.3 (needs reliable track_count providers omit);
+    client single-call cutover §5.4 (client is already correct — pure redundancy
+    removal needing an EAS build + on-device verify); extraction items §5.6 (marginal —
+    the harness's metadata-coverage metric would flag any real gap). Revisit any only
+    if the detail harness shows a regression.
 
 ---
 

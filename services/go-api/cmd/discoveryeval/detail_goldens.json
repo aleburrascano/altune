@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Che (fractured identity)",
+    "mbid": "0a68f3b5-79c2-4f81-a7bc-ebc977602e86",
+    "seed_provider": "deezer",
+    "seed_id": "234701081",
+    "identity": {
+      "deezer": "234701081",
+      "itunes": "1586243773",
+      "spotify": "5A7T1LAGJg5NXySBoIKUmF",
+      "soundcloud": "che"
+    },
+    "expected_albums": ["rest in bass", "fully loaded", "empty clip", "14 hahaha lol", "sayso says"],
+    "expected_top_tracks": ["miley cyrus", "mannequin", "dior leopard", "million dollar mansion", "pizza time"],
+    "forbidden_sources": ["deezer"],
+    "forbidden_titles": ["samsonite", "kiss me in the sky", "gallos ciegos", "the qualifier", "drunken love & heartbreak", "por siempre"],
+    "_note": "The Che bug reincarnate: seed the WRONG deezer id (234701081 = a different soul/latin Che) alongside the rapper's real spotify/apple/soundcloud ids. The MB anchor (albums) + cohesion (top-tracks) must drop every deezer-sourced (soul) item and every forbidden soul title. contamination must be 0."
+  },
+  {
+    "name": "Che (clean identity)",
+    "mbid": "0a68f3b5-79c2-4f81-a7bc-ebc977602e86",
+    "seed_provider": "spotify",
+    "seed_id": "5A7T1LAGJg5NXySBoIKUmF",
+    "identity": {
+      "itunes": "1586243773",
+      "spotify": "5A7T1LAGJg5NXySBoIKUmF",
+      "soundcloud": "che"
+    },
+    "expected_albums": ["rest in bass", "fully loaded", "empty clip", "14 hahaha lol", "sayso says"],
+    "expected_top_tracks": ["miley cyrus", "mannequin", "dior leopard", "million dollar mansion", "pizza time"],
+    "forbidden_sources": ["deezer"],
+    "forbidden_titles": ["samsonite", "kiss me in the sky", "gallos ciegos", "the qualifier", "drunken love & heartbreak", "por siempre"],
+    "_note": "The same artist with the deezer edge already scrubbed (the state verify-on-persist leaves). No deezer is ever queried, so the discography must be the rapper's, complete, contamination-free — the clean baseline."
+  },
+  {
+    "name": "Drake (mainstream control)",
+    "mbid": "",
+    "seed_provider": "deezer",
+    "seed_id": "246791",
+    "identity": { "deezer": "246791" },
+    "expected_albums": [],
+    "expected_top_tracks": [],
+    "forbidden_sources": [],
+    "forbidden_titles": [],
+    "_note": "An unambiguous mainstream artist, seed-only (deezer). No same-name risk; it exists to keep the metadata-coverage metric honest on a well-populated catalogue, not to test contamination."
+  }
+]
