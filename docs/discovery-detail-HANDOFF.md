@@ -34,6 +34,40 @@ needs EAS), existing-bad-row cleanup (§6 caveat).
 
 ---
 
+## Update — 2026-07-23 (session 2): fracture verified closed + V2 consolidated
+
+Two prod checks and a consolidation this session:
+
+- **Top-tracks fracture (§5.2) no longer reproduces — closed.** Verified live: Che's
+  bridged card (`deezer/234701081`) top-tracks are **all the rapper**, multi-sourced
+  from apple/spotify/soundcloud/lastfm with **no deezer source** and zero soul-Che
+  leakage; albums identical; metadata (year/track_count/record_type) complete (nested
+  under `extras`). Mechanism: verify-on-persist (§6) already dropped the soul-deezer
+  edge from Che's stored identity, so *neither* endpoint fans out to it — the fix at
+  the identity layer subsumes both endpoints, and the album read-time MB anchor isn't
+  even exercised for Che anymore. The standalone top-tracks read-time guard is now
+  defense-in-depth for a verify-on-persist fail-open, not a live bug — **not built**
+  (optional; if ever wanted, reuse the album surviving-provider set, not a new anchor).
+- **verify-on-persist load-check (§6 caveat) — PASSED, flag stays on.** 72h of prod
+  logs: `verify_dropped_edge` fired once, **zero** `identity.verify` errors, no MB
+  429s. Low-load and clean.
+- **Consolidation shipped (this commit):** flipped `DETAIL_IDENTITY_FIRST` +
+  `DISCOGRAPHY_V2` to **code-default `true`** and retired the dead pre-V2 identity path
+  (`identityAlbums` / `identityTopTracks` / `hideBareAlbums` + `sortByAgreement` /
+  `bestRankOf`) and its 4 tests. `GetAlbums`/`GetTopTracks` are now just
+  V2-identity-first → single-provider fallback. **Behavior-neutral on prod** (prod
+  already ran both flags `=true`) — it makes V2 the code default and deletes
+  unreachable code. Both flags kept as env kill-switches, though now redundant (both
+  must be on for V2; can collapse to one or fully remove later). The shared
+  `ConsensusService` stays (single-provider fallback + search album-validation still
+  use it). `IDENTITY_VERIFY_ON_PERSIST` left as-is (env-gated, `=true` on prod). **1412
+  backend tests green.** okf updated: `shared-infra.md` (hook-forced by config.go),
+  `app-wiring.md` (accuracy).
+  - *Prod `.env.production` note:* `DETAIL_IDENTITY_FIRST=true`/`DISCOGRAPHY_V2=true`
+    are now redundant with the code default (harmless — env just matches). No VM edit needed.
+
+---
+
 ## 1. How to reach prod for debugging (IMPORTANT — this unblocked everything)
 
 The detail endpoints sit behind `/v1` Supabase-JWKS auth, so you can't curl them
@@ -181,10 +215,10 @@ leakage**, rapper's real discography with year/tracks/covers. Rapper's own card
    AIDEV-WARNING in `spotify_content.go`; a stale hash returns HTTP 412 "Invalid
    query hash", not an auth status. A `SPOTIFY_LIVE=1`-gated E2E smoke test guards
    against silent hash-rotation regression.
-2. **Top-tracks fracture not covered.** The MB anchor is album-level, so a bridged
-   card's *top tracks* can still mix two artists. Need a track-level anchor (MB
-   recording titles/ISRCs) or apply the album-verification's surviving-provider set
-   to the top-tracks fan-out.
+2. ~~**Top-tracks fracture not covered.**~~ **VERIFIED NOT REPRODUCING (2026-07-23
+   session 2 — see top).** verify-on-persist subsumed it at the identity layer; the
+   standalone read-time guard (track-level MB-recording anchor or the album
+   surviving-provider set) is now optional defense-in-depth, not a live bug.
 3. **Coarser buckets on a *bridged* card.** Going id-only left only the surviving
    provider's `record_type`; Apple only flags "single" vs "album", so a 5-track EP
    can show as "album" (Deezer's finer type went with its dropped group). The
@@ -259,11 +293,12 @@ in-flight `Xref`, so merge/ranking (and the `discoveryeval` gate) are untouched.
   `deezer:234701081 → 0a68f3b5` row lingers (opening *that* card still resolves via
   it; the detail anchor keeps it clean). A one-time cleanup migration (delete stale
   edges whose catalogue fails the overlap test) would fully scrub the store.
-- **Enabled without a load-measurement pass.** It adds a few background MB/provider
-  fetches per newly-learned artist identity (memoized, off the request path,
-  fail-open). Watch the logs for MB rate-limit noise; flip the flag off the same way
-  if needed. Only deezer/spotify/apple edges are verified (soundcloud is an
-  MB-authoritative handle; discogs/wikidata aren't catalogues).
+- ~~**Enabled without a load-measurement pass.**~~ **MEASURED 2026-07-23 (session 2) —
+  PASSED, flag stays on** (72h of prod logs: 1 dropped edge, zero `identity.verify`
+  errors, no MB 429s). It adds a few background MB/provider fetches per newly-learned
+  artist identity (memoized, off the request path, fail-open). Only deezer/spotify/apple
+  edges are verified (soundcloud is an MB-authoritative handle; discogs/wikidata aren't
+  catalogues).
 - **Report the MB error upstream** (still worth doing): MusicBrainz accepts
   corrections; the wrong deezer url-relation on `0a68f3b5` should be removed.
 

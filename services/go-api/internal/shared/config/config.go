@@ -95,14 +95,13 @@ type Config struct {
 	// Coverage alert: page the operator when zero-result searches in the last 24h
 	// exceed this count. 0 → disabled. Aggregate count only, never the query text.
 	AlertZeroResultThreshold int `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
-	// Identity-first detail path. OFF by default: the artist detail screen
-	// (discography + top tracks) resolves the artist's full cross-provider identity
-	// from the durable IdentityStore and fans out across every content provider by
-	// its own id, merging best-of metadata, instead of trusting a single provider
-	// id (which lets a same-name artist's tracks/albums bleed in). Ships dark behind
-	// this flag until it clears the same-name spot-checks; the current single-
-	// provider path stays the default until cutover.
-	DetailIdentityFirst bool `env:"DETAIL_IDENTITY_FIRST" envDefault:"false"`
+	// Identity-first detail path. ON by default (verified on prod 2026-07-23): the
+	// artist detail screen (discography + top tracks) resolves the artist's full
+	// cross-provider identity from the durable IdentityStore and fans out across
+	// every content provider by its own id, merging best-of metadata, instead of
+	// trusting a single provider id (which lets a same-name artist's tracks/albums
+	// bleed in). Set false as a kill-switch to fall back to the single-provider path.
+	DetailIdentityFirst bool `env:"DETAIL_IDENTITY_FIRST" envDefault:"true"`
 
 	// Discography V2 — the rebuilt detail/discography core (docs/discovery-detail-
 	// pipeline.md §6). Replaces the lossy Merge+consensus+MB-veto path with the pure
@@ -110,8 +109,9 @@ type Config struct {
 	// best-of'd across providers (fixes the blank year/track-count), releases are kept
 	// on positive corroboration instead of MB-vetoed (keeps real releases MB lacks,
 	// drops same-name namesakes), and record_type is normalized (fixes album/single/EP
-	// bucketing). Requires DetailIdentityFirst. Ships dark until verified on prod.
-	DiscographyV2 bool `env:"DISCOGRAPHY_V2" envDefault:"false"`
+	// bucketing). Requires DetailIdentityFirst. ON by default (verified on prod
+	// 2026-07-23); set false as a kill-switch to fall back to the single-provider path.
+	DiscographyV2 bool `env:"DISCOGRAPHY_V2" envDefault:"true"`
 
 	// Identity verify-on-persist — the permanent identity-bridge fix (docs/
 	// discovery-detail-pipeline.md §7). MusicBrainz url-relations are not always

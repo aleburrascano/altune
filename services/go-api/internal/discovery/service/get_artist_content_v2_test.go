@@ -8,6 +8,15 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
+func trackFrom(provider domain.ProviderName, id, title, artist string) domain.SearchResult {
+	return domain.SearchResult{
+		Kind:     domain.ResultKindTrack,
+		Title:    title,
+		Subtitle: artist,
+		Sources:  []domain.SourceRef{{Provider: provider, ExternalID: id}},
+	}
+}
+
 func v2Album(provider domain.ProviderName, id, title string, opts ...func(*domain.SearchResult)) domain.SearchResult {
 	r := domain.SearchResult{
 		Kind:     domain.ResultKindAlbum,
