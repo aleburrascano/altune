@@ -78,6 +78,34 @@ func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
 	}
 }
 
+func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
+	// "!!!" and "†††" both normalize to "", so they would share the cache key
+	// "|<kinds>" and serve each other's results. Symbol-only queries must skip the
+	// result cache entirely — both read and write.
+	p := &queryFakeProvider{
+		name: domain.ProviderDeezer,
+		resultsByQuery: map[string][]domain.SearchResult{
+			"!!!": {deezerTrack("Me and Giuliani Down by the School Yard", "!!!", 80)},
+			"†††": {deezerTrack("The Epilogue", "†††", 70)},
+		},
+	}
+	cache := newFakeResultCache()
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithResultCache(cache))
+
+	out1 := runSearch(t, svc, "!!!")
+	out2 := runSearch(t, svc, "†††")
+
+	if cache.sets != 0 || cache.gets != 0 {
+		t.Errorf("symbol-only queries must bypass the cache, gets=%d sets=%d", cache.gets, cache.sets)
+	}
+	if len(out1.Results) != 1 || out1.Results[0].Subtitle != "!!!" {
+		t.Fatalf("first symbol query got wrong results: %v", titles(out1.Results))
+	}
+	if len(out2.Results) != 1 || out2.Results[0].Subtitle != "†††" {
+		t.Fatalf("second symbol query served the first query's results: %v", titles(out2.Results))
+	}
+}
+
 func TestService_ResultCache_PartialNotCached(t *testing.T) {
 	good := &countingProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &countingProvider{name: domain.ProviderITunes, err: errors.New("boom")}

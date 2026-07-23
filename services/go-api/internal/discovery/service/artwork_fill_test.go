@@ -158,6 +158,10 @@ func (f *fakeIdentityStore) LookupByProviderID(_ context.Context, _ domain.Resul
 	return f.mbid, f.xref, true
 }
 
+func (f *fakeIdentityStore) Invalidate(_ context.Context, _ domain.ResultKind, _, _ string) error {
+	return nil
+}
+
 func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 	// The deterministic fix: a provider-only result (MusicBrainz absent from this
 	// fan-out, so merge stamped no xref) resolves its identity from the durable

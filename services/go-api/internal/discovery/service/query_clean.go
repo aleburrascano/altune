@@ -22,10 +22,24 @@ var noisePatterns = []string{
 	"full album", "visualizer", "visualiser", "topic",
 }
 
+// noiseRes are the noise phrases precompiled as case-insensitive, word-bounded
+// regexes, removed with ReplaceAll so every occurrence goes — and matched on the
+// ORIGINAL text, never a lowercased copy: lowercasing can change byte offsets
+// ("İ" → "i̇"), so index-into-original slicing mangled such queries.
+var noiseRes = compileNoisePatterns(noisePatterns)
+
+func compileNoisePatterns(patterns []string) []*regexp.Regexp {
+	res := make([]*regexp.Regexp, len(patterns))
+	for i, p := range patterns {
+		res[i] = regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(p) + `\b`)
+	}
+	return res
+}
+
 func CleanQuery(raw string) string {
 	cleaned := raw
-	for _, pattern := range noisePatterns {
-		cleaned = removeNoisePhrase(cleaned, pattern)
+	for _, re := range noiseRes {
+		cleaned = re.ReplaceAllString(cleaned, " ")
 	}
 	cleaned = whitespaceRe.ReplaceAllString(cleaned, " ")
 	cleaned = strings.TrimSpace(cleaned)
@@ -34,23 +48,4 @@ func CleanQuery(raw string) string {
 		return raw
 	}
 	return cleaned
-}
-
-func removeNoisePhrase(text, phrase string) string {
-	lower := strings.ToLower(text)
-	idx := strings.Index(lower, phrase)
-	if idx < 0 {
-		return text
-	}
-	before := idx > 0 && isWordBoundary(text[idx-1])
-	end := idx + len(phrase)
-	after := end >= len(text) || isWordBoundary(text[end])
-	if (idx == 0 || before) && after {
-		return text[:idx] + " " + text[end:]
-	}
-	return text
-}
-
-func isWordBoundary(b byte) bool {
-	return b == ' ' || b == '\t' || b == '\n' || b == '(' || b == ')' || b == '[' || b == ']'
 }

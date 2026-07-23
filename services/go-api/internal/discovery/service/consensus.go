@@ -130,12 +130,23 @@ func NewConsensusService(providers []ConsensusProvider, opts ...ConsensusOption)
 // BuildConsensus merges albums from every provider into a union with a
 // confirmed/unconfirmed/rejected verdict per album. A fresh per-artist cache
 // entry short-circuits the entire fan-out + MB pass.
+//
+// seedProvider/seedID identify the artist the primaryAlbums came from. They
+// scope the cache key: a bare name key made two same-name artists ("Che" the
+// rapper / "Che" the soul singer) SHARE one 6h entry, so opening one served the
+// other's cached discography. A caller with no seed id keeps the name-only key
+// (and the same-name collision risk that comes with it).
 func (s *ConsensusService) BuildConsensus(
 	ctx context.Context,
 	artistName string,
+	seedProvider domain.ProviderName,
+	seedID string,
 	primaryAlbums []domain.SearchResult,
 ) []ConsensusAlbum {
 	cacheKey := textnorm.NormalizeForMatch(artistName)
+	if seedID != "" {
+		cacheKey += "|" + seedProvider.String() + ":" + seedID
+	}
 	if cached, ok, err := s.cache.Get(ctx, cacheKey); err == nil && ok {
 		return cached
 	}
@@ -153,7 +164,7 @@ func (s *ConsensusService) BuildConsensus(
 
 	clusters := newAlbumClusterSet()
 	for _, album := range primaryAlbums {
-		clusters.add(album, domain.ProviderDeezer.String())
+		clusters.add(album, seedProvider.String())
 	}
 	// Iterate providers in slice order (not map range) so the output ordering
 	// and canonical-pick are deterministic run-to-run.
@@ -167,23 +178,26 @@ func (s *ConsensusService) BuildConsensus(
 	for _, key := range clusters.order {
 		c := clusters.byKey[key]
 		status, reason := ConsensusUnconfirmed, "single provider"
-		if c.providerCount >= 2 {
+		if len(c.providers) >= 2 {
 			status, reason = ConsensusConfirmed, "found on multiple providers"
 		}
 		results = append(results, ConsensusAlbum{
-			Album:  annotateConsensus(c.album, status, c.providerCount, respondedCount),
+			Album:  annotateConsensus(c.album, status, len(c.providers), respondedCount),
 			Status: status,
 			Reason: reason,
 		})
 	}
 
-	results = s.applyMBAuthority(ctx, artistName, results)
+	results, mbErred := s.applyMBAuthority(ctx, artistName, results)
 	sortChronological(results)
 
 	// Don't cache a timeout-truncated result: if the deadline fired mid-fetch or
 	// mid-MB-validation, the verdicts are partial and must not be frozen for the
-	// full TTL. A fresh request will recompute.
-	if len(results) > 0 && ctx.Err() == nil {
+	// full TTL. A fresh request will recompute. Likewise when the MB authority
+	// fetch ERRORED: the un-vetoed union is still served (degradation stays),
+	// but a transient MB failure must not freeze a potentially contaminated
+	// by-name union for the full TTL.
+	if len(results) > 0 && ctx.Err() == nil && !mbErred {
 		_ = s.cache.Set(ctx, cacheKey, results)
 	}
 	logConsensus(ctx, artistName, results, respondedCount, len(s.providers))
@@ -247,13 +261,17 @@ func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName st
 // When MB confirms nothing — artist absent from MB, or an underground artist MB
 // does not cover — MB is not a credible authority here, so the provider union is
 // returned untouched (precision is unattainable without a spine; coverage wins).
+//
+// The second return reports whether the MB fetch ERRORED: the caller serves the
+// un-vetoed union either way, but must not cache it — a transient MB failure
+// would freeze a potentially contaminated by-name union for the full TTL.
 func (s *ConsensusService) applyMBAuthority(
 	ctx context.Context,
 	artistName string,
 	results []ConsensusAlbum,
-) []ConsensusAlbum {
+) ([]ConsensusAlbum, bool) {
 	if s.mb == nil {
-		return results
+		return results, false
 	}
 
 	allAlbums := make([]domain.SearchResult, len(results))
@@ -262,8 +280,11 @@ func (s *ConsensusService) applyMBAuthority(
 	}
 
 	validated, err := s.mb.ValidateArtistAlbums(ctx, artistName, allAlbums)
-	if err != nil || validated == nil {
-		return results
+	if err != nil {
+		return results, true
+	}
+	if validated == nil {
+		return results, false
 	}
 
 	confirmedTitles := make(map[string]bool, len(validated.Confirmed))
@@ -274,7 +295,7 @@ func (s *ConsensusService) applyMBAuthority(
 	// MB confirmed nothing → not a credible authority for this artist; keep the
 	// provider union as-is.
 	if len(confirmedTitles) == 0 {
-		return results
+		return results, false
 	}
 
 	for i := range results {
@@ -292,7 +313,7 @@ func (s *ConsensusService) applyMBAuthority(
 		results[i].Album = annotateConsensus(results[i].Album, ConsensusRejected, 0, 0)
 	}
 
-	return results
+	return results, false
 }
 
 func logConsensus(ctx context.Context, artistName string, results []ConsensusAlbum, responded, providers int) {
@@ -333,10 +354,12 @@ func annotateConsensus(album domain.SearchResult, status ConsensusStatus, matchC
 
 // --- categorical album clustering ---
 
+// albumCluster tracks providers as a SET so the consensus count means DISTINCT
+// providers: a Deezer primary seed plus a Deezer by-name fetch is one source,
+// not "confirmed on multiple providers".
 type albumCluster struct {
-	album         domain.SearchResult
-	providerCount int
-	providers     []string
+	album     domain.SearchResult
+	providers map[string]bool
 }
 
 type albumClusterSet struct {
@@ -353,14 +376,13 @@ func newAlbumClusterSet() *albumClusterSet {
 func (s *albumClusterSet) add(album domain.SearchResult, provider string) {
 	key := textnorm.NormalizeForMatch(album.Title)
 	if c, ok := s.byKey[key]; ok {
-		c.providerCount++
-		c.providers = append(c.providers, provider)
+		c.providers[provider] = true
 		if completenessOf(album) > completenessOf(c.album) {
 			c.album = album
 		}
 		return
 	}
-	s.byKey[key] = &albumCluster{album: album, providerCount: 1, providers: []string{provider}}
+	s.byKey[key] = &albumCluster{album: album, providers: map[string]bool{provider: true}}
 	s.order = append(s.order, key)
 }
 

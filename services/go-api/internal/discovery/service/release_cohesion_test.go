@@ -70,6 +70,24 @@ func TestFilterCohesive_keepsCoreProviderExclusiveDropsIsland(t *testing.T) {
 	}
 }
 
+// A 2v2 fracture tie: two equal-size components must resolve the SAME way every
+// request. The tie-break is the lexicographically smallest member name, so the
+// {deezer, itunes} component always beats {lastfm, soundcloud}.
+func TestFilterCohesive_equalComponentsTieBreakDeterministic(t *testing.T) {
+	releases := []MergedRelease{
+		cohesionRelease("A1", domain.ProviderDeezer, domain.ProviderITunes),
+		cohesionRelease("A2", domain.ProviderDeezer, domain.ProviderITunes),
+		cohesionRelease("B1", domain.ProviderSoundCloud, domain.ProviderLastFM),
+		cohesionRelease("B2", domain.ProviderSoundCloud, domain.ProviderLastFM),
+	}
+	for i := 0; i < 25; i++ {
+		got := FilterCohesive(releases)
+		if !hasTitle(got, "A1") || !hasTitle(got, "A2") || hasTitle(got, "B1") || hasTitle(got, "B2") {
+			t.Fatalf("run %d: kept %+v, want the deezer/itunes component every run", i, got)
+		}
+	}
+}
+
 // No corroboration anywhere (single-provider artist) → no signal → keep all.
 func TestFilterCohesive_noCorroborationKeepsAll(t *testing.T) {
 	releases := []MergedRelease{

@@ -51,10 +51,10 @@ type scored struct {
 //   - prominence: the cross-kind prominence tiebreak (CROSS_KIND_PROMINENCE_
 //     ENABLED). Each scored entity carries a log-compressed provider prominence
 //     (Deezer nb_fan for artist/album, rank for track) and rankLess breaks a
-//     relevance tie BETWEEN DIFFERENT KINDS by it — so a prominent artist rises
-//     above a same-name track on a bare-name query. It NEVER compares within a
-//     kind, so track-vs-track ordering (the bare-title corpus the popularity
-//     attempt regressed) is untouched.
+//     relevance tie by it — so a prominent artist rises above a same-name
+//     track on a bare-name query. The comparison applies to ALL pairs (a
+//     kind-difference gate broke strict weak ordering — see rankLess);
+//     same-kind pairs with equal prominence fall through as before.
 //
 // A future experiment is one field here, not a new positional parameter and
 // wrapper (the ladder this struct replaced).
@@ -140,13 +140,20 @@ func rankLess(a, b scored) bool {
 	if a.relevance != b.relevance {
 		return a.relevance > b.relevance
 	}
-	// Cross-kind prominence (experimental, off by default): among equally relevant
-	// results OF DIFFERENT KINDS, the more prominent entity sorts first — a famous
-	// artist above a same-name track, a famous track above an obscure same-name
-	// artist. Gated to kind-difference so it never reorders track-vs-track (the
-	// bare-title corpus the popularity attempt regressed). Inert when prominence is
-	// 0 (the experiment off, or no provider prominence data). See rankWithProminence.
-	if a.result.Kind != b.result.Kind && a.prominence != b.prominence {
+	// Prominence (experimental, off by default): among equally relevant results,
+	// the more prominent entity sorts first — a famous artist above a same-name
+	// track, a famous track above an obscure same-name artist. The comparison is
+	// deliberately UNCONDITIONAL: gating it to kind-difference made rankLess not
+	// a strict weak ordering (artist beats track on prominence, track beats a
+	// second artist on a later rung, that artist beats the first — a cycle), so
+	// sort output was unspecified for tied-relevance mixed-kind groups — the
+	// exact bare-name-query case the rung serves. This slightly changes same-kind
+	// tie handling (prominence now ranks before popularity — coherent, since both
+	// are popularity-family signals); same-kind pairs with equal prominence fall
+	// through exactly as before. Rank-affecting: must re-clear `discoveryeval
+	// -mode eval` and the artist-intent eval. Inert when prominence is 0 (the
+	// experiment off, or no provider prominence data).
+	if a.prominence != b.prominence {
 		return a.prominence > b.prominence
 	}
 	// Behavioral satisfaction (experimental, off by default): among equally
@@ -205,8 +212,15 @@ func sharesQueryWord(r domain.SearchResult, queryNorm string) bool {
 	if queryNorm == "" {
 		return true
 	}
+	qTokens := tokenSet(queryNorm)
+	// tokenSet drops single-char tokens, so a one-character query ("u", "v")
+	// yields an empty set. No tokens means no gate — otherwise every result
+	// would be rejected and the query forced to zero results.
+	if len(qTokens) == 0 {
+		return true
+	}
 	hay := tokenSet(textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title))
-	for w := range tokenSet(queryNorm) {
+	for w := range qTokens {
 		if hay[w] {
 			return true
 		}

@@ -80,6 +80,13 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		// names collapse by name as before.
 		if ambiguous[norm] {
 			key = norm + "\x00" + r.MBID
+			// No MBID: shared "name\x00" keys would collapse two MBID-less entities
+			// into one card — the exact wrong-collapse the ambiguity set exists to
+			// prevent. Key by the entity's first source identity instead, so no-MBID
+			// entities never collapse with each other under an ambiguous name.
+			if r.MBID == "" && len(r.Sources) > 0 {
+				key = norm + "\x00" + r.Sources[0].Provider.String() + ":" + r.Sources[0].ExternalID
+			}
 		}
 		pop := r.Popularity
 		g, exists := groups[key]

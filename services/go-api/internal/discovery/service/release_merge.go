@@ -77,13 +77,13 @@ func MergeReleases(groups []ReleaseGroup) []MergedRelease {
 // when b carries a better value.
 func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 	a.Subtitle = firstNonEmpty(a.Subtitle, b.Subtitle)
-	a.ImageURL = firstNonEmpty(a.ImageURL, b.ImageURL)
 	a.ReleaseDate = bestReleaseDate(a.ReleaseDate, b.ReleaseDate)
 	a.Year = firstNonZero(a.Year, b.Year)
 	a.TrackCount = maxInt(a.TrackCount, b.TrackCount)
 	a.Duration = firstNonZero(a.Duration, b.Duration)
 	a.Album = firstNonEmpty(a.Album, b.Album)
 	a.ISRC = firstNonEmpty(a.ISRC, b.ISRC)
+	a.UPC = firstNonEmpty(a.UPC, b.UPC)
 	a.MBID = firstNonEmpty(a.MBID, b.MBID)
 	a.ImageURL, a.ArtworkSource = bestArtwork(a, b)
 	a.Sources = unionSources(a.Sources, b.Sources)
@@ -155,9 +155,12 @@ func recordTypeRank(t string) int {
 }
 
 // hasStrongID reports whether a variant carries a cross-provider identifier that
-// makes its identity certain (a corroboration signal for the keep step).
+// makes its identity certain (a corroboration signal for the keep step). UPC
+// prefers the typed field (what merge.go's UPC tier reads, and what applemusic.go
+// instructs producers to set) with the Extras mirror as fallback, so a producer
+// setting only one of the two still counts.
 func hasStrongID(r domain.SearchResult) bool {
-	return r.MBID != "" || r.ISRC != "" || stringExtra(r.Extras, "upc") != ""
+	return r.MBID != "" || r.ISRC != "" || r.UPC != "" || stringExtra(r.Extras, "upc") != ""
 }
 
 func unionSources(a, b []domain.SourceRef) []domain.SourceRef {

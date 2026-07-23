@@ -87,7 +87,12 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 			continue
 		}
 
-		matches, _ := s.vocab.SuggestByPrefix(ctx, token, 1)
+		matches, err := s.vocab.SuggestByPrefix(ctx, token, 1)
+		if err != nil {
+			// Degrade (treat as no prefix match), but leave a trace: a silently
+			// swallowed store error made correction outages invisible.
+			slog.Debug("correction.prefix_lookup_failed", "token", token, "error", err)
+		}
 		if len(matches) > 0 && textnorm.NormalizeForMatch(matches[0].Term) == token {
 			corrected[i] = token
 			continue

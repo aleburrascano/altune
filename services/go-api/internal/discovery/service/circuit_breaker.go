@@ -51,6 +51,9 @@ func (cb *CircuitBreaker) AllowRequest(provider domain.ProviderName) bool {
 	case CircuitOpen:
 		if time.Since(entry.lastFailedAt) > openDuration {
 			entry.state = CircuitHalfOpen
+			// The transitioning caller IS the probe: mark it so a concurrent
+			// request landing in the HalfOpen branch is not admitted as a second.
+			entry.probing = true
 			slog.Warn("circuit breaker half-open (probing recovery)",
 				"provider", provider.String())
 			return true

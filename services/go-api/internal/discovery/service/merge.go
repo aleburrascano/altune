@@ -93,6 +93,17 @@ func sameEntity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
 	if e.ISRC != "" && c.ISRC != "" && e.ISRC == c.ISRC {
 		return domain.EntityResolutionISRC, true
 	}
+	// Album barcode. Positive-only: a mismatched UPC is NOT disproof (editions
+	// of one album carry different barcodes), so unlike MBID it never blocks.
+	// It only merges when the MBIDs do not conflict (both empty, one empty, or
+	// equal): merging two different-MBID albums would keep only one MBID
+	// (mergeInto's firstNonEmpty), seeding order-dependent fragmentation when a
+	// later result carries the discarded MBID. Conflicting MBIDs fall through to
+	// the MBID hard-stop below.
+	if e.Kind == domain.ResultKindAlbum && e.UPC != "" && c.UPC != "" && e.UPC == c.UPC &&
+		(e.MBID == "" || c.MBID == "" || e.MBID == c.MBID) {
+		return domain.EntityResolutionUPC, true
+	}
 	if e.MBID != "" && c.MBID != "" {
 		if e.MBID == c.MBID {
 			return domain.EntityResolutionMBID, true
@@ -108,17 +119,25 @@ func sameEntity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
 		return domain.EntityResolutionBridge, true
 	}
 
-	// Artists resolve by canonical name alone.
+	// Artists resolve by canonical name alone — unless the name normalizes to ""
+	// (symbol-only, e.g. "!!!"): shared emptiness proves nothing, so the name
+	// tier refuses (identifier/bridge tiers above still merge freely).
 	if e.Kind == domain.ResultKindArtist {
-		same := textnorm.NormalizeForMatch(e.Title) == textnorm.NormalizeForMatch(c.Title)
-		return domain.EntityResolutionNone, same
+		name := textnorm.NormalizeForMatch(e.Title)
+		if name == "" {
+			return domain.EntityResolutionNone, false
+		}
+		return domain.EntityResolutionNone, name == textnorm.NormalizeForMatch(c.Title)
 	}
 
-	// Tracks/albums: same artist and same canonical title.
+	// Tracks/albums: same artist and same canonical title. A fully-bracketed
+	// title ("(Intro)", "[untitled]") normalizes to "" — again shared emptiness,
+	// not a shared title, so the text tier refuses.
 	if textnorm.NormalizeForMatch(e.Subtitle) != textnorm.NormalizeForMatch(c.Subtitle) {
 		return domain.EntityResolutionNone, false
 	}
-	if textnorm.NormalizeForMatch(e.Title) == textnorm.NormalizeForMatch(c.Title) {
+	title := textnorm.NormalizeForMatch(e.Title)
+	if title != "" && title == textnorm.NormalizeForMatch(c.Title) {
 		return domain.EntityResolutionNone, true
 	}
 	return domain.EntityResolutionNone, false
@@ -152,6 +171,12 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 			extras[k] = v
 		}
 	}
+	// Keep the strongest proof: a later, weaker merge (e.g. a name-tier merge
+	// after an ISRC one) must not downgrade an identity-proven entity's stamped
+	// tier — and, via the switch below, its confidence.
+	if prev := domain.ResolutionTierFromExtras(extras); prev > tier {
+		tier = prev
+	}
 	extras["resolution_tier"] = tier.String()
 
 	imageURL := canonical.ImageURL
@@ -161,7 +186,7 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 
 	conf := domain.ConfidenceLow
 	switch tier {
-	case domain.EntityResolutionISRC, domain.EntityResolutionMBID, domain.EntityResolutionBridge:
+	case domain.EntityResolutionISRC, domain.EntityResolutionUPC, domain.EntityResolutionMBID, domain.EntityResolutionBridge:
 		conf = domain.ConfidenceHigh
 	default:
 		if len(sources) > 1 {
@@ -182,6 +207,7 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 	// Typed metadata: canonical wins when set, else the other side fills the gap
 	// (the same present-beats-absent rule the Extras overlay applies).
 	merged.ISRC = firstNonEmpty(canonical.ISRC, other.ISRC)
+	merged.UPC = firstNonEmpty(canonical.UPC, other.UPC)
 	merged.MBID = firstNonEmpty(canonical.MBID, other.MBID)
 	merged.Xref = canonical.Xref
 	if len(merged.Xref) == 0 {
@@ -192,6 +218,12 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 	merged.TrackCount = firstNonZero(canonical.TrackCount, other.TrackCount)
 	merged.ProviderRank = firstNonZero(canonical.ProviderRank, other.ProviderRank)
 	merged.FanCount = firstNonZero(canonical.FanCount, other.FanCount)
+	// Album/Duration/DeezerAlbumID were silently dropped on every merge until
+	// 2026-07-23 (only their Extras mirrors survived), starving their typed
+	// consumers (isLowConfidenceTail, FindRelatedService).
+	merged.Album = firstNonEmpty(canonical.Album, other.Album)
+	merged.Duration = firstNonZero(canonical.Duration, other.Duration)
+	merged.DeezerAlbumID = firstNonEmpty(canonical.DeezerAlbumID, other.DeezerAlbumID)
 	return merged
 }
 
@@ -276,6 +308,14 @@ func ambiguousArtistNamesFlat(results []domain.SearchResult) map[string]bool {
 		if r.Kind != domain.ResultKindArtist || r.MBID == "" {
 			continue
 		}
+		// Only MusicBrainz-sourced MBIDs count. A stale Last.fm mbid for the SAME
+		// artist would otherwise register as a second "identity" and mark the name
+		// ambiguous — refusing legitimate bare-name merges (duplicate artist
+		// cards). The set's semantics are "names for which MUSICBRAINZ surfaced
+		// ≥2 MBIDs".
+		if !providersOf(r)[domain.ProviderMusicBrainz] {
+			continue
+		}
 		name := textnorm.NormalizeForMatch(r.Title)
 		if mbidsByName[name] == nil {
 			mbidsByName[name] = make(map[string]bool)
@@ -297,6 +337,9 @@ func completenessOf(r domain.SearchResult) int {
 		n++
 	}
 	if r.ISRC != "" {
+		n++
+	}
+	if r.UPC != "" {
 		n++
 	}
 	if r.Duration != 0 {

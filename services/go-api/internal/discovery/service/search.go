@@ -49,6 +49,11 @@ const defaultProviderTimeout = 1500 * time.Millisecond
 // operational bound (like a page size), trimmed best-effort after each insert.
 const historyRingSize = 100
 
+// identityPersistTimeout bounds the background bridge persist (verify + upsert).
+// Generous compared to the 3s telemetry/vocab bounds: verification's MusicBrainz
+// fetches are pacing-limited, so a multi-artist batch legitimately takes a while.
+const identityPersistTimeout = 30 * time.Second
+
 // rankingExperiments groups the ranking-pipeline flags a Service can have
 // toggled on independently (each eval A/B-gated at the composition root the
 // same way): tail-noise demotion, the cross-kind prominence tiebreak,
@@ -327,7 +332,10 @@ func (s *Service) Execute(
 		cached         bool
 		partial        bool
 	)
-	if s.resultCache != nil {
+	// Symbol-only queries ("!!!", "†††") normalize to "" and would all collide on
+	// one key, serving each other's results — skip the cache entirely for them.
+	useResultCache := s.resultCache != nil && queryNorm != ""
+	if useResultCache {
 		if hit, ok := s.resultCache.Get(ctx, cacheKey); ok {
 			ranked, cached = hit, true
 		}
@@ -342,13 +350,21 @@ func (s *Service) Execute(
 		// for weak-but-non-empty results was removed: its trigger was a tuned
 		// relevance threshold — query-fit.)
 		if len(ranked) == 0 {
-			correctedQuery, originalQuery, ranked = s.tryCorrection(ctx, query)
+			var corrStatuses []domain.ProviderSearchResponse
+			correctedQuery, originalQuery, ranked, corrStatuses = s.tryCorrection(ctx, query)
+			if correctedQuery != "" {
+				// The results on the wire came from the corrected fan-out, so its
+				// statuses (not the original all-zero run's) describe them.
+				statuses = corrStatuses
+			}
 		}
 
 		partial = anyProviderFailed(statuses)
-		// Cache only complete, non-empty results: a partial (provider-drop-out) run
-		// frozen for the TTL would serve a degraded list to everyone.
-		if s.resultCache != nil && len(ranked) > 0 && !partial {
+		// Cache only complete, non-empty, uncorrected results: a partial
+		// (provider-drop-out) run frozen for the TTL would serve a degraded list to
+		// everyone, and a corrected run cached under the ORIGINAL (misspelled) key
+		// would lose its "showing results for" fields on every later hit.
+		if useResultCache && len(ranked) > 0 && !partial && correctedQuery == "" {
 			s.resultCache.Set(ctx, cacheKey, ranked)
 		}
 	}
@@ -364,6 +380,9 @@ func (s *Service) Execute(
 
 	// Exploration: a small fraction of searches serve a randomized order (cloned
 	// so the cache is never mutated) and are logged as exploration for propensity.
+	// The organic (pre-shuffle) top is captured first: vocabulary learning must
+	// ingest the ranked slate, not a randomized tail.
+	organic := ranked
 	ranked, explored := s.maybeExplore(ranked)
 
 	s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
@@ -372,7 +391,7 @@ func (s *Service) Execute(
 	if correctedQuery != "" {
 		ingestQuery = correctedQuery
 	}
-	s.ingestVocabulary(ctx, ingestQuery, ranked)
+	s.ingestVocabulary(ctx, ingestQuery, organic)
 
 	slog.InfoContext(ctx, "search.v2.complete",
 		"query", query.Raw,
@@ -422,6 +441,14 @@ func (s *Service) mergeRankEnrich(
 		Behavioral: s.BehavioralScoresSnapshot(),
 	})
 
+	// Stamp the stable engagement-join signature BEFORE display enrichment:
+	// disambiguation fills artist subtitles under a per-search budget, so a
+	// signature computed after it would flap between searches and never rejoin
+	// the behavioral score map rank keyed pre-fill (see domain.SearchResult.Signature).
+	for i := range ranked {
+		ranked[i].Signature = domain.ResultSignature(ranked[i])
+	}
+
 	// port-bound display enrichment — fills fields without reordering.
 	ranked = s.applyArtistDisambiguation(ctx, ranked)
 	ranked = s.fillArtwork(ctx, ranked)
@@ -470,8 +497,12 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 		return
 	}
 	// Persist off the request path: the durable write must not add latency to the
-	// search, and it must outlive the request, so use a detached context.
+	// search, and it must outlive the request, so use a detached context — bounded
+	// like the other background work (30s, generous because verification's MB
+	// fetches are pacing-limited and can take a while).
 	s.launchBackground(ctx, "identity.persist_bridges", func(bgCtx context.Context) {
+		bgCtx, cancel := context.WithTimeout(bgCtx, identityPersistTimeout)
+		defer cancel()
 		for _, b := range learned {
 			ids := b.ids
 			if s.identityVerifier != nil {
@@ -479,11 +510,22 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 				// MB url-relation must not fuse two same-name artists in the durable
 				// identity. Off the request path, so its provider fetches don't add
 				// search latency.
-				ids = s.identityVerifier.VerifyXref(bgCtx, b.kind, b.mbid, b.ids)
+				var ok bool
+				ids, ok = s.identityVerifier.VerifyXref(bgCtx, b.kind, b.mbid, b.ids)
+				if !ok {
+					// Memo hit: this MBID was verified+persisted within the window.
+					// Skip the upsert — writing the raw (unverified) xref here would
+					// re-introduce the mis-bridged edge the first persist dropped.
+					continue
+				}
 			}
 			if err := s.identityStore.PersistBridges(bgCtx, b.kind, b.mbid, ids); err != nil {
 				slog.WarnContext(bgCtx, "identity.persist_failed",
 					"kind", b.kind.String(), "mbid", b.mbid, "error", err)
+				// The verify memo was marked before this persist was attempted; unmark
+				// it so the next search re-verifies and re-persists instead of skipping
+				// for the memo TTL while the durable store holds nothing.
+				s.identityVerifier.Forget(b.mbid)
 			}
 		}
 	})
@@ -518,6 +560,20 @@ func (s *Service) fanOut(
 		wg.Add(1)
 		go func(i int, p ports.SearchProvider) {
 			defer wg.Done()
+			// A panicking provider adapter must not kill the process: record the
+			// slot as a provider error (and a breaker failure) and let the other
+			// providers' results stand.
+			defer func() {
+				if r := recover(); r != nil {
+					s.circuitBreaker.RecordFailure(p.Name())
+					statuses[i] = domain.ProviderSearchResponse{
+						Provider: p.Name(),
+						Status:   domain.ProviderStatusError,
+					}
+					slog.ErrorContext(ctx, "search.v2.provider_panic",
+						"provider", p.Name().String(), "panic", r)
+				}
+			}()
 
 			timeout := defaultProviderTimeout
 			if tp, ok := p.(interface{ SearchTimeout() time.Duration }); ok {
@@ -531,7 +587,13 @@ func (s *Service) fanOut(
 			latencyMs := time.Since(start).Milliseconds()
 
 			if err != nil {
-				s.circuitBreaker.RecordFailure(p.Name())
+				// A canceled PARENT request (client abandoned the search) is not a
+				// provider failure: counting it would let a handful of abandoned
+				// searches open every breaker app-wide. Check the request ctx, not
+				// provCtx — the per-provider timeout firing IS a provider failure.
+				if ctx.Err() == nil {
+					s.circuitBreaker.RecordFailure(p.Name())
+				}
 				status := domain.ProviderStatusError
 				if provCtx.Err() != nil {
 					status = domain.ProviderStatusTimeout

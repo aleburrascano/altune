@@ -58,6 +58,7 @@ type fakeMB struct {
 	mbid          string
 	confirmed     []string
 	contamination map[string]bool
+	validateErr   error
 }
 
 func (m *fakeMB) ResolveArtistIdentity(_ context.Context, _ string) (*ports.ArtistIdentity, error) {
@@ -68,6 +69,9 @@ func (m *fakeMB) ResolveArtistIdentity(_ context.Context, _ string) (*ports.Arti
 }
 
 func (m *fakeMB) ValidateArtistAlbums(_ context.Context, _ string, _ []domain.SearchResult) (*ports.AlbumValidationResult, error) {
+	if m.validateErr != nil {
+		return nil, m.validateErr
+	}
 	conf := make([]domain.SearchResult, len(m.confirmed))
 	for i, t := range m.confirmed {
 		conf[i] = domain.SearchResult{Title: t}
@@ -87,7 +91,7 @@ func TestConsensus_ConfirmedAndUnconfirmed(t *testing.T) {
 		consensusProvider("lastfm", "Album A", "Album B"),
 		consensusProvider("musicbrainz", "Album A"),
 	})
-	got := svc.BuildConsensus(context.Background(), "Artist", nil)
+	got := svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
 
 	byTitle := statusByTitle(got)
 	if byTitle["Album A"] != ConsensusConfirmed {
@@ -105,7 +109,7 @@ func TestConsensus_DistinctAlbumsStaySeparate(t *testing.T) {
 		consensusProvider("lastfm", "Scorpion", "Scorpion (Deluxe)", "Take Care"),
 		consensusProvider("musicbrainz", "Scorpion"),
 	})
-	got := svc.BuildConsensus(context.Background(), "Drake", nil)
+	got := svc.BuildConsensus(context.Background(), "Drake", domain.ProviderDeezer, "", nil)
 
 	byTitle := statusByTitle(got)
 	if _, ok := byTitle["Take Care"]; !ok {
@@ -132,11 +136,87 @@ func TestConsensus_CacheSkipsProviderCalls(t *testing.T) {
 	}
 	svc := NewConsensusService([]ConsensusProvider{p}, WithConsensusCache(newInMemoryConsensusCache()))
 
-	svc.BuildConsensus(context.Background(), "Artist", nil)
-	svc.BuildConsensus(context.Background(), "Artist", nil)
+	svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
+	svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
 
 	if n := atomic.LoadInt32(&calls); n != 1 {
 		t.Errorf("provider fetched %d times, want 1 (second served from cache)", n)
+	}
+}
+
+// Two different artists that share a name ("Che" the rapper / "Che" the soul
+// singer) must NOT share a cache entry: the key carries the seed identity, so
+// each seed recomputes its own consensus, and re-opening the first seed still
+// hits its own cached entry.
+func TestConsensus_CacheKeyedBySeedIdentity(t *testing.T) {
+	var calls int32
+	p := ConsensusProvider{
+		Name: "lastfm",
+		Fetcher: func(_ context.Context, _ string) ([]domain.SearchResult, error) {
+			atomic.AddInt32(&calls, 1)
+			return []domain.SearchResult{{Kind: domain.ResultKindAlbum, Title: "X", Subtitle: "Che"}}, nil
+		},
+	}
+	cache := newInMemoryConsensusCache()
+	svc := NewConsensusService([]ConsensusProvider{p}, WithConsensusCache(cache))
+
+	svc.BuildConsensus(context.Background(), "Che", domain.ProviderDeezer, "rapper-1", nil)
+	svc.BuildConsensus(context.Background(), "Che", domain.ProviderDeezer, "soul-2", nil)
+	if n := atomic.LoadInt32(&calls); n != 2 {
+		t.Errorf("provider fetched %d times, want 2 (distinct seeds must not share a cache entry)", n)
+	}
+	if len(cache.m) != 2 {
+		t.Errorf("cache entries = %d, want 2 distinct keys", len(cache.m))
+	}
+
+	svc.BuildConsensus(context.Background(), "Che", domain.ProviderDeezer, "rapper-1", nil)
+	if n := atomic.LoadInt32(&calls); n != 2 {
+		t.Errorf("provider fetched %d times, want 2 (same seed re-served from cache)", n)
+	}
+}
+
+// An MB authority ERROR degrades (the un-vetoed union is served) but must not
+// be cached: a transient MB failure would otherwise freeze a potentially
+// contaminated by-name union for the full TTL.
+func TestConsensus_MBErrorServedButNotCached(t *testing.T) {
+	var calls int32
+	p := ConsensusProvider{
+		Name: "lastfm",
+		Fetcher: func(_ context.Context, _ string) ([]domain.SearchResult, error) {
+			atomic.AddInt32(&calls, 1)
+			return []domain.SearchResult{{Kind: domain.ResultKindAlbum, Title: "X", Subtitle: "Artist"}}, nil
+		},
+	}
+	cache := newInMemoryConsensusCache()
+	mb := &fakeMB{mbid: "mb1", validateErr: context.DeadlineExceeded}
+	svc := NewConsensusService([]ConsensusProvider{p}, WithMBAuthority(mb), WithConsensusCache(cache))
+
+	got := svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
+	if len(got) != 1 {
+		t.Fatalf("results = %d, want 1 (union still served on MB error)", len(got))
+	}
+	if len(cache.m) != 0 {
+		t.Errorf("cache entries = %d, want 0 (MB error must skip the cache write)", len(cache.m))
+	}
+	svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
+	if n := atomic.LoadInt32(&calls); n != 2 {
+		t.Errorf("provider fetched %d times, want 2 (nothing cached after MB error)", n)
+	}
+}
+
+// A cluster's consensus counts DISTINCT providers, and the primary seed carries
+// its REAL provider label: an iTunes seed plus the same album from the by-name
+// iTunes fetch is one source — never "confirmed on multiple providers".
+func TestConsensus_SameProviderVotesCountOnce(t *testing.T) {
+	svc := NewConsensusService([]ConsensusProvider{
+		consensusProvider("itunes", "Album X"),
+	})
+	primary := []domain.SearchResult{{Kind: domain.ResultKindAlbum, Title: "Album X", Subtitle: "Artist"}}
+
+	got := svc.BuildConsensus(context.Background(), "Artist", domain.ProviderITunes, "i-1", primary)
+
+	if s := statusByTitle(got)["Album X"]; s != ConsensusUnconfirmed {
+		t.Errorf("Album X = %v, want unconfirmed (iTunes primary + iTunes by-name is ONE provider)", s)
 	}
 }
 
@@ -147,7 +227,7 @@ func TestConsensus_DeterministicAcrossRuns(t *testing.T) {
 			consensusProvider("musicbrainz", "B", "D"),
 			consensusProvider("itunes", "A", "C", "E"),
 		})
-		return svc.BuildConsensus(context.Background(), "Artist", nil)
+		return svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
 	}
 
 	first := build()
@@ -175,7 +255,7 @@ func TestConsensus_MBRejectsContaminationAndConfirms(t *testing.T) {
 		consensusProvider("lastfm", "Real Album", "Fake Album"),
 	}, WithMBAuthority(mb))
 
-	got := svc.BuildConsensus(context.Background(), "Artist", nil)
+	got := svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
 	byTitle := statusByTitle(got)
 
 	if byTitle["Real Album"] != ConsensusConfirmed {
@@ -196,7 +276,7 @@ func TestConsensus_MBSpineRejectsAlbumsNotInDiscography(t *testing.T) {
 		consensusProvider("lastfm", "Real Album", "Other Artist Album"),
 	}, WithMBAuthority(mb))
 
-	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "Artist", nil))
+	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil))
 
 	if byTitle["Real Album"] != ConsensusConfirmed {
 		t.Errorf("Real Album = %v, want confirmed", byTitle["Real Album"])
@@ -216,7 +296,7 @@ func TestConsensus_MBNotCredibleKeepsUnion(t *testing.T) {
 		consensusProvider("itunes", "Album A"),
 	}, WithMBAuthority(mb))
 
-	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "Artist", nil))
+	byTitle := statusByTitle(svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil))
 
 	if byTitle["Album A"] != ConsensusConfirmed {
 		t.Errorf("Album A (2 providers) = %v, want confirmed", byTitle["Album A"])

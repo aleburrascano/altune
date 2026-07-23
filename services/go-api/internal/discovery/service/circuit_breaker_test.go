@@ -1,6 +1,8 @@
 package service
 
 import (
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -141,6 +143,38 @@ func TestCircuitBreaker_IndependentProviders(t *testing.T) {
 	}
 	if cb.GetStatus(domain.ProviderMusicBrainz) != domain.ProviderStatusOK {
 		t.Errorf("expected MusicBrainz status OK, got %v", cb.GetStatus(domain.ProviderMusicBrainz))
+	}
+}
+
+func TestCircuitBreaker_HalfOpenAdmitsExactlyOneConcurrentProbe(t *testing.T) {
+	cb := NewCircuitBreaker()
+
+	// Open the circuit, then age it past the open window.
+	for i := 0; i < 5; i++ {
+		cb.RecordFailure(domain.ProviderDeezer)
+	}
+	cb.mu.Lock()
+	cb.circuits[domain.ProviderDeezer].lastFailedAt = time.Now().Add(-31 * time.Second)
+	cb.mu.Unlock()
+
+	// N concurrent requests race the Open→HalfOpen transition: exactly one may be
+	// admitted as the probe (the transitioning caller must set probing itself).
+	const n = 16
+	var wg sync.WaitGroup
+	var admitted int32
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if cb.AllowRequest(domain.ProviderDeezer) {
+				atomic.AddInt32(&admitted, 1)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if admitted != 1 {
+		t.Errorf("half-open admitted %d concurrent probes, want exactly 1", admitted)
 	}
 }
 

@@ -124,6 +124,72 @@ func TestService_RanksExactTitleFirst(t *testing.T) {
 	}
 }
 
+func TestFanOut_CanceledParentDoesNotRecordBreakerFailure(t *testing.T) {
+	// A client-abandoned request cancels the parent ctx; every provider errors
+	// with context.Canceled. That must NOT count as a provider failure — a few
+	// abandoned searches would otherwise open every breaker app-wide for 30s.
+	p := &fakeProvider{name: domain.ProviderDeezer, delay: 50 * time.Millisecond}
+	cb := NewCircuitBreaker()
+	svc := NewService([]ports.SearchProvider{p}, cb)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, statuses := svc.fanOut(ctx, "humble", nil)
+
+	if statuses[0].Status != domain.ProviderStatusTimeout {
+		t.Errorf("status = %v, want timeout (ctx canceled)", statuses[0].Status)
+	}
+	cb.mu.Lock()
+	entry := cb.circuits[domain.ProviderDeezer]
+	cb.mu.Unlock()
+	if entry != nil && (entry.failures != 0 || entry.state != CircuitClosed) {
+		t.Errorf("breaker state changed on parent cancellation: failures=%d state=%v", entry.failures, entry.state)
+	}
+}
+
+type panickingProvider struct{ name domain.ProviderName }
+
+func (p *panickingProvider) Name() domain.ProviderName { return p.name }
+
+func (p *panickingProvider) Search(_ context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	panic("adapter bug")
+}
+
+func (p *panickingProvider) SupportedKinds() map[domain.ResultKind]bool {
+	return map[domain.ResultKind]bool{domain.ResultKindTrack: true}
+}
+
+func TestService_PanickingProviderDoesNotKillSearch(t *testing.T) {
+	good := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	bad := &panickingProvider{name: domain.ProviderITunes}
+	cb := NewCircuitBreaker()
+	svc := NewService([]ports.SearchProvider{good, bad}, cb)
+
+	out := runSearch(t, svc, "humble")
+
+	if len(out.Results) != 1 || out.Results[0].Title != "Humble" {
+		t.Fatalf("want the good provider's result to survive the panic, got %v", titles(out.Results))
+	}
+	if !out.Partial {
+		t.Error("want partial=true (the panicking slot is a provider error)")
+	}
+	var panicked *domain.ProviderSearchResponse
+	for i := range out.ProviderStatuses {
+		if out.ProviderStatuses[i].Provider == domain.ProviderITunes {
+			panicked = &out.ProviderStatuses[i]
+		}
+	}
+	if panicked == nil || panicked.Status != domain.ProviderStatusError {
+		t.Errorf("panicking slot status = %+v, want provider error", panicked)
+	}
+	cb.mu.Lock()
+	entry := cb.circuits[domain.ProviderITunes]
+	cb.mu.Unlock()
+	if entry == nil || entry.failures != 1 {
+		t.Errorf("panic must record a breaker failure, got %+v", entry)
+	}
+}
+
 func TestService_LimitTruncates(t *testing.T) {
 	var results []domain.SearchResult
 	for i := 0; i < 5; i++ {

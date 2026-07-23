@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 	"strconv"
 	"sync"
@@ -83,6 +84,11 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 // already resolved to this provider's own id for the artist.
 type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 
+// detailFanOutTimeout bounds the identity fan-out (same principled SLA as
+// consensusTimeout): one hung provider must not hold the artist-detail request
+// open to the server timeout. A var (not const) only so tests can shrink it.
+var detailFanOutTimeout = consensusTimeout
+
 // fanOutByIdentity asks every content provider that has a resolved id for THIS
 // artist to fetch concurrently, returning one non-empty result group per
 // responder. Each provider is queried by its OWN id (or the MBID for Last.fm,
@@ -90,13 +96,21 @@ type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvide
 // in. A provider with no resolved id, or one that errors, simply doesn't
 // contribute.
 func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity ResolvedArtistIdentity, artistName string, fetch identityContentFetch) [][]domain.SearchResult {
+	ctx, cancel := context.WithTimeout(ctx, detailFanOutTimeout)
+	defer cancel()
+
 	type job struct {
 		provider domain.ProviderName
 		p        ports.ArtistContentProvider
 		id       string
 	}
 	var jobs []job
-	for name, p := range s.providers {
+	// Canonical provider order, not map range: the MergeReleases cluster
+	// incumbent is first-seen, so a per-request-random order flips the displayed
+	// title/year for the same album between requests (the same determinism bug
+	// class as the search artwork flicker).
+	for _, name := range orderedProviderNames(s.providers) {
+		p := s.providers[name]
 		id := providerContentID(identity, name)
 		if id == "" {
 			// The cross-provider identity (MB url-relations) carries no id for
@@ -117,9 +131,14 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 		wg.Add(1)
 		go func(i int, j job) {
 			defer wg.Done()
-			if res, err := fetch(ctx, j.p, j.provider, j.id); err == nil {
-				groups[i] = res
+			res, err := fetch(ctx, j.p, j.provider, j.id)
+			if err != nil {
+				// Degrade-on-error stays — the provider just doesn't contribute.
+				slog.DebugContext(ctx, "artist_content.fanout.provider_failed",
+					"provider", j.provider.String(), "error", err)
+				return
 			}
+			groups[i] = res
 		}(i, j)
 	}
 	wg.Wait()
@@ -159,7 +178,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 	results = dedupAlbums(results)
 
 	if artistName != "" && s.consensus != nil {
-		consensusResults := s.consensus.BuildConsensus(ctx, artistName, results)
+		consensusResults := s.consensus.BuildConsensus(ctx, artistName, providerName, externalID, results)
 		var kept []domain.SearchResult
 		for _, cr := range consensusResults {
 			if cr.Status != ConsensusRejected {
@@ -246,4 +265,37 @@ func parseYear(s string) int {
 		return 0
 	}
 	return y
+}
+
+// providerFanOutPriority is the canonical provider order for the detail
+// fan-out — richest-metadata providers first, so they win first-seen ties in
+// MergeReleases. Providers not listed sort alphabetically after.
+var providerFanOutPriority = []domain.ProviderName{
+	domain.ProviderDeezer,
+	domain.ProviderAppleMusic,
+	domain.ProviderSpotify,
+	domain.ProviderITunes,
+	domain.ProviderSoundCloud,
+	domain.ProviderLastFM,
+}
+
+// orderedProviderNames returns the provider map's keys in a fixed deterministic
+// order: providerFanOutPriority first, everything else alphabetically.
+func orderedProviderNames(providers map[domain.ProviderName]ports.ArtistContentProvider) []domain.ProviderName {
+	out := make([]domain.ProviderName, 0, len(providers))
+	seen := make(map[domain.ProviderName]bool, len(providers))
+	for _, name := range providerFanOutPriority {
+		if _, ok := providers[name]; ok {
+			out = append(out, name)
+			seen[name] = true
+		}
+	}
+	var rest []domain.ProviderName
+	for name := range providers {
+		if !seen[name] {
+			rest = append(rest, name)
+		}
+	}
+	sort.Slice(rest, func(i, j int) bool { return rest[i].String() < rest[j].String() })
+	return append(out, rest...)
 }

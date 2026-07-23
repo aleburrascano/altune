@@ -73,6 +73,18 @@ func TestCleanQuery(t *testing.T) {
 			raw:  "",
 			want: "",
 		},
+		{
+			// Lowercasing "İ" (U+0130) grows its byte length; the old
+			// index-on-lowered / slice-on-original removal mangled the query.
+			name: "multibyte case-fold query survives noise removal",
+			raw:  "İstanbul lyrics",
+			want: "İstanbul",
+		},
+		{
+			name: "removes every occurrence of a noise phrase",
+			raw:  "hello lyrics lyrics",
+			want: "hello",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

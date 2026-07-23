@@ -155,6 +155,67 @@ func TestMerge_IdentifierMatch(t *testing.T) {
 	})
 }
 
+func TestMerge_AlbumUPCTier(t *testing.T) {
+	t.Run("same upc merges albums across providers", func(t *testing.T) {
+		a := res(domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", domain.ProviderAppleMusic, nil)
+		a.UPC = "00602557618280"
+		b := res(domain.ResultKindAlbum, "DAMN. (Deluxe)", "Kendrick Lamar", domain.ProviderDeezer, nil)
+		b.UPC = "00602557618280"
+		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		if len(entities) != 1 {
+			t.Fatalf("got %d entities, want 1", len(entities))
+		}
+		if tier := entities[0].Result.Extras["resolution_tier"]; tier != "upc" {
+			t.Errorf("resolution_tier = %v, want upc", tier)
+		}
+		if entities[0].Result.Confidence != domain.ConfidenceHigh {
+			t.Errorf("confidence = %v, want high", entities[0].Result.Confidence)
+		}
+		if entities[0].Result.UPC != "00602557618280" {
+			t.Errorf("merged UPC = %q, want coalesced", entities[0].Result.UPC)
+		}
+	})
+
+	t.Run("mismatched upc does not block a canonical-title merge", func(t *testing.T) {
+		a := res(domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", domain.ProviderAppleMusic, nil)
+		a.UPC = "00602557618280"
+		b := res(domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", domain.ProviderDeezer, nil)
+		b.UPC = "00602557618297" // a different edition's barcode is not disproof
+		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		if len(entities) != 1 {
+			t.Fatalf("got %d entities, want 1 (upc mismatch must not block)", len(entities))
+		}
+	})
+
+	t.Run("upc never merges tracks", func(t *testing.T) {
+		a := track("Same Barcode", "Artist A", domain.ProviderDeezer, nil)
+		a.UPC = "00602557618280"
+		b := track("Different Title", "Artist B", domain.ProviderITunes, nil)
+		b.UPC = "00602557618280"
+		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		if len(entities) != 2 {
+			t.Fatalf("got %d entities, want 2 (upc tier is album-only)", len(entities))
+		}
+	})
+}
+
+func TestMergeInto_CoalescesTypedContentFields(t *testing.T) {
+	a := track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil)
+	a.Album = "DAMN."
+	a.Duration = 177
+	a.DeezerAlbumID = "13114014"
+	b := track("HUMBLE.", "Kendrick Lamar", domain.ProviderITunes, nil)
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1", len(entities))
+	}
+	r := entities[0].Result
+	if r.Album != "DAMN." || r.Duration != 177 || r.DeezerAlbumID != "13114014" {
+		t.Errorf("typed content fields dropped on merge: album=%q duration=%d deezerAlbumID=%q",
+			r.Album, r.Duration, r.DeezerAlbumID)
+	}
+}
+
 func TestMerge_IdentityBridge(t *testing.T) {
 	// MB artist "Ye" carries an mbid and a bridged Deezer id (stamped pre-merge
 	// from the IdentityBridge onto Xref). The Deezer result "Kanye West"
@@ -308,6 +369,91 @@ func TestMerge_Artists(t *testing.T) {
 			t.Fatalf("got %d entities, want 2 (Blink-182 != Blink)", len(entities))
 		}
 	})
+}
+
+func TestAmbiguousArtistNames_OnlyMusicBrainzMBIDsCount(t *testing.T) {
+	// A stale Last.fm mbid for the same artist must not register as a second
+	// "identity": the set's semantics are "names for which MUSICBRAINZ surfaced
+	// ≥2 MBIDs", and inflating it refuses legitimate bare-name merges (duplicate
+	// artist cards).
+	mb := withMBID(res(domain.ResultKindArtist, "Queen", "", domain.ProviderMusicBrainz, nil), "mbid-current")
+	lastfm := withMBID(res(domain.ResultKindArtist, "Queen", "", domain.ProviderLastFM, nil), "mbid-stale")
+
+	if got := ambiguousArtistNamesFlat([]domain.SearchResult{mb, lastfm}); got["queen"] {
+		t.Error("MB + stale Last.fm mbid marked the name ambiguous — only MusicBrainz MBIDs may count")
+	}
+
+	mb2 := withMBID(res(domain.ResultKindArtist, "Queen", "", domain.ProviderMusicBrainz, nil), "mbid-second")
+	if got := ambiguousArtistNamesFlat([]domain.SearchResult{mb, mb2}); !got["queen"] {
+		t.Error("two genuine MB identities with distinct MBIDs must still mark the name ambiguous")
+	}
+}
+
+func TestMerge_UPCTierRefusesConflictingMBIDs(t *testing.T) {
+	// A(m1,upc) and B(m2,upc) must NOT merge on UPC: mergeInto keeps only one
+	// MBID, so a later C(m2) would hard-stop against the survivor and the entity
+	// count would depend on arrival order. With conflicting MBIDs falling through
+	// to the hard-stop, the grouping is order-independent: {A} and {B+C}.
+	mkAlbum := func(title, mbid string, provider domain.ProviderName) domain.SearchResult {
+		r := withMBID(res(domain.ResultKindAlbum, title, "Kendrick Lamar", provider, nil), mbid)
+		r.UPC = "00602557618280"
+		return r
+	}
+	a := mkAlbum("DAMN.", "mbid-1", domain.ProviderAppleMusic)
+	b := mkAlbum("DAMN. (Deluxe)", "mbid-2", domain.ProviderDeezer)
+	c := withMBID(res(domain.ResultKindAlbum, "DAMN. (Deluxe Edition)", "Kendrick Lamar", domain.ProviderMusicBrainz, nil), "mbid-2")
+
+	for name, order := range map[string][]domain.SearchResult{
+		"a_b_c": {a, b, c},
+		"c_b_a": {c, b, a},
+	} {
+		entities := Merge([][]domain.SearchResult{order})
+		if len(entities) != 2 {
+			t.Errorf("order %s: got %d entities, want 2 (conflicting MBIDs must not UPC-merge)", name, len(entities))
+		}
+	}
+}
+
+func TestMerge_EmptyNormalizedTitleNeverNameMerges(t *testing.T) {
+	t.Run("fully-bracketed track titles stay separate", func(t *testing.T) {
+		// "(Intro)" and "(Outro)" both normalize to "" — shared emptiness is not
+		// a shared title, so the text tier must refuse.
+		a := track("(Intro)", "Same Artist", domain.ProviderDeezer, nil)
+		b := track("(Outro)", "Same Artist", domain.ProviderITunes, nil)
+		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		if len(entities) != 2 {
+			t.Fatalf("got %d entities, want 2 (empty normalized titles must not merge)", len(entities))
+		}
+	})
+
+	t.Run("symbol-only artist names stay separate", func(t *testing.T) {
+		a := res(domain.ResultKindArtist, "!!!", "", domain.ProviderDeezer, nil)
+		b := res(domain.ResultKindArtist, "†††", "", domain.ProviderITunes, nil)
+		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		if len(entities) != 2 {
+			t.Fatalf("got %d entities, want 2 (empty normalized names must not merge)", len(entities))
+		}
+	})
+}
+
+func TestMergeInto_KeepsStrongestResolutionTier(t *testing.T) {
+	// An ISRC-proven entity must not be downgraded by a later name-tier merge:
+	// the stamped tier and confidence keep the strongest proof seen.
+	a := withISRC(track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil), "USUM71703089")
+	b := withISRC(track("Humble", "Kendrick Lamar", domain.ProviderITunes, nil), "USUM71703089")
+	c := track("Humble", "Kendrick Lamar", domain.ProviderLastFM, nil) // no identifier — name tier
+
+	entities := Merge([][]domain.SearchResult{{a}, {b}, {c}})
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1", len(entities))
+	}
+	r := entities[0].Result
+	if tier := r.Extras["resolution_tier"]; tier != "isrc" {
+		t.Errorf("resolution_tier = %v, want isrc (name merge must not downgrade)", tier)
+	}
+	if r.Confidence != domain.ConfidenceHigh {
+		t.Errorf("confidence = %v, want high (identity-proven)", r.Confidence)
+	}
 }
 
 func TestMerge_BestRankTracksMinAcrossProviders(t *testing.T) {

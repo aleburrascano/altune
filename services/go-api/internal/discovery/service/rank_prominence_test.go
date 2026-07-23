@@ -1,6 +1,7 @@
 package service
 
 import (
+	"math/rand"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
@@ -58,15 +59,15 @@ func TestProminence_ObscureArtistStaysBelowProminentTrack(t *testing.T) {
 	}
 }
 
-func TestProminence_SameKindOrderUntouched(t *testing.T) {
-	// The reversion guard: prominence fires ONLY across kinds. Two tracks that tie
-	// on relevance must keep the exact order the existing ladder gives them, ON or
-	// OFF — so the bare-title track corpus the popularity attempt regressed cannot
-	// move.
+func TestProminence_SameKindEqualProminenceFallsThrough(t *testing.T) {
+	// Prominence now compares ALL pairs (the kind-difference gate broke strict
+	// weak ordering — see rankLess), so same-kind ties CAN reorder by prominence.
+	// What must hold: same-kind pairs with EQUAL prominence fall through to the
+	// existing ladder unchanged, ON or OFF.
 	hi := track("Echo", "Artist Hi", domain.ProviderDeezer, nil)
 	hi.ProviderRank = 900_000
 	lo := track("Echo", "Artist Lo", domain.ProviderDeezer, nil)
-	lo.ProviderRank = 10
+	lo.ProviderRank = 900_000
 	entities := []Entity{ent(hi), ent(lo)}
 
 	off := Rank(entities, "echo")
@@ -78,6 +79,47 @@ func TestProminence_SameKindOrderUntouched(t *testing.T) {
 	for i := range off {
 		if off[i].Subtitle != on[i].Subtitle {
 			t.Fatalf("same-kind order changed at %d: off %q on %q", i, off[i].Subtitle, on[i].Subtitle)
+		}
+	}
+}
+
+func TestRankLess_StrictWeakOrdering(t *testing.T) {
+	// Property guard for the sort contract: rankLess must be a strict weak
+	// ordering (asymmetric, transitive, with transitive incomparability) or
+	// sort.SliceStable's output is unspecified. The kind-gated prominence rung
+	// violated exactly this (artist<track<artist cycles on tied relevance), so
+	// the test draws every field — prominence included, i.e. the flag on — from
+	// tiny pools to force ties and cross-field interleavings.
+	rng := rand.New(rand.NewSource(1))
+	kinds := []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum, domain.ResultKindTrack}
+	pool := []float64{0, 1, 5, 10}
+	randScored := func() scored {
+		return scored{
+			result: domain.SearchResult{
+				Kind:     kinds[rng.Intn(len(kinds))],
+				Title:    string(rune('a' + rng.Intn(3))),
+				Subtitle: string(rune('a' + rng.Intn(3))),
+			},
+			relevance:  pool[rng.Intn(len(pool))],
+			behavioral: pool[rng.Intn(len(pool))],
+			prominence: pool[rng.Intn(len(pool))],
+			pop:        pool[rng.Intn(len(pool))],
+			rrf:        pool[rng.Intn(len(pool))],
+			multi:      rng.Intn(2) == 0,
+			demoted:    rng.Intn(2) == 0,
+		}
+	}
+	equiv := func(x, y scored) bool { return !rankLess(x, y) && !rankLess(y, x) }
+	for i := 0; i < 5000; i++ {
+		a, b, c := randScored(), randScored(), randScored()
+		if rankLess(a, b) && rankLess(b, a) {
+			t.Fatalf("asymmetry violated:\na=%+v\nb=%+v", a, b)
+		}
+		if rankLess(a, b) && rankLess(b, c) && !rankLess(a, c) {
+			t.Fatalf("transitivity violated:\na=%+v\nb=%+v\nc=%+v", a, b, c)
+		}
+		if equiv(a, b) && equiv(b, c) && !equiv(a, c) {
+			t.Fatalf("incomparability not transitive:\na=%+v\nb=%+v\nc=%+v", a, b, c)
 		}
 	}
 }

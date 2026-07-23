@@ -138,6 +138,29 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 		}
 	})
 
+	t.Run("ambiguous name keeps MBID-less entities as separate cards", func(t *testing.T) {
+		// Two MB identities make "Che" ambiguous; two MBID-less same-name artists
+		// from other providers must NOT collapse into one card via a shared
+		// "name\x00" key — under ambiguity, no-MBID entities never fold together.
+		mb1 := withMBID(artistResult(domain.ProviderMusicBrainz, "mb-1", "Che", nil), "mbid-1")
+		mb2 := withMBID(artistResult(domain.ProviderMusicBrainz, "mb-2", "Che", nil), "mbid-2")
+		results := []domain.SearchResult{
+			mb1,
+			mb2,
+			artistResult(domain.ProviderDeezer, "dz-1", "Che", nil),
+			artistResult(domain.ProviderITunes, "it-1", "Che", nil),
+		}
+		got := CollapseArtistDuplicates(results)
+		if len(got) != 4 {
+			t.Fatalf("expected all 4 ambiguous-name identities kept as separate cards, got %d", len(got))
+		}
+		for _, r := range got {
+			if _, ok := r.Extras["collapsed_artists"]; ok {
+				t.Errorf("unexpected collapsed_artists under ambiguous name (MBID=%q)", r.MBID)
+			}
+		}
+	})
+
 	t.Run("single artist not collapsed", func(t *testing.T) {
 		results := []domain.SearchResult{
 			artistResult(domain.ProviderDeezer, "1", "Che", map[string]any{"popularity": float64(80)}),
