@@ -451,6 +451,11 @@ type scAPITrack struct {
 	PlaybackCount int64  `json:"playback_count"`
 	LikesCount    int64  `json:"likes_count"`
 	RepostsCount  int64  `json:"reposts_count"`
+	// Date fields (scBestReleaseDate order): tracks leave release_date null but
+	// always carry display_date, so the detail screen still gets a year.
+	ReleaseDate string `json:"release_date"`
+	DisplayDate string `json:"display_date"`
+	CreatedAt   string `json:"created_at"`
 	// PublisherMetadata carries the distributor-supplied ISRC on officially
 	// released uploads — the identity key that lets a SoundCloud track merge
 	// with the same recording from Deezer/MusicBrainz (often null for pure
@@ -503,6 +508,7 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 	// SoundCloud tracks otherwise never merge with other providers (see merge.go).
 	r.ISRC = strings.TrimSpace(t.PublisherMetadata.ISRC)
 	r.Album = strings.TrimSpace(t.PublisherMetadata.AlbumTitle)
+	r.ReleaseDate = scBestReleaseDate(t.ReleaseDate, t.DisplayDate, t.CreatedAt)
 	if t.Duration > 0 {
 		r.Duration = int(t.Duration / 1000)
 	}
@@ -518,9 +524,29 @@ type scAPIAlbum struct {
 	ArtworkURL   string `json:"artwork_url"`
 	SetType      string `json:"set_type"` // album | ep | single
 	Genre        string `json:"genre"`
-	User         struct {
+	TrackCount   int    `json:"track_count"`
+	// Three date fields, in preference order (scBestReleaseDate): release_date is
+	// the uploader-declared date (clean but often null), display_date is what
+	// SoundCloud's own UI shows (always populated), created_at is the upload
+	// timestamp. Feeding ReleaseDate gives the discography a year to display.
+	ReleaseDate string `json:"release_date"`
+	DisplayDate string `json:"display_date"`
+	CreatedAt   string `json:"created_at"`
+	User        struct {
 		Username string `json:"username"`
 	} `json:"user"`
+}
+
+// scBestReleaseDate returns the first populated of release_date → display_date →
+// created_at. Albums carry release_date; tracks leave it null but always have
+// display_date, so this yields a usable date for both.
+func scBestReleaseDate(releaseDate, displayDate, createdAt string) string {
+	for _, d := range []string{releaseDate, displayDate, createdAt} {
+		if s := strings.TrimSpace(d); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 func mapSoundCloudAPIAlbum(a scAPIAlbum) (domain.SearchResult, bool) {
@@ -536,9 +562,12 @@ func mapSoundCloudAPIAlbum(a scAPIAlbum) (domain.SearchResult, bool) {
 		extras["genre"] = g
 	}
 
-	return domain.NewProviderResult(domain.ResultKindAlbum, a.Title, a.User.Username, upgradeArtworkResolution(a.ArtworkURL),
+	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, a.User.Username, upgradeArtworkResolution(a.ArtworkURL),
 		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(a.ID, 10), URL: a.PermalinkURL},
-		extras), true
+		extras)
+	r.TrackCount = a.TrackCount
+	r.ReleaseDate = scBestReleaseDate(a.ReleaseDate, a.DisplayDate, a.CreatedAt)
+	return r, true
 }
 
 // scAPIUser is an api-v2 user — SoundCloud's notion of an artist.
