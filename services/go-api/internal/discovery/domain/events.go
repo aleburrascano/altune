@@ -56,6 +56,19 @@ func (e EventType) String() string {
 	return "unknown"
 }
 
+// ClientSubmittable reports whether a client may submit this event type over
+// the POST /events path. Only the interaction types are client-allowed;
+// search_performed and results_shown are server-emitted envelope events — a
+// client minting them could poison the coverage/CTR aggregates.
+func (e EventType) ClientSubmittable() bool {
+	switch e {
+	case EventTypeResultClicked, EventTypePlay, EventTypeSkip,
+		EventTypeCompleted, EventTypeLibraryAdd, EventTypeWrongAlbum:
+		return true
+	}
+	return false
+}
+
 // ParseEventType maps a wire string to an EventType. Unknown strings return
 // EventTypeUnknown so callers can reject them at the boundary.
 func ParseEventType(s string) EventType {
