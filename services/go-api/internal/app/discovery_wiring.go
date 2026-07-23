@@ -122,6 +122,22 @@ func (a *App) wireDiscoveryContent(
 
 	var artistContentOpts []discoveryService.ArtistContentOption
 	artistContentOpts = append(artistContentOpts, discoveryService.WithConsensusService(consensusSvc))
+	// Identity-first detail (DETAIL_IDENTITY_FIRST, default off): give the artist-
+	// content service the same durable identity store the search path writes, so it
+	// can reverse-resolve a single provider id into the artist's full cross-provider
+	// identity and fan out by each provider's own id. Store wired whenever a pool
+	// exists; the fan-out only activates behind the flag.
+	if a.pool != nil {
+		artistContentOpts = append(artistContentOpts, discoveryService.WithContentIdentityStore(
+			discoveryCacheAdapters.NewRedisIdentityStore(
+				discoveryPersistence.NewPgxIdentityStore(a.pool),
+				a.redisClient,
+			),
+		))
+	}
+	if a.cfg.DetailIdentityFirst {
+		artistContentOpts = append(artistContentOpts, discoveryService.WithIdentityFirst())
+	}
 	artistSvc := discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
 	suggestSvc := discoveryService.NewSuggestService(vocabStore)
 
