@@ -14,8 +14,8 @@ live on prod) and chased a "Che" contamination bug to its real root: a **MusicBr
 data error** that fuses two same-name artists into one identity. Fixed it with
 **MB-anchored identity verification**, verified on the live API (the bridged Che
 card went **89 → 25 items, zero cross-artist leakage**). Several real follow-ups
-remain (Spotify content is dead; top-tracks not yet verified; the permanent
-upstream fix isn't built).
+remain (top-tracks not yet verified; the permanent upstream fix isn't built).
+(Spotify content — previously dead — was fixed 2026-07-23; see §5.1.)
 
 **Flags (both `true` in prod `.env.production`, on the VM only):**
 `DETAIL_IDENTITY_FIRST=true`, `DISCOGRAPHY_V2=true`.
@@ -158,12 +158,22 @@ leakage**, rapper's real discography with year/tracks/covers. Rapper's own card
 
 ## 5. STILL OPEN (prioritized)
 
-1. **Spotify content is DEAD.** Seeding the discography with Spotify's own id
-   (`5A7T1LAGJg5NXySBoIKUmF`) returns **zero spotify sources**. The anonymous
-   web-player token path is almost certainly getting **429'd** and degrading to
-   empty, silently. A strong, clean source is offline everywhere. Needs
-   retry/backoff or a better token/session strategy. (`spotify_content.go`,
-   `spotify_token.go`, `spotify_totp.go`.)
+1. ~~**Spotify content is DEAD.**~~ **FIXED (2026-07-23, `spotify_content.go`).**
+   The 429 hypothesis was wrong. The token was never the problem — content was
+   calling the **classic Web API** (`api.spotify.com/v1`), Spotify's developer-OAuth
+   API, where the anonymous web-player token has ~zero quota (every call 429s "rate
+   limit exceeded" even from a cold IP, deterministically — retry/backoff would just
+   delay a guaranteed failure). Search worked because it rides the **pathfinder
+   GraphQL API** (`api-partner.spotify.com`), which the same token IS authorized for.
+   Fix: moved both content endpoints onto pathfinder — `GetArtistAlbums` →
+   `queryArtistDiscographyAll`, `GetArtistTopTracks` → `queryArtistOverview` (its
+   `topTracks`). Verified live end-to-end via the real adapter (50 albums + 10 top
+   tracks, with dates/artwork/track-counts). The persisted-query hashes are
+   extractable from the public JS bundle (grep the linked `web-player.<build>.js`
+   for `new <mod>.l("queryArtistDiscographyAll","query","<sha256>",null)`) — see the
+   AIDEV-WARNING in `spotify_content.go`; a stale hash returns HTTP 412 "Invalid
+   query hash", not an auth status. A `SPOTIFY_LIVE=1`-gated E2E smoke test guards
+   against silent hash-rotation regression.
 2. **Top-tracks fracture not covered.** The MB anchor is album-level, so a bridged
    card's *top tracks* can still mix two artists. Need a track-level anchor (MB
    recording titles/ISRCs) or apply the album-verification's surviving-provider set
