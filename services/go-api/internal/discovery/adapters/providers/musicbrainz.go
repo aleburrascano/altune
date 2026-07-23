@@ -276,6 +276,12 @@ func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rg.ID, URL: "https://musicbrainz.org/release-group/" + rg.ID},
 		nil)
 	r.MBID = rg.ID
+	// MB is the discography's completeness spine, so its first-release-date is the
+	// authoritative year for the albums no other provider carries. It was parsed
+	// into the struct but never mapped onto the result, so those albums showed
+	// blank years and sank out of chronological order. Partial dates ("2020",
+	// "2020-05") are fine — normalizeAlbumYears reads the leading year.
+	r.ReleaseDate = rg.FirstReleaseDate
 	return r
 }
 
