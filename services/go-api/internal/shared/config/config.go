@@ -95,6 +95,14 @@ type Config struct {
 	// Coverage alert: page the operator when zero-result searches in the last 24h
 	// exceed this count. 0 → disabled. Aggregate count only, never the query text.
 	AlertZeroResultThreshold int `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
+	// Identity-first detail path. OFF by default: the artist detail screen
+	// (discography + top tracks) resolves the artist's full cross-provider identity
+	// from the durable IdentityStore and fans out across every content provider by
+	// its own id, merging best-of metadata, instead of trusting a single provider
+	// id (which lets a same-name artist's tracks/albums bleed in). Ships dark behind
+	// this flag until it clears the same-name spot-checks; the current single-
+	// provider path stays the default until cutover.
+	DetailIdentityFirst bool `env:"DETAIL_IDENTITY_FIRST" envDefault:"false"`
 }
 
 func Load() (*Config, error) {
