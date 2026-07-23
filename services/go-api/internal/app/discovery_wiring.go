@@ -148,11 +148,11 @@ func (a *App) wireDiscoveryContent(
 
 	var artistContentOpts []discoveryService.ArtistContentOption
 	artistContentOpts = append(artistContentOpts, discoveryService.WithConsensusService(consensusSvc))
-	// Identity-first detail (DETAIL_IDENTITY_FIRST, default off): give the artist-
-	// content service the same durable identity store the search path writes, so it
-	// can reverse-resolve a single provider id into the artist's full cross-provider
-	// identity and fan out by each provider's own id. Store wired whenever a pool
-	// exists; the fan-out only activates behind the flag.
+	// Identity-first V2 detail: give the artist-content service the same durable
+	// identity store the search path writes, so it can reverse-resolve a single
+	// provider id into the artist's full cross-provider identity and fan out by each
+	// provider's own id (best-of merge → confidence-keep → record-type-normalize).
+	// The store's presence is what enables the path; wired whenever a pool exists.
 	if a.pool != nil {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithContentIdentityStore(
 			discoveryCacheAdapters.NewRedisIdentityStore(
@@ -160,12 +160,6 @@ func (a *App) wireDiscoveryContent(
 				a.redisClient,
 			),
 		))
-	}
-	if a.cfg.DetailIdentityFirst {
-		artistContentOpts = append(artistContentOpts, discoveryService.WithIdentityFirst())
-	}
-	if a.cfg.DiscographyV2 {
-		artistContentOpts = append(artistContentOpts, discoveryService.WithDiscographyV2())
 	}
 	// Identity-verification anchor: the shared MusicBrainz adapter supplies the
 	// authoritative release-group set V2 checks each fan-out provider against, so a

@@ -57,14 +57,17 @@ Two prod checks and a consolidation this session:
   `bestRankOf`) and its 4 tests. `GetAlbums`/`GetTopTracks` are now just
   V2-identity-first → single-provider fallback. **Behavior-neutral on prod** (prod
   already ran both flags `=true`) — it makes V2 the code default and deletes
-  unreachable code. Both flags kept as env kill-switches, though now redundant (both
-  must be on for V2; can collapse to one or fully remove later). The shared
+  unreachable code. **Follow-up (commit 2):** the two flags were then **removed
+  entirely** — V2 is now unconditional, gated only on the artist-content service
+  having an identity store (prod always wires one when a pool exists; the unit-test
+  path has none → single-provider, so the base tests are unchanged). The shared
   `ConsensusService` stays (single-provider fallback + search album-validation still
   use it). `IDENTITY_VERIFY_ON_PERSIST` left as-is (env-gated, `=true` on prod). **1412
   backend tests green.** okf updated: `shared-infra.md` (hook-forced by config.go),
   `app-wiring.md` (accuracy).
-  - *Prod `.env.production` note:* `DETAIL_IDENTITY_FIRST=true`/`DISCOGRAPHY_V2=true`
-    are now redundant with the code default (harmless — env just matches). No VM edit needed.
+  - *Prod `.env.production` note:* after commit 2, `DETAIL_IDENTITY_FIRST` /
+    `DISCOGRAPHY_V2` are **dead keys** (the flags no longer exist; `env.Parse` ignores
+    unknown vars — harmless). `IDENTITY_VERIFY_ON_PERSIST` is still live. No VM edit needed.
 
 ---
 
