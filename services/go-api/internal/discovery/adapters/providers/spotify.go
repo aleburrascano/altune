@@ -28,10 +28,9 @@ import (
 // three other providers already covers what this adds, so a breakage here
 // degrades gracefully rather than losing coverage.
 type SpotifyAdapter struct {
-	client    *http.Client
-	resolver  *spotifyTokenResolver
-	searchURL string // overridable in tests
-	apiBase   string // classic Web API root (api.spotify.com/v1), overridable in tests
+	client        *http.Client
+	resolver      *spotifyTokenResolver
+	pathfinderURL string // GraphQL endpoint shared by search + artist content; overridable in tests
 }
 
 const (
@@ -54,10 +53,9 @@ const (
 
 func NewSpotifyAdapter(client *http.Client) *SpotifyAdapter {
 	return &SpotifyAdapter{
-		client:    client,
-		resolver:  newSpotifyTokenResolver(client),
-		searchURL: spotifyPathfinderURL,
-		apiBase:   "https://api.spotify.com/v1",
+		client:        client,
+		resolver:      newSpotifyTokenResolver(client),
+		pathfinderURL: spotifyPathfinderURL,
 	}
 }
 
@@ -124,7 +122,7 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 		return nil, 0, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.searchURL, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.pathfinderURL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, 0, err
 	}

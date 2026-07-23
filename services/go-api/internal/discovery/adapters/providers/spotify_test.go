@@ -45,7 +45,7 @@ func TestSpotifyTOTPKey_matchesKnownXORDerivation(t *testing.T) {
 
 func newTestSpotifyAdapter(searchSrv *httptest.Server) *SpotifyAdapter {
 	a := NewSpotifyAdapter(searchSrv.Client())
-	a.searchURL = searchSrv.URL
+	a.pathfinderURL = searchSrv.URL
 	a.resolver.cached = &spotifySession{
 		accessToken:  "test-access-token",
 		accessExpiry: farFuture,
