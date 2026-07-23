@@ -272,9 +272,18 @@ func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
 		subtitle = rg.ArtistCredit[0].Name
 	}
 
+	var extras map[string]any
+	// MB's primary-type is a clean album/single/ep classification (the detail
+	// screen groups the discography by record_type). Without it, MB-sourced
+	// singles and EPs — a big share of the completeness spine — all fell into the
+	// Albums row.
+	if pt := strings.ToLower(strings.TrimSpace(rg.PrimaryType)); pt != "" {
+		extras = map[string]any{"record_type": pt}
+	}
+
 	r := domain.NewProviderResult(domain.ResultKindAlbum, rg.Title, subtitle, "",
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rg.ID, URL: "https://musicbrainz.org/release-group/" + rg.ID},
-		nil)
+		extras)
 	r.MBID = rg.ID
 	// MB is the discography's completeness spine, so its first-release-date is the
 	// authoritative year for the albums no other provider carries. It was parsed

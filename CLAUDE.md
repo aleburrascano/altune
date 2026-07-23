@@ -25,3 +25,5 @@ In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the re
 - **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
 
 If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
+
+CodeGraph doesn't replace Serena MCP for: reference/implementation enumeration, type diagnostics, or renames/symbol-body edits — use Serena directly for those (see `~/.claude/rules/tool-routing.md`).
