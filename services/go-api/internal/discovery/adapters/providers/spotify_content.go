@@ -30,6 +30,7 @@ import (
 //
 //	new <mod>.l("queryArtistDiscographyAll","query","<sha256>",null)
 //	new <mod>.l("queryArtistOverview","query","<sha256>",null)
+//	new <mod>.l("queryAlbumTracks","query","<sha256>",null)
 //
 // A stale hash returns HTTP 412 "Invalid query hash" (not an auth status), so
 // isAuthStatus's retry can't mask it — content degrades to empty, the same
@@ -37,6 +38,7 @@ import (
 const (
 	spotifyDiscographyAllHash = "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599"
 	spotifyArtistOverviewHash = "ae0e2958a4ab645b35ca19ac04d0495ae12d9c5d7b7286217674801a9aab281a"
+	spotifyAlbumTracksHash    = "b9bfabef66ed756e5e13f68a942deb60bd4125ec1f1be8cc42769dc0259b4b10"
 )
 
 // spotifyContentLimit caps the discography fetch. Releases come newest-first
@@ -87,6 +89,28 @@ func (a *SpotifyAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provid
 	out := make([]domain.SearchResult, 0, len(items))
 	for _, it := range items {
 		if r, ok := mapSpotifyOverviewTrack(it.Track); ok {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// GetAlbumTracks implements ports.AlbumContentProvider via the pathfinder
+// queryAlbumTracks operation. externalID is the Spotify album id. Without this a
+// spotify-sourced album (common on identity-bridged cards, where the deezer
+// group was dropped by the MB anchor) has no native tracklist and the album-
+// tracks service falls back to a blind Deezer title search — which resolves to a
+// DIFFERENT artist's same-titled album. Returns tracks in album order.
+func (a *SpotifyAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	vars := map[string]any{"uri": "spotify:album:" + externalID, "offset": 0, "limit": spotifyContentLimit}
+	var body spotifyAlbumTracksResponse
+	if err := a.pathfinderContent(ctx, "queryAlbumTracks", spotifyAlbumTracksHash, vars, &body); err != nil {
+		return nil, err
+	}
+	items := body.Data.AlbumUnion.TracksV2.Items
+	out := make([]domain.SearchResult, 0, len(items))
+	for _, it := range items {
+		if r, ok := mapSpotifyAlbumTrack(it.Track); ok {
 			out = append(out, r)
 		}
 	}
@@ -248,6 +272,38 @@ type spotifyPFTrack struct {
 	} `json:"artists"`
 }
 
+// spotifyAlbumTracksResponse decodes queryAlbumTracks (albumUnion.tracksV2).
+type spotifyAlbumTracksResponse struct {
+	Data struct {
+		AlbumUnion struct {
+			TracksV2 struct {
+				Items []struct {
+					Track spotifyAlbumTrack `json:"track"`
+				} `json:"items"`
+			} `json:"tracksV2"`
+		} `json:"albumUnion"`
+	} `json:"data"`
+}
+
+type spotifyAlbumTrack struct {
+	Name        string `json:"name"`
+	URI         string `json:"uri"`
+	TrackNumber int    `json:"trackNumber"`
+	Duration    struct {
+		TotalMilliseconds int64 `json:"totalMilliseconds"`
+	} `json:"duration"`
+	ContentRating struct {
+		Label string `json:"label"`
+	} `json:"contentRating"`
+	Artists struct {
+		Items []struct {
+			Profile struct {
+				Name string `json:"name"`
+			} `json:"profile"`
+		} `json:"items"`
+	} `json:"artists"`
+}
+
 // --- mapping -------------------------------------------------------------
 
 func mapSpotifyRelease(rel spotifyPFRelease) (domain.SearchResult, bool) {
@@ -288,6 +344,30 @@ func mapSpotifyOverviewTrack(t spotifyPFTrack) (domain.SearchResult, bool) {
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, artist,
 		spotifyBestImage(t.AlbumOfTrack.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: t.ID, URL: "https://open.spotify.com/track/" + t.ID},
+		extras)
+	if t.Duration.TotalMilliseconds > 0 {
+		r.Duration = int(t.Duration.TotalMilliseconds / 1000)
+	}
+	return r, true
+}
+
+func mapSpotifyAlbumTrack(t spotifyAlbumTrack) (domain.SearchResult, bool) {
+	id := spotifyIDFromURI(t.URI)
+	if t.Name == "" || id == "" {
+		return domain.SearchResult{}, false
+	}
+	artist := ""
+	if len(t.Artists.Items) > 0 {
+		artist = t.Artists.Items[0].Profile.Name
+	}
+	var extras map[string]any
+	if t.ContentRating.Label == "EXPLICIT" {
+		extras = map[string]any{"explicit": true}
+	}
+	// Album tracks carry no per-track artwork (they share the album cover the
+	// client already has); leave ImageURL empty.
+	r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, artist, "",
+		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: id, URL: "https://open.spotify.com/track/" + id},
 		extras)
 	if t.Duration.TotalMilliseconds > 0 {
 		r.Duration = int(t.Duration.TotalMilliseconds / 1000)

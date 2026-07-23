@@ -102,6 +102,13 @@ func (a *App) wireDiscoveryContent(
 	albumProviders := map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider{
 		discoveryDomain.ProviderDeezer: deezerContent,
 		discoveryDomain.ProviderITunes: itunesContent,
+		// Apple Music + Spotify serve their own album tracklists natively. Without
+		// them, an apple/spotify-sourced album (the norm on identity-bridged cards,
+		// where the deezer group was dropped by the MB anchor) has no supported
+		// source and falls back to a blind Deezer title search that returns a
+		// different same-named artist's tracks.
+		discoveryDomain.ProviderAppleMusic: appleMusicContent,
+		discoveryDomain.ProviderSpotify:    spotifyContent,
 	}
 	artistProviders := map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider{
 		discoveryDomain.ProviderDeezer:     deezerContent,

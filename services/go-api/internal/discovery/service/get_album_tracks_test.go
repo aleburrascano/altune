@@ -9,6 +9,82 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
+// fakeAlbumSearcher is a minimal ports.SearchProvider for the fallback path.
+type fakeAlbumSearcher struct {
+	results []domain.SearchResult
+}
+
+func (f *fakeAlbumSearcher) Name() domain.ProviderName { return domain.ProviderDeezer }
+func (f *fakeAlbumSearcher) SupportedKinds() map[domain.ResultKind]bool {
+	return map[domain.ResultKind]bool{domain.ResultKindAlbum: true}
+}
+func (f *fakeAlbumSearcher) Search(_ context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	return f.results, nil
+}
+
+func albumSearchResult(artist, deezerID string) domain.SearchResult {
+	return domain.SearchResult{
+		Kind: domain.ResultKindAlbum, Title: "Empty Clip", Subtitle: artist,
+		Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: deezerID}},
+	}
+}
+
+// The Deezer search-then-fetch fallback must not return a DIFFERENT artist's
+// same-titled album: a bare "Empty Clip" search ranks "Chase Fetti"'s EP first,
+// but the requested album is Che's. The artist guard skips the mismatch.
+func TestGetAlbumTracks_fallbackSkipsWrongArtist(t *testing.T) {
+	var fetchedID string
+	deezer := &fakeAlbumContentProvider{
+		getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			fetchedID = id
+			return []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "Like Lil Mexico",
+				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "cht"}}}}, nil
+		},
+	}
+	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{
+		albumSearchResult("Chase Fetti", "999"), // wrong artist, ranked first
+		albumSearchResult("Che", "111"),         // right artist
+	}}
+	svc := NewGetAlbumTracksService(
+		map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: deezer},
+		WithAlbumFallbackSearcher(searcher),
+	)
+
+	// SoundCloud isn't in the album-tracks map → falls back to the Deezer search.
+	resp, err := svc.Execute(context.Background(), domain.ProviderSoundCloud, "sc-1", "Empty Clip", "Che", 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if fetchedID != "111" {
+		t.Fatalf("fetched deezer album %q, want 111 (Che, not Chase Fetti's 999)", fetchedID)
+	}
+	if len(resp.Items) != 1 || resp.Items[0].Title != "Like Lil Mexico" {
+		t.Fatalf("items = %+v, want Che's tracklist", resp.Items)
+	}
+}
+
+func TestGetAlbumTracks_fallbackNoArtistMatchReturnsEmpty(t *testing.T) {
+	deezer := &fakeAlbumContentProvider{
+		getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			t.Fatal("must not fetch a wrong-artist album")
+			return nil, nil
+		},
+	}
+	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{albumSearchResult("Chase Fetti", "999")}}
+	svc := NewGetAlbumTracksService(
+		map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: deezer},
+		WithAlbumFallbackSearcher(searcher),
+	)
+
+	resp, err := svc.Execute(context.Background(), domain.ProviderSoundCloud, "sc-1", "Empty Clip", "Che", 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(resp.Items) != 0 {
+		t.Fatalf("items = %d, want 0 (no artist match → empty, not wrong)", len(resp.Items))
+	}
+}
+
 func TestGetAlbumTracksService_Execute(t *testing.T) {
 	sampleTracks := []domain.SearchResult{
 		{Kind: domain.ResultKindTrack, Title: "Track 1", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t1"}}},
