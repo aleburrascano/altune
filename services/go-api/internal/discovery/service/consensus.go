@@ -207,6 +207,23 @@ func sortChronological(results []ConsensusAlbum) {
 	})
 }
 
+// NameGroups fetches each consensus provider's albums BY NAME and returns them
+// as one group per responding provider. It is the by-name completeness feed for
+// the Discography V2 core (docs §6): these groups are NOT identity-verified
+// (a name fetch can surface a same-name artist), so the caller tags them
+// IDVerified=false and lets the confidence-keep step drop uncorroborated,
+// identifier-less namesakes while keeping MB-identified releases (MBID = strong id).
+func (s *ConsensusService) NameGroups(ctx context.Context, artistName string) [][]domain.SearchResult {
+	byProvider := s.fetchFromProviders(ctx, artistName)
+	groups := make([][]domain.SearchResult, 0, len(s.providers))
+	for _, p := range s.providers {
+		if albums := byProvider[p.Name]; len(albums) > 0 {
+			groups = append(groups, albums)
+		}
+	}
+	return groups
+}
+
 func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName string) map[string][]domain.SearchResult {
 	return FanOutConsensus(ctx, s.providers, func(ctx context.Context, p ConsensusProvider) []domain.SearchResult {
 		albums, err := p.Fetcher(ctx, artistName)

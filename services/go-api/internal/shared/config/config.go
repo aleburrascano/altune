@@ -103,6 +103,15 @@ type Config struct {
 	// this flag until it clears the same-name spot-checks; the current single-
 	// provider path stays the default until cutover.
 	DetailIdentityFirst bool `env:"DETAIL_IDENTITY_FIRST" envDefault:"false"`
+
+	// Discography V2 — the rebuilt detail/discography core (docs/discovery-detail-
+	// pipeline.md §6). Replaces the lossy Merge+consensus+MB-veto path with the pure
+	// best-of merge → confidence-keep → record-type-normalize cores: every field is
+	// best-of'd across providers (fixes the blank year/track-count), releases are kept
+	// on positive corroboration instead of MB-vetoed (keeps real releases MB lacks,
+	// drops same-name namesakes), and record_type is normalized (fixes album/single/EP
+	// bucketing). Requires DetailIdentityFirst. Ships dark until verified on prod.
+	DiscographyV2 bool `env:"DISCOGRAPHY_V2" envDefault:"false"`
 }
 
 func Load() (*Config, error) {

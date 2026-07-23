@@ -17,6 +17,7 @@ type GetArtistContentService struct {
 	consensus     *ConsensusService
 	identityStore ports.IdentityStore
 	identityFirst bool
+	discographyV2 bool
 }
 
 func NewGetArtistContentService(
@@ -52,10 +53,21 @@ func WithIdentityFirst() ArtistContentOption {
 	return func(s *GetArtistContentService) { s.identityFirst = true }
 }
 
+// WithDiscographyV2 turns on the rebuilt discography core (DISCOGRAPHY_V2, doc §6):
+// best-of merge → confidence-keep → record-type-normalize, replacing the lossy
+// Merge+consensus+MB-veto path. Only takes effect on the identity-first path.
+func WithDiscographyV2() ArtistContentOption {
+	return func(s *GetArtistContentService) { s.discographyV2 = true }
+}
+
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityFirst {
 		if identity, ok := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID); ok {
-			if tracks := s.identityTopTracks(ctx, identity, artistName); len(tracks) > 0 {
+			tracks := s.identityTopTracks(ctx, identity, artistName)
+			if s.discographyV2 {
+				tracks = s.v2TopTracks(ctx, identity, artistName)
+			}
+			if len(tracks) > 0 {
 				return okContentResponse(providerName, tracks, limit), nil
 			}
 			// Empty fan-out (every provider missed): fall through to the single-
@@ -175,7 +187,11 @@ func bestRankOf(e Entity) int {
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityFirst {
 		if identity, ok := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID); ok {
-			if albums := s.identityAlbums(ctx, identity, artistName); len(albums) > 0 {
+			albums := s.identityAlbums(ctx, identity, artistName)
+			if s.discographyV2 {
+				albums = s.v2Albums(ctx, identity, artistName)
+			}
+			if len(albums) > 0 {
 				return okContentResponse(providerName, albums, limit), nil
 			}
 		}
