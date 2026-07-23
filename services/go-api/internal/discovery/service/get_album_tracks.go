@@ -6,6 +6,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -80,7 +81,6 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 	_ = g.Wait()
 }
 
-
 func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
 	var results []domain.SearchResult
 	var degraded *ContentFetchResponse
@@ -128,9 +128,16 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 		return emptyContentResponse(domain.ProviderDeezer), nil
 	}
 
-	// Use the first matching album's Deezer ID to fetch tracks
+	// Use the first matching album's Deezer ID to fetch tracks. When the album
+	// artist is known, require it to match: a bare title search ("Empty Clip")
+	// otherwise returns a DIFFERENT artist's same-titled album (a real bug — Che's
+	// EP resolved to one by "Chase Fetti"). Return empty rather than wrong.
+	wantArtist := textnorm.NormalizeForMatch(albumArtist)
 	for _, r := range results {
 		if len(r.Sources) == 0 {
+			continue
+		}
+		if wantArtist != "" && textnorm.NormalizeForMatch(r.Subtitle) != wantArtist {
 			continue
 		}
 		deezerAlbumID := r.Sources[0].ExternalID

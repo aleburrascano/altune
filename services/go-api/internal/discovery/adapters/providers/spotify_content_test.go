@@ -112,6 +112,38 @@ func TestSpotifyAdapter_GetArtistTopTracks(t *testing.T) {
 	}
 }
 
+func TestSpotifyAdapter_GetAlbumTracks(t *testing.T) {
+	const tracksJSON = `{"data":{"albumUnion":{"tracksV2":{"items":[
+		{"track":{"uri":"spotify:track:tr1","name":"Like Lil Mexico","trackNumber":1,"contentRating":{"label":"EXPLICIT"},"duration":{"totalMilliseconds":176830},"artists":{"items":[{"profile":{"name":"Che"}}]}}},
+		{"track":{"uri":"spotify:track:tr2","name":"Second","trackNumber":2,"duration":{"totalMilliseconds":120000},"artists":{"items":[{"profile":{"name":"Che"}}]}}}
+	]}}}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if op := operationNameOf(t, r); op != "queryAlbumTracks" {
+			t.Errorf("operationName = %q, want queryAlbumTracks", op)
+		}
+		_, _ = w.Write([]byte(tracksJSON))
+	}))
+	defer srv.Close()
+
+	a := newContentSpotifyAdapter(srv)
+	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderSpotify, "album-1")
+	if err != nil {
+		t.Fatalf("GetAlbumTracks error = %v", err)
+	}
+	if len(tracks) != 2 {
+		t.Fatalf("tracks = %d, want 2 (album order preserved)", len(tracks))
+	}
+	if tracks[0].Title != "Like Lil Mexico" || tracks[0].Subtitle != "Che" || tracks[0].Duration != 176 {
+		t.Errorf("track[0] = %+v", tracks[0])
+	}
+	if tracks[0].Sources[0].ExternalID != "tr1" {
+		t.Errorf("track[0] id = %q, want tr1 (extracted from uri)", tracks[0].Sources[0].ExternalID)
+	}
+	if tracks[0].Extras["explicit"] != true {
+		t.Errorf("track[0] explicit = %v, want true", tracks[0].Extras["explicit"])
+	}
+}
+
 func TestSpotifyAdapter_Content_surfacesGraphQLError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"errors":[{"message":"PersistedQueryNotFound"}],"data":null}`))

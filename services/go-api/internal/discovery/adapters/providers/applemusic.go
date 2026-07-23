@@ -141,6 +141,61 @@ func (a *AppleMusicAdapter) doSearch(ctx context.Context, token, query, types st
 	return results, resp.StatusCode, nil
 }
 
+// GetAlbumTracks implements ports.AlbumContentProvider via the catalog
+// /albums/{id}/tracks relationship. externalID is the Apple Music catalog album
+// id. Without this an apple-sourced album (the majority source on identity-
+// bridged discography cards) has no native tracklist and the album-tracks
+// service falls back to a blind Deezer title search that resolves to a DIFFERENT
+// artist's same-titled album. Returns tracks in album order.
+func (a *AppleMusicAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	token, err := a.resolver.get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve apple music token: %w", err)
+	}
+	songs, status, err := a.fetchAlbumTracks(ctx, token, externalID)
+	if err != nil && isAuthStatus(status) {
+		a.resolver.invalidate()
+		token, err = a.resolver.get(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("re-resolve apple music token: %w", err)
+		}
+		songs, _, err = a.fetchAlbumTracks(ctx, token, externalID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.SearchResult, 0, len(songs))
+	for _, s := range songs {
+		out = append(out, mapAppleMusicSong(s))
+	}
+	return out, nil
+}
+
+func (a *AppleMusicAdapter) fetchAlbumTracks(ctx context.Context, token, albumID string) ([]appleMusicSong, int, error) {
+	u := fmt.Sprintf("%s/albums/%s/tracks?limit=100", a.catalogBase, url.PathEscape(albumID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Origin", appleMusicOrigin)
+	req.Header.Set("User-Agent", appleMusicUserAgent)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
+	}
+	var body appleMusicResultGroup[appleMusicSong]
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, resp.StatusCode, fmt.Errorf("decode album tracks response: %w", err)
+	}
+	return body.Data, resp.StatusCode, nil
+}
+
 // --- response shapes ---------------------------------------------------
 //
 // Apple's Catalog API is a clean, flat, officially-documented JSON shape (no

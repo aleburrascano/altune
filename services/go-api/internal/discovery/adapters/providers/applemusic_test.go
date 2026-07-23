@@ -255,3 +255,36 @@ func TestAppleMusicAdapter_Name(t *testing.T) {
 		t.Errorf("Name() = %v, want %v", got, domain.ProviderAppleMusic)
 	}
 }
+
+func TestAppleMusicAdapter_GetAlbumTracks(t *testing.T) {
+	const tracksJSON = `{"data":[
+		{"id":"6763149554","attributes":{"name":"Tell U Sum","artistName":"Che","trackNumber":1,"durationInMillis":159878,"isrc":"QZJ842604812","artwork":{"url":"https://example.com/{w}x{h}bb.jpg"}}},
+		{"id":"6763149555","attributes":{"name":"Second","artistName":"Che","trackNumber":2,"durationInMillis":120000}}
+	]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/albums/al-1/tracks") {
+			t.Errorf("path = %q, want the album tracks relationship", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Errorf("Authorization = %q, want Bearer test-token", got)
+		}
+		_, _ = w.Write([]byte(tracksJSON))
+	}))
+	defer srv.Close()
+
+	a := newTestAppleMusicAdapter(srv)
+	a.catalogBase = srv.URL // GetAlbumTracks builds off catalogBase, not searchURL
+	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderAppleMusic, "al-1")
+	if err != nil {
+		t.Fatalf("GetAlbumTracks error = %v", err)
+	}
+	if len(tracks) != 2 {
+		t.Fatalf("tracks = %d, want 2 (album order preserved)", len(tracks))
+	}
+	if tracks[0].Title != "Tell U Sum" || tracks[0].Subtitle != "Che" || tracks[0].Duration != 159 {
+		t.Errorf("track[0] = %+v", tracks[0])
+	}
+	if tracks[0].ISRC != "QZJ842604812" {
+		t.Errorf("track[0].ISRC = %q, want QZJ842604812", tracks[0].ISRC)
+	}
+}
