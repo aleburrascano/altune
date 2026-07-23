@@ -224,3 +224,33 @@ The current path stays live behind `DETAIL_IDENTITY_FIRST`; build the new one be
 7. **Verify** on Che (ENCORE present, years/tracks/buckets correct, no namesakes), then flip the flag and delete the old layers.
 
 Steps 1–3 are pure functions with no I/O — fast to write, exhaustively testable, and where all the correctness lives. That's the opposite of the band-aid pattern: the hard logic becomes small, tested, deletable-in-isolation units instead of accreted conditionals across the pipeline.
+
+---
+
+## 7. The contamination that survived: identity fracture (2026-07-23)
+
+After V2 shipped and was fixed to run on the seed identity, a real case still showed cross-artist contamination. Traced with live prod+MB queries, the cause is **not** in the discography pipeline — it's a **corrupt identity fed into it**.
+
+### The Che case, exactly
+
+- Search returns one card **"Che"**: `deezer:234701081` + `mbid:0a68f3b5` + `spotify:5A7T1…`.
+- MB `0a68f3b5` is titled **"Che | Atlanta rapper"** and its url-relations assert `spotify:5A7T1` (rapper ✓), `apple:1586243773` (rapper ✓), `soundcloud:che` (rapper ✓), **and `deezer:234701081`** — which is a *different* Che (a soul artist; the rapper's real Deezer is `399574001`). **MusicBrainz has a wrong Deezer link.**
+- So the durable identity for `deezer:234701081` = {soul-Che's Deezer} ∪ {rapper-Che's MBID/Apple/Spotify/SC}. Fanning it out returns **two artists**: soul singles (Deezer-only) + rapper albums (Apple/SC/MB/YT). Both branches are legitimately id-verified — of **different humans**.
+
+### Why no existing layer catches it
+
+Every keep rule we have (`IDVerified`, corroboration, strong-id) operates **per release** and trusts the identity. When the *identity itself* fuses two artists, per-release checks can't separate them — each release really is id-verified, just against a mis-linked id. The fracture is a property of the **provider set**, not any single release.
+
+### The missing layer: provider cohesion (mis-bridge rejection)
+
+**Observation:** a real artist's providers *corroborate* — the same release shows up across several of them (REST IN BASS is on Apple+SC+MB+YT). A **mis-bridged** provider is an island: its releases overlap with *no other provider* in the fan-out (soul-Che's Deezer singles match nothing the rapper cluster has).
+
+**Rule:** after merge, compute the **cohesive core** — the set of providers that appear in at least one multi-source release (i.e., that corroborate with another provider). Drop releases whose *only* sources are providers **outside** the core. If nothing corroborates (a genuinely single-provider artist), keep everything (no signal to act on).
+
+- Soul-Che card: core = {apple, soundcloud, musicbrainz, youtube, spotify} (they share the rapper's releases). Deezer corroborates with none → island → its soul singles are dropped. Result: the rapper's discography, clean. This matches the card's *own* MB disambiguation ("Atlanta rapper").
+- Rapper seed-only card (`deezer:399574001`, no bridge): only Deezer queried → no multi-source releases → core empty → keep all. Unaffected.
+- A legit provider-exclusive (SC-only track) where SC also shares other releases with the core → SC is in the core → its exclusive is kept.
+
+This is a **provider-set** layer, not a per-release one — the level the fracture actually lives at. It's a defense against third-party (MB) identity errors we can't fix at the source. It does **not** replace `FilterKept` (which still drops name-only namesakes); it runs alongside it.
+
+**Residual risk / honesty:** cohesion assumes a real artist's platforms share ≥1 release. An artist with *fully disjoint* catalogs per platform (rare) would lose the minority platform. And when a mis-bridge brings a provider that corroborates internally (two wrong providers agreeing), cohesion keeps the larger cluster — correct when the mis-link is a single edge (the common MB error), weaker if half the identity is wrong. The proper long-term fix is upstream: **verify release overlap before persisting a cross-provider bridge at search time**, so fractured identities are never stored. Cohesion is the detail-time guard until that lands.
