@@ -134,15 +134,8 @@ func (s *ConsensusService) BuildConsensus(
 	ctx context.Context,
 	artistName string,
 	primaryAlbums []domain.SearchResult,
-	protectPrimaries bool,
 ) []ConsensusAlbum {
 	cacheKey := textnorm.NormalizeForMatch(artistName)
-	// The cache key must distinguish the two policies: the identity path protects
-	// its primaries from MB rejection, the single-provider path does not, and the
-	// two produce different verdicts for the same artist.
-	if protectPrimaries {
-		cacheKey = "protect:" + cacheKey
-	}
 	if cached, ok, err := s.cache.Get(ctx, cacheKey); err == nil && ok {
 		return cached
 	}
@@ -158,16 +151,9 @@ func (s *ConsensusService) BuildConsensus(
 		}
 	}
 
-	// Identity-safe primaries (fetched by the artist's OWN provider id, never a
-	// name) can't be same-name contamination, so MB must never reject them — it
-	// only adds completeness. Record their title keys to shield them below.
-	protectedKeys := make(map[string]bool)
 	clusters := newAlbumClusterSet()
 	for _, album := range primaryAlbums {
 		clusters.add(album, domain.ProviderDeezer.String())
-		if protectPrimaries {
-			protectedKeys[textnorm.NormalizeForMatch(album.Title)] = true
-		}
 	}
 	// Iterate providers in slice order (not map range) so the output ordering
 	// and canonical-pick are deterministic run-to-run.
@@ -191,7 +177,7 @@ func (s *ConsensusService) BuildConsensus(
 		})
 	}
 
-	results = s.applyMBAuthority(ctx, artistName, results, protectedKeys)
+	results = s.applyMBAuthority(ctx, artistName, results)
 	sortChronological(results)
 
 	// Don't cache a timeout-truncated result: if the deadline fired mid-fetch or
@@ -248,7 +234,6 @@ func (s *ConsensusService) applyMBAuthority(
 	ctx context.Context,
 	artistName string,
 	results []ConsensusAlbum,
-	protectedKeys map[string]bool,
 ) []ConsensusAlbum {
 	if s.mb == nil {
 		return results
@@ -279,18 +264,10 @@ func (s *ConsensusService) applyMBAuthority(
 		if results[i].Status == ConsensusRejected {
 			continue
 		}
-		titleKey := textnorm.NormalizeForMatch(results[i].Album.Title)
-		if confirmedTitles[titleKey] {
+		if confirmedTitles[textnorm.NormalizeForMatch(results[i].Album.Title)] {
 			results[i].Status = ConsensusConfirmed
 			results[i].Reason = "confirmed by MusicBrainz"
 			results[i].Album = annotateConsensus(results[i].Album, ConsensusConfirmed, 1, 0)
-			continue
-		}
-		// An identity-safe primary (fetched by the artist's own id) that MB simply
-		// hasn't catalogued is kept, not rejected: MB incompleteness must not purge
-		// a release we KNOW is the artist's (e.g. a new "REST IN BASS: ENCORE" that
-		// MB lags on). Rejection still applies to the by-name union additions.
-		if protectedKeys[titleKey] {
 			continue
 		}
 		results[i].Status = ConsensusRejected
