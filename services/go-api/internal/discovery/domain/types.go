@@ -94,6 +94,11 @@ type EntityResolutionTier int
 const (
 	EntityResolutionNone EntityResolutionTier = iota
 	EntityResolutionISRC
+	// EntityResolutionUPC: two album results share a UPC/EAN barcode — the
+	// release-level identifier, identity-grade like ISRC is for tracks. A
+	// MISMATCHED UPC is NOT disproof (deluxe/clean/regional editions of one
+	// album carry different barcodes), so it only ever merges, never blocks.
+	EntityResolutionUPC
 	EntityResolutionMBID
 	// EntityResolutionBridge: two results were identified as the same entity via
 	// the MusicBrainz cross-provider id bridge (an MB entity's url-relation
@@ -108,6 +113,8 @@ func (t EntityResolutionTier) String() string {
 		return "mbid"
 	case EntityResolutionISRC:
 		return "isrc"
+	case EntityResolutionUPC:
+		return "upc"
 	case EntityResolutionBridge:
 		return "bridge"
 	case EntityResolutionNone:
@@ -129,6 +136,8 @@ func ResolutionTierFromExtras(extras map[string]any) EntityResolutionTier {
 		return EntityResolutionMBID
 	case "isrc":
 		return EntityResolutionISRC
+	case "upc":
+		return EntityResolutionUPC
 	case "bridge":
 		return EntityResolutionBridge
 	default:
@@ -282,6 +291,12 @@ type SearchResult struct {
 	// rather than a silently-absent (or type-drifted) map entry. ""/nil = absent.
 	ISRC string
 	MBID string
+	// UPC is the album-level barcode (UPC/EAN), the release's ISRC-equivalent.
+	// Merge's album UPC tier branches on it. Producer today: Apple Music search
+	// albums (the only search-fan-out provider whose payload carries it) — like
+	// Popularity, the machinery is live while the producer set grows (SoundCloud
+	// publisher_metadata.upc_or_ean and Deezer /album/{id} are candidates).
+	UPC string
 	// Xref carries the bridged cross-provider ids (provider name → external id)
 	// stamped pre-merge from the identity bridge (MusicBrainz url-relations) or
 	// recovered from the durable identity store. Merge and artwork resolution
@@ -308,6 +323,14 @@ type SearchResult struct {
 	// (deezer.go)→consumer (find_related.go) link must be compile-checked
 	// rather than a silently-absent/mistyped Extras entry. "" = unknown.
 	DeezerAlbumID string
+	// Signature carries the ResultSignature computed at rank time, BEFORE display
+	// enrichment fills artist subtitles (disambiguation). Display/telemetry only —
+	// never a ranking or merge input. Stability contract: rank keys the behavioral
+	// score map on the pre-disambiguation signature, and disambiguation's per-search
+	// lookup budget makes a post-fill signature flap between searches — so the wire
+	// must echo THIS value, not recompute after enrichment, or engagement events
+	// stop joining back to rank's key. "" = not stamped (compute as fallback).
+	Signature string
 	// Extras carries provider-specific DISPLAY/TELEMETRY metadata only — nothing
 	// merge, rank, or consensus branches on (those keys are typed fields above).
 	// Current keys: "album", "duration" (mirrored from the typed fields above for

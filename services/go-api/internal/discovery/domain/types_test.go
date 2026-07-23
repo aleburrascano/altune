@@ -124,6 +124,7 @@ func TestEntityResolutionTier_String(t *testing.T) {
 	}{
 		{EntityResolutionMBID, "mbid"},
 		{EntityResolutionISRC, "isrc"},
+		{EntityResolutionUPC, "upc"},
 		{EntityResolutionNone, "none"},
 		{EntityResolutionTier(999), "unknown"},
 	}
