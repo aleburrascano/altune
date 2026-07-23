@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"sort"
 	"strconv"
@@ -186,7 +187,10 @@ func bestRankOf(e Entity) int {
 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityFirst {
-		if identity, ok := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID); ok {
+		identity, ok := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
+		slog.InfoContext(ctx, "get_albums.diag", "seed_provider", providerName.String(), "seed_id", externalID,
+			"identity_ok", ok, "discography_v2", s.discographyV2, "mbid", identity.MBID, "provider_ids", identity.ProviderIDs)
+		if ok {
 			albums := s.identityAlbums(ctx, identity, artistName)
 			if s.discographyV2 {
 				albums = s.v2Albums(ctx, identity, artistName)
