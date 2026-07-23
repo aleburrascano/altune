@@ -85,6 +85,44 @@ func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T)
 	}
 }
 
+func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/playlists/500"): // an EP playlist
+			_, _ = w.Write([]byte(`{"tracks":[
+				{"id":1,"kind":"track","title":"Track A","user":{"username":"Che"}},
+				{"id":2,"kind":"track","title":"Track B","user":{"username":"Che"}}
+			]}`))
+		case strings.HasPrefix(r.URL.Path, "/playlists/99"): // a track id is not a playlist
+			w.WriteHeader(http.StatusNotFound)
+		case strings.HasPrefix(r.URL.Path, "/tracks/99"):
+			_, _ = w.Write([]byte(`{"id":99,"kind":"track","title":"14 HAHAHA LOL","user":{"username":"Che"}}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	// A playlist id → the playlist's tracks.
+	ep, err := a.GetAlbumTracks(t.Context(), domain.ProviderSoundCloud, "500")
+	if err != nil {
+		t.Fatalf("GetAlbumTracks(playlist): %v", err)
+	}
+	if len(ep) != 2 || ep[0].Title != "Track A" {
+		t.Fatalf("playlist tracks = %+v, want [Track A, Track B]", ep)
+	}
+
+	// A single's track id (playlist lookup 404s) → the single track itself.
+	single, err := a.GetAlbumTracks(t.Context(), domain.ProviderSoundCloud, "99")
+	if err != nil {
+		t.Fatalf("GetAlbumTracks(single): %v", err)
+	}
+	if len(single) != 1 || single[0].Title != "14 HAHAHA LOL" {
+		t.Fatalf("single tracklist = %+v, want just [14 HAHAHA LOL]", single)
+	}
+}
+
 func TestSoundCloud_GetArtistAlbums_resolvesBridgeHandle(t *testing.T) {
 	var resolvedHandle bool
 	srv := scContentServer(t)

@@ -400,6 +400,66 @@ func (a *SoundCloudAPIAdapter) GetArtistTopTracks(ctx context.Context, _ domain.
 	}, mapSoundCloudAPITrack)
 }
 
+// GetAlbumTracks implements ports.AlbumContentProvider. A SoundCloud discography
+// entry is either a playlist (album/EP — externalID is a playlist id) or a
+// standalone single (externalID is a track id); the two id spaces overlap and
+// aren't distinguishable up front, so try the playlist, then fall back to the
+// single track. Without this a SoundCloud-sourced entry has no native tracklist
+// and the album-tracks service falls back to a blind Deezer title search that
+// returns a DIFFERENT album (a single "14 HAHAHA LOL" showed "REST IN BASS").
+func (a *SoundCloudAPIAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	if tracks, err := a.fetchPlaylistTracks(ctx, externalID); err == nil && len(tracks) > 0 {
+		return tracks, nil
+	}
+	return a.fetchSingleAsTracklist(ctx, externalID)
+}
+
+// fetchPlaylistTracks returns a SoundCloud playlist's member tracks (album/EP).
+// Errors (e.g. the id is a track, not a playlist → 404) so GetAlbumTracks can
+// fall back to the single-track path.
+func (a *SoundCloudAPIAdapter) fetchPlaylistTracks(ctx context.Context, playlistID string) ([]domain.SearchResult, error) {
+	var out []domain.SearchResult
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf("%s/playlists/%s?client_id=%s",
+			a.baseURL, url.PathEscape(playlistID), url.QueryEscape(clientID))
+		var pl struct {
+			Tracks []scAPITrack `json:"tracks"`
+		}
+		status, err := a.getJSON(ctx, u, &pl)
+		if err != nil {
+			return status, err
+		}
+		out = make([]domain.SearchResult, 0, len(pl.Tracks))
+		for _, t := range pl.Tracks {
+			if r, ok := mapSoundCloudAPITrack(t); ok {
+				out = append(out, r)
+			}
+		}
+		return status, nil
+	})
+	return out, err
+}
+
+// fetchSingleAsTracklist returns a single track upload as a one-element tracklist
+// (a SoundCloud single's "tracklist" is just itself).
+func (a *SoundCloudAPIAdapter) fetchSingleAsTracklist(ctx context.Context, trackID string) ([]domain.SearchResult, error) {
+	var out []domain.SearchResult
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf("%s/tracks/%s?client_id=%s",
+			a.baseURL, url.PathEscape(trackID), url.QueryEscape(clientID))
+		var t scAPITrack
+		status, err := a.getJSON(ctx, u, &t)
+		if err != nil {
+			return status, err
+		}
+		if r, ok := mapSoundCloudAPITrack(t); ok {
+			out = []domain.SearchResult{r}
+		}
+		return status, nil
+	})
+	return out, err
+}
+
 // GetArtistAlbums implements ports.ArtistContentProvider. externalID is the
 // SoundCloud numeric user id (or a profile handle when bridged from a MusicBrainz
 // soundcloud url-relation). The discography is the artist's typed playlists

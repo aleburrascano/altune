@@ -98,6 +98,10 @@ func (a *App) wireDiscoveryContent(
 	// iTunes id; see providerContentID).
 	appleMusicContent := providers.NewAppleMusicAdapter(newDiscoveryClient())
 	spotifyContent := providers.NewSpotifyAdapter(newDiscoveryClient())
+	// One SoundCloud adapter shared across the album, artist, and related content
+	// maps — each call resolves its own client_id, so a shared instance avoids
+	// three separate cold-start resolutions.
+	soundcloudContent := providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil)
 
 	albumProviders := map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider{
 		discoveryDomain.ProviderDeezer: deezerContent,
@@ -109,6 +113,10 @@ func (a *App) wireDiscoveryContent(
 		// different same-named artist's tracks.
 		discoveryDomain.ProviderAppleMusic: appleMusicContent,
 		discoveryDomain.ProviderSpotify:    spotifyContent,
+		// SoundCloud resolves its own tracklists (a playlist's tracks, or a single
+		// upload as itself). Without it, a SoundCloud-sourced single fell back to a
+		// blind Deezer title search that returned a different album's tracks.
+		discoveryDomain.ProviderSoundCloud: soundcloudContent,
 	}
 	artistProviders := map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider{
 		discoveryDomain.ProviderDeezer:     deezerContent,
@@ -116,7 +124,7 @@ func (a *App) wireDiscoveryContent(
 		discoveryDomain.ProviderSpotify:    spotifyContent,
 		// SoundCloud serves the underground long tail: an artist sourced from
 		// SoundCloud carries its numeric user id, which keys these endpoints.
-		discoveryDomain.ProviderSoundCloud: providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
+		discoveryDomain.ProviderSoundCloud: soundcloudContent,
 	}
 	// Last.fm top-tracks, keyed by MBID (identity-safe) — the client calls it only
 	// when the artist has a resolved MBID, so it never falls back to ambiguous
@@ -128,7 +136,7 @@ func (a *App) wireDiscoveryContent(
 	// Related tracks are track-keyed: a SoundCloud-sourced track carries its
 	// numeric track id, which keys /tracks/{id}/related. SoundCloud-only today.
 	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{
-		"soundcloud": providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil),
+		"soundcloud": soundcloudContent,
 	}
 	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
 
