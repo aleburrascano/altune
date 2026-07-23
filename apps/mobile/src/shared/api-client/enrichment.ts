@@ -53,10 +53,18 @@ export async function getArtistTopTracks(
   provider: string,
   externalId: string,
   limit?: number,
+  artistName?: string,
 ): Promise<ContentFetchResponse> {
-  return apiFetch<ContentFetchResponse>(
-    _contentUrl(`/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/top-tracks`, limit),
-  );
+  // artistName lets the backend resolve providers MusicBrainz never bridges
+  // (SoundCloud) by name, so an SC-exclusive artist's top tracks still join the
+  // identity fan-out. Built with URLSearchParams to avoid the `&`-without-`?`
+  // concatenation bug getArtistAlbums documents.
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (artistName) params.set('name', artistName);
+  const qs = params.toString();
+  const url = `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/top-tracks${qs ? `?${qs}` : ''}`;
+  return apiFetch<ContentFetchResponse>(url);
 }
 
 export async function getArtistAlbums(

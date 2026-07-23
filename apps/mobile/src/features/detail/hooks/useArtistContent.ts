@@ -56,8 +56,9 @@ type UseArtistContentReturn = ArtistTopTracksResult & ArtistAlbumsResult;
 export function useArtistTopTracks({
   sources,
   mbid,
+  artistName,
   enabled = true,
-}: Pick<UseArtistContentParams, 'sources' | 'mbid' | 'enabled'>): ArtistTopTracksResult {
+}: Pick<UseArtistContentParams, 'sources' | 'mbid' | 'artistName' | 'enabled'>): ArtistTopTracksResult {
   const deezerSource = sources.find((s) => s.provider === 'deezer') ?? null;
   const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
 
@@ -67,8 +68,10 @@ export function useArtistTopTracks({
     isError: isErrorDzTracks,
     refetch: refetchDzTracks,
   } = useQuery({
-    queryKey: ['artist-top-tracks-dz', deezerSource?.external_id ?? ''],
-    queryFn: () => getArtistTopTracks('deezer', deezerSource!.external_id, 5),
+    // artistName is threaded so the backend's identity fan-out can name-resolve
+    // providers MB never bridges (SoundCloud) and surface SC-exclusive tracks.
+    queryKey: ['artist-top-tracks-dz', deezerSource?.external_id ?? '', artistName ?? ''],
+    queryFn: () => getArtistTopTracks('deezer', deezerSource!.external_id, 5, artistName),
     enabled: enabled && deezerSource !== null,
     staleTime: 1000 * 60 * 30,
   });

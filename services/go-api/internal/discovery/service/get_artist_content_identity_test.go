@@ -48,7 +48,7 @@ func TestGetTopTracks_identityFirst_corroboratedBeatsSingleSource(t *testing.T) 
 		WithIdentityFirst(),
 	)
 
-	resp, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", 10)
+	resp, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", "", 10)
 	if err != nil {
 		t.Fatalf("GetTopTracks error = %v", err)
 	}
@@ -141,11 +141,67 @@ func TestGetTopTracks_identityFirst_missFallsBackToSingleProvider(t *testing.T) 
 		WithIdentityFirst(),
 	)
 
-	resp, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", 10)
+	resp, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", "", 10)
 	if err != nil {
 		t.Fatalf("GetTopTracks error = %v", err)
 	}
 	if len(resp.Items) != 1 || resp.Items[0].Title != "Real Song" {
 		t.Errorf("items = %+v, want the single-provider fallback result", resp.Items)
+	}
+}
+
+// SoundCloud carries no MusicBrainz-bridged id, so the resolved identity never
+// has one for it. The fix: when a provider implements ArtistIDResolver, the
+// fan-out resolves its id from the artist name once and queries by that id — so
+// an SC-exclusive track ("14 HAHAHA LOL") joins the discography. A wrong-name
+// resolve can't dominate: single-source tracks sink under corroborated ones.
+func TestGetTopTracks_identityFirst_soundcloudJoinsViaNameResolve(t *testing.T) {
+	deezer := &fakeArtistContentProvider{
+		getTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{trackFrom(domain.ProviderDeezer, "d-real", "Real Song", "Che")}, nil
+		},
+	}
+	sc := &fakeArtistContentProvider{
+		resolveIDFn: func(_ context.Context, name string) (string, bool) {
+			if name != "Che" {
+				t.Errorf("SC resolve name = %q, want Che", name)
+			}
+			return "sc-user-1", true
+		},
+		getTopTracksFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			if id != "sc-user-1" {
+				t.Errorf("SC queried id %q, want the name-resolved sc-user-1", id)
+			}
+			return []domain.SearchResult{trackFrom(domain.ProviderSoundCloud, "sc-lol", "14 HAHAHA LOL", "Che")}, nil
+		},
+	}
+	// xref bridges Deezer only — no SoundCloud id, mirroring MB reality.
+	store := &fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1"}}
+
+	svc := NewGetArtistContentService(
+		map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer:     deezer,
+			domain.ProviderSoundCloud: sc,
+		},
+		WithContentIdentityStore(store),
+		WithIdentityFirst(),
+	)
+
+	resp, err := svc.GetTopTracks(t.Context(), domain.ProviderDeezer, "d1", "Che", 10)
+	if err != nil {
+		t.Fatalf("GetTopTracks error = %v", err)
+	}
+	var titles []string
+	for _, it := range resp.Items {
+		titles = append(titles, it.Title)
+	}
+	found := false
+	for _, ti := range titles {
+		if ti == "14 HAHAHA LOL" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("SC-exclusive track missing; got %v", titles)
 	}
 }

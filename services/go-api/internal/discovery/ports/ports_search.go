@@ -33,6 +33,16 @@ type ArtistContentProvider interface {
 	GetArtistAlbums(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
 
+// ArtistIDResolver resolves an artist NAME to this provider's own artist id. It
+// exists for providers MusicBrainz's url-relations never bridge (SoundCloud), so
+// the identity-first content fan-out can still reach them: resolve the name once
+// to a single artist id, then query by that id (never per-item names). Optional
+// capability, probed by type-assertion; only SoundCloud implements it today
+// (searchArtists top match), mirroring RelatedTracksProvider.
+type ArtistIDResolver interface {
+	ResolveArtistID(ctx context.Context, name string) (externalID string, ok bool)
+}
+
 // RelatedTracksProvider returns a provider's per-track "related" recommendation
 // set, keyed by the track's external id. Track-keyed sibling of
 // ArtistContentProvider; only SoundCloud implements it today

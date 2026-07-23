@@ -106,6 +106,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 		return
 	}
 	limit := clampLimit(r, 5, 50)
+	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
 	pn, parseErr := domain.ParseProviderName(provider)
 	if parseErr != nil {
@@ -118,7 +119,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 		return
 	}
 
-	resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, limit)
+	resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "get artist top tracks failed",
 			"error", err, "provider", provider, "external_id", externalID)
