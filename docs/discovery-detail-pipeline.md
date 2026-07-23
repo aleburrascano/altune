@@ -170,6 +170,8 @@ Each of these is a *layer change*, not a patch. Decide here, on the map, before 
 
 ## 6. Clean-slate redesign (the decision: rebuild, not patch)
 
+> **Build status (2026-07-23):** Steps 1–5 **shipped and live on prod** behind `DISCOGRAPHY_V2=true` (+ `DETAIL_IDENTITY_FIRST`). The pure cores (`release_merge.go`, `release_keep.go`, `release_bucket.go`) are wired via `get_artist_content_v2.go`; 1393 backend tests green. This fixes F2/F3/F4 at the source — best-of metadata (year/track-count), corroboration-keep (no MB-veto), normalized buckets. The client needs **no** change for correctness: each backend response is now complete, so its dedup is no longer lossy. **Remaining (device-gated / conditional):** step 4 (search-time SoundCloud id acquisition — needs SC to co-identify in search) and step 6 (client cutover to one call — removes the now-harmless F1 double-merge, needs an EAS build). Verify on Che before flipping the default.
+
 Every fix this cycle was a band-aid on an algorithm that grew by accretion. The symptoms trace to **four architectural faults**, not four bugs:
 
 - **F1 — Double merge.** The backend fans out and merges a full discography; then the client *re-fetches per provider and re-merges it*, discarding the backend's work. Two merge implementations, neither authoritative.
