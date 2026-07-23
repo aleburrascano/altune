@@ -25,46 +25,52 @@ func hasTitle(rs []MergedRelease, title string) bool {
 
 // The Che fracture (doc §7): MusicBrainz wrongly links the rapper's MBID to a
 // different Che's Deezer id, so the fan-out returns two artists. The rapper's
-// releases corroborate across Apple/SoundCloud/MusicBrainz; the mis-bridged soul
-// Che's Deezer singles are an island that overlaps with nothing. Cohesion drops
-// the island and keeps the corroborated core.
+// providers corroborate across MANY shared releases; the mis-bridged soul Che's
+// Deezer is an island — even with ONE coincidental shared title ("Baddest", a
+// same-name collision), it doesn't reach the ≥2 edge threshold, so it stays
+// isolated and its singles drop.
 func TestFilterCohesive_dropsMisbridgedIsland(t *testing.T) {
 	releases := []MergedRelease{
+		// Rapper cluster: apple/soundcloud/musicbrainz share ≥2 releases → connected.
 		cohesionRelease("REST IN BASS", domain.ProviderAppleMusic, domain.ProviderSoundCloud, domain.ProviderMusicBrainz),
-		cohesionRelease("Fully Loaded", domain.ProviderAppleMusic, domain.ProviderSoundCloud),
-		cohesionRelease("Ternobl", domain.ProviderDeezer),     // soul island
-		cohesionRelease("Por Siempre", domain.ProviderDeezer), // soul island
+		cohesionRelease("Fully Loaded", domain.ProviderAppleMusic, domain.ProviderSoundCloud, domain.ProviderMusicBrainz),
+		// Soul island: Deezer, plus a single coincidental title-collision with iTunes.
+		cohesionRelease("Baddest", domain.ProviderDeezer, domain.ProviderITunes), // 1 shared → below threshold
+		cohesionRelease("Ternobl", domain.ProviderDeezer),
+		cohesionRelease("Por Siempre", domain.ProviderDeezer),
+		cohesionRelease("Nafi", domain.ProviderDeezer),
 	}
 
 	got := FilterCohesive(releases)
 
-	if len(got) != 2 {
-		t.Fatalf("kept %d, want 2 (rapper cluster; soul Deezer islands dropped): %+v", len(got), got)
-	}
 	if !hasTitle(got, "REST IN BASS") || !hasTitle(got, "Fully Loaded") {
 		t.Error("dropped a corroborated rapper release")
 	}
-	if hasTitle(got, "Ternobl") || hasTitle(got, "Por Siempre") {
-		t.Error("kept a mis-bridged soul island release")
+	if hasTitle(got, "Ternobl") || hasTitle(got, "Por Siempre") || hasTitle(got, "Nafi") {
+		t.Errorf("kept a mis-bridged soul-island single: %+v", got)
 	}
 }
 
-// A core provider's exclusive is kept: SoundCloud corroborates on one release, so
-// it is in the core, so its SC-only release survives (a real SC-exclusive, not a
-// mis-bridge).
-func TestFilterCohesive_keepsCoreProviderExclusive(t *testing.T) {
+// A core provider's exclusive is kept: SoundCloud shares ≥2 releases with the
+// core, so it's in the component, so its SC-only release survives — while a
+// disconnected island release is dropped.
+func TestFilterCohesive_keepsCoreProviderExclusiveDropsIsland(t *testing.T) {
 	releases := []MergedRelease{
-		cohesionRelease("Shared Album", domain.ProviderDeezer, domain.ProviderSoundCloud),
-		cohesionRelease("SC Exclusive", domain.ProviderSoundCloud), // SC is core → kept
+		cohesionRelease("Shared A", domain.ProviderDeezer, domain.ProviderSoundCloud),
+		cohesionRelease("Shared B", domain.ProviderDeezer, domain.ProviderSoundCloud),
+		cohesionRelease("SC Exclusive", domain.ProviderSoundCloud), // SC in component → kept
+		cohesionRelease("Island", domain.ProviderLastFM),           // disconnected → dropped
 	}
 	got := FilterCohesive(releases)
-	if len(got) != 2 || !hasTitle(got, "SC Exclusive") {
-		t.Errorf("SC-exclusive dropped though SoundCloud is in the core: %+v", got)
+	if !hasTitle(got, "SC Exclusive") {
+		t.Error("dropped a real SC-exclusive though SoundCloud is in the core component")
+	}
+	if hasTitle(got, "Island") {
+		t.Error("kept a disconnected island release")
 	}
 }
 
-// No corroboration anywhere (a genuinely single-provider artist) → no signal to
-// act on → keep everything, don't silently empty the discography.
+// No corroboration anywhere (single-provider artist) → no signal → keep all.
 func TestFilterCohesive_noCorroborationKeepsAll(t *testing.T) {
 	releases := []MergedRelease{
 		cohesionRelease("A", domain.ProviderDeezer),
@@ -73,5 +79,19 @@ func TestFilterCohesive_noCorroborationKeepsAll(t *testing.T) {
 	}
 	if got := FilterCohesive(releases); len(got) != 3 {
 		t.Errorf("kept %d, want 3 (no corroboration signal → keep all)", len(got))
+	}
+}
+
+// A single shared title between two islands is not enough to fuse them (the
+// collision guard): both stay below the edge threshold, so with no real
+// multi-provider component everything is kept rather than falsely merged.
+func TestFilterCohesive_singleSharedTitleDoesNotConnect(t *testing.T) {
+	releases := []MergedRelease{
+		cohesionRelease("Collision", domain.ProviderDeezer, domain.ProviderSoundCloud), // 1 shared
+		cohesionRelease("D only", domain.ProviderDeezer),
+		cohesionRelease("SC only", domain.ProviderSoundCloud),
+	}
+	if got := FilterCohesive(releases); len(got) != 3 {
+		t.Errorf("kept %d, want 3 (one shared title is below the ≥2 edge threshold → no fracture asserted)", len(got))
 	}
 }
