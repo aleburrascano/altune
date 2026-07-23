@@ -183,9 +183,10 @@ func sortedGenres(genres []mbGenre) []string {
 }
 
 // externalIDsFromRelations extracts the cross-provider id bridge from MB
-// url-relations: Discogs and Wikidata by relation type, Spotify/Deezer/Apple by
-// the host behind a streaming/purchase relation. Value is the bare id (last
-// non-empty path segment). First occurrence per provider wins; keys lowercase.
+// url-relations: Discogs, Wikidata, and SoundCloud by relation type, Spotify/
+// Deezer/Apple by the host behind a streaming/purchase relation. Value is the
+// bare id (last non-empty path segment; for SoundCloud that is the profile
+// handle, not a numeric id). First occurrence per provider wins; keys lowercase.
 //
 // The "itunes" key is the Apple Music artist id, which is the SAME value the
 // iTunes Search API returns as artistId (live-verified: MB rel
@@ -212,6 +213,14 @@ func externalIDsFromRelations(relations []mbRelation) map[string]string {
 			put("discogs", res)
 		case "wikidata":
 			put("wikidata", res)
+		case "soundcloud":
+			// The value is the profile HANDLE (soundcloud.com/che → "che"), not the
+			// numeric user id the content API needs; the SoundCloud adapter resolves
+			// handle→id on use. This is the authoritative SC identity (from the
+			// MBID's own url-relations), so SoundCloud joins the id fan-out verified
+			// instead of being name-guessed — its underground-exclusive uploads then
+			// reach the discography.
+			put("soundcloud", res)
 		case "free streaming", "streaming", "purchase for download":
 			switch {
 			case strings.Contains(res, "open.spotify.com"):

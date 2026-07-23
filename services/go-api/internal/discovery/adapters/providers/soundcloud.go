@@ -41,15 +41,15 @@ type searchFallback interface {
 }
 
 const (
-	scAPIBaseURL    = "https://api-v2.soundcloud.com"
-	scSearchLimit   = 20
-	scMaxResults    = 40
+	scAPIBaseURL  = "https://api-v2.soundcloud.com"
+	scSearchLimit = 20
+	scMaxResults  = 40
 	// scArtistContentLimit bounds a single artist's toptracks/albums fetch; the
 	// GetArtistContentService truncates further per request.
 	scArtistContentLimit = 50
 	// scRelatedLimit bounds a single /tracks/{id}/related fetch; the
 	// GetRelatedTracksService truncates further per request.
-	scRelatedLimit = 20
+	scRelatedLimit  = 20
 	scSearchTimeout = 3 * time.Second
 	scUserAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
@@ -385,26 +385,153 @@ func (a *SoundCloudAPIAdapter) doResolve(ctx context.Context, clientID, permalin
 }
 
 // GetArtistTopTracks implements ports.ArtistContentProvider: an artist's most
-// popular tracks. externalID is the SoundCloud numeric user id, which a
-// SoundCloud-sourced artist result already carries in its SourceRef.
+// popular tracks. externalID is the SoundCloud numeric user id (or a profile
+// handle when bridged from a MusicBrainz soundcloud url-relation).
 func (a *SoundCloudAPIAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
+	userID, err := a.resolveUserID(ctx, externalID)
+	if err != nil || userID == "" {
+		return nil, err
+	}
 	return scFetchList(ctx, a, func(clientID string) string {
 		return fmt.Sprintf(
 			"%s/users/%s/toptracks?client_id=%s&limit=%d",
-			a.baseURL, url.PathEscape(externalID), url.QueryEscape(clientID), scArtistContentLimit,
+			a.baseURL, url.PathEscape(userID), url.QueryEscape(clientID), scArtistContentLimit,
 		)
 	}, mapSoundCloudAPITrack)
 }
 
-// GetArtistAlbums implements ports.ArtistContentProvider: an artist's albums
-// (typed playlists). externalID is the SoundCloud numeric user id.
+// GetArtistAlbums implements ports.ArtistContentProvider. externalID is the
+// SoundCloud numeric user id (or a profile handle when bridged from a MusicBrainz
+// soundcloud url-relation). The discography is the artist's typed playlists
+// (album/ep/single) PLUS their standalone track uploads as singles — SoundCloud
+// has no release objects, so a genuine single is just an upload not grouped into
+// a playlist. Without the standalone half, SC-exclusive drops (the underground
+// long tail, e.g. a rapper's latest SoundCloud single) never reach the discography.
 func (a *SoundCloudAPIAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	return scFetchList(ctx, a, func(clientID string) string {
-		return fmt.Sprintf(
-			"%s/users/%s/albums?client_id=%s&limit=%d",
-			a.baseURL, url.PathEscape(externalID), url.QueryEscape(clientID), scArtistContentLimit,
-		)
-	}, mapSoundCloudAPIAlbum)
+	userID, err := a.resolveUserID(ctx, externalID)
+	if err != nil || userID == "" {
+		return nil, err
+	}
+	albums, inPlaylist, err := a.fetchArtistPlaylists(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	singles, err := a.fetchArtistStandaloneSingles(ctx, userID, inPlaylist)
+	if err != nil {
+		// Playlists already succeeded; degrade to albums-only rather than fail the
+		// whole discography on the singles half.
+		return albums, nil
+	}
+	return append(albums, singles...), nil
+}
+
+// resolveUserID maps an artist content id that is either a numeric SoundCloud
+// user id or a profile handle (bridged from a MusicBrainz soundcloud url-relation,
+// e.g. "che") into the numeric user id the content endpoints require. A numeric
+// input passes through untouched (no extra request).
+func (a *SoundCloudAPIAdapter) resolveUserID(ctx context.Context, ref string) (string, error) {
+	if ref == "" || isAllDigits(ref) {
+		return ref, nil
+	}
+	permalink := ref
+	if !strings.HasPrefix(permalink, "http") {
+		permalink = "https://soundcloud.com/" + ref
+	}
+	var userID string
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf("%s/resolve?url=%s&client_id=%s",
+			a.baseURL, url.QueryEscape(permalink), url.QueryEscape(clientID))
+		var user scAPIUser
+		status, err := a.getJSON(ctx, u, &user)
+		if err != nil {
+			return status, err
+		}
+		if user.ID == 0 {
+			return status, fmt.Errorf("resolve %q did not yield a user", permalink)
+		}
+		userID = strconv.FormatInt(user.ID, 10)
+		return status, nil
+	})
+	return userID, err
+}
+
+// fetchArtistPlaylists fetches the artist's typed playlists (albums/EPs/singles)
+// and, alongside the mapped albums, the set of every member track id — so the
+// standalone-singles pass can exclude tracks that already belong to a playlist.
+func (a *SoundCloudAPIAdapter) fetchArtistPlaylists(ctx context.Context, userID string) ([]domain.SearchResult, map[int64]bool, error) {
+	var albums []domain.SearchResult
+	inPlaylist := map[int64]bool{}
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf("%s/users/%s/albums?client_id=%s&limit=%d",
+			a.baseURL, url.PathEscape(userID), url.QueryEscape(clientID), scArtistContentLimit)
+		var body struct {
+			Collection []scAPIAlbum `json:"collection"`
+		}
+		status, err := a.getJSON(ctx, u, &body)
+		if err != nil {
+			return status, err
+		}
+		albums = make([]domain.SearchResult, 0, len(body.Collection))
+		for _, pl := range body.Collection {
+			for _, tr := range pl.Tracks {
+				if tr.ID != 0 {
+					inPlaylist[tr.ID] = true
+				}
+			}
+			if r, ok := mapSoundCloudAPIAlbum(pl); ok {
+				albums = append(albums, r)
+			}
+		}
+		return status, nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return albums, inPlaylist, nil
+}
+
+// fetchArtistStandaloneSingles fetches the artist's uploads (newest-first) and
+// maps each one NOT already in a playlist to a single. Returns at most the
+// scArtistContentLimit most recent uploads.
+func (a *SoundCloudAPIAdapter) fetchArtistStandaloneSingles(ctx context.Context, userID string, inPlaylist map[int64]bool) ([]domain.SearchResult, error) {
+	var singles []domain.SearchResult
+	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
+		u := fmt.Sprintf("%s/users/%s/tracks?client_id=%s&limit=%d",
+			a.baseURL, url.PathEscape(userID), url.QueryEscape(clientID), scArtistContentLimit)
+		var body struct {
+			Collection []scAPITrack `json:"collection"`
+		}
+		status, err := a.getJSON(ctx, u, &body)
+		if err != nil {
+			return status, err
+		}
+		singles = make([]domain.SearchResult, 0, len(body.Collection))
+		for _, t := range body.Collection {
+			if inPlaylist[t.ID] {
+				continue
+			}
+			if r, ok := mapSoundCloudStandaloneSingle(t); ok {
+				singles = append(singles, r)
+			}
+		}
+		return status, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return singles, nil
+}
+
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // GetRelatedTracks implements ports.RelatedTracksProvider: SoundCloud's per-track
@@ -535,6 +662,15 @@ type scAPIAlbum struct {
 	User        struct {
 		Username string `json:"username"`
 	} `json:"user"`
+	// Tracks carries each member track (full objects for the first page, id-only
+	// stubs beyond), used to exclude playlist tracks from the standalone-singles
+	// set so an EP track never also renders as a top-level single.
+	Tracks []scPlaylistTrackRef `json:"tracks"`
+}
+
+// scPlaylistTrackRef is the minimal member-track reference we read from a playlist.
+type scPlaylistTrackRef struct {
+	ID int64 `json:"id"`
 }
 
 // scBestReleaseDate returns the first populated of release_date → display_date →
@@ -567,6 +703,29 @@ func mapSoundCloudAPIAlbum(a scAPIAlbum) (domain.SearchResult, bool) {
 		extras)
 	r.TrackCount = a.TrackCount
 	r.ReleaseDate = scBestReleaseDate(a.ReleaseDate, a.DisplayDate, a.CreatedAt)
+	return r, true
+}
+
+// mapSoundCloudStandaloneSingle maps a standalone track upload to a discography
+// single (an album-kind result with record_type=single, one track), the same
+// shape Spotify/Apple/Deezer singles take, so it buckets correctly in the
+// discography. Used only for uploads not already in one of the artist's playlists.
+func mapSoundCloudStandaloneSingle(t scAPITrack) (domain.SearchResult, bool) {
+	if t.ID == 0 || strings.TrimSpace(t.Title) == "" {
+		return domain.SearchResult{}, false
+	}
+	if t.Kind != "" && t.Kind != "track" {
+		return domain.SearchResult{}, false
+	}
+	extras := map[string]any{"record_type": "single"}
+	if g := strings.TrimSpace(t.Genre); g != "" {
+		extras["genre"] = g
+	}
+	r := domain.NewProviderResult(domain.ResultKindAlbum, t.Title, t.User.Username, upgradeArtworkResolution(t.ArtworkURL),
+		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(t.ID, 10), URL: t.PermalinkURL},
+		extras)
+	r.TrackCount = 1
+	r.ReleaseDate = scBestReleaseDate(t.ReleaseDate, t.DisplayDate, t.CreatedAt)
 	return r, true
 }
 
