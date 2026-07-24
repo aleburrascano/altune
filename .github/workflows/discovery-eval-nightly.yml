@@ -1,0 +1,90 @@
+# Discovery nightly eval — the ACTUAL baselines gate.
+#
+# discovery-eval-gate.yml runs only the deterministic, provider-free unit tests
+# per-PR; the positional/merge/correction/diversity/detail gates (cmd/discoveryeval
+# vs baselines.json, exit 2 on regression) were documented as "nightly" but had no
+# scheduled runner — they fired only when a human ran them locally. This workflow
+# is that nightly run.
+#
+# Needs live providers plus the prod-cloned corpus, so repo secrets must provide:
+#   DATABASE_URL        (Supabase Postgres — corpus + identity store; required)
+#   LASTFM_API_KEY, DISCOGS_TOKEN, FANARTTV_API_KEY, GENIUS_ACCESS_TOKEN,
+#   MUSICBRAINZ_USER_AGENT                     (provider access; degrade if absent)
+#   ALERT_NTFY_URL      (optional — regression push notification)
+# REDIS_URL is intentionally unset: the VM's Redis isn't reachable from Actions,
+# and every cache is a Null-Object fallback — the eval just runs uncached.
+#
+# If GitHub-runner IPs prove flaky against providers (Spotify's anonymous flow is
+# the likely first casualty), the fallback home for this job is a cron on the OCI
+# VM running the same commands — keep the mode list below as the single source.
+name: Discovery eval nightly
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  nightly-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: services/go-api
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+      DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+      FANARTTV_API_KEY: ${{ secrets.FANARTTV_API_KEY }}
+      GENIUS_ACCESS_TOKEN: ${{ secrets.GENIUS_ACCESS_TOKEN }}
+      MUSICBRAINZ_USER_AGENT: ${{ secrets.MUSICBRAINZ_USER_AGENT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: services/go-api/go.sum
+
+      - name: build harness
+        run: go build -o ./tmp/discoveryeval ./cmd/discoveryeval
+
+      # Gated modes, cheapest-first so an early regression fails fast. Each mode
+      # gates its metrics against cmd/discoveryeval/baselines.json and exits 2 on
+      # a regression. detail needs no DB; correction is offline; the rest hit
+      # live providers over the prod-cloned corpus.
+      - name: detail (contamination = 0)
+        run: ./tmp/discoveryeval -mode detail -json ./tmp/report-detail.json
+      - name: correction
+        run: ./tmp/discoveryeval -mode correction -json ./tmp/report-correction.json
+      - name: merge
+        run: ./tmp/discoveryeval -mode merge -json ./tmp/report-merge.json
+      - name: eval (top-3 positional)
+        run: ./tmp/discoveryeval -mode eval -json ./tmp/report-eval.json
+      - name: artist-intent
+        run: ./tmp/discoveryeval -mode artist-intent -json ./tmp/report-artist-intent.json
+      - name: diversity
+        run: ./tmp/discoveryeval -mode diversity -json ./tmp/report-diversity.json
+      - name: signal-a
+        run: ./tmp/discoveryeval -mode signal-a -json ./tmp/report-signal-a.json
+      - name: signal-b
+        run: ./tmp/discoveryeval -mode signal-b -json ./tmp/report-signal-b.json
+
+      - name: upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovery-eval-reports
+          path: services/go-api/tmp/report-*.json
+          retention-days: 30
+
+      - name: notify regression
+        if: failure()
+        env:
+          ALERT_NTFY_URL: ${{ secrets.ALERT_NTFY_URL }}
+        run: |
+          if [ -n "$ALERT_NTFY_URL" ]; then
+            curl -s -H "Title: Discovery eval nightly REGRESSED" \
+              -d "A gated discoveryeval mode fell below baselines.json. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              "$ALERT_NTFY_URL"
+          fi
