@@ -19,8 +19,12 @@ import { AuthGate } from '../features/auth/ui/AuthGate';
 import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
 import { useServerEvents } from '../shared/events/useServerEvents';
 import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
+import { SleepTimerBridge } from '../features/playback/ui/SleepTimerBridge';
 import { isExpoGo } from '../shared/playback/isExpoGo';
-import { ThemeProvider, darkTheme } from '../shared/ui/theme';
+import { OfflineReconcileBridge } from '../shared/offline/OfflineReconcileBridge';
+import { ScreenBoundary } from '../shared/ui/ScreenBoundary';
+import { ThemeProvider, themes } from '../shared/ui/theme';
+import { useThemePreference } from '../shared/ui/theme/themePreference';
 
 // Registering the playback service pulls in react-native-track-player's native
 // module, which Expo Go does not bundle — skip it there so the app boots.
@@ -67,6 +71,12 @@ export default function RootLayout() {
       }),
   );
 
+  // The Stack background, status bar and Android nav bar sit OUTSIDE the
+  // ThemeProvider's context, so they read the preference directly. Without this
+  // they stay dark while every themed screen turns light.
+  const scheme = useThemePreference((s) => s.scheme);
+  const activeTheme = themes[scheme];
+
   const [fontsLoaded, fontError] = useFonts({
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
@@ -89,18 +99,18 @@ export default function RootLayout() {
     if (Platform.OS !== 'android') {
       return;
     }
-    const applyDarkNavBar = (): void => {
-      void NavigationBar.setBackgroundColorAsync(darkTheme.color.canvas);
-      void NavigationBar.setButtonStyleAsync('light');
+    const applyNavBar = (): void => {
+      void NavigationBar.setBackgroundColorAsync(activeTheme.color.canvas);
+      void NavigationBar.setButtonStyleAsync(scheme === 'dark' ? 'light' : 'dark');
     };
-    applyDarkNavBar();
+    applyNavBar();
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'active') {
-        applyDarkNavBar();
+        applyNavBar();
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [activeTheme, scheme]);
 
   if (!fontsLoaded && !fontError) {
     return null;
@@ -111,22 +121,33 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <SafeAreaProvider>
-            <StatusBar style="light" />
+            <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
             <AuthGate>
               <ServerEventsBridge />
               <AuthDeepLinkBridge />
               <PlaybackProvider>
-                <Stack
-                  screenOptions={{
-                    headerShown: false,
-                    contentStyle: { backgroundColor: darkTheme.color.canvas },
-                  }}
-                >
-                  <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="(auth)" />
-                  <Stack.Screen name="reset-password" />
-                  <Stack.Screen name="player" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', gestureEnabled: true }} />
-                </Stack>
+                {/* Pauses playback when the sleep timer expires — must outlive
+                    the player screen, so it mounts here, not in FullPlayer. */}
+                <SleepTimerBridge />
+                {/* Files win over the index — see the bridge. */}
+                <OfflineReconcileBridge />
+                {/* Backstop boundary. Each route group has its own (nearest
+                    wins), so this only catches what they can't: root-level
+                    routes like reset-password, and throws in the group layouts
+                    themselves. Without it those render a blank app. */}
+                <ScreenBoundary>
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      contentStyle: { backgroundColor: activeTheme.color.canvas },
+                    }}
+                  >
+                    <Stack.Screen name="(tabs)" />
+                    <Stack.Screen name="(auth)" />
+                    <Stack.Screen name="reset-password" />
+                    <Stack.Screen name="player" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', gestureEnabled: true }} />
+                  </Stack>
+                </ScreenBoundary>
               </PlaybackProvider>
             </AuthGate>
           </SafeAreaProvider>
