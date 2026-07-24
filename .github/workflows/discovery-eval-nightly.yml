@@ -14,8 +14,14 @@
 #   LASTFM_API_KEY, DISCOGS_TOKEN, FANARTTV_API_KEY, GENIUS_ACCESS_TOKEN,
 #   MUSICBRAINZ_USER_AGENT                     (provider access; degrade if absent)
 #   ALERT_NTFY_URL      (optional — regression push notification)
-# REDIS_URL is intentionally unset: the VM's Redis isn't reachable from Actions,
-# and every cache is a Null-Object fallback — the eval just runs uncached.
+# REDIS_URL is intentionally unset: the self-hosted VM Redis has no public
+# exposure (by design — no auth in its connection string) and isn't reachable
+# from Actions runners. Every OTHER mode degrades gracefully without it (every
+# cache is a Null-Object fallback). `correction` is the one exception — it hard-
+# requires a populated vocabulary store (learned from real search traffic) and
+# errors immediately without one, so it's marked continue-on-error here: it
+# cannot be gated from this runner. Run it from the OCI VM (where Redis is
+# reachable) if you want it enforced — see the runner-choice note below.
 #
 # If GitHub-runner IPs prove flaky against providers (Spotify's anonymous flow is
 # the likely first casualty), the fallback home for this job is a cron on the OCI
@@ -59,7 +65,8 @@ jobs:
       # live providers over the prod-cloned corpus.
       - name: detail (contamination = 0)
         run: ./tmp/discoveryeval -mode detail -json ./tmp/report-detail.json
-      - name: correction
+      - name: correction (best-effort — needs Redis, not reachable from Actions)
+        continue-on-error: true
         run: ./tmp/discoveryeval -mode correction -json ./tmp/report-correction.json
       - name: merge
         run: ./tmp/discoveryeval -mode merge -json ./tmp/report-merge.json
