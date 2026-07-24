@@ -26,3 +26,5 @@ The user's personal collection screen (`docs/superpowers/specs/2026-06-28-librar
 **Navigation**: tracks/albums/artists build a `DiscoveryResult` shape and navigate to `/library/detail` through `useLibraryNavigation`, reusing the same detail-handoff seam `discover` uses — the `detail` feature is kind-agnostic about which tab launched it.
 
 Key files: `hooks/useLibraryHome.ts`, `hooks/useLibrarySearch.ts`, `hooks/useLibraryGrouping.ts`, `hooks/usePlaylistMutations.ts`, `hooks/useDeleteTrack.ts`, `hooks/useRetryAcquisition.ts`, `state.ts`, `ui/LibraryScreen.tsx`, `ui/trackMenu.ts`, `ui/LibraryNoResults.tsx`, `ui/LibraryRow.tsx`, `ui/PlaylistDetailScreen.tsx`, `ui/FeaturingScreen.tsx`.
+
+**Offline downloads in the track menu (2026-07-24).** `ui/trackMenu.ts` — still the one assembly point — gains an offline row whose label follows the pinned status (Download / Cancel download / Remove download / Retry download). It sits behind the same `acquisition_status === 'ready'` gate as the queue actions: offline only means something once the server actually holds the audio. See [shared-offline](shared-offline.md).

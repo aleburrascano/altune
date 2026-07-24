@@ -1,6 +1,8 @@
 import TrackPlayer, { Event, State } from 'react-native-track-player';
 
-import { audioRequestHeaders, fetchAudioUrls } from './api/audio';
+import { pinnedUri } from '@shared/offline/pinnedStore';
+
+import { audioRequestHeaders, fetchAudioUrls } from '@shared/api-client/audio';
 import { forgetAllSwaps } from './audioPrefetch';
 import { ensurePlayerSetup } from './initPlayer';
 import { toNativeTrack } from './nativeTrack';
@@ -86,11 +88,18 @@ async function resolveLibraryUrls(
   }
 }
 
-// The signed (presigned) URL for a library track from a batch-resolved map, or
-// undefined for previews and unresolved library tracks (which fall back to the
-// proxy inside toNativeTrack).
+// The URL a library track should actually load from, in preference order:
+//
+//   1. a pinned offline file  — plays with no network at all
+//   2. the resolved presigned URL
+//   3. (inside toNativeTrack) the authenticated proxy
+//
+// The pinned check goes FIRST and is the whole point of downloading: once a
+// track is on disk, playback must never depend on a signed URL that expires or
+// a network that isn't there. Previews are never pinned or signed.
 function signedUrl(track: PlaybackTrack, resolved: Map<string, string>): string | undefined {
-  return track.source.kind === 'library' ? resolved.get(track.source.trackId) : undefined;
+  if (track.source.kind !== 'library') return undefined;
+  return pinnedUri(track.source.trackId) ?? resolved.get(track.source.trackId);
 }
 
 export async function loadNativeTrack(
