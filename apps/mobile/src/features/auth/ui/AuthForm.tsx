@@ -17,12 +17,6 @@ import {
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
 import { OAuthButtons } from './OAuthButtons';
 
-/**
- * Shared sign-in / sign-up form, rendered in the AuthHeroLayout (artwork hero
- * on top, this form bottom-anchored). The screens pass per-mode copy + which
- * extras to show. Validation (email format always; password policy + confirm
- * on sign-up) gates submit before any network call; server stays the backstop.
- */
 type AuthFormProps = {
   screenTestID: string;
   tagline: string;
@@ -33,14 +27,10 @@ type AuthFormProps = {
   errorText: string;
   linkHref: '/sign-in' | '/sign-up';
   linkTestID: string;
-  /** Toggle-link copy, split so the question reads white and the action cobalt. */
   linkQuestion: string;
   linkAction: string;
-  /** Render a confirm-password field and require it to match (sign-up). */
   showConfirm?: boolean;
-  /** Enforce the password policy before enabling submit (sign-up). */
   enforcePasswordPolicy?: boolean;
-  /** Render a "Forgot password?" link to the reset flow (sign-in). */
   showForgotPassword?: boolean;
 };
 
@@ -64,7 +54,6 @@ export function AuthForm({
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
 
-  // Sign-up wants a brand-new credential; sign-in wants the saved one.
   const passwordContentType = showConfirm ? 'newPassword' : 'password';
   const passwordAutoComplete = showConfirm ? 'new-password' : 'password';
 

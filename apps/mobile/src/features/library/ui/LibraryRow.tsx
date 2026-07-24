@@ -25,14 +25,19 @@ type LibraryRowProps = {
   isPlaying?: boolean;
 };
 
-function LibraryRowImpl({ track, onPlay, onPress, onMore, onRetry, retrying, isPlaying }: LibraryRowProps): ReactElement {
+function LibraryRowImpl({
+  track,
+  onPlay,
+  onPress,
+  onMore,
+  onRetry,
+  retrying,
+  isPlaying,
+}: LibraryRowProps): ReactElement {
   const theme = useTheme();
   const moreRef = useRef<View>(null);
   const { width: windowWidth } = useWindowDimensions();
 
-  // Measure the ⋮ button so the menu floats anchored to it (measureInWindow
-  // gives window coordinates; right offset = distance from the window's right
-  // edge). A null ref (not yet laid out) just skips opening.
   const handleMore = () => {
     const node = moreRef.current;
     if (node == null) return;
@@ -41,8 +46,6 @@ function LibraryRowImpl({ track, onPlay, onPress, onMore, onRetry, retrying, isP
     });
   };
   const phase = useDownloadPhase(track.id);
-  // Offline availability, distinct from acquisition: `phase` is the SERVER
-  // fetching the audio, this is a copy on THIS device.
   const pinned = usePinnedStore((s) => s.entries[track.id]?.status);
   const isReady = track.acquisition_status === 'ready';
   const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
@@ -50,7 +53,11 @@ function LibraryRowImpl({ track, onPlay, onPress, onMore, onRetry, retrying, isP
   const failedLabel = track.acquisition_status === 'failed' ? ', failed' : '';
   const albumLabel = track.album != null ? ` · ${track.album}` : '';
   const offlineLabel =
-    pinned === 'ready' ? ', downloaded' : pinned === 'downloading' || pinned === 'queued' ? ', downloading' : '';
+    pinned === 'ready'
+      ? ', downloaded'
+      : pinned === 'downloading' || pinned === 'queued'
+        ? ', downloading'
+        : '';
   const a11yLabel = `${track.title} by ${track.artist}${albumLabel}${pendingLabel}${failedLabel}${retryLabel}${offlineLabel}`;
 
   const duration =
@@ -105,7 +112,10 @@ function LibraryRowImpl({ track, onPlay, onPress, onMore, onRetry, retrying, isP
             <Pressable
               ref={moreRef}
               testID={`library-row-more-${track.id}`}
-              onPress={(e) => { e.stopPropagation?.(); handleMore(); }}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                handleMore();
+              }}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel={`More options for ${track.title}`}
@@ -116,7 +126,11 @@ function LibraryRowImpl({ track, onPlay, onPress, onMore, onRetry, retrying, isP
           </View>
         }
       >
-        <Text variant="bodyStrong" numberOfLines={1} {...(isPlaying ? { tone: 'accent' as const } : {})}>
+        <Text
+          variant="bodyStrong"
+          numberOfLines={1}
+          {...(isPlaying ? { tone: 'accent' as const } : {})}
+        >
           {track.title}
         </Text>
         <Text variant="label" tone="secondary" numberOfLines={1} style={styles.subtitle}>
@@ -124,9 +138,6 @@ function LibraryRowImpl({ track, onPlay, onPress, onMore, onRetry, retrying, isP
           {albumLabel}
         </Text>
         {phase != null && phase !== 'failed' ? (
-          // A live download phase shows regardless of cache status (F7) — so
-          // re-acquire/retry/recovery of a ready/failed track shows progress too,
-          // not only a fresh 'pending' row.
           <Text
             testID={`library-row-pending-${track.id}`}
             variant="caption"
@@ -158,7 +169,11 @@ function LibraryRowImpl({ track, onPlay, onPress, onMore, onRetry, retrying, isP
             </Text>
             {onRetry != null ? (
               retrying ? (
-                <ActivityIndicator testID={`library-row-retrying-${track.id}`} size="small" color={theme.color.accent} />
+                <ActivityIndicator
+                  testID={`library-row-retrying-${track.id}`}
+                  size="small"
+                  color={theme.color.accent}
+                />
               ) : (
                 <Pressable
                   testID={`library-row-retry-${track.id}`}
@@ -203,20 +218,6 @@ const styles = StyleSheet.create({
   },
 });
 
-/**
- * Rows are memoized on their DATA only.
- *
- * The list's `renderItem` mints fresh `onPlay`/`onPress`/`onMore`/`onRetry`
- * closures on every parent render, so the default shallow compare never hits —
- * every row re-renders (and re-measures its Artwork) when any unrelated screen
- * state changes, e.g. a keystroke in the search bar. Those closures are
- * semantically identical between renders: each is `() => handler(item)` over the
- * same item. Comparing the rendered fields instead is what makes the memo real.
- *
- * The cost: if a handler's *behaviour* ever starts depending on state not listed
- * here, the row keeps the stale closure. Anything a handler reads must therefore
- * be either passed as a compared prop or read from a store at call time.
- */
 export const LibraryRow = memo(LibraryRowImpl, (prev, next) => {
   const a = prev.track;
   const b = next.track;

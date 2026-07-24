@@ -14,7 +14,8 @@ import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
 export function MiniPlayer() {
-  const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage } = usePlayback();
+  const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage } =
+    usePlayback();
   const { skipToNext } = useQueuePlayback();
   const showSkipNext = useQueueStore((s) => s.hasNext());
   const theme = useTheme();
@@ -49,31 +50,26 @@ export function MiniPlayer() {
     outputRange: ['0%', '100%'],
   });
 
-  const onControlPress = isError
-    ? retry
-    : isPlaying
-      ? pause
-      : resume;
+  const onControlPress = isError ? retry : isPlaying ? pause : resume;
 
-  const controlIcon = isError
-    ? RotateCcw
-    : isPlaying
-      ? Pause
-      : Play;
+  const controlIcon = isError ? RotateCcw : isPlaying ? Pause : Play;
 
-  const controlLabel = isError
-    ? 'Retry'
-    : isPlaying
-      ? 'Pause'
-      : 'Play';
+  const controlLabel = isError ? 'Retry' : isPlaying ? 'Pause' : 'Play';
 
   return (
     <Pressable
       testID="mini-player"
       onPress={() => router.push('/player')}
-      style={[styles.container, { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border }]}
+      style={[
+        styles.container,
+        { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border },
+      ]}
       accessibilityRole="button"
-      accessibilityLabel={isPreview ? `Preview: ${track.title} by ${track.artist}` : `Now playing: ${track.title} by ${track.artist}`}
+      accessibilityLabel={
+        isPreview
+          ? `Preview: ${track.title} by ${track.artist}`
+          : `Now playing: ${track.title} by ${track.artist}`
+      }
     >
       <View style={[styles.progressTrack, { backgroundColor: theme.color.border }]}>
         <Animated.View
@@ -93,8 +89,12 @@ export function MiniPlayer() {
             {isError
               ? (errorMessage ?? 'Playback error')
               : isEnded
-                ? isPreview ? 'Preview ended' : 'Finished'
-                : isPreview ? `${artistText} · Preview` : artistText}
+                ? isPreview
+                  ? 'Preview ended'
+                  : 'Finished'
+                : isPreview
+                  ? `${artistText} · Preview`
+                  : artistText}
           </Text>
         </View>
         <IconButton

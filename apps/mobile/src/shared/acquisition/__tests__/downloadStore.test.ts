@@ -40,7 +40,7 @@ describe('downloadStore lifecycle', () => {
   it('does not regress the phase on an out-of-order progress event', () => {
     startDownload('t1');
     progressDownload('t1', 'finishing');
-    progressDownload('t1', 'finding'); // late, out of order
+    progressDownload('t1', 'finding');
     expect(phaseOf('t1')).toBe('finishing');
   });
 
@@ -55,13 +55,13 @@ describe('downloadStore lifecycle', () => {
     progressDownload('t1', 'downloading');
 
     completeDownload('t1');
-    expect(phaseOf('t1')).toBe('finishing'); // finishing paints first, not gone
+    expect(phaseOf('t1')).toBe('finishing');
 
     jest.advanceTimersByTime(FINISHING_DWELL_MS);
-    expect(phaseOf('t1')).toBe('done'); // then the done ✓ tail
+    expect(phaseOf('t1')).toBe('done');
 
     jest.advanceTimersByTime(DONE_HOLD_MS);
-    expect(entries()['t1']).toBeUndefined(); // then removed
+    expect(entries()['t1']).toBeUndefined();
 
     jest.useRealTimers();
   });
@@ -81,10 +81,10 @@ describe('downloadStore lifecycle', () => {
   it('ignores a stale progress after a terminal state', () => {
     jest.useFakeTimers();
     startDownload('t1');
-    completeDownload('t1'); // -> finishing (terminal sequence running)
+    completeDownload('t1');
     jest.advanceTimersByTime(FINISHING_DWELL_MS);
     expect(phaseOf('t1')).toBe('done');
-    progressDownload('t1', 'downloading'); // stale, must not revive
+    progressDownload('t1', 'downloading');
     expect(phaseOf('t1')).toBe('done');
     jest.useRealTimers();
   });
@@ -93,13 +93,13 @@ describe('downloadStore lifecycle', () => {
     jest.useFakeTimers();
     startDownload('t1');
     completeDownload('t1');
-    jest.advanceTimersByTime(FINISHING_DWELL_MS); // now 'done', removal pending
+    jest.advanceTimersByTime(FINISHING_DWELL_MS);
 
-    startDownload('t1'); // re-acquire before removal fires
+    startDownload('t1');
     expect(phaseOf('t1')).toBe('finding');
 
-    jest.advanceTimersByTime(DONE_HOLD_MS + FINISHING_DWELL_MS); // old timers must be cancelled
-    expect(phaseOf('t1')).toBe('finding'); // still present, not removed by the stale timer
+    jest.advanceTimersByTime(DONE_HOLD_MS + FINISHING_DWELL_MS);
+    expect(phaseOf('t1')).toBe('finding');
 
     jest.useRealTimers();
   });

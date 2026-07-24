@@ -1,11 +1,3 @@
-/**
- * LibraryRow — shows a pending marker while a saved track's audio is not yet
- * acquired (view-result-detail slice 17, AC#10).
- *
- * LibraryRow consumes the @shared/ui barrel, which transitively loads
- * Artwork -> expo-image; mock it so the row renders under jest.
- */
-
 import { render } from '@testing-library/react-native';
 
 import { LibraryRow } from '../ui/LibraryRow';
@@ -45,24 +37,32 @@ describe('LibraryRow', () => {
   });
 
   it('shows the pending marker when acquisition_status is pending', () => {
-    const { getByTestId } = render(<LibraryRow track={_track('pending')} onPress={noop} onMore={noop} />);
+    const { getByTestId } = render(
+      <LibraryRow track={_track('pending')} onPress={noop} onMore={noop} />,
+    );
     expect(getByTestId('library-row-pending-t1')).toBeTruthy();
   });
 
   it('omits the pending marker for a ready track with no live download', () => {
-    const { queryByTestId } = render(<LibraryRow track={_track('ready')} onPress={noop} onMore={noop} />);
+    const { queryByTestId } = render(
+      <LibraryRow track={_track('ready')} onPress={noop} onMore={noop} />,
+    );
     expect(queryByTestId('library-row-pending-t1')).toBeNull();
   });
 
   it('shows the live phase caption when a download is in flight', () => {
     progressDownload('t1', 'downloading');
-    const { getByText } = render(<LibraryRow track={_track('pending')} onPress={noop} onMore={noop} />);
+    const { getByText } = render(
+      <LibraryRow track={_track('pending')} onPress={noop} onMore={noop} />,
+    );
     expect(getByText('Downloading…')).toBeTruthy();
   });
 
   it('shows the live phase caption on a re-acquired ready track (F7 ungate)', () => {
     progressDownload('t1', 'finishing');
-    const { getByText } = render(<LibraryRow track={_track('ready')} onPress={noop} onMore={noop} />);
+    const { getByText } = render(
+      <LibraryRow track={_track('ready')} onPress={noop} onMore={noop} />,
+    );
     expect(getByText('Finishing up…')).toBeTruthy();
   });
 
@@ -76,7 +76,9 @@ describe('LibraryRow', () => {
   });
 
   it('shows fallback text when failed with no reason', () => {
-    const { getByTestId } = render(<LibraryRow track={_track('failed')} onPress={noop} onMore={noop} />);
+    const { getByTestId } = render(
+      <LibraryRow track={_track('failed')} onPress={noop} onMore={noop} />,
+    );
     const failedEl = getByTestId('library-row-failed-t1');
     expect(failedEl.props.children).toBe('Acquisition failed');
   });

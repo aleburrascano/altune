@@ -14,7 +14,6 @@ import { isValidEmail } from '../lib/validation';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
 
 const GENERIC_ERROR = "Couldn't send the reset email. Please try again.";
-// Anti-enumeration: identical message whether or not the address has an account.
 const SENT_COPY =
   "If an account exists for that email, we've sent a reset link. Check your email and follow it to choose a new password.";
 

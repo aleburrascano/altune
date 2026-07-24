@@ -22,9 +22,6 @@ function groupKey(album: string | null, artist: string | null): string {
   return `${(album ?? '').toLowerCase()}|||${(artist ?? '').toLowerCase()}`;
 }
 
-// Shared group fields every grouping mutates on a repeat-hit (track count,
-// most-recent timestamp, first-available artwork). Albums and artists differ
-// only in their skip/key/create — the fold below is identical.
 type GroupBase = {
   artworkUrl: string | null;
   trackCount: number;

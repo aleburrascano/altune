@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 
-/** Tracks the OS "reduce motion" setting so animations can be disabled. */
 export function useReduceMotion(): boolean {
   const [reduced, setReduced] = useState(false);
 

@@ -42,8 +42,6 @@ function toneColor(theme: Theme, tone: TextTone): string {
   }
 }
 
-/** Typed typography. Sets fontFamily per weight (never fontWeight) so the
- * @expo-google-fonts weighted families render without faux-bolding. */
 export function Text({ variant = 'body', tone = 'primary', style, ...rest }: TextProps) {
   const theme = useTheme();
   return (

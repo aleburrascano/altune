@@ -3,10 +3,6 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { Button } from '../Button';
 import { Skeleton } from '../Skeleton';
 
-// Button + Skeleton use RN's built-in Animated for press feedback + shimmer
-// (no react-native-reanimated — see ADR-0008), so they render in jest with no
-// extra mocks. The auth screens reuse Button after the retrofit.
-
 describe('Button', () => {
   it('renders its label and fires onPress', () => {
     const onPress = jest.fn();

@@ -1,11 +1,3 @@
-/**
- * stashHandoffForDetail — tapping a result stashes it for the detail screen
- * and yields the /detail route (view-result-detail slice 12).
- *
- * Click recording stays a separate fire-and-forget concern in the screen; this
- * helper only owns the handoff + route, so it is testable without rendering.
- */
-
 import { clearDetailHandoff, getDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { stashHandoffForDetail } from '../tap';

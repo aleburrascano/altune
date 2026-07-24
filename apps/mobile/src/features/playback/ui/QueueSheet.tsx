@@ -1,5 +1,12 @@
 import { useCallback, useState, type ReactElement } from 'react';
-import { Alert, FlatList, type ListRenderItemInfo, Pressable, StyleSheet, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  type ListRenderItemInfo,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown, EllipsisVertical, Play } from 'lucide-react-native';
@@ -41,7 +48,9 @@ function RemoveAction(_prog: SharedValue<number>, drag: SharedValue<number>, the
   }));
   return (
     <Reanimated.View style={[styles.removeAction, { backgroundColor: theme.color.danger }, style]}>
-      <Text variant="label" style={{ color: theme.color.onAccent }}>Remove</Text>
+      <Text variant="label" style={{ color: theme.color.onAccent }}>
+        Remove
+      </Text>
     </Reanimated.View>
   );
 }
@@ -58,14 +67,15 @@ export function QueueSheet(): ReactElement {
   const [menuItem, setMenuItem] = useState<QueueItem | null>(null);
 
   const sourceLabel = source
-    ? source.kind === 'playlist' ? `Playing from ${source.name}`
-      : source.kind === 'library' ? 'Playing from Library'
+    ? source.kind === 'playlist'
+      ? `Playing from ${source.name}`
+      : source.kind === 'library'
+        ? 'Playing from Library'
         : 'Playing from search'
     : 'Queue';
 
-  const currentTrackData = currentIndex >= 0 && currentIndex < playOrder.length
-    ? tracks[playOrder[currentIndex]!]
-    : null;
+  const currentTrackData =
+    currentIndex >= 0 && currentIndex < playOrder.length ? tracks[playOrder[currentIndex]!] : null;
 
   const upNextItems: QueueItem[] = [];
   for (let i = currentIndex + 1; i < playOrder.length; i++) {
@@ -90,28 +100,30 @@ export function QueueSheet(): ReactElement {
       {
         text: 'Clear',
         style: 'destructive',
-        // clearUpcoming reads the queue at press time (this Alert is modal and can
-        // sit open across auto-advances) and keeps the store and native queue in
-        // lockstep — see useQueuePlayback.
         onPress: clearUpcoming,
       },
     ]);
   };
 
-  // Row overflow menu: reorder within the upcoming region + remove. "Move Up"/
-  // "to Top" hide for the first upcoming track, "Move Down" for the last, so
-  // every option is always valid. Reorder targets stay > currentIndex, so the
-  // playing track is never moved.
   const menuOptions = (item: QueueItem): ActionSheetOption[] => {
     const isFirst = item.queueIndex === currentIndex + 1;
     const isLast = item.queueIndex === playOrder.length - 1;
     const opts: ActionSheetOption[] = [];
     if (!isFirst) {
-      opts.push({ label: 'Move to Top', onPress: () => moveQueueItem(item.queueIndex, currentIndex + 1) });
-      opts.push({ label: 'Move Up', onPress: () => moveQueueItem(item.queueIndex, item.queueIndex - 1) });
+      opts.push({
+        label: 'Move to Top',
+        onPress: () => moveQueueItem(item.queueIndex, currentIndex + 1),
+      });
+      opts.push({
+        label: 'Move Up',
+        onPress: () => moveQueueItem(item.queueIndex, item.queueIndex - 1),
+      });
     }
     if (!isLast) {
-      opts.push({ label: 'Move Down', onPress: () => moveQueueItem(item.queueIndex, item.queueIndex + 1) });
+      opts.push({
+        label: 'Move Down',
+        onPress: () => moveQueueItem(item.queueIndex, item.queueIndex + 1),
+      });
     }
     opts.push({
       label: 'Remove from Queue',
@@ -137,10 +149,16 @@ export function QueueSheet(): ReactElement {
         >
           <Artwork uri={item.artworkUrl} size={40} radius={radius.sm} />
           <View style={styles.rowInfo}>
-            <Text variant="label" numberOfLines={1}>{item.title}</Text>
-            <Text variant="caption" tone="secondary" numberOfLines={1}>{withFeaturing(item.artist, item.featuredArtists)}</Text>
+            <Text variant="label" numberOfLines={1}>
+              {item.title}
+            </Text>
+            <Text variant="caption" tone="secondary" numberOfLines={1}>
+              {withFeaturing(item.artist, item.featuredArtists)}
+            </Text>
           </View>
-          <Text variant="caption" tone="tertiary">{formatTime(item.durationSeconds)}</Text>
+          <Text variant="caption" tone="tertiary">
+            {formatTime(item.durationSeconds)}
+          </Text>
           <IconButton
             icon={EllipsisVertical}
             size={18}
@@ -154,8 +172,9 @@ export function QueueSheet(): ReactElement {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}>
-      {/* Header */}
+    <View
+      style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}
+    >
       <View style={styles.header}>
         <IconButton
           icon={ChevronDown}
@@ -165,18 +184,26 @@ export function QueueSheet(): ReactElement {
         />
         <View style={styles.headerCenter}>
           <Text variant="title">Up Next</Text>
-          <Text variant="caption" tone="secondary">{sourceLabel}</Text>
+          <Text variant="caption" tone="secondary">
+            {sourceLabel}
+          </Text>
         </View>
         {upNextItems.length > 0 ? (
-          <Pressable onPress={handleClear} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear queue">
-            <Text variant="caption" style={{ color: theme.color.danger }}>Clear</Text>
+          <Pressable
+            onPress={handleClear}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Clear queue"
+          >
+            <Text variant="caption" style={{ color: theme.color.danger }}>
+              Clear
+            </Text>
           </Pressable>
         ) : (
           <View style={styles.headerSpacer} />
         )}
       </View>
 
-      {/* Now Playing */}
       {currentTrackData ? (
         <View style={[styles.nowPlaying, { backgroundColor: theme.color.surface1 }]}>
           <View style={styles.nowPlayingContent}>
@@ -187,16 +214,23 @@ export function QueueSheet(): ReactElement {
               </View>
             </View>
             <View style={styles.nowPlayingInfo}>
-              <Text variant="caption" tone="accent" style={styles.nowPlayingLabel}>NOW PLAYING</Text>
-              <Text variant="bodyStrong" numberOfLines={1}>{currentTrackData.title}</Text>
-              <Text variant="caption" tone="secondary" numberOfLines={1}>{withFeaturing(currentTrackData.artist, currentTrackData.featuredArtists)}</Text>
+              <Text variant="caption" tone="accent" style={styles.nowPlayingLabel}>
+                NOW PLAYING
+              </Text>
+              <Text variant="bodyStrong" numberOfLines={1}>
+                {currentTrackData.title}
+              </Text>
+              <Text variant="caption" tone="secondary" numberOfLines={1}>
+                {withFeaturing(currentTrackData.artist, currentTrackData.featuredArtists)}
+              </Text>
             </View>
-            <Text variant="caption" tone="tertiary">{formatTime(currentTrackData.durationSeconds)}</Text>
+            <Text variant="caption" tone="tertiary">
+              {formatTime(currentTrackData.durationSeconds)}
+            </Text>
           </View>
         </View>
       ) : null}
 
-      {/* Up Next */}
       {upNextItems.length > 0 ? (
         <View style={styles.sectionHeader}>
           <Text variant="caption" tone="secondary" style={styles.sectionLabel}>
@@ -207,19 +241,15 @@ export function QueueSheet(): ReactElement {
 
       <FlatList
         data={upNextItems}
-        // Key by the entry's slot in `tracks`, not its play-order position:
-        // queueIndex shifts down on every advance and removal, so React
-        // reconciles a different track onto the same key — remounting every row
-        // (and its swipeable's gesture handler) on each transition, and leaving
-        // the row that inherits a removed row's key rendered swiped-open.
-        // trackIndex is unique across the queue and stable across advances.
         keyExtractor={(item) => `${item.trackIndex}`}
         renderItem={renderUpNextItem}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text variant="label" tone="secondary">No upcoming tracks</Text>
+            <Text variant="label" tone="secondary">
+              No upcoming tracks
+            </Text>
           </View>
         }
       />
@@ -227,7 +257,9 @@ export function QueueSheet(): ReactElement {
       <ActionSheet
         visible={menuItem != null}
         title={menuItem?.title}
-        subtitle={menuItem != null ? withFeaturing(menuItem.artist, menuItem.featuredArtists) : undefined}
+        subtitle={
+          menuItem != null ? withFeaturing(menuItem.artist, menuItem.featuredArtists) : undefined
+        }
         options={menuItem != null ? menuOptions(menuItem) : []}
         onClose={() => setMenuItem(null)}
       />

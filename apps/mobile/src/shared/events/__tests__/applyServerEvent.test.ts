@@ -46,20 +46,25 @@ function seedLibraryHome(qc: QueryClient, track = makeTrack({ id: 'track-1' })):
 }
 
 const entries = (): Record<string, unknown> => useDownloadStore.getState().entries;
-const phaseOf = (id: string): string | undefined =>
-  useDownloadStore.getState().entries[id]?.phase;
+const phaseOf = (id: string): string | undefined => useDownloadStore.getState().entries[id]?.phase;
 
 describe('applyServerEvent', () => {
   it('seeds the download store and flips the row to pending on a started event', () => {
     const qc = new QueryClient();
-    seedLibraryHome(qc, makeTrack({ id: 'track-1', acquisition_status: 'failed', failure_reason: 'x' }));
+    seedLibraryHome(
+      qc,
+      makeTrack({ id: 'track-1', acquisition_status: 'failed', failure_reason: 'x' }),
+    );
 
-    applyServerEvent(qc, { id: '0', type: 'track_acquisition_started', data: { track_id: 'track-1' } });
+    applyServerEvent(qc, {
+      id: '0',
+      type: 'track_acquisition_started',
+      data: { track_id: 'track-1' },
+    });
 
     expect(phaseOf('track-1')).toBe('finding');
     const data = qc.getQueryData<ListTracksResponse>(['library-home']);
     expect(data?.items[0]).toMatchObject({ acquisition_status: 'pending', failure_reason: null });
-    // Meta is snapshotted from the cache so the dock can render without a fetch.
     expect(useDownloadStore.getState().entries['track-1']).toMatchObject({
       title: 'Midnight City',
       artist: 'M83',
@@ -104,7 +109,6 @@ describe('applyServerEvent', () => {
 
     const data = qc.getQueryData<ListTracksResponse>(['library-home']);
     expect(data?.items[0]).toMatchObject({ acquisition_status: 'ready', audio_ref: 'ref-1' });
-    // Not cleared in the same tick — the finishing → done ✓ tail keeps it mounted.
     expect(phaseOf('track-1')).toBe('finishing');
   });
 
@@ -184,7 +188,7 @@ describe('applyServerEvent', () => {
     expect(qc.getQueryData<ListTracksResponse>(['library-home'])?.items).toEqual([]);
     expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library-home'] });
     expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] }); // counts reconcile
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] });
   });
 
   it('invalidates list queries for membership events', () => {
@@ -282,7 +286,14 @@ describe('applyServerEvent', () => {
     const qc = new QueryClient();
     qc.setQueryData<ListPlaylistsResponse>(['playlists'], {
       items: [
-        { id: 'p1', name: 'PL', track_count: 2, preview_artwork_urls: [], created_at: 'x', updated_at: 'x' },
+        {
+          id: 'p1',
+          name: 'PL',
+          track_count: 2,
+          preview_artwork_urls: [],
+          created_at: 'x',
+          updated_at: 'x',
+        },
       ],
       total: 1,
     });
@@ -320,9 +331,9 @@ describe('applyServerEvent', () => {
 
     applyServerEvent(qc, { id: '5', type: 'track_acquisition_completed', data: {} });
 
-    expect(qc.getQueryData<ListTracksResponse>(['library-home'])?.items[0]?.acquisition_status).toBe(
-      'pending',
-    );
+    expect(
+      qc.getQueryData<ListTracksResponse>(['library-home'])?.items[0]?.acquisition_status,
+    ).toBe('pending');
     expect(entries()).toEqual({});
   });
 });

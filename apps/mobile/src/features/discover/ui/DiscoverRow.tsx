@@ -1,13 +1,3 @@
-/**
- * DiscoverRow — the art-forward result row, Spotify-style (discover-music-v2).
- *
- * testID = `discover-row-<kind>-<position>` (preserved). Confidence is gone:
- * no ConfidenceDot, no verified glow. Row shape varies by kind:
- *   - artist: circular artwork, "Artist" label (subtitle is null)
- *   - album:  square artwork, artist subtitle + year (from extras.year)
- *   - track:  square artwork, artist subtitle
- */
-
 import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Pause, Play } from 'lucide-react-native';
@@ -92,7 +82,10 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
       onPress={() => onPress(result, position)}
       accessibilityRole="button"
       accessibilityLabel={a11yLabel}
-      style={({ pressed }) => [styles.row, pressed ? { opacity: 0.7, backgroundColor: theme.color.surface1 } : null]}
+      style={({ pressed }) => [
+        styles.row,
+        pressed ? { opacity: 0.7, backgroundColor: theme.color.surface1 } : null,
+      ]}
     >
       <Row
         leading={

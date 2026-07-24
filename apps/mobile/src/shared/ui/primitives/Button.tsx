@@ -17,7 +17,6 @@ export type ButtonProps = {
   variant?: ButtonVariant;
   disabled?: boolean;
   loading?: boolean;
-  /** Fire a light haptic on press (key actions only). */
   haptic?: boolean;
   testID?: string;
   style?: StyleProp<ViewStyle>;

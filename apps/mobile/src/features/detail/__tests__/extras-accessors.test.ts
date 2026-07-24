@@ -82,10 +82,10 @@ describe('trackExtras', () => {
     const result = trackExtras({
       featured_artists: [
         { name: 'Obj Artist', mbid: 'm1', deezer_id: 9 },
-        'Legacy String', // legacy bare-name entry
-        { name: '' }, // dropped: empty name
-        42, // dropped: not string/object
-        null, // dropped
+        'Legacy String',
+        { name: '' },
+        42,
+        null,
       ],
     });
     expect(result.featuredArtists).toEqual([

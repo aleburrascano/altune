@@ -1,10 +1,3 @@
-/**
- * LyricsSheet — the full player's lyrics surface.
- *
- * Synced lyrics when the provider has them (active line highlighted, the view
- * follows playback, tapping a line seeks to it), plain text otherwise. An
- * unresolved track is an ordinary empty state, not an error — see `_lyricsView`.
- */
 import { useEffect, useRef, type ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,8 +16,6 @@ import { spacing } from '@shared/ui/theme/tokens';
 import { useLyrics } from '../hooks/useLyrics';
 import { activeLineIndex, _lyricsView } from '../lyrics-sync';
 
-/** Keeps the active line off the very top of the viewport, so the next few
- *  lines are always readable ahead of the music. */
 const SCROLL_LEAD_PX = 140;
 
 export function LyricsSheet(): ReactElement {
@@ -47,8 +38,6 @@ export function LyricsSheet(): ReactElement {
 
   const activeIndex = view === 'synced' ? activeLineIndex(synced, positionMs) : -1;
 
-  // Line y-offsets are captured on layout rather than computed: lyric lines
-  // wrap, so there is no fixed row height to derive them from.
   const scrollRef = useRef<ScrollView | null>(null);
   const lineOffsets = useRef<Record<number, number>>({});
   useEffect(() => {
@@ -156,8 +145,6 @@ export function LyricsSheet(): ReactElement {
   );
 }
 
-/** Writer + copyright credits — a licensing requirement of the lyrics provider,
- *  not decoration. Rendered under every non-empty lyrics view. */
 function Credits({ query }: { query: ReturnType<typeof useLyrics> }): ReactElement | null {
   const writers = query.data?.writers ?? [];
   const copyright = query.data?.copyright ?? '';

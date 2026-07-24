@@ -28,7 +28,15 @@ function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   return base;
 }
 
-export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: DetailRoute; isFromLibrary?: boolean }): ReactElement {
+export function AlbumDetailBody({
+  result,
+  detailRoute,
+  isFromLibrary,
+}: {
+  result: DiscoveryResult;
+  detailRoute: DetailRoute;
+  isFromLibrary?: boolean;
+}): ReactElement {
   const theme = useTheme();
   const album = useAlbumDetailState(result, detailRoute, isFromLibrary);
 
@@ -49,7 +57,12 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
         <Text variant="body" tone="danger">
           Couldn't load tracks.
         </Text>
-        <Button testID="detail-tracklist-retry" label="Retry" onPress={() => album.refetch()} style={sharedStyles.retryButton} />
+        <Button
+          testID="detail-tracklist-retry"
+          label="Retry"
+          onPress={() => album.refetch()}
+          style={sharedStyles.retryButton}
+        />
       </View>
     );
   }
@@ -78,12 +91,8 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
     metaParts.push(hrs > 0 ? `${hrs} hr ${mins} min` : `${mins} min`);
   }
 
-
   return (
     <View testID="detail-tracklist" style={styles.trackList}>
-      {/* Play what you own; offer the rest beside it. Play is primary once
-          anything is playable, otherwise Save takes the primary slot — the
-          button that does something is always the prominent one. */}
       <View style={styles.heroActions}>
         <Button
           testID="detail-album-play"
@@ -97,11 +106,7 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
         {album.owned.unownedCount > 0 ? (
           <Button
             testID="detail-save-all"
-            label={
-              album.saveAllTapped
-                ? 'Saving…'
-                : `Save ${album.owned.unownedCount}`
-            }
+            label={album.saveAllTapped ? 'Saving…' : `Save ${album.owned.unownedCount}`}
             variant={album.playButton.disabled ? 'primary' : 'secondary'}
             onPress={album.onSaveAll}
             disabled={album.saveAllTapped}
@@ -111,7 +116,12 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
         ) : null}
       </View>
       {album.owned.acquiringCount > 0 ? (
-        <Text testID="detail-album-acquiring" variant="caption" tone="tertiary" style={styles.acquiring}>
+        <Text
+          testID="detail-album-acquiring"
+          variant="caption"
+          tone="tertiary"
+          style={styles.acquiring}
+        >
           {album.owned.acquiringCount} still downloading
         </Text>
       ) : null}
@@ -142,7 +152,9 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
             testID="detail-more-from-album"
             onPress={() => album.setMoreExpanded((prev) => !prev)}
             accessibilityRole="button"
-            accessibilityLabel={album.moreExpanded ? 'Collapse more tracks' : 'Show more from this album'}
+            accessibilityLabel={
+              album.moreExpanded ? 'Collapse more tracks' : 'Show more from this album'
+            }
             style={({ pressed }) => [styles.moreHeader, pressed ? { opacity: 0.6 } : null]}
           >
             <Text variant="label" tone="accent">

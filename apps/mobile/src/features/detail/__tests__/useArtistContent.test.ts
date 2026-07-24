@@ -1,9 +1,3 @@
-/**
- * useArtistContent — artistName passthrough to backend for MB validation.
- *
- * When artistName is provided, the hook passes it to getArtistAlbums so the
- * backend can cross-reference albums against MusicBrainz.
- */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -38,7 +32,9 @@ function _client(): QueryClient {
 }
 
 beforeEach(() => {
-  mockGetArtistAlbums.mockReset().mockImplementation((provider: string) => Promise.resolve(_ok(provider)));
+  mockGetArtistAlbums
+    .mockReset()
+    .mockImplementation((provider: string) => Promise.resolve(_ok(provider)));
   mockGetArtistTopTracks.mockReset().mockResolvedValue(_ok('deezer'));
 });
 

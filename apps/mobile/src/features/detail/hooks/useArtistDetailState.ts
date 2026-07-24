@@ -1,11 +1,3 @@
-/**
- * useArtistDetailState — the data + behaviour behind ArtistDetailBody.
- *
- * Owns the source resolution, the library/discovery content fetch, the
- * explore-discography expansion, and the navigation handlers, leaving the
- * component a presentational shell. Lifted out of ArtistDetailBody to drop
- * its cognitive complexity and isolate the union/merge logic for testing.
- */
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -46,7 +38,6 @@ export type ArtistDetailState = {
   onAlbumPress: (album: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
   saveStateFor: (title: string, subtitle: string | null) => SaveControlState;
-  /** What of this artist's listed tracks you can actually play right now. */
   owned: OwnedSplit;
   playButton: { label: string; disabled: boolean };
   onPlayOwned: () => void;
@@ -80,8 +71,6 @@ export function useArtistDetailState(
       : result.sources;
   const shouldFetchContent = effectiveSources.length > 0 && exploreExpanded;
 
-  // MBID for identity-safe Last.fm top-tracks — from the tapped artist when it has
-  // its own sources, else from the name-resolved discovery result.
   const effectiveMbid =
     (hasSources ? trackExtras(result.extras).mbid : discoverySearch.mbid) ?? undefined;
 
@@ -143,7 +132,6 @@ export function useArtistDetailState(
   const saveStateFor = (title: string, subtitle: string | null): SaveControlState =>
     saveControlState(findTrackInLibraryCache(queryClient, title, subtitle));
 
-  // Over the listed top tracks, in the order shown — same rule as album detail.
   const owned = splitOwned(topTracks, (title, subtitle) =>
     findTrackInLibraryCache(queryClient, title, subtitle),
   );

@@ -1,10 +1,3 @@
-/**
- * Resume must lose to the user. The restore awaits a full-library rehydrate; a
- * tap during that window starts real playback, and restoring on top of it would
- * stop the music and swap in the saved queue, paused. It must also never persist
- * its one-track placeholder over the real saved queue.
- */
-
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 const mockGetQueueState = jest.fn();
@@ -76,14 +69,12 @@ describe('resume vs. user-initiated playback', () => {
       current_track: null,
     });
 
-    // Hold the slow full-library rehydrate open, exactly as a real cold launch does.
     const rehydrate = deferred<{ items: unknown[] }>();
     mockGetTracks.mockReturnValue(rehydrate.promise);
 
     renderHook(() => useQueueResume());
     await waitFor(() => expect(mockGetTracks).toHaveBeenCalled());
 
-    // The user taps a track while the rehydrate is still in flight.
     useQueueStore.getState().loadQueue(
       [
         {
@@ -101,8 +92,6 @@ describe('resume vs. user-initiated playback', () => {
     rehydrate.resolve({ items: [savedTrack('saved-1'), savedTrack('saved-2')] });
     await waitFor(() => expect(mockGetTracks).toHaveBeenCalledTimes(1));
 
-    // The user's queue survives untouched, and the native player is never primed
-    // with the saved queue (which would reset() their audio).
     expect(useQueueStore.getState().generation).toBe(userGeneration);
     expect(useQueueStore.getState().currentTrack()?.title).toBe('user-pick');
     expect(mockLoadNativeQueue).not.toHaveBeenCalled();

@@ -1,13 +1,3 @@
-/**
- * DetailScreen â€” header from handoff, empty-handoff redirect, per-kind bodies,
- * and the optimistic Save action (view-result-detail slices 11-16).
- *
- * expo-image and expo-router are mocked (Artwork -> expo-image and the router
- * don't run under jest). The track body uses useSaveTrack, so track renders are
- * wrapped in a QueryClientProvider; createTrack is mocked so Save never hits
- * the network.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -87,8 +77,11 @@ function renderDetail(): ReturnType<typeof render> {
   const { DetailScreen } = require('../ui/DetailScreen');
   const { PlaybackProvider } = require('../../playback/hooks/PlaybackProvider');
   const wrapper = ({ children }: { children: ReactNode }): ReactNode =>
-    createElement(QueryClientProvider, { client: qc },
-      createElement(PlaybackProvider, null, children));
+    createElement(
+      QueryClientProvider,
+      { client: qc },
+      createElement(PlaybackProvider, null, children),
+    );
   return render(createElement(DetailScreen), { wrapper });
 }
 
@@ -113,8 +106,6 @@ describe('DetailScreen', () => {
   });
 
   it('renders the album nav row for present album extra and omits absent keys', () => {
-    // Reworked detail: duration moved onto the Play button, album/featuring became
-    // tappable nav rows; the old isrc/popularity info rows are gone entirely.
     setDetailHandoff(_result({ extras: { duration_seconds: 244, album: 'After Hours' } }));
     const { getByTestId, queryByTestId } = renderDetail();
     expect(getByTestId('detail-info-album')).toBeTruthy();
@@ -141,7 +132,6 @@ describe('DetailScreen', () => {
     setDetailHandoff(_result({ extras: { album: 'Hurry Up', duration_seconds: 244 } }));
     const { getByTestId } = renderDetail();
     fireEvent.press(getByTestId('detail-save'));
-    // onMutate awaits cancelQueries, so the POST fires a microtask later.
     await waitFor(() =>
       expect(mockCreateTrack).toHaveBeenCalledWith({
         title: 'Midnight City',
@@ -168,7 +158,6 @@ describe('DetailScreen', () => {
     expect(mockCreateTrack).not.toHaveBeenCalled();
   });
 
-  // AC#11: Track-to-artist lateral navigation
   it('shows tappable artist link on track detail', () => {
     setDetailHandoff(_result({ subtitle: 'M83' }));
     const { getByTestId } = renderDetail();
@@ -181,13 +170,17 @@ describe('DetailScreen', () => {
     const { getByTestId } = renderDetail();
     fireEvent.press(getByTestId('detail-artist-link'));
     await waitFor(() =>
-      expect(mockSearchDiscovery).toHaveBeenCalledWith({ q: 'M83', kinds: ['artist'], limit: 1, saveHistory: false }),
+      expect(mockSearchDiscovery).toHaveBeenCalledWith({
+        q: 'M83',
+        kinds: ['artist'],
+        limit: 1,
+        saveHistory: false,
+      }),
     );
   });
 
-  // AC#12: Track-to-album lateral navigation
   it('shows tappable album row when extras has album', () => {
-    setDetailHandoff(_result({ extras: { album: 'Hurry Up, We\'re Dreaming' } }));
+    setDetailHandoff(_result({ extras: { album: "Hurry Up, We're Dreaming" } }));
     const { getByTestId } = renderDetail();
     expect(getByTestId('detail-info-album')).toBeTruthy();
   });
@@ -207,7 +200,6 @@ describe('DetailScreen', () => {
     );
   });
 
-  // AC#13: Album-to-artist lateral navigation
   it('shows tappable artist link on album detail', () => {
     setDetailHandoff(_result({ kind: 'album', subtitle: 'The Weeknd' }));
     const { getByTestId } = renderDetail();

@@ -1,16 +1,3 @@
-/**
- * usePlaylistMutations — every playlist write goes through here, so the
- * optimistic-patch → rollback → invalidate choreography over the playlists
- * list / playlist detail caches has one owner (structure audit F1). Before
- * this, the six mutations lived in three files and their policies had
- * diverged (create-playlist failed silently in one path, alerted in another).
- *
- * Policy: every mutation alerts on failure; optimistic patches roll back to
- * the onMutate snapshot; onSettled invalidates so the authoritative server
- * state reconciles (the SSE event patches cover other devices — F15).
- * Screen-local concerns (closing a modal, navigating away) stay in the
- * screens via mutate-level callbacks.
- */
 import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -35,11 +22,6 @@ export function useCreatePlaylist() {
   });
 }
 
-/**
- * Create a playlist, then add the given track to it — the "New Playlist" path
- * inside the add-to-playlist sheet. A failed add after a successful create is
- * reported but not rolled back (the playlist exists; the user adds manually).
- */
 export function useCreatePlaylistWithTrack(trackId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -55,7 +37,10 @@ export function useCreatePlaylistWithTrack(trackId: string) {
     },
     onSuccess: ({ addFailed }) => {
       if (addFailed) {
-        Alert.alert('Note', 'Playlist created, but the track could not be added. Try adding it manually.');
+        Alert.alert(
+          'Note',
+          'Playlist created, but the track could not be added. Try adding it manually.',
+        );
       }
     },
     onError: () => {
@@ -65,7 +50,6 @@ export function useCreatePlaylistWithTrack(trackId: string) {
   });
 }
 
-/** Add a track to an existing playlist, optimistically bumping its count. */
 export function useAddTrackToPlaylist(trackId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -97,7 +81,6 @@ export function useAddTrackToPlaylist(trackId: string) {
   });
 }
 
-/** Rename a playlist, optimistically patching the detail cache. */
 export function useRenamePlaylist(playlistId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -138,7 +121,6 @@ export function useDeletePlaylist(playlistId: string) {
   });
 }
 
-/** Remove a track from a playlist, optimistically dropping the row. */
 export function useRemoveTrackFromPlaylist(playlistId: string) {
   const queryClient = useQueryClient();
   return useMutation({

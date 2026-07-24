@@ -1,10 +1,3 @@
-/**
- * useLyrics — lyrics for the currently playing track.
- *
- * Keyed on (title, artist) rather than a track id because the endpoint resolves
- * by name: the same recording saved from two providers shares one cache entry.
- * Long staleTime — lyrics for a given track do not change.
- */
 import { useQuery } from '@tanstack/react-query';
 
 import { getLyrics } from '@shared/api-client/lyrics';

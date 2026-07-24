@@ -12,7 +12,6 @@ import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
 
-/** Seek step for assistive-technology increment/decrement gestures. */
 const A11Y_SEEK_STEP_MS = 15000;
 
 interface ScrubberProps {
@@ -129,7 +128,9 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
   }, []);
 
   const onLayout = useCallback(
-    (_e: LayoutChangeEvent) => { remeasure(); },
+    (_e: LayoutChangeEvent) => {
+      remeasure();
+    },
     [remeasure],
   );
 
@@ -158,17 +159,18 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
         onLayout={onLayout}
         accessibilityRole="adjustable"
         accessibilityLabel={`Playback position: ${formatTime(labelMs)} of ${formatTime(durationMs)}`}
-        accessibilityValue={{ min: 0, max: 100, now: Math.round(durationMs > 0 ? (labelMs / durationMs) * 100 : 0) }}
+        accessibilityValue={{
+          min: 0,
+          max: 100,
+          now: Math.round(durationMs > 0 ? (labelMs / durationMs) * 100 : 0),
+        }}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={onAccessibilityAction}
         {...panResponder.panHandlers}
       >
         <View style={[styles.trackBg, { backgroundColor: theme.color.border }]} />
         <Animated.View
-          style={[
-            styles.trackFill,
-            { width: fillWidth, backgroundColor: theme.color.accent },
-          ]}
+          style={[styles.trackFill, { width: fillWidth, backgroundColor: theme.color.accent }]}
         />
         <Animated.View
           style={[

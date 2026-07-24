@@ -47,10 +47,7 @@ export async function addTrackToPlaylist(
   });
 }
 
-export async function removeTrackFromPlaylist(
-  playlistId: string,
-  trackId: string,
-): Promise<void> {
+export async function removeTrackFromPlaylist(playlistId: string, trackId: string): Promise<void> {
   await apiFetch<void>(`/v1/playlists/${playlistId}/tracks/${trackId}`, {
     method: 'DELETE',
   });

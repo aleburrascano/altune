@@ -11,13 +11,16 @@ function useLibraryHomeData(): ListTracksResponse | undefined {
     queryKey: ['library-home'],
     queryFn: () => getTracks({ limit: 2000, offset: 0 }),
     enabled: cached == null,
-    staleTime: Infinity, // SSE-covered; matches useLibraryHome (F15)
+    staleTime: Infinity,
   });
 
   return cached ?? data;
 }
 
-export function useLibraryTracksForAlbum(albumTitle: string, artist: string | null): TrackResponse[] {
+export function useLibraryTracksForAlbum(
+  albumTitle: string,
+  artist: string | null,
+): TrackResponse[] {
   const homeData = useLibraryHomeData();
   if (!homeData) return [];
 
@@ -36,7 +39,5 @@ export function useLibraryTracksForArtist(artistName: string): TrackResponse[] {
   if (!homeData) return [];
 
   const artistNorm = artistName.toLowerCase().trim();
-  return homeData.items.filter(
-    (t) => t.artist.toLowerCase().trim() === artistNorm,
-  );
+  return homeData.items.filter((t) => t.artist.toLowerCase().trim() === artistNorm);
 }

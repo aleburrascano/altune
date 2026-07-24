@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { trackExtras } from '../extras-accessors';
 import { resolveEntityQuery } from '../resolve-entity-query';
 
-// Last.fm's stock star placeholder — an artist it can't picture. Treat as no image.
 const LASTFM_PLACEHOLDER_HASH = '2a96cbd8b46e442fc41c2b86b821562f';
 
 export function useArtistDiscovery({

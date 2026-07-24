@@ -1,13 +1,3 @@
-/**
- * useLastFmEnrichment — fetch an entity's Last.fm detail enrichment on open.
- *
- * Resolves listen-based popularity (listeners/playcount), weighted tags, a
- * bio/blurb, and (for artists) similar artists from the result's kind + title +
- * subtitle. An unresolved entity comes back empty and is surfaced as
- * `enrichment: null` so the section hides. Off the search path — one cached call
- * per open (docs/providers/lastfm.md cap 3).
- */
-
 import { getLastFmEnrichment, type LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryKind } from '@shared/api-client/discovery';
 
@@ -26,15 +16,9 @@ type UseLastFmEnrichmentReturn = {
   isError: boolean;
 };
 
-// hasContent reports whether a payload carries anything worth rendering. An
-// unresolved entity (mbid:"" + zero counts + empty everything) is "nothing".
 function hasContent(e: LastFmEnrichmentResponse): boolean {
   return (
-    e.listeners > 0 ||
-    e.playcount > 0 ||
-    e.tags.length > 0 ||
-    e.bio !== '' ||
-    e.similar.length > 0
+    e.listeners > 0 || e.playcount > 0 || e.tags.length > 0 || e.bio !== '' || e.similar.length > 0
   );
 }
 

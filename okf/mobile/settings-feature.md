@@ -4,7 +4,7 @@ title: Settings
 description: Account screen on the Settings tab — profile card, featured-artist backfill trigger, and sign-out.
 resource: apps/mobile/src/features/settings/
 tags: [mobile, feature, settings]
-verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
+verified_commit: 650555c091fab169d723fa9bd938c0ab97f89541
 ---
 
 The smallest feature: two files, one screen, no feature-local state machine or tests. `ui/SettingsScreen.tsx` renders a profile card (avatar = first letter of the signed-in email, read via `@shared/auth/useSession`), the account Sign Out action, and — grouped beneath it under a small "Library maintenance" label so a power-user maintenance action doesn't read as a peer of Sign Out — the featured-artist backfill button. Routing follows the standard pattern (see [app-navigation](app-navigation.md)): `app/(tabs)/settings/index.tsx` is a one-line default re-export of `SettingsScreen`, `app/(tabs)/settings/_layout.tsx` wraps a headerless `Stack` in `ScreenBoundary`, and the tab is registered third in `app/(tabs)/_layout.tsx`. Test hooks: `testID="settings-backfill-featured"` and `testID="settings-sign-out"`.

@@ -1,10 +1,3 @@
-/**
- * SSEClient — XHR-based SSE parsing + reconnect/dispose lifecycle.
- *
- * XMLHttpRequest is replaced with a fake that lets the test drive the
- * progressive `responseText` the real client parses, so no network is needed.
- */
-
 import { SSEClient, HEARTBEAT_WATCHDOG_MS, MAX_RESPONSE_BYTES } from '../sse-client';
 
 const flush = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
@@ -39,7 +32,6 @@ class FakeXHR {
   abort(): void {
     this.aborted = true;
   }
-  // Drive a progressive response chunk the way the platform XHR would.
   push(text: string): void {
     this.responseText += text;
     this.onprogress?.();
@@ -62,7 +54,12 @@ describe('SSEClient', () => {
     onEvent: jest.Mock;
     xhr: FakeXHR;
   }> {
-    const client = new SSEClient('http://api/v1/events', async () => 'tok', onEvent, () => {});
+    const client = new SSEClient(
+      'http://api/v1/events',
+      async () => 'tok',
+      onEvent,
+      () => {},
+    );
     await client.connect();
     return { client, onEvent, xhr: FakeXHR.instances[0]! };
   }
@@ -101,7 +98,7 @@ describe('SSEClient', () => {
   it('replays from the last event id on reconnect', async () => {
     const { xhr, client } = await connect();
     xhr.push('id: 7\nevent: track_acquisition_completed\ndata: {}\n\n');
-    await client.connect(); // reconnect
+    await client.connect();
     expect(FakeXHR.instances[0]!.aborted).toBe(true);
     expect(FakeXHR.instances[1]!.headers['Last-Event-ID']).toBe('7');
     client.dispose();
@@ -117,7 +114,12 @@ describe('SSEClient', () => {
   });
 
   it('opens no connection without a token', async () => {
-    const client = new SSEClient('http://api/v1/events', async () => null, jest.fn(), () => {});
+    const client = new SSEClient(
+      'http://api/v1/events',
+      async () => null,
+      jest.fn(),
+      () => {},
+    );
     await client.connect();
     expect(FakeXHR.instances).toHaveLength(0);
     client.dispose();
@@ -126,10 +128,10 @@ describe('SSEClient', () => {
   it('does not blank the cursor on an id-less control event (resync)', async () => {
     const { xhr, onEvent, client } = await connect();
     xhr.push('id: 5\nevent: track_deleted\ndata: {}\n\n');
-    xhr.push('event: resync\ndata: {}\n\n'); // control event, no id
+    xhr.push('event: resync\ndata: {}\n\n');
     expect(onEvent).toHaveBeenLastCalledWith({ id: '', type: 'resync', data: {} });
 
-    await client.connect(); // reconnect must still carry the last real id
+    await client.connect();
     expect(FakeXHR.instances[1]!.headers['Last-Event-ID']).toBe('5');
     client.dispose();
   });
@@ -137,7 +139,7 @@ describe('SSEClient', () => {
   it('force-reconnects when the heartbeat watchdog elapses (F2)', async () => {
     jest.useFakeTimers();
     const { xhr, client } = await connect();
-    xhr.push(':ok\n\n'); // establish liveness, arm the watchdog
+    xhr.push(':ok\n\n');
 
     await jest.advanceTimersByTimeAsync(HEARTBEAT_WATCHDOG_MS + 1_000);
 
@@ -151,8 +153,8 @@ describe('SSEClient', () => {
   it('recycles the XHR once responseText grows past the cap, preserving Last-Event-ID (F3)', async () => {
     const { xhr, client } = await connect();
     xhr.push('id: 9\nevent: track_acquisition_completed\ndata: {}\n\n');
-    xhr.push(`:${' '.repeat(MAX_RESPONSE_BYTES)}\n\n`); // push past the byte cap
-    await flush(); // forceReconnect -> connect() awaits the token
+    xhr.push(`:${' '.repeat(MAX_RESPONSE_BYTES)}\n\n`);
+    await flush();
 
     const next = FakeXHR.instances[FakeXHR.instances.length - 1]!;
     expect(next).not.toBe(xhr);
@@ -166,16 +168,15 @@ describe('SSEClient', () => {
     const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
     const { xhr, client } = await connect();
 
-    xhr.onloadend?.(); // connection dropped
-    await jest.advanceTimersByTimeAsync(999); // just under base 1000ms
-    expect(FakeXHR.instances.length).toBe(1); // not yet
-    await jest.advanceTimersByTimeAsync(2); // now past base
-    expect(FakeXHR.instances.length).toBe(2); // first backoff ~1000ms
+    xhr.onloadend?.();
+    await jest.advanceTimersByTimeAsync(999);
+    expect(FakeXHR.instances.length).toBe(1);
+    await jest.advanceTimersByTimeAsync(2);
+    expect(FakeXHR.instances.length).toBe(2);
 
-    // Second consecutive failure backs off further (~2000ms with random()=0).
     FakeXHR.instances[1]!.onloadend?.();
     await jest.advanceTimersByTimeAsync(1_500);
-    expect(FakeXHR.instances.length).toBe(2); // still waiting
+    expect(FakeXHR.instances.length).toBe(2);
     await jest.advanceTimersByTimeAsync(600);
     expect(FakeXHR.instances.length).toBe(3);
 

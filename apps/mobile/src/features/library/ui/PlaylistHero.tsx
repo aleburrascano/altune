@@ -79,10 +79,14 @@ export function PlaylistHero({
             accessibilityLabel={`Playlist name: ${playlist.name}`}
             accessibilityHint="Tap to rename"
           >
-            <Text variant="displayL" testID="playlist-name" style={styles.name}>{playlist.name}</Text>
+            <Text variant="displayL" testID="playlist-name" style={styles.name}>
+              {playlist.name}
+            </Text>
           </Pressable>
         )}
-        <Text variant="caption" tone="secondary">{meta}</Text>
+        <Text variant="caption" tone="secondary">
+          {meta}
+        </Text>
 
         <View style={styles.buttons}>
           <Pressable
@@ -92,11 +96,16 @@ export function PlaylistHero({
             accessibilityLabel="Play all"
           >
             <Play size={14} color={theme.color.onAccent} fill={theme.color.onAccent} />
-            <Text variant="label" style={{ color: theme.color.onAccent }}>Play</Text>
+            <Text variant="label" style={{ color: theme.color.onAccent }}>
+              Play
+            </Text>
           </Pressable>
           <Pressable
             onPress={onShuffle}
-            style={[styles.shuffleBtn, { backgroundColor: theme.color.surface1, borderColor: theme.color.border }]}
+            style={[
+              styles.shuffleBtn,
+              { backgroundColor: theme.color.surface1, borderColor: theme.color.border },
+            ]}
             accessibilityRole="button"
             accessibilityLabel="Shuffle play"
           >

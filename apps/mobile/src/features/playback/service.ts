@@ -9,11 +9,6 @@ import { shouldApplyActiveIndex } from './nativeSyncGuard';
 
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
 
-// AIDEV-NOTE: Background playback service. With the native queue holding the
-// full play order, transitions, auto-advance, and repeat are all native — there
-// is no JS cold-load between tracks. This service only forwards lock-screen
-// controls to the native player and mirrors the active-track index back into
-// the store (the UI read-model) so screens follow background/lock-screen skips.
 export async function playbackService() {
   TrackPlayer.addEventListener(Event.RemotePause, () => {
     void TrackPlayer.pause();
@@ -24,10 +19,6 @@ export async function playbackService() {
   TrackPlayer.addEventListener(Event.RemoteNext, () => {
     void TrackPlayer.skipToNext();
   });
-  // Match the in-app previous button (FullPlayer.handlePrevious): past the
-  // threshold, restart the current track; only step back a track when already
-  // near the start. Read the position from the native player — the JS-side
-  // position is frozen while the app is backgrounded/locked.
   TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
     const { position } = await TrackPlayer.getProgress();
     if (position > RESTART_THRESHOLD_SECONDS) {
@@ -40,17 +31,9 @@ export async function playbackService() {
     void TrackPlayer.seekTo(data.position);
   });
 
-  // Presigned streams hit storage directly and bypass the proxy's missing-file
-  // recovery, so when a library track fails to play, ask the server to reconcile
-  // it (mark failed + re-acquire when the file is genuinely gone; a no-op when it
-  // is actually present). Best-effort.
   TrackPlayer.addEventListener(Event.PlaybackError, () => {
     const track = useQueueStore.getState().currentTrack();
     if (!track || track.source.kind !== 'library') return;
-    // A track whose entry we swapped to a locally-cached file can fail purely
-    // because eviction deleted that file — the server's copy is fine. Reloading
-    // it from the stream repairs it in place; calling recoverAudio here would
-    // tell the server to mark a healthy track failed and re-acquire it.
     if (wasSwappedToLocal(track.source.trackId)) {
       void repairActiveToStreaming(track);
       return;
@@ -58,20 +41,11 @@ export async function playbackService() {
     void recoverAudio(track.source.trackId).catch(() => {});
   });
 
-  // The native player drives transitions (manual skip, gapless auto-advance,
-  // repeat). Reflect its active position into the store so currentTrack() and
-  // the queue UI stay in lockstep. syncCurrentIndex no-ops when already aligned.
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data) => {
     if (typeof data.index === 'number') {
-      // Drop the spurious index-0 transient emitted while a queue is being primed
-      // (see nativeSyncGuard) so the store never flashes the wrong track.
       if (!shouldApplyActiveIndex(data.index)) return;
       useQueueStore.getState().syncCurrentIndex(data.index);
-      // Diagnostic-only (see AIDEV-NOTE in loadNativeTrack.ts) — the boundary
-      // timestamp to correlate against prefetch-next's timing below.
       console.log(`[audio-timing] track-transition index=${data.index} at=${Date.now()}`);
-      // Download-ahead the next track (and swap its queue entry to the local
-      // file) so the following auto-advance plays from disk with no buffering.
       void prefetchNext(data.index);
     }
   });

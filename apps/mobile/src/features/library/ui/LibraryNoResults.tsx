@@ -1,9 +1,3 @@
-/**
- * LibraryNoResults — shown when the library search filters the active view to
- * zero. A filtered-out library must never look like a missing one: the search
- * bar's text is easy to miss, and a bare "No tracks found" label reads as data
- * loss ("my entire library is gone"). Name the query and offer the way out.
- */
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@shared/ui/primitives/Button';

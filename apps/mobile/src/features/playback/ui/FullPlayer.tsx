@@ -2,7 +2,20 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronDown, ListMusic, Mic2, MoreHorizontal, Pause, Play, Repeat, Repeat1, RotateCcw, Shuffle, SkipBack, SkipForward } from 'lucide-react-native';
+import {
+  ChevronDown,
+  ListMusic,
+  Mic2,
+  MoreHorizontal,
+  Pause,
+  Play,
+  Repeat,
+  Repeat1,
+  RotateCcw,
+  Shuffle,
+  SkipBack,
+  SkipForward,
+} from 'lucide-react-native';
 
 import { withFeaturing } from '@shared/lib/featured';
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
@@ -19,7 +32,6 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-/** The now-playing label + tone for the current playback status. */
 function getStatusDisplay(
   status: PlaybackStatus,
   isPreview: boolean,
@@ -28,11 +40,12 @@ function getStatusDisplay(
   if (status === 'ended') {
     return { label: isPreview ? 'Preview ended' : 'Finished', tone: 'warning' };
   }
-  return { label: isPreview ? 'Preview' : 'Now Playing', tone: isPreview ? 'warning' : 'secondary' };
+  return {
+    label: isPreview ? 'Preview' : 'Now Playing',
+    tone: isPreview ? 'warning' : 'secondary',
+  };
 }
 
-/** The accent-filled circular play/pause/replay button, shared by the preview
- *  and full transport-control rows. */
 function PlayButton({
   isPlaying,
   isEnded,
@@ -112,7 +125,9 @@ export function FullPlayer() {
   const repeatColor = repeatMode === 'off' ? dimColor : activeColor;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}>
+    <View
+      style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}
+    >
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <IconButton
@@ -168,11 +183,7 @@ export function FullPlayer() {
 
       {isError ? (
         <View style={styles.errorControls}>
-          <Button
-            label="Retry"
-            onPress={retry}
-            haptic
-          />
+          <Button label="Retry" onPress={retry} haptic />
         </View>
       ) : isPreview ? (
         <View style={styles.controls}>
@@ -192,7 +203,9 @@ export function FullPlayer() {
           <IconButton
             icon={SkipBack}
             size={24}
-            color={hasPrevious || positionMs > RESTART_THRESHOLD_MS ? theme.color.textPrimary : dimColor}
+            color={
+              hasPrevious || positionMs > RESTART_THRESHOLD_MS ? theme.color.textPrimary : dimColor
+            }
             onPress={handlePrevious}
             accessibilityLabel="Previous track"
           />
@@ -230,8 +243,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
   },
-  // Left and right groups both flex:1 so the status label stays centred however
-  // many action buttons the right side is showing.
   headerLeft: { flex: 1, alignItems: 'flex-start' },
   headerActions: {
     flex: 1,

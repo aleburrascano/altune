@@ -1,14 +1,6 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { TrackResponse } from '@shared/api-client/types';
 
-/**
- * Adapts a library TrackResponse into the discovery wire shape, so a saved
- * track can flow through the same detail-handoff path as a discovery result.
- *
- * Shared by detail (album/artist library tracks) and library (row navigation)
- * once both needed the identical mapping. `track_position` is included whenever
- * the track carries a number — a harmless superset for callers that don't read it.
- */
 export function trackToDiscoveryResult(track: TrackResponse): DiscoveryResult {
   return {
     kind: 'track',

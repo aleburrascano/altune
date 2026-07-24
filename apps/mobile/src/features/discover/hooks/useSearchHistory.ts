@@ -1,9 +1,3 @@
-/**
- * useSearchHistory — React Query wrapper for /v1/discovery/search-history.
- *
- * Slice 45. Powers the empty-no-query state.
- */
-
 import { useQuery } from '@tanstack/react-query';
 
 import {

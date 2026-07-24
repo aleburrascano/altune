@@ -1,8 +1,3 @@
-/**
- * ForgotPasswordScreen — email → reset request. Anti-enumeration: always the
- * same "sent" state on a resolved response (AC#6). Mocks the SDK + router.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockReset = jest.fn();

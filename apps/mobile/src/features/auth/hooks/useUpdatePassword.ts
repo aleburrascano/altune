@@ -1,8 +1,3 @@
-/**
- * useUpdatePassword — sets a new password for the active (recovery) session
- * via supabase.auth.updateUser. Reached from the set-new-password screen
- * after the recovery deep link established a session.
- */
 import { useState } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';

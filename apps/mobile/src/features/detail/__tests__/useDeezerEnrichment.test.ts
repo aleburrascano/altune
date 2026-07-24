@@ -1,7 +1,3 @@
-/**
- * useDeezerEnrichment — detail-open Deezer enrichment fetch
- * (docs/providers/deezer.md caps 7–8). Real QueryClient; getDeezerEnrichment mocked.
- */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -92,7 +88,8 @@ describe('useDeezerEnrichment', () => {
 
   it('does not fetch when disabled', () => {
     const { result } = renderHook(
-      () => useDeezerEnrichment({ kind: 'artist', title: 'Eminem', subtitle: null, enabled: false }),
+      () =>
+        useDeezerEnrichment({ kind: 'artist', title: 'Eminem', subtitle: null, enabled: false }),
       { wrapper: _wrapper() },
     );
 

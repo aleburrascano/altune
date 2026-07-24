@@ -1,15 +1,3 @@
-/**
- * SleepTimerBridge — pauses playback when the sleep timer's deadline arrives.
- *
- * Mounted once inside the PlaybackProvider (it needs `pause`), renders nothing.
- * The timer must keep working while the player screen is closed, so the effect
- * cannot live in FullPlayer.
- *
- * Backgrounding is the hard case: a `setTimeout` scheduled for 30 minutes out is
- * not guaranteed to fire on time once the OS suspends the JS thread. So the
- * deadline is re-checked on every foreground transition, and an already-elapsed
- * deadline pauses immediately.
- */
 import { useEffect, type ReactElement } from 'react';
 import { AppState } from 'react-native';
 

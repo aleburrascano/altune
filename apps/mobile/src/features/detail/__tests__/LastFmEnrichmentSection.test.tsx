@@ -1,10 +1,3 @@
-/**
- * LastFmEnrichmentSection — the Last.fm metadata block (docs/providers/lastfm.md cap 3).
- *
- * Pure presentational: renders compact popularity, tags, similar artists
- * (artist kind), and a bio/blurb (track & album kind). useTheme defaults to the
- * dark theme without a provider, so it renders bare.
- */
 import { render } from '@testing-library/react-native';
 import { createElement } from 'react';
 
@@ -41,8 +34,6 @@ describe('LastFmEnrichmentSection', () => {
 
   it('shows the bio and similar artists as chips for an artist (Editorial About)', () => {
     const { getByTestId } = _render('artist', _enrichment());
-    // The Editorial About owns the artist bio now (Discogs facts were dropped),
-    // and similar artists render as individual chips, not a comma-joined line.
     expect(getByTestId('detail-lastfm-bio')).toHaveTextContent('A song blurb.');
     expect(getByTestId('detail-lastfm-similar')).toBeTruthy();
     expect(getByTestId('detail-lastfm-similar-0')).toHaveTextContent('Baby Keem');

@@ -1,12 +1,3 @@
-/**
- * usePlaylistActions — the playlist read + create concern for LibraryScreen.
- *
- * Pulls the playlists query, the create mutation, and the create-modal /
- * add-to-playlist sheet state out of LibraryScreen so the screen stops doing
- * data fetching inline (rn-component-patterns: fetching belongs in hooks).
- * The create mutation itself lives in usePlaylistMutations (one owner for
- * every playlist write); this hook keeps only the screen-facing state.
- */
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -24,7 +15,6 @@ export type PlaylistActionsState = {
   setAddToPlaylistTrack: (track: TrackResponse | null) => void;
   createPlaylist: (name: string) => void;
   createLoading: boolean;
-  /** Pull-to-refresh wiring for the Playlists view (see `ui/refresh.ts`). */
   refetchPlaylists: () => void;
   isRefetchingPlaylists: boolean;
 };
@@ -33,10 +23,14 @@ export function usePlaylistActions(): PlaylistActionsState {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<TrackResponse | null>(null);
 
-  const { data: playlistsData, isRefetching, refetch } = useQuery({
+  const {
+    data: playlistsData,
+    isRefetching,
+    refetch,
+  } = useQuery({
     queryKey: playlistKeys.list,
     queryFn: getPlaylists,
-    staleTime: Infinity, // SSE-covered; event patches keep it fresh (F15)
+    staleTime: Infinity,
   });
   const playlists = playlistsData?.items ?? [];
 

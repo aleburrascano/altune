@@ -1,15 +1,3 @@
-/**
- * useSignOut — drops the Supabase session AND clears the React Query cache.
- *
- * The cache clear is the AC#5(b) half: a representative authenticated query
- * MUST refetch after sign-out + sign-in (a stale cached result from user A
- * leaking to user B would be a multi-tenancy bug at the cache layer). Once
- * supabase.auth.signOut resolves, useSession flips to signed-out and the
- * root AuthGate redirects to /sign-in.
- *
- * Promoted from features/auth/hooks/ to shared/auth/ because 2+ features
- * consume it (settings, library/ProfileSheet).
- */
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 

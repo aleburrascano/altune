@@ -1,8 +1,3 @@
-/**
- * resolvePlaySource — full Track when acquired (from extras OR the live
- * library match), else 30s preview, else nothing.
- */
-
 import type { TrackResponse } from '@shared/api-client/types';
 
 import { trackExtras } from '../extras-accessors';

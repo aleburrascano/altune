@@ -21,10 +21,10 @@ function libTrack(over: Partial<PlaybackTrack> = {}): PlaybackTrack {
 
 describe('listenThresholdMs', () => {
   it('is 50% of duration when that is under 30s', () => {
-    expect(listenThresholdMs(40000)).toBe(20000); // 50% of 40s = 20s
+    expect(listenThresholdMs(40000)).toBe(20000);
   });
   it('caps at 30s for long tracks', () => {
-    expect(listenThresholdMs(300000)).toBe(30000); // 50% of 5min capped at 30s
+    expect(listenThresholdMs(300000)).toBe(30000);
   });
   it('falls back to 30s when duration is unknown', () => {
     expect(listenThresholdMs(0)).toBe(30000);
@@ -73,8 +73,8 @@ describe('buildTrackPayload', () => {
 describe('trackKey', () => {
   it('distinguishes library and preview sources', () => {
     expect(trackKey(libTrack())).toBe('lib:t1|Hello');
-    expect(
-      trackKey(libTrack({ source: { kind: 'preview', previewUrl: 'u' } })),
-    ).toBe('prev:u|Hello');
+    expect(trackKey(libTrack({ source: { kind: 'preview', previewUrl: 'u' } }))).toBe(
+      'prev:u|Hello',
+    );
   });
 });

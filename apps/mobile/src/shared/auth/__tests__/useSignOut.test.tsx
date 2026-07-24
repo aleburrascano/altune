@@ -1,8 +1,3 @@
-/**
- * useSignOut — verifies the SDK call and the React Query cache clear
- * (Slice 14a, AC#5(a) + (c)).
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';

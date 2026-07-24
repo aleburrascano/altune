@@ -6,24 +6,16 @@ import {
 } from '../validation';
 
 describe('isValidEmail', () => {
-  it.each([
-    'you@email.com',
-    'a.b-c+tag@sub.domain.io',
-    'x@y.co',
-  ])('accepts %s', (email) => {
+  it.each(['you@email.com', 'a.b-c+tag@sub.domain.io', 'x@y.co'])('accepts %s', (email) => {
     expect(isValidEmail(email)).toBe(true);
   });
 
-  it.each([
-    '',
-    'plainstring',
-    'no@domain',
-    '@nolocal.com',
-    'spaces in@email.com',
-    'two@@at.com',
-  ])('rejects %s', (email) => {
-    expect(isValidEmail(email)).toBe(false);
-  });
+  it.each(['', 'plainstring', 'no@domain', '@nolocal.com', 'spaces in@email.com', 'two@@at.com'])(
+    'rejects %s',
+    (email) => {
+      expect(isValidEmail(email)).toBe(false);
+    },
+  );
 
   it('trims surrounding whitespace before validating', () => {
     expect(isValidEmail('  you@email.com  ')).toBe(true);

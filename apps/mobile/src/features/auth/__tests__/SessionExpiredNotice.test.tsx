@@ -1,10 +1,3 @@
-/**
- * SessionExpiredNotice — the recovery path out of a backend-rejected session.
- * Pressing the button must sign out for real (dropping the SDK session AND
- * clearing the cache), because that is what flips useSession to `signed-out`
- * and lets AuthGate redirect to /sign-in.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { render, screen, userEvent } from '@testing-library/react-native';
 
 const mockSignOut = jest.fn(async () => undefined);
@@ -27,8 +20,6 @@ describe('SessionExpiredNotice', () => {
   });
 
   it('tells the user their data is intact', () => {
-    // The failure mode this replaces looked like data loss. Say plainly that
-    // it is not.
     const { SessionExpiredNotice } = require('../ui/SessionExpiredNotice');
     render(<SessionExpiredNotice />);
 

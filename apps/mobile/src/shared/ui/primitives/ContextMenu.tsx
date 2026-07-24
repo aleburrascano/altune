@@ -17,12 +17,8 @@ type ContextMenuProps = {
   visible: boolean;
   items: ContextMenuItem[];
   onClose: () => void;
-  // Legacy fixed positioning (used by the playlist header menu).
   anchorRight?: number;
   anchorTop?: number;
-  // Measured trigger rect (used by row menus). When set, the menu floats next to
-  // the trigger and flips above it when there isn't room below — overrides the
-  // fixed anchorRight/anchorTop.
   anchor?: MenuAnchor | undefined;
 };
 
@@ -83,7 +79,12 @@ export function ContextMenu({
             onPress={() => handlePress(item)}
             style={({ pressed }) => [
               styles.item,
-              i < items.length - 1 ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.color.border } : null,
+              i < items.length - 1
+                ? {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: theme.color.border,
+                  }
+                : null,
               pressed ? { backgroundColor: theme.color.surface1 } : null,
             ]}
             accessibilityRole="button"

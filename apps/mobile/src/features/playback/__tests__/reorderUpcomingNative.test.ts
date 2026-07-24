@@ -1,18 +1,5 @@
-/**
- * reorderUpcomingNative — the seamless-shuffle native op. It must replace the
- * upcoming tracks (removeUpcomingTracks + add) WITHOUT touching the active
- * track. Order matters: remove before add, or the old tail lingers / dupes.
- *
- * Uses a local track-player mock with stable jest.fns so calls are assertable
- * (the shared manual mock returns a fresh fn per access). Preview-source tracks
- * are used so the auth-header path is skipped.
- */
-
 import type { PlaybackTrack } from '@shared/playback/types';
 
-// Define the stubs INSIDE the factory: a top-level `const` referenced from the
-// factory is still in its TDZ when the mocked module is first required (imports
-// hoist above it), which would leave `default` undefined.
 jest.mock('react-native-track-player', () => ({
   __esModule: true,
   default: {
@@ -56,7 +43,6 @@ describe('reorderUpcomingNative', () => {
     const [added] = mockTrackPlayer.add.mock.calls[0]!;
     expect(added.map((t: { title: string }) => t.title)).toEqual(['b', 'c', 'd']);
 
-    // remove must precede add, otherwise the old tail is duplicated.
     const removeOrder = mockTrackPlayer.removeUpcomingTracks.mock.invocationCallOrder[0]!;
     const addOrder = mockTrackPlayer.add.mock.invocationCallOrder[0]!;
     expect(removeOrder).toBeLessThan(addOrder);

@@ -1,11 +1,3 @@
-/**
- * useLibrarySearch — the committed query must always track the input box.
- *
- * Regression: onChangeText handled length 0 (clear) and length >= 2 (commit)
- * but NOT length 1 — deleting "keep on lov" down to "k" kept the old committed
- * query silently filtering the whole library while the box showed one
- * character. A persistently-filtered library reads as "my library is gone".
- */
 import { act, renderHook } from '@testing-library/react-native';
 
 import { useLibrarySearch } from '../hooks/useLibrarySearch';
@@ -52,8 +44,6 @@ describe('useLibrarySearch', () => {
     act(() => jest.advanceTimersByTime(300));
     expect(result.current.filter(LIBRARY)).toHaveLength(1);
 
-    // Delete down to a single character — the filter must lift immediately,
-    // not keep applying "keep on lov" behind a box that shows "k".
     act(() => result.current.onChangeText('k'));
 
     expect(result.current.hasQuery).toBe(false);

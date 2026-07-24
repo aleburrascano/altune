@@ -1,10 +1,3 @@
-/**
- * OAuthButtons — Google one-tap (AC#10; Apple deferred — needs a paid Apple
- * account). Verifies the button renders and dispatches signInWithOAuth with
- * the right provider + callback redirect. Supabase + expo-router mocked;
- * expo-web-browser mocked globally (setup-env).
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockSignInWithOAuth = jest.fn();

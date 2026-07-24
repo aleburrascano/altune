@@ -1,12 +1,3 @@
-/**
- * useEnrichment — fetch a result's MusicBrainz detail enrichment on detail open.
- *
- * Resolves genres / year / rating / external-ids and an HD cover. Gated to
- * results that carry a title (or an MBID); an unresolved entity comes back empty
- * and is surfaced as `enrichment: null` so the section hides. Off the search
- * path — one cached call per open (spec AC#8).
- */
-
 import { getEnrichment, type EnrichmentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryKind } from '@shared/api-client/discovery';
 
@@ -26,8 +17,6 @@ type UseEnrichmentReturn = {
   isError: boolean;
 };
 
-// hasContent reports whether a payload carries anything worth rendering. An
-// unresolved entity (mbid:"" + empty everything) is treated as "nothing".
 function hasContent(e: EnrichmentResponse): boolean {
   return (
     e.genres.length > 0 ||

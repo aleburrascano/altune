@@ -1,12 +1,3 @@
-/**
- * The 401 feedback edge: apiFetch marks the session expired when the backend
- * rejects a token the SDK still considers valid.
- *
- * Without this there is no path from HTTP 401 back to auth state — the SDK
- * never emits SIGNED_OUT, AuthGate keeps rendering the app, and every query
- * fails forever with no recovery but finding Sign Out in Settings.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 
 const mockGetSession = jest.fn(async () => ({
   data: { session: null as null | { access_token: string } },
@@ -40,8 +31,6 @@ describe('session-expired marking', () => {
   });
 
   it('does not mark on other error statuses', async () => {
-    // A 500 is the backend having a bad day, not a dead session — bouncing the
-    // user to sign-in over it would be wrong.
     mockFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
     const { apiFetch } = require('../index');
     const { getSessionExpired } = require('../../auth/sessionExpired');
@@ -51,8 +40,6 @@ describe('session-expired marking', () => {
   });
 
   it('does not mark when there is no local session (the gate handles that)', async () => {
-    // No session => AuthGate already redirects to /sign-in. Marking here would
-    // show the expired notice instead of the sign-in screen.
     mockGetSession.mockResolvedValue({ data: { session: null } });
     const { apiFetch } = require('../index');
     const { getSessionExpired } = require('../../auth/sessionExpired');

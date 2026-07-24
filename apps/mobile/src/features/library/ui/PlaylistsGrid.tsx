@@ -52,7 +52,12 @@ export function PlaylistsGrid({
             <View
               style={[
                 styles.createCover,
-                { width: coverSize, height: coverSize, backgroundColor: theme.color.surface2, borderColor: theme.color.border },
+                {
+                  width: coverSize,
+                  height: coverSize,
+                  backgroundColor: theme.color.surface2,
+                  borderColor: theme.color.border,
+                },
               ]}
             >
               <Text variant="displayL" tone="tertiary">
@@ -92,7 +97,6 @@ export function PlaylistsGrid({
       testID="library-playlists-grid"
       data={data}
       keyExtractor={(item) => (item.kind === 'create' ? 'create' : item.playlist.id)}
-      // Remount on column change: FlatList cannot change numColumns in place.
       key={`cols-${columns}`}
       numColumns={columns}
       columnWrapperStyle={styles.gridRow}

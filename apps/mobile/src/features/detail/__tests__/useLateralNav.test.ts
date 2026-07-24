@@ -1,7 +1,3 @@
-/**
- * useLateralNav — search-and-navigate for lateral browsing (AC#11-13).
- */
-
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
@@ -9,8 +5,6 @@ import type { ReactNode } from 'react';
 
 import { useLateralNav } from '../hooks/useLateralNav';
 
-// The lookup now routes through the shared resolve-entity query cache, so the
-// hook needs a QueryClient. Fresh per render so no results leak across tests.
 function renderLateralNav(): ReturnType<typeof renderHook<ReturnType<typeof useLateralNav>, void>> {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }): ReactNode =>
@@ -57,7 +51,12 @@ describe('useLateralNav', () => {
       await result.current.navigateTo('M83', 'artist');
     });
 
-    expect(mockSearchDiscovery).toHaveBeenCalledWith({ q: 'M83', kinds: ['artist'], limit: 1, saveHistory: false });
+    expect(mockSearchDiscovery).toHaveBeenCalledWith({
+      q: 'M83',
+      kinds: ['artist'],
+      limit: 1,
+      saveHistory: false,
+    });
     expect(mockSetDetailHandoff).toHaveBeenCalledWith(artistResult);
     expect(mockPush).toHaveBeenCalledWith('/discover/detail');
     expect(result.current.error).toBeNull();
@@ -183,15 +182,12 @@ describe('useLateralNav', () => {
       expect(result.current.state).toBe('searching');
     });
 
-    // Attempt second navigation while first is in progress
     await act(async () => {
       await result.current.navigateTo('Another Artist', 'artist');
     });
 
-    // Only one search should have been made
     expect(mockSearchDiscovery).toHaveBeenCalledTimes(1);
 
-    // Clean up
     await act(async () => {
       resolveSearch!({ results: [] });
     });

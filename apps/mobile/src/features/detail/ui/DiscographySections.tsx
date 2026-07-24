@@ -98,7 +98,11 @@ export function DiscographySections({
               {hasMore ? (
                 <Pressable
                   testID={`detail-see-all-${section.type}`}
-                  style={({ pressed }) => [styles.seeAllCard, { backgroundColor: theme.color.surface2 }, pressed ? { opacity: 0.6 } : null]}
+                  style={({ pressed }) => [
+                    styles.seeAllCard,
+                    { backgroundColor: theme.color.surface2 },
+                    pressed ? { opacity: 0.6 } : null,
+                  ]}
                   onPress={() => setExpandedSections((prev) => new Set(prev).add(section.type))}
                   accessibilityRole="button"
                   accessibilityLabel={`See all ${items.length} ${section.label.toLowerCase()}`}

@@ -1,8 +1,3 @@
-/**
- * LibraryNoResults — a filtered-out library must never look like a missing one.
- * The view names the active query, says the library is intact, and offers a
- * one-tap clear.
- */
 import { render, screen, userEvent } from '@testing-library/react-native';
 
 import { LibraryNoResults } from '../ui/LibraryNoResults';
@@ -20,9 +15,9 @@ describe('LibraryNoResults', () => {
     const onClear = jest.fn();
     render(<LibraryNoResults query="reo" onClear={onClear} />);
 
-    await userEvent.setup({ advanceTimers: jest.advanceTimersByTime }).press(
-      screen.getByTestId('library-clear-search'),
-    );
+    await userEvent
+      .setup({ advanceTimers: jest.advanceTimersByTime })
+      .press(screen.getByTestId('library-clear-search'));
 
     expect(onClear).toHaveBeenCalledTimes(1);
   });

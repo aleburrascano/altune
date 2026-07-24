@@ -21,7 +21,6 @@ describe('resolveMenuPlacement', () => {
       windowHeight: WINDOW_HEIGHT,
       insetBottom: 34,
     });
-    // menu bottom sits just above the trigger's top edge
     expect(placement).toEqual({ right: 16, bottom: WINDOW_HEIGHT - 720 + 4 });
     expect('top' in placement).toBe(false);
   });

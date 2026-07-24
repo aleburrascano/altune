@@ -8,7 +8,6 @@ import { Text } from './Text';
 
 export type ChipProps = {
   label: string;
-  /** When provided, the chip becomes a button (recent-search rows, filters). */
   onPress?: () => void;
   selected?: boolean;
   icon?: ReactNode;
@@ -41,7 +40,10 @@ export function Chip({ label, onPress, selected = false, icon, testID }: ChipPro
     return (
       <Pressable
         testID={testID}
-        onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(); }}
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onPress();
+        }}
         accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityState={{ selected }}

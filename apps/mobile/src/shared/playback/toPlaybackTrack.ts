@@ -14,9 +14,6 @@ export function toPlaybackTrack(t: TrackResponse): PlaybackTrack {
   };
 }
 
-// The server-embedded now-playing snapshot from the queue-state response. Shape
-// mirrors toPlaybackTrack so the placeholder queued during resume is identical
-// (same trackId identity) to the entry the full rehydrate later builds.
 export function currentTrackToPlaybackTrack(t: QueueStateCurrentTrack): PlaybackTrack {
   return {
     source: { kind: 'library', trackId: t.id },

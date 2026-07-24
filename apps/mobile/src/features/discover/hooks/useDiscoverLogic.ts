@@ -1,11 +1,3 @@
-/**
- * useDiscoverLogic — the search machine behind DiscoverScreen.
- *
- * Owns the debounced search, suggestion/focus state, history + click
- * tracking, cross-navigation search-state persistence, and every handler the
- * screen wires up. DiscoverScreen is left as a presentational shell over the
- * returned state. Lifted out of the screen so the orchestration is one unit.
- */
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'expo-router';
 import { Keyboard } from 'react-native';
@@ -51,10 +43,7 @@ export type DiscoverLogic = {
   onResultTap: (result: DiscoveryResult, position: number) => void;
   impression: ImpressionHandlers;
   onRetry: () => void;
-  /** The failure behind a `full-error` view — lets the error copy tell offline
-   *  from a server fault. */
   searchError: unknown;
-  /** Fetch the next page of the ranked slate (infinite scroll). */
   onEndReached: () => void;
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
@@ -87,10 +76,11 @@ export function useDiscoverLogic(): DiscoverLogic {
   const [isFocused, setIsFocused] = useState(false);
   const [suggestionsHidden, setSuggestionsHidden] = useState(false);
 
-  const showSuggestions = isFocused
-    && !suggestionsHidden
-    && search.inputValue.trim().length >= 2
-    && (suggestions.data?.suggestions?.length ?? 0) > 0;
+  const showSuggestions =
+    isFocused &&
+    !suggestionsHidden &&
+    search.inputValue.trim().length >= 2 &&
+    (suggestions.data?.suggestions?.length ?? 0) > 0;
 
   useEffect(() => {
     setSearchState(search.committedQuery, search.inputValue);
@@ -118,10 +108,6 @@ export function useDiscoverLogic(): DiscoverLogic {
   const onHistoryTap = (item: SearchHistoryItem): void => {
     search.setQuery(item.query);
   };
-  // Clearing recent searches must delete the rows server-side, not just the
-  // cache — otherwise they reappear on the next mount when useSearchHistory
-  // refetches. Optimistically empty the cache for an instant UI; on failure,
-  // invalidate to restore the true (still-populated) history.
   const clearHistoryMutation = useMutation({
     mutationFn: clearSearchHistory,
     onError: () => {
@@ -134,10 +120,6 @@ export function useDiscoverLogic(): DiscoverLogic {
   };
   const onResultTap = (result: DiscoveryResult, position: number): void => {
     Keyboard.dismiss();
-    // Telemetry position is the GLOBAL rank in results[] — the same coordinate
-    // space buildImpressionRows logs on results_shown — so CTR@position joins
-    // line up. The incoming `position` is the row's section-/filter-local index
-    // (display + testID only); it's only a fallback for results not in the slate.
     const globalIndex = searchData?.results.indexOf(result) ?? -1;
     recordEvent.mutate({
       type: 'result_clicked',
@@ -163,8 +145,6 @@ export function useDiscoverLogic(): DiscoverLogic {
     setSuggestionsHidden(true);
     search.onSubmit();
   };
-  // Refetch directly: re-setting the same committedQuery doesn't change the
-  // query key, so React Query would never re-run a failed query from it.
   const onRetry = (): void => {
     void refetch();
   };
@@ -181,7 +161,8 @@ export function useDiscoverLogic(): DiscoverLogic {
   return {
     inputValue: search.inputValue,
     committedQuery: search.committedQuery,
-    pending: search.inputValue.trim().length >= 2 && search.inputValue.trim() !== search.committedQuery,
+    pending:
+      search.inputValue.trim().length >= 2 && search.inputValue.trim() !== search.committedQuery,
     onChangeText,
     onSubmit,
     onClear: search.onClear,
@@ -199,16 +180,15 @@ export function useDiscoverLogic(): DiscoverLogic {
     onResultTap,
     impression,
     onRetry,
-    // Surfaced so the error view can tell offline from a server fault.
     searchError,
-    // Guarded: FlatList fires onEndReached on layout passes too, so an
-    // unguarded call would spam requests at the end of the list.
     onEndReached: () => {
       if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
     },
     hasNextPage: hasNextPage ?? false,
     isFetchingNextPage,
-    onRefresh: () => { void refetch(); },
+    onRefresh: () => {
+      void refetch();
+    },
     isRefreshing: isSearching && searchData !== undefined,
     correctedQuery: searchData?.corrected_query,
     originalQuery: searchData?.original_query,

@@ -15,8 +15,6 @@ export function TopResultCard({
   onPress: (result: DiscoveryResult, position: number) => void;
 }): ReactElement {
   const isArtist = result.kind === 'artist';
-  // "Song", matching every other surface — this card used to say "Track",
-  // the one visible drift the four hand-written kind→copy maps produced.
   const label = kindLabel(result.kind);
   return (
     <View style={styles.topResultWrap}>

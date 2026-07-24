@@ -4,18 +4,15 @@ import { Pressable } from 'react-native';
 import { useTheme } from '../theme/useTheme';
 
 export type IconButtonProps = {
-  /** A lucide-react-native icon (or any component taking size/color). */
   icon: ComponentType<{ size?: number; color?: string }>;
   onPress: () => void;
   accessibilityLabel: string;
   size?: number;
   color?: string;
-  /** Blocks presses, announces the disabled state, and dims the icon (unless `color` is set). */
   disabled?: boolean;
   testID?: string;
 };
 
-/** ≥44pt tappable icon with a required a11y label. */
 export function IconButton({
   icon: Icon,
   onPress,

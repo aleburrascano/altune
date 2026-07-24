@@ -1,12 +1,3 @@
-/**
- * DownloadsBar — the in-flight acquisition strip of the Activity Dock.
- *
- * Artwork + a two-line hierarchy (heading over live phase) + a full-width
- * 3-segment progress that fills by phase, with a gentle slide-in on appear and
- * a soft pulse on the active segment. RN `Animated` only (Expo Go safe). The
- * parent mounts it only when something is downloading, so it always has items.
- */
-
 import type { ReactElement } from 'react';
 import { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
@@ -47,12 +38,9 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
     return () => loop.stop();
   }, [enter, pulse]);
 
-  // Aggregate phase across the whole batch (F9): the least-advanced active item,
-  // so the bar reflects the earliest work still happening — not just items[0].
   const phase = aggregatePhase(items) ?? 'finding';
-  // 'done' fills every segment (indexOf returns -1); the 3 progress phases map
-  // to their segment index.
-  const activeIndex = phase === 'done' ? ACQUISITION_PHASES.length : ACQUISITION_PHASES.indexOf(phase);
+  const activeIndex =
+    phase === 'done' ? ACQUISITION_PHASES.length : ACQUISITION_PHASES.indexOf(phase);
   const active = items.filter((i) => i.phase !== 'done').length;
   const count = active > 0 ? active : items.length;
   const heading =
@@ -62,10 +50,6 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
         ? `Downloading "${first?.title ?? 'track'}"`
         : `Downloading ${count} songs`;
 
-  // Acquisition progresses on its own (SSE-driven), so a screen-reader user gets
-  // no signal that anything changed. Android reads the live region; iOS needs the
-  // explicit announcement. Computed above the empty guard so the hook order is
-  // unconditional (react-hooks/rules-of-hooks).
   useAnnounceChange(first == null ? '' : `${heading}. ${phaseLabel(phase)}`);
 
   if (first == null) return null;
@@ -75,7 +59,9 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
       accessibilityLiveRegion="polite"
       style={{
         opacity: enter,
-        transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+        transform: [
+          { translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
+        ],
       }}
     >
       <Pressable
@@ -88,7 +74,12 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
           pressed ? styles.pressed : null,
         ]}
       >
-        <Artwork uri={first.artworkUrl} size={40} radius={radius.sm} accessibilityLabel="Album art" />
+        <Artwork
+          uri={first.artworkUrl}
+          size={40}
+          radius={radius.sm}
+          accessibilityLabel="Album art"
+        />
         <View style={styles.body}>
           <View style={styles.topRow}>
             <Text variant="label" numberOfLines={1} style={styles.heading}>

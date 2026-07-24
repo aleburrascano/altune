@@ -1,7 +1,3 @@
-/**
- * useRelatedTracks — SoundCloud-gated related-tracks fetch (related-tracks spec).
- * Renders the hook against a real QueryClient; getRelatedTracks is mocked.
- */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -9,10 +5,7 @@ import { createElement } from 'react';
 
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
 import type { ContentFetchResponse } from '../../../shared/api-client/enrichment';
-import type {
-  DiscoveryResult,
-  DiscoverySource,
-} from '../../../shared/api-client/discovery';
+import type { DiscoveryResult, DiscoverySource } from '../../../shared/api-client/discovery';
 
 const mockGetRelatedTracks = jest.fn();
 jest.mock('../../../shared/api-client/enrichment', () => ({
@@ -76,7 +69,6 @@ describe('useRelatedTracks', () => {
       wrapper: _wrapper(),
     });
 
-    // Query disabled: no fetch, empty rail, not loading.
     expect(mockGetRelatedTracks).not.toHaveBeenCalled();
     expect(result.current.relatedTracks).toEqual([]);
     expect(result.current.isLoading).toBe(false);

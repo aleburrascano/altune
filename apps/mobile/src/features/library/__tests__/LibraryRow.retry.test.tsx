@@ -1,11 +1,3 @@
-/**
- * LibraryRow retry behavior — loading state, a11y, and callback wiring.
- *
- * Companion to LibraryRow.test.tsx (which covers pending/failed rendering).
- * These tests cover the `retrying` prop and `onRetry` callback added by
- * the UX resilience fix.
- */
-
 import { fireEvent, render } from '@testing-library/react-native';
 
 import { LibraryRow } from '../ui/LibraryRow';
@@ -13,7 +5,10 @@ import type { AcquisitionStatus, TrackResponse } from '../../../shared/api-clien
 
 jest.mock('expo-image', () => ({ Image: () => null }));
 
-function _track(acquisitionStatus: AcquisitionStatus, failureReason: string | null = null): TrackResponse {
+function _track(
+  acquisitionStatus: AcquisitionStatus,
+  failureReason: string | null = null,
+): TrackResponse {
   return {
     id: 't1',
     title: 'Midnight City',

@@ -5,7 +5,6 @@ import { radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 
 export type CardProps = ViewProps & {
-  /** Adds a 1px accent border for the active/selected state. */
   active?: boolean;
   surface?: 'surface1' | 'surface2';
 };

@@ -1,9 +1,3 @@
-/**
- * DownloadsSheet — the expanded list behind the DownloadsBar. One row per
- * in-flight track with its artwork and live phase caption. Plain RN Modal
- * (matches the ActionSheet style; no gorhom, Expo Go safe).
- */
-
 import type { ReactElement } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 

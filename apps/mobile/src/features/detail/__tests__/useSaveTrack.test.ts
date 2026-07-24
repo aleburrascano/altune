@@ -1,23 +1,20 @@
-/**
- * useSaveTrack — optimistic insert on mutate, rollback on error
- * (view-result-detail slice 15). Renders the hook against a real QueryClient
- * seeded with a ['library-home'] snapshot; createTrack is mocked.
- */
-
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 
 import { useSaveTrack } from '../hooks/useSaveTrack';
-import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '../../../shared/api-client/types';
+import type {
+  CreateTrackRequest,
+  ListTracksResponse,
+  TrackResponse,
+} from '../../../shared/api-client/types';
 
 const mockCreateTrack = jest.fn();
 jest.mock('../../../shared/api-client/tracks', () => ({
   createTrack: (body: unknown) => mockCreateTrack(body),
 }));
 
-// Isolate the unit from the best-effort library_add telemetry side effect.
 jest.mock('@shared/telemetry/useRecordEvent', () => ({
   useRecordEvent: () => ({ mutate: jest.fn() }),
 }));
@@ -100,17 +97,11 @@ describe('useSaveTrack', () => {
     await waitFor(() => expect(_libraryIds(qc)).toHaveLength(2));
     expect(_libraryIds(qc)[0]).toContain('optimistic:');
 
-    // settle so no act() warning leaks
     act(() => resolve(_existing('a')));
     await waitFor(() => expect(result.current.isPending).toBe(false));
   });
 
   it('does not fabricate a one-track library when library-home never loaded', async () => {
-    // Regression: a user whose library-home query errored (stale-token 401)
-    // saved a track and the optimistic insert invented {total: 1} over the error
-    // state. Because albums/artists are grouped client-side from that array, a
-    // 273-track library rendered as one track, one album, one artist — and
-    // staleTime: Infinity pinned it there for the rest of the session.
     const qc = _client();
     expect(qc.getQueryData(['library-home'])).toBeUndefined();
     mockCreateTrack.mockResolvedValueOnce(_existing('real'));

@@ -1,13 +1,3 @@
-/**
- * appendNativeTrack / insertNativeTrackNext — the Add to Queue / Play Next
- * native ops. Append maps to TrackPlayer.add(track) (end of queue); Play Next
- * maps to TrackPlayer.add(track, position) so it lands right after the active
- * track. The active track is never removed or reindexed, so audio continues.
- *
- * Local track-player mock with stable jest.fns (the shared manual mock returns
- * a fresh fn per access). Preview-source tracks skip the auth-header path.
- */
-
 import type { PlaybackTrack } from '@shared/playback/types';
 
 jest.mock('react-native-track-player', () => ({
@@ -47,7 +37,6 @@ describe('appendNativeTrack', () => {
     expect(mockTrackPlayer.add).toHaveBeenCalledTimes(1);
     const call = mockTrackPlayer.add.mock.calls[0]!;
     expect(call[0]).toMatchObject({ title: 'z' });
-    // no second argument => append at end
     expect(call[1]).toBeUndefined();
   });
 });

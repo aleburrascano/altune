@@ -1,9 +1,3 @@
-/**
- * useSession — verifies the discriminated-union transitions from `loading`
- * to `signed-in` / `signed-out` based on the SDK's getSession + auth-state
- * stream.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -28,8 +22,6 @@ jest.mock('../supabaseClient', () => ({
   },
 }));
 
-// useSession clears the query cache on identity change, so it now needs a
-// client in scope. `qc` is rebuilt per test so cache assertions don't bleed.
 let qc: QueryClient;
 function _wrapper({ children }: { children: ReactNode }) {
   return createElement(QueryClientProvider, { client: qc }, children);
@@ -74,7 +66,6 @@ describe('useSession', () => {
     const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
     await waitFor(() => expect(result.current.status).toBe('signed-in'));
 
-    // Simulate the SDK emitting SIGNED_OUT.
     expect(lastAuthChangeCallback).not.toBeNull();
     lastAuthChangeCallback!('SIGNED_OUT', null);
 
@@ -82,9 +73,6 @@ describe('useSession', () => {
   });
 
   it('clears the query cache on an SDK-initiated sign-out', async () => {
-    // queryClient.clear() lives in useSignOut, which only covers the explicit
-    // Settings sign-out. A refresh-failure SIGNED_OUT bypasses it, leaving
-    // user A's cached library readable by whoever signs in next.
     const fakeSession = { access_token: 'abc', user: { id: 'u1' } };
     mockGetSession.mockResolvedValueOnce({ data: { session: fakeSession } } as never);
     const { useSession } = require('../useSession');
@@ -98,8 +86,6 @@ describe('useSession', () => {
   });
 
   it('clears the query cache when the session switches to a different user', async () => {
-    // setSession (deep link) can swap identity without an intervening
-    // SIGNED_OUT — the cache must not carry across.
     const sessionA = { access_token: 'a', user: { id: 'u1' } };
     const sessionB = { access_token: 'b', user: { id: 'u2' } };
     mockGetSession.mockResolvedValueOnce({ data: { session: sessionA } } as never);
@@ -114,8 +100,6 @@ describe('useSession', () => {
   });
 
   it('does NOT clear the cache on TOKEN_REFRESHED for the same user', async () => {
-    // The token rotates constantly; clearing on every event would wipe the
-    // library on a routine refresh.
     const fakeSession = { access_token: 'abc', user: { id: 'u1' } };
     mockGetSession.mockResolvedValueOnce({ data: { session: fakeSession } } as never);
     const { useSession } = require('../useSession');

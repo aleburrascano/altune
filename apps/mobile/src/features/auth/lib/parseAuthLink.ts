@@ -1,16 +1,3 @@
-/**
- * parseAuthLink — pure classifier for incoming `altune://` auth deep links.
- *
- * The single deep-link spine (email-confirm, password-recovery, OAuth) routes
- * through this. Per rn-security.md, only whitelisted callback paths are acted
- * on; anything else — foreign scheme, unknown path, garbage — is `ignored`.
- * Token handling lives in the handler/SDK; this only classifies + extracts.
- *
- * AIDEV-NOTE: exact param names (token_hash vs access_token, code) depend on
- * the Supabase email-template + PKCE-vs-implicit config. The whitelist is by
- * PATH, so it's robust to which token style the dashboard ends up using; the
- * handler reads whichever params are present.
- */
 const SCHEME = 'altune://';
 
 export type AuthLinkParams = Record<string, string>;

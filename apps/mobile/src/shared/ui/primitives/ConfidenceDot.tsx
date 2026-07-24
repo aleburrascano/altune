@@ -15,8 +15,6 @@ export type ConfidenceDotProps = {
   size?: number;
 };
 
-/** Dedup-confidence indicator. Color comes from the theme's semantic conf-*
- * roles (kept off the brand accent), and the level is announced to a11y. */
 export function ConfidenceDot({ level, size = 8 }: ConfidenceDotProps) {
   const theme = useTheme();
   return (
