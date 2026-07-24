@@ -9,6 +9,12 @@
  *
  * Path aliases (`@/`, `@features/`, `@shared/`) are mapped here for jest;
  * babel.config.js handles them for Metro at build time.
+ *
+ * Coverage thresholds are a RATCHET, not a target: they hold the measured
+ * baseline so coverage cannot silently regress. Raise them when a slice is
+ * hardened (see the qa-slice skill); never lower them to make CI green.
+ * A number moving up is meaningless on its own — the qa-slice skill gates on
+ * mutation survivors, because a test can cover a line without constraining it.
  */
 
 const preset = require('jest-expo/jest-preset');
@@ -17,6 +23,20 @@ module.exports = {
   ...preset,
   rootDir: __dirname,
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx}',
+    '!src/**/__tests__/**',
+    '!src/features/_template/**',
+    '!src/**/*.d.ts',
+  ],
+  coverageThreshold: {
+    global: {
+      statements: 51,
+      branches: 45,
+      functions: 44,
+      lines: 52,
+    },
+  },
   setupFiles: [...(preset.setupFiles ?? []), '<rootDir>/jest/setup-env.js'],
   setupFilesAfterEnv: [
     ...(preset.setupFilesAfterEnv ?? []),
