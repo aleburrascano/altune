@@ -35,6 +35,10 @@ __pycache__/
 .coverage
 .coverage.*
 htmlcov/
+
+# coverage output (jest --coverage, go test -coverprofile)
+coverage/
+coverage.out
 .venv/
 venv/
 env/
