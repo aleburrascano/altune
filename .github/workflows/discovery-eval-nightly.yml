@@ -36,7 +36,12 @@ on:
 jobs:
   nightly-gates:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # 90m was too tight: detail+correction+merge alone took ~53m (2026-07-24
+    # observed run), and eval/artist-intent/diversity/signal-a/signal-b still
+    # had to run — GitHub killed the job mid-eval at exactly 90m16s ("cancelled",
+    # not a real gate failure). MB's ~1 req/s pacing across the full corpus
+    # dominates the wall-clock; 240m gives real headroom.
+    timeout-minutes: 240
     defaults:
       run:
         working-directory: services/go-api
