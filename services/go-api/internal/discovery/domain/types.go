@@ -392,8 +392,14 @@ type SearchQuery struct {
 	Raw   string
 	Kinds map[ResultKind]bool
 	Limit int
+	// Offset into the ranked slate, for paging. The pipeline always builds the
+	// full slate and truncates last (see resultCacheKey), so a page is a pure
+	// slice of an already-cached list — no provider re-fetch, and page N is
+	// consistent with page 1 for the cache's lifetime.
+	Offset int
 }
 
+// NewSearchQuery builds a first-page query. Use NewPagedSearchQuery for page N.
 func NewSearchQuery(raw string, kinds map[ResultKind]bool, limit int) (*SearchQuery, error) {
 	if raw == "" {
 		return nil, fmt.Errorf("raw query cannot be empty")
@@ -409,6 +415,24 @@ func NewSearchQuery(raw string, kinds map[ResultKind]bool, limit int) (*SearchQu
 		Kinds: kinds,
 		Limit: limit,
 	}, nil
+}
+
+// MaxSearchOffset bounds paging. The ranked slate is built from a bounded
+// provider fan-out, so beyond this there is nothing left to serve; the cap keeps
+// a client loop from walking forever.
+const MaxSearchOffset = 200
+
+// NewPagedSearchQuery is NewSearchQuery plus an offset into the ranked slate.
+func NewPagedSearchQuery(raw string, kinds map[ResultKind]bool, limit, offset int) (*SearchQuery, error) {
+	q, err := NewSearchQuery(raw, kinds, limit)
+	if err != nil {
+		return nil, err
+	}
+	if offset < 0 || offset > MaxSearchOffset {
+		return nil, fmt.Errorf("offset must be between 0 and %d", MaxSearchOffset)
+	}
+	q.Offset = offset
+	return q, nil
 }
 
 // SearchHistoryEntry is a persisted search-history row.

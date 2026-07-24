@@ -145,6 +145,26 @@ type SearchOutput struct {
 	CorrectedQuery   string
 	OriginalQuery    string
 	Related          []domain.RelatedGroup
+	// Total is the size of the full ranked slate, before paging.
+	Total int
+	// Offset is the page's start index into that slate.
+	Offset int
+	// HasMore reports whether anything follows this page.
+	HasMore bool
+}
+
+// pageOf slices a ranked slate to one page. An offset past the end yields an
+// empty page rather than an error: the slate shrinks as providers drop out, so a
+// client holding an offset from a larger slate must degrade, not fail.
+func pageOf(ranked []domain.SearchResult, offset, limit int) []domain.SearchResult {
+	if offset >= len(ranked) {
+		return nil
+	}
+	end := offset + limit
+	if limit <= 0 || end > len(ranked) {
+		end = len(ranked)
+	}
+	return ranked[offset:end]
 }
 
 // Option configures optional Service dependencies.
@@ -374,24 +394,39 @@ func (s *Service) Execute(
 		related = s.findRelatedSvc.Execute(ctx, ranked)
 	}
 
-	if len(ranked) > query.Limit {
-		ranked = ranked[:query.Limit]
-	}
+	// Paging is the last step, over the full ranked slate: total is measured
+	// before the slice so the client can tell "end of results" from "this page
+	// happened to be short".
+	total := len(ranked)
+	ranked = pageOf(ranked, query.Offset, query.Limit)
+	hasMore := query.Offset+len(ranked) < total
 
 	// Exploration: a small fraction of searches serve a randomized order (cloned
 	// so the cache is never mutated) and are logged as exploration for propensity.
 	// The organic (pre-shuffle) top is captured first: vocabulary learning must
 	// ingest the ranked slate, not a randomized tail.
+	//
+	// Page 1 only. Shuffling a later page would reorder it independently of the
+	// pages already shown, so the user would see repeats and gaps; and the whole
+	// point of exploration is perturbing what gets seen FIRST.
 	organic := ranked
-	ranked, explored := s.maybeExplore(ranked)
-
-	s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
-	s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked, explored)
-	ingestQuery := query.Raw
-	if correctedQuery != "" {
-		ingestQuery = correctedQuery
+	explored := false
+	if query.Offset == 0 {
+		ranked, explored = s.maybeExplore(ranked)
 	}
-	s.ingestVocabulary(ctx, ingestQuery, organic)
+
+	// History, the search_performed event and vocabulary ingest all describe the
+	// SEARCH, not the page. Scrolling must not log a second search, re-ingest the
+	// same slate, or emit impressions whose positions restart at 0.
+	if query.Offset == 0 {
+		s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
+		s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked, explored)
+		ingestQuery := query.Raw
+		if correctedQuery != "" {
+			ingestQuery = correctedQuery
+		}
+		s.ingestVocabulary(ctx, ingestQuery, organic)
+	}
 
 	slog.InfoContext(ctx, "search.v2.complete",
 		"query", query.Raw,
@@ -400,6 +435,8 @@ func (s *Service) Execute(
 		"corrected", correctedQuery,
 		"related_groups", len(related),
 		"cached", cached,
+		"offset", query.Offset,
+		"total", total,
 		"tail_noise_top5", TailNoiseInTopK(ranked, 5),
 	)
 
@@ -407,6 +444,9 @@ func (s *Service) Execute(
 		SearchId:         searchId,
 		Explored:         explored,
 		Results:          ranked,
+		Total:            total,
+		Offset:           query.Offset,
+		HasMore:          hasMore,
 		ProviderStatuses: statuses,
 		Partial:          partial,
 		CorrectedQuery:   correctedQuery,
