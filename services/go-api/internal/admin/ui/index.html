@@ -98,6 +98,48 @@
     .section-title { margin:.2rem 0 .5rem; color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
     ::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-thumb{background:#252a31;border-radius:8px}
 
+    /* ---- Phone (the console is single-operator; the operator carries a phone) ----
+       The 900px rule above already collapses the grids to one column, which is
+       most of the work. What breaks below ~640px is everything that assumed a
+       wide row: the top bar wraps into a ragged block, the tab strip runs off the
+       edge, viewport-height panes leave a few unusable lines, and the wide tables
+       force the whole page to scroll sideways. */
+    @media (max-width:640px) {
+      body { font-size:12.5px; }                 /* 12px monospace is under the readable floor on a phone */
+      .wrap { padding:.5rem; }
+
+      .top { gap:.5rem; padding:.5rem .6rem; }
+      .top .spacer { display:none; }             /* nothing to push apart once it wraps */
+      .brand { width:100%; }
+      /* Tabs scroll instead of wrapping — a wrapped tab strip pushes the content
+         down by a whole row and the active tab can end up off-screen. */
+      .tabs { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+      .tabs::-webkit-scrollbar { display:none; }
+      .tab { flex:0 0 auto; }
+      .tiles { width:100%; flex-wrap:wrap; }
+      .auth { width:100%; }
+      .auth input { flex:1; min-width:0; }       /* min-width:140px would overflow a 360px screen */
+
+      /* Vertical panes were sized against the desktop viewport; on a phone a
+         38vh log pane shows ~4 lines. Let them size to content and scroll the page. */
+      .card [style*="vh"] { max-height:60vh !important; }
+
+      /* Tables scroll inside their own card rather than widening the document. */
+      .card table { display:block; overflow-x:auto; white-space:nowrap; }
+
+      /* The pipeline spine is a horizontal flow chart; stack it and drop the
+         connecting chevrons, which point the wrong way once stacked. */
+      .spine { flex-direction:column; gap:.4rem; }
+      .node + .node { margin-left:0; }
+      .node + .node::before { display:none; }
+
+      .subtabs { overflow-x:auto; scrollbar-width:none; }
+      .subtab { flex:0 0 auto; }
+
+      /* Log rows are nowrap by design (one event per line); let them scroll. */
+      .logrow { overflow-x:auto; }
+    }
+
     /* ---- Discovery Lab ---- */
     .lab-bar { margin-bottom:.6rem; }
     .qline { color:var(--cy); font-size:11px; margin:.1rem 0 .55rem; }
