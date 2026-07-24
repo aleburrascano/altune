@@ -153,6 +153,11 @@ async function downloadOne(trackId: string, set: Setter, get: Getter): Promise<v
     const [resolved] = await fetchAudioUrls([trackId]);
     if (!resolved) throw new Error('no signed url');
     const uri = await downloadPinned(trackId, resolved.url);
+    const unpinnedWhileDownloading = get().entries[trackId] === undefined;
+    if (unpinnedWhileDownloading) {
+      deletePinned(trackId);
+      return;
+    }
     mark({ trackId, status: 'ready', uri });
   } catch {
     mark({ trackId, status: 'failed' });

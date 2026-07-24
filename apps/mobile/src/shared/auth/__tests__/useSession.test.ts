@@ -13,6 +13,17 @@ const mockOnAuthStateChange = jest.fn((cb: AuthChangeCallback) => {
   return { data: { subscription: { unsubscribe: mockUnsubscribe } } };
 });
 
+jest.mock('@shared/offline/pinnedFiles', () => ({
+  findPinned: jest.fn(() => null),
+  deletePinned: jest.fn(),
+  deleteAllPinned: jest.fn(),
+  downloadPinned: jest.fn(async () => 'file:///offline/t1.mp3'),
+  pinnedBytes: jest.fn(() => 0),
+  formatBytes: jest.fn(() => '0 B'),
+  pinnedDir: jest.fn(),
+  extFromUrl: jest.fn(() => '.mp3'),
+}));
+
 jest.mock('../supabaseClient', () => ({
   supabase: {
     auth: {
@@ -97,6 +108,67 @@ describe('useSession', () => {
     lastAuthChangeCallback!('SIGNED_IN', sessionB);
 
     await waitFor(() => expect(qc.getQueryData(['library-home'])).toBeUndefined());
+  });
+
+  it('deletes the previous user offline downloads when the session switches user', async () => {
+    const { deleteAllPinned } = require('@shared/offline/pinnedFiles');
+    const { usePinnedStore } = require('@shared/offline/pinnedStore');
+    const sessionA = { access_token: 'a', user: { id: 'u1' } };
+    const sessionB = { access_token: 'b', user: { id: 'u2' } };
+    mockGetSession.mockResolvedValueOnce({ data: { session: sessionA } } as never);
+    const { useSession } = require('../useSession');
+    const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
+    await waitFor(() => expect(result.current.status).toBe('signed-in'));
+
+    usePinnedStore.setState({
+      entries: { t1: { trackId: 't1', status: 'ready', uri: 'file:///user-a.mp3' } },
+      queue: [],
+    });
+
+    lastAuthChangeCallback!('SIGNED_IN', sessionB);
+
+    await waitFor(() => expect(usePinnedStore.getState().entries).toEqual({}));
+    expect(deleteAllPinned).toHaveBeenCalled();
+  });
+
+  it('deletes offline downloads on an SDK-initiated sign-out', async () => {
+    const { deleteAllPinned } = require('@shared/offline/pinnedFiles');
+    const { usePinnedStore } = require('@shared/offline/pinnedStore');
+    const fakeSession = { access_token: 'abc', user: { id: 'u1' } };
+    mockGetSession.mockResolvedValueOnce({ data: { session: fakeSession } } as never);
+    const { useSession } = require('../useSession');
+    const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
+    await waitFor(() => expect(result.current.status).toBe('signed-in'));
+
+    usePinnedStore.setState({
+      entries: { t1: { trackId: 't1', status: 'ready', uri: 'file:///user-a.mp3' } },
+      queue: [],
+    });
+
+    lastAuthChangeCallback!('SIGNED_OUT', null);
+
+    await waitFor(() => expect(usePinnedStore.getState().entries).toEqual({}));
+    expect(deleteAllPinned).toHaveBeenCalled();
+  });
+
+  it('does NOT delete offline downloads on TOKEN_REFRESHED for the same user', async () => {
+    const { deleteAllPinned } = require('@shared/offline/pinnedFiles');
+    const { usePinnedStore } = require('@shared/offline/pinnedStore');
+    const fakeSession = { access_token: 'abc', user: { id: 'u1' } };
+    mockGetSession.mockResolvedValueOnce({ data: { session: fakeSession } } as never);
+    const { useSession } = require('../useSession');
+    const { result } = renderHook(() => useSession(), { wrapper: _wrapper });
+    await waitFor(() => expect(result.current.status).toBe('signed-in'));
+
+    const kept = { t1: { trackId: 't1', status: 'ready', uri: 'file:///kept.mp3' } };
+    usePinnedStore.setState({ entries: kept, queue: [] });
+    (deleteAllPinned as jest.Mock).mockClear();
+
+    lastAuthChangeCallback!('TOKEN_REFRESHED', { access_token: 'rotated', user: { id: 'u1' } });
+
+    await waitFor(() => expect(result.current.status).toBe('signed-in'));
+    expect(usePinnedStore.getState().entries).toEqual(kept);
+    expect(deleteAllPinned).not.toHaveBeenCalled();
   });
 
   it('does NOT clear the cache on TOKEN_REFRESHED for the same user', async () => {
