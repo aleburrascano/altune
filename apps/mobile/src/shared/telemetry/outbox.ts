@@ -6,10 +6,9 @@
  * key (event_id) and are retried until the POST succeeds; the server dedups on
  * event_id, so the retry is safe. Everything else stays fire-and-forget.
  *
- * The queue is in-memory and flushed on enqueue + on app foreground (a reconnect
- * proxy). Durability across a hard app-kill while offline is intentionally NOT
- * covered here: it needs a durable client store (AsyncStorage / SQLite), which is
- * not a current dependency — adding one is an ADR. The library WRITE itself
+ * The queue is flushed on enqueue + on app foreground (a reconnect proxy), and
+ * mirrored to disk (`outboxStore`) so it survives a hard app-kill while offline —
+ * the case that used to lose the label outright. The library WRITE itself
  * (createTrack) is already durable server-side; this protects the telemetry label.
  *
  * Pure helpers (withEnvelope, dedupeById, capEntries) hold the queue logic and
@@ -18,6 +17,7 @@
 
 import { AppState } from 'react-native';
 
+import { loadPersistedOutbox, persistOutbox } from './outboxStore';
 import { recordEvent, type DiscoveryEvent } from './recordEvent';
 
 export type OutboxEntry = DiscoveryEvent & {
@@ -60,6 +60,20 @@ export function capEntries(entries: readonly OutboxEntry[], max: number): Outbox
 let _queue: OutboxEntry[] = [];
 let _flushing = false;
 let _listening = false;
+let _restored = false;
+
+// Restore lazily rather than at import time: module init runs during bundle
+// evaluation, before the app has decided it needs telemetry at all.
+function ensureRestored(): void {
+  if (_restored) return;
+  _restored = true;
+  _queue = capEntries(dedupeById([...loadPersistedOutbox(), ..._queue]), MAX_ENTRIES);
+}
+
+function commit(next: OutboxEntry[]): void {
+  _queue = next;
+  persistOutbox(_queue);
+}
 
 function ensureFlushOnForeground(): void {
   if (_listening) return;
@@ -70,9 +84,10 @@ function ensureFlushOnForeground(): void {
 }
 
 export async function enqueueCritical(event: DiscoveryEvent): Promise<void> {
+  ensureRestored();
   ensureFlushOnForeground();
   const entry = withEnvelope(event, makeEventId(), new Date().toISOString());
-  _queue = capEntries(dedupeById([..._queue, entry]), MAX_ENTRIES);
+  commit(capEntries(dedupeById([..._queue, entry]), MAX_ENTRIES));
   await flushOutbox();
 }
 
@@ -80,13 +95,14 @@ export async function enqueueCritical(event: DiscoveryEvent): Promise<void> {
 // On the first failure (likely offline) it stops and leaves the rest for the next
 // trigger (enqueue or foreground). Never throws — best-effort like all telemetry.
 export async function flushOutbox(): Promise<void> {
+  ensureRestored();
   if (_flushing || _queue.length === 0) return;
   _flushing = true;
   try {
     for (const entry of [..._queue]) {
       try {
         await recordEvent(entry);
-        _queue = _queue.filter((e) => e.event_id !== entry.event_id);
+        commit(_queue.filter((e) => e.event_id !== entry.event_id));
       } catch {
         break;
       }
@@ -100,4 +116,5 @@ export async function flushOutbox(): Promise<void> {
 export function _resetOutboxForTest(): void {
   _queue = [];
   _flushing = false;
+  _restored = true; // skip disk reads in unit tests
 }

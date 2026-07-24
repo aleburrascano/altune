@@ -16,6 +16,7 @@ import { ChevronUp } from 'lucide-react-native';
 import { aggregatePhase, type DownloadEntry } from '@shared/acquisition/downloadStore';
 import { ACQUISITION_PHASES, phaseLabel } from '@shared/acquisition/stagePhase';
 import { Text, spacing, useTheme } from '@shared/ui';
+import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { radius } from '@shared/ui/theme/tokens';
 
@@ -46,8 +47,6 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
     return () => loop.stop();
   }, [enter, pulse]);
 
-  if (first == null) return null;
-
   // Aggregate phase across the whole batch (F9): the least-advanced active item,
   // so the bar reflects the earliest work still happening — not just items[0].
   const phase = aggregatePhase(items) ?? 'finding';
@@ -60,11 +59,20 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
     phase === 'done'
       ? 'Done'
       : count === 1
-        ? `Downloading "${first.title ?? 'track'}"`
+        ? `Downloading "${first?.title ?? 'track'}"`
         : `Downloading ${count} songs`;
+
+  // Acquisition progresses on its own (SSE-driven), so a screen-reader user gets
+  // no signal that anything changed. Android reads the live region; iOS needs the
+  // explicit announcement. Computed above the empty guard so the hook order is
+  // unconditional (react-hooks/rules-of-hooks).
+  useAnnounceChange(first == null ? '' : `${heading}. ${phaseLabel(phase)}`);
+
+  if (first == null) return null;
 
   return (
     <Animated.View
+      accessibilityLiveRegion="polite"
       style={{
         opacity: enter,
         transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
