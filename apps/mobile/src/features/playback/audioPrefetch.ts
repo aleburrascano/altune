@@ -157,10 +157,3 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
     inflight.delete(trackId);
   }
 }
-
-export function clearPrefetchCache(): void {
-  try {
-    const dir = cacheDir();
-    if (dir.exists) dir.delete();
-  } catch {}
-}
