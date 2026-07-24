@@ -13,17 +13,12 @@ import (
 	"github.com/google/uuid"
 )
 
-// --- stub TokenVerifier ---
-
 func stubVerifier(userID shared.UserId, err error) VerifierFunc {
 	return func(context.Context, string) (shared.UserId, error) {
 		return userID, err
 	}
 }
 
-// --- helpers ---
-
-// noopHandler records whether it was called.
 func noopHandler() (http.Handler, *bool) {
 	called := false
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -41,8 +36,6 @@ func decodeRejectBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]s
 	}
 	return body
 }
-
-// --- Middleware tests ---
 
 func TestMiddleware_MissingHeader(t *testing.T) {
 	next, called := noopHandler()
@@ -154,12 +147,10 @@ func TestMiddleware_InvalidToken(t *testing.T) {
 	}
 }
 
-func TestMiddleware_VerifierError(t *testing.T) {
-	// A non-InvalidTokenError means the verifier could not run (e.g. JWKS
-	// unreachable) — infrastructure failure, not a bad token: 503, not 401.
-	verifier := stubVerifier(shared.UserId{}, errors.New("fetch JWKS: connection refused"))
+func TestMiddleware_UnreachableVerifierIs503NotTokenRejection(t *testing.T) {
+	verifierThatCouldNotRun := stubVerifier(shared.UserId{}, errors.New("fetch JWKS: connection refused"))
 	next, called := noopHandler()
-	handler := Middleware(verifier)(next)
+	handler := Middleware(verifierThatCouldNotRun)(next)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer some-token")
@@ -178,8 +169,6 @@ func TestMiddleware_VerifierError(t *testing.T) {
 		t.Error("next handler should not have been called")
 	}
 }
-
-// --- context helper tests ---
 
 func TestUserIDFromContext(t *testing.T) {
 	t.Run("present", func(t *testing.T) {
@@ -220,7 +209,6 @@ func TestRequireUserID(t *testing.T) {
 		if got.UUID() != uid.UUID() {
 			t.Errorf("userId: got %v, want %v", got.UUID(), uid.UUID())
 		}
-		// Should not have written an error response
 		if rec.Code != http.StatusOK {
 			t.Errorf("status: got %d, want %d (no error written)", rec.Code, http.StatusOK)
 		}
