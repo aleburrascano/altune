@@ -18,3 +18,7 @@ The single source of visual truth (per `apps/mobile/src/shared/ui/CLAUDE.md`): e
 `motion/index.ts` exports `usePressScale` (RN's built-in `Animated` spring press feedback — not Reanimated, since Reanimated 4's worklets TurboModule isn't present in Expo Go; it consults `useReduceMotion` and holds the scale flat when the OS reduce-motion flag is on, so every Button's press is instant under that setting) and `useReduceMotion` (gates animation off the OS accessibility setting; also consumed by `Skeleton`).
 
 Consumers (2+ feature threshold met): [auth-feature](auth-feature.md), [discover-feature](discover-feature.md), [library-feature](library-feature.md), `app/(tabs)/_layout.tsx` (see [app-navigation](app-navigation.md)).
+
+**Theme preference (2026-07-24).** `ThemeProvider` now resolves its scheme from the persisted `themePreference` store, with an explicit `scheme` prop still winning (so tests and any fixed-scheme subtree stay deterministic). The default is unchanged: dark. `lightTheme` remains un-tuned — ADR-0008's "don't ship light mode without a design pass" still stands; the toggle exposes it as an explicit user choice, not as a supported design.
+
+Three surfaces sit *outside* the provider's context and read the preference directly in `app/_layout.tsx`: the Stack's `contentStyle`, the status bar, and the Android navigation bar. Without that they stay dark while every themed screen turns light.
