@@ -90,9 +90,10 @@ a held-in-reserve, non-query-fit tiebreak for strict-#1 polish — not the gate.
   (currently inert, see above) → multi-source → RRF (k=60) → stable title tiebreak.
   No relevance bands, no kind tiers, no intent contract (those were query-fit and
   were purged in the rebuild).
-- **Merge:** identifier (ISRC/MBID) → exact canonical title+subtitle → cross-provider
-  identity bridge. No fuzzy threshold. Only Deezer/MusicBrainz carry identifiers;
-  most cross-provider pairs merge by exact canonical title.
+- **Merge:** identifier (ISRC / album-UPC / MBID) → cross-provider identity bridge →
+  exact canonical title+subtitle. No fuzzy threshold. Deezer/MusicBrainz/Apple
+  (ISRC+UPC) and Last.fm (mbid on all search kinds, decoded 2026-07-23) carry
+  identifiers; other cross-provider pairs merge by exact canonical title.
 - **Albums have no provider popularity data** (Deezer returns `nb_fan=0`); they
   compete on multi-source/RRF only.
 - **Pre-correction disabled** (it rewrote valid queries from vocabulary pollution);
