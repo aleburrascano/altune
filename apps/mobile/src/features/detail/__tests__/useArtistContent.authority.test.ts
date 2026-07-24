@@ -1,13 +1,3 @@
-/**
- * useArtistContent — discography ordering.
- *
- * The backend owns the data (MB cross-reference validation decides which albums
- * are included, and normalizes a year onto each), and the client owns final
- * display order: it always sorts the unioned albums newest-first by release date,
- * whether or not artistName was provided. (Previously the client trusted the
- * backend's confirmed-first order when validated, which left the discography
- * non-chronological — the bug this fixes.) The MB-authority *filter* is unchanged.
- */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -58,8 +48,6 @@ beforeEach(() => {
 const _SOURCES = [_src('deezer', '234701081')];
 
 it('sorts by release date even when artistName is provided', async () => {
-  // Backend returned a non-chronological order (Samsonite, newer, last); the
-  // client must still display newest-first regardless of backend order.
   mockGetArtistAlbums.mockResolvedValue({
     items: [
       _album('REST IN BASS', 'deezer', 'alb-1', '2022'),
@@ -71,13 +59,11 @@ it('sorts by release date even when artistName is provided', async () => {
     latency_ms: 0,
   });
 
-  const { result } = renderHook(
-    () => useArtistContent({ sources: _SOURCES, artistName: 'Che' }),
-    { wrapper: _wrapper(_client()) },
-  );
+  const { result } = renderHook(() => useArtistContent({ sources: _SOURCES, artistName: 'Che' }), {
+    wrapper: _wrapper(_client()),
+  });
 
   await waitFor(() => expect(result.current.isLoadingAlbums).toBe(false));
-  // Newest-first by release date — the client always sorts, backend order is not trusted.
   expect(result.current.albums.map((a) => a.title)).toEqual([
     'Samsonite',
     'REST IN BASS',
@@ -97,16 +83,10 @@ it('sorts by release date when no artistName (no backend validation)', async () 
     latency_ms: 0,
   });
 
-  const { result } = renderHook(
-    () => useArtistContent({ sources: _SOURCES }),
-    { wrapper: _wrapper(_client()) },
-  );
+  const { result } = renderHook(() => useArtistContent({ sources: _SOURCES }), {
+    wrapper: _wrapper(_client()),
+  });
 
   await waitFor(() => expect(result.current.isLoadingAlbums).toBe(false));
-  // Sorted by release date descending
-  expect(result.current.albums.map((a) => a.title)).toEqual([
-    'Newer',
-    'Middle',
-    'Older',
-  ]);
+  expect(result.current.albums.map((a) => a.title)).toEqual(['Newer', 'Middle', 'Older']);
 });

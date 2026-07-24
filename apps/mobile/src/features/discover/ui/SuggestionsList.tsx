@@ -19,13 +19,17 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: color.surface1, borderTopColor: color.border }]}>
+    <View
+      style={[styles.container, { backgroundColor: color.surface1, borderTopColor: color.border }]}
+    >
       {suggestions.map((s, i) => (
         <Pressable
           key={`${s.text}-${i}`}
           style={({ pressed }) => [
             styles.row,
-            i > 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border } : null,
+            i > 0
+              ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border }
+              : null,
             pressed ? { opacity: 0.7 } : null,
           ]}
           onPress={() => onSelect(s.text)}

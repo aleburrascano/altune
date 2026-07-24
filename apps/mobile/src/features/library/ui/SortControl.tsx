@@ -9,7 +9,6 @@ import type { SortKey } from './sort';
 
 type SortOption = { key: SortKey; label: string };
 
-/** Count + tappable sort label that opens an ActionSheet of the view's sort options. */
 export function SortControl({
   count,
   noun,

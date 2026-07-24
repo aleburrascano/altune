@@ -1,15 +1,3 @@
-/**
- * useImpressionLogger — visibility-confirmed results_shown emission.
- *
- * IAB/Promoted.ai: an impression only counts once the results actually entered
- * the viewport — that visibility confirmation is the prerequisite for any
- * position-bias correction. We gate on FlatList's onViewableItemsChanged and
- * emit exactly ONE results_shown summary per search_id (ordered signatures +
- * position + provider + confidence), not one event per row. The handlers object
- * is stable across renders (RN forbids swapping onViewableItemsChanged on the
- * fly); the live searchData + recordEvent are read through refs.
- */
-
 import { useRef } from 'react';
 import type { ViewToken } from 'react-native';
 

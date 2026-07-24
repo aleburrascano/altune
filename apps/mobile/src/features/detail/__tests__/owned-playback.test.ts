@@ -3,13 +3,21 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { TrackResponse } from '@shared/api-client/types';
 
 const listed = (title: string): DiscoveryResult =>
-  ({ title, subtitle: 'Radiohead', kind: 'track', sources: [], extras: {} }) as unknown as DiscoveryResult;
+  ({
+    title,
+    subtitle: 'Radiohead',
+    kind: 'track',
+    sources: [],
+    extras: {},
+  }) as unknown as DiscoveryResult;
 
 const owned = (title: string, status: TrackResponse['acquisition_status']): TrackResponse =>
   ({ id: `id-${title}`, title, artist: 'Radiohead', acquisition_status: status }) as TrackResponse;
 
-/** Library lookup backed by a title→row map. */
-const lookupOf = (rows: Record<string, TrackResponse>): LibraryLookup => (title) => rows[title] ?? null;
+const lookupOf =
+  (rows: Record<string, TrackResponse>): LibraryLookup =>
+  (title) =>
+    rows[title] ?? null;
 
 describe('splitOwned', () => {
   it('keeps playable tracks in the order they are displayed, not library order', () => {
@@ -25,8 +33,6 @@ describe('splitOwned', () => {
     expect(split.playable.map((t) => t.title)).toEqual(['a', 'b', 'c']);
   });
 
-  // The three states are genuinely different: unowned needs saving, acquiring
-  // needs waiting, ready can play. Collapsing any two produces a wrong offer.
   it('separates unowned, still-acquiring and playable', () => {
     const tracks = [listed('a'), listed('b'), listed('c'), listed('d')];
     const lookup = lookupOf({
@@ -38,8 +44,8 @@ describe('splitOwned', () => {
     const split = splitOwned(tracks, lookup);
 
     expect(split.playable.map((t) => t.title)).toEqual(['a']);
-    expect(split.acquiringCount).toBe(2); // pending + failed: saved, not playable
-    expect(split.unownedCount).toBe(1); // d
+    expect(split.acquiringCount).toBe(2);
+    expect(split.unownedCount).toBe(1);
   });
 
   it('reports an album you own none of', () => {
@@ -58,8 +64,6 @@ describe('playButtonState', () => {
     });
   });
 
-  // A bare "Play" over 3 of 12 tracks reads as a bug when the queue ends early;
-  // naming the count sets the expectation up front.
   it('names the count when the album is only partly owned', () => {
     expect(
       playButtonState({ playable: [owned('a', 'ready')], unownedCount: 11, acquiringCount: 0 }),

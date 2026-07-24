@@ -1,15 +1,3 @@
-/**
- * The user's chosen colour scheme, persisted across launches.
- *
- * ADR-0008 shipped v1 dark-only and `lightTheme` was drafted but never visually
- * tuned. This exposes it behind an explicit user choice: the default stays dark,
- * so nobody sees light mode without asking for it.
- *
- * Persisted through `expo-file-system` (already a dependency) rather than a new
- * KV native module. Read synchronously at store creation so the first paint is
- * already the right scheme — a theme that flips one frame after launch is worse
- * than one that starts correct.
- */
 import { Directory, File, Paths } from 'expo-file-system';
 import { create } from 'zustand';
 
@@ -38,9 +26,7 @@ function loadScheme(): ColorScheme {
 function saveScheme(scheme: ColorScheme): void {
   try {
     prefFile().write(JSON.stringify(scheme));
-  } catch {
-    // Preference is cosmetic — a failed write just means it resets next launch.
-  }
+  } catch {}
 }
 
 export type ThemePreferenceState = {

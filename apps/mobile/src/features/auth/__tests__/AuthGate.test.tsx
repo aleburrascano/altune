@@ -1,9 +1,3 @@
-/**
- * AuthGate — branches on useSession's SessionState + the current route's
- * segment so it doesn't redirect signed-out users when they're already
- * inside the (auth) group (Slice 10, AC#6).
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { render } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
@@ -24,9 +18,6 @@ jest.mock('expo-router', () => ({
   useSegments: () => mockSegments,
 }));
 
-// Stubbed so these stay routing tests: the real notice pulls in useSignOut ->
-// the Supabase singleton. Its own behaviour is covered in
-// SessionExpiredNotice.test.tsx.
 jest.mock('../ui/SessionExpiredNotice', () => {
   const { Text } = require('react-native');
   return { SessionExpiredNotice: () => <Text testID="session-expired">expired</Text> };
@@ -54,7 +45,7 @@ describe('AuthGate', () => {
 
   it('redirects signed-out users to /sign-in when NOT already in (auth)', () => {
     mockSessionState = { status: 'signed-out' };
-    mockSegments = ['(app)']; // any non-(auth) group
+    mockSegments = ['(app)'];
     const { AuthGate } = require('../ui/AuthGate');
     render(
       <AuthGate>
@@ -103,8 +94,6 @@ describe('AuthGate', () => {
   });
 
   it('shows the expired notice when the backend rejected the token', () => {
-    // The soft-lock: SDK says signed-in, backend says 401. Without this the
-    // user sees a permanently-failing screen and no way to re-authenticate.
     mockSessionState = { status: 'signed-in', session: { access_token: 'abc' } };
     mockSegments = ['library'];
     markSessionExpired();
@@ -119,8 +108,6 @@ describe('AuthGate', () => {
   });
 
   it('does not show the expired notice to a signed-out user', () => {
-    // Signed-out already redirects to /sign-in; the notice would be redundant
-    // and would swallow the redirect.
     mockSessionState = { status: 'signed-out' };
     mockSegments = ['(app)'];
     markSessionExpired();

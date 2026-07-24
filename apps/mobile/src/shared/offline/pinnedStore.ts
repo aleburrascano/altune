@@ -1,15 +1,3 @@
-/**
- * Offline downloads — which tracks the user has pinned, and where they live.
- *
- * The index is persisted alongside the audio so a relaunch knows what it has
- * without re-listing and re-parsing the directory on every read. The FILES are
- * the source of truth though: `reconcile()` runs once at startup and drops any
- * entry whose file has gone (a restore-from-backup, a manual clean), so the UI
- * can never claim a track is available offline when it isn't.
- *
- * Downloads are sequential by design. Three concurrent downloads of a 10 MB
- * track on a phone hotspot is how you get three timeouts instead of one file.
- */
 import { Directory, File, Paths } from 'expo-file-system';
 import { create } from 'zustand';
 
@@ -22,7 +10,6 @@ export type PinnedStatus = 'queued' | 'downloading' | 'ready' | 'failed';
 export type PinnedEntry = {
   trackId: string;
   status: PinnedStatus;
-  /** file:// URI, present once ready. */
   uri?: string;
 };
 
@@ -50,14 +37,11 @@ function loadIndex(): Record<string, PinnedEntry> {
 function saveIndex(entries: Record<string, PinnedEntry>): void {
   try {
     indexFile().write(JSON.stringify(entries));
-  } catch {
-    // The files are the source of truth; a lost index costs a reconcile, not data.
-  }
+  } catch {}
 }
 
 export type PinnedState = {
   entries: Record<string, PinnedEntry>;
-  /** Track ids waiting on the sequential worker. */
   queue: string[];
   isWorking: boolean;
   pin: (trackId: string) => void;
@@ -114,8 +98,6 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     set({ entries: {}, queue: [] });
   },
 
-  // Files win over the index. An entry whose file vanished must not keep
-  // claiming the track is available offline.
   reconcile: () => {
     const { entries } = get();
     const next: Record<string, PinnedEntry> = {};
@@ -124,7 +106,6 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       if (file !== null) {
         next[trackId] = { trackId, status: 'ready', uri: file.uri };
       } else if (entry.status === 'queued' || entry.status === 'downloading') {
-        // Interrupted by a kill — re-queue rather than silently forgetting.
         next[trackId] = { trackId, status: 'queued' };
       }
     }
@@ -140,7 +121,6 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
 type Setter = (partial: Partial<PinnedState> | ((s: PinnedState) => Partial<PinnedState>)) => void;
 type Getter = () => PinnedState;
 
-/** Sequential download worker. One at a time, and re-entrant-safe via isWorking. */
 async function runQueue(set: Setter, get: Getter): Promise<void> {
   if (get().isWorking) return;
   set({ isWorking: true });
@@ -157,12 +137,10 @@ async function runQueue(set: Setter, get: Getter): Promise<void> {
 }
 
 async function downloadOne(trackId: string, set: Setter, get: Getter): Promise<void> {
-  // Unpinned while it sat in the queue.
   if (get().entries[trackId] === undefined) return;
 
   const mark = (entry: PinnedEntry): void => {
     set((s) => {
-      // Don't resurrect an entry the user unpinned mid-download.
       if (s.entries[trackId] === undefined) return {};
       const entries = { ...s.entries, [trackId]: entry };
       saveIndex(entries);
@@ -172,8 +150,6 @@ async function downloadOne(trackId: string, set: Setter, get: Getter): Promise<v
 
   mark({ trackId, status: 'downloading' });
   try {
-    // The same presigned-URL path playback uses. A pinned copy is a real
-    // download of the real object, not a second representation of it.
     const [resolved] = await fetchAudioUrls([trackId]);
     if (!resolved) throw new Error('no signed url');
     const uri = await downloadPinned(trackId, resolved.url);
@@ -183,8 +159,6 @@ async function downloadOne(trackId: string, set: Setter, get: Getter): Promise<v
   }
 }
 
-/** The local file for a track, if it is pinned and ready. Read outside React —
- *  the playback path is not a component. */
 export function pinnedUri(trackId: string): string | undefined {
   const entry = usePinnedStore.getState().entries[trackId];
   return entry?.status === 'ready' ? entry.uri : undefined;

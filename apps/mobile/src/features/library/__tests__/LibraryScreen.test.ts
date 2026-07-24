@@ -1,23 +1,11 @@
-/**
- * `_viewForState` — state-machine helper for LibraryScreen.
- *
- * Slice 10 of view-library. The pure helper carries the load-bearing
- * decisions (which testID renders, which state is "designed" per AC#5/AC#6);
- * the JSX wrapping is straightforward.
- *
- * RNTL component tests (rendering empty/error/list, retry click handling)
- * can land now that jest-expo's preset works; deferred as its own follow-up
- * spec.
- */
-
 import { _viewForState } from '../state';
 import type { TrackResponse } from '../../../shared/api-client/types';
 
-function _state(args: {
-  isLoading?: boolean;
-  error?: Error | null;
-  items?: TrackResponse[];
-}): { isLoading: boolean; error: Error | null; items: TrackResponse[] } {
+function _state(args: { isLoading?: boolean; error?: Error | null; items?: TrackResponse[] }): {
+  isLoading: boolean;
+  error: Error | null;
+  items: TrackResponse[];
+} {
   return {
     isLoading: args.isLoading ?? false,
     error: args.error ?? null,

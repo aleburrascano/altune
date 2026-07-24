@@ -1,7 +1,6 @@
 import { palette } from './palette';
 import type { Theme } from './theme';
 
-/** The shipped v1 theme — refreshed dark identity (cobalt on lifted charcoal). */
 export const darkTheme: Theme = {
   scheme: 'dark',
   color: {

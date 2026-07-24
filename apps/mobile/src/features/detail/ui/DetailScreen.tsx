@@ -1,18 +1,3 @@
-/**
- * DetailScreen — read-only detail for a tapped discovery result.
- *
- * Fed by the in-memory handoff (no per-item backend fetch). The header (back
- * affordance + hero artwork + title + artist·year) is shared across kinds; the
- * body differs per kind (track: play/save + nav; album: tracklist; artist:
- * popular tracks + discography). Identity genres sit under the header inside
- * each body; deep provider metadata lives behind a single Disclosure, not as
- * always-on slabs. An empty handoff redirects to /discover.
- *
- * Primitives are imported directly (not via the @shared/ui barrel) so jest
- * component tests don't transitively load unrelated native modules; Artwork's
- * expo-image dependency is mocked in the test.
- */
-
 import { Redirect, useRouter, useSegments } from 'expo-router';
 import type { ReactElement } from 'react';
 import { ChevronLeft } from 'lucide-react-native';
@@ -43,10 +28,7 @@ import { LastFmEnrichmentSection } from './LastFmEnrichmentSection';
 
 const HERO_SIZE = 200;
 
-function _headerYear(
-  result: ReturnType<typeof getDetailHandoff>,
-  mbYear: number,
-): string | null {
+function _headerYear(result: ReturnType<typeof getDetailHandoff>, mbYear: number): string | null {
   if (result === null) {
     return null;
   }
@@ -69,7 +51,17 @@ export function DetailScreen(): ReactElement {
   const tabRoot = tabRootFromSegments(segments);
   const detailRoute = detailRouteFor(tabRoot);
   const rawResult = getDetailHandoff();
-  const { enriched: result } = useEnrichResult(rawResult ?? { kind: 'track', title: '', subtitle: null, image_url: null, confidence: 'low', sources: [], extras: {} });
+  const { enriched: result } = useEnrichResult(
+    rawResult ?? {
+      kind: 'track',
+      title: '',
+      subtitle: null,
+      image_url: null,
+      confidence: 'low',
+      sources: [],
+      extras: {},
+    },
+  );
   const lateralNav = useLateralNav();
 
   const isFromLibrary = (rawResult?.sources.length ?? 0) === 0;
@@ -79,22 +71,12 @@ export function DetailScreen(): ReactElement {
     artistName: result.title,
     enabled: isLibraryArtist,
   });
-  // The rendered provider enrichments, fetched behind one seam: the
-  // MusicBrainz year for the header, Deezer featured_artists for the collab
-  // line / Featuring row, and the Last.fm artist About block.
   const enrichments = useDetailEnrichments(result);
 
-  // All hooks are called above; only now is it safe to bail on an empty
-  // handoff (cold start / reload / deep link) — returning earlier would make
-  // useArtistDiscovery/useDetailEnrichments conditional and break hook order.
   if (rawResult === null) {
     return <Redirect href="/discover" />;
   }
 
-  // Lock the hero to the tapped card's artwork — the identity-bound image the
-  // discovery card already resolved. Do NOT re-resolve via enrichment here: a
-  // name-based artwork lookup on open was overwriting the card with a different
-  // (often wrong same-name) artist's image and causing a visible flicker.
   const heroImageUrl =
     (result.image_url ?? '') !== ''
       ? result.image_url
@@ -131,9 +113,6 @@ export function DetailScreen(): ReactElement {
     </View>
   );
 
-  // For a collab album, append its co-primary artists to the header artist line
-  // ("Drake, 21 Savage"). The tap target stays the primary (result.subtitle);
-  // tracks keep their own "Featuring" row, so only albums augment the header.
   const albumCollaborators =
     result.kind === 'album' ? featuredArtistsFromExtras(enrichments.deezer?.featured_artists) : [];
   const subtitleDisplay =
@@ -186,10 +165,7 @@ export function DetailScreen(): ReactElement {
   return (
     <Screen testID="detail-header">
       {backButton}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {heroContent}
 
         {result.kind === 'track' ? (
@@ -202,11 +178,19 @@ export function DetailScreen(): ReactElement {
         ) : null}
 
         {result.kind === 'album' ? (
-          <AlbumDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} />
+          <AlbumDetailBody
+            result={result}
+            detailRoute={detailRoute}
+            isFromLibrary={isFromLibrary}
+          />
         ) : null}
 
         {result.kind === 'artist' ? (
-          <ArtistDetailBody result={result} detailRoute={detailRoute} isFromLibrary={isFromLibrary} />
+          <ArtistDetailBody
+            result={result}
+            detailRoute={detailRoute}
+            isFromLibrary={isFromLibrary}
+          />
         ) : null}
         {result.kind === 'artist' && artistHasAbout ? (
           <Disclosure label={`About ${result.title}`} testID="detail-artist-about">
@@ -223,5 +207,10 @@ const styles = StyleSheet.create({
   back: { paddingVertical: spacing.lg, alignSelf: 'flex-start', minHeight: 48 },
   hero: { alignItems: 'center', paddingTop: spacing.lg, gap: spacing.sm },
   title: { textAlign: 'center', marginTop: spacing.lg },
-  subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
 });

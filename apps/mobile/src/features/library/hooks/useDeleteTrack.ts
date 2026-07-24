@@ -27,9 +27,5 @@ export function useDeleteTrack() {
       }
       Alert.alert('Delete failed', 'Could not remove the track. Please try again.');
     },
-    // No onSettled invalidate (F17): the optimistic remove covers the library
-    // view instantly, and the server's own track_deleted event echoes back to
-    // this device and removes the row from every other cache (playlist details)
-    // + reconciles playlist counts — the four refetches were redundant.
   });
 }

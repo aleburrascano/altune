@@ -1,10 +1,3 @@
-/**
- * `generation` is the queue's ownership token: it bumps whenever the queue is
- * REPLACED, so a slow async flow (resume) can prove the queue it started against
- * is still in play before it writes. Transitions WITHIN a queue must not bump it,
- * or resume would abort on an ordinary auto-advance.
- */
-
 import { useQueueStore } from '../queueStore';
 import type { PlaybackTrack } from '../types';
 
@@ -49,9 +42,6 @@ describe('queue generation', () => {
     expect(gen()).toBe(owned);
   });
 
-  // Resetting to INITIAL must not rewind the counter — a resume holding
-  // generation 1 would otherwise see 1 again after a clear+load and wrongly
-  // conclude it still owned the queue (ABA).
   it('never rewinds when the queue empties', () => {
     useQueueStore.getState().loadQueue([track('a')], 0, null);
     const owned = gen();

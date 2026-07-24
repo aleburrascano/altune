@@ -27,8 +27,6 @@ function edgeColor(theme: Theme, tone: BannerTone): string {
   }
 }
 
-/** Inline status banner with a tone-colored left edge (partial-results / errors).
- * A string child is wrapped in Text; any other node renders as-is. */
 export function Banner({ children, tone = 'info', style, testID }: BannerProps) {
   const theme = useTheme();
   return (

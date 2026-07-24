@@ -1,12 +1,3 @@
-/**
- * TrackSaveControl — the 40pt circular save/download control on a track row.
- *
- * One control, the whole acquire lifecycle: add (not in library) → saving
- * (audio downloading server-side) → ready (playable) → failed (tap to retry).
- * The visible affordance is a proper tappable circle (not a bare 16pt glyph),
- * so it reads as pressable and clears the 44pt touch-target bar.
- */
-
 import type { ReactElement } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 

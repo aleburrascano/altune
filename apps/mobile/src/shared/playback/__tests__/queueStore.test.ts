@@ -64,31 +64,25 @@ describe('skipToNext', () => {
 
   it('wraps to first with repeat all', () => {
     useQueueStore.getState().loadQueue(tracks, 4, null);
-    useQueueStore.getState().cycleRepeatMode(); // off -> all
+    useQueueStore.getState().cycleRepeatMode();
     const next = useQueueStore.getState().skipToNext();
     expect(next).toEqual(tracks[0]);
     expect(useQueueStore.getState().currentIndex).toBe(0);
   });
 
-  // Repeat 'one' loops the track on AUTO-advance; an explicit next still moves on.
-  // This mirrors the native player (RepeatMode.Track), which is what ships — the
-  // store's skip actions only drive the Expo Go stub, so a store that stayed put
-  // here would mean next did different things in Expo Go and in a real build.
   it('advances with repeat one', () => {
     useQueueStore.getState().loadQueue(tracks, 2, null);
-    useQueueStore.getState().cycleRepeatMode(); // off -> all
-    useQueueStore.getState().cycleRepeatMode(); // all -> one
+    useQueueStore.getState().cycleRepeatMode();
+    useQueueStore.getState().cycleRepeatMode();
     const next = useQueueStore.getState().skipToNext();
     expect(next).toEqual(tracks[3]);
     expect(useQueueStore.getState().currentIndex).toBe(3);
   });
 
-  // ...and at the end there is nothing to advance to: native rejects skipToNext
-  // under RepeatMode.Track, so hasNext must not claim otherwise.
   it('does not wrap at the end with repeat one', () => {
     useQueueStore.getState().loadQueue(tracks, 4, null);
-    useQueueStore.getState().cycleRepeatMode(); // off -> all
-    useQueueStore.getState().cycleRepeatMode(); // all -> one
+    useQueueStore.getState().cycleRepeatMode();
+    useQueueStore.getState().cycleRepeatMode();
     expect(useQueueStore.getState().hasNext()).toBe(false);
     expect(useQueueStore.getState().skipToNext()).toBeNull();
   });
@@ -115,7 +109,7 @@ describe('skipToPrevious', () => {
 
   it('wraps to last with repeat all', () => {
     useQueueStore.getState().loadQueue(tracks, 0, null);
-    useQueueStore.getState().cycleRepeatMode(); // off -> all
+    useQueueStore.getState().cycleRepeatMode();
     const prev = useQueueStore.getState().skipToPrevious();
     expect(prev).toEqual(tracks[4]);
     expect(useQueueStore.getState().currentIndex).toBe(4);
@@ -143,11 +137,9 @@ describe('toggleShuffle', () => {
     useQueueStore.getState().toggleShuffle();
     const s = useQueueStore.getState();
     expect(s.shuffled).toBe(true);
-    // current track and everything before it are untouched...
     expect(s.currentIndex).toBe(2);
     expect(s.playOrder.slice(0, 3)).toEqual([0, 1, 2]);
     expect(s.currentTrack()).toEqual(tracks[2]);
-    // ...only the upcoming tail is reordered (still the same set of tracks).
     expect([...s.playOrder.slice(3)].sort()).toEqual([3, 4]);
     expect(s.playOrder.length).toBe(5);
   });
@@ -238,9 +230,7 @@ describe('enqueue', () => {
     const extra = makeTrack('z');
     useQueueStore.getState().enqueue(extra);
     const s = useQueueStore.getState();
-    // the new track's index (5) lands last in the play sequence...
     expect(s.playOrder[s.playOrder.length - 1]).toBe(5);
-    // ...and the existing order (current + history + upcoming) is untouched.
     expect(s.playOrder.slice(0, orderBefore.length)).toEqual(orderBefore);
     expect(s.currentIndex).toBe(2);
     expect(s.currentTrack()).toEqual(tracks[2]);
@@ -262,12 +252,9 @@ describe('playNext', () => {
     useQueueStore.getState().playNext(extra);
     const s = useQueueStore.getState();
     expect(s.tracks).toHaveLength(6);
-    // new track index is 5; it sits at play-order position currentIndex+1 = 2.
     expect(s.playOrder).toEqual([0, 1, 5, 2, 3, 4]);
-    // current track and index are unchanged.
     expect(s.currentIndex).toBe(1);
     expect(s.currentTrack()).toEqual(tracks[1]);
-    // the very next track is now the inserted one.
     const next = useQueueStore.getState().skipToNext();
     expect(next).toEqual(extra);
   });
@@ -304,9 +291,6 @@ describe('removeFromQueue', () => {
 
 describe('setShuffled (resume order preservation)', () => {
   it('marks the queue shuffled without reordering', () => {
-    // Resume loads track_ids already in (shuffled) play order, then marks it
-    // shuffled — the order must be preserved exactly, unlike toggleShuffle which
-    // re-randomizes the tail.
     const savedShuffledOrder = [makeTrack('c'), makeTrack('a'), makeTrack('e'), makeTrack('b')];
     useQueueStore.getState().loadQueue(savedShuffledOrder, 1, null);
 
@@ -315,7 +299,6 @@ describe('setShuffled (resume order preservation)', () => {
     const s = useQueueStore.getState();
     expect(s.shuffled).toBe(true);
     expect(orderedQueueTracks(s)).toEqual(savedShuffledOrder);
-    // Current track is unchanged by the flag flip.
     expect(s.currentTrack()).toEqual(savedShuffledOrder[1]);
   });
 
@@ -328,8 +311,7 @@ describe('setShuffled (resume order preservation)', () => {
 });
 
 describe('restoreQueue (full-fidelity resume)', () => {
-  // tracks in NATURAL order [a,b,c,d,e]; a shuffled play order [c,a,e,b,d].
-  const natural = tracks; // a,b,c,d,e
+  const natural = tracks;
   const playOrder = [2, 0, 4, 1, 3];
 
   it('restores the exact shuffled play sequence with natural-order tracks', () => {
@@ -337,28 +319,24 @@ describe('restoreQueue (full-fidelity resume)', () => {
     const s = useQueueStore.getState();
 
     expect(s.shuffled).toBe(true);
-    // Plays in the shuffled order...
     expect(orderedQueueTracks(s).map((t) => t.source)).toEqual(
       [2, 0, 4, 1, 3].map((i) => natural[i]!.source),
     );
-    // ...current is the play-order position 1 → natural[0] === 'a'.
     expect(s.currentTrack()).toEqual(natural[0]);
   });
 
   it('un-shuffle returns upcoming tracks to the original natural order', () => {
     useQueueStore.getState().restoreQueue(natural, playOrder, 1, null, true);
-    // Toggle shuffle off — upcoming (after the current) should sort back to natural.
     useQueueStore.getState().toggleShuffle();
     const s = useQueueStore.getState();
 
     expect(s.shuffled).toBe(false);
-    // Head (played + current) is preserved: [c, a]; upcoming sorts to natural: [b, d, e].
     expect(orderedQueueTracks(s)).toEqual([
-      natural[2]!, // c (played)
-      natural[0]!, // a (current)
-      natural[1]!, // b
-      natural[3]!, // d
-      natural[4]!, // e
+      natural[2]!,
+      natural[0]!,
+      natural[1]!,
+      natural[3]!,
+      natural[4]!,
     ]);
   });
 
@@ -370,8 +348,8 @@ describe('restoreQueue (full-fidelity resume)', () => {
 
 describe('reorderQueue', () => {
   it('moves an upcoming track up without touching the current index', () => {
-    useQueueStore.getState().loadQueue(tracks, 1, null); // current at 1; upcoming c,d,e
-    useQueueStore.getState().reorderQueue(3, 2); // d above c
+    useQueueStore.getState().loadQueue(tracks, 1, null);
+    useQueueStore.getState().reorderQueue(3, 2);
     const s = useQueueStore.getState();
     expect(s.playOrder).toEqual([0, 1, 3, 2, 4]);
     expect(s.currentIndex).toBe(1);

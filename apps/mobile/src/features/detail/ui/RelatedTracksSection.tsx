@@ -1,12 +1,3 @@
-/**
- * RelatedTracksSection — "Tracks you might like" rail on track detail.
- *
- * Renders nothing unless the track carries a SoundCloud source and the endpoint
- * returns a non-empty set (spec AC#4/AC#6/AC#7). Cards reuse the content-item
- * navigation (handoff push) used by the artist/album bodies, so a tap opens the
- * related track's own detail — chainable seed → related → related (AC#8).
- */
-
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -34,8 +25,6 @@ export function RelatedTracksSection({
   const router = useRouter();
   const { relatedTracks } = useRelatedTracks({ sources: result.sources });
 
-  // Hidden by construction for non-SoundCloud results (no fetch), on empty sets,
-  // and on failure (the hook returns []). No empty-rail shell.
   if (relatedTracks.length === 0) {
     return null;
   }

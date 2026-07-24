@@ -51,5 +51,10 @@ export function FilteredResults({
 }
 
 const styles = StyleSheet.create({
-  filteredEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
+  filteredEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing['2xl'],
+  },
 });

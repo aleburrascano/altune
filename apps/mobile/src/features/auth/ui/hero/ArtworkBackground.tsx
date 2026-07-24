@@ -4,18 +4,6 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { radius, useTheme } from '@shared/ui/theme';
 
-/**
- * The auth "artwork wall" — a rotated grid of rounded gradient tiles, blurred
- * (expo-blur) and faded under a veil down to the canvas. Static, decorative.
- * Tile colors derive from the theme so it stays token-driven.
- *
- * AIDEV-NOTE: tiles are gradient stand-ins for album art (no real artwork
- * pre-auth). Swap the tile grid for cached cover images later if wanted — the
- * blur + veil layering stays. Android blur is weaker pre-SDK-55; the dark
- * tint + veil keep it looking intentional there.
- */
-
-// canvas hex -> rgba, so the veil's translucent stops track the theme color.
 function withAlpha(hex: string, alpha: number): string {
   const n = hex.replace('#', '');
   const r = parseInt(n.slice(0, 2), 16);
@@ -31,12 +19,10 @@ export function ArtworkBackground() {
   const theme = useTheme();
   const { width, height } = useWindowDimensions();
 
-  // Oversize + rotate so tile edges bleed past every screen edge.
   const grid = Math.max(width, height) * 1.7;
   const cell = grid / COLS;
   const canvas = theme.color.canvas;
 
-  // Tile palette built from theme accents (cobalt, blue, green, amber, red).
   const [heroA, heroB] = theme.color.heroGradient;
   const pairs: [string, string][] = [
     [theme.color.accent, heroB],
@@ -77,9 +63,7 @@ export function ArtworkBackground() {
           );
         })}
       </View>
-      {/* Blur the tile grid into a soft wash. */}
       <BlurView intensity={48} tint="dark" style={StyleSheet.absoluteFill} />
-      {/* Veil: fades the art down into the solid canvas where the form sits. */}
       <LinearGradient
         colors={[withAlpha(canvas, 0.3), withAlpha(canvas, 0.5), withAlpha(canvas, 0.96), canvas]}
         locations={[0, 0.42, 0.78, 1]}

@@ -1,12 +1,3 @@
-/**
- * playlistCachePatch — patch playlist caches from server events (F13), so a
- * rename / remove-track / reorder on another device propagates instantly instead
- * of forcing a refetch (or, before F13, not propagating at all).
- *
- * Detail is cached at playlistKeys.detail(playlistId) (a PlaylistDetailResponse);
- * the list is playlistKeys.list (a ListPlaylistsResponse).
- */
-
 import type { QueryClient } from '@tanstack/react-query';
 
 import type {
@@ -16,7 +7,11 @@ import type {
 } from '@shared/api-client/types';
 import { playlistKeys } from '@shared/lib/query-keys';
 
-export function patchPlaylistName(queryClient: QueryClient, playlistId: string, name: string): void {
+export function patchPlaylistName(
+  queryClient: QueryClient,
+  playlistId: string,
+  name: string,
+): void {
   queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) =>
     prev ? { ...prev, name } : prev,
   );
@@ -57,8 +52,6 @@ export function reorderPlaylistCache(
   queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
     if (!prev) return prev;
     const byId = new Map<string, TrackResponse>(prev.tracks.map((t) => [t.id, t]));
-    // Follow the new id order; keep any track not named in the event at the end
-    // (defensive — the server sends the full order, so this is normally empty).
     const ordered = trackIds.map((id) => byId.get(id)).filter((t): t is TrackResponse => t != null);
     const missing = prev.tracks.filter((t) => !trackIds.includes(t.id));
     return { ...prev, tracks: [...ordered, ...missing] };

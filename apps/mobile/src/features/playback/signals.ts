@@ -1,16 +1,5 @@
-/**
- * signals — pure helpers for behavioral playback telemetry.
- *
- * Kept pure (the state.ts pattern) so the listen-threshold and payload shaping
- * are unit-testable without a native player. The effect-driven emission lives in
- * usePlaybackSignals.
- */
-
 import type { PlaybackTrack, QueueSource } from '@shared/playback/types';
 
-// Kim WSDM 2014: a play becomes a satisfaction signal once the listen passes a
-// threshold — 30s OR 50% of the track, whichever comes first. Below it the play
-// is just a sample, not evidence the user wanted this result.
 export const LISTEN_THRESHOLD_MS = 30000;
 
 export function listenThresholdMs(durationMs: number): number {
@@ -32,8 +21,6 @@ export type TrackEventPayload = {
   dwell_ms?: number;
 };
 
-// trackKey is a stable identity for change detection — which library track or
-// preview is playing, independent of object identity across renders.
 export function trackKey(track: PlaybackTrack): string {
   const src =
     track.source.kind === 'library'

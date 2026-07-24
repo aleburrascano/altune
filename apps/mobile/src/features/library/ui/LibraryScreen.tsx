@@ -87,18 +87,15 @@ export function LibraryScreen(): ReactElement {
   const sortKey = sortByChip[chip];
   const setSort = (key: SortKey): void => setSortByChip((prev) => ({ ...prev, [chip]: key }));
 
-  // `filter`/`matches` are memoized inside useLibrarySearch on the committed
-  // query; the object wrapping them is not. Destructuring first gives the memos
-  // below a dependency that actually holds still between renders.
   const { filter: searchFilter, matches: searchMatches } = search;
 
-  // Filtering + sorting the whole library ran on every render — including every
-  // keystroke in the search bar, which re-sorts all four collections to render
-  // one. Memoized per collection so a chip switch or a sort change recomputes
-  // only what it touched.
   const sorted = {
     playlists: useMemo(
-      () => sortPlaylists(pl.playlists.filter((p) => searchMatches(p.name)), sortByChip.playlists),
+      () =>
+        sortPlaylists(
+          pl.playlists.filter((p) => searchMatches(p.name)),
+          sortByChip.playlists,
+        ),
       [pl.playlists, searchMatches, sortByChip.playlists],
     ),
     tracks: useMemo(
@@ -114,20 +111,25 @@ export function LibraryScreen(): ReactElement {
       [state.albums, searchMatches, sortByChip.albums],
     ),
     artists: useMemo(
-      () => sortArtists(state.artists.filter((a) => searchMatches(a.artist)), sortByChip.artists),
+      () =>
+        sortArtists(
+          state.artists.filter((a) => searchMatches(a.artist)),
+          sortByChip.artists,
+        ),
       [state.artists, searchMatches, sortByChip.artists],
     ),
   };
 
-  // Typing in the search box silently reshapes the list below it. Announce the
-  // new count so a screen-reader user knows whether their query narrowed to
-  // something — the visual count in SortControl is the sighted equivalent.
   const chipCount = sorted[chip].length;
   useAnnounceChange(
     search.hasQuery ? `${chipCount} ${chipCount === 1 ? 'result' : 'results'}` : '',
   );
 
-  const view = _viewForState({ isLoading: state.isLoading, error: state.error, items: state.allTracks });
+  const view = _viewForState({
+    isLoading: state.isLoading,
+    error: state.error,
+    items: state.allTracks,
+  });
 
   if (view === 'loading') {
     return (
@@ -149,11 +151,8 @@ export function LibraryScreen(): ReactElement {
         <View testID="library-error" style={styles.center}>
           <Text variant="title">Couldn&apos;t load your library</Text>
           <Text variant="label" tone="secondary" style={styles.centerSub}>
-            {/* Blaming the connection for a server fault sends people to
-                restart their router; blaming the server for being offline is
-                just as wrong. Classify the error we already caught. */}
             {isNetworkError(state.error)
-              ? "You appear to be offline. Your library is safe — reconnect and try again."
+              ? 'You appear to be offline. Your library is safe — reconnect and try again.'
               : 'Something went wrong on our end. Try again in a moment.'}
           </Text>
           <Button testID="library-retry" label="Retry" onPress={state.refetch} />
@@ -177,8 +176,6 @@ export function LibraryScreen(): ReactElement {
     );
   }
 
-  // One refresh for the whole screen: the chips are views over two queries, so
-  // a pull on any of them reconciles both rather than half the surface.
   const refresh: ListRefresh = {
     refreshing: state.isRefetching || pl.isRefetchingPlaylists,
     onRefresh: () => {
@@ -230,7 +227,11 @@ export function LibraryScreen(): ReactElement {
       <AddToPlaylistSheet
         visible={pl.addToPlaylistTrack != null}
         trackId={pl.addToPlaylistTrack?.id ?? ''}
-        trackTitle={pl.addToPlaylistTrack != null ? `${pl.addToPlaylistTrack.title} — ${pl.addToPlaylistTrack.artist}` : ''}
+        trackTitle={
+          pl.addToPlaylistTrack != null
+            ? `${pl.addToPlaylistTrack.title} — ${pl.addToPlaylistTrack.artist}`
+            : ''
+        }
         onClose={() => pl.setAddToPlaylistTrack(null)}
       />
       <ContextMenu

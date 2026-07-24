@@ -5,23 +5,15 @@ import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'rea
 import { fontFamily, minInteractiveHeight, radius, spacing, typography } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 
-export interface TextFieldProps
-  extends Omit<TextInputProps, 'style' | 'placeholderTextColor' | 'secureTextEntry'> {
-  /** Mask the value and render a show/hide toggle (passwords). */
+export interface TextFieldProps extends Omit<
+  TextInputProps,
+  'style' | 'placeholderTextColor' | 'secureTextEntry'
+> {
   secure?: boolean;
-  /** Fill color role — pick the surface that contrasts with the field's parent. */
   surface?: 'surface1' | 'surface2';
-  /** Render a danger border (the field failed validation). */
   error?: boolean;
 }
 
-/**
- * The single text-input affordance for standalone form fields (auth, modals).
- * Owns its focus state so the accent border is automatic; `secure` adds a
- * masked value + show/hide toggle. SearchBar stays separate — it's a distinct
- * affordance (leading icon, clear button, pending bar). Lives outside the
- * `@shared/ui` barrel because it pulls in `lucide-react-native`; import by path.
- */
 export function TextField({
   secure = false,
   surface = 'surface1',

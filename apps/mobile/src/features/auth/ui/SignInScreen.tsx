@@ -17,9 +17,7 @@ export function SignInScreen(): ReactElement {
       onSubmit={(email, password) => void signIn(email, password)}
       pending={state.kind === 'pending'}
       hasError={state.kind === 'error'}
-      errorText={
-        state.kind === 'error' ? authErrorText(state.reason, GENERIC_SIGN_IN_ERROR) : ''
-      }
+      errorText={state.kind === 'error' ? authErrorText(state.reason, GENERIC_SIGN_IN_ERROR) : ''}
       linkHref="/sign-up"
       linkTestID="link-to-sign-up"
       linkQuestion="No account?"

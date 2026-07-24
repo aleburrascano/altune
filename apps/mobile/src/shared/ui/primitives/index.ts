@@ -12,10 +12,6 @@ export { Banner } from './Banner';
 export type { BannerProps, BannerTone } from './Banner';
 export { ConfidenceDot } from './ConfidenceDot';
 export type { ConfidenceDotProps } from './ConfidenceDot';
-// Artwork is intentionally NOT re-exported from the barrel: it pulls in
-// `expo-image`, which the barrel must stay free of so `@shared/ui` is safe to
-// import anywhere (incl. jest) without a heavy transitive load (structure audit
-// F2). Import it directly: `@shared/ui/primitives/Artwork`.
 export { Wordmark } from './Wordmark';
 export type { WordmarkProps } from './Wordmark';
 export { IconButton } from './IconButton';
@@ -24,9 +20,5 @@ export { Button } from './Button';
 export type { ButtonProps, ButtonVariant } from './Button';
 export { Skeleton } from './Skeleton';
 export type { SkeletonProps } from './Skeleton';
-// SearchBar is intentionally NOT re-exported from the barrel: it pulls in
-// `lucide-react-native`, which the barrel must stay free of so `@shared/ui` is
-// safe to import anywhere (incl. jest) without a heavy transitive load
-// (structure audit F2). Import it directly: `@shared/ui/primitives/SearchBar`.
 export { ContextMenu } from './ContextMenu';
 export type { ContextMenuItem } from './ContextMenu';

@@ -11,8 +11,6 @@ describe('coverColumns', () => {
     expect(coverColumns(1024)).toBe(4);
   });
 
-  // A rotated or split-view window is narrow again — the layout must follow the
-  // actual width, not a device class decided once at launch.
   it('returns to the phone layout for a narrow split-view window', () => {
     expect(coverColumns(500)).toBe(2);
   });
@@ -28,7 +26,6 @@ describe('avatarColumns', () => {
 
 describe('cellSize', () => {
   it('divides the space left after padding and gaps', () => {
-    // 400 - 2*16 - 1*12 = 356 across 2 columns
     expect(cellSize({ width: 400, columns: 2, horizontalPadding: 16, gap: 12 })).toBe(178);
   });
 

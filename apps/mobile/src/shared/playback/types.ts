@@ -13,9 +13,6 @@ export interface PlaybackTrack {
   readonly artworkUrl: string | null;
   readonly durationSeconds?: number | undefined;
   readonly featuredArtists?: readonly FeaturedArtist[] | undefined;
-  // Discovery provenance, present only when the track was queued from a search
-  // result. Carried onto play/skip/completed events so behavioral satisfaction
-  // joins back to the search and the result_signature it scores.
   readonly searchId?: string | undefined;
   readonly resultSignature?: string | undefined;
 }
@@ -29,37 +26,22 @@ export interface PlaybackState {
 }
 
 export interface PlaybackControls {
-  /** Play a single track immediately (search/detail previews). Bypasses the queue. */
   play(track: PlaybackTrack): Promise<void>;
-  /** Load an ordered track list into the native queue and start at startIndex. */
   startQueue(
     orderedTracks: readonly PlaybackTrack[],
     startIndex: number,
     options?: { autoplay?: boolean; startPositionMs?: number },
   ): Promise<void>;
-  /** Jump to an already-loaded queue position (instant — track is prefetched). */
   skipToQueueIndex(index: number): Promise<void>;
-  /**
-   * Replace the upcoming tracks (everything after the current one) in place,
-   * without disturbing the currently-playing track. Used by shuffle so toggling
-   * never re-buffers or interrupts audio.
-   */
   reorderUpcoming(upcomingTracks: readonly PlaybackTrack[]): Promise<void>;
-  /** Append a track to the end of the native queue (Add to Queue). */
   appendToQueue(track: PlaybackTrack): Promise<void>;
-  /** Insert a track into the native queue at the given play-order position (Play Next). */
   insertNext(track: PlaybackTrack, position: number): Promise<void>;
-  /** Advance to the next queued track natively (gapless, no JS cold-load). */
   skipNext(): Promise<void>;
-  /** Return to the previous queued track natively. */
   skipPrevious(): Promise<void>;
-  /** Remove a queued track by its play-order position. */
   removeQueueIndex(index: number): Promise<void>;
   pause(): void;
   resume(): void;
   seekTo(positionMs: number): void;
-  /** Playback rate multiplier (1 = normal). Pitch handling is the native
-   *  player's; RNTP preserves pitch on both platforms. */
   setRate(rate: number): void;
   stop(): void;
   retry(): void;

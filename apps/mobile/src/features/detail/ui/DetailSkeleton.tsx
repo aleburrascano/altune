@@ -4,11 +4,6 @@ import { StyleSheet, View } from 'react-native';
 import { Skeleton } from '@shared/ui/primitives/Skeleton';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-/**
- * Shape-matched loading placeholders for the detail bodies, so their content
- * loads with the same skeleton idiom the rest of the app uses (discover,
- * library) instead of a bare centered spinner.
- */
 export function TrackRowsSkeleton({
   count = 6,
   testID,

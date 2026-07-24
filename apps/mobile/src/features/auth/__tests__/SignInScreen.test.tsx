@@ -1,12 +1,3 @@
-/**
- * SignInScreen — exercises the form + error surface (Slice 11, AC#2, AC#3).
- *
- * Mocks the supabase singleton's auth.signInWithPassword so the screen's
- * useSignIn dispatches into a controlled outcome. AC#3 specifically says
- * NO assertion on the wording of the error — just presence + non-empty
- * text at testID="auth-error".
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockSignIn = jest.fn();

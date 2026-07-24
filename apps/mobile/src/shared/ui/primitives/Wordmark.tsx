@@ -7,7 +7,6 @@ export type WordmarkProps = {
   size?: number;
 };
 
-/** The Altune wordmark: lowercase "altune" in Plus Jakarta Sans + a cobalt dot. */
 export function Wordmark({ size = 28 }: WordmarkProps) {
   const theme = useTheme();
   const dot = Math.max(4, Math.round(size * 0.13));
@@ -33,8 +32,6 @@ export function Wordmark({ size = 28 }: WordmarkProps) {
           borderRadius: dot / 2,
           backgroundColor: theme.color.accent,
           marginLeft: 3,
-          // Lift the dot to sit on the type baseline (flex-end aligns it to the
-          // text box bottom, which sits below the glyphs' visual bottom).
           marginBottom: size * 0.2,
         }}
       />

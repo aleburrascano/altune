@@ -1,8 +1,3 @@
-/**
- * completeAuthIntent — exchanges parsed deep-link tokens for a Supabase
- * session and routes recovery to set-new-password. SDK + router mocked.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 const mockVerifyOtp = jest.fn();
 const mockSetSession = jest.fn();
 const mockExchange = jest.fn();

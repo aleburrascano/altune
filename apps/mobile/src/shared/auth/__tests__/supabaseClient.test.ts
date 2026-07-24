@@ -1,15 +1,3 @@
-/**
- * supabaseClient — verifies the SDK is constructed with the expo-secure-store
- * storage adapter (AC: the spec's expo-secure-store Risk pinned by Slice 9a's
- * failing test).
- *
- * Notes:
- * - jest.mock factories cannot close over outer-scope variables unless they're
- *   prefixed with `mock` (jest's allowed convention).
- * - Jest in this project doesn't enable --experimental-vm-modules; use
- *   jest.isolateModules + require() to re-evaluate the singleton per test.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import * as SecureStore from 'expo-secure-store';
 
 jest.mock('expo-secure-store', () => ({

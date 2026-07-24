@@ -1,11 +1,3 @@
-/**
- * Disclosure — a single collapsible row for deep, secondary metadata.
- *
- * The default detail screen stays clean; provider deep-cuts (album credits /
- * label, artist bio / links) live behind one tap here instead of as always-on
- * slabs. Collapsed by default.
- */
-
 import { useState, type ReactElement, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 

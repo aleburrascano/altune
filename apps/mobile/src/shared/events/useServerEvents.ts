@@ -1,14 +1,3 @@
-/**
- * useServerEvents — connects to the SSE endpoint and invalidates
- * React Query caches when domain events arrive from the server.
- *
- * Lifecycle:
- * - Connects when the app is in the foreground and authenticated
- * - Disconnects when backgrounded
- * - Reconnects automatically on foreground or connection loss
- * - Sends Last-Event-ID on reconnect for replay
- */
-
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
@@ -39,9 +28,7 @@ export function useServerEvents(): void {
       applyServerEvent(queryClient, event);
     };
 
-    const handleError = (): void => {
-      // Reconnection is handled by SSEClient internally
-    };
+    const handleError = (): void => {};
 
     const client = new SSEClient(url, getAccessToken, handleEvent, handleError);
     clientRef.current = client;

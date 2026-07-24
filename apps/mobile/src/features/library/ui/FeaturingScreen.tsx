@@ -56,20 +56,21 @@ export function FeaturingScreen(): ReactElement {
     },
   };
 
-  // Navigate within the current tab stack (discover or library) so back returns
-  // to the detail screen we came from, not the tab root.
   const openTrackDetail = (track: TrackResponse): void => {
     setDetailHandoff(trackToDiscoveryResult(track));
     router.push(`/${tabRoot}/detail` as '/discover/detail');
   };
 
-  // Option A: when the library has nothing featuring this artist, don't dead-end —
-  // search discovery for them and open their detail so tapping always leads somewhere.
   const exploreArtist = async (): Promise<void> => {
     if (exploring) return;
     setExploring(true);
     try {
-      const res = await searchDiscovery({ q: fa.name, kinds: ['artist', 'track'], limit: 1, saveHistory: false });
+      const res = await searchDiscovery({
+        q: fa.name,
+        kinds: ['artist', 'track'],
+        limit: 1,
+        saveHistory: false,
+      });
       const result = res.results[0];
       if (result !== undefined) {
         setDetailHandoff(result);
@@ -92,8 +93,12 @@ export function FeaturingScreen(): ReactElement {
       <View style={styles.header}>
         <IconButton icon={ChevronLeft} size={24} onPress={goBack} accessibilityLabel="Back" />
         <View style={styles.headerText}>
-          <Text variant="caption" tone="tertiary">Featuring</Text>
-          <Text variant="title" numberOfLines={1}>{fa.name}</Text>
+          <Text variant="caption" tone="tertiary">
+            Featuring
+          </Text>
+          <Text variant="title" numberOfLines={1}>
+            {fa.name}
+          </Text>
         </View>
       </View>
 
@@ -105,7 +110,9 @@ export function FeaturingScreen(): ReactElement {
         </View>
       ) : isError ? (
         <View style={styles.centered}>
-          <Text variant="body" tone="secondary">Couldn't load tracks.</Text>
+          <Text variant="body" tone="secondary">
+            Couldn't load tracks.
+          </Text>
           <Text variant="label" tone="accent" onPress={() => void refetch()} style={styles.retry}>
             Retry
           </Text>
@@ -159,7 +166,13 @@ const styles = StyleSheet.create({
   },
   headerText: { flex: 1 },
   list: { gap: spacing.sm, paddingTop: spacing.md },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.md,
+    padding: spacing.xl,
+  },
   emptyText: { textAlign: 'center' },
   retry: { paddingTop: spacing.sm },
 });

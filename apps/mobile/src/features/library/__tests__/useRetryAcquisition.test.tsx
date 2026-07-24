@@ -1,8 +1,3 @@
-/**
- * useRetryAcquisition optimistically flips a failed row back to pending across
- * the caches, so retry is realtime instead of waiting for a refetch.
- */
-
 import { renderHook, act } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';

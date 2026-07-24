@@ -1,9 +1,3 @@
-/**
- * SetNewPasswordScreen — new password + confirm → updateUser, then route to
- * the library (AC#7). Validation (policy + match) gates submit. SDK + router
- * mocked.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockUpdateUser = jest.fn();

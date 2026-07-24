@@ -10,7 +10,6 @@ type UseDebouncedSearchOptions = {
 type UseDebouncedSearchReturn = {
   inputValue: string;
   committedQuery: string;
-  /** True when the commit came from Enter key or history tap, not auto-debounce. */
   isExplicitSubmit: boolean;
   onChangeText: (text: string) => void;
   onSubmit: () => void;

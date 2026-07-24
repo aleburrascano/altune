@@ -2,15 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Search } from 'lucide-react-native';
 
-import {
-  Button,
-  Chip,
-  Skeleton,
-  Text,
-  radius,
-  spacing,
-  useTheme,
-} from '@shared/ui';
+import { Button, Chip, Skeleton, Text, radius, spacing, useTheme } from '@shared/ui';
 
 import { isNetworkError } from '@shared/lib/isNetworkError';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
@@ -26,13 +18,15 @@ const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: str
   { filter: 'all', label: 'All', testID: 'discover-filter-all' },
   { filter: 'album', label: kindLabel('album', { plural: true }), testID: 'discover-filter-album' },
   { filter: 'track', label: kindLabel('track', { plural: true }), testID: 'discover-filter-track' },
-  { filter: 'artist', label: kindLabel('artist', { plural: true }), testID: 'discover-filter-artist' },
+  {
+    filter: 'artist',
+    label: kindLabel('artist', { plural: true }),
+    testID: 'discover-filter-artist',
+  },
 ];
 
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
-/** What a screen reader should hear when the search body settles. Empty while
- *  loading or idle — an announcement per keystroke would be noise. */
 export function _searchAnnouncement(view: DiscoverView, resultCount: number): string {
   if (view === 'zero-results') return 'No matches';
   if (view === 'full-error') return 'Search failed';
@@ -57,8 +51,6 @@ interface DiscoverBodyProps {
   onResultTap: (result: DiscoveryResult, position: number) => void;
   impression: ImpressionHandlers;
   onRetry: () => void;
-  /** The failure behind a `full-error` view, so the copy can tell offline from
-   *  a server fault instead of guessing. */
   searchError?: unknown;
   onEndReached: () => void;
   isFetchingNextPage: boolean;
@@ -92,9 +84,6 @@ export function DiscoverBody({
 }: DiscoverBodyProps): ReactElement {
   const theme = useTheme();
 
-  // Search results arrive asynchronously and replace the body in place, with no
-  // focus change to cue a screen reader. Announce the outcome instead. Must sit
-  // above the early returns — it is a hook.
   useAnnounceChange(_searchAnnouncement(view, searchData?.results.length ?? 0));
 
   if (view === 'loading') {
@@ -116,7 +105,9 @@ export function DiscoverBody({
   if (view === 'full-error') {
     return (
       <View testID="discover-full-error" style={styles.center}>
-        <Text variant="title">{isNetworkError(searchError) ? 'No connection' : 'Search failed'}</Text>
+        <Text variant="title">
+          {isNetworkError(searchError) ? 'No connection' : 'Search failed'}
+        </Text>
         <Text variant="label" tone="secondary" style={styles.centerSub}>
           {isNetworkError(searchError)
             ? 'Check your connection and try again.'
@@ -153,39 +144,40 @@ export function DiscoverBody({
           </View>
         ) : (
           <>
-          <View style={styles.historyHeader}>
-            <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
-              RECENT SEARCHES
-            </Text>
-            {onClearHistory != null ? (
-              <Pressable
-                onPress={onClearHistory}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search history"
-                hitSlop={8}
-                style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
-              >
-                <Text variant="caption" tone="accent">Clear</Text>
-              </Pressable>
-            ) : null}
-          </View>
-          <View style={styles.chipCloud}>
-            {historyItems.map((item, index) => (
-              <Chip
-                key={item.query_norm}
-                testID={`discover-history-row-${index}`}
-                label={item.query.length > 40 ? `${item.query.slice(0, 40)}…` : item.query}
-                onPress={() => onHistoryTap(item)}
-              />
-            ))}
-          </View>
+            <View style={styles.historyHeader}>
+              <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
+                RECENT SEARCHES
+              </Text>
+              {onClearHistory != null ? (
+                <Pressable
+                  onPress={onClearHistory}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search history"
+                  hitSlop={8}
+                  style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
+                >
+                  <Text variant="caption" tone="accent">
+                    Clear
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={styles.chipCloud}>
+              {historyItems.map((item, index) => (
+                <Chip
+                  key={item.query_norm}
+                  testID={`discover-history-row-${index}`}
+                  label={item.query.length > 40 ? `${item.query.slice(0, 40)}…` : item.query}
+                  onPress={() => onHistoryTap(item)}
+                />
+              ))}
+            </View>
           </>
         )}
       </View>
     );
   }
 
-  // view === 'results'
   const results = searchData?.results ?? [];
   const common: ResultsCommonProps = {
     onResultTap,

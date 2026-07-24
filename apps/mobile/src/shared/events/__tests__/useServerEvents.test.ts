@@ -1,13 +1,3 @@
-/**
- * useServerEvents — the event-type → React Query effect contract.
- *
- * The SSEClient is mocked to capture the onEvent handler the hook installs, so
- * the test can fire a server event and assert the right cache effect. Acquisition
- * completed/failed events PATCH caches (and drive the download store) rather than
- * invalidate (F12) — the detail save-control reads the library reactively, so the
- * old library-wide refetch on every finished download is gone.
- */
-
 import { renderHook } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement } from 'react';
@@ -23,11 +13,7 @@ jest.mock('../sse-client', () => ({
     connect = jest.fn(async () => {});
     disconnect = jest.fn();
     dispose = jest.fn();
-    constructor(
-      _url: string,
-      _getToken: unknown,
-      onEvent: (event: ServerEvent) => void,
-    ) {
+    constructor(_url: string, _getToken: unknown, onEvent: (event: ServerEvent) => void) {
       captured.onEvent = onEvent;
     }
   },
@@ -46,9 +32,7 @@ function makeWrapper(qc: QueryClient) {
 
 function setup(): jest.SpyInstance {
   const qc = new QueryClient();
-  const invalidate = jest
-    .spyOn(qc, 'invalidateQueries')
-    .mockResolvedValue(undefined as never);
+  const invalidate = jest.spyOn(qc, 'invalidateQueries').mockResolvedValue(undefined as never);
   renderHook(() => useServerEvents(), { wrapper: makeWrapper(qc) });
   return invalidate;
 }

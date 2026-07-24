@@ -1,11 +1,3 @@
-/**
- * RelatedTracksSection — the "Related on SoundCloud" rail (related-tracks spec).
- *
- * The rail shows only for SoundCloud-sourced tracks with a non-empty set, and a
- * card tap navigates to that track's detail via the handoff push. expo-image,
- * expo-router, and the discovery client are mocked.
- */
- 
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -47,10 +39,9 @@ function renderSection(result: DiscoveryResult): ReturnType<typeof render> {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }): ReactNode =>
     createElement(QueryClientProvider, { client: qc }, children);
-  return render(
-    createElement(RelatedTracksSection, { result, detailRoute: '/discover/detail' }),
-    { wrapper },
-  );
+  return render(createElement(RelatedTracksSection, { result, detailRoute: '/discover/detail' }), {
+    wrapper,
+  });
 }
 
 afterEach(() => {
@@ -60,7 +51,10 @@ afterEach(() => {
 describe('RelatedTracksSection', () => {
   it('renders the rail with a card per related track for a SoundCloud-sourced track', async () => {
     mockGetRelatedTracks.mockResolvedValueOnce(
-      _ok([_track('Fell In Love', 'soundcloud', '555'), _track('Collab Leak', 'soundcloud', '556')]),
+      _ok([
+        _track('Fell In Love', 'soundcloud', '555'),
+        _track('Collab Leak', 'soundcloud', '556'),
+      ]),
     );
     const seed = _track('Seed', 'soundcloud', '12345');
 

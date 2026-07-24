@@ -13,9 +13,6 @@ export type SkeletonProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** Shimmering placeholder block for loading states. Uses RN's built-in
- * Animated (no native worklets dep). Renders static when the OS reduce-motion
- * setting is on. */
 export function Skeleton({
   width = '100%',
   height = 16,

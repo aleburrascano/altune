@@ -44,8 +44,6 @@ describe('_lyricsView', () => {
     expect(_lyricsView({ ...base, plain: 'words' })).toBe('plain');
   });
 
-  // The endpoint answers 200-with-empty for anything it can't resolve, so an
-  // empty payload must read as "no lyrics", never as a failure.
   it('reads an empty payload as unavailable, not an error', () => {
     expect(_lyricsView(base)).toBe('unavailable');
     expect(_lyricsView({ ...base, plain: '   \n  ' })).toBe('unavailable');

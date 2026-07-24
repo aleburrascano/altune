@@ -1,15 +1,3 @@
-/**
- * Lock-screen / remote "previous" control (Event.RemotePrevious).
- *
- * The remote button must match the in-app previous button: past the restart
- * threshold, restart the current track (seekTo 0); only step back a track when
- * already near the start. Position is read from the native player because the
- * JS-side position is frozen while the app is backgrounded/locked.
- *
- * Local track-player mock capturing the registered event handlers so the
- * RemotePrevious listener can be invoked directly.
- */
-
 const mockHandlers: Record<string, (...args: unknown[]) => unknown> = {};
 
 jest.mock('react-native-track-player', () => ({

@@ -1,11 +1,3 @@
-/**
- * useAlbumDetailState — the data + behaviour behind AlbumDetailBody.
- *
- * Owns the source resolution, the api/library track fetch, the "More from
- * this album" discovery expansion, and the save handlers, so the component
- * is left as a presentational shell. Lifted out of AlbumDetailBody to drop
- * its cognitive complexity and make the merge/save logic testable in isolation.
- */
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -47,12 +39,6 @@ function _isTrackOwned(title: string, ownedTitles: Set<string>): boolean {
 
 const _norm = (s: string): string => s.toLowerCase().trim();
 
-/**
- * Give each owned track its real album position by matching it against the
- * authoritative provider tracklist (whose order IS the album order), then sort
- * by position. A track that already carries a stored position keeps it; tracks
- * with no match sink to the end. No-op until the tracklist has loaded.
- */
 export function _withAlbumPositions(
   owned: DiscoveryResult[],
   albumOrder: DiscoveryResult[],
@@ -97,7 +83,6 @@ export type AlbumDetailState = {
   onSaveAll: () => void;
   isSaved: (title: string, subtitle: string | null) => boolean;
   saveStateFor: (title: string, subtitle: string | null) => SaveControlState;
-  /** What of this album you can actually play right now, in album order. */
   owned: OwnedSplit;
   playButton: { label: string; disabled: boolean };
   onPlayOwned: () => void;
@@ -120,7 +105,12 @@ export function useAlbumDetailState(
   const effectiveSource = deezerSource ?? source;
   const hasSources = effectiveSource !== undefined;
 
-  const { tracks: apiTracks, isLoading: apiLoading, isError: apiError, refetch } = useAlbumTracks({
+  const {
+    tracks: apiTracks,
+    isLoading: apiLoading,
+    isError: apiError,
+    refetch,
+  } = useAlbumTracks({
     provider: effectiveSource?.provider ?? 'deezer',
     externalId: effectiveSource?.external_id ?? '_',
     albumTitle: result.title,
@@ -135,10 +125,6 @@ export function useAlbumDetailState(
   const [moreExpanded, setMoreExpanded] = useState(false);
   const [saveAllTapped, setSaveAllTapped] = useState(false);
 
-  // Fetch eagerly (cached 30min) rather than on-expand, so the "More from this
-  // album" affordance can be hidden entirely when there's genuinely nothing to
-  // add — a single, or an album you already own in full. Without this the
-  // expander showed unconditionally and dead-ended on "you have all tracks".
   const discovery = useAlbumDiscovery({
     albumTitle: result.title,
     artist: result.subtitle,
@@ -147,10 +133,6 @@ export function useAlbumDetailState(
 
   const ownedTitles = new Set(localTracks.map((t) => t.title.toLowerCase().trim()));
 
-  // The provider tracklist's ORDER is the album order — stamp each track with its
-  // 1-based position so BOTH the owned rows and the "More from this album" rows
-  // show the real album number. (The "more" rows previously counted on from the
-  // owned-track count, so their numbers were wrong.)
   const albumOrder = discovery.tracks.map((t, i) =>
     trackExtras(t.extras).trackPosition != null
       ? t
@@ -158,28 +140,15 @@ export function useAlbumDetailState(
   );
   const moreTracks = albumOrder.filter((t) => !_isTrackOwned(t.title, ownedTitles));
 
-  // Owned tracks saved before track_number was sent have no position, so the
-  // list falls back to counting 1..N. Recover the real album order by matching
-  // each owned track against the album order and sorting by it. Display-only +
-  // re-derived per view, so it never goes stale; a stored position always wins.
   const ownedTracks = !hasSources
     ? _withAlbumPositions(localAsDiscovery, albumOrder)
     : localAsDiscovery;
 
   const tracks = hasSources ? apiTracks : ownedTracks;
 
-  // Persist the derived positions back to the DB (fill-only) so tracks saved
-  // before track_number was captured self-heal as their album is opened.
   usePersistTrackNumbers(localTracks, ownedTracks);
 
-  // Hold a library album's list until the album order has loaded, so positions
-  // are correct on first paint instead of visibly re-sorting after the screen
-  // appears. Only when there are owned tracks to reorder (an empty album shows
-  // its empty state immediately); cached after first open, and if the lookup
-  // fails the list still renders in index order.
-  const isLoading = hasSources
-    ? apiLoading
-    : localTracks.length > 0 && discovery.isLoading;
+  const isLoading = hasSources ? apiLoading : localTracks.length > 0 && discovery.isLoading;
   const isError = hasSources ? apiError : false;
 
   const onTrackPress = (track: DiscoveryResult): void => {
@@ -204,8 +173,6 @@ export function useAlbumDetailState(
   const isSaved = (title: string, subtitle: string | null): boolean =>
     _isTrackInLibraryCache(queryClient, title, subtitle);
 
-  // Resolved against the DISPLAYED list so the queue plays in album order, not
-  // in whatever order the library happens to hold them.
   const owned = splitOwned(tracks, (title, subtitle) =>
     findTrackInLibraryCache(queryClient, title, subtitle),
   );

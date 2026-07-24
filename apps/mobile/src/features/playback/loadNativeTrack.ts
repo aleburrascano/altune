@@ -10,25 +10,12 @@ import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 export interface LoadNativeTrackOptions {
-  // When false, the track is loaded but not started — used to resume a queue
-  // paused at a saved position so the user presses play to continue.
   autoplay?: boolean;
-  // Seek to this offset (ms) after loading. 0 starts from the top.
   startPositionMs?: number;
 }
 
-// Cap on presigned URLs minted per load: only the near-term window is signed so
-// the resolve stays fast (it blocks queue start). Tracks past the window fall
-// back to the proxy until reached; download-ahead covers the imminent next track
-// regardless.
 const MAX_PRESIGN = 25;
 
-// AIDEV-NOTE: Last-write-wins token for native loads. A load is a multi-await
-// sequence (setup → resolve URLs → reset → add → skip), so two overlapping loads
-// would interleave their reset()/add() calls and leave the native queue a mix of
-// both. Every load claims a token first; after each await it bails if a newer
-// load has claimed one. The newest caller always wins, which is what the user
-// expects: tapping a track must beat an in-flight resume, not race it.
 let loadToken = 0;
 
 function claimLoad(): number {
@@ -39,9 +26,6 @@ function isStale(token: number): boolean {
   return token !== loadToken;
 }
 
-// AIDEV-NOTE: Diagnostic-only instrumentation for the "audio feels slow"
-// investigation — console output, not wired to telemetry. Safe to delete
-// once that investigation is resolved.
 type TimingMarks = { start: number; [phase: string]: number };
 
 function reportTiming(scenario: string, marks: TimingMarks): void {
@@ -52,10 +36,6 @@ function reportTiming(scenario: string, marks: TimingMarks): void {
   console.log(`[audio-timing] ${scenario} total_ms=${Date.now() - start} ${offsets}`);
 }
 
-// Logs the elapsed time from `marks.start` to the native player actually
-// reaching State.Playing (i.e. buffered and audible), not just to the load
-// call returning. Self-cleans after 15s so a track that never starts
-// (autoplay=false, load error, user pauses first) doesn't leak a listener.
 function logTimeToPlaying(scenario: string, token: number, marks: TimingMarks): void {
   const sub = TrackPlayer.addEventListener(Event.PlaybackState, (e) => {
     if (e.state !== State.Playing || isStale(token)) return;
@@ -66,14 +46,7 @@ function logTimeToPlaying(scenario: string, token: number, marks: TimingMarks): 
   const timeout = setTimeout(() => sub.remove(), 15000);
 }
 
-// AIDEV-NOTE: Resolve short-lived presigned URLs for the library tracks so the
-// native player streams straight from object storage instead of proxying every
-// byte through the API (auth + Postgres + storage round-trips per range request).
-// Best-effort: any failure yields an empty map and callers fall back to the proxy
-// URL (with auth headers). Preview tracks never need resolution.
-async function resolveLibraryUrls(
-  tracks: readonly PlaybackTrack[],
-): Promise<Map<string, string>> {
+async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<Map<string, string>> {
   const ids: string[] = [];
   for (const t of tracks) {
     if (t.source.kind === 'library') ids.push(t.source.trackId);
@@ -88,15 +61,6 @@ async function resolveLibraryUrls(
   }
 }
 
-// The URL a library track should actually load from, in preference order:
-//
-//   1. a pinned offline file  — plays with no network at all
-//   2. the resolved presigned URL
-//   3. (inside toNativeTrack) the authenticated proxy
-//
-// The pinned check goes FIRST and is the whole point of downloading: once a
-// track is on disk, playback must never depend on a signed URL that expires or
-// a network that isn't there. Previews are never pinned or signed.
 function signedUrl(track: PlaybackTrack, resolved: Map<string, string>): string | undefined {
   if (track.source.kind !== 'library') return undefined;
   return pinnedUri(track.source.trackId) ?? resolved.get(track.source.trackId);
@@ -109,15 +73,10 @@ export async function loadNativeTrack(
   const { autoplay = true, startPositionMs = 0 } = options;
   const marks: TimingMarks = { start: Date.now() };
 
-  // AIDEV-WARNING: this reset() drops the native queue, so the caller MUST also
-  // clear the queue store (see PlaybackProvider.play) — otherwise the store still
-  // describes a queue the player no longer holds, and the add()-induced
-  // ActiveTrackChanged(0) repoints the UI at the old queue's first track.
   const token = claimLoad();
   await ensurePlayerSetup();
   if (isStale(token)) return;
   await TrackPlayer.reset();
-  // Every entry below is built from a streaming URL — no local-file entries survive.
   forgetAllSwaps();
   if (isStale(token)) return;
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
@@ -137,12 +96,6 @@ export async function loadNativeTrack(
   }
 }
 
-// AIDEV-NOTE: Loads the whole ordered queue into the native player in one pass so
-// TrackPlayer holds the full play order. Library tracks stream via short-lived
-// presigned URLs (resolveLibraryUrls) — direct from storage, no per-byte proxy —
-// falling back to the proxy URL on any resolve failure. The native queue mirrors
-// play order, so its index == store currentIndex. Auth headers are fetched once
-// and reused across proxy-fallback items.
 export async function loadNativeQueue(
   tracks: readonly PlaybackTrack[],
   startIndex: number,
@@ -155,30 +108,22 @@ export async function loadNativeQueue(
   await ensurePlayerSetup();
   if (isStale(token)) return;
   await TrackPlayer.reset();
-  // Every entry below is built from a streaming URL — no local-file entries survive.
   forgetAllSwaps();
   if (tracks.length === 0) return;
 
   const needsAuth = tracks.some((t) => t.source.kind === 'library');
   const headers = needsAuth ? await audioRequestHeaders() : {};
   marks.headers = Date.now();
-  // Sign the window from the start index forward — that's what plays next.
   const resolved = await resolveLibraryUrls(tracks.slice(startIndex));
   marks.resolve = Date.now();
-  // A newer load (a user tap beating an in-flight resume) already owns the
-  // player — bail before add() so the two don't interleave into one queue.
   if (isStale(token)) return;
 
   const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
-  // Pin the target index so the add()-induced index-0 transient doesn't flash
-  // the wrong track into the store (see nativeSyncGuard). The guard self-clears
-  // when the target-index event is applied — we do NOT clear it here on success,
-  // because TrackPlayer delivers the event asynchronously (a synchronous clear
-  // could lift the guard before the transient is processed). On failure we clear
-  // explicitly so a failed prime can't leave the guard pinned.
   beginNativeLoad(idx);
   try {
-    await TrackPlayer.add(tracks.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })));
+    await TrackPlayer.add(
+      tracks.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
+    );
     if (idx > 0) await TrackPlayer.skip(idx);
   } catch (err) {
     endNativeLoad();
@@ -192,16 +137,7 @@ export async function loadNativeQueue(
   }
 }
 
-// AIDEV-NOTE: Replace only the upcoming tracks (everything after the active
-// one) — removeUpcomingTracks + re-add. The currently-playing track is never
-// removed, re-added, or reindexed, so audio continues uninterrupted and no
-// PlaybackActiveTrackChanged fires. Because only positions after the active
-// index change, native index still mirrors the store's play order. Shuffle
-// toggles route through here so they're seamless. Presigned URLs are resolved for
-// the re-added upcoming items, same as loadNativeQueue.
-export async function reorderUpcomingNative(
-  upcoming: readonly PlaybackTrack[],
-): Promise<void> {
+export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
   await ensurePlayerSetup();
   await TrackPlayer.removeUpcomingTracks();
   if (upcoming.length === 0) return;
@@ -209,13 +145,11 @@ export async function reorderUpcomingNative(
   const needsAuth = upcoming.some((t) => t.source.kind === 'library');
   const headers = needsAuth ? await audioRequestHeaders() : {};
   const resolved = await resolveLibraryUrls(upcoming);
-  await TrackPlayer.add(upcoming.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })));
+  await TrackPlayer.add(
+    upcoming.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
+  );
 }
 
-// AIDEV-NOTE: Append one track to the end of the native queue (Add to Queue).
-// TrackPlayer.add with no insert index appends, which mirrors the store's
-// enqueue (new track lands last in play order). The currently-playing track is
-// untouched, so audio continues uninterrupted.
 export async function appendNativeTrack(track: PlaybackTrack): Promise<void> {
   await ensurePlayerSetup();
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
@@ -223,16 +157,12 @@ export async function appendNativeTrack(track: PlaybackTrack): Promise<void> {
   await TrackPlayer.add(toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }));
 }
 
-// AIDEV-NOTE: Insert one track at `position` in the native queue (Play Next).
-// TrackPlayer.add(track, insertBeforeIndex) inserts before that index; passing
-// currentIndex+1 places it right after the active track. Native queue position
-// == store play-order position, so this stays in lockstep with playNext.
-export async function insertNativeTrackNext(
-  track: PlaybackTrack,
-  position: number,
-): Promise<void> {
+export async function insertNativeTrackNext(track: PlaybackTrack, position: number): Promise<void> {
   await ensurePlayerSetup();
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
   const resolved = await resolveLibraryUrls([track]);
-  await TrackPlayer.add(toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }), position);
+  await TrackPlayer.add(
+    toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }),
+    position,
+  );
 }

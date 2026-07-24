@@ -16,8 +16,18 @@ export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactE
 
   if (urls.length === 0) {
     return (
-      <View style={[styles.container, { width: size, height: size, borderRadius: 8, backgroundColor: theme.color.surface2 }]}>
-        <Music size={size * 0.3} color={theme.color.textTertiary} strokeWidth={1.5} style={{ opacity: 0.3 }} />
+      <View
+        style={[
+          styles.container,
+          { width: size, height: size, borderRadius: 8, backgroundColor: theme.color.surface2 },
+        ]}
+      >
+        <Music
+          size={size * 0.3}
+          color={theme.color.textTertiary}
+          strokeWidth={1.5}
+          style={{ opacity: 0.3 }}
+        />
       </View>
     );
   }
@@ -25,7 +35,11 @@ export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactE
   if (urls.length === 1) {
     return (
       <View style={{ width: size, height: size, borderRadius: 8, overflow: 'hidden' }}>
-        <Image source={{ uri: urls[0]! }} style={{ width: size, height: size }} contentFit="cover" />
+        <Image
+          source={{ uri: urls[0]! }}
+          style={{ width: size, height: size }}
+          contentFit="cover"
+        />
       </View>
     );
   }
@@ -33,9 +47,22 @@ export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactE
   if (urls.length === 2) {
     const half = size / 2;
     return (
-      <View style={[styles.splitContainer, { width: size, height: size, borderRadius: 8, overflow: 'hidden' }]}>
-        <Image source={{ uri: urls[0]! }} style={{ width: half, height: size }} contentFit="cover" />
-        <Image source={{ uri: urls[1]! }} style={{ width: half, height: size }} contentFit="cover" />
+      <View
+        style={[
+          styles.splitContainer,
+          { width: size, height: size, borderRadius: 8, overflow: 'hidden' },
+        ]}
+      >
+        <Image
+          source={{ uri: urls[0]! }}
+          style={{ width: half, height: size }}
+          contentFit="cover"
+        />
+        <Image
+          source={{ uri: urls[1]! }}
+          style={{ width: half, height: size }}
+          contentFit="cover"
+        />
       </View>
     );
   }
@@ -44,17 +71,24 @@ export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactE
   const cells = [urls[0], urls[1], urls[2], urls[3]];
 
   return (
-    <View style={[styles.gridContainer, { width: size, height: size, borderRadius: 8, overflow: 'hidden' }]}>
+    <View
+      style={[
+        styles.gridContainer,
+        { width: size, height: size, borderRadius: 8, overflow: 'hidden' },
+      ]}
+    >
       {cells.map((url, i) => (
-        <View
-          key={i}
-          style={{ width: half, height: half, backgroundColor: theme.color.surface2 }}
-        >
+        <View key={i} style={{ width: half, height: half, backgroundColor: theme.color.surface2 }}>
           {url != null ? (
             <Image source={{ uri: url }} style={{ width: half, height: half }} contentFit="cover" />
           ) : (
             <View style={[styles.iconCell, { width: half, height: half }]}>
-              <Music size={half * 0.3} color={theme.color.textTertiary} strokeWidth={1.5} style={{ opacity: 0.3 }} />
+              <Music
+                size={half * 0.3}
+                color={theme.color.textTertiary}
+                strokeWidth={1.5}
+                style={{ opacity: 0.3 }}
+              />
             </View>
           )}
         </View>

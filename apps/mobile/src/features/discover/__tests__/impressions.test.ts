@@ -29,9 +29,7 @@ describe('buildImpressionRows', () => {
   });
 
   it('tolerates a missing signature and missing source', () => {
-    const rows = buildImpressionRows([
-      _result({ result_signature: undefined, sources: [] }),
-    ]);
+    const rows = buildImpressionRows([_result({ result_signature: undefined, sources: [] })]);
 
     expect(rows[0]).toEqual({
       result_signature: '',

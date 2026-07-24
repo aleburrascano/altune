@@ -11,7 +11,6 @@ describe('_searchAnnouncement', () => {
     expect(_searchAnnouncement('results', 1)).toBe('1 result');
   });
 
-  // Announcing mid-flight would fire on every debounced keystroke.
   it('stays silent while loading or idle', () => {
     expect(_searchAnnouncement('loading', 0)).toBe('');
     expect(_searchAnnouncement('empty-no-query', 0)).toBe('');

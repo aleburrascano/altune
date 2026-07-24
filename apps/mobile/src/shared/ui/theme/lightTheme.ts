@@ -1,10 +1,5 @@
 import type { Theme } from './theme';
 
-// AIDEV-NOTE: ADR-0008 — v1 ships DARK ONLY. This light theme exists to satisfy
-// the "every color token has a light + dark variant" rule (.claude/rules/
-// typescript-frontend.md) and to make light mode a config flip later. It is a
-// reasonable draft, NOT visually tuned — do not ship light mode without a
-// dedicated design pass.
 export const lightTheme: Theme = {
   scheme: 'light',
   color: {

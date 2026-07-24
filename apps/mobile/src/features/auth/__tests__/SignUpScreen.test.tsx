@@ -1,15 +1,3 @@
-/**
- * SignUpScreen — form + validation + error surface.
- *
- * Updated for the auth-hardening spec (docs/specs/auth-hardening/spec.md):
- * sign-up now has a confirm-password field (AC#1), client-side email format
- * (AC#2) and password policy (AC#3) gating submit before any network call.
- * The anti-enumeration error-surface assertions (AC#5) are preserved.
- *
- * Mocks supabase.auth.signUp. A policy-valid password + matching confirm is
- * the precondition for the SDK to be reached at all.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockSignUp = jest.fn();

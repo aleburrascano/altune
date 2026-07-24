@@ -63,7 +63,10 @@ export function ActionSheet({
             <Pressable
               key={opt.label}
               testID={opt.testID}
-              onPress={() => { opt.onPress(); onClose(); }}
+              onPress={() => {
+                opt.onPress();
+                onClose();
+              }}
               accessibilityRole="button"
               accessibilityLabel={opt.label}
               style={({ pressed }) => [
@@ -72,10 +75,7 @@ export function ActionSheet({
                 pressed ? styles.pressed : null,
               ]}
             >
-              <Text
-                variant="body"
-                {...(opt.tone === 'danger' ? { tone: 'danger' } : {})}
-              >
+              <Text variant="body" {...(opt.tone === 'danger' ? { tone: 'danger' } : {})}>
                 {opt.label}
               </Text>
             </Pressable>

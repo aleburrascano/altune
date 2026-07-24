@@ -11,10 +11,8 @@ interface UseLibrarySearchReturn {
   onSubmit: () => void;
   onClear: () => void;
   filter: (tracks: readonly TrackResponse[]) => readonly TrackResponse[];
-  /** Predicate over arbitrary text (album/artist/playlist names). True when the query is empty. */
   matches: (text: string) => boolean;
   hasQuery: boolean;
-  /** The query actually filtering right now (committed, not the raw input) — for "No results for X". */
   query: string;
 }
 
@@ -35,10 +33,6 @@ export function useLibrarySearch(): UseLibrarySearchReturn {
     clearDebounce();
     const trimmed = text.trim();
     if (trimmed.length < MIN_CHARS) {
-      // Below the commit threshold there is no active query — clear it
-      // immediately. Leaving the previous committedQuery in place (the old
-      // length===1 gap) kept filtering the library by "keep on lov" while the
-      // box showed a single character.
       setCommittedQuery('');
     } else {
       debounceRef.current = setTimeout(() => {
@@ -63,10 +57,11 @@ export function useLibrarySearch(): UseLibrarySearchReturn {
   const filterFn = useMemo(() => {
     if (!queryLower) return (tracks: readonly TrackResponse[]) => tracks;
     return (tracks: readonly TrackResponse[]) =>
-      tracks.filter((t) =>
-        t.title.toLowerCase().includes(queryLower)
-        || t.artist.toLowerCase().includes(queryLower)
-        || (t.album != null && t.album.toLowerCase().includes(queryLower)),
+      tracks.filter(
+        (t) =>
+          t.title.toLowerCase().includes(queryLower) ||
+          t.artist.toLowerCase().includes(queryLower) ||
+          (t.album != null && t.album.toLowerCase().includes(queryLower)),
       );
   }, [queryLower]);
 

@@ -10,11 +10,6 @@ import { GoogleLogo } from './hero/GoogleLogo';
 
 const OAUTH_ERROR = "Couldn't sign in with that provider. Please try again.";
 
-/**
- * One-tap social sign-in (AC#10) — Google only for now (Apple deferred, see
- * ADR-0018). A compact, auto-width pill with the official Google logo, under
- * an "or" divider. `useOAuth` is provider-agnostic so Apple is a one-pill add.
- */
 export function OAuthButtons(): ReactElement {
   const theme = useTheme();
   const { state, signInWith } = useOAuth();

@@ -1,14 +1,3 @@
-/**
- * useLateralNav — search-and-navigate to a related artist or album.
- *
- * AC#11-13: From track/album detail, tapping artist or album name searches for
- * that entity and navigates to its detail. Uses router.push to build a proper
- * back stack — back returns through the chain of detail screens. The lookup
- * goes through the shared resolve-entity cache, so the landed screen's own
- * name-resolution (useArtistDiscovery / useAlbumDiscovery) reuses this fetch
- * instead of re-hitting the backend.
- */
-
 import { useCallback, useRef, useState } from 'react';
 import { useRouter, useSegments } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -46,8 +35,13 @@ export function useLateralNav(): UseLateralNavReturn {
       searchingRef.current = true;
       setError(null);
       setState('searching');
+
+      const allowAnotherAttempt = () => {
+        searchingRef.current = false;
+        setState('idle');
+      };
+
       try {
-        // retry: false preserves the pre-cache behavior — one attempt, fail fast.
         const results = await queryClient.fetchQuery({
           ...resolveEntityQuery(kind, query, 1),
           retry: false,
@@ -57,18 +51,13 @@ export function useLateralNav(): UseLateralNavReturn {
         if (result === undefined) {
           const kindLabel = kind === 'artist' ? 'Artist' : 'Album';
           setError(`${kindLabel} not found: "${query}"`);
-          searchingRef.current = false;
-          setState('idle');
+          allowAnotherAttempt();
           return;
         }
 
         openDetail(router, detailRouteFor(tabRoot), result);
-        // Never reset searchingRef after a successful push — this screen
-        // is now buried in the stack. The new detail screen gets its own
-        // useLateralNav with a fresh ref. Resetting here causes duplicates.
       } catch {
-        searchingRef.current = false;
-        setState('idle');
+        allowAnotherAttempt();
       }
     },
     [router, tabRoot, queryClient],

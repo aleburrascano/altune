@@ -7,6 +7,8 @@ tags: [index, mobile, expo]
 
 Expo (React Native + TypeScript). Features own screens; shared subsystems own cross-feature state and infrastructure.
 
+**The mobile source carries no comments.** Every prose comment and JSDoc block was removed (2026-07-24); intent is expressed by naming and decomposition instead, on the reasoning that a comment is a second source of truth that drifts. Suppressions live in `apps/mobile/eslint.config.js` as named config blocks, not as inline `eslint-disable` pragmas — there are none in source. Durable rationale that code genuinely cannot carry (why a decision was made, what was tried and rejected) belongs here in `okf/` and in the nested `CLAUDE.md` files, which is why those two surfaces are load-bearing rather than supplementary for this app.
+
 ## Features
 
 - [app-navigation](app-navigation.md) — Expo Router file-based route tree: auth group, tabbed shell, fullscreen-modal player

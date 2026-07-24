@@ -18,10 +18,7 @@ import {
 } from '../state';
 
 import type { SectionKey } from '../state';
-import type {
-  DiscoveryKind,
-  DiscoveryResult,
-} from '@shared/api-client/discovery';
+import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
 
 export function BlendedSection({
   results,
@@ -58,7 +55,9 @@ export function BlendedSection({
     <ResultsList
       data={sections}
       keyExtractor={(s) => s.kind}
-      headerExtra={top !== null ? <TopResultCard result={top} onPress={common.onResultTap} /> : null}
+      headerExtra={
+        top !== null ? <TopResultCard result={top} onPress={common.onResultTap} /> : null
+      }
       common={common}
       renderItem={({ item: section }) => (
         <View style={styles.section}>

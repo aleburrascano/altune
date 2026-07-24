@@ -1,13 +1,3 @@
-/**
- * PlayButton — the round primary play control shared by the track, album, and
- * artist detail heroes.
- *
- * A 50pt cobalt circle with a triangle (play) / bars (pause) glyph, a soft
- * accent glow, and a light haptic. Disabled state (nothing to play) drops to a
- * muted surface fill. Feature-local: all three consumers live in `detail/`, so
- * it stays here rather than in shared/ui (promotion needs 2+ *features*).
- */
-
 import type { ReactElement } from 'react';
 import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -88,6 +78,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // optical-center the triangle (its visual mass sits left of geometric center)
   playGlyph: { marginLeft: 3 },
 });

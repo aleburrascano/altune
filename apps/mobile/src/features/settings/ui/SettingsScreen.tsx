@@ -24,8 +24,6 @@ export function SettingsScreen(): ReactElement {
   const unpinAll = usePinnedStore((s) => s.unpinAll);
 
   const downloadCount = Object.values(pinnedEntries).filter((e) => e.status === 'ready').length;
-  // Read from disk rather than summing the index: the number people check is
-  // the space actually used, and the two can drift.
   const downloadSize = formatBytes(pinnedBytes());
 
   const confirmRemoveDownloads = (): void => {
@@ -58,21 +56,26 @@ export function SettingsScreen(): ReactElement {
       ? `Updated ${backfill.data.updated} of ${backfill.data.scanned} tracks`
       : 'Resolve featured artists';
 
-  const email =
-    sessionState.status === 'signed-in' ? (sessionState.session.user.email ?? '') : '';
+  const email = sessionState.status === 'signed-in' ? (sessionState.session.user.email ?? '') : '';
   const initial = email.length > 0 ? email[0]!.toUpperCase() : '?';
 
   return (
     <Screen>
-      <Text variant="displayL" style={styles.title}>Settings</Text>
+      <Text variant="displayL" style={styles.title}>
+        Settings
+      </Text>
 
       <View style={styles.profileCard}>
         <View style={[styles.avatar, { backgroundColor: theme.color.accent }]}>
-          <Text variant="displayL" tone="onAccent">{initial}</Text>
+          <Text variant="displayL" tone="onAccent">
+            {initial}
+          </Text>
         </View>
         <View style={styles.profileInfo}>
           <Text variant="bodyStrong">{email || 'Not signed in'}</Text>
-          <Text variant="caption" tone="secondary">Account</Text>
+          <Text variant="caption" tone="secondary">
+            Account
+          </Text>
         </View>
       </View>
 
@@ -83,7 +86,9 @@ export function SettingsScreen(): ReactElement {
         label={isPending ? 'Signing out…' : 'Sign Out'}
         variant="ghost"
         loading={isPending}
-        onPress={() => { void signOut(); }}
+        onPress={() => {
+          void signOut();
+        }}
         style={styles.action}
       />
 
@@ -95,7 +100,9 @@ export function SettingsScreen(): ReactElement {
         label={backfillLabel}
         variant="ghost"
         loading={backfill.isPending}
-        onPress={() => { backfill.mutate(); }}
+        onPress={() => {
+          backfill.mutate();
+        }}
         style={styles.action}
       />
 
@@ -129,8 +136,7 @@ export function SettingsScreen(): ReactElement {
       />
       {scheme === 'light' ? (
         <Text variant="caption" tone="tertiary" style={styles.note}>
-          Light mode hasn&apos;t had a design pass yet (ADR-0008) — some screens
-          will look rough.
+          Light mode hasn&apos;t had a design pass yet (ADR-0008) — some screens will look rough.
         </Text>
       ) : null}
 
@@ -154,9 +160,6 @@ export function SettingsScreen(): ReactElement {
   );
 }
 
-// The version users can read back during a bug report. `expo-constants` exposes
-// the manifest's version at runtime, so it tracks app.json without a second
-// place to bump.
 const appVersion: string = Constants.expoConfig?.version ?? 'dev';
 
 const styles = StyleSheet.create({

@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
-import { FlatList, type ListRenderItemInfo, Modal, Pressable, StyleSheet, View } from 'react-native';
+import {
+  FlatList,
+  type ListRenderItemInfo,
+  Modal,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 
 import { getPlaylists } from '@shared/api-client/playlists';
@@ -27,26 +34,26 @@ export function AddToPlaylistSheet({
   const [createVisible, setCreateVisible] = useState(false);
   const [addedTo, setAddedTo] = useState<string | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
+  useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
 
   const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
     queryKey: playlistKeys.list,
     queryFn: getPlaylists,
     enabled: visible,
-    staleTime: Infinity, // SSE-covered; event patches keep it fresh (F15)
+    staleTime: Infinity,
   });
 
-  // Cache policy (optimistic count bump, rollback, invalidate) lives in the
-  // mutation hooks; this sheet keeps only its own visibility state.
   const addMut = useAddTrackToPlaylist(trackId);
   const createMut = useCreatePlaylistWithTrack(trackId);
 
   const addToPlaylist = useCallback(
     (playlistId: string): void => {
       addMut.mutate(playlistId, {
-        // Hold the "Added ✓" confirmation briefly so it's actually seen, then
-        // close. On error the sheet stays open (the mutation hook alerts) so
-        // the user can retry.
         onSuccess: () => {
           setAddedTo(playlistId);
           closeTimer.current = setTimeout(() => {
@@ -83,20 +90,33 @@ export function AddToPlaylistSheet({
         ]}
       >
         <View style={[styles.playlistIcon, { backgroundColor: theme.color.surface2 }]}>
-          <Text variant="caption" tone="tertiary">♫</Text>
+          <Text variant="caption" tone="tertiary">
+            ♫
+          </Text>
         </View>
         <View style={styles.playlistInfo}>
-          <Text variant="body" numberOfLines={1}>{item.name}</Text>
+          <Text variant="body" numberOfLines={1}>
+            {item.name}
+          </Text>
           <Text variant="caption" tone="secondary">
             {item.track_count} {item.track_count === 1 ? 'track' : 'tracks'}
           </Text>
         </View>
         {addedTo === item.id ? (
-          <Text variant="caption" style={{ color: theme.color.success }}>Added ✓</Text>
+          <Text variant="caption" style={{ color: theme.color.success }}>
+            Added ✓
+          </Text>
         ) : null}
       </Pressable>
     ),
-    [addMut.isPending, addToPlaylist, addedTo, theme.color.border, theme.color.surface2, theme.color.success],
+    [
+      addMut.isPending,
+      addToPlaylist,
+      addedTo,
+      theme.color.border,
+      theme.color.surface2,
+      theme.color.success,
+    ],
   );
 
   const handleClose = () => {
@@ -142,7 +162,9 @@ export function AddToPlaylistSheet({
             ]}
           >
             <View style={[styles.createIcon, { backgroundColor: theme.color.accent }]}>
-              <Text variant="bodyStrong" tone="onAccent">+</Text>
+              <Text variant="bodyStrong" tone="onAccent">
+                +
+              </Text>
             </View>
             <Text variant="bodyStrong">Create New Playlist</Text>
           </Pressable>
@@ -155,7 +177,9 @@ export function AddToPlaylistSheet({
             ListEmptyComponent={
               playlists.length === 0 && !playlistsLoading ? (
                 <View style={styles.empty}>
-                  <Text variant="label" tone="secondary">No playlists yet</Text>
+                  <Text variant="label" tone="secondary">
+                    No playlists yet
+                  </Text>
                 </View>
               ) : null
             }
@@ -184,8 +208,11 @@ const styles = StyleSheet.create({
     maxHeight: '70%',
   },
   handle: {
-    width: 36, height: 4, borderRadius: 2,
-    alignSelf: 'center', marginBottom: spacing.lg,
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: spacing.lg,
   },
   sheetTitle: { marginBottom: spacing.xs },
   trackLabel: { marginBottom: spacing.lg },
@@ -199,12 +226,18 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.7 },
   createIcon: {
-    width: 40, height: 40, borderRadius: 8,
-    alignItems: 'center', justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   playlistIcon: {
-    width: 40, height: 40, borderRadius: 8,
-    alignItems: 'center', justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   playlistInfo: { flex: 1 },
   empty: { paddingTop: spacing.xl, alignItems: 'center' },

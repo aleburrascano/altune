@@ -2,8 +2,6 @@ import { View } from 'react-native';
 
 import { useTheme } from '@shared/ui/theme';
 
-// Static EQ bars — a small music cue above the wordmark. Always static
-// (never animated), per design decision.
 const BAR_HEIGHTS = [7, 14, 6, 12, 16];
 
 export function EqGlyph() {

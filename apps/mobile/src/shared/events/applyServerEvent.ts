@@ -1,15 +1,3 @@
-/**
- * applyServerEvent — pure router from a server event to a cache/store effect.
- *
- * Acquisition events drive a single SSE-fed lifecycle store keyed by track_id
- * (the download store — membership AND phase in one place) AND patch the track's
- * acquisition_status across every cache (cache-as-truth, so every screen is
- * coherent at once), plus a library invalidate as a reconciliation backstop.
- * Membership/list events invalidate the affected lists. A `resync` control event
- * fully reconciles. Unknown types are ignored. Extracted from useServerEvents so
- * the routing is unit-testable without the SSE transport or AppState.
- */
-
 import type { QueryClient } from '@tanstack/react-query';
 
 import {
@@ -43,10 +31,6 @@ const INVALIDATION_MAP: Record<string, readonly (readonly string[])[]> = {
   track_added_to_playlist: [playlistKeys.details, playlistKeys.list],
 };
 
-// A resync control event (F4) means the server could not guarantee the client
-// saw every event since its cursor (a replay gap after eviction, or a restart).
-// The client cannot patch what it never received, so it fully reconciles every
-// SSE-covered family.
 const RESYNC_KEYS: readonly (readonly string[])[] = [
   libraryKeys.home,
   libraryKeys.featuringPrefix,
@@ -62,9 +46,6 @@ function asNumber(value: unknown): number | null {
   return typeof value === 'number' ? value : null;
 }
 
-// Reconstructs a full TrackResponse from a track_added_to_library payload (F10).
-// Returns null if the required identity/display fields are missing, so the
-// caller can fall back to an invalidate for an older/thin payload.
 function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
   const id = asString(data.id) ?? asString(data.track_id);
   const title = asString(data.title);
@@ -91,16 +72,11 @@ function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
   };
 }
 
-// Snapshot display metadata for the download store from whatever cache holds the
-// track (the started/progress events carry only a track_id).
 function trackMeta(track: TrackResponse | undefined): DownloadMeta | undefined {
   if (!track) return undefined;
   return { title: track.title, artist: track.artist, artworkUrl: track.artwork_url };
 }
 
-// A raw acquisition stage maps to a live download phase only for the three
-// progress phases; anything else (an unknown/new stage) is ignored rather than
-// stored as a fallback.
 function progressPhase(stage: string | null): DownloadPhase | null {
   const phase = stageToPhase(stage);
   return phase === 'finding' || phase === 'downloading' || phase === 'finishing' ? phase : null;
@@ -117,10 +93,8 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
   if (event.type === 'track_added_to_library') {
     const track = parseAddedTrack(event.data);
     if (track) {
-      upsertTrackInCaches(queryClient, track); // insert instantly, no refetch (F10)
+      upsertTrackInCaches(queryClient, track);
     } else {
-      // Older/thin payload (track_id only): fall back to a refetch. Featuring
-      // lists refetch too — the new track may credit a featured artist.
       void queryClient.invalidateQueries({ queryKey: libraryKeys.home });
       void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
     }
@@ -130,10 +104,8 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
   if (event.type === 'track_deleted') {
     const trackId = asString(event.data.track_id);
     if (trackId) {
-      removeTrackFromCaches(queryClient, trackId); // drop the row everywhere (F11)
+      removeTrackFromCaches(queryClient, trackId);
     }
-    // The playlist summary track-counts can't be patched by id alone; a single
-    // targeted refetch keeps them accurate without the two big library refetches.
     void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
     return;
   }
@@ -142,8 +114,6 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     const trackId = asString(event.data.track_id);
     if (trackId) {
       startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
-      // A re-acquired ready/failed track flips back to pending across caches so
-      // every screen (and the library row's caption) reflects the restart.
       patchTrackInCaches(queryClient, trackId, {
         acquisition_status: 'pending',
         failure_reason: null,
@@ -155,8 +125,6 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
   if (event.type === 'track_acquisition_progress') {
     const trackId = asString(event.data.track_id);
     const phase = progressPhase(asString(event.data.stage));
-    // Lifecycle store, NOT the query cache — a library refetch must not wipe it.
-    // No invalidation: progress events fire frequently.
     if (trackId && phase) {
       progressDownload(trackId, phase, trackMeta(getTrackFromCaches(queryClient, trackId)));
     }
@@ -170,13 +138,8 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
         acquisition_status: 'ready',
         audio_ref: asString(event.data.audio_ref),
       });
-      // Terminal sequence keeps the row mounted through finishing → done ✓; the
-      // cache status flip no longer unmounts it (membership is store-driven).
       completeDownload(trackId);
     }
-    // No invalidate (F12): patchTrackInCaches already flipped every cache to
-    // ready, and the detail save-control now reads the library reactively — so
-    // the old 2000-row refetch on every finished download is gone.
     return;
   }
 

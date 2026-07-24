@@ -9,21 +9,16 @@ interface QueueState {
   repeatMode: RepeatMode;
   shuffled: boolean;
   source: QueueSource | null;
-  // Saved playback offset (ms) restored on relaunch, shown on the scrubber before
-  // the native player loads and reports live progress. 0 in every fresh queue;
-  // set only by the resume flow. Once native progress goes live (> 0) the provider
-  // ignores it, so it never fights real playback.
   resumePositionMs: number;
-  // Bumped every time the queue is REPLACED (load/restore/clear) — i.e. whenever
-  // a different queue takes ownership. Lets a slow async flow prove the queue it
-  // started against is still the queue in play before it writes: resume reads it
-  // before its network fetches and bails if a user tap replaced the queue
-  // meanwhile. Transitions within a queue (skip/enqueue/shuffle) don't bump it.
   generation: number;
 }
 
 interface QueueActions {
-  loadQueue: (tracks: readonly PlaybackTrack[], startIndex: number, source: QueueSource | null) => void;
+  loadQueue: (
+    tracks: readonly PlaybackTrack[],
+    startIndex: number,
+    source: QueueSource | null,
+  ) => void;
   restoreQueue: (
     tracks: readonly PlaybackTrack[],
     playOrder: readonly number[],
@@ -67,10 +62,6 @@ function identityOrder(length: number): number[] {
   return Array.from({ length }, (_, i) => i);
 }
 
-// Shuffle only the tail after `keepThrough` (inclusive), leaving the head — the
-// already-played history and the current track — untouched. Keeping the current
-// track's position fixed is what lets the native queue reorder around the
-// active track without ever touching it (seamless, no re-buffer).
 function shuffleTail(order: readonly number[], keepThrough: number): number[] {
   const head = order.slice(0, keepThrough + 1);
   const tail = order.slice(keepThrough + 1);
@@ -83,7 +74,11 @@ function shuffleTail(order: readonly number[], keepThrough: number): number[] {
   return [...head, ...tail];
 }
 
-function trackAt(tracks: readonly PlaybackTrack[], playOrder: readonly number[], index: number): PlaybackTrack | null {
+function trackAt(
+  tracks: readonly PlaybackTrack[],
+  playOrder: readonly number[],
+  index: number,
+): PlaybackTrack | null {
   const trackIndex = playOrder[index];
   if (trackIndex == null) return null;
   return tracks[trackIndex] ?? null;
@@ -111,11 +106,6 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     });
   },
 
-  // Restore a snapshot with an EXPLICIT play-order permutation (unlike loadQueue,
-  // which forces identity order). Resume uses this to rebuild the exact shuffled
-  // sequence from the persisted natural + play orders, so tracks stays in natural
-  // (album/playlist) order and un-shuffle returns to it. currentIndex is a
-  // position in playOrder.
   restoreQueue: (tracks, playOrder, currentIndex, source, shuffled) => {
     const clampedIdx =
       playOrder.length === 0 ? -1 : Math.max(0, Math.min(currentIndex, playOrder.length - 1));
@@ -130,11 +120,6 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     });
   },
 
-  // AIDEV-WARNING: enqueue/playNext mutate tracks + playOrder, so any caller
-  // MUST also add to the native queue in lockstep (TrackPlayer.add). The new
-  // track's index is tracks.length (its slot in the appended `tracks`); native
-  // queue position == play-order position, so append maps to add-at-end and
-  // "play next" maps to add-at(currentIndex+1). See useQueuePlayback.
   enqueue: (track) => {
     const { tracks, playOrder } = get();
     set({ tracks: [...tracks, track], playOrder: [...playOrder, tracks.length] });
@@ -144,19 +129,10 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     const { tracks, playOrder, currentIndex } = get();
     const newTrackIndex = tracks.length;
     const insertAt = currentIndex + 1;
-    const newOrder = [
-      ...playOrder.slice(0, insertAt),
-      newTrackIndex,
-      ...playOrder.slice(insertAt),
-    ];
+    const newOrder = [...playOrder.slice(0, insertAt), newTrackIndex, ...playOrder.slice(insertAt)];
     set({ tracks: [...tracks, track], playOrder: newOrder });
   },
 
-  // AIDEV-NOTE: Mirrors what the native player does on skipToNext, because the
-  // native provider is what ships — this action only drives the Expo Go stub, and
-  // the two silently disagreeing is worse than either behaviour. Repeat 'one'
-  // therefore advances (it loops on auto-advance, not on an explicit next);
-  // only 'all' wraps past the end.
   skipToNext: () => {
     const { tracks, playOrder, currentIndex, repeatMode } = get();
     if (tracks.length === 0) return null;
@@ -198,10 +174,6 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     return trackAt(tracks, playOrder, index);
   },
 
-  // Reconcile currentIndex with the native player after a native-driven
-  // transition (auto-advance, lock-screen next/prev). The native queue is the
-  // transition engine; this keeps the store — the UI read-model — in lockstep.
-  // A no-op when already aligned, so it can't feed back into another native skip.
   syncCurrentIndex: (index) => {
     const { playOrder, currentIndex } = get();
     if (index < 0 || index >= playOrder.length) return;
@@ -213,11 +185,6 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({ resumePositionMs: Math.max(0, positionMs) });
   },
 
-  // Shuffle/unshuffle only the upcoming tracks; the current track and history
-  // keep their positions so currentIndex is stable and the native player never
-  // has to touch the playing track. Turning shuffle off restores the upcoming
-  // tracks to their natural (ascending) order rather than rebuilding the whole
-  // queue — history stays as played, which is what keeps the toggle seamless.
   toggleShuffle: () => {
     const { tracks, playOrder, currentIndex, shuffled } = get();
     if (tracks.length <= 1) return;
@@ -231,10 +198,6 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     }
   },
 
-  // Set the shuffled flag WITHOUT reordering. Used by resume: the saved queue is
-  // already persisted in play order, so the loaded order IS the shuffled order —
-  // marking it shuffled (rather than calling toggleShuffle, which re-randomizes
-  // the tail) preserves the exact order the user was listening to.
   setShuffled: (shuffled) => {
     set({ shuffled });
   },
@@ -247,11 +210,6 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({ repeatMode: mode });
   },
 
-  // AIDEV-WARNING: reorderQueue mutates playOrder, so any caller MUST also
-  // reorder the native queue (TrackPlayer.move) in lockstep. The store's
-  // currentIndex follows native by position (syncCurrentIndex); a store-only
-  // reorder desyncs the UI from audio — the same class of bug that store-only
-  // shuffle caused. Currently unused (drag-to-reorder isn't wired up yet).
   reorderQueue: (fromIndex, toIndex) => {
     const { playOrder, currentIndex } = get();
     if (fromIndex === toIndex) return;
@@ -280,15 +238,19 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
       set({ ...INITIAL, generation: get().generation + 1 });
       return;
     }
-    const newOrder = playOrder
-      .filter((_, i) => i !== index)
-      .map((i) => (i > trackIdx ? i - 1 : i));
-    const newCurrent = index < currentIndex
-      ? currentIndex - 1
-      : index === currentIndex
-        ? Math.min(currentIndex, newOrder.length - 1)
-        : currentIndex;
-    set({ tracks: newTracks, playOrder: newOrder, currentIndex: newCurrent, shuffled: shuffled && newTracks.length > 1 });
+    const newOrder = playOrder.filter((_, i) => i !== index).map((i) => (i > trackIdx ? i - 1 : i));
+    const newCurrent =
+      index < currentIndex
+        ? currentIndex - 1
+        : index === currentIndex
+          ? Math.min(currentIndex, newOrder.length - 1)
+          : currentIndex;
+    set({
+      tracks: newTracks,
+      playOrder: newOrder,
+      currentIndex: newCurrent,
+      shuffled: shuffled && newTracks.length > 1,
+    });
   },
 
   clearQueue: () => set({ ...INITIAL, generation: get().generation + 1 }),
@@ -299,10 +261,6 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     return trackAt(tracks, playOrder, currentIndex);
   },
 
-  // Repeat 'one' loops the track on AUTO-advance only; pressing next still moves
-  // on, and at the last track there is nothing to move to — native
-  // RepeatMode.Track rejects skipToNext there. Claiming a next exists under
-  // 'one' rendered an enabled Next button that silently did nothing.
   hasNext: () => {
     const { playOrder, currentIndex, repeatMode } = get();
     if (playOrder.length === 0) return false;
@@ -318,14 +276,9 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   },
 }));
 
-// The queue flattened into play-order — the exact sequence the native player
-// loads. Native queue index == play-order position == store currentIndex, so
-// transitions and removals map 1:1 between the store and TrackPlayer.
 export function orderedQueueTracks(state: {
   tracks: readonly PlaybackTrack[];
   playOrder: readonly number[];
 }): PlaybackTrack[] {
-  return state.playOrder
-    .map((i) => state.tracks[i])
-    .filter((t): t is PlaybackTrack => t != null);
+  return state.playOrder.map((i) => state.tracks[i]).filter((t): t is PlaybackTrack => t != null);
 }

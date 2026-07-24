@@ -1,15 +1,3 @@
-/**
- * useOAuth — one-tap sign-in with Apple or Google (ADR-0018).
- *
- * Supabase mints the provider auth URL (`signInWithOAuth`, browser redirect
- * skipped); we open it in a native auth session and feed the returned callback
- * URL back through the deep-link spine (`parseAuthLink` + `completeAuthIntent`)
- * to exchange the code for a session. One code path covers both providers.
- *
- * AIDEV-NOTE: live verification needs the Supabase Apple/Google providers
- * registered + `altune://auth/callback` whitelisted (see plan prerequisites).
- * Native one-tap sheets (expo-apple-authentication) are a deferred enhancement.
- */
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
@@ -18,7 +6,6 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { completeAuthIntent } from '../lib/completeAuthIntent';
 import { parseAuthLink } from '../lib/parseAuthLink';
 
-// Required by expo-web-browser to settle any pending auth session on web.
 WebBrowser.maybeCompleteAuthSession();
 
 export const OAUTH_REDIRECT_URL = 'altune://auth/callback';
@@ -53,7 +40,6 @@ export function useOAuth() {
         setState({ kind: 'ok' });
         return;
       }
-      // User dismissed the sheet or it closed without a callback URL.
       setState({ kind: 'cancelled' });
     } catch {
       setState({ kind: 'error' });

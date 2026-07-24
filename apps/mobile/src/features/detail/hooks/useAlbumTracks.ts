@@ -1,15 +1,3 @@
-/**
- * useAlbumTracks — fetch tracks from an album by provider + external ID.
- *
- * AC#14: Fetches from the first source in the album's sources array.
- * Cached per (provider, external_id) for the session.
- *
- * When a MusicBrainz source is available (different from the primary),
- * fetches MB tracks in parallel and merges featured_artists into the
- * primary tracks by title match — MB carries structured artist-credit
- * data that Deezer/iTunes strip from their responses.
- */
-
 import { useQuery } from '@tanstack/react-query';
 
 import { getAlbumTracks } from '@shared/api-client/enrichment';
@@ -32,7 +20,11 @@ type UseAlbumTracksReturn = {
 };
 
 function _normTitle(t: string): string {
-  return t.replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ').toLowerCase().replace(/\s+/g, ' ').trim();
+  return t
+    .replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function _mergeFeaturing(
@@ -68,7 +60,12 @@ export function useAlbumTracks({
   allSources,
   enabled = true,
 }: UseAlbumTracksParams): UseAlbumTracksReturn {
-  const { data: primaryData, isLoading, isError: isQueryError, refetch } = useQuery({
+  const {
+    data: primaryData,
+    isLoading,
+    isError: isQueryError,
+    refetch,
+  } = useQuery({
     queryKey: ['album-tracks', provider, externalId],
     queryFn: () => getAlbumTracks(provider, externalId, undefined, albumTitle, albumArtist),
     enabled,
@@ -76,7 +73,8 @@ export function useAlbumTracks({
   });
 
   const mbSource = allSources?.find(
-    (s) => s.provider === 'musicbrainz' && !(s.provider === provider && s.external_id === externalId),
+    (s) =>
+      s.provider === 'musicbrainz' && !(s.provider === provider && s.external_id === externalId),
   );
 
   const { data: mbQueryData } = useQuery({

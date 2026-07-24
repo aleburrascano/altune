@@ -1,16 +1,7 @@
-/**
- * getTracks + createTrack contract — types come back as declared, errors surface.
- *
- * Slice 8 of view-library (getTracks). createTrack added by view-result-detail
- * slice 10. RED: stub returns empty; GREEN wires real fetch.
- */
-
 import { ApiError } from '../index';
 import { createTrack, getTracks } from '../tracks';
 import type { ListTracksResponse, TrackResponse } from '../types';
 
-// apiFetch fails fast without a session (every /v1 path is authenticated).
-// These tests are about the tracks contract, so mock the auth boundary.
 jest.mock('../../auth/supabaseClient', () => ({
   supabase: {
     auth: { getSession: async () => ({ data: { session: { access_token: 'test-token' } } }) },

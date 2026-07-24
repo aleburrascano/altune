@@ -8,14 +8,11 @@ import { useTheme } from '../theme/useTheme';
 
 export type ScreenProps = {
   children: ReactNode;
-  /** Apply the standard horizontal screen padding (default true). */
   padded?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 };
 
-/** Canvas-colored, safe-area-aware page frame. Screens add their own scroller
- * (FlatList / ScrollView) inside. */
 export function Screen({ children, padded = true, style, testID }: ScreenProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();

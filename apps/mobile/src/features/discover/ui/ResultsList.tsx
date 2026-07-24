@@ -1,13 +1,3 @@
-/**
- * ResultsList — the shared results-FlatList shell for both results surfaces
- * (blended "All" view and single-kind filtered view).
- *
- * Owns the chrome the two surfaces used to hand-roll separately (and let
- * drift): correction-banner header, pull-to-refresh, and the impression
- * viewability wiring. The surfaces supply only what genuinely varies —
- * data, key, renderItem, and an optional extra header (the Top Result card).
- */
-
 import type { ReactElement, ReactNode } from 'react';
 import { FlatList, StyleSheet, type ListRenderItem } from 'react-native';
 
@@ -19,17 +9,11 @@ import { CorrectionBanner } from './CorrectionBanner';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
 
-/**
- * The props both results surfaces share, built once in DiscoverBody and passed
- * as a single object — a new results-surface concern extends this type instead
- * of threading one more prop through every layer.
- */
 export type ResultsCommonProps = {
   onResultTap: (result: DiscoveryResult, position: number) => void;
   impression: ImpressionHandlers;
   onRefresh: () => void;
   isRefreshing: boolean;
-  /** Infinite scroll over the ranked slate. */
   onEndReached: () => void;
   isFetchingNextPage: boolean;
   correctedQuery?: string | undefined;
@@ -78,8 +62,6 @@ export function ResultsList<T>({
       onViewableItemsChanged={common.impression.onViewableItemsChanged}
       viewabilityConfig={common.impression.viewabilityConfig}
       onEndReached={common.onEndReached}
-      // Half a screen of runway: enough to hide the fetch, not so much that it
-      // pages ahead of anything the user has actually looked at.
       onEndReachedThreshold={0.5}
       ListFooterComponent={
         common.isFetchingNextPage ? (

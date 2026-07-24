@@ -1,13 +1,3 @@
-/**
- * resolvePlaySource — the track body's play-source policy, pure so it
- * unit-tests without rendering.
- *
- * The full Track wins when it is in the library and acquired (id/status from
- * the handoff `extras` OR the live library match, so an acquisition-SSE patch
- * upgrades preview → full without a refetch); else the 30s preview; else
- * nothing (Play disabled).
- */
-
 import type { TrackResponse } from '@shared/api-client/types';
 import { canPlay } from '@shared/playback/canPlay';
 import type { PlaybackSource } from '@shared/playback/types';

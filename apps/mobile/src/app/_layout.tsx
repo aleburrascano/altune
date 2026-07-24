@@ -26,20 +26,10 @@ import { ScreenBoundary } from '../shared/ui/ScreenBoundary';
 import { ThemeProvider, themes } from '../shared/ui/theme';
 import { useThemePreference } from '../shared/ui/theme/themePreference';
 
-// Registering the playback service pulls in react-native-track-player's native
-// module, which Expo Go does not bundle — skip it there so the app boots.
 if (!isExpoGo) {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   require('../features/playback/registerPlaybackService').registerPlaybackService();
 }
 
-// AIDEV-NOTE: ADR-0005 — single QueryClientProvider at the Expo Router root.
-// Every feature's hooks (useLibrary, etc.) inherit this client.
-// ADR-0006 — root is auth-aware via AuthGate: splash while loading, redirect
-// to /sign-in when signed-out, mount the app tree when signed-in.
-// ADR-0008 — ThemeProvider wraps the tree (dark is the only v1 mode); the
-// design-system fonts (Space Grotesk + Inter) are held behind the native
-// splash until loaded so the UI never flashes a fallback font (FOUT).
 void SplashScreen.preventAutoHideAsync();
 
 function ServerEventsBridge() {
@@ -47,17 +37,12 @@ function ServerEventsBridge() {
   return null;
 }
 
-// AIDEV-NOTE: the auth deep-link spine (email-confirm / recovery / OAuth
-// callbacks). Mounted inside AuthGate next to ServerEventsBridge; cold-start
-// links survive via Linking.getInitialURL even across the sign-in redirect.
 function AuthDeepLinkBridge() {
   useAuthDeepLink();
   return null;
 }
 
 export default function RootLayout() {
-  // AIDEV-NOTE: a 401 is a verdict, not a hiccup — retrying it 3x with backoff
-  // (React Query's default) just delays the error the user needs to see.
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -71,9 +56,6 @@ export default function RootLayout() {
       }),
   );
 
-  // The Stack background, status bar and Android nav bar sit OUTSIDE the
-  // ThemeProvider's context, so they read the preference directly. Without this
-  // they stay dark while every themed screen turns light.
   const scheme = useThemePreference((s) => s.scheme);
   const activeTheme = themes[scheme];
 
@@ -91,10 +73,6 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  // AIDEV-NOTE: Android paints the OS navigation bar light by default and
-  // repaints it on resume (SDK 54 edge-to-edge), flashing white over our dark
-  // UI. Force dark + light buttons on mount AND every time the app returns to
-  // the foreground — the re-assert on 'active' is what kills the resume flash.
   useEffect(() => {
     if (Platform.OS !== 'android') {
       return;
@@ -126,15 +104,8 @@ export default function RootLayout() {
               <ServerEventsBridge />
               <AuthDeepLinkBridge />
               <PlaybackProvider>
-                {/* Pauses playback when the sleep timer expires — must outlive
-                    the player screen, so it mounts here, not in FullPlayer. */}
                 <SleepTimerBridge />
-                {/* Files win over the index — see the bridge. */}
                 <OfflineReconcileBridge />
-                {/* Backstop boundary. Each route group has its own (nearest
-                    wins), so this only catches what they can't: root-level
-                    routes like reset-password, and throws in the group layouts
-                    themselves. Without it those render a blank app. */}
                 <ScreenBoundary>
                   <Stack
                     screenOptions={{
@@ -145,7 +116,14 @@ export default function RootLayout() {
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="(auth)" />
                     <Stack.Screen name="reset-password" />
-                    <Stack.Screen name="player" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', gestureEnabled: true }} />
+                    <Stack.Screen
+                      name="player"
+                      options={{
+                        presentation: 'fullScreenModal',
+                        animation: 'slide_from_bottom',
+                        gestureEnabled: true,
+                      }}
+                    />
                   </Stack>
                 </ScreenBoundary>
               </PlaybackProvider>

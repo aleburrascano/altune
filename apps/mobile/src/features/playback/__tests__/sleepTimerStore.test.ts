@@ -9,8 +9,6 @@ describe('minutesRemaining', () => {
     expect(minutesRemaining(null, 1_000)).toBe(0);
   });
 
-  // Rounded up: a timer with 30 seconds left must not read "0 min" while it is
-  // still going to fire.
   it('rounds partial minutes up', () => {
     expect(minutesRemaining(1_030_000, 1_000_000)).toBe(1);
   });

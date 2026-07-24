@@ -17,7 +17,12 @@ type ArtistsGridProps = {
 
 const AVATAR_SIZE = 100;
 
-export function ArtistsGrid({ artists, emptyLabel, refresh, onArtistPress }: ArtistsGridProps): ReactElement {
+export function ArtistsGrid({
+  artists,
+  emptyLabel,
+  refresh,
+  onArtistPress,
+}: ArtistsGridProps): ReactElement {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const columns = avatarColumns(width);
@@ -26,7 +31,6 @@ export function ArtistsGrid({ artists, emptyLabel, refresh, onArtistPress }: Art
       testID="library-artists-grid"
       data={artists}
       keyExtractor={(a) => a.key}
-      // Remount on column change: FlatList cannot change numColumns in place.
       key={`cols-${columns}`}
       numColumns={columns}
       columnWrapperStyle={styles.gridRow}
@@ -51,7 +55,11 @@ export function ArtistsGrid({ artists, emptyLabel, refresh, onArtistPress }: Art
         >
           <View style={[styles.avatar, { backgroundColor: theme.color.surface2 }]}>
             {item.artworkUrl != null ? (
-              <ExpoImage source={{ uri: item.artworkUrl }} style={styles.avatarImage} contentFit="cover" />
+              <ExpoImage
+                source={{ uri: item.artworkUrl }}
+                style={styles.avatarImage}
+                contentFit="cover"
+              />
             ) : null}
           </View>
           <Text variant="caption" numberOfLines={1} style={styles.name}>

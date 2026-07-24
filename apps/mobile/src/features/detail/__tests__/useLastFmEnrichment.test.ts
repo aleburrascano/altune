@@ -1,7 +1,3 @@
-/**
- * useLastFmEnrichment — detail-open Last.fm enrichment fetch
- * (docs/providers/lastfm.md cap 3). Real QueryClient; getLastFmEnrichment mocked.
- */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';

@@ -1,9 +1,3 @@
-/**
- * extractFeaturedFromText / resolveFeatured — the track body's three-tier
- * featured-artist fallback: structured extras → Deezer enrichment → regex
- * parse of "feat./ft./with" in title/subtitle.
- */
-
 import { extractFeaturedFromText, resolveFeatured } from '../extras';
 
 describe('extractFeaturedFromText', () => {

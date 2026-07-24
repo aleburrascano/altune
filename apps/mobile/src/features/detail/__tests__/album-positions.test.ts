@@ -1,8 +1,3 @@
-/**
- * _withAlbumPositions — recovers real album track order for owned tracks that
- * were saved before track_number was sent, by matching them against the
- * authoritative (provider-ordered) album tracklist. Pure; no rendering.
- */
 import { _withAlbumPositions } from '../hooks/useAlbumDetailState';
 import type { DiscoveryResult } from '../../../shared/api-client/discovery';
 

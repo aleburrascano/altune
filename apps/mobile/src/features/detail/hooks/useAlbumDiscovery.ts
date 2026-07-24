@@ -16,7 +16,11 @@ export function useAlbumDiscovery({
 }) {
   const searchQuery = `${albumTitle} ${artist ?? ''}`.trim();
 
-  const { data, isLoading: isSearching, isError: isSearchError } = useQuery({
+  const {
+    data,
+    isLoading: isSearching,
+    isError: isSearchError,
+  } = useQuery({
     ...resolveEntityQuery('album', searchQuery, 1),
     enabled,
   });
@@ -24,9 +28,21 @@ export function useAlbumDiscovery({
 
   const source = searchResult?.sources[0];
 
-  const { data: tracksData, isLoading: isLoadingTracks, isError: isTracksError, refetch } = useQuery({
+  const {
+    data: tracksData,
+    isLoading: isLoadingTracks,
+    isError: isTracksError,
+    refetch,
+  } = useQuery({
     queryKey: ['album-discovery-tracks', source?.provider, source?.external_id],
-    queryFn: () => getAlbumTracks(source!.provider, source!.external_id, undefined, searchResult?.title, searchResult?.subtitle ?? undefined),
+    queryFn: () =>
+      getAlbumTracks(
+        source!.provider,
+        source!.external_id,
+        undefined,
+        searchResult?.title,
+        searchResult?.subtitle ?? undefined,
+      ),
     enabled: enabled && source != null,
     staleTime: 30 * 60 * 1000,
   });

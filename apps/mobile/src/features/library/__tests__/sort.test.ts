@@ -71,10 +71,7 @@ describe('sortPlaylists', () => {
   });
 
   it('sorts alphabetically by name', () => {
-    const playlists = [
-      playlist({ id: 'z', name: 'Zen' }),
-      playlist({ id: 'a', name: 'Ambient' }),
-    ];
+    const playlists = [playlist({ id: 'z', name: 'Zen' }), playlist({ id: 'a', name: 'Ambient' })];
     const result = sortPlaylists(playlists, 'az');
     expect(result[0]!.name).toBe('Ambient');
   });
@@ -180,10 +177,7 @@ describe('sortTracks', () => {
   });
 
   it('sorts alphabetically by title', () => {
-    const tracks = [
-      track({ title: 'Zebra' }),
-      track({ title: 'Alpha', id: '2' }),
-    ];
+    const tracks = [track({ title: 'Zebra' }), track({ title: 'Alpha', id: '2' })];
     const result = sortTracks(tracks, 'az');
     expect(result[0]!.title).toBe('Alpha');
   });

@@ -9,7 +9,11 @@ interface CorrectionBannerProps {
   onSearchOriginal: () => void;
 }
 
-export function CorrectionBanner({ correctedQuery, originalQuery, onSearchOriginal }: CorrectionBannerProps) {
+export function CorrectionBanner({
+  correctedQuery,
+  originalQuery,
+  onSearchOriginal,
+}: CorrectionBannerProps) {
   return (
     <View style={styles.container}>
       <Text variant="caption" tone="secondary">

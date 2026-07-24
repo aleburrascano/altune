@@ -1,10 +1,3 @@
-/**
- * SaveGlyph — the acquire lifecycle's state → glyph mapping, shared by the
- * hero save pill (TrackDetailBody) and the 40pt row control (TrackSaveControl)
- * so a new lifecycle state lands in one place. The two controls style their
- * `add` glyph differently (accent circle vs neutral pill), hence the two props.
- */
-
 import type { ReactElement } from 'react';
 import { ActivityIndicator } from 'react-native';
 

@@ -1,7 +1,3 @@
-/**
- * Shared helpers and styles for detail screen sub-components.
- */
-
 import { StyleSheet } from 'react-native';
 
 import type { QueryClient } from '@tanstack/react-query';
@@ -27,7 +23,6 @@ export function _isTrackInLibraryCache(
 
 export { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 
-/** Styles shared across multiple detail sub-components. */
 export const sharedStyles = StyleSheet.create({
   trackRow: {
     flexDirection: 'row',

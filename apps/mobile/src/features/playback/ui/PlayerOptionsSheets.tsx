@@ -1,9 +1,3 @@
-/**
- * The full player's overflow menu: playback speed and sleep timer.
- *
- * Three sheets rather than one nested menu — the root sheet shows each setting's
- * current value, so the state is readable without drilling in.
- */
 import { useRef, useState, type ReactElement } from 'react';
 
 import { usePlayback } from '@shared/playback/usePlayback';
@@ -31,7 +25,6 @@ export function PlayerOptionsSheets({
   const startSleep = useSleepTimerStore((s) => s.start);
   const cancelSleep = useSleepTimerStore((s) => s.cancel);
 
-  // `open` is the parent's request to show the menu; `sheet` is which one is up.
   const visible: OpenSheet = sheet ?? (open ? 'root' : null);
 
   const close = (): void => {
@@ -39,10 +32,6 @@ export function PlayerOptionsSheets({
     onClose();
   };
 
-  // ActionSheet fires `onPress` then unconditionally `onClose`, so a root option
-  // cannot simply setSheet('speed') — the close that follows in the same batch
-  // would wipe it. The option records where to go next; the close handler reads
-  // that instead of dismissing.
   const nextSheet = useRef<OpenSheet>(null);
   const closeRoot = (): void => {
     const next = nextSheet.current;

@@ -22,7 +22,9 @@ The single source of visual truth. Every screen composes these primitives and re
 - **Motion uses RN's built-in `Animated`** (NOT `react-native-reanimated`): zero native modules, so it runs in Expo Go. Reanimated 4's worklets TurboModule isn't present in Expo Go and crashed at startup — see ADR-0008.
 - **jest:** `react-native-safe-area-context` is mocked in `apps/mobile/jest/setup-after-env.js` (`Screen` calls `useSafeAreaInsets`, which throws with no provider). RN `Animated` needs no mock.
 - **Android system nav bar** is painted dark (canvas color + light buttons) in `app/_layout.tsx` on mount and on every `AppState` → `active`; the resume re-assert kills the white-flash bug under SDK 54 edge-to-edge (ADR-0009). `expo-blur` is still installed but no longer used by `TabBar`.
-- **AIDEV-* anchors** in `theme/ThemeProvider.tsx`, `theme/lightTheme.ts`, and `navigation/TabBar.tsx` document the dark-only / mini-player-dock decisions — never strip them.
+- **`useTheme()` resolves to `darkTheme` with no provider mounted** (the context default) — load-bearing for bare-rendered tests, not an accident.
+- **`lightTheme` is drafted, not tuned** — it exists so every token has a light variant and light mode is a later config flip; shipping it needs a design pass.
+- **`TabBar` is flush to the bottom edge** with a hairline top border and a 2px accent indicator (no pill, no glass blur); the gap above it hosts the MiniPlayer.
 
 ## Consumers
 

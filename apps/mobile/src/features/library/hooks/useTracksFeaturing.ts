@@ -4,8 +4,6 @@ import { listTracksFeaturing } from '@shared/api-client/tracks';
 import type { FeaturedArtist } from '@shared/api-client/types';
 import { libraryKeys } from '@shared/lib/query-keys';
 
-/** "Everything featuring X" — the user's saved tracks crediting a featured artist.
- * Keyed on the artist's stable identity (mbid, else deezer id, else name). */
 export function useTracksFeaturing(fa: FeaturedArtist) {
   const key = fa.mbid ?? (fa.deezer_id != null ? `dz:${fa.deezer_id}` : `name:${fa.name}`);
   return useQuery({

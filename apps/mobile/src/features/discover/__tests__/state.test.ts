@@ -1,7 +1,3 @@
-/**
- * State machine helpers for the discover feature — slice 44.
- */
-
 import {
   _cap,
   _groupByKind,
@@ -42,9 +38,9 @@ const _empty = (): DiscoverySearchResponse => ({
 
 describe('_viewForState', () => {
   it('returns empty-no-query when query is blank', () => {
-    expect(
-      _viewForState({ query: '', isLoading: false, data: undefined, error: null }),
-    ).toBe('empty-no-query');
+    expect(_viewForState({ query: '', isLoading: false, data: undefined, error: null })).toBe(
+      'empty-no-query',
+    );
     expect(
       _viewForState({
         query: '   ',
@@ -162,7 +158,6 @@ describe('_cap', () => {
   });
 });
 
-
 describe('kindLabel', () => {
   it('maps track to the UI noun Song, singular and plural', () => {
     expect(kindLabel('track')).toBe('Song');
@@ -204,7 +199,6 @@ describe('resultKey', () => {
 
 describe('_sectionOrder', () => {
   it('orders sections by the kind whose best member ranks earliest', () => {
-    // A track query: a track ranks first, so tracks lead, then albums.
     const results = [
       _result('track', 'Creep'),
       _result('album', 'Creep EP'),

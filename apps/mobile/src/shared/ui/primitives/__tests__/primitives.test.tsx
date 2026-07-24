@@ -7,9 +7,6 @@ import { ConfidenceDot } from '../ConfidenceDot';
 import { IconButton } from '../IconButton';
 import { Text } from '../Text';
 
-// Primitives render with NO ThemeProvider here on purpose — proving the
-// useTheme() dark fallback that keeps the bare-rendered auth screens green.
-
 describe('Text', () => {
   it('forwards testID and renders its children (the auth-error contract)', () => {
     const { getByTestId } = render(<Text testID="t">Hello</Text>);

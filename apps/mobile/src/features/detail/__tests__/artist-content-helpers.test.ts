@@ -110,10 +110,7 @@ describe('dedupAlbumsByTitle', () => {
   });
 
   it('keeps the only instance when no duplicates', () => {
-    const albums = [
-      album({ title: 'Alpha' }),
-      album({ title: 'Beta' }),
-    ];
+    const albums = [album({ title: 'Alpha' }), album({ title: 'Beta' })];
     expect(dedupAlbumsByTitle(albums)).toHaveLength(2);
   });
 });

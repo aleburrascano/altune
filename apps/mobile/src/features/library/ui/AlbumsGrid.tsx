@@ -15,7 +15,12 @@ type AlbumsGridProps = {
   onAlbumPress: (album: AlbumGroup) => void;
 };
 
-export function AlbumsGrid({ albums, emptyLabel, refresh, onAlbumPress }: AlbumsGridProps): ReactElement {
+export function AlbumsGrid({
+  albums,
+  emptyLabel,
+  refresh,
+  onAlbumPress,
+}: AlbumsGridProps): ReactElement {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const columns = coverColumns(width);
@@ -24,7 +29,6 @@ export function AlbumsGrid({ albums, emptyLabel, refresh, onAlbumPress }: Albums
       testID="library-albums-grid"
       data={albums}
       keyExtractor={(a) => a.key}
-      // Remount on column change: FlatList cannot change numColumns in place.
       key={`cols-${columns}`}
       numColumns={columns}
       columnWrapperStyle={styles.gridRow}
@@ -49,7 +53,11 @@ export function AlbumsGrid({ albums, emptyLabel, refresh, onAlbumPress }: Albums
         >
           <View style={[styles.cover, { backgroundColor: theme.color.surface2 }]}>
             {item.artworkUrl != null ? (
-              <ExpoImage source={{ uri: item.artworkUrl }} style={styles.coverImage} contentFit="cover" />
+              <ExpoImage
+                source={{ uri: item.artworkUrl }}
+                style={styles.coverImage}
+                contentFit="cover"
+              />
             ) : null}
           </View>
           <Text variant="label" numberOfLines={1}>

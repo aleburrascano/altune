@@ -40,11 +40,8 @@ export type LateralNavHandle = {
   clearError: () => void;
 };
 
-/** The hero Save control's state: the acquire lifecycle, plus a disabled state
- * when the track has no artist (an invalid save). */
 type SaveState = SaveControlState | 'disabled';
 
-/** Track body: the play/save hero controls plus light navigation. */
 export function TrackDetailBody({
   result,
   lateralNav,
@@ -64,9 +61,6 @@ export function TrackDetailBody({
   const libraryMatch = useLibraryTrackMatch(result.title, result.subtitle);
   const te = trackExtras(result.extras);
 
-  // `?? ''` guards against an absent subtitle arriving as `undefined` (the wire
-  // omits an empty subtitle, despite the `string | null` type) — a bare
-  // `!== null` check passes for undefined and then `.length` crashes the screen.
   const canSave = (result.subtitle ?? '').length > 0;
   const albumName = te.album;
   const featured = resolveFeatured(result.extras, deezerFeatured, result.title, result.subtitle);
@@ -77,10 +71,6 @@ export function TrackDetailBody({
   const playTestID = isPreview ? 'detail-preview' : 'detail-play';
   const playA11y = playing ? 'Pause' : isPreview ? 'Play preview' : 'Play';
 
-  // The hero Save runs the full acquire lifecycle off the library cache (add →
-  // saving → ready → failed), exactly like the row control — with a leading
-  // `disabled` when the track has no artist and a transient mutation error
-  // surfacing as `failed` before the optimistic row reconciles.
   const saveState: SaveState = !canSave
     ? 'disabled'
     : save.isError
@@ -89,7 +79,6 @@ export function TrackDetailBody({
         ? 'saving'
         : saveControlState(libraryMatch);
   const saveInteractive = saveState === 'add' || saveState === 'failed';
-  // 'disabled' shares the 'add' presentation — same glyph/caption, just inert.
   const saveDisplayState: SaveControlState = saveState === 'disabled' ? 'add' : saveState;
 
   const onSave = (): void => {
@@ -112,10 +101,6 @@ export function TrackDetailBody({
         artist: result.subtitle ?? '',
         artworkUrl: result.image_url,
         durationSeconds: te.durationSeconds ?? undefined,
-        // Provenance: stamp the originating search_id (from the detail handoff)
-        // and the result_signature so the play/completed events join back to the
-        // search that produced them — without this the satisfaction signal and the
-        // behavioral corpus get a play with no search context (the empty-corpus bug).
         searchId: getDetailHandoffSearchId() ?? undefined,
         resultSignature: result.result_signature ?? undefined,
       });
@@ -178,7 +163,7 @@ export function TrackDetailBody({
             Album
           </Text>
           <Text variant="body" tone="accent" numberOfLines={1} style={styles.navValue}>
-            {albumName}  ›
+            {albumName} ›
           </Text>
         </Pressable>
       ) : null}
@@ -193,9 +178,6 @@ export function TrackDetailBody({
               <Pressable
                 key={f.mbid ?? f.name}
                 onPress={() =>
-                  // Navigate to the featuring browse in the CURRENT tab stack
-                  // (derived from detailRoute) so back returns to this detail.
-                  // Cast: the generated route type is stale until expo restarts.
                   router.push({
                     pathname: featuringRouteFor(detailRoute),
                     params: {

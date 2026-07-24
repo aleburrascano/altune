@@ -22,13 +22,17 @@ import { AlbumCardsSkeleton, TrackRowsSkeleton } from './DetailSkeleton';
 import { DiscographySections } from './DiscographySections';
 import { TrackSaveControl } from './TrackSaveControl';
 
-// Your library can hold dozens of tracks by one artist; showing them all buries
-// the discography below an endless scroll. Cap the collapsed view and reveal the
-// rest on demand. (Discovery "Popular Tracks" is already API-limited, so the cap
-// only bites the library "Your Tracks" list.)
 const TRACK_CAP = 5;
 
-export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { result: DiscoveryResult; detailRoute: DetailRoute; isFromLibrary?: boolean }): ReactElement {
+export function ArtistDetailBody({
+  result,
+  detailRoute,
+  isFromLibrary,
+}: {
+  result: DiscoveryResult;
+  detailRoute: DetailRoute;
+  isFromLibrary?: boolean;
+}): ReactElement {
   const theme = useTheme();
   const artist = useArtistDetailState(result, detailRoute, isFromLibrary);
   const [showAllTracks, setShowAllTracks] = useState(false);
@@ -37,9 +41,6 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
 
   return (
     <View testID="detail-artist-content" style={styles.artistContent}>
-      {/* Play what you own of this artist's listed tracks. Hidden entirely when
-          nothing is listed yet — a disabled button over a loading/empty section
-          is noise, not an affordance. */}
       {artist.topTracks.length > 0 && !artist.isLoadingTracks ? (
         <Button
           testID="detail-artist-play"
@@ -52,7 +53,6 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
         />
       ) : null}
 
-      {/* Your Tracks */}
       <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
         {artist.hasSources ? 'Popular Tracks' : 'Your Tracks'}
       </Text>
@@ -63,7 +63,12 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
           <Text variant="body" tone="danger">
             Couldn't load tracks.
           </Text>
-          <Button testID="detail-top-tracks-retry" label="Retry" onPress={() => artist.refetchTracks()} style={sharedStyles.retryButton} />
+          <Button
+            testID="detail-top-tracks-retry"
+            label="Retry"
+            onPress={() => artist.refetchTracks()}
+            style={sharedStyles.retryButton}
+          />
         </View>
       ) : artist.topTracks.length === 0 ? (
         <Text variant="body" tone="tertiary" style={styles.emptySection}>
@@ -123,7 +128,6 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
         </>
       )}
 
-      {/* Library Albums (when from library) */}
       {!artist.hasSources && artist.libraryAlbums.length > 0 ? (
         <View style={sharedStyles.albumsSection}>
           <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
@@ -133,7 +137,6 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
         </View>
       ) : null}
 
-      {/* Discovery Discography — always shown when hasSources, expandable when from library */}
       {artist.hasSources ? (
         <>
           {artist.isLoadingAlbums ? (
@@ -141,14 +144,26 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
               <AlbumCardsSkeleton />
             </View>
           ) : artist.isErrorAlbums ? (
-            <View testID="detail-albums-error" style={[styles.sectionError, sharedStyles.albumsSection]}>
+            <View
+              testID="detail-albums-error"
+              style={[styles.sectionError, sharedStyles.albumsSection]}
+            >
               <Text variant="body" tone="danger">
                 Couldn't load albums.
               </Text>
-              <Button testID="detail-albums-retry" label="Retry" onPress={() => artist.refetchAlbums()} style={sharedStyles.retryButton} />
+              <Button
+                testID="detail-albums-retry"
+                label="Retry"
+                onPress={() => artist.refetchAlbums()}
+                style={sharedStyles.retryButton}
+              />
             </View>
           ) : artist.apiAlbums.length === 0 ? (
-            <Text variant="body" tone="tertiary" style={[styles.emptySection, sharedStyles.albumsSection]}>
+            <Text
+              variant="body"
+              tone="tertiary"
+              style={[styles.emptySection, sharedStyles.albumsSection]}
+            >
               No albums found.
             </Text>
           ) : (
@@ -162,7 +177,9 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
             testID="detail-explore-discography"
             onPress={() => artist.setExploreExpanded((prev) => !prev)}
             accessibilityRole="button"
-            accessibilityLabel={artist.exploreExpanded ? 'Collapse discography' : 'Explore full discography'}
+            accessibilityLabel={
+              artist.exploreExpanded ? 'Collapse discography' : 'Explore full discography'
+            }
             style={({ pressed }) => [styles.exploreHeader, pressed ? { opacity: 0.6 } : null]}
           >
             <Text variant="label" tone="accent">
@@ -183,7 +200,11 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
                 <Text variant="caption" tone="secondary">
                   Couldn't load discography.
                 </Text>
-                <Button label="Retry" onPress={() => artist.refetchAlbums()} style={sharedStyles.retryButton} />
+                <Button
+                  label="Retry"
+                  onPress={() => artist.refetchAlbums()}
+                  style={sharedStyles.retryButton}
+                />
               </View>
             ) : artist.apiAlbums.length === 0 ? (
               <Text variant="caption" tone="tertiary" style={styles.emptySection}>

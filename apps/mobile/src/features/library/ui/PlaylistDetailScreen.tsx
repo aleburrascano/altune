@@ -49,11 +49,9 @@ export function PlaylistDetailScreen(): ReactElement {
     queryKey: playlistKeys.detail(playlistId),
     queryFn: () => getPlaylist(playlistId),
     enabled: playlistId.length > 0,
-    staleTime: Infinity, // SSE-covered (rename/remove/reorder patch it); F15
+    staleTime: Infinity,
   });
 
-  // Cache policy (optimistic patch, rollback, invalidate, failure alerts)
-  // lives in usePlaylistMutations; this screen keeps navigation + edit state.
   const renameMut = useRenamePlaylist(playlistId);
   const deleteMut = useDeletePlaylist(playlistId);
   const removeMut = useRemoveTrackFromPlaylist(playlistId);
@@ -68,7 +66,10 @@ export function PlaylistDetailScreen(): ReactElement {
   const { navigateToTrack } = useLibraryNavigation(router);
   const playback = usePlayback();
   const queue = useQueuePlayback();
-  const [trackAction, setTrackAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
+  const [trackAction, setTrackAction] = useState<{
+    track: TrackResponse;
+    anchor: MenuAnchor;
+  } | null>(null);
 
   const trackMenuItems = (track: TrackResponse) =>
     buildTrackMenuItems(track, {
@@ -115,9 +116,16 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const handlePlay = () => {
     if (!playlistData) return;
-    const { playable, startIndex } = buildPlayableQueue(playlistData.tracks, playlistData.tracks[0]?.id ?? '');
+    const { playable, startIndex } = buildPlayableQueue(
+      playlistData.tracks,
+      playlistData.tracks[0]?.id ?? '',
+    );
     if (playable.length > 0) {
-      queue.playFromList(playable, startIndex, { kind: 'playlist', playlistId, name: playlistData.name });
+      queue.playFromList(playable, startIndex, {
+        kind: 'playlist',
+        playlistId,
+        name: playlistData.name,
+      });
     }
   };
 
@@ -126,15 +134,23 @@ export function PlaylistDetailScreen(): ReactElement {
     const { playable } = buildPlayableQueue(playlistData.tracks, '');
     if (playable.length === 0) return;
     const randomIdx = Math.floor(Math.random() * playable.length);
-    queue.playFromList(playable, randomIdx, { kind: 'playlist', playlistId, name: playlistData.name });
+    queue.playFromList(playable, randomIdx, {
+      kind: 'playlist',
+      playlistId,
+      name: playlistData.name,
+    });
     queue.toggleShuffle();
   };
 
-  const goBack = () => router.canGoBack() ? router.back() : router.replace('/library');
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/library'));
 
   if (!playlistId) {
     router.replace('/library');
-    return <Screen><View /></Screen>;
+    return (
+      <Screen>
+        <View />
+      </Screen>
+    );
   }
 
   if (playlistLoading) {
@@ -168,8 +184,6 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const pl = playlistData;
 
-  // Only `ready` tracks have server-side audio to download; a playlist of
-  // still-acquiring tracks would otherwise offer an action that does nothing.
   const downloadableIds = pl.tracks
     .filter((t) => t.acquisition_status === 'ready')
     .map((t) => t.id);
@@ -200,7 +214,12 @@ export function PlaylistDetailScreen(): ReactElement {
       />
       <View style={styles.header}>
         <IconButton icon={ChevronLeft} size={24} onPress={goBack} accessibilityLabel="Back" />
-        <IconButton icon={EllipsisVertical} size={20} onPress={() => setMenuVisible(true)} accessibilityLabel="Playlist options" />
+        <IconButton
+          icon={EllipsisVertical}
+          size={20}
+          onPress={() => setMenuVisible(true)}
+          accessibilityLabel="Playlist options"
+        />
       </View>
 
       <ContextMenu
@@ -239,13 +258,23 @@ export function PlaylistDetailScreen(): ReactElement {
           <View style={styles.trackRow}>
             <LibraryRow
               track={item}
-              {...(item.acquisition_status === 'ready' ? { onPlay: () => {
-                const { playable, startIndex } = buildPlayableQueue(pl.tracks, item.id);
-                queue.playFromList(playable, startIndex, { kind: 'playlist', playlistId, name: pl.name });
-              } } : {})}
+              {...(item.acquisition_status === 'ready'
+                ? {
+                    onPlay: () => {
+                      const { playable, startIndex } = buildPlayableQueue(pl.tracks, item.id);
+                      queue.playFromList(playable, startIndex, {
+                        kind: 'playlist',
+                        playlistId,
+                        name: pl.name,
+                      });
+                    },
+                  }
+                : {})}
               onPress={() => navigateToTrack(item)}
               onMore={(anchor) => setTrackAction({ track: item, anchor })}
-              {...(item.acquisition_status === 'failed' ? { onRetry: () => retryMut.mutate(item.id) } : {})}
+              {...(item.acquisition_status === 'failed'
+                ? { onRetry: () => retryMut.mutate(item.id) }
+                : {})}
               retrying={retryingTrackId === item.id}
               isPlaying={isCurrentlyPlaying(playback, { kind: 'library', trackId: item.id })}
             />
@@ -253,8 +282,12 @@ export function PlaylistDetailScreen(): ReactElement {
         )}
         ListEmptyComponent={
           <View style={styles.emptyTracks}>
-            <Text variant="label" tone="secondary">No tracks yet</Text>
-            <Text variant="caption" tone="tertiary">Use the menu on any track to add it here</Text>
+            <Text variant="label" tone="secondary">
+              No tracks yet
+            </Text>
+            <Text variant="caption" tone="tertiary">
+              Use the menu on any track to add it here
+            </Text>
           </View>
         }
       />

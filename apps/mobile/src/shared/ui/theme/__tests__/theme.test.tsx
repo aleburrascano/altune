@@ -9,8 +9,6 @@ import { useTheme } from '../useTheme';
 
 describe('useTheme', () => {
   it('falls back to darkTheme when no ThemeProvider is mounted', () => {
-    // The shipped auth tests render screens bare (no provider). The fallback
-    // keeps them green while still letting a provider drive light mode later.
     const { result } = renderHook(() => useTheme());
     expect(result.current).toBe(darkTheme);
   });

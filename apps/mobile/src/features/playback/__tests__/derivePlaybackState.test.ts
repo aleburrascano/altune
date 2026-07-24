@@ -25,8 +25,6 @@ function input(overrides: Partial<DerivePlaybackStateInput> = {}): DerivePlaybac
 
 describe('derivePlaybackState', () => {
   it('preserves position while buffering (resume flicker fix)', () => {
-    // Priming the native queue on resume enters Buffering with the scrubber
-    // already seeded to 60s. It must NOT snap to 0.
     const s = derivePlaybackState(input({ isBuffering: true }));
     expect(s.status).toBe('loading');
     expect(s.positionMs).toBe(60_000);

@@ -1,13 +1,3 @@
-/**
- * useRelatedTracks — fetch a track's "Related on SoundCloud" recommendation set.
- *
- * Gated to SoundCloud-sourced tracks: the `/tracks/{id}/related` endpoint is
- * keyed by a SoundCloud numeric track id, which only a result carrying a
- * SoundCloud source has. A result with no SoundCloud source disables the query
- * entirely (no fetch, empty rail). A non-ok payload is treated as a failure and
- * surfaces no items (the rail hides — spec AC#6/AC#7).
- */
-
 import { useQuery } from '@tanstack/react-query';
 
 import { getRelatedTracks } from '@shared/api-client/enrichment';

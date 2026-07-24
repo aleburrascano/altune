@@ -1,13 +1,7 @@
-/**
- * apiFetch Authorization header injection (Slice 13).
- *
- * Verifies the Bearer header is attached when a Supabase session exists,
- * omitted when no session, and that custom headers passed in init are
- * preserved alongside.
- */
-/* eslint-disable @typescript-eslint/no-require-imports */
 
-const mockGetSession = jest.fn(async () => ({ data: { session: null as null | { access_token: string } } }));
+const mockGetSession = jest.fn(async () => ({
+  data: { session: null as null | { access_token: string } },
+}));
 jest.mock('../../auth/supabaseClient', () => ({
   supabase: {
     auth: { getSession: () => mockGetSession() },
@@ -16,7 +10,6 @@ jest.mock('../../auth/supabaseClient', () => ({
 
 const mockFetch = jest.fn();
 beforeAll(() => {
-  // Override the global fetch the wrapper uses.
   (global as unknown as { fetch: typeof mockFetch }).fetch = mockFetch;
 });
 
@@ -43,9 +36,6 @@ describe('apiFetch auth header injection', () => {
   });
 
   it('fails fast without a request when session is null', async () => {
-    // Every apiFetch path is /v1/* and requires auth, so a null session means
-    // the request is already doomed. Previously it went out unauthenticated and
-    // the resulting 401 was reported as if the server had an opinion.
     mockGetSession.mockResolvedValueOnce({ data: { session: null } });
     const { apiFetch, ApiError } = require('../index');
 
@@ -54,8 +44,6 @@ describe('apiFetch auth header injection', () => {
   });
 
   it('fails fast when getSession reports a stale refresh token', async () => {
-    // getSession RESOLVES with {session: null, error} on refresh failure — it
-    // does not throw — so the error field has to be read explicitly.
     mockGetSession.mockResolvedValueOnce({
       data: { session: null },
       error: { message: 'Invalid Refresh Token' },

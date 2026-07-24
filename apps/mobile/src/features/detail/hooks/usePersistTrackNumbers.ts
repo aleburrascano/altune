@@ -6,16 +6,6 @@ import { setTrackNumber } from '@shared/api-client/tracks';
 
 import { trackExtras } from '../extras-accessors';
 
-/**
- * Persist-as-you-browse: write back the album positions the detail screen derived
- * (`_withAlbumPositions`) for library tracks saved before track_number was
- * captured, so the database self-heals as you open albums.
- *
- * Fire-and-forget PATCH per track, deduped for the screen's lifetime by a ref;
- * the server side is fill-only, so this can never overwrite a real value. Only
- * acts when a track has a derived position AND its stored number is still null —
- * so on discovery albums (positions already stored) it does nothing.
- */
 export function usePersistTrackNumbers(
   localTracks: readonly TrackResponse[],
   positioned: readonly DiscoveryResult[],
@@ -31,8 +21,6 @@ export function usePersistTrackNumbers(
       }
     }
     for (const lt of localTracks) {
-      // Skip tracks that already have a number, optimistic placeholders (no real
-      // id yet), and ones already attempted this session.
       if (lt.track_number != null || lt.id.startsWith('optimistic:') || done.current.has(lt.id)) {
         continue;
       }

@@ -1,10 +1,3 @@
-/**
- * useArtistContent — per-provider status handling.
- *
- * The backend returns HTTP 200 with status timeout/error and empty items;
- * the hook must treat a non-ok payload as that provider's failure instead
- * of silently showing a partial discography.
- */
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';

@@ -4,6 +4,7 @@ title: Offline downloads (pinned tracks)
 description: User-pinned local copies of library audio that survive app kills and play with no network, kept in the document directory and reconciled against disk at startup.
 resource: apps/mobile/src/shared/offline/
 tags: [mobile, offline, storage, playback]
+verified_commit: 650555c091fab169d723fa9bd938c0ab97f89541
 ---
 
 Pinning a track downloads the real audio object to this device and makes playback prefer it over any network URL. It is the "plays on a plane" promise, and every design choice here follows from that promise being unconditional.

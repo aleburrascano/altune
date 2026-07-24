@@ -1,15 +1,3 @@
-/**
- * LastFmEnrichmentSection — the "About" block on artist detail (Editorial layout).
- *
- * Reads as an intentional editorial section, not a metadata dump and with no
- * provider attribution: a bio leads (with Read more), then a quiet
- * listeners · plays line, genre chips, and similar artists as name chips. The
- * Discogs facts (real name / aliases / members) were intentionally dropped — the
- * bio and "who they sound like" are the only parts worth surfacing.
- *
- * Renders nothing when there is no usable content.
- */
-
 import { useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -25,7 +13,6 @@ const MAX_SIMILAR = 6;
 const BIO_COLLAPSED_LINES = 4;
 const BIO_LONG_THRESHOLD = 220;
 
-// compactCount renders a scrobble count as "5.2M" / "1.1B" / "950".
 function compactCount(n: number): string {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -57,8 +44,7 @@ export function LastFmEnrichmentSection({
     enrichment.playcount > 0 ? `${compactCount(enrichment.playcount)} plays` : null,
   ].filter((p): p is string => p !== null);
 
-  const hasContent =
-    popularity.length > 0 || tags.length > 0 || similar.length > 0 || bio !== '';
+  const hasContent = popularity.length > 0 || tags.length > 0 || similar.length > 0 || bio !== '';
   if (!hasContent) {
     return null;
   }

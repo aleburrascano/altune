@@ -8,11 +8,6 @@ import { spacing } from '@shared/ui/theme';
 
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
 
-/**
- * Post-sign-up "check your email" state (AC#4). Shown for BOTH a fresh
- * sign-up and an already-registered address (AC#5) — the copy never reveals
- * which, so it stays anti-enumeration-safe.
- */
 export function CheckEmailNotice(): ReactElement {
   return (
     <AuthHeroLayout testID="check-email-screen" tagline="Almost there." background={false}>

@@ -17,9 +17,6 @@ export type TrackExtras = {
 };
 
 export function trackExtras(extras: Record<string, unknown>): TrackExtras {
-  // Discovery providers emit the duration (in seconds) under `duration`; older
-  // payloads / saved tracks used `duration_seconds`. Accept either so the save
-  // request carries a duration instead of always sending null.
   const duration = extras['duration'] ?? extras['duration_seconds'];
   const album = extras['album'];
   const isrc = extras['isrc'];
@@ -42,7 +39,11 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
     albumArtist: typeof albumArtist === 'string' && albumArtist.length > 0 ? albumArtist : null,
     featuredArtists: featuredArtistsFromExtras(featured),
     trackId: typeof trackId === 'string' ? trackId : null,
-    acquisitionStatus: typeof status === 'string' && (status === 'ready' || status === 'pending' || status === 'failed') ? status : null,
+    acquisitionStatus:
+      typeof status === 'string' &&
+      (status === 'ready' || status === 'pending' || status === 'failed')
+        ? status
+        : null,
     previewUrl: typeof preview === 'string' && preview.length > 0 ? preview : null,
     mbid: typeof mbid === 'string' ? mbid : null,
     trackPosition:
