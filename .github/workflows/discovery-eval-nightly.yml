@@ -63,8 +63,23 @@ jobs:
       # gates its metrics against cmd/discoveryeval/baselines.json and exits 2 on
       # a regression. detail needs no DB; correction is offline; the rest hit
       # live providers over the prod-cloned corpus.
+      #
+      # detail's contamination guard (FilterGroupsByMBAnchor) is deliberately
+      # fail-open on a MusicBrainz timeout/error (never empty a real discography
+      # over a transient third-party failure — see ARCHITECTURE.md §15.3), so a
+      # slow/rate-limited MB response can flip this gate red with no code change
+      # (observed 2026-07-24: 0 contamination, then 70, same commit, ~30s apart).
+      # Retry with backoff before treating a failure as a real regression.
       - name: detail (contamination = 0)
-        run: ./tmp/discoveryeval -mode detail -json ./tmp/report-detail.json
+        run: |
+          for attempt in 1 2 3; do
+            if ./tmp/discoveryeval -mode detail -json ./tmp/report-detail.json; then
+              exit 0
+            fi
+            echo "detail mode failed (attempt $attempt/3) — retrying after backoff in case MusicBrainz timed out"
+            sleep $((attempt * 20))
+          done
+          exit 1
       - name: correction (best-effort — needs Redis, not reachable from Actions)
         continue-on-error: true
         run: ./tmp/discoveryeval -mode correction -json ./tmp/report-correction.json
