@@ -19,7 +19,13 @@ if [ -f scripts/okf-staleness-check.sh ]; then
   bash scripts/okf-staleness-check.sh || exit 1
 fi
 
-# 3. (Optional) ruff format check on staged Python files
+# 3. CLAUDE.md staleness check: a file can't be added/deleted/renamed under a
+#    nested CLAUDE.md's scope without updating that CLAUDE.md. (bash: arrays.)
+if [ -f scripts/claude-md-staleness-check.sh ]; then
+  bash scripts/claude-md-staleness-check.sh || exit 1
+fi
+
+# 4. (Optional) ruff format check on staged Python files
 #    Runs last: it cd's into services/api and doesn't come back.
 STAGED_PY="$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep '\.py$' || true)"
 if [ -n "$STAGED_PY" ] && command -v uv >/dev/null 2>&1 && [ -f services/api/pyproject.toml ]; then

@@ -10,6 +10,7 @@ Music manager. Expo (RN + TS) mobile in `apps/mobile/` + Go hexagonal modular mo
 
 - Domain terms come from `docs/ubiquitous-language.md`; code matches it verbatim, and a new term gets its glossary entry in the same commit. **"Song" is banned — the noun is `Track`.**
 - `AIDEV-NOTE/DECISION/WARNING` anchors are durable — never strip them.
+- A nested `CLAUDE.md` is the file map of its directory. Add, delete or rename a file under one and update that `CLAUDE.md` in the same commit — its layout, test-file list and dependency notes (a pre-commit hook blocks the commit otherwise).
 - Conventional Commits (scopes in `commitlint.config.js`); never write `Co-Authored-By: Claude` / `🤖 Generated with…` trailers.
 - Check Context7 before answering from memory on: Expo SDK, React Native, React Navigation, TanStack Query, Zustand, Reanimated, Go stdlib, chi, sqlx.
 
@@ -25,5 +26,3 @@ In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the re
 - **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
 
 If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
-
-CodeGraph doesn't replace Serena MCP for: reference/implementation enumeration, type diagnostics, or renames/symbol-body edits — use Serena directly for those (see `~/.claude/rules/tool-routing.md`).
