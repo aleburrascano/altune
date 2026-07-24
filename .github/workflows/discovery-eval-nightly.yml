@@ -8,6 +8,9 @@
 #
 # Needs live providers plus the prod-cloned corpus, so repo secrets must provide:
 #   DATABASE_URL        (Supabase Postgres — corpus + identity store; required)
+#   SUPABASE_JWT_JWKS_URL                (config.Load() validates this even though
+#                                         eval mode never touches auth; not a secret
+#                                         value, just Supabase's public JWKS URL)
 #   LASTFM_API_KEY, DISCOGS_TOKEN, FANARTTV_API_KEY, GENIUS_ACCESS_TOKEN,
 #   MUSICBRAINZ_USER_AGENT                     (provider access; degrade if absent)
 #   ALERT_NTFY_URL      (optional — regression push notification)
@@ -33,6 +36,7 @@ jobs:
         working-directory: services/go-api
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_JWT_JWKS_URL: ${{ secrets.SUPABASE_JWT_JWKS_URL }}
       LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
       DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
       FANARTTV_API_KEY: ${{ secrets.FANARTTV_API_KEY }}
