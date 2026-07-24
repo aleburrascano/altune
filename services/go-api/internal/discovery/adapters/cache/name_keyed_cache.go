@@ -19,8 +19,6 @@ import (
 var (
 	_ ports.DeezerEnrichmentCache        = (*RedisNameKeyedCache[domain.DeezerEnrichment])(nil)
 	_ ports.LastFmEnrichmentCache        = (*RedisNameKeyedCache[domain.LastFmEnrichment])(nil)
-	_ ports.DiscogsEnrichmentCache       = (*RedisNameKeyedCache[domain.DiscogsEnrichment])(nil)
-	_ ports.DiscogsArtistEnrichmentCache = (*RedisNameKeyedCache[domain.DiscogsArtistEnrichment])(nil)
 	_ ports.LyricsCache                  = (*RedisNameKeyedCache[domain.DeezerLyrics])(nil)
 )
 
@@ -35,7 +33,7 @@ const (
 )
 
 // RedisNameKeyedCache is the one read-through Redis adapter behind every
-// name-keyed detail-enrichment cache (Deezer, Last.fm, Discogs album/artist,
+// name-keyed detail-enrichment cache (Deezer, Last.fm,
 // lyrics). Each provider differs only by value type T, key prefixes, and TTLs,
 // supplied by its constructor below; the positive path stores the whole value
 // object, the negative path a marker that a name resolved to nothing. A nil
@@ -142,31 +140,7 @@ func NewRedisLastFmEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[
 	}
 }
 
-// NewRedisDiscogsEnrichmentCache caches DiscogsEnrichment by normalized
-// (artist, album) name key.
-func NewRedisDiscogsEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[domain.DiscogsEnrichment] {
-	return &RedisNameKeyedCache[domain.DiscogsEnrichment]{
-		client:    client,
-		posPrefix: "discovery:dgenrich:v1:",
-		negPrefix: "discovery:dgenrich:neg:v1:",
-		posTTL:    nameKeyedPositiveTTL,
-		negTTL:    nameKeyedNegativeTTL,
-		empty:     domain.EmptyDiscogsEnrichment,
-	}
-}
 
-// NewRedisDiscogsArtistEnrichmentCache caches DiscogsArtistEnrichment by
-// normalized artist name.
-func NewRedisDiscogsArtistEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[domain.DiscogsArtistEnrichment] {
-	return &RedisNameKeyedCache[domain.DiscogsArtistEnrichment]{
-		client:    client,
-		posPrefix: "discovery:dgartist:v1:",
-		negPrefix: "discovery:dgartist:neg:v1:",
-		posTTL:    nameKeyedPositiveTTL,
-		negTTL:    nameKeyedNegativeTTL,
-		empty:     domain.EmptyDiscogsArtistEnrichment,
-	}
-}
 
 // NewRedisDeezerLyricsCache caches DeezerLyrics by normalized (artist, title)
 // name key. Positive entries get a long TTL (lyrics are static); negative

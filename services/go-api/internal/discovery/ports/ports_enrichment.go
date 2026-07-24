@@ -37,7 +37,7 @@ type IdentityBridge interface {
 }
 
 // NameKeyedCache is the read-through detail-enrichment cache shape shared by the
-// name-resolved enrichers (Deezer, Last.fm, Discogs album/artist, lyrics): a
+// name-resolved enrichers (Deezer, Last.fm, lyrics): a
 // positive value keyed by a normalized name key, plus a negative marker that the
 // name produced nothing, so it is not re-resolved every open. The MB
 // EnrichmentCache is intentionally NOT this shape (it keys positives by mbid). A
@@ -48,30 +48,6 @@ type NameKeyedCache[T any] interface {
 	GetNegative(ctx context.Context, nameKey string) (bool, error)
 	SetNegative(ctx context.Context, nameKey string) error
 }
-
-// DiscogsEnricher resolves and looks up Discogs album enrichment for the
-// detail-open surface (docs/providers/discogs.md caps 3–6). ResolveMasterID maps
-// (artist, album) to a Discogs master id via the structured artist+title search
-// (0 when none). LookupAlbum fetches the master + its main release and assembles
-// the credits/styles/label/community enrichment. Implemented by the Discogs
-// adapter; consumed by DiscogsEnrichmentService.
-type DiscogsEnricher interface {
-	ResolveMasterID(ctx context.Context, artist, album string) (int, error)
-	LookupAlbum(ctx context.Context, masterID int) (domain.DiscogsEnrichment, error)
-	// ResolveArtistID maps an artist name to a Discogs artist id (0 when none);
-	// LookupArtist fetches the bio/aliases/groups/links for a known id (cap 7).
-	ResolveArtistID(ctx context.Context, name string) (int, error)
-	LookupArtist(ctx context.Context, artistID int) (domain.DiscogsArtistEnrichment, error)
-}
-
-// DiscogsEnrichmentCache caches DiscogsEnrichment keyed by a normalized
-// (artist, album) name key — Discogs has no ISRC/MBID, so the name key is the
-// only stable handle on the request.
-type DiscogsEnrichmentCache = NameKeyedCache[domain.DiscogsEnrichment]
-
-// DiscogsArtistEnrichmentCache is the artist-scoped sibling of
-// DiscogsEnrichmentCache, keyed by a normalized artist name.
-type DiscogsArtistEnrichmentCache = NameKeyedCache[domain.DiscogsArtistEnrichment]
 
 // LastFmEnricher looks up Last.fm detail-open enrichment for one entity
 // (docs/providers/lastfm.md cap 3). Last.fm's *.getInfo methods take entity

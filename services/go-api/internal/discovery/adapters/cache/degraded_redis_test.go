@@ -166,8 +166,6 @@ func TestNameKeyedCacheConstructors_DistinctPrefixes(t *testing.T) {
 	prefixes := map[string][2]string{
 		"deezer":        {NewRedisDeezerEnrichmentCache(nil).posPrefix, NewRedisDeezerEnrichmentCache(nil).negPrefix},
 		"lastfm":        {NewRedisLastFmEnrichmentCache(nil).posPrefix, NewRedisLastFmEnrichmentCache(nil).negPrefix},
-		"discogs":       {NewRedisDiscogsEnrichmentCache(nil).posPrefix, NewRedisDiscogsEnrichmentCache(nil).negPrefix},
-		"discogsArtist": {NewRedisDiscogsArtistEnrichmentCache(nil).posPrefix, NewRedisDiscogsArtistEnrichmentCache(nil).negPrefix},
 		"lyrics":        {NewRedisDeezerLyricsCache(nil).posPrefix, NewRedisDeezerLyricsCache(nil).negPrefix},
 	}
 	seen := map[string]string{}

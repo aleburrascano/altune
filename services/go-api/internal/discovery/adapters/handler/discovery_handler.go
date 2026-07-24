@@ -91,8 +91,6 @@ func (h *DiscoveryHandler) WithRequestTrace(r searchTraceRecorder) *DiscoveryHan
 // With* setter wired backwards from the composition root. Any member may be nil
 // (its provider isn't configured) — the endpoint then answers an empty DTO.
 type DetailEnrichers struct {
-	Discogs       *enrich.DiscogsEnrichmentService       // album credits/styles/labels (caps 3–6)
-	DiscogsArtist *enrich.DiscogsArtistEnrichmentService // artist bio/aliases/links (cap 7)
 	LastFm        *enrich.LastFmEnrichmentService        // listen popularity/tags/bio/similar (cap 3)
 	Deezer        *enrich.DeezerEnrichmentService        // track audio fields + album liner (caps 7–8)
 	Lyrics        *enrich.LyricsService                  // synced + plain lyrics (cap 6)
@@ -147,8 +145,6 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/artists/{provider}/{externalId}/albums", h.handleArtistAlbums)
 	r.Get("/tracks/{provider}/{externalId}/related", h.handleRelatedTracks)
 	r.Get("/enrichment", h.handleEnrichment)
-	r.Get("/enrichment/discogs", h.handleDiscogsEnrichment)
-	r.Get("/enrichment/discogs/artist", h.handleDiscogsArtistEnrichment)
 	r.Get("/enrichment/lastfm", h.handleLastFmEnrichment)
 	r.Get("/enrichment/deezer", h.handleDeezerEnrichment)
 	r.Get("/lyrics", h.handleLyrics)
