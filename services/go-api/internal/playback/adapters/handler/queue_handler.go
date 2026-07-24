@@ -47,8 +47,6 @@ type queueStateResponse struct {
 	CurrentTrack *currentTrackResponse `json:"current_track,omitempty"`
 }
 
-// currentTrackResponse is the display-ready snapshot of the currently-playing
-// track, embedded so the client renders now-playing from this call alone.
 type currentTrackResponse struct {
 	Id                string   `json:"id"`
 	Title             string   `json:"title"`
@@ -103,8 +101,6 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func toResponse(view *service.ResumeView) queueStateResponse {
-	// QueueState guarantees a non-nil TrackIds (EmptyQueueState / RehydrateQueueState
-	// both initialise it), so no nil-to-empty normalization is needed here.
 	state := view.State
 	resp := queueStateResponse{
 		TrackIds:     state.TrackIds,

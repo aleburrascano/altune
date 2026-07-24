@@ -11,8 +11,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// inMemoryQueueRepo is an in-memory implementation of ports.QueueStateRepository
-// for testing the use case without a database.
 type inMemoryQueueRepo struct {
 	states map[uuid.UUID]*domain.QueueState
 }
@@ -34,7 +32,6 @@ func testUser() shared.UserId {
 	return shared.NewUserId(uuid.New())
 }
 
-// fakeNowPlaying is an in-memory NowPlayingReader keyed by track id.
 type fakeNowPlaying struct {
 	tracks map[string]*ports.NowPlayingTrack
 }
@@ -71,12 +68,10 @@ func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
 	}
 }
 
-func TestQueueService_ResumeView_UnknownTrackOmitsCurrentTrack(t *testing.T) {
-	// The reader is wired but doesn't know the current track (deleted, unknown
-	// id) — resume degrades to "no snapshot" instead of failing.
+func TestQueueService_ResumeView_UnknownTrackOmitsCurrentTrackWithoutFailing(t *testing.T) {
 	repo := newInMemoryQueueRepo()
-	reader := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{}}
-	svc := NewQueueService(repo, reader)
+	readerKnowingNoTracks := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{}}
+	svc := NewQueueService(repo, readerKnowingNoTracks)
 	user := testUser()
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
@@ -99,15 +94,13 @@ func TestQueueService_ResumeView_UnknownTrackOmitsCurrentTrack(t *testing.T) {
 	}
 }
 
-func TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack(t *testing.T) {
+func TestQueueService_ResumeView_UnsavedEmptyQueueOmitsCurrentTrack(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	reader := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{}}
 	svc := NewQueueService(repo, reader)
-	user := testUser()
+	userWithNoSavedQueue := testUser()
 
-	// Empty queue → CurrentIdx normalizes to 0 but TrackIds is empty, so the
-	// index is out of range and no lookup happens.
-	view, err := svc.ResumeView(context.Background(), user)
+	view, err := svc.ResumeView(context.Background(), userWithNoSavedQueue)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

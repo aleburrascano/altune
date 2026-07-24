@@ -1,8 +1,3 @@
-// Package catalogbridge adapts the catalog context's track repository to the
-// playback context's NowPlayingReader port. It is a playback outbound adapter: it
-// depends only on the catalog *port* (interface) and catalog domain types, never
-// on catalog's adapters — the standard cross-context integration seam. Its one job
-// is translating a catalog Track into playback's display snapshot.
 package catalogbridge
 
 import (
@@ -16,8 +11,6 @@ import (
 
 var _ ports.NowPlayingReader = (*NowPlayingReader)(nil)
 
-// trackReader is the narrow read this bridge actually calls, out of the
-// catalog TrackRepository adapter's full surface.
 type trackReader interface {
 	GetByID(ctx context.Context, id catalogDomain.TrackId, userId shared.UserId) (*catalogDomain.Track, error)
 }
@@ -30,6 +23,10 @@ func NewNowPlayingReader(tracks trackReader) *NowPlayingReader {
 	return &NowPlayingReader{tracks: tracks}
 }
 
+func trackAbsent() (*ports.NowPlayingTrack, error) {
+	return nil, nil
+}
+
 func (r *NowPlayingReader) Lookup(
 	ctx context.Context,
 	userId shared.UserId,
@@ -37,9 +34,7 @@ func (r *NowPlayingReader) Lookup(
 ) (*ports.NowPlayingTrack, error) {
 	id, err := catalogDomain.ParseTrackId(trackId)
 	if err != nil {
-		// A malformed id can't identify a track — treat as absent, not an error,
-		// so resume degrades to "no snapshot" instead of failing the whole call.
-		return nil, nil
+		return trackAbsent()
 	}
 
 	track, err := r.tracks.GetByID(ctx, id, userId)
@@ -47,7 +42,7 @@ func (r *NowPlayingReader) Lookup(
 		return nil, fmt.Errorf("lookup now-playing track: %w", err)
 	}
 	if track == nil {
-		return nil, nil
+		return trackAbsent()
 	}
 
 	return &ports.NowPlayingTrack{
