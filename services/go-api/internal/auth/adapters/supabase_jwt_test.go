@@ -19,7 +19,6 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-// testJWTFixture holds a test RSA key pair, JWKS server, and helper for signing tokens.
 type testJWTFixture struct {
 	privateKey *rsa.PrivateKey
 	jwksServer *httptest.Server
@@ -154,7 +153,6 @@ func TestSupabaseJWTVerifier_InvalidSignature(t *testing.T) {
 	f := newTestJWTFixture(t)
 	verifier := f.newVerifier(t)
 
-	// Sign with a different key
 	wrongKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate wrong key: %v", err)
@@ -192,10 +190,6 @@ func TestSupabaseJWTVerifier_InvalidSignature(t *testing.T) {
 	}
 }
 
-// TestSupabaseJWTVerifier_UnknownKeyID pins classifyJWTError's
-// "failed to find key" substring against the real library: a token whose kid
-// is absent from the JWKS must classify as signature_invalid, not malformed.
-// (TestSupabaseJWTVerifier_InvalidSignature pins "could not verify message".)
 func TestSupabaseJWTVerifier_UnknownKeyID(t *testing.T) {
 	f := newTestJWTFixture(t)
 	verifier := f.newVerifier(t)
@@ -236,13 +230,10 @@ func TestSupabaseJWTVerifier_UnknownKeyID(t *testing.T) {
 	}
 }
 
-// TestSupabaseJWTVerifier_JWKSUnavailable asserts that a JWKS fetch failure is
-// an infrastructure error, not an InvalidTokenError — the middleware maps it
-// to a 503 instead of rejecting the token as invalid.
 func TestSupabaseJWTVerifier_JWKSUnavailable(t *testing.T) {
 	ctx := context.Background()
-	// Port 1 refuses connections; the initial refresh warns, Verify's fetch fails.
-	verifier, err := NewSupabaseJWTVerifier(ctx, "http://127.0.0.1:1/jwks", "https://test-project.supabase.co", "authenticated")
+	const unreachableJWKSURL = "http://127.0.0.1:1/jwks"
+	verifier, err := NewSupabaseJWTVerifier(ctx, unreachableJWKSURL, "https://test-project.supabase.co", "authenticated")
 	if err != nil {
 		t.Fatalf("create verifier: %v", err)
 	}
@@ -262,7 +253,6 @@ func TestSupabaseJWTVerifier_MissingSub(t *testing.T) {
 	f := newTestJWTFixture(t)
 	verifier := f.newVerifier(t)
 
-	// Token with no sub claim
 	token := f.signToken(t, map[string]interface{}{
 		"iss": f.issuer,
 		"aud": f.audience,
