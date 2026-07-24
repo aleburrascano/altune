@@ -66,6 +66,11 @@ type DiscoverySearchResponse struct {
 	CorrectedQuery string              `json:"corrected_query,omitempty"`
 	OriginalQuery  string              `json:"original_query,omitempty"`
 	Related        []RelatedGroupDTO   `json:"related,omitempty"`
+	// Paging over the ranked slate. `total` is the slate size before paging, so
+	// a client can show "N results" while holding only the first page.
+	Total   int  `json:"total"`
+	Offset  int  `json:"offset"`
+	HasMore bool `json:"has_more"`
 }
 
 type CacheDTO struct {
@@ -157,6 +162,8 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		limit = 20
 	}
 
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+
 	kinds, err := parseKinds(r.URL.Query().Get("kinds"))
 	if err != nil {
 		httputil.WriteError(w, http.StatusUnprocessableEntity, err.Error())
@@ -168,7 +175,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		saveHistory = false
 	}
 
-	query, err := domain.NewSearchQuery(q, kinds, limit)
+	query, err := domain.NewPagedSearchQuery(q, kinds, limit, offset)
 	if err != nil {
 		httputil.BadRequest(w, err.Error())
 		return
@@ -203,6 +210,9 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		CorrectedQuery: result.CorrectedQuery,
 		OriginalQuery:  result.OriginalQuery,
 		Related:        relatedGroupsToDTOs(result.Related),
+		Total:          result.Total,
+		Offset:         result.Offset,
+		HasMore:        result.HasMore,
 	})
 }
 
