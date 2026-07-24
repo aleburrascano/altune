@@ -44,6 +44,10 @@ maestro test e2e/auth-session-persistence.yaml
 
 - `_hello.yaml` — smoke test; launches the app and asserts ANY element renders.
   Use to verify the harness + simulator wiring before adding behavioral flows.
+- `search-save-play.yaml` — the product spine: search → detail → save → play →
+  the track appears in the library. Hits live providers and real acquisition, so
+  it asserts on containers and lifecycle transitions rather than on specific
+  titles or on audio being ready. Run with `npm run e2e:spine`.
 - `auth-session-persistence.yaml` — AC#4. Signs in, kills the app, relaunches,
   asserts the first navigation event after launch is to `/library`, not
   `/sign-in`.
