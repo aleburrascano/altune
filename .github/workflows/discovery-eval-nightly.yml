@@ -11,8 +11,16 @@
 #   SUPABASE_JWT_JWKS_URL                (config.Load() validates this even though
 #                                         eval mode never touches auth; not a secret
 #                                         value, just Supabase's public JWKS URL)
-#   LASTFM_API_KEY, DISCOGS_TOKEN, FANARTTV_API_KEY, GENIUS_ACCESS_TOKEN,
-#   MUSICBRAINZ_USER_AGENT                     (provider access; degrade if absent)
+#   LASTFM_API_KEY, DISCOGS_TOKEN, FANARTTV_API_KEY, GENIUS_ACCESS_TOKEN
+#                       (2026-07-24: dedicated CI-only credentials, separate
+#                       registrations from the ones baked into the VM's
+#                       .env.production — a heavy nightly corpus run shares no
+#                       quota with live user traffic on these four. Rotate/renew
+#                       independently of prod.)
+#   MUSICBRAINZ_USER_AGENT   (no key — just a contact UA string; shared with prod
+#                             is fine, rate limiting there is IP-scoped, not
+#                             UA-scoped, and Actions runners use different IPs
+#                             than the VM)
 #   ALERT_NTFY_URL      (optional — regression push notification)
 # REDIS_URL is intentionally unset: the self-hosted VM Redis has no public
 # exposure (by design — no auth in its connection string) and isn't reachable
