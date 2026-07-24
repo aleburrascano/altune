@@ -118,6 +118,26 @@ it('deletes a file whose entry was dropped mid-download instead of stranding it'
   expect(usePinnedStore.getState().entries.t1).toBeUndefined();
 });
 
+it('deletes a partial file when the entry was dropped and the download then failed', async () => {
+  let failDownload: (err: Error) => void = () => {};
+  (downloadPinned as jest.Mock).mockImplementationOnce(
+    () =>
+      new Promise<string>((_resolve, reject) => {
+        failDownload = reject;
+      }),
+  );
+
+  usePinnedStore.getState().pin('t1');
+  await flush();
+
+  usePinnedStore.getState().unpinAll();
+  failDownload(new Error('connection dropped mid-write'));
+  await flush();
+
+  expect(deletePinned).toHaveBeenCalledWith('t1');
+  expect(usePinnedStore.getState().entries.t1).toBeUndefined();
+});
+
 it('does not re-queue a track that is already downloaded', () => {
   usePinnedStore.setState({
     entries: { t1: { trackId: 't1', status: 'ready', uri: 'file:///x' } },

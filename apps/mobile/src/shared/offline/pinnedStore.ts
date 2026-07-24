@@ -149,19 +149,23 @@ async function downloadOne(trackId: string, set: Setter, get: Getter): Promise<v
   };
 
   mark({ trackId, status: 'downloading' });
+
+  let uri: string | undefined;
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
     if (!resolved) throw new Error('no signed url');
-    const uri = await downloadPinned(trackId, resolved.url);
-    const unpinnedWhileDownloading = get().entries[trackId] === undefined;
-    if (unpinnedWhileDownloading) {
-      deletePinned(trackId);
-      return;
-    }
-    mark({ trackId, status: 'ready', uri });
+    uri = await downloadPinned(trackId, resolved.url);
   } catch {
-    mark({ trackId, status: 'failed' });
+    uri = undefined;
   }
+
+  const unpinnedWhileDownloading = get().entries[trackId] === undefined;
+  if (unpinnedWhileDownloading) {
+    deletePinned(trackId);
+    return;
+  }
+
+  mark(uri === undefined ? { trackId, status: 'failed' } : { trackId, status: 'ready', uri });
 }
 
 export function pinnedUri(trackId: string): string | undefined {
