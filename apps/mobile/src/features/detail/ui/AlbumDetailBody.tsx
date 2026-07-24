@@ -78,19 +78,42 @@ export function AlbumDetailBody({ result, detailRoute, isFromLibrary }: { result
     metaParts.push(hrs > 0 ? `${hrs} hr ${mins} min` : `${mins} min`);
   }
 
-  const allSaved = album.tracks.every((t) => album.isSaved(t.title, t.subtitle));
 
   return (
     <View testID="detail-tracklist" style={styles.trackList}>
-      {album.hasSources && !allSaved ? (
+      {/* Play what you own; offer the rest beside it. Play is primary once
+          anything is playable, otherwise Save takes the primary slot — the
+          button that does something is always the prominent one. */}
+      <View style={styles.heroActions}>
         <Button
-          testID="detail-save-all"
-          label={album.saveAllTapped ? 'Saving...' : 'Save All to Library'}
-          onPress={album.onSaveAll}
-          disabled={album.saveAllTapped}
-          loading={album.saveAllTapped && album.savePending}
-          style={styles.saveAllButton}
+          testID="detail-album-play"
+          label={album.playButton.label}
+          variant={album.playButton.disabled ? 'secondary' : 'primary'}
+          disabled={album.playButton.disabled}
+          onPress={album.onPlayOwned}
+          haptic
+          style={styles.heroAction}
         />
+        {album.owned.unownedCount > 0 ? (
+          <Button
+            testID="detail-save-all"
+            label={
+              album.saveAllTapped
+                ? 'Saving…'
+                : `Save ${album.owned.unownedCount}`
+            }
+            variant={album.playButton.disabled ? 'primary' : 'secondary'}
+            onPress={album.onSaveAll}
+            disabled={album.saveAllTapped}
+            loading={album.saveAllTapped && album.savePending}
+            style={styles.heroAction}
+          />
+        ) : null}
+      </View>
+      {album.owned.acquiringCount > 0 ? (
+        <Text testID="detail-album-acquiring" variant="caption" tone="tertiary" style={styles.acquiring}>
+          {album.owned.acquiringCount} still downloading
+        </Text>
       ) : null}
 
       <Text variant="label" tone="tertiary" style={styles.tracksTitle}>
@@ -165,7 +188,9 @@ const styles = StyleSheet.create({
   trackList: { marginTop: spacing.lg },
   tracksTitle: { marginTop: spacing.xl, marginBottom: spacing.sm },
   albumMeta: { marginTop: spacing.lg, textAlign: 'center' as const },
-  saveAllButton: { marginBottom: spacing.md },
+  heroActions: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+  heroAction: { flex: 1 },
+  acquiring: { textAlign: 'center', marginBottom: spacing.md },
   moreSaveAll: { marginTop: spacing.lg },
   moreSection: { marginTop: spacing.xl },
   moreHeader: {

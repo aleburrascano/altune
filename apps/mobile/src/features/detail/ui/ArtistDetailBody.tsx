@@ -37,6 +37,21 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
 
   return (
     <View testID="detail-artist-content" style={styles.artistContent}>
+      {/* Play what you own of this artist's listed tracks. Hidden entirely when
+          nothing is listed yet — a disabled button over a loading/empty section
+          is noise, not an affordance. */}
+      {artist.topTracks.length > 0 && !artist.isLoadingTracks ? (
+        <Button
+          testID="detail-artist-play"
+          label={artist.playButton.label}
+          variant={artist.playButton.disabled ? 'secondary' : 'primary'}
+          disabled={artist.playButton.disabled}
+          onPress={artist.onPlayOwned}
+          haptic
+          style={styles.artistPlay}
+        />
+      ) : null}
+
       {/* Your Tracks */}
       <Text variant="label" tone="secondary" style={sharedStyles.sectionTitle}>
         {artist.hasSources ? 'Popular Tracks' : 'Your Tracks'}
@@ -185,6 +200,7 @@ export function ArtistDetailBody({ result, detailRoute, isFromLibrary }: { resul
 }
 
 const styles = StyleSheet.create({
+  artistPlay: { marginBottom: spacing.md },
   artistContent: { marginTop: spacing.lg },
   trackDuration: { marginRight: spacing.xs, fontVariant: ['tabular-nums'] },
   showAll: { paddingVertical: spacing.md, alignItems: 'center' },

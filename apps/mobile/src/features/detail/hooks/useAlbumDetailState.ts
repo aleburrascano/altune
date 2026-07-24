@@ -12,6 +12,10 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
+import { buildPlayableQueue } from '@shared/playback/playFromList';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+
+import { playButtonState, splitOwned, type OwnedSplit } from '../owned-playback';
 
 import { openDetail, type DetailRoute } from '../navigation';
 import { useAlbumDiscovery } from './useAlbumDiscovery';
@@ -93,6 +97,10 @@ export type AlbumDetailState = {
   onSaveAll: () => void;
   isSaved: (title: string, subtitle: string | null) => boolean;
   saveStateFor: (title: string, subtitle: string | null) => SaveControlState;
+  /** What of this album you can actually play right now, in album order. */
+  owned: OwnedSplit;
+  playButton: { label: string; disabled: boolean };
+  onPlayOwned: () => void;
 };
 
 export function useAlbumDetailState(
@@ -103,6 +111,7 @@ export function useAlbumDetailState(
   const router = useRouter();
   const queryClient = useQueryClient();
   const save = useSaveTrack();
+  const queue = useQueuePlayback();
 
   const source = !isFromLibrary ? result.sources[0] : undefined;
   const deezerSource = !isFromLibrary
@@ -195,6 +204,19 @@ export function useAlbumDetailState(
   const isSaved = (title: string, subtitle: string | null): boolean =>
     _isTrackInLibraryCache(queryClient, title, subtitle);
 
+  // Resolved against the DISPLAYED list so the queue plays in album order, not
+  // in whatever order the library happens to hold them.
+  const owned = splitOwned(tracks, (title, subtitle) =>
+    findTrackInLibraryCache(queryClient, title, subtitle),
+  );
+
+  const onPlayOwned = (): void => {
+    const first = owned.playable[0];
+    if (first === undefined) return;
+    const { playable, startIndex } = buildPlayableQueue(owned.playable, first.id);
+    queue.playFromList(playable, startIndex, { kind: 'library' });
+  };
+
   const saveStateFor = (title: string, subtitle: string | null): SaveControlState =>
     saveControlState(findTrackInLibraryCache(queryClient, title, subtitle));
 
@@ -217,5 +239,8 @@ export function useAlbumDetailState(
     onSaveAll,
     isSaved,
     saveStateFor,
+    owned,
+    playButton: playButtonState(owned),
+    onPlayOwned,
   };
 }

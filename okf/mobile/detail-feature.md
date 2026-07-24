@@ -24,3 +24,19 @@ Renders the detail screen for a tapped discovery result. It is fed entirely by a
 **Lateral navigation**: `useLateralNav` resolves by name through the shared resolve-entity cache and pushes a fresh detail screen for tapped artist/album names, guarded against duplicate pushes. Album/artist content (`useAlbumTracks`, `useArtistContent`) fetches from provider APIs directly (not the handoff), merging MusicBrainz and Deezer sources with an MB-authoritative filter when identity is verified. Both the top-tracks and albums fetches thread `artistName` to the backend so its identity fan-out can name-resolve providers MusicBrainz never bridges (SoundCloud) and surface an SC-exclusive artist's tracks/albums (see [soundcloud](../providers/soundcloud.md)). A library artist's "Your Tracks" list is capped at 5 with a `detail-show-all-tracks` reveal so the discography isn't buried.
 
 Key files: `hooks/useDetailEnrichments.ts`, `hooks/useEnrichmentQuery.ts`, `hooks/useEnrichResult.ts`, `hooks/useSaveTrack.ts`, `hooks/useLibraryTrackMatch.ts`, `hooks/useAlbumDetailState.ts`, `hooks/usePersistTrackNumbers.ts`, `ui/DetailScreen.tsx`, `ui/TrackDetailBody.tsx`, `ui/PlayButton.tsx`, `ui/ArtistDetailBody.tsx`, `ui/AlbumDetailBody.tsx`, `navigation.ts`, `resolve-entity-query.ts`, `play-source.ts`, `save-cache.ts`, `save-control-state.ts`, `helpers/find-track-in-library-cache.ts`.
+
+## Hero Play on album and artist (2026-07-24)
+
+The mockups always had one; it was deferred because album/artist tracklists are *discovery results* with no audio behind them, and `buildPlayableQueue` filters a queue to `acquisition_status === 'ready'`. A naive Play on an album you own none of queues nothing and reads as broken. The product decision (2026-07-24) is **play what you own, offer the rest**.
+
+`owned-playback.ts` holds the rule, shared by both bodies so they cannot drift. `splitOwned` resolves the *displayed* list against the library cache — display order, so the queue plays in album order rather than whatever order the library happens to hold — and returns three groups:
+
+- **playable** — owned and acquired; the queue Play starts
+- **unownedCount** — nothing in the library yet; what "Save N" offers
+- **acquiringCount** — saved but `pending`/`failed`; neither playable nor worth re-saving
+
+Keeping `acquiring` separate is load-bearing: folding it into `unowned` offers to re-save something already queued, and folding it into `playable` promises audio that does not exist yet. It surfaces as "N still downloading" under the buttons.
+
+`playButtonState` names the count (`Play 3`) whenever the list is only partly playable — a bare "Play" over 3 of 12 tracks reads as a bug when the queue ends early. With nothing playable, Play is disabled and Save takes the primary variant, so the button that actually does something is always the prominent one. Artist detail hides the control entirely while its track section is loading or empty rather than showing a disabled button over nothing.
+
+TestIDs: `detail-album-play`, `detail-artist-play`, `detail-album-acquiring`. `detail-save-all` now labels itself `Save N` and renders only when something is unowned.
