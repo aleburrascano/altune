@@ -36,3 +36,11 @@ Key files: `hooks/PlaybackProvider.tsx`, `hooks/trackPlayerProvider.tsx`, `hooks
 Time-synced lines are the good case and the default: the active line is highlighted and the view follows playback, and tapping a line seeks to it (`activeLineIndex` is a linear scan — ~60 entries, run on a position tick, so the constant factor is irrelevant and the boundary behaviour stays obviously correct). Plain text is the fallback. Line offsets are captured via `onLayout` rather than computed, because lyric lines wrap and there is no fixed row height to derive them from; the follow-scroll respects `useReduceMotion`.
 
 `_lyricsView` is the five-state machine (`loading | error | unavailable | synced | plain`). The load-bearing case is `unavailable`: the endpoint answers 200 with an empty payload for anything it cannot resolve, so an empty body must never render as an error. Writer and copyright credits render under every non-empty view — a licensing requirement of the provider, not decoration.
+
+## Sleep timer and playback speed (2026-07-24)
+
+Both live behind one overflow sheet in the full player (`PlayerOptionsSheets`), which shows each setting's current value on its root row so the state is readable without drilling in. `ActionSheet` fires `onPress` then unconditionally `onClose`, so a drill-down row cannot simply `setSheet('speed')` — the close in the same batch would wipe it; the root records the target in a ref and its close handler reads that instead of dismissing.
+
+The **sleep timer** (`sleepTimerStore`) stores an absolute `endsAt`, never a decrementing remainder: JS timers are throttled or suspended while backgrounded, so a counter would drift or freeze. `SleepTimerBridge` mounts inside `PlaybackProvider` at the app root — not in `FullPlayer`, which unmounts — and re-checks the deadline on every foreground transition, firing immediately if it has already passed.
+
+**Playback speed** adds `setRate` to the `PlaybackControls` contract (RNTP's `setRate` in the real provider, a no-op in the Expo Go one). The chosen rate lives in `playbackRateStore` so the label survives the player closing; RNTP holds the rate on the player rather than the track, so it persists across track changes within a session, which is what a speed control is expected to do.

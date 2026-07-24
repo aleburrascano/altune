@@ -224,6 +224,14 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     void seekPreservingPlayback(ms / 1000, isPlayingRef.current);
   }, []);
 
+  // The rate survives track changes within a session (RNTP keeps it on the
+  // player, not the track), which is what users expect from a speed control.
+  const setRate = useCallback((rate: number) => {
+    void TrackPlayer.setRate(rate).catch(() => {
+      // player not ready — the rate re-applies on the next explicit set
+    });
+  }, []);
+
   const stop = useCallback(() => {
     void TrackPlayer.reset();
     setTrack(null);
@@ -295,6 +303,7 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
       pause,
       resume,
       seekTo,
+      setRate,
       stop,
       retry,
     }),
@@ -312,6 +321,7 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
       pause,
       resume,
       seekTo,
+      setRate,
       stop,
       retry,
     ],

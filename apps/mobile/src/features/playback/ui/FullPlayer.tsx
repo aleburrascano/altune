@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronDown, ListMusic, Pause, Play, Repeat, Repeat1, RotateCcw, Shuffle, SkipBack, SkipForward } from 'lucide-react-native';
+import { ChevronDown, ListMusic, Mic2, MoreHorizontal, Pause, Play, Repeat, Repeat1, RotateCcw, Shuffle, SkipBack, SkipForward } from 'lucide-react-native';
 
 import { withFeaturing } from '@shared/lib/featured';
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
@@ -10,6 +10,7 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { PlaybackStatus } from '@shared/playback/types';
+import { PlayerOptionsSheets } from './PlayerOptionsSheets';
 import { Scrubber } from './Scrubber';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
@@ -57,6 +58,7 @@ function PlayButton({
 
 export function FullPlayer() {
   const { status, track, positionMs, durationMs, pause, resume, seekTo, retry } = usePlayback();
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const { skipToNext, skipToPrevious, toggleShuffle, cycleRepeatMode } = useQueuePlayback();
   const shuffled = useQueueStore((s) => s.shuffled);
   const repeatMode = useQueueStore((s) => s.repeatMode);
@@ -112,25 +114,39 @@ export function FullPlayer() {
   return (
     <View style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <IconButton
-          icon={ChevronDown}
-          size={28}
-          onPress={() => router.back()}
-          accessibilityLabel="Close player"
-        />
+        <View style={styles.headerLeft}>
+          <IconButton
+            icon={ChevronDown}
+            size={28}
+            onPress={() => router.back()}
+            accessibilityLabel="Close player"
+          />
+        </View>
         <Text variant="caption" tone={statusTone}>
           {statusLabel}
         </Text>
-        {queueLength > 1 ? (
+        <View style={styles.headerActions}>
           <IconButton
-            icon={ListMusic}
-            size={22}
-            onPress={() => router.push('/player/queue')}
-            accessibilityLabel="View queue"
+            icon={Mic2}
+            size={20}
+            onPress={() => router.push('/player/lyrics')}
+            accessibilityLabel="View lyrics"
           />
-        ) : (
-          <View style={styles.headerSpacer} />
-        )}
+          {queueLength > 1 ? (
+            <IconButton
+              icon={ListMusic}
+              size={22}
+              onPress={() => router.push('/player/queue')}
+              accessibilityLabel="View queue"
+            />
+          ) : null}
+          <IconButton
+            icon={MoreHorizontal}
+            size={22}
+            onPress={() => setOptionsOpen(true)}
+            accessibilityLabel="Player options"
+          />
+        </View>
       </View>
 
       <View style={styles.artworkContainer}>
@@ -198,6 +214,8 @@ export function FullPlayer() {
           />
         </View>
       )}
+
+      <PlayerOptionsSheets open={optionsOpen} onClose={() => setOptionsOpen(false)} />
     </View>
   );
 }
@@ -209,12 +227,18 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
   },
-  headerSpacer: {
-    width: 44,
+  // Left and right groups both flex:1 so the status label stays centred however
+  // many action buttons the right side is showing.
+  headerLeft: { flex: 1, alignItems: 'flex-start' },
+  headerActions: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: spacing.xs,
   },
   artworkContainer: {
     alignItems: 'center',

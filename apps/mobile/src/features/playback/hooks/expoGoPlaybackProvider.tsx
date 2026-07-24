@@ -41,6 +41,7 @@ export function ExpoGoPlaybackProvider({ children }: { children: ReactNode }) {
       pause: () => {},
       resume: () => {},
       seekTo: () => {},
+      setRate: () => {},
       stop: () => {},
       retry: () => {},
     }),
