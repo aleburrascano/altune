@@ -562,25 +562,6 @@ func (a *App) buildAudioStore() catalogPorts.AudioStore {
 func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
 	var enrichers discoveryHandler.DetailEnrichers
 
-	// Discogs album + artist: credits/personnel, styles, label/catalog, companies,
-	// community signal + artist bio/aliases/links (docs/providers/discogs.md caps
-	// 3–7). Only when a Discogs token is configured.
-	if a.cfg.HasDiscogs() {
-		discogsAdapter := providers.NewDiscogsAdapter(
-			newDiscoveryClient(),
-			a.cfg.DiscogsToken,
-			a.cfg.MusicBrainzUserAgent,
-		)
-		enrichers.Discogs = discoveryEnrich.NewDiscogsEnrichmentService(
-			discogsAdapter,
-			discoveryCacheAdapters.NewRedisDiscogsEnrichmentCache(a.redisClient),
-		)
-		enrichers.DiscogsArtist = discoveryEnrich.NewDiscogsArtistEnrichmentService(
-			discogsAdapter,
-			discoveryCacheAdapters.NewRedisDiscogsArtistEnrichmentCache(a.redisClient),
-		)
-	}
-
 	// Last.fm: listen-based popularity, weighted tags, bio, similar-artist graph,
 	// MBID bridge (docs/providers/lastfm.md cap 3). Only when a Last.fm key is set.
 	if a.cfg.HasLastFM() {

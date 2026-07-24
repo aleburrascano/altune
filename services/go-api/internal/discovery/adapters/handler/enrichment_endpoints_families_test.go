@@ -13,34 +13,9 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// Fakes for the per-source detail-open enrichment families (Discogs album +
-// artist, Last.fm, Deezer, lyrics). Each stands in for the provider adapter
-// behind its enrich service; caches are left nil (uncached).
-
-// --- fake Discogs enricher (album + artist sides) ---
-
-type fakeDiscogsEnricher struct {
-	album  discdomain.DiscogsEnrichment
-	artist discdomain.DiscogsArtistEnrichment
-}
-
-func (f *fakeDiscogsEnricher) ResolveMasterID(context.Context, string, string) (int, error) {
-	return 42, nil
-}
-
-func (f *fakeDiscogsEnricher) LookupAlbum(context.Context, int) (discdomain.DiscogsEnrichment, error) {
-	return f.album, nil
-}
-
-func (f *fakeDiscogsEnricher) ResolveArtistID(context.Context, string) (int, error) {
-	return 7, nil
-}
-
-func (f *fakeDiscogsEnricher) LookupArtist(context.Context, int) (discdomain.DiscogsArtistEnrichment, error) {
-	return f.artist, nil
-}
-
-// --- fake Last.fm enricher ---
+// Fakes for the per-source detail-open enrichment families (Last.fm, Deezer,
+// lyrics). Each stands in for the provider adapter behind its enrich service;
+// caches are left nil (uncached).
 
 type fakeLastFmEnricher struct {
 	enrichment discdomain.LastFmEnrichment
@@ -88,123 +63,6 @@ func buildEnrichersRouter(e DetailEnrichers) chi.Router {
 	return r
 }
 
-// ==================== Discogs album ====================
-
-func TestHandleDiscogsEnrichment(t *testing.T) {
-	t.Run("missing album returns 400", func(t *testing.T) {
-		router := buildEnrichersRouter(DetailEnrichers{})
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/discogs?artist=Nas", nil)
-		discAssertStatus(t, rec, http.StatusBadRequest)
-	})
-
-	t.Run("wired service maps the full DTO", func(t *testing.T) {
-		album := discdomain.EmptyDiscogsEnrichment()
-		album.MasterID = 42
-		album.Genres = []string{"Hip Hop"}
-		album.Styles = []string{"Conscious"}
-		album.Year = 1994
-		album.Credits = []discdomain.DiscogsCredit{{Name: "DJ Premier", Role: "Producer"}}
-		album.Labels = []discdomain.DiscogsLabelRef{{Name: "Columbia", Catno: "CK 57684"}}
-		album.Formats = []string{"CD · Album"}
-		album.Country = "US"
-		album.Companies = []discdomain.DiscogsCompany{{Name: "D&D Studios", Role: "Recorded At"}}
-		album.Community = discdomain.DiscogsCommunity{Have: 100, Want: 50, Rating: 4.8, Votes: 900}
-
-		svc := enrich.NewDiscogsEnrichmentService(&fakeDiscogsEnricher{album: album}, nil)
-		router := buildEnrichersRouter(DetailEnrichers{Discogs: svc})
-
-		rec := discServe(t, router, http.MethodGet,
-			"/discovery/enrichment/discogs?album=Illmatic&artist=Nas", nil)
-		discAssertStatus(t, rec, http.StatusOK)
-		discAssertJSON(t, rec)
-
-		var resp DiscogsEnrichmentResponseDTO
-		discDecodeJSON(t, rec, &resp)
-		if resp.MasterID != 42 || resp.Year != 1994 || resp.Country != "US" {
-			t.Errorf("scalar fields: %+v", resp)
-		}
-		if len(resp.Credits) != 1 || resp.Credits[0].Role != "Producer" {
-			t.Errorf("credits = %+v", resp.Credits)
-		}
-		if len(resp.Labels) != 1 || resp.Labels[0].Catno != "CK 57684" {
-			t.Errorf("labels = %+v", resp.Labels)
-		}
-		if len(resp.Companies) != 1 || resp.Companies[0].Role != "Recorded At" {
-			t.Errorf("companies = %+v", resp.Companies)
-		}
-		if resp.Community.Have != 100 || resp.Community.Rating != 4.8 {
-			t.Errorf("community = %+v", resp.Community)
-		}
-	})
-
-	t.Run("nil enricher returns 200 empty DTO with non-null collections", func(t *testing.T) {
-		router := buildEnrichersRouter(DetailEnrichers{})
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/discogs?album=X", nil)
-		discAssertStatus(t, rec, http.StatusOK)
-
-		var raw map[string]json.RawMessage
-		discDecodeJSON(t, rec, &raw)
-		for _, key := range []string{"genres", "styles", "credits", "labels", "formats", "companies"} {
-			if string(raw[key]) == "null" {
-				t.Errorf("%s must be [] when empty, got null", key)
-			}
-		}
-	})
-}
-
-// ==================== Discogs artist ====================
-
-func TestHandleDiscogsArtistEnrichment(t *testing.T) {
-	t.Run("missing name returns 400", func(t *testing.T) {
-		router := buildEnrichersRouter(DetailEnrichers{})
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/discogs/artist", nil)
-		discAssertStatus(t, rec, http.StatusBadRequest)
-	})
-
-	t.Run("wired service maps the full DTO", func(t *testing.T) {
-		artist := discdomain.EmptyDiscogsArtistEnrichment()
-		artist.ArtistID = 7
-		artist.Profile = "American rapper from Queensbridge."
-		artist.RealName = "Nasir Jones"
-		artist.Aliases = []string{"Nas Escobar"}
-		artist.Groups = []string{"The Firm"}
-		artist.Links = []discdomain.DiscogsLink{{Label: "Wikipedia", URL: "https://en.wikipedia.org/wiki/Nas"}}
-
-		svc := enrich.NewDiscogsArtistEnrichmentService(&fakeDiscogsEnricher{artist: artist}, nil)
-		router := buildEnrichersRouter(DetailEnrichers{DiscogsArtist: svc})
-
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/discogs/artist?name=Nas", nil)
-		discAssertStatus(t, rec, http.StatusOK)
-
-		var resp DiscogsArtistEnrichmentResponseDTO
-		discDecodeJSON(t, rec, &resp)
-		if resp.ArtistID != 7 || resp.RealName != "Nasir Jones" {
-			t.Errorf("scalar fields: %+v", resp)
-		}
-		if len(resp.Aliases) != 1 || resp.Aliases[0] != "Nas Escobar" {
-			t.Errorf("aliases = %v", resp.Aliases)
-		}
-		if len(resp.Links) != 1 || resp.Links[0].Label != "Wikipedia" {
-			t.Errorf("links = %+v", resp.Links)
-		}
-	})
-
-	t.Run("nil enricher returns 200 empty DTO with non-null collections", func(t *testing.T) {
-		router := buildEnrichersRouter(DetailEnrichers{})
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/discogs/artist?name=X", nil)
-		discAssertStatus(t, rec, http.StatusOK)
-
-		var raw map[string]json.RawMessage
-		discDecodeJSON(t, rec, &raw)
-		for _, key := range []string{"aliases", "name_variations", "members", "groups", "links"} {
-			if string(raw[key]) == "null" {
-				t.Errorf("%s must be [] when empty, got null", key)
-			}
-		}
-	})
-}
-
-// ==================== Last.fm ====================
 
 func TestHandleLastFmEnrichment(t *testing.T) {
 	t.Run("missing kind returns 400", func(t *testing.T) {
@@ -405,16 +263,6 @@ func TestEnrichmentToDTO_NilCollectionsBecomeEmpty(t *testing.T) {
 	dto := enrichmentToDTO(discdomain.MBEnrichment{})
 	if dto.Genres == nil || dto.SecondaryTypes == nil || dto.ExternalIDs == nil {
 		t.Errorf("nil domain collections must map to empty, got %+v", dto)
-	}
-}
-
-func TestDiscogsEnrichmentToDTO_NilCollectionsBecomeEmpty(t *testing.T) {
-	dto := discogsEnrichmentToDTO(discdomain.DiscogsEnrichment{})
-	if dto.Genres == nil || dto.Styles == nil || dto.Formats == nil {
-		t.Errorf("nil domain collections must map to empty, got %+v", dto)
-	}
-	if dto.Credits == nil || dto.Labels == nil || dto.Companies == nil {
-		t.Errorf("nil domain struct slices must map to empty, got %+v", dto)
 	}
 }
 

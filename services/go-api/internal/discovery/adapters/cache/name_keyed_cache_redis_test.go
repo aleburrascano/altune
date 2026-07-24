@@ -73,23 +73,23 @@ func TestRedisNameKeyedCache_NegativePath(t *testing.T) {
 }
 
 // The same name key cached by two providers must stay two entries: writing
-// Deezer data must not make the Discogs cache hit.
+// Deezer data must not make another provider's cache hit.
 func TestRedisNameKeyedCache_CrossProviderIsolation(t *testing.T) {
 	client := testRedisClient(t)
 	deezer := NewRedisDeezerEnrichmentCache(client)
-	discogs := NewRedisDiscogsEnrichmentCache(client)
+	lastfm := NewRedisLastFmEnrichmentCache(client)
 	ctx := context.Background()
 
 	nameKey := fmt.Sprintf("qa-nkiso|%s", t.Name())
 	cleanKeys(t, client,
 		hashKey(deezer.posPrefix, nameKey),
-		hashKey(discogs.posPrefix, nameKey),
+		hashKey(lastfm.posPrefix, nameKey),
 	)
 
 	if err := deezer.Set(ctx, nameKey, domain.DeezerEnrichment{Label: "only deezer"}); err != nil {
 		t.Fatalf("deezer Set: %v", err)
 	}
-	if _, hit, _ := discogs.Get(ctx, nameKey); hit {
-		t.Error("Deezer write served through the Discogs cache — provider namespaces collided")
+	if _, hit, _ := lastfm.Get(ctx, nameKey); hit {
+		t.Error("Deezer write served through the Last.fm cache — provider namespaces collided")
 	}
 }
