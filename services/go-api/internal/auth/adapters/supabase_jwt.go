@@ -15,8 +15,6 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-// acceptableSkew tolerates small clock drift between Supabase and this host
-// when validating exp/iat/nbf.
 const acceptableSkew = 5 * time.Second
 
 type SupabaseJWTVerifier struct {
@@ -50,8 +48,6 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shared.UserId, error) {
 	keySet, err := v.cache.Get(ctx, v.jwksURL)
 	if err != nil {
-		// Deliberately NOT an InvalidTokenError: the verifier failed to run,
-		// the token was never judged. The middleware maps this to a 503.
 		return shared.UserId{}, fmt.Errorf("fetch JWKS: %w", err)
 	}
 
@@ -91,27 +87,22 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 }
 
 func classifyJWTError(err error) auth.TokenRejectReason {
-	if errors.Is(err, jwt.ErrTokenExpired()) {
-		return auth.ReasonExpired
-	}
-	if errors.Is(err, jwt.ErrInvalidIssuer()) {
-		return auth.ReasonClaimInvalidISS
-	}
-	if errors.Is(err, jwt.ErrInvalidAudience()) {
-		return auth.ReasonClaimInvalidAUD
-	}
-
-	// jwx v2 exposes no typed sentinels for these two failures. The substrings
-	// are pinned by TestSupabaseJWTVerifier_InvalidSignature and
-	// TestSupabaseJWTVerifier_UnknownKeyID, which exercise the real library —
-	// a jwx upgrade that rewords them fails those tests instead of silently
-	// reclassifying signature failures as malformed.
-	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "failed to find key"),
-		strings.Contains(msg, "could not verify message"):
+	case errors.Is(err, jwt.ErrTokenExpired()):
+		return auth.ReasonExpired
+	case errors.Is(err, jwt.ErrInvalidIssuer()):
+		return auth.ReasonClaimInvalidISS
+	case errors.Is(err, jwt.ErrInvalidAudience()):
+		return auth.ReasonClaimInvalidAUD
+	case hasUntypedSignatureFailure(err):
 		return auth.ReasonSignatureInvalid
 	default:
 		return auth.ReasonMalformed
 	}
+}
+
+func hasUntypedSignatureFailure(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "failed to find key") ||
+		strings.Contains(msg, "could not verify message")
 }

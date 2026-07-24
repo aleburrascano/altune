@@ -11,8 +11,6 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
-// contextKey is an unexported zero-size type so the user-id key cannot collide
-// with a context key from any other package (a bare string could).
 type contextKey struct{}
 
 var userIDKey contextKey
@@ -26,29 +24,15 @@ func Middleware(verifier TokenVerifier) func(http.Handler) http.Handler {
 				return
 			}
 
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+			token, ok := bearerToken(authHeader)
+			if !ok {
 				rejectToken(w, r, ReasonMalformed, "malformed authorization header", nil)
 				return
 			}
-			token := parts[1]
 
 			userId, err := verifier.Verify(r.Context(), token)
 			if err != nil {
-				// errors.As walks the chain, so a wrapped InvalidTokenError still
-				// surfaces its specific reason. Anything else means the verifier
-				// could not run at all (JWKS unreachable) — that is a 503, not a
-				// 401, or an IdP outage reads as "everyone got logged out".
-				var ite *InvalidTokenError
-				if !errors.As(err, &ite) {
-					slog.ErrorContext(r.Context(), "auth.verifier_unavailable",
-						"error", err.Error(),
-						"path", r.URL.Path,
-					)
-					httputil.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
-					return
-				}
-				rejectToken(w, r, ite.Reason, "invalid token", err)
+				rejectFailedVerification(w, r, err)
 				return
 			}
 
@@ -62,23 +46,40 @@ func Middleware(verifier TokenVerifier) func(http.Handler) http.Handler {
 	}
 }
 
-// ContextWithUserID stores a verified user id in the context under the same
-// unexported key the middleware uses. Exposed so other packages (and tests) can
-// compose an authenticated context without depending on the key's identity.
+func bearerToken(authHeader string) (string, bool) {
+	scheme, token, found := strings.Cut(authHeader, " ")
+	if !found || !strings.EqualFold(scheme, "bearer") {
+		return "", false
+	}
+	return token, true
+}
+
 func ContextWithUserID(ctx context.Context, id shared.UserId) context.Context {
 	return context.WithValue(ctx, userIDKey, id)
 }
 
-// rejectResponse is the single 401 body shape for the feature: machine-readable
-// reason plus a client-safe detail.
 type rejectResponse struct {
 	Detail string `json:"detail"`
 	Reason string `json:"reason"`
 }
 
-// rejectToken writes the feature's one 401 contract ({detail, reason} plus a
-// WWW-Authenticate challenge). err, when non-nil, is logged server-side only —
-// jwx messages and JWKS fetch details never reach an unauthenticated client.
+func rejectFailedVerification(w http.ResponseWriter, r *http.Request, err error) {
+	var invalidToken *InvalidTokenError
+	if errors.As(err, &invalidToken) {
+		rejectToken(w, r, invalidToken.Reason, "invalid token", err)
+		return
+	}
+	rejectVerifierUnavailable(w, r, err)
+}
+
+func rejectVerifierUnavailable(w http.ResponseWriter, r *http.Request, err error) {
+	slog.ErrorContext(r.Context(), "auth.verifier_unavailable",
+		"error", err.Error(),
+		"path", r.URL.Path,
+	)
+	httputil.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
+}
+
 func rejectToken(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
 	attrs := []any{"reason", string(reason), "detail", detail}
 	if err != nil {
