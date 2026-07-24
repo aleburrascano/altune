@@ -1,30 +1,39 @@
 import type { ReactElement } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
 import type { ArtistGroup } from '../hooks/useLibraryGrouping';
+import { avatarColumns } from './gridColumns';
+import type { ListRefresh } from './refresh';
 
 type ArtistsGridProps = {
   artists: ArtistGroup[];
   emptyLabel: string;
+  refresh: ListRefresh;
   onArtistPress: (artist: ArtistGroup) => void;
 };
 
 const AVATAR_SIZE = 100;
 
-export function ArtistsGrid({ artists, emptyLabel, onArtistPress }: ArtistsGridProps): ReactElement {
+export function ArtistsGrid({ artists, emptyLabel, refresh, onArtistPress }: ArtistsGridProps): ReactElement {
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const columns = avatarColumns(width);
   return (
     <FlatList
       testID="library-artists-grid"
       data={artists}
       keyExtractor={(a) => a.key}
-      numColumns={3}
+      // Remount on column change: FlatList cannot change numColumns in place.
+      key={`cols-${columns}`}
+      numColumns={columns}
       columnWrapperStyle={styles.gridRow}
       contentContainerStyle={artists.length === 0 ? styles.emptyList : styles.list}
       showsVerticalScrollIndicator={false}
+      onRefresh={refresh.onRefresh}
+      refreshing={refresh.refreshing}
       ListEmptyComponent={
         <View style={styles.empty}>
           <Text variant="body" tone="secondary">

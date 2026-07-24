@@ -37,7 +37,7 @@ export function FeaturingScreen(): ReactElement {
     [params.name, params.mbid, params.deezer_id],
   );
 
-  const { data, isLoading, isError, refetch } = useTracksFeaturing(fa);
+  const { data, isLoading, isError, isRefetching, refetch } = useTracksFeaturing(fa);
   const deleteMutation = useDeleteTrack();
   const retryMutation = useRetryAcquisition();
   const playback = usePlayback();
@@ -49,6 +49,12 @@ export function FeaturingScreen(): ReactElement {
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/library'));
   const tracks = data?.items ?? [];
   const retryingTrackId = retryMutation.isPending ? retryMutation.variables : undefined;
+  const refresh = {
+    refreshing: isRefetching,
+    onRefresh: () => {
+      void refetch();
+    },
+  };
 
   // Navigate within the current tab stack (discover or library) so back returns
   // to the detail screen we came from, not the tab root.
@@ -121,6 +127,7 @@ export function FeaturingScreen(): ReactElement {
         <TracksList
           tracks={tracks}
           emptyLabel=""
+          refresh={refresh}
           onPlay={(track) => {
             const { playable, startIndex } = buildPlayableQueue(tracks, track.id);
             queue.playFromList(playable, startIndex, { kind: 'library' });

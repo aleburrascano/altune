@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getTracks } from '@shared/api-client/tracks';
 import { libraryKeys } from '@shared/lib/query-keys';
 
+import { fetchAllTracks } from '../fetch-all-tracks';
 import { useLibraryGrouping } from './useLibraryGrouping';
 
-const ALL_TRACKS_LIMIT = 2000;
+// Pull-to-refresh (the four Library lists) is the manual escape hatch — see
+// `ui/refresh.ts`. Everything else reconciles through SSE cache patches.
 // A slow safety net, not a realtime path (F14): SSE progress/completed/failed
 // events already drive the download store + cache patches. Degraded from a
 // 5s/2000-row loop to a 60s belt-and-suspenders poll while anything is pending,
@@ -13,9 +14,11 @@ const ALL_TRACKS_LIMIT = 2000;
 const PENDING_POLL_MS = 60_000;
 
 export function useLibraryHome() {
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, isRefetching, error, refetch } = useQuery({
     queryKey: libraryKeys.home,
-    queryFn: () => getTracks({ limit: ALL_TRACKS_LIMIT, offset: 0 }),
+    // Pages to completion — the grouping/search/sort lenses need every track,
+    // so a truncated set renders wrong rather than partial (see fetch-all-tracks).
+    queryFn: fetchAllTracks,
     // SSE patches keep this coherent; don't background-refetch on mount/nav (F15).
     // Pull-to-refresh remains as the manual escape hatch.
     staleTime: Infinity,
@@ -36,6 +39,7 @@ export function useLibraryHome() {
     artists,
     total: data?.total ?? 0,
     isLoading,
+    isRefetching,
     error: error as Error | null,
     hasPending: allTracks.some((t) => t.acquisition_status === 'pending'),
     refetch: () => {

@@ -1,13 +1,15 @@
 import { useRouter } from 'expo-router';
-import { useState, type ReactElement } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import type { TrackResponse } from '@shared/api-client/types';
+import { isNetworkError } from '@shared/lib/isNetworkError';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
+import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
@@ -26,6 +28,7 @@ import { LibraryChips, type LibraryChip } from './LibraryChips';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryNoResults } from './LibraryNoResults';
 import { PlaylistsGrid } from './PlaylistsGrid';
+import type { ListRefresh } from './refresh';
 import { SortControl } from './SortControl';
 import { buildTrackMenuItems } from './trackMenu';
 import { TracksList } from './TracksList';
@@ -84,6 +87,46 @@ export function LibraryScreen(): ReactElement {
   const sortKey = sortByChip[chip];
   const setSort = (key: SortKey): void => setSortByChip((prev) => ({ ...prev, [chip]: key }));
 
+  // `filter`/`matches` are memoized inside useLibrarySearch on the committed
+  // query; the object wrapping them is not. Destructuring first gives the memos
+  // below a dependency that actually holds still between renders.
+  const { filter: searchFilter, matches: searchMatches } = search;
+
+  // Filtering + sorting the whole library ran on every render — including every
+  // keystroke in the search bar, which re-sorts all four collections to render
+  // one. Memoized per collection so a chip switch or a sort change recomputes
+  // only what it touched.
+  const sorted = {
+    playlists: useMemo(
+      () => sortPlaylists(pl.playlists.filter((p) => searchMatches(p.name)), sortByChip.playlists),
+      [pl.playlists, searchMatches, sortByChip.playlists],
+    ),
+    tracks: useMemo(
+      () => sortTracks([...searchFilter(state.allTracks)], sortByChip.tracks),
+      [state.allTracks, searchFilter, sortByChip.tracks],
+    ),
+    albums: useMemo(
+      () =>
+        sortAlbums(
+          state.albums.filter((a) => searchMatches(a.album) || searchMatches(a.artist)),
+          sortByChip.albums,
+        ),
+      [state.albums, searchMatches, sortByChip.albums],
+    ),
+    artists: useMemo(
+      () => sortArtists(state.artists.filter((a) => searchMatches(a.artist)), sortByChip.artists),
+      [state.artists, searchMatches, sortByChip.artists],
+    ),
+  };
+
+  // Typing in the search box silently reshapes the list below it. Announce the
+  // new count so a screen-reader user knows whether their query narrowed to
+  // something — the visual count in SortControl is the sighted equivalent.
+  const chipCount = sorted[chip].length;
+  useAnnounceChange(
+    search.hasQuery ? `${chipCount} ${chipCount === 1 ? 'result' : 'results'}` : '',
+  );
+
   const view = _viewForState({ isLoading: state.isLoading, error: state.error, items: state.allTracks });
 
   if (view === 'loading') {
@@ -106,7 +149,12 @@ export function LibraryScreen(): ReactElement {
         <View testID="library-error" style={styles.center}>
           <Text variant="title">Couldn&apos;t load your library</Text>
           <Text variant="label" tone="secondary" style={styles.centerSub}>
-            Check your connection and try again.
+            {/* Blaming the connection for a server fault sends people to
+                restart their router; blaming the server for being offline is
+                just as wrong. Classify the error we already caught. */}
+            {isNetworkError(state.error)
+              ? "You appear to be offline. Your library is safe — reconnect and try again."
+              : 'Something went wrong on our end. Try again in a moment.'}
           </Text>
           <Button testID="library-retry" label="Retry" onPress={state.refetch} />
         </View>
@@ -129,8 +177,18 @@ export function LibraryScreen(): ReactElement {
     );
   }
 
+  // One refresh for the whole screen: the chips are views over two queries, so
+  // a pull on any of them reconciles both rather than half the surface.
+  const refresh: ListRefresh = {
+    refreshing: state.isRefetching || pl.isRefetchingPlaylists,
+    onRefresh: () => {
+      state.refetch();
+      pl.refetchPlaylists();
+    },
+  };
+
   const retryingTrackId = retryMutation.isPending ? retryMutation.variables : undefined;
-  const active = buildActiveView();
+  const active = buildActiveView(sorted);
 
   return (
     <Screen>
@@ -184,7 +242,12 @@ export function LibraryScreen(): ReactElement {
     </Screen>
   );
 
-  function buildActiveView(): {
+  function buildActiveView(items: {
+    playlists: ReturnType<typeof sortPlaylists>;
+    tracks: ReturnType<typeof sortTracks>;
+    albums: ReturnType<typeof sortAlbums>;
+    artists: ReturnType<typeof sortArtists>;
+  }): {
     content: ReactElement;
     count: number;
     noun: string;
@@ -192,14 +255,15 @@ export function LibraryScreen(): ReactElement {
   } {
     switch (chip) {
       case 'playlists': {
-        const items = sortPlaylists(pl.playlists.filter((p) => search.matches(p.name)), sortKey);
+        const rows = items.playlists;
         return {
-          count: items.length,
+          count: rows.length,
           noun: 'playlist',
           options: PLAYLIST_SORT_OPTIONS,
           content: (
             <PlaylistsGrid
-              playlists={items}
+              playlists={rows}
+              refresh={refresh}
               onPlaylistPress={(playlist) => router.push(`/library/playlist/${playlist.id}`)}
               onCreatePress={() => pl.setCreateModalVisible(true)}
             />
@@ -207,17 +271,18 @@ export function LibraryScreen(): ReactElement {
         };
       }
       case 'tracks': {
-        const items = sortTracks([...search.filter(state.allTracks)], sortKey);
+        const rows = items.tracks;
         return {
-          count: items.length,
+          count: rows.length,
           noun: 'track',
           options: TRACK_SORT_OPTIONS,
           content: (
             <TracksList
-              tracks={items}
+              tracks={rows}
               emptyLabel={'No tracks yet'}
+              refresh={refresh}
               onPlay={(track) => {
-                const { playable, startIndex } = buildPlayableQueue(items, track.id);
+                const { playable, startIndex } = buildPlayableQueue(rows, track.id);
                 queue.playFromList(playable, startIndex, { kind: 'library' });
               }}
               onPress={navigateToTrack}
@@ -230,33 +295,32 @@ export function LibraryScreen(): ReactElement {
         };
       }
       case 'albums': {
-        const items = sortAlbums(
-          state.albums.filter((a) => search.matches(a.album) || search.matches(a.artist)),
-          sortKey,
-        );
+        const rows = items.albums;
         return {
-          count: items.length,
+          count: rows.length,
           noun: 'album',
           options: ALBUM_SORT_OPTIONS,
           content: (
             <AlbumsGrid
-              albums={items}
+              albums={rows}
               emptyLabel={'No albums yet'}
+              refresh={refresh}
               onAlbumPress={navigateToAlbum}
             />
           ),
         };
       }
       case 'artists': {
-        const items = sortArtists(state.artists.filter((a) => search.matches(a.artist)), sortKey);
+        const rows = items.artists;
         return {
-          count: items.length,
+          count: rows.length,
           noun: 'artist',
           options: ARTIST_SORT_OPTIONS,
           content: (
             <ArtistsGrid
-              artists={items}
+              artists={rows}
               emptyLabel={'No artists yet'}
+              refresh={refresh}
               onArtistPress={navigateToArtist}
             />
           ),

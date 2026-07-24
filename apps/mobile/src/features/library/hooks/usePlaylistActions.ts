@@ -24,13 +24,16 @@ export type PlaylistActionsState = {
   setAddToPlaylistTrack: (track: TrackResponse | null) => void;
   createPlaylist: (name: string) => void;
   createLoading: boolean;
+  /** Pull-to-refresh wiring for the Playlists view (see `ui/refresh.ts`). */
+  refetchPlaylists: () => void;
+  isRefetchingPlaylists: boolean;
 };
 
 export function usePlaylistActions(): PlaylistActionsState {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<TrackResponse | null>(null);
 
-  const { data: playlistsData } = useQuery({
+  const { data: playlistsData, isRefetching, refetch } = useQuery({
     queryKey: playlistKeys.list,
     queryFn: getPlaylists,
     staleTime: Infinity, // SSE-covered; event patches keep it fresh (F15)
@@ -48,5 +51,9 @@ export function usePlaylistActions(): PlaylistActionsState {
     createPlaylist: (name) =>
       createMutation.mutate(name, { onSuccess: () => setCreateModalVisible(false) }),
     createLoading: createMutation.isPending,
+    refetchPlaylists: () => {
+      void refetch();
+    },
+    isRefetchingPlaylists: isRefetching,
   };
 }

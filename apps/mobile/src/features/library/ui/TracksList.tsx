@@ -6,10 +6,12 @@ import { Text, spacing } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { LibraryRow } from './LibraryRow';
+import type { ListRefresh } from './refresh';
 
 type TracksListProps = {
   tracks: TrackResponse[];
   emptyLabel: string;
+  refresh: ListRefresh;
   onPlay: (track: TrackResponse) => void;
   onPress: (track: TrackResponse) => void;
   onMore: (track: TrackResponse, anchor: MenuAnchor) => void;
@@ -21,6 +23,7 @@ type TracksListProps = {
 export function TracksList({
   tracks,
   emptyLabel,
+  refresh,
   onPlay,
   onPress,
   onMore,
@@ -34,6 +37,8 @@ export function TracksList({
       data={tracks}
       keyExtractor={(t) => t.id}
       showsVerticalScrollIndicator={false}
+      onRefresh={refresh.onRefresh}
+      refreshing={refresh.refreshing}
       contentContainerStyle={tracks.length === 0 ? styles.emptyList : styles.list}
       ListEmptyComponent={
         <View style={styles.empty}>
