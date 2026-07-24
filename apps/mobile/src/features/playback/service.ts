@@ -3,7 +3,7 @@ import TrackPlayer, { Event } from 'react-native-track-player';
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 
-import { recoverAudio } from './api/audio';
+import { recoverAudio } from '@shared/api-client/audio';
 import { prefetchNext, repairActiveToStreaming, wasSwappedToLocal } from './audioPrefetch';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
 

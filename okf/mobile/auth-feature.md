@@ -22,3 +22,5 @@ Owns sign-in, sign-up, sign-out, OAuth (Apple/Google), password reset, and sessi
 **Storage/API boundary**: the Supabase singleton lives at `@shared/auth/supabaseClient` (see [shared-auth](shared-auth.md)) and every file here imports it from there directly — no feature-local re-export. Session storage is wired to `expo-secure-store`, never `AsyncStorage`. Value-level `@supabase/supabase-js` imports are confined to the shared singleton; feature code only uses `import type`.
 
 Key files: `hooks/useSignIn.ts`, `hooks/useSignUp.ts`, `hooks/useOAuth.ts`, `hooks/useAuthDeepLink.ts`, `lib/parseAuthLink.ts`, `lib/completeAuthIntent.ts`, `lib/isNetworkError.ts`, `ui/AuthGate.tsx`, `ui/SessionExpiredNotice.tsx`, `ui/AuthForm.tsx`, `ui/SignInScreen.tsx`.
+
+**2026-07-24.** `lib/isNetworkError.ts` moved to `@shared/lib/isNetworkError` — Library became a second consumer. The four auth hooks import it from there; the `'network'` vs `'unknown'` reason mapping and `errorCopy.ts` are unchanged.

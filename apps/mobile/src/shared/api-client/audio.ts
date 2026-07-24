@@ -1,5 +1,14 @@
+/**
+ * Audio transport for go-api: the stream proxy URL, presigned-URL minting, and
+ * playback recovery.
+ *
+ * Lives in `shared/api-client` (not `features/playback`) because it is plain
+ * go-api transport with two feature consumers — playback and offline downloads.
+ * Keeping it under playback made `shared/offline` import from a feature, which
+ * points the dependency the wrong way.
+ */
 import { supabase } from '@shared/auth/supabaseClient';
-import { apiBase, apiFetch } from '@shared/api-client';
+import { apiBase, apiFetch } from './index';
 
 export function audioStreamUrl(trackId: string): string {
   return `${apiBase}/v1/tracks/${trackId}/audio`;

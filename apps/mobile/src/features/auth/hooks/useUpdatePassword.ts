@@ -7,7 +7,7 @@ import { useState } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { isNetworkError } from '../lib/isNetworkError';
+import { isNetworkError } from '@shared/lib/isNetworkError';
 
 export type UpdatePasswordResult =
   | { kind: 'idle' }
