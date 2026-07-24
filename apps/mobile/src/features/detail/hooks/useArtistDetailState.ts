@@ -13,11 +13,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { deriveAlbums } from '@shared/lib/derive-library-groups';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
+import { buildPlayableQueue } from '@shared/playback/playFromList';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
 import { trackExtras } from '../extras-accessors';
 import { openDetail, type DetailRoute } from '../navigation';
 import { findTrackInLibraryCache } from '../helpers/find-track-in-library-cache';
 import { saveControlState, type SaveControlState } from '../save-control-state';
+import { playButtonState, splitOwned, type OwnedSplit } from '../owned-playback';
 import { toCreateTrackRequest } from '../save-cache';
 import { useArtistContent } from './useArtistContent';
 import { useArtistDiscovery } from './useArtistDiscovery';
@@ -43,6 +46,10 @@ export type ArtistDetailState = {
   onAlbumPress: (album: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
   saveStateFor: (title: string, subtitle: string | null) => SaveControlState;
+  /** What of this artist's listed tracks you can actually play right now. */
+  owned: OwnedSplit;
+  playButton: { label: string; disabled: boolean };
+  onPlayOwned: () => void;
 };
 
 export function useArtistDetailState(
@@ -53,6 +60,7 @@ export function useArtistDetailState(
   const router = useRouter();
   const queryClient = useQueryClient();
   const save = useSaveTrack();
+  const queue = useQueuePlayback();
   const hasSources = !isFromLibrary && result.sources.length > 0;
 
   const localTracks = useLibraryTracksForArtist(result.title);
@@ -135,6 +143,18 @@ export function useArtistDetailState(
   const saveStateFor = (title: string, subtitle: string | null): SaveControlState =>
     saveControlState(findTrackInLibraryCache(queryClient, title, subtitle));
 
+  // Over the listed top tracks, in the order shown — same rule as album detail.
+  const owned = splitOwned(topTracks, (title, subtitle) =>
+    findTrackInLibraryCache(queryClient, title, subtitle),
+  );
+
+  const onPlayOwned = (): void => {
+    const first = owned.playable[0];
+    if (first === undefined) return;
+    const { playable, startIndex } = buildPlayableQueue(owned.playable, first.id);
+    queue.playFromList(playable, startIndex, { kind: 'library' });
+  };
+
   return {
     hasSources,
     topTracks,
@@ -154,5 +174,8 @@ export function useArtistDetailState(
     onAlbumPress,
     onQuickSave,
     saveStateFor,
+    owned,
+    playButton: playButtonState(owned),
+    onPlayOwned,
   };
 }
