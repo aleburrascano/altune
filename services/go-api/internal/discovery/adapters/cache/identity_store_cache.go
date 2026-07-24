@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -60,9 +61,33 @@ func (s *RedisIdentityStore) PersistBridges(
 		if provider == "" || externalID == "" {
 			continue
 		}
-		_ = s.client.Set(ctx, identityKey(kind, provider, externalID), blob, identityTTL).Err()
+		if err := s.client.Set(ctx, identityKey(kind, provider, externalID), blob, identityTTL).Err(); err != nil {
+			// Cache warming is best-effort (the durable write already succeeded),
+			// but a failing Redis shouldn't be invisible.
+			slog.DebugContext(ctx, "identity.cache_warm_failed",
+				"kind", kind.String(), "provider", provider, "error", err)
+		}
 	}
 	return nil
+}
+
+// Invalidate purges one identity from both tiers: the durable row AND the Redis
+// entry. The Redis DEL runs even when the Postgres delete errors — a stale cache
+// entry surviving a failed purge would keep serving the identity being excised.
+// Purge/remediation surface only — see the port doc.
+func (s *RedisIdentityStore) Invalidate(
+	ctx context.Context,
+	kind domain.ResultKind,
+	provider, externalID string,
+) error {
+	err := s.inner.Invalidate(ctx, kind, provider, externalID)
+	if s.client != nil && provider != "" && externalID != "" {
+		if delErr := s.client.Del(ctx, identityKey(kind, provider, externalID)).Err(); delErr != nil {
+			slog.DebugContext(ctx, "identity.cache_invalidate_failed",
+				"kind", kind.String(), "provider", provider, "error", delErr)
+		}
+	}
+	return err
 }
 
 // LookupByProviderID reads Redis first, falling through to the durable store on a

@@ -370,9 +370,17 @@ func (a *ITunesAdapter) LookupAlbum(
 var itunesTypeSuffixes = []string{" - Single", " - EP", " - Album", " - Deluxe", " - Remix"}
 
 func stripITunesTypeSuffix(name string) string {
+	lower := strings.ToLower(name)
+	// Case-folding that changes the byte length (e.g. Turkish İ) would misalign
+	// the slice offsets below; such names never carry an ASCII type suffix.
+	if len(lower) != len(name) {
+		return name
+	}
 	for _, suffix := range itunesTypeSuffixes {
-		if idx := strings.Index(strings.ToLower(name), strings.ToLower(suffix)); idx >= 0 {
-			return strings.TrimSpace(name[:idx])
+		// Suffix semantics only: a mid-title match ("Bad - Remix Album") must not
+		// truncate the name.
+		if strings.HasSuffix(lower, strings.ToLower(suffix)) {
+			return strings.TrimSpace(name[:len(name)-len(suffix)])
 		}
 	}
 	return name

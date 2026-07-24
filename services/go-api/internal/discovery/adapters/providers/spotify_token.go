@@ -80,7 +80,12 @@ func (r *spotifyTokenResolver) get(ctx context.Context) (*spotifySession, error)
 		if existing.valid() {
 			return existing, nil
 		}
-		return r.resolve(ctx)
+		// Detach from the winning caller's ctx so one impatient caller can't
+		// poison the shared resolve for every piggybacked waiter; the resolve
+		// gets its own budget instead.
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), spotifyResolveTimeout)
+		defer cancel()
+		return r.resolve(rctx)
 	})
 	if err != nil {
 		return nil, err
@@ -88,9 +93,18 @@ func (r *spotifyTokenResolver) get(ctx context.Context) (*spotifySession, error)
 	return v.(*spotifySession), nil
 }
 
-func (r *spotifyTokenResolver) invalidate() {
+// spotifyResolveTimeout bounds one shared session resolve (server-time + TOTP
+// token + client token) independently of any single caller's deadline.
+const spotifyResolveTimeout = 20 * time.Second
+
+// invalidate drops the cached session only if it is still the one the caller
+// failed with — a second 401 handler must not wipe the fresh session the first
+// re-resolve just cached (the invalidate-storm case).
+func (r *spotifyTokenResolver) invalidate(failed *spotifySession) {
 	r.mu.Lock()
-	r.cached = nil
+	if r.cached == failed {
+		r.cached = nil
+	}
 	r.mu.Unlock()
 }
 

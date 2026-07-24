@@ -76,7 +76,7 @@ func (a *AmazonMusicAdapter) Search(ctx context.Context, query string, kinds map
 
 	items, status, err := a.doSearch(ctx, sess, query)
 	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate()
+		a.resolver.invalidate(sess)
 		sess, err = a.resolver.get(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("re-resolve amazon music session: %w", err)

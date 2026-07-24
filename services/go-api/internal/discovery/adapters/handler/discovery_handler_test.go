@@ -251,6 +251,42 @@ func TestHandleRecordEvent(t *testing.T) {
 	})
 }
 
+// nopEventStore satisfies ports.EventStore so the record-event service can be
+// wired into the handler under test.
+type nopEventStore struct{}
+
+func (nopEventStore) Append(context.Context, discdomain.InteractionEvent) error { return nil }
+
+// With the event service wired, the service-level validation errors must render
+// as 400 (via the structural StatusError contract), not 500.
+func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
+	h := NewDiscoveryHandler(DiscoveryServices{
+		Search: service.NewService(nil, service.NewCircuitBreaker()),
+		Event:  service.NewRecordEventService(nopEventStore{}),
+	})
+	router := chi.NewRouter()
+	router.Use(auth.Middleware(discVerifyAsTestUser))
+	router.Mount("/discovery", h.Routes())
+
+	t.Run("server-reserved type returns 400", func(t *testing.T) {
+		body := map[string]any{"type": "search_performed"}
+		rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+		discAssertStatus(t, rec, http.StatusBadRequest)
+	})
+
+	t.Run("mistyped payload value returns 400", func(t *testing.T) {
+		body := map[string]any{"type": "skip", "payload": map[string]any{"dwell_ms": "abc"}}
+		rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+		discAssertStatus(t, rec, http.StatusBadRequest)
+	})
+
+	t.Run("well-formed interaction event returns 204", func(t *testing.T) {
+		body := map[string]any{"type": "skip", "payload": map[string]any{"dwell_ms": 1500, "result_signature": "sig"}}
+		rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+		discAssertStatus(t, rec, http.StatusNoContent)
+	})
+}
+
 // ==================== Search ====================
 
 func TestHandleSearch(t *testing.T) {
@@ -330,7 +366,7 @@ func TestHandleSearch(t *testing.T) {
 
 func TestHandleSearch_NoAuth(t *testing.T) {
 	// Arrange
-	router := buildDiscoveryRouter(&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil, )
+	router := buildDiscoveryRouter(&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
 
 	// Act
 	rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/search?q=test")

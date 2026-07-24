@@ -352,3 +352,48 @@ func TestDeezerAdapter_GetArtistTopTracks(t *testing.T) {
 		t.Errorf("source externalID: got %q, want %q", results[0].Sources[0].ExternalID, "301")
 	}
 }
+
+func TestDeezerAdapter_GetArtistAlbums_paginates(t *testing.T) {
+	var indexes []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/artist/42/albums") {
+			http.NotFound(w, r)
+			return
+		}
+		indexes = append(indexes, r.URL.Query().Get("index"))
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("index") == "0" {
+			w.Write([]byte(`{
+				"data": [
+					{"id": 1, "title": "First", "artist": {"id": 42, "name": "Radiohead"}},
+					{"id": 2, "title": "Second", "artist": {"id": 42, "name": "Radiohead"}}
+				],
+				"total": 3,
+				"next": "https://api.deezer.com/artist/42/albums?limit=100&index=100"
+			}`))
+			return
+		}
+		w.Write([]byte(`{
+			"data": [{"id": 3, "title": "Third", "artist": {"id": 42, "name": "Radiohead"}}],
+			"total": 3
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := NewDeezerAdapter(newTestClient(server.URL))
+	results, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderDeezer, "42")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums: %v", err)
+	}
+	if len(indexes) != 2 || indexes[0] != "0" || indexes[1] != "100" {
+		t.Errorf("index params: got %v, want [0 100]", indexes)
+	}
+	if len(results) != 3 {
+		t.Fatalf("expected 3 albums across pages, got %d", len(results))
+	}
+	for i, want := range []string{"First", "Second", "Third"} {
+		if results[i].Title != want {
+			t.Errorf("album[%d]: got %q, want %q (pages appended in request order)", i, results[i].Title, want)
+		}
+	}
+}

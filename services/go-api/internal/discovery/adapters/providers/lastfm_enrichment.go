@@ -49,12 +49,41 @@ func (a *LastFmAdapter) Lookup(
 	}
 }
 
+// lastfmErrNotFound is Last.fm's in-band error code 6 ("Invalid parameters" —
+// how getInfo reports an unknown artist/track/album): a definitive miss.
+const lastfmErrNotFound = 6
+
+// lastfmAPIError is Last.fm's in-band error envelope. getInfo misses and quota
+// problems ride on it — sometimes on HTTP 200, sometimes on a 4xx status.
+type lastfmAPIError struct {
+	Code    int    `json:"error"`
+	Message string `json:"message"`
+}
+
+func (e *lastfmAPIError) Error() string {
+	return fmt.Sprintf("lastfm api error %d: %s", e.Code, e.Message)
+}
+
+// getInfo fetches one getInfo body, decoding the error envelope FIRST (Deezer
+// pattern — see deezer_enrichment.go getJSON): code 6 (entity not found) is a
+// definitive miss and returns (nil, nil) so callers yield a zero enrichment
+// that the service negative-caches; any other error code is transient and
+// returns an error (never cached as a miss). The body is read even on a non-200
+// status because Last.fm delivers the envelope on 4xx too — without that, a
+// 4xx-delivered miss looked transient and the negative cache never engaged.
 func (a *LastFmAdapter) getInfo(ctx context.Context, u string) ([]byte, error) {
-	var raw json.RawMessage
-	if err := getJSON(ctx, a.client, u, &raw); err != nil {
-		return nil, err
+	status, body, err := getBytes(ctx, a.client, u)
+	var envelope lastfmAPIError
+	if len(body) > 0 && json.Unmarshal(body, &envelope) == nil && envelope.Code != 0 {
+		if envelope.Code == lastfmErrNotFound {
+			return nil, nil // definitive miss
+		}
+		return nil, &envelope
 	}
-	return raw, nil
+	if err != nil {
+		return nil, fmt.Errorf("lastfm getinfo status %d: %w", status, err)
+	}
+	return body, nil
 }
 
 func (a *LastFmAdapter) lookupArtistInfo(ctx context.Context, artistName string) (domain.LastFmEnrichment, error) {
@@ -68,6 +97,9 @@ func (a *LastFmAdapter) lookupArtistInfo(ctx context.Context, artistName string)
 	body, err := a.getInfo(ctx, u)
 	if err != nil {
 		return domain.EmptyLastFmEnrichment(), err
+	}
+	if len(body) == 0 {
+		return domain.EmptyLastFmEnrichment(), nil // definitive miss (error code 6)
 	}
 	var resp struct {
 		Artist struct {
@@ -109,6 +141,9 @@ func (a *LastFmAdapter) lookupTrackInfo(ctx context.Context, artistName, track s
 	if err != nil {
 		return domain.EmptyLastFmEnrichment(), err
 	}
+	if len(body) == 0 {
+		return domain.EmptyLastFmEnrichment(), nil // definitive miss (error code 6)
+	}
 	var resp struct {
 		Track struct {
 			MBID      string          `json:"mbid"`
@@ -148,6 +183,9 @@ func (a *LastFmAdapter) lookupAlbumInfo(ctx context.Context, artistName, album s
 	body, err := a.getInfo(ctx, u)
 	if err != nil {
 		return domain.EmptyLastFmEnrichment(), err
+	}
+	if len(body) == 0 {
+		return domain.EmptyLastFmEnrichment(), nil // definitive miss (error code 6)
 	}
 	var resp struct {
 		Album struct {

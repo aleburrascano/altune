@@ -604,8 +604,8 @@ func TestClientIDResolver_ScrapesAndCaches(t *testing.T) {
 		t.Errorf("expected homepage scraped once, got %d", homeCalls)
 	}
 
-	// After invalidate, it resolves again.
-	r.invalidate()
+	// After invalidate (with the id in hand), it resolves again.
+	r.invalidate(id)
 	if _, err := r.get(context.Background()); err != nil {
 		t.Fatalf("post-invalidate get error: %v", err)
 	}

@@ -383,3 +383,47 @@ func TestMusicBrainzAdapter_LookupAlbumArtist(t *testing.T) {
 		}
 	})
 }
+
+func TestMusicBrainzAdapter_fetchReleaseGroups_paginates(t *testing.T) {
+	var offsets []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/ws/2/release-group") {
+			http.NotFound(w, r)
+			return
+		}
+		offsets = append(offsets, r.URL.Query().Get("offset"))
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("offset") == "0" {
+			w.Write([]byte(`{
+				"release-group-count": 3,
+				"release-groups": [
+					` + mbReleaseGroupJSON("rg-1", "First", "Che", "mbid-che") + `,
+					` + mbReleaseGroupJSON("rg-2", "Second", "Che", "mbid-che") + `
+				]
+			}`))
+			return
+		}
+		w.Write([]byte(`{
+			"release-group-count": 3,
+			"release-groups": [` + mbReleaseGroupJSON("rg-3", "Third", "Che", "mbid-che") + `]
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+	rgs, err := adapter.fetchReleaseGroups(context.Background(), "mbid-che")
+	if err != nil {
+		t.Fatalf("fetchReleaseGroups: %v", err)
+	}
+	if len(offsets) != 2 || offsets[0] != "0" || offsets[1] != "100" {
+		t.Errorf("offset params: got %v, want [0 100]", offsets)
+	}
+	if len(rgs) != 3 {
+		t.Fatalf("expected 3 release-groups across pages, got %d", len(rgs))
+	}
+	for i, want := range []string{"First", "Second", "Third"} {
+		if rgs[i].Title != want {
+			t.Errorf("rg[%d]: got %q, want %q (pages appended in request order)", i, rgs[i].Title, want)
+		}
+	}
+}

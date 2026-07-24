@@ -65,13 +65,37 @@ func TestPgxIdentityStore_RoundTrip(t *testing.T) {
 		t.Error("lookup of unknown id hit, want miss")
 	}
 
-	// Upsert: re-persisting with a new MBID overwrites.
+	// Upsert: re-persisting with a new MBID overwrites (mbid is last-write-wins),
+	// but the xref MERGES — a partial re-learn carrying only {deezer} must not
+	// erase the previously learned discogs edge.
 	newMBID := "11111111-2222-3333-4444-555555555555"
 	if err := store.PersistBridges(ctx, domain.ResultKindArtist, newMBID, map[string]string{"deezer": "234701081"}); err != nil {
 		t.Fatalf("re-PersistBridges: %v", err)
 	}
-	if gotMBID, _, _ := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "234701081"); gotMBID != newMBID {
+	gotMBID, gotXref, _ := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "234701081")
+	if gotMBID != newMBID {
 		t.Errorf("after upsert mbid = %q, want %q", gotMBID, newMBID)
+	}
+	if gotXref["discogs"] != "987654" {
+		t.Errorf("partial re-learn erased the discogs edge, xref = %v", gotXref)
+	}
+	if gotXref["deezer"] != "234701081" {
+		t.Errorf("xref lost the re-learned deezer edge, xref = %v", gotXref)
+	}
+
+	// Invalidate removes exactly the targeted row; the sibling row survives.
+	if err := store.Invalidate(ctx, domain.ResultKindArtist, "deezer", "234701081"); err != nil {
+		t.Fatalf("Invalidate: %v", err)
+	}
+	if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "234701081"); ok {
+		t.Error("invalidated identity still resolves, want miss")
+	}
+	if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "discogs", "987654"); !ok {
+		t.Error("sibling row was deleted by Invalidate, want it untouched")
+	}
+	// Invalidating a missing row is a no-op, not an error.
+	if err := store.Invalidate(ctx, domain.ResultKindArtist, "deezer", "does-not-exist"); err != nil {
+		t.Errorf("Invalidate of missing row: %v, want nil", err)
 	}
 
 	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id IN ('234701081','987654')`)

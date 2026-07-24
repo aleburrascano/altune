@@ -1,0 +1,16 @@
+{
+  "results": {
+    "artistmatches": {
+      "artist": [{
+        "name": "The Weeknd",
+        "mbid": "c8b03190-306c-4120-bb0b-6f2ebfc06ea9",
+        "url": "https://www.last.fm/music/The+Weeknd",
+        "listeners": "9876543",
+        "image": [
+          {"#text": "https://lastfm.freetls.fastly.net/artist-small.png", "size": "small"},
+          {"#text": "https://lastfm.freetls.fastly.net/artist-xl.png", "size": "extralarge"}
+        ]
+      }]
+    }
+  }
+}

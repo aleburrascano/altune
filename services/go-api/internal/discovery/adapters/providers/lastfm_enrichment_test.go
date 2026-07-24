@@ -161,6 +161,61 @@ func TestLastFmAdapter_Lookup_HTTPErrorDegrades(t *testing.T) {
 	}
 }
 
+func TestLastFmAdapter_Lookup_InBandError6IsCleanMiss(t *testing.T) {
+	// Error 6 (invalid parameters / entity not found) is a DEFINITIVE miss: zero
+	// enrichment, nil error, so the enrichment service negative-caches the name.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"error":6,"message":"Artist not found"}`))
+	}))
+	defer server.Close()
+	adapter := NewLastFmAdapter(newTestClient(server.URL), "test-api-key")
+
+	e, err := adapter.Lookup(context.Background(), domain.ResultKindArtist, "No Such Artist", "")
+	if err != nil {
+		t.Fatalf("error 6 must be a clean miss (nil error), got %v", err)
+	}
+	if !e.IsZero() {
+		t.Errorf("error 6 must yield a zero enrichment, got %+v", e)
+	}
+}
+
+func TestLastFmAdapter_Lookup_InBandError6On4xxIsCleanMiss(t *testing.T) {
+	// Last.fm sometimes delivers the miss envelope on a 4xx status; it must still
+	// be a definitive miss, not a transient error that defeats the negative cache.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":6,"message":"Track not found"}`))
+	}))
+	defer server.Close()
+	adapter := NewLastFmAdapter(newTestClient(server.URL), "test-api-key")
+
+	e, err := adapter.Lookup(context.Background(), domain.ResultKindTrack, "Nobody", "Nothing")
+	if err != nil {
+		t.Fatalf("4xx-delivered error 6 must be a clean miss (nil error), got %v", err)
+	}
+	if !e.IsZero() {
+		t.Errorf("4xx-delivered error 6 must yield a zero enrichment, got %+v", e)
+	}
+}
+
+func TestLastFmAdapter_Lookup_InBandErrorOtherIsTransient(t *testing.T) {
+	// Any other error code (8 = backend failure here) is transient: an error must
+	// be returned so the result is NOT cached as a 24h negative miss.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"error":8,"message":"Operation failed - Something went wrong"}`))
+	}))
+	defer server.Close()
+	adapter := NewLastFmAdapter(newTestClient(server.URL), "test-api-key")
+
+	_, err := adapter.Lookup(context.Background(), domain.ResultKindArtist, "Kendrick Lamar", "")
+	if err == nil {
+		t.Fatal("error 8 must surface as a transient error, not a zero-struct miss")
+	}
+}
+
 func TestCleanLastFmBio(t *testing.T) {
 	tests := []struct {
 		name string

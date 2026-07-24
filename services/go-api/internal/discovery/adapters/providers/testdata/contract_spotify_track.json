@@ -1,0 +1,31 @@
+{
+  "data": {
+    "searchV2": {
+      "tracksV2": {
+        "items": [{
+          "item": {
+            "data": {
+              "id": "3ZE3wv8V3w2T2f7nOCjV0N",
+              "name": "Sicko Mode",
+              "uri": "spotify:track:3ZE3wv8V3w2T2f7nOCjV0N",
+              "duration": {"totalMilliseconds": 312820},
+              "contentRating": {"label": "EXPLICIT"},
+              "albumOfTrack": {
+                "id": "41GuZcammIkupMPKH2OJ6I",
+                "name": "ASTROWORLD",
+                "uri": "spotify:album:41GuZcammIkupMPKH2OJ6I",
+                "coverArt": {"sources": [
+                  {"url": "https://example.com/64.jpg", "width": 64, "height": 64},
+                  {"url": "https://example.com/640.jpg", "width": 640, "height": 640}
+                ]}
+              },
+              "artists": {"items": [{"profile": {"name": "Travis Scott"}, "uri": "spotify:artist:0Y5tJX1MQlPlqiwlOH1tJY"}]}
+            }
+          }
+        }]
+      },
+      "albumsV2": {"items": []},
+      "artists": {"items": []}
+    }
+  }
+}

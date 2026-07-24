@@ -71,6 +71,11 @@ const (
 
 type ArtworkCache interface {
 	Get(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (url, source string, found bool, err error)
+	// Set stores a resolved (or negative, url == "") artwork entry.
+	// Confidence-guard invariant: a write at LOWER confidence than an existing
+	// POSITIVE entry (non-empty URL) must be a no-op — a name guess or a later
+	// resolution failure never clobbers a proven-identity image. Equal or higher
+	// confidence overwrites/refreshes normally.
 	Set(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid, url, source string, confidence ArtworkConfidence) error
 }
 
@@ -101,4 +106,9 @@ type IdentityStore interface {
 	// LookupByProviderID returns the bridged identity for one provider id, or
 	// ok=false when none was ever recorded.
 	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider, externalID string) (mbid string, xref map[string]string, ok bool)
+	// Invalidate removes one recorded identity (durable row and any cache entry).
+	// The purge/remediation surface for verification tooling — nothing on the
+	// search/detail pipeline calls it; it exists so a bad bridge found after the
+	// fact can be excised without a manual DELETE + cache flush.
+	Invalidate(ctx context.Context, kind domain.ResultKind, provider, externalID string) error
 }

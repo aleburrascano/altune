@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -54,11 +55,16 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 	}
 
 	// event_id is the idempotency key — only the label-critical outbox tier sets
-	// it; NULL otherwise, so fire-and-forget events never collide.
+	// it; NULL otherwise, so fire-and-forget events never collide. A malformed
+	// event_id is dropped (the event still lands, without dedup) — logged so the
+	// silent loss of idempotency is at least observable.
 	var eventID *uuid.UUID
 	if event.EventId != "" {
 		if id, parseErr := uuid.Parse(event.EventId); parseErr == nil {
 			eventID = &id
+		} else {
+			slog.DebugContext(ctx, "telemetry.event_id_unparseable",
+				"event_id", event.EventId, "error", parseErr)
 		}
 	}
 
@@ -98,7 +104,8 @@ func (r *PgxEventStore) ZeroResultQueries(ctx context.Context, since time.Time, 
 		WHERE event_type = $1
 			AND occurred_at >= $2
 			AND query_norm IS NOT NULL
-			AND (payload->>'zero_result')::boolean = true
+			AND CASE WHEN jsonb_typeof(payload->'zero_result') = 'boolean'
+				THEN (payload->>'zero_result')::boolean ELSE false END
 		GROUP BY query_norm
 		ORDER BY cnt DESC
 		LIMIT $3`,
@@ -120,7 +127,8 @@ func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Ti
 		WHERE e.event_type = $1
 			AND e.occurred_at >= $2
 			AND e.query_norm IS NOT NULL
-			AND (e.payload->>'zero_result')::boolean = false
+			AND CASE WHEN jsonb_typeof(e.payload->'zero_result') = 'boolean'
+				THEN NOT (e.payload->>'zero_result')::boolean ELSE false END
 			AND NOT EXISTS (
 				SELECT 1 FROM discovery_events c
 				WHERE c.event_type = 'result_clicked'
@@ -143,37 +151,42 @@ func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Ti
 // dissatisfaction (Kim WSDM 2014: dwell <20–30s signals an unsatisfying result).
 const shortDwellThresholdMs = 20000
 
+// perUserSignalCap bounds one user's contribution per result_signature in each
+// direction (positives and negatives capped separately, per user, per
+// signature) so a single client replaying events cannot unboundedly pump or
+// bury a result's behavioral score.
+const perUserSignalCap = 3
+
 // SatisfactionSignals aggregates play/skip/completed events per result_signature
 // over the window into a net score: +1 per play (listen-threshold satisfaction)
 // or completed (play-to-completion), −1 per skip whose dwell_ms is below the
-// short-dwell threshold (skip-after-click dissatisfaction). result_signature
-// rides in the JSONB payload (echoed by the client); only signed results are
-// returned. Read-only analytics — never the request path.
+// short-dwell threshold (skip-after-click dissatisfaction). A skip without a
+// numeric dwell_ms counts 0 (unknown dwell is not evidence of dissatisfaction),
+// and dwell_ms is read only when jsonb_typeof says it is a number — a poisoned
+// payload ("dwell_ms":"abc") is skipped, never a 22P02 that bricks the whole
+// window. The CASE wrapper (not a bare AND) guarantees the typeof guard is
+// evaluated before the cast. result_signature rides in the JSONB payload
+// (echoed by the client); only signed results are returned. Read-only
+// analytics — never the request path.
 func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time) ([]ports.BehavioralSignal, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT payload->>'result_signature' AS sig,
-			SUM(
-				CASE
-					WHEN event_type IN ('play', 'completed') THEN 1.0
-					WHEN event_type = 'skip'
-						AND COALESCE(NULLIF(payload->>'dwell_ms', '')::numeric, 0) < $2 THEN -1.0
-					ELSE 0
-				END
-			)::float8 AS score
-		FROM discovery_events
-		WHERE occurred_at >= $1
-			AND event_type IN ('play', 'skip', 'completed')
-			AND COALESCE(payload->>'result_signature', '') <> ''
+		`SELECT sig, SUM(user_score)::float8 AS score
+		FROM (
+			SELECT payload->>'result_signature' AS sig,
+				user_id,
+				LEAST(COUNT(*) FILTER (WHERE event_type IN ('play', 'completed')), $3)
+				- LEAST(COUNT(*) FILTER (WHERE event_type = 'skip'
+					AND CASE WHEN jsonb_typeof(payload->'dwell_ms') = 'number'
+						THEN (payload->>'dwell_ms')::numeric < $2 ELSE false END), $3) AS user_score
+			FROM discovery_events
+			WHERE occurred_at >= $1
+				AND event_type IN ('play', 'skip', 'completed')
+				AND COALESCE(payload->>'result_signature', '') <> ''
+			GROUP BY sig, user_id
+		) per_user
 		GROUP BY sig
-		HAVING SUM(
-			CASE
-				WHEN event_type IN ('play', 'completed') THEN 1.0
-				WHEN event_type = 'skip'
-					AND COALESCE(NULLIF(payload->>'dwell_ms', '')::numeric, 0) < $2 THEN -1.0
-				ELSE 0
-			END
-		) <> 0`,
-		since, shortDwellThresholdMs,
+		HAVING SUM(user_score) <> 0`,
+		since, shortDwellThresholdMs, perUserSignalCap,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query satisfaction signals: %w", err)

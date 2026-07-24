@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -41,9 +42,13 @@ const (
 	spotifyAlbumTracksHash    = "b9bfabef66ed756e5e13f68a942deb60bd4125ec1f1be8cc42769dc0259b4b10"
 )
 
-// spotifyContentLimit caps the discography fetch. Releases come newest-first
-// (order=DATE_DESC), so the head is what the detail screen wants.
+// spotifyContentLimit is the page size for the discography and album-tracks
+// fetches. Releases come newest-first (order=DATE_DESC).
 const spotifyContentLimit = 50
+
+// spotifyMaxContentPages caps pagination (50 per page → 500 items) so a
+// provider bug can't loop forever.
+const spotifyMaxContentPages = 10
 
 // GetArtistAlbums implements ports.ArtistContentProvider via the pathfinder
 // queryArtistDiscographyAll operation. externalID is the Spotify artist id
@@ -52,26 +57,50 @@ const spotifyContentLimit = 50
 // cross-provider discography (the empty album-artist is filled by another
 // provider in the best-of merge).
 func (a *SpotifyAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	vars := map[string]any{
-		"uri":    "spotify:artist:" + externalID,
-		"offset": 0,
-		"limit":  spotifyContentLimit,
-		"order":  "DATE_DESC",
-	}
-	var body spotifyDiscographyResponse
-	if err := a.pathfinderContent(ctx, "queryArtistDiscographyAll", spotifyDiscographyAllHash, vars, &body); err != nil {
-		return nil, err
-	}
-	groups := body.Data.ArtistUnion.Discography.All.Items
-	out := make([]domain.SearchResult, 0, len(groups))
-	for _, g := range groups {
-		// A group's releases are variants of one release (deluxe/clean/regional);
-		// the first is the representative the web player displays.
-		if len(g.Releases.Items) == 0 {
-			continue
+	var out []domain.SearchResult
+	fetched := 0
+	for page := 0; page < spotifyMaxContentPages; page++ {
+		vars := map[string]any{
+			"uri":    "spotify:artist:" + externalID,
+			"offset": page * spotifyContentLimit,
+			"limit":  spotifyContentLimit,
+			"order":  "DATE_DESC",
 		}
-		if r, ok := mapSpotifyRelease(g.Releases.Items[0]); ok {
-			out = append(out, r)
+		var body spotifyDiscographyResponse
+		if err := a.pathfinderContent(ctx, "queryArtistDiscographyAll", spotifyDiscographyAllHash, vars, &body); err != nil {
+			// Depth is best-effort, presence is not: a later-page failure keeps the
+			// pages already fetched rather than discarding the whole discography.
+			if page > 0 {
+				slog.DebugContext(ctx, "spotify.artist_albums_page_failed",
+					"artist", externalID, "page", page, "error", err)
+				return out, nil
+			}
+			return nil, err
+		}
+		groups := body.Data.ArtistUnion.Discography.All.Items
+		if len(groups) == 0 {
+			break
+		}
+		for _, g := range groups {
+			// A group's releases are variants of one release (deluxe/clean/regional);
+			// the first is the representative the web player displays.
+			if len(g.Releases.Items) == 0 {
+				continue
+			}
+			if r, ok := mapSpotifyRelease(g.Releases.Items[0]); ok {
+				out = append(out, r)
+			}
+		}
+		totalCount := body.Data.ArtistUnion.Discography.All.TotalCount
+		// A missing/zero totalCount alongside a full page smells like schema
+		// drift — the loop would silently truncate to one page.
+		if totalCount == 0 && len(groups) == spotifyContentLimit {
+			slog.DebugContext(ctx, "spotify.artist_albums_totalcount_zero",
+				"artist", externalID, "page_items", len(groups))
+		}
+		fetched += len(groups)
+		if fetched >= totalCount {
+			break
 		}
 	}
 	return out, nil
@@ -102,16 +131,37 @@ func (a *SpotifyAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provid
 // tracks service falls back to a blind Deezer title search — which resolves to a
 // DIFFERENT artist's same-titled album. Returns tracks in album order.
 func (a *SpotifyAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	vars := map[string]any{"uri": "spotify:album:" + externalID, "offset": 0, "limit": spotifyContentLimit}
-	var body spotifyAlbumTracksResponse
-	if err := a.pathfinderContent(ctx, "queryAlbumTracks", spotifyAlbumTracksHash, vars, &body); err != nil {
-		return nil, err
-	}
-	items := body.Data.AlbumUnion.TracksV2.Items
-	out := make([]domain.SearchResult, 0, len(items))
-	for _, it := range items {
-		if r, ok := mapSpotifyAlbumTrack(it.Track); ok {
-			out = append(out, r)
+	var out []domain.SearchResult
+	fetched := 0
+	for page := 0; page < spotifyMaxContentPages; page++ {
+		vars := map[string]any{"uri": "spotify:album:" + externalID, "offset": page * spotifyContentLimit, "limit": spotifyContentLimit}
+		var body spotifyAlbumTracksResponse
+		if err := a.pathfinderContent(ctx, "queryAlbumTracks", spotifyAlbumTracksHash, vars, &body); err != nil {
+			// Same partial-page policy as GetArtistAlbums above.
+			if page > 0 {
+				slog.DebugContext(ctx, "spotify.album_tracks_page_failed",
+					"album", externalID, "page", page, "error", err)
+				return out, nil
+			}
+			return nil, err
+		}
+		items := body.Data.AlbumUnion.TracksV2.Items
+		if len(items) == 0 {
+			break
+		}
+		for _, it := range items {
+			if r, ok := mapSpotifyAlbumTrack(it.Track); ok {
+				out = append(out, r)
+			}
+		}
+		totalCount := body.Data.AlbumUnion.TracksV2.TotalCount
+		if totalCount == 0 && len(items) == spotifyContentLimit {
+			slog.DebugContext(ctx, "spotify.album_tracks_totalcount_zero",
+				"album", externalID, "page_items", len(items))
+		}
+		fetched += len(items)
+		if fetched >= totalCount {
+			break
 		}
 	}
 	return out, nil
@@ -127,7 +177,7 @@ func (a *SpotifyAdapter) pathfinderContent(ctx context.Context, operationName, h
 	}
 	status, err := a.doPathfinderContent(ctx, sess, operationName, hash, vars, out)
 	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate()
+		a.resolver.invalidate(sess)
 		sess, err = a.resolver.get(ctx)
 		if err != nil {
 			return fmt.Errorf("re-resolve spotify session: %w", err)
@@ -201,7 +251,8 @@ type spotifyDiscographyResponse struct {
 		ArtistUnion struct {
 			Discography struct {
 				All struct {
-					Items []struct {
+					TotalCount int `json:"totalCount"`
+					Items      []struct {
 						Releases struct {
 							Items []spotifyPFRelease `json:"items"`
 						} `json:"releases"`
@@ -277,7 +328,8 @@ type spotifyAlbumTracksResponse struct {
 	Data struct {
 		AlbumUnion struct {
 			TracksV2 struct {
-				Items []struct {
+				TotalCount int `json:"totalCount"`
+				Items      []struct {
 					Track spotifyAlbumTrack `json:"track"`
 				} `json:"items"`
 			} `json:"tracksV2"`

@@ -1,0 +1,21 @@
+{
+  "results": {
+    "albums": {"data": [{
+      "id": "1488408555",
+      "attributes": {
+        "name": "After Hours",
+        "artistName": "The Weeknd",
+        "artwork": {"url": "https://example.com/album/{w}x{h}bb.jpg"},
+        "contentRating": "explicit",
+        "copyright": "2020 The Weeknd XO, Inc.",
+        "genreNames": ["Pop"],
+        "isSingle": false,
+        "recordLabel": "Republic Records",
+        "releaseDate": "2020-03-20",
+        "trackCount": 14,
+        "upc": "00602435610238",
+        "url": "https://music.apple.com/us/album/1488408555"
+      }
+    }]}
+  }
+}

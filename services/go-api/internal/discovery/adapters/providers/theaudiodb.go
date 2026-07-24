@@ -40,7 +40,7 @@ func (a *TheAudioDBAdapter) Search(ctx context.Context, query string, kinds map[
 		} `json:"artists"`
 	}
 	if err := getJSON(ctx, a.client, u, &body); err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	var results []domain.SearchResult

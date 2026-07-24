@@ -113,6 +113,13 @@ func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds ma
 	return results, nil
 }
 
+// GetArtistAlbums is a BY-NAME fetch (a YTM search filtered to exact artist-name
+// matches) consumed only by the album consensus union (BuildConsensusProviders),
+// where by-name gathering is the design. AIDEV-WARNING: never wire this into the
+// detail content fan-out's artistProviders map — that path is id-keyed
+// (fanOutByIdentity would pass a browseId here, which this method would treat as
+// a search query), and a name-keyed provider in the id fan-out re-opens the
+// same-name contamination vector the identity-first path exists to close.
 func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
 	result, err := ytmSearchRetry(ctx, a.client, artistName, ytmAlbumFilter)
 	if err != nil {
@@ -144,32 +151,6 @@ func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.Prov
 	return results, nil
 }
 
-func (a *YouTubeMusicAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
-	result, err := ytmSearchRetry(ctx, a.client, artistName, ytmTrackFilter)
-	if err != nil {
-		return nil, fmt.Errorf("ytmusic track search: %w", err)
-	}
-
-	var results []domain.SearchResult
-	for _, t := range result.Tracks {
-		artistMatch := false
-		for _, artist := range t.Artists {
-			if strings.EqualFold(artist.Name, artistName) {
-				artistMatch = true
-				break
-			}
-		}
-		if !artistMatch {
-			continue
-		}
-		results = append(results, mapYTMusicTrack(t))
-		if len(results) >= 10 {
-			break
-		}
-	}
-
-	return results, nil
-}
 
 func mapYTMusicTrack(t *ytmTrack) domain.SearchResult {
 	var subtitle string

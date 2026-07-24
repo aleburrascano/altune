@@ -41,6 +41,8 @@ const amFixtureResponse = `{
         "hasLyrics": true,
         "isAppleDigitalMaster": true,
         "isrc": "USUG11904206",
+        "contentRating": "explicit",
+        "previews": [{"url": "https://audio-ssl.itunes.apple.com/preview.m4a"}],
         "releaseDate": "2019-11-29",
         "url": "https://music.apple.com/us/song/1488408568"
       }
@@ -51,6 +53,7 @@ const amFixtureResponse = `{
         "name": "After Hours",
         "artistName": "The Weeknd",
         "artwork": {"url": "https://example.com/album/{w}x{h}bb.jpg"},
+        "contentRating": "explicit",
         "copyright": "2020 The Weeknd XO, Inc.",
         "genreNames": ["Pop"],
         "isSingle": false,
@@ -114,8 +117,14 @@ func TestAppleMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 	if track.Extras["composer"] != "Max Martin, Oscar Holter, Abel Tesfaye" {
 		t.Errorf("track composer extra = %v", track.Extras["composer"])
 	}
-	if track.ImageURL != "https://example.com/500x500bb.jpg" {
-		t.Errorf("track.ImageURL = %q, want the {w}x{h} template filled with 500x500", track.ImageURL)
+	if track.ImageURL != "https://example.com/1000x1000bb.jpg" {
+		t.Errorf("track.ImageURL = %q, want the {w}x{h} template filled with 1000x1000", track.ImageURL)
+	}
+	if track.Extras["preview_url"] != "https://audio-ssl.itunes.apple.com/preview.m4a" {
+		t.Errorf("track preview_url extra = %v", track.Extras["preview_url"])
+	}
+	if track.Extras["explicit"] != true {
+		t.Errorf("track explicit extra = %v, want true", track.Extras["explicit"])
 	}
 	if len(track.Sources) != 1 || track.Sources[0].ExternalID != "1488408568" {
 		t.Errorf("track source = %+v", track.Sources)
@@ -127,6 +136,12 @@ func TestAppleMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 	}
 	if album.Extras["upc"] != "00602435610238" {
 		t.Errorf("album upc extra = %v", album.Extras["upc"])
+	}
+	if album.UPC != "00602435610238" {
+		t.Errorf("album.UPC = %q, want typed upc (merge's album tier reads it)", album.UPC)
+	}
+	if album.Extras["explicit"] != true {
+		t.Errorf("album explicit extra = %v, want true", album.Extras["explicit"])
 	}
 
 	artist := byKind[domain.ResultKindArtist]

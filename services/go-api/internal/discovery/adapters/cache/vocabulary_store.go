@@ -236,6 +236,14 @@ func (s *RedisVocabularyStore) prefixSearch(
 	return s.membersToSortedEntries(ctx, members, limit), nil
 }
 
+// vocabPrefixScanCap bounds how many lex-matched members one prefix query pulls
+// back from Redis. Without it a short prefix ("a") returns the whole vocabulary
+// (O(vocab) transfer + one score lookup per member). The popularity re-sort then
+// runs over this bounded candidate set — a term outside the first cap (in lex
+// order) can't surface, an accepted trade for a bounded suggest path (the
+// caller's limit is ≤10).
+const vocabPrefixScanCap = 200
+
 func (s *RedisVocabularyStore) lexRangeMembers(
 	ctx context.Context,
 	normPrefix string,
@@ -246,8 +254,9 @@ func (s *RedisVocabularyStore) lexRangeMembers(
 	min := "[" + normPrefix
 	max := "[" + normPrefix + "\xff"
 	return s.client.ZRangeByLex(ctx, vocabLexKey, &goredis.ZRangeBy{
-		Min: min,
-		Max: max,
+		Min:   min,
+		Max:   max,
+		Count: vocabPrefixScanCap,
 	}).Result()
 }
 
@@ -286,13 +295,23 @@ func (s *RedisVocabularyStore) membersToSortedEntries(
 	return entries
 }
 
+// attachScores fills Popularity for every entry with a single ZMSCORE round
+// trip (was one sequential ZSCORE per member — O(candidates) round trips). A
+// member missing from the terms ZSET scores 0.
 func (s *RedisVocabularyStore) attachScores(ctx context.Context, entries []domain.VocabularyEntry) {
+	if len(entries) == 0 {
+		return
+	}
+	members := make([]string, len(entries))
 	for i := range entries {
-		member := encodeMember(entries[i].TermNorm, entries[i].Term, string(entries[i].Kind))
-		score, err := s.client.ZScore(ctx, vocabTermsKey, member).Result()
-		if err == nil {
-			entries[i].Popularity = int64(score)
-		}
+		members[i] = encodeMember(entries[i].TermNorm, entries[i].Term, string(entries[i].Kind))
+	}
+	scores, err := s.client.ZMScore(ctx, vocabTermsKey, members...).Result()
+	if err != nil || len(scores) != len(entries) {
+		return
+	}
+	for i := range entries {
+		entries[i].Popularity = int64(scores[i])
 	}
 }
 

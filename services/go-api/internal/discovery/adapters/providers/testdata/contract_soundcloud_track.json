@@ -1,0 +1,21 @@
+{
+  "collection": [{
+    "id": 287264830,
+    "kind": "track",
+    "title": "Goosebumps",
+    "permalink_url": "https://soundcloud.com/travisscott-2/goosebumps",
+    "duration": 243836,
+    "genre": "Rap",
+    "artwork_url": "https://i1.sndcdn.com/artworks-goose-large.jpg",
+    "playback_count": 120000000,
+    "likes_count": 900000,
+    "reposts_count": 45000,
+    "display_date": "2016-09-16T00:00:00Z",
+    "publisher_metadata": {
+      "isrc": "USSM11607966",
+      "album_title": "Birds In The Trap Sing McKnight"
+    },
+    "user": {"username": "Travis Scott"}
+  }],
+  "next_href": ""
+}

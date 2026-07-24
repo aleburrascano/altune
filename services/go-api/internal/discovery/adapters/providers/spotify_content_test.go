@@ -156,3 +156,97 @@ func TestSpotifyAdapter_Content_surfacesGraphQLError(t *testing.T) {
 		t.Fatalf("err = %v, want a surfaced GraphQL error", err)
 	}
 }
+
+// offsetOf reads the pathfinder variables.offset from a request body.
+func offsetOf(t *testing.T, raw []byte) int {
+	t.Helper()
+	var req struct {
+		Variables struct {
+			Offset int `json:"offset"`
+		} `json:"variables"`
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		t.Fatalf("decode request body: %v", err)
+	}
+	return req.Variables.Offset
+}
+
+func TestSpotifyAdapter_GetArtistAlbums_paginates(t *testing.T) {
+	// totalCount says 3 groups; page 1 (offset 0) carries 2, page 2 (offset 50)
+	// carries the last, so the loop must stop after two requests.
+	const page1 = `{"data":{"artistUnion":{"discography":{"all":{"totalCount":3,"items":[
+		{"releases":{"items":[{"id":"al1","name":"First","type":"ALBUM"}]}},
+		{"releases":{"items":[{"id":"al2","name":"Second","type":"ALBUM"}]}}
+	]}}}}}`
+	const page2 = `{"data":{"artistUnion":{"discography":{"all":{"totalCount":3,"items":[
+		{"releases":{"items":[{"id":"al3","name":"Third","type":"SINGLE"}]}}
+	]}}}}}`
+	var offsets []int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		offset := offsetOf(t, raw)
+		offsets = append(offsets, offset)
+		if offset == 0 {
+			_, _ = w.Write([]byte(page1))
+			return
+		}
+		_, _ = w.Write([]byte(page2))
+	}))
+	defer srv.Close()
+
+	a := newContentSpotifyAdapter(srv)
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSpotify, "artist-1")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums error = %v", err)
+	}
+	if len(offsets) != 2 || offsets[0] != 0 || offsets[1] != 50 {
+		t.Errorf("offsets = %v, want [0 50]", offsets)
+	}
+	if len(albums) != 3 {
+		t.Fatalf("albums = %d, want 3 across pages", len(albums))
+	}
+	for i, want := range []string{"First", "Second", "Third"} {
+		if albums[i].Title != want {
+			t.Errorf("album[%d] = %q, want %q (pages appended in request order)", i, albums[i].Title, want)
+		}
+	}
+}
+
+func TestSpotifyAdapter_GetAlbumTracks_paginates(t *testing.T) {
+	const page1 = `{"data":{"albumUnion":{"tracksV2":{"totalCount":3,"items":[
+		{"track":{"uri":"spotify:track:tr1","name":"One","trackNumber":1}},
+		{"track":{"uri":"spotify:track:tr2","name":"Two","trackNumber":2}}
+	]}}}}`
+	const page2 = `{"data":{"albumUnion":{"tracksV2":{"totalCount":3,"items":[
+		{"track":{"uri":"spotify:track:tr3","name":"Three","trackNumber":3}}
+	]}}}}`
+	var offsets []int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		offset := offsetOf(t, raw)
+		offsets = append(offsets, offset)
+		if offset == 0 {
+			_, _ = w.Write([]byte(page1))
+			return
+		}
+		_, _ = w.Write([]byte(page2))
+	}))
+	defer srv.Close()
+
+	a := newContentSpotifyAdapter(srv)
+	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderSpotify, "album-1")
+	if err != nil {
+		t.Fatalf("GetAlbumTracks error = %v", err)
+	}
+	if len(offsets) != 2 || offsets[0] != 0 || offsets[1] != 50 {
+		t.Errorf("offsets = %v, want [0 50]", offsets)
+	}
+	if len(tracks) != 3 {
+		t.Fatalf("tracks = %d, want 3 across pages", len(tracks))
+	}
+	for i, want := range []string{"One", "Two", "Three"} {
+		if tracks[i].Title != want {
+			t.Errorf("track[%d] = %q, want %q (album order preserved across pages)", i, tracks[i].Title, want)
+		}
+	}
+}

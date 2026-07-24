@@ -1,0 +1,16 @@
+{
+  "data": [{
+    "id": 99,
+    "title": "OK Computer",
+    "link": "https://www.deezer.com/album/99",
+    "cover_big": "https://cdn.deezer.com/album_big.jpg",
+    "cover_xl": "https://cdn.deezer.com/album_xl.jpg",
+    "artist": {"id": 42, "name": "Radiohead"},
+    "record_type": "album",
+    "release_date": "1997-05-21",
+    "nb_tracks": 12,
+    "nb_fan": 50000,
+    "genre_id": 152
+  }],
+  "total": 1
+}

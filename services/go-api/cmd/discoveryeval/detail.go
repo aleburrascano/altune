@@ -72,6 +72,10 @@ func (s *seededIdentityStore) PersistBridges(context.Context, domain.ResultKind,
 	return nil
 }
 
+func (s *seededIdentityStore) Invalidate(context.Context, domain.ResultKind, string, string) error {
+	return nil
+}
+
 func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider, externalID string) (string, map[string]string, bool) {
 	if kind != domain.ResultKindArtist {
 		return "", nil, false

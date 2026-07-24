@@ -93,6 +93,7 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 					Track []struct {
 						Name      string `json:"name"`
 						Artist    string `json:"artist"`
+						MBID      string `json:"mbid"`
 						URL       string `json:"url"`
 						Listeners string `json:"listeners"`
 						Image     []struct {
@@ -115,9 +116,13 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 				if t.Listeners != "" {
 					extras["listeners"] = t.Listeners
 				}
-				results = append(results, domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist, imageURL,
+				r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist, imageURL,
 					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
-					extras))
+					extras)
+				// mbid lifts the track into the identifier merge tier (same reason
+				// GetArtistAlbums keeps it — previously dropped on the floor).
+				r.MBID = t.MBID
+				results = append(results, r)
 			}
 		}
 	case domain.ResultKindAlbum:
@@ -127,6 +132,7 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 					Album []struct {
 						Name   string `json:"name"`
 						Artist string `json:"artist"`
+						MBID   string `json:"mbid"`
 						URL    string `json:"url"`
 						Image  []struct {
 							Text string `json:"#text"`
@@ -144,9 +150,16 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 						imageURL = img.Text
 					}
 				}
-				results = append(results, domain.NewProviderResult(domain.ResultKindAlbum, a.Name, a.Artist, imageURL,
+				r := domain.NewProviderResult(domain.ResultKindAlbum, a.Name, a.Artist, imageURL,
 					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
-					nil))
+					nil)
+				// AIDEV-NOTE: a.MBID is deliberately NOT mapped onto r.MBID. Last.fm's
+				// album-search mbid is a RELEASE MBID, while MusicBrainz album results
+				// carry RELEASE-GROUP MBIDs — different UUID namespaces, so stamping
+				// it makes sameEntity's MBID hard-stop systematically block every
+				// MB↔Last.fm album merge (duplicate album rows). Track (recording
+				// namespace, matches MB recordings) and artist mbids stay mapped.
+				results = append(results, r)
 			}
 		}
 	case domain.ResultKindArtist:
@@ -155,6 +168,7 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 				ArtistMatches struct {
 					Artist []struct {
 						Name      string `json:"name"`
+						MBID      string `json:"mbid"`
 						URL       string `json:"url"`
 						Listeners string `json:"listeners"`
 						Image     []struct {
@@ -177,9 +191,15 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 				if a.Listeners != "" {
 					extras["listeners"] = a.Listeners
 				}
-				results = append(results, domain.NewProviderResult(domain.ResultKindArtist, a.Name, "", imageURL,
+				r := domain.NewProviderResult(domain.ResultKindArtist, a.Name, "", imageURL,
 					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
-					extras))
+					extras)
+				// AIDEV-WARNING: a stale Last.fm artist mbid that differs from
+				// MusicBrainz's current one both hard-stops sameEntity's MBID tier
+				// and can inflate ambiguousArtistNames (≥2 distinct MBIDs per name).
+				// Merge-affecting — validated via `discoveryeval -mode merge` A/B.
+				r.MBID = a.MBID
+				results = append(results, r)
 			}
 		}
 	}

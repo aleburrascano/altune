@@ -1,0 +1,11 @@
+{
+  "data": [{
+    "id": 42,
+    "name": "Radiohead",
+    "link": "https://www.deezer.com/artist/42",
+    "picture_big": "https://cdn.deezer.com/artist_big.jpg",
+    "picture_xl": "https://cdn.deezer.com/artist_xl.jpg",
+    "nb_fan": 5000000
+  }],
+  "total": 1
+}

@@ -40,7 +40,10 @@ const (
 	appleMusicSearchTimeout = 4 * time.Second
 	appleMusicOrigin        = "https://music.apple.com"
 	appleMusicUserAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-	appleMusicArtworkSize   = 500
+	// appleMusicArtworkSize fills the {w}x{h} artwork template for search-card
+	// artwork — 1000px sits between iTunes' 600px list tier and 1500px hero tier
+	// (see itunes.go): sharp on card AND detail-open without a hero-sized payload.
+	appleMusicArtworkSize = 1000
 )
 
 func NewAppleMusicAdapter(client *http.Client) *AppleMusicAdapter {
@@ -78,7 +81,7 @@ func (a *AppleMusicAdapter) Search(ctx context.Context, query string, kinds map[
 
 	results, status, err := a.doSearch(ctx, token, query, types)
 	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate()
+		a.resolver.invalidate(token)
 		token, err = a.resolver.get(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("re-resolve apple music token: %w", err)
@@ -154,7 +157,7 @@ func (a *AppleMusicAdapter) GetAlbumTracks(ctx context.Context, _ domain.Provide
 	}
 	songs, status, err := a.fetchAlbumTracks(ctx, token, externalID)
 	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate()
+		a.resolver.invalidate(token)
 		token, err = a.resolver.get(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("re-resolve apple music token: %w", err)
@@ -233,25 +236,30 @@ type appleMusicSong struct {
 		HasLyrics            bool              `json:"hasLyrics"`
 		IsAppleDigitalMaster bool              `json:"isAppleDigitalMaster"`
 		ISRC                 string            `json:"isrc"`
-		ReleaseDate          string            `json:"releaseDate"`
-		URL                  string            `json:"url"`
+		ContentRating        string            `json:"contentRating"`
+		Previews             []struct {
+			URL string `json:"url"`
+		} `json:"previews"`
+		ReleaseDate string `json:"releaseDate"`
+		URL         string `json:"url"`
 	} `json:"attributes"`
 }
 
 type appleMusicAlbum struct {
 	ID         string `json:"id"`
 	Attributes struct {
-		Name        string            `json:"name"`
-		ArtistName  string            `json:"artistName"`
-		Artwork     appleMusicArtwork `json:"artwork"`
-		Copyright   string            `json:"copyright"`
-		GenreNames  []string          `json:"genreNames"`
-		IsSingle    bool              `json:"isSingle"`
-		RecordLabel string            `json:"recordLabel"`
-		ReleaseDate string            `json:"releaseDate"`
-		TrackCount  int               `json:"trackCount"`
-		UPC         string            `json:"upc"`
-		URL         string            `json:"url"`
+		Name          string            `json:"name"`
+		ArtistName    string            `json:"artistName"`
+		Artwork       appleMusicArtwork `json:"artwork"`
+		ContentRating string            `json:"contentRating"`
+		Copyright     string            `json:"copyright"`
+		GenreNames    []string          `json:"genreNames"`
+		IsSingle      bool              `json:"isSingle"`
+		RecordLabel   string            `json:"recordLabel"`
+		ReleaseDate   string            `json:"releaseDate"`
+		TrackCount    int               `json:"trackCount"`
+		UPC           string            `json:"upc"`
+		URL           string            `json:"url"`
 	} `json:"attributes"`
 }
 
@@ -299,6 +307,12 @@ func mapAppleMusicSong(s appleMusicSong) domain.SearchResult {
 	if a.DiscNumber > 0 {
 		extras["disc_number"] = a.DiscNumber
 	}
+	if len(a.Previews) > 0 && a.Previews[0].URL != "" {
+		extras["preview_url"] = a.Previews[0].URL
+	}
+	if a.ContentRating == "explicit" {
+		extras["explicit"] = true
+	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, a.Name, a.ArtistName,
 		appleMusicArtworkURL(a.Artwork.URL, appleMusicArtworkSize),
@@ -335,7 +349,10 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 		extras["record_type"] = "album"
 	}
 	if a.UPC != "" {
-		extras["upc"] = a.UPC
+		extras["upc"] = a.UPC // wire mirror; the typed field below is what merge reads
+	}
+	if a.ContentRating == "explicit" {
+		extras["explicit"] = true
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindAlbum, stripAlbumTypeSuffix(a.Name), a.ArtistName,
@@ -344,6 +361,7 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 		extras)
 	r.ReleaseDate = a.ReleaseDate
 	r.TrackCount = a.TrackCount
+	r.UPC = a.UPC
 	return r
 }
 

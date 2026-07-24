@@ -25,7 +25,10 @@ func NewPgxMetricsRollup(pool *pgxpool.Pool) *PgxMetricsRollup {
 
 // RollupDay computes the UTC day's metrics in one CTE and upserts the four rows
 // (idempotent on (as_of, metric)). Read-only over discovery_events; aggregates
-// only, no user_id.
+// only, no user_id. Payload casts are guarded by jsonb_typeof (inside CASE so
+// the guard is evaluated before the cast): a poisoned client payload
+// ("zero_result":"abc") is skipped for that row, never a 22P02 that fails the
+// whole rollup.
 func (r *PgxMetricsRollup) RollupDay(ctx context.Context, day time.Time) error {
 	dayStart := day.UTC().Truncate(24 * time.Hour)
 	_, err := r.pool.Exec(ctx,
@@ -33,10 +36,12 @@ func (r *PgxMetricsRollup) RollupDay(ctx context.Context, day time.Time) error {
 			SELECT
 				COUNT(*) FILTER (WHERE event_type = 'search_performed') AS searches,
 				COUNT(*) FILTER (WHERE event_type = 'search_performed'
-					AND (payload->>'zero_result')::boolean) AS zero,
+					AND CASE WHEN jsonb_typeof(payload->'zero_result') = 'boolean'
+						THEN (payload->>'zero_result')::boolean ELSE false END) AS zero,
 				COUNT(DISTINCT search_id) FILTER (WHERE event_type = 'result_clicked') AS clicked,
-				AVG((payload->>'tail_noise_top5')::numeric) FILTER (WHERE event_type = 'search_performed'
-					AND payload ? 'tail_noise_top5') AS tail_avg
+				AVG(CASE WHEN jsonb_typeof(payload->'tail_noise_top5') = 'number'
+					THEN (payload->>'tail_noise_top5')::numeric END)
+					FILTER (WHERE event_type = 'search_performed') AS tail_avg
 			FROM discovery_events
 			WHERE occurred_at >= $1 AND occurred_at < $1 + interval '1 day'
 		)
