@@ -58,6 +58,9 @@ export interface PlaybackControls {
   pause(): void;
   resume(): void;
   seekTo(positionMs: number): void;
+  /** Playback rate multiplier (1 = normal). Pitch handling is the native
+   *  player's; RNTP preserves pitch on both platforms. */
+  setRate(rate: number): void;
   stop(): void;
   retry(): void;
 }

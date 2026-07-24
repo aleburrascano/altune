@@ -55,6 +55,7 @@ function _contextValue(overrides: Partial<PlaybackContextValue>): PlaybackContex
     pause: noop,
     resume: noop,
     seekTo: noop,
+    setRate: noop,
     stop: noop,
     retry: noop,
     ...overrides,
