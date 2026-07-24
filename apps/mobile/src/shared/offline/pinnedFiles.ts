@@ -19,40 +19,42 @@ export function extFromUrl(url: string): string {
   return dot > slash ? path.slice(dot) : '.mp3';
 }
 
-export function findPinned(trackId: string): File | null {
+function pinnedFilesOnDisk(): readonly File[] {
   try {
-    for (const entry of pinnedDir().list()) {
-      if (entry instanceof File && baseName(entry.uri).startsWith(`${trackId}.`)) return entry;
-    }
-  } catch {}
+    return pinnedDir()
+      .list()
+      .filter((entry): entry is File => entry instanceof File);
+  } catch {
+    return [];
+  }
+}
+
+export function findPinned(trackId: string): File | null {
+  for (const file of pinnedFilesOnDisk()) {
+    if (baseName(file.uri).startsWith(`${trackId}.`)) return file;
+  }
   return null;
 }
 
-export function deletePinned(trackId: string): void {
-  const file = findPinned(trackId);
-  if (file === null) return;
+function deleteIgnoringFailure(file: File): void {
   try {
     file.delete();
   } catch {}
 }
 
+export function deletePinned(trackId: string): void {
+  const file = findPinned(trackId);
+  if (file === null) return;
+  deleteIgnoringFailure(file);
+}
+
 export function deleteAllPinned(): void {
-  try {
-    for (const entry of pinnedDir().list()) {
-      if (entry instanceof File) entry.delete();
-    }
-  } catch {}
+  for (const file of pinnedFilesOnDisk()) deleteIgnoringFailure(file);
 }
 
 export function pinnedBytes(): number {
   let total = 0;
-  try {
-    for (const entry of pinnedDir().list()) {
-      if (entry instanceof File) total += entry.size ?? 0;
-    }
-  } catch {
-    return 0;
-  }
+  for (const file of pinnedFilesOnDisk()) total += file.size ?? 0;
   return total;
 }
 
