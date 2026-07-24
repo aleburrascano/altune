@@ -28,3 +28,11 @@ Owns audio playback end-to-end: mini/full player UI, the native queue, lock-scre
 Key files: `hooks/PlaybackProvider.tsx`, `hooks/trackPlayerProvider.tsx`, `hooks/expoGoPlaybackProvider.tsx`, `hooks/useQueueResume.ts`, `derivePlaybackState.ts`, `loadNativeTrack.ts`, `nativeTrack.ts`, `nativeSyncGuard.ts`, `audioPrefetch.ts`, `resumeQueue.ts`, `seekControls.ts`, `service.ts`, `signals.ts`, `api/audio.ts`, `ui/FullPlayer.tsx`, `ui/MiniPlayer.tsx`, `ui/QueueSheet.tsx`.
 
 **2026-07-24.** `api/audio.ts` moved to `@shared/api-client/audio`. It was always plain go-api transport (stream proxy, `fetchAudioUrls`, `recoverAudio`, bearer headers); it now has a second consumer outside the feature, so it lives in `shared/`. Behaviour is unchanged — `loadNativeTrack`, `audioPrefetch`, `nativeTrack` and `service` import from the new path.
+
+## Lyrics (2026-07-24)
+
+`/player/lyrics` is a modal over the full player, fed by `GET /v1/discovery/lyrics` (Deezer-backed, tracks only, keyed on title + artist). The server had served this since before the client surface existed: the earlier Discogs/Deezer/Lyrics enrichment components were deleted in the 2026-07-16 structure audit because nothing rendered them, with the note that lyrics belong to the full player when it lands. It has landed.
+
+Time-synced lines are the good case and the default: the active line is highlighted and the view follows playback, and tapping a line seeks to it (`activeLineIndex` is a linear scan — ~60 entries, run on a position tick, so the constant factor is irrelevant and the boundary behaviour stays obviously correct). Plain text is the fallback. Line offsets are captured via `onLayout` rather than computed, because lyric lines wrap and there is no fixed row height to derive them from; the follow-scroll respects `useReduceMotion`.
+
+`_lyricsView` is the five-state machine (`loading | error | unavailable | synced | plain`). The load-bearing case is `unavailable`: the endpoint answers 200 with an empty payload for anything it cannot resolve, so an empty body must never render as an error. Writer and copyright credits render under every non-empty view — a licensing requirement of the provider, not decoration.
