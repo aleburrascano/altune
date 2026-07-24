@@ -98,6 +98,26 @@ it('unpinning deletes the file and forgets the entry', () => {
   expect(usePinnedStore.getState().entries.t1).toBeUndefined();
 });
 
+it('deletes a file whose entry was dropped mid-download instead of stranding it', async () => {
+  let releaseDownload: (uri: string) => void = () => {};
+  (downloadPinned as jest.Mock).mockImplementationOnce(
+    () =>
+      new Promise<string>((resolve) => {
+        releaseDownload = resolve;
+      }),
+  );
+
+  usePinnedStore.getState().pin('t1');
+  await flush();
+
+  usePinnedStore.getState().unpinAll();
+  releaseDownload('file:///offline/t1.mp3');
+  await flush();
+
+  expect(deletePinned).toHaveBeenCalledWith('t1');
+  expect(usePinnedStore.getState().entries.t1).toBeUndefined();
+});
+
 it('does not re-queue a track that is already downloaded', () => {
   usePinnedStore.setState({
     entries: { t1: { trackId: 't1', status: 'ready', uri: 'file:///x' } },

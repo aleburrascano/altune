@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
+
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { clearSessionExpired } from './sessionExpired';
 import { supabase } from './supabaseClient';
@@ -9,6 +11,12 @@ export type SessionState =
   | { status: 'loading' }
   | { status: 'signed-in'; session: Session }
   | { status: 'signed-out' };
+
+function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
+  queryClient.clear();
+  clearSessionExpired();
+  usePinnedStore.getState().unpinAll();
+}
 
 export function useSession(): SessionState {
   const [state, setState] = useState<SessionState>({ status: 'loading' });
@@ -23,8 +31,7 @@ export function useSession(): SessionState {
       if (!active) return;
       const userId = session?.user.id ?? null;
       if (seededRef.current && userIdRef.current !== userId) {
-        queryClient.clear();
-        clearSessionExpired();
+        forgetPreviousUsersLocalData(queryClient);
       }
       seededRef.current = true;
       userIdRef.current = userId;
