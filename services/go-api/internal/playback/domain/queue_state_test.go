@@ -53,9 +53,7 @@ func TestNewQueueState_Validation(t *testing.T) {
 	}
 }
 
-func TestRehydrateQueueState_RejectsCorruptRow(t *testing.T) {
-	// A stored row whose current_idx points past the end must fail to
-	// reconstitute rather than ship an invalid snapshot to the client.
+func TestRehydrateQueueState_RejectsStoredRowWithCurrentIdxPastEnd(t *testing.T) {
 	_, err := RehydrateQueueState(QueueStateInput{
 		UserId:     testUser(),
 		TrackIds:   []string{"a", "b"},

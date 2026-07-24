@@ -24,10 +24,6 @@ type QueueService struct {
 	nowPlaying ports.NowPlayingReader
 }
 
-// NewQueueService wires the snapshot repository and the catalog bridge that lets
-// ResumeView embed the currently-playing track's metadata for instant client
-// render. Both are required — a miswired composition root fails at construction,
-// not by silently dropping CurrentTrack from every resume.
 func NewQueueService(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader) *QueueService {
 	return &QueueService{repo: repo, nowPlaying: nowPlaying}
 }
@@ -53,8 +49,6 @@ func (s *QueueService) Save(ctx context.Context, userId shared.UserId, input Sav
 	return s.repo.Upsert(ctx, state)
 }
 
-// Resume returns the user's saved snapshot, or the empty snapshot when none is
-// stored — callers never receive nil.
 func (s *QueueService) Resume(ctx context.Context, userId shared.UserId) (*domain.QueueState, error) {
 	state, err := s.repo.GetForUser(ctx, userId)
 	if err != nil {
@@ -66,10 +60,6 @@ func (s *QueueService) Resume(ctx context.Context, userId shared.UserId) (*domai
 	return state, nil
 }
 
-// ResumeView is Resume plus the currently-playing track's display snapshot, so the
-// client can render now-playing from this one small call instead of blocking on a
-// full library rehydrate. CurrentTrack is nil when the queue is empty, the index
-// is out of range, or the track can't be found.
 type ResumeView struct {
 	State        *domain.QueueState
 	CurrentTrack *ports.NowPlayingTrack
@@ -82,15 +72,22 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 	}
 
 	view := &ResumeView{State: state}
-	idx := state.CurrentIdx
-	if idx < 0 || idx >= len(state.TrackIds) {
+	trackId, isPlaying := currentTrackId(state)
+	if !isPlaying {
 		return view, nil
 	}
 
-	current, err := s.nowPlaying.Lookup(ctx, userId, state.TrackIds[idx])
+	current, err := s.nowPlaying.Lookup(ctx, userId, trackId)
 	if err != nil {
 		return nil, fmt.Errorf("resume current track: %w", err)
 	}
 	view.CurrentTrack = current
 	return view, nil
+}
+
+func currentTrackId(state *domain.QueueState) (string, bool) {
+	if state.CurrentIdx < 0 || state.CurrentIdx >= len(state.TrackIds) {
+		return "", false
+	}
+	return state.TrackIds[state.CurrentIdx], true
 }
