@@ -4,7 +4,7 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { audioRequestHeaders, fetchAudioUrls } from './api/audio';
+import { audioRequestHeaders, fetchAudioUrls } from '@shared/api-client/audio';
 import { toNativeTrack } from './nativeTrack';
 
 // AIDEV-NOTE: Download-ahead cache. RNTP's iOS backend does not pre-buffer the

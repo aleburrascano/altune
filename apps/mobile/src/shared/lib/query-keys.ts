@@ -18,6 +18,22 @@ export const libraryKeys = {
   featuring: (identity: string) => ['library', 'featuring', identity] as const,
 };
 
+/**
+ * Discovery cache keys. Promoted here from `features/discover/keys.ts` when
+ * Settings became a second consumer (it owns "Clear search history", which must
+ * invalidate `history` after the server delete) — the 2+-consumers promotion
+ * rule, and no cross-feature import.
+ */
+export const discoveryKeys = {
+  history: ['discovery', 'history'] as const,
+  /** Prefix matching every search key — for cancelQueries over all searches. */
+  searchPrefix: ['discovery', 'search'] as const,
+  search: (query: string) => ['discovery', 'search', query] as const,
+  suggest: (query: string) => ['discovery', 'suggest', query] as const,
+  /** Lyrics for one track, keyed on the (title, artist) pair the endpoint takes. */
+  lyrics: (title: string, artist: string) => ['discovery', 'lyrics', title, artist] as const,
+};
+
 export const playlistKeys = {
   /** The playlists list (`getPlaylists`). */
   list: ['playlists'] as const,

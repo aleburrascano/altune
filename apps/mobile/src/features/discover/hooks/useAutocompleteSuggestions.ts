@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { suggestDiscovery } from '@shared/api-client/discovery';
 
-import { discoveryKeys } from '../keys';
+import { discoveryKeys } from '@shared/lib/query-keys';
 
 export function useAutocompleteSuggestions(inputValue: string) {
   const trimmed = inputValue.trim().toLowerCase();

@@ -10,7 +10,7 @@ import { useState } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { isNetworkError } from '../lib/isNetworkError';
+import { isNetworkError } from '@shared/lib/isNetworkError';
 
 /** Must match a whitelisted path in parseAuthLink + a Supabase redirect URL. */
 export const RECOVERY_REDIRECT_URL = 'altune://auth/recovery';

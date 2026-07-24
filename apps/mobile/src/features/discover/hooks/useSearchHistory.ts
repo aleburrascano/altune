@@ -11,7 +11,7 @@ import {
   type DiscoverySearchHistoryResponse,
 } from '@shared/api-client/discovery';
 
-import { discoveryKeys } from '../keys';
+import { discoveryKeys } from '@shared/lib/query-keys';
 
 export function useSearchHistory() {
   return useQuery<DiscoverySearchHistoryResponse>({

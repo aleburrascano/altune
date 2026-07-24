@@ -2,7 +2,7 @@ import { type AddTrack } from 'react-native-track-player';
 
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { audioStreamUrl } from './api/audio';
+import { audioStreamUrl } from '@shared/api-client/audio';
 
 // AIDEV-NOTE: The single PlaybackTrack -> native AddTrack builder. `streamUrl`
 // overrides the URL — a resolved presigned URL (self-authorizing, so it carries

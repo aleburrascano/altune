@@ -17,7 +17,7 @@ import { useState } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { isNetworkError } from '../lib/isNetworkError';
+import { isNetworkError } from '@shared/lib/isNetworkError';
 
 /** Confirmation link target — whitelisted in parseAuthLink + Supabase redirects. */
 export const CONFIRM_REDIRECT_URL = 'altune://auth/confirm';
