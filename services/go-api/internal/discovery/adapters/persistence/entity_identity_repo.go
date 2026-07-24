@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -47,11 +48,18 @@ func (s *PgxIdentityStore) PersistBridges(
 		if provider == "" || externalID == "" {
 			continue
 		}
+		// xref merges (|| keeps old keys, new values win per key) so previously
+		// learned edges survive a partial re-learn — a later pass that bridged
+		// only {deezer} must not erase the {spotify, discogs} edges an earlier
+		// pass recorded. mbid stays last-write-wins; whether a CONFLICTING mbid
+		// should instead be rejected/flagged is an open question.
 		batch.Queue(
 			`INSERT INTO entity_identity (provider, external_id, kind, mbid, xref)
 			 VALUES ($1, $2, $3, $4, $5)
 			 ON CONFLICT (provider, external_id, kind)
-			 DO UPDATE SET mbid = EXCLUDED.mbid, xref = EXCLUDED.xref, resolved_at = now()`,
+			 DO UPDATE SET mbid = EXCLUDED.mbid,
+				xref = entity_identity.xref || EXCLUDED.xref,
+				resolved_at = now()`,
 			provider, externalID, kind.String(), mbid, blob,
 		)
 	}
@@ -90,7 +98,10 @@ func (s *PgxIdentityStore) LookupByProviderID(
 		return "", nil, false
 	}
 	if err != nil {
-		// A lookup failure must never break the search path; degrade to a miss.
+		// A lookup failure must never break the search path; degrade to a miss —
+		// but log it, so a real DB problem isn't indistinguishable from a miss.
+		slog.DebugContext(ctx, "identity.lookup_failed",
+			"kind", kind.String(), "provider", provider, "external_id", externalID, "error", err)
 		return "", nil, false
 	}
 
@@ -99,4 +110,25 @@ func (s *PgxIdentityStore) LookupByProviderID(
 		_ = json.Unmarshal(xrefBlob, &xref)
 	}
 	return mbid, xref, mbid != ""
+}
+
+// Invalidate deletes one recorded identity row. Deleting a row that does not
+// exist is a no-op, not an error. Purge/remediation surface only — see the port.
+func (s *PgxIdentityStore) Invalidate(
+	ctx context.Context,
+	kind domain.ResultKind,
+	provider, externalID string,
+) error {
+	if provider == "" || externalID == "" {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM entity_identity
+		 WHERE provider = $1 AND external_id = $2 AND kind = $3`,
+		provider, externalID, kind.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("invalidate identity: %w", err)
+	}
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/singleflight"
 )
@@ -62,7 +63,12 @@ func (r *amazonMusicSessionResolver) get(ctx context.Context) (*amazonMusicSessi
 		if existing != nil {
 			return existing, nil
 		}
-		return r.resolve(ctx)
+		// Detach from the winning caller's ctx so one impatient caller can't
+		// poison the shared resolve for every piggybacked waiter; the resolve
+		// gets its own budget instead.
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), amzResolveTimeout)
+		defer cancel()
+		return r.resolve(rctx)
 	})
 	if err != nil {
 		return nil, err
@@ -70,9 +76,18 @@ func (r *amazonMusicSessionResolver) get(ctx context.Context) (*amazonMusicSessi
 	return v.(*amazonMusicSession), nil
 }
 
-func (r *amazonMusicSessionResolver) invalidate() {
+// amzResolveTimeout bounds one shared session resolve (a single config.json
+// GET) independently of any single caller's deadline.
+const amzResolveTimeout = 10 * time.Second
+
+// invalidate drops the cached session only if it is still the one the caller
+// failed with — a second 401 handler must not wipe the fresh session the first
+// re-resolve just cached (the invalidate-storm case).
+func (r *amazonMusicSessionResolver) invalidate(failed *amazonMusicSession) {
 	r.mu.Lock()
-	r.cached = nil
+	if r.cached == failed {
+		r.cached = nil
+	}
 	r.mu.Unlock()
 }
 

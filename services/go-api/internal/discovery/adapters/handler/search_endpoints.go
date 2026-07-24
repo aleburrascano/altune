@@ -224,9 +224,11 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 	items := make([]SearchHistoryItemDTO, len(entries))
 	for i, e := range entries {
 		items[i] = SearchHistoryItemDTO{
-			Query:      e.Query,
-			QueryNorm:  e.QueryNorm,
-			ExecutedAt: e.ExecutedAt.Format("2006-01-02T15:04:05.000Z"),
+			Query:     e.Query,
+			QueryNorm: e.QueryNorm,
+			// .UTC() first: the layout hard-codes the Z designator, which would lie
+			// about a non-UTC time.
+			ExecutedAt: e.ExecutedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 		}
 	}
 
@@ -291,9 +293,10 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		ClientOccurredAt: clientOccurredAt,
 		Payload:          req.Payload,
 	}
+	// HandleServiceError renders service validation errors (StatusError → 400:
+	// non-client-submittable type, wrong payload value type) and 500s the rest.
 	if err := h.eventSvc.Execute(r.Context(), userId, input); err != nil {
-		slog.ErrorContext(r.Context(), "record event failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -320,6 +323,9 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	if sr.ISRC != "" {
 		extras["isrc"] = sr.ISRC
 	}
+	if sr.UPC != "" {
+		extras["upc"] = sr.UPC
+	}
 	if sr.MBID != "" {
 		extras["mbid"] = sr.MBID
 	}
@@ -338,6 +344,14 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	if sr.FanCount != 0 {
 		extras["nb_fan"] = sr.FanCount
 	}
+	// Prefer the signature stamped at rank time (pre-disambiguation): recomputing
+	// here after enrichment filled artist subtitles would drift from the key the
+	// behavioral score map uses (see domain.SearchResult.Signature). Compute only
+	// as a fallback for paths that never went through mergeRankEnrich.
+	signature := sr.Signature
+	if signature == "" {
+		signature = domain.ResultSignature(sr)
+	}
 	return SearchResultDTO{
 		Kind:            sr.Kind.String(),
 		Title:           sr.Title,
@@ -345,7 +359,7 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 		ImageURL:        sr.ImageURL,
 		ArtworkSource:   sr.ArtworkSource,
 		Confidence:      sr.Confidence.String(),
-		ResultSignature: domain.ResultSignature(sr),
+		ResultSignature: signature,
 		Sources:         sources,
 		Extras:          extras,
 	}

@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/url"
@@ -112,9 +113,22 @@ func (a *DeezerAdapter) lookupAlbumDetail(ctx context.Context, id string) (domai
 	return e, nil
 }
 
-// getJSON performs a GET and decodes the body into dst; a non-200 is an error.
+// getJSON performs a GET and decodes the body into dst; a non-200 is an error,
+// and so is Deezer's in-band {"error":{...}} envelope (quota exhaustion and
+// invalid ids ride on HTTP 200 — see deezerAPIError). Every public-API call in
+// deezer.go and this file routes through here.
 func (a *DeezerAdapter) getJSON(ctx context.Context, u string, dst any) error {
-	return getJSON(ctx, a.client, u, dst)
+	var raw json.RawMessage
+	if err := getJSON(ctx, a.client, u, &raw); err != nil {
+		return err
+	}
+	var envelope struct {
+		Error *deezerAPIError `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err == nil && envelope.Error != nil {
+		return envelope.Error
+	}
+	return json.Unmarshal(raw, dst)
 }
 
 // dedupeDeezerGenres pulls genre names from the `{data:[{name}]}` shape, trimmed,

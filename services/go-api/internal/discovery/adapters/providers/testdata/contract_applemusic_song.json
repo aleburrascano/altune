@@ -1,0 +1,25 @@
+{
+  "results": {
+    "songs": {"data": [{
+      "id": "1488408568",
+      "attributes": {
+        "name": "Blinding Lights",
+        "artistName": "The Weeknd",
+        "albumName": "After Hours",
+        "artwork": {"url": "https://example.com/{w}x{h}bb.jpg"},
+        "composerName": "Max Martin, Oscar Holter, Abel Tesfaye",
+        "genreNames": ["R&B/Soul", "Music"],
+        "durationInMillis": 201570,
+        "discNumber": 1,
+        "trackNumber": 1,
+        "hasLyrics": true,
+        "isAppleDigitalMaster": true,
+        "isrc": "USUG11904206",
+        "contentRating": "explicit",
+        "previews": [{"url": "https://audio-ssl.itunes.apple.com/preview.m4a"}],
+        "releaseDate": "2019-11-29",
+        "url": "https://music.apple.com/us/song/1488408568"
+      }
+    }]}
+  }
+}

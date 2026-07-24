@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -51,12 +52,19 @@ func (a *DeezerAdapter) SearchStructured(ctx context.Context, artist, track stri
 	return results, nil
 }
 
+// deezerStripQuotes removes embedded double quotes from a value interpolated
+// into the quoted advanced-search syntax — Deezer has no escape, so a name like
+// `The "Best" Band` would otherwise break the query.
+func deezerStripQuotes(s string) string {
+	return strings.ReplaceAll(s, `"`, "")
+}
+
 func deezerStructuredQuery(artist, track string, kind domain.ResultKind) string {
 	switch kind {
 	case domain.ResultKindTrack:
-		return fmt.Sprintf(`artist:"%s" track:"%s"`, artist, track)
+		return fmt.Sprintf(`artist:"%s" track:"%s"`, deezerStripQuotes(artist), deezerStripQuotes(track))
 	case domain.ResultKindAlbum:
-		return fmt.Sprintf(`artist:"%s" album:"%s"`, artist, track)
+		return fmt.Sprintf(`artist:"%s" album:"%s"`, deezerStripQuotes(artist), deezerStripQuotes(track))
 	case domain.ResultKindArtist:
 		return artist
 	default:
@@ -73,7 +81,7 @@ func (a *DeezerAdapter) searchKind(ctx context.Context, query string, kind domai
 	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=15&order=RANKING", endpoint, url.QueryEscape(query))
 
 	var body deezerSearchResponse
-	if err := getJSON(ctx, a.client, u, &body); err != nil {
+	if err := a.getJSON(ctx, u, &body); err != nil {
 		return nil, err
 	}
 
@@ -168,8 +176,22 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 
 // Deezer API response types
 
+// deezerAPIError is Deezer's in-band error envelope: quota exhaustion and
+// invalid ids come back as HTTP 200 with {"error":{...}} — without checking it,
+// a dead provider decodes as an empty success and looks healthy.
+type deezerAPIError struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+	Code    int    `json:"code"`
+}
+
+func (e *deezerAPIError) Error() string {
+	return fmt.Sprintf("deezer api error %d (%s): %s", e.Code, e.Type, e.Message)
+}
+
 type deezerSearchResponse struct {
 	Data []deezerItem `json:"data"`
+	Next string       `json:"next"` // URL of the next page; empty on the last page
 }
 
 type deezerItem struct {
@@ -220,7 +242,7 @@ func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 
 	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=1", endpoint, url.QueryEscape(query))
 	var body deezerSearchResponse
-	if err := getJSON(ctx, a.client, u, &body); err != nil {
+	if err := a.getJSON(ctx, u, &body); err != nil {
 		return "", nil
 	}
 	for _, item := range body.Data {
@@ -264,16 +286,39 @@ func (a *DeezerAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 	})
 }
 
+// deezerMaxDiscographyPages caps GetArtistAlbums pagination (100 per page →
+// 500 albums) so a provider bug can't loop forever.
+const deezerMaxDiscographyPages = 5
+
 func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=100", url.PathEscape(externalID))
-	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
-		return mapDeezerResult(item, domain.ResultKindAlbum)
-	})
+	var results []domain.SearchResult
+	for page := 0; page < deezerMaxDiscographyPages; page++ {
+		u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=100&index=%d",
+			url.PathEscape(externalID), page*100)
+		var body deezerSearchResponse
+		if err := a.getJSON(ctx, u, &body); err != nil {
+			// Depth is best-effort, presence is not: a later-page failure keeps the
+			// pages already fetched rather than discarding the whole discography.
+			if page > 0 {
+				slog.DebugContext(ctx, "deezer.artist_albums_page_failed",
+					"artist", externalID, "page", page, "error", err)
+				return results, nil
+			}
+			return nil, err
+		}
+		for _, item := range body.Data {
+			results = append(results, mapDeezerResult(item, domain.ResultKindAlbum))
+		}
+		if body.Next == "" {
+			break
+		}
+	}
+	return results, nil
 }
 
 func (a *DeezerAdapter) fetchList(ctx context.Context, u string, mapper func(deezerItem) domain.SearchResult) ([]domain.SearchResult, error) {
 	var body deezerSearchResponse
-	if err := getJSON(ctx, a.client, u, &body); err != nil {
+	if err := a.getJSON(ctx, u, &body); err != nil {
 		return nil, err
 	}
 
@@ -316,7 +361,7 @@ func (a *DeezerAdapter) fetchChartEntries(
 	kind string,
 ) ([]domain.VocabularyEntry, error) {
 	var body deezerSearchResponse
-	if err := getJSON(ctx, a.client, u, &body); err != nil {
+	if err := a.getJSON(ctx, u, &body); err != nil {
 		return nil, err
 	}
 	return mapDeezerChartItems(body.Data, kind), nil
@@ -384,7 +429,7 @@ func (a *DeezerAdapter) FetchTrackISRC(ctx context.Context, trackID string) (str
 	var detail struct {
 		ISRC string `json:"isrc"`
 	}
-	if err := getJSON(ctx, a.client, u, &detail); err != nil {
+	if err := a.getJSON(ctx, u, &detail); err != nil {
 		return "", nil
 	}
 	return detail.ISRC, nil
@@ -397,7 +442,7 @@ func (a *DeezerAdapter) FetchFirstTrackID(ctx context.Context, albumID string) (
 			ID int `json:"id"`
 		} `json:"data"`
 	}
-	if err := getJSON(ctx, a.client, u, &body); err != nil {
+	if err := a.getJSON(ctx, u, &body); err != nil {
 		return "", nil
 	}
 	if len(body.Data) == 0 {

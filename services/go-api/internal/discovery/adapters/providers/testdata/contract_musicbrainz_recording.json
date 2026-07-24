@@ -1,0 +1,8 @@
+{
+  "recordings": [{
+    "id": "abc-123-def",
+    "title": "Paranoid Android",
+    "isrcs": ["GBAYE9700011"],
+    "artist-credit": [{"name": "Radiohead"}]
+  }]
+}

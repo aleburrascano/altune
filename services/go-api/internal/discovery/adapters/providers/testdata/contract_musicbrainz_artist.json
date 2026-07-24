@@ -1,0 +1,12 @@
+{
+  "artists": [{
+    "id": "a74b1b7f-71a5-4011-9441-d0b5e4122711",
+    "name": "Radiohead",
+    "type": "Group",
+    "area": {"name": "Oxford"},
+    "tags": [
+      {"name": "alternative rock", "count": 15},
+      {"name": "electronic", "count": 8}
+    ]
+  }]
+}

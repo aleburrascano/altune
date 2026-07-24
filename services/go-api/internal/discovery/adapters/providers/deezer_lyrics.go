@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -91,14 +92,22 @@ func (a *DeezerLyricsAdapter) Lookup(ctx context.Context, trackID string) (domai
 		return domain.EmptyDeezerLyrics(), nil
 	}
 
-	body, status, err := a.postLyrics(ctx, trackID)
+	jwt, err := a.jwt.get(ctx)
+	if err != nil {
+		return domain.EmptyDeezerLyrics(), fmt.Errorf("deezer anonymous jwt: %w", err)
+	}
+	body, status, err := a.postLyrics(ctx, jwt, trackID)
 	if err != nil {
 		return domain.EmptyDeezerLyrics(), err
 	}
 	// One self-heal on an expired/rotated anonymous JWT.
 	if status == http.StatusUnauthorized {
-		a.jwt.invalidate()
-		body, status, err = a.postLyrics(ctx, trackID)
+		a.jwt.invalidate(jwt)
+		jwt, err = a.jwt.get(ctx)
+		if err != nil {
+			return domain.EmptyDeezerLyrics(), fmt.Errorf("deezer anonymous jwt: %w", err)
+		}
+		body, status, err = a.postLyrics(ctx, jwt, trackID)
 		if err != nil {
 			return domain.EmptyDeezerLyrics(), err
 		}
@@ -110,15 +119,10 @@ func (a *DeezerLyricsAdapter) Lookup(ctx context.Context, trackID string) (domai
 	return parseSynchronizedLyrics(body)
 }
 
-// postLyrics performs one authenticated SynchronizedLyrics POST and returns the
-// raw body + status. Bootstrap/transport failures are errors; an HTTP status
+// postLyrics performs one SynchronizedLyrics POST with the supplied JWT and
+// returns the raw body + status. Transport failures are errors; an HTTP status
 // (incl. 401) is returned to the caller to decide on self-heal.
-func (a *DeezerLyricsAdapter) postLyrics(ctx context.Context, trackID string) ([]byte, int, error) {
-	jwt, err := a.jwt.get(ctx)
-	if err != nil {
-		return nil, 0, fmt.Errorf("deezer anonymous jwt: %w", err)
-	}
-
+func (a *DeezerLyricsAdapter) postLyrics(ctx context.Context, jwt, trackID string) ([]byte, int, error) {
 	payload, err := json.Marshal(map[string]any{
 		"operationName": "SynchronizedLyrics",
 		"query":         synchronizedLyricsQuery,
@@ -251,7 +255,12 @@ func (r *deezerJWTResolver) get(ctx context.Context) (string, error) {
 		if existing != "" {
 			return existing, nil
 		}
-		return r.resolve(ctx)
+		// Detach from the winning caller's ctx so one impatient caller can't
+		// poison the shared resolve for every piggybacked waiter; the resolve
+		// gets its own budget instead.
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deezerJWTResolveTimeout)
+		defer cancel()
+		return r.resolve(rctx)
 	})
 	if err != nil {
 		return "", err
@@ -267,9 +276,18 @@ func (r *deezerJWTResolver) get(ctx context.Context) (string, error) {
 	return jwt, nil
 }
 
-func (r *deezerJWTResolver) invalidate() {
+// deezerJWTResolveTimeout bounds one shared anonymous-JWT resolve (a single
+// auth GET) independently of any single caller's deadline.
+const deezerJWTResolveTimeout = 10 * time.Second
+
+// invalidate drops the cached JWT only if it is still the one the caller
+// failed with — a second 401 handler must not wipe the fresh JWT the first
+// re-resolve just cached (the invalidate-storm case).
+func (r *deezerJWTResolver) invalidate(failed string) {
 	r.mu.Lock()
-	r.cached = ""
+	if r.cached == failed {
+		r.cached = ""
+	}
 	r.mu.Unlock()
 }
 

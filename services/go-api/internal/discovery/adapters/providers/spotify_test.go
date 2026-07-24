@@ -91,7 +91,10 @@ const spotifyFixtureResponse = `{
             "id": "4yP0hdKOZPNshxUOjY0cZj",
             "name": "After Hours",
             "uri": "spotify:album:4yP0hdKOZPNshxUOjY0cZj",
-            "coverArt": {"sources": [{"url": "https://example.com/album.jpg", "width": 300, "height": 300}]}
+            "type": "ALBUM",
+            "coverArt": {"sources": [{"url": "https://example.com/album.jpg", "width": 300, "height": 300}]},
+            "artists": {"items": [{"profile": {"name": "The Weeknd"}}]},
+            "date": {"year": 2020}
           }
         }]
       },
@@ -156,6 +159,15 @@ func TestSpotifyAdapter_Search_mapsAllKinds(t *testing.T) {
 	album := byKind[domain.ResultKindAlbum]
 	if len(album.Sources) != 1 || album.Sources[0].ExternalID != "4yP0hdKOZPNshxUOjY0cZj" {
 		t.Errorf("album source = %+v", album.Sources)
+	}
+	if album.Subtitle != "The Weeknd" {
+		t.Errorf("album.Subtitle = %q, want The Weeknd (first artist)", album.Subtitle)
+	}
+	if album.Year != 2020 {
+		t.Errorf("album.Year = %d, want 2020", album.Year)
+	}
+	if album.Extras["record_type"] != "album" {
+		t.Errorf("album record_type extra = %v, want %q (type lowercased)", album.Extras["record_type"], "album")
 	}
 
 	artist := byKind[domain.ResultKindArtist]

@@ -697,7 +697,7 @@ func buildArtistConsensus(ctx context.Context, deezer *providers.DeezerAdapter, 
 			return nil, artistID, fmt.Errorf("deezer artist albums: %w", err)
 		}
 	}
-	return svc.BuildConsensus(ctx, artistName, primaryAlbums), artistID, nil
+	return svc.BuildConsensus(ctx, artistName, domain.ProviderDeezer, artistID, primaryAlbums), artistID, nil
 }
 
 func consensusSingle(ctx context.Context, deezer *providers.DeezerAdapter, svc *discoveryService.ConsensusService, artistName string) error {

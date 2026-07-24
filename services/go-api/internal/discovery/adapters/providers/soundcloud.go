@@ -134,7 +134,7 @@ func (a *SoundCloudAPIAdapter) searchTracks(ctx context.Context, query string) (
 
 	results, status, err := a.doSearch(ctx, id, query)
 	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate()
+		a.resolver.invalidate(id)
 		id, err = a.resolver.get(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("re-resolve client_id: %w", err)
@@ -147,6 +147,10 @@ func (a *SoundCloudAPIAdapter) searchTracks(ctx context.Context, query string) (
 	return results, nil
 }
 
+// scMaxSearchPages caps the next_href walk — a server that keeps returning
+// empty pages with a next_href would otherwise spin until the ctx deadline.
+const scMaxSearchPages = 5
+
 // doSearch walks next_href pages until scMaxResults or no further page. Once the
 // first page has landed, a later-page error returns the partial set rather than
 // failing the whole search — depth is best-effort, presence is not.
@@ -157,7 +161,7 @@ func (a *SoundCloudAPIAdapter) doSearch(ctx context.Context, clientID, query str
 		a.baseURL, url.QueryEscape(query), url.QueryEscape(clientID), scSearchLimit,
 	)
 
-	for next != "" && len(results) < scMaxResults {
+	for page := 0; next != "" && len(results) < scMaxResults && page < scMaxSearchPages; page++ {
 		if ctx.Err() != nil {
 			break
 		}
@@ -243,7 +247,7 @@ func (a *SoundCloudAPIAdapter) resolveAndFetch(ctx context.Context, fetch func(c
 	}
 	status, err := fetch(id)
 	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate()
+		a.resolver.invalidate(id)
 		id, err = a.resolver.get(ctx)
 		if err != nil {
 			return fmt.Errorf("re-resolve client_id: %w", err)
@@ -356,7 +360,7 @@ func (a *SoundCloudAPIAdapter) ResolvePermalink(ctx context.Context, permalink s
 
 	result, status, err := a.doResolve(ctx, id, permalink)
 	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate()
+		a.resolver.invalidate(id)
 		id, err = a.resolver.get(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("re-resolve client_id: %w", err)
@@ -408,15 +412,27 @@ func (a *SoundCloudAPIAdapter) GetArtistTopTracks(ctx context.Context, _ domain.
 // and the album-tracks service falls back to a blind Deezer title search that
 // returns a DIFFERENT album (a single "14 HAHAHA LOL" showed "REST IN BASS").
 func (a *SoundCloudAPIAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	if tracks, err := a.fetchPlaylistTracks(ctx, externalID); err == nil && len(tracks) > 0 {
+	tracks, err := a.fetchPlaylistTracks(ctx, externalID)
+	if err == nil && len(tracks) > 0 {
 		return tracks, nil
+	}
+	// Fall through to the overlapping track-id namespace only on a definitive
+	// 404 (the id names a track, not a playlist) or an empty playlist — a
+	// transient failure (timeout, 5xx) must propagate, or it would resolve an
+	// unrelated single-track "tracklist".
+	if err != nil && !errors.Is(err, errSCNotFound) {
+		return nil, err
 	}
 	return a.fetchSingleAsTracklist(ctx, externalID)
 }
 
+// errSCNotFound marks a definitive api-v2 404 — the id does not name that kind
+// of resource — as opposed to a transient failure.
+var errSCNotFound = errors.New("soundcloud: not found")
+
 // fetchPlaylistTracks returns a SoundCloud playlist's member tracks (album/EP).
-// Errors (e.g. the id is a track, not a playlist → 404) so GetAlbumTracks can
-// fall back to the single-track path.
+// A 404 (the id is a track, not a playlist) is wrapped in errSCNotFound so
+// GetAlbumTracks can fall back to the single-track path; other errors propagate.
 func (a *SoundCloudAPIAdapter) fetchPlaylistTracks(ctx context.Context, playlistID string) ([]domain.SearchResult, error) {
 	var out []domain.SearchResult
 	err := a.resolveAndFetch(ctx, func(clientID string) (int, error) {
@@ -427,6 +443,9 @@ func (a *SoundCloudAPIAdapter) fetchPlaylistTracks(ctx context.Context, playlist
 		}
 		status, err := a.getJSON(ctx, u, &pl)
 		if err != nil {
+			if status == http.StatusNotFound {
+				return status, fmt.Errorf("playlist %s: %w", playlistID, errSCNotFound)
+			}
 			return status, err
 		}
 		out = make([]domain.SearchResult, 0, len(pl.Tracks))

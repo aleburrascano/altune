@@ -70,7 +70,12 @@ func (r *appleMusicTokenResolver) get(ctx context.Context) (string, error) {
 		if existing != "" && time.Now().Before(existingExpiry) {
 			return existing, nil
 		}
-		return r.resolve(ctx)
+		// Detach from the winning caller's ctx so one impatient caller can't
+		// poison the shared resolve for every piggybacked waiter; the resolve
+		// gets its own budget instead.
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), appleMusicResolveTimeout)
+		defer cancel()
+		return r.resolve(rctx)
 	})
 	if err != nil {
 		return "", err
@@ -78,9 +83,18 @@ func (r *appleMusicTokenResolver) get(ctx context.Context) (string, error) {
 	return v.(string), nil
 }
 
-func (r *appleMusicTokenResolver) invalidate() {
+// appleMusicResolveTimeout bounds one shared token resolve (page + multi-MB
+// bundle scrape) independently of any single caller's deadline.
+const appleMusicResolveTimeout = 20 * time.Second
+
+// invalidate drops the cached token only if it is still the one the caller
+// failed with — a second 401 handler must not wipe the fresh token the first
+// re-resolve just cached (the invalidate-storm case).
+func (r *appleMusicTokenResolver) invalidate(failed string) {
 	r.mu.Lock()
-	r.cached = ""
+	if r.cached == failed {
+		r.cached = ""
+	}
 	r.mu.Unlock()
 }
 

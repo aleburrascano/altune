@@ -1,0 +1,15 @@
+{
+  "data": [{
+    "id": 123456,
+    "title": "Bohemian Rhapsody",
+    "link": "https://www.deezer.com/track/123456",
+    "duration": 355,
+    "isrc": "GBAYE7500101",
+    "rank": 150000,
+    "explicit_lyrics": false,
+    "preview": "https://cdns-preview.dzcdn.net/stream/c-preview.mp3",
+    "artist": {"id": 1, "name": "Queen"},
+    "album": {"id": 10, "title": "A Night at the Opera", "cover_big": "https://cdn.deezer.com/cover_big.jpg", "cover_xl": "https://cdn.deezer.com/cover_xl.jpg"}
+  }],
+  "total": 1
+}

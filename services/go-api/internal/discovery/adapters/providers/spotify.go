@@ -79,7 +79,7 @@ func (a *SpotifyAdapter) Search(ctx context.Context, query string, kinds map[dom
 
 	results, status, err := a.doSearch(ctx, sess, query)
 	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate()
+		a.resolver.invalidate(sess)
 		sess, err = a.resolver.get(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("re-resolve spotify session: %w", err)
@@ -282,9 +282,20 @@ type spotifyAlbumData struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	URI      string `json:"uri"`
+	Type     string `json:"type"` // ALBUM|SINGLE|COMPILATION|EP
 	CoverArt struct {
 		Sources []spotifyImage `json:"sources"`
 	} `json:"coverArt"`
+	Artists struct {
+		Items []struct {
+			Profile struct {
+				Name string `json:"name"`
+			} `json:"profile"`
+		} `json:"items"`
+	} `json:"artists"`
+	Date struct {
+		Year int `json:"year"`
+	} `json:"date"`
 }
 
 type spotifyArtistData struct {
@@ -359,10 +370,25 @@ func mapSpotifyAlbum(al spotifyAlbumData) (domain.SearchResult, bool) {
 	if id == "" {
 		id = spotifyIDFromURI(al.URI)
 	}
-	return domain.NewProviderResult(domain.ResultKindAlbum, al.Name, "",
+	artist := ""
+	if len(al.Artists.Items) > 0 {
+		artist = al.Artists.Items[0].Profile.Name
+	}
+	// type is ALBUM|SINGLE|COMPILATION|EP — lowercased to the record_type key
+	// NormalizeRecordType expects, same mapping the discography path uses
+	// (spotify_content.go).
+	var extras map[string]any
+	if rt := strings.ToLower(al.Type); rt != "" {
+		extras = map[string]any{"record_type": rt}
+	}
+	r := domain.NewProviderResult(domain.ResultKindAlbum, al.Name, artist,
 		spotifyBestImage(al.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: id, URL: "https://open.spotify.com/album/" + id},
-		nil), true
+		extras)
+	if al.Date.Year > 0 {
+		r.Year = al.Date.Year
+	}
+	return r, true
 }
 
 func mapSpotifyArtist(ar spotifyArtistData) (domain.SearchResult, bool) {

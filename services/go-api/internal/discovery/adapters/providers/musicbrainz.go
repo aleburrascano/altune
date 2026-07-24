@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
@@ -24,6 +26,7 @@ type MusicBrainzAdapter struct {
 
 	identityMemo *mbMemo[*ports.ArtistIdentity]
 	releaseMemo  *mbMemo[[]mbReleaseGroup]
+	releaseSF    singleflight.Group
 }
 
 // mbMemoTTL bounds how long stable MB lookups (artist identity by name,
@@ -142,12 +145,19 @@ func (a *MusicBrainzAdapter) SearchStructured(ctx context.Context, artist, track
 	return results, nil
 }
 
+// mbEscapeQuotes backslash-escapes embedded double quotes in a value
+// interpolated into a quoted Lucene term — an unescaped quote in an artist or
+// track name would otherwise break the query syntax.
+func mbEscapeQuotes(s string) string {
+	return strings.ReplaceAll(s, `"`, `\"`)
+}
+
 func mbStructuredQuery(artist, track string, kind domain.ResultKind) string {
 	switch kind {
 	case domain.ResultKindTrack:
-		return fmt.Sprintf(`artist:"%s" AND recording:"%s"`, artist, track)
+		return fmt.Sprintf(`artist:"%s" AND recording:"%s"`, mbEscapeQuotes(artist), mbEscapeQuotes(track))
 	case domain.ResultKindAlbum:
-		return fmt.Sprintf(`artist:"%s" AND release:"%s"`, artist, track)
+		return fmt.Sprintf(`artist:"%s" AND release:"%s"`, mbEscapeQuotes(artist), mbEscapeQuotes(track))
 	case domain.ResultKindArtist:
 		return artist
 	default:
@@ -168,7 +178,7 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		withHeader("User-Agent", a.userAgent),
 		withHeader("Accept", "application/json"))
 	if err != nil {
-		return nil, fmt.Errorf("musicbrainz returned %d", status)
+		return nil, fmt.Errorf("musicbrainz status %d: %w", status, err)
 	}
 
 	var results []domain.SearchResult
@@ -357,7 +367,8 @@ type mbLifeSpan struct {
 }
 
 type mbReleaseGroupResponse struct {
-	ReleaseGroups []mbReleaseGroup `json:"release-groups"`
+	ReleaseGroups     []mbReleaseGroup `json:"release-groups"`
+	ReleaseGroupCount int              `json:"release-group-count"`
 }
 
 type mbReleaseGroup struct {
@@ -583,20 +594,54 @@ func (a *MusicBrainzAdapter) ReleaseGroupTitles(ctx context.Context, mbid string
 	return titles, nil
 }
 
+// mbMaxReleaseGroupPages caps release-group browse pagination (100 per page →
+// 500 release-groups) so a provider bug can't loop forever. Pages are fetched
+// sequentially through getJSON, so the shared rateLimit pacing applies.
+const mbMaxReleaseGroupPages = 5
+
 func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {
 	if rgs, ok := a.releaseMemo.get(mbid); ok {
 		return rgs, nil
 	}
-	u := fmt.Sprintf(
-		"https://musicbrainz.org/ws/2/release-group?artist=%s&type=album%%7Cep%%7Csingle&fmt=json&limit=100",
-		url.QueryEscape(mbid))
-
-	var body mbReleaseGroupResponse
-	if err := a.getJSON(ctx, u, &body); err != nil {
+	// Singleflight per MBID: two concurrent detail-opens for the same artist
+	// would otherwise both paginate through the 1 req/s limiter (~10s each).
+	v, err, _ := a.releaseSF.Do(mbid, func() (any, error) {
+		if rgs, ok := a.releaseMemo.get(mbid); ok {
+			return rgs, nil
+		}
+		return a.fetchReleaseGroupPages(ctx, mbid)
+	})
+	if err != nil {
 		return nil, err
 	}
-	a.releaseMemo.put(mbid, body.ReleaseGroups)
-	return body.ReleaseGroups, nil
+	return v.([]mbReleaseGroup), nil
+}
+
+func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {
+	var all []mbReleaseGroup
+	for page := 0; page < mbMaxReleaseGroupPages; page++ {
+		u := fmt.Sprintf(
+			"https://musicbrainz.org/ws/2/release-group?artist=%s&type=album%%7Cep%%7Csingle&fmt=json&limit=100&offset=%d",
+			url.QueryEscape(mbid), page*100)
+
+		var body mbReleaseGroupResponse
+		if err := a.getJSON(ctx, u, &body); err != nil {
+			// Depth is best-effort, presence is not: keep the pages already fetched,
+			// and skip the memo so the truncated set is not reused for 6h.
+			if page > 0 {
+				slog.DebugContext(ctx, "mb.release_groups_page_failed",
+					"mbid", mbid, "page", page, "error", err)
+				return all, nil
+			}
+			return nil, err
+		}
+		all = append(all, body.ReleaseGroups...)
+		if len(body.ReleaseGroups) == 0 || len(all) >= body.ReleaseGroupCount {
+			break
+		}
+	}
+	a.releaseMemo.put(mbid, all)
+	return all, nil
 }
 
 // LookupAlbumArtist searches MusicBrainz for a release-group matching
@@ -608,7 +653,7 @@ func (a *MusicBrainzAdapter) LookupAlbumArtist(
 	artistName, albumTitle string,
 	profile domain.ArtistIdentityProfile,
 ) (domain.AlbumVerdict, string, error) {
-	q := fmt.Sprintf(`release-group:"%s" AND artist:"%s"`, albumTitle, artistName)
+	q := fmt.Sprintf(`release-group:"%s" AND artist:"%s"`, mbEscapeQuotes(albumTitle), mbEscapeQuotes(artistName))
 	u := fmt.Sprintf(
 		"https://musicbrainz.org/ws/2/release-group/?query=%s&fmt=json&limit=5",
 		url.QueryEscape(q),

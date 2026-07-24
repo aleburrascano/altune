@@ -18,6 +18,7 @@ func TestLastFmAdapter_Search_Tracks(t *testing.T) {
 					"track": [{
 						"name": "Small Talk",
 						"artist": "Katy Perry",
+						"mbid": "6c9d9e5f-25cc-4e3a-9d3a-3a4b7d2f1a01",
 						"url": "https://www.last.fm/music/Katy+Perry/_/Small+Talk",
 						"listeners": "1234567",
 						"image": [
@@ -74,6 +75,9 @@ func TestLastFmAdapter_Search_Tracks(t *testing.T) {
 	if r.Extras["listeners"] != "1234567" {
 		t.Errorf("extras.listeners: got %v, want %q", r.Extras["listeners"], "1234567")
 	}
+	if r.MBID != "6c9d9e5f-25cc-4e3a-9d3a-3a4b7d2f1a01" {
+		t.Errorf("MBID: got %q, want the fixture mbid", r.MBID)
+	}
 }
 
 func TestLastFmAdapter_Search_Artists(t *testing.T) {
@@ -84,6 +88,7 @@ func TestLastFmAdapter_Search_Artists(t *testing.T) {
 				"artistmatches": {
 					"artist": [{
 						"name": "The Weeknd",
+						"mbid": "c8b03190-306c-4120-bb0b-6f2ebfc06ea9",
 						"url": "https://www.last.fm/music/The+Weeknd",
 						"listeners": "9876543",
 						"image": [
@@ -123,6 +128,60 @@ func TestLastFmAdapter_Search_Artists(t *testing.T) {
 	}
 	if r.Extras["listeners"] != "9876543" {
 		t.Errorf("extras.listeners: got %v, want %q", r.Extras["listeners"], "9876543")
+	}
+	if r.MBID != "c8b03190-306c-4120-bb0b-6f2ebfc06ea9" {
+		t.Errorf("MBID: got %q, want the fixture mbid", r.MBID)
+	}
+}
+
+func TestLastFmAdapter_Search_Albums_DoesNotStampReleaseMBID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"results": {
+				"albummatches": {
+					"album": [{
+						"name": "OK Computer",
+						"artist": "Radiohead",
+						"mbid": "0b6b4ba0-d36f-47bd-b4ea-6a5b91842d29",
+						"url": "https://www.last.fm/music/Radiohead/OK+Computer",
+						"image": [
+							{"#text": "https://lastfm.freetls.fastly.net/album-small.png", "size": "small"},
+							{"#text": "https://lastfm.freetls.fastly.net/album-xl.png", "size": "extralarge"}
+						]
+					}]
+				}
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	adapter := NewLastFmAdapter(newTestClient(server.URL), "test-api-key")
+	results, err := adapter.Search(context.Background(), "ok computer", map[domain.ResultKind]bool{
+		domain.ResultKindAlbum: true,
+	})
+	if err != nil {
+		t.Fatalf("Search returned error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	r := results[0]
+	if r.Kind != domain.ResultKindAlbum {
+		t.Errorf("kind: got %v, want %v", r.Kind, domain.ResultKindAlbum)
+	}
+	if r.Title != "OK Computer" {
+		t.Errorf("title: got %q, want %q", r.Title, "OK Computer")
+	}
+	if r.Subtitle != "Radiohead" {
+		t.Errorf("subtitle: got %q, want %q", r.Subtitle, "Radiohead")
+	}
+	// Last.fm album-search mbids are RELEASE MBIDs; MusicBrainz album results
+	// carry RELEASE-GROUP MBIDs — different UUID namespaces, so stamping the
+	// release mbid makes the MBID hard-stop block every MB↔Last.fm album merge.
+	if r.MBID != "" {
+		t.Errorf("MBID: got %q, want empty (release-namespace mbid must not be stamped)", r.MBID)
 	}
 }
 

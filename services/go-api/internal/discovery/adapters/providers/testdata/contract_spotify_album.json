@@ -1,0 +1,21 @@
+{
+  "data": {
+    "searchV2": {
+      "tracksV2": {"items": []},
+      "albumsV2": {
+        "items": [{
+          "data": {
+            "id": "4yP0hdKOZPNshxUOjY0cZj",
+            "name": "After Hours",
+            "uri": "spotify:album:4yP0hdKOZPNshxUOjY0cZj",
+            "type": "ALBUM",
+            "coverArt": {"sources": [{"url": "https://example.com/album.jpg", "width": 300, "height": 300}]},
+            "artists": {"items": [{"profile": {"name": "The Weeknd"}}]},
+            "date": {"year": 2020}
+          }
+        }]
+      },
+      "artists": {"items": []}
+    }
+  }
+}

@@ -55,7 +55,7 @@ func (a *AppleMusicAdapter) fetchCatalog(ctx context.Context, u string, out any)
 	}
 	status, err := a.doCatalogGet(ctx, token, u, out)
 	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate()
+		a.resolver.invalidate(token)
 		token, err = a.resolver.get(ctx)
 		if err != nil {
 			return fmt.Errorf("re-resolve apple music token: %w", err)
