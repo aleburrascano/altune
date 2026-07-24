@@ -45,6 +45,7 @@ func TestResultKind_String(t *testing.T) {
 		kind ResultKind
 		want string
 	}{
+		{ResultKindUnknown, "unknown"},
 		{ResultKindArtist, "artist"},
 		{ResultKindAlbum, "album"},
 		{ResultKindTrack, "track"},
@@ -125,6 +126,7 @@ func TestEntityResolutionTier_String(t *testing.T) {
 		{EntityResolutionMBID, "mbid"},
 		{EntityResolutionISRC, "isrc"},
 		{EntityResolutionUPC, "upc"},
+		{EntityResolutionBridge, "bridge"},
 		{EntityResolutionNone, "none"},
 		{EntityResolutionTier(999), "unknown"},
 	}
@@ -144,6 +146,7 @@ func TestProviderName_String(t *testing.T) {
 		provider ProviderName
 		want     string
 	}{
+		{ProviderUnknown, "unknown"},
 		{ProviderDeezer, "deezer"},
 		{ProviderMusicBrainz, "musicbrainz"},
 		{ProviderSoundCloud, "soundcloud"},
