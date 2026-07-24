@@ -47,7 +47,7 @@ flowchart LR
         direction TB
         TAP["seed · one provider id"] --> RID["resolveArtistIdentity<br/>read IdentityStore"]
         RID --> FID["fan-out by ID<br/>each provider's own id"]
-        FID --> V2["best-of merge → keep → verify → bucket"]
+        FID --> V2["verify → best-of merge → keep → bucket"]
         V2 --> DR["discography · top-tracks"]
     end
     ST -. "write bridge · (provider,id) → MBID+xref" .-> IDS[("IdentityStore<br/>Postgres + Redis 30d")]
@@ -126,9 +126,9 @@ The composition root builds the object graph (`internal/app`, see
   stay shared — per-client limiters would let N providers each hit N× a host's
   limit and get the prod IP throttled. Eval/replay inject a recording transport
   through the same seam.
-- **Two MusicBrainz adapter instances exist** (one in the discovery content wiring,
-  one inside the search-service builder). Rate safety holds because pacing lives in
-  the shared transport, not the adapter.
+- **Several MusicBrainz adapter instances exist** (discovery content wiring, the
+  search-service builder, the provider and consensus builders). Rate safety holds
+  because pacing lives in the shared transport, not the adapter.
 
 ---
 
@@ -140,7 +140,7 @@ field groups encode the philosophy:
 | Group | Fields | Why typed |
 |---|---|---|
 | Display | `Kind`, `Title`, `Subtitle`, `ImageURL`, `ArtworkSource` | rendered; `ArtworkSource` records *where* the image resolved for coverage telemetry |
-| Identity | `ISRC`, `MBID`, `Xref` (provider→id bridge) | `Merge`'s tiers branch on them — compile-checked |
+| Identity | `ISRC`, `UPC` (album barcode), `MBID`, `Xref` (provider→id bridge) | `Merge`'s tiers branch on them — compile-checked |
 | Ranking | `Popularity` (**inert**, see §11), `FanCount`, `ProviderRank` | `Rank`'s tiebreaks read them directly |
 | Metadata | `Year`, `ReleaseDate`, `TrackCount`, `Album`, `Duration`, `DeezerAlbumID` | consensus / discography ordering / relevance-tail read them |
 | Provenance | `Sources []SourceRef` (provider + external id + url), `Confidence` | union of contributing providers; `Confidence` is display-only |
@@ -243,7 +243,9 @@ values. `sameEntity` decides identity strictly by tier, strongest first:
 flowchart TD
     A["two candidate results"] --> ISRC{"same ISRC?"}
     ISRC -->|yes| MI["MERGE · tier ISRC"]
-    ISRC -->|no| MBID{"MBID?"}
+    ISRC -->|no| UPC{"albums · same UPC?"}
+    UPC -->|yes| MU["MERGE · tier UPC"]
+    UPC -->|"no · positive-only, never blocks"| MBID{"MBID?"}
     MBID -->|same| MM["MERGE · tier MBID"]
     MBID -->|mismatched| HN["NOT the same · hard stop"]
     MBID -->|"neither has one"| BR{"Xref bridge match?"}
@@ -257,10 +259,18 @@ flowchart TD
 Strongest tier first:
 
 ```
-ISRC exact  →  shared MBID (a MISMATCHED MBID is a hard "not the same")
+ISRC exact  →  UPC exact (albums only; a mismatch is NOT disproof — editions
+               differ — so unlike MBID it never blocks)
+            →  shared MBID (a MISMATCHED MBID is a hard "not the same")
             →  cross-provider bridge (a stamped Xref present on ≥1 side)
             →  bare canonical name (artists) / exact canonical title+subtitle (tracks, albums)
 ```
+
+The UPC tier follows the Popularity pattern — machinery live and tested while the
+producer set grows: Apple Music search albums are the one search-fan-out producer
+today (SoundCloud `publisher_metadata.upc_or_ean` and Deezer `/album/{id}` are
+candidates). Last.fm search results carry their MusicBrainz `mbid` on all three
+kinds (decoded 2026-07-23), feeding the MBID tier from a second provider.
 
 There is deliberately **no fuzzy threshold and no version-marker vocabulary** —
 canonical normalization is the one structural definition of "same title."
@@ -353,12 +363,15 @@ flowchart TD
     STORE -->|yes| RID["resolveArtistIdentity<br/>MBID + providerIDs · seed always kept"]
     RID --> FAN["fanOutByIdentity<br/>each provider by ITS OWN id · never a name"]
     FAN -->|"empty fan-out"| FB
-    FAN --> MR["MergeReleases · field-level best-of"]
+    FAN --> KIND{"albums or tracks?"}
+    KIND -->|albums| MBA["FilterGroupsByMBAnchor · PRE-merge<br/>drop provider groups barely overlapping MB · fail-open"]
+    KIND -->|tracks| MR2["MergeReleases · field-level best-of"]
+    MBA --> MR["MergeReleases · field-level best-of"]
     MR --> FK["FilterKept · keep iff IDVerified"]
-    FK --> KIND{"albums or tracks?"}
-    KIND -->|albums| MBA["FilterGroupsByMBAnchor<br/>drop groups barely overlapping MB · fail-open"]
-    KIND -->|tracks| COH["FilterCohesive<br/>drop single-source islands"]
-    MBA --> BUCK["NormalizeRecordType + Bucket<br/>+ year normalize + sort newest-first"]
+    MR2 --> FK2["FilterKept · keep iff IDVerified"]
+    FK --> COH1["FilterCohesive"]
+    FK2 --> COH["FilterCohesive<br/>drop single-source islands"]
+    COH1 --> BUCK["NormalizeRecordType + Bucket<br/>+ year normalize + sort newest-first"]
     COH --> ORD["order most-corroborated first"]
     BUCK --> O1["discography"]
     ORD --> O2["top tracks"]
@@ -383,7 +396,12 @@ its own id.
 ### 5.2 The V2 cores (four pure functions)
 
 `v2Albums` / `v2TopTracks` assemble tagged `ReleaseGroup`s from the id fan-out
-(all `IDVerified`) and pass them through pure, exhaustively-tested cores:
+(all `IDVerified`) and pass them through pure, exhaustively-tested cores. Order
+matters and differs from the numbering below on one point: for **albums** the MB
+anchor (step 3) runs **first, on the raw pre-merge provider groups** — it drops a
+whole mis-bridged provider group before best-of merge can absorb its fields —
+then merge → keep → cohesion. Albums get **both** the anchor and cohesion;
+top-tracks get cohesion only.
 
 1. **`MergeReleases`** (`release_merge.go`) — field-level **best-of** across every
    provider that returned a release. A cover, year, or track-count from *any* source
@@ -528,6 +546,8 @@ contamination-prone):
 | Amazon Music | ✅ | ❌ not wired | — | — |
 | Discogs | — | — | ✅ name | ✅ (id) |
 | TheAudioDB | — | — | — | ✅ (id) |
+| Fanart.tv | — | — | — | ✅ (MBID) |
+| Genius | — | — | — | ✅ name (last) |
 
 Per-provider notes worth carrying:
 
@@ -565,7 +585,9 @@ Per-provider notes worth carrying:
   same-name contamination. This MB-*veto* is the legacy path, still used by the
   detail single-provider fallback; the V2 discography core replaces it with
   corroboration-based keeping (§5.2). `NameGroups` exposes the raw by-name provider
-  albums as the completeness feed for V2. The per-artist result is cached behind a
+  albums, but the V2 path passes `includeNameGroups=false` at both call sites — the
+  by-name completeness feed is a dormant seam, consumed today only by the
+  single-provider fallback/consensus path. The per-artist result is cached behind a
   pluggable name-keyed cache (Redis, 6h; a no-op default that recomputes correctly
   when unwired).
 
@@ -617,12 +639,13 @@ Thin chi handlers (`adapters/handler/`) that parse → call service → map to D
 ```
 GET  /v1/discovery/search?q=&kinds=&limit=
 GET  /v1/discovery/suggest?q=
-GET  /v1/discovery/history          POST/DELETE history
-GET  /v1/discovery/artists/{provider}/{id}/albums?name=&limit=
-GET  /v1/discovery/artists/{provider}/{id}/top-tracks?name=&limit=
-GET  /v1/discovery/albums/{provider}/{id}/tracks?title=&artist=&limit=
-GET  /v1/discovery/tracks/{provider}/{id}/related?limit=
-GET  /v1/discovery/enrichment[/lastfm|/deezer]?kind=&title=&subtitle=&mbid=
+GET/DELETE /v1/discovery/search-history   (written as a side-effect of search — no POST)
+GET  /v1/discovery/artists/{provider}/{externalId}/albums?name=&limit=
+GET  /v1/discovery/artists/{provider}/{externalId}/top-tracks?name=&limit=
+GET  /v1/discovery/albums/{provider}/{externalId}/tracks?title=&artist=&limit=
+GET  /v1/discovery/tracks/{provider}/{externalId}/related?limit=
+GET  /v1/discovery/enrichment[/lastfm|/deezer|/discogs|/discogs/artist]?kind=&title=&subtitle=&mbid=
+GET  /v1/discovery/lyrics
 POST /v1/discovery/events
 ```
 
@@ -665,7 +688,10 @@ the eval harness.
 
 `cmd/discoveryeval` runs the *real* pipeline in-process (`app.BuildSearchService`,
 the single construction site so eval never drifts from production) against cloned
-prod data, nightly rather than per-commit. Every gated mode flows through one
+prod data, nightly rather than per-commit — the scheduled runner is
+`.github/workflows/discovery-eval-nightly.yml` (the gated modes vs
+`baselines.json`, ntfy alert on regression); the per-PR
+`discovery-eval-gate.yml` runs only the deterministic provider-free tests. Every gated mode flows through one
 spine: run → write JSON → render → gate headline metrics against a committed
 `baselines.json` → print failure slices → exit non-zero on regression.
 
@@ -771,15 +797,20 @@ current state → tension → candidate direction.
    *directly* why album/single/EP bucketing is "good, not perfect," and why a
    bridged card whose native-typed provider group was dropped by the anchor can show
    coarser buckets and blank years. Two threads: (a) squeeze every displayable field
-   out of each provider's payload at extraction time; (b) derive `record_type` from a
-   reliable track-count rather than trusting provider labels. Artwork resolution is
-   also left on the table (several providers serve far higher resolution than is
-   requested).
+   out of each provider's payload at extraction time (2026-07-23: Spotify search
+   albums now carry artist/year/record_type; Apple search results carry
+   preview/explicit; Deezer/MB/Spotify discography fetches now paginate past page
+   one); (b) derive `record_type` from a reliable track-count rather than trusting
+   provider labels. Artwork: Apple search art now requests 1000px (was 500);
+   SoundCloud still caps at 500 where 1080/original exist.
 
 7. **Providers absent from the content fan-out.** YouTube Music and Amazon Music are
-   in search (and YT in consensus) but not the detail fan-out — even though YT maps a
-   usable year. Adding them needs their id to be bridgeable; otherwise they inherit
-   SoundCloud's name-resolve problem.
+   in search (and YT in consensus) but not the detail fan-out. YTM's content
+   methods are **by-name** (a filtered search — its `GetArtistTopTracks` was
+   deleted as dead 2026-07-23; `GetArtistAlbums` survives for the by-name
+   consensus union only), so joining the id fan-out requires a genuinely
+   id-keyed fetch (the album `browse` endpoint) plus a bridgeable id; otherwise
+   they inherit SoundCloud's name-resolve problem.
 
 8. **The client's multi-seed union.** The backend is now authoritative and complete,
    but the mobile client still fans out to several seed providers and merges them
