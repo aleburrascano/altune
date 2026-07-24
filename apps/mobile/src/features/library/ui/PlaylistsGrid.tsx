@@ -4,24 +4,34 @@ import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'reac
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
+import { cellSize, coverColumns } from './gridColumns';
 import { PlaylistCover } from './PlaylistCover';
+import type { ListRefresh } from './refresh';
 
 type Cell = { kind: 'create' } | { kind: 'playlist'; playlist: PlaylistResponse };
 
 type PlaylistsGridProps = {
   playlists: PlaylistResponse[];
+  refresh: ListRefresh;
   onPlaylistPress: (playlist: PlaylistResponse) => void;
   onCreatePress: () => void;
 };
 
 export function PlaylistsGrid({
   playlists,
+  refresh,
   onPlaylistPress,
   onCreatePress,
 }: PlaylistsGridProps): ReactElement {
   const theme = useTheme();
   const { width } = useWindowDimensions();
-  const coverSize = Math.floor((width - spacing.lg * 2 - spacing.md) / 2);
+  const columns = coverColumns(width);
+  const coverSize = cellSize({
+    width,
+    columns,
+    horizontalPadding: spacing.lg,
+    gap: spacing.md,
+  });
 
   const data: Cell[] = [
     { kind: 'create' },
@@ -82,10 +92,14 @@ export function PlaylistsGrid({
       testID="library-playlists-grid"
       data={data}
       keyExtractor={(item) => (item.kind === 'create' ? 'create' : item.playlist.id)}
-      numColumns={2}
+      // Remount on column change: FlatList cannot change numColumns in place.
+      key={`cols-${columns}`}
+      numColumns={columns}
       columnWrapperStyle={styles.gridRow}
       contentContainerStyle={styles.list}
       showsVerticalScrollIndicator={false}
+      onRefresh={refresh.onRefresh}
+      refreshing={refresh.refreshing}
       renderItem={renderItem}
     />
   );

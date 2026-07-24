@@ -14,6 +14,7 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { TrackResponse } from '@shared/api-client/types';
@@ -38,7 +39,13 @@ export function PlaylistDetailScreen(): ReactElement {
   const [editName, setEditName] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
 
-  const { data: playlistData, isLoading: playlistLoading, error: playlistError } = useQuery({
+  const {
+    data: playlistData,
+    isLoading: playlistLoading,
+    isRefetching: playlistRefetching,
+    error: playlistError,
+    refetch: refetchPlaylist,
+  } = useQuery({
     queryKey: playlistKeys.detail(playlistId),
     queryFn: () => getPlaylist(playlistId),
     enabled: playlistId.length > 0,
@@ -53,6 +60,9 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const pinnedEntries = usePinnedStore((s) => s.entries);
+  const pinMany = usePinnedStore((s) => s.pinMany);
+  const unpin = usePinnedStore((s) => s.unpin);
   const retryMut = useRetryAcquisition();
   const retryingTrackId = retryMut.isPending ? retryMut.variables : undefined;
   const { navigateToTrack } = useLibraryNavigation(router);
@@ -158,6 +168,29 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const pl = playlistData;
 
+  // Only `ready` tracks have server-side audio to download; a playlist of
+  // still-acquiring tracks would otherwise offer an action that does nothing.
+  const downloadableIds = pl.tracks
+    .filter((t) => t.acquisition_status === 'ready')
+    .map((t) => t.id);
+  const pinnedCount = downloadableIds.filter((id) => pinnedEntries[id]?.status === 'ready').length;
+  const allPinned = downloadableIds.length > 0 && pinnedCount === downloadableIds.length;
+  const offlineAction =
+    downloadableIds.length === 0
+      ? { label: 'Nothing to download yet', onPress: () => {} }
+      : allPinned
+        ? {
+            label: 'Remove downloads',
+            onPress: () => downloadableIds.forEach((id) => unpin(id)),
+          }
+        : {
+            label:
+              pinnedCount > 0
+                ? `Download rest (${downloadableIds.length - pinnedCount})`
+                : `Download all (${downloadableIds.length})`,
+            onPress: () => pinMany(downloadableIds),
+          };
+
   return (
     <Screen padded={false}>
       <LinearGradient
@@ -176,6 +209,7 @@ export function PlaylistDetailScreen(): ReactElement {
         anchorTop={insets.top + spacing.xs + 44 + spacing.xs}
         items={[
           { label: 'Rename Playlist', onPress: startEditing },
+          offlineAction,
           { label: 'Delete Playlist', onPress: handleDelete, tone: 'danger' },
         ]}
       />
@@ -184,6 +218,10 @@ export function PlaylistDetailScreen(): ReactElement {
         data={pl.tracks}
         keyExtractor={(t) => t.id}
         showsVerticalScrollIndicator={false}
+        onRefresh={() => {
+          void refetchPlaylist();
+        }}
+        refreshing={playlistRefetching}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <PlaylistHero

@@ -1,9 +1,10 @@
-import { useRef, type ReactElement } from 'react';
+import { memo, useRef, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { MoreVertical } from 'lucide-react-native';
+import { ArrowDownCircle, CircleCheck, MoreVertical } from 'lucide-react-native';
 
 import { useDownloadPhase } from '@shared/acquisition/downloadStore';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { phaseLabel } from '@shared/acquisition/stagePhase';
 import { withFeaturing } from '@shared/lib/featured';
 import { formatDuration } from '@shared/lib/format';
@@ -24,7 +25,7 @@ type LibraryRowProps = {
   isPlaying?: boolean;
 };
 
-export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, isPlaying }: LibraryRowProps): ReactElement {
+function LibraryRowImpl({ track, onPlay, onPress, onMore, onRetry, retrying, isPlaying }: LibraryRowProps): ReactElement {
   const theme = useTheme();
   const moreRef = useRef<View>(null);
   const { width: windowWidth } = useWindowDimensions();
@@ -40,12 +41,17 @@ export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, 
     });
   };
   const phase = useDownloadPhase(track.id);
+  // Offline availability, distinct from acquisition: `phase` is the SERVER
+  // fetching the audio, this is a copy on THIS device.
+  const pinned = usePinnedStore((s) => s.entries[track.id]?.status);
   const isReady = track.acquisition_status === 'ready';
   const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
   const retryLabel = retrying ? ', retrying' : onRetry != null ? ', retry available' : '';
   const failedLabel = track.acquisition_status === 'failed' ? ', failed' : '';
   const albumLabel = track.album != null ? ` · ${track.album}` : '';
-  const a11yLabel = `${track.title} by ${track.artist}${albumLabel}${pendingLabel}${failedLabel}${retryLabel}`;
+  const offlineLabel =
+    pinned === 'ready' ? ', downloaded' : pinned === 'downloading' || pinned === 'queued' ? ', downloading' : '';
+  const a11yLabel = `${track.title} by ${track.artist}${albumLabel}${pendingLabel}${failedLabel}${retryLabel}${offlineLabel}`;
 
   const duration =
     track.duration_seconds != null && track.duration_seconds > 0
@@ -78,6 +84,19 @@ export function LibraryRow({ track, onPlay, onPress, onMore, onRetry, retrying, 
         }
         trailing={
           <View style={styles.trailing}>
+            {pinned === 'ready' ? (
+              <CircleCheck
+                testID={`library-row-offline-${track.id}`}
+                size={14}
+                color={theme.color.accent}
+              />
+            ) : pinned === 'downloading' || pinned === 'queued' ? (
+              <ArrowDownCircle
+                testID={`library-row-offline-pending-${track.id}`}
+                size={14}
+                color={theme.color.textTertiary}
+              />
+            ) : null}
             {duration != null ? (
               <Text variant="caption" tone="tertiary">
                 {duration}
@@ -182,4 +201,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+});
+
+/**
+ * Rows are memoized on their DATA only.
+ *
+ * The list's `renderItem` mints fresh `onPlay`/`onPress`/`onMore`/`onRetry`
+ * closures on every parent render, so the default shallow compare never hits —
+ * every row re-renders (and re-measures its Artwork) when any unrelated screen
+ * state changes, e.g. a keystroke in the search bar. Those closures are
+ * semantically identical between renders: each is `() => handler(item)` over the
+ * same item. Comparing the rendered fields instead is what makes the memo real.
+ *
+ * The cost: if a handler's *behaviour* ever starts depending on state not listed
+ * here, the row keeps the stale closure. Anything a handler reads must therefore
+ * be either passed as a compared prop or read from a store at call time.
+ */
+export const LibraryRow = memo(LibraryRowImpl, (prev, next) => {
+  const a = prev.track;
+  const b = next.track;
+  return (
+    a.id === b.id &&
+    a.title === b.title &&
+    a.artist === b.artist &&
+    a.album === b.album &&
+    a.artwork_url === b.artwork_url &&
+    a.duration_seconds === b.duration_seconds &&
+    a.acquisition_status === b.acquisition_status &&
+    a.failure_reason === b.failure_reason &&
+    prev.retrying === next.retrying &&
+    prev.isPlaying === next.isPlaying &&
+    (prev.onPlay == null) === (next.onPlay == null) &&
+    (prev.onRetry == null) === (next.onRetry == null)
+  );
 });
