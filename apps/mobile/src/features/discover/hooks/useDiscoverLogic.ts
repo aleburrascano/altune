@@ -12,7 +12,7 @@ import { Keyboard } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { clearSearchHistory } from '@shared/api-client/discovery';
-import { discoveryKeys } from '../keys';
+import { discoveryKeys } from '@shared/lib/query-keys';
 import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { useDiscoverSearch } from './useDiscoverSearch';
@@ -51,6 +51,13 @@ export type DiscoverLogic = {
   onResultTap: (result: DiscoveryResult, position: number) => void;
   impression: ImpressionHandlers;
   onRetry: () => void;
+  /** The failure behind a `full-error` view — lets the error copy tell offline
+   *  from a server fault. */
+  searchError: unknown;
+  /** Fetch the next page of the ranked slate (infinite scroll). */
+  onEndReached: () => void;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
   correctedQuery: string | undefined;
@@ -64,7 +71,15 @@ export function useDiscoverLogic(): DiscoverLogic {
   const search = useDebouncedSearch({ debounceMs: 300, minChars: 2 });
   const [filter, setFilter] = useState<ResultsFilter>('all');
   const queryClient = useQueryClient();
-  const { data: searchData, isLoading: isSearching, error: searchError, refetch } = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
+  const {
+    data: searchData,
+    isLoading: isSearching,
+    error: searchError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
   const suggestions = useAutocompleteSuggestions(search.inputValue);
   const history = useSearchHistory();
   const recordEvent = useRecordEvent();
@@ -184,6 +199,15 @@ export function useDiscoverLogic(): DiscoverLogic {
     onResultTap,
     impression,
     onRetry,
+    // Surfaced so the error view can tell offline from a server fault.
+    searchError,
+    // Guarded: FlatList fires onEndReached on layout passes too, so an
+    // unguarded call would spam requests at the end of the list.
+    onEndReached: () => {
+      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+    },
+    hasNextPage: hasNextPage ?? false,
+    isFetchingNextPage,
     onRefresh: () => { void refetch(); },
     isRefreshing: isSearching && searchData !== undefined,
     correctedQuery: searchData?.corrected_query,

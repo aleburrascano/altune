@@ -11,7 +11,9 @@
 import type { ReactElement, ReactNode } from 'react';
 import { FlatList, StyleSheet, type ListRenderItem } from 'react-native';
 
-import { spacing } from '@shared/ui';
+import { ActivityIndicator, View } from 'react-native';
+
+import { spacing, useTheme } from '@shared/ui';
 
 import { CorrectionBanner } from './CorrectionBanner';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -27,6 +29,9 @@ export type ResultsCommonProps = {
   impression: ImpressionHandlers;
   onRefresh: () => void;
   isRefreshing: boolean;
+  /** Infinite scroll over the ranked slate. */
+  onEndReached: () => void;
+  isFetchingNextPage: boolean;
   correctedQuery?: string | undefined;
   originalQuery?: string | undefined;
   onSearchOriginal: () => void;
@@ -45,6 +50,7 @@ export function ResultsList<T>({
   headerExtra?: ReactNode;
   common: ResultsCommonProps;
 }): ReactElement {
+  const theme = useTheme();
   const header = (
     <>
       {common.correctedQuery && common.originalQuery ? (
@@ -71,6 +77,17 @@ export function ResultsList<T>({
       refreshing={common.isRefreshing}
       onViewableItemsChanged={common.impression.onViewableItemsChanged}
       viewabilityConfig={common.impression.viewabilityConfig}
+      onEndReached={common.onEndReached}
+      // Half a screen of runway: enough to hide the fetch, not so much that it
+      // pages ahead of anything the user has actually looked at.
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={
+        common.isFetchingNextPage ? (
+          <View testID="discover-loading-more" style={styles.footer}>
+            <ActivityIndicator size="small" color={theme.color.accent} />
+          </View>
+        ) : null
+      }
     />
   );
 }
@@ -78,4 +95,5 @@ export function ResultsList<T>({
 const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { paddingTop: spacing.sm, paddingBottom: spacing.xl, flexGrow: 1 },
+  footer: { paddingVertical: spacing.xl, alignItems: 'center' },
 });

@@ -12,6 +12,8 @@ import {
   useTheme,
 } from '@shared/ui';
 
+import { isNetworkError } from '@shared/lib/isNetworkError';
+import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from './BlendedSection';
 import { FilteredResults } from './FilteredResults';
 import { kindLabel } from '../state';
@@ -29,6 +31,17 @@ const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: str
 
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
+/** What a screen reader should hear when the search body settles. Empty while
+ *  loading or idle — an announcement per keystroke would be noise. */
+export function _searchAnnouncement(view: DiscoverView, resultCount: number): string {
+  if (view === 'zero-results') return 'No matches';
+  if (view === 'full-error') return 'Search failed';
+  if (view === 'results') {
+    return `${resultCount} ${resultCount === 1 ? 'result' : 'results'}`;
+  }
+  return '';
+}
+
 interface SearchData {
   results: DiscoveryResult[];
   query_norm?: string;
@@ -44,6 +57,11 @@ interface DiscoverBodyProps {
   onResultTap: (result: DiscoveryResult, position: number) => void;
   impression: ImpressionHandlers;
   onRetry: () => void;
+  /** The failure behind a `full-error` view, so the copy can tell offline from
+   *  a server fault instead of guessing. */
+  searchError?: unknown;
+  onEndReached: () => void;
+  isFetchingNextPage: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
   correctedQuery?: string | undefined;
@@ -62,6 +80,9 @@ export function DiscoverBody({
   onResultTap,
   impression,
   onRetry,
+  searchError,
+  onEndReached,
+  isFetchingNextPage,
   onRefresh,
   isRefreshing,
   correctedQuery,
@@ -70,6 +91,11 @@ export function DiscoverBody({
   onClearHistory,
 }: DiscoverBodyProps): ReactElement {
   const theme = useTheme();
+
+  // Search results arrive asynchronously and replace the body in place, with no
+  // focus change to cue a screen reader. Announce the outcome instead. Must sit
+  // above the early returns — it is a hook.
+  useAnnounceChange(_searchAnnouncement(view, searchData?.results.length ?? 0));
 
   if (view === 'loading') {
     return (
@@ -90,9 +116,11 @@ export function DiscoverBody({
   if (view === 'full-error') {
     return (
       <View testID="discover-full-error" style={styles.center}>
-        <Text variant="title">Search failed</Text>
+        <Text variant="title">{isNetworkError(searchError) ? 'No connection' : 'Search failed'}</Text>
         <Text variant="label" tone="secondary" style={styles.centerSub}>
-          Something went wrong. Try again.
+          {isNetworkError(searchError)
+            ? 'Check your connection and try again.'
+            : 'Something went wrong on our end. Try again.'}
         </Text>
         <Button testID="discover-retry" label="Retry" onPress={onRetry} />
       </View>
@@ -164,6 +192,8 @@ export function DiscoverBody({
     impression,
     onRefresh,
     isRefreshing,
+    onEndReached,
+    isFetchingNextPage,
     correctedQuery,
     originalQuery,
     onSearchOriginal,
