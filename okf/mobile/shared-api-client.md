@@ -16,3 +16,5 @@ Per-context files each export typed functions calling `apiFetch` with a specific
 Consumed by every feature that talks to the backend — discover, library, playlists, playback.
 
 **`audio.ts` (2026-07-24).** Audio transport — the stream-proxy URL builder, presigned-URL minting (`fetchAudioUrls`), the native player's bearer headers, and `recoverAudio` — moved here from `features/playback/api/`. It is plain go-api transport, and it gained a second feature consumer (offline downloads) which is in `shared/`; leaving it under playback made `shared/offline` import from a feature, pointing the dependency the wrong way. Lint (`import/no-restricted-paths`) is what caught it.
+
+**`lyrics.ts` (2026-07-24).** `GET /v1/discovery/lyrics` — plain text, time-synced lines, writers and copyright, for a track identified by title + subtitle. The server always answers 200: an unresolved track returns an empty DTO rather than a 404, so callers branch on emptiness and never on an error status. Go's `omitempty` drops empty slices from the wire, so `synced_lines` and `writers` are coerced to `[]` at the boundary.
