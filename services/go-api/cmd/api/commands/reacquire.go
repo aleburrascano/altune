@@ -16,28 +16,17 @@ import (
 	"altune/go-api/internal/shared/database"
 )
 
-// perTrackTimeout bounds one track's re-acquisition (search + download + store),
-// matching the acquisition service's own ceiling.
 const perTrackTimeout = 10 * time.Minute
 
-// reacquireSpec is what actually differs between the re-acquisition commands:
-// which stored refs to select and how to talk about them. The loop — query rows,
-// dry-run print, run pipeline, swap audio_ref, delete the old file — is shared.
 type reacquireSpec struct {
-	refLike           string // SQL LIKE pattern selecting the audio_refs to re-acquire
-	banner            string // Printf format with one %d (candidate count)
-	doneHeading       string
-	okLabel           string // summary label for successful tracks
-	orphanLogMsg      string
-	completedLogEvent string // slog event emitted on completion; "" → none
+	audioRefLikePattern     string
+	bannerFormatWithCount   string
+	doneHeading             string
+	successLabel            string
+	orphanLogMsg            string
+	completedLogEventOrNone string
 }
 
-// runReacquire re-acquires every ready track whose audio_ref matches the spec,
-// through the fully-gated acquisition pipeline (search → select → download →
-// verify → tag → store). Per track: store the new file → swap audio_ref → delete
-// the old one, so a failed or gate-rejected re-acquire leaves the existing file
-// and DB row untouched. Dry-run by default; execute=true applies; limit<=0
-// processes all. Safe to re-run.
 func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpec) {
 	if cfg.DatabaseURL == "" {
 		fmt.Println("ERROR: DATABASE_URL not set")
@@ -65,7 +54,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 		FROM tracks
 		WHERE acquisition_status = 'ready'
 		  AND audio_ref IS NOT NULL
-		  AND audio_ref LIKE '`+spec.refLike+`'
+		  AND audio_ref LIKE '`+spec.audioRefLikePattern+`'
 		ORDER BY added_at DESC`)
 	if err != nil {
 		fmt.Printf("ERROR: query failed: %v\n", err)
@@ -91,7 +80,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 		tracks = tracks[:limit]
 	}
 
-	fmt.Printf("\n"+spec.banner+"\n\n", len(tracks))
+	fmt.Printf("\n"+spec.bannerFormatWithCount+"\n\n", len(tracks))
 	if len(tracks) == 0 {
 		fmt.Println("Nothing to do.")
 		return
@@ -129,10 +118,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 		if _, err := pool.Exec(ctx,
 			`UPDATE tracks SET audio_ref = $1 WHERE id = $2 AND user_id = $3`,
 			newRef, t.id, t.userId); err != nil {
-			// The new file is stored but the DB still points at the old ref, so the
-			// track keeps playing. A later run re-processes it (idempotent), leaving
-			// at worst one orphaned file. Do NOT delete the old file here.
-			fmt.Printf("  [%d/%d] SKIP (db update failed): %s — %s  (%v)\n", i+1, len(tracks), t.title, t.artist, err)
+			fmt.Printf("  [%d/%d] SKIP (db update failed, old ref and old file left intact): %s — %s  (%v)\n", i+1, len(tracks), t.title, t.artist, err)
 			skipped++
 			continue
 		}
@@ -150,24 +136,18 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 	fmt.Printf("\n%s\n", strings.Repeat("=", 50))
 	fmt.Println(spec.doneHeading)
 	fmt.Printf("  Candidates: %d\n", len(tracks))
-	fmt.Printf("  %-11s %d\n", spec.okLabel+":", fixed)
+	fmt.Printf("  %-11s %d\n", spec.successLabel+":", fixed)
 	fmt.Printf("  Skipped:    %d  (old file kept, safe to re-run)\n", skipped)
 	fmt.Println()
 
-	if spec.completedLogEvent != "" {
-		slog.Info(spec.completedLogEvent,
+	if spec.completedLogEventOrNone != "" {
+		slog.Info(spec.completedLogEventOrNone,
 			"candidates", len(tracks),
 			"converted", fixed,
 			"skipped", skipped)
 	}
 }
 
-// reacquireTrack runs the acquisition pipeline for one track and returns the new
-// audio_ref on success (the pipeline derives its extension from the file the
-// download actually produced). It does NOT touch the database or the old file —
-// the caller updates audio_ref and deletes the old one only after this returns
-// cleanly. The expected duration (DB value, else probed from the existing file)
-// is passed so DownloadStep's prober rejects a wrong-length recording.
 func reacquireTrack(
 	ctx context.Context,
 	steps []acqService.Step,
@@ -179,15 +159,7 @@ func reacquireTrack(
 	perCtx, cancel := context.WithTimeout(ctx, perTrackTimeout)
 	defer cancel()
 
-	track.Duration = 0
-	if dbDuration != nil {
-		track.Duration = *dbDuration
-	}
-	if track.Duration <= 0 {
-		if d, perr := probeDuration(perCtx, audioStore, oldRef); perr == nil {
-			track.Duration = d
-		}
-	}
+	track.Duration = expectedDuration(perCtx, audioStore, dbDuration, oldRef)
 
 	ac := &acqService.AcquisitionContext{Track: track}
 
@@ -200,4 +172,20 @@ func reacquireTrack(
 		return "", fmt.Errorf("pipeline produced no audio ref")
 	}
 	return ac.AudioRef, nil
+}
+
+func expectedDuration(
+	ctx context.Context,
+	audioStore ports.AudioStore,
+	dbDuration *float64,
+	oldRef string,
+) float64 {
+	if dbDuration != nil && *dbDuration > 0 {
+		return *dbDuration
+	}
+	probed, err := probeDuration(ctx, audioStore, oldRef)
+	if err != nil {
+		return 0
+	}
+	return probed
 }

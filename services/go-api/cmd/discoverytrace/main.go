@@ -1,15 +1,3 @@
-// Command discoverytrace runs a discovery search with a recording HTTP transport
-// and dumps the EXACT payload at each stage — raw provider JSON (before parsing),
-// the mapped []SearchResult, and (in pipeline mode) the merge → rank → reshape
-// stages. It is pipeline observability: seeing the data
-// mutate stage by stage, not just that a call happened.
-//
-//	go run ./cmd/discoverytrace -query "Ken Carson Olympics"                 # full pipeline
-//	go run ./cmd/discoverytrace -mode single -provider soundcloud -query "…" # one provider
-//
-// Offline + read-only: reuses the exported Merge/Rank/reshape (no prod-path
-// changes). stampIdentities (the xref bridge) and artwork enrichment are skipped
-// — they don't reorder results — so bridge-only merges won't appear here.
 package main
 
 import (
@@ -64,24 +52,53 @@ func main() {
 	runPipeline(rec, *query, kinds, *out)
 }
 
-// runPipeline runs every search provider, then the real exported decision core
-// (Merge → RankWith → Reshape, flag-gated stages included), dumping each stage.
 func runPipeline(rec *httptrace.Recorder, query string, kinds map[domain.ResultKind]bool, out string) {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: config.Load: %v\n", err)
 		os.Exit(1)
 	}
-	// The production provider set over the recording transport — no hand-mirror
-	// (a local copy drifted once: SoundCloud lost its yt-dlp fallback).
 	provs := app.BuildDiscoveryProviders(cfg, rec)
 	qNorm := textnorm.NormalizeForMatch(service.CleanQuery(query))
 
 	fmt.Printf("discoverytrace pipeline: query=%q qnorm=%q kinds=%v providers=%d\n\n", query, qNorm, flagList(kinds), len(provs))
 
-	// Stage 1 — fan out to every provider (concurrent), capturing raw + mapped.
-	perProvider := make([][]domain.SearchResult, len(provs))
-	names := make([]string, len(provs))
+	names, perProvider := searchEveryProviderConcurrently(provs, query, kinds)
+
+	fmt.Println("=== STAGE 1: per-provider (raw JSON dumped to files) ===")
+	for i, name := range names {
+		fmt.Printf("  %-12s %d results\n", name, len(perProvider[i]))
+	}
+	dumpExchanges(rec, out)
+	writeJSON(out, "01-perprovider.json", labeledPerProvider(names, perProvider))
+
+	entities := service.Merge(perProvider)
+	fmt.Printf("\n=== STAGE 2: merged — %d entities (from %d raw) ===\n", len(entities), countAll(perProvider))
+	writeJSON(out, "02-merged.json", entities)
+
+	ranked := service.RankWith(entities, qNorm, service.RankOptions{
+		TailDemotion:        cfg.TailDemotionEnabled,
+		CrossKindProminence: cfg.CrossKindProminenceEnabled,
+	})
+	fmt.Printf("\n=== STAGE 3: ranked — %d results (top 20) ===\n", len(ranked))
+	printRanked(ranked, 20)
+	writeJSON(out, "03-ranked.json", ranked)
+
+	final := service.Reshape(ranked)
+	fmt.Printf("\n=== STAGE 4: final (diversity + collapse) — %d results (top 20) ===\n", len(final))
+	printRanked(final, 20)
+	writeJSON(out, "04-final.json", final)
+
+	fmt.Printf("\nwrote raw exchanges + 01-04 stage JSON to %s\n", out)
+}
+
+func searchEveryProviderConcurrently(
+	provs []ports.SearchProvider,
+	query string,
+	kinds map[domain.ResultKind]bool,
+) (names []string, perProvider [][]domain.SearchResult) {
+	perProvider = make([][]domain.SearchResult, len(provs))
+	names = make([]string, len(provs))
 	var wg sync.WaitGroup
 	for i, p := range provs {
 		names[i] = p.Name().String()
@@ -96,36 +113,7 @@ func runPipeline(rec *httptrace.Recorder, query string, kinds map[domain.ResultK
 		}(i, p)
 	}
 	wg.Wait()
-
-	fmt.Println("=== STAGE 1: per-provider (raw JSON dumped to files) ===")
-	for i, name := range names {
-		fmt.Printf("  %-12s %d results\n", name, len(perProvider[i]))
-	}
-	dumpExchanges(rec, out)
-	writeJSON(out, "01-perprovider.json", labeledPerProvider(names, perProvider))
-
-	// Stage 2 — Merge.
-	entities := service.Merge(perProvider)
-	fmt.Printf("\n=== STAGE 2: merged — %d entities (from %d raw) ===\n", len(entities), countAll(perProvider))
-	writeJSON(out, "02-merged.json", entities)
-
-	// Stage 3 — Rank, with the same flag-gated experiment stages production
-	// applies (behavioral is a live-Service snapshot, unavailable offline → nil).
-	ranked := service.RankWith(entities, qNorm, service.RankOptions{
-		TailDemotion:        cfg.TailDemotionEnabled,
-		CrossKindProminence: cfg.CrossKindProminenceEnabled,
-	})
-	fmt.Printf("\n=== STAGE 3: ranked — %d results (top 20) ===\n", len(ranked))
-	printRanked(ranked, 20)
-	writeJSON(out, "03-ranked.json", ranked)
-
-	// Stage 4 — reshape (diversity + collapse).
-	final := service.Reshape(ranked)
-	fmt.Printf("\n=== STAGE 4: final (diversity + collapse) — %d results (top 20) ===\n", len(final))
-	printRanked(final, 20)
-	writeJSON(out, "04-final.json", final)
-
-	fmt.Printf("\nwrote raw exchanges + 01-04 stage JSON to %s\n", out)
+	return names, perProvider
 }
 
 func runSingle(name string, client *http.Client, rec *httptrace.Recorder, query string, kinds map[domain.ResultKind]bool, out string) {
@@ -154,11 +142,6 @@ func runSingle(name string, client *http.Client, rec *httptrace.Recorder, query 
 	fmt.Printf("\nwrote raw exchanges + mapped.json to %s\n", out)
 }
 
-// printRanked shows each result's final rank position, kind, title/subtitle,
-// source count, and providers — the order is the signal (which result landed in
-// the top-K). The per-result relevance breakdown was boost-specific debugging and
-// went away with the boost; ranking is now the parameter-free measure in
-// service/rank_relevance.go.
 func printRanked(results []domain.SearchResult, limit int) {
 	for i, r := range results {
 		if i >= limit {

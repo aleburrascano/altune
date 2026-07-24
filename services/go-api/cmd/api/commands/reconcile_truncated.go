@@ -10,22 +10,8 @@ import (
 	"altune/go-api/internal/shared/database"
 )
 
-// truncatedAudioThresholdSecs is the duration below which a stored file is treated
-// as a truncated preview rather than a full track. SoundCloud previews are ~30s;
-// the affected tracks all probe at 29.8s. No real track this library cares about
-// is under 45s, so anything shorter is re-acquired rather than accepted.
 const truncatedAudioThresholdSecs = 45.0
 
-// RunReconcileTruncated repairs the tracks broken by the old SoundCloud
-// direct-acquire path. For every ready track with a NULL duration, it probes the
-// actual stored audio:
-//   - probed >= threshold  → the audio is fine, only the duration was never
-//     written → backfill duration_seconds in place (no re-download).
-//   - probed <  threshold  → only a ~30s preview was stored → mark the track
-//     failed + clear audio_ref so the app shows a retry, which re-acquires the
-//     full track via the search pipeline.
-//
-// Dry-run by default; pass execute=true to apply.
 func RunReconcileTruncated(cfg *config.Config, execute bool) {
 	if cfg.DatabaseURL == "" {
 		fmt.Println("ERROR: DATABASE_URL not set")
