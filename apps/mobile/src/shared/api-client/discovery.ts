@@ -67,6 +67,11 @@ export type DiscoverySearchResponse = {
   corrected_query?: string;
   original_query?: string;
   related?: RelatedGroup[];
+  /** Size of the full ranked slate, before paging — so "N results" is accurate
+   *  while only the first page is held. */
+  total: number;
+  offset: number;
+  has_more: boolean;
 };
 
 export type DiscoverySuggestion = {
@@ -95,6 +100,9 @@ export async function searchDiscovery(
     q: string;
     kinds?: DiscoveryKind[];
     limit?: number;
+    /** Start index into the ranked slate. The server builds the whole slate and
+     *  pages it last, so page N is a slice of the same cached list as page 1. */
+    offset?: number;
     saveHistory?: boolean;
   },
   signal?: AbortSignal,
@@ -106,6 +114,9 @@ export async function searchDiscovery(
   if (params.limit !== undefined) {
     qs.set('limit', String(params.limit));
   }
+  if (params.offset !== undefined && params.offset > 0) {
+    qs.set('offset', String(params.offset));
+  }
   if (params.saveHistory === false) {
     qs.set('save_history', 'false');
   }
@@ -113,7 +124,15 @@ export async function searchDiscovery(
     `/v1/discovery/search?${qs.toString()}`,
     signal ? { signal } : undefined,
   );
-  return { ...response, results: (response.results ?? []).map(normalizeResult) };
+  return {
+    ...response,
+    results: (response.results ?? []).map(normalizeResult),
+    // Older servers omit the paging fields; treat that as a single full page
+    // rather than an empty one.
+    total: response.total ?? (response.results ?? []).length,
+    offset: response.offset ?? 0,
+    has_more: response.has_more ?? false,
+  };
 }
 
 // The wire omits an empty `subtitle`/`image_url` (Go `omitempty`), so an absent

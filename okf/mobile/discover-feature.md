@@ -18,3 +18,17 @@ The unified music-search surface (`docs/specs/discover-music-v1`, ADR-0007, rest
 Key files: `state.ts`, `keys.ts`, `hooks/useDiscoverSearch.ts`, `hooks/useDiscoverLogic.ts`, `hooks/useDebouncedSearch.ts`, `hooks/useImpressionLogger.ts`, `impressions.ts`, `tap.ts`, `ui/DiscoverScreen.tsx`, `ui/ResultsList.tsx`, `ui/DiscoverRow.tsx`.
 
 **2026-07-24.** `keys.ts` is gone: `discoveryKeys` now lives in `@shared/lib/query-keys` alongside the library/playlist families. Settings owns "Clear search history" and must invalidate `discoveryKeys.history` after the server delete, and a cross-feature import is not allowed — so the factory was promoted rather than duplicated. The four discover hooks import from the shared module; the key strings are unchanged, so no cache entry moved.
+
+## Infinite scroll (2026-07-24)
+
+`useDiscoverSearch` is a `useInfiniteQuery` over `GET /v1/discovery/search?offset=`, page size 20 (matching the server default so page boundaries are predictable). The server builds the full ranked slate and truncates last, and its result cache holds the whole pre-limit list, so page 2 is a window onto the same cached list page 1 came from: consistent ordering, no provider re-fan-out.
+
+The hook **flattens pages back into one response object** — `results` concatenated, metadata (`search_id`, corrections, `related`) taken from page 1, which is the page that describes the search. Nothing downstream (the `_viewForState` machine, the impression logger, click telemetry) had to learn about paging.
+
+`getNextPageParam` derives the next offset from `offset + results.length`, not `offset + PAGE_SIZE` — that is what keeps paging correct when the server returns a short page. `onEndReached` is guarded on `hasNextPage && !isFetchingNextPage`, because FlatList fires it on layout passes too and an unguarded call spams requests at the end of the list.
+
+`saveHistory` is forced false for pages after the first; the server enforces the same rule, but stating it client-side keeps the intent local to the call.
+
+## Honest failure copy + screen-reader announcements (2026-07-24)
+
+`full-error` distinguishes offline from a server fault via `isNetworkError` on the thrown error (`searchError` is threaded down for exactly this) — blaming the connection for a 500 sends people to restart their router. `_searchAnnouncement` feeds `useAnnounceChange` so a settled search announces its outcome; results replace the body in place with no focus change, so a screen reader otherwise gets no signal. It stays silent while loading, since announcing mid-flight fires on every debounced keystroke.

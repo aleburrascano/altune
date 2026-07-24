@@ -35,6 +35,9 @@ const _empty = (): DiscoverySearchResponse => ({
   providers: [],
   partial: false,
   cache: { hit: false, fetched_at: null },
+  total: 0,
+  offset: 0,
+  has_more: false,
 });
 
 describe('_viewForState', () => {

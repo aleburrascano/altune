@@ -65,6 +65,9 @@ export function DiscoverScreen(): ReactElement {
         onResultTap={d.onResultTap}
         impression={d.impression}
         onRetry={d.onRetry}
+        searchError={d.searchError}
+        onEndReached={d.onEndReached}
+        isFetchingNextPage={d.isFetchingNextPage}
         onRefresh={d.onRefresh}
         isRefreshing={d.isRefreshing}
         correctedQuery={d.correctedQuery}
