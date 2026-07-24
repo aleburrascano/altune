@@ -77,9 +77,7 @@ func hasFlag(flag string) bool {
 	return false
 }
 
-// flagInt reads an int flag in either "--name=5" or "--name 5" form, returning
-// def when absent or unparseable.
-func flagInt(name string, def int) int {
+func flagInt(name string, fallback int) int {
 	args := os.Args[2:]
 	for i, arg := range args {
 		if strings.HasPrefix(arg, name+"=") {
@@ -93,5 +91,5 @@ func flagInt(name string, def int) int {
 			}
 		}
 	}
-	return def
+	return fallback
 }
