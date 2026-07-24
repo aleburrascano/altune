@@ -69,6 +69,7 @@ export function MiniPlayer() {
 
   return (
     <Pressable
+      testID="mini-player"
       onPress={() => router.push('/player')}
       style={[styles.container, { backgroundColor: theme.color.surface1, borderTopColor: theme.color.border }]}
       accessibilityRole="button"

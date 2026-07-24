@@ -18,3 +18,15 @@ The file-based route tree (Expo Router) that composes every feature into the run
 **`index.tsx`** is a bare `<Redirect href="/discover" />` — route groups are path-transparent, so `/discover` resolves to `(tabs)/discover`, making Discover the true landing surface.
 
 Key files: `_layout.tsx`, `(auth)/_layout.tsx`, `(tabs)/_layout.tsx`, `index.tsx`, `player/_layout.tsx`, `(tabs)/discover/_layout.tsx`, `(tabs)/library/featuring.tsx`.
+
+## Error boundaries and root bridges (2026-07-24)
+
+`ScreenBoundary` previously wrapped only the three `(tabs)` stacks, so a render throw anywhere else escaped to the root and blanked the app. It now also wraps:
+
+- the **player** group (`app/player/_layout.tsx`) — its own route group, holding `FullPlayer`, the queue sheet and the lyrics sheet
+- the **`(auth)`** group — around the Stack only, so `ArtworkBackground` survives; this is the one group a signed-out user cannot navigate away from
+- a **root backstop** in `app/_layout.tsx`, catching what the group boundaries cannot: root-level routes like `reset-password`, and throws in the group layouts themselves. Nearest boundary still wins, so this only fires for gaps.
+
+`app/player/lyrics.tsx` is a new modal route in the player stack (see [playback-feature](playback-feature.md)).
+
+Two bridges mount inside `PlaybackProvider` at the root because they must outlive the screens that configure them: `SleepTimerBridge` (pauses playback when the timer expires, with the player screen closed) and `OfflineReconcileBridge` (rebuilds the pinned-download index from disk once per launch).
