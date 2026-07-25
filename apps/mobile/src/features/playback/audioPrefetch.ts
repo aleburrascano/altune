@@ -2,10 +2,12 @@ import { Directory, File, Paths } from 'expo-file-system';
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
+import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { audioRequestHeaders, fetchAudioUrls } from '@shared/api-client/audio';
 import { toNativeTrack } from './nativeTrack';
+import { reportPlaybackError } from './playbackErrorStore';
 
 const CACHE_SUBDIR = 'audio-prefetch';
 const KEEP_WINDOW = 4;
@@ -63,6 +65,8 @@ async function toStreamingNative(track: PlaybackTrack): Promise<AddTrack> {
 }
 
 export async function repairActiveToStreaming(track: PlaybackTrack): Promise<void> {
+  const active = await TrackPlayer.getActiveTrack().catch(() => undefined);
+  if (active != null && active.id !== trackKey(track)) return;
   if (track.source.kind === 'library') swappedToLocal.delete(track.source.trackId);
   try {
     await TrackPlayer.load(await toStreamingNative(track));
@@ -70,32 +74,38 @@ export async function repairActiveToStreaming(track: PlaybackTrack): Promise<voi
   } catch {}
 }
 
-export async function swapUpcomingToLocal(
-  index: number,
-  track: PlaybackTrack,
-  uri: string,
-): Promise<void> {
+async function upcomingSlotOf(key: string): Promise<number | null> {
+  const queue = await TrackPlayer.getQueue().catch(() => []);
   const activeIndex = await TrackPlayer.getActiveTrackIndex().catch(() => undefined);
-  if (activeIndex != null && index <= activeIndex) return;
+  const after = activeIndex ?? -1;
+  const slot = queue.findIndex((t, i) => i > after && t.id === key);
+  return slot < 0 ? null : slot;
+}
+
+export async function swapUpcomingToLocal(track: PlaybackTrack, uri: string): Promise<void> {
+  const key = trackKey(track);
+  const index = await upcomingSlotOf(key);
+  if (index === null) return;
 
   try {
     await TrackPlayer.remove(index);
   } catch {
     return;
   }
+  await refillSlot(index, track, uri);
+}
 
+async function refillSlot(index: number, track: PlaybackTrack, uri: string): Promise<void> {
   try {
     await TrackPlayer.add(toNativeTrack(track, { streamUrl: uri }), index);
     if (track.source.kind === 'library') swappedToLocal.add(track.source.trackId);
-  } catch {
-    await refillSlotWithStreamingEntry(index, track);
-  }
-}
-
-async function refillSlotWithStreamingEntry(index: number, track: PlaybackTrack): Promise<void> {
+    return;
+  } catch {}
   try {
     await TrackPlayer.add(await toStreamingNative(track), index);
-  } catch {}
+  } catch {
+    reportPlaybackError(trackKey(track), 'Could not load this track');
+  }
 }
 
 function evict(ordered: readonly PlaybackTrack[], currentIndex: number): void {
@@ -123,7 +133,7 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
 
   const existing = findCached(trackId);
   if (existing) {
-    await swapUpcomingToLocal(activeIndex + 1, next, existing.uri);
+    await swapUpcomingToLocal(next, existing.uri);
     evict(ordered, s.currentIndex);
     console.log(
       `[audio-timing] prefetch-next track=${trackId} cache=hit swap_ms=${Date.now() - start}`,
@@ -146,7 +156,7 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
     const ordered2 = orderedQueueTracks(s2);
     const stillNext = ordered2[s2.currentIndex + 1];
     if (stillNext && stillNext.source.kind === 'library' && stillNext.source.trackId === trackId) {
-      await swapUpcomingToLocal(s2.currentIndex + 1, stillNext, file.uri);
+      await swapUpcomingToLocal(stillNext, file.uri);
     }
     evict(ordered2, s2.currentIndex);
     console.log(

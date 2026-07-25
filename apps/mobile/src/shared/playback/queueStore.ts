@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { trackKey } from './trackKey';
 import type { PlaybackTrack, QueueSource, RepeatMode } from './types';
 
 interface QueueState {
@@ -31,7 +32,7 @@ interface QueueActions {
   skipToNext: () => PlaybackTrack | null;
   skipToPrevious: () => PlaybackTrack | null;
   skipToIndex: (index: number) => PlaybackTrack | null;
-  syncCurrentIndex: (index: number) => void;
+  syncCurrentIndex: (index: number, key?: string) => void;
   setResumePosition: (positionMs: number) => void;
   toggleShuffle: () => void;
   setShuffled: (shuffled: boolean) => void;
@@ -82,6 +83,30 @@ function trackAt(
   const trackIndex = playOrder[index];
   if (trackIndex == null) return null;
   return tracks[trackIndex] ?? null;
+}
+
+function nearestKeyPosition(
+  ordered: readonly (PlaybackTrack | null)[],
+  key: string,
+  preferred: number,
+): number | null {
+  const hits = ordered.flatMap((t, i) => (t && trackKey(t) === key ? [i] : []));
+  if (hits.length === 0) return null;
+  return hits.reduce((a, b) => (Math.abs(b - preferred) < Math.abs(a - preferred) ? b : a));
+}
+
+function resolveSyncTarget(
+  tracks: readonly PlaybackTrack[],
+  playOrder: readonly number[],
+  index: number,
+  key: string | undefined,
+): number | null {
+  const inRange = index >= 0 && index < playOrder.length;
+  if (key == null) return inRange ? index : null;
+  const ordered = playOrder.map((i) => tracks[i] ?? null);
+  const at = inRange ? ordered[index] : null;
+  if (at && trackKey(at) === key) return index;
+  return nearestKeyPosition(ordered, key, index);
 }
 
 const REPEAT_CYCLE: Record<RepeatMode, RepeatMode> = {
@@ -174,11 +199,11 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     return trackAt(tracks, playOrder, index);
   },
 
-  syncCurrentIndex: (index) => {
-    const { playOrder, currentIndex } = get();
-    if (index < 0 || index >= playOrder.length) return;
-    if (index === currentIndex) return;
-    set({ currentIndex: index });
+  syncCurrentIndex: (index, key) => {
+    const { tracks, playOrder, currentIndex } = get();
+    const target = resolveSyncTarget(tracks, playOrder, index, key);
+    if (target === null || target === currentIndex) return;
+    set({ currentIndex: target });
   },
 
   setResumePosition: (positionMs) => {

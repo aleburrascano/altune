@@ -6,6 +6,7 @@ Invariants:
 
 - `playOrder` is an index **permutation** over `tracks`, never a re-sorted copy; shuffle/reorder/remove mutate ordering without touching `tracks`.
 - Native queue index, play-order position, and store `currentIndex` are kept 1:1; `syncCurrentIndex` is the idempotent reconciliation for native-driven changes.
+- `trackKey.ts` is the only definition of a `PlaybackTrack`'s identity; when a native index and a `trackKey` disagree, the key wins.
 - `canPlay.ts` is the **only** place playability (`AcquisitionStatus === 'ready'`) is checked.
 - Feature UIs call the `useQueuePlayback` facade — never the store or native controls directly.
 

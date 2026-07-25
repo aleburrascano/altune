@@ -1,13 +1,40 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
 
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
-import { useQueueStore } from '@shared/playback/queueStore';
+import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
+import { trackKey } from '@shared/playback/trackKey';
+import type { PlaybackTrack } from '@shared/playback/types';
 
 import { recoverAudio } from '@shared/api-client/audio';
 import { prefetchNext, repairActiveToStreaming, wasSwappedToLocal } from './audioPrefetch';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
+import { reportPlaybackError } from './playbackErrorStore';
 
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
+
+async function activeTrackKey(): Promise<string | null> {
+  const active = await TrackPlayer.getActiveTrack().catch(() => undefined);
+  return typeof active?.id === 'string' ? active.id : null;
+}
+
+function queueTrackByKey(key: string): PlaybackTrack | null {
+  const s = useQueueStore.getState();
+  return orderedQueueTracks(s).find((t) => trackKey(t) === key) ?? null;
+}
+
+async function handlePlaybackError(message: string): Promise<void> {
+  const key = await activeTrackKey();
+  const failed = key !== null ? queueTrackByKey(key) : useQueueStore.getState().currentTrack();
+  const failedKey = key ?? (failed ? trackKey(failed) : null);
+  if (failedKey !== null) reportPlaybackError(failedKey, message || 'Playback failed');
+
+  if (!failed || failed.source.kind !== 'library') return;
+  if (wasSwappedToLocal(failed.source.trackId)) {
+    await repairActiveToStreaming(failed);
+    return;
+  }
+  await recoverAudio(failed.source.trackId).catch(() => {});
+}
 
 export async function playbackService() {
   TrackPlayer.addEventListener(Event.RemotePause, () => {
@@ -31,22 +58,16 @@ export async function playbackService() {
     void TrackPlayer.seekTo(data.position);
   });
 
-  TrackPlayer.addEventListener(Event.PlaybackError, () => {
-    const track = useQueueStore.getState().currentTrack();
-    if (!track || track.source.kind !== 'library') return;
-    if (wasSwappedToLocal(track.source.trackId)) {
-      void repairActiveToStreaming(track);
-      return;
-    }
-    void recoverAudio(track.source.trackId).catch(() => {});
+  TrackPlayer.addEventListener(Event.PlaybackError, async (data) => {
+    await handlePlaybackError(data.message);
   });
 
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data) => {
-    if (typeof data.index === 'number') {
-      if (!shouldApplyActiveIndex(data.index)) return;
-      useQueueStore.getState().syncCurrentIndex(data.index);
-      console.log(`[audio-timing] track-transition index=${data.index} at=${Date.now()}`);
-      void prefetchNext(data.index);
-    }
+    if (typeof data.index !== 'number') return;
+    if (!shouldApplyActiveIndex(data.index)) return;
+    const key = typeof data.track?.id === 'string' ? data.track.id : undefined;
+    useQueueStore.getState().syncCurrentIndex(data.index, key);
+    console.log(`[audio-timing] track-transition index=${data.index} at=${Date.now()}`);
+    void prefetchNext(useQueueStore.getState().currentIndex);
   });
 }

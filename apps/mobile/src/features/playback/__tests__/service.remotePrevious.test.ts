@@ -21,11 +21,13 @@ jest.mock('react-native-track-player', () => ({
     RemotePrevious: 'remote-previous',
     RemoteSeek: 'remote-seek',
     PlaybackActiveTrackChanged: 'playback-active-track-changed',
+    PlaybackError: 'playback-error',
   },
 }));
 
 jest.mock('@shared/playback/queueStore', () => ({
-  useQueueStore: { getState: () => ({ syncCurrentIndex: jest.fn() }) },
+  useQueueStore: { getState: () => ({ syncCurrentIndex: jest.fn(), currentTrack: () => null }) },
+  orderedQueueTracks: () => [],
 }));
 
 import TrackPlayer, { Event } from 'react-native-track-player';
