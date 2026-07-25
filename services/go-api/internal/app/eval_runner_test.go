@@ -11,7 +11,7 @@ func TestMatchPosition(t *testing.T) {
 		{Title: "Bohemian Rhapsody", Subtitle: "Queen"},
 		{Title: "Some Other Track", Subtitle: "Artist"},
 		{Title: "Third", Subtitle: "Third Artist"},
-		{Title: "HUMBLE.", Subtitle: "Kendrick Lamar"}, // 4th — outside top-3
+		{Title: "HUMBLE.", Subtitle: "Kendrick Lamar"},
 	}
 
 	tests := []struct {

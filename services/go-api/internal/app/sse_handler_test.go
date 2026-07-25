@@ -16,9 +16,6 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-// newTestSSEServer wraps the sseHandler in an httptest server that injects a
-// fixed authenticated user id, so the handler can be exercised end-to-end over a
-// real HTTP stream.
 func newTestSSEServer(t *testing.T, bus *events.InProcessBus, uid shared.UserId, heartbeat time.Duration) *httptest.Server {
 	t.Helper()
 	h := &sseHandler{bus: bus, heartbeat: heartbeat}
@@ -30,8 +27,6 @@ func newTestSSEServer(t *testing.T, bus *events.InProcessBus, uid shared.UserId,
 	return srv
 }
 
-// readUntil reads lines from the stream until one satisfies match or the
-// deadline elapses. Returns the matching line, or fails the test.
 func readUntil(t *testing.T, r *bufio.Reader, match func(string) bool) string {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -48,13 +43,10 @@ func readUntil(t *testing.T, r *bufio.Reader, match func(string) bool) string {
 	return ""
 }
 
-// TestSSEHandler_CaughtUpReconnectStreamsLiveEvents is the F1 regression: a
-// reconnect whose Last-Event-ID is already caught up must NOT return 204 — it
-// must hold the stream open and deliver subsequently-published events.
 func TestSSEHandler_CaughtUpReconnectStreamsLiveEvents(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	bus.Publish(uid, "seed", map[string]any{"k": "v"}) // nextID -> 1
+	bus.Publish(uid, "seed", map[string]any{"k": "v"})
 
 	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
 
@@ -62,7 +54,7 @@ func TestSSEHandler_CaughtUpReconnectStreamsLiveEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Last-Event-ID", "1") // caught up: nothing newer than id 1
+	req.Header.Set("Last-Event-ID", "1")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -75,22 +67,16 @@ func TestSSEHandler_CaughtUpReconnectStreamsLiveEvents(t *testing.T) {
 	}
 
 	br := bufio.NewReader(resp.Body)
-	// The initial flush proves the handler reached Subscribe rather than 204ing.
 	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
 
-	// A live event published now must reach this open stream.
 	bus.Publish(uid, "live", map[string]any{"hello": "world"})
 	readUntil(t, br, func(l string) bool { return l == "event: live" })
 }
 
-// TestSSEHandler_ReplayGapEmitsResync is the F4 regression: when the client
-// resumes from a cursor the ring can no longer cover (here, an id from a
-// previous, epoch-lower process), the handler emits a resync control event
-// rather than streaming a hole-y partial history.
 func TestSSEHandler_ReplayGapEmitsResync(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	bus.Publish(uid, "seed", map[string]any{"k": "v"}) // epoch-seeded id, far above 1
+	bus.Publish(uid, "seed", map[string]any{"k": "v"})
 
 	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
 
@@ -98,7 +84,7 @@ func TestSSEHandler_ReplayGapEmitsResync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Last-Event-ID", "1") // a stale cursor the ring can't cover
+	req.Header.Set("Last-Event-ID", "1")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -130,9 +116,6 @@ func TestReplayGapped(t *testing.T) {
 	}
 }
 
-// TestSSEHandler_EmitsHeartbeat is the F2 regression: an idle stream must emit
-// periodic comment pings so proxies don't silently drop the socket and the
-// client watchdog has a signal.
 func TestSSEHandler_EmitsHeartbeat(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
@@ -146,7 +129,6 @@ func TestSSEHandler_EmitsHeartbeat(t *testing.T) {
 	defer resp.Body.Close()
 
 	br := bufio.NewReader(resp.Body)
-	// First comment is the initial flush; a second proves a heartbeat fired.
 	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
 	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
 }

@@ -10,17 +10,6 @@ import (
 	"altune/go-api/internal/shared/config"
 )
 
-// BuildArtistContentService constructs the detail/discography service the way
-// wireDiscoveryContent does for production — the artist-content fan-out (Deezer,
-// Apple Music, Spotify, SoundCloud, + Last.fm when configured) plus the
-// MusicBrainz identity-verification anchor — but over a caller-supplied identity
-// store. The discoveryeval `detail` harness passes a seeded in-memory store so it
-// can feed deliberately fractured identities (a wrong streaming edge fusing two
-// same-name artists) and assert the read-time guards clean them.
-//
-// AIDEV-NOTE: this mirrors wireDiscoveryContent's artistProviders map — the two
-// must stay in sync when a content provider is added/removed. It is a harness
-// seam, not a production wiring path; production still goes through wireDiscovery.
 func BuildArtistContentService(
 	cfg *config.Config,
 	transport http.RoundTripper,

@@ -15,21 +15,10 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// rerunBodyCap bounds each captured raw provider body in a re-run response so the
-// operator console payload stays sane even for chatty providers.
 const rerunBodyCap = 64 * 1024
 
-// reRunner runs an operator-supplied query live through the real discovery
-// decision core (the same exported Merge → RankWith → Reshape composition the
-// search path uses, including the flag-gated experiment stages), over a
-// recording HTTP client, and returns the full stage-by-stage waterfall. It
-// builds providers directly — no Service — so it bypasses the live circuit
-// breakers by construction (a re-run can't trip a breaker live users depend on).
 type reRunner struct {
-	cfg *config.Config
-	// behavioralScores reads the live Service's published satisfaction snapshot,
-	// so a re-run ranks with the same behavioral input production applies. Reading
-	// the snapshot touches no breaker.
+	cfg              *config.Config
 	behavioralScores func() map[string]float64
 }
 
@@ -37,7 +26,6 @@ func (a *App) buildReRunner(svc *discoveryService.Service) *reRunner {
 	return &reRunner{cfg: a.cfg, behavioralScores: svc.BehavioralScoresSnapshot}
 }
 
-// ReRun satisfies adminHandler.ReRunner.
 func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (adminHandler.ReRunResult, error) {
 	kindSet := parseRerunKinds(kinds)
 	rec := requeststore.NewExchangeRecorder(defaultLiveTransport, rerunBodyCap)
@@ -49,11 +37,6 @@ func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (ad
 	start := time.Now()
 	perProvider, providerTraces := fanOutRerun(ctx, provs, cleaned, kindSet)
 	merged := discoveryService.Merge(perProvider)
-	// Rank with the same flag-gated experiment stages production applies — a
-	// zero-value config here once made the waterfall silently diverge from live
-	// ranking whenever a flag was on (cross-kind prominence defaults on). RankExplain
-	// ranks identically to RankWith but keeps each result's scoring math for the
-	// console's rank explainer.
 	explained := discoveryService.RankExplain(merged, queryNorm, discoveryService.RankOptions{
 		TailDemotion:        rr.cfg.TailDemotionEnabled,
 		CrossKindProminence: rr.cfg.CrossKindProminenceEnabled,
@@ -77,8 +60,6 @@ func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (ad
 	}, nil
 }
 
-// projectScored pairs each ranked result's display projection with the scoring
-// provenance rankLess ordered on, for the console's rank explainer.
 func projectScored(explained []discoveryService.ScoredResult) []adminHandler.ScoredRow {
 	out := make([]adminHandler.ScoredRow, len(explained))
 	for i, s := range explained {
@@ -97,8 +78,6 @@ func projectScored(explained []discoveryService.ScoredResult) []adminHandler.Sco
 	return out
 }
 
-// fanOutRerun queries every provider concurrently (no breaker), returning the raw
-// per-provider groups for merge plus a display projection per provider.
 func fanOutRerun(
 	ctx context.Context,
 	provs []discoveryPorts.SearchProvider,

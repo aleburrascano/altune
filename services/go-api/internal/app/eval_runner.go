@@ -14,10 +14,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// evalSmokeChecks is a tiny fixed set of canonical queries (the discovery
-// spot-checks) the meter runs to catch search-quality regressions. Deliberately
-// small: a handful of queries per interval can't meaningfully burn provider
-// quota, unlike the full-corpus offline harness (cmd/discoveryeval).
 var evalSmokeChecks = []struct{ query, expect string }{
 	{"Bohemian Rhapsody", "bohemian rhapsody"},
 	{"Blinding Lights", "blinding lights"},
@@ -32,19 +28,10 @@ const (
 	evalLimit    = 10
 )
 
-// buildEvalRunner returns the live eval-meter runner, or nil when the meter is
-// disabled (so no second provider stack is constructed).
 func (a *App) buildEvalRunner() evalmeter.Runner {
 	if !a.cfg.EvalMeterEnabled {
 		return nil
 	}
-	// A dedicated search-service instance with its OWN per-provider circuit
-	// breakers, isolated from production's — eval failures can never trip the
-	// breakers live search depends on. Reuses the pool + redis; nil event store
-	// so synthetic eval searches don't pollute telemetry. rankingOnly: skips the
-	// shared result cache (a cached hit would score the cache, not the pipeline,
-	// masking a regression for the TTL) and display enrichment (artwork HTTP the
-	// title/subtitle match never reads) while keeping every rank-affecting flag live.
 	evalSvc := BuildSearchServiceWithTransport(a.cfg, a.pool, a.redisClient, nil, nil, nil, true)
 
 	evalUser, err := shared.ParseUserId(a.cfg.OperatorUserID)
@@ -98,8 +85,6 @@ func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user share
 	}, nil
 }
 
-// matchPosition returns the index of the first result whose title/subtitle
-// contains expect, or -1 if none match in the returned list.
 func matchPosition(results []domain.SearchResult, expect string) int {
 	expect = strings.ToLower(expect)
 	for i, r := range results {

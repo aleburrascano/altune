@@ -18,9 +18,6 @@ import (
 	discoveryService "altune/go-api/internal/discovery/service"
 )
 
-// discoveryWiring carries the discovery-context values other stages consume:
-// the mounted handler, the operator-surface inputs (request store + live search
-// service), and the catalog-facing featured-artist bridge.
 type discoveryWiring struct {
 	handler        *discoveryHandler.DiscoveryHandler
 	requestStore   *requeststore.Store
@@ -29,9 +26,6 @@ type discoveryWiring struct {
 	featuredBridge *discoverybridge.FeaturedResolver
 }
 
-// discoveryContentWiring carries the featured-artist bridge and the detail/
-// content services (album, artist, related, suggest) wired by
-// wireDiscoveryContent.
 type discoveryContentWiring struct {
 	featuredBridge *discoverybridge.FeaturedResolver
 	albumSvc       *discoveryService.GetAlbumTracksService
@@ -40,9 +34,6 @@ type discoveryContentWiring struct {
 	suggestSvc     *discoveryService.SuggestService
 }
 
-// wireDiscoveryConsensus builds the multi-provider album consensus service: ALL
-// providers are equal sources, merged into a union via the shared
-// BuildConsensusProviders so coverage signal B measures the same provider set.
 func (a *App) wireDiscoveryConsensus(sharedMB *providers.MusicBrainzAdapter) *discoveryService.ConsensusService {
 	consensusProviders := BuildConsensusProviders(a.cfg, nil)
 
@@ -65,17 +56,11 @@ func (a *App) wireDiscoveryConsensus(sharedMB *providers.MusicBrainzAdapter) *di
 	return discoveryService.NewConsensusService(consensusProviders, consensusOpts...)
 }
 
-// wireDiscoveryContent builds the featured-artist bridge and the detail/content
-// services: album tracks, artist content (consensus-backed), related tracks,
-// and suggest.
 func (a *App) wireDiscoveryContent(
 	sharedMB *providers.MusicBrainzAdapter,
 	vocabStore discoveryPorts.VocabularyStore,
 	consensusSvc *discoveryService.ConsensusService,
 ) discoveryContentWiring {
-	// Featured-artist resolver (discovery-sourced) + catalog bridge. The resolver
-	// tolerates a nil MB searcher (MusicBrainz not configured) and degrades to
-	// Deezer-only; a nil interface (not a typed-nil pointer) keeps that safe.
 	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
 	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
 	if sharedMB != nil {
@@ -85,57 +70,28 @@ func (a *App) wireDiscoveryContent(
 
 	deezerContentClient := newDiscoveryClient()
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
-	// iTunes is a second mainstream source of truth for discography/tracklist
-	// (docs/providers/itunes.md cap 5): an iTunes-sourced album/artist result
-	// carries its collectionId/artistId, which keys the /lookup content endpoint.
 	itunesContent := providers.NewITunesAdapter(newDiscoveryClient())
-	// Apple Music + Spotify join the artist-content fan-out through the same
-	// ArtistContentProvider interface (see docs/brainstorms/2026-07-22-provider-
-	// uniform-interface.md — "stop excluding them"). Apple Music replaces iTunes for
-	// artist content: same Apple catalog + ids, but the official Catalog API carries
-	// release dates, cover art, and ISRC that the plain iTunes lookup misses. Spotify
-	// uses its classic /v1 endpoints with the anonymous web-player token (no
-	// persisted-query hash). Both are keyed by their bridged id (Apple via the shared
-	// iTunes id; see providerContentID).
 	appleMusicContent := providers.NewAppleMusicAdapter(newDiscoveryClient())
 	spotifyContent := providers.NewSpotifyAdapter(newDiscoveryClient())
-	// One SoundCloud adapter shared across the album, artist, and related content
-	// maps — each call resolves its own client_id, so a shared instance avoids
-	// three separate cold-start resolutions.
 	soundcloudContent := providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil)
 
 	albumProviders := map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider{
-		discoveryDomain.ProviderDeezer: deezerContent,
-		discoveryDomain.ProviderITunes: itunesContent,
-		// Apple Music + Spotify serve their own album tracklists natively. Without
-		// them, an apple/spotify-sourced album (the norm on identity-bridged cards,
-		// where the deezer group was dropped by the MB anchor) has no supported
-		// source and falls back to a blind Deezer title search that returns a
-		// different same-named artist's tracks.
+		discoveryDomain.ProviderDeezer:     deezerContent,
+		discoveryDomain.ProviderITunes:     itunesContent,
 		discoveryDomain.ProviderAppleMusic: appleMusicContent,
 		discoveryDomain.ProviderSpotify:    spotifyContent,
-		// SoundCloud resolves its own tracklists (a playlist's tracks, or a single
-		// upload as itself). Without it, a SoundCloud-sourced single fell back to a
-		// blind Deezer title search that returned a different album's tracks.
 		discoveryDomain.ProviderSoundCloud: soundcloudContent,
 	}
 	artistProviders := map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider{
 		discoveryDomain.ProviderDeezer:     deezerContent,
 		discoveryDomain.ProviderAppleMusic: appleMusicContent,
 		discoveryDomain.ProviderSpotify:    spotifyContent,
-		// SoundCloud serves the underground long tail: an artist sourced from
-		// SoundCloud carries its numeric user id, which keys these endpoints.
 		discoveryDomain.ProviderSoundCloud: soundcloudContent,
 	}
-	// Last.fm top-tracks, keyed by MBID (identity-safe) — the client calls it only
-	// when the artist has a resolved MBID, so it never falls back to ambiguous
-	// name matching. Adds the scrobble-popular layer alongside Deezer/SoundCloud.
 	if a.cfg.HasLastFM() {
 		artistProviders[discoveryDomain.ProviderLastFM] = providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
 	}
 
-	// Related tracks are track-keyed: a SoundCloud-sourced track carries its
-	// numeric track id, which keys /tracks/{id}/related. SoundCloud-only today.
 	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{
 		"soundcloud": soundcloudContent,
 	}
@@ -149,11 +105,6 @@ func (a *App) wireDiscoveryContent(
 
 	var artistContentOpts []discoveryService.ArtistContentOption
 	artistContentOpts = append(artistContentOpts, discoveryService.WithConsensusService(consensusSvc))
-	// Identity-first V2 detail: give the artist-content service the same durable
-	// identity store the search path writes, so it can reverse-resolve a single
-	// provider id into the artist's full cross-provider identity and fan out by each
-	// provider's own id (best-of merge → confidence-keep → record-type-normalize).
-	// The store's presence is what enables the path; wired whenever a pool exists.
 	if a.pool != nil {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithContentIdentityStore(
 			discoveryCacheAdapters.NewRedisIdentityStore(
@@ -162,9 +113,6 @@ func (a *App) wireDiscoveryContent(
 			),
 		))
 	}
-	// Identity-verification anchor: the shared MusicBrainz adapter supplies the
-	// authoritative release-group set V2 checks each fan-out provider against, so a
-	// mis-bridged same-name artist (a wrong MB url-relation) is dropped (doc §7).
 	if sharedMB != nil {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithMBAnchor(sharedMB))
 	}
@@ -180,10 +128,6 @@ func (a *App) wireDiscoveryContent(
 	}
 }
 
-// wireDiscoveryEnrichment builds the detail-open MusicBrainz enrichment service
-// (genres/year/rating/external-ids + the HD MBID-keyed cover via the existing
-// artwork chain). Returns nil when MusicBrainz is not configured — the handler
-// degrades to an empty DTO.
 func (a *App) wireDiscoveryEnrichment(sharedMB *providers.MusicBrainzAdapter) *discoveryService.EnrichmentService {
 	if sharedMB == nil {
 		return nil
@@ -193,14 +137,10 @@ func (a *App) wireDiscoveryEnrichment(sharedMB *providers.MusicBrainzAdapter) *d
 		sharedMB,
 		buildArtworkChain(clientFactory{}, a.cfg),
 		enrichmentCache,
-		// Memoize each name resolution so the search path can attach the MBID to
-		// a non-MB result later (cap 5 warm).
 		discoveryService.WithMBIDMemo(enrichmentCache),
 	)
 }
 
-// wireDiscovery builds the discovery context: search pipeline, content/detail
-// services, telemetry-fed background tickers, and the mounted handler.
 func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	var sharedMB *providers.MusicBrainzAdapter
 	if a.cfg.HasMusicBrainz() {
@@ -212,20 +152,14 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
 
-	// vocabStore is shared by suggest + the periodic vocabulary refresh; the
-	// search pipeline builds its own inside BuildSearchService.
 	vocabStore := BuildVocabularyStore(a.redisClient)
 
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
-	// Multi-provider consensus feeds artist-content, so it's wired before content.
 	consensusSvc := a.wireDiscoveryConsensus(sharedMB)
 	content := a.wireDiscoveryContent(sharedMB, vocabStore, consensusSvc)
 
-	// The recording transport wraps the shared live transport so every provider
-	// call on a correlated request is captured into the drill-down store, keyed by
-	// correlation id. Bounded + degrades silently — never affects the search path.
 	requestStore := requeststore.New()
 	searchSvc := BuildSearchServiceWithTransport(
 		a.cfg,
@@ -237,21 +171,13 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		false,
 	)
 
-	// Behavioral-ranking refresh: when the flag is on, recompute the satisfaction
-	// score map off the request path on a ticker. Inert (the option is unset)
-	// otherwise. Bound to the app context so it exits on graceful shutdown.
 	if a.cfg.BehavioralRankingEnabled {
 		searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
 		slog.Info("behavioral ranking refresh started")
 	}
 
-	// Self-growing eval corpus: when a path is configured, nightly-materialize the
-	// behavioral labels (search→engagement positives, wrong_album hard negatives)
-	// into the eval corpus format. Off when the path is empty.
 	a.startCorpusRefresh(ctx, eventStore)
 
-	// Mission Control metrics rollup: persist the daily aggregate gauges so the
-	// console's history survives restart. Always on (cheap aggregate upsert).
 	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)

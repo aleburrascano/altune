@@ -15,8 +15,6 @@ func albumResult(title string, tracks int, sources ...string) domain.SearchResul
 	return domain.SearchResult{Kind: domain.ResultKindAlbum, Title: title, TrackCount: tracks, Sources: refs}
 }
 
-// The merge below is the one part that must stay faithful to the mobile client's
-// dedupAlbumsByTitle — the backend can't import the TS, so these lock the rules.
 func TestMergeAlbumsLikeClient_dedupesByTitleKeepsHighestTrackCountUnionsSources(t *testing.T) {
 	seeds := []rawSeed{
 		{provider: "deezer", status: "ok", items: []domain.SearchResult{albumResult("REST IN BASS", 1, "deezer")}},
@@ -58,8 +56,6 @@ func TestMergeAlbumsLikeClient_ordersNewestFirst(t *testing.T) {
 	}
 }
 
-// Mirrors dedupeTracksByTitle + slice(0,5): first occurrence wins across seeds in
-// Deezer-precedence order, deduped by normalized title, capped at five.
 func TestMergeTracksLikeClient_dedupesByTitleFirstWinsAndCapsAtFive(t *testing.T) {
 	first := []domain.SearchResult{{Title: "A"}, {Title: "B"}}
 	second := []domain.SearchResult{{Title: "b"}, {Title: "C"}, {Title: "D"}, {Title: "E"}, {Title: "F"}}
@@ -71,7 +67,7 @@ func TestMergeTracksLikeClient_dedupesByTitleFirstWinsAndCapsAtFive(t *testing.T
 	if len(got) != 5 {
 		t.Fatalf("want cap 5, got %d", len(got))
 	}
-	want := []string{"A", "B", "C", "D", "E"} // "b" is a normalized dup of "B" → dropped
+	want := []string{"A", "B", "C", "D", "E"}
 	for i, w := range want {
 		if got[i].Title != w {
 			t.Errorf("pos %d: want %q, got %q", i, w, got[i].Title)
