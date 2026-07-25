@@ -36,7 +36,7 @@ func TestDedupExchanges_CollapsesIdenticalRequests(t *testing.T) {
 	js := "https://a-v2.sndcdn.com/assets/55-fbdbfe63.js"
 	ex := []httptrace.Exchange{
 		{Method: "GET", URL: js, Status: 200, RespBody: "bigjs"},
-		{Method: "GET", URL: js, Status: 200, RespBody: "bigjs"}, // racing duplicate bootstrap
+		{Method: "GET", URL: js, Status: 200, RespBody: "bigjs"},
 		{Method: "GET", URL: "https://api.deezer.com/search?q=a", Status: 200, RespBody: "a"},
 		{Method: "GET", URL: "https://api.deezer.com/search?q=b", Status: 200, RespBody: "b"},
 	}

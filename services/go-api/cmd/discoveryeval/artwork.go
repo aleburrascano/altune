@@ -14,13 +14,6 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// runArtworkEval measures artwork-resolution coverage over the library's distinct
-// artists: for each it runs the REAL pipeline and buckets the top artist result by
-// HOW its image resolved (identity / provider / name / blank). It prints aggregate
-// percentages plus the attributed gaps — the name-guesses (risky for same-name
-// artists) and the blanks — so coverage is a number to optimize, not an artist you
-// hand-tested. Live: bound it with -limit and -concurrency. Flush Redis first for a
-// cold measurement (warm artwork-cache hits report as "cache").
 func runArtworkEval(
 	ctx context.Context,
 	cfg *config.Config,
@@ -61,8 +54,6 @@ func runArtworkEval(
 	return nil
 }
 
-// resolveArtistArtworkPath runs the real search for an artist and returns how the
-// top artist result's image resolved, or "blank" when no artist surfaced / no image.
 func resolveArtistArtworkPath(ctx context.Context, searcher discoveryEval.Searcher, artist string) string {
 	results, err := searcher.Search(ctx, artist)
 	if err != nil {
@@ -86,8 +77,8 @@ func resolveArtistArtworkPath(ctx context.Context, searcher discoveryEval.Search
 type artworkReport struct {
 	total  int
 	byPath map[string]int
-	names  []string // provisional (name-guessed) — risky for same-name artists
-	blanks []string // no image
+	names  []string
+	blanks []string
 }
 
 func newArtworkReport(artists, paths []string) artworkReport {
@@ -144,7 +135,6 @@ func printArtworkList(label string, items []string) {
 	}
 }
 
-// loadLibraryArtists returns the library's distinct artists, optionally sampled.
 func loadLibraryArtists(ctx context.Context, pool *pgxpool.Pool, limit int, random bool) ([]string, error) {
 	query := `SELECT DISTINCT artist FROM tracks WHERE artist <> '' ORDER BY artist`
 	if random {

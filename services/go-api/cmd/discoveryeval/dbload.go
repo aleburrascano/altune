@@ -9,11 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// loadLibraryEntities reads the distinct (title, artist) pairs across ALL users.
-// This is an offline-only cross-context read of the catalog's tracks table; it
-// lives in the composition root and never touches the request path.
 func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, random bool) ([]discoveryEval.LibraryEntity, error) {
-	// Random sampling needs a subquery: DISTINCT must resolve before ORDER BY random().
 	order := "ORDER BY artist, title"
 	query := `SELECT DISTINCT title, artist FROM tracks WHERE artist <> '' ` + order
 	if random {
@@ -43,8 +39,6 @@ func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, ran
 	return entities, nil
 }
 
-// loadLibraryTerms reads the distinct artist and title strings across all users
-// — the known-good vocabulary the correction harness perturbs.
 func loadLibraryTerms(ctx context.Context, pool *pgxpool.Pool, limit int) ([]string, error) {
 	query := `SELECT DISTINCT artist AS term FROM tracks WHERE artist <> ''
 	          UNION
@@ -65,9 +59,6 @@ func loadDistinctArtists(ctx context.Context, pool *pgxpool.Pool, limit int) ([]
 	return artists, nil
 }
 
-// queryStrings runs a single-column string query against the tracks table,
-// optionally capped with LIMIT, and scans every row — the shape shared by the
-// harnesses' single-column loaders (loadLibraryTerms, loadDistinctArtists).
 func queryStrings(ctx context.Context, pool *pgxpool.Pool, query string, limit int) ([]string, error) {
 	if limit > 0 {
 		query += fmt.Sprintf(" LIMIT %d", limit)

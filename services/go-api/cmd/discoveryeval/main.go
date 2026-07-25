@@ -1,28 +1,3 @@
-// Command discoveryeval runs the offline discovery quality harnesses. It
-// exercises the real search pipeline in-process (via app.BuildSearchService) and
-// reads discovery's own telemetry; it runs nightly / on demand, NOT per-commit.
-//
-// Every gated harness shares one spine (harness.go): run → gate the headline
-// metrics against cmd/discoveryeval/baselines.json → print the attributed-failure
-// slices → exit 2 on regression. Re-baseline explicitly with -update-baselines
-// (use -noise-runs 3 to set an empirical margin). See plan
-// docs/plans/2026-06-24-001-test-discovery-eval-harness-program-plan.md.
-//
-// Modes (-mode):
-//   - eval       : ranking — library "artist title → top-K" (gated: top1, topk).
-//   - merge      : entity resolution — collapse + over-merge (gated).
-//   - correction : synthetic-typo precision/recall, offline (gated).
-//   - diversity  : reshaping cost differential on the library oracle (gated).
-//   - signal-a   : demand-side coverage gaps from telemetry (gated).
-//   - signal-b   : cross-provider coverage imbalance (gated).
-//   - health     : fill-rate / bridge-hit / latency (report-only, never gated).
-//   - consensus  : per-artist detail dump (-query), or corpus completeness
-//     (no -query, report-only).
-//   - detail     : artist detail/discography — same-name contamination (gated
-//     =0) + recall + metadata, over seeded fractured identities + live providers.
-//
-// Telemetry emission is disabled for eval searches (nil event store) so
-// synthetic searches never pollute the telemetry the signals read.
 package main
 
 import (
@@ -108,9 +83,6 @@ func run(opts options) error {
 
 	ctx := context.Background()
 
-	// detail mode runs the artist-detail path over a seeded in-memory identity
-	// store + live providers — it needs neither the library DB nor Redis, so it
-	// runs anywhere the config validates (CI, no database required).
 	if opts.mode == "detail" {
 		return runDetail(ctx, cfg, opts)
 	}
@@ -127,8 +99,6 @@ func run(opts options) error {
 		defer redisClient.Close()
 	}
 
-	// The single-query search diagnostic owns -query, except in consensus mode
-	// where -query names the artist to build consensus for.
 	if opts.query != "" && opts.mode != "consensus" {
 		return runQuery(ctx, cfg, pool, redisClient, opts)
 	}
@@ -161,8 +131,6 @@ func run(opts options) error {
 	}
 }
 
-// ---- health mode (report-only, never gated) -----------------------------
-
 func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
 	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
 	if err != nil {
@@ -185,8 +153,6 @@ func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 	}
 	fmt.Print(renderHealth(report))
 
-	// Report-only: record gauges for visibility/history on an explicit update,
-	// but NEVER gate them — a health gauge cannot flip the exit code.
 	if opts.updateBaselines {
 		existing, err := loadBaselines(opts.baselinesPath)
 		if err != nil {
@@ -206,8 +172,6 @@ func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 	}
 	return nil
 }
-
-// ---- diversity mode -----------------------------------------------------
 
 func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
 	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
@@ -235,9 +199,6 @@ func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	return runHarness("diversity", once, human, opts)
 }
 
-// corpusEntities applies the corpus selection. Hard mode keeps only single-token
-// titles (the ambiguous case — "Humble", "Scorpion") and signals title-only
-// querying; exact mode keeps every entity and queries "artist title".
 func corpusEntities(entities []discoveryEval.LibraryEntity, corpus string) ([]discoveryEval.LibraryEntity, discoveryEval.QueryMode) {
 	if corpus != "hard" {
 		return entities, discoveryEval.QueryExact
@@ -251,8 +212,6 @@ func corpusEntities(entities []discoveryEval.LibraryEntity, corpus string) ([]di
 	return out, discoveryEval.QueryTitleOnly
 }
 
-// variantSearchAdapter exposes the pipeline's with/without-reshape seam as the
-// diversity harness's VariantSearcher.
 type variantSearchAdapter struct {
 	svc *discoveryService.Service
 }
@@ -265,11 +224,6 @@ func (a variantSearchAdapter) SearchVariants(ctx context.Context, query string) 
 	return a.svc.RankVariantsForEval(ctx, q)
 }
 
-// ---- correction mode ----------------------------------------------------
-
-// runCorrection is offline w.r.t. providers: it reads the vocabulary store and
-// the library only. Library terms are filtered to those the store recognizes so
-// recall measures the correction algorithm, not vocabulary coverage.
 func runCorrection(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
 	vocab := app.BuildVocabularyStore(redisClient)
 	if vocab == nil {
@@ -296,8 +250,6 @@ func runCorrection(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis
 	return runHarness("correction", once, human, opts)
 }
 
-// filterRecognized keeps only terms the vocabulary store holds exactly — so a
-// recall miss means the corrector failed, not that the term was never in vocab.
 func filterRecognized(ctx context.Context, vocab discoveryEval.VocabularyLookup, terms []string) []string {
 	out := []string{}
 	for _, term := range terms {
@@ -307,8 +259,6 @@ func filterRecognized(ctx context.Context, vocab discoveryEval.VocabularyLookup,
 	}
 	return out
 }
-
-// ---- merge mode ---------------------------------------------------------
 
 func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
 	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
@@ -334,8 +284,6 @@ func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 	return runHarness("merge", once, human, opts)
 }
 
-// ---- eval mode ----------------------------------------------------------
-
 func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
 	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
 	if err != nil {
@@ -357,20 +305,15 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 
 	once := func() (discoveryEval.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "evaluating %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
-		// nil event store: eval searches must not emit telemetry.
 		searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
 		report := discoveryEval.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
-		drain() // drain best-effort background writes before exit
+		drain()
 		return report, nil
 	}
 	human := func(r discoveryEval.HarnessReport) string { return renderEval(r.(discoveryEval.EvalReport)) }
 	return runHarness("eval", once, human, opts)
 }
 
-// runEvalFixtures runs the ranking eval against recorded provider fixtures. With
-// -record it captures live provider responses through one shared recording
-// Service (concurrent) and writes a single corpus fixture. Without -record it
-// replays them through one combined Replayer + one Service, deterministically.
 func runEvalFixtures(
 	ctx context.Context,
 	cfg *config.Config,
@@ -386,9 +329,6 @@ func runEvalFixtures(
 		if err := os.MkdirAll(opts.fixtures, 0o755); err != nil {
 			return fmt.Errorf("mkdir fixtures %s: %w", opts.fixtures, err)
 		}
-		// Record writes one corpus file at the end, so the \r progress counter gives
-		// no mid-run signal. Emit newline-terminated progress so a tail of the log
-		// shows how far a long background record has gotten.
 		recProgress := func(done, total int) {
 			if done == total || done%25 == 0 {
 				fmt.Fprintf(os.Stderr, "recorded %d/%d\n", done, total)
@@ -413,15 +353,11 @@ func runEvalFixtures(
 	return runHarness("eval", once, human, opts)
 }
 
-// buildEvalSearcher constructs the search pipeline as the eval's narrow
-// Searcher, plus a drain func to flush its best-effort background writes.
 func buildEvalSearcher(cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discoveryEval.Searcher, func()) {
 	svc := app.BuildSearchService(cfg, pool, redisClient, nil)
 	return searchAdapter{svc: svc}, svc.WaitForBackground
 }
 
-// runQuery is the diagnostic mode: dump the top results a single query returns
-// through the chosen pipeline, so v1 and v2 can be compared title-by-title.
 func runQuery(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
 	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
 	results, err := searcher.Search(ctx, opts.query)
@@ -455,8 +391,6 @@ func evalQuery(query string) (*domain.SearchQuery, error) {
 	return domain.NewSearchQuery(query, kinds, 20)
 }
 
-// searchAdapter wraps the search service as the eval's narrow Searcher.
-// Blended view (all music kinds), no history persistence, synthetic zero user.
 type searchAdapter struct {
 	svc *discoveryService.Service
 }
@@ -473,21 +407,11 @@ func (a searchAdapter) Search(ctx context.Context, query string) ([]domain.Searc
 	return out.Results, nil
 }
 
-// ---- artist-intent mode -------------------------------------------------
-
-// runArtistIntent evaluates bare-artist-name queries against the artist-card
-// oracle — the corpus the library eval (track-only) is blind to. Corpus is the
-// distinct library artists; same deterministic sample discipline as eval.
 func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
 	artists, err := loadDistinctArtists(ctx, pool, 0)
 	if err != nil {
 		return fmt.Errorf("load artists: %w", err)
 	}
-	// corpus=hard isolates the bug's actual home: single-token artist names, where
-	// bare-token relevance ties at 1.0 and the kind-blind tiebreak can bury the
-	// artist under a same-name track. Multi-token names engage the IDF path and
-	// don't tie, so they never exhibit the burial. Filter BEFORE -limit so the
-	// limit caps the single-token corpus, not the full list.
 	if opts.corpus == "hard" {
 		single := artists[:0:0]
 		for _, a := range artists {
@@ -515,9 +439,6 @@ func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool
 		return renderArtistIntent(r.(discoveryEval.ArtistIntentReport))
 	}
 
-	// Fixtures path: record the artist queries' provider traffic, or replay it
-	// deterministically — the seam that lets a ranking change (e.g. cross-kind
-	// prominence) be A/B'd over frozen provider responses, free of iTunes-dropout noise.
 	if opts.fixtures != "" {
 		if opts.record {
 			if err := os.MkdirAll(opts.fixtures, 0o755); err != nil {
@@ -556,13 +477,6 @@ func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool
 	return runHarness("artist-intent", once, human, opts)
 }
 
-// ---- corpus-build mode --------------------------------------------------
-
-// runCorpusBuild materializes the self-growing behavioral eval corpus on demand
-// (the same thing the API's nightly job does, runnable now for validation). It
-// mines search→engagement labels from discovery_events — completed/library_add ⇒
-// +1, wrong_album ⇒ −1 — over the -since-days window, prints a summary + samples,
-// and writes the corpus to -json when given. Report-only; never gates.
 func runCorpusBuild(ctx context.Context, pool *pgxpool.Pool, opts options) error {
 	eventStore := discoveryPersistence.NewPgxEventStore(pool)
 	builder := discoveryEval.NewCorpusBuilder(eventStore)
@@ -603,13 +517,9 @@ func runCorpusBuild(ctx context.Context, pool *pgxpool.Pool, opts options) error
 	return nil
 }
 
-// ---- signal-a mode ------------------------------------------------------
-
 func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
 	eventStore := discoveryPersistence.NewPgxEventStore(pool)
 
-	// A correction filter drops misspellings from the strong gaps; without a
-	// vocabulary store it is simply skipped (every zero-result counts as a gap).
 	var svc *discoveryEval.CoverageSignalAService
 	if vocab := app.BuildVocabularyStore(redisClient); vocab != nil {
 		svc = discoveryEval.NewCoverageSignalAService(eventStore, discoveryService.NewCorrectionService(vocab))
@@ -626,8 +536,6 @@ func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Cl
 	}
 	return runHarness("signal-a", once, human, opts)
 }
-
-// ---- signal-b mode ------------------------------------------------------
 
 func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opts options) error {
 	artists, err := loadDistinctArtists(ctx, pool, opts.limit)
@@ -646,13 +554,6 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 	return runHarness("signal-b", once, human, opts)
 }
 
-// ---- consensus mode ------------------------------------------------------
-
-// runConsensus has two paths. With -query it is the single-artist diagnostic:
-// resolve the Deezer artist, seed its albums, build consensus across providers,
-// and dump the per-album verdicts. Without -query it is the report-only
-// completeness gauge: build consensus for a corpus of library artists and report
-// the mean confirmed fraction (plan 2026-06-24-001 — health tier, never gated).
 func runConsensus(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opts options) error {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	deezer := providers.NewDeezerAdapter(httpClient)
@@ -670,8 +571,6 @@ func runConsensus(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, o
 	return consensusCompleteness(ctx, deezer, svc, pool, opts.limit)
 }
 
-// buildArtistConsensus resolves the Deezer artist, seeds with its albums, and
-// builds cross-provider consensus — the per-artist core shared by both paths.
 func buildArtistConsensus(ctx context.Context, deezer *providers.DeezerAdapter, svc *discoveryService.ConsensusService, artistName string) ([]discoveryService.ConsensusAlbum, string, error) {
 	artistResults, err := deezer.Search(ctx, artistName, map[domain.ResultKind]bool{domain.ResultKindArtist: true})
 	if err != nil {
@@ -714,9 +613,6 @@ func consensusSingle(ctx context.Context, deezer *providers.DeezerAdapter, svc *
 	return nil
 }
 
-// consensusCompleteness is the report-only health gauge: mean confirmed fraction
-// across a corpus of library artists. Never gated — provider availability moves
-// it run to run.
 func consensusCompleteness(ctx context.Context, deezer *providers.DeezerAdapter, svc *discoveryService.ConsensusService, pool *pgxpool.Pool, limit int) error {
 	artists, err := loadDistinctArtists(ctx, pool, limit)
 	if err != nil {
