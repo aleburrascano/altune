@@ -16,6 +16,8 @@ Structure:
 
 Platform:
 
+- Prettier config lives in `package.json`'s `prettier` key — never add a `.prettierrc*` file back.
+- Keep CI workflows in the repo-root `.github/workflows/` — GitHub ignores a nested `.github/`, so one here is dead config that looks alive.
 - Add native modules only via `npx expo install <name>`.
 - Test on both iOS and Android, or document why one is deferred.
 - Never block the JS thread on UI events — push heavy work to workers or native.
