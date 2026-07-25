@@ -1,4 +1,5 @@
 import { apiFetch } from './index';
+import type { LibrarySort } from './library';
 import type {
   CreateTrackRequest,
   FeaturedArtist,
@@ -9,11 +10,15 @@ import type {
 export async function getTracks(params: {
   limit: number;
   offset: number;
+  q?: string;
+  sort?: LibrarySort;
 }): Promise<ListTracksResponse> {
   const qs = new URLSearchParams({
     limit: String(params.limit),
     offset: String(params.offset),
   });
+  if (params.q) qs.set('q', params.q);
+  if (params.sort) qs.set('sort', params.sort);
   return apiFetch<ListTracksResponse>(`/v1/tracks?${qs.toString()}`);
 }
 

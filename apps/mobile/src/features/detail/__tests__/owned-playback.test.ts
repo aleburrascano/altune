@@ -1,82 +1,103 @@
-import { playButtonState, splitOwned, type LibraryLookup } from '../owned-playback';
+import { playButtonState, splitOwned, toPlaybackQueue } from '../owned-playback';
+
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { TrackResponse } from '@shared/api-client/types';
 
-const listed = (title: string): DiscoveryResult =>
-  ({
-    title,
-    subtitle: 'Radiohead',
+function trackResult(title: string, extras: Record<string, unknown> = {}): DiscoveryResult {
+  return {
     kind: 'track',
+    title,
+    subtitle: 'Artist',
+    image_url: null,
+    confidence: 'high',
     sources: [],
-    extras: {},
-  }) as unknown as DiscoveryResult;
+    extras,
+  };
+}
 
-const owned = (title: string, status: TrackResponse['acquisition_status']): TrackResponse =>
-  ({ id: `id-${title}`, title, artist: 'Radiohead', acquisition_status: status }) as TrackResponse;
-
-const lookupOf =
-  (rows: Record<string, TrackResponse>): LibraryLookup =>
-  (title) =>
-    rows[title] ?? null;
+const ownedReady = (id: string) => ({
+  owned_track_id: id,
+  owned_acquisition_status: 'ready',
+});
 
 describe('splitOwned', () => {
-  it('keeps playable tracks in the order they are displayed, not library order', () => {
-    const tracks = [listed('a'), listed('b'), listed('c')];
-    const lookup = lookupOf({
-      c: owned('c', 'ready'),
-      a: owned('a', 'ready'),
-      b: owned('b', 'ready'),
-    });
+  it('counts a result the server did not stamp as unowned', () => {
+    const split = splitOwned([trackResult('Unsaved')]);
 
-    const split = splitOwned(tracks, lookup);
-
-    expect(split.playable.map((t) => t.title)).toEqual(['a', 'b', 'c']);
-  });
-
-  it('separates unowned, still-acquiring and playable', () => {
-    const tracks = [listed('a'), listed('b'), listed('c'), listed('d')];
-    const lookup = lookupOf({
-      a: owned('a', 'ready'),
-      b: owned('b', 'pending'),
-      c: owned('c', 'failed'),
-    });
-
-    const split = splitOwned(tracks, lookup);
-
-    expect(split.playable.map((t) => t.title)).toEqual(['a']);
-    expect(split.acquiringCount).toBe(2);
+    expect(split.playable).toHaveLength(0);
     expect(split.unownedCount).toBe(1);
+    expect(split.acquiringCount).toBe(0);
   });
 
-  it('reports an album you own none of', () => {
-    const split = splitOwned([listed('a'), listed('b')], () => null);
+  it('keeps a stamped ready track playable, paired with its result', () => {
+    const split = splitOwned([trackResult('Saved', ownedReady('track-1'))]);
 
-    expect(split.playable).toEqual([]);
-    expect(split.unownedCount).toBe(2);
+    expect(split.playable).toHaveLength(1);
+    expect(split.playable[0]?.owned.trackId).toBe('track-1');
+    expect(split.playable[0]?.result.title).toBe('Saved');
+  });
+
+  it('separates acquiring tracks from both playable and unowned', () => {
+    const split = splitOwned([
+      trackResult('Pending', {
+        owned_track_id: 'track-2',
+        owned_acquisition_status: 'pending',
+      }),
+    ]);
+
+    expect(split.playable).toHaveLength(0);
+    expect(split.unownedCount).toBe(0);
+    expect(split.acquiringCount).toBe(1);
+  });
+
+  it('preserves display order in the playable list', () => {
+    const split = splitOwned([
+      trackResult('First', ownedReady('a')),
+      trackResult('Skipped'),
+      trackResult('Second', ownedReady('b')),
+    ]);
+
+    expect(split.playable.map((p) => p.owned.trackId)).toEqual(['a', 'b']);
+  });
+});
+
+describe('toPlaybackQueue', () => {
+  it('maps playables onto library playback tracks', () => {
+    const split = splitOwned([trackResult('Song', ownedReady('track-9'))]);
+
+    const queue = toPlaybackQueue(split.playable, 'Fallback Artist', 'art.png');
+
+    expect(queue).toEqual([
+      {
+        source: { kind: 'library', trackId: 'track-9' },
+        title: 'Song',
+        artist: 'Artist',
+        artworkUrl: 'art.png',
+        durationSeconds: undefined,
+      },
+    ]);
   });
 });
 
 describe('playButtonState', () => {
-  it('disables Play when nothing can actually play', () => {
-    expect(playButtonState({ playable: [], unownedCount: 12, acquiringCount: 0 })).toEqual({
+  it('disables Play when nothing is playable', () => {
+    expect(playButtonState({ playable: [], unownedCount: 3, acquiringCount: 0 })).toEqual({
       label: 'Play',
       disabled: true,
     });
   });
 
-  it('names the count when the album is only partly owned', () => {
-    expect(
-      playButtonState({ playable: [owned('a', 'ready')], unownedCount: 11, acquiringCount: 0 }),
-    ).toEqual({ label: 'Play 1', disabled: false });
+  it('names the count when the list is only partly playable', () => {
+    const split = splitOwned([
+      trackResult('One', ownedReady('a')),
+      trackResult('Two'),
+    ]);
+
+    expect(playButtonState(split)).toEqual({ label: 'Play 1', disabled: false });
   });
 
-  it('is a plain Play once everything listed is playable', () => {
-    expect(
-      playButtonState({
-        playable: [owned('a', 'ready'), owned('b', 'ready')],
-        unownedCount: 0,
-        acquiringCount: 0,
-      }),
-    ).toEqual({ label: 'Play', disabled: false });
+  it('stays a bare Play when everything is playable', () => {
+    const split = splitOwned([trackResult('One', ownedReady('a'))]);
+
+    expect(playButtonState(split)).toEqual({ label: 'Play', disabled: false });
   });
 });

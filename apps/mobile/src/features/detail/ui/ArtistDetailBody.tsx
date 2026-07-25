@@ -105,7 +105,7 @@ export function ArtistDetailBody({
                 ) : null}
                 <TrackSaveControl
                   testID={`detail-top-track-save-${index}`}
-                  state={artist.saveStateFor(track.title, track.subtitle)}
+                  state={artist.saveStateFor(track)}
                   title={track.title}
                   onPress={() => artist.onQuickSave(track)}
                 />

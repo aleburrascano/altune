@@ -1,31 +1,51 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { PlaybackTrack } from '@shared/playback/types';
 
-export type LibraryLookup = (title: string, subtitle: string | null) => TrackResponse | null;
+import { trackExtras } from './extras-accessors';
+import { ownedFromExtras, type OwnedTrack } from './hooks/useOwnedTrack';
+
+export type PlayableTrack = {
+  owned: OwnedTrack;
+  result: DiscoveryResult;
+};
 
 export type OwnedSplit = {
-  playable: TrackResponse[];
+  playable: PlayableTrack[];
   unownedCount: number;
   acquiringCount: number;
 };
 
-export function splitOwned(tracks: readonly DiscoveryResult[], lookup: LibraryLookup): OwnedSplit {
-  const playable: TrackResponse[] = [];
+export function splitOwned(tracks: readonly DiscoveryResult[]): OwnedSplit {
+  const playable: PlayableTrack[] = [];
   let unownedCount = 0;
   let acquiringCount = 0;
 
-  for (const track of tracks) {
-    const owned = lookup(track.title, track.subtitle);
+  for (const result of tracks) {
+    const owned = ownedFromExtras(trackExtras(result.extras));
     if (owned === null) {
       unownedCount += 1;
-    } else if (owned.acquisition_status === 'ready') {
-      playable.push(owned);
+    } else if (owned.acquisitionStatus === 'ready') {
+      playable.push({ owned, result });
     } else {
       acquiringCount += 1;
     }
   }
 
   return { playable, unownedCount, acquiringCount };
+}
+
+export function toPlaybackQueue(
+  playable: readonly PlayableTrack[],
+  fallbackArtist: string | null,
+  fallbackArtwork: string | null,
+): PlaybackTrack[] {
+  return playable.map(({ owned, result }) => ({
+    source: { kind: 'library' as const, trackId: owned.trackId },
+    title: result.title,
+    artist: result.subtitle ?? fallbackArtist ?? '',
+    artworkUrl: result.image_url ?? fallbackArtwork,
+    durationSeconds: trackExtras(result.extras).durationSeconds ?? undefined,
+  }));
 }
 
 export function playButtonState(split: OwnedSplit): { label: string; disabled: boolean } {

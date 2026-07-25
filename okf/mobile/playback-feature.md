@@ -52,3 +52,9 @@ The **sleep timer** (`sleepTimerStore`) stores an absolute `endsAt`, never a dec
 **Offline playback (2026-07-24).** `loadNativeTrack.signedUrl` is the single seam where a library track's URL is chosen, and it now prefers a pinned local file over the presigned URL, with the authenticated proxy still last. The pinned check goes first deliberately: once a track is on disk, playback must not depend on a signed URL that expires or a network that is not there. See [shared-offline](shared-offline.md); note it is a different concern from `audioPrefetch`, which is a cache-directory optimisation the OS may purge.
 
 **TestID (2026-07-24).** `MiniPlayer`'s root carries `testID="mini-player"`. It had none, and it is the observable that proves playback actually started in the `search-save-play` e2e flow — the dock appearing above the tab bar is the only user-visible confirmation that audio is playing.
+
+## Structured queue source (2026-07-25)
+
+`useQueueResume` used to pack and parse the queue's origin itself: `buildSourceId` produced `playlist:<id>:<url-encoded name>` and `parseSourceId` picked it apart on restore, with a `decodeOrEmpty` guard for malformed input. That format is the server's, and the URL-encoding existed only so a `:` in a playlist name could not be read as a separator.
+
+The wire now carries a structured `source` object and the two functions are a pair of small mappers between it and the store's `QueueSource` union. The packing lives in `playback/domain/queue_source.go` (see [playback](../backend/playback.md)).

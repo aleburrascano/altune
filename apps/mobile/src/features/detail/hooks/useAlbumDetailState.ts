@@ -1,25 +1,21 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
-import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
-import { playButtonState, splitOwned, type OwnedSplit } from '../owned-playback';
+import { playButtonState, splitOwned, toPlaybackQueue, type OwnedSplit } from '../owned-playback';
 
 import { openDetail, type DetailRoute } from '../navigation';
 import { useAlbumDiscovery } from './useAlbumDiscovery';
 import { useAlbumTracks } from './useAlbumTracks';
 import { useLibraryTracksForAlbum } from './useLibraryTracks';
-import { usePersistTrackNumbers } from './usePersistTrackNumbers';
 import { useSaveTrack } from './useSaveTrack';
 import { toCreateTrackRequest } from '../save-cache';
 import { trackExtras } from '../extras-accessors';
-import { findTrackInLibraryCache } from '../helpers/find-track-in-library-cache';
+import { ownedFromExtras } from './useOwnedTrack';
 import { saveControlState, type SaveControlState } from '../save-control-state';
-import { _isTrackInLibraryCache } from '../ui/helpers';
 
 function _enrichAlbumTrack(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult {
   return {
@@ -37,31 +33,10 @@ function _isTrackOwned(title: string, ownedTitles: Set<string>): boolean {
   return ownedTitles.has(title.toLowerCase().trim());
 }
 
-const _norm = (s: string): string => s.toLowerCase().trim();
-
-export function _withAlbumPositions(
-  owned: DiscoveryResult[],
-  albumOrder: DiscoveryResult[],
-): DiscoveryResult[] {
-  if (albumOrder.length === 0) {
-    return owned;
-  }
-  const positionByTitle = new Map<string, number>();
-  albumOrder.forEach((t, i) => {
-    positionByTitle.set(_norm(t.title), trackExtras(t.extras).trackPosition ?? i + 1);
-  });
-  const placed = owned.map((t) => {
-    if (trackExtras(t.extras).trackPosition != null) {
-      return t;
-    }
-    const pos = positionByTitle.get(_norm(t.title));
-    return pos == null ? t : { ...t, extras: { ...t.extras, track_position: pos } };
-  });
-  return [...placed].sort(
-    (a, b) =>
-      (trackExtras(a.extras).trackPosition ?? Number.MAX_SAFE_INTEGER) -
-      (trackExtras(b.extras).trackPosition ?? Number.MAX_SAFE_INTEGER),
-  );
+function byTrackPosition(a: DiscoveryResult, b: DiscoveryResult): number {
+  const pa = trackExtras(a.extras).trackPosition ?? Number.MAX_SAFE_INTEGER;
+  const pb = trackExtras(b.extras).trackPosition ?? Number.MAX_SAFE_INTEGER;
+  return pa - pb;
 }
 
 export type AlbumDetailState = {
@@ -81,8 +56,7 @@ export type AlbumDetailState = {
   onTrackPress: (track: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
   onSaveAll: () => void;
-  isSaved: (title: string, subtitle: string | null) => boolean;
-  saveStateFor: (title: string, subtitle: string | null) => SaveControlState;
+  saveStateFor: (track: DiscoveryResult) => SaveControlState;
   owned: OwnedSplit;
   playButton: { label: string; disabled: boolean };
   onPlayOwned: () => void;
@@ -94,7 +68,6 @@ export function useAlbumDetailState(
   isFromLibrary?: boolean,
 ): AlbumDetailState {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const save = useSaveTrack();
   const queue = useQueuePlayback();
 
@@ -120,7 +93,7 @@ export function useAlbumDetailState(
   });
 
   const localTracks = useLibraryTracksForAlbum(result.title, result.subtitle);
-  const localAsDiscovery = localTracks.map(trackToDiscoveryResult);
+  const localAsDiscovery = [...localTracks.map(trackToDiscoveryResult)].sort(byTrackPosition);
 
   const [moreExpanded, setMoreExpanded] = useState(false);
   const [saveAllTapped, setSaveAllTapped] = useState(false);
@@ -132,21 +105,9 @@ export function useAlbumDetailState(
   });
 
   const ownedTitles = new Set(localTracks.map((t) => t.title.toLowerCase().trim()));
+  const moreTracks = discovery.tracks.filter((t) => !_isTrackOwned(t.title, ownedTitles));
 
-  const albumOrder = discovery.tracks.map((t, i) =>
-    trackExtras(t.extras).trackPosition != null
-      ? t
-      : { ...t, extras: { ...t.extras, track_position: i + 1 } },
-  );
-  const moreTracks = albumOrder.filter((t) => !_isTrackOwned(t.title, ownedTitles));
-
-  const ownedTracks = !hasSources
-    ? _withAlbumPositions(localAsDiscovery, albumOrder)
-    : localAsDiscovery;
-
-  const tracks = hasSources ? apiTracks : ownedTracks;
-
-  usePersistTrackNumbers(localTracks, ownedTracks);
+  const tracks = hasSources ? apiTracks : localAsDiscovery;
 
   const isLoading = hasSources ? apiLoading : localTracks.length > 0 && discovery.isLoading;
   const isError = hasSources ? apiError : false;
@@ -163,29 +124,22 @@ export function useAlbumDetailState(
     setSaveAllTapped(true);
     const allTracks = hasSources ? tracks : [...tracks, ...moreTracks];
     for (const track of allTracks) {
-      const enriched = _enrichAlbumTrack(track, result);
-      if (!_isTrackInLibraryCache(queryClient, enriched.title, enriched.subtitle)) {
-        save.mutate(toCreateTrackRequest(enriched));
+      if (ownedFromExtras(trackExtras(track.extras)) === null) {
+        save.mutate(toCreateTrackRequest(_enrichAlbumTrack(track, result)));
       }
     }
   };
 
-  const isSaved = (title: string, subtitle: string | null): boolean =>
-    _isTrackInLibraryCache(queryClient, title, subtitle);
+  const saveStateFor = (track: DiscoveryResult): SaveControlState =>
+    saveControlState(ownedFromExtras(trackExtras(track.extras)));
 
-  const owned = splitOwned(tracks, (title, subtitle) =>
-    findTrackInLibraryCache(queryClient, title, subtitle),
-  );
+  const owned = splitOwned(tracks);
 
   const onPlayOwned = (): void => {
-    const first = owned.playable[0];
-    if (first === undefined) return;
-    const { playable, startIndex } = buildPlayableQueue(owned.playable, first.id);
-    queue.playFromList(playable, startIndex, { kind: 'library' });
+    const playable = toPlaybackQueue(owned.playable, result.subtitle, result.image_url);
+    if (playable.length === 0) return;
+    queue.playFromList(playable, 0, { kind: 'library' });
   };
-
-  const saveStateFor = (title: string, subtitle: string | null): SaveControlState =>
-    saveControlState(findTrackInLibraryCache(queryClient, title, subtitle));
 
   return {
     tracks,
@@ -204,7 +158,6 @@ export function useAlbumDetailState(
     onTrackPress,
     onQuickSave,
     onSaveAll,
-    isSaved,
     saveStateFor,
     owned,
     playButton: playButtonState(owned),

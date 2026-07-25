@@ -16,6 +16,7 @@ export type TrackResponse = {
   acquisition_status: AcquisitionStatus;
   artwork_url: string | null;
   failure_reason: string | null;
+  failure_message?: string | null;
   year: number | null;
   genre: string | null;
   track_number: number | null;
@@ -63,6 +64,7 @@ export type ListPlaylistsResponse = {
 };
 
 export type PlaylistDetailResponse = PlaylistResponse & {
+  total_duration_seconds: number;
   tracks: TrackResponse[];
 };
 

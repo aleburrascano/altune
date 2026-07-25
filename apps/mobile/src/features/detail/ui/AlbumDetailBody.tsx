@@ -136,7 +136,7 @@ export function AlbumDetailBody({
           track={track}
           index={index}
           subtitle={_trackSubtitleWithFeaturing(track)}
-          saveState={album.saveStateFor(track.title, track.subtitle)}
+          saveState={album.saveStateFor(track)}
           onPress={() => album.onTrackPress(track)}
           onQuickSave={() => album.onQuickSave(track)}
         />
@@ -175,7 +175,7 @@ export function AlbumDetailBody({
                   track={track}
                   index={album.tracks.length + index}
                   subtitle={_trackSubtitleWithFeaturing(track)}
-                  saveState={album.saveStateFor(track.title, track.subtitle)}
+                  saveState={album.saveStateFor(track)}
                   onPress={() => album.onTrackPress(track)}
                   onQuickSave={() => album.onQuickSave(track)}
                 />

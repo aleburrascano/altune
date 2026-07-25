@@ -39,12 +39,9 @@ function wrapperFor(qc: QueryClient) {
 describe('useRetryAcquisition', () => {
   it('optimistically sets the track to pending and clears the failure reason', () => {
     const qc = new QueryClient();
-    qc.setQueryData<ListTracksResponse>(['library-home'], {
-      items: [failedTrack()],
-      total: 1,
-      limit: 50,
-      offset: 0,
-      has_more: false,
+    qc.setQueryData(['library', 'tracks', '', 'recent'], {
+      pages: [{ items: [failedTrack()], total: 1, limit: 200, offset: 0, has_more: false }],
+      pageParams: [0],
     });
 
     const { result } = renderHook(() => useRetryAcquisition(), { wrapper: wrapperFor(qc) });
@@ -53,7 +50,7 @@ describe('useRetryAcquisition', () => {
       result.current.mutate('t1');
     });
 
-    const data = qc.getQueryData<ListTracksResponse>(['library-home']);
-    expect(data?.items[0]).toMatchObject({ acquisition_status: 'pending', failure_reason: null });
+    const data = qc.getQueryData<{ pages: ListTracksResponse[] }>(['library', 'tracks', '', 'recent']);
+    expect(data?.pages[0]?.items[0]).toMatchObject({ acquisition_status: 'pending', failure_reason: null });
   });
 });

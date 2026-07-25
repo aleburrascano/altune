@@ -20,6 +20,7 @@ function _track(
     acquisition_status: acquisitionStatus,
     artwork_url: null,
     failure_reason: failureReason,
+    failure_message: failureReason === 'no_match_found' ? "Couldn't find this track" : null,
     year: null,
     genre: null,
     track_number: null,

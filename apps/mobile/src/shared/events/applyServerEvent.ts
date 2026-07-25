@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
+import { patchTrackStatus, removeTrackStatus } from '@shared/acquisition/trackStatusStore';
 import {
   startDownload,
   progressDownload,
@@ -32,7 +33,10 @@ const INVALIDATION_MAP: Record<string, readonly (readonly string[])[]> = {
 };
 
 const RESYNC_KEYS: readonly (readonly string[])[] = [
-  libraryKeys.home,
+  libraryKeys.tracksPrefix,
+  libraryKeys.lookupPrefix,
+  libraryKeys.albumsPrefix,
+  libraryKeys.artistsPrefix,
   libraryKeys.featuringPrefix,
   playlistKeys.list,
   playlistKeys.details,
@@ -82,6 +86,11 @@ function progressPhase(stage: string | null): DownloadPhase | null {
   return phase === 'finding' || phase === 'downloading' || phase === 'finishing' ? phase : null;
 }
 
+function invalidateLenses(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: libraryKeys.albumsPrefix });
+  void queryClient.invalidateQueries({ queryKey: libraryKeys.artistsPrefix });
+}
+
 export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): void {
   if (event.type === 'resync') {
     for (const queryKey of RESYNC_KEYS) {
@@ -92,10 +101,15 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
 
   if (event.type === 'track_added_to_library') {
     const track = parseAddedTrack(event.data);
+    invalidateLenses(queryClient);
     if (track) {
       upsertTrackInCaches(queryClient, track);
+      patchTrackStatus(track.id, {
+        acquisitionStatus: track.acquisition_status,
+        failureMessage: track.failure_message ?? null,
+      });
     } else {
-      void queryClient.invalidateQueries({ queryKey: libraryKeys.home });
+      void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
       void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
     }
     return;
@@ -105,7 +119,9 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     const trackId = asString(event.data.track_id);
     if (trackId) {
       removeTrackFromCaches(queryClient, trackId);
+      removeTrackStatus(trackId);
     }
+    invalidateLenses(queryClient);
     void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
     return;
   }
@@ -117,7 +133,9 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
       patchTrackInCaches(queryClient, trackId, {
         acquisition_status: 'pending',
         failure_reason: null,
+        failure_message: null,
       });
+      patchTrackStatus(trackId, { acquisitionStatus: 'pending', failureMessage: null });
     }
     return;
   }
@@ -138,6 +156,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
         acquisition_status: 'ready',
         audio_ref: asString(event.data.audio_ref),
       });
+      patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
       completeDownload(trackId);
     }
     return;
@@ -149,7 +168,12 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
       patchTrackInCaches(queryClient, trackId, {
         acquisition_status: 'failed',
         failure_reason: asString(event.data.reason),
+        failure_message: asString(event.data.failure_message),
         audio_ref: null,
+      });
+      patchTrackStatus(trackId, {
+        acquisitionStatus: 'failed',
+        failureMessage: asString(event.data.failure_message),
       });
       failDownload(trackId);
     }

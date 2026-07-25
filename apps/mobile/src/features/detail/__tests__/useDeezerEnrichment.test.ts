@@ -13,7 +13,8 @@ jest.mock('../../../shared/api-client/enrichment', () => ({
 
 function _enrichment(over: Partial<DeezerEnrichmentResponse> = {}): DeezerEnrichmentResponse {
   return {
-    bpm: 172,
+  has_content: true,
+  bpm: 172,
     gain: -8.3,
     explicit: true,
     label: '',
@@ -25,6 +26,7 @@ function _enrichment(over: Partial<DeezerEnrichmentResponse> = {}): DeezerEnrich
 }
 
 const _empty: DeezerEnrichmentResponse = {
+  has_content: false,
   bpm: 0,
   gain: 0,
   explicit: false,
@@ -75,7 +77,9 @@ describe('useDeezerEnrichment', () => {
   });
 
   it('treats a gain-only payload as no enrichment (gain is not displayed)', async () => {
-    mockGet.mockResolvedValueOnce(_enrichment({ bpm: 0, explicit: false, gain: -9.1 }));
+    mockGet.mockResolvedValueOnce(
+      _enrichment({ bpm: 0, explicit: false, gain: -9.1, has_content: false }),
+    );
 
     const { result } = renderHook(
       () => useDeezerEnrichment({ kind: 'track', title: 'Instrumental', subtitle: 'Someone' }),

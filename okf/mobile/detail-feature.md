@@ -66,3 +66,21 @@ A hero Play on album and artist is deliberately deferred: their tracklists are d
 `useArtistContent` unions MusicBrainz and Deezer albums via `dedupAlbumsByTitle` (normalized key, keep highest `track_count`, merge sources), sorted by release date descending. When the identity is verified and MB returned a non-empty list, Deezer may only enrich title-matched albums and contributes no new titles — Deezer's artist entities conflate same-name artists, and its album entries carry no artist field to filter on. Unverified artists keep the full union. Provider failures arrive as HTTP 200 with `status: 'timeout'`/`'error'` and empty items, so the hook treats any non-ok payload as that provider's failure and `isErrorAlbums` fires only when every available provider failed.
 
 Track numbers work in three layers. `toCreateTrackRequest` maps `extras.track_position` to `CreateTrackRequest.track_number` so new album-context saves store the real position. For tracks saved before that, `_withAlbumPositions` recovers order at view time by matching owned tracks against the authoritative tracklist — display-only and re-derived per view, so it can never go stale, and a stored position always wins. `usePersistTrackNumbers` then fire-and-forgets a `PATCH` per derived position so the database self-heals as albums are browsed; the server side is fill-only and therefore idempotent.
+
+## Ownership comes stamped (2026-07-25)
+
+"Is this result already in my library?" used to be answered by `findTrackInData` — normalized title+artist matching against the whole library snapshot, feeding `saveControlState`, `splitOwned`, `resolvePlaySource` and the album/artist Play buttons. That is the single reason the detail screen needed the entire library resident.
+
+The server now stamps every track result with `extras.owned_track_id` and `extras.owned_acquisition_status` (see [discovery](../backend/discovery/index.md)). `trackExtras` reads them as fallbacks for the existing `track_id` / `acquisition_status` keys, so `resolvePlaySource` picked it up with no change to its rule. `hooks/useOwnedTrack.ts` is the reactive read: the stamp is the value at fetch time, overlaid with anything newer from `@shared/acquisition/trackStatusStore`, which the SSE router writes on every acquisition event. That store is what replaced the query-cache observer — the save control still flips the instant a download finishes, without the library being in memory.
+
+`splitOwned` now takes only the displayed results and pairs each playable with the result it came from, so `toPlaybackQueue` can build the queue without a second lookup; `saveStateFor` takes a result rather than a title/subtitle pair.
+
+`helpers/find-track-in-library-cache.ts` and `hooks/useLibraryTrackMatch.ts` are gone. `hooks/useLibraryTracks.ts` survives for the library-origin album and artist views, but it now asks the server (`GET /v1/tracks?q=`) and filters the small result set precisely, rather than scanning everything.
+
+## Artist content in one call, positions filled by the server (2026-07-25)
+
+`useArtistContent` was three parallel per-provider queries plus `helpers/artist-content.ts` (dedupe by normalized title, merge source lists, back-fill artwork, sort by release date) and `helpers/normalize-for-dedup.ts` (a 30-line normalizer). It is now one `getArtistContent` call; all four of those files are deleted. `useAlbumTracks` likewise dropped its second MusicBrainz query and `_mergeFeaturing` — it passes `mbid` and the server merges.
+
+`usePersistTrackNumbers` is gone. The server fills a missing `track_number` from the provider tracklist's own order when the album is fetched, so the database still self-heals as albums are browsed, without one `PATCH` per track leaving the phone.
+
+`useSaveTrack` keeps its optimistic placeholder — instant feedback is a client concern — but it now inserts into the paged tracks cache via `upsertTrackInCaches` and swaps in the real row with `replaceTrackInCaches`. The old "never seed an absent cache" invariant survives in those helpers: both no-op when nothing is cached.

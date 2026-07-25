@@ -9,13 +9,20 @@ export interface QueueStateCurrentTrack {
   acquisition_status: string;
 }
 
+export interface QueueSourceWire {
+  kind: 'library' | 'playlist' | 'search';
+  playlist_id?: string;
+  name?: string;
+  query?: string;
+}
+
 export interface QueueStateResponse {
   track_ids: string[];
   current_index: number;
   position_ms: number;
   shuffled: boolean;
   repeat_mode: string;
-  source_id: string;
+  source: QueueSourceWire | null;
   natural_order: string[];
   current_track?: QueueStateCurrentTrack;
 }
@@ -26,7 +33,7 @@ export interface SaveQueueStateRequest {
   position_ms: number;
   shuffled: boolean;
   repeat_mode: string;
-  source_id: string;
+  source: QueueSourceWire | null;
   natural_order: string[];
 }
 

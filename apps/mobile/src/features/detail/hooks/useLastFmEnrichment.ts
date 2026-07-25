@@ -16,12 +16,6 @@ type UseLastFmEnrichmentReturn = {
   isError: boolean;
 };
 
-function hasContent(e: LastFmEnrichmentResponse): boolean {
-  return (
-    e.listeners > 0 || e.playcount > 0 || e.tags.length > 0 || e.bio !== '' || e.similar.length > 0
-  );
-}
-
 export function useLastFmEnrichment({
   kind,
   title,
@@ -31,7 +25,7 @@ export function useLastFmEnrichment({
   const { value, isLoading, isError } = useEnrichmentQuery({
     queryKey: ['lastfm-enrichment', kind, `${title}|${subtitle ?? ''}`],
     queryFn: () => getLastFmEnrichment({ kind, title, subtitle }),
-    hasContent,
+    hasContent: (e) => e.has_content,
     enabled: enabled && title.trim() !== '',
   });
 

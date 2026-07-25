@@ -18,6 +18,8 @@ type TracksListProps = {
   onRetry: (track: TrackResponse) => void;
   retryingTrackId: string | undefined;
   isPlaying: (trackId: string) => boolean;
+  onEndReached?: () => void;
+  isFetchingNextPage?: boolean;
 };
 
 export function TracksList({
@@ -30,6 +32,8 @@ export function TracksList({
   onRetry,
   retryingTrackId,
   isPlaying,
+  onEndReached,
+  isFetchingNextPage,
 }: TracksListProps): ReactElement {
   return (
     <FlatList
@@ -39,6 +43,17 @@ export function TracksList({
       showsVerticalScrollIndicator={false}
       onRefresh={refresh.onRefresh}
       refreshing={refresh.refreshing}
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={
+        isFetchingNextPage === true ? (
+          <View style={styles.footer}>
+            <Text variant="caption" tone="tertiary">
+              Loading more…
+            </Text>
+          </View>
+        ) : null
+      }
       contentContainerStyle={tracks.length === 0 ? styles.emptyList : styles.list}
       ListEmptyComponent={
         <View style={styles.empty}>
@@ -66,4 +81,5 @@ const styles = StyleSheet.create({
   list: { paddingBottom: spacing['3xl'] },
   emptyList: { flexGrow: 1 },
   empty: { flex: 1, alignItems: 'center', paddingTop: spacing['3xl'] },
+  footer: { alignItems: 'center', paddingVertical: spacing.lg },
 });

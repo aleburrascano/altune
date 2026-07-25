@@ -1,15 +1,15 @@
-import type { TrackResponse } from '@shared/api-client/types';
 import { canPlay } from '@shared/playback/canPlay';
 import type { PlaybackSource } from '@shared/playback/types';
 
 import type { TrackExtras } from './extras-accessors';
+import type { OwnedTrack } from './hooks/useOwnedTrack';
 
 export function resolvePlaySource(
   te: TrackExtras,
-  libraryMatch: TrackResponse | null,
+  owned: OwnedTrack | null,
 ): PlaybackSource | null {
-  const trackId = te.trackId ?? libraryMatch?.id ?? null;
-  const acquisitionStatus = te.acquisitionStatus ?? libraryMatch?.acquisition_status ?? null;
+  const trackId = te.trackId ?? owned?.trackId ?? null;
+  const acquisitionStatus = te.acquisitionStatus ?? owned?.acquisitionStatus ?? null;
   if (canPlay(acquisitionStatus) && trackId !== null) {
     return { kind: 'library', trackId };
   }

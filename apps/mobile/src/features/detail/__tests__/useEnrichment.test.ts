@@ -13,7 +13,8 @@ jest.mock('../../../shared/api-client/enrichment', () => ({
 
 function _enrichment(over: Partial<EnrichmentResponse> = {}): EnrichmentResponse {
   return {
-    mbid: 'mbid-1',
+  has_content: true,
+  mbid: 'mbid-1',
     genres: ['hip hop'],
     year: 2017,
     rating: 4.1,
@@ -27,6 +28,7 @@ function _enrichment(over: Partial<EnrichmentResponse> = {}): EnrichmentResponse
 }
 
 const _empty: EnrichmentResponse = {
+  has_content: false,
   mbid: '',
   genres: [],
   year: 0,

@@ -1,41 +1,37 @@
-import type { TrackResponse } from '@shared/api-client/types';
-
-import { saveControlState } from '../save-control-state';
-
-function _track(status: TrackResponse['acquisition_status']): TrackResponse {
-  return {
-    id: 'id-1',
-    title: 'Midnight City',
-    artist: 'M83',
-    album: null,
-    duration_seconds: 243,
-    added_at: '2026-01-01T00:00:00Z',
-    acquisition_status: status,
-    artwork_url: null,
-    failure_reason: status === 'failed' ? 'boom' : null,
-    year: null,
-    genre: null,
-    track_number: null,
-    album_artist: null,
-    isrc: null,
-    audio_ref: status === 'ready' ? 'ref-1' : null,
-  };
-}
+import { saveControlLabel, saveControlState, saveControlText } from '../save-control-state';
 
 describe('saveControlState', () => {
-  it('offers add when the track is not in the library', () => {
+  it('is add when the server did not stamp ownership', () => {
     expect(saveControlState(null)).toBe('add');
   });
 
-  it('shows saving while a saved track is still pending acquisition', () => {
-    expect(saveControlState(_track('pending'))).toBe('saving');
+  it('is saving while acquisition is pending', () => {
+    expect(saveControlState({ trackId: 't', acquisitionStatus: 'pending' })).toBe('saving');
   });
 
-  it('shows ready once acquisition completes', () => {
-    expect(saveControlState(_track('ready'))).toBe('ready');
+  it('is failed when acquisition failed', () => {
+    expect(saveControlState({ trackId: 't', acquisitionStatus: 'failed' })).toBe('failed');
   });
 
-  it('shows failed when acquisition failed', () => {
-    expect(saveControlState(_track('failed'))).toBe('failed');
+  it('is ready once the audio is there', () => {
+    expect(saveControlState({ trackId: 't', acquisitionStatus: 'ready' })).toBe('ready');
+  });
+});
+
+describe('saveControlLabel', () => {
+  it('names the track in every state', () => {
+    expect(saveControlLabel('add', 'Song')).toBe('Save Song');
+    expect(saveControlLabel('saving', 'Song')).toBe('Song downloading');
+    expect(saveControlLabel('ready', 'Song')).toBe('Song in library');
+    expect(saveControlLabel('failed', 'Song')).toBe('Retry saving Song');
+  });
+});
+
+describe('saveControlText', () => {
+  it('renders the short label', () => {
+    expect(saveControlText('add')).toBe('Save');
+    expect(saveControlText('saving')).toBe('Saving…');
+    expect(saveControlText('ready')).toBe('Saved');
+    expect(saveControlText('failed')).toBe('Retry');
   });
 });

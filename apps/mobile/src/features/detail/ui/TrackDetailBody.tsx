@@ -15,7 +15,7 @@ import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import { resolveFeatured } from '../extras';
 import { trackExtras } from '../extras-accessors';
-import { useLibraryTrackMatch } from '../hooks/useLibraryTrackMatch';
+import { useOwnedTrack } from '../hooks/useOwnedTrack';
 import { useReportWrongAlbum } from '../hooks/useReportWrongAlbum';
 import { useSaveTrack } from '../hooks/useSaveTrack';
 import { featuringRouteFor, type DetailRoute } from '../navigation';
@@ -58,14 +58,14 @@ export function TrackDetailBody({
   const save = useSaveTrack();
   const wrongAlbum = useReportWrongAlbum(result);
   const playback = usePlayback();
-  const libraryMatch = useLibraryTrackMatch(result.title, result.subtitle);
   const te = trackExtras(result.extras);
+  const owned = useOwnedTrack(te);
 
   const canSave = (result.subtitle ?? '').length > 0;
   const albumName = te.album;
   const featured = resolveFeatured(result.extras, deezerFeatured, result.title, result.subtitle);
 
-  const source = resolvePlaySource(te, libraryMatch);
+  const source = resolvePlaySource(te, owned);
   const playing = source !== null && isCurrentlyPlaying(playback, source);
   const isPreview = source?.kind === 'preview';
   const playTestID = isPreview ? 'detail-preview' : 'detail-play';
@@ -77,7 +77,7 @@ export function TrackDetailBody({
       ? 'failed'
       : save.isPending
         ? 'saving'
-        : saveControlState(libraryMatch);
+        : saveControlState(owned);
   const saveInteractive = saveState === 'add' || saveState === 'failed';
   const saveDisplayState: SaveControlState = saveState === 'disabled' ? 'add' : saveState;
 

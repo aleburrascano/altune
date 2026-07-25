@@ -3,7 +3,11 @@ import { AppState } from 'react-native';
 
 import TrackPlayer from 'react-native-track-player';
 
-import { getQueueState, saveQueueState } from '@shared/api-client/playback';
+import {
+  getQueueState,
+  saveQueueState,
+  type QueueSourceWire,
+} from '@shared/api-client/playback';
 import { getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
@@ -16,41 +20,26 @@ import { currentTrackId, reconstructPlayOrder, resolveResumeStartIndex } from '.
 const SAVE_INTERVAL_MS = 15_000;
 const REHYDRATE_LIMIT = 2000;
 
-function buildSourceId(source: ReturnType<typeof useQueueStore.getState>['source']): string {
-  if (!source) return '';
+function toWireSource(
+  source: ReturnType<typeof useQueueStore.getState>['source'],
+): QueueSourceWire | null {
+  if (!source) return null;
   if (source.kind === 'playlist') {
-    return `playlist:${source.playlistId}:${encodeURIComponent(source.name)}`;
+    return { kind: 'playlist', playlist_id: source.playlistId, name: source.name };
   }
-  if (source.kind === 'search') return `search:${encodeURIComponent(source.query)}`;
-  return source.kind;
+  if (source.kind === 'search') return { kind: 'search', query: source.query };
+  return { kind: 'library' };
 }
 
-function decodeOrEmpty(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return '';
+function fromWireSource(
+  source: QueueSourceWire | null | undefined,
+): ReturnType<typeof useQueueStore.getState>['source'] {
+  if (!source) return null;
+  if (source.kind === 'playlist') {
+    return { kind: 'playlist', playlistId: source.playlist_id ?? '', name: source.name ?? '' };
   }
-}
-
-function parseSourceId(sourceId: string): ReturnType<typeof useQueueStore.getState>['source'] {
-  if (!sourceId) return null;
-  if (sourceId.startsWith('playlist:')) {
-    const rest = sourceId.slice('playlist:'.length);
-    const sep = rest.indexOf(':');
-    if (sep === -1) return { kind: 'playlist', playlistId: rest, name: '' };
-    return {
-      kind: 'playlist',
-      playlistId: rest.slice(0, sep),
-      name: decodeOrEmpty(rest.slice(sep + 1)),
-    };
-  }
-  if (sourceId === 'library') return { kind: 'library' };
-  if (sourceId === 'search') return { kind: 'search', query: '' };
-  if (sourceId.startsWith('search:')) {
-    return { kind: 'search', query: decodeOrEmpty(sourceId.slice('search:'.length)) };
-  }
-  return null;
+  if (source.kind === 'search') return { kind: 'search', query: source.query ?? '' };
+  return { kind: 'library' };
 }
 
 async function currentPositionMsOrZero(): Promise<number> {
@@ -68,7 +57,7 @@ function showSavedTrackWhileRehydrating(
   if (!saved.current_track || saved.current_track.acquisition_status !== 'ready') return null;
 
   const current = currentTrackToPlaybackTrack(saved.current_track);
-  useQueueStore.getState().loadQueue([current], 0, parseSourceId(saved.source_id));
+  useQueueStore.getState().loadQueue([current], 0, fromWireSource(saved.source));
   useQueueStore.getState().setResumePosition(saved.position_ms);
   return useQueueStore.getState().generation;
 }
@@ -77,7 +66,7 @@ function rebuildFromNaturalOrder(
   saved: Awaited<ReturnType<typeof getQueueState>>,
   trackMap: Map<string, TrackResponse>,
   isReady: (id: string) => boolean,
-  source: ReturnType<typeof parseSourceId>,
+  source: ReturnType<typeof fromWireSource>,
 ): boolean {
   if (!saved.natural_order.length) return false;
 
@@ -97,7 +86,7 @@ function rebuildFromNaturalOrder(
 function rebuildFromPlayOrderAlone(
   saved: Awaited<ReturnType<typeof getQueueState>>,
   trackMap: Map<string, TrackResponse>,
-  source: ReturnType<typeof parseSourceId>,
+  source: ReturnType<typeof fromWireSource>,
 ): boolean {
   const validTracks = saved.track_ids
     .map((id) => trackMap.get(id))
@@ -141,7 +130,7 @@ export function useQueueResume() {
         position_ms: await currentPositionMsOrZero(),
         shuffled: s.shuffled,
         repeat_mode: s.repeatMode,
-        source_id: buildSourceId(s.source),
+        source: toWireSource(s.source),
         natural_order: naturalOrder,
       });
     } catch {}
@@ -176,7 +165,7 @@ export function useQueueResume() {
           const t = trackMap.get(id);
           return t != null && t.acquisition_status === 'ready';
         };
-        const source = parseSourceId(saved.source_id);
+        const source = fromWireSource(saved.source);
 
         const rebuilt =
           rebuildFromNaturalOrder(saved, trackMap, isReady, source) ||

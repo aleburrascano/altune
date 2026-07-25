@@ -38,55 +38,6 @@ export function _viewForState(state: DiscoverHookState): DiscoverView {
   }
 }
 
-export const SECTION_CAP = 10;
-
-export type GroupedResults = {
-  albums: DiscoveryResult[];
-  tracks: DiscoveryResult[];
-  artists: DiscoveryResult[];
-};
-
-export function _groupByKind(results: DiscoveryResult[]): GroupedResults {
-  const albums: DiscoveryResult[] = [];
-  const tracks: DiscoveryResult[] = [];
-  const artists: DiscoveryResult[] = [];
-  for (const result of results) {
-    if (result.kind === 'album') {
-      albums.push(result);
-    } else if (result.kind === 'track') {
-      tracks.push(result);
-    } else {
-      artists.push(result);
-    }
-  }
-  return { albums, tracks, artists };
-}
-
-export function _topResult(results: DiscoveryResult[]): DiscoveryResult | null {
-  return results[0] ?? null;
-}
-
-export type SectionKey = 'album' | 'track' | 'artist';
-
-const _sectionKeyOf = (kind: DiscoveryResult['kind']): SectionKey => kind;
-
-export function _sectionOrder(results: DiscoveryResult[]): SectionKey[] {
-  const order: SectionKey[] = [];
-  const seen = new Set<SectionKey>();
-  for (const result of results) {
-    const key = _sectionKeyOf(result.kind);
-    if (!seen.has(key)) {
-      seen.add(key);
-      order.push(key);
-    }
-  }
-  return order;
-}
-
-export function _cap<T>(items: T[], cap: number = SECTION_CAP): T[] {
-  return items.slice(0, cap);
-}
-
 const KIND_LABELS: Record<DiscoveryKind, readonly [string, string]> = {
   artist: ['Artist', 'Artists'],
   album: ['Album', 'Albums'],

@@ -16,10 +16,6 @@ type UseDeezerEnrichmentReturn = {
   isError: boolean;
 };
 
-function hasContent(e: DeezerEnrichmentResponse): boolean {
-  return e.bpm > 0 || e.explicit || e.label !== '' || e.genres.length > 0 || e.record_type !== '';
-}
-
 export function useDeezerEnrichment({
   kind,
   title,
@@ -29,7 +25,7 @@ export function useDeezerEnrichment({
   const { value, isLoading, isError } = useEnrichmentQuery({
     queryKey: ['deezer-enrichment', kind, `${title}|${subtitle ?? ''}`],
     queryFn: () => getDeezerEnrichment({ kind, title, subtitle }),
-    hasContent,
+    hasContent: (e) => e.has_content,
     enabled: enabled && title.trim() !== '',
   });
 

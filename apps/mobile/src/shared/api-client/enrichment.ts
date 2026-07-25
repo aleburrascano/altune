@@ -20,11 +20,13 @@ export async function getAlbumTracks(
   limit?: number,
   albumTitle?: string,
   albumArtist?: string,
+  mbExternalId?: string,
 ): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
   if (albumTitle) params.set('title', albumTitle);
   if (albumArtist) params.set('artist', albumArtist);
+  if (mbExternalId) params.set('mbid', mbExternalId);
   const qs = params.toString();
   const url = `/v1/discovery/albums/${provider}/${encodeURIComponent(externalId)}/tracks${qs ? `?${qs}` : ''}`;
   return apiFetch<ContentFetchResponse>(url);
@@ -72,6 +74,7 @@ export async function getRelatedTracks(
 }
 
 export type EnrichmentResponse = {
+  has_content: boolean;
   mbid: string;
   genres: string[];
   year: number;
@@ -97,6 +100,7 @@ export async function getEnrichment(params: {
 }
 
 export type LastFmEnrichmentResponse = {
+  has_content: boolean;
   mbid: string;
   listeners: number;
   playcount: number;
@@ -124,6 +128,7 @@ export async function getLastFmEnrichment(params: {
 }
 
 export type DeezerEnrichmentResponse = {
+  has_content: boolean;
   bpm: number;
   gain: number;
   explicit: boolean;
@@ -142,4 +147,23 @@ export async function getDeezerEnrichment(params: {
   return apiFetch<DeezerEnrichmentResponse>(
     `/v1/discovery/enrichment/deezer?${kindTitleQs(params.kind, params.title, params.subtitle)}`,
   );
+}
+
+export type ArtistContentResponse = {
+  top_tracks: ContentFetchResponse;
+  albums: ContentFetchResponse;
+};
+
+export async function getArtistContent(
+  provider: string,
+  externalId: string,
+  opts: { artistName?: string; tracksLimit?: number; albumsLimit?: number } = {},
+): Promise<ArtistContentResponse> {
+  const params = new URLSearchParams();
+  if (opts.artistName) params.set('name', opts.artistName);
+  if (opts.tracksLimit !== undefined) params.set('tracks_limit', String(opts.tracksLimit));
+  if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
+  const qs = params.toString();
+  const url = `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/content${qs ? `?${qs}` : ''}`;
+  return apiFetch<ArtistContentResponse>(url);
 }

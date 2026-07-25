@@ -8,6 +8,20 @@ import type {
 
 import { patchTrackInCaches, removeTrackFromCaches } from '../trackCachePatch';
 
+type TrackPages = { pages: ListTracksResponse[]; pageParams: number[] };
+
+function seedTracks(qc: QueryClient, items: TrackResponse[]): void {
+  qc.setQueryData<TrackPages>(['library', 'tracks', '', 'recent'], {
+    pages: [{ items, total: items.length, limit: 200, offset: 0, has_more: false }],
+    pageParams: [0],
+  });
+}
+
+function readTracks(qc: QueryClient): TrackResponse[] {
+  return qc.getQueryData<TrackPages>(['library', 'tracks', '', 'recent'])?.pages.flatMap((p) => p.items) ?? [];
+}
+
+
 function makeTrack(overrides: Partial<TrackResponse>): TrackResponse {
   return {
     id: 'track-1',
@@ -32,17 +46,11 @@ function makeTrack(overrides: Partial<TrackResponse>): TrackResponse {
 describe('patchTrackInCaches', () => {
   it('patches the track in the library-home snapshot', () => {
     const qc = new QueryClient();
-    qc.setQueryData<ListTracksResponse>(['library-home'], {
-      items: [makeTrack({ id: 'track-1' }), makeTrack({ id: 'track-2' })],
-      total: 2,
-      limit: 50,
-      offset: 0,
-      has_more: false,
-    });
+    seedTracks(qc, [makeTrack({ id: 'track-1' }), makeTrack({ id: 'track-2' })]);
 
     patchTrackInCaches(qc, 'track-1', { acquisition_status: 'ready', audio_ref: 'ref-1' });
 
-    const data = qc.getQueryData<ListTracksResponse>(['library-home']);
+    const data = { items: readTracks(qc) };
     expect(data?.items[0]).toMatchObject({ acquisition_status: 'ready', audio_ref: 'ref-1' });
     expect(data?.items[1]?.acquisition_status).toBe('pending');
   });
@@ -54,6 +62,7 @@ describe('patchTrackInCaches', () => {
       name: 'Faves',
       track_count: 1,
       preview_artwork_urls: [],
+      total_duration_seconds: 0,
       created_at: '',
       updated_at: '',
     };
@@ -100,7 +109,7 @@ describe('patchTrackInCaches', () => {
   it('is a no-op when no cache holds the track', () => {
     const qc = new QueryClient();
     expect(() => patchTrackInCaches(qc, 'ghost', { acquisition_status: 'ready' })).not.toThrow();
-    expect(qc.getQueryData(['library-home'])).toBeUndefined();
+    expect(qc.getQueryData(['library', 'tracks', '', 'recent'])).toBeUndefined();
   });
 });
 

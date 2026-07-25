@@ -48,3 +48,20 @@ The model is spine plus lenses: Tracks and Playlists are what the user owns and 
 `LibraryNoResults` exists because a filtered-out library must never look like a missing one: the 2026-07-14 "entire library is missing" report turned out to be a persisted search filter, so the view names the query, states the library is intact, and offers a one-tap clear.
 
 Deferred deliberately: **Favorites / Liked** is not built, because saving is already the deliberate act — a pinned slot can be added later. **Jump back in / recently played** is a Home concern reserved for a future Home tab, not Library.
+
+## The server owns grouping, search and sort (2026-07-25)
+
+The screen used to page the **entire** track list onto the device (`fetch-all-tracks.ts`, `limit: 2000` until `has_more` went false), pin it with `staleTime: Infinity`, and answer everything from that one array: Albums and Artists were folded out of it by `derive-library-groups.ts`, search was `toLowerCase().includes()` over it, and sort was four `localeCompare` passes. That is why the cache had to be global, why the fold had to be memoized on stable identities, and why `LibraryRow` needed a hand-written comparator — the whole list re-rendered on every keystroke.
+
+All four of those are now server queries, one per chip, each enabled only while its chip is active:
+
+- **Tracks** — `useLibraryTracks` is a `useInfiniteQuery` over `GET /v1/tracks?q=&sort=&offset=`, page size 200, keyed `libraryKeys.tracks(query, sort)`. Paging replaced the fetch-everything loop: a large library now costs one page, not the whole table.
+- **Albums / Artists** — `GET /v1/library/albums` and `/v1/library/artists`, keyed `libraryKeys.albums/artists(query, sort)`. `AlbumGroup` / `ArtistGroup` are now wire types from `@shared/api-client/library` (snake_case), not client-derived shapes.
+- **Search** — `useLibrarySearch` kept the 300ms / 2-character debounce (UI timing is a client concern) and lost `filter` / `matches`; it now just yields the committed string that goes on the query.
+- **Sort** — `ui/sort.ts` kept the `*_SORT_OPTIONS` label lists and lost the comparators. The keys (`recent` / `az` / `year`) are wire values.
+
+`_viewForState` still owns the loading > error > empty > list precedence; it now takes `readonly unknown[]` because it only ever read `.length`, and the active chip supplies the count.
+
+**The cache topology changed with it.** `libraryKeys.home` is gone. The tracks family is an `InfiniteData<ListTracksResponse>` under the `['library','tracks']` prefix, so `trackCachePatch` walks pages and patches every cached variant through `setQueriesData` — a query-keyed cache means there is no longer one snapshot to write. `libraryKeys.lookup` is a separate flat family for detail's narrow "tracks matching this album/artist" reads. Albums and Artists are aggregates: a track-level event cannot be patched into them, so add/delete **invalidate** those two families instead.
+
+Playlists are still sorted on the device. They are a small list the client already holds in full, with no server sort to defer to, and inventing one would be a query for a dozen rows.

@@ -1,22 +1,22 @@
-import type { AlbumGroup, ArtistGroup } from '../hooks/useLibraryGrouping';
+import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
 import { albumToDiscoveryResult, artistToDiscoveryResult } from '../ui/library-to-discovery';
 
 const baseAlbum: AlbumGroup = {
   key: 'rumours|||fleetwood mac',
   album: 'Rumours',
   artist: 'Fleetwood Mac',
-  artworkUrl: 'https://img/rumours.jpg',
+  artwork_url: 'https://img/rumours.jpg',
   year: 1977,
-  trackCount: 11,
-  mostRecentAddedAt: '2026-06-01T00:00:00Z',
+  track_count: 11,
+  most_recent_added_at: '2026-06-01T00:00:00Z',
 };
 
 const baseArtist: ArtistGroup = {
   key: 'fleetwood mac',
   artist: 'Fleetwood Mac',
-  artworkUrl: 'https://img/fm.jpg',
-  trackCount: 42,
-  mostRecentAddedAt: '2026-06-01T00:00:00Z',
+  artwork_url: 'https://img/fm.jpg',
+  track_count: 42,
+  most_recent_added_at: '2026-06-01T00:00:00Z',
 };
 
 describe('albumToDiscoveryResult', () => {
@@ -39,7 +39,7 @@ describe('albumToDiscoveryResult', () => {
   });
 
   it('passes a null artwork url straight through', () => {
-    expect(albumToDiscoveryResult({ ...baseAlbum, artworkUrl: null }).image_url).toBeNull();
+    expect(albumToDiscoveryResult({ ...baseAlbum, artwork_url: null }).image_url).toBeNull();
   });
 });
 
@@ -57,6 +57,6 @@ describe('artistToDiscoveryResult', () => {
   });
 
   it('passes a null artwork url straight through', () => {
-    expect(artistToDiscoveryResult({ ...baseArtist, artworkUrl: null }).image_url).toBeNull();
+    expect(artistToDiscoveryResult({ ...baseArtist, artwork_url: null }).image_url).toBeNull();
   });
 });

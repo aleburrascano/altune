@@ -34,11 +34,18 @@ export type RelatedGroup = {
   items: DiscoveryResult[];
 };
 
+export type ResultSection = {
+  kind: DiscoveryKind;
+  items: DiscoveryResult[];
+};
+
 export type DiscoverySearchResponse = {
   query: string;
   query_norm: string;
   search_id?: string | undefined;
   results: DiscoveryResult[];
+  top_result?: DiscoveryResult | undefined;
+  sections: ResultSection[];
   providers: DiscoveryProviderInfo[];
   partial: boolean;
   cache: { hit: boolean; fetched_at: string | null };
@@ -101,6 +108,11 @@ export async function searchDiscovery(
   return {
     ...response,
     results: (response.results ?? []).map(normalizeResult),
+    ...(response.top_result ? { top_result: normalizeResult(response.top_result) } : {}),
+    sections: (response.sections ?? []).map((section) => ({
+      ...section,
+      items: section.items.map(normalizeResult),
+    })),
     total: response.total ?? (response.results ?? []).length,
     offset: response.offset ?? 0,
     has_more: response.has_more ?? false,

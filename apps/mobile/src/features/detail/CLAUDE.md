@@ -6,9 +6,9 @@ Layout:
 
 - `ui/DetailScreen.tsx` — entrypoint and header; `ui/PlayButton.tsx`, `ui/TrackSaveControl.tsx`, `ui/SaveGlyph.tsx`; per-kind bodies and `DiscographySections`.
 - `extras.ts` — `resolveFeatured`, `extractFeaturedFromText`. `extras-accessors.ts` — narrowing for the untyped wire map.
-- `play-source.ts` — `resolvePlaySource`. `save-control-state.ts` — lifecycle state + labels. `save-cache.ts` — optimistic cache transforms.
-- `navigation.ts` — `openDetail`. `hooks/` — `useSaveTrack`, `useLateralNav`, `useAlbumTracks`, `useArtistContent`, `useDetailEnrichments`, `useEnrichResult`, `usePersistTrackNumbers`, `useAlbumDetailState`, `useArtistDetailState`.
-- `__tests__/` — `extras`, `play-source`, `save-control-state`, `save-cache`, `useSaveTrack`, `useLateralNav`, `album-positions`, `DetailScreen`.
+- `play-source.ts` — `resolvePlaySource`. `save-control-state.ts` — lifecycle state + labels. `save-cache.ts` — the create-request mapper and the optimistic placeholder. `hooks/useOwnedTrack.ts` — server ownership stamp overlaid with the live acquisition status.
+- `navigation.ts` — `openDetail`. `hooks/` — `useSaveTrack`, `useLateralNav`, `useAlbumTracks`, `useArtistContent`, `useDetailEnrichments`, `useEnrichResult`, `useOwnedTrack`, `useAlbumDetailState`, `useArtistDetailState`.
+- `__tests__/` — `extras`, `play-source`, `save-control-state`, `save-cache`, `owned-playback`, `useSaveTrack`, `useLateralNav`, `DetailScreen`.
 
 Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@shared/api-client/{tracks,discovery,enrichment}`, `@shared/ui/primitives/*` (imported directly, not the barrel), `@tanstack/react-query`. No cross-feature imports.
 
@@ -18,6 +18,8 @@ Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@share
 - Redirect to `/discover` on an empty handoff; never render a detail screen without one.
 - Keep logic in the pure helpers and the JSX a thin wrapper.
 - Narrow every `extras` key before use; absent and empty values are omitted.
+- Read ownership from the server stamp (`owned_track_id` / `owned_acquisition_status`), never by scanning a library cache.
+- Fetch artist top-tracks and albums in one call; never merge per-provider discographies on the device.
 - Never save a Track with a null artist — the control disables and `onSave` short-circuits.
 - Never let `useEnrichResult` match on title alone, and never let it overwrite stored library `extras`.
 - Never reset `searchingRef` after a successful push, or lateral nav duplicates screens.

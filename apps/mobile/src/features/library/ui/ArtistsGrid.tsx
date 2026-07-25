@@ -4,7 +4,7 @@ import { Image as ExpoImage } from 'expo-image';
 
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
-import type { ArtistGroup } from '../hooks/useLibraryGrouping';
+import type { ArtistGroup } from '@shared/api-client/library';
 import { avatarColumns } from './gridColumns';
 import type { ListRefresh } from './refresh';
 
@@ -54,9 +54,9 @@ export function ArtistsGrid({
           accessibilityLabel={item.artist}
         >
           <View style={[styles.avatar, { backgroundColor: theme.color.surface2 }]}>
-            {item.artworkUrl != null ? (
+            {item.artwork_url != null ? (
               <ExpoImage
-                source={{ uri: item.artworkUrl }}
+                source={{ uri: item.artwork_url }}
                 style={styles.avatarImage}
                 contentFit="cover"
               />

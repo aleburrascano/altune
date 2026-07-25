@@ -44,3 +44,13 @@ After a successful search the `discoveryKeys.history` query is invalidated so ne
 Interaction telemetry is fire-and-forget per ADR-0007 §3.12: a result tap emits `result_clicked` through the shared `useRecordEvent` and errors are swallowed. The event's `position` is the result's **global** index in `results[]` — the coordinate space `results_shown` impressions use — not the section-local display index the testIDs are built from. Tapping a result stashes the handoff and pushes the detail route without awaiting the click mutation.
 
 `useSearchHistory` is a `useQuery` with no `enabled` gate, so it fetches whenever the screen mounts. That is cheap (one Postgres query, under 50ms) but worth knowing if lazy history is ever wanted.
+
+## The slate is shaped server-side (2026-07-25)
+
+`_groupByKind`, `_topResult`, `_sectionOrder` and `_cap` are gone from `state.ts`. The search response now carries `top_result` and `sections`, and `BlendedSection` renders them directly.
+
+The reason is that `_sectionOrder` — "the kind whose strongest member ranks earliest shows first" — was a ranking decision taken outside the ranker and outside the eval harness. Moving it puts it under `discoveryeval` with everything else that decides what a user sees first.
+
+One behaviour change falls out of this: sections are computed over the page the server returned, and `useDiscoverSearch` takes metadata from page 1 as it already does for `search_id` and corrections. Scrolling the blended view no longer grows the sections — "See all <kind>" is the way down, and the filtered view is what pages.
+
+`kindLabel` and `resultKey` stay client-side; they are display vocabulary, not ranking.

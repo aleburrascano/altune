@@ -56,16 +56,21 @@ function _client(): QueryClient {
   return new QueryClient({ defaultOptions: { mutations: { retry: false } } });
 }
 
+function seedTracks(qc: QueryClient, items: TrackResponse[]): void {
+  qc.setQueryData(['library', 'tracks', '', 'recent'], {
+    pages: [{ items, total: items.length, limit: 200, offset: 0, has_more: false }],
+    pageParams: [0],
+  });
+}
+
+function trackIds(qc: QueryClient): string[] {
+  const data = qc.getQueryData<{ pages: ListTracksResponse[] }>(['library', 'tracks', '', 'recent']);
+  return data?.pages.flatMap((p) => p.items).map((t) => t.id) ?? [];
+}
+
 function _seededClient(): QueryClient {
   const qc = _client();
-  const data: ListTracksResponse = {
-    items: [_existing('a')],
-    total: 1,
-    limit: 50,
-    offset: 0,
-    has_more: false,
-  };
-  qc.setQueryData(['library-home'], data);
+  seedTracks(qc, [_existing('a')]);
   return qc;
 }
 
@@ -79,8 +84,7 @@ afterEach(() => {
 });
 
 function _libraryIds(qc: QueryClient): string[] {
-  const data = qc.getQueryData<ListTracksResponse>(['library-home']);
-  return data?.items.map((t) => t.id) ?? [];
+  return trackIds(qc);
 }
 
 describe('useSaveTrack', () => {
@@ -101,9 +105,9 @@ describe('useSaveTrack', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
   });
 
-  it('does not fabricate a one-track library when library-home never loaded', async () => {
+  it('does not fabricate a one-track library when the tracks cache never loaded', async () => {
     const qc = _client();
-    expect(qc.getQueryData(['library-home'])).toBeUndefined();
+    expect(qc.getQueryData(['library', 'tracks', '', 'recent'])).toBeUndefined();
     mockCreateTrack.mockResolvedValueOnce(_existing('real'));
 
     const { result } = renderHook(() => useSaveTrack(), { wrapper: _wrapper(qc) });
@@ -112,7 +116,7 @@ describe('useSaveTrack', () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(qc.getQueryData(['library-home'])).toBeUndefined();
+    expect(qc.getQueryData(['library', 'tracks', '', 'recent'])).toBeUndefined();
   });
 
   it('rolls back the optimistic insert when the save fails', async () => {
