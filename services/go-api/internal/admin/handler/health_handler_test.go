@@ -31,8 +31,6 @@ func TestDependencyHealth_Healthy(t *testing.T) {
 	}
 }
 
-// AE1: the operator health tile reports the per-dependency breakdown (Redis
-// down shows red, DB green) through the data endpoint.
 func TestAdminHealthEndpoint(t *testing.T) {
 	probe := func(context.Context) DependencyHealth {
 		return DependencyHealth{DB: "ok", Redis: "down"}

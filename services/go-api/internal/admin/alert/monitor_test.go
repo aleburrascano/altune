@@ -18,8 +18,6 @@ func (s *stubNotifier) Notify(_ context.Context, a Alert) error {
 	return s.err
 }
 
-// newTestMonitor builds a monitor without starting its ticker, so tests can
-// drive evaluate() deterministically.
 func newTestMonitor(n AlertNotifier, conds ...Condition) *Monitor {
 	m := NewMonitor(n, 0, conds...)
 	return m
@@ -43,7 +41,7 @@ func TestMonitor_SignalFiresOnce(t *testing.T) {
 	m := newTestMonitor(n, signalCond("dep", &firing))
 
 	m.evaluate(context.Background())
-	m.evaluate(context.Background()) // still firing — must not page again
+	m.evaluate(context.Background())
 
 	if n.calls != 1 {
 		t.Fatalf("notify calls = %d, want 1 (once per incident)", n.calls)
@@ -55,11 +53,11 @@ func TestMonitor_RefiresAfterRecovery(t *testing.T) {
 	n := &stubNotifier{}
 	m := newTestMonitor(n, signalCond("dep", &firing))
 
-	m.evaluate(context.Background()) // fire
+	m.evaluate(context.Background())
 	firing = false
-	m.evaluate(context.Background()) // recover
+	m.evaluate(context.Background())
 	firing = true
-	m.evaluate(context.Background()) // new incident — fires again
+	m.evaluate(context.Background())
 
 	if n.calls != 2 {
 		t.Fatalf("notify calls = %d, want 2 (fire, recover, fire)", n.calls)
@@ -88,7 +86,6 @@ func TestMonitor_NotifierFailureDoesNotPanic(t *testing.T) {
 	n := &stubNotifier{err: errors.New("push failed")}
 	m := newTestMonitor(n, signalCond("dep", &firing))
 
-	// Must not panic; the monitor logs and continues.
 	m.evaluate(context.Background())
 
 	if n.calls != 1 {

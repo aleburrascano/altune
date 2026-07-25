@@ -1,7 +1,3 @@
-// Package providerhealth holds the in-memory rolling-window store behind the
-// Mission Control provider status board. It aggregates per-provider scatter-
-// gather outcomes (ProviderStatus) that the discovery handler already computes —
-// no change to the ranking path, and no external metrics store.
 package providerhealth
 
 import (
@@ -22,8 +18,6 @@ type sample struct {
 	at        time.Time
 }
 
-// Store is concurrency-safe. The discovery handler records into it after each
-// search; the operator board reads snapshots.
 type Store struct {
 	mu      sync.Mutex
 	samples map[string][]sample
@@ -37,8 +31,6 @@ func NewStore() *Store {
 	}
 }
 
-// Record adds one provider outcome. Called off the ranking path (at the search
-// response boundary), so it never affects search latency or correctness.
 func (s *Store) Record(provider, status string, latencyMs int64) {
 	now := time.Now().UTC()
 	s.mu.Lock()
@@ -51,20 +43,17 @@ func (s *Store) Record(provider, status string, latencyMs int64) {
 	s.mu.Unlock()
 }
 
-// ProviderSnapshot is one provider's status board row.
 type ProviderSnapshot struct {
-	Provider     string         `json:"provider"`
-	Current      string         `json:"current"`     // most recent status
-	Counts       map[string]int `json:"counts"`      // per-status counts in the window
-	Total        int            `json:"total"`       // total calls in the window
-	AvgLatencyMs int64          `json:"avg_latency_ms"`
-	P95LatencyMs int64          `json:"p95_latency_ms"`
-	ErrorRate    float64        `json:"error_rate"`     // non-ok outcomes / total, in the window
-	RateLimited  int            `json:"rate_limited"`   // rate_limited outcomes in the window (quota-pressure signal)
+	Provider        string         `json:"provider"`
+	CurrentStatus   string         `json:"current"`
+	CountsPerStatus map[string]int `json:"counts"`
+	TotalCalls      int            `json:"total"`
+	AvgLatencyMs    int64          `json:"avg_latency_ms"`
+	P95LatencyMs    int64          `json:"p95_latency_ms"`
+	ErrorRate       float64        `json:"error_rate"`
+	RateLimited     int            `json:"rate_limited"`
 }
 
-// Snapshot returns each provider's rolling status mix, ordered by name. It prunes
-// stale samples as it reads.
 func (s *Store) Snapshot() []ProviderSnapshot {
 	cutoff := time.Now().UTC().Add(-window)
 	s.mu.Lock()
@@ -101,22 +90,20 @@ func (s *Store) Snapshot() []ProviderSnapshot {
 			errorRate = float64(errs) / float64(len(kept))
 		}
 		out = append(out, ProviderSnapshot{
-			Provider:     provider,
-			Current:      s.last[provider],
-			Counts:       counts,
-			Total:        len(kept),
-			AvgLatencyMs: avg,
-			P95LatencyMs: percentile(latencies, 0.95),
-			ErrorRate:    errorRate,
-			RateLimited:  counts["rate_limited"],
+			Provider:        provider,
+			CurrentStatus:   s.last[provider],
+			CountsPerStatus: counts,
+			TotalCalls:      len(kept),
+			AvgLatencyMs:    avg,
+			P95LatencyMs:    percentile(latencies, 0.95),
+			ErrorRate:       errorRate,
+			RateLimited:     counts["rate_limited"],
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Provider < out[j].Provider })
 	return out
 }
 
-// percentile returns the nearest-rank p-th percentile latency (p in [0,1]), or 0
-// for an empty set. Sorts a copy so the caller's slice is untouched.
 func percentile(latencies []int64, p float64) int64 {
 	if len(latencies) == 0 {
 		return 0

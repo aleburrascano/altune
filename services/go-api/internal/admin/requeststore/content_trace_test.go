@@ -27,7 +27,7 @@ func TestRecordContentFetch_AttachesDetailWithYearAndStatus(t *testing.T) {
 	if len(rec.Detail.Items) != 2 {
 		t.Fatalf("items = %d, want 2", len(rec.Detail.Items))
 	}
-	if rec.Detail.Items[0].Year != 2024 || rec.Detail.Items[0].Status != "confirmed" {
+	if rec.Detail.Items[0].Year != 2024 || rec.Detail.Items[0].ConsensusVerdict != "confirmed" {
 		t.Errorf("item 0 = %+v, want year 2024 / confirmed", rec.Detail.Items[0])
 	}
 	if rec.Detail.Items[1].Year != 0 {

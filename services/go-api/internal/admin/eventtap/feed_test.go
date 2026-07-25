@@ -12,7 +12,6 @@ func TestFeed_Rates(t *testing.T) {
 	f.record(TapEvent{Type: "search", Timestamp: now})
 	f.record(TapEvent{Type: "search", Timestamp: now})
 	f.record(TapEvent{Type: "track_added", Timestamp: now})
-	// Stale event outside the window must not count.
 	f.record(TapEvent{Type: "search", Timestamp: now.Add(-2 * time.Minute)})
 
 	rates := f.Rates()

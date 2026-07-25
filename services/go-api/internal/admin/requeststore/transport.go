@@ -9,17 +9,11 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
-// recordingTransport wraps the shared outbound transport and captures every
-// provider call belonging to a tracked request (one carrying a correlation id)
-// into the store. Requests without a correlation id — or when no store is wired —
-// pass straight through, untouched.
 type recordingTransport struct {
 	base  http.RoundTripper
 	store *Store
 }
 
-// NewTransport wraps base so each outbound call on a correlated request is
-// recorded. base defaults to http.DefaultTransport.
 func NewTransport(base http.RoundTripper, store *Store) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
@@ -45,7 +39,6 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	}
 
 	ex.Status = resp.StatusCode
-	// Capture the body lazily as the adapter reads it — no upfront full buffer.
 	resp.Body = &capturingBody{
 		inner:  resp.Body,
 		buf:    &bytes.Buffer{},
@@ -57,9 +50,6 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	return resp, nil
 }
 
-// capturingBody tees up to cap bytes of the response into buf as the caller
-// reads, then finalizes the exchange into the store on Close. The caller still
-// receives the full, unmodified body.
 type capturingBody struct {
 	inner  io.ReadCloser
 	buf    *bytes.Buffer

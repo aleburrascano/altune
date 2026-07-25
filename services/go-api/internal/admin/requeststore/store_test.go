@@ -40,8 +40,8 @@ func TestEviction_ByRequestCount(t *testing.T) {
 func TestEviction_ByTotalBytes(t *testing.T) {
 	s := New()
 	s.maxTotal = 10
-	s.recordExchange("c1", ex("aaaaaa")) // 6 bytes
-	s.recordExchange("c2", ex("bbbbbb")) // 6 bytes → total 12 > 10, drop c1
+	s.recordExchange("c1", ex("aaaaaa"))
+	s.recordExchange("c2", ex("bbbbbb"))
 	if _, ok := s.Get("c1"); ok {
 		t.Error("c1 should be evicted to satisfy the byte ceiling")
 	}

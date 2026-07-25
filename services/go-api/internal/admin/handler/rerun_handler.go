@@ -9,23 +9,17 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
-// ReRunResult is the full waterfall of an on-demand re-run, mirroring the passive
-// drill-down's projection so the console renders both the same way.
 type ReRunResult struct {
 	Query     string                       `json:"query"`
 	Kinds     []string                     `json:"kinds"`
-	Providers []requeststore.ProviderTrace `json:"providers"`  // mapped results per provider
-	Exchanges []requeststore.Exchange      `json:"exchanges"`  // raw provider JSON
-	Merged    []requeststore.ResultRow     `json:"merged"`     // after entity-resolution merge
-	RankTrace []ScoredRow                  `json:"rank_trace"` // after rank, before reshape — with per-result scoring math
-	Final     []requeststore.ResultRow     `json:"final"`      // after diversity + collapse
+	Providers []requeststore.ProviderTrace `json:"providers"`
+	Exchanges []requeststore.Exchange      `json:"exchanges"`
+	Merged    []requeststore.ResultRow     `json:"merged"`
+	RankTrace []ScoredRow                  `json:"rank_trace"`
+	Final     []requeststore.ResultRow     `json:"final"`
 	TookMs    int64                        `json:"took_ms"`
 }
 
-// ScoredRow is one ranked result with the scoring provenance the rank measure
-// computed for it: the display projection (embedded) plus the exact signals
-// rankLess ordered on — relevance first, then the experiment-gated tiebreaks and
-// RRF/multi-source. Lets the console explain WHY a result sits where it does.
 type ScoredRow struct {
 	requeststore.ResultRow
 	Relevance   float64 `json:"relevance"`
@@ -37,15 +31,10 @@ type ScoredRow struct {
 	Demoted     bool    `json:"demoted"`
 }
 
-// ReRunner runs a fresh discovery search through a recording client and returns
-// the stage-by-stage waterfall. Satisfied at the composition root (it needs the
-// provider wiring); the admin handler only consumes it.
 type ReRunner interface {
 	ReRun(ctx context.Context, query string, kinds []string) (ReRunResult, error)
 }
 
-// WithReRunner attaches the on-demand re-run inspector. A nil runner disables the
-// endpoint (503).
 func (h *AdminHandler) WithReRunner(r ReRunner) *AdminHandler {
 	h.reRunner = r
 	return h
@@ -56,9 +45,6 @@ type reRunRequest struct {
 	Kinds []string `json:"kinds"`
 }
 
-// serveReRun runs an operator-supplied query live through the discovery pipeline
-// and returns the full waterfall. Live: hits provider APIs, bypasses the live
-// circuit breakers, shares live keys.
 func (h *AdminHandler) serveReRun(w http.ResponseWriter, r *http.Request) {
 	if h.reRunner == nil {
 		httputil.WriteError(w, http.StatusServiceUnavailable, "re-run inspector not configured")

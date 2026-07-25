@@ -7,10 +7,6 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
-// streamSSE encodes each value received on ch as a Server-Sent Event until the
-// request context is cancelled (client disconnect) or the channel closes. It
-// requires an http.Flusher; the chi RequestLogger wrapper forwards Flush, so
-// the operator console's streams work behind the middleware chain.
 func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {

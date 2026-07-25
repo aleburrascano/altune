@@ -9,10 +9,8 @@ import (
 
 func TestRecordSearch_MergesWithExchangesUnderSameCorrID(t *testing.T) {
 	s := New()
-	// Transport captured a raw exchange first.
 	s.recordExchange("c1", ex("{raw provider json}"))
 
-	// Handler then records the search trace for the same correlation id.
 	ctx := httputil.WithCorrelationID(t.Context(), "c1")
 	statuses := []domain.ProviderSearchResponse{{
 		Provider:    domain.ProviderDeezer,
@@ -60,8 +58,8 @@ func TestProjectResults_CarriesArtworkSourceAndPath(t *testing.T) {
 	if rows[0].ArtworkSource != "discogs" {
 		t.Errorf("artwork_source = %q, want discogs", rows[0].ArtworkSource)
 	}
-	if rows[0].ArtworkPath != "durable-identity" {
-		t.Errorf("artwork_path = %q, want durable-identity", rows[0].ArtworkPath)
+	if rows[0].ArtworkResolutionPath != "durable-identity" {
+		t.Errorf("artwork_path = %q, want durable-identity", rows[0].ArtworkResolutionPath)
 	}
 }
 

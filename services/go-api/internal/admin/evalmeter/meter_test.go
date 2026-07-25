@@ -64,7 +64,7 @@ func TestMeter_SkipIfRunning(t *testing.T) {
 
 	go m.runOnce(context.Background())
 	<-started
-	m.runOnce(context.Background()) // must skip while the first is in flight
+	m.runOnce(context.Background())
 	close(release)
 
 	if calls != 1 {

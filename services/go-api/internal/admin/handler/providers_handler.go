@@ -7,8 +7,6 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
-// serveProviders returns the per-provider status board (rolling status mix,
-// current state, and average latency).
 func (h *AdminHandler) serveProviders(w http.ResponseWriter, _ *http.Request) {
 	if h.providerHealth == nil {
 		httputil.WriteJSON(w, http.StatusOK, []providerhealth.ProviderSnapshot{})
