@@ -19,6 +19,36 @@ The harness's own math is unit-tested (2026-07-24 QA sweep, package at ~94% cove
 
 A gate is a relative drop below a committed baseline, never an absolute floor. A metric with no baseline is never a regression (the first run establishes it), baselines move only on an explicit operator `--update-baselines`, and a regression strictly inside the noise margin is invisible by design. Diversity's benefit metric is report-only and never gated — you gate the cost of a policy, not the policy itself. Entities the search never finds are a coverage miss, not a merge miss.
 
+## Why the corpus is frozen
+
+A rate is only comparable across runs if its denominator is. The corpus was originally rebuilt live from `SELECT DISTINCT title, artist FROM tracks` on every run, so it grew with the library — and the first scheduled nightly (2026-07-25) failed for exactly that reason: the eval baselines had been measured over 1877 entities (1849 top-1, 1868 top-3) and the run evaluated 1942. `eval.top1_rate` came out 1.6e-5 below its baseline, identical at four decimals, and with `margin: 0` that counted as a regression. Nothing about ranking had changed; 65 tracks had been added.
+
+So `corpus.go` reads a committed snapshot (`corpus-library.json`) instead: `resolveEntities` / `resolveArtists` / `resolveTerms` fall back to the `dbload.go` loaders only when `-corpus-file` is unset, so ad-hoc local runs are unchanged while the nightly is pinned. `LibraryCorpus` (`service/eval/library_corpus.go`) sorts on construction and derives the artist and term lists from the same entity pairs, so one file feeds `eval`, `merge`, `diversity`, `artist-intent`, `signal-b` and `correction` and they cannot disagree about what the library is. A frozen-corpus delta therefore means the code or a provider changed — the only two things left that can move.
+
+`-random` with `-corpus-file` is an error rather than a silent override: a frozen corpus exists to be deterministic, and sampling it randomly defeats the point while looking like it worked.
+
+Refreshing the snapshot moves the denominator again, which is why it is a dispatch-triggered PR (`discovery-eval-corpus-refresh.yml`) and not an automatic step. Every corpus-derived baseline must be re-measured after it merges, or the next nightly reports the size change as a regression.
+
+## Why margins are measured on the runner
+
+`-noise-runs N` sets each margin to the run-to-run spread, and for the live-provider modes that spread is mostly provider behaviour: MusicBrainz pacing, circuit-breaker trips, rate-limited responses. Which of those you observe depends on which IP you ask from. A margin measured on a laptop describes the laptop's network and then gets enforced against GitHub runner IPs, so re-baselining is a cloud workflow (`discovery-eval-rebaseline.yml`) rather than a local command. The PR it opens is what keeps "never re-baseline implicitly" true.
+
+Provider noise is also why a regressed mode re-runs once before the nightly calls it red. A single red result is not evidence — `detail`'s contamination guard is fail-open on a MusicBrainz timeout and has reported 0 then 70 on the same commit ~30s apart. Two consecutive regressions is signal.
+
+## Why the nightly fans out
+
+The modes run as an eight-way matrix with `fail-fast: false`, one job per mode. Before that they were sequential steps in a single job, so the first mode to exit 2 skipped every mode after it: the 2026-07-25 run learned nothing about `artist-intent`, `diversity`, `signal-a` or `signal-b` because `eval` failed first. A nightly that stops at the first regression cannot answer whether discovery improved overall.
+
+Concurrency is capped by provider quota scope, not by runner availability. `liveTransport`'s limiter is per-process (see [app-wiring](../app-wiring.md)), so N concurrent jobs issue N times the request rate. MusicBrainz and iTunes are IP-scoped and unaffected by a second runner; Last.fm, Discogs and Genius are key-scoped, and the CI credentials are one key each. So the modes that spend key quota — `eval`, `merge`, `diversity`, `artist-intent`, and `signal-b`, which fans out over `BuildConsensusProviders` — run one at a time, while `detail` (MusicBrainz only), `correction` (offline) and `signal-a` (telemetry) run alongside them.
+
+`correction` hard-requires a populated vocabulary store, and the VM's Redis is unreachable from Actions by design. Rather than leave the mode permanently ungated, `correction-seed` (`seed.go`) `BulkAdd`s the corpus's artists and titles into a CI Redis service container. That vocabulary is seeded, not learned from real search traffic, so its recall and precision are not comparable to a run against prod's store — the mode carries its own baseline measured the same seeded way.
+
+## Where the trend lives
+
+`-metrics path` writes a flat, mode-agnostic `{mode, generated_at, metrics[]}` file per run, and `-mode report` (`report.go`) globs those into one gate table: current, baseline, margin, signed delta, verdict, rendered to the job summary. It writes every metric into the existing `discovery_metrics` table (see [discovery-metrics-table](../../data/discovery-metrics-table.md)) keyed `(as_of, metric)`, so eval history outlives the 30-day artifact retention and sits alongside CTR and zero-result rate for the admin console to chart. The flat metrics file exists so the aggregator never has to unmarshal `HarnessReport` polymorphically — it does not need to know which mode produced what.
+
+When something regresses, `report` also writes `regressions.txt` naming each metric and its delta, which is what the push notification carries. The alert previously said only that "a gated mode fell below baselines".
+
 ## Report field glossary
 
 The report structs in `service/eval/` are the JSON wire contract for each harness. Their fields:
@@ -83,7 +113,9 @@ The `Replayer` matches by request identity, so one combined set serves every que
 
 `detail` is the offline quality gate for the artist detail path, running the real detail service in-process against live providers but over a seeded in-memory identity store built from the goldens, so a golden can carry a deliberately fractured identity — a wrong streaming edge, the "Che" bug — and the harness verifies the read-time guards drop the contamination. It touches neither the library DB nor Redis; `seededIdentityStore` answers `LookupByProviderID` from that fixed map.
 
-`health` records gauges for visibility and history only on an explicit update, and is never gated. `loadLibraryEntities` is an offline-only cross-context read of the catalog `tracks` table across all users, where random sampling needs a subquery because `DISTINCT` must resolve before `ORDER BY random()`.
+`health` records gauges for visibility and history only on an explicit update, and is never gated. `loadLibraryEntities` is an offline-only cross-context read of the catalog `tracks` table across all users, where random sampling needs a subquery because `DISTINCT` must resolve before `ORDER BY random()`. It is now reached through `resolveEntities`, which prefers a frozen `-corpus-file` when one is given.
+
+`corpus-snapshot` writes that frozen file and refuses an empty result — an empty snapshot would silently pass every gate rather than fail loudly. `report` aggregates and gates; `correction-seed` populates a vocabulary store. Neither `report` nor `corpus-snapshot` runs the search pipeline.
 
 ## discoverytrace
 

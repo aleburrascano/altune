@@ -40,13 +40,16 @@ type options struct {
 	noiseRuns       int
 	typos           int
 	corpus          string
+	corpusFile      string
+	metricsPath     string
+	reportsDir      string
 	fixtures        string
 	record          bool
 }
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | detail")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | report | detail")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -60,6 +63,9 @@ func main() {
 	flag.IntVar(&opts.noiseRuns, "noise-runs", 1, "with -update-baselines: run N times and set the margin to the measured spread (use 3)")
 	flag.IntVar(&opts.typos, "typos", 3, "correction: synthetic typos generated per known-good term")
 	flag.StringVar(&opts.corpus, "corpus", "exact", "eval/diversity corpus: exact (\"artist title\") | hard (single-token titles, title-only query)")
+	flag.StringVar(&opts.corpusFile, "corpus-file", "", "read the gated corpus from this frozen snapshot instead of the live tracks table; with -mode corpus-snapshot, the path to write")
+	flag.StringVar(&opts.metricsPath, "metrics", "", "write this run's flat metric list to this path (for -mode report)")
+	flag.StringVar(&opts.reportsDir, "reports", "", "report: directory of metrics-*.json files to aggregate and gate")
 	flag.StringVar(&opts.fixtures, "fixtures", "", "eval: directory of recorded provider fixtures. With -record, write them (live); without, replay them (deterministic, offline w.r.t. providers)")
 	flag.BoolVar(&opts.record, "record", false, "eval: with -fixtures, record provider responses to the directory instead of replaying (runs live, sequentially)")
 	flag.Parse()
@@ -126,13 +132,19 @@ func run(opts options) error {
 		return runArtistIntent(ctx, cfg, pool, redisClient, opts)
 	case "corpus-build":
 		return runCorpusBuild(ctx, pool, opts)
+	case "corpus-snapshot":
+		return runCorpusSnapshot(ctx, pool, opts)
+	case "correction-seed":
+		return runCorrectionSeed(ctx, pool, redisClient, opts)
+	case "report":
+		return runReport(ctx, pool, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | merge | correction | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | detail)", opts.mode)
+		return fmt.Errorf("unknown mode %q (want eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | report | detail)", opts.mode)
 	}
 }
 
 func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
+	entities, err := resolveEntities(ctx, pool, opts)
 	if err != nil {
 		return fmt.Errorf("load library: %w", err)
 	}
@@ -174,7 +186,7 @@ func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 }
 
 func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
+	entities, err := resolveEntities(ctx, pool, opts)
 	if err != nil {
 		return fmt.Errorf("load library: %w", err)
 	}
@@ -231,7 +243,7 @@ func runCorrection(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis
 	}
 	corrector := discoveryService.NewCorrectionService(vocab)
 
-	terms, err := loadLibraryTerms(ctx, pool, opts.limit)
+	terms, err := resolveTerms(ctx, pool, opts)
 	if err != nil {
 		return fmt.Errorf("load library terms: %w", err)
 	}
@@ -261,7 +273,7 @@ func filterRecognized(ctx context.Context, vocab discoveryEval.VocabularyLookup,
 }
 
 func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
+	entities, err := resolveEntities(ctx, pool, opts)
 	if err != nil {
 		return fmt.Errorf("load library: %w", err)
 	}
@@ -285,7 +297,7 @@ func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 }
 
 func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	entities, err := loadLibraryEntities(ctx, pool, opts.limit, opts.random)
+	entities, err := resolveEntities(ctx, pool, opts)
 	if err != nil {
 		return fmt.Errorf("load library: %w", err)
 	}
@@ -408,7 +420,7 @@ func (a searchAdapter) Search(ctx context.Context, query string) ([]domain.Searc
 }
 
 func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	artists, err := loadDistinctArtists(ctx, pool, 0)
+	artists, err := resolveArtists(ctx, pool, opts, 0)
 	if err != nil {
 		return fmt.Errorf("load artists: %w", err)
 	}
@@ -538,7 +550,7 @@ func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Cl
 }
 
 func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opts options) error {
-	artists, err := loadDistinctArtists(ctx, pool, opts.limit)
+	artists, err := resolveArtists(ctx, pool, opts, opts.limit)
 	if err != nil {
 		return fmt.Errorf("load artists: %w", err)
 	}
