@@ -104,7 +104,7 @@ func TestArtistIdentityProfile_AddGenre(t *testing.T) {
 
 	p.AddGenre("Rock")
 	p.AddGenre("jazz")
-	p.AddGenre("ROCK") // duplicate after lowercasing
+	p.AddGenre("ROCK")
 
 	if len(p.GenreCluster) != 2 {
 		t.Errorf("GenreCluster should have 2 entries, got %d", len(p.GenreCluster))
@@ -122,7 +122,7 @@ func TestArtistIdentityProfile_AddISRCRegistrant(t *testing.T) {
 
 	p.AddISRCRegistrant("J842")
 	p.AddISRCRegistrant("ABC1")
-	p.AddISRCRegistrant("J842") // duplicate
+	p.AddISRCRegistrant("J842")
 
 	if len(p.KnownISRCRegistrants) != 2 {
 		t.Errorf("KnownISRCRegistrants should have 2 entries, got %d", len(p.KnownISRCRegistrants))

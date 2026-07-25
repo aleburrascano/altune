@@ -99,6 +99,31 @@ a held-in-reserve, non-query-fit tiebreak for strict-#1 polish — not the gate.
 - **Pre-correction disabled** (it rewrote valid queries from vocabulary pollution);
   post-correction (zero-results-only) is sufficient.
 
+## Domain value objects (`domain/`)
+
+The enrichment types (`MBEnrichment`, `DeezerEnrichment`, `DeezerLyrics`, `LastFmEnrichment`, `DiscogsEnrichment`) are immutable **live read surfaces** fetched on detail-open and never persisted. Each covers all applicable kinds with one shape; kind-specific fields are simply zero when not applicable. They divide by authority: MusicBrainz owns identity + curated genres + artwork, Discogs owns credits + styles, Last.fm owns listening behavior (popularity, folksonomy tags, bio, similar artists), and Deezer owns audio fields plus album liner data. **Lyrics are the one axis no other audited provider carries** — sourced from Deezer's internal `pipe.deezer.com` GraphQL (anonymous-JWT), separate from the public-API `DeezerEnrichment` surface, and availability is per-track and region-dependent.
+
+Invariants that are easy to break:
+
+- Every `Empty*Enrichment` constructor returns **non-nil** slices/maps so the wire mapping never emits a null list. All graceful-degradation paths (no id, no data for this region, provider error) return that value, not a zero struct.
+- `MBEnrichment.IsZero` is false whenever an MBID is present, even if every other field is empty — **the MBID alone unlocks artwork**.
+- `DeezerEnrichment.Featured` is consumed by the "Featuring" row, not the Deezer detail section, so it is deliberately **excluded from `IsZero`**: a featured-only enrichment still has no section to render.
+- Deezer zero values are meaningful absences, not data: BPM `0` = unknown (Deezer reports 0 for many tracks), ReplayGain `0` = absent (it's a volume-normalization value, never a display field).
+- `EventType`'s zero value is the **unknown sentinel**, so an uninitialized event is never silently valid, and `"unknown"` is `String()`'s output, not a wire value. `ClientSubmittable` allows only the interaction types — `search_performed` and `results_shown` are server-emitted envelope events and must be rejected at the `POST /events` boundary.
+- `InteractionEvent.SearchId` is the keystone join key (the UUID of the originating `search_performed`) and lives in a **real column**, not the payload; it's empty for events with no originating search, e.g. a play from the library. `EventId` is the client-minted idempotency key for label-critical events (`library_add`, `wrong_album`) delivered via the outbox. `ClientOccurredAt` is client-recorded time versus `OccurredAt`/`received_at` server time, and is zero for server-minted events.
+- `FeaturedArtist` serialization lives in the domain (`ToExtrasMap` / `FeaturedArtistsToExtras` / `FeaturedArtistsFromExtras` / `FeaturedArtistFromMap`) rather than at each call site, because the domain owns the contract. Empty ids are **omitted** so absence stays distinguishable from a zero id, an empty slice returns nil so the key is omitted rather than emitted empty, and the parser tolerates the numeric variance a JSON round-trip introduces (`int64` vs `float64`, and `[]any` rather than `[]map[string]any`). `RoleFeatured` is the only role populated in v1; the field is reserved so producer/writer credits can arrive without a shape change.
+- `ArtistIdentityProfile` is a query-time **read model**, not an aggregate.
+
+## Ports (`ports/`)
+
+The artwork ports encode a strict precedence that must not be flattened:
+
+- `IdentityArtworkResolver` is an optional capability for resolvers that can fetch by a **bridged provider id** instead of by name. The chain tries these **before** any name-based resolver, and a resolver implementing it is treated as identity-only — it never name-searches.
+- `TaggingArtworkResolver` is the service-side port: `ResolveWithIdentityTagged` resolves strictly by proven identity, `ResolveTagged` is the name path. `Source` is `""` when nothing resolved, and is recorded as `SearchResult.ArtworkSource` for per-provider coverage visibility (a resolver names itself via the optional `SourcedArtworkResolver`).
+- **`ArtworkCache.Set` has a confidence-guard invariant**: a write at *lower* confidence than an existing *positive* entry (non-empty URL) must be a **no-op**. A name guess or a later resolution failure must never clobber a proven-identity image. Equal or higher confidence overwrites. `ArtworkConfidence` is what lets the cache treat a proven-identity image as authoritative (long TTL) and a name-searched one as provisional (short TTL, re-checked so it can upgrade once identity is learned).
+- `MBIDIndex` is **cache-only** — never a MusicBrainz call on the search path. A detail-open's strict name resolution memoizes `(kind, nameKey) → mbid`; the search path reads it so the MBID-keyed artwork tier (Cover Art Archive / Fanart.tv) fires on search cards too. A miss degrades to the provider's own thumbnail.
+- `IdentityStore` is the durable, MB-independent counterpart to the in-flight identity bridge: `PersistBridges` records what the merge learned when MusicBrainz answered, so a later search where MusicBrainz is absent (rate-limited, circuit open) still resolves identity-first instead of guessing by name. It is **keyed on stable provider ids, never names**, so same-name entities ("Che") cannot inherit each other's identity. Postgres is the source of truth with a Redis read-through in front; implementations are nil-safe no-ops when unset.
+
 ## Key files
 
 - `ARCHITECTURE.md` — flow diagram + ranking key
