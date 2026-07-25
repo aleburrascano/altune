@@ -7,8 +7,8 @@ import (
 )
 
 func TestTailNoiseInTopK(t *testing.T) {
-	clean := deezerTrack("Clean", "Artist", 50)                       // single curated-catalog source — not noise
-	noise := track("type beat", "uploader", domain.ProviderSoundCloud, nil) // single UGC, no identity — noise
+	clean := deezerTrack("Clean", "Artist", 50)
+	noise := track("type beat", "uploader", domain.ProviderSoundCloud, nil)
 	results := []domain.SearchResult{clean, noise, noise, clean}
 
 	if got := TailNoiseInTopK(results, 5); got != 2 {

@@ -10,16 +10,10 @@ import (
 )
 
 const (
-	// vocabIngestTop is how many top results feed the vocabulary per search (an
-	// operational bound, like a page size).
-	vocabIngestTop = 5
-	// vocabIngestTimeout bounds the background ingest.
+	vocabIngestTop     = 5
 	vocabIngestTimeout = 3 * time.Second
 )
 
-// ingestVocabulary learns the query and its strong results into the vocabulary
-// store, asynchronously and best-effort. This keeps Layer-0 intent detection and
-// query correction improving from real traffic without blocking the request.
 func (s *Service) ingestVocabulary(parentCtx context.Context, rawQuery string, results []domain.SearchResult) {
 	if s.vocabStore == nil || len(results) == 0 {
 		return

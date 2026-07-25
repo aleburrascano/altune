@@ -7,10 +7,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// twoSourceTrack is a track corroborated by two providers (multi-source true),
-// carrying a Deezer rank prominence. Two sources make it win the multi-source
-// tiebreak over a single-source artist — the exact shape that buries the artist
-// on a bare-name query.
 func twoSourceTrack(title, artist string, rank int64) domain.SearchResult {
 	r := track(title, artist, domain.ProviderITunes, nil)
 	r.ProviderRank = rank
@@ -27,9 +23,6 @@ func artistWithFans(name string, nbFan int64) domain.SearchResult {
 }
 
 func TestProminence_OffBuriesArtist_OnLiftsIt(t *testing.T) {
-	// Bare-name query: a prominent artist vs a same-name multi-source track. Both
-	// tie on relevance (exact single-token title). With prominence OFF the
-	// multi-source track wins (the bug); with it ON the more-prominent artist wins.
 	artist := artistWithFans("Boston", 5_000_000)
 	trk := twoSourceTrack("Boston", "Augustana", 50_000)
 	entities := []Entity{ent(trk), ent(artist)}
@@ -46,9 +39,6 @@ func TestProminence_OffBuriesArtist_OnLiftsIt(t *testing.T) {
 }
 
 func TestProminence_ObscureArtistStaysBelowProminentTrack(t *testing.T) {
-	// The firework shape: an obscure same-name artist must NOT be lifted over a
-	// prominent track. Prominence is symmetric — it orders by magnitude, not by
-	// kind — so the famous track still wins even with the rung ON.
 	artist := artistWithFans("FireWork", 30)
 	trk := twoSourceTrack("Firework", "Katy Perry", 900_000)
 	entities := []Entity{ent(artist), ent(trk)}
@@ -60,10 +50,6 @@ func TestProminence_ObscureArtistStaysBelowProminentTrack(t *testing.T) {
 }
 
 func TestProminence_SameKindEqualProminenceFallsThrough(t *testing.T) {
-	// Prominence now compares ALL pairs (the kind-difference gate broke strict
-	// weak ordering — see rankLess), so same-kind ties CAN reorder by prominence.
-	// What must hold: same-kind pairs with EQUAL prominence fall through to the
-	// existing ladder unchanged, ON or OFF.
 	hi := track("Echo", "Artist Hi", domain.ProviderDeezer, nil)
 	hi.ProviderRank = 900_000
 	lo := track("Echo", "Artist Lo", domain.ProviderDeezer, nil)
@@ -84,12 +70,6 @@ func TestProminence_SameKindEqualProminenceFallsThrough(t *testing.T) {
 }
 
 func TestRankLess_StrictWeakOrdering(t *testing.T) {
-	// Property guard for the sort contract: rankLess must be a strict weak
-	// ordering (asymmetric, transitive, with transitive incomparability) or
-	// sort.SliceStable's output is unspecified. The kind-gated prominence rung
-	// violated exactly this (artist<track<artist cycles on tied relevance), so
-	// the test draws every field — prominence included, i.e. the flag on — from
-	// tiny pools to force ties and cross-field interleavings.
 	rng := rand.New(rand.NewSource(1))
 	kinds := []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum, domain.ResultKindTrack}
 	pool := []float64{0, 1, 5, 10}

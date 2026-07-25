@@ -52,7 +52,6 @@ func TestSuggest_FuzzyDuplicatesDeduped(t *testing.T) {
 			return []domain.VocabularyEntry{vocabEntry("drake")}, nil
 		},
 		findClosestFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
-			// Same normalized term as the prefix hit, plus one genuinely new.
 			return []domain.VocabularyEntry{vocabEntry("drake"), vocabEntry("droke")}, nil
 		},
 	}

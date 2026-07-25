@@ -15,10 +15,10 @@ func TestBaselines_Gate_higherIsBetter(t *testing.T) {
 		regressed bool
 	}{
 		{"at baseline", 0.90, false},
-		{"inside margin below", 0.88, false},  // 0.90-0.03=0.87 threshold; 0.88 ok
-		{"exactly at threshold", 0.87, false}, // not strictly below
-		{"below threshold", 0.86, true},       // regressed
-		{"improved", 0.95, false},             // higher is fine
+		{"inside margin below", 0.88, false},
+		{"exactly at threshold", 0.87, false},
+		{"below threshold", 0.86, true},
+		{"improved", 0.95, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -43,10 +43,10 @@ func TestBaselines_Gate_lowerIsBetter(t *testing.T) {
 		regressed bool
 	}{
 		{"at baseline", 0.05, false},
-		{"inside margin above", 0.06, false},  // 0.05+0.02=0.07 threshold; 0.06 ok
-		{"exactly at threshold", 0.07, false}, // not strictly above
-		{"above threshold", 0.08, true},       // cost rose — regressed
-		{"improved", 0.01, false},             // lower cost is fine
+		{"inside margin above", 0.06, false},
+		{"exactly at threshold", 0.07, false},
+		{"above threshold", 0.08, true},
+		{"improved", 0.01, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -59,7 +59,7 @@ func TestBaselines_Gate_lowerIsBetter(t *testing.T) {
 }
 
 func TestBaselines_Gate_missingIsNeverRegression(t *testing.T) {
-	var b Baselines // nil map
+	var b Baselines
 	g := b.Gate("brand_new_metric", 0.42)
 	if !g.Missing {
 		t.Fatal("expected missing for an uncommitted metric")
@@ -85,7 +85,6 @@ func TestMeasureNoise(t *testing.T) {
 	if m := MeasureNoise([]float64{0.9}); m != 0 {
 		t.Errorf("single sample must yield zero margin, got %v", m)
 	}
-	// spread 0.90..0.94 = 0.04 peak-to-peak, ×1.5 = 0.06
 	m := MeasureNoise([]float64{0.92, 0.90, 0.94})
 	if math.Abs(m-0.06) > 1e-9 {
 		t.Errorf("margin = %v, want 0.06", m)

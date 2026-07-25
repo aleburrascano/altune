@@ -62,6 +62,6 @@ func TestGetAlbumTracks_enrichFeatured(t *testing.T) {
 	t.Run("no lookup configured is a no-op", func(t *testing.T) {
 		svc := NewGetAlbumTracksService(nil)
 		results := []domain.SearchResult{deezerTrackFeat("1", "X")}
-		svc.enrichFeatured(ctx, results) // must not panic
+		svc.enrichFeatured(ctx, results)
 	})
 }

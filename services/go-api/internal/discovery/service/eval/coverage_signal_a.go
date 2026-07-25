@@ -9,25 +9,19 @@ import (
 	"altune/go-api/internal/discovery/service"
 )
 
-// queryCorrector is the slice of CorrectionService the signal consumes: given a
-// query, does a vocabulary correction exist? Defined here (consumer side) so the
-// signal can be tested with a fake.
 type queryCorrector interface {
 	Correct(ctx context.Context, query string) *service.CorrectionResult
 }
 
-// GapStrength labels how confident we are that a query is a real coverage gap.
-// Zero value is unknown/invalid.
 type GapStrength int
 
 const (
 	GapStrengthUnknown GapStrength = iota
-	GapStrong                      // zero-result and not a correctable typo
-	GapWeak                        // returned results but drew no click
-	GapAbandoned                   // no click and reformulated within 60s
+	GapStrong
+	GapWeak
+	GapAbandoned
 )
 
-// MarshalJSON emits the strength as its label so the JSON report is readable.
 func (g GapStrength) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + g.String() + `"`), nil
 }
@@ -45,14 +39,12 @@ func (g GapStrength) String() string {
 	}
 }
 
-// CoverageGap is a demand-weighted candidate gap query.
 type CoverageGap struct {
 	QueryNorm string      `json:"query_norm"`
 	Count     int         `json:"count"`
 	Strength  GapStrength `json:"strength"`
 }
 
-// CoverageReportA is the zero-result / abandoned-search coverage report.
 type CoverageReportA struct {
 	Strong          []CoverageGap `json:"strong"`            // zero-result, not typos
 	Weak            []CoverageGap `json:"weak"`              // results shown, no click
@@ -60,12 +52,9 @@ type CoverageReportA struct {
 	FilteredAsTypos int           `json:"filtered_as_typos"` // zero-result queries dropped by the correction filter
 }
 
-// CoverageSignalAService mines telemetry into a coverage-gap report. A
-// zero-result query is a strong gap unless the corrector can fix it (then it's a
-// typo, not missing coverage). A results-but-no-click query is a weak hint only.
 type CoverageSignalAService struct {
 	events    ports.EventQuery
-	corrector queryCorrector // may be nil — then no typo filtering is applied
+	corrector queryCorrector
 }
 
 func NewCoverageSignalAService(events ports.EventQuery, corrector queryCorrector) *CoverageSignalAService {
@@ -118,10 +107,6 @@ func (s *CoverageSignalAService) Execute(ctx context.Context, since time.Time, l
 	return report, nil
 }
 
-// isCorrectableTypo is true when a vocabulary correction exists for the query —
-// evidence the zero result was a misspelling, not missing coverage. Offline
-// approximation of "the corrected query would also be empty": if a correction
-// exists, the corrected form would have returned results, so it is not a gap.
 func (s *CoverageSignalAService) isCorrectableTypo(ctx context.Context, queryNorm string) bool {
 	if s.corrector == nil {
 		return false

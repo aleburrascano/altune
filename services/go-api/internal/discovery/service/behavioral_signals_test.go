@@ -39,17 +39,13 @@ func TestSatisfactionConsumer_RefreshPublishesScores(t *testing.T) {
 
 func TestBehavioralRankingDisabled_SnapshotNil(t *testing.T) {
 	store := &fakeSignalStore{signals: []ports.BehavioralSignal{{ResultSignature: "x", Score: 9}}}
-	// No WithBehavioralRanking → flag off → snapshot stays nil even if a consumer existed.
 	svc := NewService(nil, NewCircuitBreaker())
-	svc.behavioralConsumer = NewSatisfactionConsumer(store) // present but flag off
+	svc.behavioralConsumer = NewSatisfactionConsumer(store)
 	if got := svc.BehavioralScoresSnapshot(); got != nil {
 		t.Errorf("snapshot must be nil when behavioral ranking is off, got %v", got)
 	}
 }
 
-// TestBehavioralScore_BreaksTiesOnly proves the signal is a within-tie input:
-// among equally relevant results it promotes the satisfied one, and it is inert
-// when no scores are supplied (the default production path).
 func TestBehavioralScore_BreaksTiesOnly(t *testing.T) {
 	a := scored{relevance: 1.0, behavioral: 2.0}
 	b := scored{relevance: 1.0, behavioral: -1.0}
@@ -57,14 +53,12 @@ func TestBehavioralScore_BreaksTiesOnly(t *testing.T) {
 		t.Error("equal relevance: higher behavioral score should sort first")
 	}
 
-	// Differing relevance dominates behavioral (behavioral only breaks ties).
 	hiRel := scored{relevance: 2.0, behavioral: -5.0}
 	loRel := scored{relevance: 1.0, behavioral: 5.0}
 	if !rankLess(hiRel, loRel) {
 		t.Error("relevance must dominate behavioral; higher relevance sorts first")
 	}
 
-	// Inert default: zero behavioral on both → falls through to later tiebreaks.
 	z1 := scored{relevance: 1.0, pop: 5}
 	z2 := scored{relevance: 1.0, pop: 1}
 	if !rankLess(z1, z2) {

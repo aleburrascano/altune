@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// mutableSignalStore lets a test swap the returned signals/error between
-// refreshes, guarded for the ticker goroutine.
 type mutableSignalStore struct {
 	mu      sync.Mutex
 	signals []ports.BehavioralSignal
@@ -56,7 +54,6 @@ func TestRefreshBehavioralScores_ErrorKeepsLastSnapshot(t *testing.T) {
 	if err := svc.RefreshBehavioralScores(context.Background()); err == nil {
 		t.Fatal("refresh must surface the consumer error to its caller")
 	}
-	// The failed refresh must NOT clobber the published snapshot.
 	if got := svc.BehavioralScoresSnapshot(); got["sig"] != 2 {
 		t.Errorf("snapshot after failed refresh = %v, want the last good map kept", got)
 	}
@@ -65,7 +62,6 @@ func TestRefreshBehavioralScores_ErrorKeepsLastSnapshot(t *testing.T) {
 func TestStartBehavioralRefresh_NoConsumerReturnsImmediately(t *testing.T) {
 	svc := NewService(nil, NewCircuitBreaker())
 	svc.StartBehavioralRefresh(context.Background(), time.Millisecond)
-	// No goroutine was registered — WaitForBackground must not block.
 	done := make(chan struct{})
 	go func() { svc.WaitForBackground(); close(done) }()
 	select {
@@ -76,15 +72,12 @@ func TestStartBehavioralRefresh_NoConsumerReturnsImmediately(t *testing.T) {
 }
 
 func TestStartBehavioralRefresh_TicksRefreshesAndStopsOnCancel(t *testing.T) {
-	// First refresh errors (tolerated — the loop keeps ticking); later ticks
-	// publish scores. Cancel stops the goroutine and WaitForBackground drains it.
 	store := &mutableSignalStore{err: errors.New("first refresh fails")}
 	svc := NewService(nil, NewCircuitBreaker(), WithBehavioralRanking(NewSatisfactionConsumer(store)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	svc.StartBehavioralRefresh(ctx, 5*time.Millisecond)
 
-	// Wait for the immediate (failing) refresh plus at least one tick.
 	deadline := time.After(2 * time.Second)
 	for store.callCount() < 2 {
 		select {
@@ -93,7 +86,6 @@ func TestStartBehavioralRefresh_TicksRefreshesAndStopsOnCancel(t *testing.T) {
 		case <-time.After(time.Millisecond):
 		}
 	}
-	// Recover: the next tick publishes the snapshot despite the earlier error.
 	store.set([]ports.BehavioralSignal{{ResultSignature: "sig", Score: 1.5}}, nil)
 	deadline = time.After(2 * time.Second)
 	for svc.BehavioralScoresSnapshot() == nil {

@@ -99,6 +99,51 @@ a held-in-reserve, non-query-fit tiebreak for strict-#1 polish — not the gate.
 - **Pre-correction disabled** (it rewrote valid queries from vocabulary pollution);
   post-correction (zero-results-only) is sufficient.
 
+## Service invariants (`service/`)
+
+### Search orchestration (`search.go`, `pipeline.go`, `fanout`)
+
+- The exported `Merge` / `RankWith` / `Reshape` composition exists **outside** `Service` so the Mission Control re-run ranks with the same core production does and can never diverge. `RankExplain` keeps each result's scoring math and is for the re-run inspector only — a pure read, never on the live search path. Display-enrichment stages stay on `Service.mergeRankEnrich`: **they fill fields, they do not decide order.**
+- **A panicking provider adapter must not kill the process** — the fan-out records the panic and continues. Each goroutine writes only its own slot, so output follows the fixed provider order and never completion order.
+- The durable identity persist runs **off the request path** on a detached, bounded context: it must add no latency to search and must outlive the request. A wrong MB url-relation must not fuse two same-name artists in the durable store. Vocabulary trim is best-effort — a trim failure must not fail the search.
+- Telemetry is best-effort throughout: it never blocks the request, outlives request cancellation (`WithoutCancel` plus its own timeout), recovers from panics, and logs rather than surfacing. `pipelineVersionV2` stamps every rebuilt-pipeline event so ML training data is separable.
+- One search event per **search**, not per page. Scrolling must not log a second search or re-ingest vocabulary. A client holding an offset from a larger slate must degrade, not fail.
+- **Exploration never mutates the cached list** — it shuffles a copy and is inert at rate 0. The organic (pre-shuffle) top is captured *first*, because vocabulary learning must ingest the organic ranked top, not the shuffled one.
+- The engagement-join signature is computed **before** disambiguation fills fields; a signature computed after would flap between searches and never rejoin.
+
+### Merge (`merge.go`)
+
+Identifier (ISRC / album-UPC / MBID) → cross-provider identity bridge → exact canonical title+subtitle. There is **deliberately no fuzzy threshold**. UPC is advisory — different pressings of one album carry different barcodes — so unlike MBID it never blocks; it merges only when MBIDs don't conflict (both empty, one empty, or equal). A later merge (e.g. a UPC one after an ISRC one) **must not downgrade an identity-proven entity's stamped identity**. For a bridge to fire, one side must carry an `Xref`: two native ids alone are same-provider duplicates, not a cross-provider bridge.
+
+### Rank (`rank.go`)
+
+Continuous relevance → popularity (inert) → multi-source → RRF → stable title tiebreak. Deliberately **no relevance bands, no popularity-dominance window, no kind tiers** — those were query-fit and were purged in the rebuild. The multi-source comparison is deliberately **unconditional**: gating it to kind-difference made `rankLess` non-transitive. Flag-gated stages (`isLowConfidenceTail`, behavioral) have both predicates unset by default, so they never fire until enabled. Anything rank-affecting **must re-clear `discoveryeval`**.
+
+Tail demotion never flags the corroborating providers (Deezer/iTunes/MusicBrainz), and is uniform so it cannot reorder within the demoted set.
+
+### Artwork fill (`artwork_fill.go`)
+
+The one rule everything else serves: **a name-searched image must never masquerade as identity.** When MusicBrainz never answered a search, the durable `IdentityStore` supplies the identity rather than gambling on a name lookup — the operator console then reads `durable-identity`, which is the fix made visible. There is no same-name fallback: a placeholder is correct, a stranger's face frozen as identity is not. A provisional image is labelled as such so a real identity image can replace it later. Per-result artwork diagnostics surface in Mission Control, never on the public wire.
+
+### Consensus and detail (`consensus.go`, `detail_identity.go`, `release_*.go`)
+
+- Detail resolution is keyed on **provider ids, never names**, so a same-name artist ("Che") can never bleed into another's discography. The resolved identity is never narrower than the input. `get_album_tracks` guards against returning a different artist's same-titled album.
+- **Partial verdicts must never be cached.** If the context is cut mid-MB-validation, verdicts are incomplete; a transient MB failure degrades to serving the un-vetoed union but must not freeze a potentially contaminated result. Cache keys carry the seed identity so two same-name artists never share an entry.
+- `identity_verify` is **fail-open**: never drop an edge on a fetch failure or empty result.
+- A single iTunes fetch is one source and is never reported as "confirmed on multiple providers". A provider carrying only a year must never mask another's full date, and artwork URL + source are tagged together so `ArtworkSource` cannot describe the wrong URL.
+- The MB anchor has minimum thresholds (`mbAnchorMinReleaseGroups`, `mbVerifyMinTitles`) precisely so an **incomplete MB discography can never drop a real release**.
+- Providers under-label `record_type` (iTunes never set it), which is why release bucketing exists rather than trusting the field.
+
+### Enrichment and degradation
+
+Every detail-open enricher returns an **empty enrichment and a nil error** — the endpoint always answers 200, never a surfaced failure. A provider returning `(nil, nil)` still honors the envelope contract's non-nil `Items`. A failure must not poison the positive cache, and a negative result is cached so a repeat doesn't re-run resolution. A `SuggestByPrefix` failure during token correction degrades to "no prefix match" and keeps going rather than aborting correction. Behavioral snapshots are published by **swapping in a new map**, never editing a published one — callers must not mutate what they read, and a failed refresh must not clobber the last good snapshot.
+
+`query_clean` operates on the **original** text, never a lowercased copy: lowercasing can change byte offsets.
+
+### Eval substrate (`service/eval/`)
+
+A gate is a **relative drop below a committed baseline, never an absolute floor**. A metric with no committed baseline is never a regression — the first run establishes it, and baselines only move on an explicit operator `--update-baselines`. A regression strictly inside the noise margin is invisible **by design**. Failure slices only group the failure log; they never touch ranking, and no failure-mode taxonomy is maintained. Diversity's benefit metric (top-K concentration drop) is report-only and **never gated** — you gate the cost of a policy, not the policy itself. Entities the search never finds are a *coverage* miss, not a merge miss. The eval package never imports `service`, so it stays a pure testable core.
+
 ## Domain value objects (`domain/`)
 
 The enrichment types (`MBEnrichment`, `DeezerEnrichment`, `DeezerLyrics`, `LastFmEnrichment`, `DiscogsEnrichment`) are immutable **live read surfaces** fetched on detail-open and never persisted. Each covers all applicable kinds with one shape; kind-specific fields are simply zero when not applicable. They divide by authority: MusicBrainz owns identity + curated genres + artwork, Discogs owns credits + styles, Last.fm owns listening behavior (popularity, folksonomy tags, bio, similar artists), and Deezer owns audio fields plus album liner data. **Lyrics are the one axis no other audited provider carries** — sourced from Deezer's internal `pipe.deezer.com` GraphQL (anonymous-JWT), separate from the public-API `DeezerEnrichment` surface, and availability is per-track and region-dependent.

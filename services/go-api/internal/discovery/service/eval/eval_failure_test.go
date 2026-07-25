@@ -11,10 +11,10 @@ func TestTokenCount(t *testing.T) {
 		in   string
 		want int
 	}{
-		{"Humble", 1}, // the single-token hard case
+		{"Humble", 1},
 		{"Kendrick Lamar Humble", 3},
 		{"  spaced   out  ", 2},
-		{"Beyoncé", 1}, // diacritics fold, still one token
+		{"Beyoncé", 1},
 		{"", 0},
 	}
 	for _, tt := range tests {
@@ -33,7 +33,7 @@ func TestScriptClass(t *testing.T) {
 		{"中島美嘉", "nonlatin"},
 		{"¥$", "symbol"},
 		{"BTS 방탄소년단", "mixed"},
-		{"123", "symbol"}, // no letters
+		{"123", "symbol"},
 	}
 	for _, tt := range tests {
 		if got := ScriptClass(tt.in); got != tt.want {
@@ -68,7 +68,7 @@ func TestSliceFailures(t *testing.T) {
 		{Query: "a", Attrs: map[string]any{TokenCountAttr: 1, PopBandAttr: "low"}},
 		{Query: "b", Attrs: map[string]any{TokenCountAttr: 1, PopBandAttr: "low"}},
 		{Query: "c", Attrs: map[string]any{TokenCountAttr: 3, PopBandAttr: "high"}},
-		{Query: "d", Attrs: map[string]any{}}, // missing keys
+		{Query: "d", Attrs: map[string]any{}},
 	}
 	byTok := SliceFailures(recs, TokenCountAttr)
 	if byTok["1"] != 2 || byTok["3"] != 1 || byTok["(unset)"] != 1 {

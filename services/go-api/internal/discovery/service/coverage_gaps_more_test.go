@@ -12,8 +12,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// --- artworkPathFor table --------------------------------------------------
-
 func TestArtworkPathFor(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -38,12 +36,7 @@ func TestArtworkPathFor(t *testing.T) {
 	}
 }
 
-// --- circuit breaker: full state-machine walk under concurrency ------------
-
 func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
-	// closed → open (threshold) → half-open (probe) → closed (success) →
-	// open again (threshold), with each phase hammered by concurrent callers to
-	// shake out lock/ordering races the single-step tests can't.
 	cb := NewCircuitBreaker()
 	p := domain.ProviderDeezer
 
@@ -56,14 +49,12 @@ func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
 		wg.Wait()
 	}
 
-	// Closed: concurrent requests all allowed.
 	hammer(16, func() {
 		if !cb.AllowRequest(p) {
 			t.Error("closed breaker must allow requests")
 		}
 	})
 
-	// → Open: concurrent failures cross the threshold exactly once.
 	hammer(failureThreshold, func() { cb.RecordFailure(p) })
 	if cb.AllowRequest(p) {
 		t.Fatal("breaker must be open after the failure threshold")
@@ -72,7 +63,6 @@ func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
 		t.Fatalf("status = %v, want circuit_open", cb.GetStatus(p))
 	}
 
-	// → HalfOpen: age past the window; exactly one concurrent probe admitted.
 	cb.mu.Lock()
 	cb.circuits[p].lastFailedAt = time.Now().Add(-openDuration - time.Second)
 	cb.mu.Unlock()
@@ -88,12 +78,10 @@ func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
 	if admitted != 1 {
 		t.Fatalf("half-open admitted %d probes, want exactly 1", admitted)
 	}
-	// GetStatus reports OK for half-open (only Open maps to circuit_open).
 	if cb.GetStatus(p) != domain.ProviderStatusOK {
 		t.Errorf("half-open status = %v, want ok", cb.GetStatus(p))
 	}
 
-	// → Closed: the probe succeeds; everyone flows again and failures reset.
 	cb.RecordSuccess(p)
 	hammer(16, func() {
 		if !cb.AllowRequest(p) {
@@ -101,13 +89,11 @@ func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
 		}
 	})
 
-	// → Open again: a fresh threshold's worth of failures re-opens.
 	hammer(failureThreshold, func() { cb.RecordFailure(p) })
 	if cb.AllowRequest(p) {
 		t.Fatal("breaker must re-open after a fresh failure threshold")
 	}
 
-	// → HalfOpen again → probe FAILS → immediately open (no threshold needed).
 	cb.mu.Lock()
 	cb.circuits[p].lastFailedAt = time.Now().Add(-openDuration - time.Second)
 	cb.mu.Unlock()
@@ -119,8 +105,6 @@ func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
 		t.Error("a failed half-open probe must re-open the breaker immediately")
 	}
 }
-
-// --- CorrectionService gaps ------------------------------------------------
 
 func TestCorrection_NilVocabIsNil(t *testing.T) {
 	s := NewCorrectionService(nil)
@@ -147,7 +131,6 @@ func TestCorrection_CorrectWholeQuery(t *testing.T) {
 		t.Fatalf("Correct = %+v, want the distance-1 vocab term", got)
 	}
 
-	// An exact non-query vocab match must NOT be "corrected".
 	if got := s.Correct(context.Background(), "kendrick"); got != nil {
 		t.Errorf("exact vocab term corrected to %+v, want nil", got)
 	}
@@ -173,10 +156,10 @@ func TestMaxCorrectionDist_Boundaries(t *testing.T) {
 		query string
 		want  int
 	}{
-		{"abcd", 1},      // 4 runes — short
-		{"abcde", 2},     // 5 runes — medium starts
-		{"abcdefgh", 2},  // 8 runes — medium ends
-		{"abcdefghi", 3}, // 9 runes — long
+		{"abcd", 1},
+		{"abcde", 2},
+		{"abcdefgh", 2},
+		{"abcdefghi", 3},
 	}
 	for _, tt := range tests {
 		if got := maxCorrectionDist(tt.query); got != tt.want {
@@ -186,9 +169,7 @@ func TestMaxCorrectionDist_Boundaries(t *testing.T) {
 }
 
 func TestCorrection_TokenPathSingleTokenIsNil(t *testing.T) {
-	// correctTokens requires 2+ tokens; a one-token query that misses the
-	// whole-query path yields nil from the aggressive corrector.
-	store := &fakeVocabularyStore{} // FindClosest → nil
+	store := &fakeVocabularyStore{}
 	s := NewCorrectionService(store)
 	if got := s.CorrectAggressive(context.Background(), "kendrik"); got != nil {
 		t.Errorf("single-token aggressive miss = %+v, want nil", got)
@@ -196,20 +177,17 @@ func TestCorrection_TokenPathSingleTokenIsNil(t *testing.T) {
 }
 
 func TestCorrection_TokenPathPrefixErrorDegrades(t *testing.T) {
-	// SuggestByPrefix errors → degrade to FindClosest per token; one fixable
-	// token flips anyChanged and the min confidence is carried.
 	store := &fakeVocabularyStore{
 		suggestByPrefixFn: func(string, int) ([]domain.VocabularyEntry, error) {
 			return nil, errors.New("redis down")
 		},
 		findClosestFn: func(query string, _ int) ([]domain.VocabularyEntry, error) {
-			if query == "kendrik lamar" { // whole-query pass finds nothing
+			if query == "kendrik lamar" {
 				return nil, nil
 			}
 			if query == "kendrik" {
 				return []domain.VocabularyEntry{{Term: "Kendrick", TermNorm: "kendrick", Kind: domain.VocabKindArtist, MatchScore: 0.8}}, nil
 			}
-			// "lamar" is already exact vocabulary.
 			return []domain.VocabularyEntry{{Term: "Lamar", TermNorm: "lamar", Kind: domain.VocabKindArtist, MatchScore: 1}}, nil
 		},
 	}
@@ -223,14 +201,12 @@ func TestCorrection_TokenPathPrefixErrorDegrades(t *testing.T) {
 	}
 }
 
-// --- RecordEventService validation errors ----------------------------------
-
 func TestRecordEvent_NonClientSubmittableRenders400(t *testing.T) {
 	store := &fakeEventStore{}
 	svc := NewRecordEventService(store)
 
 	err := svc.Execute(context.Background(), newUser(), RecordEventInput{
-		Type: domain.EventTypeSearchPerformed, // server-emitted, never client-submittable
+		Type: domain.EventTypeSearchPerformed,
 	})
 	if err == nil {
 		t.Fatal("want a validation error")
@@ -247,9 +223,6 @@ func TestRecordEvent_NonClientSubmittableRenders400(t *testing.T) {
 	}
 }
 
-// --- detail identity: name-based fallback resolver -------------------------
-
-// plainArtistProvider deliberately does NOT implement ports.ArtistIDResolver.
 type plainArtistProvider struct{}
 
 func (plainArtistProvider) GetArtistTopTracks(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
@@ -282,9 +255,6 @@ func TestResolveArtistIDByName(t *testing.T) {
 	}
 }
 
-// --- artist disambiguation --------------------------------------------------
-
-// countingIdentityResolver counts live MB resolutions per name.
 type countingIdentityResolver struct {
 	mu     sync.Mutex
 	calls  []string
@@ -342,8 +312,6 @@ func TestApplyArtistDisambiguation_BudgetCapsLiveLookups(t *testing.T) {
 	resolver := &countingIdentityResolver{byName: map[string]*ports.ArtistIdentity{}}
 	svc := NewService(nil, NewCircuitBreaker(), WithAlbumValidator(resolver))
 
-	// Five distinct unnamed artists: only disambigMaxLookups may hit MB live;
-	// a repeated name is served from the per-request cache, not a new lookup.
 	in := []domain.SearchResult{
 		disambigArtist("A"), disambigArtist("B"), disambigArtist("A"),
 		disambigArtist("C"), disambigArtist("D"), disambigArtist("E"),
@@ -382,9 +350,7 @@ func TestApplyArtistDisambiguation_ResolverErrorLeavesResultUntouched(t *testing
 	}
 }
 
-// --- identity verifier: nil-safe Forget -------------------------------------
-
 func TestIdentityVerifier_ForgetNilSafe(t *testing.T) {
 	var v *IdentityVerifier
-	v.Forget("any-mbid") // must not panic on the nil receiver
+	v.Forget("any-mbid")
 }

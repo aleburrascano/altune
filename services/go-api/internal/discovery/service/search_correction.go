@@ -8,11 +8,6 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// tryCorrection runs only when the first search returned nothing: aggressively
-// correct the query from the learned vocabulary and re-run the pipeline. The
-// trigger is principled (zero results, not a tuned threshold). Returns the
-// corrected + original query (for the wire), the corrected results, and the
-// corrected fan-out's provider statuses (the ones describing those results).
 func (s *Service) tryCorrection(ctx context.Context, query *domain.SearchQuery) (corrected, original string, results []domain.SearchResult, statuses []domain.ProviderSearchResponse) {
 	if s.correctionSvc == nil {
 		return "", "", nil, nil

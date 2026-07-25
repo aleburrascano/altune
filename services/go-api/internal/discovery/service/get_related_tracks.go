@@ -7,10 +7,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// GetRelatedTracksService returns a provider's per-track "related" set. It is the
-// track-keyed sibling of GetArtistContentService: one provider per name, an
-// unknown/failed provider degrades to an empty set (never errors the request), and
-// the result is truncated to the requested limit.
 type GetRelatedTracksService struct {
 	providers map[string]ports.RelatedTracksProvider
 }

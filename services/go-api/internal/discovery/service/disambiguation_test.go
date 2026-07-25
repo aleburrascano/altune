@@ -8,10 +8,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// --- fillArtwork / disambiguation never-reorder (the display bracket fills
-// fields, it must not change the ranked order). Reuses fakeArtworkResolver
-// from artwork_fill_test. ---
-
 func TestFillArtwork_FillsArtworkWithoutReordering(t *testing.T) {
 	resolver := &fakeArtworkResolver{url: "art://cover.jpg"}
 	s := NewService(nil, NewCircuitBreaker(), WithArtworkResolver(resolver))
@@ -37,9 +33,6 @@ func TestFillArtwork_FillsArtworkWithoutReordering(t *testing.T) {
 }
 
 func TestSearch_SignatureStampedBeforeDisambiguationFill(t *testing.T) {
-	// The engagement-join signature must be computed BEFORE disambiguation fills
-	// the artist subtitle: rank keys the behavioral score map pre-fill, and the
-	// MB lookup budget makes a post-fill signature flap between searches.
 	artist := res(domain.ResultKindArtist, "Nas", "", domain.ProviderDeezer, map[string]any{"disambiguation": "American rapper"})
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{artist}}
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker())
@@ -61,7 +54,7 @@ func TestSearch_SignatureStampedBeforeDisambiguationFill(t *testing.T) {
 }
 
 func TestApplyArtistDisambiguation_FillsSubtitleWithoutReordering(t *testing.T) {
-	s := NewService(nil, NewCircuitBreaker()) // nil albumValidator → extras-only branch
+	s := NewService(nil, NewCircuitBreaker())
 	in := []domain.SearchResult{
 		res(domain.ResultKindArtist, "Nas", "", domain.ProviderDeezer, map[string]any{"disambiguation": "American rapper"}),
 		deezerTrack("Some Song", "Nas", 50),

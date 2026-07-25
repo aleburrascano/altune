@@ -25,7 +25,7 @@ func TestRunHealthEval_fillAndBridge(t *testing.T) {
 	withArt := track("Humble", "Kendrick", domain.ProviderDeezer, nil)
 	withArt.ImageURL = "https://art/1.jpg"
 	withArt.Extras = map[string]any{"resolution_tier": domain.EntityResolutionBridge.String()}
-	noArt := track("Other", "Kendrick", domain.ProviderITunes, nil) // no image, no bridge
+	noArt := track("Other", "Kendrick", domain.ProviderITunes, nil)
 
 	fake := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
 		"Kendrick Humble": {withArt, noArt},
@@ -41,8 +41,6 @@ func TestRunHealthEval_fillAndBridge(t *testing.T) {
 	if r.BridgedMerges != 1 || r.BridgeHitRate != 0.5 {
 		t.Errorf("bridge: bridged=%d rate=%v, want 1 / 0.5", r.BridgedMerges, r.BridgeHitRate)
 	}
-	// Health metrics exist for recording but the report is not a HarnessReport
-	// (it must never be gated).
 	if len(r.HealthMetrics()) != 4 {
 		t.Errorf("expected 4 health metrics, got %d", len(r.HealthMetrics()))
 	}

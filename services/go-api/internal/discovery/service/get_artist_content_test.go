@@ -156,20 +156,20 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 					getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return []domain.SearchResult{
 							{
-								Kind:    domain.ResultKindAlbum,
-								Title:   "After Hours",
+								Kind:       domain.ResultKindAlbum,
+								Title:      "After Hours",
 								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a1"}},
 								TrackCount: 14,
 							},
 							{
-								Kind:    domain.ResultKindAlbum,
-								Title:   "After Hours (Deluxe)",
+								Kind:       domain.ResultKindAlbum,
+								Title:      "After Hours (Deluxe)",
 								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a2"}},
 								TrackCount: 18,
 							},
 							{
-								Kind:    domain.ResultKindAlbum,
-								Title:   "Starboy",
+								Kind:       domain.ResultKindAlbum,
+								Title:      "Starboy",
 								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a3"}},
 								TrackCount: 18,
 							},
@@ -178,7 +178,7 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 				},
 			},
 			wantStatus:    domain.ProviderStatusOK,
-			wantItemCount: 2, // "After Hours" and "After Hours (Deluxe)" normalize the same → deduped to 1, plus "Starboy" = 2
+			wantItemCount: 2,
 		},
 		{
 			name:         "dedup keeps higher track_count version",
@@ -190,14 +190,14 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 					getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
 						return []domain.SearchResult{
 							{
-								Kind:    domain.ResultKindAlbum,
-								Title:   "Dawn FM",
+								Kind:       domain.ResultKindAlbum,
+								Title:      "Dawn FM",
 								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a1"}},
 								TrackCount: 10,
 							},
 							{
-								Kind:    domain.ResultKindAlbum,
-								Title:   "Dawn FM (Alternate World)",
+								Kind:       domain.ResultKindAlbum,
+								Title:      "Dawn FM (Alternate World)",
 								Sources:    []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "a2"}},
 								TrackCount: 20,
 							},
@@ -206,7 +206,7 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 				},
 			},
 			wantStatus:    domain.ProviderStatusOK,
-			wantItemCount: 1, // same normalized title → keep the one with higher track_count
+			wantItemCount: 1,
 		},
 		{
 			name:         "provider error returns error status",
@@ -258,7 +258,6 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		providers := map[domain.ProviderName]ports.ArtistContentProvider{
 			domain.ProviderDeezer: &fakeArtistContentProvider{
 				getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
-					// Deliberately out of order.
 					return []domain.SearchResult{
 						album("Older", "2016-09-09", "a1"),
 						album("Newest", "2022-01-07", "a3"),
@@ -269,7 +268,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := NewGetArtistContentService(providers)
 
-		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", "",0)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", "", 0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -303,7 +302,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := NewGetArtistContentService(providers)
 
-		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", "",0)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", "", 0)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -326,7 +325,7 @@ func TestGetArtistContentService_GetAlbums_OrderingAndYear(t *testing.T) {
 		}
 		svc := NewGetArtistContentService(providers)
 
-		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", "",2)
+		resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "artist-1", "", 2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

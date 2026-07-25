@@ -32,7 +32,6 @@ func (f *fakeEventStore) snapshot() []domain.InteractionEvent {
 	return append([]domain.InteractionEvent(nil), f.events...)
 }
 
-// recorded is an alias for snapshot used by the record-event tests.
 func (f *fakeEventStore) recorded() []domain.InteractionEvent {
 	return f.snapshot()
 }
@@ -76,7 +75,7 @@ func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store))
 
 	out, err := svc.Execute(context.Background(), newUser(), newQuery(t, "humble"), false)
-	svc.WaitForBackground() // must not panic despite the append error
+	svc.WaitForBackground()
 
 	if err != nil {
 		t.Fatalf("Execute returned error %v; telemetry failure must not surface", err)
@@ -90,5 +89,5 @@ func TestService_NoEventStoreNoEmit(t *testing.T) {
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker())
 	runSearch(t, svc, "humble")
-	svc.WaitForBackground() // no-op, must not block or panic
+	svc.WaitForBackground()
 }

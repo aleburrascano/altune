@@ -8,7 +8,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// fakeSearcher returns canned results keyed by query; no live APIs.
 type fakeSearcher struct {
 	byQuery map[string][]domain.SearchResult
 	err     error
@@ -41,7 +40,7 @@ func TestEvalOne(t *testing.T) {
 		k           int
 		wantOutcome EvalOutcome
 		wantPos     int
-		wantTopKind string // only checked when outcome is fail_wrong_top
+		wantTopKind string
 	}{
 		{
 			name:        "entity at #1 passes top-1",
@@ -154,10 +153,10 @@ func TestMatchesEntity(t *testing.T) {
 
 func TestRunLibraryEval_Aggregation(t *testing.T) {
 	entities := []LibraryEntity{
-		{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, // top-1 pass
-		{Title: "Circles", Artist: "Post Malone"},    // top-K pass at #2 (album on top)
-		{Title: "Ghost Track", Artist: "Nobody"},     // fail: no results
-		{Title: "Orphan", Artist: ""},                // skipped
+		{Title: "HUMBLE.", Artist: "Kendrick Lamar"},
+		{Title: "Circles", Artist: "Post Malone"},
+		{Title: "Ghost Track", Artist: "Nobody"},
+		{Title: "Orphan", Artist: ""},
 	}
 	searcher := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
 		"Kendrick Lamar HUMBLE.": {evalTrack("HUMBLE.", "Kendrick Lamar")},

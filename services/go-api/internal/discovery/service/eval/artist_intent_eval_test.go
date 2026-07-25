@@ -152,7 +152,6 @@ func TestRunArtistIntentEval_AggregationAndRates(t *testing.T) {
 		t.Errorf("Corpus = %q, want hard", report.Corpus)
 	}
 
-	// Metrics carry the corpus tag and per-metric direction.
 	metrics := report.Metrics()
 	byName := map[string]NamedMetric{}
 	for _, m := range metrics {
@@ -165,7 +164,6 @@ func TestRunArtistIntentEval_AggregationAndRates(t *testing.T) {
 		t.Errorf("hard_buried_rate metric = %+v, want present + lower-is-better", m)
 	}
 
-	// Failures: every non-pass, non-skipped outcome, tagged with its outcome.
 	fails := report.Failures()
 	if len(fails) != 3 {
 		t.Fatalf("failures = %d, want 3 (buried, absent, no_results)", len(fails))

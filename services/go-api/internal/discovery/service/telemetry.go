@@ -10,19 +10,11 @@ import (
 )
 
 const (
-	// telemetryTopN caps how many shown results the envelope records.
-	telemetryTopN = 10
-	// pipelineVersionV2 stamps every rebuilt-pipeline event so ML training data
-	// stays attributable per pipeline across the cutover.
+	telemetryTopN     = 10
 	pipelineVersionV2 = "v2"
-	// emitTimeout bounds a single telemetry append.
-	emitTimeout = 3 * time.Second
+	emitTimeout       = 3 * time.Second
 )
 
-// emitSearchEvent appends a search_performed telemetry event, asynchronously and
-// best-effort: it never blocks the request, outlives request cancellation (via
-// WithoutCancel + its own timeout), recovers from panics, and logs — never
-// surfaces — failures. The envelope matches the legacy emitter, stamped v2.
 func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult, explored bool) {
 	if s.eventStore == nil {
 		return
@@ -34,8 +26,6 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 		"tail_noise_top5":  TailNoiseInTopK(shown, 5),
 		"pipeline_version": pipelineVersionV2,
 	}
-	// Stamp exploration so offline counterfactual eval can weight these searches
-	// (their shown order is unbiased by ranking — the propensity slate).
 	if explored {
 		payload["exploration"] = true
 		payload["exploration_rate"] = s.explorationRate

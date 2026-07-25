@@ -7,11 +7,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// Reuses fakeSearcher (library_eval_test.go) and track (merge_test.go). The
-// track helper sets ExternalID = "<title>:<provider>".
-
 func TestRunMergeEval_clean(t *testing.T) {
-	// One result for the query — nothing to under-merge.
 	entities := []LibraryEntity{{Title: "Humble", Artist: "Kendrick"}}
 	fake := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
 		"Kendrick Humble": {track("Humble", "Kendrick", domain.ProviderDeezer, nil)},
@@ -26,8 +22,6 @@ func TestRunMergeEval_clean(t *testing.T) {
 }
 
 func TestRunMergeEval_underMergeIdenticalCanonical(t *testing.T) {
-	// Two rows with identical canonical title+artist from different providers —
-	// merge's contract says collapse; left separate = a provable under-merge.
 	entities := []LibraryEntity{{Title: "Humble", Artist: "Kendrick"}}
 	fake := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
 		"Kendrick Humble": {
@@ -48,8 +42,6 @@ func TestRunMergeEval_underMergeIdenticalCanonical(t *testing.T) {
 }
 
 func TestRunMergeEval_distinctVersionsNotUnderMerge(t *testing.T) {
-	// Same title core but a non-bracketed version marker survives normalization,
-	// so these are DIFFERENT canonical titles — correctly NOT an under-merge.
 	entities := []LibraryEntity{{Title: "Redrum", Artist: "21 Savage"}}
 	fake := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
 		"21 Savage Redrum": {
@@ -65,7 +57,6 @@ func TestRunMergeEval_distinctVersionsNotUnderMerge(t *testing.T) {
 }
 
 func TestRunMergeEval_underMergeByISRC(t *testing.T) {
-	// Different titles but the SAME isrc — provably one recording; left apart = bug.
 	entities := []LibraryEntity{{Title: "Humble", Artist: "Kendrick"}}
 	fake := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
 		"Kendrick Humble": {

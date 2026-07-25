@@ -215,8 +215,6 @@ func TestFindRelated_ProviderCallCap(t *testing.T) {
 	}
 }
 
-// countingAlbumProvider counts calls; the production scatter-gather invokes it
-// from multiple goroutines, so the counter must be atomic (caught by -race).
 type countingAlbumProvider struct {
 	inner ports.AlbumContentProvider
 	count *atomic.Int64

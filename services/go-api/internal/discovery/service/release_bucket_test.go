@@ -26,7 +26,6 @@ func TestNormalizeRecordType(t *testing.T) {
 		{"explicit album", "album", 12, "album"},
 		{"compilation folds into album", "compilation", 20, "album"},
 		{"unknown defaults to album", "", 0, "album"},
-		// The user's rule: a one-track release labelled "album" is really a single.
 		{"one-track album is a single", "album", 1, "single"},
 		{"one-track unknown is a single", "", 1, "single"},
 	}
@@ -44,7 +43,7 @@ func TestBucketDiscography(t *testing.T) {
 		release("Green Day", "single", 1),
 		release("Sayso Says", "album", 10),
 		release("Some Comp", "compilation", 30),
-		release("Mislabeled", "album", 1), // 1 track → single
+		release("Mislabeled", "album", 1),
 	})
 
 	if len(buckets.Albums) != 2 {

@@ -8,15 +8,8 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// behavioralLookback bounds how far back the satisfaction signal looks. Recent
-// behavior only — older engagement is stale relative to catalog/taste drift.
 const behavioralLookback = 30 * 24 * time.Hour
 
-// SatisfactionConsumer is the first EventConsumer: it turns a play (listen
-// threshold crossed) or play-to-completion into a positive ranking signal and a
-// skip-after-click (short dwell) into a negative, keyed by result_signature.
-// New behavioral signals (#3 corpus labels, #5 pogo-sticking) plug in as sibling
-// EventConsumers — "add an implementation", never "rewire the pipeline".
 type SatisfactionConsumer struct {
 	store ports.BehavioralSignalStore
 }
@@ -33,10 +26,6 @@ func (c *SatisfactionConsumer) Signals(ctx context.Context, since time.Time) ([]
 
 var _ ports.EventConsumer = (*SatisfactionConsumer)(nil)
 
-// RefreshBehavioralScores recomputes the behavioral score map from the consumer
-// and atomically swaps it in. Called off the request path (a background ticker);
-// the search path only ever reads the published snapshot. A no-op when behavioral
-// ranking is not configured.
 func (s *Service) RefreshBehavioralScores(ctx context.Context) error {
 	if s.behavioralConsumer == nil {
 		return nil
@@ -55,11 +44,6 @@ func (s *Service) RefreshBehavioralScores(ctx context.Context) error {
 	return nil
 }
 
-// StartBehavioralRefresh runs RefreshBehavioralScores once immediately, then on
-// the given interval until ctx is cancelled. The ticker goroutine is tracked on
-// bgWg so graceful shutdown can wait for it. A no-op when behavioral ranking is
-// not configured. Best-effort: a refresh error is logged, never fatal — the
-// search path keeps serving the last good (or empty) snapshot.
 func (s *Service) StartBehavioralRefresh(ctx context.Context, interval time.Duration) {
 	if s.behavioralConsumer == nil {
 		return
@@ -85,12 +69,6 @@ func (s *Service) StartBehavioralRefresh(ctx context.Context, interval time.Dura
 	}()
 }
 
-// BehavioralScoresSnapshot returns the currently published score map (nil when
-// disabled or not yet refreshed). Read-only contract: the returned map is the
-// live published snapshot, shared by every concurrent reader without locking —
-// callers must never mutate it (a write would race the search path). A refresh
-// swaps in a NEW map; it never edits a published one. Exported so the Mission
-// Control re-run ranks with the same snapshot the live search applies.
 func (s *Service) BehavioralScoresSnapshot() map[string]float64 {
 	if !s.behavioralRanking {
 		return nil

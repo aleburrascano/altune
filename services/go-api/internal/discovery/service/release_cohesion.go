@@ -2,26 +2,8 @@ package service
 
 import "altune/go-api/internal/discovery/domain"
 
-// cohesionEdgeMin is how many releases two providers must SHARE before we treat
-// them as the same artist. One shared title can be coincidence (two same-name
-// artists both have a "Baddest"); a pattern of ≥2 is a real cross-platform artist.
 const cohesionEdgeMin = 2
 
-// FilterCohesive defends against a FRACTURED identity — two same-name artists
-// fused into one, e.g. a MusicBrainz wrong url-relation linking the rapper Che's
-// MBID to a different Che's Deezer id (doc §7). The fan-out then returns two
-// artists; every release is legitimately id-verified (of a different human), so
-// per-release keep rules can't separate them. The fracture is a property of the
-// PROVIDER SET.
-//
-// Providers of one real artist corroborate: the same releases appear across
-// several of them. We build a graph where two providers are linked when they
-// share ≥ cohesionEdgeMin releases (a single shared title is ignored as a likely
-// collision), find connected components, and keep the releases of the component
-// with the MOST providers — the widest cross-platform presence, i.e. the real
-// artist. A mis-bridged provider is an island (few or no genuine overlaps) and is
-// dropped. With no multi-provider component at all (a genuine single-provider
-// artist, or nothing corroborates) there is no signal, so everything is kept.
 func FilterCohesive(releases []MergedRelease) []MergedRelease {
 	shared, providers := providerCooccurrence(releases)
 	if len(providers) <= 1 {
@@ -37,7 +19,7 @@ func FilterCohesive(releases []MergedRelease) []MergedRelease {
 
 	best, size := uf.largestComponent()
 	if size <= 1 {
-		return releases // nothing corroborates ≥ the threshold — no signal to act on
+		return releases
 	}
 
 	out := make([]MergedRelease, 0, len(releases))
@@ -54,8 +36,6 @@ func FilterCohesive(releases []MergedRelease) []MergedRelease {
 
 type providerPair struct{ a, b domain.ProviderName }
 
-// providerCooccurrence counts, for each unordered provider pair, how many merged
-// releases carry both — and collects every provider seen.
 func providerCooccurrence(releases []MergedRelease) (map[providerPair]int, map[domain.ProviderName]bool) {
 	shared := make(map[providerPair]int)
 	providers := make(map[domain.ProviderName]bool)
@@ -81,8 +61,6 @@ func orderedPair(a, b domain.ProviderName) providerPair {
 	return providerPair{a, b}
 }
 
-// providerUnionFind is a tiny union-find over the handful of providers in a
-// fan-out, used to group them into same-artist components.
 type providerUnionFind struct {
 	parent map[domain.ProviderName]domain.ProviderName
 }
@@ -107,11 +85,6 @@ func (u *providerUnionFind) union(a, b domain.ProviderName) {
 	u.parent[u.find(a)] = u.find(b)
 }
 
-// largestComponent returns the component root with the most providers, and that
-// count. Ties break on the lexicographically smallest member name of each
-// component (NOT the root: which member ends up root depends on union order,
-// which follows a map range) — so a 2v2 fracture tie keeps the same artist's
-// discography every request instead of flipping at random.
 func (u *providerUnionFind) largestComponent() (domain.ProviderName, int) {
 	counts := make(map[domain.ProviderName]int)
 	minMember := make(map[domain.ProviderName]string)

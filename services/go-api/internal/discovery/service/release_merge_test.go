@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// albumVariant is a terse builder for a provider's view of one release.
 func albumVariant(provider domain.ProviderName, id, title string, opts ...func(*domain.SearchResult)) domain.SearchResult {
 	r := domain.SearchResult{
 		Kind:     domain.ResultKindAlbum,
@@ -55,11 +54,6 @@ func findRelease(t *testing.T, releases []MergedRelease, title string) MergedRel
 	return MergedRelease{}
 }
 
-// The Fully-Loaded case — the exact bug the rebuild targets (fault F2/F3): one
-// provider carries the release date, another the track count, another the cover.
-// The old replace-by-completeness merge kept ONE variant and dropped the others'
-// fields, so the album rendered with no year/tracks. Best-of merge keeps all
-// three.
 func TestMergeReleases_bestOfAcrossProviders(t *testing.T) {
 	groups := []ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Fully Loaded", withDate("2026-04-01"), withCover("cover-dz"), withType("ep"))),
@@ -89,9 +83,6 @@ func TestMergeReleases_bestOfAcrossProviders(t *testing.T) {
 	}
 }
 
-// The ENCORE case — a real release only one provider (Deezer, by the artist's own
-// id) carries, and MusicBrainz doesn't know. Merge must surface it intact with
-// its date; the keep step (build step 2) later keeps it on own-id provenance.
 func TestMergeReleases_singleProviderReleaseSurvivesIntact(t *testing.T) {
 	groups := []ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderDeezer, "enc", "REST IN BASS: ENCORE", withDate("2025-12-25"), withCover("c"), withType("album"))),
@@ -110,9 +101,6 @@ func TestMergeReleases_singleProviderReleaseSurvivesIntact(t *testing.T) {
 	}
 }
 
-// Direct proof of best-of over replace: cover-only + year-only variants of the
-// same release merge into one carrying BOTH — the old merge would keep whichever
-// scored higher and lose the other's field.
 func TestMergeReleases_coverAndYearCombine(t *testing.T) {
 	groups := []ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderLastFM, "l1", "Closed Captions", withCover("cover-lfm"))),
@@ -132,15 +120,12 @@ func TestMergeReleases_coverAndYearCombine(t *testing.T) {
 	}
 }
 
-// When the incumbent has no artwork, the other variant's URL and its source tag
-// adopt TOGETHER — the incumbent's stale ArtworkSource must never label the
-// adopted URL (the mislabel a pre-bestArtwork ImageURL assignment used to cause).
 func TestMergeReleases_adoptedArtworkKeepsItsSourceTag(t *testing.T) {
 	withArtworkSource := func(s string) func(*domain.SearchResult) {
 		return func(r *domain.SearchResult) { r.ArtworkSource = s }
 	}
 	groups := []ReleaseGroup{
-		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Nafi", withArtworkSource("deezer-stale"))), // no ImageURL
+		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Nafi", withArtworkSource("deezer-stale"))),
 		idGroup(albumVariant(domain.ProviderITunes, "i1", "Nafi", withCover("cover-it"), withArtworkSource("itunes"))),
 	}
 
@@ -163,9 +148,6 @@ func TestMergeReleases_strongIDDetected(t *testing.T) {
 	}
 }
 
-// A producer that sets only the TYPED UPC field (as applemusic.go instructs —
-// "the typed field below is what merge reads") must also count as a strong
-// identifier: no split-brain between r.UPC and Extras["upc"].
 func TestMergeReleases_strongIDDetectedFromTypedUPC(t *testing.T) {
 	withTypedUPC := func(u string) func(*domain.SearchResult) {
 		return func(r *domain.SearchResult) { r.UPC = u }
@@ -179,7 +161,6 @@ func TestMergeReleases_strongIDDetectedFromTypedUPC(t *testing.T) {
 	}
 }
 
-// The typed UPC also survives the best-of fold, like ISRC/MBID.
 func TestMergeReleases_typedUPCFolds(t *testing.T) {
 	withTypedUPC := func(u string) func(*domain.SearchResult) {
 		return func(r *domain.SearchResult) { r.UPC = u }
@@ -193,7 +174,6 @@ func TestMergeReleases_typedUPCFolds(t *testing.T) {
 	}
 }
 
-// More precise date wins regardless of which side carries it.
 func TestBestReleaseDate_prefersPrecision(t *testing.T) {
 	if got := bestReleaseDate("2020", "2020-05-01"); got != "2020-05-01" {
 		t.Errorf("bestReleaseDate(year, full) = %q, want the full date", got)

@@ -25,8 +25,6 @@ type CorrectionResult struct {
 	Confidence float64
 }
 
-// Correct tries whole-query correction only. Used in the pre-correction
-// phase before provider search, where false positives are costly.
 func (s *CorrectionService) Correct(ctx context.Context, query string) *CorrectionResult {
 	if s.vocab == nil {
 		return nil
@@ -34,9 +32,6 @@ func (s *CorrectionService) Correct(ctx context.Context, query string) *Correcti
 	return s.correctWholeQuery(ctx, textnorm.NormalizeForMatch(query))
 }
 
-// CorrectAggressive tries whole-query correction first, then falls back
-// to token-level correction. Used in the post-correction phase when
-// providers returned zero results and we need deeper recovery.
 func (s *CorrectionService) CorrectAggressive(ctx context.Context, query string) *CorrectionResult {
 	if s.vocab == nil {
 		return nil
@@ -59,9 +54,6 @@ func (s *CorrectionService) correctWholeQuery(ctx context.Context, norm string) 
 	return pickBestCorrection(norm, candidates)
 }
 
-// isExactVocabMatch reports whether any candidate is an exact non-query vocabulary
-// match for norm — meaning the input is already a confirmed entity term and should
-// not be corrected.
 func isExactVocabMatch(candidates []domain.VocabularyEntry, norm string) bool {
 	for _, c := range candidates {
 		if c.TermNorm == norm && c.Kind != domain.VocabKindQuery {
@@ -89,8 +81,6 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 
 		matches, err := s.vocab.SuggestByPrefix(ctx, token, 1)
 		if err != nil {
-			// Degrade (treat as no prefix match), but leave a trace: a silently
-			// swallowed store error made correction outages invisible.
 			slog.Debug("correction.prefix_lookup_failed", "token", token, "error", err)
 		}
 		if len(matches) > 0 && textnorm.NormalizeForMatch(matches[0].Term) == token {
@@ -167,9 +157,6 @@ func pickBestCorrection(queryNorm string, candidates []domain.VocabularyEntry) *
 	return best
 }
 
-// maxCorrectionDist returns the maximum edit distance allowed for a correction
-// candidate. Short queries (<=4 runes) tolerate only 1 edit to avoid wild
-// corrections; medium queries (<=8) tolerate 2; longer queries tolerate 3.
 func maxCorrectionDist(query string) int {
 	n := len([]rune(query))
 	if n <= 4 {

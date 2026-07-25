@@ -12,30 +12,23 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// LibraryEntity is one unique (title, artist) pair drawn from the catalog. The
-// eval treats the user's own library as ground truth: a search for
-// "artist title" should surface that exact track in the top results.
 type LibraryEntity struct {
 	Title  string `json:"title"`
 	Artist string `json:"artist"`
 }
 
-// Searcher is the slice of the search pipeline the eval consumes. The CLI wraps
-// the real SearchMusicService; tests pass a canned fake. Defined here (consumer
-// side) so the eval never depends on the full Execute signature.
 type Searcher interface {
 	Search(ctx context.Context, query string) ([]domain.SearchResult, error)
 }
 
-// EvalOutcome is the verdict for one entity. Zero value is unknown/invalid.
 type EvalOutcome int
 
 const (
 	EvalOutcomeUnknown EvalOutcome = iota
-	EvalPass                       // the entity appeared within the top-K window
-	EvalFailWrongTop               // results returned but the entity was not in the top-K
-	EvalFailNoResults              // search returned nothing (or errored)
-	EvalSkipped                    // no artist — an "artist title" query can't be formed
+	EvalPass
+	EvalFailWrongTop
+	EvalFailNoResults
+	EvalSkipped
 )
 
 func (o EvalOutcome) String() string {
@@ -53,19 +46,16 @@ func (o EvalOutcome) String() string {
 	}
 }
 
-// MarshalJSON emits the outcome as its label so the JSON report is readable.
 func (o EvalOutcome) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + o.String() + `"`), nil
 }
 
-// ResultSummary captures what actually ranked #1 when an entity missed the window.
 type ResultSummary struct {
 	Kind     string `json:"kind"`
 	Title    string `json:"title"`
 	Subtitle string `json:"subtitle"`
 }
 
-// EvalResult is the verdict plus diagnostics for one entity.
 type EvalResult struct {
 	Entity        LibraryEntity  `json:"entity"`
 	Query         string         `json:"query"`
@@ -75,9 +65,6 @@ type EvalResult struct {
 	Error         string         `json:"error,omitempty"` // search error, if any
 }
 
-// EvalReport is the aggregate quality-regression report. The product bar is
-// "the right answer is visible in the top results", so both top-1 (strict) and
-// top-K (the relaxed bar) are reported.
 type EvalReport struct {
 	Corpus            string         `json:"corpus,omitempty"` // "" = exact, "hard" = title-only ambiguous
 	K                 int            `json:"k"`                // the top-K window evaluated
@@ -91,7 +78,6 @@ type EvalReport struct {
 	Results           []EvalResult   `json:"results"`
 }
 
-// Top1Rate is top1_passed / evaluated, in [0,1].
 func (r EvalReport) Top1Rate() float64 {
 	if r.Evaluated == 0 {
 		return 0
@@ -99,7 +85,6 @@ func (r EvalReport) Top1Rate() float64 {
 	return float64(r.Top1Passed) / float64(r.Evaluated)
 }
 
-// TopKRate is topk_passed / evaluated, in [0,1].
 func (r EvalReport) TopKRate() float64 {
 	if r.Evaluated == 0 {
 		return 0
@@ -107,17 +92,11 @@ func (r EvalReport) TopKRate() float64 {
 	return float64(r.TopKPassed) / float64(r.Evaluated)
 }
 
-// QueryMode selects how the eval forms its search query from an entity. It is
-// what makes the eval discriminate: the exact corpus is trivially easy (an exact
-// "artist title" almost always ranks #1), while the title-only corpus is the
-// hard, ambiguous case — a bare title competes against same-named artists,
-// albums, and other tracks (the documented hardest case: "Humble", "Scorpion",
-// "Circles").
 type QueryMode int
 
 const (
-	QueryExact     QueryMode = iota // "artist title" — easy corpus
-	QueryTitleOnly                  // "title" — ambiguous/hard corpus
+	QueryExact QueryMode = iota
+	QueryTitleOnly
 )
 
 func (m QueryMode) queryFor(e LibraryEntity) string {
@@ -127,8 +106,6 @@ func (m QueryMode) queryFor(e LibraryEntity) string {
 	return e.Artist + " " + e.Title
 }
 
-// label is the corpus tag stamped into report metric names so exact and hard
-// baselines are distinct gate entries ("eval.top1_rate" vs "eval.hard_top1_rate").
 func (m QueryMode) label() string {
 	if m == QueryTitleOnly {
 		return "hard"
@@ -136,18 +113,10 @@ func (m QueryMode) label() string {
 	return ""
 }
 
-// RunLibraryEval searches "artist title" for every entity and checks whether the
-// entity appears within the top-k results. concurrency bounds parallel searches
-// against live provider rate limits (use 1 for a fake searcher in tests). k is
-// the window (k=1 is strict #1). progress, if non-nil, is called as entities
-// complete (throttled to ~5% steps). A per-entity search error is recorded as a
-// failure, never aborting the run.
 func RunLibraryEval(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency, k int, progress func(done, total int)) EvalReport {
 	return RunLibraryEvalMode(ctx, entities, searcher, concurrency, k, QueryExact, progress)
 }
 
-// RunLibraryEvalMode is RunLibraryEval with an explicit query mode — QueryExact
-// for the easy corpus, QueryTitleOnly for the hard ambiguous corpus.
 func RunLibraryEvalMode(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency, k int, mode QueryMode, progress func(done, total int)) EvalReport {
 	if concurrency < 1 {
 		concurrency = 1
@@ -178,23 +147,17 @@ func RunLibraryEvalMode(ctx context.Context, entities []LibraryEntity, searcher 
 			return nil
 		})
 	}
-	_ = g.Wait() // evalOneQuery never returns an error through the group
+	_ = g.Wait()
 
 	report := aggregate(results, k)
 	report.Corpus = mode.label()
 	return report
 }
 
-// evalOne searches the exact "artist title" query — the default corpus. Kept as
-// the unit-tested entry; RunLibraryEvalMode uses evalOneQuery directly.
 func evalOne(ctx context.Context, entity LibraryEntity, searcher Searcher, k int) EvalResult {
 	return evalOneQuery(ctx, entity.Artist+" "+entity.Title, entity, searcher, k)
 }
 
-// evalOneQuery runs one eval against a caller-supplied query, matching against
-// the full entity (title + artist) regardless of what the query contained — so a
-// title-only query still verifies the result is the owned track, not a same-named
-// other track.
 func evalOneQuery(ctx context.Context, query string, entity LibraryEntity, searcher Searcher, k int) EvalResult {
 	if strings.TrimSpace(entity.Artist) == "" {
 		return EvalResult{Entity: entity, Outcome: EvalSkipped, MatchPosition: -1}
@@ -234,13 +197,6 @@ func evalOneQuery(ctx context.Context, query string, entity LibraryEntity, searc
 	return res
 }
 
-// matchesEntity is true when the result is the track for this entity.
-// Providers routinely embed the artist (and track numbers) in the track title —
-// "A-Ha - Take On Me", "07-The Best Was Yet To Come" — and sometimes list a
-// re-uploader as the subtitle. So the entity title is matched as a contiguous
-// token run within the result title, and the artist may appear in either the
-// subtitle or the title. Token-boundary matching avoids short titles like "Go"
-// matching inside "Going".
 func matchesEntity(r domain.SearchResult, entity LibraryEntity) bool {
 	if r.Kind != domain.ResultKindTrack {
 		return false
@@ -253,12 +209,6 @@ func matchesEntity(r domain.SearchResult, entity LibraryEntity) bool {
 		return false
 	}
 	if ea == "" {
-		// Symbol-only artists (e.g. "¥$") normalize to empty, so token matching
-		// can never validate them — a correct result is marked a phantom failure.
-		// Fall back to a raw, case-folded substring compare against the
-		// symbol-preserving artist. Eval-tooling only; the live pipeline's
-		// normalization is unchanged (keeping symbols there breaks tokenization,
-		// plan 005 §A).
 		raw := strings.ToLower(strings.TrimSpace(entity.Artist))
 		return raw != "" &&
 			(strings.Contains(strings.ToLower(r.Subtitle), raw) || strings.Contains(strings.ToLower(r.Title), raw))
@@ -266,8 +216,6 @@ func matchesEntity(r domain.SearchResult, entity LibraryEntity) bool {
 	return containsTokens(textnorm.NormalizeForMatch(r.Subtitle), ea) || containsTokens(rt, ea)
 }
 
-// containsTokens reports whether want's tokens appear as a contiguous run within
-// have's tokens (exact match included).
 func containsTokens(have, want string) bool {
 	if want == "" {
 		return false

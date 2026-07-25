@@ -6,9 +6,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// fakeIdentityStore is defined in artwork_fill_test.go; it returns ok=true iff
-// mbid is non-empty, so a zero-value store models a miss.
-
 func TestResolveArtistIdentity_bridged_fansOutIdsPlusSeed(t *testing.T) {
 	store := &fakeIdentityStore{
 		mbid: "mbid-che",
@@ -25,7 +22,6 @@ func TestResolveArtistIdentity_bridged_fansOutIdsPlusSeed(t *testing.T) {
 	if id.MBID != "mbid-che" {
 		t.Errorf("MBID = %q, want mbid-che", id.MBID)
 	}
-	// Seed always present, even though xref did not carry the Deezer id.
 	if id.ProviderIDs[domain.ProviderDeezer] != "deezer-che" {
 		t.Errorf("seed deezer id = %q, want deezer-che", id.ProviderIDs[domain.ProviderDeezer])
 	}
@@ -61,15 +57,12 @@ func TestProviderContentID_aliases(t *testing.T) {
 	if got := providerContentID(id, domain.ProviderDeezer); got != "d1" {
 		t.Errorf("deezer id = %q, want d1", got)
 	}
-	// Apple Music shares the iTunes catalog id (the bridge only emits "itunes").
 	if got := providerContentID(id, domain.ProviderAppleMusic); got != "it1" {
 		t.Errorf("apple music id = %q, want the shared iTunes id it1", got)
 	}
-	// Last.fm keys on MBID.
 	if got := providerContentID(id, domain.ProviderLastFM); got != "mbid-x" {
 		t.Errorf("lastfm id = %q, want mbid-x", got)
 	}
-	// A provider with no resolved id and no alias sits out.
 	if got := providerContentID(id, domain.ProviderSpotify); got != "" {
 		t.Errorf("spotify id = %q, want empty (not bridged)", got)
 	}

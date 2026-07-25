@@ -10,9 +10,6 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// inMemoryConsensusCache is a test double for ports.NameKeyedCache[[]ConsensusAlbum]
-// — no TTL, no eviction, just enough to assert the service reads its cache
-// before re-fetching from providers.
 type inMemoryConsensusCache struct{ m map[string][]ConsensusAlbum }
 
 func newInMemoryConsensusCache() *inMemoryConsensusCache {
@@ -27,12 +24,13 @@ func (c *inMemoryConsensusCache) Set(_ context.Context, key string, v []Consensu
 	c.m[key] = v
 	return nil
 }
-func (c *inMemoryConsensusCache) GetNegative(context.Context, string) (bool, error) { return false, nil }
-func (c *inMemoryConsensusCache) SetNegative(context.Context, string) error         { return nil }
+func (c *inMemoryConsensusCache) GetNegative(context.Context, string) (bool, error) {
+	return false, nil
+}
+func (c *inMemoryConsensusCache) SetNegative(context.Context, string) error { return nil }
 
 var _ ports.NameKeyedCache[[]ConsensusAlbum] = (*inMemoryConsensusCache)(nil)
 
-// provider builds a consensus provider that returns the given album titles.
 func consensusProvider(name string, albums ...string) ConsensusProvider {
 	return ConsensusProvider{
 		Name: name,
@@ -103,8 +101,6 @@ func TestConsensus_ConfirmedAndUnconfirmed(t *testing.T) {
 }
 
 func TestConsensus_DistinctAlbumsStaySeparate(t *testing.T) {
-	// Canonical clustering: genuinely different album titles stay separate; the
-	// parenthetical "(Deluxe)" is canonical noise and folds into "Scorpion".
 	svc := NewConsensusService([]ConsensusProvider{
 		consensusProvider("lastfm", "Scorpion", "Scorpion (Deluxe)", "Take Care"),
 		consensusProvider("musicbrainz", "Scorpion"),
@@ -115,8 +111,6 @@ func TestConsensus_DistinctAlbumsStaySeparate(t *testing.T) {
 	if _, ok := byTitle["Take Care"]; !ok {
 		t.Error("expected the distinct album 'Take Care' to remain")
 	}
-	// "Scorpion" + "Scorpion (Deluxe)" + musicbrainz "Scorpion" all normalize alike →
-	// one confirmed cluster (3 provider hits).
 	if byTitle["Scorpion"] != ConsensusConfirmed {
 		t.Errorf("Scorpion = %v, want confirmed (deluxe folds in)", byTitle["Scorpion"])
 	}
@@ -144,10 +138,6 @@ func TestConsensus_CacheSkipsProviderCalls(t *testing.T) {
 	}
 }
 
-// Two different artists that share a name ("Che" the rapper / "Che" the soul
-// singer) must NOT share a cache entry: the key carries the seed identity, so
-// each seed recomputes its own consensus, and re-opening the first seed still
-// hits its own cached entry.
 func TestConsensus_CacheKeyedBySeedIdentity(t *testing.T) {
 	var calls int32
 	p := ConsensusProvider{
@@ -175,9 +165,6 @@ func TestConsensus_CacheKeyedBySeedIdentity(t *testing.T) {
 	}
 }
 
-// An MB authority ERROR degrades (the un-vetoed union is served) but must not
-// be cached: a transient MB failure would otherwise freeze a potentially
-// contaminated by-name union for the full TTL.
 func TestConsensus_MBErrorServedButNotCached(t *testing.T) {
 	var calls int32
 	p := ConsensusProvider{
@@ -204,9 +191,6 @@ func TestConsensus_MBErrorServedButNotCached(t *testing.T) {
 	}
 }
 
-// A cluster's consensus counts DISTINCT providers, and the primary seed carries
-// its REAL provider label: an iTunes seed plus the same album from the by-name
-// iTunes fetch is one source — never "confirmed on multiple providers".
 func TestConsensus_SameProviderVotesCountOnce(t *testing.T) {
 	svc := NewConsensusService([]ConsensusProvider{
 		consensusProvider("itunes", "Album X"),
@@ -267,10 +251,6 @@ func TestConsensus_MBRejectsContaminationAndConfirms(t *testing.T) {
 }
 
 func TestConsensus_MBSpineRejectsAlbumsNotInDiscography(t *testing.T) {
-	// Precision-first: when MB resolves the artist and confirms at least one
-	// album, an album MB does NOT credit to this artist is rejected — even when
-	// MB doesn't explicitly flag it as another artist's. This is the same-name
-	// ("wrong Che") contamination drop the per-album probe used to miss.
 	mb := &fakeMB{mbid: "mb1", confirmed: []string{"Real Album"}}
 	svc := NewConsensusService([]ConsensusProvider{
 		consensusProvider("lastfm", "Real Album", "Other Artist Album"),
@@ -287,9 +267,6 @@ func TestConsensus_MBSpineRejectsAlbumsNotInDiscography(t *testing.T) {
 }
 
 func TestConsensus_MBNotCredibleKeepsUnion(t *testing.T) {
-	// MB resolves no confirmations (artist absent / underground) → MB is not an
-	// authority here; the provider union is kept untouched (coverage over
-	// precision when there is no spine to anchor on).
 	mb := &fakeMB{mbid: "mb1", confirmed: nil}
 	svc := NewConsensusService([]ConsensusProvider{
 		consensusProvider("lastfm", "Album A", "Album B"),

@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// ent wraps a result as a single-provider entity at rank 0.
 func ent(r domain.SearchResult) Entity {
 	br := make(map[domain.ProviderName]int)
 	for _, s := range r.Sources {
@@ -20,7 +19,6 @@ func withPop(r domain.SearchResult, pop float64) domain.SearchResult {
 	return r
 }
 
-// deezerTrack / deezerAlbum carry a Deezer source so they pass the browseable gate.
 func deezerTrack(title, artist string, pop float64) domain.SearchResult {
 	return withPop(track(title, artist, domain.ProviderDeezer, nil), pop)
 }
@@ -38,8 +36,6 @@ func titles(results []domain.SearchResult) []string {
 }
 
 func TestRank_ExactTitleOutranksPartial(t *testing.T) {
-	// Continuous relevance: the exact title matches more of the query than a
-	// partial one, so it ranks higher — even when the partial is more popular.
 	exact := deezerTrack("Humble", "Artist A", 10)
 	partial := deezerTrack("Humble Beginnings", "Artist B", 99)
 
@@ -51,9 +47,6 @@ func TestRank_ExactTitleOutranksPartial(t *testing.T) {
 }
 
 func TestRank_DashVariantOutranksParenForRemasterQuery(t *testing.T) {
-	// The regression fix, in the ranker: for a query carrying the version suffix,
-	// the dash-form variant (which keeps those tokens after normalization) is a
-	// closer match than the paren-form (whose suffix normalization strips away).
 	dash := deezerTrack("Big Poppa - 2005 Remaster", "The Notorious B.I.G.", 50)
 	paren := deezerTrack("Big Poppa (2007 Remaster)", "The Notorious B.I.G.", 99)
 
@@ -65,7 +58,6 @@ func TestRank_DashVariantOutranksParenForRemasterQuery(t *testing.T) {
 }
 
 func TestRank_PopularityBreaksRelevanceTie(t *testing.T) {
-	// Same canonical title → equal relevance → popularity decides.
 	a := deezerTrack("Crazy", "Artist A", 30)
 	b := deezerTrack("Crazy", "Artist B", 90)
 
@@ -88,9 +80,6 @@ func TestRank_SharesQueryWordGate(t *testing.T) {
 }
 
 func TestRank_SingleCharQueryIsNotGatedOut(t *testing.T) {
-	// tokenSet drops single-char tokens, so a one-character query ("u", "v") has
-	// an empty token set — sharesQueryWord must treat that as "no gate", not
-	// reject every candidate (which forced zero results).
 	artist := deezerTrack("U", "U", 50)
 
 	got := Rank([]Entity{ent(artist)}, "u")

@@ -9,7 +9,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// fakeAlbumSearcher is a minimal ports.SearchProvider for the fallback path.
 type fakeAlbumSearcher struct {
 	results []domain.SearchResult
 }
@@ -29,9 +28,6 @@ func albumSearchResult(artist, deezerID string) domain.SearchResult {
 	}
 }
 
-// The Deezer search-then-fetch fallback must not return a DIFFERENT artist's
-// same-titled album: a bare "Empty Clip" search ranks "Chase Fetti"'s EP first,
-// but the requested album is Che's. The artist guard skips the mismatch.
 func TestGetAlbumTracks_fallbackSkipsWrongArtist(t *testing.T) {
 	var fetchedID string
 	deezer := &fakeAlbumContentProvider{
@@ -42,15 +38,14 @@ func TestGetAlbumTracks_fallbackSkipsWrongArtist(t *testing.T) {
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{
-		albumSearchResult("Chase Fetti", "999"), // wrong artist, ranked first
-		albumSearchResult("Che", "111"),         // right artist
+		albumSearchResult("Chase Fetti", "999"),
+		albumSearchResult("Che", "111"),
 	}}
 	svc := NewGetAlbumTracksService(
 		map[domain.ProviderName]ports.AlbumContentProvider{domain.ProviderDeezer: deezer},
 		WithAlbumFallbackSearcher(searcher),
 	)
 
-	// SoundCloud isn't in the album-tracks map → falls back to the Deezer search.
 	resp, err := svc.Execute(context.Background(), domain.ProviderSoundCloud, "sc-1", "Empty Clip", "Che", 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

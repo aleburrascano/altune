@@ -17,9 +17,6 @@ func (f fakeDetailSvc) TopTracks(context.Context, string, string, string) []Deta
 	return f.tracks
 }
 
-// The scoring core: a forbidden source and a forbidden title each count as one
-// contamination; recall is fraction-of-expected-present; coverage is
-// fraction-of-albums-with-artwork-and-year.
 func TestRunDetailEval_scores(t *testing.T) {
 	goldens := []DetailGolden{{
 		Name:              "X",
@@ -33,11 +30,11 @@ func TestRunDetailEval_scores(t *testing.T) {
 	svc := fakeDetailSvc{
 		albums: []DetailItem{
 			{Title: "Real Album (Deluxe)", Sources: []string{"spotify"}, HasArtwork: true, Year: 2020},
-			{Title: "Wrong One", Sources: []string{"deezer"}, HasArtwork: true, Year: 2019}, // forbidden source
+			{Title: "Wrong One", Sources: []string{"deezer"}, HasArtwork: true, Year: 2019},
 		},
 		tracks: []DetailItem{
 			{Title: "Real Track", Sources: []string{"spotify"}},
-			{Title: "Soul Song", Sources: []string{"applemusic"}}, // forbidden title
+			{Title: "Soul Song", Sources: []string{"applemusic"}},
 		},
 	}
 
@@ -60,14 +57,12 @@ func TestRunDetailEval_scores(t *testing.T) {
 	}
 }
 
-// A metadata-only control (no expected titles) must not inflate the recall
-// averages — it's excluded from them, but still scored for coverage.
 func TestRunDetailEval_controlExcludedFromRecall(t *testing.T) {
 	goldens := []DetailGolden{
 		{Name: "scored", SeedProvider: "deezer", SeedID: "1", ExpectedAlbums: []string{"a"}},
-		{Name: "control", SeedProvider: "deezer", SeedID: "2"}, // no expected — control
+		{Name: "control", SeedProvider: "deezer", SeedID: "2"},
 	}
-	svc := fakeDetailSvc{albums: []DetailItem{{Title: "B", HasArtwork: true, Year: 2021}}} // "a" absent → recall 0
+	svc := fakeDetailSvc{albums: []DetailItem{{Title: "B", HasArtwork: true, Year: 2021}}}
 
 	rep := RunDetailEval(context.Background(), goldens, svc)
 

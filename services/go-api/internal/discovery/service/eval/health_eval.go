@@ -1,22 +1,5 @@
 package eval
 
-// Health gauges — report-only (plan 2026-06-24-001, Phase 3).
-//
-// These are operational signals, NOT gated. They fluctuate with provider uptime
-// (artwork resolves only when its sources are up; latency tracks load), so a
-// threshold on them would flap — the exact false-red that gets a harness deleted.
-// They are tracked in baselines.json for visibility and history only; one
-// graduates to a gated metric ONLY if it proves it predicts user-visible
-// breakage. Deliberately not a HarnessReport — the cmd prints them and never
-// gates them.
-//
-//   - fill_rate       : share of returned results with artwork resolved (a result
-//                       with no art is a near-dead card).
-//   - bridge_hit_rate : share of results merged via the cross-provider identity
-//                       bridge (resolution_tier == "bridge") — how much reach the
-//                       bridge actually buys.
-//   - latency p50/p95 : end-to-end search wall time.
-
 import (
 	"context"
 	"sort"
@@ -28,7 +11,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// HealthReport is the report-only operational snapshot.
 type HealthReport struct {
 	Searches      int     `json:"searches"`
 	Results       int     `json:"results"` // total result rows seen
@@ -41,8 +23,6 @@ type HealthReport struct {
 	LatencyMaxMs  int64   `json:"latency_max_ms"`
 }
 
-// RunHealthEval searches "artist title" for each entity, timing each call and
-// tallying artwork fill and bridge-merge incidence across the returned rows.
 func RunHealthEval(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency int, progress func(done, total int)) HealthReport {
 	if concurrency < 1 {
 		concurrency = 1
@@ -115,8 +95,6 @@ func RunHealthEval(ctx context.Context, entities []LibraryEntity, searcher Searc
 	return report
 }
 
-// percentile returns the p-th percentile (0–100) of the samples via
-// nearest-rank, or 0 for an empty set.
 func percentile(samples []int64, p int) int64 {
 	if len(samples) == 0 {
 		return 0
@@ -133,9 +111,6 @@ func percentile(samples []int64, p int) int64 {
 	return sorted[rank]
 }
 
-// HealthMetrics renders the gauges as NamedMetrics for recording in baselines
-// (visibility/history) — never gated. Latency direction is lower-is-better;
-// fill/bridge are higher-is-better, but none of these flip an exit code.
 func (r HealthReport) HealthMetrics() []NamedMetric {
 	return []NamedMetric{
 		{Name: "health.fill_rate", Value: r.FillRate, HigherIsBetter: true},

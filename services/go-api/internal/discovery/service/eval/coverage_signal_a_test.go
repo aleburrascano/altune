@@ -9,7 +9,6 @@ import (
 	"altune/go-api/internal/discovery/service"
 )
 
-// fakeEventQuery returns canned aggregates; no DB.
 type fakeEventQuery struct {
 	zero      []ports.QueryCount
 	noClick   []ports.QueryCount
@@ -28,7 +27,6 @@ func (f *fakeEventQuery) AbandonedSearches(_ context.Context, _ time.Time, _ int
 	return f.abandoned, nil
 }
 
-// fakeCorrector reports a correction exists for any query_norm in its set.
 type fakeCorrector struct {
 	typos map[string]bool
 }
@@ -65,7 +63,7 @@ func TestCoverageSignalA(t *testing.T) {
 
 	t.Run("correctable typo is filtered out, not a strong gap", func(t *testing.T) {
 		events := &fakeEventQuery{zero: []ports.QueryCount{
-			{QueryNorm: "kendrik lamar", Count: 5}, // typo — correction exists
+			{QueryNorm: "kendrik lamar", Count: 5},
 			{QueryNorm: "real gap", Count: 2},
 		}}
 		corrector := &fakeCorrector{typos: map[string]bool{"kendrik lamar": true}}

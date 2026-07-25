@@ -7,25 +7,10 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// pipeline_test exercises rankPipeline — the pure decision core of search
-// (Merge → Rank → EnforceDiversity → CollapseArtistDuplicates), with no ports and
-// no I/O. The per-stage tests (merge_test, rank_test, diversity_test) cover each
-// stage alone; this file pins the STAGE INTERACTIONS — the place positioning
-// regressions hide (CLAUDE.md) and the production path Service.Execute actually
-// runs. Fixtures are synthetic but encode TRUE-TO-LIFE relationships (an artist
-// genuinely has more fans than a deep-cut track); popularity never carries a
-// claimed real nb_fan. This test pins the ALGORITHM; discoveryeval -mode eval
-// stays the real-provider gate.
-
-// --- local fixture + assertion helpers (build on the package-wide helpers in
-// merge_test/rank_test: res, track, deezerTrack, deezerAlbum, withPop, titles) ---
-
-// dzArtist is a browseable (Deezer-sourced) artist at the given popularity.
 func dzArtist(name string, pop float64) domain.SearchResult {
 	return withPop(res(domain.ResultKindArtist, name, "", domain.ProviderDeezer, nil), pop)
 }
 
-// norm normalizes a raw query the way Service.Execute does before rankPipeline.
 func norm(raw string) string { return textnorm.NormalizeForMatch(raw) }
 
 func indexOfTitle(results []domain.SearchResult, title string) int {
@@ -47,8 +32,6 @@ func countTitle(results []domain.SearchResult, title string) int {
 	return n
 }
 
-// inTopN asserts the named title appears within the first n results — the
-// product bar is "visible in the top 3", never strict #1.
 func inTopN(t *testing.T, got []domain.SearchResult, n int, wantTitle string) {
 	t.Helper()
 	limit := n
@@ -63,10 +46,6 @@ func inTopN(t *testing.T, got []domain.SearchResult, n int, wantTitle string) {
 	t.Fatalf("want %q in top-%d, got order %v", wantTitle, n, titles(got))
 }
 
-// --- composition invariants ---
-
-// The eligibility gate is not overridable by popularity: an album with no
-// browseable (Deezer) source never surfaces, however popular it claims to be.
 func TestRankPipeline_GateDominatesPopularity(t *testing.T) {
 	itunesOnlyAlbum := withPop(res(domain.ResultKindAlbum, "Mirage", "Some Artist", domain.ProviderITunes, nil), 1_000_000)
 	deezerTrack := deezerTrack("Mirage", "Some Artist", 10)
@@ -83,17 +62,12 @@ func TestRankPipeline_GateDominatesPopularity(t *testing.T) {
 	}
 }
 
-// Kind alone never reorders. Two results identical in relevance, popularity, and
-// sources but differing only in Kind keep their input order — there is no
-// track>album>artist favoritism. This guard goes red if kind tiering is ever
-// reintroduced into the sort.
 func TestRankPipeline_NoKindFavoritism(t *testing.T) {
 	albumFirst := withPop(res(domain.ResultKindAlbum, "Echo", "Band", domain.ProviderDeezer, nil), 50)
 	trackSecond := withPop(res(domain.ResultKindTrack, "Echo", "Band", domain.ProviderDeezer, nil), 50)
 
 	got := rankPipeline([][]domain.SearchResult{{albumFirst, trackSecond}}, norm("Echo"))
 
-	// Both share the title "Echo"; assert by kind position instead.
 	albumPos, trackPos := -1, -1
 	for i, r := range got {
 		switch r.Kind {
@@ -111,12 +85,7 @@ func TestRankPipeline_NoKindFavoritism(t *testing.T) {
 	}
 }
 
-// EnforceDiversity caps per-artist repetition but never PROMOTES a lower-ranked
-// result above a higher-ranked one — the overflow moves down, relative order is
-// preserved.
 func TestRankPipeline_DiversityPreservesOrder(t *testing.T) {
-	// Five same-artist tracks, descending popularity, no title match (relevance
-	// ties at the gate floor) so popularity is the sole order signal.
 	in := []domain.SearchResult{
 		deezerTrack("Song A", "Solo", 90),
 		deezerTrack("Song B", "Solo", 80),
@@ -140,9 +109,6 @@ func TestRankPipeline_DiversityPreservesOrder(t *testing.T) {
 	}
 }
 
-// CollapseArtistDuplicates folds same-name artists into the most popular one and
-// drops ONLY the duplicates — distinct artists survive, survivor is the popular
-// one, and order is preserved.
 func TestRankPipeline_CollapseKeepsSurvivors(t *testing.T) {
 	auroraLow := dzArtist("Aurora", 40)
 	auroraHigh := dzArtist("Aurora", 95)
@@ -165,20 +131,14 @@ func TestRankPipeline_CollapseKeepsSurvivors(t *testing.T) {
 	}
 }
 
-// --- canonical-query top-3 smoke (each a distinct cross-stage mechanic) ---
-
 func TestRankPipeline_CanonicalTopThree(t *testing.T) {
 	tests := []struct {
 		name      string
 		query     string
 		groups    [][]domain.SearchResult
-		wantTitle string // must appear in the top 3
+		wantTitle string
 	}{
 		{
-			// Cross-kind ambiguity: the exact-title track stays visible in the
-			// top-3 even though a same-name ARTIST is legitimately more popular
-			// (the artist may sit at #1 — the data doesn't lie — but the track
-			// earns a top-3 slot on relevance).
 			name:  "humble surfaces the kendrick track despite a more popular same-name artist",
 			query: "Humble",
 			groups: [][]domain.SearchResult{
@@ -189,8 +149,6 @@ func TestRankPipeline_CanonicalTopThree(t *testing.T) {
 			wantTitle: "HUMBLE.",
 		},
 		{
-			// Artist-name query: the artist surfaces top-3 among many of its own
-			// tracks (which carry no title relevance and are diversity-capped).
 			name:  "drake the artist surfaces among many drake tracks",
 			query: "Drake",
 			groups: [][]domain.SearchResult{
@@ -205,8 +163,6 @@ func TestRankPipeline_CanonicalTopThree(t *testing.T) {
 			wantTitle: "Drake",
 		},
 		{
-			// Multi-token artist+title query: the specific track wins via the
-			// artist+title relevance framing.
 			name:  "kendrick lamar humble lands the specific track",
 			query: "Kendrick Lamar Humble",
 			groups: [][]domain.SearchResult{
