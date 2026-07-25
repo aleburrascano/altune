@@ -1,13 +1,4 @@
-# Local development infrastructure.
-#
-# Production runs on a separate Supabase project (per ADR-0003); this compose
-# file is for dev + manual API exercise only. testcontainers-python spins
-# ephemeral Postgres instances for integration tests and does NOT use this
-# compose file.
-#
-# Bring up:    docker compose up -d
-# Tear down:   docker compose down
-# Wipe data:   docker compose down -v
+name: altune
 
 services:
   postgres:

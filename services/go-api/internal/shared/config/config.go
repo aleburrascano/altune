@@ -60,7 +60,7 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	_ = godotenv.Load()
+	_ = godotenv.Load(".env.development")
 
 	cfg := &Config{}
 	if err := env.Parse(cfg); err != nil {

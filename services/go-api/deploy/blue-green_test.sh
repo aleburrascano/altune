@@ -6,14 +6,14 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 FAILURES=0
 
 setup_case() {
-    local seed=$1 health_ok=$2 public_ok=$3 legacy=$4
+    local seed=$1 health_ok=$2 public_ok=$3 legacy=$4 seed_at=${5:-deploy/caddy}
     WORK=$(mktemp -d)
-    mkdir -p "$WORK/bin" "$WORK/api/deploy" "$WORK/api/caddy"
+    mkdir -p "$WORK/bin" "$WORK/api/deploy/caddy" "$WORK/api/caddy"
     cp "$HERE/lib.sh" "$HERE/blue-green.sh" "$WORK/api/deploy/"
-    cp "$HERE/../docker-compose.prod.yml" "$WORK/api/"
+    cp "$HERE/compose.prod.yml" "$WORK/api/deploy/"
 
     if [ -n "$seed" ]; then
-        printf 'reverse_proxy altune-go-api-%s:8000\n' "$seed" >"$WORK/api/caddy/upstream.conf"
+        printf 'reverse_proxy altune-go-api-%s:8000\n' "$seed" >"$WORK/api/$seed_at/upstream.conf"
     fi
 
     cat >"$WORK/bin/docker" <<EOF
@@ -36,7 +36,7 @@ EOF
     (cd "$WORK/api" && PATH="$WORK/bin:$PATH" HEALTH_TIMEOUT=4 \
         bash deploy/blue-green.sh >"$WORK/out.log" 2>&1)
     RC=$?
-    UPSTREAM=$(cat "$WORK/api/caddy/upstream.conf")
+    UPSTREAM=$(cat "$WORK/api/deploy/caddy/upstream.conf")
 }
 
 fail() {
@@ -98,6 +98,13 @@ CASE="first run rolls back to the legacy container, not to a colour"
 setup_case "" yes no yes
 expect_rc 1
 expect_upstream "reverse_proxy altune-go-api:8000"
+
+CASE="a pre-move upstream file is adopted instead of reseeded to blue"
+setup_case green yes yes no caddy
+expect_rc 0
+expect_upstream "reverse_proxy altune-go-api-blue:8000"
+expect_action "build go-api-blue"
+[ -f "$WORK/api/caddy/upstream.conf" ] && fail "legacy upstream file was left behind"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

@@ -1,10 +1,12 @@
+name: go-api
+
 x-go-api: &go-api
   build:
-    context: .
-    dockerfile: Dockerfile
+    context: ..
+    dockerfile: deploy/Dockerfile
   restart: unless-stopped
   env_file:
-    - .env.production
+    - ../.env.production
   environment:
     - OPERATOR_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524
     - EVAL_METER_ENABLED=true

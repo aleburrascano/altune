@@ -5,7 +5,10 @@
   "description": "Altune — music manager. Repo root: git-hook tooling only (husky + commitlint). The mobile app is a standalone npm package under apps/mobile (see ADR-0016); the Go service lives under services/go-api.",
   "scripts": {
     "prepare": "husky",
-    "lint:commits": "commitlint --from=HEAD~10 --to=HEAD --verbose"
+    "lint:commits": "commitlint --from=HEAD~10 --to=HEAD --verbose",
+    "dev:up": "docker compose -f services/go-api/deploy/compose.dev.yml up -d",
+    "dev:down": "docker compose -f services/go-api/deploy/compose.dev.yml down",
+    "dev:reset": "docker compose -f services/go-api/deploy/compose.dev.yml down -v"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.5.0",
