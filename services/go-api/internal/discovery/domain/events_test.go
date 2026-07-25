@@ -46,8 +46,6 @@ func TestParseEventType(t *testing.T) {
 		{name: "invalid", input: "page_view", want: EventTypeUnknown},
 		{name: "empty", input: "", want: EventTypeUnknown},
 		{name: "uppercase rejected", input: "Play", want: EventTypeUnknown},
-		// "unknown" is the sentinel's String() output, not a wire value — it must
-		// NOT parse to a valid type.
 		{name: "sentinel name rejected", input: "unknown", want: EventTypeUnknown},
 	}
 
@@ -63,7 +61,6 @@ func TestParseEventType(t *testing.T) {
 }
 
 func TestParseEventType_RoundTrip(t *testing.T) {
-	// Every named EventType should survive String() -> Parse() round-trip.
 	types := []EventType{
 		EventTypeSearchPerformed, EventTypeResultsShown, EventTypeResultClicked,
 		EventTypePlay, EventTypeSkip, EventTypeCompleted,
@@ -80,9 +77,6 @@ func TestParseEventType_RoundTrip(t *testing.T) {
 }
 
 func TestEventType_ClientSubmittable(t *testing.T) {
-	// Full matrix: only the interaction types are client-allowed; the
-	// server-emitted envelope events (search_performed, results_shown) and the
-	// unknown sentinel must be rejected at the POST /events boundary.
 	tests := []struct {
 		et   EventType
 		want bool

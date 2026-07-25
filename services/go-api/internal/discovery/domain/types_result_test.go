@@ -16,8 +16,6 @@ func TestResolutionTierFromExtras(t *testing.T) {
 		{name: "key absent", extras: map[string]any{}, want: EntityResolutionNone},
 		{name: "nil extras", extras: nil, want: EntityResolutionNone},
 		{name: "wrong type", extras: map[string]any{"resolution_tier": 3}, want: EntityResolutionNone},
-		// "none" is a String() output, not a value merge.go ever stamps — it
-		// still maps to the None sentinel.
 		{name: "none", extras: map[string]any{"resolution_tier": "none"}, want: EntityResolutionNone},
 	}
 
@@ -33,7 +31,6 @@ func TestResolutionTierFromExtras(t *testing.T) {
 }
 
 func TestResolutionTierFromExtras_RoundTrip(t *testing.T) {
-	// Every tier merge.go can stamp must survive String() -> FromExtras.
 	tiers := []EntityResolutionTier{
 		EntityResolutionISRC, EntityResolutionUPC,
 		EntityResolutionMBID, EntityResolutionBridge,
@@ -67,7 +64,6 @@ func TestNewProviderResult(t *testing.T) {
 	if r.Extras == nil {
 		t.Fatal("nil extras must be initialized to a writable map")
 	}
-	// The nil-map footgun: the returned Extras must be writable.
 	r.Extras["genre"] = "rap"
 	if r.Extras["genre"] != "rap" {
 		t.Error("Extras must be writable after nil initialization")
@@ -84,8 +80,6 @@ func TestNewProviderResult_KeepsProvidedExtras(t *testing.T) {
 }
 
 func TestResultSignature(t *testing.T) {
-	// Byte-exactness matters: the rank pipeline and the wire mapper MUST
-	// compute the same string or behavioral scores stop joining.
 	tests := []struct {
 		name string
 		r    SearchResult
@@ -135,8 +129,6 @@ func TestResultSignature(t *testing.T) {
 }
 
 func TestResultSignature_KindDisambiguates(t *testing.T) {
-	// Same title+subtitle, different kind → different signature: an album and
-	// its title track must never share an engagement join key.
 	album := SearchResult{Kind: ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"}
 	track := SearchResult{Kind: ResultKindTrack, Title: "DAMN.", Subtitle: "Kendrick Lamar"}
 	if ResultSignature(album) == ResultSignature(track) {
@@ -145,7 +137,6 @@ func TestResultSignature_KindDisambiguates(t *testing.T) {
 }
 
 func TestResultSignature_CaseAndSpacingStable(t *testing.T) {
-	// Provider casing/spacing variance must not fracture the join key.
 	a := SearchResult{Kind: ResultKindTrack, Title: "Sicko  Mode", Subtitle: "TRAVIS SCOTT"}
 	b := SearchResult{Kind: ResultKindTrack, Title: "SICKO MODE", Subtitle: "Travis Scott"}
 	if ResultSignature(a) != ResultSignature(b) {

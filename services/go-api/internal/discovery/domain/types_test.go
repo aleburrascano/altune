@@ -362,7 +362,6 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 }
 
 func TestParseResultKind_RoundTrip(t *testing.T) {
-	// Every valid ResultKind should survive String() -> Parse() round-trip
 	kinds := []ResultKind{ResultKindArtist, ResultKindAlbum, ResultKindTrack, ResultKindPlaylist}
 	for _, k := range kinds {
 		t.Run(k.String(), func(t *testing.T) {

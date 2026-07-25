@@ -6,17 +6,11 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// AlbumValidator cross-references an artist's albums against an authoritative
-// source (e.g., MusicBrainz) and splits them into confirmed vs unconfirmed.
 type AlbumValidator interface {
 	ValidateArtistAlbums(ctx context.Context, artistName string, albums []domain.SearchResult) (*AlbumValidationResult, error)
 	ResolveArtistIdentity(ctx context.Context, artistName string) (*ArtistIdentity, error)
 }
 
-// ArtistIdentityResolver is the narrow port consumed by the search pipeline's
-// artist-disambiguation step. It is satisfied by the same MusicBrainz adapter
-// that implements AlbumValidator; the split lets Service hold only the one
-// method it actually calls.
 type ArtistIdentityResolver interface {
 	ResolveArtistIdentity(ctx context.Context, artistName string) (*ArtistIdentity, error)
 }
@@ -41,7 +35,6 @@ type RelatedTrackMatch struct {
 	Album      string
 	ArtworkURL *string
 }
-
 
 type DiscogsArtistInfo struct {
 	ID      int

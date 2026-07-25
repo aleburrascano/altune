@@ -30,7 +30,6 @@ func TestFeaturedArtist_ExtrasRoundTrip(t *testing.T) {
 }
 
 func TestFeaturedArtist_FromMap_JSONNumeric(t *testing.T) {
-	// JSON round-trips numbers as float64 — the parser must tolerate it.
 	m := map[string]any{"name": "SZA", "deezer_id": float64(42)}
 	got := FeaturedArtistFromMap(m)
 	if got.DeezerID != 42 {
@@ -97,8 +96,6 @@ func TestFeaturedArtistsFromExtras_AbsentOrWrongShape(t *testing.T) {
 	}{
 		{"key absent", map[string]any{}},
 		{"nil extras", nil},
-		// A JSON round-trip decodes to []any, not []map[string]any — that shape
-		// is intentionally not accepted here.
 		{"json-decoded shape", map[string]any{"featured_artists": []any{map[string]any{"name": "SZA"}}}},
 		{"wrong type", map[string]any{"featured_artists": "SZA"}},
 	}
@@ -112,8 +109,6 @@ func TestFeaturedArtistsFromExtras_AbsentOrWrongShape(t *testing.T) {
 }
 
 func TestFeaturedArtist_FromMap_NumericVariants(t *testing.T) {
-	// deezer_id must parse from all three numeric shapes the untyped map can
-	// carry (native int64, plain int, JSON float64).
 	tests := []struct {
 		name string
 		id   any

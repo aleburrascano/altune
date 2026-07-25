@@ -19,8 +19,6 @@ func TestVocabularyMatchScore_NoSignalScoresZero(t *testing.T) {
 }
 
 func TestVocabularyMatchScore_WeightsTradeOff(t *testing.T) {
-	// Jaccard is weighted above phonetic, so a candidate matching only on trigram
-	// overlap must outrank one matching only phonetically.
 	jaccardOnly := VocabularyMatchScore(1, 0, 0, 0)
 	phoneticOnly := VocabularyMatchScore(0, 0, 1, 0)
 	if jaccardOnly <= phoneticOnly {

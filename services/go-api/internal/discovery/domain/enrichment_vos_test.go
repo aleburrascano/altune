@@ -31,8 +31,6 @@ func TestDeezerEnrichment_IsZero(t *testing.T) {
 		{"genres only", DeezerEnrichment{Genres: []string{"rap"}}, false},
 		{"upc only", DeezerEnrichment{UPC: "0602557798456"}, false},
 		{"record type only", DeezerEnrichment{RecordType: "ep"}, false},
-		// Featured is consumed by the "Featuring" row, not the Deezer detail
-		// section — a featured-only enrichment still has no section to show.
 		{"featured excluded from IsZero", DeezerEnrichment{Featured: []FeaturedArtist{{Name: "SZA"}}}, true},
 	}
 	for _, tt := range tests {
@@ -67,7 +65,6 @@ func TestDeezerLyrics_IsZero(t *testing.T) {
 		{"empty", EmptyDeezerLyrics(), true},
 		{"plain only", DeezerLyrics{Plain: "line one"}, false},
 		{"synced only", DeezerLyrics{SyncedLines: []SyncedLyricLine{{Line: "line one"}}}, false},
-		// Writers/Copyright without any lyric text render nothing — still zero.
 		{"credits only", DeezerLyrics{Writers: []string{"K. Duckworth"}, Copyright: "© 2017"}, true},
 	}
 	for _, tt := range tests {
