@@ -24,3 +24,12 @@ func (e DeezerEnrichment) IsZero() bool {
 		e.UPC == "" &&
 		e.RecordType == ""
 }
+
+func (e DeezerEnrichment) HasRenderableContent() bool {
+	return e.BPM > 0 ||
+		e.Explicit ||
+		e.Label != "" ||
+		len(e.Genres) > 0 ||
+		e.RecordType != "" ||
+		len(e.Featured) > 0
+}

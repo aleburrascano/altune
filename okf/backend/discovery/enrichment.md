@@ -22,3 +22,9 @@ Every `Empty*Enrichment` constructor returns non-nil slices and maps so the wire
 Every detail-open enricher returns an empty enrichment and a nil error — the endpoint always answers 200, never a surfaced failure. A failure must not poison the positive cache, and a definitive miss is negative-cached so a repeat does not re-run resolution.
 
 The enrichment types (`MBEnrichment`, `DeezerEnrichment`, `DeezerLyrics`, `LastFmEnrichment`, `DiscogsEnrichment`) are immutable live read surfaces fetched on detail-open and never persisted. Each covers all applicable kinds with one shape, and kind-specific fields are simply zero when not applicable. They divide by authority: MusicBrainz owns identity, curated genres and artwork; Discogs owns credits and styles; Last.fm owns listening behavior (popularity, folksonomy tags, bio, similar artists); Deezer owns audio fields plus album liner data. Lyrics are the one axis no other audited provider carries — sourced from Deezer's internal `pipe.deezer.com` GraphQL, separate from the public-API surface, with per-track region-dependent availability.
+
+## has_content (2026-07-25)
+
+Each enrichment value object answers `HasRenderableContent()`, and the DTO carries it as `has_content`. It is deliberately distinct from the existing `IsZero()`: `IsZero` asks "did we resolve anything at all", `HasRenderableContent` asks "is there something worth drawing a section for". MusicBrainz ignores `MBID` and `PrimaryType` (present on every resolved entity, renderable on none); Last.fm ignores `MBID`, `Duration` and `Album`.
+
+The mobile client owned these predicates, which meant it had to know which fields Deezer returns. One difference from what the client did: Deezer's predicate counts `Featured`, so a payload whose only content is guest credits no longer collapses to null - the detail header's co-billed artists were being dropped whenever Deezer returned nothing else.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"strings"
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
@@ -68,6 +69,84 @@ func (r *TrackRepo) ListForUser(_ context.Context, userId shared.UserId, limit, 
 		end = len(all)
 	}
 	return all[offset:end], total, nil
+}
+
+func (r *TrackRepo) ListFilteredForUser(ctx context.Context, userId shared.UserId, query domain.LibraryQuery) ([]*domain.Track, int, error) {
+	tracks, total, err := r.ListForUser(ctx, userId, query.Limit, query.Offset)
+	if err != nil || query.Search == "" {
+		return tracks, total, err
+	}
+	needle := strings.ToLower(query.Search)
+	var matched []*domain.Track
+	for _, t := range tracks {
+		if strings.Contains(strings.ToLower(t.Title), needle) ||
+			strings.Contains(strings.ToLower(t.Artist), needle) ||
+			strings.Contains(strings.ToLower(t.Album), needle) {
+			matched = append(matched, t)
+		}
+	}
+	return matched, len(matched), nil
+}
+
+func (r *TrackRepo) ListAlbumsForUser(_ context.Context, userId shared.UserId, _ domain.LibraryQuery) ([]domain.AlbumGroup, error) {
+	if r.ErrOnList != nil {
+		return nil, r.ErrOnList
+	}
+	byKey := map[string]*domain.AlbumGroup{}
+	var order []string
+	for _, t := range r.Tracks {
+		if t.UserId != userId || t.Album == "" {
+			continue
+		}
+		artist := t.Artist
+		if t.AlbumArtist != nil {
+			artist = *t.AlbumArtist
+		}
+		key := strings.ToLower(t.Album) + "|||" + strings.ToLower(artist)
+		if g, ok := byKey[key]; ok {
+			g.TrackCount++
+			continue
+		}
+		byKey[key] = &domain.AlbumGroup{
+			Key: key, Album: t.Album, Artist: artist,
+			ArtworkURL: t.ArtworkURL, Year: t.Year,
+			TrackCount: 1, MostRecentAddedAt: t.AddedAt,
+		}
+		order = append(order, key)
+	}
+	out := make([]domain.AlbumGroup, 0, len(order))
+	for _, key := range order {
+		out = append(out, *byKey[key])
+	}
+	return out, nil
+}
+
+func (r *TrackRepo) ListArtistsForUser(_ context.Context, userId shared.UserId, _ domain.LibraryQuery) ([]domain.ArtistGroup, error) {
+	if r.ErrOnList != nil {
+		return nil, r.ErrOnList
+	}
+	byKey := map[string]*domain.ArtistGroup{}
+	var order []string
+	for _, t := range r.Tracks {
+		if t.UserId != userId {
+			continue
+		}
+		key := strings.ToLower(t.Artist)
+		if g, ok := byKey[key]; ok {
+			g.TrackCount++
+			continue
+		}
+		byKey[key] = &domain.ArtistGroup{
+			Key: key, Artist: t.Artist, ArtworkURL: t.ArtworkURL,
+			TrackCount: 1, MostRecentAddedAt: t.AddedAt,
+		}
+		order = append(order, key)
+	}
+	out := make([]domain.ArtistGroup, 0, len(order))
+	for _, key := range order {
+		out = append(out, *byKey[key])
+	}
+	return out, nil
 }
 
 func (r *TrackRepo) ListByIDs(_ context.Context, userId shared.UserId, ids []domain.TrackId) ([]*domain.Track, error) {

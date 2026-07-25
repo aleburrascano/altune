@@ -62,6 +62,7 @@ type EnrichmentResponseDTO struct {
 	SecondaryTypes []string          `json:"secondary_types"`
 	ExternalIDs    map[string]string `json:"external_ids"`
 	ArtworkURL     string            `json:"artwork_url"`
+	HasContent     bool              `json:"has_content"`
 }
 
 func enrichmentToDTO(e domain.MBEnrichment) EnrichmentResponseDTO {
@@ -87,6 +88,7 @@ func enrichmentToDTO(e domain.MBEnrichment) EnrichmentResponseDTO {
 		SecondaryTypes: secondary,
 		ExternalIDs:    ids,
 		ArtworkURL:     e.ArtworkURL,
+		HasContent:     e.HasRenderableContent(),
 	}
 }
 
@@ -126,26 +128,28 @@ func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http
 }
 
 type LastFmEnrichmentResponseDTO struct {
-	MBID      string   `json:"mbid"`
-	Listeners int64    `json:"listeners"`
-	Playcount int64    `json:"playcount"`
-	Tags      []string `json:"tags"`
-	Bio       string   `json:"bio"`
-	Similar   []string `json:"similar"`
-	Duration  int      `json:"duration"`
-	Album     string   `json:"album"`
+	MBID       string   `json:"mbid"`
+	Listeners  int64    `json:"listeners"`
+	Playcount  int64    `json:"playcount"`
+	Tags       []string `json:"tags"`
+	Bio        string   `json:"bio"`
+	Similar    []string `json:"similar"`
+	Duration   int      `json:"duration"`
+	Album      string   `json:"album"`
+	HasContent bool     `json:"has_content"`
 }
 
 func lastfmEnrichmentToDTO(e domain.LastFmEnrichment) LastFmEnrichmentResponseDTO {
 	return LastFmEnrichmentResponseDTO{
-		MBID:      e.MBID,
-		Listeners: e.Listeners,
-		Playcount: e.Playcount,
-		Tags:      nonNilStrings(e.Tags),
-		Bio:       e.Bio,
-		Similar:   nonNilStrings(e.Similar),
-		Duration:  e.Duration,
-		Album:     e.Album,
+		MBID:       e.MBID,
+		Listeners:  e.Listeners,
+		Playcount:  e.Playcount,
+		Tags:       nonNilStrings(e.Tags),
+		Bio:        e.Bio,
+		Similar:    nonNilStrings(e.Similar),
+		Duration:   e.Duration,
+		Album:      e.Album,
+		HasContent: e.HasRenderableContent(),
 	}
 }
 
@@ -186,6 +190,7 @@ type DeezerEnrichmentResponseDTO struct {
 	UPC             string           `json:"upc"`
 	RecordType      string           `json:"record_type"`
 	FeaturedArtists []map[string]any `json:"featured_artists,omitempty"`
+	HasContent      bool             `json:"has_content"`
 }
 
 func deezerEnrichmentToDTO(e domain.DeezerEnrichment) DeezerEnrichmentResponseDTO {
@@ -198,6 +203,7 @@ func deezerEnrichmentToDTO(e domain.DeezerEnrichment) DeezerEnrichmentResponseDT
 		UPC:             e.UPC,
 		RecordType:      e.RecordType,
 		FeaturedArtists: domain.FeaturedArtistsToExtras(e.Featured),
+		HasContent:      e.HasRenderableContent(),
 	}
 }
 

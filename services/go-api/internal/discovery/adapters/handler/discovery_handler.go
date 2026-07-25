@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
 
@@ -22,6 +23,9 @@ type DiscoveryHandler struct {
 	eventSvc        *service.RecordEventService
 
 	enrichers DetailEnrichers
+
+	ownership    ports.OwnershipReader
+	trackNumbers ports.TrackNumberFiller
 
 	providerHealth providerHealthRecorder
 
@@ -103,6 +107,7 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Delete("/search-history", h.handleClearSearchHistory)
 	r.Post("/events", h.handleRecordEvent)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
+	r.Get("/artists/{provider}/{externalId}/content", h.handleArtistContent)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
 	r.Get("/artists/{provider}/{externalId}/albums", h.handleArtistAlbums)
 	r.Get("/tracks/{provider}/{externalId}/related", h.handleRelatedTracks)

@@ -24,6 +24,7 @@ type TrackDTO struct {
 	ISRC              *string             `json:"isrc,omitempty"`
 	AudioRef          *string             `json:"audio_ref,omitempty"`
 	FailureReason     *string             `json:"failure_reason,omitempty"`
+	FailureMessage    *string             `json:"failure_message,omitempty"`
 	FeaturedArtists   []FeaturedArtistDTO `json:"featured_artists,omitempty"`
 }
 
@@ -37,6 +38,11 @@ func TrackToDTO(t *domain.Track) TrackDTO {
 	var album *string
 	if t.Album != "" {
 		album = &t.Album
+	}
+	var failureMessage *string
+	if t.AcquisitionStatus == domain.AcquisitionFailed {
+		msg := domain.FailureMessage(t.FailureReason)
+		failureMessage = &msg
 	}
 	return TrackDTO{
 		ID:                t.ID.UUID(),
@@ -54,6 +60,7 @@ func TrackToDTO(t *domain.Track) TrackDTO {
 		ISRC:              t.ISRC,
 		AudioRef:          t.AudioRef,
 		FailureReason:     t.FailureReason,
+		FailureMessage:    failureMessage,
 		FeaturedArtists:   FeaturedToDTOs(t.FeaturedArtists),
 	}
 }

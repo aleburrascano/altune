@@ -48,11 +48,18 @@ type RelatedGroupDTO struct {
 	Items        []SearchResultDTO `json:"items"`
 }
 
+type ResultSectionDTO struct {
+	Kind  string            `json:"kind"`
+	Items []SearchResultDTO `json:"items"`
+}
+
 type DiscoverySearchResponse struct {
 	Query          string              `json:"query"`
 	QueryNorm      string              `json:"query_norm"`
 	SearchID       string              `json:"search_id"`
 	Results        []SearchResultDTO   `json:"results"`
+	TopResult      *SearchResultDTO    `json:"top_result,omitempty"`
+	Sections       []ResultSectionDTO  `json:"sections"`
 	Providers      []ProviderStatusDTO `json:"providers"`
 	Partial        bool                `json:"partial"`
 	Exploration    bool                `json:"exploration,omitempty"`
@@ -188,11 +195,18 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		h.searchTrace.RecordSearch(r.Context(), q, kindNames(kinds), userId.String(), result.ProviderStatuses, result.Results)
 	}
 
+	results := searchResultsToDTOs(result.Results)
+	slate := service.BuildBlendedSlate(result.Results)
+	topResult, sections := blendedSlateToDTOs(slate)
+	h.stampOwnership(r.Context(), userId, ownershipTargets(results, topResult, sections)...)
+
 	httputil.WriteJSON(w, searchStatusCode(result.ProviderStatuses), DiscoverySearchResponse{
 		Query:          q,
 		QueryNorm:      textnorm.NormalizeForMatch(q),
 		SearchID:       result.SearchId,
-		Results:        searchResultsToDTOs(result.Results),
+		Results:        results,
+		TopResult:      topResult,
+		Sections:       sections,
 		Providers:      providerStatusesToDTOs(result.ProviderStatuses),
 		Partial:        result.Partial,
 		Exploration:    result.Explored,
@@ -336,6 +350,11 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	}
 	if sr.FanCount != 0 {
 		extras["nb_fan"] = sr.FanCount
+	}
+	if _, set := extras["featured_artists"]; !set && sr.Kind == domain.ResultKindTrack {
+		if parsed := domain.FeaturedFromText(sr.Title, sr.Subtitle); len(parsed) > 0 {
+			extras["featured_artists"] = domain.FeaturedArtistsToExtras(parsed)
+		}
 	}
 	signature := sr.Signature
 	if signature == "" {

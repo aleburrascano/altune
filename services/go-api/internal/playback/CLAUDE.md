@@ -5,6 +5,7 @@ Deliberately thin (ADR-0010): the live Queue is client-owned (`apps/mobile/src/s
 Layout:
 
 - `domain/queue_state.go` — `QueueState`, `QueueStateInput`, the `newQueueState` gate, `RepeatMode`, `ValidationError`.
+- `domain/queue_source.go` — `QueueSource` and the `Format`/`ParseQueueSource` pair owning the stored `source_id` packing.
 - `ports/` — `QueueStateRepository`, `NowPlayingReader`.
 - `service/queue_service.go` — `Save`, `Resume`, `ResumeView`.
 - `adapters/` — `handler/`, `persistence/`, `catalogbridge/`.
@@ -18,5 +19,7 @@ Layout:
 - Never import `net/http` from `domain/` — `ValidationError` carries a plain int status.
 - `Resume` returns `EmptyQueueState`, never nil.
 - Never grow queue logic here: advance/prev/shuffle/repeat live on the client.
+- Pack and parse `source_id` only through `QueueSource`; the wire carries the structured `source`.
+- Keep emitting `source_id` alongside `source` until every client reads the structured field.
 
 Why each rule exists: `okf/backend/playback.md`; table in `okf/data/playback-queue-state-table.md` — read before structural work; update in the same commit when behavior they describe changes (pre-commit hook enforces).

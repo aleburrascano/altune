@@ -69,7 +69,70 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 	_ = g.Wait()
 }
 
+type AlbumTracksRequest struct {
+	Provider     domain.ProviderName
+	ExternalID   string
+	Title        string
+	Artist       string
+	MBExternalID string
+	Limit        int
+}
+
 func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
+	return s.ExecuteRequest(ctx, AlbumTracksRequest{
+		Provider:   providerName,
+		ExternalID: externalID,
+		Title:      albumTitle,
+		Artist:     albumArtist,
+		Limit:      limit,
+	})
+}
+
+func (s *GetAlbumTracksService) ExecuteRequest(ctx context.Context, req AlbumTracksRequest) (*ContentFetchResponse, error) {
+	resp, err := s.fetchAlbumTracks(ctx, req.Provider, req.ExternalID, req.Title, req.Artist, req.Limit)
+	if err != nil {
+		return nil, err
+	}
+	s.mergeMusicBrainzFeaturing(ctx, req.MBExternalID, resp.Items)
+	return resp, nil
+}
+
+func (s *GetAlbumTracksService) mergeMusicBrainzFeaturing(ctx context.Context, mbExternalID string, items []domain.SearchResult) {
+	if mbExternalID == "" || len(items) == 0 {
+		return
+	}
+	mb, ok := s.providers[domain.ProviderMusicBrainz]
+	if !ok {
+		return
+	}
+	mbTracks, err := mb.GetAlbumTracks(ctx, domain.ProviderMusicBrainz, mbExternalID)
+	if err != nil || len(mbTracks) == 0 {
+		return
+	}
+
+	featuredByTitle := make(map[string]any, len(mbTracks))
+	for _, t := range mbTracks {
+		if feats, present := t.Extras["featured_artists"]; present {
+			featuredByTitle[textnorm.NormalizeForMatch(t.Title)] = feats
+		}
+	}
+
+	for i := range items {
+		if _, present := items[i].Extras["featured_artists"]; present {
+			continue
+		}
+		feats, found := featuredByTitle[textnorm.NormalizeForMatch(items[i].Title)]
+		if !found {
+			continue
+		}
+		if items[i].Extras == nil {
+			items[i].Extras = map[string]any{}
+		}
+		items[i].Extras["featured_artists"] = feats
+	}
+}
+
+func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerName domain.ProviderName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
 	var results []domain.SearchResult
 	var degraded *ContentFetchResponse
 	if provider, ok := s.providers[providerName]; ok {

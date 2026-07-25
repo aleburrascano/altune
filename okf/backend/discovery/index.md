@@ -25,3 +25,23 @@ Discovery is the multi-provider search context (`services/go-api/internal/discov
 - [eval-harness](eval-harness.md) — offline discoveryeval CLI measuring ranking/merge/diversity/coverage against committed baselines
 
 The Mission Control operator console that displays discovery's telemetry is its own module — see [admin](../admin/index.md); discovery feeds it through consumer-defined seams and never imports it.
+
+## Ownership stamping, blended slate, artist content (2026-07-25)
+
+Three shapes moved here from the mobile client.
+
+**Ownership stamping.** A discovery result now carries whether the signed-in user already owns it: `extras.owned_track_id` and `extras.owned_acquisition_status`, stamped on every track result the wire emits (search, album tracks, artist top-tracks, related, artist content). Before this, the client answered "do I own this?" by matching normalized title+artist against a full in-memory copy of the library — the single biggest reason the phone held every row it owned.
+
+The seam is `ports.OwnershipReader`, implemented by `adapters/catalogbridge/ownership_reader.go` against a narrow local interface over catalog's repo — the same shape `playback/adapters/catalogbridge` uses, and the reason discovery never imports catalog's service layer. `ports.OwnershipKey` (`NormalizeForMatch(title) | NormalizeForMatch(artist)`) is the one normalizer both sides use; keeping it in `ports` is what stops the bridge and the wire stamper drifting apart. Stamping happens at the handler, never in the pipeline: ranking must not see a user's library, or the eval harness stops being reproducible. A lookup failure logs and returns unstamped results — the degradation rule applies.
+
+The bridge reads the user's `(id, title, artist, status, track_number)` tuples per request and matches in Go. That is a full-table read per stamped request, which is cheap next to the provider fan-out it accompanies and is bounded by one user's library; the alternative (a stored normalized key column) needs a migration and a backfill whose normalization would have to match Go's exactly.
+
+**Track-number fill.** `ports.TrackNumberFiller` + `catalogbridge.TrackNumberWriter` let the album-tracks endpoint write a missing `track_number` from the provider tracklist's own order. The client used to derive positions at view time and fire one `PATCH` per track from the phone. The write is fill-only server-side (so it is idempotent), runs on a detached context off the request path, and only fires for owned tracks that have no stored position.
+
+**Blended slate.** `service/blend.go`'s `BuildBlendedSlate` groups the ranked results by kind, orders the sections by where each kind's strongest member ranks, drops the top result from its own section and caps each at ten. That is the Discover "All" view, and every one of those decisions is a ranking decision — it belongs next to the ranker and under the eval harness, not in a React component. It ships as `top_result` and `sections` alongside the flat `results`, which stay authoritative for paging and telemetry coordinates.
+
+**Artist content in one call.** `GET /v1/discovery/artists/{provider}/{externalId}/content` returns top tracks and albums together, fetched in parallel. The client was calling three per-provider endpoints (Deezer, SoundCloud, iTunes / Last.fm) and merging, deduping by a hand-rolled normalizer, back-filling artwork and sorting by release date on the device — a second, worse copy of what `GetArtistContentService` already does through the identity fan-out, MB anchor and `MergeReleases` core.
+
+**Featured artists from text.** `domain.FeaturedFromText` parses "feat./ft./featuring/with" credits out of a title or subtitle and stamps them as `featured_artists` when no provider supplied structured credits. The client had the same regex.
+
+**Enrichment `has_content`.** Each enrichment DTO now carries `has_content`, computed by `HasRenderableContent()` on the domain value. The client had its own per-provider predicate deciding whether a payload was worth rendering, which meant the client knew which fields Deezer returns. Deezer's predicate additionally counts featured artists, so a payload whose only content is guest credits no longer collapses to nothing.

@@ -117,10 +117,15 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	query, err := libraryQuery(r)
+	if err != nil {
+		httputil.HandleServiceError(w, r, err)
+		return
+	}
+	query.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+	query.Offset, _ = strconv.Atoi(r.URL.Query().Get("offset"))
 
-	result, err := h.listTracks.Execute(r.Context(), userId, limit, offset)
+	result, err := h.listTracks.Execute(r.Context(), userId, query)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
@@ -130,7 +135,7 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 		Items:   tracksToDTO(result.Tracks),
 		Total:   result.Total,
 		Limit:   result.Limit,
-		Offset:  offset,
+		Offset:  query.Offset,
 		HasMore: result.HasMore,
 	})
 }

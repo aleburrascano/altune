@@ -4,9 +4,9 @@ The Track and Playlist aggregate context: a user's owned music metadata, dedup, 
 
 Layout:
 
-- `domain/` — `Track`, `Playlist`, `FeaturedArtist`, `CodedError`.
+- `domain/` — `Track`, `Playlist`, `FeaturedArtist`, `CodedError`, the library read-models (`AlbumGroup`, `ArtistGroup`, `LibraryQuery`, `LibrarySort`, `OwnedTrackRef`).
 - `ports/` — `TrackRepository`, `PlaylistRepository`, `AudioStore`, `AudioURLSigner`, `AudioLister`, `AcquisitionScheduler`, `FeaturedArtistResolver`.
-- `service/` — track/playlist use cases, audio-URL resolution, streaming, featured backfill.
+- `service/` — track/playlist use cases, audio-URL resolution, streaming, featured backfill, `LibraryLensService`.
 - `adapters/` — `persistence/` (pgx repos), `storage/` (filesystem + object storage), `handler/`, `discoverybridge/`.
 - `catalogtest/` — in-memory fakes shared by the service and handler test packages.
 
@@ -28,5 +28,9 @@ Layout:
 - `SetTrackNumber` is fill-only — never clobber an existing value.
 - Keep `FeaturedArtist.IdentityKey` in step with the generated column on `featured_artists`.
 - Never let the wire response and the `track_added_to_library` payload diverge — both are `service.TrackDTO`.
+- Albums and Artists are SQL groupings, never derived by a caller — `ListAlbumsForUser` / `ListArtistsForUser` are the only producers.
+- Filter and sort tracks in SQL through `LibraryQuery`; never hand a caller the whole library to sort.
+- Reject `sort=year` for artists rather than silently falling back.
+- Keep `FailureMessage` the one map from a failure reason to human copy.
 
 Why each rule exists: `okf/backend/catalog/index.md`; tables in `okf/data/tracks-table.md` and `okf/data/playlists-table.md` — read before structural work; update in the same commit when behavior they describe changes (pre-commit hook enforces).

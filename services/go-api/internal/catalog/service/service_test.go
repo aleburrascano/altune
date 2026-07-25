@@ -233,7 +233,7 @@ func TestListTracksService_Execute(t *testing.T) {
 			}
 			svc := NewListTracksService(repo)
 
-			out, err := svc.Execute(ctx, userId, tt.limit, tt.offset)
+			out, err := svc.Execute(ctx, userId, domain.LibraryQuery{Limit: tt.limit, Offset: tt.offset})
 
 			if tt.wantErr != "" {
 				if err == nil {
