@@ -52,6 +52,32 @@ func (r *PgxMetricsRollup) RollupDay(ctx context.Context, day time.Time) error {
 	return nil
 }
 
+func (r *PgxMetricsRollup) RecordMetrics(ctx context.Context, day time.Time, values map[string]float64) error {
+	if len(values) == 0 {
+		return nil
+	}
+	dayStart := day.UTC().Truncate(24 * time.Hour)
+
+	names := make([]string, 0, len(values))
+	nums := make([]float64, 0, len(values))
+	for name, value := range values {
+		names = append(names, name)
+		nums = append(nums, value)
+	}
+
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO discovery_metrics (as_of, metric, value)
+		SELECT $1::date, m.name, m.value
+		FROM unnest($2::text[], $3::float8[]) AS m(name, value)
+		ON CONFLICT (as_of, metric) DO UPDATE SET value = EXCLUDED.value, created_at = now()`,
+		dayStart, names, nums,
+	)
+	if err != nil {
+		return fmt.Errorf("record %d discovery metrics for %s: %w", len(values), dayStart.Format("2006-01-02"), err)
+	}
+	return nil
+}
+
 func (r *PgxMetricsRollup) MetricsHistory(ctx context.Context, metric string, days int) ([]ports.MetricPoint, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT as_of, value
