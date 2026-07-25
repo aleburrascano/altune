@@ -44,6 +44,15 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
   };
 }
 
+export function useLibraryIsEmpty(): boolean {
+  const { data } = useQuery({
+    queryKey: libraryKeys.summary,
+    queryFn: () => getTracks({ limit: 1, offset: 0 }),
+    staleTime: Infinity,
+  });
+  return data !== undefined && data.total === 0;
+}
+
 export function useLibraryAlbums(query: string, sort: LibrarySort, enabled: boolean) {
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
     queryKey: libraryKeys.albums(query, sort),

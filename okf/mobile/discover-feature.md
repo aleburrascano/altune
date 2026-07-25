@@ -51,6 +51,8 @@ Interaction telemetry is fire-and-forget per ADR-0007 §3.12: a result tap emits
 
 The reason is that `_sectionOrder` — "the kind whose strongest member ranks earliest shows first" — was a ranking decision taken outside the ranker and outside the eval harness. Moving it puts it under `discoveryeval` with everything else that decides what a user sees first.
 
-One behaviour change falls out of this: sections are computed over the page the server returned, and `useDiscoverSearch` takes metadata from page 1 as it already does for `search_id` and corrections. Scrolling the blended view no longer grows the sections — "See all <kind>" is the way down, and the filtered view is what pages.
+Sections are computed over the **full ranked slate**, not the returned page, so they arrive complete on page 1. The old client re-derived them from whatever pages had accumulated, which meant a section filled in as you scrolled; the converged state is the same, and now it is the initial state. Each section carries `has_more`, so "See all <kind>" still appears only when that kind has more than the cap — exactly the old condition, just answered by the server.
+
+The top result comes from the page the user actually sees rather than the full list, because exploration shuffles the first page. `BuildBlendedSlate(page, all)` takes both for that reason, and excludes the top result from its own section by signature.
 
 `kindLabel` and `resultKey` stay client-side; they are display vocabulary, not ranking.

@@ -49,8 +49,9 @@ type RelatedGroupDTO struct {
 }
 
 type ResultSectionDTO struct {
-	Kind  string            `json:"kind"`
-	Items []SearchResultDTO `json:"items"`
+	Kind    string            `json:"kind"`
+	Items   []SearchResultDTO `json:"items"`
+	HasMore bool              `json:"has_more"`
 }
 
 type DiscoverySearchResponse struct {
@@ -196,8 +197,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	results := searchResultsToDTOs(result.Results)
-	slate := service.BuildBlendedSlate(result.Results)
-	topResult, sections := blendedSlateToDTOs(slate)
+	topResult, sections := blendedSlateToDTOs(result.Slate)
 	h.stampOwnership(r.Context(), userId, ownershipTargets(results, topResult, sections)...)
 
 	httputil.WriteJSON(w, searchStatusCode(result.ProviderStatuses), DiscoverySearchResponse{

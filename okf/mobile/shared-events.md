@@ -22,3 +22,9 @@ verified_commit: 650555c091fab169d723fa9bd938c0ab97f89541
 Albums and Artists are **aggregates**, so a track-level event cannot be patched into them: `track_added_to_library` and `track_deleted` invalidate `['library','albums']` and `['library','artists']` instead. That is the one place the F10/F11 "patch, never invalidate" rule does not apply, and it is deliberate — a group's track count and artwork cannot be derived from one row's payload.
 
 `applyServerEvent` also writes `@shared/acquisition/trackStatusStore` on every acquisition event. The detail screen reads ownership from the server's stamp on a result and overlays that store for liveness, so the save control still flips the moment a download finishes without the library being resident in memory (see [detail-feature](detail-feature.md)).
+
+## The summary probe is invalidated, not patched (2026-07-25)
+
+`invalidateDerived` (was `invalidateLenses`) now also invalidates `libraryKeys.summary`, the one-row "is the library empty" probe behind the empty-state CTA. Like the album and artist lenses it is derived from the whole collection, so a single track's payload cannot patch it.
+
+It is also the reason that key lives outside `['library','tracks']`: everything under that prefix is swept by `setQueriesData` as `InfiniteData`, and a flat response parked there would crash `mapPages` on the first event that patched it.

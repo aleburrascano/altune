@@ -1,4 +1,5 @@
 export const libraryKeys = {
+  summary: ['library', 'summary'] as const,
   tracksPrefix: ['library', 'tracks'] as const,
   tracks: (query: string, sort: string) => ['library', 'tracks', query, sort] as const,
   lookupPrefix: ['library', 'lookup'] as const,

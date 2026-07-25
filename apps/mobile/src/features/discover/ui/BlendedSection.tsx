@@ -50,19 +50,21 @@ export function BlendedSection({
                 onPress={common.onResultTap}
               />
             ))}
-            <Pressable
-              testID={`discover-see-all-${section.kind}`}
-              onPress={() => onSeeAll(section.kind)}
-              accessibilityRole="button"
-              accessibilityLabel={`See all ${title.toLowerCase()}`}
-              hitSlop={8}
-              style={({ pressed }) => [styles.seeAll, pressed ? { opacity: 0.7 } : null]}
-            >
-              <Text variant="label" tone="accent">
-                See all {title.toLowerCase()}
-              </Text>
-              <ChevronRight size={16} color={theme.color.accent} />
-            </Pressable>
+            {section.has_more ? (
+              <Pressable
+                testID={`discover-see-all-${section.kind}`}
+                onPress={() => onSeeAll(section.kind)}
+                accessibilityRole="button"
+                accessibilityLabel={`See all ${title.toLowerCase()}`}
+                hitSlop={8}
+                style={({ pressed }) => [styles.seeAll, pressed ? { opacity: 0.7 } : null]}
+              >
+                <Text variant="label" tone="accent">
+                  See all {title.toLowerCase()}
+                </Text>
+                <ChevronRight size={16} color={theme.color.accent} />
+              </Pressable>
+            ) : null}
           </View>
         );
       }}
