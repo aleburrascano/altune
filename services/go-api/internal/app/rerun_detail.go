@@ -12,19 +12,8 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// detailRerunSearchLimit caps the entity-resolution search — the phone opens one
-// artist, so we only need the top artist result and its seed ids.
 const detailRerunSearchLimit = 20
 
-// detailReRunner reproduces the mobile client's artist-detail flow so the operator
-// console can show exactly what the app renders when it opens an artist — the gap
-// the search-only /rerun leaves (detail is a separate pipeline). It resolves the
-// top artist entity through the live search Service, then fans out the SAME
-// per-seed content calls useArtistContent makes (albums: deezer/soundcloud/itunes
-// with the name; top-tracks: deezer with the name, soundcloud + Last.fm-by-MBID
-// without) and applies the SAME client-side merge (dedupe by title, keep highest
-// track-count, newest-first). Both services are the production instances, so
-// identity resolution, the MB anchor, and the caches all match the phone.
 type detailReRunner struct {
 	searchSvc *discoveryService.Service
 	artistSvc *discoveryService.GetArtistContentService
@@ -37,9 +26,6 @@ func (a *App) buildDetailReRunner(
 	return &detailReRunner{searchSvc: searchSvc, artistSvc: artistSvc}
 }
 
-// rawSeed is one seed provider's un-projected content response, kept as domain
-// results so the client-merge can read track-count and release date before the
-// display projection.
 type rawSeed struct {
 	provider   string
 	externalID string
@@ -47,7 +33,6 @@ type rawSeed struct {
 	items      []domain.SearchResult
 }
 
-// ReRunDetail satisfies adminHandler.DetailReRunner.
 func (dr *detailReRunner) ReRunDetail(ctx context.Context, query string) (adminHandler.DetailReRunResult, error) {
 	start := time.Now()
 	entity, ok := dr.resolveTopArtist(ctx, query)
@@ -70,8 +55,6 @@ func (dr *detailReRunner) ReRunDetail(ctx context.Context, query string) (adminH
 	}, nil
 }
 
-// resolveTopArtist runs the real search and returns the top artist result — the
-// entity the phone would hand to the detail screen, with its seed sources + MBID.
 func (dr *detailReRunner) resolveTopArtist(ctx context.Context, query string) (domain.SearchResult, bool) {
 	sq, err := domain.NewSearchQuery(query, map[domain.ResultKind]bool{domain.ResultKindArtist: true}, detailRerunSearchLimit)
 	if err != nil {
@@ -85,8 +68,6 @@ func (dr *detailReRunner) resolveTopArtist(ctx context.Context, query string) (d
 	return domain.SearchResult{}, false
 }
 
-// albumFanOut mirrors useArtistAlbums: Deezer, SoundCloud, iTunes seeds (in that
-// precedence order), each queried with the artist name, capped at 100.
 func (dr *detailReRunner) albumFanOut(ctx context.Context, byProvider map[string]string, name string) []rawSeed {
 	var seeds []rawSeed
 	for _, provider := range []string{"deezer", "soundcloud", "itunes"} {
@@ -97,8 +78,6 @@ func (dr *detailReRunner) albumFanOut(ctx context.Context, byProvider map[string
 	return seeds
 }
 
-// trackFanOut mirrors useArtistTopTracks: Deezer with the name, SoundCloud without
-// (its id is unambiguous), and Last.fm keyed by MBID without a name (identity-safe).
 func (dr *detailReRunner) trackFanOut(ctx context.Context, byProvider map[string]string, mbid, name string) []rawSeed {
 	var seeds []rawSeed
 	if id, ok := byProvider["deezer"]; ok {
@@ -138,9 +117,6 @@ func seedFrom(provider, id string, resp *discoveryService.ContentFetchResponse, 
 	return rawSeed{provider: provider, externalID: id, status: resp.Status.String(), items: resp.Items}
 }
 
-// mergeAlbumsLikeClient mirrors dedupAlbumsByTitle + sortByReleaseDateDesc: union
-// every ok seed's items in seed order, collapse by normalized title keeping the
-// highest track-count variant (union its sources), then order newest-first.
 func mergeAlbumsLikeClient(seeds []rawSeed) []domain.SearchResult {
 	seen := map[string]int{}
 	var out []domain.SearchResult
@@ -157,8 +133,6 @@ func mergeAlbumsLikeClient(seeds []rawSeed) []domain.SearchResult {
 	return out
 }
 
-// mergeTracksLikeClient mirrors dedupeTracksByTitle + slice(0,5): union in seed
-// order (Deezer precedence), keep the first of each normalized title, cap at 5.
 func mergeTracksLikeClient(seeds []rawSeed) []domain.SearchResult {
 	seen := map[string]bool{}
 	var out []domain.SearchResult
@@ -186,8 +160,6 @@ func okSeedItems(seeds []rawSeed) []domain.SearchResult {
 	return flat
 }
 
-// mergeAlbumPair keeps the higher-track-count variant (dedupAlbumsByTitle) and
-// unions both variants' sources so the merged row shows every contributing seed.
 func mergeAlbumPair(existing, incoming domain.SearchResult) domain.SearchResult {
 	winner := existing
 	if incoming.TrackCount > existing.TrackCount {
@@ -211,9 +183,6 @@ func unionSourceRefs(a, b []domain.SourceRef) []domain.SourceRef {
 	return out
 }
 
-// sortReleasesByDateDesc mirrors the service's sortAlbumsByReleaseDateDesc (a
-// private helper it can't import): newest-first by ISO release date, else bare
-// year, undated sinking to the end; stable so equal-date order is kept.
 func sortReleasesByDateDesc(items []domain.SearchResult) {
 	sort.SliceStable(items, func(i, j int) bool {
 		ki, kj := releaseSortKey(items[i]), releaseSortKey(items[j])
@@ -243,8 +212,6 @@ func detailEntity(entity domain.SearchResult, byProvider map[string]string) *adm
 	}
 }
 
-// seedIDsByProvider mirrors the client's sources.find(provider): the first seed id
-// per provider name, keyed by provider string so the fan-out matches useArtistContent.
 func seedIDsByProvider(sources []domain.SourceRef) map[string]string {
 	m := make(map[string]string, len(sources))
 	for _, s := range sources {

@@ -11,8 +11,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// fakeRT returns a programmed sequence of (status, err) per attempt and counts
-// calls. The last entry repeats if more attempts occur.
 type fakeRT struct {
 	calls int
 	steps []fakeStep
@@ -42,7 +40,6 @@ func newLiveOver(base http.RoundTripper) *liveTransport {
 
 func getReq(t *testing.T) *http.Request {
 	t.Helper()
-	// unlisted host → no rate-limit delay, so retry tests only pay backoff.
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://unlisted.example.com/x", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -88,9 +85,6 @@ func TestLiveTransport_NoRetryOn404(t *testing.T) {
 
 func TestLiveTransport_ExhaustsOnPersistent503(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}}}
-	// After exhausting retries the real upstream response is returned (not a
-	// synthetic error) — the adapter sees the 503 and handles it. What matters is
-	// that we tried exactly liveMaxAttempts times.
 	resp, err := newLiveOver(f).RoundTrip(getReq(t))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -122,7 +116,6 @@ func TestLiveTransport_LimiterPerHost(t *testing.T) {
 	if lt.limiter("unlisted.example.com") != nil {
 		t.Error("expected no limiter for an unlisted host")
 	}
-	// memoized: same instance back.
 	if lt.limiter("musicbrainz.org") != lt.limiter("musicbrainz.org") {
 		t.Error("limiter not memoized for a listed host")
 	}

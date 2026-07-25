@@ -137,10 +137,6 @@ func (a *App) Run(ctx context.Context) error {
 			a.scheduler.Shutdown(ctx)
 		}
 	})
-	// Always drain the shared background group (corpus refresh, metrics rollup —
-	// and in-flight acquisitions when the scheduler exists) with a bound. The
-	// drain is owned here, not by the scheduler: without it, the no-audio-store
-	// path used to block shutdown forever on a bare wg.Wait().
 	a.drainBackground(30 * time.Second)
 
 	a.cleanup()
@@ -148,17 +144,12 @@ func (a *App) Run(ctx context.Context) error {
 	return nil
 }
 
-// shutdownComponent calls fn with a bounded context. Used to give each
-// shutdownable component its own timeout without repeating the
-// WithTimeout/defer-cancel boilerplate at every call site.
 func (a *App) shutdownComponent(timeout time.Duration, fn func(context.Context)) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	fn(ctx)
 }
 
-// drainBackground waits for every goroutine registered on the App's WaitGroup,
-// giving up after the timeout so a hung background task can never wedge shutdown.
 func (a *App) drainBackground(timeout time.Duration) {
 	done := make(chan struct{})
 	go func() {
@@ -172,9 +163,6 @@ func (a *App) drainBackground(timeout time.Duration) {
 	}
 }
 
-// setup assembles the object graph in dependency order. Each wire* stage owns
-// one context's construction; the values crossing contexts travel explicitly
-// through the small *Wiring structs.
 func (a *App) setup(ctx context.Context) error {
 	var err error
 
@@ -196,9 +184,6 @@ func (a *App) setup(ctx context.Context) error {
 	}
 
 	a.eventBus = events.NewInProcessBus()
-	// Publishers go through the Mission Control tap decorator; subscribers (the
-	// per-user SSE stream) read the inner bus directly. Keeps the operator
-	// console's vocabulary out of internal/shared/events.
 	tap := eventtap.New(a.eventBus)
 
 	disc := a.wireDiscovery(ctx)
@@ -221,20 +206,15 @@ func (a *App) setup(ctx context.Context) error {
 	return nil
 }
 
-// catalogWiring carries the catalog+acquisition values other stages consume:
-// the track repository (playback's now-playing reader is built from it) and
-// the handlers mountRoutes mounts.
 type catalogWiring struct {
 	trackRepo       *persistence.PgxTrackRepository
 	trackHandler    *catalogHandler.TrackHandler
 	playlistHandler *catalogHandler.PlaylistHandler
 	streamHandler   *catalogHandler.StreamHandler
 	audioURLHandler *catalogHandler.AudioURLHandler
-	retryH          *acqHandler.RetryHandler // nil when acquisition is off
+	retryH          *acqHandler.RetryHandler
 }
 
-// wireCatalog builds the catalog context plus the acquisition scheduler that
-// backs it (nil-degraded when no audio store is configured).
 func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.FeaturedResolver) catalogWiring {
 	audioStore := a.buildAudioStore()
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
@@ -300,9 +280,6 @@ func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.Fea
 	}
 }
 
-// wirePlayback builds the playback context. The now-playing reader is a
-// required parameter by design: a miswired graph fails at construction instead
-// of silently dropping current_track from every resume.
 func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) *playbackHandler.QueueHandler {
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool)
 	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo)
@@ -310,8 +287,6 @@ func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) *playbackH
 	return playbackHandler.NewQueueHandler(queueSvc)
 }
 
-// mountRoutes builds the router: middleware, the public health probe, and the
-// auth-gated /v1 API. Admin routes are mounted separately by wireAdmin.
 func (a *App) mountRoutes(
 	verifier auth.TokenVerifier,
 	cat catalogWiring,
@@ -323,7 +298,7 @@ func (a *App) mountRoutes(
 	r.Use(httputil.CorrelationID)
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.RequestLogger)
-	r.Use(httputil.MaxBodySize(1 << 20)) // 1MB limit on request bodies
+	r.Use(httputil.MaxBodySize(1 << 20))
 	corsHeaders := []string{"Accept", "Authorization", "Content-Type"}
 	if a.cfg.IsDevelopment() {
 		corsHeaders = append(corsHeaders, "ngrok-skip-browser-warning")
@@ -343,8 +318,8 @@ func (a *App) mountRoutes(
 		r.Use(auth.Middleware(verifier))
 
 		r.Route("/tracks", func(r chi.Router) {
-				r.Mount("/", cat.trackHandler.Routes())
-			})
+			r.Mount("/", cat.trackHandler.Routes())
+		})
 		r.Get("/tracks/{trackId}/audio", cat.streamHandler.HandleStreamAudio)
 		r.Post("/tracks/{trackId}/audio/recover", cat.streamHandler.HandleRecover)
 		r.Post("/audio-urls", cat.audioURLHandler.HandleResolve)
@@ -360,9 +335,6 @@ func (a *App) mountRoutes(
 	return r
 }
 
-// wireAdmin builds the Mission Control operator console — two-layer gate: auth
-// first, then the operator-only check inside adminH's data routes. Fails closed
-// when OperatorUserID is unset.
 func (a *App) wireAdmin(
 	ctx context.Context,
 	r *chi.Mux,
@@ -379,11 +351,6 @@ func (a *App) wireAdmin(
 		acqReader = a.scheduler
 	}
 
-	// AIDEV-NOTE: eval meter ships OFF by default (EVAL_METER_ENABLED). The runner
-	// runs a tiny fixed smoke-query set through a *dedicated* search-service
-	// instance whose per-provider circuit breakers are isolated from production's,
-	// so eval failures can't trip the breakers live search depends on. When
-	// disabled, buildEvalRunner returns nil and no second provider stack is built.
 	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.buildEvalRunner())
 	a.evalMeter.Start(ctx)
 	adminH := adminHandler.New(a.dependencyHealth, a.logRing).
@@ -398,9 +365,9 @@ func (a *App) wireAdmin(
 		WithDetailReRunner(a.buildDetailReRunner(searchSvc, artistSvc)).
 		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool))
 	r.Route("/admin", func(ar chi.Router) {
-		ar.Get("/", adminH.ServeIndex)        // public shell — holds no data
-		ar.Get("/config", adminH.ServeConfig) // public client config for sign-in
-		ar.Group(func(gr chi.Router) {        // gated data: auth, then operator check
+		ar.Get("/", adminH.ServeIndex)
+		ar.Get("/config", adminH.ServeConfig)
+		ar.Group(func(gr chi.Router) {
 			gr.Use(auth.Middleware(verifier))
 			gr.Use(adminHandler.OperatorOnly(a.cfg.OperatorUserID))
 			adminH.RegisterData(gr)
@@ -408,9 +375,6 @@ func (a *App) wireAdmin(
 	})
 }
 
-// handleHealth is the public readiness probe. It deliberately exposes no
-// dependency topology: just whether the service can serve. The detailed
-// per-dependency breakdown lives behind the operator-gated /admin/health tile.
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if a.dependencyHealth(r.Context()).Healthy() {
 		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -419,9 +383,6 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "degraded"})
 }
 
-// dependencyHealth pings the configured dependencies and reports each one's
-// status. A nil dependency is "not_configured" (intentionally absent), distinct
-// from "down" (configured but unreachable).
 func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealth {
 	detail := adminHandler.DependencyDetail{CheckedAt: time.Now().UTC()}
 
@@ -452,10 +413,6 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus, Detail: detail}
 }
 
-// startAlertMonitor builds and starts the Mission Control alert monitor. It
-// pages the operator on Signal conditions (dependency down to start), pushing
-// via ntfy when configured and logging only otherwise. Alert messages carry
-// only state names, never connection details.
 func (a *App) startAlertMonitor(ctx context.Context) {
 	var notifier adminAlert.AlertNotifier = adminAlert.NopNotifier{}
 	if a.cfg.HasAlertPush() {
@@ -486,11 +443,6 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 
 	conditions := []adminAlert.Condition{dependencyDown}
 
-	// Coverage alert: page when zero-result searches in the last 24h exceed the
-	// threshold — the computed-but-unwatched coverage signal now pages the operator
-	// instead of waiting to be noticed. Disabled when the threshold is 0. The
-	// message carries the aggregate count only — never the query text or any user
-	// id (cardinality / privacy).
 	if a.cfg.AlertZeroResultThreshold > 0 {
 		conditions = append(conditions, buildCoverageCondition(a.pool, a.cfg.AlertZeroResultThreshold))
 	}
@@ -499,8 +451,6 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 	a.alertMonitor.Start(ctx)
 }
 
-// buildCoverageCondition returns an alert condition that pages when zero-result
-// searches in the last 24h exceed threshold.
 func buildCoverageCondition(pool *pgxpool.Pool, threshold int) adminAlert.Condition {
 	eventQuery := discoveryPersistence.NewPgxEventStore(pool)
 	return adminAlert.Condition{
@@ -554,16 +504,9 @@ func (a *App) buildAudioStore() catalogPorts.AudioStore {
 	return nil
 }
 
-// buildDetailEnrichers wires the optional, provider-keyed detail-open enrichers
-// (Discogs album+artist, Last.fm, Deezer, lyrics) into one DetailEnrichers
-// bundle. Each is best-effort: an unconfigured provider leaves its field nil and
-// the endpoint answers an empty DTO. The MusicBrainz enricher is deliberately
-// NOT here — it also feeds the search path, so it stays wired in setup.
 func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
 	var enrichers discoveryHandler.DetailEnrichers
 
-	// Last.fm: listen-based popularity, weighted tags, bio, similar-artist graph,
-	// MBID bridge (docs/providers/lastfm.md cap 3). Only when a Last.fm key is set.
 	if a.cfg.HasLastFM() {
 		lfmEnricher := providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
 		enrichers.LastFm = discoveryEnrich.NewLastFmEnrichmentService(
@@ -572,16 +515,11 @@ func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
 		)
 	}
 
-	// Deezer: track audio fields (bpm/gain) + explicit flag, album liner data
-	// (docs/providers/deezer.md caps 7–8). Public API, no key — wired always.
 	enrichers.Deezer = discoveryEnrich.NewDeezerEnrichmentService(
 		providers.NewDeezerAdapter(newDiscoveryClient()),
 		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient),
 	)
 
-	// Deezer lyrics: synced + plain lyrics, writers, copyright — the one axis no
-	// other audited provider carries (docs/providers/deezer.md cap 6). Via the
-	// pipe.deezer.com GraphQL (anonymous-JWT, self-healing); no key — wired always.
 	enrichers.Lyrics = discoveryEnrich.NewLyricsService(
 		providers.NewDeezerLyricsAdapter(newDiscoveryClient()),
 		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient),
@@ -596,17 +534,8 @@ func buildDiscoveryProviders(cf clientFactory, cfg *config.Config, mb *providers
 	deezerClient := cf.discovery()
 	providerList = append(providerList, providers.NewDeezerAdapter(deezerClient))
 
-	// Apple Music's Catalog API replaces plain iTunes Search here: same
-	// catalog/ids, but with ISRC, composer credits, and a lyrics flag iTunes
-	// Search never exposed. ITunesAdapter itself stays wired elsewhere
-	// (artwork chain, album consensus, content lookups) — see applemusic.go.
 	appleMusicClient := cf.discovery()
 	providerList = append(providerList, providers.NewAppleMusicAdapter(appleMusicClient))
-
-	// TheAudioDB is intentionally NOT a search provider: its free key caps artist
-	// search at 1 result and it carries no ranking signal, so it fails the
-	// ambiguous-query case while Deezer/MB/Last.fm/YT already cover artists. It is
-	// kept as an artwork-by-identity resolver in buildArtworkChain. (audit §3.8)
 
 	if mb != nil {
 		providerList = append(providerList, mb)
@@ -617,8 +546,6 @@ func buildDiscoveryProviders(cf clientFactory, cfg *config.Config, mb *providers
 		providerList = append(providerList, providers.NewLastFmAdapter(lfmClient, cfg.LastFMAPIKey))
 	}
 
-	// Direct api-v2 SoundCloud client (coverage: unreleased/underground long tail),
-	// with the yt-dlp adapter as fallback when client_id resolution is down.
 	soundcloudClient := cf.discovery()
 	providerList = append(providerList, providers.NewSoundCloudAPIAdapter(
 		soundcloudClient,
@@ -627,15 +554,9 @@ func buildDiscoveryProviders(cf clientFactory, cfg *config.Config, mb *providers
 
 	providerList = append(providerList, providers.NewYouTubeMusicAdapter(cf.roundTripper()))
 
-	// Amazon Music via its internal web-player backend (coverage: Amazon's
-	// exclusive/timed-exclusive catalog). See amazonmusic.go's AIDEV-DECISION.
 	amazonClient := cf.discovery()
 	providerList = append(providerList, providers.NewAmazonMusicAdapter(amazonClient))
 
-	// Spotify via its anonymous web-player bootstrap (coverage: cross-check
-	// against the other three catalog sources). Materially more fragile than
-	// the other providers here — see spotify.go's AIDEV-DECISION and
-	// AIDEV-WARNING on the persisted-query hash.
 	spotifyClient := cf.discovery()
 	providerList = append(providerList, providers.NewSpotifyAdapter(spotifyClient))
 
@@ -643,11 +564,6 @@ func buildDiscoveryProviders(cf clientFactory, cfg *config.Config, mb *providers
 	return providerList
 }
 
-// startCorpusRefresh runs the nightly self-growing-corpus materialization when
-// BEHAVIORAL_CORPUS_PATH is set: it mines the last 30 days of behavioral labels
-// and writes them to the configured path in the eval corpus format. Best-effort —
-// a failure is logged, never fatal. Exits when ctx is cancelled (graceful
-// shutdown). A no-op when the path is empty.
 func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.BehavioralLabelStore) {
 	if a.cfg.BehavioralCorpusPath == "" {
 		return
@@ -665,10 +581,6 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 	slog.Info("behavioral corpus refresh started", "path", a.cfg.BehavioralCorpusPath)
 }
 
-// startMetricsRollup rolls up today's (and yesterday's, for late-arriving
-// events) Mission Control gauges every 6 hours, persisting them to
-// discovery_metrics so the console's week-over-week history survives restart.
-// Best-effort; bound to the app context for graceful shutdown.
 func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.MetricsRollupStore) {
 	a.startTicker(ctx, 6*time.Hour, func() {
 		now := time.Now().UTC()
@@ -681,8 +593,6 @@ func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.Metri
 	slog.Info("discovery metrics rollup started")
 }
 
-// startTicker runs fn immediately, then on every interval until ctx is
-// cancelled. The goroutine is tracked on the App's WaitGroup.
 func (a *App) startTicker(ctx context.Context, interval time.Duration, fn func()) {
 	a.wg.Add(1)
 	go func() {

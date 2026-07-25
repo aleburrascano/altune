@@ -18,14 +18,6 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// BuildSearchService constructs the discovery search pipeline exactly as the API
-// server wires it, so offline tooling (the library eval) exercises the same
-// ranking the user sees. The single construction site keeps the eval from
-// drifting away from production as wiring changes.
-//
-// eventStore is injected (not built here) so the server can share its telemetry
-// store while the eval passes nil — eval searches are synthetic and must not
-// pollute telemetry. redisClient may be nil (cache/vocab options are skipped).
 func BuildSearchService(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
@@ -35,20 +27,6 @@ func BuildSearchService(
 	return BuildSearchServiceWithTransport(cfg, pool, redisClient, eventStore, nil, nil, false)
 }
 
-// BuildSearchServiceWithTransport is BuildSearchService with an injectable HTTP
-// transport for every discovery provider. The server passes nil (default
-// transport); the deterministic eval passes a record/replay transport so the
-// identical wiring runs against frozen provider responses.
-//
-// vocabStore is the pre-built VocabularyStore to wire into the search pipeline.
-// Pass nil to build one internally from redisClient (offline-tooling path).
-// The server passes its already-built store so only one instance is created.
-//
-// rankingOnly skips the post-ranking display enrichment (artwork chain) and
-// related-groups — annotations that fill fields without reordering. The
-// deterministic ranking eval sets it: those calls fire the bulk of a search's
-// HTTP, so recording them would bloat fixtures ~10x for zero ranking signal.
-// rankPipeline (merge → rank → shape) is identical either way.
 func BuildSearchServiceWithTransport(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
@@ -75,19 +53,12 @@ func BuildSearchServiceWithTransport(
 	opts := []discoveryService.Option{
 		discoveryService.WithHistoryRepository(historyRepo),
 	}
-	// Tail-noise demotion experiment (off unless TAIL_DEMOTION_ENABLED). Pure
-	// ranking concern, applied regardless of rankingOnly so the eval A/B exercises it.
 	if cfg.TailDemotionEnabled {
 		opts = append(opts, discoveryService.WithTailDemotion())
 	}
-	// Cross-kind prominence tiebreak (off unless CROSS_KIND_PROMINENCE_ENABLED).
-	// Pure ranking concern, applied regardless of rankingOnly so the eval A/B
-	// exercises it.
 	if cfg.CrossKindProminenceEnabled {
 		opts = append(opts, discoveryService.WithCrossKindProminence())
 	}
-	// Exploration randomization (off unless EXPLORATION_ENABLED). Never on the
-	// rankingOnly eval path — the eval must see the deterministic order it scores.
 	if cfg.ExplorationEnabled && !rankingOnly {
 		opts = append(opts, discoveryService.WithExploration(cfg.ExplorationRate))
 	}
@@ -99,11 +70,6 @@ func BuildSearchServiceWithTransport(
 			discoveryService.WithArtworkResolver(buildArtworkChain(cf, cfg)),
 			discoveryService.WithFindRelatedService(findRelatedSvc),
 		)
-		// Durable identity store: Postgres is the source of truth (survives Redis
-		// flushes), Redis fronts it as a read-through. Persists the cross-provider
-		// bridges the merge learns when MusicBrainz is present, and resolves them on
-		// later MB-absent searches so artwork stays identity-first. redisClient may be
-		// nil — the read-through degrades to PG-direct.
 		if pool != nil {
 			identityStore := discoveryCacheAdapters.NewRedisIdentityStore(
 				discoveryPersistence.NewPgxIdentityStore(pool),
@@ -111,11 +77,6 @@ func BuildSearchServiceWithTransport(
 			)
 			opts = append(opts, discoveryService.WithIdentityStore(identityStore))
 		}
-		// Verify-on-persist (IDENTITY_VERIFY_ON_PERSIST, default off): before a
-		// learned bridge is stored, drop any streaming edge whose catalogue doesn't
-		// overlap the artist's MusicBrainz release-groups — a mis-bridged same-name
-		// artist from a wrong MB url-relation (doc §7). sharedMB supplies the
-		// release-group anchor; the content adapters fetch each edge's catalogue.
 		if cfg.IdentityVerifyOnPersist && sharedMB != nil {
 			verifyProviders := map[domain.ProviderName]discoveryPorts.ArtistContentProvider{
 				domain.ProviderDeezer:     deezerContent,
@@ -128,9 +89,6 @@ func BuildSearchServiceWithTransport(
 		}
 	}
 	if redisClient != nil {
-		// App-wide consistency cache (shared, short-TTL): identical query → identical
-		// ranked list for everyone within the window. Skipped on the rankingOnly eval
-		// path so the eval always exercises the live pipeline, never a cached list.
 		if !rankingOnly {
 			opts = append(opts, discoveryService.WithResultCache(
 				discoveryCacheAdapters.NewRedisResultCache(redisClient),
@@ -139,10 +97,6 @@ func BuildSearchServiceWithTransport(
 		opts = append(opts, discoveryService.WithArtworkCache(
 			discoveryCacheAdapters.NewRedisArtworkCache(redisClient),
 		))
-		// The enrichment cache triples as the identity bridge (MB → provider id
-		// graph that merge reads) and the MBID index (name → mbid memo that lets
-		// search-card artwork attach an MBID to a non-MB result). Both detail-open
-		// warmed, both cache-only — no extra MB call on the search path.
 		enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(redisClient)
 		opts = append(opts, discoveryService.WithIdentityBridge(enrichmentCache))
 		opts = append(opts, discoveryService.WithMBIDIndex(enrichmentCache))
@@ -156,10 +110,6 @@ func BuildSearchServiceWithTransport(
 	}
 	if eventStore != nil {
 		opts = append(opts, discoveryService.WithEventStore(eventStore))
-		// Behavioral ranking (off unless BEHAVIORAL_RANKING_ENABLED). The event
-		// store doubles as the behavioral-signal read store; the consumer is the
-		// satisfaction Strategy. Applied regardless of rankingOnly so the eval A/B
-		// can exercise it. The refresh ticker is started by the composition root.
 		if cfg.BehavioralRankingEnabled {
 			if store, ok := eventStore.(discoveryPorts.BehavioralSignalStore); ok {
 				opts = append(opts, discoveryService.WithBehavioralRanking(
@@ -175,11 +125,6 @@ func BuildSearchServiceWithTransport(
 	return discoveryService.NewService(searchProviders, circuitBreaker, opts...)
 }
 
-// BuildDiscoveryProviders builds the production search-provider set over the
-// given transport (nil → the shared rate-limiting live transport). Exported so
-// offline tooling (cmd/discoverytrace) and the Mission Control re-run exercise
-// the exact provider set the app wires instead of mirroring it by hand — a
-// hand-mirror already drifted once (SoundCloud lost its yt-dlp fallback).
 func BuildDiscoveryProviders(cfg *config.Config, transport http.RoundTripper) []discoveryPorts.SearchProvider {
 	cf := clientFactory{transport: transport}
 	var mb *providers.MusicBrainzAdapter
@@ -189,10 +134,6 @@ func BuildDiscoveryProviders(cfg *config.Config, transport http.RoundTripper) []
 	return buildDiscoveryProviders(cf, cfg, mb)
 }
 
-// BuildConsensusProviders builds the multi-provider album fan-out used by the
-// artist-content consensus AND the offline coverage signal B. One definition so
-// the diagnostic measures the same provider set the app uses. Config-gated
-// identically to the server wiring.
 func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []discoveryService.ConsensusProvider {
 	cf := clientFactory{transport: transport}
 	var consensusProviders []discoveryService.ConsensusProvider
@@ -211,9 +152,6 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 			Name: "musicbrainz",
 			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
-				// List MB's discography so it casts real votes. The prior
-				// ValidateArtistAlbums(_, nil) was a filter over a nil slice and
-				// always returned empty — MB contributed nothing to consensus.
 				return mb.ListArtistDiscography(ctx, artistName)
 			},
 		})
@@ -263,9 +201,6 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 		},
 	})
 
-	// SoundCloud joins the consensus as an equal source (no provider is detail-
-	// only): album-kind search by name, then MB-spine authority filters out the
-	// same-name contamination. Closes the gap where SC albums bypassed the union.
 	sc := providers.NewSoundCloudAPIAdapter(cf.discovery(), nil)
 	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 		Name: "soundcloud",
@@ -277,21 +212,12 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 	return consensusProviders
 }
 
-// buildArtworkChain assembles the artwork resolver chain: ID-based sources first
-// (always correct for the entity), name-search fallbacks last.
 func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
 	var artworkResolvers []discoveryPorts.ArtworkResolver
 	artworkResolvers = append(artworkResolvers,
 		providers.NewCoverArtArchiveResolver(cf.discovery()))
-	// Spotify is identity-only: it resolves the exact bridged Spotify entity by id
-	// via the public oEmbed endpoint (no key). The broadest artist-image source, so
-	// it leads the identity phase. Like Discogs, it never name-searches — id-pinned,
-	// so a same-name artist can't get another's face.
 	artworkResolvers = append(artworkResolvers,
 		providers.NewSpotifyArtworkResolver(cf.discovery()))
-	// Discogs is identity-only: it resolves the exact bridged Discogs artist by id
-	// (the right face for same-name artists), never by name. The chain tries it in
-	// the identity phase and excludes it from the name phase.
 	if cfg.HasDiscogs() {
 		artworkResolvers = append(artworkResolvers,
 			providers.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent))
@@ -308,21 +234,13 @@ func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.Tagg
 		providers.NewTheAudioDBAdapter(cf.discovery()),
 		providers.NewDeezerAdapter(cf.discovery()),
 		providers.NewITunesAdapter(cf.discovery()),
-		// Keyless YouTube Music artist artwork (internal API): the one artist-image
-		// source iTunes lacks, with no key and no Data-API quota. Verified working
-		// from the prod OCI IP (2026-06-25, innertube 200), so the key-gated
-		// YouTube Data API v3 resolver was retired in favour of it.
 		providers.NewYouTubeMusicArtworkResolver(cf.roundTripper()),
 	)
-	// SoundCloud last: name-search fallback for the underground long tail no
-	// ID-based source covers. nil fallback — artwork resolution never uses yt-dlp.
 	artworkResolvers = append(artworkResolvers,
 		providers.NewSoundCloudAPIAdapter(cf.discovery(), nil))
 	return providers.NewChainedArtworkResolver(artworkResolvers...)
 }
 
-// BuildVocabularyStore returns the Redis-backed vocabulary store, or nil when
-// Redis is not configured.
 func BuildVocabularyStore(redisClient *goredis.Client) discoveryPorts.VocabularyStore {
 	if redisClient == nil {
 		return nil
