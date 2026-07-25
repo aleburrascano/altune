@@ -30,6 +30,15 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.0 run
 
 `.golangci.yml` enforces the import-direction rules that `.claude/rules/backend/domain-layer.md` and `docs/architecture.md` state as convention: domain purity (the inner ring may import only stdlib, sibling domain packages, `internal/shared` root value objects and `textnorm`), catalog reaching discovery only through `adapters/discoverybridge`, and `internal/shared` never importing a feature, the composition root, or auth. Each `deny` carries its own `desc:` naming the rule it protects.
 
+## Deploy
+
+`deploy/blue-green.sh` (helpers in `deploy/lib.sh`) is the only supported deploy path; `deploy/rollback.sh` reverses it. `deploy/blue-green_test.sh` runs both against stubbed `docker`/`curl` and asserts each failure path — run it after touching either. `caddy/upstream.conf` names the live colour and is gitignored — never track it, the VM rewrites it every deploy.
+
+- Register every periodic background loop through `App.whenLeader`, never `Start(ctx)` directly, and always before `startBackgroundWhenLeader` runs.
+- Keep `deploy/lib.sh`'s `log` on stderr — `active_color` is read via command substitution.
+- A migration must stay compatible with the previous version — both colours share one database during the swap.
+- Keep `Caddyfile` a single `import` — the colour lives in `caddy/upstream.conf`.
+
 ## Comment policy
 
 `services/go-api/` is **comment-free**, matching `apps/mobile/`. The code is the source of truth: if something needs explaining, rename it or split it out. Only compiler directives (`//go:build`, `//go:embed`) are allowed. Durable rationale — invariants, provider fragility, regression history, anything a name cannot hold — lives in the nested `CLAUDE.md` files and `okf/`.
