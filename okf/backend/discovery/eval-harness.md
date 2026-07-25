@@ -7,7 +7,7 @@ tags: [discovery, eval, regression-gate, behavioral-corpus, replay, subsystem]
 verified_commit: dc56d3381f7ae1f20f1b124c530bf848316d21ab
 ---
 
-`cmd/discoveryeval` (`main.go` plus its split-out files; the mode table and the record/replay rationale live in `cmd/discoveryeval/CLAUDE.md`, since the package carries no comments) runs the real search pipeline in-process (`app.BuildSearchService`) against cloned prod data, never per-commit (see [ci-cd-pipeline](../../playbooks/ci-cd-pipeline.md) for the narrower gated subset that does run per-commit). `main.go` holds the CLI entrypoint, the per-mode `run*` handlers, and the small adapter/helper types they use (`variantSearchAdapter`, `searchAdapter`, `corpusEntities`, `filterRecognized`, `buildEvalSearcher`, `evalQuery`, and the consensus tally helpers `tallyConsensus`/`pooledPct`/`buildArtistConsensus`/`consensusSingle`/`consensusCompleteness` — `buildArtistConsensus` passes the resolved Deezer `(provider, artistID)` seed into `BuildConsensus`, matching the service's seeded signature); `dbload.go` holds the cross-user library loaders (`loadLibraryEntities`, `loadLibraryTerms`, `loadDistinctArtists`), the latter two now sharing a `queryStrings` scan-and-LIMIT helper (previously each had its own duplicate scan loop, and `loadLibraryTerms` built its LIMIT via a subquery wrapper — `SELECT term FROM (...) t LIMIT %d` — where `queryStrings` now appends `LIMIT` directly to the UNION query text; same result set, different SQL shape); `render.go` holds `maybeWriteJSON` and the per-mode human-report renderers (`renderEval`, `renderArtistIntent`, `renderMerge`, `renderDiversity`, `renderHealth`, `renderConsensus`, `renderCorrection`, `renderSignalA`, `renderSignalB`). This is a file split for navigability, not a behavior change. Modes: `eval` (library "artist title → top-K", gated top1/topk), `merge` (under/over-merge), `correction` (synthetic-typo precision/recall), `diversity` (reshaping cost), `signal-a`/`signal-b` (telemetry coverage gaps / cross-provider imbalance, gated), `health`/`consensus` (report-only gauges, never gated), `artwork`, `artist-intent`, `corpus-build`, and `detail` (the artist detail/discography path, not search ranking — see below). Eval searches use a nil event store so synthetic runs never pollute telemetry. Process setup mirrors `cmd/api` — env config then `logging.Setup(logLevel, development)` — so eval logs use the same handler stack as production.
+`cmd/discoveryeval` (`main.go` plus its split-out files) runs the real search pipeline in-process (`app.BuildSearchService`) against cloned prod data, never per-commit (see [ci-cd-pipeline](../../playbooks/ci-cd-pipeline.md) for the narrower gated subset that does run per-commit). `main.go` holds the CLI entrypoint, the per-mode `run*` handlers, and the small adapter/helper types they use (`variantSearchAdapter`, `searchAdapter`, `corpusEntities`, `filterRecognized`, `buildEvalSearcher`, `evalQuery`, and the consensus tally helpers `tallyConsensus`/`pooledPct`/`buildArtistConsensus`/`consensusSingle`/`consensusCompleteness` — `buildArtistConsensus` passes the resolved Deezer `(provider, artistID)` seed into `BuildConsensus`, matching the service's seeded signature); `dbload.go` holds the cross-user library loaders (`loadLibraryEntities`, `loadLibraryTerms`, `loadDistinctArtists`), the latter two now sharing a `queryStrings` scan-and-LIMIT helper (previously each had its own duplicate scan loop, and `loadLibraryTerms` built its LIMIT via a subquery wrapper — `SELECT term FROM (...) t LIMIT %d` — where `queryStrings` now appends `LIMIT` directly to the UNION query text; same result set, different SQL shape); `render.go` holds `maybeWriteJSON` and the per-mode human-report renderers (`renderEval`, `renderArtistIntent`, `renderMerge`, `renderDiversity`, `renderHealth`, `renderConsensus`, `renderCorrection`, `renderSignalA`, `renderSignalB`). This is a file split for navigability, not a behavior change. Modes: `eval` (library "artist title → top-K", gated top1/topk), `merge` (under/over-merge), `correction` (synthetic-typo precision/recall), `diversity` (reshaping cost), `signal-a`/`signal-b` (telemetry coverage gaps / cross-provider imbalance, gated), `health`/`consensus` (report-only gauges, never gated), `artwork`, `artist-intent`, `corpus-build`, and `detail` (the artist detail/discography path, not search ranking — see below). Eval searches use a nil event store so synthetic runs never pollute telemetry. Process setup mirrors `cmd/api` — env config then `logging.Setup(logLevel, development)` — so eval logs use the same handler stack as production.
 
 Every gated mode flows through one spine, `runHarness` (`harness.go`): run once → write JSON → render the human report → gate headline metrics against `cmd/discoveryeval/baselines.json` → print failure slices → exit 2 (`errRegressed`) on regression. `--update-baselines -noise-runs 3` is the explicit re-baseline path: it runs the harness N times, sets the baseline to the mean and the margin to `MeasureNoise` (peak-to-peak spread × 1.5 headroom) — a hand-picked floor is explicitly banned (`eval_baseline.go`); gates are relative drops below a measured baseline, direction-aware via `NamedMetric.HigherIsBetter`. `Baselines.Gate` reports `Missing` (never a regression) until a baseline is first committed.
 
@@ -19,4 +19,74 @@ The harness's own math is unit-tested (2026-07-24 QA sweep, package at ~94% cove
 
 A gate is a relative drop below a committed baseline, never an absolute floor. A metric with no baseline is never a regression (the first run establishes it), baselines move only on an explicit operator `--update-baselines`, and a regression strictly inside the noise margin is invisible by design. Diversity's benefit metric is report-only and never gated — you gate the cost of a policy, not the policy itself. Entities the search never finds are a coverage miss, not a merge miss.
 
-The report structs in `service/eval/` are the JSON wire contract for each harness; their field-by-field definitions (which counter is a denominator, which position is 0-based versus `-1`-for-absent, which metric is the gated cost versus the report-only benefit) are collected as a metric glossary in `services/go-api/internal/discovery/CLAUDE.md`, since the Go files carry no comments.
+## Report field glossary
+
+The report structs in `service/eval/` are the JSON wire contract for each harness. Their fields:
+
+- `Baseline{Value, Margin, HigherIsBetter, Note}` — `Margin` is the empirical noise band, always at least the observed run-to-run spread. `HigherIsBetter` is true for rates, false for cost/latency/gap counts. `GateResult.Threshold` is the value `current` must stay on the safe side of; `Missing` means no committed baseline and is informational only.
+- **Library eval** — `Evaluated` = `Total − Skipped`, the rate denominator. `MatchPosition` is 0-based, `-1` when not in top-K. `Top1Passed` = ranked #1; `TopKPassed` includes top-1; `Failed` = not in top-K or no results. `FailuresByTopKind` records what kind ranked #1 on a miss (including `"none"`). `Corpus` is `""` for exact, `"hard"` for title-only ambiguous.
+- **Artist-intent eval** — `ArtistPos` / `FirstTrackPos` are 0-based, `-1` if absent. `Buried` is the bug: the artist card is present but a same-name track ranks above it. `BelowK` is present-but-below-K without being track-buried. `Absent` is the recall gap — the card never surfaced. `Corpus` `"hard"` means single-token names.
+- **Merge eval** — `ResultsSeen` is the under-merge denominator (all rows), `DistinctSeen` the over-merge denominator. `NoMatch` is a coverage miss, not a merge miss. `UnderMergeIncidents` counts provable duplicates left unmerged; `CleanQueries` are those with zero.
+- **Correction eval** — `Terms` is the precision denominator, `TyposTested` the recall denominator. `Corrupted` is a false positive: a valid term the corrector rewrote.
+- **Diversity eval** — `LostToReshape` (in top-K unshaped, out reshaped) is the cost and the gated metric; `GainedByReshape` is the reverse, since collapse can promote. `ConcentrationWith`/`Without` are mean top-K Herfindahl — the benefit side, report-only.
+- **Coverage signal A** — `Strong` = zero-result and not typos; `Weak` = results shown, no click; `Abandoned` = no click, reformulated within 60s. **Signal B** — `GapPct` = `Missing / Union` in [0,1]; `Unique` counts entities only that provider had.
+- **Health** — `FillRate` = with-artwork / results; `BridgeHitRate` = bridged-merges / results.
+- **Detail eval** — `Identity` (provider → id) may be deliberately fractured; `ForbiddenSources` / `ForbiddenTitles` must not appear in any result.
+
+## Measured state (2026-06-24, cloned prod data, 1897 tracks)
+
+- Exact `"artist title"` eval — **100% top-3**. This is the real product bar, and it is met.
+- Bare single-token title eval — **~81% top-3**. A stress metric with an inherent ambiguity ceiling: a bare title ("Hello", "Scorpion") legitimately surfaces the *famous* track over the user's niche owned one, and discovery is not personalized. Not a bug.
+- Merge — **0% under-merge / 0% over-merge**.
+- Correction — **93% recall / 100% precision**.
+
+## Why the testing discipline is what it is
+
+Position, not presence: "is the right answer in the top 10" is far too weak to catch ranking regressions, which is why the gate is top-3. A/B must run on an identical deterministic sample (`-limit`, no `-random`) because deltas across random samples are noise — a plausible change once looked "+7pp" and the same-sample A/B revealed it as a regression. That is how the popularity attempt was caught (see [ranking](ranking.md)). Adding a word to a bank or a special-case list to fix a bad query rots immediately; fix the algorithm instead. Each session tends to add ranking layers, so the question to ask of any stage is "if I remove this, do the positioning tests still pass?"
+
+The canonical spot-checks (top-3, blended, tested both blended and filtered by `kinds=album` / `kinds=track`):
+
+```
+"Humble"                → top-3 contains the Kendrick track "HUMBLE."
+"Scorpion"              → top-3 contains a Drake "Scorpion" result
+"Bohemian Rhapsody"     → top-3 contains a Queen result
+"Drake" / "Bad Bunny"   → top-3 contains the artist
+"Blinding Lights"       → top-3 contains the Weeknd track
+"Kendrick Lamar Humble" → top-3 contains "HUMBLE." by "Kendrick Lamar"
+```
+
+`track>album>artist` is a held-in-reserve, non-query-fit tiebreak for strict-#1 polish — not the gate.
+
+## The gated spine
+
+Every gated mode goes through `runHarness`, which gives them one identical shape: run once, write JSON, print the mode's human render, gate the headline metrics against `baselines.json`, print the gate block and the attributed-failure slices, and exit 2 on regression (`errRegressed`).
+
+Re-baselining is explicit only. `-update-baselines` runs the harness `noiseRuns` times — the noise ritual — sets each metric's baseline to the mean and its margin to the measured spread, and merges into the existing file leaving other modes untouched. A missing `baselines.json` is not an error: it yields an empty set, so every metric reports `Missing` until it is baselined.
+
+`renderSlices` is the default view over the attributed failure log — total, the four mechanical single-key slices, then the token by popularity joint band where ambiguity tends to surface. It is disposable sugar; the raw log in the JSON output is the real artifact.
+
+## Why record/replay exists
+
+The ranking eval is non-deterministic against live providers: catalog drift and network jitter churn the failure set run to run, so a real ranking regression hides in the noise. Fixtures freeze the provider I/O — record every provider's raw HTTP responses once, then replay them through the real ranking pipeline (`app.BuildSearchServiceWithTransport`, `rankingOnly`) so the same wiring runs deterministically.
+
+Record and replay both use one shared `Service` over a single recorder or replayer. That matters for size and speed: SoundCloud bootstraps its `client_id` once (a ~3 MB JS asset) rather than per query, and YouTube Music's package-global HTTP client is set once, so recording can run at full concurrency. The recorder wraps the live rate-limiting, retrying transport, so a bulk record paces itself inside each provider's limit instead of hammering it into throttling and capturing self-inflicted timeouts. Redis is left nil on both paths so cache state cannot add variance — the frozen provider responses are the only input.
+
+The `Replayer` matches by request identity, so one combined set serves every query and order across files does not matter; `loadAllFixtures` concatenates every `*.json` in the directory, so a sharded corpus still works. `dedupExchanges` keeps one exchange per `(method, URL, request body)`: identical requests carry identical responses, so collapsing is lossless, and it removes duplicate `client_id`-bootstrap fetches from a concurrent first burst. Fixtures are written compact rather than indented, because the corpus file reaches gigabytes where indentation only inflates it. Recording writes one corpus file at the end, so the `\r` progress counter gives no mid-run signal and progress is emitted newline-terminated for a useful log tail.
+
+## Mode notes
+
+`corpusEntities` applies corpus selection: **hard** keeps only single-token titles — the ambiguous case, "Humble", "Scorpion" — and signals title-only. `artist-intent` with `corpus=hard` isolates single-token artist names, the bug's actual home.
+
+`correction` is offline with respect to providers, reading the vocabulary store and the library only; `filterRecognized` keeps only terms the store holds exactly, so a recall miss means the corrector failed rather than that the term was never in vocabulary.
+
+`artwork` runs the real pipeline per distinct library artist and buckets the top artist result by how its image resolved — identity, provider, name or blank — printing aggregate percentages plus the attributed gaps, meaning the name-guesses that are risky for same-name artists and the blanks. It is live, so bound it with `-limit` and `-concurrency`, and flush Redis first for a cold measurement.
+
+`detail` is the offline quality gate for the artist detail path, running the real detail service in-process against live providers but over a seeded in-memory identity store built from the goldens, so a golden can carry a deliberately fractured identity — a wrong streaming edge, the "Che" bug — and the harness verifies the read-time guards drop the contamination. It touches neither the library DB nor Redis; `seededIdentityStore` answers `LookupByProviderID` from that fixed map.
+
+`health` records gauges for visibility and history only on an explicit update, and is never gated. `loadLibraryEntities` is an offline-only cross-context read of the catalog `tracks` table across all users, where random sampling needs a subquery because `DISTINCT` must resolve before `ORDER BY random()`.
+
+## discoverytrace
+
+`cmd/discoverytrace` is the single-query counterpart to the corpus harnesses: it runs a discovery search behind a recording HTTP transport and dumps the exact payload at each stage — raw provider JSON before parsing, the mapped `[]SearchResult`, and in pipeline mode the merge, rank and reshape stages. The point is watching the data mutate stage by stage rather than confirming a call happened. It is offline and read-only, reusing the exported `Merge` / `RankWith` / `Reshape` without touching the production path.
+
+Providers come from `app.BuildDiscoveryProviders` — the production set over the recording transport — and must never be hand-mirrored locally: a local copy drifted once and SoundCloud silently lost its yt-dlp fallback. `stampIdentities` (the xref bridge) and artwork enrichment are skipped since neither reorders results, so bridge-only merges do not appear in the dumps. Rank runs the same flag-gated experiment stages production applies, except the behavioral stage, which is a live-`Service` snapshot unavailable offline and therefore nil. `printRanked` deliberately shows only rank position, kind, title/subtitle, source count and providers, because order is the signal; the old per-result relevance breakdown was boost-specific debugging and went away with the boost.

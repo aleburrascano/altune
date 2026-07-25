@@ -21,4 +21,4 @@ Persistence (`adapters/persistence/featured_artist_repo.go`, tables detailed in 
 
 Handler (`adapters/handler/featured_artist_handler.go`): `FeaturedArtistHandler` mounts under the track routes (`addRoutes`, called from `TrackHandler.Routes`) as `GET /featuring` (name/mbid/deezer_id query params, precedence mbid → deezer_id → name via `FeaturedArtistForQuery`; 400 when none given) and `POST /featured-backfill` — synchronous, no job queue, because the library is small enough that a per-user backfill completes within a request.
 
-`IdentityKey` is computed in Go to mirror the generated column on the `featured_artists` table exactly, so Go-side and SQL-side identity always agree. `FeaturedArtist` is a value object, not an entity — it has no lifecycle beyond its membership on a track. The durable rationale for the catalog context lives in `internal/catalog/CLAUDE.md`; the Go files carry no comments.
+`IdentityKey` is computed in Go to mirror the generated column on the `featured_artists` table exactly, so Go-side and SQL-side identity always agree. `FeaturedArtist` is a value object, not an entity — it has no lifecycle beyond its membership on a track.

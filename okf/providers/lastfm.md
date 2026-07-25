@@ -14,3 +14,5 @@ verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 Caveats: not an artwork source — `*.getInfo` images cap at 300px and artist images are frequently a shared placeholder hash (verified on Radiohead), so artwork stays MB-keyed. Similar-tracks (`track.getSimilar`) and tag-as-discovery (`tag.gettopartists`) remain unbuilt per the doc's next steps. Rate limit ~5 req/sec is `[INFERRED]`, not header-exposed. Code matches `docs/providers/lastfm.md` — no material drift found.
 
 Last.fm's artist MBID is deliberately **not** mapped onto the result MBID — a stale Last.fm mbid disagreeing with MusicBrainz would corrupt identity. The enrichment path reads the response body even on a non-200, because a 4xx-delivered miss otherwise looked transient and the negative cache never engaged.
+
+`lastfmAlbumsLimit` caps `artist.gettopalbums`; the default of 50 is a deliberate choice, not an inherited default.

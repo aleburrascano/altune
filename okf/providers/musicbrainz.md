@@ -18,3 +18,5 @@ Both search and enrichment are config-gated by `cfg.HasMusicBrainz()`. Cover Art
 Only successful results are cached — errors and timeouts never are, so a transient failure cannot freeze — and a cancelled request must not keep sleeping out its backoff. Enrichment resolves strictly or returns nothing ("nothing to enrich"), never a fuzzy guess, with ties broken alphabetically so tests and the UI agree on order.
 
 Recording length is decoded as `LengthMs` (wire tag `length`) — MusicBrainz reports it in milliseconds.
+
+Rate limiting is per-provider rather than uniform, and MusicBrainz reserves the strictest budget of any provider here.
