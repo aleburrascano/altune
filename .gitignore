@@ -55,6 +55,8 @@ build/
 
 # ---- Claude / local ----
 .superpowers/
+.impeccable/
+.fallow/
 CLAUDE.local.md
 .claude/settings.local.json
 .claude/hooks.log
@@ -75,9 +77,5 @@ CLAUDE.local.md
 *.zip
 *.exe
 
-# ---- Discovery eval harness run artifacts (keep library.json snapshot) ----
-services/api/scripts/discovery_eval/data/report_*.md
-services/api/scripts/discovery_eval/data/report_*.json
-
 # Blue-green active-upstream pointer, written on the VM by deploy/blue-green.sh
-services/go-api/caddy/upstream.conf
+services/go-api/deploy/caddy/upstream.conf
