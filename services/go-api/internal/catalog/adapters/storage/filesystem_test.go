@@ -15,26 +15,22 @@ func TestFilesystemAudioStore_StoreAndStream(t *testing.T) {
 	store := NewFilesystemAudioStore(dir)
 	ctx := context.Background()
 
-	// Arrange: write a temp source file
 	content := []byte("fake audio data for store-and-stream test")
 	srcPath := filepath.Join(dir, "source.opus")
 	if err := os.WriteFile(srcPath, content, 0o644); err != nil {
 		t.Fatalf("write source file: %v", err)
 	}
 
-	// Act: store
 	if err := store.Store(ctx, srcPath, "tracks/abc.opus"); err != nil {
 		t.Fatalf("Store: %v", err)
 	}
 
-	// Act: stream back
 	rc, size, err := store.Stream(ctx, "tracks/abc.opus")
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
 	defer rc.Close()
 
-	// Assert: content matches
 	got, err := io.ReadAll(rc)
 	if err != nil {
 		t.Fatalf("ReadAll: %v", err)
@@ -52,7 +48,6 @@ func TestFilesystemAudioStore_Exists(t *testing.T) {
 	store := NewFilesystemAudioStore(dir)
 	ctx := context.Background()
 
-	// Arrange: store a file
 	srcPath := filepath.Join(dir, "source.opus")
 	if err := os.WriteFile(srcPath, []byte("data"), 0o644); err != nil {
 		t.Fatalf("write source: %v", err)
@@ -61,7 +56,6 @@ func TestFilesystemAudioStore_Exists(t *testing.T) {
 		t.Fatalf("Store: %v", err)
 	}
 
-	// Assert: stored file exists
 	exists, err := store.Exists(ctx, "exists-test.opus")
 	if err != nil {
 		t.Fatalf("Exists (stored): %v", err)
@@ -70,7 +64,6 @@ func TestFilesystemAudioStore_Exists(t *testing.T) {
 		t.Error("expected stored file to exist, got false")
 	}
 
-	// Assert: non-existent file returns false
 	exists, err = store.Exists(ctx, "no-such-file.opus")
 	if err != nil {
 		t.Fatalf("Exists (missing): %v", err)
@@ -85,7 +78,6 @@ func TestFilesystemAudioStore_Delete(t *testing.T) {
 	store := NewFilesystemAudioStore(dir)
 	ctx := context.Background()
 
-	// Arrange: store a file
 	srcPath := filepath.Join(dir, "source.opus")
 	if err := os.WriteFile(srcPath, []byte("to-delete"), 0o644); err != nil {
 		t.Fatalf("write source: %v", err)
@@ -94,12 +86,10 @@ func TestFilesystemAudioStore_Delete(t *testing.T) {
 		t.Fatalf("Store: %v", err)
 	}
 
-	// Act: delete
 	if err := store.Delete(ctx, "delete-me.opus"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	// Assert: no longer exists
 	exists, err := store.Exists(ctx, "delete-me.opus")
 	if err != nil {
 		t.Fatalf("Exists after delete: %v", err)
@@ -129,9 +119,6 @@ func TestFilesystemAudioStore_SafePath(t *testing.T) {
 	store := NewFilesystemAudioStore(dir)
 	ctx := context.Background()
 
-	// Forward-slash traversal is rejected on every OS. Backslash is only a path
-	// separator on Windows — on Linux "..\windows\system32" is a single valid
-	// filename and correctly NOT traversal, so only assert it where it applies.
 	traversalRefs := []string{
 		"../etc/passwd",
 		"tracks/../../secret",
@@ -144,7 +131,7 @@ func TestFilesystemAudioStore_SafePath(t *testing.T) {
 		t.Helper()
 		if err == nil {
 			t.Errorf("expected path traversal to be rejected for %q, got nil error", ref)
-			return // guard the nil deref below
+			return
 		}
 		if !strings.Contains(err.Error(), "path traversal rejected") {
 			t.Errorf("expected 'path traversal rejected' in error, got: %v", err)

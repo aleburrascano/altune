@@ -51,19 +51,12 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", ports.AudioContentType(*out.Track.AudioRef))
 	http.ServeContent(w, r, "", time.Time{}, out.Reader)
 
-	// Includes the full byte transfer, not just setup — dominated by client
-	// read speed/range-request pattern rather than server work, but shows
-	// whether a request is stalling somewhere after the headers went out.
 	slog.InfoContext(r.Context(), "stream.served",
 		"track_id", trackId.String(),
 		"total_ms", time.Since(start).Milliseconds(),
 	)
 }
 
-// HandleRecover is the client's playback-error hook for presigned streams: since
-// those bypass the proxy (and its missing-file recovery), the client calls this
-// when a library track fails to play so a genuinely-gone file still gets marked
-// failed and re-acquired. Idempotent and a no-op when the file is actually there.
 func (h *StreamHandler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {

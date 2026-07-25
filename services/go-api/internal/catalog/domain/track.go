@@ -30,9 +30,9 @@ func TrackIdFromUUID(id uuid.UUID) TrackId {
 	return TrackId{value: id}
 }
 
-func (t TrackId) UUID() uuid.UUID   { return t.value }
-func (t TrackId) String() string    { return t.value.String() }
-func (t TrackId) IsZero() bool      { return t.value == uuid.Nil }
+func (t TrackId) UUID() uuid.UUID { return t.value }
+func (t TrackId) String() string  { return t.value.String() }
+func (t TrackId) IsZero() bool    { return t.value == uuid.Nil }
 
 type AcquisitionStatus int
 
@@ -86,9 +86,7 @@ type Track struct {
 	ISRC              *string
 	AudioRef          *string
 	FailureReason     *string
-	// FeaturedArtists are the ordered guest ("feat.") credits on this track,
-	// sourced from the discovery resolver. Empty for tracks not yet resolved.
-	FeaturedArtists []FeaturedArtist
+	FeaturedArtists   []FeaturedArtist
 }
 
 func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {

@@ -15,7 +15,6 @@ import (
 	"github.com/google/uuid"
 )
 
-
 type TrackHandler struct {
 	addTrack       *service.AddTrackService
 	listTracks     *service.ListTracksService
@@ -54,9 +53,6 @@ func (h *TrackHandler) Routes() chi.Router {
 	return r
 }
 
-// handleSetTrackNumber persists a track's album position (fill-only — never
-// overwrites). Backs the client persisting positions it derived from the album
-// tracklist for tracks saved before track_number was captured.
 func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
@@ -83,31 +79,20 @@ type SetTrackNumberRequest struct {
 	TrackNumber int `json:"track_number"`
 }
 
-// --- DTOs ---
-
 type CreateTrackRequest struct {
-	Title           string   `json:"title"`
-	Artist          string   `json:"artist"`
-	Album           *string  `json:"album,omitempty"`
-	DurationSeconds *float64 `json:"duration_seconds,omitempty"`
-	ArtworkURL      *string  `json:"artwork_url,omitempty"`
-	ISRC            *string  `json:"isrc,omitempty"`
-	Year            *int     `json:"year,omitempty"`
-	Genre           *string  `json:"genre,omitempty"`
-	AlbumArtist     *string  `json:"album_artist,omitempty"`
-	// FeaturedArtists are the guest ("feat.") credits carried from the discovery
-	// result the client saved, persisted on the track.
+	Title           string                      `json:"title"`
+	Artist          string                      `json:"artist"`
+	Album           *string                     `json:"album,omitempty"`
+	DurationSeconds *float64                    `json:"duration_seconds,omitempty"`
+	ArtworkURL      *string                     `json:"artwork_url,omitempty"`
+	ISRC            *string                     `json:"isrc,omitempty"`
+	Year            *int                        `json:"year,omitempty"`
+	Genre           *string                     `json:"genre,omitempty"`
+	AlbumArtist     *string                     `json:"album_artist,omitempty"`
 	FeaturedArtists []service.FeaturedArtistDTO `json:"featured_artists,omitempty"`
-	// SourceURL is the exact provider URL the saved result was discovered at
-	// (e.g. a SoundCloud permalink). When it is a directly-downloadable source,
-	// acquisition grabs that exact track instead of re-searching by metadata.
-	// Not persisted — it rides through to the acquisition scheduler only.
-	SourceURL *string `json:"source_url,omitempty"`
+	SourceURL       *string                     `json:"source_url,omitempty"`
 }
 
-// TrackResponse is the track wire shape, owned by the service layer so the
-// track_added_to_library event payload and this HTTP response can never drift —
-// they serialize the same struct (service.TrackDTO).
 type TrackResponse = service.TrackDTO
 
 type ListTracksResponse struct {
@@ -125,8 +110,6 @@ func tracksToDTO(tracks []*domain.Track) []TrackResponse {
 	}
 	return out
 }
-
-// --- Handlers ---
 
 func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
@@ -183,8 +166,6 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		SourceURL:       req.SourceURL,
 	}
 
-	// Validation lives in the domain (NewTrack returns a coded 400) — no
-	// duplicated pre-checks here; HandleServiceError renders the status.
 	result, err := h.addTrack.Execute(r.Context(), userId, input)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
@@ -267,8 +248,6 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// domainFeaturedFromDTOs converts request DTOs into domain value objects, dropping
-// entries with an empty name.
 func domainFeaturedFromDTOs(dtos []service.FeaturedArtistDTO) []domain.FeaturedArtist {
 	if len(dtos) == 0 {
 		return nil

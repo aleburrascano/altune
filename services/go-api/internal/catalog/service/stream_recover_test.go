@@ -9,17 +9,13 @@ import (
 	"altune/go-api/internal/catalog/domain"
 )
 
-// TestStreamTrackService_RecoverIfMissing covers the presigned-playback recovery
-// hook: a genuinely-gone file is marked failed and re-acquired, a present file is
-// a no-op (so transient errors don't spuriously re-acquire), and non-streamable
-// tracks and exists-check errors are handled.
 func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
 
 	t.Run("missing file marks failed and schedules", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		store := catalogtest.NewAudioStore() // not seeded -> Exists false
+		store := catalogtest.NewAudioStore()
 		sched := &catalogtest.Scheduler{}
 		track := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/gone.opus")
 		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))

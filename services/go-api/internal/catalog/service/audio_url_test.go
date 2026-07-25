@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/catalog/domain"
 )
 
-// stubSigner turns the plain catalogtest.AudioStore into an AudioURLSigner so
-// NewAudioURLService detects a signer. err makes PresignGet fail.
 type stubSigner struct {
 	*catalogtest.AudioStore
 	err error
@@ -55,7 +53,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	t.Run("no signer returns nothing (client proxies)", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		ready := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/ok.opus")
-		svc := NewAudioURLService(repo, catalogtest.NewAudioStore()) // plain store, not a signer
+		svc := NewAudioURLService(repo, catalogtest.NewAudioStore())
 
 		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
 		if err != nil {

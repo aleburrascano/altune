@@ -39,12 +39,10 @@ func TestPgxPlaylistRepo_CreateAndGetByID(t *testing.T) {
 	pl := newTestPlaylistForDB(t, userId)
 	cleanupPlaylist(t, pool, pl.ID, userId)
 
-	// Act: Create
 	if err := repo.Create(ctx, pl); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	// Act: GetByID
 	got, _, err := repo.GetByID(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
@@ -53,7 +51,6 @@ func TestPgxPlaylistRepo_CreateAndGetByID(t *testing.T) {
 		t.Fatal("GetByID() returned nil, want playlist")
 	}
 
-	// Assert
 	if got.ID.UUID() != pl.ID.UUID() {
 		t.Errorf("ID = %v, want %v", got.ID.UUID(), pl.ID.UUID())
 	}
@@ -77,7 +74,6 @@ func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	// Arrange: create 3 playlists with staggered times
 	for i := 0; i < 3; i++ {
 		pl := newTestPlaylistForDB(t, userId)
 		pl.CreatedAt = time.Now().UTC().Add(time.Duration(i) * time.Second)
@@ -88,18 +84,15 @@ func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 		}
 	}
 
-	// Act
 	got, err := repo.ListForUser(ctx, userId)
 	if err != nil {
 		t.Fatalf("ListForUser() error = %v", err)
 	}
 
-	// Assert
 	if len(got) != 3 {
 		t.Fatalf("len(playlists) = %d, want 3", len(got))
 	}
 
-	// Verify descending created_at order
 	for i := 1; i < len(got); i++ {
 		if got[i-1].Playlist.CreatedAt.Before(got[i].Playlist.CreatedAt) {
 			t.Errorf("playlists not in descending created_at order at index %d", i)
@@ -120,7 +113,6 @@ func TestPgxPlaylistRepo_Delete(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	// Act: delete
 	deleted, err := repo.Delete(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
@@ -129,7 +121,6 @@ func TestPgxPlaylistRepo_Delete(t *testing.T) {
 		t.Error("Delete() deleted = false, want true")
 	}
 
-	// Assert: gone
 	got, _, err := repo.GetByID(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID after delete: %v", err)
@@ -138,7 +129,6 @@ func TestPgxPlaylistRepo_Delete(t *testing.T) {
 		t.Errorf("GetByID after delete returned non-nil: %v", got.ID)
 	}
 
-	// Assert: deleting again returns false
 	deleted2, err := repo.Delete(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("second Delete() error = %v", err)
@@ -155,7 +145,6 @@ func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	// Arrange: create a playlist and a track
 	pl := newTestPlaylistForDB(t, userId)
 	cleanupPlaylist(t, pool, pl.ID, userId)
 	if err := playlistRepo.Create(ctx, pl); err != nil {
@@ -168,12 +157,10 @@ func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 		t.Fatalf("Add track: %v", err)
 	}
 
-	// Act: add track to playlist
 	if err := playlistRepo.AddTrack(ctx, pl.ID, track.ID, 0); err != nil {
 		t.Fatalf("AddTrack() error = %v", err)
 	}
 
-	// Assert: verify track appears in GetWithTracks
 	gotPl, gotTracks, err := playlistRepo.GetWithTracks(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetWithTracks() error = %v", err)
@@ -194,12 +181,10 @@ func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 		t.Errorf("track position = %d, want 0", gotPl.Tracks[0].Position)
 	}
 
-	// Act: remove track from playlist
 	if err := playlistRepo.RemoveTrack(ctx, pl.ID, track.ID); err != nil {
 		t.Fatalf("RemoveTrack() error = %v", err)
 	}
 
-	// Assert: no tracks after removal
 	gotPl2, gotTracks2, err := playlistRepo.GetWithTracks(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetWithTracks after remove: %v", err)
@@ -219,7 +204,6 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	// Arrange: create playlist + 3 tracks
 	pl := newTestPlaylistForDB(t, userId)
 	cleanupPlaylist(t, pool, pl.ID, userId)
 	if err := playlistRepo.Create(ctx, pl); err != nil {
@@ -239,7 +223,6 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 		trackIDs[i] = track.ID
 	}
 
-	// Act: reverse the order (2, 1, 0)
 	reordered := []domain.PlaylistTrack{
 		{TrackId: trackIDs[2], Position: 0},
 		{TrackId: trackIDs[1], Position: 1},
@@ -249,7 +232,6 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 		t.Fatalf("ReorderTracks() error = %v", err)
 	}
 
-	// Assert: positions reflect new order
 	gotPl, _, err := playlistRepo.GetWithTracks(ctx, pl.ID, userId)
 	if err != nil {
 		t.Fatalf("GetWithTracks after reorder: %v", err)
@@ -258,7 +240,6 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 		t.Fatalf("len(tracks) = %d, want 3", len(gotPl.Tracks))
 	}
 
-	// GetWithTracks orders by position ASC, so index 0 should be trackIDs[2]
 	if gotPl.Tracks[0].TrackId.UUID() != trackIDs[2].UUID() {
 		t.Errorf("position 0: track = %v, want %v", gotPl.Tracks[0].TrackId.UUID(), trackIDs[2].UUID())
 	}

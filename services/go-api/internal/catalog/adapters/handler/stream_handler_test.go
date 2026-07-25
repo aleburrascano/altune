@@ -80,7 +80,6 @@ func TestHandleStreamAudio(t *testing.T) {
 			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
 				track := makeReadyTrack(testUserId, "Gone", "Artist", "Album", "audio/gone.opus")
 				repo.Seed(track)
-				// Deliberately NOT seeding audio store, so Stream will fail with EOF
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusNotFound,
@@ -89,16 +88,13 @@ func TestHandleStreamAudio(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			repo := catalogtest.NewTrackRepo()
 			store := catalogtest.NewAudioStore()
 			trackId := tt.setup(repo, store)
 			_, router := buildStreamHandler(repo, store, nil)
 
-			// Act
 			rec := serve(t, router, http.MethodGet, "/tracks/"+trackId+"/stream", nil)
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantContentType != "" {
@@ -137,14 +133,11 @@ func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
 }
 
 func TestHandleStreamAudio_NoAuth(t *testing.T) {
-	// Arrange
 	repo := catalogtest.NewTrackRepo()
 	store := catalogtest.NewAudioStore()
 	_, router := buildStreamHandler(repo, store, nil)
 
-	// Act
 	rec := serveNoAuth(t, router, http.MethodGet, "/tracks/"+uuid.New().String()+"/stream", nil)
 
-	// Assert
 	assertStatus(t, rec, http.StatusUnauthorized)
 }

@@ -8,8 +8,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// GetTrackStatusService returns a single track for the authenticated user,
-// used by the status-polling endpoint.
 type GetTrackStatusService struct {
 	trackRepo trackByIDGetter
 }

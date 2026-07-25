@@ -19,21 +19,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// --- test constants ---
-
 var (
 	testUserUUID = uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	testUserId   = shared.NewUserId(testUserUUID)
 )
 
-// --- fake token verifier ---
-
-// verifyAsTestUser always succeeds and returns testUserId.
 var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
 	return testUserId, nil
 })
 
-// serve sends a request through a chi router and returns the response recorder.
 func serve(t *testing.T, router chi.Router, method, path string, body io.Reader) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, body)
@@ -46,7 +40,6 @@ func serve(t *testing.T, router chi.Router, method, path string, body io.Reader)
 	return rec
 }
 
-// serveNoAuth sends a request without an Authorization header.
 func serveNoAuth(t *testing.T, router chi.Router, method, path string, body io.Reader) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, body)
@@ -55,7 +48,6 @@ func serveNoAuth(t *testing.T, router chi.Router, method, path string, body io.R
 	return rec
 }
 
-// jsonBody encodes v as JSON for use as a request body.
 func jsonBody(t *testing.T, v any) *bytes.Buffer {
 	t.Helper()
 	buf := &bytes.Buffer{}
@@ -65,15 +57,12 @@ func jsonBody(t *testing.T, v any) *bytes.Buffer {
 	return buf
 }
 
-// decodeJSON decodes the response body into dst.
 func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder, dst any) {
 	t.Helper()
 	if err := json.NewDecoder(rec.Body).Decode(dst); err != nil {
 		t.Fatalf("decodeJSON: %v (body: %s)", err, rec.Body.String())
 	}
 }
-
-// --- domain helpers ---
 
 func makeTrack(userId shared.UserId, title, artist, album string) *catdomain.Track {
 	t, _ := catdomain.NewTrack(userId, title, artist, album)
@@ -90,8 +79,6 @@ func makePlaylist(userId shared.UserId, name string) *catdomain.Playlist {
 	p, _ := catdomain.NewPlaylist(userId, name)
 	return p
 }
-
-// --- service builders ---
 
 func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.Scheduler) (*TrackHandler, chi.Router) {
 	var addOpts []func(*service.AddTrackService)
@@ -139,7 +126,6 @@ func buildStreamHandler(trackRepo *catalogtest.TrackRepo, audioStore *catalogtes
 	return h, r
 }
 
-// assertStatus checks the HTTP status code.
 func assertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	t.Helper()
 	if rec.Code != want {
@@ -147,7 +133,6 @@ func assertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	}
 }
 
-// assertJSON checks that the response has application/json content type.
 func assertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	ct := rec.Header().Get("Content-Type")

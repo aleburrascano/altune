@@ -37,8 +37,6 @@ func (h *FeaturedArtistHandler) addRoutes(r chi.Router) {
 	r.Post("/featured-backfill", h.handleBackfillFeatured)
 }
 
-// handleBackfillFeatured resolves and persists featured artists for the authed
-// user's existing tracks (idempotent). Synchronous — the library is small.
 func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
@@ -52,8 +50,6 @@ func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r 
 	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
-// handleListFeaturing returns the user's tracks crediting a featured artist,
-// identified by mbid, deezer_id, or name (in that precedence).
 func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {

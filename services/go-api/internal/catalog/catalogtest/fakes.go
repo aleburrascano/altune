@@ -1,6 +1,3 @@
-// Package catalogtest provides in-memory fakes for the catalog ports, shared by
-// the service and adapters/handler test packages so both exercise the same
-// repository/store behavior instead of maintaining independent copies.
 package catalogtest
 
 import (
@@ -13,10 +10,8 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// TrackRepo is an in-memory fake satisfying the catalog service layer's
-// narrow track-repository interfaces.
 type TrackRepo struct {
-	Tracks map[string]*domain.Track // keyed by trackId.String()
+	Tracks map[string]*domain.Track
 
 	ErrOnAdd    error
 	ErrOnGetBy  error
@@ -33,7 +28,6 @@ func (r *TrackRepo) Add(_ context.Context, track *domain.Track) (*domain.Track, 
 	if r.ErrOnAdd != nil {
 		return nil, false, r.ErrOnAdd
 	}
-	// Dedup by DedupKey+UserId: return the existing track on conflict.
 	for _, t := range r.Tracks {
 		if t.DedupKey == track.DedupKey && t.UserId == track.UserId {
 			return t, false, nil
@@ -157,15 +151,13 @@ func (r *TrackRepo) ListTracksFeaturing(_ context.Context, userId shared.UserId,
 	return out, nil
 }
 
-// Seed adds a track directly into the fake store.
 func (r *TrackRepo) Seed(track *domain.Track) {
 	r.Tracks[track.ID.String()] = track
 }
 
-// PlaylistRepo is an in-memory fake satisfying ports.PlaylistRepository.
 type PlaylistRepo struct {
-	Playlists      map[string]*domain.Playlist // keyed by playlistId.String()
-	PlaylistTracks map[string][]*domain.Track  // keyed by playlistId.String(), for GetWithTracks
+	Playlists      map[string]*domain.Playlist
+	PlaylistTracks map[string][]*domain.Track
 
 	ErrOnCreate        error
 	ErrOnGetByID       error
@@ -270,20 +262,17 @@ func (r *PlaylistRepo) ReorderTracks(_ context.Context, _ domain.PlaylistId, _ [
 	return r.ErrOnReorder
 }
 
-// Seed adds a playlist directly into the fake store.
 func (r *PlaylistRepo) Seed(playlist *domain.Playlist) {
 	r.Playlists[playlist.ID.String()] = playlist
 }
 
-// SeedWithTracks adds a playlist and its associated tracks for GetWithTracks.
 func (r *PlaylistRepo) SeedWithTracks(playlist *domain.Playlist, tracks []*domain.Track) {
 	r.Playlists[playlist.ID.String()] = playlist
 	r.PlaylistTracks[playlist.ID.String()] = tracks
 }
 
-// AudioStore is an in-memory fake satisfying ports.AudioStore.
 type AudioStore struct {
-	Files map[string][]byte // audioRef -> content
+	Files map[string][]byte
 
 	ErrOnExists error
 	ErrOnStore  error
@@ -336,12 +325,10 @@ func (s *AudioStore) Delete(_ context.Context, audioRef string) error {
 	return nil
 }
 
-// Seed marks an audioRef as existing in the store with the given content.
 func (s *AudioStore) Seed(audioRef string, data []byte) {
 	s.Files[audioRef] = data
 }
 
-// Scheduler is a recording fake satisfying ports.AcquisitionScheduler.
 type Scheduler struct {
 	TrackIds   []domain.TrackId
 	SourceURLs []string

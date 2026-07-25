@@ -271,7 +271,6 @@ func TestTrack_MarkReady(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			track := newTestTrack(t)
-			// Pre-set a failure reason to verify it gets cleared
 			reason := "old failure"
 			track.FailureReason = &reason
 
@@ -323,7 +322,6 @@ func TestTrack_MarkFailed(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			track := newTestTrack(t)
-			// Pre-set an audio ref to verify it gets cleared
 			ref := "s3://bucket/track.opus"
 			track.AudioRef = &ref
 
@@ -357,7 +355,6 @@ func TestTrack_RevertToPending(t *testing.T) {
 	t.Parallel()
 	track := newTestTrack(t)
 
-	// Put track into ready state first
 	if err := track.MarkReady("s3://bucket/track.opus"); err != nil {
 		t.Fatalf("setup: MarkReady failed: %v", err)
 	}
@@ -380,9 +377,9 @@ func TestTrack_IsStreamable(t *testing.T) {
 	audioRef := "s3://bucket/track.opus"
 
 	tests := []struct {
-		name   string
-		setup  func(*Track)
-		want   bool
+		name  string
+		setup func(*Track)
+		want  bool
 	}{
 		{
 			name: "ready with audioRef is streamable",
@@ -427,8 +424,6 @@ func TestTrack_IsStreamable(t *testing.T) {
 		})
 	}
 }
-
-// --- helpers ---
 
 func newTestTrack(t *testing.T) *Track {
 	t.Helper()

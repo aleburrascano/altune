@@ -36,8 +36,6 @@ func (h *PlaylistHandler) Routes() chi.Router {
 	return r
 }
 
-// --- DTOs ---
-
 type CreatePlaylistRequest struct {
 	Name string `json:"name"`
 }
@@ -78,8 +76,6 @@ type PlaylistDetailResponse struct {
 	Tracks             []TrackResponse `json:"tracks"`
 }
 
-// playlistToResponse maps a playlist summary to its wire DTO — one mapper for
-// the create/list/rename responses (the detail response carries tracks too).
 func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string) PlaylistResponse {
 	if artworkURLs == nil {
 		artworkURLs = []string{}
@@ -93,9 +89,6 @@ func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string
 		UpdatedAt:          p.UpdatedAt,
 	}
 }
-
-
-// --- Handlers ---
 
 func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)

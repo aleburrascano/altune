@@ -14,17 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// trackColumns is the canonical column list for a `tracks` SELECT, shared by
-// every query that reads a track row (bare form here; playlist_repo.go and
-// featured_artist_repo.go use trackColumnsPrefixed for their joins). One
-// definition so a schema change is a single-line edit instead of a hand-sync
-// across every query.
 const trackColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
 	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason`
 
-// trackColumnsPrefixed is trackColumns qualified with the `t.` alias, for
-// queries that join tracks against another table.
 const trackColumnsPrefixed = `t.id, t.user_id, t.title, t.artist, t.album, t.duration_seconds,
 	t.added_at, t.artwork_url, t.acquisition_status, t.dedup_key,
 	t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason`
@@ -61,9 +54,6 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Dedup-key conflict: the row already exists — nothing was inserted (the
-		// deferred rollback disposes the empty tx). Return the existing track so
-		// the caller does not have to issue its own lookup.
 		existing, lookupErr := r.GetByDedupKey(ctx, track.UserId, track.DedupKey)
 		if lookupErr != nil {
 			return nil, false, lookupErr
@@ -83,9 +73,6 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 	return track, true, nil
 }
 
-// GetByID does not load FeaturedArtists (see the port doc) — every current
-// caller only reads status/audio-ref fields, so the join would be paid on every
-// call and discarded.
 func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
 	row := r.pool.QueryRow(ctx,
 		`SELECT `+trackColumns+`
@@ -131,10 +118,6 @@ func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.User
 	return tracks, total, nil
 }
 
-// ListByIDs batch-loads the user's tracks matching ids in one query. Unknown or
-// foreign ids are absent from the result; order is not guaranteed. Does not load
-// featured credits (see the port doc) — the hot caller is audio-URL presigning,
-// which only needs the acquisition status and audio ref.
 func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId, ids []domain.TrackId) ([]*domain.Track, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -188,8 +171,6 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) er
 	return nil
 }
 
-// SetTrackNumber fills the album position only when unset (WHERE track_number IS
-// NULL), so it never clobbers a real value and is safe to call repeatedly.
 func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (bool, error) {
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE tracks SET track_number=$3
@@ -268,10 +249,6 @@ type scanner interface {
 	Scan(dest ...any) error
 }
 
-// trackScanDest returns the 17 scan destinations for a track row (in the canonical
-// column order used by every track SELECT) plus a builder that turns them into a
-// domain.Track. Sharing it lets joins that carry extra columns (e.g. playlist
-// position) reuse the exact same column list and construction.
 func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 	var (
 		id            uuid.UUID

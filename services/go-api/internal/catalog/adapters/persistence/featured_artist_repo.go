@@ -11,16 +11,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// querier is the subset of pgxpool.Pool / pgx.Tx used for reads, so featured-artist
-// loading works both on the pool and inside a transaction.
 type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// writeTrackFeatured upserts each featured artist into the canonical
-// featured_artists table (deduped on the generated identity_key) and links it to
-// the track in position order. Must run inside a transaction. It does not clear
-// existing links — callers replacing a set (backfill) delete first.
 func writeTrackFeatured(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -54,8 +48,6 @@ func writeTrackFeatured(
 	return nil
 }
 
-// loadFeaturedForTracks batch-loads the featured artists for the given tracks in
-// one query and attaches them (position-ordered). Avoids an N+1 across a list.
 func loadFeaturedForTracks(ctx context.Context, q querier, tracks []*domain.Track) error {
 	if len(tracks) == 0 {
 		return nil
@@ -104,9 +96,6 @@ func loadFeaturedForTracks(ctx context.Context, q querier, tracks []*domain.Trac
 	return rows.Err()
 }
 
-// ReplaceFeaturedArtists deletes the track's existing featured-artist links and
-// writes the new set in one transaction. Verifies the track belongs to the user
-// first so the backfill can't cross tenants.
 func (r *PgxTrackRepository) ReplaceFeaturedArtists(
 	ctx context.Context,
 	id domain.TrackId,
@@ -140,8 +129,6 @@ func (r *PgxTrackRepository) ReplaceFeaturedArtists(
 	return tx.Commit(ctx)
 }
 
-// ListTracksFeaturing returns the user's tracks crediting the featured artist,
-// matched on its identity key. Ordered newest-first.
 func (r *PgxTrackRepository) ListTracksFeaturing(
 	ctx context.Context,
 	userId shared.UserId,

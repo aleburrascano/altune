@@ -13,8 +13,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// --- helpers ---
-
 func testUserId() shared.UserId {
 	return shared.NewUserId(uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
 }
@@ -47,8 +45,6 @@ func seedPlaylist(t *testing.T, repo *catalogtest.PlaylistRepo, userId shared.Us
 	repo.Seed(playlist)
 	return playlist
 }
-
-// ==================== AddTrackService ====================
 
 func TestAddTrackService_Execute(t *testing.T) {
 	ctx := context.Background()
@@ -152,8 +148,6 @@ func TestAddTrackService_Execute(t *testing.T) {
 		})
 	}
 }
-
-// ==================== ListTracksService ====================
 
 func TestListTracksService_Execute(t *testing.T) {
 	ctx := context.Background()
@@ -266,8 +260,6 @@ func TestListTracksService_Execute(t *testing.T) {
 	}
 }
 
-// ==================== DeleteTrackService ====================
-
 func TestDeleteTrackService_Execute(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
@@ -289,7 +281,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		{
 			name: "non-existent track returns ErrTrackNotFound",
 			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
-				return domain.NewTrackId() // not in repo
+				return domain.NewTrackId()
 			},
 			wantErr: ErrTrackNotFound,
 		},
@@ -327,8 +319,6 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		})
 	}
 }
-
-// ==================== PlaylistService ====================
 
 func TestPlaylistLifecycleService_Create(t *testing.T) {
 	ctx := context.Background()
@@ -419,7 +409,7 @@ func TestPlaylistLifecycleService_Get(t *testing.T) {
 		{
 			name: "not found returns ErrPlaylistNotFound",
 			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
-				return domain.NewPlaylistId() // not seeded
+				return domain.NewPlaylistId()
 			},
 			wantErr: ErrPlaylistNotFound,
 		},
@@ -589,7 +579,6 @@ func TestPlaylistLifecycleService_Rename(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			// Verify the name was actually updated in the repo
 			renamed, _, _ := plRepo.GetByID(ctx, playlistId, userId)
 			if renamed == nil {
 				t.Fatal("expected playlist to still exist after rename")
@@ -631,7 +620,7 @@ func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 			name: "track not found returns ErrTrackNotFound",
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
-				return pl.ID, domain.NewTrackId() // not in repo
+				return pl.ID, domain.NewTrackId()
 			},
 			wantErr: ErrTrackNotFound,
 		},
@@ -709,8 +698,6 @@ func TestPlaylistMembershipService_RemoveTrack(t *testing.T) {
 		{
 			name: "repo error propagates",
 			setup: func(plRepo *catalogtest.PlaylistRepo) (domain.PlaylistId, domain.TrackId) {
-				// RemoveTrack now loads via GetWithTracks (it routes through the
-				// aggregate), so the repo error surfaces there.
 				plRepo.ErrOnGetWithTracks = errRepo
 				return domain.NewPlaylistId(), domain.NewTrackId()
 			},
@@ -809,8 +796,6 @@ func TestPlaylistMembershipService_Reorder(t *testing.T) {
 		})
 	}
 }
-
-// --- test utilities ---
 
 func ptrStatus(s domain.AcquisitionStatus) *domain.AcquisitionStatus {
 	return &s

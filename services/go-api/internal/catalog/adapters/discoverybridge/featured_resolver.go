@@ -1,5 +1,3 @@
-// Package discoverybridge adapts discovery-context services to catalog ports,
-// keeping catalog free of a direct discovery import (mirrors playback/catalogbridge).
 package discoverybridge
 
 import (
@@ -12,9 +10,6 @@ import (
 
 var _ catalogports.FeaturedArtistResolver = (*FeaturedResolver)(nil)
 
-// FeaturedResolver satisfies the catalog FeaturedArtistResolver port by delegating
-// to the discovery resolver and translating discovery value objects into catalog
-// ones.
 type FeaturedResolver struct {
 	inner *discoveryservice.FeaturedArtistResolver
 }

@@ -40,7 +40,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("resolves and persists, idempotent", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		t1 := newTrackFeat(t, userId, "Song A")
-		t2 := newTrackFeat(t, userId, "Song B") // no featured
+		t2 := newTrackFeat(t, userId, "Song B")
 		repo.Seed(t1)
 		repo.Seed(t2)
 
@@ -60,7 +60,6 @@ func TestBackfillFeaturedService(t *testing.T) {
 			t.Errorf("t1 featured = %+v", t1.FeaturedArtists)
 		}
 
-		// Re-run: same result, still 1 featured on t1 (idempotent replace).
 		res2, _ := svc.Execute(ctx, userId)
 		if res2.Updated != 1 || len(t1.FeaturedArtists) != 1 {
 			t.Errorf("re-run not idempotent: %+v / %+v", res2, t1.FeaturedArtists)

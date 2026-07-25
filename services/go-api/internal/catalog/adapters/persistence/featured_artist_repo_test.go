@@ -10,9 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Integration test — skips without DATABASE_URL. Verifies featured artists persist
-// on Add and reload on GetByDedupKey in position order, and that re-adding a
-// dedup track dedups the canonical featured_artists rows on identity_key.
 func TestPgxTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)

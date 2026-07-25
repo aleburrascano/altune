@@ -153,7 +153,6 @@ func TestPlaylist_Rename(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			pl := newTestPlaylist(t)
 			beforeUpdate := pl.UpdatedAt
-			// Ensure time difference is detectable
 			time.Sleep(time.Millisecond)
 
 			err := pl.Rename(tt.newName)
@@ -292,7 +291,6 @@ func TestPlaylist_Reorder(t *testing.T) {
 		beforeUpdate := pl.UpdatedAt
 		time.Sleep(time.Millisecond)
 
-		// Reverse order: C, B, A
 		err := pl.Reorder([]TrackId{trackC, trackB, trackA})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -347,8 +345,6 @@ func TestPlaylist_Reorder(t *testing.T) {
 		}
 	})
 }
-
-// --- helpers ---
 
 func newTestPlaylist(t *testing.T) *Playlist {
 	t.Helper()

@@ -8,14 +8,10 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// featuringLister is the narrow read this service actually calls, out of
-// ports.TrackRepository's full surface.
 type featuringLister interface {
 	ListTracksFeaturing(ctx context.Context, userId shared.UserId, fa domain.FeaturedArtist) ([]*domain.Track, error)
 }
 
-// ListFeaturingService returns the user's tracks that credit a given featured
-// artist — the "everything featuring X" browse.
 type ListFeaturingService struct {
 	trackRepo featuringLister
 }

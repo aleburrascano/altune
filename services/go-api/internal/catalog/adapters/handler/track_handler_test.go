@@ -66,17 +66,14 @@ func TestHandleListTracks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			repo := catalogtest.NewTrackRepo()
 			for i := 0; i < tt.seedCount; i++ {
 				repo.Seed(makeTrack(testUserId, "Track "+string(rune('A'+i)), "Artist", "Album"))
 			}
 			_, router := buildTrackHandler(repo, nil)
 
-			// Act
 			rec := serve(t, router, http.MethodGet, "/tracks"+tt.query, nil)
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 			assertJSON(t, rec)
 
@@ -99,14 +96,11 @@ func TestHandleListTracks(t *testing.T) {
 }
 
 func TestHandleListTracks_NoAuth(t *testing.T) {
-	// Arrange
 	repo := catalogtest.NewTrackRepo()
 	_, router := buildTrackHandler(repo, nil)
 
-	// Act
 	rec := serveNoAuth(t, router, http.MethodGet, "/tracks", nil)
 
-	// Assert
 	assertStatus(t, rec, http.StatusUnauthorized)
 }
 
@@ -116,7 +110,7 @@ func TestHandleCreateTrack(t *testing.T) {
 		body       any
 		seedDedup  bool
 		wantStatus int
-		wantField  string // JSON field to spot-check in response
+		wantField  string
 	}{
 		{
 			name: "valid track returns 201 Created",
@@ -162,14 +156,12 @@ func TestHandleCreateTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			repo := catalogtest.NewTrackRepo()
 			if tt.seedDedup {
 				repo.Seed(makeTrack(testUserId, "Existing", "Artist", ""))
 			}
 			_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
 
-			// Act
 			var rec *httptest.ResponseRecorder
 			switch b := tt.body.(type) {
 			case string:
@@ -179,7 +171,6 @@ func TestHandleCreateTrack(t *testing.T) {
 				rec = serve(t, router, http.MethodPost, "/tracks", jsonBody(t, b))
 			}
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus == http.StatusCreated || tt.wantStatus == http.StatusOK {
@@ -232,22 +223,18 @@ func TestHandleDeleteTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			repo := catalogtest.NewTrackRepo()
 			trackId := tt.trackIdFn(repo)
 			_, router := buildTrackHandler(repo, nil)
 
-			// Act
 			rec := serve(t, router, http.MethodDelete, "/tracks/"+trackId, nil)
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 		})
 	}
 }
 
 func TestHandleCreateTrack_ResponseShape(t *testing.T) {
-	// Arrange
 	repo := catalogtest.NewTrackRepo()
 	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
 
@@ -269,10 +256,8 @@ func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 		ISRC:            &isrc,
 	}
 
-	// Act
 	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
-	// Assert
 	assertStatus(t, rec, http.StatusCreated)
 
 	var raw map[string]json.RawMessage
