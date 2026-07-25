@@ -33,27 +33,26 @@ func TestPgxSearchHistoryRepo_InsertAndListDistinctRecent(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	// Arrange: insert 3 entries, 2 with the same query_norm
 	entries := []*domain.SearchHistoryEntry{
 		{
-			ID:        uuid.New(),
-			UserId:    userId,
-			Query:     "Beatles",
-			QueryNorm: "beatles",
+			ID:         uuid.New(),
+			UserId:     userId,
+			Query:      "Beatles",
+			QueryNorm:  "beatles",
 			ExecutedAt: time.Now().UTC().Add(-3 * time.Minute),
 		},
 		{
-			ID:        uuid.New(),
-			UserId:    userId,
-			Query:     "beatles",
-			QueryNorm: "beatles",
+			ID:         uuid.New(),
+			UserId:     userId,
+			Query:      "beatles",
+			QueryNorm:  "beatles",
 			ExecutedAt: time.Now().UTC().Add(-1 * time.Minute),
 		},
 		{
-			ID:        uuid.New(),
-			UserId:    userId,
-			Query:     "Pink Floyd",
-			QueryNorm: "pink floyd",
+			ID:         uuid.New(),
+			UserId:     userId,
+			Query:      "Pink Floyd",
+			QueryNorm:  "pink floyd",
 			ExecutedAt: time.Now().UTC().Add(-2 * time.Minute),
 		},
 	}
@@ -68,18 +67,15 @@ func TestPgxSearchHistoryRepo_InsertAndListDistinctRecent(t *testing.T) {
 		}
 	}
 
-	// Act: list distinct recent
 	got, err := repo.ListDistinctRecent(ctx, userId, 10)
 	if err != nil {
 		t.Fatalf("ListDistinctRecent() error = %v", err)
 	}
 
-	// Assert: should return 2 distinct query_norms
 	if len(got) != 2 {
 		t.Fatalf("len(entries) = %d, want 2 (distinct query_norms)", len(got))
 	}
 
-	// The "beatles" entry should be the more recent one (1 min ago)
 	foundBeatles := false
 	for _, e := range got {
 		if e.QueryNorm == "beatles" {
@@ -93,7 +89,6 @@ func TestPgxSearchHistoryRepo_InsertAndListDistinctRecent(t *testing.T) {
 		t.Error("missing 'beatles' entry in distinct recent results")
 	}
 
-	// Assert: most recent first
 	if got[0].ExecutedAt.Before(got[1].ExecutedAt) {
 		t.Error("entries not in descending executed_at order")
 	}
@@ -105,7 +100,6 @@ func TestPgxSearchHistoryRepo_TrimToN(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	// Arrange: insert 5 entries
 	ids := make([]uuid.UUID, 5)
 	for i := 0; i < 5; i++ {
 		ids[i] = uuid.New()
@@ -125,12 +119,10 @@ func TestPgxSearchHistoryRepo_TrimToN(t *testing.T) {
 		}
 	}
 
-	// Act: trim to 2
 	if err := repo.TrimToN(ctx, userId, 2); err != nil {
 		t.Fatalf("TrimToN() error = %v", err)
 	}
 
-	// Assert: only 2 remain
 	got, err := repo.ListDistinctRecent(ctx, userId, 10)
 	if err != nil {
 		t.Fatalf("ListDistinctRecent after trim: %v", err)

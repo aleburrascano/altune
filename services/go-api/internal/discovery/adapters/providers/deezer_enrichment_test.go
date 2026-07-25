@@ -10,9 +10,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// deezerEnrichmentServer routes the resolve search + the /track|/album detail
-// fetches to canned bodies captured from the live probe (docs/providers/deezer.md
-// §4, 2026-06-22).
 func deezerEnrichmentServer() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -48,7 +45,7 @@ func TestDeezerAdapter_ResolveAndLookupTrack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Lookup: %v", err)
 	}
-	if e.BPM != 172 { // 171.6 rounds to 172
+	if e.BPM != 172 {
 		t.Errorf("BPM: got %d, want 172", e.BPM)
 	}
 	if e.Gain != -8.3 {
@@ -85,7 +82,6 @@ func TestDeezerAdapter_ResolveAndLookupAlbum(t *testing.T) {
 	if e.RecordType != "album" {
 		t.Errorf("RecordType: got %q", e.RecordType)
 	}
-	// Duplicate genre in the fixture must be deduped to one.
 	if len(e.Genres) != 1 || e.Genres[0] != "Electro" {
 		t.Errorf("Genres: got %v, want [Electro]", e.Genres)
 	}
@@ -105,8 +101,6 @@ func TestDeezerAdapter_ArtistKindResolvesToEmpty(t *testing.T) {
 	}
 }
 
-// TestDeezerAdapter_Resolve_PrefersXLArtwork verifies the cap-2 artwork bump:
-// the ArtworkResolver returns the 1000px _xl cover when present.
 func TestDeezerAdapter_Resolve_PrefersXLArtwork(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

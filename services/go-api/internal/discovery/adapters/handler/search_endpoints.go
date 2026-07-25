@@ -17,12 +17,6 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// Search-family endpoints: /search, /suggest, /search-history, /events — the
-// surfaces that change with the ranking pipeline — plus the search wire DTOs
-// shared by every endpoint family (SearchResultDTO and its mappers).
-
-// --- DTOs ---
-
 type SearchResultDTO struct {
 	Kind            string         `json:"kind"`
 	Title           string         `json:"title"`
@@ -66,11 +60,9 @@ type DiscoverySearchResponse struct {
 	CorrectedQuery string              `json:"corrected_query,omitempty"`
 	OriginalQuery  string              `json:"original_query,omitempty"`
 	Related        []RelatedGroupDTO   `json:"related,omitempty"`
-	// Paging over the ranked slate. `total` is the slate size before paging, so
-	// a client can show "N results" while holding only the first page.
-	Total   int  `json:"total"`
-	Offset  int  `json:"offset"`
-	HasMore bool `json:"has_more"`
+	Total          int                 `json:"total"`
+	Offset         int                 `json:"offset"`
+	HasMore        bool                `json:"has_more"`
 }
 
 type CacheDTO struct {
@@ -107,8 +99,6 @@ type SuggestionDTO struct {
 type SuggestResponse struct {
 	Suggestions []SuggestionDTO `json:"suggestions"`
 }
-
-// --- Handlers ---
 
 func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request) {
 	_, ok := auth.RequireUserID(w, r)
@@ -234,10 +224,8 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 	items := make([]SearchHistoryItemDTO, len(entries))
 	for i, e := range entries {
 		items[i] = SearchHistoryItemDTO{
-			Query:     e.Query,
-			QueryNorm: e.QueryNorm,
-			// .UTC() first: the layout hard-codes the Z designator, which would lie
-			// about a non-UTC time.
+			Query:      e.Query,
+			QueryNorm:  e.QueryNorm,
 			ExecutedAt: e.ExecutedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 		}
 	}
@@ -286,8 +274,6 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// client_occurred_at is optional RFC3339; a malformed value is dropped (the
-	// server received_at still anchors the event in time).
 	var clientOccurredAt time.Time
 	if req.ClientOccurredAt != "" {
 		if t, parseErr := time.Parse(time.RFC3339, req.ClientOccurredAt); parseErr == nil {
@@ -303,8 +289,6 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		ClientOccurredAt: clientOccurredAt,
 		Payload:          req.Payload,
 	}
-	// HandleServiceError renders service validation errors (StatusError → 400:
-	// non-client-submittable type, wrong payload value type) and 500s the rest.
 	if err := h.eventSvc.Execute(r.Context(), userId, input); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
@@ -312,8 +296,6 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 
 	w.WriteHeader(http.StatusNoContent)
 }
-
-// --- wire mapping ---
 
 func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	sources := make([]SourceRefDTO, len(sr.Sources))
@@ -324,8 +306,6 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 			URL:        s.URL,
 		}
 	}
-	// The wire extras keep carrying the metadata the domain promoted to typed
-	// fields — clients key on these names, so the contract stays byte-identical.
 	extras := make(map[string]any, len(sr.Extras)+7)
 	for k, v := range sr.Extras {
 		extras[k] = v
@@ -354,10 +334,6 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	if sr.FanCount != 0 {
 		extras["nb_fan"] = sr.FanCount
 	}
-	// Prefer the signature stamped at rank time (pre-disambiguation): recomputing
-	// here after enrichment filled artist subtitles would drift from the key the
-	// behavioral score map uses (see domain.SearchResult.Signature). Compute only
-	// as a fallback for paths that never went through mergeRankEnrich.
 	signature := sr.Signature
 	if signature == "" {
 		signature = domain.ResultSignature(sr)
@@ -375,7 +351,6 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	}
 }
 
-// searchResultsToDTOs maps a slice of domain results to wire DTOs.
 func searchResultsToDTOs(results []domain.SearchResult) []SearchResultDTO {
 	dtos := make([]SearchResultDTO, len(results))
 	for i, sr := range results {
@@ -384,9 +359,6 @@ func searchResultsToDTOs(results []domain.SearchResult) []SearchResultDTO {
 	return dtos
 }
 
-// relatedGroupsToDTOs maps the related-tracks groups to wire DTOs. Returns nil
-// (not an empty slice) when there are no groups, preserving the response's
-// omitempty behavior for the related block.
 func relatedGroupsToDTOs(groups []domain.RelatedGroup) []RelatedGroupDTO {
 	if len(groups) == 0 {
 		return nil
@@ -402,7 +374,6 @@ func relatedGroupsToDTOs(groups []domain.RelatedGroup) []RelatedGroupDTO {
 	return dtos
 }
 
-// providerStatusesToDTOs maps per-provider scatter-gather outcomes to wire DTOs.
 func providerStatusesToDTOs(statuses []domain.ProviderSearchResponse) []ProviderStatusDTO {
 	dtos := make([]ProviderStatusDTO, len(statuses))
 	for i, ps := range statuses {
@@ -416,8 +387,6 @@ func providerStatusesToDTOs(statuses []domain.ProviderSearchResponse) []Provider
 	return dtos
 }
 
-// searchStatusCode is 503 when a non-empty scatter had every provider fail, else
-// 200 — an all-error fan-out is surfaced as service-unavailable per AC.
 func searchStatusCode(statuses []domain.ProviderSearchResponse) int {
 	if len(statuses) == 0 {
 		return http.StatusOK
@@ -430,8 +399,6 @@ func searchStatusCode(statuses []domain.ProviderSearchResponse) int {
 	return http.StatusServiceUnavailable
 }
 
-// kindNames returns the requested kinds as a stable, sorted slice of names for
-// the operator console's request trace.
 func kindNames(kinds map[domain.ResultKind]bool) []string {
 	out := make([]string, 0, len(kinds))
 	for k := range kinds {

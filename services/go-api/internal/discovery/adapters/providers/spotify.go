@@ -12,25 +12,10 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// SpotifyAdapter searches Spotify's internal partner GraphQL API
-// (api-partner.spotify.com/pathfinder) using the same anonymous-visitor
-// bootstrap Spotify's own web player uses — no account login, no
-// developer-registered app (see spotify_token.go, spotify_totp.go).
-//
-// AIDEV-DECISION: undocumented and against Spotify's ToS — accepted for
-// self-hosted personal/family use, the same risk posture as the SoundCloud/
-// Amazon Music/Apple Music adapters. Unlike those three, this one rides a
-// genuinely hardened, actively-defended internal API (TOTP-gated access
-// token, a separate client-integrity token, and a persisted-query hash
-// Spotify can rotate without notice) — confirmed live 2026-07-22 to be a
-// materially harder and more fragile integration than the other three.
-// Accepted anyway per explicit product decision: redundancy across the
-// three other providers already covers what this adds, so a breakage here
-// degrades gracefully rather than losing coverage.
 type SpotifyAdapter struct {
 	client        *http.Client
 	resolver      *spotifyTokenResolver
-	pathfinderURL string // GraphQL endpoint shared by search + artist content; overridable in tests
+	pathfinderURL string
 }
 
 const (
@@ -39,16 +24,7 @@ const (
 	spotifyClientVersion     = "1.2.95.397.gd60c55ec"
 	spotifySearchTimeout     = 5 * time.Second
 	spotifyPathfinderURL     = "https://api-partner.spotify.com/pathfinder/v2/query"
-	// spotifySearchQueryHash is the persisted-query sha256 for the
-	// "searchDesktop" pathfinder operation, captured live 2026-07-22.
-	//
-	// AIDEV-WARNING: Spotify can rotate this hash without notice — a stale
-	// hash fails with a "PersistedQueryNotFound"-shaped GraphQL error, not an
-	// auth error, so isAuthStatus's retry-on-401/403 will NOT catch or fix
-	// it. Re-capture the current hash from a live open.spotify.com/search
-	// page's network traffic (operationName "searchDesktop") if search
-	// starts failing with no auth-related status code.
-	spotifySearchQueryHash = "db61238974d27839a136c9dc02bfdbe3fab7635f21cf85976ebff9a1ee281345"
+	spotifySearchQueryHash   = "db61238974d27839a136c9dc02bfdbe3fab7635f21cf85976ebff9a1ee281345"
 )
 
 func NewSpotifyAdapter(client *http.Client) *SpotifyAdapter {
@@ -148,13 +124,6 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 		return nil, resp.StatusCode, fmt.Errorf("decode search response: %w", err)
 	}
 
-	// Pathfinder signals failure at the GraphQL layer with a top-level "errors"
-	// array while still returning HTTP 200 — a stale persisted-query hash
-	// ("PersistedQueryNotFound") or a rejected integrity token both land here.
-	// Without this check the empty data.searchV2 decodes cleanly and the search
-	// silently returns zero results while reporting success, so Spotify vanishes
-	// from every query and looks healthy on the provider board (see the
-	// persisted-query AIDEV-WARNING above). Surface it as a real error instead.
 	if len(body.Errors) > 0 {
 		return nil, resp.StatusCode, fmt.Errorf("spotify graphql error: %s", body.Errors[0].Message)
 	}
@@ -178,13 +147,6 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 	}
 	return results, resp.StatusCode, nil
 }
-
-// --- request/response shapes --------------------------------------------
-//
-// The "searchDesktop" persisted-query response nests each section
-// inconsistently: tracksV2 wraps its entity at items[].item.data (the extra
-// "item" hop) while albumsV2/artists wrap at items[].data directly — matches
-// the live-captured traffic exactly, not a guess.
 
 type spotifySearchRequest struct {
 	Variables     spotifySearchVariables `json:"variables"`
@@ -243,8 +205,6 @@ type spotifySearchResponse struct {
 			} `json:"artists"`
 		} `json:"searchV2"`
 	} `json:"data"`
-	// Errors carries pathfinder's GraphQL-layer failures (returned alongside HTTP
-	// 200). A stale persisted-query hash reports "PersistedQueryNotFound" here.
 	Errors []struct {
 		Message string `json:"message"`
 	} `json:"errors"`
@@ -311,8 +271,6 @@ type spotifyArtistData struct {
 	} `json:"visuals"`
 }
 
-// spotifyBestImage picks the widest available image — search responses
-// carry several fixed sizes, not a URL template like Apple/Amazon.
 func spotifyBestImage(sources []spotifyImage) string {
 	best, bestWidth := "", -1
 	for _, s := range sources {
@@ -323,8 +281,6 @@ func spotifyBestImage(sources []spotifyImage) string {
 	return best
 }
 
-// spotifyIDFromURI recovers the entity id from a "spotify:kind:id" URI, for
-// the rare case a search hit carries no bare id field.
 func spotifyIDFromURI(uri string) string {
 	i := strings.LastIndex(uri, ":")
 	if i < 0 {
@@ -374,9 +330,6 @@ func mapSpotifyAlbum(al spotifyAlbumData) (domain.SearchResult, bool) {
 	if len(al.Artists.Items) > 0 {
 		artist = al.Artists.Items[0].Profile.Name
 	}
-	// type is ALBUM|SINGLE|COMPILATION|EP — lowercased to the record_type key
-	// NormalizeRecordType expects, same mapping the discography path uses
-	// (spotify_content.go).
 	var extras map[string]any
 	if rt := strings.ToLower(al.Type); rt != "" {
 		extras = map[string]any{"record_type": rt}

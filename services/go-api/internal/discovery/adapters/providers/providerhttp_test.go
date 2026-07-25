@@ -73,7 +73,7 @@ func TestGetBytesCapped_capsBody(t *testing.T) {
 
 func TestGetBytes_transportErrorZeroStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
-	srv.Close() // closed server → connection refused
+	srv.Close()
 
 	status, _, err := getBytes(context.Background(), http.DefaultClient, srv.URL)
 	if err == nil {

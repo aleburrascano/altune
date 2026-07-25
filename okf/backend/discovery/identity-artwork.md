@@ -19,3 +19,5 @@ Artwork resolution consumes this identity. The service-side port is `ports.Taggi
 The artwork port precedence (identity-first resolvers tried before any name-based one, `ArtworkCache.Set`'s confidence guard, `MBIDIndex` being cache-only, `IdentityStore` keyed on provider ids and never names) is recorded in `internal/discovery/CLAUDE.md`; the Go files carry no comments.
 
 A name-searched image must never masquerade as identity: when MusicBrainz did not answer, the durable `IdentityStore` supplies the identity instead of a name gamble (the console reads `durable-identity`), and there is no same-name fallback — a placeholder is correct where a stranger's face frozen as identity is not.
+
+On the persistence side, an xref upsert merges rather than replaces: writing a narrow `{deezer}` xref must not erase `{spotify, discogs}` edges an earlier write learned. A lookup failure degrades to a miss and never breaks the search path.

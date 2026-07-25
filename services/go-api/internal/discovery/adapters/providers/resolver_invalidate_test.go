@@ -5,10 +5,6 @@ import (
 	"time"
 )
 
-// A stale invalidate — a second 401 handler racing the first — must not wipe
-// the fresh credential the first re-resolve just cached (invalidate storm);
-// only the credential the caller actually failed with is dropped.
-
 func TestClientIDResolver_staleInvalidateNoops(t *testing.T) {
 	r := &clientIDResolver{cached: "fresh"}
 	r.invalidate("stale")

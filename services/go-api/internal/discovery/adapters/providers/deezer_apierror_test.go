@@ -10,9 +10,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// deezerQuotaErrorJSON is Deezer's in-band error envelope: quota exhaustion
-// rides on HTTP 200, so without the envelope check it decodes as an empty
-// success and the provider looks healthy while dead.
 const deezerQuotaErrorJSON = `{"error":{"type":"Exception","message":"Quota limit exceeded","code":4}}`
 
 func TestDeezerAdapter_Search_QuotaErrorBodySurfaces(t *testing.T) {

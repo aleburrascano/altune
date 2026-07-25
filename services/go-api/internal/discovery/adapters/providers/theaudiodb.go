@@ -53,13 +53,8 @@ func (a *TheAudioDBAdapter) Search(ctx context.Context, query string, kinds map[
 	return results, nil
 }
 
-// Resolve implements ArtworkResolver — searches TheAudioDB for album/artist covers.
 func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
 	if kind == domain.ResultKindArtist {
-		// Prefer the deterministic MBID lookup over name-fuzzing when the caller
-		// supplies an mbid — the free key's 1-result name search is ambiguous, but
-		// artist-mb.php?i={mbid} resolves by identity. (artist-mb.php confirmed on
-		// the free key, 2026-06-22.)
 		if mbid != "" {
 			if art := a.artistThumbByMBID(ctx, mbid); art != "" {
 				return art, nil
@@ -95,8 +90,6 @@ func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind,
 	return "", nil
 }
 
-// artistThumbByMBID resolves an artist's thumbnail by MusicBrainz id via
-// artist-mb.php — identity-keyed, no name fuzzing or 1-result-cap ambiguity.
 func (a *TheAudioDBAdapter) artistThumbByMBID(ctx context.Context, mbid string) string {
 	u := fmt.Sprintf("https://theaudiodb.com/api/v1/json/523532/artist-mb.php?i=%s", url.QueryEscape(mbid))
 	var body struct {

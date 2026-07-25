@@ -1,22 +1,5 @@
 package providers
 
-// Provider contract tests.
-//
-// Each golden in testdata/contract_<provider>_<kind>.json pins the wire shape
-// an adapter depends on, and each case decodes it through the adapter's real
-// parse/map path (httptest server, exactly like the unit tests) and asserts
-// the REQUIRED fields that merge/rank/identity actually consume are non-zero
-// on the mapped domain.SearchResult. This catches the silent failure mode
-// where a provider renames or drops a response field: the adapter still
-// decodes cleanly, the consumed field goes zero, and merge/rank quietly
-// shifts with no error anywhere.
-//
-// When a provider changes its API, refresh the golden from a live capture
-// (curl the real endpoint) and the required-field assertions say exactly
-// which consumed fields broke. The nightly eval (live providers) is the
-// drift detector; these tests make the field-level dependency explicit and
-// fail loudly in CI.
-
 import (
 	"net/http"
 	"net/http/httptest"
@@ -36,11 +19,9 @@ func artistKinds() map[domain.ResultKind]bool {
 }
 
 type providerContract struct {
-	name   string
-	golden string
-	// search runs the adapter's real Search against srv, which replays the golden.
-	search func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error)
-	// required asserts every consumed field survived the parse/map path.
+	name     string
+	golden   string
+	search   func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error)
 	required func(t *testing.T, r domain.SearchResult)
 }
 

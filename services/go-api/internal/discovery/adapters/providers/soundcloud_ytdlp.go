@@ -14,8 +14,6 @@ import (
 
 func (a *SoundCloudAdapter) SearchTimeout() time.Duration { return 5 * time.Second }
 
-// SoundCloudAdapter uses yt-dlp CLI subprocess for SoundCloud search
-// since the Python library API is not available in Go.
 type SoundCloudAdapter struct{}
 
 func NewSoundCloudAdapter() *SoundCloudAdapter {

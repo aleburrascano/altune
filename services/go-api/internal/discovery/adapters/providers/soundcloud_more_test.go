@@ -103,7 +103,7 @@ func TestSoundCloudAPIAdapter_ResolvePermalink_reResolvesClientIDOnAuth(t *testi
 			}
 			staleHits++
 			w.WriteHeader(http.StatusUnauthorized)
-		default: // homepage scrape for the re-resolve
+		default:
 			resolveHits++
 			_, _ = w.Write([]byte(`<script src="` + srv.URL + `/assets/app-1.js"></script>`))
 		}
@@ -149,7 +149,6 @@ func TestSoundCloud_doSearch_capsAtMaxResults(t *testing.T) {
 			items[i] = fmt.Sprintf(`{"id": %d, "kind": "track", "title": "T%d", "user": {"username": "U"}}`,
 				pages*1000+i, i)
 		}
-		// next_href always present — the cap, not the server, must stop the walk.
 		_, _ = w.Write([]byte(`{"collection":[` + strings.Join(items, ",") + `],"next_href":"` +
 			srv.URL + `/search/tracks?offset=next"}`))
 	}))
@@ -170,7 +169,7 @@ func TestSoundCloud_doSearch_capsAtMaxResults(t *testing.T) {
 
 func TestSCBestReleaseDate(t *testing.T) {
 	tests := []struct {
-		name                               string
+		name                            string
 		release, display, created, want string
 	}{
 		{"release wins", "2020-01-01", "2020-02-02", "2020-03-03", "2020-01-01"},
@@ -192,7 +191,7 @@ func TestMapSoundCloudStandaloneSingle(t *testing.T) {
 		ID: 99, Kind: "track", Title: "14 HAHAHA LOL",
 		Genre:       "rage",
 		DisplayDate: "2026-07-20T00:00:00Z",
-		User:        struct {
+		User: struct {
 			Username string `json:"username"`
 		}{Username: "Che"},
 	})

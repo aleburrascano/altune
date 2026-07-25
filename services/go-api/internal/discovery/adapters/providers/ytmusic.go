@@ -13,20 +13,12 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// ytmusicTimeout bounds every YouTube Music call. The keyless internal endpoint
-// has no SLA, so a slow/hung request must not block a search indefinitely.
 const ytmusicTimeout = 8 * time.Second
 
-// ytmHTTPClient builds the timeout-bounded client the adapter and the artwork
-// resolver share-shape. transport is injected (nil → default transport) so the
-// deterministic eval can record/replay YouTube Music like every other provider.
 func ytmHTTPClient(transport http.RoundTripper) *http.Client {
 	return &http.Client{Timeout: ytmusicTimeout, Transport: transport}
 }
 
-// ytmSearchRetry runs a search with one retry on a transient error — notably the
-// intermittent HTTP 403 rate-limit, whose HTML body surfaces as a JSON decode
-// error — while respecting the caller's context.
 func ytmSearchRetry(ctx context.Context, client *http.Client, query string, filter ytmFilter) (*ytmResult, error) {
 	const attempts = 2
 	var lastErr error
@@ -54,18 +46,12 @@ type YouTubeMusicAdapter struct {
 	client *http.Client
 }
 
-// NewYouTubeMusicAdapter builds the YouTube Music search adapter. transport is
-// injected into the adapter's own HTTP client (nil → default transport), so
-// offline tooling can record/replay YouTube Music like every other provider.
 func NewYouTubeMusicAdapter(transport http.RoundTripper) *YouTubeMusicAdapter {
 	return &YouTubeMusicAdapter{client: ytmHTTPClient(transport)}
 }
 
 func (a *YouTubeMusicAdapter) Name() domain.ProviderName { return domain.ProviderYouTube }
 
-// SearchTimeout gives YouTube Music a larger budget than the default fan-out
-// timeout so the adapter has room to retry the intermittent rate-limit (HTTP
-// 403) it returns under bursty load.
 func (a *YouTubeMusicAdapter) SearchTimeout() time.Duration { return 3 * time.Second }
 
 func (a *YouTubeMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
@@ -88,13 +74,6 @@ func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds ma
 		for _, t := range result.Tracks {
 			results = append(results, mapYTMusicTrack(t))
 		}
-		// AIDEV-NOTE: Coverage fix (plan 003 U6, Pattern C). YouTube Music
-		// classifies many obscure/underground recordings as videos
-		// (MUSIC_VIDEO_TYPE_OMV/UGC), which our parser routes to result.Videos —
-		// not result.Tracks. Dropping them left the exact track absent from the
-		// candidate set, so the ranker substituted the artist's hit. Mapping
-		// videos as tracks recovers the recording; the categorical merge dedups
-		// any video that duplicates an official track.
 		for _, v := range result.Videos {
 			results = append(results, mapYTMusicVideo(v))
 		}
@@ -113,13 +92,6 @@ func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds ma
 	return results, nil
 }
 
-// GetArtistAlbums is a BY-NAME fetch (a YTM search filtered to exact artist-name
-// matches) consumed only by the album consensus union (BuildConsensusProviders),
-// where by-name gathering is the design. AIDEV-WARNING: never wire this into the
-// detail content fan-out's artistProviders map — that path is id-keyed
-// (fanOutByIdentity would pass a browseId here, which this method would treat as
-// a search query), and a name-keyed provider in the id fan-out re-opens the
-// same-name contamination vector the identity-first path exists to close.
 func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
 	result, err := ytmSearchRetry(ctx, a.client, artistName, ytmAlbumFilter)
 	if err != nil {
@@ -151,7 +123,6 @@ func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.Prov
 	return results, nil
 }
 
-
 func mapYTMusicTrack(t *ytmTrack) domain.SearchResult {
 	var subtitle string
 	if len(t.Artists) > 0 {
@@ -169,7 +140,7 @@ func mapYTMusicTrack(t *ytmTrack) domain.SearchResult {
 		extras["album"] = t.Album.Name
 	}
 	if t.IsExplicit {
-		extras["explicit"] = true // parsed by ytmHasExplicitBadge; previously dropped
+		extras["explicit"] = true
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Title, subtitle, imageURL,
@@ -180,9 +151,6 @@ func mapYTMusicTrack(t *ytmTrack) domain.SearchResult {
 	return r
 }
 
-// mapYTMusicVideo maps a YouTube Music video result to a track. Used by the
-// Pattern-C coverage fix: obscure recordings YT Music classifies as videos are
-// still the playable track the user wants.
 func mapYTMusicVideo(v *ytmVideo) domain.SearchResult {
 	var subtitle string
 	if len(v.Artists) > 0 {
@@ -218,53 +186,30 @@ func mapYTMusicAlbum(a *ytmAlbum) domain.SearchResult {
 		extras["record_type"] = a.Type
 	}
 	if a.IsExplicit {
-		extras["explicit"] = true // parsed by ytmHasExplicitBadge; previously dropped
+		extras["explicit"] = true
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, subtitle, imageURL,
 		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: a.BrowseID, URL: "https://music.youtube.com/browse/" + a.BrowseID},
 		extras)
-	// YT Music carries the year as a display string; parse it into the typed field.
 	if y, err := strconv.Atoi(strings.TrimSpace(a.Year)); err == nil && y > 0 {
 		r.Year = y
 	}
 	return r
 }
 
-// ytArtworkHeroSize is the square dimension the artist-artwork hero is resized
-// to. YouTube Music thumbnails are URL-resizable (the `=wN-hN` suffix); the raw
-// master (`=s0`) can be many MB (an artist photo probed at 13.9MB), so 1000px is
-// the hero sweet spot (~130KB, live-verified) — comfortably above Deezer's 1000
-// and Discogs's 600 artist fallbacks.
 const ytArtworkHeroSize = 1000
 
-// ytThumbSizeRe matches the `w<digits>-h<digits>` segment of a Google-hosted
-// YouTube Music thumbnail URL, preserving any trailing crop flags (e.g. the
-// artist `-p-` smart-crop) when rewritten.
 var ytThumbSizeRe = regexp.MustCompile(`w\d+-h\d+`)
 
-// YouTubeMusicArtworkResolver resolves artist artwork from the keyless YouTube
-// Music internal API. It earns its place in the chain because (a) iTunes — our
-// highest-res keyless artwork source — carries no artist images at all, and
-// (b) the official YouTube Data API resolver is key-gated and quota-crippled
-// (search.list costs 100 of 10k daily units → ~100 lookups/day). The internal
-// API returns real, high-res artist photos with no key and no quota.
-//
-// AIDEV-NOTE: artist-only by design. Album/track artwork is already well covered
-// by the ID-keyed sources (CAA 1200 / Deezer 1000 / iTunes 1500-from-3000); YT
-// Music adds no album ceiling above those, only artist images they lack.
 type YouTubeMusicArtworkResolver struct {
 	client *http.Client
 }
 
-// NewYouTubeMusicArtworkResolver builds the keyless YouTube Music artist-artwork
-// resolver. transport is injected into the resolver's own HTTP client (nil →
-// default transport).
 func NewYouTubeMusicArtworkResolver(transport http.RoundTripper) *YouTubeMusicArtworkResolver {
 	return &YouTubeMusicArtworkResolver{client: ytmHTTPClient(transport)}
 }
 
-// Resolve returns a high-res artist image URL, or "" so the chain falls through.
 func (a *YouTubeMusicArtworkResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
 	if kind != domain.ResultKindArtist || title == "" {
 		return "", nil
@@ -280,11 +225,6 @@ func (a *YouTubeMusicArtworkResolver) Resolve(ctx context.Context, kind domain.R
 	return url, nil
 }
 
-// pickArtistArtwork chooses the best artist image from a search result and
-// rewrites it to `size`. It prefers an exact (case-insensitive) name match to
-// avoid wrong-artist images, falling back to the top result — which the caller
-// searched by this exact name, so a name-matched photo beats no photo (the
-// chain's fallback philosophy). Pure (no network) for testability.
 func pickArtistArtwork(artists []*ytmArtistItem, name string, size int) string {
 	var fallback string
 	for _, artist := range artists {
@@ -305,8 +245,6 @@ func pickArtistArtwork(artists []*ytmArtistItem, name string, size int) string {
 	return resizeYTThumbnail(fallback, size)
 }
 
-// largestYTThumbnail returns the URL of the highest-resolution thumbnail (the
-// API orders them ascending by size).
 func largestYTThumbnail(thumbs []ytmThumbnail) string {
 	if len(thumbs) == 0 {
 		return ""
@@ -314,9 +252,6 @@ func largestYTThumbnail(thumbs []ytmThumbnail) string {
 	return thumbs[len(thumbs)-1].URL
 }
 
-// resizeYTThumbnail rewrites a YouTube Music thumbnail URL to a square `size`,
-// preserving any crop flags. Returns the URL unchanged if it carries no
-// recognizable `wN-hN` size segment.
 func resizeYTThumbnail(url string, size int) string {
 	if !ytThumbSizeRe.MatchString(url) {
 		return url

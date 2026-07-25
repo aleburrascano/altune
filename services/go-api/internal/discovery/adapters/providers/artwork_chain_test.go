@@ -8,7 +8,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// fakeArtworkResolver is a fake implementing ports.ArtworkResolver for chain tests.
 type fakeArtworkResolver struct {
 	url string
 	err error
@@ -77,8 +76,6 @@ func TestChainedArtworkResolver_NoResolvers(t *testing.T) {
 }
 
 func TestChainedArtworkResolver_SkipsDeezerPlaceholder(t *testing.T) {
-	// IsDeezerPlaceholder filters URLs that are Deezer's placeholder images.
-	// The chain should skip those and try the next resolver.
 	chain := NewChainedArtworkResolver(
 		&fakeArtworkResolver{url: "https://e-cdns-images.dzcdn.net/images/artist//500x500-000000-80-0-0.jpg", err: nil},
 		&fakeArtworkResolver{url: "https://images.example.com/real.jpg", err: nil},

@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// fakeMetadataEnricher stands in for the MusicBrainz adapter.
 type fakeMetadataEnricher struct {
 	enrichment discdomain.MBEnrichment
 }

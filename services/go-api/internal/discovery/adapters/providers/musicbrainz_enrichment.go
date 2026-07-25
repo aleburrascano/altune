@@ -12,17 +12,8 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// AIDEV-NOTE: MusicBrainz enrichment surface (docs/specs/musicbrainz-enrichment).
-// The inc= lookup + name resolution that the detail-open EnrichmentService
-// drives. Endpoint shapes live-probed 2026-06-22 (docs/providers/musicbrainz.md
-// §4). Off the ranking path — display-only.
-
 var _ ports.MetadataEnricher = (*MusicBrainzAdapter)(nil)
 
-// Lookup fetches MusicBrainz enrichment for a known MBID. Artist and album
-// (release-group) are the v1 surface; any other kind returns empty (track rich
-// detail is deferred — see spec Out of scope). A non-200 (incl. a 404 on a
-// stale MBID) returns an error so the service can degrade it to empty.
 func (a *MusicBrainzAdapter) Lookup(ctx context.Context, kind domain.ResultKind, mbid string) (domain.MBEnrichment, error) {
 	if mbid == "" {
 		return domain.EmptyEnrichment(), nil
@@ -72,11 +63,6 @@ func (a *MusicBrainzAdapter) Lookup(ctx context.Context, kind domain.ResultKind,
 	}
 }
 
-// ResolveMBID maps a (kind, title, subtitle) to an MBID via a strict normalized
-// match: the first search candidate whose normalized title equals the query
-// title and — when subtitle is non-empty and the kind is not artist — whose
-// normalized primary artist-credit equals the subtitle. No match returns "" (the
-// service treats that as "nothing to enrich"), never a fuzzy guess.
 func (a *MusicBrainzAdapter) ResolveMBID(ctx context.Context, kind domain.ResultKind, title, subtitle string) (string, error) {
 	titleNorm := textnorm.NormalizeForMatch(title)
 	if titleNorm == "" {
@@ -134,8 +120,6 @@ func (a *MusicBrainzAdapter) ResolveMBID(ctx context.Context, kind domain.Result
 	}
 }
 
-// creditMatches reports whether the first artist-credit's normalized name equals
-// the wanted (already normalized) subtitle.
 func creditMatches(credit []mbArtistRef, wantNorm string) bool {
 	if len(credit) == 0 {
 		return false
@@ -143,8 +127,6 @@ func creditMatches(credit []mbArtistRef, wantNorm string) bool {
 	return textnorm.NormalizeForMatch(credit[0].Name) == wantNorm
 }
 
-// sortedGenres dedups MB genres and orders them by vote count descending, ties
-// broken alphabetically — deterministic so tests and the UI agree on order.
 func sortedGenres(genres []mbGenre) []string {
 	if len(genres) == 0 {
 		return []string{}
@@ -182,17 +164,6 @@ func sortedGenres(genres []mbGenre) []string {
 	return out
 }
 
-// externalIDsFromRelations extracts the cross-provider id bridge from MB
-// url-relations: Discogs, Wikidata, and SoundCloud by relation type, Spotify/
-// Deezer/Apple by the host behind a streaming/purchase relation. Value is the
-// bare id (last non-empty path segment; for SoundCloud that is the profile
-// handle, not a numeric id). First occurrence per provider wins; keys lowercase.
-//
-// The "itunes" key is the Apple Music artist id, which is the SAME value the
-// iTunes Search API returns as artistId (live-verified: MB rel
-// music.apple.com/.../5468295 == iTunes artistId 5468295). It keys directly to
-// ProviderITunes, so the merge bridge resolves iTunes results to the MB identity
-// — unlike the legacy amgArtistId, which is a different (numeric AMG) id-space.
 func externalIDsFromRelations(relations []mbRelation) map[string]string {
 	ids := map[string]string{}
 	put := func(key, raw string) {
@@ -214,12 +185,6 @@ func externalIDsFromRelations(relations []mbRelation) map[string]string {
 		case "wikidata":
 			put("wikidata", res)
 		case "soundcloud":
-			// The value is the profile HANDLE (soundcloud.com/che → "che"), not the
-			// numeric user id the content API needs; the SoundCloud adapter resolves
-			// handle→id on use. This is the authoritative SC identity (from the
-			// MBID's own url-relations), so SoundCloud joins the id fan-out verified
-			// instead of being name-guessed — its underground-exclusive uploads then
-			// reach the discography.
 			put("soundcloud", res)
 		case "free streaming", "streaming", "purchase for download":
 			switch {
@@ -235,8 +200,6 @@ func externalIDsFromRelations(relations []mbRelation) map[string]string {
 	return ids
 }
 
-// lastPathSegment returns the final non-empty path segment of a URL (the bare id
-// in "https://www.deezer.com/artist/525046" → "525046").
 func lastPathSegment(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -251,8 +214,6 @@ func lastPathSegment(raw string) string {
 	}
 	return p
 }
-
-// --- enrichment lookup response shapes (verified 2026-06-22) ---
 
 type mbGenre struct {
 	Name  string `json:"name"`

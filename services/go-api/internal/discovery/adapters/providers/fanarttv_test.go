@@ -28,7 +28,6 @@ func TestFanartTvArtworkResolver_Resolve_ArtistThumb(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
 	}
-	// artistthumb takes priority over artistbackground for artist kind
 	if url != "https://assets.fanart.tv/fanart/music/artist-thumb.jpg" {
 		t.Errorf("resolve URL: got %q, want artistthumb URL", url)
 	}
@@ -37,7 +36,6 @@ func TestFanartTvArtworkResolver_Resolve_ArtistThumb(t *testing.T) {
 func TestFanartTvArtworkResolver_Resolve_ArtistBackground_Fallback(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// No artistthumb, only artistbackground
 		w.Write([]byte(`{
 			"artistbackground": [
 				{"url": "https://assets.fanart.tv/fanart/music/artist-bg.jpg"}
@@ -57,9 +55,6 @@ func TestFanartTvArtworkResolver_Resolve_ArtistBackground_Fallback(t *testing.T)
 }
 
 func TestFanartTvArtworkResolver_Resolve_AlbumCover(t *testing.T) {
-	// Shape + endpoint captured from the live API (probed 2026-06-21): album art
-	// comes from /v3/music/albums/{mbid}, nested under albums[mbid].albumcover —
-	// not a top-level "albumcover" key (the prior fixture was fabricated).
 	const rgMbid = "01134202-7978-441c-a67b-f5f30c143204"
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -14,7 +14,7 @@ func TestExtractMBFeatured(t *testing.T) {
 	tests := []struct {
 		name    string
 		credits []mbArtistRef
-		want    []string // expected featured names, in order
+		want    []string
 	}{
 		{
 			name:    "no featured — solo",

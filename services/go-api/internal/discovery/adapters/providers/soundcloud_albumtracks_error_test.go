@@ -11,10 +11,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// A transient playlist-fetch failure (5xx/timeout) must propagate — falling
-// through to the overlapping track-id namespace would resolve an unrelated
-// single-track "tracklist". Only a definitive 404 may fall through (covered by
-// TestSoundCloud_GetAlbumTracks_playlistAndSingle).
 func TestSoundCloud_GetAlbumTracks_transientPlaylistErrorPropagates(t *testing.T) {
 	var trackFetches atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,8 +36,6 @@ func TestSoundCloud_GetAlbumTracks_transientPlaylistErrorPropagates(t *testing.T
 	}
 }
 
-// A server that keeps returning empty pages with a next_href must not spin
-// until the ctx deadline — the page counter caps the walk.
 func TestSoundCloud_doSearch_capsEmptyPageWalk(t *testing.T) {
 	var requests atomic.Int64
 	var srvURL string

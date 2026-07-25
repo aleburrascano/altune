@@ -138,7 +138,6 @@ func TestTheAudioDBAdapter_Resolve_Album(t *testing.T) {
 	defer server.Close()
 
 	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
-	// Resolve for album: title is album name, subtitle is artist
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)

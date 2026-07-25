@@ -9,10 +9,6 @@ import (
 	"testing"
 )
 
-// deezerLyricsServer routes the three hosts the lyrics path touches — the public
-// search (track-id resolve), the anonymous-JWT bootstrap, and the pipe GraphQL —
-// to canned bodies. redirectTransport rewrites every host to this server, so the
-// adapter's hard-coded auth/pipe URLs land here and route by path.
 func deezerLyricsServer(jwtHits, pipeHits *int32) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -66,7 +62,6 @@ func TestDeezerLyricsAdapter_ResolveAndLookup(t *testing.T) {
 	if len(lyrics.Writers) != 2 || lyrics.Writers[0] != "Adele Laurie Blue Adkins" {
 		t.Errorf("Writers: got %v", lyrics.Writers)
 	}
-	// The empty trailing separator line must be dropped.
 	if len(lyrics.SyncedLines) != 2 {
 		t.Fatalf("SyncedLines: got %d, want 2", len(lyrics.SyncedLines))
 	}
@@ -97,7 +92,6 @@ func TestDeezerLyricsAdapter_JWTCachedAcrossLookups(t *testing.T) {
 
 func TestDeezerLyricsAdapter_SelfHealsOn401(t *testing.T) {
 	var pipeHits int32
-	// The first stale JWT is rejected; after re-bootstrap the second succeeds.
 	tokens := []string{"stale-jwt", "fresh-jwt"}
 	var jwtIdx int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +133,6 @@ func TestDeezerLyricsAdapter_NoLyricsIsEmptyNotError(t *testing.T) {
 		case "/login/anonymous":
 			w.Write([]byte(`{"jwt":"anon-test-jwt"}`))
 		case "/api":
-			// LyricsNotFoundError — structured GraphQL error, null lyrics.
 			w.Write([]byte(`{"data":{"track":{"id":"1","lyrics":null}},"errors":[{"message":"LyricsNotFoundError"}]}`))
 		default:
 			http.NotFound(w, r)

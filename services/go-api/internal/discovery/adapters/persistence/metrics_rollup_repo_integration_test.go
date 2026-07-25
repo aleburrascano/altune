@@ -13,9 +13,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// The rollup is tested on a synthetic day far in the past so the aggregate
-// window can't be polluted by real dev-DB events (which all carry recent
-// occurred_at) or by the other event tests in this package.
 var rollupTestDay = time.Date(2001, 2, 3, 0, 0, 0, 0, time.UTC)
 
 func TestPgxMetricsRollup_RollupDay_ComputesAndIsIdempotent(t *testing.T) {
@@ -42,10 +39,6 @@ func TestPgxMetricsRollup_RollupDay_ComputesAndIsIdempotent(t *testing.T) {
 		}
 	}
 
-	// 4 searches in the day: 1 zero-result, 1 poisoned zero_result (string) and
-	// 1 poisoned tail_noise_top5 (string) that must be SKIPPED not fatal, plus
-	// tail values 2 and 4 (avg 3.0). Distinct clicked search_ids: 2 (one search
-	// clicked twice must count once).
 	s1, s2 := uuid.New().String(), uuid.New().String()
 	append_(domain.EventTypeSearchPerformed, s1,
 		map[string]any{"zero_result": true, "tail_noise_top5": 2}, 1*time.Hour)
@@ -56,10 +49,9 @@ func TestPgxMetricsRollup_RollupDay_ComputesAndIsIdempotent(t *testing.T) {
 	append_(domain.EventTypeSearchPerformed, uuid.New().String(), nil, 4*time.Hour)
 
 	append_(domain.EventTypeResultClicked, s1, nil, 1*time.Hour+time.Minute)
-	append_(domain.EventTypeResultClicked, s1, nil, 1*time.Hour+2*time.Minute) // same search: counts once
+	append_(domain.EventTypeResultClicked, s1, nil, 1*time.Hour+2*time.Minute)
 	append_(domain.EventTypeResultClicked, s2, nil, 2*time.Hour+time.Minute)
 
-	// An event just OUTSIDE the day must not leak into the window.
 	append_(domain.EventTypeSearchPerformed, uuid.New().String(),
 		map[string]any{"zero_result": true}, 24*time.Hour)
 
@@ -90,9 +82,9 @@ func TestPgxMetricsRollup_RollupDay_ComputesAndIsIdempotent(t *testing.T) {
 	got := readMetrics(t)
 	want := map[string]float64{
 		"searches":            4,
-		"zero_result_rate":    0.25, // 1 boolean-true of 4 (poisoned string skipped)
-		"ctr":                 0.5,  // 2 distinct clicked searches of 4
-		"tail_noise_top5_avg": 3,    // avg(2, 4); poisoned string skipped
+		"zero_result_rate":    0.25,
+		"ctr":                 0.5,
+		"tail_noise_top5_avg": 3,
 	}
 	for metric, wantV := range want {
 		gotV, ok := got[metric]
@@ -105,8 +97,6 @@ func TestPgxMetricsRollup_RollupDay_ComputesAndIsIdempotent(t *testing.T) {
 		}
 	}
 
-	// Idempotent re-run: same day again → still exactly 4 rows, same values
-	// (ON CONFLICT upserts, never duplicates).
 	if err := rollup.RollupDay(ctx, rollupTestDay); err != nil {
 		t.Fatalf("RollupDay re-run: %v", err)
 	}
@@ -162,7 +152,6 @@ func TestPgxMetricsRollup_MetricsHistory_NewestFirstAndLimited(t *testing.T) {
 		t.Errorf("as_of order: %v then %v, want descending", points[0].AsOf, points[1].AsOf)
 	}
 
-	// An unknown metric is an empty history, not an error.
 	empty, err := rollup.MetricsHistory(ctx, "qa_never_written_"+uuid.New().String()[:8], 7)
 	if err != nil {
 		t.Fatalf("MetricsHistory(unknown): %v", err)

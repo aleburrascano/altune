@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// newNoFollowTestClient redirects requests to the test server WITHOUT following
-// redirects, so the resolver's own 30x handling is what's under test.
 func newNoFollowTestClient(serverURL string) *http.Client {
 	return &http.Client{
 		Transport: &redirectTransport{targetURL: serverURL},

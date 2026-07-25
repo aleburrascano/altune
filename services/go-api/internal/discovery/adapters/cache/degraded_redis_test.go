@@ -11,9 +11,6 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// unreachableRedisClient returns a real client pointed at a dead address, so
-// every command fails fast — the "Redis is down" degradation path, distinct
-// from the nil-client "Redis not configured" path.
 func unreachableRedisClient(t *testing.T) *goredis.Client {
 	t.Helper()
 	client := goredis.NewClient(&goredis.Options{
@@ -21,7 +18,7 @@ func unreachableRedisClient(t *testing.T) *goredis.Client {
 		DialTimeout:     200 * time.Millisecond,
 		ReadTimeout:     200 * time.Millisecond,
 		WriteTimeout:    200 * time.Millisecond,
-		MaxRetries:      -1, // fail immediately, no backoff
+		MaxRetries:      -1,
 		PoolTimeout:     200 * time.Millisecond,
 		MinRetryBackoff: -1,
 		MaxRetryBackoff: -1,
@@ -29,8 +26,6 @@ func unreachableRedisClient(t *testing.T) *goredis.Client {
 	t.Cleanup(func() { client.Close() })
 	return client
 }
-
-// --- nil client: Redis not configured — every method must no-op cleanly ------
 
 func TestRedisArtworkCache_NilClient_NoOps(t *testing.T) {
 	c := NewRedisArtworkCache(nil)
@@ -52,7 +47,6 @@ func TestRedisResultCache_NilClient_NoOps(t *testing.T) {
 	if got, hit := c.Get(ctx, "key"); hit || got != nil {
 		t.Errorf("nil-client Get = (%v,%v), want clean miss", got, hit)
 	}
-	// Set must be a silent no-op (it has no error return to begin with).
 	c.Set(ctx, "key", []domain.SearchResult{{Title: "x"}})
 	if _, hit := c.Get(ctx, "key"); hit {
 		t.Error("nil-client Set cached something, want no-op")
@@ -99,8 +93,6 @@ func TestRedisIdentityStore_NilClient_DelegatesToInner(t *testing.T) {
 		t.Errorf("durable lookup calls = %d, want 1", inner.lookupCalls)
 	}
 }
-
-// --- unreachable Redis: reads degrade to a miss (or the durable tier) --------
 
 func TestCaches_UnreachableRedis_ReadsDegrade(t *testing.T) {
 	client := unreachableRedisClient(t)
@@ -158,15 +150,11 @@ func TestCaches_UnreachableRedis_ReadsDegrade(t *testing.T) {
 	})
 }
 
-// --- key-namespace isolation across the name-keyed constructors --------------
-
-// Two different providers caching under the same name key must never collide:
-// a Deezer entry read back as a Last.fm entry would be silent data corruption.
 func TestNameKeyedCacheConstructors_DistinctPrefixes(t *testing.T) {
 	prefixes := map[string][2]string{
-		"deezer":        {NewRedisDeezerEnrichmentCache(nil).posPrefix, NewRedisDeezerEnrichmentCache(nil).negPrefix},
-		"lastfm":        {NewRedisLastFmEnrichmentCache(nil).posPrefix, NewRedisLastFmEnrichmentCache(nil).negPrefix},
-		"lyrics":        {NewRedisDeezerLyricsCache(nil).posPrefix, NewRedisDeezerLyricsCache(nil).negPrefix},
+		"deezer": {NewRedisDeezerEnrichmentCache(nil).posPrefix, NewRedisDeezerEnrichmentCache(nil).negPrefix},
+		"lastfm": {NewRedisLastFmEnrichmentCache(nil).posPrefix, NewRedisLastFmEnrichmentCache(nil).negPrefix},
+		"lyrics": {NewRedisDeezerLyricsCache(nil).posPrefix, NewRedisDeezerLyricsCache(nil).negPrefix},
 	}
 	seen := map[string]string{}
 	for name, pair := range prefixes {
@@ -184,13 +172,10 @@ func TestNameKeyedCacheConstructors_DistinctPrefixes(t *testing.T) {
 		}
 	}
 
-	// Lyrics are static content: their positive TTL must exceed the default
-	// name-keyed TTL, or the "cache lyrics long" intent has silently regressed.
 	if got := NewRedisDeezerLyricsCache(nil).posTTL; got <= nameKeyedPositiveTTL {
 		t.Errorf("lyrics posTTL = %v, want > default %v", got, nameKeyedPositiveTTL)
 	}
 
-	// The exported generic constructor must honor its arguments verbatim.
 	g := NewRedisNameKeyedCache(nil, "pos:", "neg:", time.Hour, time.Minute, func() int { return 7 })
 	if g.posPrefix != "pos:" || g.negPrefix != "neg:" || g.posTTL != time.Hour || g.negTTL != time.Minute {
 		t.Errorf("generic constructor mangled its config: %+v", g)
@@ -200,10 +185,6 @@ func TestNameKeyedCacheConstructors_DistinctPrefixes(t *testing.T) {
 	}
 }
 
-// --- shared fake --------------------------------------------------------------
-
-// recordingIdentityStore is a configurable durable-store fake that counts calls
-// so the cache tier's read-through/write-through behavior is observable.
 type recordingIdentityStore struct {
 	mbid  string
 	xref  map[string]string

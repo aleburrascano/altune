@@ -11,9 +11,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// mbServer stands up an httptest server that routes MB ws/2 paths to canned
-// bodies, and returns an adapter pointed at it. The adapter's base URL is
-// hardcoded to musicbrainz.org, so we rewrite the transport to redirect there.
 func mbServer(t *testing.T, handler http.HandlerFunc) *MusicBrainzAdapter {
 	t.Helper()
 	srv := httptest.NewServer(handler)
@@ -21,7 +18,7 @@ func mbServer(t *testing.T, handler http.HandlerFunc) *MusicBrainzAdapter {
 
 	client := &http.Client{
 		Timeout:   2 * time.Second,
-		Transport: &rewriteTransport{base: srv.URL}, // shared with discogs_test.go
+		Transport: &rewriteTransport{base: srv.URL},
 	}
 	return NewMusicBrainzAdapter(client, "AltuneTest/1.0 ( test@altune )")
 }
@@ -94,7 +91,7 @@ func TestMusicBrainzAdapter_Lookup_Artist(t *testing.T) {
 		"spotify":    "2YZyLoL8N0Wb9xBt1NhZWg",
 		"deezer":     "525046",
 		"itunes":     "368183298",
-		"soundcloud": "kendrick-lamar", // profile handle, not a numeric id
+		"soundcloud": "kendrick-lamar",
 	}
 	for k, v := range wantIDs {
 		if e.ExternalIDs[k] != v {

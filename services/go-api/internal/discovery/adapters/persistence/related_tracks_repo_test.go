@@ -9,10 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// seedTrackRow inserts a minimal tracks row (the columns FindRelatedBy* reads,
-// plus the NOT NULL set) and registers cleanup. Discovery touching catalog's
-// tracks table here is the deliberate, documented read coupling (ADR-0012-era
-// review, candidate #2).
 func seedTrackRow(t *testing.T, pool *pgxpool.Pool, userId uuid.UUID, title, artist, album string) {
 	t.Helper()
 	id := uuid.New()
@@ -36,13 +32,10 @@ func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
 
 	userA := uuid.New()
 	userB := uuid.New()
-	// Unique album/artist so assertions are isolated from real dev data.
 	suffix := uuid.New().String()[:8]
 	album := "Relink Album " + suffix
 	artist := "Relink Artist " + suffix
 
-	// Same title+artist across two users must collapse to one row (DISTINCT ON),
-	// and another user's track must surface (the deliberate cross-user read).
 	seedTrackRow(t, pool, userA, "Song One", artist, album)
 	seedTrackRow(t, pool, userB, "Song One", artist, album)
 	seedTrackRow(t, pool, userA, "Song Two", artist, album)

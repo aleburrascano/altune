@@ -15,32 +15,20 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// --- token resolution -------------------------------------------------
-//
-// Apple Music's web player (music.apple.com) embeds a long-lived, anonymous
-// MusicKit developer token directly in its public JS bundle — no Apple
-// Developer Program enrollment needed, unlike the paid MusicKit API most
-// integrators use. This resolver scrapes it the same way SoundCloud's
-// clientIDResolver scrapes its client_id: fetch the page, find the current
-// cache-busted bundle URL, scan it for the token. Confirmed live 2026-07-22:
-// the token's JWT `exp` gives a multi-week validity window (~35 days
-// observed), so this refreshes rarely — far less often than SoundCloud's
-// client_id or Amazon Music's per-session bundle.
-
 const (
 	appleMusicSiteURL = "https://music.apple.com/us/search"
-	appleMusicMaxBody = 8 << 20 // the index bundle is a few MB
+	appleMusicMaxBody = 8 << 20
 )
 
 var (
 	appleMusicBundleRe = regexp.MustCompile(`assets/index~[A-Za-z0-9]+\.js`)
-	appleMusicJWTRe     = regexp.MustCompile(`eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)
+	appleMusicJWTRe    = regexp.MustCompile(`eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`)
 )
 
 type appleMusicTokenResolver struct {
 	client        *http.Client
-	siteURL       string // overridable in tests
-	bundleBaseURL string // overridable in tests; the bundle path is same-origin
+	siteURL       string
+	bundleBaseURL string
 	sf            singleflight.Group
 	mu            sync.Mutex
 	cached        string
@@ -70,9 +58,6 @@ func (r *appleMusicTokenResolver) get(ctx context.Context) (string, error) {
 		if existing != "" && time.Now().Before(existingExpiry) {
 			return existing, nil
 		}
-		// Detach from the winning caller's ctx so one impatient caller can't
-		// poison the shared resolve for every piggybacked waiter; the resolve
-		// gets its own budget instead.
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), appleMusicResolveTimeout)
 		defer cancel()
 		return r.resolve(rctx)
@@ -83,13 +68,8 @@ func (r *appleMusicTokenResolver) get(ctx context.Context) (string, error) {
 	return v.(string), nil
 }
 
-// appleMusicResolveTimeout bounds one shared token resolve (page + multi-MB
-// bundle scrape) independently of any single caller's deadline.
 const appleMusicResolveTimeout = 20 * time.Second
 
-// invalidate drops the cached token only if it is still the one the caller
-// failed with — a second 401 handler must not wipe the fresh token the first
-// re-resolve just cached (the invalidate-storm case).
 func (r *appleMusicTokenResolver) invalidate(failed string) {
 	r.mu.Lock()
 	if r.cached == failed {
@@ -137,11 +117,6 @@ func (r *appleMusicTokenResolver) fetchText(ctx context.Context, u string) (stri
 	return string(body), nil
 }
 
-// extractAppleMusicToken scans js for embedded JWTs (the bundle carries
-// several, issued to different Apple internal consumers) and returns the one
-// whose payload identifies it as the anonymous web-player token
-// ("AMPWebPlay" — confirmed live to authenticate api.music.apple.com), along
-// with its expiry.
 func extractAppleMusicToken(js string) (token string, expiry time.Time, ok bool) {
 	for _, candidate := range appleMusicJWTRe.FindAllString(js, -1) {
 		parts := strings.Split(candidate, ".")

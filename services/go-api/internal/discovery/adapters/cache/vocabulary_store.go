@@ -16,30 +16,18 @@ import (
 
 const (
 	vocabTermsKey   = "discovery:vocab:v1:terms"
-	// vocabLexKey is a parallel sorted set holding the same members all at score 0,
-	// used only for ZRANGEBYLEX prefix queries. ZRANGEBYLEX is only well-defined
-	// when every member shares one score; vocabTermsKey scores by popularity, so a
-	// dedicated equal-score set is required for correct prefix matching.
 	vocabLexKey     = "discovery:vocab:v1:lex"
 	vocabTriPrefix  = "discovery:vocab:v1:tri:"
 	vocabEntryPfx   = "discovery:vocab:v1:entry:"
 	vocabMetaPrefix = "discovery:vocab:v1:meta:"
 	memberSep       = "\x00"
-	// vocabEntryTTL bounds the per-term JSON blobs (the largest per-term payload),
-	// refreshed on every write so hot terms persist and cold ones reclaim. The
-	// sorted-set + trigram index lifecycle is a separate (structural) concern.
-	vocabEntryTTL = 90 * 24 * time.Hour
+	vocabEntryTTL   = 90 * 24 * time.Hour
 )
 
-// NormalizeFunc normalizes a term for matching. Injected to avoid
-// import cycles between cache and service packages.
 type NormalizeFunc func(string) string
 
-// MetaphoneFunc computes a phonetic key for a term.
 type MetaphoneFunc func(string) string
 
-// RedisVocabularyStore implements ports.VocabularyStore backed by Redis
-// sorted sets and trigram indexes.
 type RedisVocabularyStore struct {
 	client    *goredis.Client
 	normalize NormalizeFunc
@@ -67,7 +55,6 @@ func WithMetaphone(fn MetaphoneFunc) VocabStoreOption {
 	return func(s *RedisVocabularyStore) { s.metaphone = fn }
 }
 
-// Add indexes a single vocabulary entry in Redis.
 func (s *RedisVocabularyStore) Add(ctx context.Context, entry domain.VocabularyEntry) error {
 	if s.client == nil {
 		return nil
@@ -75,7 +62,6 @@ func (s *RedisVocabularyStore) Add(ctx context.Context, entry domain.VocabularyE
 	return s.indexEntry(ctx, entry)
 }
 
-// BulkAdd indexes multiple vocabulary entries using a pipeline.
 func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.VocabularyEntry) error {
 	if s.client == nil || len(entries) == 0 {
 		return nil
@@ -88,8 +74,6 @@ func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.Voc
 	return err
 }
 
-// SuggestByPrefix returns entries whose normalized term starts with prefix,
-// sorted by popularity descending.
 func (s *RedisVocabularyStore) SuggestByPrefix(
 	ctx context.Context,
 	prefix string,
@@ -101,8 +85,6 @@ func (s *RedisVocabularyStore) SuggestByPrefix(
 	return s.prefixSearch(ctx, prefix, limit)
 }
 
-// FindClosest returns entries whose trigram similarity to query is highest,
-// filtered by Levenshtein distance.
 func (s *RedisVocabularyStore) FindClosest(
 	ctx context.Context,
 	query string,
@@ -114,11 +96,6 @@ func (s *RedisVocabularyStore) FindClosest(
 	return s.fuzzySearch(ctx, query, limit)
 }
 
-// Trim bounds the vocabulary to its maxEntries most popular terms, fully evicting
-// the lowest-scored overflow across ALL five key families (terms ZSET, lex ZSET,
-// trigram SETs, entry blobs, metaphone SETs). This is the store's owned retention
-// — the single place that knows the multi-key model, so callers never reach in to
-// prune it. A no-op when the store is nil-backed or already within budget.
 func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
 	if s.client == nil || maxEntries <= 0 {
 		return nil
@@ -131,7 +108,6 @@ func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
 	if overflow <= 0 {
 		return nil
 	}
-	// Lowest-scored members rank first (ascending) — the eviction set.
 	members, err := s.client.ZRange(ctx, vocabTermsKey, 0, int64(overflow-1)).Result()
 	if err != nil {
 		return fmt.Errorf("vocab trim: range: %w", err)
@@ -150,10 +126,6 @@ func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
 	return nil
 }
 
-// queueEvict pipelines the removal of one term from every key family. member is
-// the encoded sorted-set member (norm\x00term\x00kind); norm keys the per-trigram,
-// metaphone, and blob entries. Sharing this keeps "what a vocabulary entry spans"
-// in one place — adding a Delete(termNorm) later is one call to this.
 func (s *RedisVocabularyStore) queueEvict(ctx context.Context, pipe goredis.Pipeliner, norm, member string) {
 	pipe.ZRem(ctx, vocabTermsKey, member)
 	pipe.ZRem(ctx, vocabLexKey, member)
@@ -167,8 +139,6 @@ func (s *RedisVocabularyStore) queueEvict(ctx context.Context, pipe goredis.Pipe
 	}
 	pipe.Del(ctx, vocabEntryPfx+norm)
 }
-
-// --- internal helpers -------------------------------------------------------
 
 func (s *RedisVocabularyStore) buildNorm(e domain.VocabularyEntry) string {
 	if e.TermNorm != "" {
@@ -203,7 +173,6 @@ func addEntryToPipeline(
 		Score:  float64(entry.Popularity),
 		Member: member,
 	})
-	// Mirror the member into the equal-score lex index for correct ZRANGEBYLEX.
 	pipe.ZAdd(ctx, vocabLexKey, goredis.Z{Score: 0, Member: member})
 	entryJSON, _ := json.Marshal(vocabEntryData{
 		Term:       entry.Term,
@@ -222,7 +191,6 @@ func addEntryToPipeline(
 	}
 }
 
-// prefixSearch uses ZRANGEBYLEX for prefix matching, then re-sorts by score.
 func (s *RedisVocabularyStore) prefixSearch(
 	ctx context.Context,
 	prefix string,
@@ -236,12 +204,6 @@ func (s *RedisVocabularyStore) prefixSearch(
 	return s.membersToSortedEntries(ctx, members, limit), nil
 }
 
-// vocabPrefixScanCap bounds how many lex-matched members one prefix query pulls
-// back from Redis. Without it a short prefix ("a") returns the whole vocabulary
-// (O(vocab) transfer + one score lookup per member). The popularity re-sort then
-// runs over this bounded candidate set — a term outside the first cap (in lex
-// order) can't surface, an accepted trade for a bounded suggest path (the
-// caller's limit is ≤10).
 const vocabPrefixScanCap = 200
 
 func (s *RedisVocabularyStore) lexRangeMembers(
@@ -295,9 +257,6 @@ func (s *RedisVocabularyStore) membersToSortedEntries(
 	return entries
 }
 
-// attachScores fills Popularity for every entry with a single ZMSCORE round
-// trip (was one sequential ZSCORE per member — O(candidates) round trips). A
-// member missing from the terms ZSET scores 0.
 func (s *RedisVocabularyStore) attachScores(ctx context.Context, entries []domain.VocabularyEntry) {
 	if len(entries) == 0 {
 		return
@@ -315,8 +274,6 @@ func (s *RedisVocabularyStore) attachScores(ctx context.Context, entries []domai
 	}
 }
 
-// fuzzySearch retrieves candidates via trigram overlap and phonetic match,
-// then scores by Jaccard coefficient with a phonetic confidence floor.
 func (s *RedisVocabularyStore) fuzzySearch(
 	ctx context.Context,
 	query string,
@@ -486,8 +443,6 @@ func (s *RedisVocabularyStore) normalizeTerm(term string) string {
 	return strings.ToLower(term)
 }
 
-// --- encoding / trigrams / Levenshtein --------------------------------------
-
 type vocabEntryData struct {
 	Term       string `json:"term"`
 	Kind       string `json:"kind"`
@@ -506,8 +461,6 @@ func decodeMember(member string) (norm, term, kind string) {
 	return parts[0], parts[1], parts[2]
 }
 
-// trigrams decomposes a string into character trigrams using rune indexing
-// so multi-byte Unicode characters are handled correctly.
 func trigrams(s string) []string {
 	runes := []rune(s)
 	if len(runes) == 0 {
@@ -541,5 +494,3 @@ func maxLevenshtein(query string) int {
 	}
 	return 3
 }
-
-

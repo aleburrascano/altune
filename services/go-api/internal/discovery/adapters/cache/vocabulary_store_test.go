@@ -11,8 +11,6 @@ import (
 
 func lowercaseNorm(s string) string { return strings.ToLower(s) }
 
-// --- unit tests (nil client) ------------------------------------------------
-
 func TestVocabularyStore_NilClient_AddReturnsNil(t *testing.T) {
 	store := NewVocabularyStore(nil, lowercaseNorm)
 	err := store.Add(context.Background(), domain.VocabularyEntry{
@@ -55,8 +53,6 @@ func TestVocabularyStore_NilClient_FindClosestReturnsNil(t *testing.T) {
 	}
 }
 
-// --- trigrams ---------------------------------------------------------------
-
 func TestTrigrams(t *testing.T) {
 	tests := []struct {
 		name string
@@ -78,8 +74,6 @@ func TestTrigrams(t *testing.T) {
 		})
 	}
 }
-
-// --- jaccardCoefficient -----------------------------------------------------
 
 func TestJaccardCoefficient(t *testing.T) {
 	tests := []struct {
@@ -103,8 +97,6 @@ func TestJaccardCoefficient(t *testing.T) {
 	}
 }
 
-// --- encodeMember / decodeMember --------------------------------------------
-
 func TestMemberEncoding(t *testing.T) {
 	norm, term, kind := "megaman", "Megaman", "track"
 	encoded := encodeMember(norm, term, kind)
@@ -121,9 +113,6 @@ func TestDecodeMember_Invalid(t *testing.T) {
 	}
 }
 
-// --- integration tests (require REDIS_URL) ----------------------------------
-
-// vocabAllKeys returns all Redis keys used by a vocabulary entry (for test cleanup).
 func vocabAllKeys(norm string) []string {
 	keys := []string{
 		vocabTermsKey,
@@ -257,15 +246,12 @@ func TestVocabularyStore_EmptyPrefix_ReturnsByPopularity(t *testing.T) {
 	if len(results) < 3 {
 		t.Fatalf("expected at least 3 results, got %d", len(results))
 	}
-	// First result should have highest popularity among our entries
 	foundHigh := false
 	for i, r := range results {
 		if r.Term == "emppophigh" {
 			foundHigh = true
-			// Should appear before emppopmed and emppoplow
 			for j := i + 1; j < len(results); j++ {
 				if results[j].Term == "emppopmed" || results[j].Term == "emppoplow" {
-					// This is expected — higher pop comes first
 				}
 			}
 			break
@@ -327,8 +313,6 @@ func TestVocabularyStore_PrefixResults_SortedByPopularity(t *testing.T) {
 			results[2].Term, results[2].Popularity)
 	}
 }
-
-// --- helpers ----------------------------------------------------------------
 
 func sliceEqual(a, b []string) bool {
 	if a == nil && b == nil {

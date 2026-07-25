@@ -29,10 +29,6 @@ type MusicBrainzAdapter struct {
 	releaseSF    singleflight.Group
 }
 
-// mbMemoTTL bounds how long stable MB lookups (artist identity by name,
-// release-groups by MBID) are reused. Artist metadata and discography change
-// rarely; a few hours removes the repeated per-search / per-detail-open MB
-// round-trips that were timing out under MB's 1 req/s limit.
 const mbMemoTTL = 6 * time.Hour
 
 func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAdapter {
@@ -44,10 +40,6 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAd
 	}
 }
 
-// mbMemo is a small TTL cache for MB lookups whose inputs are stable. Only
-// successful results are stored — errors and timeouts are never cached, so a
-// transient MB failure self-heals on the next call. The working set (a
-// household's artists) is small, so no eviction beyond TTL is needed.
 type mbMemo[V any] struct {
 	mu  sync.RWMutex
 	ttl time.Duration
@@ -80,12 +72,6 @@ func (c *mbMemo[V]) put(key string, v V) {
 	c.mu.Unlock()
 }
 
-// rateLimit enforces MB's 1 req/sec policy. Call before every HTTP request.
-//
-// Each caller reserves a distinct future slot under the lock — lastReq advances
-// by the wait, so N concurrent callers fire 1s apart instead of bunching. The
-// earlier form stamped lastReq at lock-time and slept after unlocking, letting
-// concurrent callers share a baseline and burst together → MB 503s.
 func (a *MusicBrainzAdapter) rateLimit(ctx context.Context) {
 	a.mu.Lock()
 	next := a.lastReq.Add(time.Second)
@@ -98,8 +84,6 @@ func (a *MusicBrainzAdapter) rateLimit(ctx context.Context) {
 	if wait <= 0 {
 		return
 	}
-	// Respect cancellation: a timed-out/cancelled request must not keep sleeping
-	// for its reserved slot — the subsequent HTTP call would fail fast anyway.
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
 	select {
@@ -145,9 +129,6 @@ func (a *MusicBrainzAdapter) SearchStructured(ctx context.Context, artist, track
 	return results, nil
 }
 
-// mbEscapeQuotes backslash-escapes embedded double quotes in a value
-// interpolated into a quoted Lucene term — an unescaped quote in an artist or
-// track name would otherwise break the query syntax.
 func mbEscapeQuotes(s string) string {
 	return strings.ReplaceAll(s, `"`, `\"`)
 }
@@ -244,7 +225,7 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 		r.ISRC = rec.ISRCs[0]
 	}
 	if rec.Length > 0 {
-		r.Duration = rec.Length / 1000 // ms → seconds; was decoded-then-dropped
+		r.Duration = rec.Length / 1000
 		extras["duration"] = r.Duration
 	}
 	return r
@@ -287,15 +268,9 @@ func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
 	}
 
 	var extras map[string]any
-	// MB's primary-type is a clean album/single/ep classification (the detail
-	// screen groups the discography by record_type). Without it, MB-sourced
-	// singles and EPs — a big share of the completeness spine — all fell into the
-	// Albums row.
 	if pt := strings.ToLower(strings.TrimSpace(rg.PrimaryType)); pt != "" {
 		extras = map[string]any{"record_type": pt}
 	}
-	// Secondary types (Compilation/Live/Soundtrack) refine the discography beyond
-	// the primary album/single/ep; previously decoded nowhere. Latent display data.
 	if len(rg.SecondaryTypes) > 0 {
 		if extras == nil {
 			extras = map[string]any{}
@@ -307,11 +282,6 @@ func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rg.ID, URL: "https://musicbrainz.org/release-group/" + rg.ID},
 		extras)
 	r.MBID = rg.ID
-	// MB is the discography's completeness spine, so its first-release-date is the
-	// authoritative year for the albums no other provider carries. It was parsed
-	// into the struct but never mapped onto the result, so those albums showed
-	// blank years and sank out of chronological order. Partial dates ("2020",
-	// "2020-05") are fine — normalizeAlbumYears reads the leading year.
 	r.ReleaseDate = rg.FirstReleaseDate
 	return r
 }
@@ -380,10 +350,6 @@ type mbReleaseGroup struct {
 	ArtistCredit     []mbArtistRef `json:"artist-credit"`
 }
 
-// ValidateArtistAlbums cross-references albums against MusicBrainz.
-// Searches MB for the artist by name, picks the best match, queries
-// their release-groups, and splits input albums into confirmed
-// (title matches an MB release) vs unconfirmed.
 func (a *MusicBrainzAdapter) ValidateArtistAlbums(
 	ctx context.Context,
 	artistName string,
@@ -434,12 +400,6 @@ func (a *MusicBrainzAdapter) ValidateArtistAlbums(
 	}, nil
 }
 
-// ListArtistDiscography resolves the artist by name and lists their
-// release-groups as album SearchResults — the contributor counterpart to
-// ValidateArtistAlbums (which only filters a supplied album list). Wiring MB's
-// consensus fetcher to this is what lets MB actually cast votes: the prior
-// ValidateArtistAlbums(ctx, name, nil) always returned empty because the
-// filter loop never ran over a nil input slice.
 func (a *MusicBrainzAdapter) ListArtistDiscography(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
 	mbid, err := a.resolveArtistMBID(ctx, artistName)
 	if err != nil {
@@ -542,8 +502,6 @@ func (a *MusicBrainzAdapter) fetchArtistMatches(ctx context.Context, name string
 	return body.Artists, nil
 }
 
-// getJSON issues a rate-limited GET with the MB User-Agent and decodes a 200
-// body into out. Non-200 is an error. Used by the enrichment surface.
 func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) error {
 	a.rateLimit(ctx)
 	return getJSON(ctx, a.client, u, out,
@@ -551,8 +509,6 @@ func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) err
 		withHeader("Accept", "application/json"))
 }
 
-// fetchReleaseGroupMatches searches release-groups by free-text query (used by
-// ResolveMBID for strict client-side matching).
 func (a *MusicBrainzAdapter) fetchReleaseGroupMatches(ctx context.Context, query string) ([]mbReleaseGroup, error) {
 	u := fmt.Sprintf("https://musicbrainz.org/ws/2/release-group/?query=%s&fmt=json&limit=10",
 		url.QueryEscape(query))
@@ -563,8 +519,6 @@ func (a *MusicBrainzAdapter) fetchReleaseGroupMatches(ctx context.Context, query
 	return body.ReleaseGroups, nil
 }
 
-// fetchRecordingMatches searches recordings by free-text query (used by
-// ResolveMBID for strict client-side matching).
 func (a *MusicBrainzAdapter) fetchRecordingMatches(ctx context.Context, query string) ([]mbRecording, error) {
 	u := fmt.Sprintf("https://musicbrainz.org/ws/2/recording/?query=%s&fmt=json&limit=10",
 		url.QueryEscape(query))
@@ -575,10 +529,6 @@ func (a *MusicBrainzAdapter) fetchRecordingMatches(ctx context.Context, query st
 	return body.Recordings, nil
 }
 
-// ReleaseGroupTitles implements ports.MBDiscographyAnchor: the artist's release-
-// group titles for MBID, used as the identity-verification anchor (doc §7). Reuses
-// the memoized release-group fetch, so a detail-open that already hit it pays no
-// extra MB round-trip.
 func (a *MusicBrainzAdapter) ReleaseGroupTitles(ctx context.Context, mbid string) ([]string, error) {
 	if mbid == "" {
 		return nil, nil
@@ -594,17 +544,12 @@ func (a *MusicBrainzAdapter) ReleaseGroupTitles(ctx context.Context, mbid string
 	return titles, nil
 }
 
-// mbMaxReleaseGroupPages caps release-group browse pagination (100 per page →
-// 500 release-groups) so a provider bug can't loop forever. Pages are fetched
-// sequentially through getJSON, so the shared rateLimit pacing applies.
 const mbMaxReleaseGroupPages = 5
 
 func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {
 	if rgs, ok := a.releaseMemo.get(mbid); ok {
 		return rgs, nil
 	}
-	// Singleflight per MBID: two concurrent detail-opens for the same artist
-	// would otherwise both paginate through the 1 req/s limiter (~10s each).
 	v, err, _ := a.releaseSF.Do(mbid, func() (any, error) {
 		if rgs, ok := a.releaseMemo.get(mbid); ok {
 			return rgs, nil
@@ -626,8 +571,6 @@ func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid st
 
 		var body mbReleaseGroupResponse
 		if err := a.getJSON(ctx, u, &body); err != nil {
-			// Depth is best-effort, presence is not: keep the pages already fetched,
-			// and skip the memo so the truncated set is not reused for 6h.
 			if page > 0 {
 				slog.DebugContext(ctx, "mb.release_groups_page_failed",
 					"mbid", mbid, "page", page, "error", err)
@@ -644,10 +587,6 @@ func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid st
 	return all, nil
 }
 
-// LookupAlbumArtist searches MusicBrainz for a release-group matching
-// albumTitle by artistName and checks whether it is credited to the
-// artist described by profile. Returns the verdict, the credited MBID
-// (if found), and any error.
 func (a *MusicBrainzAdapter) LookupAlbumArtist(
 	ctx context.Context,
 	artistName, albumTitle string,
@@ -686,8 +625,6 @@ func (a *MusicBrainzAdapter) LookupAlbumArtist(
 				"expected_mbid", profile.MBID, "credited_mbid", creditedMBID)
 			return domain.AlbumVerdictContamination, creditedMBID, nil
 		}
-		// No MBID on profile — return unknown with the credited MBID for
-		// upstream layers to use in secondary disambiguation.
 		slog.DebugContext(ctx, "mb.lookup_album_artist_no_profile_mbid",
 			"artist", artistName, "album", albumTitle, "credited_mbid", creditedMBID)
 		return domain.AlbumVerdictUnknown, creditedMBID, nil

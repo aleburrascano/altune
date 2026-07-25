@@ -9,8 +9,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// A dead TheAudioDB must be distinguishable from no-matches: transport/HTTP
-// failures surface as errors so breaker/health signals can fire.
 func TestTheAudioDBAdapter_Search_transportErrorSurfaces(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

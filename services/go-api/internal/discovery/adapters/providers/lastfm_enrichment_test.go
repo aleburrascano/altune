@@ -9,8 +9,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// Fixtures mirror the live-probed getInfo shapes (docs/providers/lastfm.md §4).
-
 const lastfmArtistInfoJSON = `{
   "artist": {
     "name": "Kendrick Lamar",
@@ -122,7 +120,6 @@ func TestLastFmAdapter_Lookup_Track(t *testing.T) {
 	if len(e.Tags) != 3 || e.Tags[1] != "trap" {
 		t.Errorf("tags: got %v", e.Tags)
 	}
-	// Tracks carry no similar-artist list.
 	if len(e.Similar) != 0 {
 		t.Errorf("similar should be empty for track: got %v", e.Similar)
 	}
@@ -162,8 +159,6 @@ func TestLastFmAdapter_Lookup_HTTPErrorDegrades(t *testing.T) {
 }
 
 func TestLastFmAdapter_Lookup_InBandError6IsCleanMiss(t *testing.T) {
-	// Error 6 (invalid parameters / entity not found) is a DEFINITIVE miss: zero
-	// enrichment, nil error, so the enrichment service negative-caches the name.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"error":6,"message":"Artist not found"}`))
@@ -181,8 +176,6 @@ func TestLastFmAdapter_Lookup_InBandError6IsCleanMiss(t *testing.T) {
 }
 
 func TestLastFmAdapter_Lookup_InBandError6On4xxIsCleanMiss(t *testing.T) {
-	// Last.fm sometimes delivers the miss envelope on a 4xx status; it must still
-	// be a definitive miss, not a transient error that defeats the negative cache.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -201,8 +194,6 @@ func TestLastFmAdapter_Lookup_InBandError6On4xxIsCleanMiss(t *testing.T) {
 }
 
 func TestLastFmAdapter_Lookup_InBandErrorOtherIsTransient(t *testing.T) {
-	// Any other error code (8 = backend failure here) is transient: an error must
-	// be returned so the result is NOT cached as a 24h negative miss.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"error":8,"message":"Operation failed - Something went wrong"}`))
@@ -237,8 +228,6 @@ func TestCleanLastFmBio(t *testing.T) {
 }
 
 func TestParseLastFmTags_TolerantOfEmpty(t *testing.T) {
-	// Last.fm sometimes serializes an empty collection as "" — must not panic
-	// and must yield no tags.
 	if got := parseLastFmTags([]byte(`""`)); len(got) != 0 {
 		t.Errorf("expected no tags from empty-string collection, got %v", got)
 	}

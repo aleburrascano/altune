@@ -57,9 +57,6 @@ func TestRedisResultCache_RoundTripAndFreshCopies(t *testing.T) {
 		t.Errorf("Sources did not round-trip: %v", first.Sources)
 	}
 
-	// Deep-copy semantics: mutating what Get returned (fields AND nested maps)
-	// must not bleed into the next Get — the cache serves fresh copies, not a
-	// shared slice one caller can corrupt for every other request.
 	got[0].Title = "MUTATED"
 	got[0].Xref["deezer"] = "corrupted"
 
@@ -94,8 +91,6 @@ func TestRedisResultCache_KeyIsolationAndMiss(t *testing.T) {
 	}
 }
 
-// A corrupt stored value is a miss (so the search recomputes and overwrites),
-// never an error or a poisoned decode.
 func TestRedisResultCache_CorruptValueIsMiss(t *testing.T) {
 	client := testRedisClient(t)
 	cache := NewRedisResultCache(client)

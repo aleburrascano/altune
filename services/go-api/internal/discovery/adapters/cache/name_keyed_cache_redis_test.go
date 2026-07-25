@@ -40,7 +40,6 @@ func TestRedisNameKeyedCache_PositiveRoundTrip(t *testing.T) {
 		t.Errorf("genres did not round-trip: %v", got.Genres)
 	}
 
-	// A positive entry must not read as negative, and a different key misses.
 	if neg, _ := cache.GetNegative(ctx, nameKey); neg {
 		t.Error("positive entry reported negative")
 	}
@@ -66,14 +65,11 @@ func TestRedisNameKeyedCache_NegativePath(t *testing.T) {
 	if neg, err := cache.GetNegative(ctx, nameKey); !neg || err != nil {
 		t.Errorf("GetNegative = (%v,%v), want (true,nil)", neg, err)
 	}
-	// The negative marker must never surface through the positive path.
 	if _, hit, _ := cache.Get(ctx, nameKey); hit {
 		t.Error("negative marker readable as a positive entry")
 	}
 }
 
-// The same name key cached by two providers must stay two entries: writing
-// Deezer data must not make another provider's cache hit.
 func TestRedisNameKeyedCache_CrossProviderIsolation(t *testing.T) {
 	client := testRedisClient(t)
 	deezer := NewRedisDeezerEnrichmentCache(client)

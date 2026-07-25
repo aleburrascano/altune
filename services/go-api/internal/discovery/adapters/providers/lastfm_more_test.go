@@ -20,9 +20,9 @@ func TestLooksLikeMBID(t *testing.T) {
 		{lastfmTestMBID, true},
 		{strings.ToUpper(lastfmTestMBID), true},
 		{"the weeknd", false},
-		{"a74b1b7f-71a5-4011-9441-d0b5e412271", false},   // 35 chars
-		{"a74b1b7f_71a5_4011_9441_d0b5e4122711", false},  // wrong separators
-		{"g74b1b7f-71a5-4011-9441-d0b5e4122711", false},  // non-hex
+		{"a74b1b7f-71a5-4011-9441-d0b5e412271", false},
+		{"a74b1b7f_71a5_4011_9441_d0b5e4122711", false},
+		{"g74b1b7f-71a5-4011-9441-d0b5e4122711", false},
 	}
 	for _, tt := range tests {
 		if got := looksLikeMBID(tt.in); got != tt.want {

@@ -22,10 +22,6 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 		return "", nil
 	}
 
-	// Endpoint + shape verified live 2026-06-21: artist art is top-level on
-	// /v3/music/{mbid}; album art lives behind the dedicated /v3/music/albums/{mbid}
-	// endpoint, nested under albums[mbid].albumcover (the plain music endpoint
-	// returns {} for an album mbid).
 	path := "music/" + mbid
 	if kind == domain.ResultKindAlbum {
 		path = "music/albums/" + mbid
@@ -49,9 +45,6 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 	return albumCoverURL(data, mbid), nil
 }
 
-// albumCoverURL digs the album cover out of the albums endpoint's nested shape:
-// {"albums": {"<mbid>": {"albumcover": [{"url": ...}]}}}. Keyed by the queried
-// mbid (the endpoint returns the album under its own id).
 func albumCoverURL(data map[string]any, mbid string) string {
 	albums, ok := data["albums"].(map[string]any)
 	if !ok {
@@ -64,10 +57,6 @@ func albumCoverURL(data map[string]any, mbid string) string {
 	return bestFanartImage(entry, "albumcover")
 }
 
-// bestFanartImage picks the best image of a Fanart.tv type instead of blindly
-// taking the first: it prefers community-favored art (highest `likes`) and
-// English/neutral `lang`, which avoids an arbitrary or wrong-locale first entry.
-// Each image object is {id, url, lang, likes(string)}.
 func bestFanartImage(data map[string]any, key string) string {
 	arr, ok := data[key].([]any)
 	if !ok || len(arr) == 0 {
@@ -86,10 +75,10 @@ func bestFanartImage(data map[string]any, key string) string {
 		}
 		var score int64
 		if likes, ok := m["likes"].(string); ok {
-			score = parseListeners(likes) // reuse the digit parser
+			score = parseListeners(likes)
 		}
 		if lang, _ := m["lang"].(string); lang == "en" || lang == "" {
-			score += 1_000_000 // language preference dominates the likes tiebreak
+			score += 1_000_000
 		}
 		if score > bestScore {
 			bestScore = score

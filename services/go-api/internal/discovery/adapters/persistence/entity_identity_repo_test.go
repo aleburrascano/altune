@@ -7,10 +7,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// Guard clauses: empty inputs must short-circuit BEFORE any pool access (the
-// store is built with a nil pool here — a regression that reaches the pool
-// panics the test). These are the "nothing to bridge / nothing to look up"
-// no-op contracts the search path relies on.
 func TestPgxIdentityStore_EmptyInputGuards(t *testing.T) {
 	store := NewPgxIdentityStore(nil)
 	ctx := context.Background()
@@ -25,7 +21,6 @@ func TestPgxIdentityStore_EmptyInputGuards(t *testing.T) {
 	})
 
 	t.Run("PersistBridges skips blank providers and ids", func(t *testing.T) {
-		// Every entry is unusable → the batch is empty → no pool access.
 		xref := map[string]string{"": "123", "deezer": ""}
 		if err := store.PersistBridges(ctx, domain.ResultKindArtist, "some-mbid", xref); err != nil {
 			t.Errorf("all-blank xref: %v, want nil no-op", err)

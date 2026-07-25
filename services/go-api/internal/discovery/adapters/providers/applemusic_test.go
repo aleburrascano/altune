@@ -10,9 +10,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// newTestAppleMusicAdapter seeds a fake token so tests exercise the catalog
-// search call without needing a live page-scrape round trip — the same shape
-// as newTestSoundCloudAPI seeding a client_id.
 func newTestAppleMusicAdapter(srv *httptest.Server) *AppleMusicAdapter {
 	a := NewAppleMusicAdapter(srv.Client())
 	a.searchURL = srv.URL
@@ -21,9 +18,6 @@ func newTestAppleMusicAdapter(srv *httptest.Server) *AppleMusicAdapter {
 	return a
 }
 
-// amFixtureResponse is a trimmed catalog search response covering one song,
-// one album, and one artist. Shape captured live against api.music.apple.com
-// (2026-07-22).
 const amFixtureResponse = `{
   "results": {
     "songs": {"data": [{
@@ -172,11 +166,8 @@ func TestAppleMusicAdapter_Search_onlyRequestsAskedKinds(t *testing.T) {
 	}
 }
 
-// appleMusicFixtureJWT is a syntactically valid (unsigned-verification-wise;
-// nothing here checks the signature) JWT whose payload identifies it as the
-// anonymous web-player token, for resolver tests.
 const appleMusicFixtureJWT = "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9." +
-	"eyJpc3MiOiJBTVBXZWJQbGF5IiwiZXhwIjo5OTk5OTk5OTk5fQ" + // {"iss":"AMPWebPlay","exp":9999999999}
+	"eyJpc3MiOiJBTVBXZWJQbGF5IiwiZXhwIjo5OTk5OTk5OTk5fQ" +
 	".sig"
 
 func TestAppleMusicAdapter_Search_reResolvesTokenOnAuthFailure(t *testing.T) {
@@ -195,8 +186,6 @@ func TestAppleMusicAdapter_Search_reResolvesTokenOnAuthFailure(t *testing.T) {
 	}))
 	defer searchSrv.Close()
 
-	// A separate fake server plays both the page (script tag) and the bundle
-	// (embedded JWT) so invalidate() -> re-resolve has somewhere real to land.
 	bundleSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "index~abc123.js") {
 			_, _ = w.Write([]byte(`var t = "` + appleMusicFixtureJWT + `";`))
@@ -207,7 +196,7 @@ func TestAppleMusicAdapter_Search_reResolvesTokenOnAuthFailure(t *testing.T) {
 	defer bundleSrv.Close()
 
 	a := newTestAppleMusicAdapter(searchSrv)
-	a.resolver.cached = "stale-token" // seeded valid so the first Search call skips resolve()
+	a.resolver.cached = "stale-token"
 	a.resolver.expiry = time.Now().Add(time.Hour)
 	a.resolver.siteURL = bundleSrv.URL
 	a.resolver.bundleBaseURL = bundleSrv.URL + "/"
@@ -288,7 +277,7 @@ func TestAppleMusicAdapter_GetAlbumTracks(t *testing.T) {
 	defer srv.Close()
 
 	a := newTestAppleMusicAdapter(srv)
-	a.catalogBase = srv.URL // GetAlbumTracks builds off catalogBase, not searchURL
+	a.catalogBase = srv.URL
 	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderAppleMusic, "al-1")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks error = %v", err)

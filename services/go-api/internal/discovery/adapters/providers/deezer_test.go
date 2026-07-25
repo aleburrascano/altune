@@ -10,7 +10,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// redirectTransport rewrites all outgoing request URLs to the test server.
 type redirectTransport struct {
 	targetURL string
 }
@@ -93,7 +92,6 @@ func TestDeezerAdapter_Search_Tracks(t *testing.T) {
 	if r.Extras["album"] != "A Night at the Opera" {
 		t.Errorf("extras.album: got %v, want %q", r.Extras["album"], "A Night at the Opera")
 	}
-	// JSON unmarshals numbers as float64
 	if dur, ok := r.Extras["duration"].(int); !ok || dur != 355 {
 		t.Errorf("extras.duration: got %v (%T), want 355", r.Extras["duration"], r.Extras["duration"])
 	}
@@ -201,7 +199,6 @@ func TestDeezerAdapter_Search_Albums(t *testing.T) {
 	if r.ReleaseDate != "1997-05-21" {
 		t.Errorf("ReleaseDate: got %q, want %q", r.ReleaseDate, "1997-05-21")
 	}
-	// nb_tracks is an int in the struct, mapped to TrackCount
 	if r.TrackCount != 12 {
 		t.Errorf("TrackCount: got %d, want 12", r.TrackCount)
 	}
@@ -223,8 +220,6 @@ func TestDeezerAdapter_Search_HTTPError(t *testing.T) {
 	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
 		domain.ResultKindTrack: true,
 	})
-	// When every attempted kind fails (a single kind on HTTP 500), Search surfaces
-	// an error so the circuit breaker sees the provider outage.
 	if err == nil {
 		t.Fatal("expected an error when all attempted kinds fail on HTTP 500, got nil")
 	}

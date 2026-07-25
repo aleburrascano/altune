@@ -11,10 +11,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// Remaining risk-path coverage: iTunes top-tracks delegation, MB release-group
-// titles + track-kind ResolveMBID, the YT Music artwork resolver, the Spotify
-// content-side auth retry, and SoundCloud's re-resolve failure surface.
-
 func TestITunesAdapter_GetArtistTopTracks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/lookup" {
@@ -37,7 +33,6 @@ func TestITunesAdapter_GetArtistTopTracks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetArtistTopTracks: %v", err)
 	}
-	// The parent "artist" wrapper must be filtered; only track children map.
 	if len(tracks) != 1 {
 		t.Fatalf("tracks = %d, want 1 (parent wrapper dropped)", len(tracks))
 	}
@@ -139,8 +134,6 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 	})
 }
 
-// The content side (pathfinderContent) shares Search's rotation tolerance: a
-// 401 invalidates the session, re-resolves, and retries once.
 func TestSpotifyAdapter_GetArtistAlbums_reResolvesSessionOnAuthFailure(t *testing.T) {
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -198,15 +191,12 @@ func TestSpotifyAdapter_GetArtistAlbums_reResolvesSessionOnAuthFailure(t *testin
 	}
 }
 
-// When the auth retry's client_id re-resolve itself fails, the caller must see
-// the re-resolve error, not a silent empty.
 func TestSoundCloudAPIAdapter_authRetryReResolveFailureSurfaces(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/search/users") {
-			w.WriteHeader(http.StatusUnauthorized) // auth failure → invalidate + re-resolve
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		// The homepage scrape for the re-resolve fails too.
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()

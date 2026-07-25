@@ -9,11 +9,9 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// Write-through: PersistBridges lands durably AND warms Redis, so the very
-// next lookup is served from the cache without touching the durable store.
 func TestRedisIdentityStore_PersistBridges_WarmsCache(t *testing.T) {
 	client := testRedisClient(t)
-	inner := &recordingIdentityStore{} // durable lookups would MISS — cache must answer
+	inner := &recordingIdentityStore{}
 	store := NewRedisIdentityStore(inner, client)
 	ctx := context.Background()
 
@@ -33,7 +31,6 @@ func TestRedisIdentityStore_PersistBridges_WarmsCache(t *testing.T) {
 		t.Fatalf("durable persist calls = %d, want 1 (durable first)", inner.persistCalls)
 	}
 
-	// EVERY provider id in the xref must now resolve from Redis alone.
 	for provider, extID := range xref {
 		gotMBID, gotXref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, provider, extID)
 		if !ok || gotMBID != mbid {
@@ -47,8 +44,6 @@ func TestRedisIdentityStore_PersistBridges_WarmsCache(t *testing.T) {
 		t.Errorf("durable lookups = %d, want 0 (warmed cache must answer)", inner.lookupCalls)
 	}
 
-	// Kind is part of the cache key: an album lookup of the same ids must fall
-	// through to the durable store (which misses here).
 	if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindAlbum, "deezer", extDeezer); ok {
 		t.Error("artist cache entry answered an album lookup, want kind-isolated miss")
 	}
@@ -57,8 +52,6 @@ func TestRedisIdentityStore_PersistBridges_WarmsCache(t *testing.T) {
 	}
 }
 
-// Read-through: a cold cache reads the durable store ONCE and back-fills, so a
-// second lookup is Redis-only.
 func TestRedisIdentityStore_Lookup_ReadThroughBackfill(t *testing.T) {
 	client := testRedisClient(t)
 	extID := fmt.Sprintf("dz-backfill-%s", t.Name())
@@ -79,7 +72,6 @@ func TestRedisIdentityStore_Lookup_ReadThroughBackfill(t *testing.T) {
 		t.Errorf("durable lookups = %d, want 1 (second lookup served by back-filled cache)", inner.lookupCalls)
 	}
 
-	// A durable miss stays a miss and must not be cached as a hit.
 	missInner := &recordingIdentityStore{}
 	missStore := NewRedisIdentityStore(missInner, client)
 	extMiss := fmt.Sprintf("dz-miss-%s", t.Name())
@@ -94,8 +86,6 @@ func TestRedisIdentityStore_Lookup_ReadThroughBackfill(t *testing.T) {
 	}
 }
 
-// Invalidate purges the Redis entry EVEN when the durable delete fails — a
-// stale cache surviving a failed purge would keep serving the excised identity.
 func TestRedisIdentityStore_Invalidate_PurgesRedisEvenOnDurableError(t *testing.T) {
 	client := testRedisClient(t)
 	extID := fmt.Sprintf("dz-inval-%s", t.Name())
@@ -105,7 +95,6 @@ func TestRedisIdentityStore_Invalidate_PurgesRedisEvenOnDurableError(t *testing.
 	key := identityKey(domain.ResultKindArtist, "deezer", extID)
 	cleanKeys(t, client, key)
 
-	// Warm the cache.
 	if err := store.PersistBridges(ctx, domain.ResultKindArtist, "qa-mbid-inval",
 		map[string]string{"deezer": extID}); err != nil {
 		t.Fatalf("PersistBridges: %v", err)
@@ -114,7 +103,6 @@ func TestRedisIdentityStore_Invalidate_PurgesRedisEvenOnDurableError(t *testing.
 		t.Fatal("precondition: warmed lookup must hit")
 	}
 
-	// Durable delete fails; the error must surface AND the cache must be purged.
 	inner.invalidateErr = errors.New("pg down")
 	if err := store.Invalidate(ctx, domain.ResultKindArtist, "deezer", extID); err == nil {
 		t.Error("Invalidate swallowed the durable-store error")
@@ -122,7 +110,6 @@ func TestRedisIdentityStore_Invalidate_PurgesRedisEvenOnDurableError(t *testing.
 	if n, err := client.Exists(ctx, key).Result(); err != nil || n != 0 {
 		t.Errorf("Redis entry survived a failed durable purge (exists=%d, err=%v), want deleted", n, err)
 	}
-	// The next lookup now falls to the (miss-returning) durable store.
 	if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", extID); ok {
 		t.Error("invalidated identity still served from cache")
 	}

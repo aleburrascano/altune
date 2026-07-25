@@ -9,8 +9,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// fakeIdentityResolver implements ports.ArtworkResolver + IdentityArtworkResolver
-// + SourcedArtworkResolver for chain tests.
 type fakeIdentityResolver struct {
 	url        string
 	err        error
@@ -82,8 +80,6 @@ func TestChainedArtworkResolver_ResolveWithIdentityTagged_noIdentitySourceIsEmpt
 	}
 }
 
-// The name path must skip identity-only resolvers so a missing identity can't
-// trigger a wrong same-name guess.
 func TestChainedArtworkResolver_ResolveTagged_skipsIdentityResolvers(t *testing.T) {
 	identity := &fakeIdentityResolver{url: "https://img/identity.jpg", source: "discogs"}
 	name := &fakeArtworkResolver{url: "https://img/name.jpg"}
@@ -99,7 +95,6 @@ func TestChainedArtworkResolver_ResolveTagged_skipsIdentityResolvers(t *testing.
 	if identity.nameCalled || identity.idCalled {
 		t.Error("identity-only resolver must be skipped entirely on the name path")
 	}
-	// fakeArtworkResolver carries no ArtworkSource — tag must be empty, not invented.
 	if source != "" {
 		t.Errorf("source = %q, want empty for an unsourced resolver", source)
 	}

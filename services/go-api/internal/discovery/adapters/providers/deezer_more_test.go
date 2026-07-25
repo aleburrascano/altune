@@ -10,14 +10,11 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// --- charts -----------------------------------------------------------------
-
 func TestDeezerAdapter_FetchCharts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/chart/0/tracks"):
-			// rank present → popularity from the metric; rank absent → 1000-position fallback
 			_, _ = w.Write([]byte(`{"data": [
 				{"id": 1, "title": "Top Track", "rank": 900000},
 				{"id": 2, "title": "Metricless Track"}
@@ -37,7 +34,6 @@ func TestDeezerAdapter_FetchCharts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchCharts: %v", err)
 	}
-	// Blank-term album (id 5) dropped → 4 entries.
 	if len(entries) != 4 {
 		t.Fatalf("entries = %d, want 4 (blank terms dropped)", len(entries))
 	}
@@ -84,8 +80,6 @@ func TestDeezerAdapter_FetchCharts_failedKindSkipped(t *testing.T) {
 		}
 	}
 }
-
-// --- structured search ------------------------------------------------------
 
 func TestDeezerAdapter_SearchStructured_sendsAdvancedQuery(t *testing.T) {
 	var gotQuery string
@@ -135,8 +129,6 @@ func TestDeezerAdapter_SearchStructured_failedKindSkipped(t *testing.T) {
 	}
 }
 
-// --- enrichment lookups -----------------------------------------------------
-
 func TestDeezerAdapter_FetchTrackISRC(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/track/123" {
@@ -158,8 +150,6 @@ func TestDeezerAdapter_FetchTrackISRC(t *testing.T) {
 	}
 }
 
-// FetchTrackISRC's documented policy is empty-on-error (best-effort enrichment,
-// the caller degrades) — pin it so a future edit doesn't silently flip it.
 func TestDeezerAdapter_FetchTrackISRC_errorIsEmptyNotError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -237,8 +227,6 @@ func TestDeezerAdapter_LookupTrackFeatured_quotaErrorSurfaces(t *testing.T) {
 	}
 }
 
-// --- pagination edges -------------------------------------------------------
-
 func TestDeezerAdapter_GetArtistAlbums_nextDrivenPagination(t *testing.T) {
 	var indexes []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -251,7 +239,6 @@ func TestDeezerAdapter_GetArtistAlbums_nextDrivenPagination(t *testing.T) {
 			}`))
 			return
 		}
-		// Last page: data present, next absent → stop.
 		_, _ = w.Write([]byte(`{"data": [{"id": 2, "title": "Second", "artist": {"id": 42, "name": "A"}}]}`))
 	}))
 	defer server.Close()
@@ -274,7 +261,6 @@ func TestDeezerAdapter_GetArtistAlbums_capsAtMaxPages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pages++
 		w.Header().Set("Content-Type", "application/json")
-		// next always set — an adversarial/looping server must hit the page cap.
 		_, _ = w.Write([]byte(`{
 			"data": [{"id": 1, "title": "Loop", "artist": {"id": 42, "name": "A"}}],
 			"next": "https://api.deezer.com/artist/42/albums?limit=100&index=100"
@@ -295,8 +281,6 @@ func TestDeezerAdapter_GetArtistAlbums_capsAtMaxPages(t *testing.T) {
 	}
 }
 
-// --- parsing edges ----------------------------------------------------------
-
 func TestMapDeezerResult_unicodeSurvives(t *testing.T) {
 	item := deezerItem{
 		ID:    1,
@@ -315,8 +299,6 @@ func TestMapDeezerResult_unicodeSurvives(t *testing.T) {
 }
 
 func TestMapDeezerResult_missingOptionalFields(t *testing.T) {
-	// Track with no artist, no album, no preview: mapping must not panic and
-	// must leave the dependent fields zero.
 	r := mapDeezerResult(deezerItem{ID: 9, Title: "Orphan"}, domain.ResultKindTrack)
 	if r.Subtitle != "" || r.Album != "" || r.DeezerAlbumID != "" || r.ImageURL != "" {
 		t.Errorf("result = %+v, want zero optional fields for a bare item", r)

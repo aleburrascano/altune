@@ -12,9 +12,6 @@ import (
 
 var _ ports.MetricsRollupStore = (*PgxMetricsRollup)(nil)
 
-// PgxMetricsRollup computes the daily Mission Control metrics from the event
-// stream and persists them to discovery_metrics for restart-surviving,
-// week-over-week history.
 type PgxMetricsRollup struct {
 	pool *pgxpool.Pool
 }
@@ -23,12 +20,6 @@ func NewPgxMetricsRollup(pool *pgxpool.Pool) *PgxMetricsRollup {
 	return &PgxMetricsRollup{pool: pool}
 }
 
-// RollupDay computes the UTC day's metrics in one CTE and upserts the four rows
-// (idempotent on (as_of, metric)). Read-only over discovery_events; aggregates
-// only, no user_id. Payload casts are guarded by jsonb_typeof (inside CASE so
-// the guard is evaluated before the cast): a poisoned client payload
-// ("zero_result":"abc") is skipped for that row, never a 22P02 that fails the
-// whole rollup.
 func (r *PgxMetricsRollup) RollupDay(ctx context.Context, day time.Time) error {
 	dayStart := day.UTC().Truncate(24 * time.Hour)
 	_, err := r.pool.Exec(ctx,
@@ -61,7 +52,6 @@ func (r *PgxMetricsRollup) RollupDay(ctx context.Context, day time.Time) error {
 	return nil
 }
 
-// MetricsHistory returns the last `days` daily values of a metric, newest first.
 func (r *PgxMetricsRollup) MetricsHistory(ctx context.Context, metric string, days int) ([]ports.MetricPoint, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT as_of, value

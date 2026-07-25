@@ -23,10 +23,6 @@ func NewLastFmAdapter(client *http.Client, apiKey string) *LastFmAdapter {
 
 func (a *LastFmAdapter) Name() domain.ProviderName { return domain.ProviderLastFM }
 
-// SearchTimeout gives Last.fm a budget in line with the other multi-kind
-// providers (iTunes 4s, MB 5s). The 1.5s default was the lone omission and, even
-// with the per-kind calls now concurrent, Last.fm's endpoints are routinely
-// slower than 1.5s — so the default surfaced as spurious timeouts.
 func (a *LastFmAdapter) SearchTimeout() time.Duration { return 4 * time.Second }
 
 func (a *LastFmAdapter) SupportedKinds() map[domain.ResultKind]bool {
@@ -119,8 +115,6 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 				r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist, imageURL,
 					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
 					extras)
-				// mbid lifts the track into the identifier merge tier (same reason
-				// GetArtistAlbums keeps it — previously dropped on the floor).
 				r.MBID = t.MBID
 				results = append(results, r)
 			}
@@ -153,12 +147,6 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 				r := domain.NewProviderResult(domain.ResultKindAlbum, a.Name, a.Artist, imageURL,
 					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
 					nil)
-				// AIDEV-NOTE: a.MBID is deliberately NOT mapped onto r.MBID. Last.fm's
-				// album-search mbid is a RELEASE MBID, while MusicBrainz album results
-				// carry RELEASE-GROUP MBIDs — different UUID namespaces, so stamping
-				// it makes sameEntity's MBID hard-stop systematically block every
-				// MB↔Last.fm album merge (duplicate album rows). Track (recording
-				// namespace, matches MB recordings) and artist mbids stay mapped.
 				results = append(results, r)
 			}
 		}
@@ -194,10 +182,6 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 				r := domain.NewProviderResult(domain.ResultKindArtist, a.Name, "", imageURL,
 					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
 					extras)
-				// AIDEV-WARNING: a stale Last.fm artist mbid that differs from
-				// MusicBrainz's current one both hard-stops sameEntity's MBID tier
-				// and can inflate ambiguousArtistNames (≥2 distinct MBIDs per name).
-				// Merge-affecting — validated via `discoveryeval -mode merge` A/B.
 				r.MBID = a.MBID
 				results = append(results, r)
 			}
@@ -207,10 +191,6 @@ func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.S
 	return results
 }
 
-// --- ArtistContentProvider ---
-
-// looksLikeMBID reports whether s is a MusicBrainz UUID (8-4-4-4-12 hex with
-// dashes), so the caller can pass an MBID for identity-safe lookups.
 func looksLikeMBID(s string) bool {
 	if len(s) != 36 {
 		return false
@@ -231,9 +211,6 @@ func looksLikeMBID(s string) bool {
 }
 
 func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, artistRef string) ([]domain.SearchResult, error) {
-	// artistRef is an MBID when the caller has the artist's resolved identity
-	// (identity-safe — avoids the ambiguous-name top-tracks problem); otherwise it
-	// is the artist name.
 	idParam := "artist=" + url.QueryEscape(artistRef)
 	if looksLikeMBID(artistRef) {
 		idParam = "mbid=" + artistRef
@@ -284,13 +261,6 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 	return results, nil
 }
 
-// lastfmAlbumsLimit caps artist.gettopalbums. The default 50 is deliberate, not
-// a truncation bug: past the top ~50-by-playcount the method returns the
-// artist's entire credited-on graph (compilations, "various artists"
-// appearances, live bootlegs, singles-as-albums), not real discography. A prod
-// coverage scan at limit=500 exploded the album union 21× with this noise, so
-// real deep discography is sourced from MusicBrainz/Deezer (identifier-backed)
-// instead. See docs/providers/maximization-audit-2026-06-22.md §3.3.
 const lastfmAlbumsLimit = 50
 
 func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
@@ -329,8 +299,6 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 				imageURL = img.Text
 			}
 		}
-		// mbid bridges the album into identifier-based merge; playcount is a
-		// popularity signal — both were previously dropped on the floor.
 		extras := make(map[string]any)
 		if al.PlayCount > 0 {
 			extras["playcount"] = int64(al.PlayCount)
@@ -343,8 +311,6 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 	}
 	return results, nil
 }
-
-// --- ChartProvider ---
 
 func (a *LastFmAdapter) FetchCharts(ctx context.Context, limit int) ([]domain.VocabularyEntry, error) {
 	var entries []domain.VocabularyEntry
@@ -448,9 +414,6 @@ func parseListeners(s string) int64 {
 	return n
 }
 
-// lastfmExternalID derives an external ID from a Last.fm URL.
-// e.g. "https://www.last.fm/music/The+Weeknd" → "The+Weeknd"
-// e.g. "https://www.last.fm/music/Katy+Perry/_/Small+Talk" → "Katy+Perry/_/Small+Talk"
 func lastfmExternalID(u string) string {
 	const prefix = "/music/"
 	idx := strings.Index(u, prefix)

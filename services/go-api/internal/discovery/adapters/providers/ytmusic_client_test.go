@@ -20,9 +20,6 @@ func loadYTMFixture(t *testing.T, name string) any {
 	return page
 }
 
-// TestParseYTMSearch_Unfiltered guards the regression that motivated owning the
-// client: the new musicCardShelfRenderer + itemSectionRenderer layout must parse
-// to non-empty, correctly-categorised results (the library returned zero).
 func TestParseYTMSearch_Unfiltered(t *testing.T) {
 	res := parseYTMSearch(loadYTMFixture(t, "ytmusic_search_sombr.json"))
 
@@ -36,8 +33,6 @@ func TestParseYTMSearch_Unfiltered(t *testing.T) {
 		t.Error("expected videos (OMV/UGC), got none")
 	}
 
-	// The "sombr" top-result card header is the artist; it must be captured with
-	// artwork, since that is what the artwork resolver and ranker need.
 	var sombr *ytmArtistItem
 	for _, a := range res.Artists {
 		if a.Artist == "sombr" {
@@ -55,15 +50,12 @@ func TestParseYTMSearch_Unfiltered(t *testing.T) {
 		t.Error("artist missing thumbnails")
 	}
 
-	// A track must carry a title and a videoId (the playable id).
 	top := res.Tracks[0]
 	if top.Title == "" || top.VideoID == "" {
 		t.Errorf("track missing title/videoId: %+v", top)
 	}
 }
 
-// TestParseYTMSearch_ArtistFilter covers the filtered path (still the legacy
-// musicShelfRenderer shape) that the artist-artwork resolver depends on.
 func TestParseYTMSearch_ArtistFilter(t *testing.T) {
 	res := parseYTMSearch(loadYTMFixture(t, "ytmusic_artist_filter_sombr.json"))
 
@@ -78,9 +70,9 @@ func TestParseYTMSearch_ArtistFilter(t *testing.T) {
 
 func TestYTMDurationToSeconds(t *testing.T) {
 	tests := []struct {
-		name  string
-		in    string
-		want  int
+		name string
+		in   string
+		want int
 	}{
 		{"minutes seconds", "4:20", 260},
 		{"hours", "1:02:03", 3723},

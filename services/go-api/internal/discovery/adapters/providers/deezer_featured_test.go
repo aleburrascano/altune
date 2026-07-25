@@ -6,8 +6,8 @@ func TestExtractDeezerFeatured(t *testing.T) {
 	cs := []deezerContributor{
 		{ID: 1, Name: "Main Artist", Role: "Main"},
 		{ID: 2, Name: "Guest One", Role: "Featured"},
-		{ID: 3, Name: "  ", Role: "Featured"}, // blank name skipped
-		{ID: 4, Name: "Guest Two", Role: "featured"}, // case-insensitive
+		{ID: 3, Name: "  ", Role: "Featured"},
+		{ID: 4, Name: "Guest Two", Role: "featured"},
 	}
 	got := extractDeezerFeatured(cs)
 	if len(got) != 2 {
@@ -29,9 +29,8 @@ func TestExtractDeezerFeatured_NoneWhenAllMain(t *testing.T) {
 }
 
 func TestExtractDeezerFeatured_CoPrimaryMain(t *testing.T) {
-	// Opium-style co-billing: the collaborator is credited "Main", not "Featured".
 	cs := []deezerContributor{
-		{ID: 1, Name: "Ken Carson", Role: "Main"}, // primary — skipped
+		{ID: 1, Name: "Ken Carson", Role: "Main"},
 		{ID: 2, Name: "Playboi Carti", Role: "Main"},
 	}
 	got := extractDeezerFeatured(cs)
@@ -42,10 +41,10 @@ func TestExtractDeezerFeatured_CoPrimaryMain(t *testing.T) {
 
 func TestExtractDeezerFeatured_DedupesAndKeepsFeaturedAfterCoMain(t *testing.T) {
 	cs := []deezerContributor{
-		{ID: 1, Name: "Ken Carson", Role: "Main"},   // primary — skipped
-		{ID: 2, Name: "Destroy Lonely", Role: "Main"}, // co-primary
+		{ID: 1, Name: "Ken Carson", Role: "Main"},
+		{ID: 2, Name: "Destroy Lonely", Role: "Main"},
 		{ID: 3, Name: "Lil Uzi Vert", Role: "Featured"},
-		{ID: 4, Name: "destroy lonely", Role: "Featured"}, // dup by name
+		{ID: 4, Name: "destroy lonely", Role: "Featured"},
 	}
 	got := extractDeezerFeatured(cs)
 	if len(got) != 2 {

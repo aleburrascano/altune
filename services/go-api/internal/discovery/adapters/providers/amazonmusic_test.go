@@ -9,9 +9,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// newTestAmazonMusicAdapter seeds a fake session so tests exercise showSearch
-// without needing a live config.json round trip — the same shape as
-// newTestSoundCloudAPI seeding a client_id.
 func newTestAmazonMusicAdapter(srv *httptest.Server) *AmazonMusicAdapter {
 	a := NewAmazonMusicAdapter(srv.Client())
 	a.searchURL = srv.URL
@@ -32,10 +29,6 @@ func allKinds() map[domain.ResultKind]bool {
 	}
 }
 
-// amzFixtureResponse is a trimmed showSearch response with one track, one
-// album, and one artist card, plus a duplicate track (same album+track pair,
-// as the real response repeats a top hit in more than one row) to exercise
-// dedup. Shape captured from the live web player (2026-07-22).
 const amzFixtureResponse = `{
   "methods": [{
     "template": {
@@ -110,8 +103,6 @@ func TestAmazonMusicAdapter_Search_classifiesAndDedupes(t *testing.T) {
 	if got := len(byKind[domain.ResultKindArtist]); got != 1 {
 		t.Errorf("artist count = %d, want 1", got)
 	}
-	// The podcast card carries no /albums or /artists deeplink and must be
-	// dropped, not misclassified.
 	for _, r := range results {
 		if r.Title == "Some Podcast Episode" {
 			t.Errorf("podcast card leaked into results: %+v", r)
@@ -178,7 +169,6 @@ func TestAmazonMusicAdapter_Search_reResolvesSessionOnAuthFailure(t *testing.T) 
 	}))
 	defer srv.Close()
 
-	// A second server plays config.json so invalidate() can re-resolve.
 	configSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{

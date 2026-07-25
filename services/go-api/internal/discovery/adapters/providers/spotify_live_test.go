@@ -10,9 +10,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// TestSpotifyContentLive_E2E exercises the REAL adapter (no test overrides)
-// against live Spotify, confirming the pathfinder content path returns data.
-// Gated by SPOTIFY_LIVE=1; not part of the regression suite.
 func TestSpotifyContentLive_E2E(t *testing.T) {
 	if os.Getenv("SPOTIFY_LIVE") != "1" {
 		t.Skip("set SPOTIFY_LIVE=1 to run the live Spotify content E2E")

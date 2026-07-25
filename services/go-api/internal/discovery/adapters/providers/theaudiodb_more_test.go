@@ -84,8 +84,6 @@ func TestTheAudioDBAdapter_Resolve_AlbumWithoutSubtitleIsEmpty(t *testing.T) {
 	}
 }
 
-// Search's documented policy: transport/status errors PROPAGATE (unlike
-// Resolve, which degrades) so the fan-out's circuit breaker sees the outage.
 func TestTheAudioDBAdapter_Search_http500Propagates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

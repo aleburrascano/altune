@@ -37,8 +37,6 @@ func TestAppleMusicAdapter_GetAlbumTracks_malformedJSONIsError(t *testing.T) {
 	}
 }
 
-// The content path shares Search's rotation tolerance: a 401 invalidates the
-// token, re-resolves, and retries once.
 func TestAppleMusicAdapter_fetchCatalog_reResolvesTokenOnAuthFailure(t *testing.T) {
 	calls := 0
 	catalogSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

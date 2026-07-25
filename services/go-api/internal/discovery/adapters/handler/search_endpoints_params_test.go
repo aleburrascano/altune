@@ -18,8 +18,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// --- fake vocabulary store (suggest) ---
-
 type fakeVocabStore struct {
 	entries       []discdomain.VocabularyEntry
 	err           error
@@ -39,8 +37,6 @@ func (s *fakeVocabStore) FindClosest(context.Context, string, int) ([]discdomain
 	return nil, nil
 }
 
-// --- recording event store ---
-
 type recordingEventStore struct {
 	events []discdomain.InteractionEvent
 	err    error
@@ -54,10 +50,8 @@ func (s *recordingEventStore) Append(_ context.Context, e discdomain.Interaction
 	return nil
 }
 
-// --- fake operator-console recorders ---
-
 type fakeProviderHealth struct {
-	records []string // "provider/status"
+	records []string
 }
 
 func (f *fakeProviderHealth) Record(provider, status string, _ int64) {
@@ -66,7 +60,7 @@ func (f *fakeProviderHealth) Record(provider, status string, _ int64) {
 
 type fakeSearchTrace struct {
 	searchQueries  []string
-	contentFetches []string // fetch kind ("top_tracks", "albums")
+	contentFetches []string
 }
 
 func (f *fakeSearchTrace) RecordSearch(_ context.Context, query string, _ []string, _ string, _ []discdomain.ProviderSearchResponse, _ []discdomain.SearchResult) {
@@ -76,8 +70,6 @@ func (f *fakeSearchTrace) RecordSearch(_ context.Context, query string, _ []stri
 func (f *fakeSearchTrace) RecordContentFetch(_ context.Context, kind, _, _, _ string, _ []discdomain.SearchResult) {
 	f.contentFetches = append(f.contentFetches, kind)
 }
-
-// --- router helpers ---
 
 func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{Suggest: service.NewSuggestService(vocab)})
@@ -91,14 +83,10 @@ func buildEventRouter(store *recordingEventStore) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{Event: service.NewRecordEventService(store)})
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(discVerifyAsTestUser))
-	// Mirror the app's body-size cap (app.go wires MaxBodySize(1<<20) globally)
-	// so the oversized-payload path is exercised as deployed.
 	r.Use(httputil.MaxBodySize(1 << 20))
 	r.Mount("/discovery", h.Routes())
 	return r
 }
-
-// ==================== Suggest ====================
 
 func TestHandleSuggest(t *testing.T) {
 	t.Run("missing q returns 400", func(t *testing.T) {
@@ -134,18 +122,17 @@ func TestHandleSuggest(t *testing.T) {
 	})
 
 	t.Run("limit boundaries clamp to default 5", func(t *testing.T) {
-		// limit is valid on (0, 10]; everything else falls back to 5.
 		cases := []struct {
 			query string
 			want  int
 		}{
-			{"/discovery/suggest?q=x", 5},           // absent
-			{"/discovery/suggest?q=x&limit=0", 5},   // zero
-			{"/discovery/suggest?q=x&limit=-3", 5},  // negative
-			{"/discovery/suggest?q=x&limit=11", 5},  // above cap
-			{"/discovery/suggest?q=x&limit=abc", 5}, // non-numeric
-			{"/discovery/suggest?q=x&limit=1", 1},   // lower valid bound
-			{"/discovery/suggest?q=x&limit=10", 10}, // upper valid bound
+			{"/discovery/suggest?q=x", 5},
+			{"/discovery/suggest?q=x&limit=0", 5},
+			{"/discovery/suggest?q=x&limit=-3", 5},
+			{"/discovery/suggest?q=x&limit=11", 5},
+			{"/discovery/suggest?q=x&limit=abc", 5},
+			{"/discovery/suggest?q=x&limit=1", 1},
+			{"/discovery/suggest?q=x&limit=10", 10},
 		}
 		for _, c := range cases {
 			vocab := &fakeVocabStore{}
@@ -183,11 +170,7 @@ func TestHandleSuggest(t *testing.T) {
 	})
 }
 
-// ==================== Search param validation ====================
-
 func TestHandleSearch_LimitBoundaries(t *testing.T) {
-	// The domain caps limit at 50 (NewSearchQuery); non-positive / unparsable
-	// values fall back to the handler default of 20 rather than erroring.
 	cases := []struct {
 		name       string
 		query      string
@@ -200,8 +183,6 @@ func TestHandleSearch_LimitBoundaries(t *testing.T) {
 		{"zero defaults", "/discovery/search?q=x&limit=0", http.StatusOK},
 		{"negative defaults", "/discovery/search?q=x&limit=-1", http.StatusOK},
 		{"non-numeric defaults", "/discovery/search?q=x&limit=abc", http.StatusOK},
-		// strconv.Atoi saturates an overflowing value to MaxInt (alongside
-		// ErrRange), so a huge limit lands above the domain cap and 400s.
 		{"overflow-huge exceeds cap", "/discovery/search?q=x&limit=99999999999999999999", http.StatusBadRequest},
 	}
 	for _, c := range cases {
@@ -308,11 +289,7 @@ func TestHandleSearch_RecordsProviderHealthAndTrace(t *testing.T) {
 	}
 }
 
-// ==================== Search history ====================
-
 func TestHandleSearchHistory_UTCTimestampFormat(t *testing.T) {
-	// A non-UTC ExecutedAt must be converted before the Z-suffixed layout is
-	// applied — the wire timestamp always tells UTC truth.
 	cest := time.FixedZone("CEST", 2*3600)
 	historyRepo := &fakeSearchHistoryRepo{entries: []*discdomain.SearchHistoryEntry{{
 		ID:         uuid.New(),
@@ -358,8 +335,6 @@ func TestHandleClearSearchHistory_NoAuthReturns401(t *testing.T) {
 	discAssertStatus(t, rec, http.StatusUnauthorized)
 }
 
-// ==================== Events ====================
-
 func TestHandleRecordEvent_StoreErrorReturns500(t *testing.T) {
 	router := buildEventRouter(&recordingEventStore{err: context.DeadlineExceeded})
 
@@ -371,8 +346,6 @@ func TestHandleRecordEvent_StoreErrorReturns500(t *testing.T) {
 func TestHandleRecordEvent_OversizedBodyReturns400(t *testing.T) {
 	router := buildEventRouter(&recordingEventStore{})
 
-	// Just over the 1MB cap: MaxBytesReader trips mid-decode -> "invalid
-	// request body" 400, never a 500 or an appended event.
 	oversized := `{"type":"play","query_norm":"` + strings.Repeat("a", 1<<20) + `"}`
 	rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(oversized))
 	discAssertStatus(t, rec, http.StatusBadRequest)
@@ -425,8 +398,6 @@ func TestHandleRecordEvent_ServerReservedTypes(t *testing.T) {
 	}
 }
 
-// ==================== Wire mapping units ====================
-
 func TestSearchResultToDTO_TypedFieldsMirroredIntoExtras(t *testing.T) {
 	sr := discdomain.SearchResult{
 		Kind:          discdomain.ResultKindAlbum,
@@ -458,7 +429,7 @@ func TestSearchResultToDTO_TypedFieldsMirroredIntoExtras(t *testing.T) {
 		"year":         2017,
 		"release_date": "2017-04-14",
 		"track_count":  14,
-		"duration":     180, // pre-existing extras survive the merge
+		"duration":     180,
 	}
 	for k, want := range wantExtras {
 		if got, ok := dto.Extras[k]; !ok || got != want {

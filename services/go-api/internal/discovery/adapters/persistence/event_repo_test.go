@@ -65,8 +65,6 @@ func TestPgxEventStore_AppendAndRead(t *testing.T) {
 	}
 }
 
-// A non-search event has no query and no payload: query_norm must persist as
-// NULL and payload must default to an empty JSON object, not error.
 func TestPgxEventStore_NilPayloadAndQuery(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
