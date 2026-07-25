@@ -5,9 +5,9 @@ The search pipeline (`service/`), providers (`adapters/providers/`), and the val
 Layout:
 
 - `domain/` — `SearchResult`, the enrichment value objects, telemetry events, `FeaturedArtist`, identity read-models.
-- `ports/` — provider, artwork, cache and identity-store interfaces.
+- `ports/` — provider, artwork, cache, identity-store and catalog-ownership interfaces.
 - `service/` — `search.go` (the `Service` orchestrator), `merge.go` / `rank.go` / `diversity.go` (the Merge→Rank→reshape core), `enrich/` (detail-open enrichers), `eval/` (offline harness cores, including `library_corpus.go`'s frozen-corpus load/save).
-- `adapters/` — `providers/` (one file per provider), `cache/`, `persistence/`, `handler/`.
+- `adapters/` — `providers/` (one file per provider), `cache/`, `persistence/`, `handler/`, `catalogbridge/` (the read-only seam onto catalog for ownership stamping and track-number fill).
 
 ## Rules
 
@@ -46,6 +46,14 @@ Adapters:
 - Never add a `user_id` filter to `related_tracks_repo`'s cross-user scan — it is deliberate.
 - Never let a malformed row payload fail a whole batch; skip the row.
 - An xref upsert merges, never replaces.
+
+Ownership and shaping:
+
+- Stamp ownership at the wire edge only; the ranking path never sees a user's library.
+- Keep `ports.OwnershipKey` the single normalizer both the bridge and the stamper use.
+- An ownership lookup failure degrades to an unstamped result — never a failed search.
+- Fill a track number off the request path, on a detached context.
+- `BuildBlendedSlate` reads the ranked order and never re-ranks; the top result is excluded from its own section.
 
 Telemetry:
 

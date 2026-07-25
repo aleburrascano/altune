@@ -18,3 +18,17 @@ The artist **detail** path is a separate pipeline from search (see [scatter-gath
 Detail resolution is keyed on provider ids, never names, so a same-name artist cannot bleed into another's discography, and the resolved identity is never narrower than the input. Partial consensus verdicts are never cached: if the context is cut mid-validation a transient MB failure degrades to the un-vetoed union but must not freeze a possibly contaminated result. Identity verification is fail-open — never drop an edge on a fetch failure or empty result — and the MB anchor's minimum thresholds exist so an incomplete MB discography can never drop a real release.
 
 A single iTunes fetch is one source and is never reported as "confirmed on multiple providers". A provider carrying only a year must never mask another's full date, and the artwork URL and its source are tagged together so `ArtworkSource` cannot describe the wrong URL. Providers under-label `record_type` (iTunes never set it), which is why release bucketing exists rather than trusting the field. Consensus cache keys carry the seed identity, so two same-name artists never share an entry.
+
+## Album tracklists: MusicBrainz featured merge (2026-07-25)
+
+`GetAlbumTracksService` gained `ExecuteRequest(AlbumTracksRequest)`, which is `Execute` plus one step: when the caller passes the album's MusicBrainz id (`?mbid=` on the endpoint), the service fetches the MB tracklist and copies its `featured_artists` onto any track that has none, matched on `NormalizeForMatch(title)`.
+
+MusicBrainz carries guest credits the streaming providers drop, so the client had been making a second album-tracks call against MB and doing this merge itself. Doing it here means one request from the device and one definition of how titles are matched.
+
+`Execute` survives with its original positional signature and delegates - its four test files and the detail harness call it, and the MB merge is genuinely optional.
+
+## One call for artist content (2026-07-25)
+
+`GET /v1/discovery/artists/{provider}/{externalId}/content` runs `GetTopTracks` and `GetAlbums` in parallel and returns both. The client used to call the per-provider `top-tracks` and `albums` endpoints once each for Deezer, SoundCloud and iTunes/Last.fm and merge the six responses - a second implementation of the identity fan-out and `MergeReleases` core that already runs here, and a worse one: it deduped on a hand-rolled title normalizer and had no MB anchor.
+
+The per-provider endpoints stay; they are what the operator console's detail re-runner drives.

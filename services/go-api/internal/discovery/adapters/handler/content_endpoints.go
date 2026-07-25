@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
+	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
@@ -82,7 +84,14 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	resp, err := h.albumSvc.Execute(r.Context(), pn, externalID, albumTitle, albumArtist, limit)
+	resp, err := h.albumSvc.ExecuteRequest(r.Context(), service.AlbumTracksRequest{
+		Provider:     pn,
+		ExternalID:   externalID,
+		Title:        albumTitle,
+		Artist:       albumArtist,
+		MBExternalID: strings.TrimSpace(r.URL.Query().Get("mbid")),
+		Limit:        limit,
+	})
 	if err != nil {
 		slog.ErrorContext(r.Context(), "get album tracks failed",
 			"error", err, "provider", provider, "external_id", externalID)
@@ -90,7 +99,12 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
+	dto := contentFetchToDTO(resp)
+	if userId, hasUser := auth.UserIDFromContext(r.Context()); hasUser {
+		h.stampOwnership(r.Context(), userId, dto.Items)
+		h.fillAlbumTrackNumbers(r.Context(), userId, dto.Items)
+	}
+	httputil.WriteJSON(w, http.StatusOK, dto)
 }
 
 func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +138,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 		h.searchTrace.RecordContentFetch(r.Context(), "top_tracks", provider, "", resp.Status.String(), resp.Items)
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
+	h.writeContentFetch(w, r, resp)
 }
 
 func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +172,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 		h.searchTrace.RecordContentFetch(r.Context(), "albums", provider, artistName, resp.Status.String(), resp.Items)
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
+	h.writeContentFetch(w, r, resp)
 }
 
 func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Request) {
@@ -187,5 +201,80 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, contentFetchToDTO(resp))
+	h.writeContentFetch(w, r, resp)
+}
+
+type ArtistContentResponseDTO struct {
+	TopTracks ContentFetchResponseDTO `json:"top_tracks"`
+	Albums    ContentFetchResponseDTO `json:"albums"`
+}
+
+func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Request) {
+	provider, externalID, ok := validateContentParams(w, r)
+	if !ok {
+		return
+	}
+	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
+	tracksLimit := clampNamedLimit(r, "tracks_limit", 5, 50)
+	albumsLimit := clampNamedLimit(r, "albums_limit", 100, 200)
+
+	pn, parseErr := domain.ParseProviderName(provider)
+	if parseErr != nil {
+		httputil.BadRequest(w, "unknown provider")
+		return
+	}
+	if h.artistSvc == nil {
+		httputil.WriteJSON(w, http.StatusOK, ArtistContentResponseDTO{
+			TopTracks: ContentFetchResponseDTO{Provider: provider, Status: "error", Items: []SearchResultDTO{}},
+			Albums:    ContentFetchResponseDTO{Provider: provider, Status: "error", Items: []SearchResultDTO{}},
+		})
+		return
+	}
+
+	var tracksResp, albumsResp *service.ContentFetchResponse
+	var tracksErr, albumsErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		tracksResp, tracksErr = h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, tracksLimit)
+	}()
+	go func() {
+		defer wg.Done()
+		albumsResp, albumsErr = h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, albumsLimit)
+	}()
+	wg.Wait()
+
+	if tracksErr != nil || albumsErr != nil {
+		slog.ErrorContext(r.Context(), "artist content failed",
+			"tracks_error", tracksErr, "albums_error", albumsErr,
+			"provider", provider, "external_id", externalID)
+		httputil.InternalError(w)
+		return
+	}
+
+	if h.searchTrace != nil {
+		h.searchTrace.RecordContentFetch(r.Context(), "top_tracks", provider, artistName, tracksResp.Status.String(), tracksResp.Items)
+		h.searchTrace.RecordContentFetch(r.Context(), "albums", provider, artistName, albumsResp.Status.String(), albumsResp.Items)
+	}
+
+	dto := ArtistContentResponseDTO{
+		TopTracks: contentFetchToDTO(tracksResp),
+		Albums:    contentFetchToDTO(albumsResp),
+	}
+	if userId, hasUser := auth.UserIDFromContext(r.Context()); hasUser {
+		h.stampOwnership(r.Context(), userId, dto.TopTracks.Items)
+	}
+	httputil.WriteJSON(w, http.StatusOK, dto)
+}
+
+func clampNamedLimit(r *http.Request, param string, def, max int) int {
+	limit, _ := strconv.Atoi(r.URL.Query().Get(param))
+	if limit <= 0 {
+		return def
+	}
+	if limit > max {
+		return max
+	}
+	return limit
 }

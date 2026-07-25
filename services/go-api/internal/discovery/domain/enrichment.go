@@ -30,3 +30,11 @@ func (e MBEnrichment) IsZero() bool {
 		len(e.ExternalIDs) == 0 &&
 		e.ArtworkURL == ""
 }
+
+func (e MBEnrichment) HasRenderableContent() bool {
+	return len(e.Genres) > 0 ||
+		e.Year > 0 ||
+		e.Rating > 0 ||
+		e.ArtworkURL != "" ||
+		len(e.ExternalIDs) > 0
+}

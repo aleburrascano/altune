@@ -157,3 +157,29 @@ func (t *Track) RevertToPending() {
 func (t *Track) IsStreamable() bool {
 	return t.AcquisitionStatus == AcquisitionReady && t.AudioRef != nil
 }
+
+var failureMessages = map[string]string{
+	"no_match_found":  "Couldn't find this track",
+	"download_failed": "Download failed",
+	"ytdlp_error":     "Download error",
+}
+
+func FailureMessage(reason *string) string {
+	if reason == nil {
+		return "Acquisition failed"
+	}
+	if msg, ok := failureMessages[*reason]; ok {
+		return msg
+	}
+	return "Couldn't get this track"
+}
+
+func TotalDurationSeconds(tracks []*Track) float64 {
+	total := 0.0
+	for _, t := range tracks {
+		if t.DurationSeconds != nil {
+			total += *t.DurationSeconds
+		}
+	}
+	return total
+}

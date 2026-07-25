@@ -9,7 +9,7 @@ import (
 )
 
 type trackLister interface {
-	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
+	ListFilteredForUser(ctx context.Context, userId shared.UserId, query domain.LibraryQuery) (tracks []*domain.Track, total int, err error)
 }
 
 type ListTracksOutput struct {
@@ -27,15 +27,15 @@ func NewListTracksService(trackRepo trackLister) *ListTracksService {
 	return &ListTracksService{trackRepo: trackRepo}
 }
 
-func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, limit, offset int) (*ListTracksOutput, error) {
-	if limit <= 0 {
-		limit = 50
+func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, query domain.LibraryQuery) (*ListTracksOutput, error) {
+	if query.Limit <= 0 {
+		query.Limit = 50
 	}
-	if limit > 2000 {
-		limit = 2000
+	if query.Limit > 2000 {
+		query.Limit = 2000
 	}
 
-	tracks, total, err := s.trackRepo.ListForUser(ctx, userId, limit, offset)
+	tracks, total, err := s.trackRepo.ListFilteredForUser(ctx, userId, query)
 	if err != nil {
 		return nil, fmt.Errorf("list tracks: %w", err)
 	}
@@ -43,7 +43,7 @@ func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, l
 	return &ListTracksOutput{
 		Tracks:  tracks,
 		Total:   total,
-		Limit:   limit,
-		HasMore: offset+len(tracks) < total,
+		Limit:   query.Limit,
+		HasMore: query.Offset+len(tracks) < total,
 	}, nil
 }

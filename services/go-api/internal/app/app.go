@@ -31,6 +31,7 @@ import (
 	catalogPorts "altune/go-api/internal/catalog/ports"
 	catalogService "altune/go-api/internal/catalog/service"
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
+	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	"altune/go-api/internal/discovery/adapters/providers"
@@ -189,6 +190,9 @@ func (a *App) setup(ctx context.Context) error {
 	disc := a.wireDiscovery(ctx)
 	cat := a.wireCatalog(tap, disc.featuredBridge)
 	queueHandler := a.wirePlayback(cat.trackRepo)
+	disc.handler.
+		WithOwnership(discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo)).
+		WithTrackNumberFiller(discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc))
 
 	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler)
 	a.wireAdmin(ctx, r, verifier, tap, disc.requestStore, disc.searchSvc, disc.artistSvc)
@@ -207,12 +211,14 @@ func (a *App) setup(ctx context.Context) error {
 }
 
 type catalogWiring struct {
-	trackRepo       *persistence.PgxTrackRepository
-	trackHandler    *catalogHandler.TrackHandler
-	playlistHandler *catalogHandler.PlaylistHandler
-	streamHandler   *catalogHandler.StreamHandler
-	audioURLHandler *catalogHandler.AudioURLHandler
-	retryH          *acqHandler.RetryHandler
+	trackRepo         *persistence.PgxTrackRepository
+	setTrackNumberSvc *catalogService.SetTrackNumberService
+	trackHandler      *catalogHandler.TrackHandler
+	libraryHandler    *catalogHandler.LibraryHandler
+	playlistHandler   *catalogHandler.PlaylistHandler
+	streamHandler     *catalogHandler.StreamHandler
+	audioURLHandler   *catalogHandler.AudioURLHandler
+	retryH            *acqHandler.RetryHandler
 }
 
 func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.FeaturedResolver) catalogWiring {
@@ -271,12 +277,14 @@ func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.Fea
 	}
 
 	return catalogWiring{
-		trackRepo:       trackRepo,
-		trackHandler:    trackHandler,
-		playlistHandler: playlistHandler,
-		streamHandler:   streamHandler,
-		audioURLHandler: audioURLHandler,
-		retryH:          retryH,
+		trackRepo:         trackRepo,
+		setTrackNumberSvc: setTrackNumberSvc,
+		trackHandler:      trackHandler,
+		libraryHandler:    catalogHandler.NewLibraryHandler(catalogService.NewLibraryLensService(trackRepo)),
+		playlistHandler:   playlistHandler,
+		streamHandler:     streamHandler,
+		audioURLHandler:   audioURLHandler,
+		retryH:            retryH,
 	}
 }
 
@@ -326,6 +334,7 @@ func (a *App) mountRoutes(
 		if cat.retryH != nil {
 			r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
 		}
+		r.Mount("/library", cat.libraryHandler.Routes())
 		r.Mount("/playlists", cat.playlistHandler.Routes())
 		r.Mount("/playback", queueHandler.Routes())
 		r.Mount("/discovery", discoveryH.Routes())

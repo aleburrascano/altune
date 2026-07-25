@@ -26,3 +26,15 @@ Handler (`adapters/handler/track_handler.go`): `TrackHandler` routes (`GET /`, `
 `Track.FeaturedArtists` is empty for tracks whose credits were never resolved, and `TrackRepository.GetByID` / `ListByIDs` deliberately do not load it — their callers read only status and audio-ref fields (the hot one being audio-URL presigning), so the join is not paid on every call.
 
 `trackColumns` and `trackColumnsPrefixed` (the `t.`-aliased form for joins), `playlistTrackCountSubquery`, `renumberPlaylistPositions` and `trackScanDest` each exist so a rule has exactly one definition and cannot drift between the queries sharing it. `renumberPlaylistPositions` in particular is shared by every write path that can drop a `playlist_tracks` row — playlist track removal, and track deletion in `track_repo.go`.
+
+## Failure copy (2026-07-25)
+
+`FailureMessage(reason *string)` maps an acquisition failure reason to the sentence a user reads: `no_match_found` to "Couldn't find this track", `download_failed` to "Download failed", `ytdlp_error` to "Download error", a nil reason to "Acquisition failed", anything unrecognised to "Couldn't get this track". It surfaces as `failure_message` on `TrackDTO`, set only when the track is actually `failed`.
+
+The map lived in the mobile client, which meant the backend could introduce a new failure reason and every already-shipped app would render it as the generic fallback. The reason string stays on the wire too - it is the machine-readable half, and telemetry and the operator console read it.
+
+## Library read models (2026-07-25)
+
+`domain/library_lens.go` sits beside the aggregate but is deliberately not part of it: `AlbumGroup`, `ArtistGroup` and `OwnedTrackRef` are read-side projections over many tracks, with no identity and no invariants. They are here rather than in `service/` so the pgx adapter can return them without importing the application layer.
+
+`LibrarySort` is a three-state enum (`recent` / `az` / `year`) parsed at the edge; an unknown value is a `ValidationError`, never a silent default.

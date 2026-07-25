@@ -28,3 +28,11 @@ func (e LastFmEnrichment) IsZero() bool {
 		e.Duration == 0 &&
 		e.Album == ""
 }
+
+func (e LastFmEnrichment) HasRenderableContent() bool {
+	return e.Listeners > 0 ||
+		e.Playcount > 0 ||
+		len(e.Tags) > 0 ||
+		e.Bio != "" ||
+		len(e.Similar) > 0
+}

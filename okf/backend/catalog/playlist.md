@@ -24,3 +24,7 @@ Handler (`adapters/handler/playlist_handler.go`): `PlaylistHandler` holds both s
 `domain.PreviewArtworkLimit` is the single definition of the preview cap, shared by the SQL projection in `PgxPlaylistRepository.ListForUser` and the Go fallback in `handler.previewArtworkFromTracks` — two independent implementations of one selection rule, so the cap cannot drift. `renumberPlaylistPositions` is likewise shared by every write path that can drop a `playlist_tracks` row (playlist track removal, and track deletion in `track_repo.go`).
 
 `track_count` and `preview_artwork` are computed in the same query as the playlist rows, so the playlists screen costs one round-trip with no per-playlist follow-up, and `track_count` is projected on `GetByID` too so a single-playlist response such as a rename reports a real count without loading tracks.
+
+## Total duration on the wire (2026-07-25)
+
+`PlaylistDetailResponse` carries `total_duration_seconds`, summed by `domain.TotalDurationSeconds` over the tracks the response already contains. The mobile playlist hero used to sum `duration_seconds` itself; the number a user reads is now decided in one place. The list response deliberately does not carry it - the grid shows a track count, and adding a `SUM` to the list query would cost a join for a number nothing renders.

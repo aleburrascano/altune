@@ -65,3 +65,13 @@ The eval meter ships off (`EVAL_METER_ENABLED`); when disabled `buildEvalRunner`
 `setup` assembles the graph in dependency order; each `wire*` stage owns one context's construction, and values crossing contexts travel explicitly through the `*Wiring` structs rather than package state. Shutdown drains the shared background group (corpus refresh, metrics rollup) in `app` rather than in the scheduler — without that drain the no-audio-store path leaks goroutines past shutdown — and `drainBackground` gives up after its timeout so a hung background task cannot wedge shutdown.
 
 Health is tri-state: a nil dependency is `not_configured`, intentionally absent and distinct from `down`, so it must not fail readiness. The per-dependency breakdown stays behind the operator-gated `/admin/health` tile.
+
+## Discovery to catalog ownership bridge (2026-07-25)
+
+`setup` now wires one edge that did not exist before: discovery reading from catalog. After `wireCatalog` returns, the discovery handler is given `discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo)` and `NewTrackNumberWriter(cat.setTrackNumberSvc)`.
+
+The ordering is load-bearing and slightly awkward: `wireDiscovery` runs first (catalog's `AddTrackService` needs discovery's featured-artist bridge), so the ownership dependency can only be attached to the already-constructed handler afterwards. That is why both are `With*` setters rather than constructor parameters - the two contexts each need something from the other, and one of the two edges has to be late-bound.
+
+`catalogWiring` exposes `setTrackNumberSvc` for the same reason: the bridge writes through catalog's service, not its repo, so the fill-only policy stays in one place.
+
+Both dependencies are optional at the handler - nil means results ship unstamped and no track numbers are filled, which is what the eval and re-run harnesses get.

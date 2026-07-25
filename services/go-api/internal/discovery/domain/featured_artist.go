@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -87,4 +88,26 @@ func asString(v any) string {
 		return strings.TrimSpace(s)
 	}
 	return ""
+}
+
+var featuredFromTextRe = regexp.MustCompile(`(?i)(?:\(|\[)?\s*(?:feat\.?|ft\.?|featuring|with)\s+([^)\]]+?)(?:\)|\]|$)`)
+
+func FeaturedFromText(title, subtitle string) []FeaturedArtist {
+	for _, text := range []string{title, subtitle} {
+		match := featuredFromTextRe.FindStringSubmatch(text)
+		if match == nil {
+			continue
+		}
+		var out []FeaturedArtist
+		for _, name := range strings.Split(match[1], ",") {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				out = append(out, FeaturedArtist{Name: name, Role: RoleFeatured})
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return nil
 }

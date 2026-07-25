@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/service"
 	"altune/go-api/internal/shared/httputil"
 )
@@ -27,13 +28,21 @@ func (h *QueueHandler) Routes() chi.Router {
 }
 
 type saveQueueRequest struct {
-	TrackIds     []string `json:"track_ids"`
-	CurrentIdx   int      `json:"current_index"`
-	PositionMs   int64    `json:"position_ms"`
-	Shuffled     bool     `json:"shuffled"`
-	RepeatMode   string   `json:"repeat_mode"`
-	SourceId     string   `json:"source_id"`
-	NaturalOrder []string `json:"natural_order"`
+	TrackIds     []string        `json:"track_ids"`
+	CurrentIdx   int             `json:"current_index"`
+	PositionMs   int64           `json:"position_ms"`
+	Shuffled     bool            `json:"shuffled"`
+	RepeatMode   string          `json:"repeat_mode"`
+	SourceId     string          `json:"source_id"`
+	Source       *queueSourceDTO `json:"source"`
+	NaturalOrder []string        `json:"natural_order"`
+}
+
+type queueSourceDTO struct {
+	Kind       string `json:"kind"`
+	PlaylistId string `json:"playlist_id,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Query      string `json:"query,omitempty"`
 }
 
 type queueStateResponse struct {
@@ -43,6 +52,7 @@ type queueStateResponse struct {
 	Shuffled     bool                  `json:"shuffled"`
 	RepeatMode   string                `json:"repeat_mode"`
 	SourceId     string                `json:"source_id"`
+	Source       *queueSourceDTO       `json:"source"`
 	NaturalOrder []string              `json:"natural_order"`
 	CurrentTrack *currentTrackResponse `json:"current_track,omitempty"`
 }
@@ -74,7 +84,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		PositionMs:   body.PositionMs,
 		Shuffled:     body.Shuffled,
 		RepeatMode:   body.RepeatMode,
-		SourceId:     body.SourceId,
+		SourceId:     saveSourceId(body),
 		NaturalOrder: body.NaturalOrder,
 	})
 	if err != nil {
@@ -109,6 +119,7 @@ func toResponse(view *service.ResumeView) queueStateResponse {
 		Shuffled:     state.Shuffled,
 		RepeatMode:   state.RepeatMode.String(),
 		SourceId:     state.SourceId,
+		Source:       sourceToDTO(domain.ParseQueueSource(state.SourceId)),
 		NaturalOrder: state.NaturalOrder,
 	}
 	if c := view.CurrentTrack; c != nil {
@@ -122,4 +133,35 @@ func toResponse(view *service.ResumeView) queueStateResponse {
 		}
 	}
 	return resp
+}
+
+func saveSourceId(body saveQueueRequest) string {
+	if body.Source != nil {
+		return sourceFromDTO(body.Source).Format()
+	}
+	return body.SourceId
+}
+
+func sourceFromDTO(dto *queueSourceDTO) domain.QueueSource {
+	if dto == nil {
+		return domain.QueueSource{}
+	}
+	return domain.QueueSource{
+		Kind:       dto.Kind,
+		PlaylistId: dto.PlaylistId,
+		Name:       dto.Name,
+		Query:      dto.Query,
+	}
+}
+
+func sourceToDTO(source domain.QueueSource) *queueSourceDTO {
+	if source.IsZero() {
+		return nil
+	}
+	return &queueSourceDTO{
+		Kind:       source.Kind,
+		PlaylistId: source.PlaylistId,
+		Name:       source.Name,
+		Query:      source.Query,
+	}
 }
