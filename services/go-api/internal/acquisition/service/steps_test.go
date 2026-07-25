@@ -470,9 +470,9 @@ func TestBuildAudioRef(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildAudioRef(tt.track, "/tmp/acquire/downloaded.mp3")
+			got := BuildAudioRef(tt.track, "/tmp/acquire/downloaded.mp3")
 			if got != tt.want {
-				t.Errorf("buildAudioRef() = %q, want %q", got, tt.want)
+				t.Errorf("BuildAudioRef() = %q, want %q", got, tt.want)
 			}
 		})
 	}

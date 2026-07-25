@@ -40,7 +40,7 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 		}
 	}
 
-	audioRef := buildAudioRef(ac.Track, ac.TempPath)
+	audioRef := BuildAudioRef(ac.Track, ac.TempPath)
 	ac.AudioRef = audioRef
 
 	if err := s.audioStore.Store(ctx, ac.TempPath, audioRef); err != nil {
@@ -60,7 +60,7 @@ func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error 
 	return nil
 }
 
-func buildAudioRef(track TrackRef, tempPath string) string {
+func BuildAudioRef(track TrackRef, tempPath string) string {
 	artist := sanitizePathComponent(track.Artist)
 	album := track.Album
 	if album == "" {

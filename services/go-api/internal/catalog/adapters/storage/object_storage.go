@@ -18,6 +18,7 @@ import (
 var (
 	_ ports.AudioStore     = (*ObjectStorageAudioStore)(nil)
 	_ ports.AudioURLSigner = (*ObjectStorageAudioStore)(nil)
+	_ ports.AudioLister    = (*ObjectStorageAudioStore)(nil)
 )
 
 type ObjectStorageAudioStore struct {
@@ -67,6 +68,20 @@ func (s *ObjectStorageAudioStore) Exists(ctx context.Context, audioRef string) (
 		return false, err
 	}
 	return true, nil
+}
+
+func (s *ObjectStorageAudioStore) List(ctx context.Context, prefix string) ([]string, error) {
+	var refs []string
+	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	}) {
+		if obj.Err != nil {
+			return nil, fmt.Errorf("list %q: %w", prefix, obj.Err)
+		}
+		refs = append(refs, obj.Key)
+	}
+	return refs, nil
 }
 
 func (s *ObjectStorageAudioStore) Store(ctx context.Context, sourcePath string, audioRef string) error {
