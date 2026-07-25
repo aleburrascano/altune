@@ -1,0 +1,107 @@
+# Re-measure one mode's baselines and open a PR with the diff.
+#
+# Manual dispatch only. cmd/discoveryeval/CLAUDE.md forbids implicit
+# re-baselining: the PR is the explicit, reviewed step, and the diff shows every
+# metric that moved before anything is enforced.
+#
+# Margins must be measured HERE, not locally — -noise-runs sets each margin from
+# the spread across runs, and that spread is dominated by provider behaviour as
+# seen from GitHub runner IPs. A margin measured from a laptop describes a
+# different network.
+#
+# Run one mode at a time; eval at -noise-runs 3 is ~2.6h.
+name: Discovery eval rebaseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Mode to re-baseline
+        required: true
+        type: choice
+        options:
+          - eval
+          - merge
+          - diversity
+          - artist-intent
+          - signal-a
+          - signal-b
+          - correction
+          - detail
+      noise-runs:
+        description: Runs to measure the margin from (3 recommended; 1 sets margin 0)
+        required: true
+        default: '3'
+        type: string
+
+concurrency:
+  group: discovery-eval
+  cancel-in-progress: false
+
+jobs:
+  rebaseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: write
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: services/go-api
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_JWT_JWKS_URL: ${{ secrets.SUPABASE_JWT_JWKS_URL }}
+      LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+      DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+      FANARTTV_API_KEY: ${{ secrets.FANARTTV_API_KEY }}
+      GENIUS_ACCESS_TOKEN: ${{ secrets.GENIUS_ACCESS_TOKEN }}
+      MUSICBRAINZ_USER_AGENT: ${{ secrets.MUSICBRAINZ_USER_AGENT }}
+      CORPUS: cmd/discoveryeval/corpus-library.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: services/go-api/go.sum
+      - name: build harness
+        run: go build -o ./tmp/discoveryeval ./cmd/discoveryeval
+
+      - name: seed vocabulary
+        if: inputs.mode == 'correction'
+        env:
+          REDIS_URL: redis://localhost:6379
+        run: ./tmp/discoveryeval -mode correction-seed -corpus-file "$CORPUS"
+
+      - name: re-baseline ${{ inputs.mode }}
+        env:
+          REDIS_URL: ${{ inputs.mode == 'correction' && 'redis://localhost:6379' || '' }}
+        run: |
+          ./tmp/discoveryeval \
+            -mode ${{ inputs.mode }} \
+            -corpus-file "$CORPUS" \
+            -update-baselines \
+            -noise-runs ${{ inputs.noise-runs }}
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          add-paths: services/go-api/cmd/discoveryeval/baselines.json
+          branch: rebaseline/${{ inputs.mode }}
+          commit-message: |
+            chore(tooling): re-baseline discoveryeval ${{ inputs.mode }}
+          title: 'chore(tooling): re-baseline discoveryeval ${{ inputs.mode }}'
+          body: |
+            Measured on a GitHub runner over ${{ inputs.noise-runs }} run(s) against the frozen corpus.
+
+            Review the value and margin movement before merging — merging this makes these numbers the gate.
+
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
