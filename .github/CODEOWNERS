@@ -4,5 +4,5 @@
 
 # CI/CD and deploy config — owner review required.
 /.github/        @aleburrascano
-/services/go-api/docker-compose.prod.yml   @aleburrascano
+/services/go-api/deploy/   @aleburrascano
 /apps.json       @aleburrascano

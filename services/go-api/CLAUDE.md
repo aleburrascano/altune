@@ -11,14 +11,19 @@ CLAUDE.md files load on demand, imports only expand at launch). Full entries und
 `~/.claude/lexicon/site/{path}/index.html` — Grep an entry for `Avoid|Cost` and
 quote its cost line when tradeoffs matter; never read a whole entry (~40k chars).
 
+Everything about running this service — dev and prod — lives in `deploy/`: `compose.dev.yml` (Postgres + Redis for local work), `compose.prod.yml`, `Dockerfile`, `Caddyfile`, `caddy/`, and the deploy scripts. The module root holds Go code and its lint/env config, nothing else.
+
 ```bash
 cd services/go-api
 
 # Build
 go build -o ./tmp/api.exe ./cmd/api
 
-# Run locally (needs .env with DB/Redis)
+# Run locally (needs .env.development with DB/Redis)
 ./tmp/api.exe          # or `air` for hot reload
+
+# Local infra (or `npm run dev:up` / `dev:down` / `dev:reset` from the repo root)
+docker compose -f deploy/compose.dev.yml up -d
 
 # Test + vet
 go test ./... -count=1
@@ -32,12 +37,14 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.0 run
 
 ## Deploy
 
-`deploy/blue-green.sh` (helpers in `deploy/lib.sh`) is the only supported deploy path; `deploy/rollback.sh` reverses it. `deploy/blue-green_test.sh` runs both against stubbed `docker`/`curl` and asserts each failure path — run it after touching either. `caddy/upstream.conf` names the live colour and is gitignored — never track it, the VM rewrites it every deploy.
+`deploy/blue-green.sh` (helpers in `deploy/lib.sh`) is the only supported deploy path; `deploy/rollback.sh` reverses it. `deploy/blue-green_test.sh` runs both against stubbed `docker`/`curl` and asserts each failure path — run it after touching either. `deploy/caddy/upstream.conf` names the live colour and is gitignored — never track it, the VM rewrites it every deploy.
 
 - Register every periodic background loop through `App.whenLeader`, never `Start(ctx)` directly, and always before `startBackgroundWhenLeader` runs.
 - Keep `deploy/lib.sh`'s `log` on stderr — `active_color` is read via command substitution.
 - A migration must stay compatible with the previous version — both colours share one database during the swap.
-- Keep `Caddyfile` a single `import` — the colour lives in `caddy/upstream.conf`.
+- Keep `deploy/Caddyfile` a single `import` — the colour lives in `deploy/caddy/upstream.conf`.
+- Keep `name:` pinned in both compose files — dropping it re-derives the project name from the directory and orphans every existing container and volume.
+- Delete `LEGACY_UPSTREAM_FILE` from `deploy/lib.sh` once the VM has deployed at least once after the `deploy/` move.
 
 ## Comment policy
 

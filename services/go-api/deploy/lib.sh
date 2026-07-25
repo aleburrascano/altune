@@ -1,7 +1,8 @@
 set -euo pipefail
 
-COMPOSE_FILE=docker-compose.prod.yml
-UPSTREAM_FILE=caddy/upstream.conf
+COMPOSE_FILE=deploy/compose.prod.yml
+UPSTREAM_FILE=deploy/caddy/upstream.conf
+LEGACY_UPSTREAM_FILE=caddy/upstream.conf
 PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://altune.duckdns.org/health}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 DRAIN_SECONDS="${DRAIN_SECONDS:-20}"
@@ -24,6 +25,11 @@ seed_upstream_if_missing() {
         return 0
     fi
     mkdir -p "$(dirname "$UPSTREAM_FILE")"
+    if [ -f "$LEGACY_UPSTREAM_FILE" ]; then
+        log "adopting the pre-move upstream file at $LEGACY_UPSTREAM_FILE"
+        mv "$LEGACY_UPSTREAM_FILE" "$UPSTREAM_FILE"
+        return 0
+    fi
     if docker ps --format '{{.Names}}' | grep -qx altune-go-api; then
         log "first blue-green deploy: holding Caddy on the legacy container during the swap"
         printf 'reverse_proxy altune-go-api:8000\n' >"$UPSTREAM_FILE"
