@@ -14,7 +14,7 @@ import { AppState, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { ApiError } from '../shared/api-client';
+import { isRetryable } from '../shared/api-client';
 import { AuthGate } from '../features/auth/ui/AuthGate';
 import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
 import { useServerEvents } from '../shared/events/useServerEvents';
@@ -49,8 +49,7 @@ export default function RootLayout() {
         defaultOptions: {
           queries: {
             staleTime: 30_000,
-            retry: (failureCount, error) =>
-              !(error instanceof ApiError && error.status === 401) && failureCount < 3,
+            retry: (failureCount, error) => isRetryable(error) && failureCount < 5,
           },
         },
       }),
