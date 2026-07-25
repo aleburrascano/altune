@@ -520,7 +520,7 @@ func TestSoundCloudAPIAdapter_ArtistContent(t *testing.T) {
 				{"id":9,"kind":"playlist","title":"More Chaos","set_type":"album","user":{"username":"Ken Carson"}}
 			]}`))
 		case r.URL.Path == "/users/659062284/tracks":
-			_, _ = w.Write([]byte(`{"collection":[]}`)) // no standalone uploads for this fixture
+			_, _ = w.Write([]byte(`{"collection":[]}`))
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}

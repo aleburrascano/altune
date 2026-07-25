@@ -14,10 +14,10 @@ type NamedMetric struct {
 
 type Baseline struct {
 	Metric         string  `json:"metric"`
-	Value          float64 `json:"value"`            // the measured baseline
-	Margin         float64 `json:"margin"`           // empirical noise band (>= observed run-to-run spread)
-	HigherIsBetter bool    `json:"higher_is_better"` // true for rates; false for cost/latency/gap counts
-	Note           string  `json:"note,omitempty"`   // free-text: when/how it was set
+	Value          float64 `json:"value"`
+	Margin         float64 `json:"margin"`
+	HigherIsBetter bool    `json:"higher_is_better"`
+	Note           string  `json:"note,omitempty"`
 }
 
 type Baselines map[string]Baseline
@@ -27,9 +27,9 @@ type GateResult struct {
 	Current   float64 `json:"current"`
 	Baseline  float64 `json:"baseline"`
 	Margin    float64 `json:"margin"`
-	Threshold float64 `json:"threshold"` // the value current must stay on the safe side of
+	Threshold float64 `json:"threshold"`
 	Regressed bool    `json:"regressed"`
-	Missing   bool    `json:"missing"` // no committed baseline — informational only
+	Missing   bool    `json:"missing"`
 }
 
 func (b Baselines) Gate(metric string, current float64) GateResult {

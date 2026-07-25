@@ -18,3 +18,5 @@ The same struct also implements `ports.DeezerEnricher` (`deezer_enrichment.go`):
 Caveats: rate limit ~50 req/5s per IP is `[INFERRED]`, unconfirmed via headers; `bpm` is sparse (render only when `> 0`); lyrics availability is region/catalog-dependent; the JWT response field name (`jwt`) is explicitly `[INFERRED]` in the code comment, unverified against a live-dumped auth response. Code matches `docs/providers/deezer.md` closely — no material drift found.
 
 The lyrics path rides `pipe.deezer.com` + `auth.deezer.com` with an anonymous JWT: expect rotation (401 → re-bootstrap once), and never block the hot search path on it. As with every self-healing credential here, a second 401 handler must not wipe the fresh JWT the first one just obtained — re-bootstrap only if the credential still matches the one the request failed with.
+
+In the search-response DTO the pagination cursor is `NextPageURL` (wire tag `next`).

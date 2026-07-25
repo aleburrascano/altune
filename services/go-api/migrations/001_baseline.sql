@@ -1,14 +1,5 @@
--- Baseline schema for Altune.
--- Extracted from the running local Postgres on 2026-06-15.
--- Apply to Supabase via SQL Editor or psql.
---
--- NOTE: When you have Docker running, dump the real schema instead:
---   docker exec altune-postgres-dev pg_dump -U altune -d altune --schema-only --no-owner --no-privileges
--- This file is a best-effort reconstruction from the Go persistence layer.
-
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- catalog: tracks
 CREATE TABLE IF NOT EXISTS tracks (
     id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id            UUID NOT NULL,
@@ -30,7 +21,6 @@ CREATE TABLE IF NOT EXISTS tracks (
     UNIQUE (user_id, dedup_key)
 );
 
--- catalog: playlists
 CREATE TABLE IF NOT EXISTS playlists (
     id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id    UUID NOT NULL,
@@ -39,7 +29,6 @@ CREATE TABLE IF NOT EXISTS playlists (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- catalog: playlist ↔ track membership
 CREATE TABLE IF NOT EXISTS playlist_tracks (
     playlist_id UUID NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
     track_id    UUID NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
@@ -47,7 +36,6 @@ CREATE TABLE IF NOT EXISTS playlist_tracks (
     PRIMARY KEY (playlist_id, track_id)
 );
 
--- discovery: search history (ring buffer per user)
 CREATE TABLE IF NOT EXISTS discovery_search_history (
     id                       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id                  UUID NOT NULL,
@@ -60,7 +48,6 @@ CREATE TABLE IF NOT EXISTS discovery_search_history (
 CREATE INDEX IF NOT EXISTS idx_search_history_user_executed
     ON discovery_search_history (user_id, executed_at DESC);
 
--- discovery: click tracking (sliding-window dedup)
 CREATE TABLE IF NOT EXISTS discovery_search_clicks (
     id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id          UUID NOT NULL,

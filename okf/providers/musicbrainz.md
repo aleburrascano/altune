@@ -16,3 +16,5 @@ The code also adds an `mbMemo` TTL cache (`mbMemoTTL = 6h`, keyed by normalized 
 Both search and enrichment are config-gated by `cfg.HasMusicBrainz()`. Cover Art Archive (a sibling adapter, `coverartarchive.go`) runs first in the artwork chain, consuming the release-group MBIDs this adapter supplies (see [artwork-chain](artwork-chain.md)). No popularity signal — MB `rating` is sparse/community-driven; Deezer stays the ranking popularity primary.
 
 Only successful results are cached — errors and timeouts never are, so a transient failure cannot freeze — and a cancelled request must not keep sleeping out its backoff. Enrichment resolves strictly or returns nothing ("nothing to enrich"), never a fuzzy guess, with ties broken alphabetically so tests and the UI agree on order.
+
+Recording length is decoded as `LengthMs` (wire tag `length`) — MusicBrainz reports it in milliseconds.

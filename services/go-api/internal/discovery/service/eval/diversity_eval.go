@@ -16,19 +16,19 @@ type VariantSearcher interface {
 type DiversityResult struct {
 	Entity        LibraryEntity `json:"entity"`
 	Query         string        `json:"query"`
-	InTopKWith    bool          `json:"in_topk_with"`    // target in top-K of the reshaped list
-	InTopKWithout bool          `json:"in_topk_without"` // target in top-K of the unshaped list
+	InTopKWith    bool          `json:"in_topk_with"`
+	InTopKWithout bool          `json:"in_topk_without"`
 }
 
 type DiversityReport struct {
-	Corpus               string          `json:"corpus,omitempty"` // "" = exact, "hard" = title-only
+	Corpus               string          `json:"corpus,omitempty"`
 	K                    int             `json:"k"`
 	Total                int             `json:"total"`
-	Evaluated            int             `json:"evaluated"`             // entities scored (artist present)
-	LostToReshape        int             `json:"lost_to_reshape"`       // in top-K without reshape, out with — the cost
-	GainedByReshape      int             `json:"gained_by_reshape"`     // out without, in with (collapse can promote)
-	ConcentrationWith    float64         `json:"concentration_with"`    // mean top-K Herfindahl, reshaped (benefit side)
-	ConcentrationWithout float64         `json:"concentration_without"` // mean top-K Herfindahl, unshaped
+	Evaluated            int             `json:"evaluated"`
+	LostToReshape        int             `json:"lost_to_reshape"`
+	GainedByReshape      int             `json:"gained_by_reshape"`
+	ConcentrationWith    float64         `json:"concentration_with"`
+	ConcentrationWithout float64         `json:"concentration_without"`
 	Losses               []FailureRecord `json:"losses"`
 }
 

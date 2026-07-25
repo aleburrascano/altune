@@ -13,11 +13,11 @@ type DetailGolden struct {
 	MBID              string            `json:"mbid"`
 	SeedProvider      string            `json:"seed_provider"`
 	SeedID            string            `json:"seed_id"`
-	Identity          map[string]string `json:"identity"` // provider -> id; may be deliberately fractured
+	Identity          map[string]string `json:"identity"`
 	ExpectedAlbums    []string          `json:"expected_albums"`
 	ExpectedTopTracks []string          `json:"expected_top_tracks"`
-	ForbiddenSources  []string          `json:"forbidden_sources"` // provider names that must not source any result
-	ForbiddenTitles   []string          `json:"forbidden_titles"`  // titles that must not appear (other-artist markers)
+	ForbiddenSources  []string          `json:"forbidden_sources"`
+	ForbiddenTitles   []string          `json:"forbidden_titles"`
 }
 
 type DetailItem struct {

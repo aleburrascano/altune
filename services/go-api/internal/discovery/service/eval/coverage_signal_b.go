@@ -14,10 +14,10 @@ const signalBTitleMatchMinTSR = 85
 
 type ProviderGap struct {
 	Provider string  `json:"provider"`
-	Missing  int     `json:"missing"` // union entities this provider lacked
-	Union    int     `json:"union"`   // union entities across artists where it responded
-	GapPct   float64 `json:"gap_pct"` // missing / union, in [0,1]
-	Unique   int     `json:"unique"`  // entities ONLY this provider had (reach no one else covers)
+	Missing  int     `json:"missing"`
+	Union    int     `json:"union"`
+	GapPct   float64 `json:"gap_pct"`
+	Unique   int     `json:"unique"`
 }
 
 type CoverageReportB struct {

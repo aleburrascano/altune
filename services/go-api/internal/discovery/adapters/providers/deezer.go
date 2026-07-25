@@ -178,8 +178,8 @@ func (e *deezerAPIError) Error() string {
 }
 
 type deezerSearchResponse struct {
-	Data []deezerItem `json:"data"`
-	Next string       `json:"next"` // URL of the next page; empty on the last page
+	Data        []deezerItem `json:"data"`
+	NextPageURL string       `json:"next"`
 }
 
 type deezerItem struct {
@@ -288,7 +288,7 @@ func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 		for _, item := range body.Data {
 			results = append(results, mapDeezerResult(item, domain.ResultKindAlbum))
 		}
-		if body.Next == "" {
+		if body.NextPageURL == "" {
 			break
 		}
 	}

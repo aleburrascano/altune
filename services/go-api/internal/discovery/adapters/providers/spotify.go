@@ -242,7 +242,7 @@ type spotifyAlbumData struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	URI      string `json:"uri"`
-	Type     string `json:"type"` // ALBUM|SINGLE|COMPILATION|EP
+	Type     string `json:"type"`
 	CoverArt struct {
 		Sources []spotifyImage `json:"sources"`
 	} `json:"coverArt"`
