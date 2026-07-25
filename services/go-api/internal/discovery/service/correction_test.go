@@ -9,8 +9,6 @@ import (
 )
 
 func TestCorrectTokens_PrefixLookupErrorDegrades(t *testing.T) {
-	// A SuggestByPrefix failure during token correction must degrade (treat as
-	// "no prefix match" and keep going), never abort the correction.
 	store := &fakeVocabularyStore{
 		suggestByPrefixFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
 			return nil, errors.New("redis down")
@@ -19,7 +17,6 @@ func TestCorrectTokens_PrefixLookupErrorDegrades(t *testing.T) {
 			if token == "humbel" {
 				return []domain.VocabularyEntry{{Term: "humble", TermNorm: "humble", Kind: domain.VocabKindTrack, MatchScore: 0.8}}, nil
 			}
-			// Whole-query pass and the already-correct token: no candidates.
 			return nil, nil
 		},
 	}

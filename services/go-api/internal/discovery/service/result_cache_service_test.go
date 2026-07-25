@@ -56,8 +56,6 @@ func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
 	cache := newFakeResultCache()
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithResultCache(cache))
 
-	// runSearch uses a fresh user each call; the app-wide cache is keyed by query
-	// only, so the second (different) user must get the first user's cached list.
 	out1 := runSearch(t, svc, "humble")
 	if p.calls != 1 {
 		t.Fatalf("first search: provider calls = %d, want 1", p.calls)
@@ -79,9 +77,6 @@ func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
 }
 
 func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
-	// "!!!" and "†††" both normalize to "", so they would share the cache key
-	// "|<kinds>" and serve each other's results. Symbol-only queries must skip the
-	// result cache entirely — both read and write.
 	p := &queryFakeProvider{
 		name: domain.ProviderDeezer,
 		resultsByQuery: map[string][]domain.SearchResult{

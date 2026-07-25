@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// slowTimeoutProvider is a fakeProvider that also implements the optional
-// SearchTimeout override the fan-out honors per-provider.
 type slowTimeoutProvider struct {
 	fakeProvider
 	timeout time.Duration
@@ -20,9 +18,6 @@ type slowTimeoutProvider struct {
 func (p *slowTimeoutProvider) SearchTimeout() time.Duration { return p.timeout }
 
 func TestFanOut_PerProviderTimeoutOverride(t *testing.T) {
-	// Both providers delay 80ms. The overriding provider allows itself only 20ms
-	// (times out); the default-timeout provider (1500ms) succeeds. Proves the
-	// override applies to the declaring provider alone.
 	slow := &slowTimeoutProvider{
 		fakeProvider: fakeProvider{name: domain.ProviderITunes, delay: 80 * time.Millisecond,
 			results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 70)}},
@@ -46,8 +41,6 @@ func TestFanOut_PerProviderTimeoutOverride(t *testing.T) {
 }
 
 func TestFanOut_TimeoutRecordsBreakerFailure(t *testing.T) {
-	// A per-provider timeout IS a provider failure (unlike parent cancellation):
-	// the breaker must count it.
 	slow := &slowTimeoutProvider{
 		fakeProvider: fakeProvider{name: domain.ProviderITunes, delay: 80 * time.Millisecond},
 		timeout:      10 * time.Millisecond,
@@ -93,10 +86,6 @@ func TestFanOut_OpenBreakerSkipsProviderEntirely(t *testing.T) {
 }
 
 func TestFanOut_ManyProvidersDeterministicSlotOrder(t *testing.T) {
-	// Eight providers finishing in REVERSE-staggered order: the last-listed
-	// provider completes first. Both outputs must still follow the fixed provider
-	// order (each goroutine writes only its own slot), never completion order —
-	// that determinism is what keeps tied ranks stable run-to-run.
 	names := []domain.ProviderName{
 		domain.ProviderDeezer, domain.ProviderITunes, domain.ProviderMusicBrainz,
 		domain.ProviderSoundCloud, domain.ProviderLastFM, domain.ProviderSpotify,
@@ -106,7 +95,7 @@ func TestFanOut_ManyProvidersDeterministicSlotOrder(t *testing.T) {
 	for i, n := range names {
 		providers[i] = &fakeProvider{
 			name:  n,
-			delay: time.Duration(len(names)-i) * 10 * time.Millisecond, // slot 0 slowest
+			delay: time.Duration(len(names)-i) * 10 * time.Millisecond,
 			results: []domain.SearchResult{
 				deezerTrack(fmt.Sprintf("Humble %d", i), n.String(), float64(50+i)),
 			},

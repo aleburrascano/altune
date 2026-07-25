@@ -10,10 +10,10 @@ import (
 )
 
 type fakeEnricher struct {
-	lookups   int
-	resolves  int
-	lookupErr error
-	resolveID string
+	lookups    int
+	resolves   int
+	lookupErr  error
+	resolveID  string
 	enrichment domain.MBEnrichment
 }
 
@@ -44,7 +44,6 @@ func (f *fakeArtwork) ResolveWithIdentityTagged(_ context.Context, _ domain.Resu
 	return "", "", nil
 }
 
-// memEnrichmentCache is an in-memory EnrichmentCache.
 type memEnrichmentCache struct {
 	pos map[string]domain.MBEnrichment
 	neg map[string]bool
@@ -82,8 +81,6 @@ func (m *fakeMBIDMemo) RememberMBID(_ context.Context, kind domain.ResultKind, n
 }
 
 func TestEnrichmentService_ResolveWarmsMBIDMemo(t *testing.T) {
-	// A name-resolved (non-passed) MBID is memoized so the search path can attach
-	// it to a non-MB result later (cap 5 warm).
 	enr := &fakeEnricher{resolveID: "mbid-warm", enrichment: sampleEnrichment()}
 	memo := &fakeMBIDMemo{remembered: map[string]string{}}
 	svc := NewEnrichmentService(enr, &fakeArtwork{}, newMemCache(), WithMBIDMemo(memo))
@@ -123,7 +120,6 @@ func TestEnrichmentService_PassedMBID_CachesWholeValue(t *testing.T) {
 		t.Errorf("merged result wrong: %#v", got)
 	}
 
-	// AC#5: second identical call hits cache — no extra lookup, no extra artwork.
 	got2, _ := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "mbid-1")
 	if got2.ArtworkURL != "https://caa/1200.jpg" {
 		t.Errorf("cached value lost artwork: %#v", got2)
@@ -148,15 +144,12 @@ func TestEnrichmentService_LookupError_DegradesToEmpty(t *testing.T) {
 	if !got.IsZero() {
 		t.Errorf("want empty enrichment on lookup error, got %#v", got)
 	}
-	// Must not poison the positive cache with the failure.
 	if _, found, _ := cache.Get(context.Background(), domain.ResultKindArtist, "mbid-err"); found {
 		t.Error("lookup error must not be cached")
 	}
 }
 
 func TestEnrichmentService_PassedMBID_404DegradesToEmpty(t *testing.T) {
-	// AC#6 explicit 404 path: a passed mbid whose lookup 404s (modeled as a
-	// lookup error) returns empty + nil error, same as any non-200.
 	enr := &fakeEnricher{lookupErr: errors.New("musicbrainz returned 404")}
 	svc := NewEnrichmentService(enr, nil, nil)
 
@@ -178,7 +171,7 @@ func TestEnrichmentService_ArtworkMerged(t *testing.T) {
 }
 
 func TestEnrichmentService_Unresolved_NegativeCached(t *testing.T) {
-	enr := &fakeEnricher{resolveID: ""} // name resolves to nothing
+	enr := &fakeEnricher{resolveID: ""}
 	cache := newMemCache()
 	svc := NewEnrichmentService(enr, &fakeArtwork{}, cache)
 
@@ -186,7 +179,6 @@ func TestEnrichmentService_Unresolved_NegativeCached(t *testing.T) {
 	if !got.IsZero() {
 		t.Errorf("want empty on no resolve, got %#v", got)
 	}
-	// AC#5 negative path: a repeat must not re-run resolution.
 	_, _ = svc.Execute(context.Background(), domain.ResultKindAlbum, "Unknown", "Nobody", "")
 	if enr.resolves != 1 {
 		t.Errorf("resolves = %d, want 1 (miss negatively cached)", enr.resolves)

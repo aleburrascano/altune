@@ -81,7 +81,6 @@ func TestLyricsService_TranslatesNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// The subtitle is the artist; the title is the track.
 	if provider.lastArtist != "Adele" || provider.lastTitle != "Hello" {
 		t.Errorf("names: got artist=%q title=%q", provider.lastArtist, provider.lastTitle)
 	}
@@ -104,7 +103,7 @@ func TestLyricsService_CacheHitShortCircuits(t *testing.T) {
 }
 
 func TestLyricsService_UnresolvedCachedNegative(t *testing.T) {
-	provider := &fakeLyricsProvider{resolveID: ""} // resolves to nothing
+	provider := &fakeLyricsProvider{resolveID: ""}
 	cache := newMemLyricsCache()
 	svc := NewLyricsService(provider, cache)
 

@@ -91,7 +91,6 @@ func TestDeezerEnrichmentService_TrackTranslatesNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// The subtitle is the artist; the title is the entity.
 	if enricher.lastArtist != "Eminem" || enricher.lastTitle != "Lose Yourself" {
 		t.Errorf("names: got artist=%q title=%q", enricher.lastArtist, enricher.lastTitle)
 	}
@@ -130,7 +129,7 @@ func TestDeezerEnrichmentService_CacheHitShortCircuits(t *testing.T) {
 }
 
 func TestDeezerEnrichmentService_UnresolvedCachedNegative(t *testing.T) {
-	enricher := &fakeDeezerEnricher{resolveID: ""} // resolves to nothing
+	enricher := &fakeDeezerEnricher{resolveID: ""}
 	cache := newMemDeezerCache()
 	svc := NewDeezerEnrichmentService(enricher, cache)
 

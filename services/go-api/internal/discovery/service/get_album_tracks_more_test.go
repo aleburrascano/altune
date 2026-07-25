@@ -9,7 +9,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// erroringAlbumSearcher fails the fallback search itself.
 type erroringAlbumSearcher struct{}
 
 func (erroringAlbumSearcher) Name() domain.ProviderName { return domain.ProviderDeezer }
@@ -28,8 +27,6 @@ func albumTracksSvc(deezer ports.AlbumContentProvider, searcher ports.SearchProv
 }
 
 func TestGetAlbumTracks_fallbackArtistGuardFoldsDiacritics(t *testing.T) {
-	// Normalization strips diacritics on both sides, so "Ché" and "Che" are the
-	// same artist to the guard — a provider's accented spelling must not trip it.
 	var fetchedID string
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
@@ -51,15 +48,6 @@ func TestGetAlbumTracks_fallbackArtistGuardFoldsDiacritics(t *testing.T) {
 }
 
 func TestGetAlbumTracks_fallbackArtistGuardRejectsFeatTaggedSubtitle(t *testing.T) {
-	// AIDEV-NOTE: pins a KNOWN FALSE NEGATIVE of the exact-match artist guard
-	// (deezerSearchFallback in get_album_tracks.go). The guard compares
-	// NormalizeForMatch(subtitle) == NormalizeForMatch(albumArtist) EXACTLY, and
-	// normalization deliberately keeps un-bracketed feature tags (the curated
-	// feat/ft word list was removed 2026-06-21). So a provider subtitle
-	// "Che feat. Lil X" normalizes to "che feat lil x" ≠ "che" and the right
-	// album is SKIPPED — the fallback returns empty (safe, but a recall miss).
-	// If this test starts failing because items were returned, the false
-	// negative was fixed — update this pin, don't suppress it.
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 			t.Error("guard unexpectedly accepted the feat-tagged subtitle (known false negative fixed?)")
@@ -79,10 +67,6 @@ func TestGetAlbumTracks_fallbackArtistGuardRejectsFeatTaggedSubtitle(t *testing.
 }
 
 func TestGetAlbumTracks_fallbackNoArtistTakesFirstCandidate(t *testing.T) {
-	// Known behavior, pinned: with NO album artist the guard is disabled, so a
-	// bare-title fallback takes the FIRST sourced album — same-titled albums by
-	// other artists can win (the documented risk the guard exists to prevent
-	// when an artist IS known).
 	var fetchedID string
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
@@ -92,7 +76,7 @@ func TestGetAlbumTracks_fallbackNoArtistTakesFirstCandidate(t *testing.T) {
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{
-		{Kind: domain.ResultKindAlbum, Title: "Empty Clip", Subtitle: "Whoever"}, // sourceless → skipped
+		{Kind: domain.ResultKindAlbum, Title: "Empty Clip", Subtitle: "Whoever"},
 		albumSearchResult("Chase Fetti", "999"),
 	}}
 	svc := albumTracksSvc(deezer, searcher)
@@ -128,14 +112,12 @@ func TestGetAlbumTracks_fallbackSearcherErrorReturnsEmpty(t *testing.T) {
 }
 
 func TestGetAlbumTracks_fallbackSkipsCandidateWithNoTracks(t *testing.T) {
-	// The first matching album resolves zero tracks → continue to the next
-	// candidate instead of returning an empty tracklist.
 	fetched := []string{}
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			fetched = append(fetched, id)
 			if id == "111" {
-				return nil, nil // empty tracklist
+				return nil, nil
 			}
 			return []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "T",
 				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t"}}}}, nil
@@ -160,8 +142,6 @@ func TestGetAlbumTracks_fallbackSkipsCandidateWithNoTracks(t *testing.T) {
 }
 
 func TestGetAlbumTracks_primaryEmptyWithNoTitleKeepsEmptyOK(t *testing.T) {
-	// A supported provider that returns zero tracks, with no album title to fall
-	// back on: the empty OK response stands (no fallback possible).
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 			return nil, nil

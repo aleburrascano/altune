@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// fakeVariantSearcher returns canned (withReshape, withoutReshape) lists per query.
 type fakeVariantSearcher struct {
 	with    map[string][]domain.SearchResult
 	without map[string][]domain.SearchResult
@@ -21,8 +20,6 @@ func TestRunDiversityEval_costWhenReshapeDemotesTarget(t *testing.T) {
 	entity := LibraryEntity{Title: "Humble", Artist: "Kendrick"}
 	q := "Kendrick Humble"
 
-	// WITHOUT reshape: target is at position 1 (in top-2). WITH reshape: the
-	// per-artist cap pushed it to position 3 (out of top-2) — a cost.
 	other := track("Other", "Kendrick", domain.ProviderDeezer, nil)
 	target := track("Humble", "Kendrick", domain.ProviderDeezer, nil)
 	fake := &fakeVariantSearcher{
@@ -57,7 +54,6 @@ func TestRunDiversityEval_noCostWhenTargetSurvives(t *testing.T) {
 }
 
 func TestTopKConcentration(t *testing.T) {
-	// Three results, all the same artist → Herfindahl 1.0 (max concentration).
 	same := []domain.SearchResult{
 		track("A", "Drake", domain.ProviderDeezer, nil),
 		track("B", "Drake", domain.ProviderDeezer, nil),
@@ -66,7 +62,6 @@ func TestTopKConcentration(t *testing.T) {
 	if h := topKConcentration(same, 3); h != 1.0 {
 		t.Errorf("all-one-artist concentration = %v, want 1.0", h)
 	}
-	// Three distinct artists → 3 × (1/3)^2 = 1/3.
 	diverse := []domain.SearchResult{
 		track("A", "Drake", domain.ProviderDeezer, nil),
 		track("B", "Adele", domain.ProviderDeezer, nil),

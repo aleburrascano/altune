@@ -11,8 +11,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// --- persistHistory failure tolerance ------------------------------------
-
 func TestPersistHistory_SavesEntryAndTrimsToRing(t *testing.T) {
 	var inserted *domain.SearchHistoryEntry
 	var trimmedTo int
@@ -53,7 +51,7 @@ func TestPersistHistory_SkippedWhenNotRequested(t *testing.T) {
 	}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithHistoryRepository(repo))
-	runSearch(t, svc, "humble") // saveHistory=false
+	runSearch(t, svc, "humble")
 }
 
 func TestPersistHistory_InsertFailureToleratedAndSkipsTrim(t *testing.T) {
@@ -96,11 +94,6 @@ func TestPersistHistory_TrimFailureTolerated(t *testing.T) {
 	}
 }
 
-// --- launchBackground panic recovery -------------------------------------
-
-// panickingEventStore panics inside the background telemetry goroutine — the
-// recover in launchBackground must swallow it (the process, the search, and
-// WaitForBackground all survive).
 type panickingEventStore struct{ calls int32 }
 
 func (p *panickingEventStore) Append(context.Context, domain.InteractionEvent) error {
@@ -114,7 +107,7 @@ func TestLaunchBackground_PanicRecovered(t *testing.T) {
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store))
 
 	out := runSearch(t, svc, "humble")
-	svc.WaitForBackground() // must return (Done deferred before the recover) and not re-panic
+	svc.WaitForBackground()
 
 	if len(out.Results) != 1 {
 		t.Fatalf("search must succeed despite the background panic, got %d results", len(out.Results))
@@ -123,8 +116,6 @@ func TestLaunchBackground_PanicRecovered(t *testing.T) {
 		t.Fatalf("append called %d times, want 1 (the panicking call)", store.calls)
 	}
 }
-
-// --- emitSearchEvent payload shape ---------------------------------------
 
 func TestEmitSearchEvent_PayloadShape(t *testing.T) {
 	store := &fakeEventStore{}
@@ -153,7 +144,6 @@ func TestEmitSearchEvent_PayloadShape(t *testing.T) {
 	if e.Payload["result_count"] != len(out.Results) {
 		t.Errorf("result_count = %v, want %d", e.Payload["result_count"], len(out.Results))
 	}
-	// Exploration stamps for the propensity slate.
 	if e.Payload["exploration"] != true {
 		t.Errorf("exploration = %v, want true (rate 1.0)", e.Payload["exploration"])
 	}
@@ -163,7 +153,6 @@ func TestEmitSearchEvent_PayloadShape(t *testing.T) {
 	if _, ok := e.Payload["tail_noise_top5"]; !ok {
 		t.Error("payload missing tail_noise_top5")
 	}
-	// Top is capped at telemetryTopN and each entry carries the shown shape.
 	top, ok := e.Payload["top"].([]map[string]any)
 	if !ok {
 		t.Fatalf("top has wrong type %T", e.Payload["top"])
@@ -209,12 +198,7 @@ func TestEmitSearchEvent_ZeroResultPayload(t *testing.T) {
 	}
 }
 
-// --- operator seams -------------------------------------------------------
-
 func TestRankVariantsForEval_WithAndWithoutReshape(t *testing.T) {
-	// Five same-artist tracks: reshape (EnforceDiversity) caps the artist inside
-	// the top window, the no-reshape baseline does not — the differential the
-	// diversity harness measures. One fan-out serves both.
 	results := []domain.SearchResult{
 		deezerTrack("Humble One", "Kendrick Lamar", 90),
 		deezerTrack("Humble Two", "Kendrick Lamar", 80),
@@ -236,7 +220,6 @@ func TestRankVariantsForEval_WithAndWithoutReshape(t *testing.T) {
 	if len(without) != len(results) {
 		t.Errorf("no-reshape variant = %d results, want all %d", len(without), len(results))
 	}
-	// Membership identical — reshaping reorders/caps, it never invents results.
 	seen := map[string]bool{}
 	for _, r := range without {
 		seen[r.Title] = true
@@ -257,7 +240,6 @@ func TestInspectSearch_BypassesResultCacheAndTruncates(t *testing.T) {
 	cache := newFakeResultCache()
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithResultCache(cache))
 
-	// Warm the cache through the normal path.
 	runSearch(t, svc, "humble")
 	if p.calls != 1 || cache.sets != 1 {
 		t.Fatalf("precondition: calls=%d sets=%d, want 1/1", p.calls, cache.sets)
@@ -277,8 +259,6 @@ func TestInspectSearch_BypassesResultCacheAndTruncates(t *testing.T) {
 	}
 }
 
-// --- maybeExplore boundaries ----------------------------------------------
-
 func TestMaybeExplore_FewerThanTwoResultsNeverExplores(t *testing.T) {
 	svc := NewService(nil, NewCircuitBreaker(), WithExploration(1.0))
 	one := []domain.SearchResult{{Title: "solo"}}
@@ -296,8 +276,6 @@ func TestWithExploration_NonPositiveRateIgnored(t *testing.T) {
 		t.Errorf("explorationRate = %v, want 0 (non-positive rates ignored)", svc.explorationRate)
 	}
 }
-
-// --- option wiring --------------------------------------------------------
 
 func TestOptions_WireTheirDependencies(t *testing.T) {
 	repo := &fakeSearchHistoryRepository{}

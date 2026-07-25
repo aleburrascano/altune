@@ -10,11 +10,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// signalBTitleMatchMinTSR mirrors the consensus album-merge threshold so the
-// diagnostic groups entities the same way the live pipeline does.
 const signalBTitleMatchMinTSR = 85
 
-// ProviderGap is one provider's entity-level miss rate against the union.
 type ProviderGap struct {
 	Provider string  `json:"provider"`
 	Missing  int     `json:"missing"` // union entities this provider lacked
@@ -23,7 +20,6 @@ type ProviderGap struct {
 	Unique   int     `json:"unique"`  // entities ONLY this provider had (reach no one else covers)
 }
 
-// CoverageReportB is the entity-level cross-provider imbalance diagnostic.
 type CoverageReportB struct {
 	ArtistsScanned int           `json:"artists_scanned"`
 	TotalEntities  int           `json:"total_entities"`
@@ -31,9 +27,6 @@ type CoverageReportB struct {
 	Caveats        []string      `json:"caveats"`
 }
 
-// CoverageSignalBService fans out per artist to the album providers and measures
-// which provider misses which canonical album. Diagnostic only: it measures
-// provider imbalance, not absolute coverage (see Caveats in the report).
 type CoverageSignalBService struct {
 	providers []service.ConsensusProvider
 }
@@ -44,12 +37,12 @@ func NewCoverageSignalBService(providers []service.ConsensusProvider) *CoverageS
 
 type provResult struct {
 	albums []domain.SearchResult
-	ok     bool // provider responded (no error)
+	ok     bool
 }
 
 type artistCoverage struct {
-	responded []string          // providers that responded for this artist
-	entities  []map[string]bool // per canonical album: the set of providers that had it
+	responded []string
+	entities  []map[string]bool
 }
 
 func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, concurrency int) (*CoverageReportB, error) {
@@ -97,8 +90,6 @@ func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, 
 				}
 			}
 		}
-		// An entity held by exactly one provider is reach only that provider
-		// brings — the truest "did this provider expand coverage" signal.
 		for _, ent := range ac.entities {
 			if len(ent) != 1 {
 				continue
@@ -126,9 +117,6 @@ func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, 
 	return report, nil
 }
 
-// fanOut queries every provider for an artist's albums in parallel. A provider
-// that errors is marked not-responded (ok=false) so transient failures don't
-// inflate its gap.
 func (s *CoverageSignalBService) fanOut(ctx context.Context, artist string) map[string]provResult {
 	return service.FanOutConsensus(ctx, s.providers, func(ctx context.Context, p service.ConsensusProvider) provResult {
 		albums, err := p.Fetcher(ctx, artist)
@@ -139,9 +127,6 @@ func (s *CoverageSignalBService) fanOut(ctx context.Context, artist string) map[
 	})
 }
 
-// clusterEntities groups albums across providers into canonical entities by
-// fuzzy title match (same mechanism as consensus). Providers are iterated in
-// declaration order so cluster membership is deterministic.
 func (s *CoverageSignalBService) clusterEntities(fan map[string]provResult) []map[string]bool {
 	type cluster struct {
 		key   string

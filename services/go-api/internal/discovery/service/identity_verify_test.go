@@ -39,8 +39,6 @@ func albumProvider(fn func() ([]domain.SearchResult, error)) *fakeArtistContentP
 
 func TestIdentityVerifier_dropsMisbridgedEdge(t *testing.T) {
 	anchor := &fakeMBAnchor{titles: []string{"Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"}}
-	// deezer resolves to the WRONG same-name artist (no catalogue overlap); spotify
-	// resolves to the right one (full overlap).
 	deezer := albumProvider(func() ([]domain.SearchResult, error) {
 		return verifyAlbums("Nope", "Wrong", "Other", "Bogus", "Zzz"), nil
 	})
@@ -67,14 +65,13 @@ func TestIdentityVerifier_dropsMisbridgedEdge(t *testing.T) {
 	if out["discogs"] != "123" {
 		t.Errorf("non-catalogue discogs edge should be untouched, got %v", out)
 	}
-	// Input must not be mutated (VerifyXref clones).
 	if _, ok := in["deezer"]; !ok {
 		t.Error("VerifyXref mutated the input xref")
 	}
 }
 
 func TestIdentityVerifier_failOpenTooFewReleaseGroups(t *testing.T) {
-	anchor := &fakeMBAnchor{titles: []string{"A", "B"}} // < mbAnchorMinReleaseGroups
+	anchor := &fakeMBAnchor{titles: []string{"A", "B"}}
 	deezer := albumProvider(func() ([]domain.SearchResult, error) {
 		t.Fatal("must not fetch a provider catalogue when there's no anchor to judge against")
 		return nil, nil
@@ -116,16 +113,11 @@ func TestIdentityVerifier_memoSkipsSecondVerification(t *testing.T) {
 	if !ok1 {
 		t.Error("first verification must report ok=true (persistable)")
 	}
-	// The memo hit must NOT hand back the caller's raw xref as persistable: the
-	// durable store already holds the verified set, and re-upserting the raw one
-	// would re-write any edge the first pass dropped.
 	if ok2 || out2 != nil {
 		t.Errorf("memo hit must return (nil, false), got %v ok=%v", out2, ok2)
 	}
 }
 
-// recordingIdentityStore captures every PersistBridges call (and whether its
-// context carried a deadline) so persist-skip behavior is observable.
 type recordingIdentityStore struct {
 	mu           sync.Mutex
 	persisted    []map[string]string
@@ -151,9 +143,6 @@ func (f *recordingIdentityStore) Invalidate(_ context.Context, _ domain.ResultKi
 }
 
 func TestStampIdentities_MemoHitDoesNotRePersistRawXref(t *testing.T) {
-	// First search: verification drops the mis-bridged deezer edge and persists the
-	// verified set. Second search of the same artist (memo hit): NO persist at all —
-	// re-upserting the raw xref would re-write the edge the first persist dropped.
 	anchor := &fakeMBAnchor{titles: []string{"Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"}}
 	deezer := albumProvider(func() ([]domain.SearchResult, error) {
 		return verifyAlbums("Nope", "Wrong", "Other", "Bogus", "Zzz"), nil
@@ -218,7 +207,6 @@ func TestIdentityVerifier_ForgetReVerifies(t *testing.T) {
 	}
 }
 
-// failingIdentityStore always errors on persist — the memo-unmark path's trigger.
 type failingIdentityStore struct {
 	mu       sync.Mutex
 	attempts int
@@ -240,9 +228,6 @@ func (f *failingIdentityStore) Invalidate(context.Context, domain.ResultKind, st
 }
 
 func TestStampIdentities_PersistFailureUnmarksVerifyMemo(t *testing.T) {
-	// A failed PersistBridges must Forget the verify memo: otherwise the memo
-	// claims "verified+persisted" for 6h while the durable store holds nothing,
-	// and every later search of the artist skips both verify and persist.
 	anchor := &fakeMBAnchor{titles: []string{"Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"}}
 	verifier := NewIdentityVerifier(anchor, nil)
 	store := &failingIdentityStore{}

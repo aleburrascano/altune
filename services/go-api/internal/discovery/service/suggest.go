@@ -43,8 +43,6 @@ func (s *SuggestService) supplementWithFuzzy(
 	remaining := limit - len(prefix)
 	fuzzy, err := s.vocab.FindClosest(ctx, norm, remaining+len(prefix))
 	if err != nil {
-		// Degrade to the prefix matches alone, but leave a trace: a silently
-		// swallowed store error made fuzzy-supplement outages invisible.
 		slog.Debug("suggest.fuzzy_supplement_failed", "error", err)
 		return prefix, nil
 	}

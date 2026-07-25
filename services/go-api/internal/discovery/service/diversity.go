@@ -5,29 +5,12 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// Result-list shaping rules carried forward from the v1 ranking pipeline. These
-// are orthogonal to ranking proper (the rebuilt Merge/Rank own ordering) — they
-// cap per-artist repetition and fold same-name artist duplicates after ranking.
-//
-// AIDEV-NOTE: diversityWindow/maxPerArtistInTop are PRODUCT POLICY, not the
-// query-fit ranking constants the rebuild purged (relevance bands, dominance
-// windows, intent thresholds — see search.go's doctrine). They fit the product
-// (a household of diverse tastes should not see one artist dominate the top
-// results), not the query, so they are intentionally exempt from that purge.
-// Changing them is a UX decision; validate against the top-K library eval
-// (cmd/discoveryeval) since it shifts what users see at the top.
 const (
 	diversityWindow   = 10
 	maxPerArtistInTop = 3
 )
 
-// EnforceDiversity limits the number of results per artist within the
-// top diversityWindow positions to maxPerArtistInTop, moving overflow
-// results below the window.
 func EnforceDiversity(results []domain.SearchResult) []domain.SearchResult {
-	// Clamp the window to the result count: a short list (≤ window) is still
-	// entirely within the top positions, so the per-artist cap must apply there
-	// too — early-returning would let one artist dominate a small result set.
 	windowSize := diversityWindow
 	if len(results) < windowSize {
 		windowSize = len(results)
@@ -56,9 +39,6 @@ func EnforceDiversity(results []domain.SearchResult) []domain.SearchResult {
 	return out
 }
 
-// CollapseArtistDuplicates groups artist results that share the same normalized
-// name. The highest-popularity artist is kept as the primary result. Remaining
-// same-name artists are stored in a "collapsed_artists" extra on the primary.
 func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResult {
 	type group struct {
 		primaryIdx int
@@ -75,15 +55,8 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		}
 		norm := textnorm.NormalizeForMatch(r.Title)
 		key := norm
-		// Ambiguous name (multiple real artists share it): key by MBID so distinct
-		// identities stay as separate cards instead of folding into one. Unambiguous
-		// names collapse by name as before.
 		if ambiguous[norm] {
 			key = norm + "\x00" + r.MBID
-			// No MBID: shared "name\x00" keys would collapse two MBID-less entities
-			// into one card — the exact wrong-collapse the ambiguity set exists to
-			// prevent. Key by the entity's first source identity instead, so no-MBID
-			// entities never collapse with each other under an ambiguous name.
 			if r.MBID == "" && len(r.Sources) > 0 {
 				key = norm + "\x00" + r.Sources[0].Provider.String() + ":" + r.Sources[0].ExternalID
 			}
@@ -113,8 +86,6 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		collapsedList := make([]domain.CollapsedArtistSummary, len(g.otherIdxs))
 		for j, idx := range g.otherIdxs {
 			other := results[idx]
-			// The collapsed entry's extras keep carrying mbid on the wire (it was an
-			// Extras key before the typed-field promotion; clients key on it).
 			otherExtras := copyExtras(other.Extras)
 			if other.MBID != "" {
 				otherExtras["mbid"] = other.MBID
@@ -146,8 +117,6 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 	}
 	return out
 }
-
-// --- shared extras helpers (used by consensus, find_related, and the rules above) ---
 
 func copyExtras(src map[string]any) map[string]any {
 	if src == nil {

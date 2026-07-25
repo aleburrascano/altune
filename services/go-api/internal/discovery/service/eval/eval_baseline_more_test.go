@@ -11,9 +11,9 @@ func TestBaselines_GateAll(t *testing.T) {
 		"diversity.cost_rate": {Metric: "diversity.cost_rate", Value: 0.05, Margin: 0.01, HigherIsBetter: false},
 	}
 	gates := b.GateAll([]NamedMetric{
-		{Name: "eval.top1_rate", Value: 0.70, HigherIsBetter: true},       // regressed
-		{Name: "diversity.cost_rate", Value: 0.05, HigherIsBetter: false}, // ok
-		{Name: "brand.new", Value: 0.42, HigherIsBetter: true},            // missing
+		{Name: "eval.top1_rate", Value: 0.70, HigherIsBetter: true},
+		{Name: "diversity.cost_rate", Value: 0.05, HigherIsBetter: false},
+		{Name: "brand.new", Value: 0.42, HigherIsBetter: true},
 	})
 	if len(gates) != 3 {
 		t.Fatalf("gates = %d, want 3", len(gates))
@@ -45,7 +45,6 @@ func TestBuildBaselines(t *testing.T) {
 		t.Error("direction must be carried from the metric")
 	}
 
-	// Round-trip: a freshly built baseline gates its own value as not regressed.
 	if g := b.Gate("eval.top1_rate", 0.83); g.Regressed {
 		t.Error("a value at its own baseline must never regress")
 	}
@@ -72,7 +71,6 @@ func TestSortedGates(t *testing.T) {
 	if got[0].Metric != "a" || got[1].Metric != "m" || got[2].Metric != "z" {
 		t.Errorf("sorted = %v", []string{got[0].Metric, got[1].Metric, got[2].Metric})
 	}
-	// The input must be untouched (defensive copy).
 	if in[0].Metric != "z" {
 		t.Error("SortedGates must not mutate its input")
 	}

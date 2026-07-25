@@ -21,17 +21,10 @@ func TestKeepRelease(t *testing.T) {
 		m    MergedRelease
 		want bool
 	}{
-		// The ENCORE case: reached by the artist's OWN id, MB doesn't know it — the
-		// old MB-authority veto dropped it. Kept now on identity provenance.
 		{"id-verified (ENCORE)", keepCase(1, true, false), true},
-		// A same-name artist's release surfaced only by a by-name fetch. Dropped.
 		{"name-fetched single source, no id (namesake)", keepCase(1, false, false), false},
-		// UNSOUND signals that must NOT keep on their own (doc §6 correction):
-		// two by-name providers can be the same wrong artist...
 		{"two by-name providers, no id-verified (still a namesake)", keepCase(2, false, false), false},
-		// ...and a namesake's release carries its own valid identifier.
 		{"strong id but not id-verified (namesake with own MBID)", keepCase(1, false, true), false},
-		// An id-verified release enriched by a by-name provider stays kept.
 		{"id-verified + by-name enrichment", keepCase(2, true, true), true},
 	}
 	for _, tt := range tests {

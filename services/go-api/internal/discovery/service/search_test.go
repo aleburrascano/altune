@@ -68,8 +68,6 @@ func runSearch(t *testing.T, svc *Service, raw string) *SearchOutput {
 }
 
 func TestService_EndToEnd_MergesAndRanks(t *testing.T) {
-	// Same ISRC across two providers must merge to one entity with two sources;
-	// the more popular track outranks the same-named album (bare query).
 	trackP1 := withPop(withISRC(track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil), "X"), 90)
 	trackP2 := withPop(withISRC(track("Humble", "Kendrick Lamar", domain.ProviderITunes, nil), "X"), 90)
 	album := deezerAlbum("Humble", "Kendrick Lamar", 40)
@@ -110,8 +108,6 @@ func TestService_PartialOnProviderError(t *testing.T) {
 }
 
 func TestService_RanksExactTitleFirst(t *testing.T) {
-	// End-to-end: continuous relevance puts the exact-title track ahead of a
-	// partial-title one regardless of popularity.
 	exact := deezerTrack("HUMBLE.", "Kendrick Lamar", 40)
 	partial := deezerTrack("Humble Beginnings", "Someone Else", 99)
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{partial, exact}}
@@ -125,9 +121,6 @@ func TestService_RanksExactTitleFirst(t *testing.T) {
 }
 
 func TestFanOut_CanceledParentDoesNotRecordBreakerFailure(t *testing.T) {
-	// A client-abandoned request cancels the parent ctx; every provider errors
-	// with context.Canceled. That must NOT count as a provider failure — a few
-	// abandoned searches would otherwise open every breaker app-wide for 30s.
 	p := &fakeProvider{name: domain.ProviderDeezer, delay: 50 * time.Millisecond}
 	cb := NewCircuitBreaker()
 	svc := NewService([]ports.SearchProvider{p}, cb)

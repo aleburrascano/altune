@@ -75,7 +75,6 @@ func TestService_SkipsEnrichWhenArtworkPresent(t *testing.T) {
 	}
 }
 
-// capturingArtworkResolver records the mbid it was last called with.
 type capturingArtworkResolver struct {
 	url     string
 	mu      sync.Mutex
@@ -112,9 +111,6 @@ func (f *fakeMBIDIndex) RememberMBID(_ context.Context, _ domain.ResultKind, _, 
 }
 
 func TestService_MBIDIndexAttachesMBIDForArtwork(t *testing.T) {
-	// A non-MB result with no mbid: the MBID index (warmed by detail-opens)
-	// supplies one, which must reach the artwork resolver so its MBID-keyed tier
-	// (CAA/Fanart) can fire on the search card.
 	resolver := &capturingArtworkResolver{url: "https://caa/hd.jpg"}
 	idx := &fakeMBIDIndex{mbid: "warm-mbid"}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
@@ -163,11 +159,6 @@ func (f *fakeIdentityStore) Invalidate(_ context.Context, _ domain.ResultKind, _
 }
 
 func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
-	// The deterministic fix: a provider-only result (MusicBrainz absent from this
-	// fan-out, so merge stamped no xref) resolves its identity from the durable
-	// store, keyed on its own provider id. The bridged ids + MBID reach the artwork
-	// resolver so it stays identity-first — the right entity — even though MB never
-	// answered this search.
 	resolver := &capturingArtworkResolver{url: "https://caa/right-face.jpg"}
 	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[string]string{"discogs": "123"}}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
@@ -191,8 +182,6 @@ func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 	}
 }
 
-// fakeIdentityAwareResolver resolves only when given a proven identity — exercising
-// the identity-first branch so the resolution path is reported as identity.
 type fakeIdentityAwareResolver struct{ url string }
 
 func (r *fakeIdentityAwareResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, string, error) {
@@ -207,9 +196,6 @@ func (r *fakeIdentityAwareResolver) ResolveWithIdentityTagged(_ context.Context,
 }
 
 func TestService_ArtworkPathIsDurableIdentityWhenStoreResolves(t *testing.T) {
-	// When MB is absent (no xref in merge) but the durable store supplies identity,
-	// and artwork then resolves identity-first, the resolution path stamped for the
-	// operator console must read "durable-identity" — the fix, made visible.
 	resolver := &fakeIdentityAwareResolver{url: "https://caa/right.jpg"}
 	store := &fakeIdentityStore{mbid: "durable-mbid", xref: map[string]string{"discogs": "123"}}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}

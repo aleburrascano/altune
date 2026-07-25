@@ -1,28 +1,5 @@
 package eval
 
-// Artist-intent eval — the corpus the library eval is structurally blind to.
-//
-// The library eval (library_eval.go) only ever passes on a TRACK
-// (matchesEntity hard-requires ResultKindTrack), so "search a bare artist name,
-// expect the artist card on top" is unmeasured. This harness fills that gap: for
-// each distinct library artist it queries the bare name and asks whether an
-// artist card named that surfaces in the top-K.
-//
-// The headline split is the load-bearing part. A miss is one of two very
-// different things, and the ranker can only fix one:
-//
-//   - BURIED  — an artist card named X exists in the result set but ranks below
-//     K while a same-name TRACK ranks within it. This is the kind-blindness bug
-//     (bare-token relevance ties → multi-source/RRF tiebreak favors the
-//     better-covered track). The ranker CAN fix this.
-//   - ABSENT  — no artist card named X surfaced anywhere. A recall / identity
-//     gap (the queried artist never entered the candidate set, or merged into a
-//     same-name other). The ranker CANNOT fix this — no reorder surfaces a
-//     result that isn't there.
-//
-// Keeping them apart is what stops a "boost artists" change from looking like it
-// worked when the real failure was recall.
-
 import (
 	"context"
 	"sync/atomic"
@@ -33,17 +10,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// ArtistIntentOutcome is the verdict for one bare-artist-name query.
 type ArtistIntentOutcome int
 
 const (
-	ArtistIntentUnknown   ArtistIntentOutcome = iota
-	ArtistIntentPass                          // an artist card named X is within the top-K
-	ArtistIntentBuried                        // artist card exists below K AND a same-name track is within K (the ranker bug)
-	ArtistIntentBelowK                        // artist card exists below K but no same-name track usurped it (album/other domination or pure rank)
-	ArtistIntentAbsent                        // no artist card named X anywhere — recall/identity gap, not a ranking bug
-	ArtistIntentNoResults                     // search returned nothing or errored
-	ArtistIntentSkipped                       // name normalizes to empty (symbol-only) — cannot be matched
+	ArtistIntentUnknown ArtistIntentOutcome = iota
+	ArtistIntentPass
+	ArtistIntentBuried
+	ArtistIntentBelowK
+	ArtistIntentAbsent
+	ArtistIntentNoResults
+	ArtistIntentSkipped
 )
 
 func (o ArtistIntentOutcome) String() string {
@@ -65,12 +41,10 @@ func (o ArtistIntentOutcome) String() string {
 	}
 }
 
-// MarshalJSON emits the outcome as its label so the JSON report is readable.
 func (o ArtistIntentOutcome) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + o.String() + `"`), nil
 }
 
-// ArtistIntentResult is the verdict plus diagnostics for one artist query.
 type ArtistIntentResult struct {
 	Artist        string              `json:"artist"`
 	Outcome       ArtistIntentOutcome `json:"outcome"`
@@ -80,7 +54,6 @@ type ArtistIntentResult struct {
 	Error         string              `json:"error,omitempty"`
 }
 
-// ArtistIntentReport is the aggregate artist-intent quality report.
 type ArtistIntentReport struct {
 	Corpus     string               `json:"corpus,omitempty"` // "" = all artists, "hard" = single-token names
 	K          int                  `json:"k"`
@@ -96,18 +69,12 @@ type ArtistIntentReport struct {
 	Results    []ArtistIntentResult `json:"results"`
 }
 
-// Top1Rate is artist-#1 / evaluated.
 func (r ArtistIntentReport) Top1Rate() float64 { return rate(r.Top1Passed, r.Evaluated) }
 
-// TopKRate is artist-in-top-K / evaluated — the product bar (higher is better).
 func (r ArtistIntentReport) TopKRate() float64 { return rate(r.TopKPassed, r.Evaluated) }
 
-// BuriedRate is the kind-blindness signal: artist present but out-ranked by a
-// same-name track / evaluated (lower is better). The number the ranker fix moves.
 func (r ArtistIntentReport) BuriedRate() float64 { return rate(r.Buried, r.Evaluated) }
 
-// AbsentRate is the recall gap: artist card never surfaced / evaluated (lower is
-// better). The ranker cannot move this — only fan-out/identity work can.
 func (r ArtistIntentReport) AbsentRate() float64 { return rate(r.Absent, r.Evaluated) }
 
 func rate(n, d int) float64 {
@@ -117,9 +84,6 @@ func rate(n, d int) float64 {
 	return float64(n) / float64(d)
 }
 
-// RunArtistIntentEval queries each bare artist name and classifies whether an
-// artist card named that surfaces in the top-K. concurrency bounds parallel
-// live-provider searches; k is the window (k=1 is strict #1).
 func RunArtistIntentEval(ctx context.Context, artists []string, searcher Searcher, concurrency, k int, corpus string, progress func(done, total int)) ArtistIntentReport {
 	if concurrency < 1 {
 		concurrency = 1
@@ -157,9 +121,6 @@ func RunArtistIntentEval(ctx context.Context, artists []string, searcher Searche
 	return report
 }
 
-// evalOneArtist runs one bare-name query and classifies the outcome. It scans
-// the FULL result list (not just top-K) so it can tell "buried" (artist present,
-// out-ranked) from "absent" (artist never surfaced).
 func evalOneArtist(ctx context.Context, artist string, searcher Searcher, k int) ArtistIntentResult {
 	name := textnorm.NormalizeForMatch(artist)
 	if name == "" {
@@ -228,13 +189,8 @@ func aggregateArtistIntent(results []ArtistIntentResult, k int) ArtistIntentRepo
 	return report
 }
 
-// ---- HarnessReport conformance -----------------------------------------
-
 var _ HarnessReport = ArtistIntentReport{}
 
-// Metrics gates the product bar (topk_rate, higher better) and the two failure
-// modes kept distinct: buried_rate (the ranker bug, lower better) and
-// absent_rate (the recall gap, lower better). top1_rate is recorded for history.
 func (r ArtistIntentReport) Metrics() []NamedMetric {
 	p := "artist_intent."
 	if r.Corpus != "" {
@@ -248,8 +204,6 @@ func (r ArtistIntentReport) Metrics() []NamedMetric {
 	}
 }
 
-// Failures emits one attributed record per non-pass, tagged with the outcome so
-// the buried/absent split survives into the failure log and its slices.
 func (r ArtistIntentReport) Failures() []FailureRecord {
 	out := []FailureRecord{}
 	for _, res := range r.Results {

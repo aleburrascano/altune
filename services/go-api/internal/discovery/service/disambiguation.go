@@ -10,27 +10,11 @@ import (
 )
 
 const (
-	// disambigTimeout bounds the whole live-disambiguation pass. Like enrich and
-	// FindRelated, this stage must not dominate the search hot path.
-	disambigTimeout = 2 * time.Second
-	// disambigMaxLookups caps live MusicBrainz identity resolutions per search.
-	// MB is rate-limited to ~1 req/s, so each lookup costs seconds and they can't
-	// be parallelized away. Results are ranked, so the top few artists (the ones
-	// actually shown) get disambiguated while lower-ranked same-name artists keep
-	// an empty subtitle. Pre-resolved disambiguations carried in extras are free
-	// and always applied regardless of this cap.
+	disambigTimeout    = 2 * time.Second
 	disambigMaxLookups = 3
 )
 
-// applyArtistDisambiguation fills an artist result's empty subtitle with a
-// disambiguation hint ("American rapper", "English rock band") so same-name
-// artists are distinguishable. It prefers a disambiguation already carried in
-// extras and otherwise resolves identity via MusicBrainz. Live MB resolution is
-// bounded by disambigTimeout and disambigMaxLookups so it can never stall search
-// (it was previously unbounded — one sequential rate-limited MB call per distinct
-// artist name, ~15s on multi-artist queries).
 func (s *Service) applyArtistDisambiguation(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
-	// First pass: apply pre-resolved disambiguations from extras — always free.
 	for i, r := range results {
 		if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
 			continue
@@ -43,7 +27,6 @@ func (s *Service) applyArtistDisambiguation(ctx context.Context, results []domai
 		return results
 	}
 
-	// Second pass: live MusicBrainz resolution for artists still missing a subtitle.
 	ctx, cancel := context.WithTimeout(ctx, disambigTimeout)
 	defer cancel()
 
@@ -62,9 +45,6 @@ func (s *Service) applyArtistDisambiguation(ctx context.Context, results []domai
 		nameNorm := textnorm.NormalizeForMatch(r.Title)
 		entry, found := identityCache[nameNorm]
 		if !found {
-			// Bound live MB resolution: stop issuing new lookups once the
-			// per-search budget is spent or the timeout has fired. Names already
-			// resolved this request still apply for free.
 			if liveLookups >= disambigMaxLookups || ctx.Err() != nil {
 				continue
 			}

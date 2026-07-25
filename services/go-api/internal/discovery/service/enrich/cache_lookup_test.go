@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// memStringCache is the string-typed in-memory NameKeyedCache used to test
-// CachedLookup itself (the enricher tests each carry their own typed twin).
 type memStringCache struct {
 	pos  map[string]string
 	neg  map[string]bool
@@ -36,7 +34,6 @@ func (c *memStringCache) SetNegative(_ context.Context, k string) error {
 	return nil
 }
 
-// countingFetch returns a fetch func that records how often it ran.
 func countingFetch(calls *int, value string, found bool, err error) func(context.Context) (string, bool, error) {
 	return func(context.Context) (string, bool, error) {
 		*calls++
@@ -91,7 +88,6 @@ func TestCachedLookup_LoaderHitIsPositiveCached(t *testing.T) {
 		t.Fatalf("first call: got=%q calls=%d sets=%d negs=%d", got, calls, cache.sets, cache.negs)
 	}
 
-	// Second call is served from the cache.
 	got, _ = CachedLookup(context.Background(), cache, "daft punk", "", fetch)
 	if got != "fresh" || calls != 1 {
 		t.Errorf("second call must hit the cache, got=%q calls=%d", got, calls)
@@ -111,7 +107,6 @@ func TestCachedLookup_DefinitiveMissIsNegativeCached(t *testing.T) {
 		t.Fatalf("miss: got=%q negs=%d sets=%d", got, cache.negs, cache.sets)
 	}
 
-	// Second call is answered by the negative cache, not the loader.
 	_, _ = CachedLookup(context.Background(), cache, "nobody", "", fetch)
 	if calls != 1 {
 		t.Errorf("negative-cached miss must not re-fetch, got %d calls", calls)
@@ -134,7 +129,6 @@ func TestCachedLookup_TransientErrorDegradesAndIsNotCached(t *testing.T) {
 		t.Errorf("a transient error must not poison the cache, got sets=%d negs=%d", cache.sets, cache.negs)
 	}
 
-	// The next call retries the loader — nothing was cached.
 	_, _ = CachedLookup(context.Background(), cache, "daft punk", "", fetch)
 	if calls != 2 {
 		t.Errorf("want a retry after a transient error, got %d calls", calls)

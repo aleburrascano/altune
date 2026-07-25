@@ -17,17 +17,17 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 
 	fixedEntries := []*domain.SearchHistoryEntry{
 		{
-			ID:        uuid.New(),
-			UserId:    userID,
-			Query:     "radiohead",
-			QueryNorm: "radiohead",
+			ID:         uuid.New(),
+			UserId:     userID,
+			Query:      "radiohead",
+			QueryNorm:  "radiohead",
 			ExecutedAt: time.Now().UTC(),
 		},
 		{
-			ID:        uuid.New(),
-			UserId:    userID,
-			Query:     "queen",
-			QueryNorm: "queen",
+			ID:         uuid.New(),
+			UserId:     userID,
+			Query:      "queen",
+			QueryNorm:  "queen",
 			ExecutedAt: time.Now().UTC().Add(-time.Hour),
 		},
 	}

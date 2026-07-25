@@ -13,9 +13,6 @@ import (
 
 const albumFeaturedConcurrency = 5
 
-// Album tracklists don't carry contributors inline, so we fetch each track's
-// featured artists individually via the Deezer adapter's LookupTrackFeatured
-// (deezerFeaturedLookup, declared in featured_resolver.go).
 type GetAlbumTracksService struct {
 	providers        map[domain.ProviderName]ports.AlbumContentProvider
 	featured         deezerFeaturedLookup
@@ -35,23 +32,14 @@ func NewGetAlbumTracksService(
 	return s
 }
 
-// WithTrackFeatured enables per-track featured-artist enrichment of album tracks.
 func WithTrackFeatured(f deezerFeaturedLookup) AlbumTracksOption {
 	return func(s *GetAlbumTracksService) { s.featured = f }
 }
 
-// WithAlbumFallbackSearcher wires the SearchProvider used by the Deezer
-// search-then-fetch fallback (see deezerSearchFallback). Without this the
-// fallback never fires, which is the correct default for tests that only
-// exercise the primary provider path.
 func WithAlbumFallbackSearcher(sp ports.SearchProvider) AlbumTracksOption {
 	return func(s *GetAlbumTracksService) { s.fallbackSearcher = sp }
 }
 
-// enrichFeatured fetches each Deezer-sourced track's featured contributors
-// concurrently (bounded) and stamps them into Extras["featured_artists"]. A
-// per-track failure degrades that track to no features rather than failing the
-// whole tracklist. Each goroutine writes a distinct slice index, so no shared map.
 func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []domain.SearchResult) {
 	if s.featured == nil {
 		return
@@ -93,10 +81,6 @@ func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName domain
 		degraded = errorContentResponse(providerName)
 	}
 
-	// Fallback: an unsupported/failing provider, or one that resolved zero
-	// tracks, falls back to a Deezer album search by title+artist when Deezer is
-	// available. Orthogonal to the found/parse/fetch shape fetchProviderResults
-	// owns, so it stays here rather than in the shared helper.
 	if degraded != nil || len(results) == 0 {
 		if albumTitle != "" && s.fallbackSearcher != nil {
 			if deezer, hasDeezer := s.providers[domain.ProviderDeezer]; hasDeezer {
@@ -128,10 +112,6 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 		return emptyContentResponse(domain.ProviderDeezer), nil
 	}
 
-	// Use the first matching album's Deezer ID to fetch tracks. When the album
-	// artist is known, require it to match: a bare title search ("Empty Clip")
-	// otherwise returns a DIFFERENT artist's same-titled album (a real bug — Che's
-	// EP resolved to one by "Chase Fetti"). Return empty rather than wrong.
 	wantArtist := textnorm.NormalizeForMatch(albumArtist)
 	for _, r := range results {
 		if len(r.Sources) == 0 {

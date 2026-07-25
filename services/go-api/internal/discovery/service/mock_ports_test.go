@@ -7,8 +7,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// --- SearchHistoryRepository fake ---
-
 type fakeSearchHistoryRepository struct {
 	insertFn       func(ctx context.Context, entry *domain.SearchHistoryEntry) error
 	trimToNFn      func(ctx context.Context, userId shared.UserId, n int) error
@@ -44,8 +42,6 @@ func (f *fakeSearchHistoryRepository) DeleteAllForUser(ctx context.Context, user
 	return nil
 }
 
-// --- AlbumContentProvider fake ---
-
 type fakeAlbumContentProvider struct {
 	getAlbumTracksFn func(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 }
@@ -57,14 +53,10 @@ func (f *fakeAlbumContentProvider) GetAlbumTracks(ctx context.Context, provider 
 	return nil, nil
 }
 
-// --- ArtistContentProvider fake ---
-
 type fakeArtistContentProvider struct {
 	getTopTracksFn func(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
 	getAlbumsFn    func(ctx context.Context, provider domain.ProviderName, externalID string) ([]domain.SearchResult, error)
-	// resolveIDFn, when set, makes the fake implement ports.ArtistIDResolver
-	// (name → this provider's id) for the SoundCloud-style fan-out fallback.
-	resolveIDFn func(ctx context.Context, name string) (string, bool)
+	resolveIDFn    func(ctx context.Context, name string) (string, bool)
 }
 
 func (f *fakeArtistContentProvider) ResolveArtistID(ctx context.Context, name string) (string, bool) {

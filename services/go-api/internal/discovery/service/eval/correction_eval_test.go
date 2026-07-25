@@ -8,12 +8,9 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// vocabCorrector knows a fixed vocabulary and corrects any input within
-// Levenshtein distance 1 of a known term back to it. Deterministic, no I/O —
-// stands in for the real CorrectionService + vocab store.
 type vocabCorrector struct {
 	vocab          []string
-	corruptOnValid bool // when true, "corrects" even an exact valid term (precision break)
+	corruptOnValid bool
 }
 
 func (f *vocabCorrector) nearest(query string) *service.CorrectionResult {
@@ -24,7 +21,7 @@ func (f *vocabCorrector) nearest(query string) *service.CorrectionResult {
 			if f.corruptOnValid {
 				return &service.CorrectionResult{Corrected: term + " x", Confidence: 0.5}
 			}
-			return nil // exact match — nothing to correct
+			return nil
 		}
 		if textnorm.LevenshteinDistance(q, tn) == 1 {
 			return &service.CorrectionResult{Corrected: term, Confidence: 0.9}
@@ -51,11 +48,9 @@ func TestRunCorrectionEval_recallAndPrecision(t *testing.T) {
 	if r.TyposTested == 0 {
 		t.Fatal("expected typos to be generated")
 	}
-	// Every distance-1 typo of a known term must be recovered by this fake.
 	if r.RecallRate() != 1.0 {
 		t.Errorf("recall_rate = %v, want 1.0 (misses: %+v)", r.RecallRate(), r.RecallMisses)
 	}
-	// No valid term should be corrupted.
 	if r.PrecisionRate() != 1.0 {
 		t.Errorf("precision_rate = %v, want 1.0 (corruptions: %+v)", r.PrecisionRate(), r.Corruptions)
 	}
@@ -97,7 +92,6 @@ func TestSyntheticTypos_deterministicAndDistance1(t *testing.T) {
 			t.Errorf("typo %q is distance %d, want 1", a[i], d)
 		}
 	}
-	// A term too short to perturb yields nothing.
 	if got := syntheticTypos("a", 3); got != nil {
 		t.Errorf("expected no typos for single-letter term, got %v", got)
 	}

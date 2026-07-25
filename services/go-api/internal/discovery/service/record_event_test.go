@@ -81,8 +81,6 @@ func TestRecordEventService_Execute_RejectsUnknownType(t *testing.T) {
 	}
 }
 
-// assertRejected400 asserts err is a 400-status validation error (via the
-// structural httputil.StatusError contract) and that nothing was appended.
 func assertRejected400(t *testing.T, store *fakeEventStore, err error) {
 	t.Helper()
 	if err == nil {
@@ -142,8 +140,7 @@ func TestRecordEventService_Execute_AcceptsWellTypedPayload(t *testing.T) {
 	store := &fakeEventStore{}
 	svc := NewRecordEventService(store)
 	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
-		Type: domain.EventTypeSkip,
-		// float64 is what encoding/json hands the handler for any JSON number.
+		Type:    domain.EventTypeSkip,
 		Payload: map[string]any{"dwell_ms": 1500.0, "result_signature": "sig", "session_id": "s1"},
 	})
 	if err != nil {

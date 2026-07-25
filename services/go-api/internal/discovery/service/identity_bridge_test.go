@@ -7,14 +7,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// identity_bridge_test pins the ADR-0011 cross-provider identity bridge — the
-// accepted-but-previously-unverified merge tier. Two surfaces:
-//   - stampIdentities (service): reads the IdentityBridge and stamps Xref ids.
-//   - Merge bridgeMatch (pure): two differently-titled results merge by a shared
-//     bridged id, recorded as the high-confidence bridge tier.
-
-// fakeIdentityBridge returns the external ids for a known mbid, mimicking the
-// warmed enrichment cache.
 type fakeIdentityBridge struct {
 	byMBID map[string]map[string]string
 }
@@ -24,7 +16,6 @@ func (f *fakeIdentityBridge) ExternalIDs(_ context.Context, _ domain.ResultKind,
 	return ids, ok
 }
 
-// withMBID returns r with the typed MBID identity key set.
 func withMBID(r domain.SearchResult, mbid string) domain.SearchResult {
 	r.MBID = mbid
 	return r
@@ -46,14 +37,13 @@ func TestStampIdentities_StampsBridgedIDs(t *testing.T) {
 	if groups[0][0].Xref["deezer"] != "555" {
 		t.Fatalf("expected xref stamped on the MB result, xref=%v", groups[0][0].Xref)
 	}
-	// The non-MB result carries no mbid, so nothing is stamped.
 	if groups[1][0].Xref != nil {
 		t.Fatalf("did not expect xref on the non-MB result")
 	}
 }
 
 func TestStampIdentities_NoBridgeIsNoOp(t *testing.T) {
-	s := NewService(nil, NewCircuitBreaker()) // no IdentityBridge wired
+	s := NewService(nil, NewCircuitBreaker())
 	groups := [][]domain.SearchResult{
 		{withMBID(res(domain.ResultKindTrack, "Some Track", "Some Artist", domain.ProviderMusicBrainz, nil), "mbid-1")},
 	}
@@ -63,10 +53,6 @@ func TestStampIdentities_NoBridgeIsNoOp(t *testing.T) {
 	}
 }
 
-// The merge tier itself: two results with DIFFERENT titles (so no name match can
-// merge them) fold into one entity solely because one carries a bridged id that
-// matches the other's native source id — recorded as the high-confidence bridge
-// tier.
 func TestMerge_BridgeTierMergesCrossProvider(t *testing.T) {
 	mb := withMBID(res(domain.ResultKindTrack, "Bridge Recording One", "Artist X", domain.ProviderMusicBrainz, nil), "mbid-1")
 	mb.Xref = map[string]string{"deezer": "555"}
@@ -91,8 +77,6 @@ func TestMerge_BridgeTierMergesCrossProvider(t *testing.T) {
 	}
 }
 
-// A bridge match requires a stamped xref to participate: two native ids alone
-// (no xref) are not a cross-provider bridge.
 func TestMerge_NoBridgeWithoutXref(t *testing.T) {
 	a := withMBID(res(domain.ResultKindTrack, "Distinct One", "Artist X", domain.ProviderMusicBrainz, nil), "mbid-1")
 	b := domain.SearchResult{

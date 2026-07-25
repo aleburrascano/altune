@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// res builds a SearchResult with one source for the given provider.
 func res(kind domain.ResultKind, title, subtitle string, provider domain.ProviderName, extras map[string]any) domain.SearchResult {
 	return domain.SearchResult{
 		Kind:     kind,
@@ -20,8 +19,6 @@ func res(kind domain.ResultKind, title, subtitle string, provider domain.Provide
 	}
 }
 
-// popFromExtras lifts a fixture's legacy "popularity" key into the typed
-// Popularity field, mirroring how providers populate it at ACL translation.
 func popFromExtras(extras map[string]any) float64 {
 	switch n := extras["popularity"].(type) {
 	case float64:
@@ -50,9 +47,6 @@ func findByTitle(t *testing.T, entities []Entity, title string) Entity {
 }
 
 func TestMerge_AmbiguousArtistNameKeepsIdentitiesSeparate(t *testing.T) {
-	// MB returns two distinct "Che" artists (different MBIDs) → the name is
-	// ambiguous. A no-identifier provider artist of the same name must NOT be
-	// absorbed by name alone — every entity keeps only its own source.
 	mb1 := withMBID(res(domain.ResultKindArtist, "Che", "", domain.ProviderMusicBrainz, nil), "mbid-1")
 	mb2 := withMBID(res(domain.ResultKindArtist, "Che", "", domain.ProviderMusicBrainz, nil), "mbid-2")
 	itunes := res(domain.ResultKindArtist, "Che", "", domain.ProviderITunes, nil)
@@ -70,8 +64,6 @@ func TestMerge_AmbiguousArtistNameKeepsIdentitiesSeparate(t *testing.T) {
 }
 
 func TestMerge_UnambiguousArtistNameStillNameMerges(t *testing.T) {
-	// One MB identity for the name → unambiguous → a no-identifier provider artist
-	// of the same name merges by name as before (no regression for e.g. Drake).
 	mb := withMBID(res(domain.ResultKindArtist, "Drake", "", domain.ProviderMusicBrainz, nil), "mbid-drake")
 	itunes := res(domain.ResultKindArtist, "Drake", "", domain.ProviderITunes, nil)
 
@@ -86,10 +78,6 @@ func TestMerge_UnambiguousArtistNameStillNameMerges(t *testing.T) {
 }
 
 func TestMerge_ITunesBridgesIntoMBIdentityDespiteAmbiguousName(t *testing.T) {
-	// MB "Che" is stamped with its Apple Music id (Xref["itunes"]); the iTunes
-	// "Che" carries that same artistId natively. They bridge and merge even though
-	// the name is ambiguous (a second distinct MB "Che" exists) — identity beats
-	// the name-ambiguity gate.
 	mb := domain.SearchResult{
 		Kind:    domain.ResultKindArtist,
 		Title:   "Che",
@@ -114,7 +102,7 @@ func TestMerge_ITunesBridgesIntoMBIdentityDespiteAmbiguousName(t *testing.T) {
 	if len(entities) != 2 {
 		t.Fatalf("got %d entities, want 2 (iTunes bridged into MB#1; MB#2 stays separate)", len(entities))
 	}
-	bridged := findByTitle(t, entities, "Che") // first "Che" = MB#1 (the xref carrier)
+	bridged := findByTitle(t, entities, "Che")
 	hasITunes := false
 	for _, s := range bridged.Result.Sources {
 		if s.Provider == domain.ProviderITunes {
@@ -180,7 +168,7 @@ func TestMerge_AlbumUPCTier(t *testing.T) {
 		a := res(domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", domain.ProviderAppleMusic, nil)
 		a.UPC = "00602557618280"
 		b := res(domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", domain.ProviderDeezer, nil)
-		b.UPC = "00602557618297" // a different edition's barcode is not disproof
+		b.UPC = "00602557618297"
 		entities := Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 1 {
 			t.Fatalf("got %d entities, want 1 (upc mismatch must not block)", len(entities))
@@ -217,10 +205,6 @@ func TestMergeInto_CoalescesTypedContentFields(t *testing.T) {
 }
 
 func TestMerge_IdentityBridge(t *testing.T) {
-	// MB artist "Ye" carries an mbid and a bridged Deezer id (stamped pre-merge
-	// from the IdentityBridge onto Xref). The Deezer result "Kanye West"
-	// has that exact native id. The titles differ, so only the stated id proves
-	// they are the same entity — name similarity never would.
 	mb := domain.SearchResult{
 		Kind:    domain.ResultKindArtist,
 		Title:   "Ye",
@@ -252,7 +236,7 @@ func TestMerge_IdentityBridge(t *testing.T) {
 
 	t.Run("without the stated id they stay separate", func(t *testing.T) {
 		bare := mb
-		bare.Xref = nil // no xref
+		bare.Xref = nil
 		entities := Merge([][]domain.SearchResult{{bare}, {dz}})
 		if len(entities) != 2 {
 			t.Fatalf("got %d entities, want 2 — no stated id, differing titles must not merge", len(entities))
@@ -270,8 +254,6 @@ func TestMerge_IdentityBridge(t *testing.T) {
 }
 
 func TestMerge_SequelStaysSeparate(t *testing.T) {
-	// Pattern B: a trailing sequel number survives canonical normalization, so
-	// the sequel never collapses into the original — with no version machinery.
 	a := track("Shotta Flow", "NLE Choppa", domain.ProviderDeezer, map[string]any{"popularity": 90.0})
 	b := track("Shotta Flow 2", "NLE Choppa", domain.ProviderDeezer, map[string]any{"popularity": 40.0})
 	entities := Merge([][]domain.SearchResult{{a, b}})
@@ -281,10 +263,6 @@ func TestMerge_SequelStaysSeparate(t *testing.T) {
 }
 
 func TestMerge_ParentheticalVariantsCollapse(t *testing.T) {
-	// Parenthetical markers are canonical noise (textnorm strips them), so a
-	// remix/live/feat variant folds into the base title — intentionally NOT a
-	// separate entity (the over-merging that broke re-find is gone the other way:
-	// we no longer fold a dash-form variant into a paren-form one; see below).
 	cases := []struct{ a, b string }{
 		{"Bad", "Bad (Remix)"},
 		{"Fix You", "Fix You (Live)"},
@@ -301,9 +279,6 @@ func TestMerge_ParentheticalVariantsCollapse(t *testing.T) {
 }
 
 func TestMerge_DashAndParenVariantsStaySeparate(t *testing.T) {
-	// The regression fix: a dash-suffixed variant keeps its suffix tokens after
-	// normalization ("big poppa 2005 remaster") and so does NOT merge into a
-	// paren-form entity ("big poppa") — the exact saved variant survives.
 	a := track("Big Poppa - 2005 Remaster", "The Notorious B.I.G.", domain.ProviderLastFM, nil)
 	b := track("Big Poppa (2007 Remaster)", "The Notorious B.I.G.", domain.ProviderDeezer, nil)
 	entities := Merge([][]domain.SearchResult{{a}, {b}})
@@ -328,9 +303,6 @@ func TestMerge_SameTitleAcrossProvidersMerges(t *testing.T) {
 }
 
 func TestMerge_TyposStaySeparate(t *testing.T) {
-	// No fuzzy rung anymore: a typo'd title is a different canonical string, so
-	// it is a separate entity. The duplicate is the accepted cost of dropping a
-	// tuned threshold; ranking surfaces both.
 	a := track("Bohemian Rhapsody", "Queen", domain.ProviderDeezer, nil)
 	b := track("Bohemian Rapsody", "Queen", domain.ProviderITunes, nil)
 	entities := Merge([][]domain.SearchResult{{a}, {b}})
@@ -372,10 +344,6 @@ func TestMerge_Artists(t *testing.T) {
 }
 
 func TestAmbiguousArtistNames_OnlyMusicBrainzMBIDsCount(t *testing.T) {
-	// A stale Last.fm mbid for the same artist must not register as a second
-	// "identity": the set's semantics are "names for which MUSICBRAINZ surfaced
-	// ≥2 MBIDs", and inflating it refuses legitimate bare-name merges (duplicate
-	// artist cards).
 	mb := withMBID(res(domain.ResultKindArtist, "Queen", "", domain.ProviderMusicBrainz, nil), "mbid-current")
 	lastfm := withMBID(res(domain.ResultKindArtist, "Queen", "", domain.ProviderLastFM, nil), "mbid-stale")
 
@@ -390,10 +358,6 @@ func TestAmbiguousArtistNames_OnlyMusicBrainzMBIDsCount(t *testing.T) {
 }
 
 func TestMerge_UPCTierRefusesConflictingMBIDs(t *testing.T) {
-	// A(m1,upc) and B(m2,upc) must NOT merge on UPC: mergeInto keeps only one
-	// MBID, so a later C(m2) would hard-stop against the survivor and the entity
-	// count would depend on arrival order. With conflicting MBIDs falling through
-	// to the hard-stop, the grouping is order-independent: {A} and {B+C}.
 	mkAlbum := func(title, mbid string, provider domain.ProviderName) domain.SearchResult {
 		r := withMBID(res(domain.ResultKindAlbum, title, "Kendrick Lamar", provider, nil), mbid)
 		r.UPC = "00602557618280"
@@ -416,8 +380,6 @@ func TestMerge_UPCTierRefusesConflictingMBIDs(t *testing.T) {
 
 func TestMerge_EmptyNormalizedTitleNeverNameMerges(t *testing.T) {
 	t.Run("fully-bracketed track titles stay separate", func(t *testing.T) {
-		// "(Intro)" and "(Outro)" both normalize to "" — shared emptiness is not
-		// a shared title, so the text tier must refuse.
 		a := track("(Intro)", "Same Artist", domain.ProviderDeezer, nil)
 		b := track("(Outro)", "Same Artist", domain.ProviderITunes, nil)
 		entities := Merge([][]domain.SearchResult{{a}, {b}})
@@ -437,11 +399,9 @@ func TestMerge_EmptyNormalizedTitleNeverNameMerges(t *testing.T) {
 }
 
 func TestMergeInto_KeepsStrongestResolutionTier(t *testing.T) {
-	// An ISRC-proven entity must not be downgraded by a later name-tier merge:
-	// the stamped tier and confidence keep the strongest proof seen.
 	a := withISRC(track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil), "USUM71703089")
 	b := withISRC(track("Humble", "Kendrick Lamar", domain.ProviderITunes, nil), "USUM71703089")
-	c := track("Humble", "Kendrick Lamar", domain.ProviderLastFM, nil) // no identifier — name tier
+	c := track("Humble", "Kendrick Lamar", domain.ProviderLastFM, nil)
 
 	entities := Merge([][]domain.SearchResult{{a}, {b}, {c}})
 	if len(entities) != 1 {

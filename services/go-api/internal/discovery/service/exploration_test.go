@@ -9,7 +9,7 @@ import (
 )
 
 func TestMaybeExplore_DisabledIsInert(t *testing.T) {
-	svc := NewService(nil, NewCircuitBreaker()) // explorationRate 0
+	svc := NewService(nil, NewCircuitBreaker())
 	in := []domain.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
 	out, explored := svc.maybeExplore(in)
 	if explored {
@@ -21,11 +21,6 @@ func TestMaybeExplore_DisabledIsInert(t *testing.T) {
 }
 
 func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
-	// Vocabulary learning must ingest the organic ranked top, not the
-	// exploration-shuffled slate — otherwise every explored search teaches the
-	// vocabulary random tail results. Two identical services (one exploring at
-	// rate 1.0) must ingest identical entries; repeated to make a shuffle leak
-	// effectively impossible to miss.
 	results := make([]domain.SearchResult, 0, 20)
 	for i := 0; i < 20; i++ {
 		results = append(results, deezerTrack("Humble Take "+string(rune('A'+i)), "Artist "+string(rune('A'+i)), float64(100-i)))
@@ -79,18 +74,16 @@ func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
 }
 
 func TestMaybeExplore_AlwaysExploresClonesAndKeepsMembers(t *testing.T) {
-	svc := NewService(nil, NewCircuitBreaker(), WithExploration(1.0)) // always explore
+	svc := NewService(nil, NewCircuitBreaker(), WithExploration(1.0))
 	in := []domain.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
 	out, explored := svc.maybeExplore(in)
 
 	if !explored {
 		t.Fatal("rate 1.0 must always explore")
 	}
-	// Cache-safety: the input slice must be untouched (a shared cached list).
 	if in[0].Title != "a" || in[1].Title != "b" || in[2].Title != "c" {
 		t.Error("maybeExplore must not mutate the input (cache) slice")
 	}
-	// Same membership, just possibly reordered.
 	seen := map[string]bool{}
 	for _, r := range out {
 		seen[r.Title] = true

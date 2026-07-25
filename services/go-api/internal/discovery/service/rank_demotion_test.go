@@ -6,19 +6,16 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// withISRC returns r with the typed ISRC identity key set.
 func withISRC(r domain.SearchResult, isrc string) domain.SearchResult {
 	r.ISRC = isrc
 	return r
 }
 
-// withAlbum returns r with the typed Album field set.
 func withAlbum(r domain.SearchResult, album string) domain.SearchResult {
 	r.Album = album
 	return r
 }
 
-// multiSource returns r with a second provider source appended (corroborated).
 func multiSource(r domain.SearchResult, p domain.ProviderName) domain.SearchResult {
 	r.Sources = append(r.Sources, domain.SourceRef{Provider: p, ExternalID: "x", URL: "https://x"})
 	return r
@@ -77,20 +74,14 @@ func TestIsLowConfidenceTail(t *testing.T) {
 }
 
 func TestRankWith_DemotesUGCNoiseBelowCleanResult(t *testing.T) {
-	// The junk title stuffs the distinguishing query tokens (rest/in/bass) → high
-	// relevance. The clean catalog result shares only the common word, so it has
-	// LOWER relevance — yet demotion must still lift it above the UGC noise. This is
-	// the strong claim: demotion overrides a genuine relevance advantage.
 	junk := track("rest in bass encore type beat", "prodguy", domain.ProviderSoundCloud, nil)
 	clean := deezerTrack("Encore", "Che", 10)
 
-	// Baseline (no demotion): the query-word-stuffed junk wins on relevance.
 	base := Rank([]Entity{ent(clean), ent(junk)}, "rest in bass encore")
 	if len(base) != 2 || base[0].Subtitle != "prodguy" {
 		t.Fatalf("baseline precondition: expected junk first on relevance, got %v", titles(base))
 	}
 
-	// With demotion: the corroborated catalog result rises despite lower relevance.
 	got := rankWith([]Entity{ent(clean), ent(junk)}, "rest in bass encore", rankConfig{demote: isLowConfidenceTail})
 	if len(got) != 2 || got[0].Subtitle != "Che" {
 		t.Fatalf("with demotion: expected clean 'Che' first, got %v", titles(got))
@@ -101,8 +92,6 @@ func TestRankWith_DemotesUGCNoiseBelowCleanResult(t *testing.T) {
 }
 
 func TestRankWith_NilPredicateMatchesRank(t *testing.T) {
-	// rankWith with a zero config must be byte-identical in ordering to Rank — the inertness that
-	// keeps the default path and the sacred tests unchanged.
 	junk := track("crazy bootleg edit", "uploader", domain.ProviderSoundCloud, nil)
 	clean := deezerTrack("Crazy", "Gnarls Barkley", 50)
 	entities := []Entity{ent(clean), ent(junk)}

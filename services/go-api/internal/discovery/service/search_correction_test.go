@@ -9,9 +9,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// queryFakeProvider returns canned results keyed by the exact query string —
-// unlike fakeProvider (which ignores the query), it can distinguish the
-// original search from the corrected re-search.
 type queryFakeProvider struct {
 	name           domain.ProviderName
 	resultsByQuery map[string][]domain.SearchResult
@@ -31,9 +28,6 @@ func (p *queryFakeProvider) SupportedKinds() map[domain.ResultKind]bool {
 	}
 }
 
-// humbleVocab returns a store whose FindClosest offers "humble" as the one
-// correction candidate (dist 2 from "humbel", within maxCorrectionDist for a
-// 6-rune query, and not an exact vocab match).
 func humbleVocab() *fakeVocabularyStore {
 	return &fakeVocabularyStore{
 		findClosestFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
@@ -45,8 +39,6 @@ func humbleVocab() *fakeVocabularyStore {
 }
 
 func TestService_Execute_ZeroResultsTriggersCorrection(t *testing.T) {
-	// The original query returns nothing; the vocabulary offers "humble"; the
-	// corrected re-search returns results. The output carries both queries.
 	p := &queryFakeProvider{
 		name: domain.ProviderDeezer,
 		resultsByQuery: map[string][]domain.SearchResult{
@@ -70,10 +62,6 @@ func TestService_Execute_ZeroResultsTriggersCorrection(t *testing.T) {
 }
 
 func TestService_Execute_CorrectedResultsNeverCached(t *testing.T) {
-	// A corrected run's results must not be cached under the ORIGINAL (misspelled)
-	// key: a later identical typo would hit the cache, lose the "showing results
-	// for" fields, and the raw typo would be vocabulary-ingested against strong
-	// results.
 	p := &queryFakeProvider{
 		name: domain.ProviderDeezer,
 		resultsByQuery: map[string][]domain.SearchResult{
@@ -95,9 +83,6 @@ func TestService_Execute_CorrectedResultsNeverCached(t *testing.T) {
 	}
 }
 
-// erroringThenFakeProvider fails the original query and answers the corrected
-// one — so the original fan-out statuses (error) and the corrected fan-out
-// statuses (ok, 1 result) are distinguishable on the wire.
 type erroringThenFakeProvider struct {
 	name    domain.ProviderName
 	failFor string
@@ -122,9 +107,6 @@ func (p *erroringThenFakeProvider) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func TestService_Execute_CorrectionUsesCorrectedFanOutStatuses(t *testing.T) {
-	// The original fan-out errored (and returned nothing); the corrected fan-out
-	// succeeded. The response's statuses (and partial) must describe the corrected
-	// run — the one whose results are on the wire — not the failed original.
 	p := &erroringThenFakeProvider{
 		name:    domain.ProviderDeezer,
 		failFor: "humbel",
@@ -152,7 +134,6 @@ func TestService_Execute_CorrectionUsesCorrectedFanOutStatuses(t *testing.T) {
 }
 
 func TestService_Execute_ResultsDoNotTriggerCorrection(t *testing.T) {
-	// A query with results never consults the vocabulary for correction.
 	store := humbleVocab()
 	p := &queryFakeProvider{
 		name: domain.ProviderDeezer,
@@ -177,9 +158,7 @@ func TestService_Execute_ResultsDoNotTriggerCorrection(t *testing.T) {
 }
 
 func TestService_Execute_NoCorrectionCandidateReturnsEmpty(t *testing.T) {
-	// Zero results and no vocabulary candidate: the empty original result comes
-	// back without error and without a corrected query.
-	store := &fakeVocabularyStore{} // FindClosest returns nothing
+	store := &fakeVocabularyStore{}
 	p := &queryFakeProvider{name: domain.ProviderDeezer}
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithVocabularyStore(store))
 
@@ -195,9 +174,7 @@ func TestService_Execute_NoCorrectionCandidateReturnsEmpty(t *testing.T) {
 }
 
 func TestService_Execute_CorrectedSearchAlsoEmptyReturnsEmpty(t *testing.T) {
-	// A candidate exists, but the corrected re-search also returns nothing:
-	// the correction is discarded, not surfaced.
-	p := &queryFakeProvider{name: domain.ProviderDeezer} // no results for any query
+	p := &queryFakeProvider{name: domain.ProviderDeezer}
 	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithVocabularyStore(humbleVocab()))
 
 	out := runSearch(t, svc, "humbel")
@@ -212,8 +189,6 @@ func TestService_Execute_CorrectedSearchAlsoEmptyReturnsEmpty(t *testing.T) {
 }
 
 func TestService_Execute_ExactVocabMatchNotCorrected(t *testing.T) {
-	// The query is itself a confirmed entity term (exact non-query vocab match):
-	// zero results must NOT be "corrected" away from a valid term.
 	store := &fakeVocabularyStore{
 		findClosestFn: func(_ string, _ int) ([]domain.VocabularyEntry, error) {
 			return []domain.VocabularyEntry{

@@ -12,18 +12,12 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// VocabularyRefreshService periodically fetches chart data from
-// providers and populates the vocabulary store for autocomplete.
 type VocabularyRefreshService struct {
 	charts   []ports.ChartProvider
 	vocab    ports.VocabularyStore
 	interval time.Duration
 	limit    int
 
-	// mu guards the Start/Shutdown lifecycle: started makes a second Start a
-	// no-op (a double Start would double-close done and leak the first cancel)
-	// and lets Shutdown-before-Start return without waiting on a loop that
-	// never ran.
 	mu      sync.Mutex
 	started bool
 	cancel  context.CancelFunc
@@ -45,14 +39,8 @@ func NewVocabularyRefreshService(
 	}
 }
 
-// maxVocabEntries caps the learned vocabulary so the Redis index does not grow
-// unbounded as new query/result terms are ingested from traffic. Generous — the
-// household + chart vocabulary is well under this — and enforced on the periodic
-// refresh, the natural home for retention.
 const maxVocabEntries = 50000
 
-// RunOnce fetches charts from all providers, ingests them, then trims the
-// vocabulary back to its retention bound.
 func (s *VocabularyRefreshService) RunOnce(ctx context.Context) error {
 	entries := s.collectEntries(ctx)
 	if len(entries) == 0 {
@@ -66,9 +54,6 @@ func (s *VocabularyRefreshService) RunOnce(ctx context.Context) error {
 	return nil
 }
 
-// trim invokes the store's owned retention when it supports it. Kept off the
-// shared VocabularyStore port (ISP): only this maintenance path needs it, so the
-// capability is discovered structurally rather than widening the read/write seam.
 func (s *VocabularyRefreshService) trim(ctx context.Context) {
 	t, ok := s.vocab.(interface {
 		Trim(ctx context.Context, maxEntries int) error
@@ -107,8 +92,6 @@ func (s *VocabularyRefreshService) normalizeAndStore(
 	return s.vocab.BulkAdd(ctx, entries)
 }
 
-// Start launches the background refresh loop. Idempotent: a second call is a
-// no-op (the loop is already running).
 func (s *VocabularyRefreshService) Start() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -156,9 +139,6 @@ func (s *VocabularyRefreshService) recoverPanic() {
 	}
 }
 
-// Shutdown cancels the background loop and waits for it to finish. Safe to call
-// before Start (returns immediately — there is no loop to wait for) and safe
-// concurrently with Start (mu orders the cancel after the launch).
 func (s *VocabularyRefreshService) Shutdown(ctx context.Context) {
 	s.mu.Lock()
 	started := s.started

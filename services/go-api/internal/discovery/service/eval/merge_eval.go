@@ -1,30 +1,5 @@
 package eval
 
-// Merge harness — library-as-truth precision/recall (plan 2026-06-24-001, Phase 1;
-// recall metric redefined 2026-06-24 after the live-data test).
-//
-// Oracle: the user's own library. For each owned track we search "artist title"
-// and inspect the merged result list (Merge has already run). Two black-box
-// signals fall out:
-//
-//   - UNDER-MERGE (recall, gated, lower is better): the FIRST version counted
-//     only PROVABLE duplicates — two result rows that share an identifier (ISRC/
-//     MBID) or have identical canonical (title, artist, kind) yet appear as
-//     separate entities. That is exactly what Merge's own contract says it must
-//     collapse (merge.go: identifier, then exact canonical title+subtitle), so a
-//     leftover duplicate is a real bug. This deliberately does NOT count the many
-//     genuinely-distinct uploads providers (esp. SoundCloud) return for one query
-//     — "redrum" and "redrum sped up" are different recordings and correctly stay
-//     apart. (The original collapse_rate conflated those and read ~5% on real
-//     data; this is the honest replacement.)
-//
-//   - OVER-MERGE (precision, gated, lower is better): a single result entity that
-//     represents two DISTINCT owned tracks — Merge folded two recordings into one.
-//     Tracked across the corpus by result signature.
-//
-// Entities the search never finds are a COVERAGE miss, not a merge miss, and are
-// excluded from the denominators.
-
 import (
 	"context"
 	"sync"
@@ -35,7 +10,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// MergeResult is the per-entity verdict plus diagnostics.
 type MergeResult struct {
 	Entity              LibraryEntity `json:"entity"`
 	Query               string        `json:"query"`
@@ -45,7 +19,6 @@ type MergeResult struct {
 	UnderMergeExample   string        `json:"under_merge_example,omitempty"`
 }
 
-// MergeReport is the aggregate precision/recall report.
 type MergeReport struct {
 	Total               int           `json:"total"`
 	Evaluated           int           `json:"evaluated"`             // queries that returned results
@@ -61,8 +34,6 @@ type MergeReport struct {
 	Results             []MergeResult `json:"results"`
 }
 
-// UnderMergeRate is provable-unmerged-duplicates / results_seen, in [0,1].
-// Gated, lower is better. ~0 means Merge collapsed everything it provably could.
 func (r MergeReport) UnderMergeRate() float64 {
 	if r.ResultsSeen == 0 {
 		return 0
@@ -70,7 +41,6 @@ func (r MergeReport) UnderMergeRate() float64 {
 	return float64(r.UnderMergeIncidents) / float64(r.ResultsSeen)
 }
 
-// OverMergeRate is over_merged / distinct_seen, in [0,1]. Gated, lower is better.
 func (r MergeReport) OverMergeRate() float64 {
 	if r.DistinctSeen == 0 {
 		return 0
@@ -78,8 +48,6 @@ func (r MergeReport) OverMergeRate() float64 {
 	return float64(r.OverMerged) / float64(r.DistinctSeen)
 }
 
-// CleanMergeRate is the share of evaluated queries with zero under-merge —
-// reported for readability (not gated; under_merge_rate is the gate).
 func (r MergeReport) CleanMergeRate() float64 {
 	if r.Evaluated == 0 {
 		return 0
@@ -87,8 +55,6 @@ func (r MergeReport) CleanMergeRate() float64 {
 	return float64(r.CleanQueries) / float64(r.Evaluated)
 }
 
-// RunMergeEval searches "artist title" for every entity, detects provable
-// under-merges per query, and accumulates the cross-corpus over-merge signal.
 func RunMergeEval(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency int, progress func(done, total int)) MergeReport {
 	if concurrency < 1 {
 		concurrency = 1
@@ -128,24 +94,22 @@ func RunMergeEval(ctx context.Context, entities []LibraryEntity, searcher Search
 func mergeEvalOne(ctx context.Context, entity LibraryEntity, searcher Searcher, mu *sync.Mutex, sigOwners map[string]map[string]bool) MergeResult {
 	res := MergeResult{Entity: entity}
 	if entity.Artist == "" {
-		return res // skipped (no artist) — Found stays false, Query empty
+		return res
 	}
 	query := entity.Artist + " " + entity.Title
 	res.Query = query
 
 	shown, err := searcher.Search(ctx, query)
 	if err != nil || len(shown) == 0 {
-		return res // no_match
+		return res
 	}
 	res.Found = true
 	res.ResultsSeen = len(shown)
 
-	// Under-merge: provable duplicates Merge should have collapsed.
 	incidents, example := detectUnderMerge(shown)
 	res.UnderMergeIncidents = incidents
 	res.UnderMergeExample = example
 
-	// Over-merge: record which owned titles claim each matching result signature.
 	ownerTitle := textnorm.NormalizeForMatch(entity.Title)
 	for _, r := range shown {
 		if !matchesEntity(r, entity) {
@@ -162,12 +126,6 @@ func mergeEvalOne(ctx context.Context, entity LibraryEntity, searcher Searcher, 
 	return res
 }
 
-// detectUnderMerge groups a query's results by a PROVABLE identity key and counts
-// entities beyond the first in any group — duplicates Merge failed to collapse.
-// A result keys on its strongest identifier (isrc, then mbid); lacking those, on
-// the exact canonical (kind, title, subtitle) that merge.go merges on. Two rows
-// only collide when they produce the same key, so distinct versions (whose
-// canonical titles differ) never count.
 func detectUnderMerge(results []domain.SearchResult) (incidents int, example string) {
 	groups := map[string][]domain.SearchResult{}
 	for _, r := range results {
@@ -184,9 +142,6 @@ func detectUnderMerge(results []domain.SearchResult) (incidents int, example str
 	return incidents, example
 }
 
-// provableIdentityKey is the key two results must share for Merge to have been
-// obligated to collapse them: same ISRC, or same MBID, or — lacking identifiers —
-// identical canonical kind+title+subtitle.
 func provableIdentityKey(r domain.SearchResult) string {
 	if r.ISRC != "" {
 		return "isrc:" + r.ISRC
@@ -197,8 +152,6 @@ func provableIdentityKey(r domain.SearchResult) string {
 	return "t:" + r.Kind.String() + "|" + textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
 }
 
-// resultSignature is a stable identity for a result entity across queries: its
-// strongest source ref, falling back to canonical title+subtitle.
 func resultSignature(r domain.SearchResult) string {
 	if len(r.Sources) > 0 && r.Sources[0].ExternalID != "" {
 		return r.Sources[0].Provider.String() + ":" + r.Sources[0].ExternalID

@@ -4,7 +4,6 @@ import (
 	"testing"
 )
 
-// metricNames extracts the names for order-insensitive membership checks.
 func metricByName(t *testing.T, metrics []NamedMetric) map[string]NamedMetric {
 	t.Helper()
 	out := make(map[string]NamedMetric, len(metrics))
@@ -32,7 +31,6 @@ func TestEvalReport_MetricsCorpusPrefix(t *testing.T) {
 }
 
 func TestEvalReport_ZeroEvaluatedRates(t *testing.T) {
-	// All-skipped run: evaluated 0 → rates must be 0, not NaN.
 	var r EvalReport
 	if r.Top1Rate() != 0 || r.TopKRate() != 0 {
 		t.Error("zero-evaluated report must yield 0 rates")

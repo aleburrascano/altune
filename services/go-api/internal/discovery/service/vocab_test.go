@@ -33,7 +33,6 @@ func TestBuildVocabEntries_MapsResultsToEntries(t *testing.T) {
 
 	entries := buildVocabEntries("Drake!", results)
 
-	// Query entry + artist + (track + its artist) + album = 5.
 	if len(entries) != 5 {
 		t.Fatalf("want 5 entries, got %d: %+v", len(entries), entries)
 	}
@@ -53,13 +52,11 @@ func TestBuildVocabEntries_MapsResultsToEntries(t *testing.T) {
 		t.Errorf("track entry: got %+v", tr)
 	}
 
-	// A track's subtitle is learned as an artist term of its own.
 	trArtist := entries[3]
 	if trArtist.Kind != domain.VocabKindArtist || trArtist.Term != "Kendrick Lamar" || trArtist.Popularity != 80 {
 		t.Errorf("track-subtitle artist entry: got %+v", trArtist)
 	}
 
-	// Albums get the composite term but NO extra subtitle-artist entry.
 	al := entries[4]
 	if al.Kind != domain.VocabKindAlbum || al.Term != "Scorpion - Drake" {
 		t.Errorf("album entry: got %+v", al)
@@ -74,7 +71,6 @@ func TestBuildVocabEntries_IngestsOnlyTopFive(t *testing.T) {
 
 	entries := buildVocabEntries("query", results)
 
-	// 1 query entry + vocabIngestTop artists; ranks 6-7 never feed the vocabulary.
 	if len(entries) != 1+vocabIngestTop {
 		t.Fatalf("want %d entries, got %d", 1+vocabIngestTop, len(entries))
 	}
@@ -93,10 +89,6 @@ func TestBuildVocabEntries_FewerResultsThanTop(t *testing.T) {
 	}
 }
 
-// AIDEV-NOTE: pins current behavior — buildVocabEntries has NO junk filter. A
-// result with an empty title still produces an entry with empty Term/TermNorm
-// (only the top-5 cut bounds ingestion). If a filter is ever added, update this
-// test to assert the entry is dropped instead.
 func TestBuildVocabEntries_EmptyTitleIsNotFiltered(t *testing.T) {
 	entries := buildVocabEntries("q", []domain.SearchResult{
 		res(domain.ResultKindTrack, "", "", domain.ProviderDeezer, nil),

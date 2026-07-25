@@ -2,13 +2,6 @@ package enrich
 
 import "context"
 
-// resolveThenLookup is the resolve→lookup dance shared by the enrichers whose
-// provider needs a separate id-resolution step before the detail fetch
-// (Deezer, Discogs album, Discogs artist): resolve a name to an id, bail out
-// (definitive miss, no error) on a zero id, look up the id, bail out
-// (definitive miss) on an empty result. Errors from either step are returned
-// as-is (transient — the caller's CachedLookup treats them as uncached).
-// zero is returned on every non-hit path.
 func resolveThenLookup[ID comparable, T any](
 	ctx context.Context,
 	resolve func(context.Context) (ID, error),

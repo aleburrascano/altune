@@ -10,8 +10,6 @@ import (
 )
 
 func TestConsensus_NameGroups(t *testing.T) {
-	// One provider errors, one returns nothing, two return albums: NameGroups
-	// keeps only the responding providers' groups, in provider-slice order.
 	svc := NewConsensusService([]ConsensusProvider{
 		{Name: "broken", Fetcher: func(context.Context, string) ([]domain.SearchResult, error) {
 			return nil, errors.New("down")
@@ -37,9 +35,6 @@ func TestConsensus_NameGroups(t *testing.T) {
 }
 
 func TestConsensus_TimeoutTruncatedNeverCached(t *testing.T) {
-	// The provider blocks past the caller's deadline: the fan-out returns
-	// truncated (ctx.Err() != nil), and the partial verdicts must NOT be frozen
-	// in the cache for the TTL.
 	blocked := ConsensusProvider{
 		Name: "slow",
 		Fetcher: func(ctx context.Context, _ string) ([]domain.SearchResult, error) {
@@ -64,9 +59,6 @@ func TestConsensus_TimeoutTruncatedNeverCached(t *testing.T) {
 }
 
 func TestConsensus_NameOnlyKeyWhenNoSeedID(t *testing.T) {
-	// Without a seed id the cache key falls back to the bare normalized name —
-	// the documented same-name-collision risk: a seedless call after a seeded one
-	// misses the seeded entry and recomputes under its own name-only key.
 	var calls int
 	p := ConsensusProvider{
 		Name: "lastfm",
@@ -90,7 +82,6 @@ func TestConsensus_NameOnlyKeyWhenNoSeedID(t *testing.T) {
 		t.Errorf("cache keys = %v, want the seed-scoped key", mapKeys(cache.m))
 	}
 
-	// The seedless call now hits its own name-only entry.
 	svc.BuildConsensus(context.Background(), "Che", domain.ProviderDeezer, "", nil)
 	if calls != 2 {
 		t.Errorf("provider calls = %d, want 2 (name-only key re-served from cache)", calls)

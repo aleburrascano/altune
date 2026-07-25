@@ -32,9 +32,6 @@ func v2Album(provider domain.ProviderName, id, title string, opts ...func(*domai
 	return r
 }
 
-// The end-to-end V2 discography: id-verified providers best-of-merge into complete
-// albums (year + track-count + cover from whichever provider has each), while a
-// same-name namesake arriving only via the by-name consensus feed is dropped.
 func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
 	deezer := &fakeArtistContentProvider{
 		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
@@ -46,13 +43,11 @@ func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
 	}
 	itunes := &fakeArtistContentProvider{
 		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
-			// Corroborates Fully Loaded and carries the track count Deezer's list lacks.
 			return []domain.SearchResult{
 				v2Album(domain.ProviderITunes, "i-fl", "Fully Loaded", withTracks(5)),
 			}, nil
 		},
 	}
-	// A same-name artist's single, reachable only by name (no id, no MBID).
 	namesake := consensusProvider("lastfm", "Wrong Che Single")
 	consensus := NewConsensusService([]ConsensusProvider{namesake})
 
@@ -94,11 +89,6 @@ func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
 	}
 }
 
-// The Che case: the durable store has NO cross-provider bridge (underground
-// artist MusicBrainz doesn't url-relate), so resolveArtistIdentity returns
-// ok=false. V2 must STILL run on the seed identity alone — the seed provider id
-// is id-verified — keeping the seed's real albums and dropping a by-name namesake.
-// Before this fix V2 was gated behind ok and silently fell back to the old path.
 func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 	deezer := &fakeArtistContentProvider{
 		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
@@ -114,7 +104,7 @@ func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 	svc := NewGetArtistContentService(
 		map[domain.ProviderName]ports.ArtistContentProvider{domain.ProviderDeezer: deezer},
 		WithConsensusService(NewConsensusService([]ConsensusProvider{namesake})),
-		WithContentIdentityStore(&fakeIdentityStore{}), // empty → resolveArtistIdentity ok=false
+		WithContentIdentityStore(&fakeIdentityStore{}),
 	)
 
 	resp, err := svc.GetAlbums(context.Background(), domain.ProviderDeezer, "399574001", "Che", 50)
@@ -126,9 +116,6 @@ func TestGetAlbums_v2_runsOnSeedWhenStoreHasNoBridge(t *testing.T) {
 	}
 }
 
-// The fan-out order is canonical, not map range: the MergeReleases incumbent
-// (which fixes the displayed title casing/fields) must be the same provider
-// every request, not whichever the map range yielded first.
 func TestGetAlbums_v2_deterministicAcrossRuns(t *testing.T) {
 	deezer := &fakeArtistContentProvider{
 		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
@@ -139,8 +126,6 @@ func TestGetAlbums_v2_deterministicAcrossRuns(t *testing.T) {
 	}
 	itunes := &fakeArtistContentProvider{
 		getAlbumsFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
-			// Same release, different casing: whoever is the cluster incumbent
-			// decides the displayed title.
 			return []domain.SearchResult{
 				v2Album(domain.ProviderITunes, "i-fl", "FULLY LOADED", withTracks(5)),
 			}, nil
@@ -169,8 +154,6 @@ func TestGetAlbums_v2_deterministicAcrossRuns(t *testing.T) {
 	}
 }
 
-// A hung provider is cut off at detailFanOutTimeout instead of holding the
-// request open; the responsive providers' results still come back.
 func TestFanOutByIdentity_slowProviderCutOffAtTimeout(t *testing.T) {
 	old := detailFanOutTimeout
 	detailFanOutTimeout = 50 * time.Millisecond
@@ -183,7 +166,7 @@ func TestFanOutByIdentity_slowProviderCutOffAtTimeout(t *testing.T) {
 	}
 	slow := &fakeArtistContentProvider{
 		getAlbumsFn: func(ctx context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {
-			<-ctx.Done() // hangs until the fan-out deadline fires
+			<-ctx.Done()
 			return nil, ctx.Err()
 		},
 	}
@@ -209,7 +192,6 @@ func TestFanOutByIdentity_slowProviderCutOffAtTimeout(t *testing.T) {
 	}
 }
 
-// V2 top-tracks: id-verified fan-out, corroborated tracks first, no by-name feed.
 func TestGetTopTracks_v2_corroboratedFirst(t *testing.T) {
 	deezer := &fakeArtistContentProvider{
 		getTopTracksFn: func(_ context.Context, _ domain.ProviderName, _ string) ([]domain.SearchResult, error) {

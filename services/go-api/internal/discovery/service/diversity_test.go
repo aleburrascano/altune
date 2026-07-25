@@ -6,12 +6,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// Shared result-builder helpers, relocated here when the v1 ranking tests were
-// removed. Still used by the surviving find_related tests and the diversity
-// tests below.
-
-// trackResult builds a track result with a Deezer source (passes
-// hasBrowseableSource for all kinds).
 func trackResult(provider domain.ProviderName, extID, title, subtitle string, extras map[string]any) domain.SearchResult {
 	return domain.SearchResult{
 		Kind:       domain.ResultKindTrack,
@@ -23,8 +17,6 @@ func trackResult(provider domain.ProviderName, extID, title, subtitle string, ex
 	}
 }
 
-// artistResult builds an artist result. Non-track results need a Deezer source
-// to pass hasBrowseableSource.
 func artistResult(provider domain.ProviderName, extID, name string, extras map[string]any) domain.SearchResult {
 	return domain.SearchResult{
 		Kind:       domain.ResultKindArtist,
@@ -35,7 +27,6 @@ func artistResult(provider domain.ProviderName, extID, name string, extras map[s
 	}
 }
 
-// albumResult builds an album result.
 func albumResult(provider domain.ProviderName, extID, title, subtitle string, extras map[string]any) domain.SearchResult {
 	return domain.SearchResult{
 		Kind:       domain.ResultKindAlbum,
@@ -48,9 +39,6 @@ func albumResult(provider domain.ProviderName, extID, title, subtitle string, ex
 }
 
 func TestEnforceDiversity(t *testing.T) {
-	// EnforceDiversity moves excess entries from within the window to just
-	// after the window. The "kept" portion of the window has at most 3 per
-	// artist; overflow follows immediately.
 	var results []domain.SearchResult
 	for i := 0; i < 6; i++ {
 		results = append(results, trackResult(domain.ProviderDeezer, "",
@@ -139,9 +127,6 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 	})
 
 	t.Run("ambiguous name keeps MBID-less entities as separate cards", func(t *testing.T) {
-		// Two MB identities make "Che" ambiguous; two MBID-less same-name artists
-		// from other providers must NOT collapse into one card via a shared
-		// "name\x00" key — under ambiguity, no-MBID entities never fold together.
 		mb1 := withMBID(artistResult(domain.ProviderMusicBrainz, "mb-1", "Che", nil), "mbid-1")
 		mb2 := withMBID(artistResult(domain.ProviderMusicBrainz, "mb-2", "Che", nil), "mbid-2")
 		results := []domain.SearchResult{

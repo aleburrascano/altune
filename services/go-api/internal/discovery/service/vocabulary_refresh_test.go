@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// --- fakes ---
-
 type fakeChartProvider struct {
 	entries []domain.VocabularyEntry
 	err     error
@@ -22,10 +20,8 @@ func (f *fakeChartProvider) FetchCharts(_ context.Context, _ int) ([]domain.Voca
 }
 
 type fakeVocabularyStore struct {
-	bulkAdded []domain.VocabularyEntry
-	err       error
-	// Optional read-side overrides (used by suggest/correction tests); nil keeps
-	// the no-result default the refresh tests rely on. Call counts record either way.
+	bulkAdded         []domain.VocabularyEntry
+	err               error
 	suggestByPrefixFn func(prefix string, limit int) ([]domain.VocabularyEntry, error)
 	findClosestFn     func(query string, limit int) ([]domain.VocabularyEntry, error)
 	addFn             func(entry domain.VocabularyEntry) error
@@ -60,8 +56,6 @@ func (f *fakeVocabularyStore) FindClosest(_ context.Context, query string, limit
 	}
 	return nil, nil
 }
-
-// --- tests ---
 
 func TestVocabularyRefresh_HappyPath(t *testing.T) {
 	store := &fakeVocabularyStore{}
@@ -194,20 +188,17 @@ func TestVocabularyRefresh_DuplicateTerms(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Both entries passed to BulkAdd; dedup is the store's concern
 	if len(store.bulkAdded) != 2 {
 		t.Fatalf("got %d entries, want 2", len(store.bulkAdded))
 	}
 }
 
 func TestVocabularyRefresh_StartTwiceAndShutdownSafe(t *testing.T) {
-	// A second Start must be a no-op (the old code double-closed done and leaked
-	// the first cancel), and Shutdown must stop the single loop cleanly.
 	store := &fakeVocabularyStore{}
 	svc := NewVocabularyRefreshService(nil, store, time.Hour, 50)
 
 	svc.Start()
-	svc.Start() // no-op, must not panic on shutdown's close(done)
+	svc.Start()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -223,13 +214,11 @@ func TestVocabularyRefresh_ShutdownBeforeStartReturns(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	svc.Shutdown(ctx) // never started: must return immediately, not hang on done
+	svc.Shutdown(ctx)
 	if ctx.Err() != nil {
 		t.Fatal("Shutdown before Start blocked until the context expired")
 	}
 }
-
-// --- helpers ---
 
 func newTestRefreshService(
 	charts []fakeChartProvider,

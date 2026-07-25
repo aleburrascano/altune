@@ -8,24 +8,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// Discography V2 (docs/discovery-detail-pipeline.md §6) — the rebuilt core wired
-// into the artist-content service behind DISCOGRAPHY_V2. It replaces the lossy
-// Merge → consensus(MB-veto) → hideBare path with the pure cores:
-//
-//	id-verified fan-out + by-name completeness groups
-//	  → MergeReleases (field-level best-of, never replace)
-//	  → FilterKept   (keep on corroboration/identifier/own-id, not MB-veto)
-//	  → normalize record_type + year, order
-//
-// Contamination-safe (no blind SoundCloud name-resolve: the id fan-out is queried
-// by id only), and metadata-complete (every field best-of'd), so the year/track-
-// count/bucketing bugs are fixed at the source.
-
-// v2Albums builds the discography identity-first with the V2 cores. It fans out
-// by id ONLY (no by-name completeness feed — that was a title-collision +
-// contamination source, e.g. iTunes returning a different Che), verifies each
-// provider against the MusicBrainz anchor to drop a mis-bridged same-name artist
-// (doc §7), then merges best-of.
 func (s *GetArtistContentService) v2Albums(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
 	groups := s.v2ReleaseGroups(ctx, identity, artistName, false, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistAlbums(ctx, provider, id)
@@ -43,9 +25,6 @@ func (s *GetArtistContentService) v2Albums(ctx context.Context, identity Resolve
 	return out
 }
 
-// v2TopTracks builds top tracks with the V2 cores. There is no by-name
-// completeness feed for tracks (consensus is album-only), so only the id-verified
-// fan-out contributes; results order most-corroborated first.
 func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
 	groups := s.v2ReleaseGroups(ctx, identity, artistName, false, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistTopTracks(ctx, provider, id)
@@ -61,11 +40,6 @@ func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity Reso
 	return out
 }
 
-// v2ReleaseGroups assembles the tagged input for MergeReleases: the id fan-out
-// (queried by each provider's OWN id — IDVerified, never a name, so no same-name
-// bleed) plus, for albums, the by-name consensus providers as unverified groups
-// the keep step filters. artistName is intentionally NOT passed to fanOutByIdentity
-// (that would re-enable the blind SoundCloud name-resolve V2 removes).
 func (s *GetArtistContentService) v2ReleaseGroups(ctx context.Context, identity ResolvedArtistIdentity, artistName string, includeNameGroups bool, fetch identityContentFetch) []ReleaseGroup {
 	idGroups := s.fanOutByIdentity(ctx, identity, "", fetch)
 	groups := make([]ReleaseGroup, 0, len(idGroups)+8)
@@ -80,10 +54,6 @@ func (s *GetArtistContentService) v2ReleaseGroups(ctx context.Context, identity 
 	return groups
 }
 
-// verifyGroupsAgainstMB drops fan-out provider groups whose catalogue does not
-// overlap the artist's MusicBrainz release-groups — the mis-bridged same-name
-// artists (doc §7). A no-op without an MB anchor, without an MBID, or on MB error
-// (fail open: never empty the discography on a transient MB failure).
 func (s *GetArtistContentService) verifyGroupsAgainstMB(ctx context.Context, identity ResolvedArtistIdentity, groups []ReleaseGroup) []ReleaseGroup {
 	if s.mbAnchor == nil || identity.MBID == "" {
 		return groups
@@ -95,8 +65,6 @@ func (s *GetArtistContentService) verifyGroupsAgainstMB(ctx context.Context, ide
 	return FilterGroupsByMBAnchor(normalizeTitleSet(titles), groups)
 }
 
-// normalizeReleaseYear derives a numeric Year from ReleaseDate when a provider
-// carried only the date (mirrors normalizeAlbumYears for a single record).
 func normalizeReleaseYear(r *domain.SearchResult) {
 	if r.Year != 0 || len(r.ReleaseDate) < 4 {
 		return

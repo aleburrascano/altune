@@ -25,8 +25,6 @@ func TestPageOf(t *testing.T) {
 		{name: "first page", total: 10, offset: 0, limit: 4, wantLen: 4, wantFirst: "a"},
 		{name: "second page continues where the first ended", total: 10, offset: 4, limit: 4, wantLen: 4, wantFirst: "e"},
 		{name: "last page is short, not padded", total: 10, offset: 8, limit: 4, wantLen: 2, wantFirst: "i"},
-		// The slate shrinks when a provider drops out between pages. A client
-		// holding an offset from the larger slate must get an empty page, not a panic.
 		{name: "offset past the end yields nothing", total: 3, offset: 20, limit: 4, wantLen: 0},
 		{name: "offset exactly at the end yields nothing", total: 4, offset: 4, limit: 4, wantLen: 0},
 		{name: "zero limit means the rest of the slate", total: 5, offset: 1, limit: 0, wantLen: 4, wantFirst: "b"},
@@ -45,7 +43,6 @@ func TestPageOf(t *testing.T) {
 	}
 }
 
-// Consecutive pages must tile the slate exactly: no result seen twice, none skipped.
 func TestPageOfTilesTheSlateWithoutGapsOrRepeats(t *testing.T) {
 	const total, limit = 23, 5
 	full := slate(total)

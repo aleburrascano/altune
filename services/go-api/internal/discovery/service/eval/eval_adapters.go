@@ -1,15 +1,5 @@
 package eval
 
-// Harness → substrate adapters (plan 2026-06-24-001).
-//
-// Each existing harness report exposes its headline gateable numbers
-// (Metrics) and its attributed failure log (Failures) through one uniform
-// contract, so the discoveryeval cmd gates and slices every mode identically.
-// Kept in this one file so the tested harness sources (library_eval.go,
-// coverage_signal_*.go) are not disturbed.
-
-// HarnessReport is what every eval mode produces: numbers to gate and failures
-// to slice. The cmd treats all modes through this single shape.
 type HarnessReport interface {
 	Metrics() []NamedMetric
 	Failures() []FailureRecord
@@ -24,10 +14,6 @@ var (
 	_ HarnessReport = DiversityReport{}
 )
 
-// ---- library eval (ranking) --------------------------------------------
-
-// Metrics gates ranking on both bars: strict #1 and the product top-K bar. The
-// corpus tag keeps exact and hard baselines as distinct gate entries.
 func (r EvalReport) Metrics() []NamedMetric {
 	p := "eval."
 	if r.Corpus != "" {
@@ -39,9 +25,6 @@ func (r EvalReport) Metrics() []NamedMetric {
 	}
 }
 
-// Failures emits one attributed record per miss. The query's token count and
-// script are always present (the single-token / non-Latin bands); a wrong-top
-// miss also carries what kind of result usurped #1.
 func (r EvalReport) Failures() []FailureRecord {
 	out := []FailureRecord{}
 	for _, res := range r.Results {
@@ -67,11 +50,6 @@ func (r EvalReport) Failures() []FailureRecord {
 	return out
 }
 
-// ---- coverage signal A (demand-side gaps) -------------------------------
-
-// Metrics gates the strong-gap count (lower is better). It is traffic-sensitive
-// — a busy window surfaces more distinct gaps — so its committed margin must be
-// wide; the note on the baseline records that.
 func (r *CoverageReportA) Metrics() []NamedMetric {
 	return []NamedMetric{
 		{Name: "signal_a.strong_gaps", Value: float64(len(r.Strong)), HigherIsBetter: false},
@@ -79,10 +57,6 @@ func (r *CoverageReportA) Metrics() []NamedMetric {
 	}
 }
 
-// Failures: each strong gap is already a failed real user query — emit it with
-// its demand weight and the standard query attrs. Abandoned gaps are demand
-// evidence of a different kind (the query returned something, but the user
-// gave up and reformulated), so they carry their own reason.
 func (r *CoverageReportA) Failures() []FailureRecord {
 	out := []FailureRecord{}
 	for _, g := range r.Strong {
@@ -98,10 +72,6 @@ func (r *CoverageReportA) Failures() []FailureRecord {
 	return out
 }
 
-// ---- coverage signal B (provider imbalance) -----------------------------
-
-// Metrics gates the mean per-provider gap (lower is better) — the union-relative
-// imbalance across providers.
 func (r *CoverageReportB) Metrics() []NamedMetric {
 	mean := 0.0
 	if len(r.ProviderGaps) > 0 {
@@ -116,9 +86,6 @@ func (r *CoverageReportB) Metrics() []NamedMetric {
 	}
 }
 
-// Failures: one record per provider, attributed with its miss/union counts and
-// unique reach. Provider-level by nature — signal B does not retain per-entity
-// detail.
 func (r *CoverageReportB) Failures() []FailureRecord {
 	out := []FailureRecord{}
 	for _, g := range r.ProviderGaps {
@@ -136,10 +103,6 @@ func (r *CoverageReportB) Failures() []FailureRecord {
 	return out
 }
 
-// ---- merge (precision / recall) -----------------------------------------
-
-// Metrics gates both halves, both lower-is-better: under_merge_rate (recall —
-// provable duplicates left unmerged) and over_merge_rate (precision).
 func (r MergeReport) Metrics() []NamedMetric {
 	return []NamedMetric{
 		{Name: "merge.under_merge_rate", Value: r.UnderMergeRate(), HigherIsBetter: false},
@@ -147,9 +110,6 @@ func (r MergeReport) Metrics() []NamedMetric {
 	}
 }
 
-// Failures emits the queries that left a provable duplicate unmerged, attributed
-// with the standard query bands + the incident count. Over-merges live in the
-// report's OverMergeExamples (provenance is a signature pair, not a single query).
 func (r MergeReport) Failures() []FailureRecord {
 	out := []FailureRecord{}
 	for _, res := range r.Results {
@@ -163,10 +123,6 @@ func (r MergeReport) Failures() []FailureRecord {
 	return out
 }
 
-// ---- correction (precision / recall) ------------------------------------
-
-// Metrics gates both halves: recall_rate (typos recovered, higher is better)
-// and precision_rate (valid queries left untouched, higher is better).
 func (r CorrectionReport) Metrics() []NamedMetric {
 	return []NamedMetric{
 		{Name: "correction.recall_rate", Value: r.RecallRate(), HigherIsBetter: true},
@@ -174,9 +130,6 @@ func (r CorrectionReport) Metrics() []NamedMetric {
 	}
 }
 
-// Failures unions the recall misses and the corruptions — both already carry
-// their attributed bags. A corruption (rewriting a valid query) is the more
-// dangerous failure, so it leads.
 func (r CorrectionReport) Failures() []FailureRecord {
 	out := make([]FailureRecord, 0, len(r.Corruptions)+len(r.RecallMisses))
 	out = append(out, r.Corruptions...)
@@ -184,11 +137,6 @@ func (r CorrectionReport) Failures() []FailureRecord {
 	return out
 }
 
-// ---- diversity (reshaping cost) -----------------------------------------
-
-// Metrics gates ONLY the cost — the correct answers reshaping demotes out of the
-// top-K (lower is better). The benefit (concentration drop) is deliberately
-// absent: a policy's collateral damage is gated; the policy is not.
 func (r DiversityReport) Metrics() []NamedMetric {
 	name := "diversity.cost_rate"
 	if r.Corpus != "" {
@@ -199,7 +147,6 @@ func (r DiversityReport) Metrics() []NamedMetric {
 	}
 }
 
-// Failures are the entities reshaping pushed below the fold.
 func (r DiversityReport) Failures() []FailureRecord {
 	return r.Losses
 }

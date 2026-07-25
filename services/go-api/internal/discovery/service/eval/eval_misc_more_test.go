@@ -12,8 +12,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// ---- behavioral corpus error paths --------------------------------------
-
 func TestLoadBehavioralCorpus_MissingFile(t *testing.T) {
 	if _, err := LoadBehavioralCorpus(filepath.Join(t.TempDir(), "absent.json")); err == nil {
 		t.Fatal("want an error for a missing corpus file")
@@ -53,14 +51,11 @@ func TestCorpusBuilder_BuildAndMaterializePropagateStoreError(t *testing.T) {
 func TestCorpusBuilder_MaterializeUnwritablePath(t *testing.T) {
 	store := fakeLabelStore{}
 	builder := NewCorpusBuilder(store)
-	// A path whose parent directory does not exist → the write step must error.
 	path := filepath.Join(t.TempDir(), "no-such-dir", "corpus.json")
 	if err := builder.Materialize(context.Background(), time.Unix(0, 0), "x", path); err == nil {
 		t.Error("Materialize must surface the write error")
 	}
 }
-
-// ---- detail report metrics ----------------------------------------------
 
 func TestDetailReport_MetricsDirections(t *testing.T) {
 	r := DetailReport{ContaminationCount: 2, AlbumRecall: 0.9, TrackRecall: 0.8, MetadataCoverage: 0.7}
@@ -90,8 +85,6 @@ func TestRunDetailEval_EmptyGoldens(t *testing.T) {
 }
 
 func TestRunDetailEval_NoAlbumsExcludedFromCoverage(t *testing.T) {
-	// A golden whose service returns no albums must not drag metadata coverage
-	// toward zero — it is excluded from the coverage average entirely.
 	goldens := []DetailGolden{
 		{Name: "empty", SeedProvider: "deezer", SeedID: "1"},
 	}
@@ -103,8 +96,6 @@ func TestRunDetailEval_NoAlbumsExcludedFromCoverage(t *testing.T) {
 		t.Errorf("per-artist coverage = %v, want 0", rep.PerArtist[0].MetadataCoverage)
 	}
 }
-
-// ---- library eval odds and ends -----------------------------------------
 
 func TestEvalOutcome_StringAndJSON(t *testing.T) {
 	tests := []struct {
@@ -158,8 +149,6 @@ func TestRunLibraryEvalMode_AllSkippedReportsZeroRates(t *testing.T) {
 	}
 }
 
-// ---- correction helpers --------------------------------------------------
-
 type recordedVocab struct {
 	entries []domain.VocabularyEntry
 	err     error
@@ -186,16 +175,14 @@ func TestIsRecognizedTerm(t *testing.T) {
 	}
 }
 
-// ---- failure-log helpers -------------------------------------------------
-
 func TestStringifyAttrAndItoa(t *testing.T) {
 	records := []FailureRecord{
 		{Attrs: map[string]any{"k": "str"}},
 		{Attrs: map[string]any{"k": true}},
 		{Attrs: map[string]any{"k": false}},
 		{Attrs: map[string]any{"k": -42}},
-		{Attrs: map[string]any{"k": 3.14}}, // unsupported type → "?"
-		{Attrs: map[string]any{}},          // missing key → "(unset)"
+		{Attrs: map[string]any{"k": 3.14}},
+		{Attrs: map[string]any{}},
 	}
 	got := SliceFailures(records, "k")
 	want := map[string]int{"str": 1, "true": 1, "false": 1, "-42": 1, "?": 1, "(unset)": 1}
@@ -222,17 +209,13 @@ func TestStringExtra(t *testing.T) {
 	}
 }
 
-// ---- neighborRune determinism -------------------------------------------
-
 func TestNeighborRune(t *testing.T) {
 	if neighborRune('a') != 's' {
 		t.Errorf("neighborRune('a') = %q, want 's' (QWERTY-adjacent)", neighborRune('a'))
 	}
-	// Off-map lowercase letters shift by one; 'z' is ON the map (→'x').
 	if neighborRune('z') != 'x' {
 		t.Errorf("neighborRune('z') = %q, want 'x'", neighborRune('z'))
 	}
-	// Non-letter falls back to 'a'.
 	if neighborRune('7') != 'a' {
 		t.Errorf("neighborRune('7') = %q, want 'a'", neighborRune('7'))
 	}

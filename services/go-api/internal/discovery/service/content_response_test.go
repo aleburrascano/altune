@@ -6,8 +6,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// A provider returning (nil, nil) must still honor the envelope contract: Items
-// is always non-nil so the wire serializes [] rather than null.
 func TestOkContentResponse_nilResultsCoercedToEmptySlice(t *testing.T) {
 	resp := okContentResponse(domain.ProviderDeezer, nil, 10)
 	if resp.Items == nil {
