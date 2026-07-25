@@ -1,0 +1,59 @@
+# Rebuild the frozen eval corpus from the live tracks table and open a PR.
+#
+# The nightly evaluates a checked-in snapshot so a metric delta means the code or
+# a provider changed, never that the library grew. Refreshing the snapshot is
+# therefore a deliberate act: it moves the denominator, which invalidates every
+# corpus-derived baseline. Re-baseline each gated mode after merging this.
+name: Discovery eval corpus refresh
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: discovery-eval
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: services/go-api
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_JWT_JWKS_URL: ${{ secrets.SUPABASE_JWT_JWKS_URL }}
+      MUSICBRAINZ_USER_AGENT: ${{ secrets.MUSICBRAINZ_USER_AGENT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: services/go-api/go.sum
+
+      - name: snapshot corpus
+        id: snapshot
+        run: |
+          go run ./cmd/discoveryeval \
+            -mode corpus-snapshot \
+            -corpus-file cmd/discoveryeval/corpus-library.json | tee ./tmp/snapshot.md
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          add-paths: services/go-api/cmd/discoveryeval/corpus-library.json
+          branch: eval-corpus-refresh
+          commit-message: |
+            chore(tooling): refresh the frozen discoveryeval corpus
+          title: 'chore(tooling): refresh the frozen discoveryeval corpus'
+          body: |
+            Rebuilt from the live `tracks` table.
+
+            **Merging this moves the denominator for every corpus-derived metric.**
+            Re-baseline each gated mode with the Discovery eval rebaseline workflow
+            afterwards, or the next nightly reports regressions that are only the
+            corpus changing size.
+
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

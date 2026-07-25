@@ -1,39 +1,23 @@
 # Discovery nightly eval — the ACTUAL baselines gate.
 #
 # discovery-eval-gate.yml runs only the deterministic, provider-free unit tests
-# per-PR; the positional/merge/correction/diversity/detail gates (cmd/discoveryeval
-# vs baselines.json, exit 2 on regression) were documented as "nightly" but had no
-# scheduled runner — they fired only when a human ran them locally. This workflow
-# is that nightly run.
+# per-PR. This workflow runs every gated mode against the frozen corpus and
+# reports each metric against cmd/discoveryeval/baselines.json.
 #
-# Needs live providers plus the prod-cloned corpus, so repo secrets must provide:
-#   DATABASE_URL        (Supabase Postgres — corpus + identity store; required)
+# Why the corpus is frozen, why the modes are split into two groups, and what a
+# metric delta means: okf/backend/discovery/eval-harness.md.
+#
+# Repo secrets required:
+#   DATABASE_URL        (Supabase Postgres — identity store + metric history)
 #   SUPABASE_JWT_JWKS_URL                (config.Load() validates this even though
-#                                         eval mode never touches auth; not a secret
-#                                         value, just Supabase's public JWKS URL)
+#                                         eval mode never touches auth)
 #   LASTFM_API_KEY, DISCOGS_TOKEN, FANARTTV_API_KEY, GENIUS_ACCESS_TOKEN
-#                       (2026-07-24: dedicated CI-only credentials, separate
-#                       registrations from the ones baked into the VM's
-#                       .env.production — a heavy nightly corpus run shares no
-#                       quota with live user traffic on these four. Rotate/renew
-#                       independently of prod.)
-#   MUSICBRAINZ_USER_AGENT   (no key — just a contact UA string; shared with prod
-#                             is fine, rate limiting there is IP-scoped, not
-#                             UA-scoped, and Actions runners use different IPs
-#                             than the VM)
+#                       (dedicated CI-only credentials — a heavy nightly run
+#                        shares no quota with live user traffic. Rotate
+#                        independently of prod.)
+#   MUSICBRAINZ_USER_AGENT   (no key — a contact UA string; rate limiting there
+#                             is IP-scoped, so sharing with prod is fine)
 #   ALERT_NTFY_URL      (optional — regression push notification)
-# REDIS_URL is intentionally unset: the self-hosted VM Redis has no public
-# exposure (by design — no auth in its connection string) and isn't reachable
-# from Actions runners. Every OTHER mode degrades gracefully without it (every
-# cache is a Null-Object fallback). `correction` is the one exception — it hard-
-# requires a populated vocabulary store (learned from real search traffic) and
-# errors immediately without one, so it's marked continue-on-error here: it
-# cannot be gated from this runner. Run it from the OCI VM (where Redis is
-# reachable) if you want it enforced — see the runner-choice note below.
-#
-# If GitHub-runner IPs prove flaky against providers (Spotify's anonymous flow is
-# the likely first casualty), the fallback home for this job is a cron on the OCI
-# VM running the same commands — keep the mode list below as the single source.
 name: Discovery eval nightly
 
 on:
@@ -41,14 +25,26 @@ on:
     - cron: '30 3 * * *'
   workflow_dispatch:
 
+concurrency:
+  group: discovery-eval
+  cancel-in-progress: false
+
+env:
+  CORPUS: cmd/discoveryeval/corpus-library.json
+
 jobs:
-  nightly-gates:
+  # Modes that sweep the corpus against live providers. max-parallel is 1 by
+  # deliberate design, not runner scarcity: the rate limiter in
+  # internal/app/live_transport.go is per-process, so two concurrent jobs would
+  # double the request rate on the Last.fm and Discogs credentials, whose quotas
+  # are per-key. MusicBrainz and iTunes are IP-scoped and would be unaffected.
+  heavy:
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        mode: [eval, merge, diversity, artist-intent, signal-b]
     runs-on: ubuntu-latest
-    # 90m was too tight: detail+correction+merge alone took ~53m (2026-07-24
-    # observed run), and eval/artist-intent/diversity/signal-a/signal-b still
-    # had to run — GitHub killed the job mid-eval at exactly 90m16s ("cancelled",
-    # not a real gate failure). MB's ~1 req/s pacing across the full corpus
-    # dominates the wall-clock; 240m gives real headroom.
     timeout-minutes: 240
     defaults:
       run:
@@ -63,67 +59,162 @@ jobs:
       MUSICBRAINZ_USER_AGENT: ${{ secrets.MUSICBRAINZ_USER_AGENT }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: services/go-api/go.sum
+      - name: build harness
+        run: go build -o ./tmp/discoveryeval ./cmd/discoveryeval
 
+      # A regressed mode re-runs once before it counts. Live providers are noisy
+      # enough that a single red result is not evidence: detail's contamination
+      # guard is fail-open on a MusicBrainz timeout, and a rate-limited response
+      # can flip a gate with no code change (observed 2026-07-24: 0 contamination,
+      # then 70, same commit, ~30s apart). Two consecutive regressions is signal.
+      - name: ${{ matrix.mode }}
+        run: |
+          for attempt in 1 2; do
+            if ./tmp/discoveryeval \
+              -mode ${{ matrix.mode }} \
+              -corpus-file "$CORPUS" \
+              -json ./tmp/report-${{ matrix.mode }}.json \
+              -metrics ./tmp/metrics-${{ matrix.mode }}.json; then
+              exit 0
+            fi
+            echo "${{ matrix.mode }} regressed or errored (attempt $attempt/2)"
+            sleep 60
+          done
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: discovery-eval-${{ matrix.mode }}
+          path: services/go-api/tmp/*-${{ matrix.mode }}.json
+          retention-days: 30
+
+  # Modes that spend no per-key provider quota: correction is offline against a
+  # seeded Redis, signal-a reads telemetry, and detail touches only MusicBrainz,
+  # which is IP-scoped and so unaffected by a concurrent heavy job on another
+  # runner. Safe to run alongside the heavy group. signal-b is NOT here — it
+  # fans out over Last.fm, MusicBrainz and Discogs (BuildConsensusProviders).
+  cheap:
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [detail, correction, signal-a]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: services/go-api
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_JWT_JWKS_URL: ${{ secrets.SUPABASE_JWT_JWKS_URL }}
+      LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+      DISCOGS_TOKEN: ${{ secrets.DISCOGS_TOKEN }}
+      FANARTTV_API_KEY: ${{ secrets.FANARTTV_API_KEY }}
+      GENIUS_ACCESS_TOKEN: ${{ secrets.GENIUS_ACCESS_TOKEN }}
+      MUSICBRAINZ_USER_AGENT: ${{ secrets.MUSICBRAINZ_USER_AGENT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: services/go-api/go.sum
+      - name: build harness
+        run: go build -o ./tmp/discoveryeval ./cmd/discoveryeval
+
+      # correction hard-requires a populated vocabulary store. The VM's Redis has
+      # no public exposure and isn't reachable from Actions, so CI seeds its own
+      # from the frozen corpus — deterministic, and gated against a baseline
+      # measured the same way.
+      - name: seed vocabulary
+        if: matrix.mode == 'correction'
+        env:
+          REDIS_URL: redis://localhost:6379
+        run: ./tmp/discoveryeval -mode correction-seed -corpus-file "$CORPUS"
+
+      - name: ${{ matrix.mode }}
+        env:
+          REDIS_URL: ${{ matrix.mode == 'correction' && 'redis://localhost:6379' || '' }}
+        run: |
+          for attempt in 1 2; do
+            if ./tmp/discoveryeval \
+              -mode ${{ matrix.mode }} \
+              -corpus-file "$CORPUS" \
+              -json ./tmp/report-${{ matrix.mode }}.json \
+              -metrics ./tmp/metrics-${{ matrix.mode }}.json; then
+              exit 0
+            fi
+            echo "${{ matrix.mode }} regressed or errored (attempt $attempt/2)"
+            sleep 20
+          done
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: discovery-eval-${{ matrix.mode }}
+          path: services/go-api/tmp/*-${{ matrix.mode }}.json
+          retention-days: 30
+
+  report:
+    needs: [heavy, cheap]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/go-api
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SUPABASE_JWT_JWKS_URL: ${{ secrets.SUPABASE_JWT_JWKS_URL }}
+      MUSICBRAINZ_USER_AGENT: ${{ secrets.MUSICBRAINZ_USER_AGENT }}
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
 
-      - name: build harness
-        run: go build -o ./tmp/discoveryeval ./cmd/discoveryeval
-
-      # Gated modes, cheapest-first so an early regression fails fast. Each mode
-      # gates its metrics against cmd/discoveryeval/baselines.json and exits 2 on
-      # a regression. detail needs no DB; correction is offline; the rest hit
-      # live providers over the prod-cloned corpus.
-      #
-      # detail's contamination guard (FilterGroupsByMBAnchor) is deliberately
-      # fail-open on a MusicBrainz timeout/error (never empty a real discography
-      # over a transient third-party failure — see ARCHITECTURE.md §15.3), so a
-      # slow/rate-limited MB response can flip this gate red with no code change
-      # (observed 2026-07-24: 0 contamination, then 70, same commit, ~30s apart).
-      # Retry with backoff before treating a failure as a real regression.
-      - name: detail (contamination = 0)
-        run: |
-          for attempt in 1 2 3; do
-            if ./tmp/discoveryeval -mode detail -json ./tmp/report-detail.json; then
-              exit 0
-            fi
-            echo "detail mode failed (attempt $attempt/3) — retrying after backoff in case MusicBrainz timed out"
-            sleep $((attempt * 20))
-          done
-          exit 1
-      - name: correction (best-effort — needs Redis, not reachable from Actions)
-        continue-on-error: true
-        run: ./tmp/discoveryeval -mode correction -json ./tmp/report-correction.json
-      - name: merge
-        run: ./tmp/discoveryeval -mode merge -json ./tmp/report-merge.json
-      - name: eval (top-3 positional)
-        run: ./tmp/discoveryeval -mode eval -json ./tmp/report-eval.json
-      - name: artist-intent
-        run: ./tmp/discoveryeval -mode artist-intent -json ./tmp/report-artist-intent.json
-      - name: diversity
-        run: ./tmp/discoveryeval -mode diversity -json ./tmp/report-diversity.json
-      - name: signal-a
-        run: ./tmp/discoveryeval -mode signal-a -json ./tmp/report-signal-a.json
-      - name: signal-b
-        run: ./tmp/discoveryeval -mode signal-b -json ./tmp/report-signal-b.json
-
-      - name: upload reports
-        if: always()
-        uses: actions/upload-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: discovery-eval-reports
-          path: services/go-api/tmp/report-*.json
-          retention-days: 30
+          path: services/go-api/tmp/reports
+          pattern: discovery-eval-*
+          merge-multiple: true
+
+      # Renders the table, upserts every metric into discovery_metrics so the
+      # trend outlives the 30-day artifact retention, and exits 2 on a regression.
+      - name: aggregate
+        id: aggregate
+        run: |
+          set +e
+          go run ./cmd/discoveryeval -mode report -reports ./tmp/reports > ./tmp/summary.md
+          code=$?
+          cat ./tmp/summary.md >> "$GITHUB_STEP_SUMMARY"
+          cat ./tmp/summary.md
+          exit $code
 
       - name: notify regression
         if: failure()
         env:
           ALERT_NTFY_URL: ${{ secrets.ALERT_NTFY_URL }}
         run: |
-          if [ -n "$ALERT_NTFY_URL" ]; then
-            curl -s -H "Title: Discovery eval nightly REGRESSED" \
-              -d "A gated discoveryeval mode fell below baselines.json. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              "$ALERT_NTFY_URL"
+          if [ -z "$ALERT_NTFY_URL" ]; then
+            exit 0
           fi
+          digest=$(cat ./tmp/reports/regressions.txt 2>/dev/null || echo "a gated mode failed to produce metrics")
+          curl -s -H "Title: Discovery eval nightly REGRESSED" \
+            -d "$digest — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            "$ALERT_NTFY_URL"
