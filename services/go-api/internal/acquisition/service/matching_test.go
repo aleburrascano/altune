@@ -7,8 +7,6 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 )
 
-// selectBest is the test-only equivalent of the old exported SelectBestCandidate:
-// rank candidates and return the best, or nil when none pass the identity gate.
 func selectBest(track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {
 	ranked := rankCandidates(context.Background(), track, candidates)
 	if len(ranked) == 0 {
@@ -25,7 +23,7 @@ func TestSelectBestCandidate(t *testing.T) {
 		candidates []ports.AudioCandidate
 		wantNil    bool
 		wantTitle  string
-		wantReason string // human-readable why this candidate wins
+		wantReason string
 	}{
 		{
 			name: "topic channel preferred when identity >= 60",

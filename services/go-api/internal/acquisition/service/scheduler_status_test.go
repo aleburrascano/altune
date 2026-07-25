@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// newStatusTestScheduler builds a scheduler suitable for exercising the
-// in-memory status surface directly (no goroutines / no AcquireTrackAudioService).
 func newStatusTestScheduler() *BackgroundAcquisitionScheduler {
 	var wg sync.WaitGroup
 	return NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, 1))
@@ -39,8 +37,6 @@ func TestAcquisitionStatus_Counts(t *testing.T) {
 
 func TestAcquisitionStatus_RecentBounded(t *testing.T) {
 	s := newStatusTestScheduler()
-	// Failed jobs ride on the recent-terminal ring, so they are bounded by that
-	// ring's cap rather than a separate failure cap.
 	for i := 0; i < recentJobCap+10; i++ {
 		s.log.complete("t", "failed", "boom")
 	}
@@ -54,7 +50,6 @@ func TestAcquisitionStatus_SnapshotIsACopy(t *testing.T) {
 	s.log.complete("t", "failed", "boom")
 	snap := s.Status()
 	snap.Recent[0].Reason = "mutated"
-	// Recording more must not be affected by the caller mutating the snapshot.
 	if s.Status().Recent[0].Reason != "boom" {
 		t.Error("Status() returned a shared slice; callers can corrupt internal state")
 	}

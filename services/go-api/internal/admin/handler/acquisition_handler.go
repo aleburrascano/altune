@@ -14,8 +14,8 @@ type AcquisitionStatusReader interface {
 func (h *AdminHandler) serveAcquisition(w http.ResponseWriter, _ *http.Request) {
 	if h.acquisition == nil {
 		httputil.WriteJSON(w, http.StatusOK, acqService.AcquisitionStatus{
-			Jobs:   []acqService.JobRecord{},
-			Recent: []acqService.JobRecord{},
+			ActiveJobs: []acqService.JobRecord{},
+			Recent:     []acqService.JobRecord{},
 		})
 		return
 	}

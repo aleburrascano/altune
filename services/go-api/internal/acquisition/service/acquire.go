@@ -46,24 +46,14 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.events = pub }
 }
 
-// WithAudioProber enables post-download duration verification: each downloaded
-// file is probed and rejected if its length doesn't match the track's expected
-// duration, falling through to the next-best candidate.
 func WithAudioProber(p ports.AudioProber) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.audioProber = p }
 }
 
-// WithAudioTagger enables metadata tagging of the downloaded file before it is
-// stored. Without it the tag step is a no-op.
 func WithAudioTagger(t ports.AudioTagger) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.audioTagger = t }
 }
 
-// Execute acquires audio for a track via the search pipeline (YouTube-first,
-// SoundCloud gap-fill). It always re-searches by metadata. The previous
-// direct-download path (download a saved SoundCloud permalink verbatim) was
-// removed: SoundCloud's public stream for many tracks is only a ~30s preview,
-// which yt-dlp would store as if it were the full track.
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
@@ -92,9 +82,6 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		"user_id", userId.String(),
 		"has_isrc", track.ISRC != nil,
 	)
-	// Server-authoritative "it's acquiring now" signal (F7/F8): the client seeds
-	// its download UI from this and flips a re-acquired ready/failed track back
-	// to pending, instead of depending on the optimistic save or the poll.
 	if s.events != nil {
 		s.events.Publish(userId, "track_acquisition_started", map[string]any{
 			"track_id": trackId.String(),
@@ -126,11 +113,6 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	return nil
 }
 
-// failureReason maps an internal pipeline error to a short, stable, client-safe
-// reason. The full error chain (which can carry yt-dlp stderr, file paths, and
-// other internals) is logged at the call site and never stored on the track or
-// returned over the wire. RunPipeline produces exactly two shapes: a *StepError
-// for a failing step, or a "pipeline cancelled" error for context cancellation.
 func failureReason(err error) string {
 	var stepErr *StepError
 	if errors.As(err, &stepErr) {
@@ -145,7 +127,6 @@ func failureReason(err error) string {
 	return "audio acquisition failed"
 }
 
-// reasonForStep maps a pipeline step name to its client-safe failure reason.
 func reasonForStep(step string) (string, bool) {
 	switch step {
 	case "search", "select":
@@ -159,11 +140,6 @@ func reasonForStep(step string) (string, bool) {
 	}
 }
 
-// reconcileForReacquire resets a non-pending track back to pending so the
-// pipeline can run again, and reports whether acquisition should proceed. A
-// ready track whose audio file still exists is a no-op skip (proceed=false); a
-// ready track with a missing file, or a previously failed track, is reverted to
-// pending (proceed=true). A fresh pending track proceeds unchanged.
 func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, track *domain.Track) (proceed bool, err error) {
 	switch track.AcquisitionStatus {
 	case domain.AcquisitionReady:
@@ -171,8 +147,6 @@ func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, tr
 			exists, existsErr := s.audioStore.Exists(ctx, *track.AudioRef)
 			switch {
 			case existsErr != nil:
-				// A transient existence-check error must not leave a possibly-missing
-				// file unrepaired: fall through to re-acquire rather than skipping.
 				slog.WarnContext(ctx, "acquire_exists_check_failed",
 					"track_id", track.ID.String(), "audio_ref", *track.AudioRef, "error", existsErr)
 			case exists:
@@ -195,7 +169,6 @@ func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, tr
 	return true, nil
 }
 
-// revertToPending persists an already-loaded track back to AcquisitionPending.
 func (s *AcquireTrackAudioService) revertToPending(ctx context.Context, track *domain.Track) error {
 	track.RevertToPending()
 	if err := s.trackRepo.Update(ctx, track); err != nil {
@@ -204,8 +177,6 @@ func (s *AcquireTrackAudioService) revertToPending(ctx context.Context, track *d
 	return nil
 }
 
-// buildSteps assembles the acquisition pipeline: discover a candidate
-// (search + select), then the shared download → tag → store → update-track tail.
 func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId) []Step {
 	return append(
 		CoreSteps(s.audioSearcher, s.audioTagger, s.audioStore, s.audioProber),
@@ -213,11 +184,6 @@ func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId doma
 	)
 }
 
-// CoreSteps assembles the search → select → download → tag → store sequence
-// shared by every caller that replays the acquisition pipeline: the production
-// service (via buildSteps, plus its own UpdateTrackStep) and the reacquire CLI
-// commands, which update audio_ref themselves and so stop before that step.
-// One place decides the core pipeline's shape so the two callers cannot drift.
 func CoreSteps(searcher ports.AudioSearcher, tagger ports.AudioTagger, store ports.AudioWriter, prober ports.AudioProber) []Step {
 	return []Step{
 		NewSearchStep(searcher),
@@ -252,7 +218,6 @@ func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domai
 	}
 }
 
-// deref returns the pointee, or the zero value of T when p is nil.
 func deref[T any](p *T) T {
 	if p == nil {
 		var zero T
@@ -261,8 +226,6 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-// loadAndUpdate fetches a track, applies mutate, and persists the result.
-// notFound is returned (nil to swallow) when the track no longer exists.
 func loadAndUpdate(ctx context.Context, repo ports.TrackRepository, id domain.TrackId, userId shared.UserId, notFound error, mutate func(*domain.Track) error) error {
 	track, err := repo.GetByID(ctx, id, userId)
 	if err != nil {
@@ -296,11 +259,6 @@ func buildTrackRef(track *domain.Track) TrackRef {
 	}
 }
 
-// CleanupTemp removes the temp directory a downloaded file lived in (the
-// parent of TempPath, not TempPath itself — DownloadStep creates one temp dir
-// per download attempt via os.MkdirTemp). Exported so the reacquire CLI
-// commands, which replay the pipeline outside Execute, clean up the same way
-// instead of re-deriving the convention.
 func CleanupTemp(ctx context.Context, ac *AcquisitionContext) {
 	if ac.TempPath == "" {
 		return

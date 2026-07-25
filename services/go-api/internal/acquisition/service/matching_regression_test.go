@@ -8,12 +8,6 @@ import (
 	"testing"
 )
 
-// TestAcquisitionMatchingRegression validates that the candidate selection
-// algorithm picks the correct YouTube result for a known set of tracks.
-// Each test case simulates the candidates that yt-dlp would return and
-// asserts which candidate is selected.
-//
-// Run with: go test ./internal/acquisition/service/... -run TestAcquisitionMatchingRegression -v
 func TestAcquisitionMatchingRegression(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -21,7 +15,7 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 		candidates   []ports.AudioCandidate
 		wantNil      bool
 		wantChannel  string
-		wantContains string // substring in selected candidate's title
+		wantContains string
 		description  string
 	}{
 		{
@@ -163,14 +157,10 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 			track: TrackRef{
 				Title:    "Smaxk Or Die (feat. Playboi Carti)",
 				Artist:   "Fatt Smaxk",
-				Duration: 0, // unknown — must still pick the feat cut by feature, not duration
+				Duration: 0,
 			},
 			candidates: []ports.AudioCandidate{
 				{
-					// The wrong pick the bug shipped: a high-view solo official video.
-					// NormalizeForMatch strips "(Official Music Video)" AND the track's
-					// "(feat. Playboi Carti)", so its identity ties the feat cut — and
-					// it wins on views/category unless feature-consistency intervenes.
 					Title:      "Fatt Smaxk - Smaxk Or Die (Official Music Video) | [Dir. By Kharkee]",
 					Channel:    "FattSmaxkVEVO",
 					Duration:   150,
@@ -244,8 +234,6 @@ func TestAcquisitionMatchingRegression(t *testing.T) {
 	}
 }
 
-// TestAcquisitionMatchingReport prints a summary of all regression cases.
-// Run with: go test ./internal/acquisition/service/... -run TestAcquisitionMatchingReport -v
 func TestAcquisitionMatchingReport(t *testing.T) {
 	type testCase struct {
 		query       string

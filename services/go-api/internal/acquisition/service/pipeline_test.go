@@ -7,15 +7,12 @@ import (
 	"testing"
 )
 
-// mockStep is a configurable fake implementing the Step interface.
-// It records execution and rollback calls for verification.
 type mockStep struct {
-	name        string
-	executeErr  error
-	rollbackErr error
-	executed    bool
-	rolledBack  bool
-	// order tracking: appends step name to the shared slice on execute/rollback
+	name         string
+	executeErr   error
+	rollbackErr  error
+	executed     bool
+	rolledBack   bool
 	executionLog *[]string
 }
 
@@ -102,7 +99,6 @@ func TestRunPipeline(t *testing.T) {
 			wantErrContain: "step search",
 			wantLog: []string{
 				"execute:search",
-				// no rollback calls — nothing completed before search
 			},
 		},
 		{
@@ -115,7 +111,7 @@ func TestRunPipeline(t *testing.T) {
 			},
 			wantErr:        true,
 			wantErrContain: "pipeline cancelled",
-			wantLog:        nil, // checked separately due to pre-cancel setup
+			wantLog:        nil,
 		},
 		{
 			name: "rollback error does not mask original step error",
@@ -138,10 +134,9 @@ func TestRunPipeline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Special handling for cancelled context test
 			if tt.name == "cancelled context triggers rollback of completed steps" {
 				ctx, cancel := context.WithCancel(context.Background())
-				cancel() // cancel immediately before running
+				cancel()
 
 				var log []string
 				steps := tt.buildSteps(&log)
@@ -193,7 +188,6 @@ func TestRunPipeline(t *testing.T) {
 }
 
 func TestRunPipeline_SecondStepFails_OnlyFirstRolledBack(t *testing.T) {
-	// Arrange
 	var log []string
 	s1 := newMockStep("search", &log)
 	s2 := newMockStep("select", &log)
@@ -203,10 +197,8 @@ func TestRunPipeline_SecondStepFails_OnlyFirstRolledBack(t *testing.T) {
 	steps := []Step{s1, s2, s3}
 	ac := &AcquisitionContext{}
 
-	// Act
 	err := RunPipeline(context.Background(), steps, ac)
 
-	// Assert
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

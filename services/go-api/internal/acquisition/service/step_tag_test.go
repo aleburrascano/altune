@@ -34,7 +34,6 @@ func TestTagStep_Execute_NoTagger_NoOp(t *testing.T) {
 	}
 }
 
-// Tagging failures must never fail the pipeline — they are logged and swallowed.
 func TestTagStep_Execute_TaggerError_Swallowed(t *testing.T) {
 	tagger := &fakeTagger{err: errors.New("boom")}
 	ac := &AcquisitionContext{

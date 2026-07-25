@@ -9,16 +9,6 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// Acquisition pipeline stage tests: verify each stage's behavior in
-// isolation so regressions are pinpointed to the exact stage that broke.
-//
-// Stages: buildSearchQueries → Search → SelectBestCandidate → Download →
-// Store (buildAudioRef) → Tag → UpdateTrack
-
-// ---------------------------------------------------------------------------
-// Stage 1: buildSearchQueries
-// ---------------------------------------------------------------------------
-
 func TestAcqStage_BuildSearchQueries(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -84,10 +74,6 @@ func TestAcqStage_BuildSearchQueries(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Stage 2: identityScore
-// ---------------------------------------------------------------------------
-
 func TestAcqStage_IdentityScore(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -141,10 +127,6 @@ func TestAcqStage_IdentityScore(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Stage 3: channelScore + artistMatchesChannel
-// ---------------------------------------------------------------------------
-
 func TestAcqStage_ArtistMatchesChannel(t *testing.T) {
 	tests := []struct {
 		artist  string
@@ -170,10 +152,6 @@ func TestAcqStage_ArtistMatchesChannel(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Stage 4: metadataRank
-// ---------------------------------------------------------------------------
-
 func TestAcqStage_MetadataRank(t *testing.T) {
 	topic := ports.AudioCandidate{
 		Channel:    "Artist - Topic",
@@ -198,8 +176,6 @@ func TestAcqStage_MetadataRank(t *testing.T) {
 	vevoRank := metadataRank(vevo, 200, 500_000_000)
 	randomRank := metadataRank(random, 200, 500_000_000)
 
-	// Topic channel weight (0.45) is high but VEVO's view score + duration
-	// match can compensate. Verify both score reasonably and random is lowest.
 	if topicRank < 0.5 {
 		t.Errorf("topic rank (%.3f) unexpectedly low", topicRank)
 	}
@@ -212,10 +188,6 @@ func TestAcqStage_MetadataRank(t *testing.T) {
 
 	t.Logf("topic=%.3f, vevo=%.3f, random=%.3f", topicRank, vevoRank, randomRank)
 }
-
-// ---------------------------------------------------------------------------
-// Stage 5: buildAudioRef
-// ---------------------------------------------------------------------------
 
 func TestAcqStage_BuildAudioRef(t *testing.T) {
 	tests := []struct {
@@ -243,8 +215,6 @@ func TestAcqStage_BuildAudioRef(t *testing.T) {
 			want:     "user-1/ACDC/Back in Black/Thunderstruck.mp3",
 		},
 		{
-			// The ref's extension follows the downloaded file, not a hardcoded
-			// format — refs must never lie about the bytes they name (m4a era).
 			name:     "extension follows downloaded file",
 			track:    TrackRef{UserID: "user-1", Artist: "Drake", Album: "Views", Title: "One Dance"},
 			tempPath: "/tmp/acquire/One Dance.m4a",
@@ -267,10 +237,6 @@ func TestAcqStage_BuildAudioRef(t *testing.T) {
 		})
 	}
 }
-
-// ---------------------------------------------------------------------------
-// Stage 6: Full candidate selection trace
-// ---------------------------------------------------------------------------
 
 func TestAcqStage_FullSelectionTrace(t *testing.T) {
 	track := TrackRef{
@@ -311,11 +277,9 @@ func TestAcqStage_FullSelectionTrace(t *testing.T) {
 		},
 	}
 
-	// Stage 1: Build queries
 	queries := buildSearchQueries(track)
 	t.Logf("Stage 1 — Search queries: %v", queries)
 
-	// Stage 2: Identity scores
 	for _, c := range candidates {
 		ident := identityScore(track.Title, track.Artist, c.Title)
 		artMatch := artistMatchesChannel(track.Artist, c.Channel)
@@ -323,20 +287,17 @@ func TestAcqStage_FullSelectionTrace(t *testing.T) {
 			c.Title, c.Channel, ident, artMatch, ident >= identityMin)
 	}
 
-	// Stage 3: Normalization check
 	for _, q := range queries {
 		norm := textnorm.NormalizeForMatch(q)
 		t.Logf("Stage 3 — Normalize query: %q → %q", q, norm)
 	}
 
-	// Stage 4: Selection
 	selected := selectBest(track, candidates)
 	if selected == nil {
 		t.Fatal("expected a candidate to be selected")
 	}
 	t.Logf("Stage 4 — Selected: %q (channel: %q)", selected.Title, selected.Channel)
 
-	// Verify: Topic channel should win
 	if !strings.Contains(selected.Channel, "Topic") {
 		t.Errorf("expected Topic channel selected, got %q", selected.Channel)
 	}

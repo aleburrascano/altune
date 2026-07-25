@@ -8,8 +8,6 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 )
 
-// withRunner swaps the subprocess seam for a fake, so the dual-engine fan-out is
-// exercised without invoking yt-dlp.
 func withRunner(r searchRunner) *YtDlpAudioSearcher {
 	s := NewYtDlpAudioSearcher("", "", "")
 	s.runSearch = r
@@ -34,11 +32,9 @@ func TestYtDlpAudioSearcher_Search_QueriesBothEngines(t *testing.T) {
 		t.Fatalf("Search error: %v", err)
 	}
 
-	// AC#1: both engines issued, YouTube first.
 	if len(specs) != 2 || specs[0] != "ytsearch5:song artist" || specs[1] != "scsearch5:song artist" {
 		t.Fatalf("engine specs = %v, want yt then sc", specs)
 	}
-	// AC#2: union returned.
 	if len(got) != 2 {
 		t.Fatalf("expected 2 merged candidates, got %d: %+v", len(got), got)
 	}
@@ -47,7 +43,6 @@ func TestYtDlpAudioSearcher_Search_QueriesBothEngines(t *testing.T) {
 func TestYtDlpAudioSearcher_Search_DedupsByURL(t *testing.T) {
 	dup := ports.AudioCandidate{Title: "Dup", URL: "https://soundcloud.com/x/same"}
 	s := withRunner(func(_ context.Context, _ string) ([]ports.AudioCandidate, error) {
-		// Both engines surface the same URL.
 		return []ports.AudioCandidate{dup}, nil
 	})
 
@@ -55,7 +50,6 @@ func TestYtDlpAudioSearcher_Search_DedupsByURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
-	// AC#3: duplicate URL collapsed.
 	if len(got) != 1 {
 		t.Fatalf("expected duplicate URL collapsed to 1, got %d", len(got))
 	}
@@ -70,7 +64,6 @@ func TestYtDlpAudioSearcher_Search_OneEngineFails(t *testing.T) {
 	})
 
 	got, err := s.Search(context.Background(), "q")
-	// AC#4: a single engine failure must not fail the search.
 	if err != nil {
 		t.Fatalf("a single engine failure must not fail the search, got: %v", err)
 	}
@@ -84,7 +77,6 @@ func TestYtDlpAudioSearcher_Search_BothEnginesFail(t *testing.T) {
 		return nil, errors.New("down")
 	})
 
-	// AC#5: every engine failing returns an error.
 	if _, err := s.Search(context.Background(), "q"); err == nil {
 		t.Fatal("expected an error when every engine fails")
 	}

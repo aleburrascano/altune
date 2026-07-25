@@ -10,10 +10,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// TestExecute_PublishesStartedEvent is the F7/F8 regression: acquisition must
-// emit a server-authoritative track_acquisition_started event when it begins, so
-// the client can seed the download UI (and flip a re-acquired ready/failed track
-// back to pending) without depending on the optimistic save or the poll.
 func TestExecute_PublishesStartedEvent(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
@@ -27,7 +23,7 @@ func TestExecute_PublishesStartedEvent(t *testing.T) {
 	pub := &recordingProgressPublisher{}
 	svc := NewAcquireTrackAudioService(
 		repo,
-		&fakeAudioSearcher{}, // no results → pipeline fails after started fires
+		&fakeAudioSearcher{},
 		newFakeAudioStore(),
 		WithAcquireEvents(pub),
 	)

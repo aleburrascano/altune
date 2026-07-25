@@ -12,15 +12,12 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 		t.Skip("yt-dlp not installed, skipping integration test")
 	}
 
-	// Arrange
 	searcher := NewYtDlpAudioSearcher("", "", "")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Act: search for a well-known track
 	candidates, err := searcher.Search(ctx, "The Weeknd Blinding Lights")
 
-	// Assert
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
@@ -28,7 +25,6 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 		t.Fatal("expected at least one candidate, got 0")
 	}
 
-	// Verify first candidate has non-empty required fields
 	first := candidates[0]
 	if first.Title == "" {
 		t.Error("first candidate has empty Title")

@@ -72,8 +72,6 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Retries carry no source URL (the request is by trackId), so acquisition
-	// falls back to the search pipeline.
 	h.scheduler.Schedule(userId, trackId, "")
 
 	w.WriteHeader(http.StatusAccepted)

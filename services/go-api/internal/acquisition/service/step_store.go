@@ -23,10 +23,6 @@ func NewStoreStep(audioStore ports.AudioWriter, opts ...func(*StoreStep)) *Store
 	return s
 }
 
-// WithStoreProber validates that the final file decodes before it is persisted.
-// This is the last gate — after download and tagging — so corruption introduced
-// by any earlier step (a format-mismatched tagger, a truncated write) is caught
-// before it reaches the library, not after a user tries to play it.
 func WithStoreProber(p ports.AudioProber) func(*StoreStep) {
 	return func(s *StoreStep) { s.prober = p }
 }
@@ -64,10 +60,6 @@ func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error 
 	return nil
 }
 
-// buildAudioRef derives the ref's extension from the downloaded file itself, so
-// the ref always names what the download actually produced. The format is
-// decided once, by the searcher adapter — hardcoding it here again is how refs
-// ended up lying about their bytes during the m4a era.
 func buildAudioRef(track TrackRef, tempPath string) string {
 	artist := sanitizePathComponent(track.Artist)
 	album := track.Album
@@ -99,8 +91,6 @@ func sanitizePathComponent(s string) string {
 	if result == "" {
 		return "Unknown"
 	}
-	// A component made only of dots ("." / "..") is a path-traversal token; the
-	// store defends against escapes, but acquisition should never emit one.
 	if strings.Trim(result, ".") == "" {
 		return "Unknown"
 	}

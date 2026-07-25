@@ -30,8 +30,6 @@ func TestFailureReason(t *testing.T) {
 	}
 }
 
-// The whole point of failureReason is to keep internals out of the stored/wire
-// reason: the download case must not leak yt-dlp stderr (file paths, etc.).
 func TestFailureReason_DropsInternalDetails(t *testing.T) {
 	err := &StepError{Step: "download", Err: errors.New("yt-dlp download: exit 1 (stderr: /home/secret/cookies.txt)")}
 	if reason := failureReason(err); strings.Contains(reason, "cookies") || strings.Contains(reason, "/home") {

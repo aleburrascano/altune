@@ -18,7 +18,7 @@ func (r *recordingReporter) source(u string)             { r.srcURL = u }
 
 type passStep struct{ n string }
 
-func (s passStep) Name() string                                   { return s.n }
+func (s passStep) Name() string                                        { return s.n }
 func (s passStep) Execute(context.Context, *AcquisitionContext) error  { return nil }
 func (s passStep) Rollback(context.Context, *AcquisitionContext) error { return nil }
 
@@ -39,7 +39,6 @@ func TestRunPipeline_ReportsStageAndSource(t *testing.T) {
 }
 
 func TestRunPipeline_NoReporter_IsNoOp(t *testing.T) {
-	// No reporter in context → jobReporterFrom returns the no-op; must not panic.
 	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}}
 	if err := RunPipeline(context.Background(), []Step{passStep{"store"}}, ac); err != nil {
 		t.Fatal(err)

@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// pendingTrack stores a fresh (pending) track in the repo and returns it.
 func pendingTrack(t *testing.T, repo *fakeTrackRepository, userId shared.UserId) *domain.Track {
 	t.Helper()
 	track, err := domain.NewTrack(userId, "Fell In Love", "Lil Tecca", "")
@@ -21,8 +20,6 @@ func pendingTrack(t *testing.T, repo *fakeTrackRepository, userId shared.UserId)
 	return track
 }
 
-// Acquisition always uses the search pipeline now (the direct SoundCloud path was
-// removed because SoundCloud's public stream is often a ~30s preview).
 func TestExecute_AlwaysSearches(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()

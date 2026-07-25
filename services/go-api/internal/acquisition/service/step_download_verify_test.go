@@ -10,9 +10,6 @@ import (
 	"testing"
 )
 
-// queueProber returns canned durations in order, one per ProbeDuration call —
-// simulating ffprobe reporting each downloaded candidate's true length. decodeErrs
-// canned per ValidateDecodable call simulate the ffmpeg decode gate (nil = decodes).
 type queueProber struct {
 	durations  []float64
 	calls      int
@@ -57,13 +54,9 @@ func TestDurationWithinTolerance(t *testing.T) {
 	}
 }
 
-// TestDownloadStep_VerifiesAndFallsBack reproduces the "How Sweet" fix: the
-// top-ranked candidate downloads to a 14:00 file, fails verification against the
-// 3:46 expected duration, is discarded, and the next candidate (correct length)
-// is downloaded and accepted.
 func TestDownloadStep_VerifiesAndFallsBack(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
-	prober := &queueProber{durations: []float64{840, 227}} // bloated, then correct
+	prober := &queueProber{durations: []float64{840, 227}}
 	step := NewDownloadStep(searcher, WithDownloadProber(prober))
 
 	ac := &AcquisitionContext{
@@ -108,8 +101,6 @@ func TestDownloadStep_AllCandidatesWrongDuration_Errors(t *testing.T) {
 	}
 }
 
-// Without an expected duration there is nothing to verify against, so the first
-// candidate is accepted unverified (preserves prior behaviour for legacy tracks).
 func TestDownloadStep_NoExpectedDuration_SkipsVerification(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	prober := &queueProber{durations: []float64{840}}
@@ -133,9 +124,6 @@ func TestDownloadStep_NoExpectedDuration_SkipsVerification(t *testing.T) {
 	}
 }
 
-// TestDownloadStep_RejectsUndecodableAudio reproduces the corrupt-m4a incident:
-// the first candidate downloads with the right duration but its samples don't
-// decode; it is discarded and the next (decodable) candidate is accepted.
 func TestDownloadStep_RejectsUndecodableAudio(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	prober := &queueProber{
@@ -162,8 +150,6 @@ func TestDownloadStep_RejectsUndecodableAudio(t *testing.T) {
 	}
 }
 
-// TestDownloadStep_AllUndecodable_Errors: when every candidate's audio is corrupt,
-// the step fails (leaving the track un-stored) rather than persisting garbage.
 func TestDownloadStep_AllUndecodable_Errors(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	prober := &queueProber{
