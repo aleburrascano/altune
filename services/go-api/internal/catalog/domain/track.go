@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"altune/go-api/internal/shared"
@@ -96,16 +97,29 @@ func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error)
 	if artist == "" {
 		return nil, &ValidationError{Message: "track artist required"}
 	}
+	resolved := resolveAlbum(album, title)
 	return &Track{
 		ID:                NewTrackId(),
 		UserId:            userId,
 		Title:             title,
 		Artist:            artist,
-		Album:             album,
+		Album:             resolved,
 		AddedAt:           time.Now().UTC(),
 		AcquisitionStatus: AcquisitionPending,
-		DedupKey:          computeDedupKey(title, artist, album),
+		DedupKey:          computeDedupKey(title, artist, resolved),
 	}, nil
+}
+
+func resolveAlbum(album, title string) string {
+	if strings.TrimSpace(album) == "" {
+		return title
+	}
+	return album
+}
+
+func (t *Track) SetAlbum(album string) {
+	t.Album = resolveAlbum(album, t.Title)
+	t.DedupKey = computeDedupKey(t.Title, t.Artist, t.Album)
 }
 
 func (t *Track) MarkReady(audioRef string) error {

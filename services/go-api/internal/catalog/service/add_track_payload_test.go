@@ -36,13 +36,27 @@ func TestTrackAddedPayload(t *testing.T) {
 }
 
 func TestTrackAddedPayload_EmptyAlbumIsNil(t *testing.T) {
+	track := &domain.Track{
+		ID:     domain.NewTrackId(),
+		UserId: shared.NewUserId(uuid.New()),
+		Title:  "Single",
+		Artist: "Artist",
+		Album:  "",
+	}
+
+	if album := trackAddedPayload(track)["album"]; album != nil {
+		t.Errorf("empty album = %v, want JSON null", album)
+	}
+}
+
+func TestTrackAddedPayload_SingleCarriesTheTitleAsAlbum(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "Single", "Artist", "")
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
 
-	if album := trackAddedPayload(track)["album"]; album != nil {
-		t.Errorf("empty album = %v, want JSON null", album)
+	if album := trackAddedPayload(track)["album"]; album != "Single" {
+		t.Errorf("album = %v, want the title", album)
 	}
 }

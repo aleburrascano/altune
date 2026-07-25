@@ -13,6 +13,8 @@ Layout:
 ## Rules
 
 - Change `AcquisitionStatus` / `AudioRef` / `FailureReason` only through aggregate methods, never by direct field mutation.
+- Change `Album` only through `SetAlbum` — it recomputes `DedupKey`, and the two may never drift.
+- A blank album resolves to the track's title; apply that in the aggregate, never at the API edge.
 - Change `Playlist` positions only through `AddTrack` / `RemoveTrack` / `Reorder`; they stay contiguous 0..N-1 with no duplicates.
 - Never import acquisition — go through the `AcquisitionScheduler` port.
 - Never import discovery — go through `adapters/discoverybridge`.
