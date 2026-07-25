@@ -13,11 +13,11 @@ import (
 
 type HealthReport struct {
 	Searches      int     `json:"searches"`
-	Results       int     `json:"results"` // total result rows seen
+	Results       int     `json:"results"`
 	WithArtwork   int     `json:"with_artwork"`
 	BridgedMerges int     `json:"bridged_merges"`
-	FillRate      float64 `json:"fill_rate"`       // with_artwork / results
-	BridgeHitRate float64 `json:"bridge_hit_rate"` // bridged_merges / results
+	FillRate      float64 `json:"fill_rate"`
+	BridgeHitRate float64 `json:"bridge_hit_rate"`
 	LatencyP50Ms  int64   `json:"latency_p50_ms"`
 	LatencyP95Ms  int64   `json:"latency_p95_ms"`
 	LatencyMaxMs  int64   `json:"latency_max_ms"`

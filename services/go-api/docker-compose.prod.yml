@@ -1,11 +1,3 @@
-# Production deployment compose file.
-# Database: Supabase Postgres (external). Cache: self-hosted Redis (this VM).
-# Reverse proxy: Caddy with automatic HTTPS via Let's Encrypt.
-#
-# Deploy:  docker compose -f docker-compose.prod.yml up --build -d
-# Logs:    docker compose -f docker-compose.prod.yml logs go-api --tail 50
-# Rebuild: docker compose -f docker-compose.prod.yml up --build -d go-api
-
 services:
   go-api:
     build:
@@ -18,16 +10,8 @@ services:
     env_file:
       - .env.production
     environment:
-      # Mission Control operator account. Not a secret — /admin still requires
-      # this account's Supabase JWT; the id only names who may open the console.
-      # Override or move to .env.production if it should rotate without a deploy.
       - OPERATOR_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524
-      # Eval meter: runs ~5 canonical smoke queries every 6h through a
-      # breaker-isolated search instance (can't affect live search). Safe to
-      # leave on; set false to silence the panel.
       - EVAL_METER_ENABLED=true
-      # Public Supabase client key — lets the /admin page sign the operator in
-      # with email + password. Public client config (same key the app ships).
       - SUPABASE_ANON_KEY=sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
     volumes:
       - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
@@ -37,10 +21,6 @@ services:
       redis:
         condition: service_healthy
 
-  # Self-hosted cache (replaces Upstash). Caches are regenerable, so persistence
-  # is disabled and memory is capped with LRU eviction to protect the VM's RAM.
-  # Not published to the host — only reachable by go-api on the compose network
-  # via REDIS_URL=redis://redis:6379/0 in .env.production.
   redis:
     image: redis:7-alpine
     container_name: altune-redis

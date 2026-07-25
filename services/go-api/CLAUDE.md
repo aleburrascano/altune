@@ -23,7 +23,16 @@ go build -o ./tmp/api.exe ./cmd/api
 # Test + vet
 go test ./... -count=1
 go vet ./...
+
+# Import-direction lint (what fails CI when the layering erodes)
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.0 run
 ```
+
+`.golangci.yml` enforces the import-direction rules that `.claude/rules/backend/domain-layer.md` and `docs/architecture.md` state as convention: domain purity (the inner ring may import only stdlib, sibling domain packages, `internal/shared` root value objects and `textnorm`), catalog reaching discovery only through `adapters/discoverybridge`, and `internal/shared` never importing a feature, the composition root, or auth. Each `deny` carries its own `desc:` naming the rule it protects.
+
+## Comment policy
+
+`services/go-api/` is **comment-free**, matching `apps/mobile/`. The code is the source of truth: if something needs explaining, rename it or split it out. Only compiler directives (`//go:build`, `//go:embed`) are allowed. Durable rationale — invariants, provider fragility, regression history, anything a name cannot hold — lives in the nested `CLAUDE.md` files and `okf/`.
 
 Code changes don't take effect until you rebuild and restart the process.
 

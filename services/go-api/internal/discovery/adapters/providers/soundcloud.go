@@ -543,7 +543,7 @@ type scAPITrack struct {
 	Kind              string `json:"kind"`
 	Title             string `json:"title"`
 	PermalinkURL      string `json:"permalink_url"`
-	Duration          int64  `json:"duration"` // milliseconds
+	DurationMs        int64  `json:"duration"`
 	Genre             string `json:"genre"`
 	ArtworkURL        string `json:"artwork_url"`
 	PlaybackCount     int64  `json:"playback_count"`
@@ -570,8 +570,8 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 	}
 
 	extras := map[string]any{}
-	if t.Duration > 0 {
-		extras["duration"] = float64(t.Duration) / 1000.0
+	if t.DurationMs > 0 {
+		extras["duration"] = float64(t.DurationMs) / 1000.0
 	}
 	if t.PlaybackCount > 0 {
 		extras["playback_count"] = t.PlaybackCount
@@ -595,19 +595,19 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 	r.ISRC = strings.TrimSpace(t.PublisherMetadata.ISRC)
 	r.Album = strings.TrimSpace(t.PublisherMetadata.AlbumTitle)
 	r.ReleaseDate = scBestReleaseDate(t.ReleaseDate, t.DisplayDate, t.CreatedAt)
-	if t.Duration > 0 {
-		r.Duration = int(t.Duration / 1000)
+	if t.DurationMs > 0 {
+		r.Duration = int(t.DurationMs / 1000)
 	}
 	return r, true
 }
 
 type scAPIAlbum struct {
 	ID           int64  `json:"id"`
-	Kind         string `json:"kind"` // "playlist"
+	Kind         string `json:"kind"`
 	Title        string `json:"title"`
 	PermalinkURL string `json:"permalink_url"`
 	ArtworkURL   string `json:"artwork_url"`
-	SetType      string `json:"set_type"` // album | ep | single
+	SetType      string `json:"set_type"`
 	Genre        string `json:"genre"`
 	TrackCount   int    `json:"track_count"`
 	ReleaseDate  string `json:"release_date"`
@@ -674,7 +674,7 @@ func mapSoundCloudStandaloneSingle(t scAPITrack) (domain.SearchResult, bool) {
 
 type scAPIUser struct {
 	ID           int64  `json:"id"`
-	Kind         string `json:"kind"` // "user"
+	Kind         string `json:"kind"`
 	Username     string `json:"username"`
 	PermalinkURL string `json:"permalink_url"`
 	AvatarURL    string `json:"avatar_url"`

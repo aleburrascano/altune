@@ -9,8 +9,7 @@ Music manager. Expo (RN + TS) mobile in `apps/mobile/` + Go hexagonal modular mo
 ## Always in force
 
 - Domain terms come from `docs/ubiquitous-language.md`; code matches it verbatim, and a new term gets its glossary entry in the same commit. **"Song" is banned — the noun is `Track`.**
-- `apps/mobile/` is comment-free: the code is the source of truth. No prose comments, no JSDoc — if something needs explaining, rename it or split it out. Only linter/compiler pragmas (`eslint-disable`, `@ts-expect-error`) are allowed. Durable rationale lives in the nested `CLAUDE.md` files and `okf/`.
-- In `services/go-api/`, `AIDEV-NOTE/DECISION/WARNING` anchors are durable — never strip them.
+- `apps/mobile/` and `services/go-api/` are comment-free: the code is the source of truth. No prose comments, no JSDoc, no godoc — if something needs explaining, rename it or split it out. Only linter/compiler pragmas (`eslint-disable`, `@ts-expect-error`, `//go:build`, `//go:embed`) are allowed. This extends to the backend's SQL migrations and config files. Durable rationale lives in the nested `CLAUDE.md` files and `okf/`.
 - A nested `CLAUDE.md` is the file map of its directory. Add, delete or rename a file under one and update that `CLAUDE.md` in the same commit — its layout, test-file list and dependency notes (a pre-commit hook blocks the commit otherwise).
 - Conventional Commits (scopes in `commitlint.config.js`); never write `Co-Authored-By: Claude` / `🤖 Generated with…` trailers.
 - Check Context7 before answering from memory on: Expo SDK, React Native, React Navigation, TanStack Query, Zustand, Reanimated, Go stdlib, chi, sqlx.

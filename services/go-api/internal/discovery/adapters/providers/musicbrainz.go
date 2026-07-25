@@ -224,8 +224,8 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 	if len(rec.ISRCs) > 0 {
 		r.ISRC = rec.ISRCs[0]
 	}
-	if rec.Length > 0 {
-		r.Duration = rec.Length / 1000
+	if rec.LengthMs > 0 {
+		r.Duration = rec.LengthMs / 1000
 		extras["duration"] = r.Duration
 	}
 	return r
@@ -293,7 +293,7 @@ type mbRecordingResponse struct {
 type mbRecording struct {
 	ID           string        `json:"id"`
 	Title        string        `json:"title"`
-	Length       int           `json:"length"` // milliseconds
+	LengthMs     int           `json:"length"`
 	ISRCs        []string      `json:"isrcs"`
 	ArtistCredit []mbArtistRef `json:"artist-credit"`
 }
@@ -345,7 +345,7 @@ type mbReleaseGroup struct {
 	ID               string        `json:"id"`
 	Title            string        `json:"title"`
 	PrimaryType      string        `json:"primary-type"`
-	SecondaryTypes   []string      `json:"secondary-types"` // Compilation/Live/Soundtrack/Remix
+	SecondaryTypes   []string      `json:"secondary-types"`
 	FirstReleaseDate string        `json:"first-release-date"`
 	ArtistCredit     []mbArtistRef `json:"artist-credit"`
 }

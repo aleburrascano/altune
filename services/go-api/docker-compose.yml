@@ -1,7 +1,3 @@
-# Go API deployment compose file.
-# Used for production deployment on OCI instance.
-# Dev infra (Postgres, Redis) lives in the root docker-compose.yml.
-
 services:
   go-api:
     build:

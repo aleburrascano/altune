@@ -48,22 +48,22 @@ func (o ArtistIntentOutcome) MarshalJSON() ([]byte, error) {
 type ArtistIntentResult struct {
 	Artist        string              `json:"artist"`
 	Outcome       ArtistIntentOutcome `json:"outcome"`
-	ArtistPos     int                 `json:"artist_pos"`      // 0-based position the artist card landed; -1 if absent
-	FirstTrackPos int                 `json:"first_track_pos"` // 0-based position of the first same-name track; -1 if none
-	Top           *ResultSummary      `json:"top,omitempty"`   // what ranked #1 (when the artist wasn't)
+	ArtistPos     int                 `json:"artist_pos"`
+	FirstTrackPos int                 `json:"first_track_pos"`
+	Top           *ResultSummary      `json:"top,omitempty"`
 	Error         string              `json:"error,omitempty"`
 }
 
 type ArtistIntentReport struct {
-	Corpus     string               `json:"corpus,omitempty"` // "" = all artists, "hard" = single-token names
+	Corpus     string               `json:"corpus,omitempty"`
 	K          int                  `json:"k"`
 	Total      int                  `json:"total"`
-	Evaluated  int                  `json:"evaluated"` // total - skipped (the rate denominator)
+	Evaluated  int                  `json:"evaluated"`
 	Top1Passed int                  `json:"top1_passed"`
 	TopKPassed int                  `json:"topk_passed"`
-	Buried     int                  `json:"buried"`  // artist present, same-name track ranked above it (the bug)
-	BelowK     int                  `json:"below_k"` // artist present below K, not specifically track-buried
-	Absent     int                  `json:"absent"`  // artist card never surfaced (recall gap)
+	Buried     int                  `json:"buried"`
+	BelowK     int                  `json:"below_k"`
+	Absent     int                  `json:"absent"`
 	NoResults  int                  `json:"no_results"`
 	Skipped    int                  `json:"skipped"`
 	Results    []ArtistIntentResult `json:"results"`

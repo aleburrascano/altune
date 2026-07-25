@@ -36,11 +36,11 @@ type Corrector interface {
 }
 
 type CorrectionReport struct {
-	Terms        int             `json:"terms"`         // precision denominator
-	TyposTested  int             `json:"typos_tested"`  // recall denominator
-	Recovered    int             `json:"recovered"`     // typo corrected back to its source term
-	NotRecovered int             `json:"not_recovered"` // typo not corrected (or to the wrong term)
-	Corrupted    int             `json:"corrupted"`     // a valid term the corrector rewrote — false positive
+	Terms        int             `json:"terms"`
+	TyposTested  int             `json:"typos_tested"`
+	Recovered    int             `json:"recovered"`
+	NotRecovered int             `json:"not_recovered"`
+	Corrupted    int             `json:"corrupted"`
 	RecallMisses []FailureRecord `json:"recall_misses"`
 	Corruptions  []FailureRecord `json:"corruptions"`
 }

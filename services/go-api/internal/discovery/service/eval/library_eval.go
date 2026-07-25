@@ -60,21 +60,21 @@ type EvalResult struct {
 	Entity        LibraryEntity  `json:"entity"`
 	Query         string         `json:"query"`
 	Outcome       EvalOutcome    `json:"outcome"`
-	MatchPosition int            `json:"match_position"`  // 0-based position the entity matched; -1 if not in top-K
-	Top           *ResultSummary `json:"top,omitempty"`   // what ranked #1 when the entity wasn't #1
-	Error         string         `json:"error,omitempty"` // search error, if any
+	MatchPosition int            `json:"match_position"`
+	Top           *ResultSummary `json:"top,omitempty"`
+	Error         string         `json:"error,omitempty"`
 }
 
 type EvalReport struct {
-	Corpus            string         `json:"corpus,omitempty"` // "" = exact, "hard" = title-only ambiguous
-	K                 int            `json:"k"`                // the top-K window evaluated
-	Total             int            `json:"total"`            // entities evaluated (includes skipped)
-	Evaluated         int            `json:"evaluated"`        // total - skipped (the rate denominator)
-	Top1Passed        int            `json:"top1_passed"`      // entity ranked #1
-	TopKPassed        int            `json:"topk_passed"`      // entity within the top-K (includes top1)
-	Failed            int            `json:"failed"`           // not in the top-K (or no results)
+	Corpus            string         `json:"corpus,omitempty"`
+	K                 int            `json:"k"`
+	Total             int            `json:"total"`
+	Evaluated         int            `json:"evaluated"`
+	Top1Passed        int            `json:"top1_passed"`
+	TopKPassed        int            `json:"topk_passed"`
+	Failed            int            `json:"failed"`
 	Skipped           int            `json:"skipped"`
-	FailuresByTopKind map[string]int `json:"failures_by_top_kind"` // what kind ranked #1 on a miss (incl. "none")
+	FailuresByTopKind map[string]int `json:"failures_by_top_kind"`
 	Results           []EvalResult   `json:"results"`
 }
 

@@ -46,10 +46,10 @@ type CoverageGap struct {
 }
 
 type CoverageReportA struct {
-	Strong          []CoverageGap `json:"strong"`            // zero-result, not typos
-	Weak            []CoverageGap `json:"weak"`              // results shown, no click
-	Abandoned       []CoverageGap `json:"abandoned"`         // no click, reformulated within 60s
-	FilteredAsTypos int           `json:"filtered_as_typos"` // zero-result queries dropped by the correction filter
+	Strong          []CoverageGap `json:"strong"`
+	Weak            []CoverageGap `json:"weak"`
+	Abandoned       []CoverageGap `json:"abandoned"`
+	FilteredAsTypos int           `json:"filtered_as_typos"`
 }
 
 type CoverageSignalAService struct {

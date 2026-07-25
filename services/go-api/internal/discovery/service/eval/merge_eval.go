@@ -13,21 +13,21 @@ import (
 type MergeResult struct {
 	Entity              LibraryEntity `json:"entity"`
 	Query               string        `json:"query"`
-	Found               bool          `json:"found"`                 // entity matched at least one result
-	ResultsSeen         int           `json:"results_seen"`          // result rows returned for this query
-	UnderMergeIncidents int           `json:"under_merge_incidents"` // provable dups left unmerged
+	Found               bool          `json:"found"`
+	ResultsSeen         int           `json:"results_seen"`
+	UnderMergeIncidents int           `json:"under_merge_incidents"`
 	UnderMergeExample   string        `json:"under_merge_example,omitempty"`
 }
 
 type MergeReport struct {
 	Total               int           `json:"total"`
-	Evaluated           int           `json:"evaluated"`             // queries that returned results
-	NoMatch             int           `json:"no_match"`              // entity not found — coverage miss
-	Skipped             int           `json:"skipped"`               // no artist
-	ResultsSeen         int           `json:"results_seen"`          // under-merge denominator (all rows)
-	UnderMergeIncidents int           `json:"under_merge_incidents"` // provable dups left unmerged
-	CleanQueries        int           `json:"clean_queries"`         // queries with zero under-merge
-	DistinctSeen        int           `json:"distinct_seen"`         // over-merge denominator
+	Evaluated           int           `json:"evaluated"`
+	NoMatch             int           `json:"no_match"`
+	Skipped             int           `json:"skipped"`
+	ResultsSeen         int           `json:"results_seen"`
+	UnderMergeIncidents int           `json:"under_merge_incidents"`
+	CleanQueries        int           `json:"clean_queries"`
+	DistinctSeen        int           `json:"distinct_seen"`
 	OverMerged          int           `json:"over_merged"`
 	UnderMergeExamples  []string      `json:"under_merge_examples,omitempty"`
 	OverMergeExamples   []string      `json:"over_merge_examples,omitempty"`

@@ -18,3 +18,5 @@ SoundCloud is altune's sole source for the unreleased/leaked/underground long ta
 **Doc drift (`docs/providers/soundcloud.md`).** The doc is otherwise accurate against the code (entity model, endpoint catalog, `resolveAndFetch` retry shape, and the ISRC-merge comment all match verbatim). One staleness note: the doc's "current implementation state" section still frames capabilities 1–4 as living on an unpushed branch (`refactor/discovery-pipeline-clarity`) with per-capability commit hashes — but the code is already live-wired into `internal/app/search_wiring.go` and `app.go` today. Not a functional drift, just narration worth updating whenever the doc is next touched.
 
 SoundCloud periodically rotates how its `client_id` is embedded, which breaks the bootstrap; the re-resolve is self-healing but must not wipe a fresh id another handler just obtained. SoundCloud tracks otherwise never merge with other providers, and an EP track must never also render as a top-level single.
+
+Track duration is decoded as `DurationMs` (wire tag `duration`) — SoundCloud reports it in milliseconds.

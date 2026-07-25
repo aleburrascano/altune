@@ -1,9 +1,3 @@
-# Import-direction enforcement (structure audit F1, 2026-07-16).
-# The rules in .claude/rules/backend/domain-layer.md and docs/architecture.md
-# are convention; this file is what fails CI when they erode.
-#
-# Run locally:
-#   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.0 run
 version: "2"
 
 linters:
@@ -13,10 +7,6 @@ linters:
   settings:
     depguard:
       rules:
-        # Domain is the inner ring: stdlib, other domain packages, and from
-        # internal/shared only the root value objects (UserId) plus the pure
-        # textnorm functions (sanctioned — ResultSignature is a cross-layer
-        # contract shared with the wire mapper).
         domain-purity:
           list-mode: strict
           files:
@@ -36,8 +26,6 @@ linters:
             - pkg: altune/go-api/internal/shared/
               desc: domain may import from internal/shared only the root value objects and textnorm (.claude/rules/backend/domain-layer.md)
 
-        # Catalog reaches discovery only through adapters/discoverybridge (structure
-        # audit F3, 2026-07-18); it never imports another feature directly.
         catalog-boundary:
           files:
             - "**/internal/catalog/service/**"
@@ -53,8 +41,6 @@ linters:
             - pkg: altune/go-api/internal/admin
               desc: catalog never imports admin (internal/catalog/CLAUDE.md)
 
-        # Shared is the bottom of the import graph: it never imports a feature,
-        # the composition root, or auth.
         shared-bottom:
           files:
             - "**/internal/shared/**"

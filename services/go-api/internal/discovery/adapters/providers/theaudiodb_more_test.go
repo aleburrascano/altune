@@ -40,7 +40,7 @@ func TestTheAudioDBAdapter_Resolve_MBIDMissFallsBackToNameSearch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.Path, "artist-mb.php") {
-			_, _ = w.Write([]byte(`{"artists": null}`)) // MBID unknown to TADB
+			_, _ = w.Write([]byte(`{"artists": null}`))
 			return
 		}
 		_, _ = w.Write([]byte(`{"artists": [{"idArtist": "1", "strArtist": "Che", "strArtistThumb": "https://img/name-thumb.jpg"}]}`))

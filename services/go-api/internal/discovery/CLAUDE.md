@@ -176,6 +176,18 @@ Every detail-open enricher returns an **empty enrichment and a nil error** — t
 
 ### Eval substrate (`service/eval/`)
 
+**Metric glossary** (the report structs are the wire contract; these are their definitions):
+
+- `Baseline{Value, Margin, HigherIsBetter, Note}` — `Margin` is the empirical noise band and is always ≥ the observed run-to-run spread; `HigherIsBetter` is true for rates and false for cost/latency/gap counts. `GateResult.Threshold` is the value `current` must stay on the safe side of; `Missing` means no committed baseline and is informational only.
+- **Library eval**: `Evaluated` = `Total − Skipped` and is the rate denominator. `MatchPosition` is 0-based, `-1` when not in top-K. `Top1Passed` = entity ranked #1; `TopKPassed` includes top-1; `Failed` = not in top-K or no results. `FailuresByTopKind` records what kind ranked #1 on a miss (including `"none"`). `Corpus` is `""` for exact and `"hard"` for title-only ambiguous.
+- **Artist-intent eval**: `ArtistPos` / `FirstTrackPos` are 0-based, `-1` if absent. `Buried` is the bug — the artist card is present but a same-name track ranks above it. `BelowK` is present-but-below-K without being track-buried. `Absent` is the recall gap: the artist card never surfaced. `Corpus` `"hard"` means single-token names.
+- **Merge eval**: `ResultsSeen` is the under-merge denominator (all rows), `DistinctSeen` the over-merge denominator. `NoMatch` is a *coverage* miss, not a merge miss. `UnderMergeIncidents` counts provable duplicates left unmerged; `CleanQueries` are those with zero.
+- **Correction eval**: `Terms` is the precision denominator, `TyposTested` the recall denominator. `Corrupted` is a false positive — a valid term the corrector rewrote.
+- **Diversity eval**: `LostToReshape` (in top-K unshaped, out reshaped) is **the cost** and the gated metric; `GainedByReshape` is the reverse, since collapse can promote. `ConcentrationWith`/`Without` are mean top-K Herfindahl — the benefit side, report-only.
+- **Coverage signal A**: `Strong` = zero-result and not typos; `Weak` = results shown, no click; `Abandoned` = no click and reformulated within 60s. **Signal B**: `GapPct` = `Missing / Union` in [0,1]; `Unique` counts entities only that provider had — reach nobody else covers.
+- **Health**: `FillRate` = with-artwork / results; `BridgeHitRate` = bridged-merges / results.
+- **Detail eval**: `Identity` (provider → id) may be **deliberately fractured**; `ForbiddenSources` / `ForbiddenTitles` must not appear in any result.
+
 A gate is a **relative drop below a committed baseline, never an absolute floor**. A metric with no committed baseline is never a regression — the first run establishes it, and baselines only move on an explicit operator `--update-baselines`. A regression strictly inside the noise margin is invisible **by design**. Failure slices only group the failure log; they never touch ranking, and no failure-mode taxonomy is maintained. Diversity's benefit metric (top-K concentration drop) is report-only and **never gated** — you gate the cost of a policy, not the policy itself. Entities the search never finds are a *coverage* miss, not a merge miss. The eval package never imports `service`, so it stays a pure testable core.
 
 ## Domain value objects (`domain/`)

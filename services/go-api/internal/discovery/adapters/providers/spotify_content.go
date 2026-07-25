@@ -209,7 +209,7 @@ type spotifyDiscographyResponse struct {
 type spotifyPFRelease struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
-	Type     string `json:"type"` // ALBUM | SINGLE | COMPILATION
+	Type     string `json:"type"`
 	URI      string `json:"uri"`
 	CoverArt struct {
 		Sources []spotifyImage `json:"sources"`
