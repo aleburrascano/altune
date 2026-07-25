@@ -12,6 +12,7 @@ Layout:
 - `httptrace/` — `Recorder` and `Replayer`.
 - `textnorm/` — `NormalizeForMatch`, `TokenSortRatio`, `LevenshteinDistance`.
 - `phonetics/` — `DoubleMetaphone`, `MetaphoneKey`.
+- `leader/` — `Election`, the Postgres advisory lock electing one instance to run background loops (`election_test.go`, skipped without `DATABASE_URL`).
 
 ## Rules
 
@@ -26,5 +27,7 @@ Layout:
 - Never answer an unmatched request in `Replayer` with an empty response — it must be a hard error.
 - Never rename a metaphone rule casually: every stored vocabulary key built from it goes stale.
 - Never log a config value — `LogValue` reports `has_*` booleans only.
+- Never point `DATABASE_URL` at a transaction-mode pooler: `leader.Election` needs session-scoped advisory locks.
+- Never start a periodic background loop outside `App.whenLeader` — two deploy colours would both run it.
 
 Why each rule exists, and what every config flag does: `okf/backend/shared-infra.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).

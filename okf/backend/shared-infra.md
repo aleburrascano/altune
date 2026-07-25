@@ -2,8 +2,8 @@
 type: Subsystem
 title: internal/shared backend infrastructure
 description: Cross-cutting Go infrastructure — config loading, DB/Redis pool setup, structured logging with an in-memory ring buffer, HTTP trace record/replay, shared HTTP error/middleware utilities, text normalization, and the UserId value object.
-resource: services/go-api/internal/shared/config/config.go, services/go-api/internal/shared/database/database.go, services/go-api/internal/shared/redis/redis.go, services/go-api/internal/shared/logging/logging.go, services/go-api/internal/shared/logging/ringbuffer_handler.go, services/go-api/internal/shared/httptrace/recorder.go, services/go-api/internal/shared/httptrace/replay.go, services/go-api/internal/shared/httputil/errors.go, services/go-api/internal/shared/httputil/middleware.go, services/go-api/internal/shared/textnorm/normalize.go, services/go-api/internal/shared/textnorm/fuzzy.go, services/go-api/internal/shared/userid.go
-tags: [subsystem, shared-infra, config, logging, observability, httputil, textnorm]
+resource: services/go-api/internal/shared/config/config.go, services/go-api/internal/shared/database/database.go, services/go-api/internal/shared/redis/redis.go, services/go-api/internal/shared/logging/logging.go, services/go-api/internal/shared/logging/ringbuffer_handler.go, services/go-api/internal/shared/httptrace/recorder.go, services/go-api/internal/shared/httptrace/replay.go, services/go-api/internal/shared/httputil/errors.go, services/go-api/internal/shared/httputil/middleware.go, services/go-api/internal/shared/textnorm/normalize.go, services/go-api/internal/shared/textnorm/fuzzy.go, services/go-api/internal/shared/userid.go, services/go-api/internal/shared/leader/election.go
+tags: [subsystem, shared-infra, config, logging, observability, httputil, textnorm, leader-election]
 verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ---
 
@@ -62,3 +62,16 @@ Ranking and eval flags, and why each default is what it is:
 - `BEHAVIORAL_CORPUS_PATH` (empty disables) — when set to a writable path, the nightly job materializes search-to-engagement labels plus `wrong_album` hard negatives into the eval corpus format.
 - `EXPLORATION_ENABLED` (off) / `EXPLORATION_RATE` — serves a randomized result order for a small fraction of searches, logged as exploration, so offline counterfactual eval has unbiased propensity data. The one user-facing behavior change, shipped dark so it needs no live sign-off.
 - `IDENTITY_VERIFY_ON_PERSIST` (off) — the permanent identity-bridge fix (`docs/discovery-detail-pipeline.md` §7). MusicBrainz url-relations are not always correct, and a wrong streaming link fuses two same-name artists (the wrong Deezer "Che"). When on, each learned streaming edge is checked against the artist's MusicBrainz release-groups before the bridge is persisted and a non-overlapping edge is dropped, so the durable identity and everything reading it never inherit the contamination. Runs off the request path; ships dark until its added fetch load is measured.
+
+## `leader/` — one instance runs the background loops (2026-07-25)
+
+`Election` wraps a Postgres **session-scoped** advisory lock (`pg_try_advisory_lock`) held on a connection checked out of the pool for the process lifetime. `IsLeader()` reports whether this process holds it; `Await(ctx)` blocks until it does. The composition root registers every periodic loop through `App.whenLeader` and starts them only after `Await` returns, so exactly one process runs the alert monitor, eval meter, vocabulary refresh, behavioural refresh, corpus refresh and metrics rollup.
+
+Introduced for blue-green deploys (see [production-deployment](../playbooks/production-deployment.md)), where two versions are deliberately alive at once. Request handling is safe under that — Caddy routes to one colour — but the loops are not: the alert monitor's `firing` de-dup map is per-process, so a second instance re-notifies everything already firing, and four of the loops run once at boot, which on a 1-core VM means the standby competes for CPU with the health check that is deciding whether to promote it.
+
+Two properties matter and both come from the lock being session-scoped rather than transaction-scoped:
+
+- **It requires the session-mode pooler.** The Supabase URL uses port 5432. Over a transaction-mode pooler (6543) each statement may land on a different backend, so the lock is not reliably held across statements and `IsLeader()` would be fiction. This is why the `DATABASE_URL` port is an invariant, not a preference.
+- **Release is automatic.** A crashed or killed process drops its connection and Postgres releases the lock; the standby's 10s retry picks it up. There is no lease to expire and no way to leave the jobs permanently unowned — which is what rules out the simpler alternatives (an env flag on the standby, or an admin "promote" endpoint): both fail silently closed, leaving nobody running the loops after an unlucky restart.
+
+`verify` re-pings the held connection each tick and drops leadership if it died, so a half-open connection surfaces as a lost election rather than a leader that no longer holds anything. The acquisition scheduler is deliberately *not* gated — it is request-driven, not periodic, so it only acts on requests its own colour received.
