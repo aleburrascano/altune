@@ -17,6 +17,16 @@
     "e2e:spine": "maestro test e2e/search-save-play.yaml",
     "doctor": "npx react-doctor@latest"
   },
+  "prettier": {
+    "printWidth": 100,
+    "tabWidth": 2,
+    "useTabs": false,
+    "semi": true,
+    "singleQuote": true,
+    "trailingComma": "all",
+    "arrowParens": "always",
+    "endOfLine": "lf"
+  },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
