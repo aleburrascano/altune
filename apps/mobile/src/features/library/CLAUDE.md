@@ -1,61 +1,28 @@
-# library — feature-local context
+# library — feature-local router
 
-Single chip-filtered Library screen (library-redesign, `docs/superpowers/specs/2026-06-28-library-redesign-design.md`). Opens to **Playlists**; a persistent search + chip bar swaps one focused view at a time — no stacked overview. Model: **spine + lenses** — Tracks and Playlists are what the user owns (primary); Albums and Artists are derived groupings of saved tracks (lenses).
+Single chip-filtered Library screen (`docs/superpowers/specs/2026-06-28-library-redesign-design.md`). Opens to Playlists; a persistent search + chip bar swaps one focused view at a time. `LibraryChip` is the active view: `'playlists' | 'tracks' | 'albums' | 'artists'`.
 
-## Key terms
+Layout:
 
-- **Track** — single audio recording with title + artist (+ optional album, duration, artwork, year, genre, track_number, album_artist, isrc, audio_ref). Defined globally in `docs/ubiquitous-language.md`. ("Song" is the banned legacy synonym — the 2026-07-16 structure audit renamed the chip/list vocabulary to Tracks.)
-- **AlbumGroup** / **ArtistGroup** — client-side groupings derived from library tracks (`@shared/lib/derive-library-groups`). Not domain types — UI read-side lenses.
-- **LibraryChip** — the active view: `'playlists' | 'tracks' | 'albums' | 'artists'` (`ui/LibraryChips.tsx`).
+- `ui/LibraryScreen.tsx` — orchestrator; owns `chip`, per-chip `sortByChip`, search, the track action sheet, and the loading/error/empty branches.
+- `ui/LibraryChips.tsx`, `ui/SortControl.tsx`, `ui/LibraryNoResults.tsx`.
+- `ui/PlaylistsGrid.tsx`, `ui/TracksList.tsx`, `ui/AlbumsGrid.tsx`, `ui/ArtistsGrid.tsx`, `ui/LibraryRow.tsx`.
+- `ui/PlaylistDetailScreen.tsx` / `ui/PlaylistHero.tsx` — route `/library/playlist/[id]`.
+- `ui/trackMenu.ts` — `buildTrackMenuItems`. `ui/sort.ts` — pure sorters + `*_SORT_OPTIONS`.
+- `hooks/useLibraryHome.ts`, `hooks/usePlaylistMutations.ts`, `hooks/useLibrarySearch.ts`. `state.ts` — `_viewForState`.
+- `__tests__/` — `LibraryScreen`, `sort`, `LibraryRow{,.retry}`, `useLibraryGrouping`, `library-to-discovery`, `formatFailureReason`, `useLibrarySearch`, `LibraryNoResults`, `useRetryAcquisition`.
 
-## Layout
+Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` directly — native deps, structure audit F2), `@shared/lib/{format,derive-library-groups,detail-handoff,query-keys}`, `@shared/playback`.
 
-- `ui/LibraryScreen.tsx` — orchestrator. Owns `chip`, per-chip `sortByChip`, search, and the track action sheet; renders header + search + chip bar + sort control + the active view. Handles loading/error/empty (`_viewForState`); empty-library (no tracks **and** no playlists) shows the Discover CTA.
-- `ui/LibraryChips.tsx` — the type chip bar (`Playlists · Tracks · Albums · Artists`), horizontally scrollable.
-- `ui/SortControl.tsx` — count + tappable sort label opening an `ActionSheet` of the view's sort options.
-- `ui/PlaylistsGrid.tsx` — 2-col grid of `PlaylistCover` collages + a "New Playlist" tile (cover size from `useWindowDimensions`).
-- `ui/TracksList.tsx` — `LibraryRow` list (the spine). Play context `{ kind: 'library' }`.
-- `ui/AlbumsGrid.tsx` — 2-col album cover grid (lens).
-- `ui/ArtistsGrid.tsx` — 3-col circular artist grid (lens).
-- `ui/LibraryRow.tsx` — rich track row: `Artwork` (48px) + title + artist · album + duration; inline pending/failed + retry.
-- `ui/trackMenu.ts` — `buildTrackMenuItems`, the one assembly point for the track context menu (ready-gated queue actions → optional Add to Playlist → View Details → danger row); screens pass only what differs.
-- `ui/LibraryNoResults.tsx` — shown when the search filters the active view to zero: names the query, states the library is intact, offers one-tap clear. A filtered-out library must never look like a missing one (the 2026-07-14 "entire library is missing" report was a persisted search filter).
-- `ui/PlaylistDetailScreen.tsx` / `ui/PlaylistHero.tsx` — playlist detail (centered hero). Route `/library/playlist/[id]`.
-- `ui/sort.ts` — pure `sortPlaylists` / `sortTracks` / `sortAlbums` / `sortArtists` + `*_SORT_OPTIONS`. `SortKey = 'recent' | 'az' | 'year'`.
-- `hooks/useLibraryHome.ts` — fetches all tracks (limit 2000, polls while any track is pending) + derives album/artist groups.
-- `hooks/usePlaylistMutations.ts` — every playlist write (create, create-with-track, add-track, rename, delete, remove-track) with one optimistic-patch/rollback/alert/invalidate policy; screens keep only UI state.
-- `hooks/useLibrarySearch.ts` — debounced search: `filter(tracks)` for tracks, `matches(text)` predicate for album/artist/playlist names.
-- `state.ts` — `_viewForState` pure helper (loading > error > empty > list).
+## Rules
 
-## Patterns
+- The noun is **Track**, never "Song" — chip and list vocabulary included.
+- Import cache keys from `libraryKeys` / `playlistKeys` in `@shared/lib/query-keys`; never retype a key literal.
+- Route every playlist write through `usePlaylistMutations` — it owns the optimistic-patch/rollback/alert/invalidate policy; screens keep only UI state.
+- Assemble the track context menu only in `ui/trackMenu.ts`.
+- Keep the sorters in `ui/sort.ts` pure.
+- Derive albums and artists client-side; never add a backend grouping endpoint.
+- Never show the empty-library CTA when a search has merely filtered the view to zero.
+- Navigate to detail through `useLibraryNavigation` + the handoff seam.
 
-- **One screen, chip-filtered**: the chips are the navigation. Selecting a chip swaps only the content area; search and per-chip sort persist. Replaces the old stacked home + separate `all-tracks`/`all-albums`/`all-artists` routes.
-- **Client-side grouping**: albums/artists derived from `TrackResponse[]`. No backend endpoint.
-- **Recently Added = Tracks sorted Recent** — not a separate section.
-- **Query keys from `@shared/lib/query-keys`** (`libraryKeys`/`playlistKeys`) — never retype key literals; the SSE patch layer imports the same builders.
-- **Navigation to Detail**: tracks/albums/artists build a `DiscoveryResult` and navigate to `/library/detail` via `useLibraryNavigation` + the detail handoff seam.
-
-## Deferred
-
-- **Favorites / Liked** — not built; saving is already the deliberate act. A pinned slot can be added later.
-- **Jump back in / recently played** — a Home concern, reserved for a future Home tab; not in Library.
-
-## Dependencies
-
-- `@shared/ui` — Screen, Chip, Row, Text, Button, Skeleton, spacing, radius, useTheme; `primitives/ActionSheet`, `primitives/Artwork`, `primitives/SearchBar` (the last two live outside the barrel — native deps, structure audit F2).
-- `@shared/lib/format` — `formatDuration`. `@shared/lib/derive-library-groups` — grouping. `@shared/lib/detail-handoff` — discover↔detail seam. `@shared/lib/query-keys` — cache keys.
-- `@shared/playback` — queue/playback for in-library play.
-
-## Test files
-
-- `__tests__/LibraryScreen.test.ts` — `_viewForState` state machine.
-- `__tests__/sort.test.ts` — sort helpers (playlists/tracks/albums/artists).
-- `__tests__/LibraryRow.test.tsx` / `LibraryRow.retry.test.tsx` — row rendering + retry.
-- `__tests__/useLibraryGrouping.test.ts`, `library-to-discovery.test.ts`, `formatFailureReason.test.ts`.
-- `__tests__/useLibrarySearch.test.ts` — debounce/commit + the stale-committed-query regression (deleting to 1 char must lift the filter).
-- `__tests__/LibraryNoResults.test.tsx` — no-results view names the query and clears on tap.
-- `__tests__/useRetryAcquisition.test.tsx` — optimistic pending patch.
-
-## Knowledge base
-
-`okf/mobile/library-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
+Why each rule exists, and what is deliberately deferred: `okf/mobile/library-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

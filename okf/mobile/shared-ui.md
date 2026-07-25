@@ -24,3 +24,15 @@ Consumers (2+ feature threshold met): [auth-feature](auth-feature.md), [discover
 Three surfaces sit *outside* the provider's context and read the preference directly in `app/_layout.tsx`: the Stack's `contentStyle`, the status bar, and the Android navigation bar. Without that they stay dark while every themed screen turns light.
 
 **Announcements (2026-07-24).** `accessibilityLiveRegion` is Android-only; VoiceOver ignores it. `announce.ts` is the iOS half (`AccessibilityInfo.announceForAccessibility`, guarded on a screen reader actually running), and `useAnnounceChange` fires it on transitions only — skipping the first value, since a surface mounting with content already present is not a change worth interrupting for. Surfaces that change without user input set the prop *and* call the hook.
+
+## Why the design system is shaped this way
+
+The barrel is heavy-dep-free (structure audit F2): the two native-module primitives, `Artwork` (`expo-image`) and `SearchBar` (`lucide-react-native`), are not re-exported, so importing `@shared/ui` never drags a native module into jest. `TabBar` is excluded from the barrel for the same reason — it would pull `lucide-react-native` transitively.
+
+`useTheme()`'s context default *is* `darkTheme`, so a component rendered with no `ThemeProvider` mounted resolves to dark rather than throwing. That is load-bearing for the bare-rendered auth component tests, not an accident. `lightTheme` is a drafted, inactive counterpart that exists so every token has a light variant and light mode becomes a later config flip; it is not visually tuned, and shipping it needs a dedicated design pass.
+
+Typography sets `fontFamily` per weight rather than `fontWeight` so the `@expo-google-fonts` weighted families render without faux-bolding, which means token `fontFamily` strings must match the font export names loaded in `app/_layout.tsx`.
+
+Motion uses React Native's built-in `Animated` rather than `react-native-reanimated`: zero native modules, so it runs in Expo Go. Reanimated 4's worklets TurboModule is not present in Expo Go and crashed at startup — see ADR-0008.
+
+In jest, `react-native-safe-area-context` is mocked in `apps/mobile/jest/setup-after-env.js` because `Screen` calls `useSafeAreaInsets`, which throws with no provider; RN `Animated` needs no mock. The Android system nav bar is painted dark on mount and on every `AppState` transition to active, and that resume re-assert is what kills the white-flash bug under SDK 54 edge-to-edge (ADR-0009).
