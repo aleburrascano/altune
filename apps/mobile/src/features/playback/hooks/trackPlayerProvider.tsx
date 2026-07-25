@@ -8,6 +8,7 @@ import TrackPlayer, {
 
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
+import { trackKey } from '@shared/playback/trackKey';
 import type {
   PlaybackContextValue,
   PlaybackState,
@@ -25,6 +26,11 @@ import {
   loadNativeTrack,
   reorderUpcomingNative,
 } from '../loadNativeTrack';
+import {
+  clearPlaybackError,
+  reportPlaybackError,
+  usePlaybackErrorFor,
+} from '../playbackErrorStore';
 import { useIsForeground } from './useIsForeground';
 import { usePlaybackSignals } from './usePlaybackSignals';
 import { useQueueResume } from './useQueueResume';
@@ -35,6 +41,10 @@ const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
   one: RepeatMode.Track,
 };
 
+function loadFailureMessage(err: unknown): string {
+  return err instanceof Error ? err.message : 'Failed to load audio';
+}
+
 async function ignoringNativeRejection(op: () => Promise<unknown>): Promise<void> {
   try {
     await op();
@@ -43,7 +53,7 @@ async function ignoringNativeRejection(op: () => Promise<unknown>): Promise<void
 
 export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const errorMessage = usePlaybackErrorFor(track ? trackKey(track) : null);
   const lastPlayedTrack = useRef<PlaybackTrack | null>(null);
 
   const playbackState = usePlaybackState();
@@ -103,7 +113,7 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   });
 
   const play = useCallback(async (newTrack: PlaybackTrack) => {
-    setErrorMessage(null);
+    clearPlaybackError();
     setTrack(newTrack);
     lastPlayedTrack.current = newTrack;
     useQueueStore.getState().clearQueue();
@@ -111,18 +121,18 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     try {
       await loadNativeTrack(newTrack);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load audio';
-      setErrorMessage(message);
+      reportPlaybackError(trackKey(newTrack), loadFailureMessage(err));
     }
   }, []);
 
   const startQueue = useCallback<PlaybackContextValue['startQueue']>(
     async (orderedTracks, startIndex, options) => {
-      setErrorMessage(null);
+      clearPlaybackError();
       try {
         await loadNativeQueue(orderedTracks, startIndex, options);
       } catch (err) {
-        setErrorMessage(err instanceof Error ? err.message : 'Failed to load audio');
+        const failed = orderedTracks[startIndex];
+        if (failed) reportPlaybackError(trackKey(failed), loadFailureMessage(err));
       }
     },
     [],
@@ -184,10 +194,11 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const stop = useCallback(() => {
     void TrackPlayer.reset();
     setTrack(null);
-    setErrorMessage(null);
+    clearPlaybackError();
   }, []);
 
   const retry = useCallback(() => {
+    clearPlaybackError();
     const s = useQueueStore.getState();
     if (s.currentTrack()) {
       void startQueue(orderedQueueTracks(s), s.currentIndex);
@@ -210,7 +221,6 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   useEffect(() => {
     if (!currentQueueTrack) return;
     setTrack(currentQueueTrack);
-    setErrorMessage(null);
     lastPlayedTrack.current = currentQueueTrack;
   }, [currentQueueTrack]);
 

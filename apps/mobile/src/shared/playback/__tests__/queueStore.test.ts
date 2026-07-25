@@ -383,3 +383,42 @@ describe('reorderQueue', () => {
     expect(s.currentIndex).toBe(1);
   });
 });
+
+describe('syncCurrentIndex', () => {
+  it('accepts the native index when no identity is supplied', () => {
+    useQueueStore.getState().loadQueue(tracks, 0, null);
+    useQueueStore.getState().syncCurrentIndex(3);
+    expect(useQueueStore.getState().currentIndex).toBe(3);
+  });
+
+  it('ignores an out-of-range index', () => {
+    useQueueStore.getState().loadQueue(tracks, 1, null);
+    useQueueStore.getState().syncCurrentIndex(99);
+    expect(useQueueStore.getState().currentIndex).toBe(1);
+  });
+
+  it('follows the identity when the native queue has drifted', () => {
+    useQueueStore.getState().loadQueue(tracks, 0, null);
+    useQueueStore.getState().syncCurrentIndex(2, 'library:d');
+    expect(useQueueStore.getState().currentIndex).toBe(3);
+  });
+
+  it('resolves the identity through the play order, not the track order', () => {
+    useQueueStore.getState().loadQueue(tracks, 0, null);
+    useQueueStore.getState().reorderQueue(4, 1);
+    useQueueStore.getState().syncCurrentIndex(3, 'library:e');
+    expect(useQueueStore.getState().currentIndex).toBe(1);
+  });
+
+  it('ignores an identity that is not in the queue at all', () => {
+    useQueueStore.getState().loadQueue(tracks, 2, null);
+    useQueueStore.getState().syncCurrentIndex(0, 'library:zzz');
+    expect(useQueueStore.getState().currentIndex).toBe(2);
+  });
+
+  it('picks the occurrence nearest the reported index when a track repeats', () => {
+    useQueueStore.getState().loadQueue([makeTrack('a'), makeTrack('b'), makeTrack('a')], 0, null);
+    useQueueStore.getState().syncCurrentIndex(2, 'library:a');
+    expect(useQueueStore.getState().currentIndex).toBe(2);
+  });
+});
