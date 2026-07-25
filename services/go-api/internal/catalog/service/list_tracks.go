@@ -8,8 +8,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// trackLister is the narrow read this service actually calls, out of
-// ports.TrackRepository's full surface.
 type trackLister interface {
 	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
 }

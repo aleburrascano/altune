@@ -34,7 +34,6 @@ func TestSetTrackNumberService(t *testing.T) {
 			t.Fatalf("track number = %v, want 3", got)
 		}
 
-		// Fill-only: a second call must not overwrite the stored value.
 		updated, err = svc.Execute(context.Background(), userId, track.ID, 9)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

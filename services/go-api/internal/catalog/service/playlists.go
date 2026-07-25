@@ -104,4 +104,3 @@ func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.Use
 	})
 	return playlist, summary, nil
 }
-

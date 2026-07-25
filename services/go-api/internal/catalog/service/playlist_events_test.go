@@ -40,9 +40,6 @@ func (p *recordingPlaylistPublisher) last(typ string) map[string]any {
 	return nil
 }
 
-// TestPlaylistService_PublishesMutationEvents is the F13 regression: rename,
-// remove-track, and reorder emitted no events, so those changes never propagated
-// to another device. Each must now publish with the changed fields.
 func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())

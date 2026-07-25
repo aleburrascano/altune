@@ -23,11 +23,7 @@ type AddTrackInput struct {
 	AlbumArtist     *string
 	ISRC            *string
 	FeaturedArtists []domain.FeaturedArtist
-	// SourceURL is a transient acquisition hint (e.g. a SoundCloud permalink),
-	// not a domain attribute — it is never written to the Track. When set and the
-	// track is freshly created, it is forwarded to the acquisition scheduler so
-	// acquisition grabs that exact source instead of re-searching by metadata.
-	SourceURL *string
+	SourceURL       *string
 }
 
 type AddTrackOutput struct {
@@ -35,8 +31,6 @@ type AddTrackOutput struct {
 	Created bool
 }
 
-// trackAdder is the narrow write this service actually calls, out of
-// ports.TrackRepository's full surface.
 type trackAdder interface {
 	Add(ctx context.Context, track *domain.Track) (stored *domain.Track, created bool, err error)
 }
@@ -115,11 +109,6 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	return &AddTrackOutput{Track: track, Created: created}, nil
 }
 
-// trackAddedPayload builds the full track object embedded in the
-// track_added_to_library event, so a receiving client inserts the row directly
-// instead of forcing a refetch. TrackDTO drives the JSON shape so the event
-// payload and the HTTP response can never drift; track_id is the legacy key
-// retained for older clients alongside the canonical id field.
 func trackAddedPayload(t *domain.Track) map[string]any {
 	type payload struct {
 		TrackDTO

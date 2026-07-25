@@ -11,8 +11,6 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-// trackDeleter is the narrow write this service actually calls, out of
-// ports.TrackRepository's full surface.
 type trackDeleter interface {
 	Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error)
 }

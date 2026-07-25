@@ -12,8 +12,6 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
-// maxAudioURLBatch caps how many URLs a single resolve can mint — a queue is not
-// unbounded, and the cap keeps one request from signing thousands of objects.
 const maxAudioURLBatch = 200
 
 type AudioURLHandler struct {
@@ -38,9 +36,6 @@ type resolveAudioURLsResponse struct {
 	URLs []audioURLDTO `json:"urls"`
 }
 
-// HandleResolve mints short-lived, directly-streamable URLs for the given tracks.
-// Tracks it can't sign (unknown, not owned, not ready, or no signer configured)
-// are simply absent from the response — the client streams those via the proxy.
 func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	userId, ok := auth.RequireUserID(w, r)

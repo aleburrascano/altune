@@ -14,10 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// playlistTrackCountSubquery is the canonical track_count projection for a
-// playlist row, shared by ListForUser and GetByID. One definition so a change
-// to how the count is computed (e.g. excluding soft-deleted tracks) is a
-// single-line edit instead of a hand-sync across both queries.
 const playlistTrackCountSubquery = `(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id)`
 
 var _ ports.PlaylistRepository = (*PgxPlaylistRepository)(nil)
@@ -39,10 +35,6 @@ func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Pla
 }
 
 func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]domain.PlaylistWithSummary, error) {
-	// track_count and preview_artwork are read-side projections computed in the
-	// same query — one round-trip for the whole playlists screen, no per-playlist
-	// follow-up. preview_artwork: up to four distinct artwork URLs in position
-	// order (the playlist tile).
 	rows, err := r.pool.Query(ctx,
 		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
 			`+playlistTrackCountSubquery+` AS track_count,
@@ -100,9 +92,6 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 }
 
 func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {
-	// track_count is projected here too (not just on ListForUser) so single-
-	// playlist responses (e.g. rename) report the real count without loading the
-	// track rows.
 	row := r.pool.QueryRow(ctx,
 		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
 			`+playlistTrackCountSubquery+` AS track_count
@@ -229,11 +218,6 @@ func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, playlistId doma
 	return tx.Commit(ctx)
 }
 
-// renumberPlaylistPositions collapses a playlist's track positions back to a
-// contiguous 0..N-1 range (order-preserving), so a removal never leaves a gap.
-// Shared by every write path that can drop a playlist_tracks row (playlist
-// track removal here; track deletion in track_repo.go) — one definition so
-// the renumbering rule can't drift between them.
 func renumberPlaylistPositions(ctx context.Context, tx pgx.Tx, playlistId uuid.UUID) error {
 	_, err := tx.Exec(ctx,
 		`UPDATE playlist_tracks SET position = sub.new_pos

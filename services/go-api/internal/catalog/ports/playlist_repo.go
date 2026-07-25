@@ -7,11 +7,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// PlaylistRepository persists the Playlist aggregate: lifecycle, reads (with
-// their read-side projections — track count and preview artwork ride on
-// ListForUser), and track membership. One flat surface: every consumer today
-// uses all of it; carve a narrower interface at the consumer the day one wants
-// less (Go interfaces are satisfied implicitly, so that move costs nothing).
 type PlaylistRepository interface {
 	Create(ctx context.Context, playlist *domain.Playlist) error
 	ListForUser(ctx context.Context, userId shared.UserId) ([]domain.PlaylistWithSummary, error)

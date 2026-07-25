@@ -37,11 +37,6 @@ type PlaylistTrack struct {
 	Position int
 }
 
-// PreviewArtworkLimit caps how many distinct track artwork URLs a playlist's
-// preview tile shows. Read by both the SQL projection
-// (persistence.PgxPlaylistRepository.ListForUser) and the Go fallback
-// (handler.previewArtworkFromTracks) — one definition so the cap can't drift
-// between the two independent implementations of the same selection rule.
 const PreviewArtworkLimit = 4
 
 type Playlist struct {
@@ -53,16 +48,11 @@ type Playlist struct {
 	Tracks    []PlaylistTrack
 }
 
-// PlaylistSummary carries read-side projections that list/get queries compute
-// but that the aggregate's own methods never read. Kept separate from Playlist
-// so the write model and its behaviour methods stay free of query artefacts.
 type PlaylistSummary struct {
 	TrackCount         int
 	PreviewArtworkURLs []string
 }
 
-// PlaylistWithSummary pairs a Playlist with its read-side projections so
-// ListForUser returns one value per row instead of two parallel slices.
 type PlaylistWithSummary struct {
 	Playlist *Playlist
 	Summary  PlaylistSummary
@@ -159,10 +149,6 @@ func validatePlaylistName(name string) error {
 	return nil
 }
 
-// PreviewArtworkURLs selects up to PreviewArtworkLimit distinct artwork URLs
-// from tracks in order, for a playlist's preview tile. Used on the Get handler
-// path where tracks are already loaded in Go; the List path delegates this
-// selection to the SQL projection instead.
 func PreviewArtworkURLs(tracks []*Track) []string {
 	urls := []string{}
 	seen := make(map[string]bool)

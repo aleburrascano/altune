@@ -38,7 +38,7 @@ func NewObjectStorageAudioStore(endpoint, accessKey, secretKey, bucket, region s
 
 	transport := &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
-		TLSHandshakeTimeout:  10 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 30 * time.Second,
 		IdleConnTimeout:       90 * time.Second,
 		MaxIdleConns:          10,
@@ -105,9 +105,6 @@ func (s *ObjectStorageAudioStore) Stream(ctx context.Context, audioRef string) (
 	return obj, stat.Size, nil
 }
 
-// PresignGet mints a short-lived presigned GET URL for the object. Signing is a
-// local operation (HMAC over the request with the access key) — no network call
-// to storage — so this is cheap enough to mint per track at queue-build time.
 func (s *ObjectStorageAudioStore) PresignGet(ctx context.Context, audioRef string, ttl time.Duration) (string, error) {
 	u, err := s.client.PresignedGetObject(ctx, s.bucket, audioRef, ttl, nil)
 	if err != nil {

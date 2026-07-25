@@ -45,16 +45,17 @@ func (s *FilesystemAudioStore) Store(_ context.Context, sourcePath string, audio
 		return fmt.Errorf("create directory: %w", err)
 	}
 
-	if err := os.Rename(sourcePath, destPath); err == nil {
+	err = os.Rename(sourcePath, destPath)
+	if err == nil {
 		return nil
-	} else if !errors.Is(err, syscall.EXDEV) {
+	}
+	if !errors.Is(err, syscall.EXDEV) {
 		return fmt.Errorf("move audio into place: %w", err)
 	}
+	return copyThenRemoveAcrossFilesystems(sourcePath, destPath)
+}
 
-	// Source (temp dir) and destination (audio volume) are on different
-	// filesystems, so os.Rename returns EXDEV. Copy across, then remove the
-	// source. Without this, every acquisition fails when $TMPDIR and the audio
-	// baseDir are separate mounts (the norm on a Linux VM).
+func copyThenRemoveAcrossFilesystems(sourcePath, destPath string) error {
 	if err := copyFile(sourcePath, destPath); err != nil {
 		return fmt.Errorf("copy audio into place: %w", err)
 	}
@@ -83,8 +84,6 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-// Stream returns a readable file handle and its size in bytes.
-// The caller MUST close the returned AudioStream when done.
 func (s *FilesystemAudioStore) Stream(_ context.Context, audioRef string) (ports.AudioStream, int64, error) {
 	path, err := s.safePath(audioRef)
 	if err != nil {

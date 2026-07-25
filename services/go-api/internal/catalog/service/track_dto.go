@@ -8,11 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// TrackDTO is the single wire shape of a track. Both serializers of the track
-// contract use it: the HTTP handler's responses (the handler aliases it as
-// TrackResponse) and the track_added_to_library event payload (trackAddedPayload
-// marshals it). Keeping one struct is what makes the event's promise — "the row
-// the client would have fetched" — hold by construction instead of by comment.
 type TrackDTO struct {
 	ID                uuid.UUID           `json:"id"`
 	Title             string              `json:"title"`
@@ -32,17 +27,12 @@ type TrackDTO struct {
 	FeaturedArtists   []FeaturedArtistDTO `json:"featured_artists,omitempty"`
 }
 
-// FeaturedArtistDTO is the wire shape of one featured ("feat.") credit. Optional
-// ids are pointer-typed and omitted when unknown so absence stays distinct from a
-// zero id.
 type FeaturedArtistDTO struct {
 	Name     string  `json:"name"`
 	MBID     *string `json:"mbid,omitempty"`
 	DeezerID *int64  `json:"deezer_id,omitempty"`
 }
 
-// TrackToDTO maps a domain track to its wire shape. `album` is null when empty,
-// matching the wire contract.
 func TrackToDTO(t *domain.Track) TrackDTO {
 	var album *string
 	if t.Album != "" {
@@ -68,8 +58,6 @@ func TrackToDTO(t *domain.Track) TrackDTO {
 	}
 }
 
-// FeaturedToDTOs converts domain value objects into wire DTOs. Returns nil for
-// no credits (omitted on the wire).
 func FeaturedToDTOs(feats []domain.FeaturedArtist) []FeaturedArtistDTO {
 	if len(feats) == 0 {
 		return nil

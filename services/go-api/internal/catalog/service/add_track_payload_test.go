@@ -9,9 +9,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// TestTrackAddedPayload is the F10 regression: the track_added_to_library event
-// must embed the full track (wire-shaped) so a receiving client inserts the row
-// directly instead of forcing a refetch.
 func TestTrackAddedPayload(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "Midnight City", "M83", "Hurry Up, We're Dreaming")
@@ -30,7 +27,6 @@ func TestTrackAddedPayload(t *testing.T) {
 	if p["title"] != "Midnight City" || p["artist"] != "M83" {
 		t.Errorf("title/artist = %v/%v", p["title"], p["artist"])
 	}
-	// The payload is the marshaled TrackDTO, so values carry JSON types.
 	if album, ok := p["album"].(string); !ok || album != "Hurry Up, We're Dreaming" {
 		t.Errorf("album = %v, want the album string", p["album"])
 	}

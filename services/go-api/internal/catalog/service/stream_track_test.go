@@ -10,11 +10,6 @@ import (
 	"altune/go-api/internal/catalog/domain"
 )
 
-// TestStreamTrackService_Execute covers the streaming happy path and the
-// missing-audio recovery folded in from the former ReconcileTrackStatusService:
-// a ready track whose file is gone is marked failed and re-acquisition is
-// scheduled, while a transient stream error over a present file leaves the track
-// ready. The track is loaded once; recovery acts on that same instance.
 func TestStreamTrackService_Execute(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
@@ -25,7 +20,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		setup         func(*catalogtest.TrackRepo, *catalogtest.AudioStore) domain.TrackId
 		wantErr       error
 		wantOutput    bool
-		wantStatus    *domain.AcquisitionStatus // nil = don't check
+		wantStatus    *domain.AcquisitionStatus
 		wantScheduled bool
 	}{
 		{
@@ -44,7 +39,6 @@ func TestStreamTrackService_Execute(t *testing.T) {
 			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
 				track := seedReadyTrack(t, trRepo, userId, "Song", "Artist", "Album", "audio/gone.opus")
 				store.ErrOnStream = errors.New("not found")
-				// file not seeded -> Exists returns false
 				return track.ID
 			},
 			wantErr:       ErrAudioNotAvailable,
@@ -152,9 +146,6 @@ func TestStreamTrackService_Execute(t *testing.T) {
 	}
 }
 
-// The save flow forwards the discovered source URL to the acquisition scheduler
-// so acquisition downloads that exact track (acquire-soundcloud). Relocated from
-// the handler suite when scheduling moved into the service.
 func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
@@ -176,8 +167,6 @@ func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
 	}
 }
 
-// A save with no source URL forwards an empty string (acquisition falls back to
-// search).
 func TestAddTrackService_NoSourceURL_ForwardsEmpty(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()

@@ -54,7 +54,6 @@ func TestPgxTrackRepo_AddAndGetByID(t *testing.T) {
 	track := newTestTrackForDB(t, userId)
 	cleanupTrack(t, pool, track.ID, userId)
 
-	// Act: Add
 	_, created, err := repo.Add(ctx, track)
 	if err != nil {
 		t.Fatalf("Add() error = %v", err)
@@ -63,7 +62,6 @@ func TestPgxTrackRepo_AddAndGetByID(t *testing.T) {
 		t.Fatal("Add() created = false, want true")
 	}
 
-	// Act: GetByID
 	got, err := repo.GetByID(ctx, track.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
@@ -72,7 +70,6 @@ func TestPgxTrackRepo_AddAndGetByID(t *testing.T) {
 		t.Fatal("GetByID() returned nil, want track")
 	}
 
-	// Assert: all persisted fields match
 	if got.ID.UUID() != track.ID.UUID() {
 		t.Errorf("ID = %v, want %v", got.ID.UUID(), track.ID.UUID())
 	}
@@ -113,20 +110,17 @@ func TestPgxTrackRepo_Add_DedupConflict(t *testing.T) {
 		t.Fatal("first Add() created = false, want true")
 	}
 
-	// Second track with same title/artist/album (same dedup key), different ID
 	track2, err := domain.NewTrack(userId, track1.Title, track1.Artist, track1.Album)
 	if err != nil {
 		t.Fatalf("NewTrack for dedup: %v", err)
 	}
 	cleanupTrack(t, pool, track2.ID, userId)
 
-	// Act: second Add with same dedup key
 	_, created2, err := repo.Add(ctx, track2)
 	if err != nil {
 		t.Fatalf("second Add() error = %v", err)
 	}
 
-	// Assert: dedup conflict returns created=false
 	if created2 {
 		t.Error("second Add() created = true, want false (dedup conflict)")
 	}
@@ -138,7 +132,6 @@ func TestPgxTrackRepo_ListForUser(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	// Arrange: add 3 tracks with staggered times
 	tracks := make([]*domain.Track, 3)
 	for i := 0; i < 3; i++ {
 		tracks[i] = newTestTrackForDB(t, userId)
@@ -149,13 +142,11 @@ func TestPgxTrackRepo_ListForUser(t *testing.T) {
 		}
 	}
 
-	// Act: list with limit=2, offset=0
 	got, total, err := repo.ListForUser(ctx, userId, 2, 0)
 	if err != nil {
 		t.Fatalf("ListForUser() error = %v", err)
 	}
 
-	// Assert
 	if total != 3 {
 		t.Errorf("total = %d, want 3", total)
 	}
@@ -163,12 +154,10 @@ func TestPgxTrackRepo_ListForUser(t *testing.T) {
 		t.Errorf("len(tracks) = %d, want 2", len(got))
 	}
 
-	// Verify ordering: most recently added first
 	if len(got) >= 2 && got[0].AddedAt.Before(got[1].AddedAt) {
 		t.Error("tracks not in descending added_at order")
 	}
 
-	// Act: list with offset=2 to get the last one
 	got2, total2, err := repo.ListForUser(ctx, userId, 10, 2)
 	if err != nil {
 		t.Fatalf("ListForUser(offset=2) error = %v", err)
@@ -194,7 +183,6 @@ func TestPgxTrackRepo_Update(t *testing.T) {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	// Act: mark ready and update
 	audioRef := "s3://bucket/test-" + uuid.New().String() + ".opus"
 	if err := track.MarkReady(audioRef); err != nil {
 		t.Fatalf("MarkReady: %v", err)
@@ -203,7 +191,6 @@ func TestPgxTrackRepo_Update(t *testing.T) {
 		t.Fatalf("Update() error = %v", err)
 	}
 
-	// Assert: re-read and verify
 	got, err := repo.GetByID(ctx, track.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID after update: %v", err)
@@ -232,7 +219,6 @@ func TestPgxTrackRepo_Delete(t *testing.T) {
 		t.Fatalf("Add() error = %v", err)
 	}
 
-	// Act: delete
 	deleted, _, err := repo.Delete(ctx, track.ID, userId)
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
@@ -241,7 +227,6 @@ func TestPgxTrackRepo_Delete(t *testing.T) {
 		t.Error("Delete() deleted = false, want true")
 	}
 
-	// Assert: gone
 	got, err := repo.GetByID(ctx, track.ID, userId)
 	if err != nil {
 		t.Fatalf("GetByID after delete: %v", err)
@@ -250,7 +235,6 @@ func TestPgxTrackRepo_Delete(t *testing.T) {
 		t.Errorf("GetByID after delete returned non-nil track: %v", got.ID)
 	}
 
-	// Assert: deleting again returns false
 	deleted2, _, err := repo.Delete(ctx, track.ID, userId)
 	if err != nil {
 		t.Fatalf("second Delete() error = %v", err)
@@ -266,7 +250,6 @@ func TestPgxTrackRepo_GetByID_NotFound(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	// Act: get a non-existent track
 	got, err := repo.GetByID(ctx, domain.TrackIdFromUUID(uuid.New()), userId)
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)

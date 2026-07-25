@@ -40,12 +40,10 @@ func TestHandleCreatePlaylist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
-			// Act
 			var rec *httptest.ResponseRecorder
 			if tt.body == nil {
 				rec = serve(t, router, http.MethodPost, "/playlists", strings.NewReader("{invalid"))
@@ -53,7 +51,6 @@ func TestHandleCreatePlaylist(t *testing.T) {
 				rec = serve(t, router, http.MethodPost, "/playlists", jsonBody(t, tt.body))
 			}
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus == http.StatusCreated {
@@ -96,7 +93,6 @@ func TestHandleListPlaylists(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			for i := 0; i < tt.seedCount; i++ {
@@ -104,10 +100,8 @@ func TestHandleListPlaylists(t *testing.T) {
 			}
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
-			// Act
 			rec := serve(t, router, http.MethodGet, "/playlists", nil)
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 			assertJSON(t, rec)
 
@@ -157,16 +151,13 @@ func TestHandleGetPlaylist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo, trRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
-			// Act
 			rec := serve(t, router, http.MethodGet, "/playlists/"+playlistId, nil)
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus == http.StatusOK {
@@ -219,16 +210,13 @@ func TestHandleDeletePlaylist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
-			// Act
 			rec := serve(t, router, http.MethodDelete, "/playlists/"+playlistId, nil)
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 		})
 	}
@@ -273,16 +261,13 @@ func TestHandleRenamePlaylist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
-			// Act
 			rec := serve(t, router, http.MethodPatch, "/playlists/"+playlistId, jsonBody(t, tt.body))
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus == http.StatusOK {
@@ -319,7 +304,7 @@ func TestHandleAddTrack(t *testing.T) {
 				pl := makePlaylist(testUserId, "My List")
 				track := makeTrack(testUserId, "Song", "Artist", "Album")
 				trRepo.Seed(track)
-				_ = pl.AddTrack(track.ID) // already in playlist
+				_ = pl.AddTrack(track.ID)
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), track.ID.UUID()
 			},
@@ -347,7 +332,6 @@ func TestHandleAddTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			playlistId, trackUUID := tt.setup(plRepo, trRepo)
@@ -355,10 +339,8 @@ func TestHandleAddTrack(t *testing.T) {
 
 			body := AddTrackToPlaylistRequest{TrackID: trackUUID}
 
-			// Act
 			rec := serve(t, router, http.MethodPost, "/playlists/"+playlistId+"/tracks", jsonBody(t, body))
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 		})
 	}
@@ -406,16 +388,13 @@ func TestHandleRemoveTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			playlistId, trackId := tt.setup(plRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
-			// Act
 			rec := serve(t, router, http.MethodDelete, "/playlists/"+playlistId+"/tracks/"+trackId, nil)
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 		})
 	}
@@ -450,16 +429,13 @@ func TestHandleReorder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			plRepo := catalogtest.NewPlaylistRepo()
 			trRepo := catalogtest.NewTrackRepo()
 			playlistId := tt.setup(plRepo)
 			_, router := buildPlaylistHandler(plRepo, trRepo)
 
-			// Act
 			rec := serve(t, router, http.MethodPatch, "/playlists/"+playlistId+"/tracks/reorder", jsonBody(t, tt.body))
 
-			// Assert
 			assertStatus(t, rec, tt.wantStatus)
 		})
 	}

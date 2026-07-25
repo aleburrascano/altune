@@ -8,17 +8,10 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// trackNumberSetter is the narrow write this service actually calls, out of
-// ports.TrackRepository's full surface.
 type trackNumberSetter interface {
 	SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (updated bool, err error)
 }
 
-// SetTrackNumberService persists a track's album position when it is unset.
-// Backs the client's persist-as-you-browse flow: when the album detail derives a
-// track's real position from the album tracklist, it writes it back so a track
-// saved before track_number was captured is corrected in the database. Fill-only
-// at the repository, so re-running never overwrites a real value.
 type SetTrackNumberService struct {
 	trackRepo trackNumberSetter
 }
@@ -27,9 +20,6 @@ func NewSetTrackNumberService(trackRepo trackNumberSetter) *SetTrackNumberServic
 	return &SetTrackNumberService{trackRepo: trackRepo}
 }
 
-// Execute fills the track's position when unset. `updated` reports whether a row
-// changed (false when the track already had a number or was not found — both are
-// non-errors for an idempotent backfill).
 func (s *SetTrackNumberService) Execute(
 	ctx context.Context,
 	userId shared.UserId,
