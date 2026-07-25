@@ -112,7 +112,6 @@ func searchString(s, sub string) bool {
 func setEnv(t *testing.T, vars map[string]string) {
 	t.Helper()
 
-	// Clear all config-related env vars first
 	envKeys := []string{
 		"ENV", "LOG_LEVEL", "HOST", "PORT", "CORS_ORIGINS",
 		"DATABASE_URL", "SUPABASE_PROJECT_URL", "SUPABASE_JWT_AUD",

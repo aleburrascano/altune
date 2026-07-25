@@ -10,7 +10,6 @@ import (
 func newCaptureLogger(t *testing.T, capacity int) (*slog.Logger, *RingBuffer) {
 	t.Helper()
 	ring := NewRingBuffer(capacity)
-	// Discard inner output; we only assert on the captured ring.
 	inner := slog.NewJSONHandler(discardWriter{}, &slog.HandlerOptions{Level: slog.LevelDebug})
 	return slog.New(newRingHandler(inner, ring)), ring
 }
@@ -28,7 +27,7 @@ func TestRingHandler_CapturesAndGroupsByCorrID(t *testing.T) {
 
 	snap := ring.Snapshot()
 	if len(snap) != 3 {
-		t.Fatalf("snapshot len = %d, want 3", len(snap)) // AE3 grouping data
+		t.Fatalf("snapshot len = %d, want 3", len(snap))
 	}
 
 	var abc int
@@ -45,7 +44,6 @@ func TestRingHandler_CapturesAndGroupsByCorrID(t *testing.T) {
 func TestRingHandler_WithAttrsSharesRing(t *testing.T) {
 	logger, ring := newCaptureLogger(t, 10)
 
-	// A derived logger (per-request child) must feed the same ring.
 	child := logger.With("corr_id", "derived")
 	child.Info("from child")
 
@@ -93,10 +91,9 @@ func TestRingBuffer_Subscribe(t *testing.T) {
 
 func TestRingBuffer_SlowSubscriberDropsNotBlocks(t *testing.T) {
 	ring := NewRingBuffer(10)
-	_, cancel := ring.Subscribe() // never drained
-	defer cancel()
+	_, cancelNeverDrainedSubscriber := ring.Subscribe()
+	defer cancelNeverDrainedSubscriber()
 
-	// Far more than the subscriber buffer; must not block the producer.
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < subscriberChanSize*4; i++ {
@@ -108,7 +105,6 @@ func TestRingBuffer_SlowSubscriberDropsNotBlocks(t *testing.T) {
 	case <-done:
 	case <-context.Background().Done():
 	}
-	// If we reached here without deadlock, the producer was never blocked.
 }
 
 func TestRingBuffer_ConcurrentAppends(t *testing.T) {

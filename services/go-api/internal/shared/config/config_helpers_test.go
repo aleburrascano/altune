@@ -119,8 +119,6 @@ func TestConfig_IsDevelopment(t *testing.T) {
 }
 
 func TestConfig_HasOCIS3_AllCombinations(t *testing.T) {
-	// The existing test covers all-set and missing-bucket.
-	// Cover the other missing-field cases.
 	tests := []struct {
 		name     string
 		endpoint string

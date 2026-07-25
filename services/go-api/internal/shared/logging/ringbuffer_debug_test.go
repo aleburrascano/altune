@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// TestRing_CapturesDebugBelowStdoutLevel verifies the console ring retains DEBUG
-// records even when stdout is at INFO, while stdout itself stays at INFO.
 func TestRing_CapturesDebugBelowStdoutLevel(t *testing.T) {
 	ring := NewRingBuffer(10)
 	var stdout bytes.Buffer

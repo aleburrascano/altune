@@ -15,18 +15,15 @@ func TestWriteJSON(t *testing.T) {
 	rec := httptest.NewRecorder()
 	WriteJSON(rec, http.StatusCreated, payload{Name: "altune"})
 
-	// Status code
 	if rec.Code != http.StatusCreated {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusCreated)
 	}
 
-	// Content-Type
 	ct := rec.Header().Get("Content-Type")
 	if ct != "application/json" {
 		t.Errorf("Content-Type: got %q, want %q", ct, "application/json")
 	}
 
-	// Body
 	var got payload
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode body: %v", err)
