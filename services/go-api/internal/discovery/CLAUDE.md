@@ -6,7 +6,7 @@ Layout:
 
 - `domain/` — `SearchResult`, the enrichment value objects, telemetry events, `FeaturedArtist`, identity read-models.
 - `ports/` — provider, artwork, cache and identity-store interfaces.
-- `service/` — `search.go` (the `Service` orchestrator), `merge.go` / `rank.go` / `diversity.go` (the Merge→Rank→reshape core), `enrich/` (detail-open enrichers), `eval/` (offline harness cores).
+- `service/` — `search.go` (the `Service` orchestrator), `merge.go` / `rank.go` / `diversity.go` (the Merge→Rank→reshape core), `enrich/` (detail-open enrichers), `eval/` (offline harness cores, including `library_corpus.go`'s frozen-corpus load/save).
 - `adapters/` — `providers/` (one file per provider), `cache/`, `persistence/`, `handler/`.
 
 ## Rules

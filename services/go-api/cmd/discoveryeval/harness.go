@@ -28,6 +28,9 @@ func runHarness(
 	if err := maybeWriteJSON(opts.jsonPath, report); err != nil {
 		return err
 	}
+	if err := maybeWriteMetrics(opts.metricsPath, name, report.Metrics()); err != nil {
+		return err
+	}
 	fmt.Print(human(report))
 
 	baselines, err := loadBaselines(opts.baselinesPath)
