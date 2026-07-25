@@ -17,16 +17,6 @@ type UseEnrichmentReturn = {
   isError: boolean;
 };
 
-function hasContent(e: EnrichmentResponse): boolean {
-  return (
-    e.genres.length > 0 ||
-    e.year > 0 ||
-    e.rating > 0 ||
-    e.artwork_url !== '' ||
-    Object.keys(e.external_ids).length > 0
-  );
-}
-
 export function useEnrichment({
   kind,
   title,
@@ -37,7 +27,7 @@ export function useEnrichment({
   const { value, isLoading, isError } = useEnrichmentQuery({
     queryKey: ['enrichment', kind, mbid && mbid !== '' ? mbid : `${title}|${subtitle ?? ''}`],
     queryFn: () => getEnrichment({ kind, title, subtitle, mbid }),
-    hasContent,
+    hasContent: (e) => e.has_content,
     enabled: enabled && (title.trim() !== '' || (mbid ?? '') !== ''),
   });
 

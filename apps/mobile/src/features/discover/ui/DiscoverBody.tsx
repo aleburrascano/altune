@@ -9,7 +9,11 @@ import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from './BlendedSection';
 import { FilteredResults } from './FilteredResults';
 import { kindLabel } from '../state';
-import type { DiscoveryResult, SearchHistoryItem } from '@shared/api-client/discovery';
+import type {
+  DiscoveryResult,
+  ResultSection,
+  SearchHistoryItem,
+} from '@shared/api-client/discovery';
 import type { DiscoverView, ResultsFilter } from '../state';
 import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
 import type { ResultsCommonProps } from './ResultsList';
@@ -39,6 +43,8 @@ export function _searchAnnouncement(view: DiscoverView, resultCount: number): st
 interface SearchData {
   results: DiscoveryResult[];
   query_norm?: string;
+  top_result?: DiscoveryResult | undefined;
+  sections?: ResultSection[];
 }
 
 interface DiscoverBodyProps {
@@ -194,7 +200,12 @@ export function DiscoverBody({
     <View testID="discover-results" style={styles.results}>
       <FilterChips active={filter} onSelect={onFilterChange} />
       {filter === 'all' ? (
-        <BlendedSection results={results} onSeeAll={onFilterChange} common={common} />
+        <BlendedSection
+          sections={searchData?.sections ?? []}
+          topResult={searchData?.top_result}
+          onSeeAll={onFilterChange}
+          common={common}
+        />
       ) : (
         <FilteredResults kind={filter} results={results} common={common} />
       )}

@@ -8,7 +8,7 @@ export function useBackfillFeatured() {
   return useMutation({
     mutationFn: backfillFeaturedArtists,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: libraryKeys.home });
+      void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
       void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
       void queryClient.invalidateQueries({ queryKey: ['album-tracks'] });
     },

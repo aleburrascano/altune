@@ -20,3 +20,13 @@ Consumed by every feature that talks to the backend — discover, library, playl
 **`lyrics.ts` (2026-07-24).** `GET /v1/discovery/lyrics` — plain text, time-synced lines, writers and copyright, for a track identified by title + subtitle. The server always answers 200: an unresolved track returns an empty DTO rather than a 404, so callers branch on emptiness and never on an error status. Go's `omitempty` drops empty slices from the wire, so `synced_lines` and `writers` are coerced to `[]` at the boundary.
 
 **Search paging (2026-07-24).** `searchDiscovery` takes an `offset`; `DiscoverySearchResponse` carries `total`, `offset` and `has_more`. A server that omits them is normalised to a single full page rather than an empty one, so an older API degrades instead of rendering nothing.
+
+## Library, artist content and the structured queue source (2026-07-25)
+
+`library.ts` is new: `getLibraryAlbums` / `getLibraryArtists` against `/v1/library/*`, plus the `AlbumGroup` / `ArtistGroup` / `LibrarySort` wire types. `getTracks` gained `q` and `sort`. Together they are the read side of the collection now that grouping, filtering and sorting happen in SQL (see [library-feature](library-feature.md)).
+
+`enrichment.ts` gained `getArtistContent` — one call returning `{ top_tracks, albums }` — and `getAlbumTracks` takes an optional MusicBrainz external id so the server can merge guest credits. All three enrichment responses carry `has_content`, the server's verdict on whether a section is worth rendering; the client no longer defines per-provider predicates over fields like `bpm`.
+
+`TrackResponse` carries `failure_message` (human copy for a failed acquisition, alongside the machine-readable `failure_reason`) and `PlaylistDetailResponse` carries `total_duration_seconds`.
+
+`playback.ts`'s queue state now sends and receives a structured `source: { kind, playlist_id?, name?, query? }` instead of the packed `source_id` string. The server still emits `source_id` for older clients; this one reads `source`.

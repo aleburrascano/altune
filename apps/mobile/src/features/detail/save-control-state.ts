@@ -1,15 +1,15 @@
-import type { TrackResponse } from '@shared/api-client/types';
+import type { OwnedTrack } from './hooks/useOwnedTrack';
 
 export type SaveControlState = 'add' | 'saving' | 'ready' | 'failed';
 
-export function saveControlState(match: TrackResponse | null): SaveControlState {
-  if (match === null) {
+export function saveControlState(owned: OwnedTrack | null): SaveControlState {
+  if (owned === null) {
     return 'add';
   }
-  if (match.acquisition_status === 'failed') {
+  if (owned.acquisitionStatus === 'failed') {
     return 'failed';
   }
-  if (match.acquisition_status === 'pending') {
+  if (owned.acquisitionStatus === 'pending') {
     return 'saving';
   }
   return 'ready';

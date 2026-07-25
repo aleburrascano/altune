@@ -1,16 +1,9 @@
-import type { TrackResponse } from '@shared/api-client/types';
-
 import { trackExtras } from '../extras-accessors';
 import { resolvePlaySource } from '../play-source';
+import type { OwnedTrack } from '../hooks/useOwnedTrack';
 
-function _match(overrides: Partial<TrackResponse> = {}): TrackResponse {
-  return {
-    id: 'lib-1',
-    title: 'Midnight City',
-    artist: 'M83',
-    acquisition_status: 'ready',
-    ...overrides,
-  } as TrackResponse;
+function _match(overrides: Partial<OwnedTrack> = {}): OwnedTrack {
+  return { trackId: 'lib-1', acquisitionStatus: 'ready', ...overrides };
 }
 
 describe('resolvePlaySource', () => {
@@ -31,7 +24,7 @@ describe('resolvePlaySource', () => {
 
   it('falls back to the preview while acquisition is pending', () => {
     const te = trackExtras({ preview_url: 'https://p.mp3' });
-    expect(resolvePlaySource(te, _match({ acquisition_status: 'pending' }))).toEqual({
+    expect(resolvePlaySource(te, _match({ acquisitionStatus: 'pending' }))).toEqual({
       kind: 'preview',
       previewUrl: 'https://p.mp3',
     });
@@ -44,6 +37,6 @@ describe('resolvePlaySource', () => {
 
   it('resolves to null with no playable source', () => {
     expect(resolvePlaySource(trackExtras({}), null)).toBeNull();
-    expect(resolvePlaySource(trackExtras({}), _match({ acquisition_status: 'failed' }))).toBeNull();
+    expect(resolvePlaySource(trackExtras({}), _match({ acquisitionStatus: 'failed' }))).toBeNull();
   });
 });

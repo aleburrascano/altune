@@ -4,7 +4,7 @@ import { Image as ExpoImage } from 'expo-image';
 
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
-import type { AlbumGroup } from '../hooks/useLibraryGrouping';
+import type { AlbumGroup } from '@shared/api-client/library';
 import { coverColumns } from './gridColumns';
 import type { ListRefresh } from './refresh';
 
@@ -52,9 +52,9 @@ export function AlbumsGrid({
           accessibilityLabel={`${item.album} by ${item.artist}`}
         >
           <View style={[styles.cover, { backgroundColor: theme.color.surface2 }]}>
-            {item.artworkUrl != null ? (
+            {item.artwork_url != null ? (
               <ExpoImage
-                source={{ uri: item.artworkUrl }}
+                source={{ uri: item.artwork_url }}
                 style={styles.coverImage}
                 contentFit="cover"
               />

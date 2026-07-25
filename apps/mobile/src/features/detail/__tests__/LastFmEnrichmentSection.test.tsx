@@ -7,7 +7,8 @@ import type { DiscoveryKind } from '../../../shared/api-client/discovery';
 
 function _enrichment(over: Partial<LastFmEnrichmentResponse> = {}): LastFmEnrichmentResponse {
   return {
-    mbid: '381086ea',
+  has_content: true,
+  mbid: '381086ea',
     listeners: 5172275,
     playcount: 1050884806,
     tags: ['Hip-Hop', 'rap'],
@@ -53,7 +54,8 @@ describe('LastFmEnrichmentSection', () => {
 
   it('renders nothing when there is no displayable content', () => {
     const { queryByTestId } = _render('artist', {
-      mbid: '',
+  has_content: true,
+  mbid: '',
       listeners: 0,
       playcount: 0,
       tags: [],

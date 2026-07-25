@@ -10,6 +10,20 @@ import type {
 
 import { applyServerEvent } from '../applyServerEvent';
 
+type TrackPages = { pages: ListTracksResponse[]; pageParams: number[] };
+
+function seedTracks(qc: QueryClient, items: TrackResponse[]): void {
+  qc.setQueryData<TrackPages>(['library', 'tracks', '', 'recent'], {
+    pages: [{ items, total: items.length, limit: 200, offset: 0, has_more: false }],
+    pageParams: [0],
+  });
+}
+
+function readTracks(qc: QueryClient): TrackResponse[] {
+  return qc.getQueryData<TrackPages>(['library', 'tracks', '', 'recent'])?.pages.flatMap((p) => p.items) ?? [];
+}
+
+
 beforeEach(() => {
   useDownloadStore.getState().reset();
 });
@@ -36,13 +50,7 @@ function makeTrack(overrides: Partial<TrackResponse>): TrackResponse {
 }
 
 function seedLibraryHome(qc: QueryClient, track = makeTrack({ id: 'track-1' })): void {
-  qc.setQueryData<ListTracksResponse>(['library-home'], {
-    items: [track],
-    total: 1,
-    limit: 50,
-    offset: 0,
-    has_more: false,
-  });
+  seedTracks(qc, [track]);
 }
 
 const entries = (): Record<string, unknown> => useDownloadStore.getState().entries;
@@ -63,7 +71,7 @@ describe('applyServerEvent', () => {
     });
 
     expect(phaseOf('track-1')).toBe('finding');
-    const data = qc.getQueryData<ListTracksResponse>(['library-home']);
+    const data = { items: readTracks(qc) };
     expect(data?.items[0]).toMatchObject({ acquisition_status: 'pending', failure_reason: null });
     expect(useDownloadStore.getState().entries['track-1']).toMatchObject({
       title: 'Midnight City',
@@ -107,7 +115,7 @@ describe('applyServerEvent', () => {
       data: { track_id: 'track-1', audio_ref: 'ref-1' },
     });
 
-    const data = qc.getQueryData<ListTracksResponse>(['library-home']);
+    const data = { items: readTracks(qc) };
     expect(data?.items[0]).toMatchObject({ acquisition_status: 'ready', audio_ref: 'ref-1' });
     expect(phaseOf('track-1')).toBe('finishing');
   });
@@ -123,7 +131,7 @@ describe('applyServerEvent', () => {
       data: { track_id: 'track-1', reason: 'no source found' },
     });
 
-    const data = qc.getQueryData<ListTracksResponse>(['library-home']);
+    const data = { items: readTracks(qc) };
     expect(data?.items[0]).toMatchObject({
       acquisition_status: 'failed',
       failure_reason: 'no source found',
@@ -134,13 +142,7 @@ describe('applyServerEvent', () => {
 
   it('inserts a full track from a track_added_to_library payload without refetching (F10)', () => {
     const qc = new QueryClient();
-    qc.setQueryData<ListTracksResponse>(['library-home'], {
-      items: [],
-      total: 0,
-      limit: 50,
-      offset: 0,
-      has_more: false,
-    });
+    seedTracks(qc, []);
     const spy = jest.spyOn(qc, 'invalidateQueries');
 
     applyServerEvent(qc, {
@@ -158,10 +160,10 @@ describe('applyServerEvent', () => {
       },
     });
 
-    const data = qc.getQueryData<ListTracksResponse>(['library-home']);
-    expect(data?.items.map((t) => t.id)).toEqual(['track-9']);
-    expect(data?.total).toBe(1);
-    expect(spy).not.toHaveBeenCalled();
+    expect(readTracks(qc).map((t) => t.id)).toEqual(['track-9']);
+    expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library', 'tracks'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'albums'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'artists'] });
   });
 
   it('falls back to invalidate for a thin track_added payload (track_id only)', () => {
@@ -174,7 +176,7 @@ describe('applyServerEvent', () => {
       data: { track_id: 'track-9' },
     });
 
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['library-home'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'tracks'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'featuring'] });
   });
 
@@ -185,8 +187,8 @@ describe('applyServerEvent', () => {
 
     applyServerEvent(qc, { id: '10', type: 'track_deleted', data: { track_id: 'track-1' } });
 
-    expect(qc.getQueryData<ListTracksResponse>(['library-home'])?.items).toEqual([]);
-    expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library-home'] });
+    expect(readTracks(qc)).toEqual([]);
+    expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library', 'tracks'] });
     expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] });
   });
@@ -207,7 +209,7 @@ describe('applyServerEvent', () => {
 
     applyServerEvent(qc, { id: '', type: 'resync', data: {} });
 
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['library-home'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'tracks'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'featuring'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] });
     expect(spy).toHaveBeenCalledWith({ queryKey: ['playlist'] });
@@ -220,6 +222,7 @@ describe('applyServerEvent', () => {
       name: 'Old',
       track_count: 0,
       preview_artwork_urls: [],
+      total_duration_seconds: 0,
       created_at: 'x',
       updated_at: 'x',
       tracks: [],
@@ -243,6 +246,7 @@ describe('applyServerEvent', () => {
       name: 'PL',
       track_count: 2,
       preview_artwork_urls: [],
+      total_duration_seconds: 0,
       created_at: 'x',
       updated_at: 'x',
       tracks: [makeTrack({ id: 'a' }), makeTrack({ id: 'b' })],
@@ -266,6 +270,7 @@ describe('applyServerEvent', () => {
       name: 'PL',
       track_count: 3,
       preview_artwork_urls: [],
+      total_duration_seconds: 0,
       created_at: 'x',
       updated_at: 'x',
       tracks: [makeTrack({ id: 'a' }), makeTrack({ id: 'b' }), makeTrack({ id: 'c' })],
@@ -302,6 +307,7 @@ describe('applyServerEvent', () => {
       name: 'PL',
       track_count: 2,
       preview_artwork_urls: [],
+      total_duration_seconds: 0,
       created_at: 'x',
       updated_at: 'x',
       tracks: [makeTrack({ id: 'a' })],
@@ -332,7 +338,7 @@ describe('applyServerEvent', () => {
     applyServerEvent(qc, { id: '5', type: 'track_acquisition_completed', data: {} });
 
     expect(
-      qc.getQueryData<ListTracksResponse>(['library-home'])?.items[0]?.acquisition_status,
+      readTracks(qc)[0]?.acquisition_status,
     ).toBe('pending');
     expect(entries()).toEqual({});
   });

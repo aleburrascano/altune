@@ -19,39 +19,6 @@ type UseAlbumTracksReturn = {
   refetch: () => void;
 };
 
-function _normTitle(t: string): string {
-  return t
-    .replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function _mergeFeaturing(
-  primary: DiscoveryResult[],
-  mbTracks: DiscoveryResult[],
-): DiscoveryResult[] {
-  if (mbTracks.length === 0) return primary;
-  const mbByTitle = new Map<string, DiscoveryResult>();
-  for (const t of mbTracks) {
-    mbByTitle.set(_normTitle(t.title), t);
-  }
-  return primary.map((track) => {
-    if (
-      Array.isArray(track.extras['featured_artists']) &&
-      (track.extras['featured_artists'] as unknown[]).length > 0
-    ) {
-      return track;
-    }
-    const mbMatch = mbByTitle.get(_normTitle(track.title));
-    const feat = mbMatch?.extras['featured_artists'];
-    if (Array.isArray(feat) && (feat as unknown[]).length > 0) {
-      return { ...track, extras: { ...track.extras, featured_artists: feat } };
-    }
-    return track;
-  });
-}
-
 export function useAlbumTracks({
   provider,
   externalId,
@@ -60,39 +27,20 @@ export function useAlbumTracks({
   allSources,
   enabled = true,
 }: UseAlbumTracksParams): UseAlbumTracksReturn {
-  const {
-    data: primaryData,
-    isLoading,
-    isError: isQueryError,
-    refetch,
-  } = useQuery({
-    queryKey: ['album-tracks', provider, externalId],
-    queryFn: () => getAlbumTracks(provider, externalId, undefined, albumTitle, albumArtist),
+  const mbExternalId = allSources?.find((s) => s.provider === 'musicbrainz')?.external_id;
+
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['album-tracks', provider, externalId, mbExternalId ?? ''],
+    queryFn: () =>
+      getAlbumTracks(provider, externalId, undefined, albumTitle, albumArtist, mbExternalId),
     enabled,
     staleTime: 1000 * 60 * 30,
   });
 
-  const mbSource = allSources?.find(
-    (s) =>
-      s.provider === 'musicbrainz' && !(s.provider === provider && s.external_id === externalId),
-  );
-
-  const { data: mbQueryData } = useQuery({
-    queryKey: ['album-tracks', 'musicbrainz', mbSource?.external_id ?? ''],
-    queryFn: () => getAlbumTracks('musicbrainz', mbSource!.external_id),
-    enabled: enabled && mbSource !== undefined,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  const primaryTracks = primaryData?.items ?? [];
-  const mbTracks = mbQueryData?.items ?? [];
-
-  const tracks = _mergeFeaturing(primaryTracks, mbTracks);
-
   return {
-    tracks,
+    tracks: data?.items ?? [],
     isLoading,
-    isError: isQueryError || primaryData?.status === 'error',
+    isError: isError || data?.status === 'error',
     refetch,
   };
 }

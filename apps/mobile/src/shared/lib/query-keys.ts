@@ -1,5 +1,12 @@
 export const libraryKeys = {
-  home: ['library-home'] as const,
+  tracksPrefix: ['library', 'tracks'] as const,
+  tracks: (query: string, sort: string) => ['library', 'tracks', query, sort] as const,
+  lookupPrefix: ['library', 'lookup'] as const,
+  lookup: (query: string) => ['library', 'lookup', query] as const,
+  albumsPrefix: ['library', 'albums'] as const,
+  albums: (query: string, sort: string) => ['library', 'albums', query, sort] as const,
+  artistsPrefix: ['library', 'artists'] as const,
+  artists: (query: string, sort: string) => ['library', 'artists', query, sort] as const,
   featuringPrefix: ['library', 'featuring'] as const,
   featuring: (identity: string) => ['library', 'featuring', identity] as const,
 };

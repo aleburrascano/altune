@@ -11,7 +11,7 @@ interface PlaylistData {
   name: string;
   track_count: number;
   preview_artwork_urls: string[];
-  tracks?: { duration_seconds: number | null }[];
+  total_duration_seconds?: number;
 }
 
 interface PlaylistHeroProps {
@@ -25,12 +25,10 @@ interface PlaylistHeroProps {
   onShuffle: () => void;
 }
 
-function formatTotalDuration(tracks: { duration_seconds: number | null }[] | undefined): string {
-  if (!tracks || tracks.length === 0) return '';
-  const totalSec = tracks.reduce((sum, t) => sum + (t.duration_seconds ?? 0), 0);
-  if (totalSec === 0) return '';
-  const hours = Math.floor(totalSec / 3600);
-  const mins = Math.ceil((totalSec % 3600) / 60);
+function formatTotalDuration(totalSeconds: number | undefined): string {
+  if (totalSeconds == null || totalSeconds === 0) return '';
+  const hours = Math.floor(totalSeconds / 3600);
+  const mins = Math.ceil((totalSeconds % 3600) / 60);
   if (hours > 0) return `${hours}h ${mins}m`;
   return `${mins}m`;
 }
@@ -46,7 +44,7 @@ export function PlaylistHero({
   onShuffle,
 }: PlaylistHeroProps): ReactElement {
   const theme = useTheme();
-  const duration = formatTotalDuration(playlist.tracks);
+  const duration = formatTotalDuration(playlist.total_duration_seconds);
   const meta = `${playlist.track_count} ${playlist.track_count === 1 ? 'track' : 'tracks'}${duration ? ` · ${duration}` : ''}`;
 
   return (

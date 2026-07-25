@@ -24,8 +24,8 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
   const genre = extras['genre'];
   const albumArtist = extras['album_artist'];
   const featured = extras['featured_artists'];
-  const trackId = extras['track_id'];
-  const status = extras['acquisition_status'];
+  const trackId = extras['track_id'] ?? extras['owned_track_id'];
+  const status = extras['acquisition_status'] ?? extras['owned_acquisition_status'];
   const preview = extras['preview_url'];
   const mbid = extras['mbid'];
   const trackPosition = extras['track_position'];

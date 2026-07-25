@@ -2,29 +2,18 @@ import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { deleteTrack } from '@shared/api-client/tracks';
-import type { ListTracksResponse } from '@shared/api-client/types';
-import { libraryKeys } from '@shared/lib/query-keys';
+import { removeTrackFromCaches } from '@shared/events/trackCachePatch';
+import { removeTrackStatus } from '@shared/acquisition/trackStatusStore';
 
 export function useDeleteTrack() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (trackId: string) => deleteTrack(trackId),
-    onMutate: async (trackId) => {
-      await queryClient.cancelQueries({ queryKey: libraryKeys.home });
-      const previous = queryClient.getQueryData<ListTracksResponse>(libraryKeys.home);
-      if (previous) {
-        queryClient.setQueryData<ListTracksResponse>(libraryKeys.home, {
-          ...previous,
-          items: previous.items.filter((t) => t.id !== trackId),
-          total: Math.max(0, previous.total - 1),
-        });
-      }
-      return { previous };
+    onMutate: (trackId: string) => {
+      removeTrackFromCaches(queryClient, trackId);
+      removeTrackStatus(trackId);
     },
-    onError: (_err, _trackId, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(libraryKeys.home, context.previous);
-      }
+    onError: () => {
       Alert.alert('Delete failed', 'Could not remove the track. Please try again.');
     },
   });

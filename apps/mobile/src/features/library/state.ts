@@ -1,4 +1,3 @@
-import type { TrackResponse } from '@shared/api-client/types';
 import { asyncView } from '@shared/lib/async-view';
 
 export type ScreenView = 'loading' | 'error' | 'empty' | 'list';
@@ -6,7 +5,7 @@ export type ScreenView = 'loading' | 'error' | 'empty' | 'list';
 export function _viewForState(state: {
   isLoading: boolean;
   error: Error | null;
-  items: readonly TrackResponse[];
+  items: readonly unknown[];
 }): ScreenView {
   const view = asyncView({
     isLoading: state.isLoading,

@@ -9,6 +9,7 @@ const page = (offset: number, count: number, hasMore: boolean): DiscoverySearchR
     query: 'q',
     query_norm: 'q',
     results: Array.from({ length: count }, () => ({}) as never),
+    sections: [],
     providers: [],
     partial: false,
     cache: { hit: false, fetched_at: null },

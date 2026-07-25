@@ -21,3 +21,9 @@ The screen was profile card + sign-out + the featured-artist backfill. It now al
 - **Privacy** — "Clear search history", which previously existed only buried in the Discover empty state. `useClearSearchHistory` optimistically empties the cache and invalidates on failure, so a failed delete restores the still-populated history rather than lying about being cleared.
 - **Offline downloads** — track count and bytes, read from disk rather than summed from the pinned index (the number people check is space actually used, and the two can drift), plus remove-all behind a confirm.
 - **Version** — from `expo-constants`, so it tracks `app.json` without a second place to bump. The string people read back in a bug report.
+
+## Backfill invalidation follows the new cache families (2026-07-25)
+
+`useBackfillFeatured`'s `onSuccess` contract is unchanged in spirit — every cache that renders featured credits must be invalidated — but the keys moved. `libraryKeys.home` no longer exists; the library's track list is a family keyed by `(query, sort)`, so the hook invalidates the `libraryKeys.tracksPrefix` prefix instead, alongside the featuring family and `album-tracks`.
+
+The rule still stands and is still easy to break: a new surface that renders featured artists needs adding here, or it shows stale credits after a backfill.

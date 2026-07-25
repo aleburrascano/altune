@@ -13,7 +13,8 @@ jest.mock('../../../shared/api-client/enrichment', () => ({
 
 function _enrichment(over: Partial<LastFmEnrichmentResponse> = {}): LastFmEnrichmentResponse {
   return {
-    mbid: '381086ea-f511-4aba-bdf9-71c753dc5077',
+  has_content: true,
+  mbid: '381086ea-f511-4aba-bdf9-71c753dc5077',
     listeners: 5172275,
     playcount: 1050884806,
     tags: ['Hip-Hop', 'rap'],
@@ -26,6 +27,7 @@ function _enrichment(over: Partial<LastFmEnrichmentResponse> = {}): LastFmEnrich
 }
 
 const _empty: LastFmEnrichmentResponse = {
+  has_content: false,
   mbid: '',
   listeners: 0,
   playcount: 0,

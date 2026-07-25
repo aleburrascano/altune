@@ -14,3 +14,9 @@ The one real invariant lives in `detail-handoff.ts`: it is the **in-memory seam 
 **`isNetworkError.ts` (2026-07-24).** The transport-failure classifier promoted out of `features/auth/lib/` on its second consumer. Library and Discover use it to tell "you are offline" from "the server failed" in their error copy; auth additionally maps `'network'` to distinct wording. The heuristic is knowingly approximate — one regex over the error message — but it is the only connectivity signal available without NetInfo, which is a native module and would need a new dev build.
 
 **`query-keys.ts`** also now owns `discoveryKeys`, promoted out of `features/discover/keys.ts` when Settings gained "Clear search history" and needed `discoveryKeys.history` to invalidate after the server delete. A shared home beats a cross-feature import, and this file already declares itself the single declaration of the cache topology.
+
+## `derive-library-groups.ts` is gone (2026-07-25)
+
+`deriveAlbums` / `deriveArtists` folded a `TrackResponse[]` into album and artist groups on the device. Both are now SQL `GROUP BY`s behind `/v1/library/albums` and `/v1/library/artists`, and the group types live in `@shared/api-client/library` as wire types (see [library-feature](library-feature.md)).
+
+`query-keys.ts` changed shape with it: `libraryKeys.home` is replaced by four families — `tracks(query, sort)`, `lookup(query)`, `albums(query, sort)` and `artists(query, sort)` — each with a prefix for the SSE patch layer to sweep.

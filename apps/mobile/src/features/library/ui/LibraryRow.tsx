@@ -13,7 +13,6 @@ import { Artwork } from '@shared/ui/primitives/Artwork';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import type { TrackResponse } from '../../../shared/api-client/types';
-import { formatFailureReason } from './formatFailureReason';
 
 type LibraryRowProps = {
   track: TrackResponse;
@@ -165,7 +164,7 @@ function LibraryRowImpl({
               style={styles.failed}
               numberOfLines={1}
             >
-              {retrying ? 'Retrying…' : formatFailureReason(track.failure_reason)}
+              {retrying ? 'Retrying…' : (track.failure_message ?? 'Acquisition failed')}
             </Text>
             {onRetry != null ? (
               retrying ? (
@@ -230,6 +229,7 @@ export const LibraryRow = memo(LibraryRowImpl, (prev, next) => {
     a.duration_seconds === b.duration_seconds &&
     a.acquisition_status === b.acquisition_status &&
     a.failure_reason === b.failure_reason &&
+    a.failure_message === b.failure_message &&
     prev.retrying === next.retrying &&
     prev.isPlaying === next.isPlaying &&
     (prev.onPlay == null) === (next.onPlay == null) &&

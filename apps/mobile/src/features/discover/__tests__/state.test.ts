@@ -1,12 +1,4 @@
-import {
-  _cap,
-  _groupByKind,
-  _sectionOrder,
-  _topResult,
-  _viewForState,
-  kindLabel,
-  resultKey,
-} from '../state';
+import { _viewForState, kindLabel, resultKey } from '../state';
 
 import type {
   DiscoveryKind,
@@ -28,6 +20,7 @@ const _empty = (): DiscoverySearchResponse => ({
   query: 'q',
   query_norm: 'q',
   results: [],
+  sections: [],
   providers: [],
   partial: false,
   cache: { hit: false, fetched_at: null },
@@ -110,54 +103,6 @@ describe('_viewForState', () => {
   });
 });
 
-describe('_groupByKind', () => {
-  it('returns empty buckets for empty input', () => {
-    expect(_groupByKind([])).toEqual({ albums: [], tracks: [], artists: [] });
-  });
-
-  it('partitions by kind', () => {
-    const grouped = _groupByKind([
-      _result('artist', 'Che'),
-      _result('album', 'Rest in Bass'),
-      _result('track', 'Some Track'),
-    ]);
-    expect(grouped.albums.map((r) => r.title)).toEqual(['Rest in Bass']);
-    expect(grouped.tracks.map((r) => r.title)).toEqual(['Some Track']);
-    expect(grouped.artists.map((r) => r.title)).toEqual(['Che']);
-  });
-
-  it('preserves backend order within each kind', () => {
-    const grouped = _groupByKind([
-      _result('album', 'A1'),
-      _result('album', 'A2'),
-      _result('album', 'A3'),
-    ]);
-    expect(grouped.albums.map((r) => r.title)).toEqual(['A1', 'A2', 'A3']);
-  });
-});
-
-describe('_topResult', () => {
-  it('returns null for empty input', () => {
-    expect(_topResult([])).toBeNull();
-  });
-
-  it('returns the first entry (backend-ranked top result)', () => {
-    const top = _result('album', 'Rest in Bass');
-    expect(_topResult([top, _result('track', 'Other')])).toBe(top);
-  });
-});
-
-describe('_cap', () => {
-  it('returns at most `cap` items, preserving order', () => {
-    const items = Array.from({ length: 15 }, (_, i) => i);
-    expect(_cap(items, 10)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-  });
-
-  it('returns all items when fewer than the cap', () => {
-    expect(_cap([1, 2, 3], 10)).toEqual([1, 2, 3]);
-  });
-});
-
 describe('kindLabel', () => {
   it('maps track to the UI noun Song, singular and plural', () => {
     expect(kindLabel('track')).toBe('Song');
@@ -197,25 +142,3 @@ describe('resultKey', () => {
   });
 });
 
-describe('_sectionOrder', () => {
-  it('orders sections by the kind whose best member ranks earliest', () => {
-    const results = [
-      _result('track', 'Creep'),
-      _result('album', 'Creep EP'),
-      _result('track', 'Creep (Live)'),
-      _result('artist', 'Creep'),
-    ];
-    expect(_sectionOrder(results)).toEqual(['track', 'album', 'artist']);
-  });
-
-  it('omits kinds with no results', () => {
-    expect(_sectionOrder([_result('artist', 'Che'), _result('album', 'Rest in Bass')])).toEqual([
-      'artist',
-      'album',
-    ]);
-  });
-
-  it('returns empty for no results', () => {
-    expect(_sectionOrder([])).toEqual([]);
-  });
-});

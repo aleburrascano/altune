@@ -1,21 +1,19 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { deriveAlbums } from '@shared/lib/derive-library-groups';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
-import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
 import { trackExtras } from '../extras-accessors';
 import { openDetail, type DetailRoute } from '../navigation';
-import { findTrackInLibraryCache } from '../helpers/find-track-in-library-cache';
+import { ownedFromExtras } from './useOwnedTrack';
 import { saveControlState, type SaveControlState } from '../save-control-state';
-import { playButtonState, splitOwned, type OwnedSplit } from '../owned-playback';
+import { playButtonState, splitOwned, toPlaybackQueue, type OwnedSplit } from '../owned-playback';
 import { toCreateTrackRequest } from '../save-cache';
 import { useArtistContent } from './useArtistContent';
 import { useArtistDiscovery } from './useArtistDiscovery';
+import { useLibraryAlbumsForArtist } from './useLibraryAlbumsForArtist';
 import { useLibraryTracksForArtist } from './useLibraryTracks';
 import { useSaveTrack } from './useSaveTrack';
 
@@ -37,7 +35,7 @@ export type ArtistDetailState = {
   onTrackPress: (track: DiscoveryResult) => void;
   onAlbumPress: (album: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
-  saveStateFor: (title: string, subtitle: string | null) => SaveControlState;
+  saveStateFor: (track: DiscoveryResult) => SaveControlState;
   owned: OwnedSplit;
   playButton: { label: string; disabled: boolean };
   onPlayOwned: () => void;
@@ -49,7 +47,6 @@ export function useArtistDetailState(
   isFromLibrary?: boolean,
 ): ArtistDetailState {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const save = useSaveTrack();
   const queue = useQueuePlayback();
   const hasSources = !isFromLibrary && result.sources.length > 0;
@@ -71,9 +68,6 @@ export function useArtistDetailState(
       : result.sources;
   const shouldFetchContent = effectiveSources.length > 0 && exploreExpanded;
 
-  const effectiveMbid =
-    (hasSources ? trackExtras(result.extras).mbid : discoverySearch.mbid) ?? undefined;
-
   const {
     topTracks: apiTopTracks,
     albums: apiAlbums,
@@ -86,23 +80,11 @@ export function useArtistDetailState(
   } = useArtistContent({
     sources: effectiveSources,
     artistName: result.title,
-    ...(effectiveMbid ? { mbid: effectiveMbid } : {}),
     enabled: shouldFetchContent,
   });
 
   const libraryTracksAsDiscovery = localTracks.map(trackToDiscoveryResult);
-  const libraryAlbums: DiscoveryResult[] = deriveAlbums(localTracks).map((g) => ({
-    kind: 'album' as const,
-    title: g.album,
-    subtitle: g.artist,
-    image_url: g.artworkUrl,
-    confidence: 'high' as const,
-    sources: [],
-    extras: {
-      track_count: g.trackCount,
-      ...(g.year != null ? { year: g.year } : {}),
-    },
-  }));
+  const libraryAlbums = useLibraryAlbumsForArtist(result.title, !hasSources);
 
   const topTracks = hasSources ? apiTopTracks : libraryTracksAsDiscovery;
   const isLoadingTracks = hasSources ? apiLoadingTracks : false;
@@ -129,18 +111,15 @@ export function useArtistDetailState(
     );
   };
 
-  const saveStateFor = (title: string, subtitle: string | null): SaveControlState =>
-    saveControlState(findTrackInLibraryCache(queryClient, title, subtitle));
+  const saveStateFor = (track: DiscoveryResult): SaveControlState =>
+    saveControlState(ownedFromExtras(trackExtras(track.extras)));
 
-  const owned = splitOwned(topTracks, (title, subtitle) =>
-    findTrackInLibraryCache(queryClient, title, subtitle),
-  );
+  const owned = splitOwned(topTracks);
 
   const onPlayOwned = (): void => {
-    const first = owned.playable[0];
-    if (first === undefined) return;
-    const { playable, startIndex } = buildPlayableQueue(owned.playable, first.id);
-    queue.playFromList(playable, startIndex, { kind: 'library' });
+    const playable = toPlaybackQueue(owned.playable, result.title, result.image_url);
+    if (playable.length === 0) return;
+    queue.playFromList(playable, 0, { kind: 'library' });
   };
 
   return {

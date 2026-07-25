@@ -11,6 +11,8 @@ Structure:
 - Never import across features. Extraction to `shared/` requires 2+ real consumers.
 - Use path aliases (`@/`, `@features/`, `@shared/`) over relative `../../` beyond one level.
 - Navigate with `useRouter` from `expo-router`, and use the typed route paths.
+- Read grouped, filtered and sorted collections from the API; never re-derive them on the device (`@shared/api-client/library`).
+- Read a track's ownership from the server stamp on a result, overlaid with `@shared/acquisition/trackStatusStore` for liveness; never hold the whole library to answer it.
 
 Platform:
 

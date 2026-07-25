@@ -1,6 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
-
-import type { TrackResponse } from '@shared/api-client/types';
+import { useRef, useState } from 'react';
 
 const DEBOUNCE_MS = 300;
 const MIN_CHARS = 2;
@@ -10,8 +8,6 @@ interface UseLibrarySearchReturn {
   onChangeText: (text: string) => void;
   onSubmit: () => void;
   onClear: () => void;
-  filter: (tracks: readonly TrackResponse[]) => readonly TrackResponse[];
-  matches: (text: string) => boolean;
   hasQuery: boolean;
   query: string;
 }
@@ -52,31 +48,11 @@ export function useLibrarySearch(): UseLibrarySearchReturn {
     setCommittedQuery('');
   };
 
-  const queryLower = committedQuery.toLowerCase();
-
-  const filterFn = useMemo(() => {
-    if (!queryLower) return (tracks: readonly TrackResponse[]) => tracks;
-    return (tracks: readonly TrackResponse[]) =>
-      tracks.filter(
-        (t) =>
-          t.title.toLowerCase().includes(queryLower) ||
-          t.artist.toLowerCase().includes(queryLower) ||
-          (t.album != null && t.album.toLowerCase().includes(queryLower)),
-      );
-  }, [queryLower]);
-
-  const matches = useMemo(() => {
-    if (!queryLower) return () => true;
-    return (text: string) => text.toLowerCase().includes(queryLower);
-  }, [queryLower]);
-
   return {
     inputValue,
     onChangeText,
     onSubmit,
     onClear,
-    filter: filterFn,
-    matches,
     hasQuery: committedQuery.length > 0,
     query: committedQuery,
   };

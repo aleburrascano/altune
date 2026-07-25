@@ -7,6 +7,7 @@ Mobile screen for the unified music search surface: greeting + "Discover" title 
 ## Rules
 
 - Keep the state machine in `state.ts` as a pure function; JSX branches stay trivial wrappers.
+- Render the blended view from the response `sections` and `top_result`; never regroup, reorder or cap the slate on the device.
 - Import query keys from the `discoveryKeys` factory in `@shared/lib/query-keys` — never write a `['discovery', …]` literal.
 - Never compute `result_signature` client-side; echo what the wire returns.
 - Never persist history on a debounced query — only explicit submits pass `save_history=true`.
@@ -31,7 +32,7 @@ Why each rule exists: `okf/mobile/discover-feature.md` — read before structura
 
 ### Files
 
-- [state.ts](state.ts) — pure `_viewForState` + blended-view helpers (`_groupByKind`, `_topResult`, `_sectionOrder`, `_cap`); no RN imports so jest runs without RN transform.
+- [state.ts](state.ts) — pure `_viewForState` + the display helpers `kindLabel` / `resultKey`; no RN imports so jest runs without RN transform.
 - [tap.ts](tap.ts) — `stashHandoffForDetail`; the navigation seam, unit-testable without rendering.
 - [search-state.ts](search-state.ts) — feature-local last query/input, so detail→back preserves the search.
 - [hooks/useDiscoverSearch.ts](hooks/useDiscoverSearch.ts) — `useQuery<DiscoverySearchResponse>` keyed on trimmed query; `enabled` only when query non-empty.
@@ -43,7 +44,7 @@ Why each rule exists: `okf/mobile/discover-feature.md` — read before structura
 ### Public API surface
 
 - `DiscoverScreen` (default export of [ui/DiscoverScreen.tsx](ui/DiscoverScreen.tsx)) — consumed by `apps/mobile/src/app/(tabs)/discover/index.tsx`.
-- `_viewForState` + blended-view helpers — exported for unit testing; not consumed by other features.
+- `_viewForState`, `kindLabel`, `resultKey` — exported for unit testing; not consumed by other features.
 
 ### Dependencies on other features / shared
 
@@ -57,7 +58,7 @@ Why each rule exists: `okf/mobile/discover-feature.md` — read before structura
 
 ### Test files
 
-- [__tests__/state.test.ts](__tests__/state.test.ts) — `_viewForState` (all five view-state branches) + blended-view helpers.
+- [__tests__/state.test.ts](__tests__/state.test.ts) — `_viewForState` (all five view-state branches) + `kindLabel` / `resultKey`.
 - [__tests__/tap.test.ts](__tests__/tap.test.ts) — `stashHandoffForDetail`.
 
 <!-- AUTO-MAINTAINED:END -->

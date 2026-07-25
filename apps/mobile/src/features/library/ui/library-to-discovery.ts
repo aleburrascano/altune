@@ -1,18 +1,17 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-
-import type { AlbumGroup, ArtistGroup } from '../hooks/useLibraryGrouping';
+import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
 
 export function albumToDiscoveryResult(album: AlbumGroup): DiscoveryResult {
   return {
     kind: 'album',
     title: album.album,
     subtitle: album.artist,
-    image_url: album.artworkUrl,
+    image_url: album.artwork_url,
     confidence: 'high',
     sources: [],
     extras: {
       ...(album.year != null ? { year: album.year } : {}),
-      track_count: album.trackCount,
+      track_count: album.track_count,
     },
   };
 }
@@ -22,7 +21,7 @@ export function artistToDiscoveryResult(artist: ArtistGroup): DiscoveryResult {
     kind: 'artist',
     title: artist.artist,
     subtitle: null,
-    image_url: artist.artworkUrl,
+    image_url: artist.artwork_url,
     confidence: 'high',
     sources: [],
     extras: {},

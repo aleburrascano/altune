@@ -1,43 +1,41 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { getTracks } from '@shared/api-client/tracks';
-import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/types';
+import { libraryKeys } from '@shared/lib/query-keys';
 
-function useLibraryHomeData(): ListTracksResponse | undefined {
-  const queryClient = useQueryClient();
-  const cached = queryClient.getQueryData<ListTracksResponse>(['library-home']);
+const LOOKUP_LIMIT = 200;
 
+const norm = (s: string | null): string => (s ?? '').toLowerCase().trim();
+
+function useLibraryLookup(search: string): TrackResponse[] {
+  const trimmed = search.trim();
   const { data } = useQuery({
-    queryKey: ['library-home'],
-    queryFn: () => getTracks({ limit: 2000, offset: 0 }),
-    enabled: cached == null,
-    staleTime: Infinity,
+    queryKey: libraryKeys.lookup(trimmed),
+    queryFn: () => getTracks({ limit: LOOKUP_LIMIT, offset: 0, q: trimmed }),
+    enabled: trimmed.length > 0,
+    staleTime: 60_000,
   });
-
-  return cached ?? data;
+  return data?.items ?? [];
 }
 
 export function useLibraryTracksForAlbum(
   albumTitle: string,
   artist: string | null,
 ): TrackResponse[] {
-  const homeData = useLibraryHomeData();
-  if (!homeData) return [];
+  const candidates = useLibraryLookup(albumTitle);
+  const albumNorm = norm(albumTitle);
+  const artistNorm = norm(artist);
 
-  const albumNorm = albumTitle.toLowerCase().trim();
-  const artistNorm = (artist ?? '').toLowerCase().trim();
-
-  return homeData.items.filter((t) => {
-    const tAlbum = (t.album ?? '').toLowerCase().trim();
-    const tArtist = (t.album_artist ?? t.artist).toLowerCase().trim();
+  return candidates.filter((t) => {
+    const tAlbum = norm(t.album);
+    const tArtist = norm(t.album_artist ?? t.artist);
     return tAlbum === albumNorm && (artistNorm === '' || tArtist === artistNorm);
   });
 }
 
 export function useLibraryTracksForArtist(artistName: string): TrackResponse[] {
-  const homeData = useLibraryHomeData();
-  if (!homeData) return [];
-
-  const artistNorm = artistName.toLowerCase().trim();
-  return homeData.items.filter((t) => t.artist.toLowerCase().trim() === artistNorm);
+  const candidates = useLibraryLookup(artistName);
+  const artistNorm = norm(artistName);
+  return candidates.filter((t) => norm(t.artist) === artistNorm);
 }
