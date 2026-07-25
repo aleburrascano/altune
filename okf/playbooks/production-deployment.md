@@ -22,7 +22,7 @@ verified_commit: 6a047a008fb23b38e719d9a9a3e9b539ab349d4d
 - **Candidate never goes healthy** → its logs are dumped, it is stopped, the script exits 1. Caddy is never reloaded; the upstream file is never rewritten. The live colour did not notice a deploy happened.
 - **Public check fails after the flip** → the upstream is rewritten back to the previous colour, Caddy is reloaded again, the candidate is stopped, exit 1. This is why the old colour is stopped only *after* the public verify: it is the rollback target, and stopping it first would leave nothing to fall back to.
 
-The old colour is stopped, never removed, so `deploy/rollback.sh` can bring it straight back (start → health-gate → flip → verify) without a rebuild. The workflow prints that command on any failure.
+The old colour is stopped, never removed, so `deploy/rollback.sh` can bring it straight back (start → health-gate → flip → verify) without a rebuild. The workflow prints that command on any failure; run it from `services/go-api` on the VM, either as `./deploy/rollback.sh` (the scripts are committed executable) or `bash deploy/rollback.sh`. It health-gates the returning colour exactly as a deploy does, so a rollback to a version that no longer boots refuses to move traffic rather than trading one outage for another.
 
 **Why the health check runs through the Caddy container** rather than from the runner: the candidate has no published port and no DNS name outside the compose network, and checking it from GitHub would only prove Caddy answers — which it does, on the *old* colour. The gate has to interrogate the candidate directly.
 
