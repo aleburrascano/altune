@@ -17,6 +17,7 @@ var providerRateLimits = map[string]rate.Limit{
 	"itunes.apple.com":      0.5,
 	"ws.audioscrobbler.com": 5,
 	"music.youtube.com":     2,
+	"api.discogs.com":       1,
 }
 
 type liveTransport struct {
