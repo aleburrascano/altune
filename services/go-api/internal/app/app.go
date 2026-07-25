@@ -47,6 +47,7 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/leader"
 	"altune/go-api/internal/shared/logging"
 	sharedRedis "altune/go-api/internal/shared/redis"
 
@@ -71,6 +72,30 @@ type App struct {
 	eventFeed      *eventtap.Feed
 	providerHealth *providerhealth.Store
 	evalMeter      *evalmeter.Meter
+
+	election         *leader.Election
+	backgroundStarts []func(context.Context)
+}
+
+const backgroundLockKey int64 = 8_246_113_907_441_002
+
+func (a *App) whenLeader(start func(context.Context)) {
+	a.backgroundStarts = append(a.backgroundStarts, start)
+}
+
+func (a *App) startBackgroundWhenLeader(ctx context.Context) {
+	a.election = leader.NewElection(a.pool, backgroundLockKey)
+	a.election.Start(ctx)
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		if !a.election.Await(ctx) {
+			return
+		}
+		for _, start := range a.backgroundStarts {
+			start(ctx)
+		}
+	}()
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
@@ -138,6 +163,11 @@ func (a *App) Run(ctx context.Context) error {
 			a.scheduler.Shutdown(ctx)
 		}
 	})
+	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
+		if a.election != nil {
+			a.election.Shutdown(ctx)
+		}
+	})
 	a.drainBackground(30 * time.Second)
 
 	a.cleanup()
@@ -198,6 +228,7 @@ func (a *App) setup(ctx context.Context) error {
 	a.wireAdmin(ctx, r, verifier, tap, disc.requestStore, disc.searchSvc, disc.artistSvc)
 
 	a.startAlertMonitor(ctx)
+	a.startBackgroundWhenLeader(ctx)
 
 	a.server = &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
@@ -361,7 +392,7 @@ func (a *App) wireAdmin(
 	}
 
 	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.buildEvalRunner())
-	a.evalMeter.Start(ctx)
+	a.whenLeader(a.evalMeter.Start)
 	adminH := adminHandler.New(a.dependencyHealth, a.logRing).
 		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).
 		WithEventFeed(a.eventFeed).
@@ -457,7 +488,7 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 	}
 
 	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...)
-	a.alertMonitor.Start(ctx)
+	a.whenLeader(a.alertMonitor.Start)
 }
 
 func buildCoverageCondition(pool *pgxpool.Pool, threshold int) adminAlert.Condition {
@@ -603,6 +634,10 @@ func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.Metri
 }
 
 func (a *App) startTicker(ctx context.Context, interval time.Duration, fn func()) {
+	a.whenLeader(func(ctx context.Context) { a.runTicker(ctx, interval, fn) })
+}
+
+func (a *App) runTicker(ctx context.Context, interval time.Duration, fn func()) {
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
@@ -631,8 +666,10 @@ func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) 
 	a.vocabRefresh = discoveryService.NewVocabularyRefreshService(
 		charts, vocabStore, 6*time.Hour, 50,
 	)
-	a.vocabRefresh.Start()
-	slog.Info("vocabulary refresh started")
+	a.whenLeader(func(context.Context) {
+		a.vocabRefresh.Start()
+		slog.Info("vocabulary refresh started")
+	})
 }
 
 func (a *App) buildChartProviders() []discoveryPorts.ChartProvider {

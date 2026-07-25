@@ -75,3 +75,15 @@ The ordering is load-bearing and slightly awkward: `wireDiscovery` runs first (c
 `catalogWiring` exposes `setTrackNumberSvc` for the same reason: the bridge writes through catalog's service, not its repo, so the fill-only policy stays in one place.
 
 Both dependencies are optional at the handler - nil means results ship unstamped and no track numbers are filled, which is what the eval and re-run harnesses get.
+
+## Background loops start only on the leader (2026-07-25)
+
+`setup` ends with `startBackgroundWhenLeader`, which constructs a `leader.Election` (see [shared-infra](shared-infra.md)) over the pgx pool and spawns one goroutine that waits on `Await(ctx)` and then runs every start function registered through `whenLeader`.
+
+Five wiring sites moved from starting a loop directly to registering it: the eval meter, the alert monitor, the vocabulary refresh, the behavioural refresh (in `discovery_wiring.go`) and `startTicker`, which itself covers the corpus refresh and the metrics rollup. `startTicker` was split — `runTicker` keeps the old body and `startTicker` became the registration — so that every periodic loop in the composition root passes through one gate rather than each call site remembering to ask.
+
+The gate lives here, in the composition root, rather than inside each component, and that is the point: leadership is a deployment concern, not a property of the alert monitor or the vocabulary refresh. Threading a `gate func() bool` into five constructors across three bounded contexts would have spread a fact about how the service is *deployed* into code that has no business knowing it, and each new loop would silently opt out by forgetting to accept the option. Registration inverts that — a loop that is never registered simply never starts, which fails loudly in testing rather than quietly in production.
+
+Deferred starts receive the same `ctx` as immediate ones, and each component's `Shutdown` already no-ops when `Start` was never called, so a standby process that never wins the election shuts down cleanly. `Election.Shutdown` runs in the shutdown sequence after the acquisition scheduler drains, releasing the advisory lock so the incoming deploy colour takes over without waiting for its retry.
+
+Why this exists at all: blue-green deploys run two versions concurrently (see [production-deployment](../playbooks/production-deployment.md)). Request handling is safe under that, periodic loops are not.

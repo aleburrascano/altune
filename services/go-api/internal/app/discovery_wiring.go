@@ -172,8 +172,10 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	)
 
 	if a.cfg.BehavioralRankingEnabled {
-		searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
-		slog.Info("behavioral ranking refresh started")
+		a.whenLeader(func(ctx context.Context) {
+			searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
+			slog.Info("behavioral ranking refresh started")
+		})
 	}
 
 	a.startCorpusRefresh(ctx, eventStore)
