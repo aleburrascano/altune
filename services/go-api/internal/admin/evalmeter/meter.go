@@ -1,7 +1,3 @@
-// Package evalmeter runs the Mission Control discovery-eval meter: a background
-// ticker that periodically scores the live search pipeline against a small fixed
-// smoke-query set and exposes the latest score to the console. It is a lifecycle
-// component, not a handler — the admin handler only reads Status().
 package evalmeter
 
 import (
@@ -11,12 +7,8 @@ import (
 	"time"
 )
 
-// defaultInterval is deliberately long: a live eval run hits real provider
-// APIs and competes with user traffic for per-provider quota.
 const defaultInterval = 6 * time.Hour
 
-// QueryResult is one smoke query's outcome in an eval run: whether the
-// expected result landed in the top-K, and at what position (-1 if absent).
 type QueryResult struct {
 	Query    string `json:"query"`
 	Expect   string `json:"expect"`
@@ -24,7 +16,6 @@ type QueryResult struct {
 	Position int    `json:"position"`
 }
 
-// Result is the outcome of one discovery-eval run.
 type Result struct {
 	Score     float64
 	Baseline  float64
@@ -32,13 +23,8 @@ type Result struct {
 	Queries   []QueryResult
 }
 
-// Runner performs one eval run. It MUST use a dedicated client that bypasses
-// the shared per-provider circuit breakers (so eval failures never trip the
-// breakers live search depends on) and a small fixed smoke query set.
 type Runner func(ctx context.Context) (Result, error)
 
-// Meter periodically runs the discovery eval and exposes the latest score.
-// It is inert unless explicitly enabled AND given a runner.
 type Meter struct {
 	enabled  bool
 	interval time.Duration
@@ -61,8 +47,6 @@ func New(enabled bool, interval time.Duration, runner Runner) *Meter {
 	return &Meter{enabled: enabled, interval: interval, runner: runner}
 }
 
-// Start launches the eval ticker. It no-ops when disabled or when no runner is
-// wired, so the meter is safe to construct unconditionally.
 func (m *Meter) Start(ctx context.Context) {
 	if !m.enabled || m.runner == nil {
 		return
@@ -77,7 +61,7 @@ func (m *Meter) loop(ctx context.Context) {
 	defer close(m.done)
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
-	m.runOnce(ctx) // one run on start so the meter isn't empty for a full interval
+	m.runOnce(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -89,13 +73,9 @@ func (m *Meter) loop(ctx context.Context) {
 }
 
 func (m *Meter) runOnce(ctx context.Context) {
-	m.mu.Lock()
-	if m.running {
-		m.mu.Unlock()
-		return // skip-if-running: never overlap eval runs
+	if !m.claimRunSlotIfIdle() {
+		return
 	}
-	m.running = true
-	m.mu.Unlock()
 
 	res, err := m.runner(ctx)
 
@@ -113,10 +93,27 @@ func (m *Meter) runOnce(ctx context.Context) {
 	m.mu.Unlock()
 }
 
-// Status is the meter's wire shape for the console.
+const (
+	StateDisabled   = "disabled"
+	StateNoData     = "no_data"
+	StateOK         = "ok"
+	StateRegression = "regression"
+	StateError      = "error"
+)
+
+func (m *Meter) claimRunSlotIfIdle() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.running {
+		return false
+	}
+	m.running = true
+	return true
+}
+
 type Status struct {
 	Enabled  bool          `json:"enabled"`
-	State    string        `json:"state"` // disabled | no_data | ok | regression | error
+	State    string        `json:"state"`
 	Score    *float64      `json:"score,omitempty"`
 	Baseline *float64      `json:"baseline,omitempty"`
 	LastRun  *time.Time    `json:"last_run,omitempty"`
@@ -131,20 +128,20 @@ func (m *Meter) Status() Status {
 	st := Status{Enabled: m.enabled}
 	switch {
 	case !m.enabled:
-		st.State = "disabled"
+		st.State = StateDisabled
 	case m.lastErr != "":
-		st.State = "error"
+		st.State = StateError
 		st.Error = m.lastErr
 		if !m.lastRun.IsZero() {
 			lr := m.lastRun
 			st.LastRun = &lr
 		}
 	case m.last == nil:
-		st.State = "no_data"
+		st.State = StateNoData
 	default:
-		st.State = "ok"
+		st.State = StateOK
 		if m.last.Regressed {
-			st.State = "regression"
+			st.State = StateRegression
 		}
 		score, base, lr := m.last.Score, m.last.Baseline, m.lastRun
 		st.Score, st.Baseline, st.LastRun = &score, &base, &lr
@@ -153,7 +150,6 @@ func (m *Meter) Status() Status {
 	return st
 }
 
-// Shutdown stops the ticker, waiting up to the context deadline.
 func (m *Meter) Shutdown(ctx context.Context) {
 	if m.cancel == nil {
 		return

@@ -49,7 +49,7 @@ func TestTransport_RecordsAndDeliversFullBody(t *testing.T) {
 	rt := NewTransport(fakeRT{resp: respWith("full-body-bytes")}, s)
 
 	resp, _ := rt.RoundTrip(reqWithCorr("c1"))
-	got, _ := io.ReadAll(resp.Body) // caller still gets the whole body
+	got, _ := io.ReadAll(resp.Body)
 	if string(got) != "full-body-bytes" {
 		t.Fatalf("caller body = %q, want full", got)
 	}

@@ -1,10 +1,3 @@
-// Package alert runs the Mission Control in-process alert monitor: it evaluates
-// operator-relevant conditions on a ticker and pushes a notification when one
-// transitions into a firing state. It implements the data-consistency
-// Fix→Log→Signal cascade — only Signal-tier conditions page the operator.
-//
-// The monitor cannot observe the box being fully down (it dies with the box);
-// that gap is covered off-box by the U9 uptime check.
 package alert
 
 import (
@@ -13,39 +6,29 @@ import (
 	"time"
 )
 
-// Severity follows the Fix→Log→Signal cascade. Only Signal pages the operator.
 type Severity int
 
 const (
-	SeverityFix    Severity = iota // self-healed; not surfaced
-	SeverityLog                    // recorded; not paged
-	SeveritySignal                 // page the operator
+	SeverityFix Severity = iota
+	SeverityLog
+	SeveritySignal
 )
 
-// Alert is the payload pushed to the operator. Its Message MUST carry only
-// operational state names — never connection strings, hostnames, or user ids.
 type Alert struct {
 	Title    string
 	Message  string
 	Severity Severity
 }
 
-// AlertNotifier delivers an alert out of band. Defined here, where it is
-// consumed, per "interfaces belong to consumers".
 type AlertNotifier interface {
 	Notify(ctx context.Context, a Alert) error
 }
 
-// Condition is one monitored signal. Eval returns a non-nil Alert while the
-// condition is firing and nil while healthy; Key identifies the incident so the
-// monitor can dedup (fire once per incident, reset on recovery).
 type Condition struct {
 	Key  string
 	Eval func(ctx context.Context) *Alert
 }
 
-// Monitor evaluates its conditions on a ticker in a single goroutine, so its
-// incident-tracking state needs no locking.
 type Monitor struct {
 	notifier   AlertNotifier
 	conditions []Condition
@@ -67,7 +50,6 @@ func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Co
 	}
 }
 
-// Start launches the monitor loop. Call Shutdown to stop it.
 func (m *Monitor) Start(ctx context.Context) {
 	loopCtx, cancel := context.WithCancel(ctx)
 	m.cancel = cancel
@@ -103,7 +85,7 @@ func (m *Monitor) evaluate(ctx context.Context) {
 		}
 
 		if wasFiring {
-			continue // already paged for this incident; don't spam
+			continue
 		}
 		m.firing[c.Key] = true
 
@@ -117,7 +99,6 @@ func (m *Monitor) evaluate(ctx context.Context) {
 	}
 }
 
-// Shutdown stops the monitor loop, waiting up to the context deadline.
 func (m *Monitor) Shutdown(ctx context.Context) {
 	if m.cancel == nil {
 		return

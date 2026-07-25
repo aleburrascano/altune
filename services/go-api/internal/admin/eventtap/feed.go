@@ -10,14 +10,9 @@ import (
 const (
 	feedRateWindow = 60 * time.Second
 	feedSubSize    = 64
-	// perTypeCap bounds memory between Rates() prunes if one type fires heavily.
-	perTypeCap = 1024
+	perTypeCap     = 1024
 )
 
-// Feed is the single consumer of the bus system-wide tap. It keeps per-type
-// rolling rates and fans the redacted events out to connected SSE clients. All
-// state is guarded by one mutex; only the loop goroutine and handler calls
-// touch it.
 type Feed struct {
 	mu      sync.Mutex
 	recent  map[string][]time.Time
@@ -35,8 +30,6 @@ func NewFeed() *Feed {
 	}
 }
 
-// Start subscribes to the tap and begins consuming. If the tap already has a
-// consumer the feed degrades to empty (logs, does not crash).
 func (f *Feed) Start(ctx context.Context, tap *Tap) {
 	ch, cancelTap, err := tap.SubscribeAll()
 	if err != nil {
@@ -83,8 +76,6 @@ func (f *Feed) record(evt TapEvent) {
 	f.mu.Unlock()
 }
 
-// Rates returns per-type event counts within the rolling window, pruning stale
-// timestamps as it goes.
 func (f *Feed) Rates() map[string]int {
 	cutoff := time.Now().UTC().Add(-feedRateWindow)
 	f.mu.Lock()
@@ -105,8 +96,6 @@ func (f *Feed) Rates() map[string]int {
 	return out
 }
 
-// Subscribe registers one SSE client on the fan-out and returns its channel
-// plus a cancel that unregisters and closes it.
 func (f *Feed) Subscribe() (<-chan TapEvent, func()) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -124,7 +113,6 @@ func (f *Feed) Subscribe() (<-chan TapEvent, func()) {
 	}
 }
 
-// Shutdown stops the feed loop, waiting up to the context deadline.
 func (f *Feed) Shutdown(ctx context.Context) {
 	if f.cancel == nil {
 		return

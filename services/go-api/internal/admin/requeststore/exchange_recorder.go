@@ -8,11 +8,6 @@ import (
 	"time"
 )
 
-// ExchangeRecorder is a one-shot recording RoundTripper for the re-run inspector:
-// it captures every exchange (body capped) in call order into a flat list. Unlike
-// the corr_id-keyed transport it is scoped to a single operator-triggered re-run,
-// so a full-body read is acceptable — the bodies are capped and the recorder is
-// discarded after the response is serialized.
 type ExchangeRecorder struct {
 	base    http.RoundTripper
 	bodyCap int
@@ -21,7 +16,6 @@ type ExchangeRecorder struct {
 	exchanges []Exchange
 }
 
-// NewExchangeRecorder wraps base, capping each retained body at bodyCap bytes.
 func NewExchangeRecorder(base http.RoundTripper, bodyCap int) *ExchangeRecorder {
 	if base == nil {
 		base = http.DefaultTransport
@@ -46,7 +40,7 @@ func (r *ExchangeRecorder) RoundTrip(req *http.Request) (*http.Response, error) 
 
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	resp.Body = io.NopCloser(bytes.NewReader(body)) // restore full body to the caller
+	resp.Body = io.NopCloser(bytes.NewReader(body))
 	ex.Status = resp.StatusCode
 	if len(body) > r.bodyCap {
 		ex.RespBody = string(body[:r.bodyCap])
@@ -64,7 +58,6 @@ func (r *ExchangeRecorder) add(ex Exchange) {
 	r.mu.Unlock()
 }
 
-// Exchanges returns a copy of everything recorded, in call order.
 func (r *ExchangeRecorder) Exchanges() []Exchange {
 	r.mu.Lock()
 	defer r.mu.Unlock()

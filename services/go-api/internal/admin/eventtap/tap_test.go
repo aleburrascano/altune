@@ -17,7 +17,6 @@ func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
 	}
 	defer cancel()
 
-	// A user with no prior state (lazy init) must still appear on the tap.
 	freshUser := shared.NewUserId(uuid.New())
 	tp.Publish(freshUser, "track_added", map[string]any{"track_id": "secret"})
 
@@ -49,7 +48,7 @@ func TestSubscribeAll_SingleConsumer(t *testing.T) {
 
 func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
 	tp := New(events.NewInProcessBus())
-	_, cancel, err := tp.SubscribeAll() // never drained
+	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
 	}
@@ -57,7 +56,7 @@ func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
 
 	user := shared.NewUserId(uuid.New())
 	for i := 0; i < tapChanSize*3; i++ {
-		tp.Publish(user, "spam", nil) // must not block despite a full tap
+		tp.Publish(user, "spam", nil)
 	}
 	if tp.Dropped() == 0 {
 		t.Error("expected some tap drops once the consumer buffer filled")
@@ -71,7 +70,6 @@ func TestTap_ReleasedAfterCancel(t *testing.T) {
 		t.Fatalf("SubscribeAll: %v", err)
 	}
 	cancel()
-	// After cancel a new consumer may subscribe.
 	_, cancel2, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("re-subscribe after cancel: %v", err)

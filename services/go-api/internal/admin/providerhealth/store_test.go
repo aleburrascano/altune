@@ -14,20 +14,19 @@ func TestStore_StatusMixAndCurrent(t *testing.T) {
 		t.Fatalf("snapshot len = %d, want 2", len(snap))
 	}
 
-	// Ordered by provider name: deezer, discogs.
 	if snap[0].Provider != "deezer" || snap[1].Provider != "discogs" {
 		t.Fatalf("providers not ordered by name: %s, %s", snap[0].Provider, snap[1].Provider)
 	}
 
 	discogs := snap[1]
-	if discogs.Current != "circuit_open" {
-		t.Errorf("current = %q, want circuit_open (most recent)", discogs.Current)
+	if discogs.CurrentStatus != "circuit_open" {
+		t.Errorf("current = %q, want circuit_open (most recent)", discogs.CurrentStatus)
 	}
-	if discogs.Counts["circuit_open"] != 2 || discogs.Counts["ok"] != 1 {
-		t.Errorf("counts = %v, want 2 circuit_open + 1 ok", discogs.Counts)
+	if discogs.CountsPerStatus["circuit_open"] != 2 || discogs.CountsPerStatus["ok"] != 1 {
+		t.Errorf("counts = %v, want 2 circuit_open + 1 ok", discogs.CountsPerStatus)
 	}
-	if discogs.Total != 3 {
-		t.Errorf("total = %d, want 3", discogs.Total)
+	if discogs.TotalCalls != 3 {
+		t.Errorf("total = %d, want 3", discogs.TotalCalls)
 	}
 }
 

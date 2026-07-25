@@ -8,11 +8,6 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
-// RecordSearch attaches the query, user, per-provider results, and final ranked
-// list to the request record keyed by the context's correlation id — the same
-// key the recording transport captured the raw provider exchanges under. Called
-// at the discovery handler boundary, off the ranking path. No-op when the request
-// carries no correlation id.
 func (s *Store) RecordSearch(
 	ctx context.Context,
 	query string,
@@ -35,12 +30,6 @@ func (s *Store) RecordSearch(
 	rec.Final = ProjectResults(final)
 }
 
-// RecordContentFetch attaches a detail-screen fetch (artist discography,
-// top-tracks, related) to the request record keyed by the context's correlation id
-// — the trace an operator reads to see what came up when a detail screen was
-// opened, including each item's year and consensus verdict so ordering/metadata
-// bugs are visible. Raw provider exchanges live under the same key. No-op without a
-// correlation id.
 func (s *Store) RecordContentFetch(
 	ctx context.Context,
 	kind, provider, artist, status string,
@@ -66,9 +55,9 @@ func projectDetailRows(items []domain.SearchResult) []DetailRow {
 	out := make([]DetailRow, 0, len(items))
 	for _, it := range items {
 		out = append(out, DetailRow{
-			Title:  it.Title,
-			Year:   it.Year,
-			Status: extraStr(it, "consensus_status"),
+			Title:            it.Title,
+			Year:             it.Year,
+			ConsensusVerdict: extraStr(it, "consensus_status"),
 		})
 	}
 	return out
@@ -81,8 +70,6 @@ func extraStr(r domain.SearchResult, key string) string {
 	return ""
 }
 
-// ProjectStatuses projects per-provider search responses into the display rows the
-// console reads. Exported so the re-run inspector can reuse the same shape.
 func ProjectStatuses(statuses []domain.ProviderSearchResponse) []ProviderTrace {
 	out := make([]ProviderTrace, 0, len(statuses))
 	for _, st := range statuses {
@@ -97,20 +84,19 @@ func ProjectStatuses(statuses []domain.ProviderSearchResponse) []ProviderTrace {
 	return out
 }
 
-// ProjectResults projects domain results into the display rows the console reads.
 func ProjectResults(results []domain.SearchResult) []ResultRow {
 	out := make([]ResultRow, 0, len(results))
 	for _, r := range results {
 		out = append(out, ResultRow{
-			Kind:           r.Kind.String(),
-			Title:          r.Title,
-			Subtitle:       r.Subtitle,
-			ImageURL:       r.ImageURL,
-			Sources:        sourceNames(r.Sources),
-			ArtworkSource:  r.ArtworkSource,
-			ArtworkPath:    extraStr(r, "artwork_path"),
-			ResolutionTier: extraStr(r, "resolution_tier"),
-			Confidence:     r.Confidence.String(),
+			Kind:                  r.Kind.String(),
+			Title:                 r.Title,
+			Subtitle:              r.Subtitle,
+			ImageURL:              r.ImageURL,
+			Sources:               sourceNames(r.Sources),
+			ArtworkSource:         r.ArtworkSource,
+			ArtworkResolutionPath: extraStr(r, "artwork_path"),
+			ResolutionTier:        extraStr(r, "resolution_tier"),
+			Confidence:            r.Confidence.String(),
 		})
 	}
 	return out

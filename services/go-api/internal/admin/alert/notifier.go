@@ -8,14 +8,10 @@ import (
 	"time"
 )
 
-// NopNotifier is used when no push channel is configured. The monitor still
-// runs and logs firing conditions; nothing is pushed out of band.
 type NopNotifier struct{}
 
 func (NopNotifier) Notify(context.Context, Alert) error { return nil }
 
-// NtfyNotifier pushes alerts to an ntfy topic URL via a plain HTTP POST. The
-// topic should be a non-guessable random string supplied via configuration.
 type NtfyNotifier struct {
 	url    string
 	client *http.Client
