@@ -1,10 +1,14 @@
-# Deploy the Go API to the OCI production VM.
+# Deploy the Go API to the OCI production VM, blue-green.
 #
-# Mirrors the manual runbook: SSH in, fast-forward `main`, rebuild the
-# docker-compose stack. The VM deploys from `main` only.
+# SSH in, fast-forward `main`, then hand the swap to deploy/blue-green.sh:
+# it builds the idle colour, health-gates it before any traffic moves, flips
+# the Caddy upstream, and rolls back if the public check fails. The live
+# colour keeps serving throughout. The VM deploys from `main` only.
 #
 # Triggers on pushes to `main` that touch the backend (or manually).
 # Schema migrations stay MANUAL by design — see the "migrations" guard below.
+# Blue-green runs both versions against one database during the swap, so a
+# migration must stay compatible with the outgoing version (expand/contract).
 #
 # Required repo secrets (Settings → Secrets and variables → Actions):
 #   DEPLOY_HOST     e.g. altune.duckdns.org
@@ -74,23 +78,17 @@ jobs:
             git checkout main
             git pull --ff-only origin main
             cd services/go-api
-            # Clear any stale renamed container from an interrupted recreate.
-            # Compose renames the old container to "<id>_altune-go-api" before
-            # swapping; an interrupted swap leaves it behind and the next recreate
-            # fails with a name conflict. Match only the renamed leftovers (the
-            # "_altune-go-api" suffix) so the live "altune-go-api" is untouched and
-            # keeps serving during the rebuild.
-            docker ps -aq --filter "name=_altune-go-api" | xargs -r docker rm -f || true
-            docker compose -f docker-compose.prod.yml up --build -d
-            docker compose -f docker-compose.prod.yml ps
+            # Builds the idle colour, health-gates it, then flips Caddy onto it.
+            # A build or health failure leaves the live colour serving and exits
+            # non-zero; a post-flip failure rolls the upstream back. The script
+            # owns the whole swap, so nothing here needs to touch containers.
+            PUBLIC_HEALTH_URL="https://${{ secrets.DEPLOY_HOST }}/health" \
+              bash deploy/blue-green.sh
             docker image prune -f
 
-      - name: Health check
+      - name: Report rollback command on failure
+        if: failure()
         run: |
-          for i in 1 2 3 4 5; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "https://${{ secrets.DEPLOY_HOST }}/health" || true)
-            if [ "$code" = "200" ]; then echo "health OK"; exit 0; fi
-            echo "attempt $i: /health -> $code, retrying..."; sleep 10
-          done
-          echo "::error title=Health check failed::/health did not return 200"
-          exit 1
+          echo "::error title=Deploy failed::The previous version is still serving."
+          echo "To force a manual rollback, SSH to the VM and run:"
+          echo "  cd /home/ubuntu/altune/services/go-api && bash deploy/rollback.sh"

@@ -17,4 +17,8 @@ RUN apk add --no-cache \
 
 USER altune
 COPY --from=build /app /app
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:8000/health || exit 1
+
 ENTRYPOINT ["/app"]

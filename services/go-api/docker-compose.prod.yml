@@ -1,25 +1,32 @@
+x-go-api: &go-api
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  env_file:
+    - .env.production
+  environment:
+    - OPERATOR_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524
+    - EVAL_METER_ENABLED=true
+    - SUPABASE_ANON_KEY=sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
+  volumes:
+    - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
+  tmpfs:
+    - /tmp:size=1G
+  depends_on:
+    redis:
+      condition: service_healthy
+
 services:
-  go-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: altune-go-api
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env.production
-    environment:
-      - OPERATOR_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524
-      - EVAL_METER_ENABLED=true
-      - SUPABASE_ANON_KEY=sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
-    volumes:
-      - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
-    tmpfs:
-      - /tmp:size=1G
-    depends_on:
-      redis:
-        condition: service_healthy
+  go-api-blue:
+    <<: *go-api
+    image: altune-go-api:blue
+    container_name: altune-go-api-blue
+
+  go-api-green:
+    <<: *go-api
+    image: altune-go-api:green
+    container_name: altune-go-api-green
 
   redis:
     image: redis:7-alpine
@@ -41,6 +48,7 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/upstream.conf:/etc/caddy/upstream.conf:ro
       - caddy-data:/data
       - caddy-config:/config
 

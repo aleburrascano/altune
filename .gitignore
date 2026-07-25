@@ -78,3 +78,6 @@ CLAUDE.local.md
 # ---- Discovery eval harness run artifacts (keep library.json snapshot) ----
 services/api/scripts/discovery_eval/data/report_*.md
 services/api/scripts/discovery_eval/data/report_*.json
+
+# Blue-green active-upstream pointer, written on the VM by deploy/blue-green.sh
+services/go-api/caddy/upstream.conf
