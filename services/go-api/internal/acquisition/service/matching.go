@@ -12,19 +12,10 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 )
 
-// featuredRe captures the featured-artist blob after a feat/ft/featuring marker,
-// up to a bracket or end of string. "with" is deliberately excluded — it mangles
-// real titles like "Stuck with U" (the same reason textnorm dropped it).
 var featuredRe = regexp.MustCompile(`(?i)\b(?:featuring|feat|ft)\.?\s+([^()\[\]]+)`)
 
-// featSepRe splits a featured-artist blob into individual names ("A & B", "A, B").
 var featSepRe = regexp.MustCompile(`(?i)\s*(?:,|&|\band\b)\s*`)
 
-// extractFeaturedArtists pulls the featured-artist names out of a title's
-// "feat./ft./featuring X" marker. Returns nil when the title carries no feature.
-// NOTE: NormalizeForMatch strips bracketed segments, so by the time identityScore
-// compares titles the "(feat. X)" is gone — the matcher is blind to features. This
-// reads the RAW title to recover that lost signal for feature-aware ranking.
 func extractFeaturedArtists(title string) []string {
 	m := featuredRe.FindStringSubmatch(title)
 	if m == nil {
@@ -40,12 +31,6 @@ func extractFeaturedArtists(title string) []string {
 	return out
 }
 
-// featureMatch reports whether a candidate is consistent with the track's feature.
-// When the track names featured artists, a candidate must mention every one of
-// them in its (raw, un-normalized) title — otherwise it is a different recording
-// (the solo cut / official video that the duration-blind identity score cannot
-// tell apart). A track with no feature imposes no requirement (every candidate
-// passes), so solo-track acquisition is unaffected.
 func featureMatch(trackTitle, candidateTitle string) bool {
 	feats := extractFeaturedArtists(trackTitle)
 	if len(feats) == 0 {
@@ -65,10 +50,6 @@ const (
 	durationTight = 3
 	durationLoose = 15
 
-	// Same-recording tolerance for post-download verification (durationWithinTolerance):
-	// the larger of an absolute slack and a fraction of the expected length. The same
-	// recording from any source runs the same length within a few seconds (intro/outro
-	// or silence trimming); a larger gap means a different recording.
 	durationMatchSlackSecs = 15.0
 	durationMatchFraction  = 0.07
 )
@@ -81,10 +62,6 @@ func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
 	combinedScore := textnorm.TokenSortRatio(combined, candidateNorm)
 	titleOnlyScore := textnorm.TokenSortRatio(titleOnly, candidateNorm)
 
-	// Penalize title-only matches: without artist context the match is
-	// ambiguous (e.g., "Die Hard" matches Kendrick's "DIE HARD" by title
-	// alone). The penalty discourages selecting a wrong-artist candidate
-	// when a combined artist+title match exists.
 	titleOnlyScore *= 0.6
 
 	return math.Max(combinedScore, titleOnlyScore)
@@ -143,17 +120,11 @@ func isTopicChannel(channel string) bool {
 }
 
 func artistMatchesChannel(trackArtist, channel string) bool {
-	// Strip spaces so spaceless VEVO/official channels ("TheWeekndVEVO") still
-	// match the spaced artist name ("The Weeknd").
 	artistNorm := strings.ReplaceAll(textnorm.NormalizeForMatch(trackArtist), " ", "")
 	channelNorm := strings.ReplaceAll(textnorm.NormalizeForMatch(channel), " ", "")
 	return strings.Contains(channelNorm, artistNorm)
 }
 
-// candidateEntry is a candidate scored against the track: identity/metadata
-// ranks plus the artist- and feature-consistency signals. classifyCandidates
-// computes all of it up front; which fields a bucket's sort.Slice comparator
-// reads depends on whether the candidate landed in the Topic or other bucket.
 type candidateEntry struct {
 	ident       float64
 	meta        float64
@@ -162,11 +133,6 @@ type candidateEntry struct {
 	candidate   ports.AudioCandidate
 }
 
-// rankCandidates returns every identity-passing candidate ordered best-first.
-// Topic-channel candidates rank ahead of all others (artist-matching Topic first,
-// then by identity); non-Topic candidates follow, ordered by identity then
-// metadata. Selection takes element 0; the acquisition pipeline walks the rest as
-// fallbacks when a downloaded file fails duration verification.
 func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate) []ports.AudioCandidate {
 	if len(candidates) == 0 {
 		return nil
@@ -188,9 +154,6 @@ func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.Audi
 		if other[i].ident != other[j].ident {
 			return other[i].ident > other[j].ident
 		}
-		// Feature-consistency breaks an identity tie: a "(feat. X)" track prefers a
-		// candidate that names X over an equally-scored solo cut / official video
-		// (identity can't see the stripped "(feat. X)"). See featureMatch.
 		if other[i].featMatch != other[j].featMatch {
 			return other[i].featMatch
 		}
@@ -207,9 +170,6 @@ func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.Audi
 	return ranked
 }
 
-// durationWithinTolerance reports whether an acquired file's actual duration is
-// close enough to the track's expected (catalog-provider) duration to be the same
-// recording. Callers must only invoke it when the expected duration is known.
 func durationWithinTolerance(expected, actual float64) bool {
 	tolerance := math.Max(durationMatchSlackSecs, expected*durationMatchFraction)
 	return math.Abs(expected-actual) <= tolerance
@@ -225,8 +185,6 @@ func maxViewCount(candidates []ports.AudioCandidate) int64 {
 	return maxViews
 }
 
-// classifyCandidates scores every candidate, drops those below the identity
-// gate, and splits the survivors into Topic-channel and other buckets.
 func classifyCandidates(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate, maxViews int64) (topic, other []candidateEntry) {
 
 	for _, c := range candidates {
@@ -262,4 +220,3 @@ func classifyCandidates(ctx context.Context, track TrackRef, candidates []ports.
 
 	return topic, other
 }
-

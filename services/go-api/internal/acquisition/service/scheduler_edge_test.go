@@ -12,9 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// blockingRepo holds the first GetByID inside the goroutine (signaling started,
-// then waiting on release) so the inflight-dedup window can be tested
-// deterministically. It returns (nil, nil) so Execute exits quickly once freed.
 type blockingRepo struct {
 	started chan struct{}
 	release chan struct{}
@@ -41,8 +38,8 @@ func TestBackgroundScheduler_Schedule_DedupsInflight(t *testing.T) {
 	trackId := domain.NewTrackId()
 
 	scheduler.Schedule(userId, trackId, "")
-	<-repo.started                          // first goroutine is in-flight (inflight key set)
-	scheduler.Schedule(userId, trackId, "") // same track → must be deduped (skipped)
+	<-repo.started
+	scheduler.Schedule(userId, trackId, "")
 	close(repo.release)
 	wg.Wait()
 
@@ -86,8 +83,6 @@ func (r *panicRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.UserId
 }
 func (r *panicRepo) Update(_ context.Context, _ *domain.Track) error { return nil }
 
-// A panic inside an acquisition goroutine must be recovered, not crash the
-// process; the WaitGroup must still drain.
 func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
 	svc := NewAcquireTrackAudioService(&panicRepo{}, &fakeAudioSearcher{}, newFakeAudioStore())
 
@@ -96,5 +91,5 @@ func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
 
 	scheduler.Schedule(shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
-	wg.Wait() // returns only if the panic was recovered and wg.Done ran
+	wg.Wait()
 }

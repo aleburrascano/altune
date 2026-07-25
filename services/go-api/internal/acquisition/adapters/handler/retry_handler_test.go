@@ -15,21 +15,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// --- test constants ---
-
 var (
 	retryTestUserUUID = uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	retryTestUserId   = shared.NewUserId(retryTestUserUUID)
 )
 
-// --- fake token verifier ---
-
-// retryVerifyAsTestUser always succeeds and returns retryTestUserId.
 var retryVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
 	return retryTestUserId, nil
 })
-
-// --- fake track repo ---
 
 type retryFakeTrackRepo struct {
 	tracks map[string]*catdomain.Track
@@ -83,8 +76,6 @@ func (r *retryFakeTrackRepo) seed(t *catdomain.Track) {
 	r.tracks[t.ID.String()] = t
 }
 
-// --- fake scheduler ---
-
 type retryFakeScheduler struct {
 	scheduled []catdomain.TrackId
 }
@@ -92,8 +83,6 @@ type retryFakeScheduler struct {
 func (s *retryFakeScheduler) Schedule(_ shared.UserId, trackId catdomain.TrackId, _ string) {
 	s.scheduled = append(s.scheduled, trackId)
 }
-
-// --- helpers ---
 
 func retryServe(t *testing.T, router chi.Router, method, path string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -111,7 +100,6 @@ func retryAssertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	}
 }
 
-// suppress unused import warning
 var _ = io.NopCloser
 
 func makeRetryTrack(userId shared.UserId, title, artist, album string) *catdomain.Track {
@@ -139,14 +127,12 @@ func buildRetryRouter(trackRepo *retryFakeTrackRepo, scheduler *retryFakeSchedul
 	return r
 }
 
-// ==================== Tests ====================
-
 func TestHandleRetryAcquisition(t *testing.T) {
 	tests := []struct {
-		name           string
-		setup          func(*retryFakeTrackRepo) string
-		wantStatus     int
-		wantScheduled  bool
+		name          string
+		setup         func(*retryFakeTrackRepo) string
+		wantStatus    int
+		wantScheduled bool
 	}{
 		{
 			name: "failed track returns 202 and schedules retry",
@@ -194,16 +180,13 @@ func TestHandleRetryAcquisition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			repo := newRetryFakeTrackRepo()
 			scheduler := &retryFakeScheduler{}
 			trackId := tt.setup(repo)
 			router := buildRetryRouter(repo, scheduler)
 
-			// Act
 			rec := retryServe(t, router, http.MethodPost, "/tracks/"+trackId+"/retry")
 
-			// Assert
 			retryAssertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantScheduled && len(scheduler.scheduled) == 0 {
@@ -217,16 +200,13 @@ func TestHandleRetryAcquisition(t *testing.T) {
 }
 
 func TestHandleRetryAcquisition_NoAuth(t *testing.T) {
-	// Arrange
 	repo := newRetryFakeTrackRepo()
 	scheduler := &retryFakeScheduler{}
 	router := buildRetryRouter(repo, scheduler)
 
-	// Act
 	req := httptest.NewRequest(http.MethodPost, "/tracks/"+uuid.New().String()+"/retry", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	// Assert
 	retryAssertStatus(t, rec, http.StatusUnauthorized)
 }

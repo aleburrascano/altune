@@ -12,30 +12,24 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-// AcquisitionStatus is the in-memory snapshot of the background acquisition
-// pipeline for the operator console. In-memory only — resets on restart.
 type AcquisitionStatus struct {
-	InFlight  int         `json:"in_flight"`
-	Succeeded uint64      `json:"succeeded"`
-	Failed    uint64      `json:"failed"`
-	Jobs      []JobRecord `json:"jobs"`   // current queued/running jobs
-	Recent    []JobRecord `json:"recent"` // recent terminal outcomes, newest first (failures carry their reason)
+	InFlight   int         `json:"in_flight"`
+	Succeeded  uint64      `json:"succeeded"`
+	Failed     uint64      `json:"failed"`
+	ActiveJobs []JobRecord `json:"jobs"`
+	Recent     []JobRecord `json:"recent"`
 }
 
-// BackgroundAcquisitionScheduler runs acquisition jobs on goroutines gated by a
-// semaphore, deduping in-flight work per track. Job execution lives here; the
-// operator-console telemetry those jobs produce lives in jobLog.
 type BackgroundAcquisitionScheduler struct {
 	svc      *AcquireTrackAudioService
 	events   events.Publisher
 	wg       *sync.WaitGroup
 	sem      chan struct{}
 	cancel   context.CancelFunc
-	baseCtx  context.Context // owned lifecycle context (not a request ctx); cancelled on Shutdown
+	baseCtx  context.Context
 	closed   atomic.Bool
 	inflight sync.Map
 
-	// Operator-console in-flight counter; succeeded/failed totals live on log.
 	inflightCount atomic.Int64
 
 	log *jobLog
@@ -62,9 +56,6 @@ func NewBackgroundAcquisitionScheduler(
 	return s
 }
 
-// WithSchedulerEvents wires the publisher the per-job reporter uses for
-// track_acquisition_progress events. Without it (eval/test paths) stage
-// transitions only land on the operator-console job record.
 func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.events = pub }
 }
@@ -104,7 +95,7 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 		case s.sem <- struct{}{}:
 			defer func() { <-s.sem }()
 		case <-s.baseCtx.Done():
-			s.log.complete(key, "cancelled", "")
+			s.log.complete(key, JobCancelled, "")
 			slog.Info("acquisition.cancelled_before_start", "track_id", key)
 			return
 		}
@@ -119,13 +110,10 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 				"track_id", key, "error", err)
 			return
 		}
-		s.log.complete(key, "succeeded", "")
+		s.log.complete(key, JobSucceeded, "")
 	}()
 }
 
-// schedulerJobReporter is the per-job jobReporter the scheduler hands the acquire
-// pipeline via context, so live metadata + stage transitions land on the job
-// record the operator console reads and on the user's event stream.
 type schedulerJobReporter struct {
 	log     *jobLog
 	events  events.Publisher
@@ -138,9 +126,6 @@ func (r schedulerJobReporter) meta(title, artist, album string) {
 }
 func (r schedulerJobReporter) stage(name string) {
 	r.log.update(r.trackID, func(j *JobRecord) { j.Stage = name })
-	// Push the stage transition to the user's event stream so the client can
-	// show "Finding source… / Downloading… / Finishing up…" live. Guarded for
-	// the eval/test paths that build the scheduler without an event publisher.
 	if r.events != nil {
 		r.events.Publish(r.userId, "track_acquisition_progress", map[string]any{
 			"track_id": r.trackID,
@@ -150,23 +135,21 @@ func (r schedulerJobReporter) stage(name string) {
 }
 func (r schedulerJobReporter) source(url string) {
 	r.log.update(r.trackID, func(j *JobRecord) {
-		if j.Source == "" {
-			j.Source = url
+		if j.ResolvedSource == "" {
+			j.ResolvedSource = url
 		}
 	})
 }
 
-// Status returns the in-memory acquisition pipeline snapshot for the operator
-// console.
 func (s *BackgroundAcquisitionScheduler) Status() AcquisitionStatus {
 	jobs, recent := s.log.snapshot()
 	succeeded, failed := s.log.counts()
 	return AcquisitionStatus{
-		InFlight:  int(s.inflightCount.Load()),
-		Succeeded: succeeded,
-		Failed:    failed,
-		Jobs:      jobs,
-		Recent:    recent,
+		InFlight:   int(s.inflightCount.Load()),
+		Succeeded:  succeeded,
+		Failed:     failed,
+		ActiveJobs: jobs,
+		Recent:     recent,
 	}
 }
 

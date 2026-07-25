@@ -7,13 +7,6 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-// buildsteps_test pins the acquisition pipeline's step ASSEMBLY — the glue that
-// RunPipeline's generic test and the per-step tests don't cover. The load-bearing
-// invariant: the pipeline runs all six steps —
-// search → select → download → tag → store → update_track — in order. A
-// regression here (a reordered or dropped step) would otherwise only surface
-// end-to-end.
-
 func stepNames(steps []Step) []string {
 	names := make([]string, len(steps))
 	for i, s := range steps {

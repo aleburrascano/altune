@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 )
 
-// fileWritingSearcher writes a real file into the outDir it is given, so the
-// DownloadStep's temp-dir lifecycle can be exercised end to end.
 type fileWritingSearcher struct {
 	writeFile bool
 	err       error

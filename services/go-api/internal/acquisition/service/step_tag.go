@@ -15,9 +15,6 @@ func NewTagStep(tagger ports.AudioTagger) *TagStep { return &TagStep{tagger: tag
 
 func (s *TagStep) Name() string { return "tag" }
 
-// Execute writes the track's metadata into the downloaded file via the tagger
-// port. Tagging failure is logged and swallowed — it must never fail the
-// pipeline. Without a tagger wired the step is a no-op.
 func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	if ac.TempPath == "" || s.tagger == nil {
 		return nil

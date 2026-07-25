@@ -15,16 +15,11 @@ import (
 	"time"
 )
 
-// FfprobeProber inspects a downloaded audio file with ffmpeg tooling: ffprobe for
-// duration, ffmpeg for decode validation. It implements acquisition's AudioProber
-// port, used to verify a downloaded file before it is stored.
 type FfprobeProber struct {
 	ffprobe string
 	ffmpeg  string
 }
 
-// NewFfprobeProber resolves the ffprobe/ffmpeg binaries near the configured ffmpeg
-// location (yt-dlp's --ffmpeg-location dir), falling back to the bare name on PATH.
 func NewFfprobeProber(ffmpegLocation string) *FfprobeProber {
 	return &FfprobeProber{
 		ffprobe: resolveBinary("ffprobe", ffmpegLocation),
@@ -80,13 +75,6 @@ func (p *FfprobeProber) ProbeDuration(ctx context.Context, filePath string) (flo
 	return duration, nil
 }
 
-// ValidateDecodable decodes the whole stream to null and reports an error if the
-// decoder rejects the audio. ffprobe/ProbeDuration only reads container metadata,
-// so a file with a valid header but corrupt samples passes duration verification
-// yet fails here — the exact defect that shipped undecodable m4a files. A non-zero
-// ffmpeg exit means the samples don't decode. If ffmpeg itself cannot be run
-// (missing binary, timeout), validation is skipped rather than blocking acquisition
-// on an unavailable validator — mirroring ProbeDuration's fail-open stance.
 func (p *FfprobeProber) ValidateDecodable(ctx context.Context, filePath string) error {
 	decodeCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()

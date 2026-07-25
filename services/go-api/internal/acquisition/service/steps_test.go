@@ -13,10 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// --- SearchStep ---
-
 func TestSearchStep_Execute(t *testing.T) {
-	// Arrange
 	searcher := &fakeAudioSearcher{
 		searchResults: []ports.AudioCandidate{
 			{
@@ -45,10 +42,8 @@ func TestSearchStep_Execute(t *testing.T) {
 		},
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -64,7 +59,6 @@ func TestSearchStep_Execute(t *testing.T) {
 }
 
 func TestSearchStep_Execute_NoCandidates(t *testing.T) {
-	// Arrange
 	searcher := &fakeAudioSearcher{
 		searchResults: []ports.AudioCandidate{},
 	}
@@ -76,10 +70,8 @@ func TestSearchStep_Execute_NoCandidates(t *testing.T) {
 		},
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert
 	if err == nil {
 		t.Fatal("expected error for no candidates, got nil")
 	}
@@ -89,7 +81,6 @@ func TestSearchStep_Execute_NoCandidates(t *testing.T) {
 }
 
 func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
-	// Arrange: searcher returns an error for every query
 	searcher := &fakeAudioSearcher{
 		searchResults: nil,
 		searchErr:     fmt.Errorf("network timeout"),
@@ -102,10 +93,8 @@ func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
 		},
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert: all queries failed, so 0 candidates => error
 	if err == nil {
 		t.Fatal("expected error when all searches fail, got nil")
 	}
@@ -115,7 +104,6 @@ func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
 }
 
 func TestSearchStep_Execute_DeduplicatesByURL(t *testing.T) {
-	// Arrange: same URL returned across different query iterations
 	searcher := &fakeAudioSearcher{
 		searchResults: []ports.AudioCandidate{
 			{
@@ -132,15 +120,13 @@ func TestSearchStep_Execute_DeduplicatesByURL(t *testing.T) {
 		Track: TrackRef{
 			Title:  "Song",
 			Artist: "Artist",
-			Album:  "Album", // generates multiple queries
+			Album:  "Album",
 			ISRC:   "US1234567890",
 		},
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert: multiple queries see the same URL, but dedup keeps only 1
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -156,11 +142,7 @@ func TestSearchStep_Name(t *testing.T) {
 	}
 }
 
-// --- SelectStep ---
-
 func TestSelectStep_Execute(t *testing.T) {
-	// Arrange: provide candidates that will pass matching gates.
-	// Using a Topic channel candidate to ensure it passes the identity threshold.
 	step := NewSelectStep()
 	ac := &AcquisitionContext{
 		Track: TrackRef{
@@ -180,10 +162,8 @@ func TestSelectStep_Execute(t *testing.T) {
 		},
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -196,17 +176,14 @@ func TestSelectStep_Execute(t *testing.T) {
 }
 
 func TestSelectStep_Execute_NoCandidates(t *testing.T) {
-	// Arrange: empty candidates list
 	step := NewSelectStep()
 	ac := &AcquisitionContext{
 		Track:      TrackRef{Title: "Song", Artist: "Artist", Duration: 200},
 		Candidates: []ports.AudioCandidate{},
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert
 	if err == nil {
 		t.Fatal("expected error for no candidates passing gates, got nil")
 	}
@@ -216,7 +193,6 @@ func TestSelectStep_Execute_NoCandidates(t *testing.T) {
 }
 
 func TestSelectStep_Execute_AllCandidatesBelowThreshold(t *testing.T) {
-	// Arrange: candidates whose titles don't match the track at all
 	step := NewSelectStep()
 	ac := &AcquisitionContext{
 		Track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
@@ -232,10 +208,8 @@ func TestSelectStep_Execute_AllCandidatesBelowThreshold(t *testing.T) {
 		},
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert
 	if err == nil {
 		t.Fatal("expected error when all candidates are below identity threshold, got nil")
 	}
@@ -248,10 +222,7 @@ func TestSelectStep_Name(t *testing.T) {
 	}
 }
 
-// --- StoreStep ---
-
 func TestStoreStep_Execute(t *testing.T) {
-	// Arrange
 	store := newFakeAudioStore()
 	step := NewStoreStep(store)
 	ac := &AcquisitionContext{
@@ -264,30 +235,23 @@ func TestStoreStep_Execute(t *testing.T) {
 		TempPath: "/tmp/altune-test/song.mp3",
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if ac.AudioRef == "" {
 		t.Fatal("expected ac.AudioRef to be set, got empty string")
 	}
-	// Verify the audio ref follows the expected pattern: userID/artist/album/title.mp3
 	wantRef := "user-123/Artist Name/Album Name/Song Title.mp3"
 	if ac.AudioRef != wantRef {
 		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, wantRef)
 	}
-	// Verify the fake store actually stored it
 	if !store.stored[ac.AudioRef] {
 		t.Error("expected audio ref to be stored in fake store")
 	}
 }
 
-// TestStoreStep_Execute_RejectsUndecodable is the final safety net: even a file
-// that reached the store step is decode-validated first, so corruption introduced
-// after download (e.g. a format-mismatched tagger) never reaches the library.
 func TestStoreStep_Execute_RejectsUndecodable(t *testing.T) {
 	store := newFakeAudioStore()
 	prober := &queueProber{decodeErrs: []error{errors.New("audio stream failed to decode")}}
@@ -306,17 +270,14 @@ func TestStoreStep_Execute_RejectsUndecodable(t *testing.T) {
 }
 
 func TestStoreStep_Execute_NoTempPath(t *testing.T) {
-	// Arrange
 	store := newFakeAudioStore()
 	step := NewStoreStep(store)
 	ac := &AcquisitionContext{
-		TempPath: "", // no temp file
+		TempPath: "",
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert
 	if err == nil {
 		t.Fatal("expected error for missing temp path, got nil")
 	}
@@ -326,7 +287,6 @@ func TestStoreStep_Execute_NoTempPath(t *testing.T) {
 }
 
 func TestStoreStep_Execute_StoreError(t *testing.T) {
-	// Arrange
 	store := newFakeAudioStore()
 	store.err = fmt.Errorf("storage unavailable")
 	step := NewStoreStep(store)
@@ -339,17 +299,14 @@ func TestStoreStep_Execute_StoreError(t *testing.T) {
 		TempPath: "/tmp/altune-test/song.mp3",
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert
 	if err == nil {
 		t.Fatal("expected error when store fails, got nil")
 	}
 }
 
 func TestStoreStep_Rollback_DeletesStoredAudio(t *testing.T) {
-	// Arrange
 	store := newFakeAudioStore()
 	store.stored["user-123/Artist/Album/Song.mp3"] = true
 	step := NewStoreStep(store)
@@ -357,10 +314,8 @@ func TestStoreStep_Rollback_DeletesStoredAudio(t *testing.T) {
 		AudioRef: "user-123/Artist/Album/Song.mp3",
 	}
 
-	// Act
 	err := step.Rollback(context.Background(), ac)
 
-	// Assert
 	if err != nil {
 		t.Fatalf("expected no error on rollback, got %v", err)
 	}
@@ -376,10 +331,7 @@ func TestStoreStep_Name(t *testing.T) {
 	}
 }
 
-// --- UpdateTrackStep ---
-
 func TestUpdateTrackStep_Execute(t *testing.T) {
-	// Arrange
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
 	if err != nil {
@@ -394,15 +346,12 @@ func TestUpdateTrackStep_Execute(t *testing.T) {
 		AudioRef: "user/artist/album/song.mp3",
 	}
 
-	// Act
 	execErr := step.Execute(context.Background(), ac)
 
-	// Assert
 	if execErr != nil {
 		t.Fatalf("expected no error, got %v", execErr)
 	}
 
-	// Verify track was marked ready
 	updated := repo.tracks[track.ID.String()+":"+userId.String()]
 	if updated.AcquisitionStatus != domain.AcquisitionReady {
 		t.Errorf("track status = %v, want %v", updated.AcquisitionStatus, domain.AcquisitionReady)
@@ -413,7 +362,6 @@ func TestUpdateTrackStep_Execute(t *testing.T) {
 }
 
 func TestUpdateTrackStep_Execute_TrackNotFound(t *testing.T) {
-	// Arrange: empty repo, track doesn't exist
 	repo := newFakeTrackRepository()
 	userId := shared.NewUserId(uuid.New())
 	trackId := domain.NewTrackId()
@@ -423,10 +371,8 @@ func TestUpdateTrackStep_Execute_TrackNotFound(t *testing.T) {
 		AudioRef: "some/audio/ref.mp3",
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert
 	if err == nil {
 		t.Fatal("expected error when track not found, got nil")
 	}
@@ -436,7 +382,6 @@ func TestUpdateTrackStep_Execute_TrackNotFound(t *testing.T) {
 }
 
 func TestUpdateTrackStep_Execute_EmptyAudioRef(t *testing.T) {
-	// Arrange: track exists but audioRef is empty -> MarkReady should fail
 	userId := shared.NewUserId(uuid.New())
 	track, _ := domain.NewTrack(userId, "Song", "Artist", "Album")
 
@@ -445,20 +390,17 @@ func TestUpdateTrackStep_Execute_EmptyAudioRef(t *testing.T) {
 
 	step := NewUpdateTrackStep(repo, userId, track.ID)
 	ac := &AcquisitionContext{
-		AudioRef: "", // empty
+		AudioRef: "",
 	}
 
-	// Act
 	err := step.Execute(context.Background(), ac)
 
-	// Assert
 	if err == nil {
 		t.Fatal("expected error when audioRef is empty, got nil")
 	}
 }
 
 func TestUpdateTrackStep_Rollback_RevertsToPending(t *testing.T) {
-	// Arrange: track is in ready state
 	userId := shared.NewUserId(uuid.New())
 	track, _ := domain.NewTrack(userId, "Song", "Artist", "Album")
 	audioRef := "user/artist/album/song.mp3"
@@ -470,10 +412,8 @@ func TestUpdateTrackStep_Rollback_RevertsToPending(t *testing.T) {
 	step := NewUpdateTrackStep(repo, userId, track.ID)
 	ac := &AcquisitionContext{}
 
-	// Act
 	err := step.Rollback(context.Background(), ac)
 
-	// Assert
 	if err != nil {
 		t.Fatalf("expected no error on rollback, got %v", err)
 	}
@@ -489,8 +429,6 @@ func TestUpdateTrackStep_Name(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", got, "update_track")
 	}
 }
-
-// --- buildAudioRef + sanitizePathComponent ---
 
 func TestBuildAudioRef(t *testing.T) {
 	tests := []struct {

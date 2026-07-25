@@ -15,16 +15,8 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 )
 
-// searchRunner issues a single yt-dlp search for a fully-formed search spec
-// (e.g. "ytsearch5:<query>") and returns the parsed candidates. Seamed onto the
-// searcher so the dual-engine fan-out is unit-testable without invoking yt-dlp.
 type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error)
 
-// searchEngines are the yt-dlp search prefixes acquisition fans each query out
-// to. YouTube covers the mainstream catalogue; SoundCloud covers the unreleased
-// / leaked / underground long tail YouTube does not index. Selection is
-// Topic-channel-first, so a SoundCloud candidate only fills a gap (no qualifying
-// YouTube Topic match) — it never displaces a good YouTube result.
 var searchEngines = []string{"ytsearch5:", "scsearch5:"}
 
 type YtDlpAudioSearcher struct {
@@ -44,10 +36,6 @@ func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpA
 	return s
 }
 
-// Search fans the query out to every search engine, merging the candidates
-// (deduped by URL). A single engine failing is tolerated — only the other
-// engine's results are kept; acquisition fails the search only if every engine
-// errors.
 func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.AudioCandidate, error) {
 	seen := make(map[string]bool)
 	merged := []ports.AudioCandidate{}
@@ -75,8 +63,6 @@ func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.
 	return merged, nil
 }
 
-// prependAuthFlags prepends the js-runtime and cookie-file flags shared by
-// every yt-dlp invocation this adapter makes (search and download).
 func (s *YtDlpAudioSearcher) prependAuthFlags(args []string) []string {
 	if s.jsRuntime != "" {
 		args = append([]string{"--js-runtimes", s.jsRuntime, "--remote-components", "ejs:github"}, args...)
@@ -87,7 +73,6 @@ func (s *YtDlpAudioSearcher) prependAuthFlags(args []string) []string {
 	return args
 }
 
-// runYtDlpSearch is the real subprocess implementation of searchRunner.
 func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error) {
 	searchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -170,9 +155,6 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 		return "", fmt.Errorf("no mp3 file produced in %s", outDir)
 	}
 
-	// Pick the largest mp3: a single-track download yields one file, but if
-	// several appear, the full track is the largest (partial/sidecar files are
-	// smaller).
 	best, bestSize := "", int64(-1)
 	for _, m := range matches {
 		info, statErr := os.Stat(m)
@@ -186,7 +168,7 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 	if best == "" {
 		return "", fmt.Errorf("stat downloaded files in %s", outDir)
 	}
-	const minFileSize = 10 * 1024 // 10KB
+	const minFileSize = 10 * 1024
 	if bestSize < minFileSize {
 		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", bestSize)
 	}

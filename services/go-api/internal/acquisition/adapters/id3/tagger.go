@@ -1,5 +1,3 @@
-// Package id3 writes ID3v2 metadata into MP3 files via bogem/id3v2. It
-// implements acquisition's AudioTagger port.
 package id3
 
 import (
@@ -18,11 +16,6 @@ type Tagger struct{}
 
 func NewTagger() *Tagger { return &Tagger{} }
 
-// Tag writes ID3v2.4 tags into the file at filePath. ID3v2 is an MP3-only
-// container convention: the tagger prepends an ID3 block at byte 0. That is
-// correct for MP3 but corrupts any other container (e.g. an m4a/MP4 must start
-// with `ftyp`, and the shifted bytes invalidate its sample offset table). Only
-// MP3 is tagged; other formats are skipped and carry their metadata in the DB.
 func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags) error {
 	if !strings.HasSuffix(strings.ToLower(filePath), ".mp3") {
 		slog.InfoContext(ctx, "tag_skipped_non_mp3", "path", filePath)

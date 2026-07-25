@@ -11,11 +11,8 @@ import (
 	"github.com/bogem/id3v2/v2"
 )
 
-// Compile-time check: the adapter satisfies acquisition's AudioTagger port.
 var _ ports.AudioTagger = (*Tagger)(nil)
 
-// ID3v2 tags are MP3-only; writing them to an m4a/MP4 corrupts the container.
-// The tagger must skip non-MP3 files entirely, leaving the bytes untouched.
 func TestTagger_SkipsNonMp3(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "track.m4a")
 	original := []byte("\x00\x00\x00\x1cftypM4A original bytes")
@@ -36,8 +33,6 @@ func TestTagger_SkipsNonMp3(t *testing.T) {
 	}
 }
 
-// A missing/unreadable file is an error — the pipeline step decides whether to
-// swallow it, not the adapter.
 func TestTagger_BadPath_ReturnsError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "does-not-exist.mp3")
 	if err := NewTagger().Tag(context.Background(), path, ports.TrackTags{Title: "T", Artist: "A"}); err == nil {

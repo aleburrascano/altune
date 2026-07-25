@@ -14,8 +14,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// --- Fake ports for AcquireTrackAudioService ---
-
 type fakeTrackRepository struct {
 	tracks map[string]*domain.Track
 	err    error
@@ -86,8 +84,8 @@ func (s *fakeAudioSearcher) Download(_ context.Context, url string, _ string) (s
 }
 
 type fakeAudioStore struct {
-	stored  map[string]bool
-	err     error
+	stored map[string]bool
+	err    error
 }
 
 func newFakeAudioStore() *fakeAudioStore {
@@ -119,10 +117,6 @@ func (s *fakeAudioStore) Delete(_ context.Context, audioRef string) error {
 }
 
 func TestBackgroundScheduler_Schedule(t *testing.T) {
-	// Arrange: build a real AcquireTrackAudioService with fakes that cause
-	// Execute to return early (track not found → logs warning, returns nil).
-	// This lets us verify the scheduler's goroutine + WaitGroup mechanics
-	// without needing a full acquisition pipeline.
 	repo := newFakeTrackRepository()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
@@ -136,20 +130,15 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	trackId := domain.NewTrackId()
 
-	// Act
 	scheduler.Schedule(userId, trackId, "")
 
-	// Assert: WaitGroup completes (goroutine ran and finished)
 	wg.Wait()
-	// If we reach here, the goroutine completed without deadlock.
-	// The semaphore should be drained (released).
 	if len(sem) != 0 {
 		t.Errorf("semaphore should be empty after goroutine completes, got %d tokens held", len(sem))
 	}
 }
 
 func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
-	// Arrange: semaphore capacity 1 → schedules run one at a time
 	repo := newFakeTrackRepository()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
@@ -157,7 +146,7 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 	svc := NewAcquireTrackAudioService(repo, searcher, store)
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 1) // capacity 1
+	sem := make(chan struct{}, 1)
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
 
 	userId := shared.NewUserId(uuid.New())
@@ -165,15 +154,13 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 	var completedCount atomic.Int32
 	const numSchedules = 3
 
-	// Act: schedule multiple acquisitions
 	for i := 0; i < numSchedules; i++ {
 		trackId := domain.NewTrackId()
 		scheduler.Schedule(userId, trackId, "")
 	}
 
-	// Assert: all complete (WaitGroup drains)
 	wg.Wait()
-	_ = completedCount.Load() // all goroutines finished if we reach here
+	_ = completedCount.Load()
 
 	if len(sem) != 0 {
 		t.Errorf("semaphore should be empty after all goroutines complete, got %d tokens held", len(sem))

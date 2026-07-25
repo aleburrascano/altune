@@ -15,10 +15,6 @@ type Step interface {
 	Rollback(ctx context.Context, ac *AcquisitionContext) error
 }
 
-// StepError identifies which pipeline step failed. It carries the step name as a
-// field so callers (failureReason) map outcomes on the structured Step, not by
-// parsing an error-message prefix. Its Error() preserves the historical
-// "step <name>: <err>" format so logs stay stable.
 type StepError struct {
 	Step string
 	Err  error
@@ -72,24 +68,22 @@ func rollback(ctx context.Context, completed []Step, ac *AcquisitionContext) {
 type AcquisitionContext struct {
 	Track      TrackRef
 	Candidates []ports.AudioCandidate
-	// Ranked is the best-first candidate list produced by SelectStep; DownloadStep
-	// walks it, downloading and verifying each until one passes.
-	Ranked   []ports.AudioCandidate
-	Selected *ports.AudioCandidate
-	TempPath string
-	AudioRef string
+	Ranked     []ports.AudioCandidate
+	Selected   *ports.AudioCandidate
+	TempPath   string
+	AudioRef   string
 }
 
 type TrackRef struct {
-	ID           string
-	UserID       string
-	Title        string
-	Artist       string
-	Album        string
-	Duration     float64
-	ISRC         string
-	Year         int
-	TrackNumber  int
-	AlbumArtist  string
-	Genre        string
+	ID          string
+	UserID      string
+	Title       string
+	Artist      string
+	Album       string
+	Duration    float64
+	ISRC        string
+	Year        int
+	TrackNumber int
+	AlbumArtist string
+	Genre       string
 }

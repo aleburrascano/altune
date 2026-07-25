@@ -17,8 +17,6 @@ func (s *SelectStep) Execute(ctx context.Context, ac *AcquisitionContext) error 
 		return fmt.Errorf("no candidates passed matching gates")
 	}
 	ac.Ranked = ranked
-	// Provisional best for telemetry; DownloadStep advances past it if a
-	// downloaded file fails verification.
 	best := ranked[0]
 	ac.Selected = &best
 	return nil
