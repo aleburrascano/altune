@@ -1,17 +1,30 @@
 # Admin / Mission Control — router
 
-Single-operator observability console under /admin. Deliberately NOT hexagonal — flat observability packages (`handler/`, `alert/`, `evalmeter/`, `eventtap/`, `providerhealth/`, `requeststore/`, `ui/`). Interfaces exist only where the implementation lives in the composition root (`ReRunner`, `SearchInspector`, `AcquisitionStatusReader`, `HealthProbe`, `evalmeter.Runner`); same-feature collaborators are concrete pointers — don't reintroduce single-impl reader interfaces. `handler/` is transport only; background lifecycle components live in their own packages (`evalmeter.Meter`, `eventtap.Feed`). `eventtap.Tap` is the admin-owned `events.Publisher` decorator that feeds the console's system-wide event stream — its payload-key vocabulary stays here, not in `internal/shared/events`.
+Single-operator observability console under `/admin`. Deliberately **not** hexagonal — flat observability packages.
 
-Invariants:
+Layout:
 
-- Fail-closed gating: shell/config are public by design (hold no data); every data route needs `auth.Middleware` + `OperatorOnly`, which denies all when `OPERATOR_USER_ID` is unset and re-checks auth itself.
-- Privacy: alert messages carry operational state names only — never query text, user ids, hostnames, or connection strings. The event stream is operator full-visibility (type + time + user + short subject) per the verbosity rework — acceptable only because the console is single-operator and auth-gated.
-- Memory bounds are load-bearing (4 GB box): requeststore 100 req / 64 KB body / 96 MB total; providerhealth 2048 samples/provider. Everything in-memory resets on restart.
-- Discovery/acquisition never import admin — they feed it via consumer-defined seams. Don't invert that.
-- SSE needs `http.Flusher` forwarded through every middleware wrapper.
-- `alert.Monitor` implements the data-consistency **Fix→Log→Signal** cascade: only `SeveritySignal` conditions page the operator; lower tiers are logged. It dedups by `Condition.Key` — fire once per incident, reset on recovery — and evaluates on a ticker in one goroutine. It cannot observe the box being fully down, because it dies with the box; that gap needs an external check.
-- `evalmeter.Runner` **must** use a dedicated client that bypasses the shared per-provider circuit breakers, so eval failures never trip the breakers live search depends on. `defaultInterval` is deliberately long: a live run hits real provider APIs and competes with user traffic for per-provider quota. `claimRunSlotIfIdle` guarantees runs never overlap; the meter runs once at start so the console isn't empty for a full interval, and is inert unless both enabled and given a runner.
-- `eventtap.Tap` is lossy and single-consumer: a second `SubscribeAll` errors, and a slow consumer drops rather than blocking `Publish`. The tiny critical section exists so a concurrent cancel can't close the channel mid-send.
-- `requeststore` wire rows are the console's contract; the JSON tags are the contract, the Go field names carry the meaning (`ConsensusVerdict`, `ArtworkResolutionPath`, `CountsPerStatus`, `TotalCalls`). `DetailTrace.Kind` is one of `albums` / `top_tracks` / `related`. Search fields and detail fields never co-occur on one record — each detail fetch gets its own correlation id. Response bodies are captured lazily as the adapter reads them (never buffered upfront), and the caller always receives the full body regardless of the capture cap.
+- `handler/` — transport only; `AdminHandler`, `OperatorOnly`, the per-panel endpoints, `sse.go`.
+- `alert/` — `Monitor`, `Condition`, `NopNotifier` / `NtfyNotifier`.
+- `evalmeter/` — `Meter`, the background eval ticker.
+- `eventtap/` — `Tap` (the `events.Publisher` decorator) and `Feed`.
+- `providerhealth/` — rolling per-provider outcome window.
+- `requeststore/` — correlation-keyed drill-down store, recording transport, trace projections.
+- `ui/` — the embedded console page.
 
-Knowledge base: `okf/backend/admin/index.md` — read before structural work; update the relevant concept file in the same commit when behavior it describes changes (pre-commit hook enforces).
+## Rules
+
+- Every data route needs `auth.Middleware` + `OperatorOnly`; only the shell and `/admin/config` are public.
+- `OperatorOnly` stays fail-closed — unset `OPERATOR_USER_ID` denies everyone — and re-checks auth itself.
+- Never put query text, user ids, hostnames or connection strings in an alert message.
+- Only `SeveritySignal` may page; lower tiers log.
+- Never give the eval meter production's circuit breakers, and never let two runs overlap.
+- Never add a second `Tap` consumer, and never block `Publish` on a slow one.
+- Keep the memory bounds — 100 requests / 64 KB body / 96 MB total, 2048 samples per provider.
+- Never let discovery or acquisition import admin; they feed it through consumer-defined seams.
+- Keep `handler/` transport-only — background lifecycle components live in their own package.
+- Keep the tap's payload vocabulary here, never in `internal/shared/events`.
+- Hold same-feature collaborators as concrete pointers; don't reintroduce single-impl reader interfaces.
+- Forward `http.Flusher` through every middleware wrapper or SSE breaks.
+
+Why each rule exists: `okf/backend/admin/index.md` — read before structural work; update the relevant concept in the same commit when behavior it describes changes (pre-commit hook enforces).

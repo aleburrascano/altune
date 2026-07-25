@@ -43,7 +43,7 @@ func (f *fakeNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId stri
 func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	reader := &fakeNowPlaying{tracks: map[string]*ports.NowPlayingTrack{
-		"y": {Id: "y", Title: "Song Y", Artist: "Artist", AcquisitionStatus: "ready"},
+		"y": {Id: "y", Title: "Track Y", Artist: "Artist", AcquisitionStatus: "ready"},
 	}}
 	svc := NewQueueService(repo, reader)
 	user := testUser()
@@ -63,7 +63,7 @@ func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
 	if view.CurrentTrack == nil {
 		t.Fatal("expected current track to be embedded")
 	}
-	if view.CurrentTrack.Id != "y" || view.CurrentTrack.Title != "Song Y" {
+	if view.CurrentTrack.Id != "y" || view.CurrentTrack.Title != "Track Y" {
 		t.Errorf("wrong current track embedded: %+v", view.CurrentTrack)
 	}
 }

@@ -25,3 +25,33 @@ Acquisition is a customer of the catalog context: it consumes `catalog/domain.Tr
 `failureReason` (`acquire.go`) maps internal step errors to a small, stable, client-safe vocabulary ("no matching audio found" for search/select, "audio download failed", "audio storage failed", "audio acquisition cancelled" for context cancellation, generic fallback "audio acquisition failed") by matching on the structured `StepError` — `RunPipeline`'s only other error shape is the "pipeline cancelled" prefix — with the full error chain logged, never stored on the track or returned over the wire.
 
 `AcquireTrackAudioService.Execute` re-searches by metadata on every call; there is no direct-download-by-saved-URL path (SoundCloud's public stream for many tracks is only a ~30s preview, which yt-dlp would otherwise store as if it were the full track). `reconcileForReacquire` decides whether a call should even run the pipeline: a `Ready` track whose audio file still exists is a no-op skip; a `Ready` track with a missing file, or a previously `Failed` track, is reverted to pending and re-run; a fresh `Pending` track proceeds unchanged.
+
+## Search and selection
+
+Acquisition always re-searches by metadata. The old direct-download path — fetching a saved SoundCloud permalink verbatim — was removed because SoundCloud's public stream is often only a ~30s preview.
+
+`searchEngines` fans each query to YouTube (the mainstream catalogue) and SoundCloud (the unreleased, leaked and underground long tail YouTube does not index). Selection is Topic-channel-first, so a SoundCloud candidate only fills a gap where no qualifying YouTube Topic match exists and never displaces a good YouTube result. One engine failing is tolerated; the search fails only if every engine fails.
+
+`featuredRe` deliberately excludes "with", which mangles real titles like "Stuck with U" — the same reason `textnorm` dropped it. `extractFeaturedArtists` reads the raw title, because `NormalizeForMatch` strips bracketed segments and by the time `identityScore` compares titles the `(feat. X)` is gone, leaving the matcher blind to features. `featureMatch` then requires a candidate to mention every named featured artist in its raw title; otherwise it is a different recording — the solo cut or official video that the duration-blind identity score cannot tell apart. A track with no feature imposes no requirement. Title-only matches are penalized because without artist context the match is ambiguous ("Die Hard" versus Kendrick's "DIE HARD"), and spaces are stripped when matching channels so spaceless official channels like "TheWeekndVEVO" still match.
+
+Duration tolerance is the larger of an absolute slack and a fraction of the expected length: the same recording from any source runs the same length within a few seconds, allowing for intro/outro or silence trimming, so a larger gap means a different recording.
+
+## Verification and tagging
+
+`ValidateDecodable` exists because `ProbeDuration` is metadata-only: a file with a valid header but corrupt samples passes duration verification and fails here. That is the exact defect that shipped undecodable m4a files. If ffmpeg itself cannot run — missing binary, timeout — validation is skipped rather than blocking acquisition on an unavailable validator, mirroring `ProbeDuration`'s fail-open stance.
+
+ID3v2 is MP3-only. The tagger prepends an ID3 block at byte 0, which is correct for MP3 but corrupts any other container: an m4a/MP4 must start with `ftyp`, and the shifted bytes invalidate its sample-offset table. Non-MP3 files are skipped entirely and carry their metadata in the database.
+
+`reconcileForReacquire` treats a ready track whose audio file still exists as a no-op skip, and reverts a ready track with a missing file — or a previously failed track — to pending. A transient existence-check error falls through to re-acquire rather than skipping, so a possibly-missing file is never left unrepaired.
+
+Acquisition emits a server-authoritative `track_acquisition_started` event so the client seeds its download UI and flips a re-acquired ready or failed track back to pending, instead of depending on the optimistic save or the poll (regression F7/F8).
+
+`CoreSteps` is the single definition of the search -> select -> download -> tag -> store sequence, shared by the production service (via `buildSteps`, which appends its own `UpdateTrackStep`) and the reacquire CLI commands (which update `audio_ref` themselves and stop before that step), so the two callers cannot drift. `CleanupTemp` removes the parent of `TempPath` rather than `TempPath` itself, because `DownloadStep` creates one temp dir per download attempt via `os.MkdirTemp`; it is exported so the reacquire CLI cleans up identically.
+
+## One-off repair commands (`cmd/api/commands`)
+
+Order per track is store the new file, swap `audio_ref`, then delete the old one — never the reverse. If the DB update fails the new file is already stored but the row still points at the old ref, so the track keeps playing and a later run re-processes it, leaving at worst one orphaned file; the old file must not be deleted on that path. A failed or gate-rejected re-acquire leaves the existing file and row untouched, because a broken original is preferable to a lost row. `reacquireTrack` is passed an expected duration (`expectedDuration`: the DB value, else probed from the existing file) so `DownloadStep`'s prober rejects a wrong-length recording.
+
+`truncatedAudioThresholdSecs` (45s) is the line between a truncated preview and a real track: SoundCloud previews are ~30s and the affected tracks all probe at 29.8s, while no track this library cares about is under 45s. Above the threshold the audio is fine and only `duration_seconds` is backfilled with no re-download; below it the track is marked failed and `audio_ref` cleared, so the app offers a retry that re-acquires through the search pipeline.
+
+Historically `backfill_m4a` converted MP3 to native M4A. After the ID3-on-m4a corruption the pipeline was reverted to MP3, so both it and `reacquire_corrupt` now simply re-run tracks through the current pipeline, whose output extension follows whatever that pipeline produces.

@@ -28,5 +28,3 @@ Why: the client surface that rendered them was deleted in the 2026-07-16 detail 
 - **Identity** — `ResolveByIdentity` resolves by an MB-asserted Discogs id, so it participates in the cross-provider identity bridge.
 
 If a credits or liner-notes surface is ever wanted in the app again, this is a UI question first: the provider is still connected and the lookup code is recoverable from git history.
-
-Rationale for this adapter lives in `services/go-api/internal/discovery/CLAUDE.md`; the Go files carry no comments.

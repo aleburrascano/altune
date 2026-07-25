@@ -20,3 +20,5 @@ SoundCloud is altune's sole source for the unreleased/leaked/underground long ta
 SoundCloud periodically rotates how its `client_id` is embedded, which breaks the bootstrap; the re-resolve is self-healing but must not wipe a fresh id another handler just obtained. SoundCloud tracks otherwise never merge with other providers, and an EP track must never also render as a top-level single.
 
 Track duration is decoded as `DurationMs` (wire tag `duration`) — SoundCloud reports it in milliseconds.
+
+One SoundCloud adapter instance is shared across the album, artist and related content maps: each call resolves its own `client_id`, so sharing avoids redundant resolution.

@@ -19,3 +19,5 @@ verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 `ExchangeRecorder` (`exchange_recorder.go`) is a separate, simpler one-shot recorder for the operator-triggered re-run: unlike the corr-id-keyed transport it's scoped to a single request, so it can afford a full-body `io.ReadAll` (bodies still capped, recorder discarded after the response serializes) rather than the streaming-tee approach `recordingTransport` needs to stay cheap on every live search.
 
 `Snapshot()`/`Get(corrID)` return deep copies (`cloneRecord`) so the operator drill-down can serialize freely without racing the store's writers; `Store` itself is a single `sync.Mutex` guarding both the exchange-recording write path and the read path.
+
+`DetailTrace.Kind` is one of `albums`, `top_tracks` or `related`. Search fields and detail fields never co-occur on one record, because each detail fetch gets its own correlation id. Response bodies are captured lazily as the adapter reads them rather than buffered upfront, and the caller always receives the full body regardless of the capture cap.
