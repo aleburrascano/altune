@@ -1,13 +1,5 @@
 package main
 
-// detail mode — the offline quality gate for the artist detail/discography path
-// (okf/backend/discovery/artist-detail.md), sibling of the ranking eval. It runs
-// the real detail service in-process against LIVE providers, but over a SEEDED
-// in-memory identity store built from the goldens — so a golden can carry a
-// deliberately fractured identity (a wrong streaming edge, the "Che" bug) and the
-// harness verifies the read-time guards drop the contamination. No DB identity
-// data is touched; the corpus is the committed detail_goldens.json.
-
 import (
 	"context"
 	_ "embed"
@@ -44,8 +36,6 @@ func runDetail(ctx context.Context, cfg *config.Config, opts options) error {
 	return runHarness("detail", once, human, opts)
 }
 
-// ---- seeded identity store ----------------------------------------------
-
 var _ discoveryPorts.IdentityStore = (*seededIdentityStore)(nil)
 
 type identityRow struct {
@@ -53,9 +43,6 @@ type identityRow struct {
 	xref map[string]string
 }
 
-// seededIdentityStore answers LookupByProviderID from a fixed map built out of
-// the goldens — the harness's stand-in for the durable store, so it can feed
-// exactly the (possibly fractured) identity each golden declares.
 type seededIdentityStore struct {
 	entries map[string]identityRow
 }
@@ -86,8 +73,6 @@ func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind domain.
 	}
 	return row.mbid, row.xref, true
 }
-
-// ---- service adapter (real ContentFetchResponse -> eval.DetailItem) -----
 
 type detailServiceAdapter struct {
 	svc *discoveryService.GetArtistContentService

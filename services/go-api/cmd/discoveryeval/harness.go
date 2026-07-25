@@ -1,14 +1,5 @@
 package main
 
-// Shared harness runner for the gated discoveryeval modes (plan 2026-06-24-001).
-//
-// Every gated mode (eval, signal-a, signal-b, merge, correction, diversity)
-// flows through runHarness, which gives them one identical spine: run once →
-// write JSON → print the mode's human render → gate the headline metrics against
-// baselines.json → print the gate block + the attributed-failure slices →
-// regress with a non-zero exit. The explicit re-baseline path (--update-baselines)
-// runs the harness N times (the noise ritual) and writes measured value + margin.
-
 import (
 	"encoding/json"
 	"errors"
@@ -18,12 +9,8 @@ import (
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
 )
 
-// errRegressed is the sentinel runHarness returns when a gate trips; main maps
-// it to exit code 2 (distinct from operational failures, which exit 1).
 var errRegressed = errors.New("eval regression")
 
-// runHarness is the uniform spine for a gated mode. `once` executes the harness
-// a single time; `human` renders the mode's existing human-readable report.
 func runHarness(
 	name string,
 	once func() (discoveryEval.HarnessReport, error),
@@ -57,10 +44,6 @@ func runHarness(
 	return nil
 }
 
-// updateBaselines runs the harness opts.noiseRuns times, sets each metric's
-// baseline to the mean of the runs and its margin to the measured spread, merges
-// the result into the existing baselines file (other modes untouched), and
-// writes it back. This is the explicit, operator-invoked re-baseline.
 func updateBaselines(
 	name string,
 	once func() (discoveryEval.HarnessReport, error),
@@ -124,11 +107,6 @@ func updateBaselines(
 	return nil
 }
 
-// ---- baselines file IO --------------------------------------------------
-
-// loadBaselines reads baselines.json. A missing file is not an error — it yields
-// an empty set so every metric reports Missing (recorded, never regressed) until
-// the first --update-baselines lands.
 func loadBaselines(path string) (discoveryEval.Baselines, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -155,8 +133,6 @@ func writeBaselines(path string, b discoveryEval.Baselines) error {
 	return nil
 }
 
-// ---- gate + slice rendering ---------------------------------------------
-
 func renderGateBlock(gates []discoveryEval.GateResult) string {
 	out := "\n## Gate\n\n"
 	for _, g := range discoveryEval.SortedGates(gates) {
@@ -168,10 +144,6 @@ func renderGateBlock(gates []discoveryEval.GateResult) string {
 	return out
 }
 
-// renderSlices is the default view on the attributed failure log: total, then
-// the four mechanical single-key slices, then the token×pop joint band where
-// ambiguity tends to surface. Disposable sugar — the raw log (in the JSON) is
-// the system of record.
 func renderSlices(failures []discoveryEval.FailureRecord) string {
 	out := fmt.Sprintf("\n## Failure slices — %d total\n\n", len(failures))
 	if len(failures) == 0 {
@@ -185,7 +157,6 @@ func renderSlices(failures []discoveryEval.FailureRecord) string {
 	}
 	for _, a := range axes {
 		buckets := discoveryEval.SliceFailures(failures, a.key)
-		// Skip an axis no harness populated (every record "(unset)").
 		if len(buckets) == 1 {
 			if _, only := buckets["(unset)"]; only {
 				continue
