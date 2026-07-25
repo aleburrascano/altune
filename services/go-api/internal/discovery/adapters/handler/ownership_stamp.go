@@ -124,8 +124,9 @@ func blendedSlateToDTOs(slate service.BlendedSlate) (*SearchResultDTO, []ResultS
 	sections := make([]ResultSectionDTO, 0, len(slate.Sections))
 	for _, s := range slate.Sections {
 		sections = append(sections, ResultSectionDTO{
-			Kind:  s.Kind.String(),
-			Items: searchResultsToDTOs(s.Items),
+			Kind:    s.Kind.String(),
+			Items:   searchResultsToDTOs(s.Items),
+			HasMore: s.HasMore,
 		})
 	}
 	if slate.TopResult == nil {

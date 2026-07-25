@@ -20,3 +20,9 @@ The one real invariant lives in `detail-handoff.ts`: it is the **in-memory seam 
 `deriveAlbums` / `deriveArtists` folded a `TrackResponse[]` into album and artist groups on the device. Both are now SQL `GROUP BY`s behind `/v1/library/albums` and `/v1/library/artists`, and the group types live in `@shared/api-client/library` as wire types (see [library-feature](library-feature.md)).
 
 `query-keys.ts` changed shape with it: `libraryKeys.home` is replaced by four families — `tracks(query, sort)`, `lookup(query)`, `albums(query, sort)` and `artists(query, sort)` — each with a prefix for the SSE patch layer to sweep.
+
+## `libraryKeys.summary` (2026-07-25)
+
+A fifth family beside the four query-keyed ones: a single cache holding a `limit: 1` track response, used only to answer "does this user own anything at all" for the library's empty-state CTA.
+
+It is deliberately **not** under `tracksPrefix`. The SSE patch layer sweeps that prefix treating every entry as `InfiniteData`; a flat `ListTracksResponse` there would fail on the first patch. Being a separate key also means it is invalidated rather than patched, which is correct — it is a property of the whole collection, not of any row.

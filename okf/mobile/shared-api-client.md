@@ -30,3 +30,7 @@ Consumed by every feature that talks to the backend — discover, library, playl
 `TrackResponse` carries `failure_message` (human copy for a failed acquisition, alongside the machine-readable `failure_reason`) and `PlaylistDetailResponse` carries `total_duration_seconds`.
 
 `playback.ts`'s queue state now sends and receives a structured `source: { kind, playlist_id?, name?, query? }` instead of the packed `source_id` string. The server still emits `source_id` for older clients; this one reads `source`.
+
+## `ResultSection.has_more` (2026-07-25)
+
+Each blended section carries `has_more`. The client used to decide whether to draw "See all <kind>" by comparing a section's length against its own cap; with the slate built server-side it no longer holds the full per-kind list, so the server answers the question instead. Without it the affordance would either always show or never show, and both are wrong.

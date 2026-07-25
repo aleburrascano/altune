@@ -85,6 +85,7 @@ type SearchOutput struct {
 	Total            int
 	Offset           int
 	HasMore          bool
+	Slate            BlendedSlate
 }
 
 func pageOf(ranked []domain.SearchResult, offset, limit int) []domain.SearchResult {
@@ -251,13 +252,16 @@ func (s *Service) Execute(
 	}
 
 	total := len(ranked)
+	fullSlate := ranked
 	ranked = pageOf(ranked, query.Offset, query.Limit)
 	hasMore := query.Offset+len(ranked) < total
 
 	organic := ranked
 	explored := false
+	var slate BlendedSlate
 	if query.Offset == 0 {
 		ranked, explored = s.maybeExplore(ranked)
+		slate = BuildBlendedSlate(ranked, fullSlate)
 	}
 
 	if query.Offset == 0 {
@@ -289,6 +293,7 @@ func (s *Service) Execute(
 		Total:            total,
 		Offset:           query.Offset,
 		HasMore:          hasMore,
+		Slate:            slate,
 		ProviderStatuses: statuses,
 		Partial:          partial,
 		CorrectedQuery:   correctedQuery,

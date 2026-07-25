@@ -37,6 +37,7 @@ export type RelatedGroup = {
 export type ResultSection = {
   kind: DiscoveryKind;
   items: DiscoveryResult[];
+  has_more: boolean;
 };
 
 export type DiscoverySearchResponse = {

@@ -15,7 +15,12 @@ import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
-import { useLibraryAlbums, useLibraryArtists, useLibraryTracks } from '../hooks/useLibraryHome';
+import {
+  useLibraryAlbums,
+  useLibraryArtists,
+  useLibraryIsEmpty,
+  useLibraryTracks,
+} from '../hooks/useLibraryHome';
 import { useLibrarySearch } from '../hooks/useLibrarySearch';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
@@ -88,6 +93,7 @@ export function LibraryScreen(): ReactElement {
   const tracksState = useLibraryTracks(search.query, sortByChip.tracks, chip === 'tracks');
   const albumsState = useLibraryAlbums(search.query, sortByChip.albums, chip === 'albums');
   const artistsState = useLibraryArtists(search.query, sortByChip.artists, chip === 'artists');
+  const libraryIsEmpty = useLibraryIsEmpty();
 
   const confirmRemoveTrack = (track: TrackResponse): void => {
     Alert.alert('Remove from Library', `Remove "${track.title}" from your library?`, [
@@ -150,7 +156,7 @@ export function LibraryScreen(): ReactElement {
     );
   }
 
-  if (view === 'empty' && chip === 'playlists' && !search.hasQuery) {
+  if (view === 'empty' && !search.hasQuery && playlists.length === 0 && libraryIsEmpty) {
     return (
       <Screen>
         <LibraryHeader />
@@ -251,7 +257,7 @@ export function LibraryScreen(): ReactElement {
           onRefresh: tracksState.refetch,
         };
         return {
-          count: tracksState.tracks.length,
+          count: tracksState.tracks.length === 0 ? 0 : tracksState.total,
           noun: 'track',
           options: TRACK_SORT_OPTIONS,
           isLoading: tracksState.isLoading,

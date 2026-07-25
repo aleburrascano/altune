@@ -37,6 +37,7 @@ const RESYNC_KEYS: readonly (readonly string[])[] = [
   libraryKeys.lookupPrefix,
   libraryKeys.albumsPrefix,
   libraryKeys.artistsPrefix,
+  libraryKeys.summary,
   libraryKeys.featuringPrefix,
   playlistKeys.list,
   playlistKeys.details,
@@ -86,9 +87,10 @@ function progressPhase(stage: string | null): DownloadPhase | null {
   return phase === 'finding' || phase === 'downloading' || phase === 'finishing' ? phase : null;
 }
 
-function invalidateLenses(queryClient: QueryClient): void {
+function invalidateDerived(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: libraryKeys.albumsPrefix });
   void queryClient.invalidateQueries({ queryKey: libraryKeys.artistsPrefix });
+  void queryClient.invalidateQueries({ queryKey: libraryKeys.summary });
 }
 
 export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): void {
@@ -101,7 +103,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
 
   if (event.type === 'track_added_to_library') {
     const track = parseAddedTrack(event.data);
-    invalidateLenses(queryClient);
+    invalidateDerived(queryClient);
     if (track) {
       upsertTrackInCaches(queryClient, track);
       patchTrackStatus(track.id, {
@@ -121,7 +123,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
       removeTrackFromCaches(queryClient, trackId);
       removeTrackStatus(trackId);
     }
-    invalidateLenses(queryClient);
+    invalidateDerived(queryClient);
     void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
     return;
   }

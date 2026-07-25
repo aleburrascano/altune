@@ -65,3 +65,13 @@ All four of those are now server queries, one per chip, each enabled only while 
 **The cache topology changed with it.** `libraryKeys.home` is gone. The tracks family is an `InfiniteData<ListTracksResponse>` under the `['library','tracks']` prefix, so `trackCachePatch` walks pages and patches every cached variant through `setQueriesData` — a query-keyed cache means there is no longer one snapshot to write. `libraryKeys.lookup` is a separate flat family for detail's narrow "tracks matching this album/artist" reads. Albums and Artists are aggregates: a track-level event cannot be patched into them, so add/delete **invalidate** those two families instead.
 
 Playlists are still sorted on the device. They are a small list the client already holds in full, with no server sort to defer to, and inventing one would be a query for a dozen rows.
+
+## Behaviour parity after the server migration (2026-07-25)
+
+Two things the migration changed by accident, and how they were put back:
+
+**The Tracks count.** `SortControl` renders "N tracks", and with a paged list the loaded array length is the page size, not the library. It reads `tracksState.total` — the server's count — and falls back to 0 only when nothing loaded, so a filtered-to-nothing view still reads "0 tracks" and triggers `LibraryNoResults`.
+
+**The empty-library CTA.** It used to key off the always-loaded track list, so it could show on any chip. With per-chip queries there is no such list, and the CTA collapsed to the Playlists chip only. `useLibraryIsEmpty` restores it: a `limit: 1` probe reading `total === 0`.
+
+That probe sits under `libraryKeys.summary`, deliberately **outside** the `['library','tracks']` prefix. The patchers sweep that prefix expecting `InfiniteData`, and a flat `ListTracksResponse` parked under it would blow up `mapPages` on the first acquisition event. It is invalidated with the album and artist lenses instead, since like them it is derived from the whole collection rather than from one row.
