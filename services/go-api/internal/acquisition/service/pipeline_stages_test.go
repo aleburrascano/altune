@@ -230,9 +230,9 @@ func TestAcqStage_BuildAudioRef(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildAudioRef(tt.track, tt.tempPath)
+			got := BuildAudioRef(tt.track, tt.tempPath)
 			if got != tt.want {
-				t.Errorf("buildAudioRef = %q, want %q", got, tt.want)
+				t.Errorf("BuildAudioRef = %q, want %q", got, tt.want)
 			}
 		})
 	}

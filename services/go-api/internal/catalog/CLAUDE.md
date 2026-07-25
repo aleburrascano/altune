@@ -5,7 +5,7 @@ The Track and Playlist aggregate context: a user's owned music metadata, dedup, 
 Layout:
 
 - `domain/` — `Track`, `Playlist`, `FeaturedArtist`, `CodedError`.
-- `ports/` — `TrackRepository`, `PlaylistRepository`, `AudioStore`, `AudioURLSigner`, `AcquisitionScheduler`, `FeaturedArtistResolver`.
+- `ports/` — `TrackRepository`, `PlaylistRepository`, `AudioStore`, `AudioURLSigner`, `AudioLister`, `AcquisitionScheduler`, `FeaturedArtistResolver`.
 - `service/` — track/playlist use cases, audio-URL resolution, streaming, featured backfill.
 - `adapters/` — `persistence/` (pgx repos), `storage/` (filesystem + object storage), `handler/`, `discoverybridge/`.
 - `catalogtest/` — in-memory fakes shared by the service and handler test packages.
@@ -17,7 +17,7 @@ Layout:
 - Never import acquisition — go through the `AcquisitionScheduler` port.
 - Never import discovery — go through `adapters/discoverybridge`.
 - Keep `AudioContentType` the only place a stored ref maps to a MIME type; upload and serve sides must agree.
-- Never require `AudioURLSigner` — detect it by type assertion and fall back to the proxy.
+- Never require `AudioURLSigner` or `AudioLister` — detect them by type assertion and degrade.
 - Never let a batch resolve sign an unbounded number of objects.
 - Never `os.Rename` audio into place without the `EXDEV` fallback.
 - Always close the handle `Stream` returns.

@@ -35,3 +35,7 @@ func AudioContentType(audioRef string) string {
 type AudioURLSigner interface {
 	PresignGet(ctx context.Context, audioRef string, ttl time.Duration) (string, error)
 }
+
+type AudioLister interface {
+	List(ctx context.Context, prefix string) ([]string, error)
+}
