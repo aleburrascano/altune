@@ -77,8 +77,6 @@ func TestTokenSortRatio(t *testing.T) {
 			wantMax: 10,
 		},
 		{
-			// Rune-counted total: CJK strings sharing zero characters must score
-			// 0, not the ~67 a byte-length total produced (3 bytes per rune).
 			name:    "cjk no shared characters",
 			s1:      "坂本",
 			s2:      "龍一",
@@ -109,8 +107,6 @@ func TestLevenshteinDistance(t *testing.T) {
 		{"megaman", "megamsn", 1},
 		{"kitten", "sitting", 3},
 		{"same", "same", 0},
-		// Rune-based, not byte-based: a single accented character must diff as
-		// one edit, not the multi-byte UTF-8 sequence it's encoded as.
 		{"beyonce", "beyoncé", 1},
 	}
 	for _, tt := range tests {

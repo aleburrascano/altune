@@ -6,21 +6,22 @@ func TestDoubleMetaphone(t *testing.T) {
 	tests := []struct {
 		input   string
 		primary string
+		rule    string
 	}{
-		{"weeknd", "AKNT"},
-		{"weekend", "AKNT"},
-		{"smith", "SM0"},
-		{"schmidt", "SKMT"},
-		{"phone", "FN"},
-		{"knight", "NKT"},
-		{"wright", "RKT"},
-		{"", ""},
+		{"weeknd", "AKNT", ""},
+		{"weekend", "AKNT", ""},
+		{"smith", "SM0", ""},
+		{"schmidt", "SKMT", ""},
+		{"phone", "FN", ""},
+		{"knight", "NKT", ""},
+		{"wright", "RKT", ""},
+		{"", "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			pri, _ := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
-				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q", tt.input, pri, tt.primary)
+				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
 		})
 	}
@@ -51,17 +52,18 @@ func TestDoubleMetaphone_SilentInitials(t *testing.T) {
 	tests := []struct {
 		input   string
 		primary string
+		rule    string
 	}{
-		{"knight", "NKT"}, // KN → N
-		{"gnome", "NM"},   // GN → N
-		{"wright", "RKT"}, // WR → R
-		{"aeon", "N"},     // AE → E (then leading-vowel rule consumed)
+		{"knight", "NKT", "KN → N"},
+		{"gnome", "NM", "GN → N"},
+		{"wright", "RKT", "WR → R"},
+		{"aeon", "N", "AE → E (then leading-vowel rule consumed)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			pri, _ := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
-				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q", tt.input, pri, tt.primary)
+				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
 		})
 	}
@@ -71,33 +73,34 @@ func TestDoubleMetaphone_Digraphs(t *testing.T) {
 	tests := []struct {
 		input   string
 		primary string
+		rule    string
 	}{
-		{"cher", "XR"},     // CH → X
-		{"cello", "SL"},    // CE → S, LL collapsed
-		{"jack", "JK"},     // CK collapsed to one K
-		{"edge", "AJ"},     // DGE → J
-		{"phone", "FN"},    // PH → F
-		{"the", "0"},       // TH → 0
-		{"nation", "NXN"},  // TIO → X
-		{"school", "SKL"},  // SCH → SK
-		{"science", "SNS"}, // SCI → S
-		{"scat", "SKT"},    // SC+other → SK
-		{"ghost", "KST"},   // initial GH → K
-		{"ghetto", "KT"},   // GH after consonantless start → K, TT collapsed
-		{"night", "NKT"},   // GH after vowel → K (simplified; real metaphone silences it)
-		{"xavier", "KSFR"}, // X → KS
-		{"exxon", "AKSN"},  // XX collapsed
-		{"queen", "KN"},    // QU → K
-		{"pizza", "PS"},    // ZZ → S
-		{"jazz", "JS"},     // trailing ZZ → S
-		{"viva", "FF"},     // V → F
-		{"judge", "JJ"},    // DGE → J after initial J
+		{"cher", "XR", "CH → X"},
+		{"cello", "SL", "CE → S, LL collapsed"},
+		{"jack", "JK", "CK collapsed to one K"},
+		{"edge", "AJ", "DGE → J"},
+		{"phone", "FN", "PH → F"},
+		{"the", "0", "TH → 0"},
+		{"nation", "NXN", "TIO → X"},
+		{"school", "SKL", "SCH → SK"},
+		{"science", "SNS", "SCI → S"},
+		{"scat", "SKT", "SC+other → SK"},
+		{"ghost", "KST", "initial GH → K"},
+		{"ghetto", "KT", "GH after consonantless start → K, TT collapsed"},
+		{"night", "NKT", "GH after vowel → K (simplified; real metaphone silences it)"},
+		{"xavier", "KSFR", "X → KS"},
+		{"exxon", "AKSN", "XX collapsed"},
+		{"queen", "KN", "QU → K"},
+		{"pizza", "PS", "ZZ → S"},
+		{"jazz", "JS", "trailing ZZ → S"},
+		{"viva", "FF", "V → F"},
+		{"judge", "JJ", "DGE → J after initial J"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			pri, _ := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
-				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q", tt.input, pri, tt.primary)
+				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
 		})
 	}
@@ -107,19 +110,20 @@ func TestDoubleMetaphone_DoubledLetters(t *testing.T) {
 	tests := []struct {
 		input   string
 		primary string
+		rule    string
 	}{
-		{"dodd", "TT"},     // final DD collapses to one T (initial D emits the other)
-		{"off", "AF"},      // FF → F, leading vowel kept
-		{"happy", "HP"},    // PP → P
-		{"bubba", "PP"},    // BB → P
-		{"accent", "AKNT"}, // CC → K then continues past both
-		{"buggy", "PK"},    // GG → K
+		{"dodd", "TT", "final DD collapses to one T (initial D emits the other)"},
+		{"off", "AF", "FF → F, leading vowel kept"},
+		{"happy", "HP", "PP → P"},
+		{"bubba", "PP", "BB → P"},
+		{"accent", "AKNT", "CC → K then continues past both"},
+		{"buggy", "PK", "GG → K"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			pri, _ := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
-				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q", tt.input, pri, tt.primary)
+				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
 		})
 	}
@@ -129,45 +133,46 @@ func TestDoubleMetaphone_RemainingBranches(t *testing.T) {
 	tests := []struct {
 		input   string
 		primary string
+		rule    string
 	}{
-		{"afghan", "AFN"},  // mid-word GH after consonant is silent
-		{"signs", "SS"},    // mid-word GN followed by consonant is silent
-		{"shakira", "XKR"}, // SH → X
-		{"hajj", "HJ"},     // JJ collapsed
-		{"mokka", "MK"},    // KK collapsed
-		{"zaqqum", "SKM"},  // QQ collapsed
-		{"ferrari", "FRR"}, // RR collapsed
-		{"missy", "MS"},    // SS collapsed
-		{"savvy", "SF"},    // VV collapsed
-		{"zebra", "SPR"},   // single Z → S
+		{"afghan", "AFN", "mid-word GH after consonant is silent"},
+		{"signs", "SS", "mid-word GN followed by consonant is silent"},
+		{"shakira", "XKR", "SH → X"},
+		{"hajj", "HJ", "JJ collapsed"},
+		{"mokka", "MK", "KK collapsed"},
+		{"zaqqum", "SKM", "QQ collapsed"},
+		{"ferrari", "FRR", "RR collapsed"},
+		{"missy", "MS", "SS collapsed"},
+		{"savvy", "SF", "VV collapsed"},
+		{"zebra", "SPR", "single Z → S"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			pri, _ := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
-				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q", tt.input, pri, tt.primary)
+				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
 		})
 	}
 }
 
-func TestDoubleMetaphone_VowelHandling(t *testing.T) {
-	// Only a leading vowel is encoded (as A); interior vowels are dropped.
+func TestDoubleMetaphone_EncodesOnlyLeadingVowelAndDropsInteriorOnes(t *testing.T) {
 	tests := []struct {
 		input   string
 		primary string
+		rule    string
 	}{
-		{"ooh", "A"},  // leading vowel, trailing H silent
-		{"wa", "A"},   // W+vowel → A
-		{"a", "A"},    // single vowel
-		{"hah", "H"},  // H before vowel at word start kept, trailing H dropped
-		{"high", "HK"},
+		{"ooh", "A", "leading vowel, trailing H silent"},
+		{"wa", "A", "W+vowel → A"},
+		{"a", "A", "single vowel"},
+		{"hah", "H", "H before vowel at word start kept, trailing H dropped"},
+		{"high", "HK", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			pri, _ := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
-				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q", tt.input, pri, tt.primary)
+				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
 		})
 	}
@@ -177,21 +182,22 @@ func TestDoubleMetaphone_NonAlphaAndUnicode(t *testing.T) {
 	tests := []struct {
 		input   string
 		primary string
+		rule    string
 	}{
-		{"ab3d", "APT"},    // digit skipped, consonants both sides survive
-		{"123", ""},        // all digits → empty code
-		{"!?", ""},         // symbols only → empty code
-		{"élan", "LN"},     // non-ASCII letter skipped (not treated as a vowel)
-		{"x", "KS"},        // single consonant
-		{"q", "K"},
-		{"  smith  ", "SM0"}, // surrounding whitespace trimmed
-		{"SMITH", "SM0"},     // case-insensitive
+		{"ab3d", "APT", "digit skipped, consonants both sides survive"},
+		{"123", "", "all digits → empty code"},
+		{"!?", "", "symbols only → empty code"},
+		{"élan", "LN", "non-ASCII letter skipped (not treated as a vowel)"},
+		{"x", "KS", "single consonant"},
+		{"q", "K", ""},
+		{"  smith  ", "SM0", "surrounding whitespace trimmed"},
+		{"SMITH", "SM0", "case-insensitive"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			pri, _ := DoubleMetaphone(tt.input)
 			if pri != tt.primary {
-				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q", tt.input, pri, tt.primary)
+				t.Errorf("DoubleMetaphone(%q) primary = %q, want %q (rule: %s)", tt.input, pri, tt.primary, tt.rule)
 			}
 		})
 	}
@@ -232,9 +238,7 @@ func TestDoubleMetaphone_MaxLengthFour(t *testing.T) {
 	}
 }
 
-func TestDoubleMetaphone_Stability(t *testing.T) {
-	// Same input → same key, and casing must not change the key: the vocabulary
-	// index writes the key at Add time and matches it at query time.
+func TestDoubleMetaphone_SameInputAndCasingAlwaysYieldTheSameKey(t *testing.T) {
 	words := []string{"weeknd", "Beyonce", "kendrick lamar", "SMITH"}
 	for _, w := range words {
 		t.Run(w, func(t *testing.T) {
@@ -247,11 +251,6 @@ func TestDoubleMetaphone_Stability(t *testing.T) {
 	}
 }
 
-// TestDoubleMetaphone_SimplifiedQuirks pins behavior where this simplified
-// implementation diverges from canonical (double) metaphone. Matching is
-// symmetric — both sides of a comparison use the same function — so these are
-// consistency anchors, not correctness claims: if one changes, every stored
-// vocabulary metaphone key built from it goes stale.
 func TestDoubleMetaphone_SimplifiedQuirks(t *testing.T) {
 	tests := []struct {
 		input   string
@@ -276,9 +275,7 @@ func TestDoubleMetaphone_SimplifiedQuirks(t *testing.T) {
 	}
 }
 
-func TestDoubleMetaphone_AlternateMirrorsPrimary(t *testing.T) {
-	// Documents current behavior: no branch ever emits a divergent alternate,
-	// so the second return value always equals the primary.
+func TestDoubleMetaphone_AlternateAlwaysMirrorsPrimary(t *testing.T) {
 	words := []string{"weeknd", "schmidt", "cello", "xavier", "night", "jose"}
 	for _, w := range words {
 		t.Run(w, func(t *testing.T) {
@@ -294,24 +291,25 @@ func TestMetaphoneKey(t *testing.T) {
 	tests := []struct {
 		term string
 		want string
+		rule string
 	}{
-		{"the weeknd", "0AKNT"},
-		{"the weekend", "0AKNT"},
-		{"tay k", "TK"},
-		{"", ""},
-		{"   ", ""},                 // whitespace-only → no words
-		{"  the   weeknd  ", "0AKNT"}, // ragged spacing collapses via Fields
-		{"...", ""},                 // symbol-only word stripped, then skipped
-		{"!!! chk", "XK"},           // symbol-only word skipped, real word coded
-		{"a.b 123", "AP"},           // punctuation stripped inside word; digit-only word skipped
-		{"AC/DC", "AKTK"},           // slash stripped → single word ACDC
-		{"björk", "PJRK"},           // non-ASCII letter survives stripNonAlpha, skipped by the coder
+		{"the weeknd", "0AKNT", ""},
+		{"the weekend", "0AKNT", ""},
+		{"tay k", "TK", ""},
+		{"", "", ""},
+		{"   ", "", "whitespace-only → no words"},
+		{"  the   weeknd  ", "0AKNT", "ragged spacing collapses via Fields"},
+		{"...", "", "symbol-only word stripped, then skipped"},
+		{"!!! chk", "XK", "symbol-only word skipped, real word coded"},
+		{"a.b 123", "AP", "punctuation stripped inside word; digit-only word skipped"},
+		{"AC/DC", "AKTK", "slash stripped → single word ACDC"},
+		{"björk", "PJRK", "non-ASCII letter survives stripNonAlpha, skipped by the coder"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.term, func(t *testing.T) {
 			got := MetaphoneKey(tt.term)
 			if got != tt.want {
-				t.Errorf("MetaphoneKey(%q) = %q, want %q", tt.term, got, tt.want)
+				t.Errorf("MetaphoneKey(%q) = %q, want %q (rule: %s)", tt.term, got, tt.want, tt.rule)
 			}
 		})
 	}

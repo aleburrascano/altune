@@ -25,22 +25,12 @@ type userState struct {
 }
 
 type InProcessBus struct {
-	// users grows one entry per distinct UserId and is never evicted — a few
-	// hundred bytes per user, bounded in practice by the family-scale user base,
-	// and reset on restart like all in-memory state.
 	users   sync.Map
 	ringCap int
-	// idBase seeds every user's monotonic event counter at process start. The
-	// per-user nextID resets to 0 on restart otherwise (F5), so a client that
-	// had already seen low ids from the previous process would mis-dedupe /
-	// stop on reconnect. Seeding from the wall clock makes ids monotonic across
-	// restarts: a later process always starts above the earlier one's range.
 	idBase  uint64
 	dropped atomic.Uint64
 }
 
-// Dropped reports the total number of events dropped because a subscriber's
-// buffer was full — the lossy-by-design backpressure made observable.
 func (b *InProcessBus) Dropped() uint64 { return b.dropped.Load() }
 
 var (
@@ -49,7 +39,11 @@ var (
 )
 
 func NewInProcessBus() *InProcessBus {
-	return &InProcessBus{ringCap: defaultRingSize, idBase: uint64(time.Now().UnixNano())}
+	return &InProcessBus{ringCap: defaultRingSize, idBase: idBaseMonotonicAcrossRestarts()}
+}
+
+func idBaseMonotonicAcrossRestarts() uint64 {
+	return uint64(time.Now().UnixNano())
 }
 
 func (b *InProcessBus) getOrCreateUser(userId shared.UserId) *userState {
@@ -95,14 +89,16 @@ func (b *InProcessBus) Publish(userId shared.UserId, eventType string, payload m
 		select {
 		case ch <- evt:
 		default:
-			// Subscriber buffer full: drop (the ring + Replay is the recovery
-			// path). Lossy by design, but no longer silent.
-			total := b.dropped.Add(1)
-			slog.Warn("events.subscriber_dropped",
-				"user_id", userId.String(), "event_type", eventType,
-				"event_id", evt.ID, "dropped_total", total)
+			b.recordDropForFullSubscriber(userId, eventType, evt.ID)
 		}
 	}
+}
+
+func (b *InProcessBus) recordDropForFullSubscriber(userId shared.UserId, eventType string, eventID uint64) {
+	total := b.dropped.Add(1)
+	slog.Warn("events.subscriber_dropped",
+		"user_id", userId.String(), "event_type", eventType,
+		"event_id", eventID, "dropped_total", total)
 }
 
 func (b *InProcessBus) Subscribe(userId shared.UserId) (<-chan Event, func()) {
@@ -143,17 +139,7 @@ func (b *InProcessBus) Replay(userId shared.UserId, afterID uint64) []Event {
 		start += b.ringCap
 	}
 
-	// Gap detection: if the caller resumes after an id that has already been
-	// evicted from the ring, events between afterID and the oldest retained id
-	// are lost. The client receives only the retained tail — surface the gap so
-	// it is diagnosable (a resume that silently loses events otherwise looks like
-	// a clean resume). afterID 0 means "from the beginning" — no gap expected.
-	oldestID := us.ring[start].ID
-	if afterID > 0 && oldestID > afterID+1 {
-		slog.Warn("events.replay_gap",
-			"user_id", userId.String(), "after_id", afterID,
-			"oldest_retained_id", oldestID, "lost", oldestID-afterID-1)
-	}
+	warnIfEventsWereEvictedBeforeResume(userId, afterID, us.ring[start].ID)
 
 	var result []Event
 	for i := 0; i < us.ringLen; i++ {
@@ -164,4 +150,14 @@ func (b *InProcessBus) Replay(userId shared.UserId, afterID uint64) []Event {
 		}
 	}
 	return result
+}
+
+func warnIfEventsWereEvictedBeforeResume(userId shared.UserId, afterID, oldestRetainedID uint64) {
+	resumingFromBeginning := afterID == 0
+	if resumingFromBeginning || oldestRetainedID <= afterID+1 {
+		return
+	}
+	slog.Warn("events.replay_gap",
+		"user_id", userId.String(), "after_id", afterID,
+		"oldest_retained_id", oldestRetainedID, "lost", oldestRetainedID-afterID-1)
 }

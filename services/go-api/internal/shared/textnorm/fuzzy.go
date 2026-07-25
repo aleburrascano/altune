@@ -6,9 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-// TokenSortRatio implements rapidfuzz's token_sort_ratio algorithm:
-// tokenize → sort tokens alphabetically → join → compute normalized
-// Levenshtein ratio * 100.
 func TokenSortRatio(s1, s2 string) float64 {
 	t1 := sortedTokenString(s1)
 	t2 := sortedTokenString(s2)
@@ -25,10 +22,6 @@ func levenshteinRatio(s1, s2 string) float64 {
 	if s1 == s2 {
 		return 1.0
 	}
-	// Rune counts, not byte lengths: the distance below counts runes, so a
-	// byte-length total inflated the ratio for multi-byte scripts (two CJK
-	// strings sharing zero characters scored ~0.67 instead of 0). ASCII is
-	// unchanged (bytes == runes).
 	total := utf8.RuneCountInString(s1) + utf8.RuneCountInString(s2)
 	if total == 0 {
 		return 1.0
@@ -41,7 +34,6 @@ func levenshteinRatio(s1, s2 string) float64 {
 	return float64(matching) / float64(total)
 }
 
-// LevenshteinDistance is the edit distance between two strings, counted in runes.
 func LevenshteinDistance(s1, s2 string) int {
 	r1 := []rune(s1)
 	r2 := []rune(s2)

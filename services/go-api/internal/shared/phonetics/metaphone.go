@@ -5,9 +5,6 @@ import (
 	"unicode"
 )
 
-// DoubleMetaphone returns primary and alternate phonetic codes for a word.
-// Simplified implementation covering the most common English pronunciation
-// patterns relevant to music artist/track names.
 func DoubleMetaphone(s string) (primary, alternate string) {
 	s = strings.ToUpper(strings.TrimSpace(s))
 	if s == "" {
@@ -46,7 +43,6 @@ func DoubleMetaphone(s string) (primary, alternate string) {
 	}
 	add := func(c string) { addBoth(c, c) }
 
-	// Skip initial silent letters
 	switch at(0) {
 	case 'G', 'K', 'P':
 		if at(1) == 'N' {
@@ -300,8 +296,6 @@ func DoubleMetaphone(s string) (primary, alternate string) {
 	return pri.String(), alt.String()
 }
 
-// MetaphoneKey returns the primary metaphone code for a normalized term,
-// splitting multi-word terms and concatenating codes.
 func MetaphoneKey(term string) string {
 	words := strings.Fields(term)
 	if len(words) == 0 {

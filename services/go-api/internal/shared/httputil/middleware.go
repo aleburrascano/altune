@@ -29,10 +29,6 @@ func GetCorrelationID(ctx context.Context) string {
 	return id
 }
 
-// WithCorrelationID returns a context carrying the given correlation id. Used by
-// synthetic request paths (e.g. the Mission Control re-run inspector) that need to
-// participate in correlation-keyed telemetry without passing through the
-// CorrelationID HTTP middleware.
 func WithCorrelationID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, correlationIDKey, id)
 }
@@ -122,9 +118,6 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// Flush forwards to the underlying ResponseWriter so streaming handlers — the
-// SSE endpoint at /v1/events type-asserts http.Flusher — keep working through
-// this logging wrapper. Without it the assertion fails and SSE 500s.
 func (w *statusWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()

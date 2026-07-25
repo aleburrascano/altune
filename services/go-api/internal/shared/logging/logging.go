@@ -13,11 +13,6 @@ import (
 	"time"
 )
 
-// Setup installs the default slog logger and returns the in-memory ring that
-// tees every record for the Mission Control logs panel. Callers that don't need
-// the ring (e.g. CLI subcommands) may ignore the return value. Takes the two
-// config values it needs rather than *config.Config so logging has no
-// intra-shared dependency.
 func Setup(logLevel string, development bool) *RingBuffer {
 	level := parseLevel(logLevel)
 
@@ -87,14 +82,12 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 
 	var b strings.Builder
 
-	// timestamp + level + message
 	fmt.Fprintf(&b, "%s%s%s %s%-5s%s %s%s%s",
 		colorGray, timestamp, colorReset,
 		levelColor, level, colorReset,
 		colorWhite, r.Message, colorReset,
 	)
 
-	// source location (function name + file:line)
 	if h.addSource {
 		fs := r.PC
 		if fs != 0 {
@@ -111,11 +104,9 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 		}
 	}
 
-	// pre-set attrs (already group-qualified at WithAttrs time)
 	for _, a := range h.attrs {
 		writeAttr(&b, a, "")
 	}
-	// record attrs, qualified with the handler's open group
 	r.Attrs(func(a slog.Attr) bool {
 		writeAttr(&b, a, h.group)
 		return true
@@ -127,7 +118,6 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 }
 
 func (h *prettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	// Qualify now so the open group at attach time sticks to these attrs.
 	qualified := make([]slog.Attr, 0, len(attrs))
 	for _, a := range attrs {
 		qualified = append(qualified, slog.Attr{Key: h.group + a.Key, Value: a.Value})
@@ -167,8 +157,6 @@ func formatLevel(level slog.Level) (string, string) {
 	}
 }
 
-// writeAttr renders one attr, prefixing its key with the handler's open group
-// (dot-joined). Group-valued attrs flatten to parent.child keys.
 func writeAttr(b *strings.Builder, a slog.Attr, prefix string) {
 	if a.Equal(slog.Attr{}) {
 		return
@@ -200,8 +188,6 @@ func writeAttr(b *strings.Builder, a slog.Attr, prefix string) {
 }
 
 func shortFuncName(full string) string {
-	// "altune/go-api/internal/catalog/service.(*AddTrackService).Execute"
-	// → "AddTrackService.Execute"
 	if idx := strings.LastIndex(full, "/"); idx >= 0 {
 		full = full[idx+1:]
 	}

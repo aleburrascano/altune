@@ -118,9 +118,6 @@ func TestNormalizeForMatch(t *testing.T) {
 	}
 }
 
-// TestNormalizeForMatchNonLatin pins the CJK fix: non-Latin letters now survive
-// (the query is rankable) while symbols/hyphens are still stripped, and matching
-// stays symmetric.
 func TestNormalizeForMatchNonLatin(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -178,16 +175,12 @@ func TestNormalizeForMatchNonLatin(t *testing.T) {
 	}
 }
 
-// TestStripSymbolsASCIIByteIdentical guards the load-bearing safety property: for
-// ASCII input, stripSymbols must produce exactly what the old `[^\w\s]` regex did
-// (ASCII alphanumerics and `_` kept, every other byte → space). If this drifts, the
-// CJK change is no longer additive-only and could perturb the Latin eval corpus.
 func TestStripSymbolsASCIIByteIdentical(t *testing.T) {
-	oldRe := regexp.MustCompile(`[^\w\s]`)
-	for b := 0; b < 128; b++ {
-		in := string(rune(b)) // single ASCII byte
+	oldASCIIOnlyRe := regexp.MustCompile(`[^\w\s]`)
+	for asciiByte := 0; asciiByte < 128; asciiByte++ {
+		in := string(rune(asciiByte))
 		got := stripSymbols(in)
-		want := oldRe.ReplaceAllString(in, " ")
+		want := oldASCIIOnlyRe.ReplaceAllString(in, " ")
 		if got != want {
 			t.Errorf("stripSymbols(%q) = %q, old regex = %q", in, got, want)
 		}

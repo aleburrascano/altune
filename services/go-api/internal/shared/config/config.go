@@ -20,91 +20,43 @@ type Config struct {
 
 	DatabaseURL string `env:"DATABASE_URL"`
 
-	// Supabase Auth — JWKS only (HS256 not implemented, matching Python behavior).
 	SupabaseProjectURL string `env:"SUPABASE_PROJECT_URL"`
 	SupabaseJWTAud     string `env:"SUPABASE_JWT_AUD" envDefault:"authenticated"`
 	SupabaseJWTJWKSURL string `env:"SUPABASE_JWT_JWKS_URL"`
-	// Public client (publishable/anon) key — safe to expose to browsers. Lets the
-	// Mission Control page sign the operator in with email + password directly.
-	SupabaseAnonKey string `env:"SUPABASE_ANON_KEY"`
+	SupabaseAnonKey    string `env:"SUPABASE_ANON_KEY"`
 
-	// Redis
 	RedisURL string `env:"REDIS_URL"`
 
-	// Discovery providers
 	MusicBrainzUserAgent string `env:"MUSICBRAINZ_USER_AGENT"`
 	LastFMAPIKey         string `env:"LASTFM_API_KEY"`
 	FanartTVAPIKey       string `env:"FANARTTV_API_KEY"`
 	GeniusAccessToken    string `env:"GENIUS_ACCESS_TOKEN"`
 	DiscogsToken         string `env:"DISCOGS_TOKEN"`
 
-	// Audio storage — OCI Object Storage (S3-compatible)
 	OCIS3Endpoint  string `env:"OCI_S3_ENDPOINT"`
 	OCIS3AccessKey string `env:"OCI_S3_ACCESS_KEY"`
 	OCIS3SecretKey string `env:"OCI_S3_SECRET_KEY"`
 	OCIS3Bucket    string `env:"OCI_S3_BUCKET"`
 	OCIS3Region    string `env:"OCI_S3_REGION"`
 
-	// Audio storage — local filesystem fallback
 	MusicDir string `env:"MUSIC_DIR"`
 
-	// Audio acquisition tools
 	FFmpegLocation         string `env:"FFMPEG_LOCATION"`
 	YtDLPCookieFile        string `env:"YTDLP_COOKIE_FILE"`
 	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
 	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
 
-	// Mission Control — operator console. The console is denied to everyone
-	// (fail-closed) unless OPERATOR_USER_ID is set to the operator's account id.
-	OperatorUserID string `env:"OPERATOR_USER_ID"`
-	// Alert push channel (ntfy topic URL). Empty → alerts are logged only, not
-	// pushed. Use a non-guessable random topic.
-	AlertNtfyURL string `env:"ALERT_NTFY_URL"`
-	// Discovery-eval meter. OFF by default: the live smoke run hits real provider
-	// APIs and shares per-provider quota with user traffic, so it must be opted
-	// into deliberately.
-	EvalMeterEnabled bool `env:"EVAL_METER_ENABLED" envDefault:"false"`
-	// Tail-noise demotion experiment. OFF by default: demotes single-source
-	// UGC/scrobble results with no identity below corroborated results. Flipped on
-	// for eval A/B before any production rollout. See
-	// docs/brainstorms/2026-06-27-discovery-tail-noise-demotion.md.
-	TailDemotionEnabled bool `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
-	// Cross-kind prominence tiebreak. Among equally relevant results of different
-	// kinds, the more prominent entity (Deezer nb_fan/rank, log-compressed) sorts
-	// first — fixes bare-name artist-intent burial without touching track-vs-track
-	// order. ON by default: the fixture A/B (2026-06-29) proved it lifts artist-
-	// intent top-1 +7.8pp AND track-hard top-3 +3.4pp (−38 obscure-artist-on-top
-	// failures), with track-exact byte-identical. Set false to disable. See
-	// docs/solutions/2026-06-29-cross-kind-ranking-ties.md.
-	CrossKindProminenceEnabled bool `env:"CROSS_KIND_PROMINENCE_ENABLED" envDefault:"true"`
-	// Behavioral ranking. OFF by default: feeds the EventConsumer-derived
-	// satisfaction signal (play-to-completion +, skip-after-click −) into ranking
-	// as a within-tie input. A new ranking consumer, so it ships dark until eval
-	// A/B proves it on the hard corpus — same discipline as tail demotion.
-	BehavioralRankingEnabled bool `env:"BEHAVIORAL_RANKING_ENABLED" envDefault:"false"`
-	// Self-growing eval corpus. Empty → the nightly behavioral-label corpus job is
-	// disabled. When set to a writable path, the job materializes search→engagement
-	// labels (positive) + wrong_album (hard negative) into the eval corpus format.
-	BehavioralCorpusPath string `env:"BEHAVIORAL_CORPUS_PATH"`
-	// Exploration randomization. OFF by default: a small fraction of searches
-	// serve a randomized result order (logged as exploration) so offline
-	// counterfactual eval has unbiased propensity data. The one user-facing
-	// behavior change — shipped dark behind this flag so it needs no live sign-off.
-	ExplorationEnabled bool    `env:"EXPLORATION_ENABLED" envDefault:"false"`
-	ExplorationRate    float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
-	// Coverage alert: page the operator when zero-result searches in the last 24h
-	// exceed this count. 0 → disabled. Aggregate count only, never the query text.
-	AlertZeroResultThreshold int `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
-	// Identity verify-on-persist — the permanent identity-bridge fix (docs/
-	// discovery-detail-pipeline.md §7). MusicBrainz url-relations are not always
-	// correct: a wrong streaming link fuses two same-name artists (the wrong Deezer
-	// "Che"). When on, each learned streaming edge is checked against the artist's
-	// MusicBrainz release-groups before the bridge is persisted, and a
-	// non-overlapping (mis-bridged) edge is dropped — so the durable identity, and
-	// the detail fan-out / artwork that read it, never inherit the contamination.
-	// Runs off the request path (the background bridge persist). Ships dark until
-	// its added MB/provider fetch load is measured.
-	IdentityVerifyOnPersist bool `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
+	OperatorUserID             string  `env:"OPERATOR_USER_ID"`
+	AlertNtfyURL               string  `env:"ALERT_NTFY_URL"`
+	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
+	TailDemotionEnabled        bool    `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
+	CrossKindProminenceEnabled bool    `env:"CROSS_KIND_PROMINENCE_ENABLED" envDefault:"true"`
+	BehavioralRankingEnabled   bool    `env:"BEHAVIORAL_RANKING_ENABLED" envDefault:"false"`
+	BehavioralCorpusPath       string  `env:"BEHAVIORAL_CORPUS_PATH"`
+	ExplorationEnabled         bool    `env:"EXPLORATION_ENABLED" envDefault:"false"`
+	ExplorationRate            float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
+	AlertZeroResultThreshold   int     `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
+	IdentityVerifyOnPersist    bool    `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
 }
 
 func Load() (*Config, error) {
@@ -172,7 +124,6 @@ func (c *Config) HasAlertPush() bool {
 	return c.AlertNtfyURL != ""
 }
 
-// LogValue implements slog.LogValuer to redact secrets.
 func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("env", c.Env),
