@@ -9,8 +9,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// recordingRoundTripper records whether a request was ever dispatched, so the
-// cancelled-context test can assert no network call happened.
 type recordingRoundTripper struct{ called bool }
 
 func (r *recordingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {

@@ -18,30 +18,12 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// AIDEV-NOTE: Deezer lyrics (docs/providers/deezer.md cap 6 — the headline).
-// Lyrics are the one metadata axis no other audited provider carries. The public
-// API does not expose them and the legacy gw-light song.getLyrics is auth-gated;
-// the working anonymous path is the internal pipe.deezer.com GraphQL, reached with
-// an anonymous JWT bootstrapped from auth.deezer.com. ToS: reverse-engineered,
-// against ToS — accepted for self-hosted personal/family use (README doctrine),
-// same posture as SoundCloud's client_id path.
-//
-// Track-id resolution reuses the public-API DeezerAdapter search (no second
-// search implementation). Endpoint shapes are from the live probe documented in
-// deezer.md §4; the auth-response field name is [INFERRED] (the JWT body was not
-// field-dumped this session) — corrected on the next live probe if wrong.
-
-// AIDEV-WARNING: pipe.deezer.com + auth.deezer.com are reverse-engineered internal
-// endpoints. Keep this path display-only and self-healing on the anonymous-JWT
-// rotation (401 → re-bootstrap once). Never block the hot search path on it.
-
 const (
 	deezerAuthAnonymousURL = "https://auth.deezer.com/login/anonymous?jo=p&rto=c&i=c"
 	deezerPipeURL          = "https://pipe.deezer.com/api"
-	deezerLyricsMaxBody    = 1 << 20 // 1MB ceiling on a lyrics response
+	deezerLyricsMaxBody    = 1 << 20
 )
 
-// synchronizedLyricsQuery is the verified pipe GraphQL query (deezer.md §4).
 const synchronizedLyricsQuery = `query SynchronizedLyrics($trackId: String!) {
   track(trackId: $trackId) {
     id
@@ -57,18 +39,12 @@ const synchronizedLyricsQuery = `query SynchronizedLyrics($trackId: String!) {
 
 var _ ports.LyricsProvider = (*DeezerLyricsAdapter)(nil)
 
-// DeezerLyricsAdapter fetches a track's lyrics from Deezer. It delegates track-id
-// resolution to the public-API DeezerAdapter and fetches the lyrics themselves
-// from the internal pipe.deezer.com GraphQL, gated by a self-healing anonymous
-// JWT.
 type DeezerLyricsAdapter struct {
 	resolver *DeezerAdapter
 	jwt      *deezerJWTResolver
 	client   *http.Client
 }
 
-// NewDeezerLyricsAdapter wires the lyrics adapter. The same http.Client is used
-// for the public-API resolution, the anonymous-JWT bootstrap, and the pipe POST.
 func NewDeezerLyricsAdapter(client *http.Client) *DeezerLyricsAdapter {
 	return &DeezerLyricsAdapter{
 		resolver: NewDeezerAdapter(client),
@@ -77,16 +53,10 @@ func NewDeezerLyricsAdapter(client *http.Client) *DeezerLyricsAdapter {
 	}
 }
 
-// ResolveTrackID maps an (artist, title) to the top-matching Deezer track id via
-// the public-API search, "" when nothing matches.
 func (a *DeezerLyricsAdapter) ResolveTrackID(ctx context.Context, artist, title string) (string, error) {
 	return a.resolver.ResolveID(ctx, domain.ResultKindTrack, artist, title)
 }
 
-// Lookup fetches the lyrics for a known track id. A definitive "no lyrics"
-// (the track has none, or none for this region) returns an empty value + nil
-// error so the service can negative-cache it; an auth/network/decode failure
-// returns an error so the service degrades without poisoning the cache.
 func (a *DeezerLyricsAdapter) Lookup(ctx context.Context, trackID string) (domain.DeezerLyrics, error) {
 	if strings.TrimSpace(trackID) == "" {
 		return domain.EmptyDeezerLyrics(), nil
@@ -100,7 +70,6 @@ func (a *DeezerLyricsAdapter) Lookup(ctx context.Context, trackID string) (domai
 	if err != nil {
 		return domain.EmptyDeezerLyrics(), err
 	}
-	// One self-heal on an expired/rotated anonymous JWT.
 	if status == http.StatusUnauthorized {
 		a.jwt.invalidate(jwt)
 		jwt, err = a.jwt.get(ctx)
@@ -119,9 +88,6 @@ func (a *DeezerLyricsAdapter) Lookup(ctx context.Context, trackID string) (domai
 	return parseSynchronizedLyrics(body)
 }
 
-// postLyrics performs one SynchronizedLyrics POST with the supplied JWT and
-// returns the raw body + status. Transport failures are errors; an HTTP status
-// (incl. 401) is returned to the caller to decide on self-heal.
 func (a *DeezerLyricsAdapter) postLyrics(ctx context.Context, jwt, trackID string) ([]byte, int, error) {
 	payload, err := json.Marshal(map[string]any{
 		"operationName": "SynchronizedLyrics",
@@ -152,17 +118,14 @@ func (a *DeezerLyricsAdapter) postLyrics(ctx context.Context, jwt, trackID strin
 	return body, resp.StatusCode, nil
 }
 
-// parseSynchronizedLyrics maps the pipe GraphQL response into the domain value
-// object. A null lyrics object or a GraphQL error array is a definitive miss
-// (empty + nil — negative-cacheable), not a failure.
 func parseSynchronizedLyrics(body []byte) (domain.DeezerLyrics, error) {
 	var env struct {
 		Data struct {
 			Track struct {
 				Lyrics *struct {
-					Copyright        string `json:"copyright"`
-					Text             string `json:"text"`
-					Writers          string `json:"writers"`
+					Copyright         string `json:"copyright"`
+					Text              string `json:"text"`
+					Writers           string `json:"writers"`
 					SynchronizedLines []struct {
 						LRCTimestamp string `json:"lrcTimestamp"`
 						Line         string `json:"line"`
@@ -180,8 +143,6 @@ func parseSynchronizedLyrics(body []byte) (domain.DeezerLyrics, error) {
 		return domain.EmptyDeezerLyrics(), fmt.Errorf("decode deezer lyrics: %w", err)
 	}
 
-	// LyricsNotFoundError (and friends) come back as a structured GraphQL error
-	// with no usable data — a definitive miss, not a transient failure.
 	if env.Data.Track.Lyrics == nil {
 		return domain.EmptyDeezerLyrics(), nil
 	}
@@ -196,7 +157,6 @@ func parseSynchronizedLyrics(body []byte) (domain.DeezerLyrics, error) {
 	for _, l := range src.SynchronizedLines {
 		line := strings.TrimSpace(l.Line)
 		ts := strings.TrimSpace(l.LRCTimestamp)
-		// Deezer emits an empty trailing line as a synced-line separator; skip it.
 		if line == "" && ts == "" {
 			continue
 		}
@@ -211,9 +171,6 @@ func parseSynchronizedLyrics(body []byte) (domain.DeezerLyrics, error) {
 	return out, nil
 }
 
-// splitDeezerWriters turns Deezer's comma-joined writer credits into a trimmed,
-// non-empty list. [INFERRED] writers is a scalar string in the probe ("A, B");
-// if a future probe shows a JSON array this needs a custom unmarshal.
 func splitDeezerWriters(s string) []string {
 	out := []string{}
 	for _, w := range strings.Split(s, ",") {
@@ -224,13 +181,9 @@ func splitDeezerWriters(s string) []string {
 	return out
 }
 
-// deezerJWTResolver bootstraps and caches the anonymous JWT the pipe GraphQL
-// backend requires. The cached token is reused until a 401 invalidates it (the
-// rotation tax — lighter than SoundCloud's client_id: one GET, no JS scraping).
-// Concurrent cold-start callers are collapsed with singleflight.
 type deezerJWTResolver struct {
 	client  *http.Client
-	authURL string // overridable in tests
+	authURL string
 	sf      singleflight.Group
 	mu      sync.Mutex
 	cached  string
@@ -255,9 +208,6 @@ func (r *deezerJWTResolver) get(ctx context.Context) (string, error) {
 		if existing != "" {
 			return existing, nil
 		}
-		// Detach from the winning caller's ctx so one impatient caller can't
-		// poison the shared resolve for every piggybacked waiter; the resolve
-		// gets its own budget instead.
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deezerJWTResolveTimeout)
 		defer cancel()
 		return r.resolve(rctx)
@@ -276,13 +226,8 @@ func (r *deezerJWTResolver) get(ctx context.Context) (string, error) {
 	return jwt, nil
 }
 
-// deezerJWTResolveTimeout bounds one shared anonymous-JWT resolve (a single
-// auth GET) independently of any single caller's deadline.
 const deezerJWTResolveTimeout = 10 * time.Second
 
-// invalidate drops the cached JWT only if it is still the one the caller
-// failed with — a second 401 handler must not wipe the fresh JWT the first
-// re-resolve just cached (the invalidate-storm case).
 func (r *deezerJWTResolver) invalidate(failed string) {
 	r.mu.Lock()
 	if r.cached == failed {
@@ -305,8 +250,6 @@ func (r *deezerJWTResolver) resolve(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("deezer anonymous auth returned %d", resp.StatusCode)
 	}
 
-	// [INFERRED] response shape: {"jwt":"<token>"}. The JWT body was not field-
-	// dumped in the audit session — confirm the field name on the next live probe.
 	var out struct {
 		JWT string `json:"jwt"`
 	}

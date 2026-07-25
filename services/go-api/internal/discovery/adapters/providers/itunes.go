@@ -18,39 +18,20 @@ import (
 type ITunesAdapter struct {
 	client *http.Client
 	mu     sync.Mutex
-	tat    time.Time // GCRA theoretical arrival time of the next conforming request
+	tat    time.Time
 }
 
 func NewITunesAdapter(client *http.Client) *ITunesAdapter {
 	return &ITunesAdapter{client: client}
 }
 
-// iTunes rate limiting (GCRA token bucket). Apple's ceiling is ~20 req/min/IP —
-// exceeding it returns HTTP 403 (not 503). itunesEmitInterval sets the sustained
-// rate (~15 req/min, safely under the ceiling); itunesBurst lets a short run of
-// calls fire back-to-back before throttling kicks in. The burst is what makes a
-// single search usable: its 3 sequential kind calls fire immediately instead of
-// being spaced 3.5s apart (the old fixed-gap limiter blew the search SLA and made
-// iTunes time out on every query), while sustained load still stays under 403 range.
 const (
-	itunesEmitInterval = 4 * time.Second // sustained ~15 req/min
-	itunesBurst        = 4               // calls allowed back-to-back before spacing
+	itunesEmitInterval = 4 * time.Second
+	itunesBurst        = 4
 )
 
-// itunesUserAgent identifies the client to Apple. The default Go user-agent
-// (Go-http-client/1.1) makes Apple's abuse heuristic stricter; a plain
-// identifying UA avoids that.
 const itunesUserAgent = "Altune/1.0 (music manager; self-hosted)"
 
-// rateLimit blocks until the GCRA limiter admits a request. tat is the
-// theoretical arrival time of the next conforming request: a call is admitted
-// immediately while now is within the burst tolerance of tat, otherwise it waits
-// until then. Each admitted call pushes tat forward by one emit interval.
-//
-// The limiter is per-adapter. iTunes is constructed as several instances
-// (search, consensus, artwork, content) that don't share this gate, but each
-// reflects a separate flow; for a personal/family-scale deployment the
-// per-instance budget is sufficient.
 func (a *ITunesAdapter) rateLimit(ctx context.Context) {
 	const burstTolerance = time.Duration(itunesBurst-1) * itunesEmitInterval
 
@@ -74,9 +55,6 @@ func (a *ITunesAdapter) rateLimit(ctx context.Context) {
 	}
 }
 
-// SearchTimeout overrides the fan-out default. iTunes runs three sequential
-// kind searches (~3s total at limit=200); the burst-tolerant limiter lets them
-// fire without spacing, but the 1.5s default is still too tight for three calls.
 func (a *ITunesAdapter) SearchTimeout() time.Duration { return 4 * time.Second }
 
 func (a *ITunesAdapter) Name() domain.ProviderName { return domain.ProviderITunes }
@@ -98,8 +76,6 @@ func (a *ITunesAdapter) Search(ctx context.Context, query string, kinds map[doma
 
 func (a *ITunesAdapter) searchKind(ctx context.Context, query string, kind domain.ResultKind) ([]domain.SearchResult, error) {
 	entity := itunesEntity(kind)
-	// limit=200 is the API max (default 50) — deeper recall for merge at no extra
-	// rate cost (same single call). The fan-out trims to the requested limit.
 	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&country=US&limit=200", url.QueryEscape(query), entity)
 
 	a.rateLimit(ctx)
@@ -178,7 +154,7 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	}
 	if kind == domain.ResultKindTrack {
 		r.Album = item.CollectionName
-		r.ReleaseDate = item.ReleaseDate // songs carry it too; only the album branch used to
+		r.ReleaseDate = item.ReleaseDate
 		if item.TrackTimeMillis > 0 {
 			r.Duration = int(item.TrackTimeMillis / 1000)
 		}
@@ -186,13 +162,6 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	return r
 }
 
-// itunesSourceRef returns the entity's own iTunes id + view URL for the kind:
-// trackId/collectionId/artistId. Previously every kind carried trackId, which
-// left album and artist results with an unusable "0" id (trackId is absent on
-// those entities) — blocking the content lookups (cap 5). The change is
-// merge-neutral: a SourceRef id only affects a merge decision through the
-// xref-gated cross-provider bridge, and MusicBrainz url-relations never carry an
-// Apple/iTunes id, so a real Apple id can never bridge-match.
 func itunesSourceRef(item itunesItem, kind domain.ResultKind) (id, sourceURL string) {
 	switch kind {
 	case domain.ResultKindAlbum:
@@ -208,19 +177,10 @@ func upscaleArtwork(url string, size int) string {
 	return strings.Replace(url, "100x100", fmt.Sprintf("%dx%d", size, size), 1)
 }
 
-// iTunesListArtworkSize is the resolution used for search-list thumbnails — a
-// card-sized cover, kept modest to avoid bloating the search payload.
 const iTunesListArtworkSize = 600
 
-// iTunesHeroArtworkSize is the resolution used for the detail-open artwork
-// fallback (the hero image). Apple serves resolution-templated artwork up to a
-// real 3000×3000 (live-probed 2026-06-22 — see docs/providers/itunes.md §5.2),
-// above Cover Art Archive's 1200px ceiling. We request 1500px: comfortably past
-// CAA, but a fraction of the ~2.4MB a 3000px hero would cost on mobile data.
-// The chain runs the MBID-keyed sources first, so this only fires on their miss.
 const iTunesHeroArtworkSize = 1500
 
-// Resolve implements ArtworkResolver — searches iTunes for cover art.
 func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
 	query := title
 	if subtitle != "" {
@@ -243,23 +203,10 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	return "", nil
 }
 
-// --- AlbumContentProvider + ArtistContentProvider (docs/providers/itunes.md cap 5) ---
-//
-// The iTunes /lookup endpoint returns the parent entity as the first result
-// followed by its children (verified 2026-06-22): an artist+entity=album lookup
-// returns the artist wrapper then its collections; a collection+entity=song
-// lookup returns the collection wrapper then its tracks. We skip the parent
-// wrapper (by wrapperType) and map the children. iTunes is a second mainstream
-// source of truth for discography/tracklist alongside Deezer/MusicBrainz.
-
 func (a *ITunesAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	return a.lookupContent(ctx, externalID, "song")
 }
 
-// GetArtistTopTracks returns the artist's tracks via /lookup. iTunes lookup is
-// catalog-ordered (recent-first), not popularity-ranked — unlike Deezer's
-// /artist/{id}/top — so "top" here means "the artist's tracks", trimmed by the
-// caller's limit.
 func (a *ITunesAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	return a.lookupContent(ctx, externalID, "song")
 }
@@ -279,10 +226,6 @@ func (a *ITunesAdapter) lookupContent(ctx context.Context, id, entity string) ([
 		return nil, err
 	}
 
-	// Keep only the requested child wrapperType. This drops the parent wrapper
-	// uniformly: an album→song lookup's parent is itself a "collection", so
-	// filtering on wrapperType alone would leak it — we filter on the *target*
-	// type the entity asked for (song→track, album→collection).
 	targetWrapper, kind := itunesContentTarget(entity)
 	results := make([]domain.SearchResult, 0, len(body.Results))
 	for _, item := range body.Results {
@@ -294,9 +237,6 @@ func (a *ITunesAdapter) lookupContent(ctx context.Context, id, entity string) ([
 	return results, nil
 }
 
-// itunesContentTarget maps a /lookup entity param to the child wrapperType and
-// ResultKind that lookup returns: entity=song → "track" children, entity=album
-// → "collection" children.
 func itunesContentTarget(entity string) (wrapperType string, kind domain.ResultKind) {
 	if entity == "album" {
 		return "collection", domain.ResultKindAlbum
@@ -304,10 +244,6 @@ func itunesContentTarget(entity string) (wrapperType string, kind domain.ResultK
 	return "track", domain.ResultKindTrack
 }
 
-// LookupAlbum searches iTunes for an album and returns a verdict on whether
-// it belongs to the given artist based on name and genre compatibility.
-// The returned int64 is the iTunes artist ID when confirmed (0 otherwise),
-// used by the resolver for cross-album artist identity consistency.
 func (a *ITunesAdapter) LookupAlbum(
 	ctx context.Context,
 	albumTitle, artistName string,
@@ -371,14 +307,10 @@ var itunesTypeSuffixes = []string{" - Single", " - EP", " - Album", " - Deluxe",
 
 func stripITunesTypeSuffix(name string) string {
 	lower := strings.ToLower(name)
-	// Case-folding that changes the byte length (e.g. Turkish İ) would misalign
-	// the slice offsets below; such names never carry an ASCII type suffix.
 	if len(lower) != len(name) {
 		return name
 	}
 	for _, suffix := range itunesTypeSuffixes {
-		// Suffix semantics only: a mid-title match ("Bad - Remix Album") must not
-		// truncate the name.
 		if strings.HasSuffix(lower, strings.ToLower(suffix)) {
 			return strings.TrimSpace(name[:len(name)-len(suffix)])
 		}
@@ -386,12 +318,6 @@ func stripITunesTypeSuffix(name string) string {
 	return name
 }
 
-// stripAlbumTypeSuffix removes a trailing " - Single"/" - EP" that Apple Music
-// and iTunes append to album names, so "Fully Loaded - EP" displays as "Fully
-// Loaded" AND clusters with the same album from other providers (a suffixed title
-// would otherwise land in its own cluster). The record_type signal is derived
-// separately (iTunesRecordType from the raw name; Apple's isSingle flag), so
-// stripping the display title never loses it.
 func stripAlbumTypeSuffix(title string) string {
 	for _, suffix := range []string{" - Single", " - EP"} {
 		if len(title) >= len(suffix) && strings.EqualFold(title[len(title)-len(suffix):], suffix) {
@@ -401,10 +327,6 @@ func stripAlbumTypeSuffix(title string) string {
 	return title
 }
 
-// iTunesRecordType derives an album's record type from the collection-name
-// suffix iTunes appends (" - Single"/" - EP"). The Search API carries no clean
-// type field, but the suffix is authoritative, so this is how the app tells a
-// single/EP from an album for discography bucketing. Defaults to "album".
 func iTunesRecordType(collectionName string) string {
 	lower := strings.ToLower(collectionName)
 	switch {

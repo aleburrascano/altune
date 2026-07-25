@@ -11,22 +11,11 @@ import (
 	"time"
 )
 
-// Concurrency contracts shared by the token/session resolvers:
-//
-//  1. singleflight collapse — N concurrent cold-start gets trigger exactly one
-//     resolve round trip;
-//  2. detached resolve ctx — a caller whose ctx is already cancelled must not
-//     poison the shared resolve (it runs on its own budget);
-//  3. expiry-triggered re-resolve — an expired cached credential is replaced,
-//     not returned;
-//  4. invalidate storm under concurrency — stale invalidates racing a fresh
-//     credential never wipe it.
-
 func TestAmazonMusicSessionResolver_singleflightCollapsesConcurrentGets(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits.Add(1)
-		time.Sleep(50 * time.Millisecond) // hold the resolve open so callers pile up
+		time.Sleep(50 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"deviceId":"d","sessionId":"s","csrf":{"token":"t","rnd":"r","ts":"1"}}`))
 	}))
@@ -106,9 +95,6 @@ func TestClientIDResolver_singleflightCollapsesConcurrentGets(t *testing.T) {
 	}
 }
 
-// A caller whose ctx is already cancelled must still get a session: the shared
-// resolve detaches (context.WithoutCancel + its own timeout) so one impatient
-// caller can't poison the resolve for every piggybacked waiter.
 func TestAmazonMusicSessionResolver_resolveDetachesFromCallerCtx(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -146,7 +132,7 @@ func TestAppleMusicTokenResolver_expiredTokenTriggersReResolve(t *testing.T) {
 	r.siteURL = srv.URL
 	r.bundleBaseURL = srv.URL + "/"
 	r.cached = "expired-token"
-	r.expiry = time.Now().Add(-time.Minute) // expired → must NOT be returned
+	r.expiry = time.Now().Add(-time.Minute)
 
 	token, err := r.get(context.Background())
 	if err != nil {
@@ -183,7 +169,7 @@ func TestSpotifyTokenResolver_expiredSessionTriggersReResolve(t *testing.T) {
 	r.clientTokenURL = srv.URL + "/clienttoken"
 	r.cached = &spotifySession{
 		accessToken:  "stale-token",
-		accessExpiry: time.Now().Add(-time.Minute), // access token expired
+		accessExpiry: time.Now().Add(-time.Minute),
 		clientToken:  "stale-client-token",
 		clientExpiry: time.Now().Add(time.Hour),
 	}
@@ -197,8 +183,6 @@ func TestSpotifyTokenResolver_expiredSessionTriggersReResolve(t *testing.T) {
 	}
 }
 
-// Stale invalidates racing a fresh credential must never wipe it — run under
-// -race this also proves the mutex discipline of get/invalidate.
 func TestClientIDResolver_concurrentStaleInvalidateNoops(t *testing.T) {
 	r := &clientIDResolver{cached: "fresh"}
 

@@ -12,8 +12,6 @@ func TestStripITunesTypeSuffix(t *testing.T) {
 		{"single suffix stripped", "Bad - Single", "Bad"},
 		{"mid-title match untouched", "Bad - Remix Album", "Bad - Remix Album"},
 		{"no suffix untouched", "OK Computer", "OK Computer"},
-		// Turkish İ lowercases to a longer byte sequence; slicing the original at
-		// an index from the lowered copy used to mangle the title.
 		{"multibyte case-fold untouched", "İSTANBUL - Single", "İSTANBUL - Single"},
 	}
 	for _, tt := range tests {

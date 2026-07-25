@@ -228,8 +228,6 @@ func TestDiscogsAdapter_FetchArtistReleases(t *testing.T) {
 	}
 }
 
-// overrideDiscogsBaseURL is a test helper that patches the adapter's HTTP client
-// transport to redirect Discogs API calls to the test server.
 func overrideDiscogsBaseURL(adapter *DiscogsAdapter, baseURL string) {
 	adapter.client = &http.Client{
 		Transport: &rewriteTransport{base: baseURL},

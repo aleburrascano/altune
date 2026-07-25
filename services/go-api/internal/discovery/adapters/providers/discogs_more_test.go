@@ -107,19 +107,17 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 	})
 }
 
-// The Discogs limiter spaces consecutive requests ~1s apart (its published
-// per-token budget). First call is free; the second blocks for the remainder.
 func TestDiscogsAdapter_rateLimit_spacesConsecutiveCalls(t *testing.T) {
 	a := NewDiscogsAdapter(http.DefaultClient, "tok", "ua")
 
 	start := time.Now()
-	a.rateLimit() // first call: lastReq zero → immediate
+	a.rateLimit()
 	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
 		t.Errorf("first call blocked %v, want immediate", elapsed)
 	}
 
 	start = time.Now()
-	a.rateLimit() // second call: must wait out the 1s interval
+	a.rateLimit()
 	if elapsed := time.Since(start); elapsed < 700*time.Millisecond {
 		t.Errorf("second call blocked only %v, want ~1s spacing", elapsed)
 	}

@@ -12,8 +12,6 @@ import (
 
 var farFuture = time.Now().Add(24 * time.Hour)
 
-// --- TOTP -----------------------------------------------------------------
-
 func TestSpotifyTOTPGenerate_isDeterministicSixDigits(t *testing.T) {
 	code1 := spotifyTOTPGenerate(spotifyTOTPSecrets[0].secret, 1700000000)
 	code2 := spotifyTOTPGenerate(spotifyTOTPSecrets[0].secret, 1700000000)
@@ -24,8 +22,6 @@ func TestSpotifyTOTPGenerate_isDeterministicSixDigits(t *testing.T) {
 		t.Errorf("code length = %d, want 6 (zero-padded): %q", len(code1), code1)
 	}
 
-	// A different 30s time-step must (almost certainly) produce a different
-	// code — cheap sanity check that time actually feeds the computation.
 	code3 := spotifyTOTPGenerate(spotifyTOTPSecrets[0].secret, 1700000000+30)
 	if code1 == code3 {
 		t.Errorf("codes for different time steps collided: both %q (extremely unlikely, check the counter math)", code1)
@@ -33,15 +29,11 @@ func TestSpotifyTOTPGenerate_isDeterministicSixDigits(t *testing.T) {
 }
 
 func TestSpotifyTOTPKey_matchesKnownXORDerivation(t *testing.T) {
-	// "A" (0x41) at index 0: 0x41 ^ (0%33+9) = 65 ^ 9  = 72 -> "72"
-	// "B" (0x42) at index 1: 0x42 ^ (1%33+9) = 66 ^ 10 = 72 -> "72"
 	got := string(spotifyTOTPKey("AB"))
 	if got != "7272" {
 		t.Errorf("spotifyTOTPKey(%q) = %q, want %q", "AB", got, "7272")
 	}
 }
-
-// --- adapter / mapping ------------------------------------------------
 
 func newTestSpotifyAdapter(searchSrv *httptest.Server) *SpotifyAdapter {
 	a := NewSpotifyAdapter(searchSrv.Client())
@@ -55,10 +47,6 @@ func newTestSpotifyAdapter(searchSrv *httptest.Server) *SpotifyAdapter {
 	return a
 }
 
-// spotifyFixtureResponse is a trimmed searchDesktop response covering one
-// track, one album, and one artist. Shape (including tracksV2's extra
-// items[].item.data hop vs albumsV2/artists' items[].data) captured live
-// against api-partner.spotify.com (2026-07-22).
 const spotifyFixtureResponse = `{
   "data": {
     "searchV2": {
@@ -177,10 +165,6 @@ func TestSpotifyAdapter_Search_mapsAllKinds(t *testing.T) {
 }
 
 func TestSpotifyAdapter_Search_graphqlErrorIsSurfaced(t *testing.T) {
-	// A stale persisted-query hash: pathfinder answers HTTP 200 with a GraphQL
-	// "errors" array and no data. This must surface as an error, not decode to a
-	// silent empty result set (the failure mode that made Spotify vanish from
-	// search while still looking healthy on the provider board).
 	const persistedQueryNotFound = `{"errors":[{"message":"PersistedQueryNotFound"}]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -239,8 +223,6 @@ func TestSpotifyAdapter_Search_reResolvesSessionOnAuthFailure(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// A fake token backend plays server-time, access-token, and client-token
-	// so invalidate() -> re-resolve has somewhere real to land.
 	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -303,8 +285,6 @@ func TestSpotifyAdapter_Name(t *testing.T) {
 		t.Errorf("Name() = %v, want %v", got, domain.ProviderSpotify)
 	}
 }
-
-// --- token resolver ---------------------------------------------------
 
 func TestSpotifyTokenResolver_resolve(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

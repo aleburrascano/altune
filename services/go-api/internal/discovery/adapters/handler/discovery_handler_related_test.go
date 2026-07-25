@@ -13,8 +13,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// fakeRelatedTracksProvider stands in for the SoundCloud adapter on the
-// related-tracks endpoint.
 type fakeRelatedTracksProvider struct {
 	results []discdomain.SearchResult
 	err     error
@@ -27,8 +25,6 @@ func (p *fakeRelatedTracksProvider) GetRelatedTracks(_ context.Context, _ discdo
 	return p.results, nil
 }
 
-// buildRelatedRouter mounts a discovery handler whose only wired use case is the
-// related-tracks service (soundcloud-only), with auth middleware.
 func buildRelatedRouter(provider *fakeRelatedTracksProvider) chi.Router {
 	svc := service.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
 		"soundcloud": provider,
@@ -89,8 +85,6 @@ func TestHandleRelatedTracks(t *testing.T) {
 	t.Run("missing external id returns 400", func(t *testing.T) {
 		router := buildRelatedRouter(&fakeRelatedTracksProvider{})
 
-		// trailing slash leaves externalId empty -> chi 404 on the param route;
-		// hit the validate path with a blank segment via an explicit empty id.
 		rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud//related", nil)
 		if rec.Code != http.StatusBadRequest && rec.Code != http.StatusNotFound {
 			t.Errorf("status = %d, want 400 or 404 for missing external id", rec.Code)

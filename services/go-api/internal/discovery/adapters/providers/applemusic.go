@@ -13,26 +13,11 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// AppleMusicAdapter searches Apple Music's official Catalog API
-// (api.music.apple.com) using the anonymous developer token Apple's own web
-// player embeds publicly — see applemusic_token.go. It returns the same
-// catalog and the same entity ids as ITunesAdapter's plain Search API, but
-// with ISRC, composer credits, and a lyrics-availability flag that API never
-// exposed — confirmed by direct comparison (2026-07-22). Because it strictly
-// supersedes iTunes Search for search-fan-out purposes, it replaces
-// ITunesAdapter's slot in the fan-out (buildDiscoveryProviders) rather than
-// running alongside it, avoiding a duplicate call to the identical catalog on
-// every search; ITunesAdapter itself is untouched for its other uses (artwork
-// chain, album consensus, content lookups).
-//
-// AIDEV-DECISION: the anonymous devToken is meant for Apple's own web player,
-// not third-party use — accepted for self-hosted personal/family use, the
-// same risk posture as the SoundCloud/Amazon Music adapters.
 type AppleMusicAdapter struct {
 	client      *http.Client
 	resolver    *appleMusicTokenResolver
-	searchURL   string // overridable in tests
-	catalogBase string // storefront catalog root, overridable in tests
+	searchURL   string
+	catalogBase string
 }
 
 const (
@@ -40,10 +25,7 @@ const (
 	appleMusicSearchTimeout = 4 * time.Second
 	appleMusicOrigin        = "https://music.apple.com"
 	appleMusicUserAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-	// appleMusicArtworkSize fills the {w}x{h} artwork template for search-card
-	// artwork — 1000px sits between iTunes' 600px list tier and 1500px hero tier
-	// (see itunes.go): sharp on card AND detail-open without a hero-sized payload.
-	appleMusicArtworkSize = 1000
+	appleMusicArtworkSize   = 1000
 )
 
 func NewAppleMusicAdapter(client *http.Client) *AppleMusicAdapter {
@@ -144,12 +126,6 @@ func (a *AppleMusicAdapter) doSearch(ctx context.Context, token, query, types st
 	return results, resp.StatusCode, nil
 }
 
-// GetAlbumTracks implements ports.AlbumContentProvider via the catalog
-// /albums/{id}/tracks relationship. externalID is the Apple Music catalog album
-// id. Without this an apple-sourced album (the majority source on identity-
-// bridged discography cards) has no native tracklist and the album-tracks
-// service falls back to a blind Deezer title search that resolves to a DIFFERENT
-// artist's same-titled album. Returns tracks in album order.
 func (a *AppleMusicAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	token, err := a.resolver.get(ctx)
 	if err != nil {
@@ -198,12 +174,6 @@ func (a *AppleMusicAdapter) fetchAlbumTracks(ctx context.Context, token, albumID
 	}
 	return body.Data, resp.StatusCode, nil
 }
-
-// --- response shapes ---------------------------------------------------
-//
-// Apple's Catalog API is a clean, flat, officially-documented JSON shape (no
-// UI-template tree to walk, unlike Amazon Music) — only the auth is
-// unofficial here, not the response format.
 
 type appleMusicSearchResponse struct {
 	Results struct {
@@ -276,8 +246,6 @@ type appleMusicArtist struct {
 	} `json:"attributes"`
 }
 
-// appleMusicArtworkURL fills Apple's "{w}x{h}" artwork URL template with a
-// fixed square size.
 func appleMusicArtworkURL(templateURL string, size int) string {
 	if templateURL == "" {
 		return ""
@@ -339,17 +307,13 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 	if a.RecordLabel != "" {
 		extras["record_label"] = a.RecordLabel
 	}
-	// record_type: Apple flags singles explicitly; everything else is an album
-	// (the Catalog API has no EP/compilation flag). Labelling the common case
-	// instead of leaving it blank is what lets the discography bucket it, rather
-	// than falling back to whatever another provider happened to say.
 	if a.IsSingle {
 		extras["record_type"] = "single"
 	} else {
 		extras["record_type"] = "album"
 	}
 	if a.UPC != "" {
-		extras["upc"] = a.UPC // wire mirror; the typed field below is what merge reads
+		extras["upc"] = a.UPC
 	}
 	if a.ContentRating == "explicit" {
 		extras["explicit"] = true

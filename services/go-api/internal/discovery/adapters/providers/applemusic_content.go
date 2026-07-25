@@ -10,14 +10,8 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// appleMusicContentLimit caps the artist-content endpoints. Apple returns the
-// discography newest-first and top-songs by popularity, so the head is what the
-// detail screen wants.
 const appleMusicContentLimit = 25
 
-// GetArtistAlbums implements ports.ArtistContentProvider: an artist's albums from
-// the official catalog, carrying release date + cover art. externalID is the Apple
-// catalog artist id (identical to the iTunes artist id — same catalog).
 func (a *AppleMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	u := fmt.Sprintf("%s/artists/%s/albums?limit=%d", a.catalogBase, url.PathEscape(externalID), appleMusicContentLimit)
 	var body appleMusicResultGroup[appleMusicAlbum]
@@ -31,8 +25,6 @@ func (a *AppleMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.Provid
 	return out, nil
 }
 
-// GetArtistTopTracks implements ports.ArtistContentProvider: an artist's most
-// popular songs from the catalog's top-songs view.
 func (a *AppleMusicAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	u := fmt.Sprintf("%s/artists/%s/view/top-songs?limit=%d", a.catalogBase, url.PathEscape(externalID), appleMusicContentLimit)
 	var body appleMusicResultGroup[appleMusicSong]
@@ -46,8 +38,6 @@ func (a *AppleMusicAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Pro
 	return out, nil
 }
 
-// fetchCatalog GETs an authorized catalog URL into out, re-resolving the token
-// once on an auth failure (the same rotation-tolerant shape as Search).
 func (a *AppleMusicAdapter) fetchCatalog(ctx context.Context, u string, out any) error {
 	token, err := a.resolver.get(ctx)
 	if err != nil {

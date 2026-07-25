@@ -11,11 +11,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// AIDEV-NOTE: KNOWN silent-zero — doSearch walks the whole Template Interface
-// tree collecting card-shaped elements; a valid 200 JSON response containing
-// none (a layout drift, an interstitial, an empty shelf) yields zero results
-// with no error anywhere. This test PINS that behaviour; if the adapter ever
-// gains a tree-shape check, update this to expect an error.
 func TestAmazonMusicAdapter_Search_noCardsIsSilentZero(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -123,10 +118,10 @@ func TestAmazonMusicDeeplinkID(t *testing.T) {
 
 func TestAmazonMusicAlbumDeeplink(t *testing.T) {
 	tests := []struct {
-		name              string
-		deeplink          string
-		album, track      string
-		ok                bool
+		name         string
+		deeplink     string
+		album, track string
+		ok           bool
 	}{
 		{"album only", "/albums/B086Q2QNLH", "B086Q2QNLH", "", true},
 		{"album with slug", "/albums/B086Q2QNLH/after-hours", "B086Q2QNLH", "", true},

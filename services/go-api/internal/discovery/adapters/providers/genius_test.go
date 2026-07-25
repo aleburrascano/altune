@@ -11,7 +11,6 @@ import (
 
 func TestGeniusArtworkResolver_Resolve_Song(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify Authorization header is present
 		auth := r.Header.Get("Authorization")
 		if auth != "Bearer test-token-123" {
 			t.Errorf("Authorization header: got %q, want %q", auth, "Bearer test-token-123")
@@ -123,7 +122,6 @@ func TestGeniusArtworkResolver_Resolve_SkipsDefaultImages(t *testing.T) {
 	defer server.Close()
 
 	resolver := NewGeniusArtworkResolver(newTestClient(server.URL), "token")
-	// song_art_image_url contains "default", header contains "no_image" — both should be skipped
 	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Something", "Test", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -134,7 +132,6 @@ func TestGeniusArtworkResolver_Resolve_SkipsDefaultImages(t *testing.T) {
 }
 
 func TestGeniusArtworkResolver_Resolve_NoSubtitle(t *testing.T) {
-	// When kind is not artist and subtitle is empty, Resolve returns empty
 	resolver := NewGeniusArtworkResolver(http.DefaultClient, "token")
 	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Song", "", "")
 	if err != nil {

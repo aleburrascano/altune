@@ -14,11 +14,6 @@ import (
 
 var _ ports.ArtworkCache = (*RedisArtworkCache)(nil)
 
-// artworkEntry is the cached value: the resolved URL plus the source that
-// supplied it ("fanart", "discogs", …), so a cache hit still reports who
-// resolved the artwork for per-provider coverage visibility, plus the confidence
-// it was resolved at (so a name guess can't overwrite a proven-identity image and
-// gets a shorter TTL). A negative entry has an empty URL.
 type artworkEntry struct {
 	URL        string `json:"u"`
 	Source     string `json:"s"`
@@ -26,24 +21,14 @@ type artworkEntry struct {
 }
 
 const (
-	// Proven-identity images are effectively permanent; provisional name-resolved
-	// images get a short TTL so they re-check soon and can upgrade to an identity
-	// image once the durable identity store learns the entity.
 	artworkPositiveTTL    = 14 * 24 * time.Hour
 	artworkProvisionalTTL = 48 * time.Hour
 
-	// Negative (no-artwork) TTLs are per-kind: a missing image is cached so the
-	// 8-provider chain isn't re-run every search, but the wait before newly-added
-	// artwork appears scales with how fast that kind churns. Tracks churn most
-	// (singles/deep cuts get art late), artists least (stable, rarely gain a
-	// photo), so tracks re-check soonest.
 	artworkNegativeTTLTrack  = 6 * time.Hour
 	artworkNegativeTTLAlbum  = 12 * time.Hour
 	artworkNegativeTTLArtist = 24 * time.Hour
 )
 
-// negativeTTL returns the no-artwork cache TTL for a kind (artist is the
-// conservative default for any unknown kind).
 func negativeTTL(kind domain.ResultKind) time.Duration {
 	switch kind {
 	case domain.ResultKindTrack:
@@ -76,7 +61,6 @@ func (c *RedisArtworkCache) Get(ctx context.Context, kind domain.ResultKind, tit
 
 	var entry artworkEntry
 	if err := json.Unmarshal([]byte(val), &entry); err != nil {
-		// Corrupt/legacy value: treat as a miss so it re-resolves and overwrites.
 		return "", "", false, nil
 	}
 	return entry.URL, entry.Source, true, nil
@@ -89,9 +73,6 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 
 	key := artworkCacheKey(kind, title, subtitle, mbid)
 
-	// Overwrite guard: never let a weaker result replace a real, higher-confidence
-	// image — a name guess (or a later failure) must not clobber a proven-identity
-	// photo. Equal or higher confidence refreshes normally.
 	if existing, ok := c.read(ctx, key); ok && existing.URL != "" && int(confidence) < existing.Confidence {
 		return nil
 	}
@@ -104,7 +85,6 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 	return c.client.Set(ctx, key, payload, artworkTTL(kind, url, confidence)).Err()
 }
 
-// read fetches and decodes a cached entry, or ok=false on miss / corrupt value.
 func (c *RedisArtworkCache) read(ctx context.Context, key string) (artworkEntry, bool) {
 	val, err := c.client.Get(ctx, key).Result()
 	if err != nil {
@@ -117,8 +97,6 @@ func (c *RedisArtworkCache) read(ctx context.Context, key string) (artworkEntry,
 	return entry, true
 }
 
-// artworkTTL picks the TTL: negative (no image) by kind, identity images long,
-// name-resolved images provisional so they can upgrade to identity later.
 func artworkTTL(kind domain.ResultKind, url string, confidence ports.ArtworkConfidence) time.Duration {
 	if url == "" {
 		return negativeTTL(kind)
@@ -130,10 +108,6 @@ func artworkTTL(kind domain.ResultKind, url string, confidence ports.ArtworkConf
 }
 
 func artworkCacheKey(kind domain.ResultKind, title, subtitle, mbid string) string {
-	// v3: value is now JSON {url, source} (was a bare URL string) — the bump
-	// abandons v2 entries so a hit can't decode-fail on the old format; stale keys
-	// expire by TTL. (v2 introduced identity-aware keying — the "Che" same-name
-	// fix.) Bump this on any change to how artwork is resolved or stored.
 	input := fmt.Sprintf("%s|%s|%s", title, subtitle, mbid)
 	return hashKey("discovery:artwork:v3:"+kind.String()+":", input)
 }

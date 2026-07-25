@@ -10,7 +10,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// mbReleaseGroupJSON returns a release-group JSON object for test fixtures.
 func mbReleaseGroupJSON(rgID, title, artistName, artistMBID string) string {
 	return `{
 		"id": "` + rgID + `",
@@ -235,8 +234,6 @@ func TestMusicBrainzAdapter_Search_HTTPError(t *testing.T) {
 	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
 		domain.ResultKindTrack: true,
 	})
-	// When every attempted kind fails (a single kind on HTTP 500), Search surfaces
-	// an error so the circuit breaker sees the provider outage.
 	if err == nil {
 		t.Fatal("expected an error when all attempted kinds fail on HTTP 500, got nil")
 	}

@@ -65,7 +65,6 @@ func TestLastFmAdapter_Search_Tracks(t *testing.T) {
 	if r.Sources[0].Provider != domain.ProviderLastFM {
 		t.Errorf("source provider: got %v, want %v", r.Sources[0].Provider, domain.ProviderLastFM)
 	}
-	// lastfmExternalID extracts path after /music/
 	if r.Sources[0].ExternalID != "Katy+Perry/_/Small+Talk" {
 		t.Errorf("source externalID: got %q, want %q", r.Sources[0].ExternalID, "Katy+Perry/_/Small+Talk")
 	}
@@ -177,9 +176,6 @@ func TestLastFmAdapter_Search_Albums_DoesNotStampReleaseMBID(t *testing.T) {
 	if r.Subtitle != "Radiohead" {
 		t.Errorf("subtitle: got %q, want %q", r.Subtitle, "Radiohead")
 	}
-	// Last.fm album-search mbids are RELEASE MBIDs; MusicBrainz album results
-	// carry RELEASE-GROUP MBIDs — different UUID namespaces, so stamping the
-	// release mbid makes the MBID hard-stop block every MB↔Last.fm album merge.
 	if r.MBID != "" {
 		t.Errorf("MBID: got %q, want empty (release-namespace mbid must not be stamped)", r.MBID)
 	}
@@ -229,8 +225,6 @@ func TestLastFmAdapter_Search_HTTPError(t *testing.T) {
 	results, err := adapter.Search(context.Background(), "anything", map[domain.ResultKind]bool{
 		domain.ResultKindTrack: true,
 	})
-	// When every attempted kind fails (a single kind on HTTP 500), Search surfaces
-	// an error so the circuit breaker sees the provider outage.
 	if err == nil {
 		t.Fatal("expected an error when all attempted kinds fail on HTTP 500, got nil")
 	}

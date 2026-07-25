@@ -13,15 +13,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// AIDEV-NOTE: Last.fm detail-open enrichment (docs/providers/lastfm.md cap 3,
-// with cap-4 similar artists folded into the artist payload). One *.getInfo
-// lookup per opened entity yields the listen-based popularity, weighted tags,
-// bio, similar-artist graph, and the MBID bridge. Response shapes live-probed
-// 2026-06-22 (docs/providers/lastfm.md §4). Off the ranking path — display-only.
-//
-// Last.fm's getInfo fuzzy-matches names server-side (we pass autocorrect=1), so
-// there is no separate id-resolution step like Discogs needs — a single call.
-
 var _ ports.LastFmEnricher = (*LastFmAdapter)(nil)
 
 const (
@@ -29,9 +20,6 @@ const (
 	lastfmSimilarCap = 8
 )
 
-// Lookup dispatches to the per-kind getInfo call. artistName is the artist;
-// entityTitle is the track/album title (empty for the artist kind). A non-200
-// or decode failure returns an error so the service can degrade to empty.
 func (a *LastFmAdapter) Lookup(
 	ctx context.Context,
 	kind domain.ResultKind,
@@ -49,12 +37,8 @@ func (a *LastFmAdapter) Lookup(
 	}
 }
 
-// lastfmErrNotFound is Last.fm's in-band error code 6 ("Invalid parameters" —
-// how getInfo reports an unknown artist/track/album): a definitive miss.
 const lastfmErrNotFound = 6
 
-// lastfmAPIError is Last.fm's in-band error envelope. getInfo misses and quota
-// problems ride on it — sometimes on HTTP 200, sometimes on a 4xx status.
 type lastfmAPIError struct {
 	Code    int    `json:"error"`
 	Message string `json:"message"`
@@ -64,19 +48,12 @@ func (e *lastfmAPIError) Error() string {
 	return fmt.Sprintf("lastfm api error %d: %s", e.Code, e.Message)
 }
 
-// getInfo fetches one getInfo body, decoding the error envelope FIRST (Deezer
-// pattern — see deezer_enrichment.go getJSON): code 6 (entity not found) is a
-// definitive miss and returns (nil, nil) so callers yield a zero enrichment
-// that the service negative-caches; any other error code is transient and
-// returns an error (never cached as a miss). The body is read even on a non-200
-// status because Last.fm delivers the envelope on 4xx too — without that, a
-// 4xx-delivered miss looked transient and the negative cache never engaged.
 func (a *LastFmAdapter) getInfo(ctx context.Context, u string) ([]byte, error) {
 	status, body, err := getBytes(ctx, a.client, u)
 	var envelope lastfmAPIError
 	if len(body) > 0 && json.Unmarshal(body, &envelope) == nil && envelope.Code != 0 {
 		if envelope.Code == lastfmErrNotFound {
-			return nil, nil // definitive miss
+			return nil, nil
 		}
 		return nil, &envelope
 	}
@@ -99,7 +76,7 @@ func (a *LastFmAdapter) lookupArtistInfo(ctx context.Context, artistName string)
 		return domain.EmptyLastFmEnrichment(), err
 	}
 	if len(body) == 0 {
-		return domain.EmptyLastFmEnrichment(), nil // definitive miss (error code 6)
+		return domain.EmptyLastFmEnrichment(), nil
 	}
 	var resp struct {
 		Artist struct {
@@ -142,7 +119,7 @@ func (a *LastFmAdapter) lookupTrackInfo(ctx context.Context, artistName, track s
 		return domain.EmptyLastFmEnrichment(), err
 	}
 	if len(body) == 0 {
-		return domain.EmptyLastFmEnrichment(), nil // definitive miss (error code 6)
+		return domain.EmptyLastFmEnrichment(), nil
 	}
 	var resp struct {
 		Track struct {
@@ -165,7 +142,7 @@ func (a *LastFmAdapter) lookupTrackInfo(ctx context.Context, artistName, track s
 	e.MBID = strings.TrimSpace(resp.Track.MBID)
 	e.Listeners = parseListeners(resp.Track.Listeners)
 	e.Playcount = parseListeners(resp.Track.Playcount)
-	e.Duration = int(parseListeners(resp.Track.Duration) / 1000) // Last.fm reports ms
+	e.Duration = int(parseListeners(resp.Track.Duration) / 1000)
 	e.Album = parseLastFmAlbumTitle(resp.Track.Album)
 	e.Tags = parseLastFmTags(resp.Track.TopTags)
 	e.Bio = cleanLastFmBio(resp.Track.Wiki.Summary)
@@ -185,7 +162,7 @@ func (a *LastFmAdapter) lookupAlbumInfo(ctx context.Context, artistName, album s
 		return domain.EmptyLastFmEnrichment(), err
 	}
 	if len(body) == 0 {
-		return domain.EmptyLastFmEnrichment(), nil // definitive miss (error code 6)
+		return domain.EmptyLastFmEnrichment(), nil
 	}
 	var resp struct {
 		Album struct {
@@ -211,9 +188,6 @@ func (a *LastFmAdapter) lookupAlbumInfo(ctx context.Context, artistName, album s
 	return e, nil
 }
 
-// parseLastFmTags extracts tag names from the `{ "tag": [{name}] }` shape,
-// trimmed/deduped/capped, preserving Last.fm's relevance order. Tolerant of the
-// empty-collection-as-"" quirk: any parse failure yields no tags.
 func parseLastFmTags(raw json.RawMessage) []string {
 	if len(raw) == 0 {
 		return []string{}
@@ -242,8 +216,6 @@ func parseLastFmTags(raw json.RawMessage) []string {
 	return out
 }
 
-// parseLastFmSimilarArtists extracts similar-artist names from the
-// `{ "artist": [{name}] }` shape (cap 4). Same tolerance as tags.
 func parseLastFmSimilarArtists(raw json.RawMessage) []string {
 	if len(raw) == 0 {
 		return []string{}
@@ -270,8 +242,6 @@ func parseLastFmSimilarArtists(raw json.RawMessage) []string {
 	return out
 }
 
-// parseLastFmAlbumTitle pulls the album title from a track's `album` object,
-// tolerating the field being absent or a non-object.
 func parseLastFmAlbumTitle(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -285,16 +255,10 @@ func parseLastFmAlbumTitle(raw json.RawMessage) string {
 	return strings.TrimSpace(parsed.Title)
 }
 
-// lastfmReadMore matches the trailing "Read more on Last.fm" anchor every bio
-// summary ends with; we cut from the first anchor onward.
 var lastfmReadMore = regexp.MustCompile(`(?s)\s*<a[^>]*>.*$`)
 
-// lastfmHTMLTag matches any remaining HTML tag in a bio summary.
 var lastfmHTMLTag = regexp.MustCompile(`<[^>]+>`)
 
-// cleanLastFmBio strips the trailing "Read more on Last.fm" link, removes any
-// other HTML tags, unescapes entities, and trims. Returns "" for an empty or
-// placeholder summary.
 func cleanLastFmBio(summary string) string {
 	if strings.TrimSpace(summary) == "" {
 		return ""

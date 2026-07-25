@@ -6,9 +6,6 @@ import (
 	discdomain "altune/go-api/internal/discovery/domain"
 )
 
-// The wire signature must be the pre-disambiguation one the service stamped at
-// rank time (domain.SearchResult.Signature) — recomputing after enrichment
-// filled the artist subtitle would drift from the behavioral-ranking join key.
 func TestSearchResultToDTO_PrefersStampedSignature(t *testing.T) {
 	preFill := discdomain.ResultSignature(discdomain.SearchResult{
 		Kind:  discdomain.ResultKindArtist,
@@ -17,7 +14,7 @@ func TestSearchResultToDTO_PrefersStampedSignature(t *testing.T) {
 	sr := discdomain.SearchResult{
 		Kind:      discdomain.ResultKindArtist,
 		Title:     "Nas",
-		Subtitle:  "American rapper", // filled by disambiguation AFTER the stamp
+		Subtitle:  "American rapper",
 		Signature: preFill,
 	}
 
@@ -31,8 +28,6 @@ func TestSearchResultToDTO_PrefersStampedSignature(t *testing.T) {
 	}
 }
 
-// Results that never went through mergeRankEnrich (no stamped Signature) keep
-// the computed fallback.
 func TestSearchResultToDTO_ComputesSignatureFallback(t *testing.T) {
 	sr := discdomain.SearchResult{
 		Kind:     discdomain.ResultKindTrack,

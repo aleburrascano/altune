@@ -10,8 +10,6 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// qaTrimMetaphone buckets every qa-trim test term under one phonetic code so
-// the metaphone key family participates in indexing and eviction.
 func qaTrimMetaphone(norm string) string {
 	if strings.HasPrefix(norm, "qatrim") {
 		return "QATRIM"
@@ -29,11 +27,6 @@ func TestVocabularyStore_NilClient_TrimReturnsNil(t *testing.T) {
 	}
 }
 
-// Trim evicts the lowest-popularity overflow from EVERY key family (terms
-// ZSET, lex ZSET, trigram sets, entry blob, metaphone set) and leaves the
-// budgeted survivors fully queryable. The test terms carry hugely negative
-// popularity so they are strictly the lowest-ranked members of the shared
-// dev-Redis vocabulary — Trim can only ever evict them.
 func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
 	client := testRedisClient(t)
 	store := NewVocabularyStore(client, lowercaseNorm, WithMetaphone(qaTrimMetaphone))
@@ -59,7 +52,6 @@ func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
 		t.Fatalf("BulkAdd: %v", err)
 	}
 
-	// Budget = base + 1 → overflow of exactly 2 → the two lowest (the victims).
 	if err := store.Trim(ctx, int(baseCount)+1); err != nil {
 		t.Fatalf("Trim: %v", err)
 	}
@@ -87,7 +79,6 @@ func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
 		}
 	}
 
-	// The keeper survives intact and stays queryable through the public path.
 	results, err := store.SuggestByPrefix(ctx, "qatrimkeep", 10)
 	if err != nil {
 		t.Fatalf("SuggestByPrefix after trim: %v", err)
@@ -99,7 +90,6 @@ func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
 		t.Error("keeper lost its metaphone index entry")
 	}
 
-	// Within budget → no-op: nothing else may disappear.
 	if err := store.Trim(ctx, int(baseCount)+10); err != nil {
 		t.Fatalf("Trim (within budget): %v", err)
 	}
@@ -108,14 +98,10 @@ func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
 	}
 }
 
-// A phonetically-identical term with ZERO trigram overlap and a hopeless
-// Levenshtein distance is reachable ONLY through the metaphone index — the
-// exact case WithMetaphone exists for.
 func TestVocabularyStore_WithMetaphone_PhoneticOnlyMatch(t *testing.T) {
 	client := testRedisClient(t)
 	ctx := context.Background()
 
-	// "vvvv" vs query "wwww": no shared trigrams, lev distance 4 (> maxDist 1).
 	vocabCleanKeys(t, "vvvv")
 	cleanKeys(t, client, vocabMetaPrefix+"QAVW")
 
@@ -128,7 +114,6 @@ func TestVocabularyStore_WithMetaphone_PhoneticOnlyMatch(t *testing.T) {
 		t.Fatalf("Add: %v", err)
 	}
 
-	// Without the phonetic index the term is unreachable.
 	got, err := plain.FindClosest(ctx, "wwww", 5)
 	if err != nil {
 		t.Fatalf("FindClosest (plain): %v", err)
@@ -137,8 +122,6 @@ func TestVocabularyStore_WithMetaphone_PhoneticOnlyMatch(t *testing.T) {
 		t.Fatalf("plain store found %v — the fixture no longer isolates the phonetic path", got)
 	}
 
-	// With it, the phonetic bucket surfaces the term despite zero trigram
-	// overlap and a failing Levenshtein filter.
 	got, err = phonetic.FindClosest(ctx, "wwww", 5)
 	if err != nil {
 		t.Fatalf("FindClosest (phonetic): %v", err)

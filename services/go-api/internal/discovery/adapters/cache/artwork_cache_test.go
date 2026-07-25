@@ -25,8 +25,6 @@ func TestNegativeTTL_PerKind(t *testing.T) {
 			}
 		})
 	}
-	// A negative TTL must never exceed the positive TTL (a miss should re-check
-	// at least as often as a hit refreshes).
 	for _, k := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindAlbum, domain.ResultKindArtist} {
 		if negativeTTL(k) >= artworkPositiveTTL {
 			t.Errorf("negativeTTL(%v) must be shorter than positive TTL %v", k, artworkPositiveTTL)

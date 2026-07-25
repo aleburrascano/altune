@@ -13,7 +13,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// contentTrack builds a minimal track result for seeding content providers.
 func contentTrack(title string) discdomain.SearchResult {
 	return discdomain.SearchResult{
 		Kind:       discdomain.ResultKindTrack,
@@ -32,8 +31,6 @@ func seedTracks(n int) []discdomain.SearchResult {
 	}
 	return out
 }
-
-// ==================== limit clamping ====================
 
 func TestHandleAlbumTracks_LimitClamping(t *testing.T) {
 	cases := []struct {
@@ -94,8 +91,6 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 	}
 }
 
-// ==================== param validation ====================
-
 func TestContentEndpoints_ExternalIDTooLongReturns400(t *testing.T) {
 	albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
 		discdomain.ProviderDeezer: &fakeAlbumContentProvider{},
@@ -108,19 +103,12 @@ func TestContentEndpoints_ExternalIDTooLongReturns400(t *testing.T) {
 }
 
 func TestContentEndpoints_UnknownProviderOnArtistAndRelated(t *testing.T) {
-	// Provider path-segment validation on the two families not already covered
-	// by the table tests: related tracks (400) — the artist ones live in
-	// discovery_handler_test.go.
 	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, nil)
 	rec := discServe(t, router, http.MethodGet, "/discovery/tracks/not_a_provider/1/related", nil)
 	discAssertStatus(t, rec, http.StatusBadRequest)
 }
 
-// ==================== degraded envelopes (nil services) ====================
-
 func TestContentEndpoints_NilServiceDegradedEnvelope(t *testing.T) {
-	// A handler with no content services wired answers every content route with
-	// the 200 degraded envelope: status "error", items [] (never null).
 	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, nil)
 
 	paths := []string{
@@ -150,8 +138,6 @@ func TestContentEndpoints_NilServiceDegradedEnvelope(t *testing.T) {
 	}
 }
 
-// ==================== related tracks limit ====================
-
 func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 	provider := &fakeRelatedTracksProvider{results: seedTracks(5)}
 	svc := service.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
@@ -171,8 +157,6 @@ func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 		t.Errorf("len(Items) = %d, want 2 (limit applied)", len(resp.Items))
 	}
 }
-
-// ==================== operator trace on content fetches ====================
 
 func TestHandleArtistContent_RecordsContentFetchTrace(t *testing.T) {
 	artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{

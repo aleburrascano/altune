@@ -42,21 +42,16 @@ func TestRedisEnrichmentCache_PositiveRoundTrip(t *testing.T) {
 		t.Errorf("genres did not round-trip in order: %v", got.Genres)
 	}
 
-	// Same mbid under a different kind is a distinct entry.
 	if _, hit, _ := cache.Get(ctx, domain.ResultKindArtist, mbid); hit {
 		t.Error("album entry served for artist kind, want kind-namespaced miss")
 	}
 
-	// ExternalIDs reads the same positive entry as the identity-bridge port.
 	ids, ok := cache.ExternalIDs(ctx, domain.ResultKindAlbum, mbid)
 	if !ok || ids["deezer"] != "111" || ids["discogs"] != "222" {
 		t.Errorf("ExternalIDs = (%v,%v), want the cached bridge ids", ids, ok)
 	}
 }
 
-// ExternalIDs must report a MISS (not an empty hit) when the cached enrichment
-// carries no ids — merge then falls back to name similarity instead of
-// trusting an empty bridge.
 func TestRedisEnrichmentCache_ExternalIDs_EmptyIsMiss(t *testing.T) {
 	client := testRedisClient(t)
 	cache := NewRedisEnrichmentCache(client)
@@ -96,11 +91,9 @@ func TestRedisEnrichmentCache_NegativePath(t *testing.T) {
 	if neg, err := cache.GetNegative(ctx, domain.ResultKindAlbum, nameKey); !neg || err != nil {
 		t.Errorf("GetNegative after Set = (%v,%v), want (true,nil)", neg, err)
 	}
-	// Negative is kind-namespaced too.
 	if neg, _ := cache.GetNegative(ctx, domain.ResultKindArtist, nameKey); neg {
 		t.Error("album negative leaked into artist kind")
 	}
-	// A negative name marker must never masquerade as a positive entry.
 	if _, hit, _ := cache.Get(ctx, domain.ResultKindAlbum, nameKey); hit {
 		t.Error("negative marker readable through the positive path")
 	}
@@ -127,11 +120,9 @@ func TestRedisEnrichmentCache_MBIDIndexRoundTrip(t *testing.T) {
 	if !ok || got != "mbid-artist-1" {
 		t.Errorf("LookupMBID = (%q,%v), want (mbid-artist-1,true)", got, ok)
 	}
-	// Kind isolation: the artist memo must not answer an album lookup.
 	if _, ok := cache.LookupMBID(ctx, domain.ResultKindAlbum, nameKey); ok {
 		t.Error("artist name→MBID memo served for album kind")
 	}
-	// Empty inputs no-op rather than writing a garbage key.
 	if err := cache.RememberMBID(ctx, domain.ResultKindArtist, "", "mbid-x"); err != nil {
 		t.Errorf("RememberMBID empty name: %v, want nil no-op", err)
 	}

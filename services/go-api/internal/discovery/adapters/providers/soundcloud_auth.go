@@ -12,37 +12,18 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-// --- client_id resolution -------------------------------------------------
-//
-// This half of the SoundCloud adapter is independent of the search/mapping
-// code in soundcloud.go: it only scrapes and caches the public client_id the
-// api-v2 backend requires, and it changes on its own externally-forced
-// cadence (SoundCloud periodically rotates how the id is embedded, breaking
-// the scraper independent of anything else in the adapter).
-
-// scAssetURLRe matches the JS bundle URLs the SoundCloud homepage loads; one of
-// them embeds the public client_id the api-v2 backend requires. The homepage we
-// fetch is the trust anchor, so we match any absolute /assets/*.js it lists and
-// scan each for the key, rather than hard-coding the CDN host.
 var scAssetURLRe = regexp.MustCompile(`https?://[^"' ]+/assets/[^"' ]+\.js`)
 
-// scClientIDRe extracts the 32-char client_id from a JS bundle, tolerating the
-// minified `client_id:"…"` and `client_id="…"` forms.
 var scClientIDRe = regexp.MustCompile(`client_id\s*[:=]\s*"?([a-zA-Z0-9]{32})"?`)
 
 const (
 	scSiteURL      = "https://soundcloud.com/"
-	scMaxBodyBytes = 16 << 20 // JS bundles are a few MB; cap defensively
+	scMaxBodyBytes = 16 << 20
 )
 
-// clientIDResolver fetches and caches the public client_id the api-v2 backend
-// requires. Resolution scrapes the homepage's JS bundles once; the cached value
-// is reused until an auth failure invalidates it (the rotation tax). Concurrent
-// cold-start callers are collapsed with singleflight so a burst of searches
-// triggers exactly one scrape.
 type clientIDResolver struct {
 	client  *http.Client
-	siteURL string // overridable in tests
+	siteURL string
 	sf      singleflight.Group
 	mu      sync.Mutex
 	cached  string
@@ -67,9 +48,6 @@ func (r *clientIDResolver) get(ctx context.Context) (string, error) {
 		if existing != "" {
 			return existing, nil
 		}
-		// Detach from the winning caller's ctx so one impatient caller can't
-		// poison the shared resolve for every piggybacked waiter; the resolve
-		// gets its own budget instead.
 		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), scResolveTimeout)
 		defer cancel()
 		return r.resolve(rctx)
@@ -88,13 +66,8 @@ func (r *clientIDResolver) get(ctx context.Context) (string, error) {
 	return id, nil
 }
 
-// scResolveTimeout bounds one shared client_id resolve (homepage + JS bundle
-// scrape) independently of any single caller's deadline.
 const scResolveTimeout = 20 * time.Second
 
-// invalidate drops the cached client_id only if it is still the one the caller
-// failed with — a second 401 handler must not wipe the fresh id the first
-// re-resolve just cached (the invalidate-storm case).
 func (r *clientIDResolver) invalidate(failed string) {
 	r.mu.Lock()
 	if r.cached == failed {
@@ -114,7 +87,6 @@ func (r *clientIDResolver) resolve(ctx context.Context) (string, error) {
 		return "", errors.New("no asset bundles found on soundcloud home")
 	}
 
-	// The client_id lives in one of the later bundles, so scan from the end.
 	for i := len(assets) - 1; i >= 0; i-- {
 		if ctx.Err() != nil {
 			return "", ctx.Err()

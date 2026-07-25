@@ -12,8 +12,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// serveYTMFixture returns an httptest server replaying the named testdata file
-// for every request.
 func serveYTMFixture(t *testing.T, name string) *httptest.Server {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", name))
@@ -56,8 +54,6 @@ func TestYouTubeMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 			artists++
 		}
 	}
-	// Videos (OMV/UGC) must be folded into tracks (Pattern-C coverage fix), so
-	// tracks > pure-ATV count; all three kinds must be represented.
 	if tracks == 0 || albums == 0 || artists == 0 {
 		t.Errorf("kinds mapped: tracks=%d albums=%d artists=%d, want all non-zero", tracks, albums, artists)
 	}
@@ -67,8 +63,6 @@ func TestYouTubeMusicAdapter_Search_retriesOn403HTML(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if hits.Add(1) == 1 {
-			// The intermittent rate-limit: HTTP 403 with an HTML body that is not
-			// valid JSON — must surface as an error and trigger the single retry.
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`<html><body>Access denied</body></html>`))
 			return
@@ -106,11 +100,6 @@ func TestYouTubeMusicAdapter_Search_persistent403IsError(t *testing.T) {
 	}
 }
 
-// AIDEV-NOTE: KNOWN silent-zero — ytmSearch never checks the HTTP status; any
-// response whose body decodes as JSON (here a 500 with `{}`) parses to zero
-// results and reports success. The status only surfaces when the body is
-// non-JSON (the 403 HTML case). This test PINS the current behaviour; if the
-// adapter ever gains a status check, update this to expect an error.
 func TestYTMSearch_jsonBodyOn500IsSilentZero(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -128,8 +117,6 @@ func TestYTMSearch_jsonBodyOn500IsSilentZero(t *testing.T) {
 	}
 }
 
-// ytmAlbumShelfJSON is a minimal filtered album-search response (legacy
-// musicShelfRenderer shape) with two albums by different artists.
 const ytmAlbumShelfJSON = `{
   "contents": {"tabbedSearchResultsRenderer": {"tabs": [{"tabRenderer": {"content": {"sectionListRenderer": {"contents": [
     {"musicShelfRenderer": {"contents": [
@@ -173,7 +160,7 @@ func TestYouTubeMusicAdapter_GetArtistAlbums_filtersToExactArtistName(t *testing
 	defer srv.Close()
 
 	adapter := NewYouTubeMusicAdapter(&redirectTransport{targetURL: srv.URL})
-	albums, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderYouTube, "SOMBR") // case-insensitive
+	albums, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderYouTube, "SOMBR")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}

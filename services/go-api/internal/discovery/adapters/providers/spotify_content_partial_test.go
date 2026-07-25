@@ -9,9 +9,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// A later-page failure keeps the pages already fetched — depth is best-effort,
-// presence is not (the SoundCloud doSearch policy, applied to pathfinder).
-
 func TestSpotifyAdapter_GetArtistAlbums_laterPageErrorKeepsEarlierPages(t *testing.T) {
 	const page1 = `{"data":{"artistUnion":{"discography":{"all":{"totalCount":3,"items":[
 		{"releases":{"items":[{"id":"al1","name":"First","type":"ALBUM"}]}},

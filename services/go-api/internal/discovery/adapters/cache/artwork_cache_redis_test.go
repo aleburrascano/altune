@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-// The upgrade direction of the overwrite guard: a provisional name-resolved
-// image is REPLACED once a proven-identity image arrives.
 func TestRedisArtworkCache_NameThenIdentity_Upgrades(t *testing.T) {
 	client := testRedisClient(t)
 	cache := NewRedisArtworkCache(client)
@@ -37,8 +35,6 @@ func TestRedisArtworkCache_NameThenIdentity_Upgrades(t *testing.T) {
 	}
 }
 
-// A negative (no-artwork) entry must not block a later real image: a name-level
-// find after a cached miss overwrites the negative entry.
 func TestRedisArtworkCache_NegativeThenName_Overwrites(t *testing.T) {
 	client := testRedisClient(t)
 	cache := NewRedisArtworkCache(client)
@@ -61,9 +57,6 @@ func TestRedisArtworkCache_NegativeThenName_Overwrites(t *testing.T) {
 	}
 }
 
-// Identity-aware keying: the same (title, subtitle) with and without an MBID
-// are distinct entries — the same-name ("Che") fix. A per-name image must never
-// be served for the identity-resolved entity or vice versa.
 func TestRedisArtworkCache_MBIDKeySeparation(t *testing.T) {
 	client := testRedisClient(t)
 	cache := NewRedisArtworkCache(client)
@@ -92,9 +85,6 @@ func TestRedisArtworkCache_MBIDKeySeparation(t *testing.T) {
 	}
 }
 
-// Negative-cache TTL per kind, observed on the REAL stored key (not just the
-// helper): a cached miss must expire on the per-kind schedule, and positive
-// entries must outlive provisional ones.
 func TestRedisArtworkCache_StoredTTLs(t *testing.T) {
 	client := testRedisClient(t)
 	cache := NewRedisArtworkCache(client)

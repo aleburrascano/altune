@@ -11,16 +11,10 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// --- rateLimit --------------------------------------------------------------
-
-// Each concurrent caller must reserve a DISTINCT future slot (lastReq advances
-// by 1s per caller under the lock) — the pre-fix form let concurrent callers
-// share a baseline and burst together into MB 503s. Reservation happens under
-// the lock regardless of the sleep, so a cancelled ctx observes it instantly.
 func TestMusicBrainzAdapter_rateLimit_reservesDistinctSlots(t *testing.T) {
 	a := NewMusicBrainzAdapter(http.DefaultClient, "test")
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // skip the sleeps; only the slot arithmetic is under test
+	cancel()
 
 	start := time.Now()
 	a.rateLimit(ctx)
@@ -31,7 +25,6 @@ func TestMusicBrainzAdapter_rateLimit_reservesDistinctSlots(t *testing.T) {
 	last := a.lastReq
 	a.mu.Unlock()
 
-	// First call lands on now; each subsequent call reserves +1s.
 	if got := last.Sub(start); got < 1900*time.Millisecond || got > 3*time.Second {
 		t.Errorf("lastReq advanced by %v, want ~2s (three callers spaced 1s apart)", got)
 	}
@@ -43,7 +36,7 @@ func TestMusicBrainzAdapter_rateLimit_reservesDistinctSlots(t *testing.T) {
 func TestMusicBrainzAdapter_rateLimit_ctxCancelAbortsWait(t *testing.T) {
 	a := NewMusicBrainzAdapter(http.DefaultClient, "test")
 	a.mu.Lock()
-	a.lastReq = time.Now() // next slot is 1s away
+	a.lastReq = time.Now()
 	a.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -54,8 +47,6 @@ func TestMusicBrainzAdapter_rateLimit_ctxCancelAbortsWait(t *testing.T) {
 		t.Errorf("rateLimit blocked %v after ctx cancel, want prompt return", elapsed)
 	}
 }
-
-// --- structured query -------------------------------------------------------
 
 func TestMBStructuredQuery_perKind(t *testing.T) {
 	tests := []struct {
@@ -83,7 +74,7 @@ func TestMusicBrainzAdapter_SearchStructured_failedKindSkipped(t *testing.T) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/ws/2/recording"):
 			_, _ = w.Write([]byte(`{"recordings": [{"id": "rec-1", "title": "Söz 🎵 東京", "artist-credit": [{"name": "Queen"}]}]}`))
-		default: // artist kind fails
+		default:
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}))
@@ -100,13 +91,10 @@ func TestMusicBrainzAdapter_SearchStructured_failedKindSkipped(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected the surviving kind's 1 result, got %d", len(results))
 	}
-	// Unicode (Turkish ö, emoji, CJK) must survive the parse/map path verbatim.
 	if results[0].Title != "Söz 🎵 東京" {
 		t.Errorf("title = %q, want the unicode title preserved", results[0].Title)
 	}
 }
-
-// --- artist identity --------------------------------------------------------
 
 func TestMusicBrainzAdapter_ResolveArtistIdentity(t *testing.T) {
 	requests := 0
@@ -140,7 +128,6 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity(t *testing.T) {
 		t.Errorf("BirthYear = %d, want 2004 (parsed from life-span.begin)", id.BirthYear)
 	}
 
-	// Second call must come from the memo — no extra MB round trip.
 	before := requests
 	if _, err := adapter.ResolveArtistIdentity(context.Background(), "Che"); err != nil {
 		t.Fatalf("memoized ResolveArtistIdentity: %v", err)
@@ -175,8 +162,8 @@ func TestParseBirthYear(t *testing.T) {
 		{"1969-10-02", 1969},
 		{"2004", 2004},
 		{"", 0},
-		{"196", 0},     // too short
-		{"19x9-01", 0}, // non-digit
+		{"196", 0},
+		{"19x9-01", 0},
 	}
 	for _, tt := range tests {
 		if got := parseBirthYear(tt.in); got != tt.want {
@@ -184,8 +171,6 @@ func TestParseBirthYear(t *testing.T) {
 		}
 	}
 }
-
-// --- validate / discography -------------------------------------------------
 
 func TestMusicBrainzAdapter_ValidateArtistAlbums(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -314,7 +299,7 @@ func TestExtractCreditedMBID_missingCredit(t *testing.T) {
 	if got := extractCreditedMBID(mbReleaseGroup{}); got != "" {
 		t.Errorf("no artist-credit: got %q, want empty", got)
 	}
-	rg := mbReleaseGroup{ArtistCredit: []mbArtistRef{{Name: "Che"}}} // credit without artist link
+	rg := mbReleaseGroup{ArtistCredit: []mbArtistRef{{Name: "Che"}}}
 	if got := extractCreditedMBID(rg); got != "" {
 		t.Errorf("credit without artist link: got %q, want empty", got)
 	}

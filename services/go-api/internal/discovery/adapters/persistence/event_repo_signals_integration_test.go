@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// appendOrFatal appends one event and fails the test on error.
 func appendOrFatal(t *testing.T, store *PgxEventStore, ev domain.InteractionEvent) {
 	t.Helper()
 	if err := store.Append(context.Background(), ev); err != nil {
@@ -31,8 +30,6 @@ func newEventTestUser(t *testing.T, store *PgxEventStore) shared.UserId {
 	return userId
 }
 
-// SatisfactionSignals: net score per result_signature with the per-user ±3 cap,
-// short-dwell semantics, and the jsonb_typeof guard against poisoned payloads.
 func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -43,12 +40,11 @@ func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 	userC := newEventTestUser(t, store)
 
 	suffix := uuid.New().String()[:8]
-	sigCapped := "sig-cap-" + suffix     // one user, 10 plays → capped at +3
-	sigMixed := "sig-mixed-" + suffix    // +2 (play+completed) − 1 (short skip) = +1
-	sigPoisoned := "sig-poison-" + suffix // 1 play, poisoned/unknown-dwell skips count 0 → +1
-	sigZeroNet := "sig-zeronet-" + suffix // +1 −1 = 0 → excluded by HAVING
+	sigCapped := "sig-cap-" + suffix
+	sigMixed := "sig-mixed-" + suffix
+	sigPoisoned := "sig-poison-" + suffix
+	sigZeroNet := "sig-zeronet-" + suffix
 
-	// Per-user cap: 10 plays from ONE user must contribute at most +3.
 	for range 10 {
 		appendOrFatal(t, store, domain.InteractionEvent{
 			UserId: userA, Type: domain.EventTypePlay,
@@ -56,7 +52,6 @@ func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 		})
 	}
 
-	// Mixed: play + completed are each +1; a short-dwell skip is −1.
 	appendOrFatal(t, store, domain.InteractionEvent{
 		UserId: userA, Type: domain.EventTypePlay,
 		Payload: map[string]any{"result_signature": sigMixed},
@@ -70,9 +65,6 @@ func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 		Payload: map[string]any{"result_signature": sigMixed, "dwell_ms": 1500},
 	})
 
-	// Poisoned payloads: dwell_ms as string, as object, absent, and ≥ threshold.
-	// Every one of these skips must count 0 — and, critically, must not 22P02
-	// the whole query. The single play nets the signature to exactly +1.
 	appendOrFatal(t, store, domain.InteractionEvent{
 		UserId: userB, Type: domain.EventTypePlay,
 		Payload: map[string]any{"result_signature": sigPoisoned},
@@ -87,7 +79,6 @@ func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 		})
 	}
 
-	// Net zero: one play, one short skip — HAVING <> 0 must drop it.
 	appendOrFatal(t, store, domain.InteractionEvent{
 		UserId: userC, Type: domain.EventTypePlay,
 		Payload: map[string]any{"result_signature": sigZeroNet},
@@ -120,8 +111,6 @@ func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 	}
 }
 
-// ZeroResultQueries: only boolean-true zero_result rows count; poisoned
-// (string) and absent flags are skipped without erroring.
 func TestPgxEventStore_ZeroResultQueries(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -142,7 +131,7 @@ func TestPgxEventStore_ZeroResultQueries(t *testing.T) {
 	}
 	search(qHit, map[string]any{"zero_result": true})
 	search(qHit, map[string]any{"zero_result": true})
-	search(qPoison, map[string]any{"zero_result": "yes"}) // poisoned: string, not boolean
+	search(qPoison, map[string]any{"zero_result": "yes"})
 	search(qAbsent, map[string]any{})
 	search(qFalse, map[string]any{"zero_result": false})
 
@@ -164,7 +153,6 @@ func TestPgxEventStore_ZeroResultQueries(t *testing.T) {
 	}
 }
 
-// NonZeroNoClickQueries: searches that returned results but drew no click.
 func TestPgxEventStore_NonZeroNoClickQueries(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -216,8 +204,6 @@ func TestPgxEventStore_NonZeroNoClickQueries(t *testing.T) {
 	}
 }
 
-// BehavioralLabels: engagement chained to its search by search_id; wrong_album
-// is a hard negative that trumps a positive on the same signature.
 func TestPgxEventStore_BehavioralLabels(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -256,7 +242,6 @@ func TestPgxEventStore_BehavioralLabels(t *testing.T) {
 		Payload: map[string]any{"result_signature": sigNeg, "title": "Wrong One"},
 	})
 
-	// An engagement with NO search_id can't chain to a query — no label.
 	appendOrFatal(t, store, domain.InteractionEvent{
 		UserId: userId, Type: domain.EventTypeCompleted,
 		Payload: map[string]any{"result_signature": "sig-lbl-orphan-" + suffix},
@@ -305,8 +290,6 @@ func TestPgxEventStore_BehavioralLabels(t *testing.T) {
 	}
 }
 
-// AbandonedSearches: no click + a same-session reformulation within 60s.
-// The 59s/61s pair pins the window boundary.
 func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -324,22 +307,18 @@ func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 		})
 	}
 
-	// Reformulated 30s later, never clicked → abandoned.
 	qAband := "qa aband " + suffix
 	search(qAband, "sess-a-"+suffix, "", base)
 	search("qa aband next "+suffix, "sess-a-"+suffix, "", base.Add(30*time.Second))
 
-	// Boundary: reformulated at +59s → inside the window, abandoned.
 	q59 := "qa aband 59s " + suffix
 	search(q59, "sess-b-"+suffix, "", base)
 	search("qa aband 59s next "+suffix, "sess-b-"+suffix, "", base.Add(59*time.Second))
 
-	// Boundary: reformulated at +61s → outside the window, NOT abandoned.
 	q61 := "qa aband 61s " + suffix
 	search(q61, "sess-c-"+suffix, "", base)
 	search("qa aband 61s next "+suffix, "sess-c-"+suffix, "", base.Add(61*time.Second))
 
-	// Clicked, then reformulated → NOT abandoned (the click satisfies it).
 	qClicked := "qa aband clicked " + suffix
 	clickedSearchID := uuid.New().String()
 	search(qClicked, "sess-d-"+suffix, clickedSearchID, base)
@@ -373,9 +352,6 @@ func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 	}
 }
 
-// Append idempotency: a valid event_id dedups a retry; a malformed event_id is
-// dropped (row still lands, WITHOUT dedup) and a malformed search_id persists
-// as NULL rather than failing the append.
 func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -400,7 +376,7 @@ func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 			Payload: map[string]any{"result_signature": "sig-dedup"},
 		}
 		appendOrFatal(t, store, ev)
-		appendOrFatal(t, store, ev) // at-least-once retry
+		appendOrFatal(t, store, ev)
 		if n := countRows(t, userId); n != 1 {
 			t.Errorf("rows after retried critical event = %d, want 1 (ON CONFLICT no-op)", n)
 		}

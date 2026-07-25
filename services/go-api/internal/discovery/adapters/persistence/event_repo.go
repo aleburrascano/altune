@@ -38,15 +38,11 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		return fmt.Errorf("marshal telemetry payload: %w", err)
 	}
 
-	// query_norm is nullable — only search-originated events carry one.
 	var queryNorm *string
 	if event.QueryNorm != "" {
 		queryNorm = &event.QueryNorm
 	}
 
-	// search_id is nullable — only events that trace back to a search carry one.
-	// Parse defensively: a malformed id is dropped (logged-not-swallowed upstream)
-	// rather than failing the whole append.
 	var searchID *uuid.UUID
 	if event.SearchId != "" {
 		if id, parseErr := uuid.Parse(event.SearchId); parseErr == nil {
@@ -54,10 +50,6 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		}
 	}
 
-	// event_id is the idempotency key — only the label-critical outbox tier sets
-	// it; NULL otherwise, so fire-and-forget events never collide. A malformed
-	// event_id is dropped (the event still lands, without dedup) — logged so the
-	// silent loss of idempotency is at least observable.
 	var eventID *uuid.UUID
 	if event.EventId != "" {
 		if id, parseErr := uuid.Parse(event.EventId); parseErr == nil {
@@ -68,7 +60,6 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		}
 	}
 
-	// client_occurred_at is nullable — only client-minted events carry one.
 	var clientOccurredAt *time.Time
 	if !event.ClientOccurredAt.IsZero() {
 		t := event.ClientOccurredAt.UTC()
@@ -80,8 +71,6 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		occurredAt = time.Now().UTC()
 	}
 
-	// received_at fills from its column default (now()). ON CONFLICT on the partial
-	// event_id index makes a retried critical event a no-op (at-least-once → once).
 	_, err = r.pool.Exec(ctx,
 		`INSERT INTO discovery_events
 			(user_id, event_type, query_norm, search_id, event_id, client_occurred_at, payload, occurred_at)
@@ -95,8 +84,6 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 	return nil
 }
 
-// ZeroResultQueries ranks search_performed events flagged zero_result in the
-// window by frequency. These are the strong coverage-gap candidates.
 func (r *PgxEventStore) ZeroResultQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT query_norm, COUNT(*) AS cnt
@@ -118,8 +105,6 @@ func (r *PgxEventStore) ZeroResultQueries(ctx context.Context, since time.Time, 
 	return scanQueryCounts(rows)
 }
 
-// NonZeroNoClickQueries ranks search_performed events that returned results but
-// whose query_norm drew no click in the window — a weak coverage hint.
 func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT e.query_norm, COUNT(*) AS cnt
@@ -147,27 +132,10 @@ func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Ti
 	return scanQueryCounts(rows)
 }
 
-// shortDwellThresholdMs is the dwell below which a skip counts as
-// dissatisfaction (Kim WSDM 2014: dwell <20–30s signals an unsatisfying result).
 const shortDwellThresholdMs = 20000
 
-// perUserSignalCap bounds one user's contribution per result_signature in each
-// direction (positives and negatives capped separately, per user, per
-// signature) so a single client replaying events cannot unboundedly pump or
-// bury a result's behavioral score.
 const perUserSignalCap = 3
 
-// SatisfactionSignals aggregates play/skip/completed events per result_signature
-// over the window into a net score: +1 per play (listen-threshold satisfaction)
-// or completed (play-to-completion), −1 per skip whose dwell_ms is below the
-// short-dwell threshold (skip-after-click dissatisfaction). A skip without a
-// numeric dwell_ms counts 0 (unknown dwell is not evidence of dissatisfaction),
-// and dwell_ms is read only when jsonb_typeof says it is a number — a poisoned
-// payload ("dwell_ms":"abc") is skipped, never a 22P02 that bricks the whole
-// window. The CASE wrapper (not a bare AND) guarantees the typeof guard is
-// evaluated before the cast. result_signature rides in the JSONB payload
-// (echoed by the client); only signed results are returned. Read-only
-// analytics — never the request path.
 func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time) ([]ports.BehavioralSignal, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT sig, SUM(user_score)::float8 AS score
@@ -204,12 +172,6 @@ func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time
 	return signals, rows.Err()
 }
 
-// BehavioralLabels mines free relevance labels from query→engagement chains:
-// each engagement event (completed, library_add, wrong_album) is joined to its
-// originating search_performed by search_id to recover the query. A signature
-// touched by a wrong_album is a hard negative (Polarity −1); otherwise a
-// completed/library_add makes it a positive (Polarity +1). Read-only — never the
-// request path.
 func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) ([]ports.BehavioralLabel, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT sp.query_norm,
@@ -251,10 +213,6 @@ func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) (
 	return labels, rows.Err()
 }
 
-// AbandonedSearches ranks queries that drew no click and were reformulated — the
-// same session_id fired another search within 60s (a Joachims query-chain
-// dissatisfaction signal). The no-click test joins precisely by search_id; the
-// reformulation test joins by the session_id carried in the JSONB payload.
 func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT sp.query_norm, COUNT(*) AS cnt

@@ -27,7 +27,6 @@ func seedHistoryEntry(t *testing.T, repo *PgxSearchHistoryRepository, userId sha
 	}
 }
 
-// DeleteAllForUser wipes exactly one user's history; another user's survives.
 func TestPgxSearchHistoryRepo_DeleteAllForUser(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxSearchHistoryRepository(pool)
@@ -69,13 +68,11 @@ func TestPgxSearchHistoryRepo_DeleteAllForUser(t *testing.T) {
 		t.Errorf("userB entries after userA delete = %d, want 1 (scoped delete)", len(gotB))
 	}
 
-	// Deleting an already-empty history is a no-op, not an error.
 	if err := repo.DeleteAllForUser(ctx, userA); err != nil {
 		t.Errorf("DeleteAllForUser on empty history: %v, want nil", err)
 	}
 }
 
-// ListDistinctRecent's limit applies to DISTINCT query_norms, most recent first.
 func TestPgxSearchHistoryRepo_ListDistinctRecent_LimitBoundary(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxSearchHistoryRepository(pool)
@@ -101,7 +98,6 @@ func TestPgxSearchHistoryRepo_ListDistinctRecent_LimitBoundary(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("len = %d, want 2 (limit)", len(got))
 	}
-	// The two MOST RECENT norms survive the limit; the oldest is cut.
 	if got[0].QueryNorm != "limit qc "+suffix || got[1].QueryNorm != "limit qb "+suffix {
 		t.Errorf("got [%q, %q], want the two most recent [%q, %q]",
 			got[0].QueryNorm, got[1].QueryNorm, "limit qc "+suffix, "limit qb "+suffix)

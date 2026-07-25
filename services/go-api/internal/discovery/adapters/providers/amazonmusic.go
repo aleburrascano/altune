@@ -16,33 +16,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// AmazonMusicAdapter searches Amazon Music through its internal web-player
-// backend — an anonymous config.json session bootstrap feeding
-// na.web.skill.music.a2z.com's showSearch endpoint — since Amazon's own
-// developer program gates catalog access behind Business Development
-// approval (confirmed 2026-07-22), leaving no self-serve documented route.
-//
-// AIDEV-DECISION: undocumented and against Amazon's ToS — accepted for
-// self-hosted personal/family use, the same risk acceptance already made for
-// the SoundCloud api-v2 adapter. Unlike SoundCloud (and unlike Spotify, whose
-// internal API is gated by a rotating cryptographic secret specifically
-// hardened against unofficial clients), the gate here is soft: an anonymous
-// GET to config.json hands back a fresh session bundle (device/session id +
-// a plaintext CSRF token) with no login and no client-side cryptography.
 type AmazonMusicAdapter struct {
 	client    *http.Client
 	resolver  *amazonMusicSessionResolver
-	searchURL string // overridable in tests
+	searchURL string
 }
 
 const (
-	amzSearchURL     = "https://na.web.skill.music.a2z.com/api/showSearch"
-	amzSearchTimeout = 4 * time.Second
-	amzUserAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-	// amzResponseBodyCap is well above providerBodyCap: showSearch's Template
-	// Interface response is a full UI-description tree, not flat metadata, and
-	// an artist-name query's page (top artist result + songs + albums + related)
-	// comfortably exceeds the shared 2 MiB provider default.
+	amzSearchURL       = "https://na.web.skill.music.a2z.com/api/showSearch"
+	amzSearchTimeout   = 4 * time.Second
+	amzUserAgent       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 	amzResponseBodyCap = 16 << 20
 )
 
@@ -64,8 +47,6 @@ func (a *AmazonMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
 	}
 }
 
-// SearchTimeout gives room for a cold-start session resolve (config.json) plus
-// the search call itself.
 func (a *AmazonMusicAdapter) SearchTimeout() time.Duration { return amzSearchTimeout }
 
 func (a *AmazonMusicAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
@@ -134,13 +115,6 @@ func (a *AmazonMusicAdapter) doSearch(ctx context.Context, sess *amazonMusicSess
 	return results, resp.StatusCode, nil
 }
 
-// --- request body ----------------------------------------------------------
-//
-// showSearch's body is a JSON envelope whose fields are themselves
-// JSON-encoded strings (the "Template Interface" wire format Amazon's web
-// player shares with its Alexa/FireTV surfaces). Shape captured directly from
-// the live web player (2026-07-22); field names are load-bearing.
-
 type amzSearchRequest struct {
 	Filter           string `json:"filter"`
 	Keyword          string `json:"keyword"`
@@ -166,10 +140,6 @@ type amzCSRFElement struct {
 	RndNonce  string `json:"rndNonce"`
 }
 
-// amzHeadersBundle is the JSON-stringified x-amzn-* header bundle showSearch
-// expects in its body (not as real HTTP headers). Fields with no dynamic
-// value (referer, affiliate tags, feature flags, ...) are sent empty, which
-// is what the live web player sends for an anonymous session too.
 type amzHeadersBundle struct {
 	Authentication  string `json:"x-amzn-authentication"`
 	DeviceModel     string `json:"x-amzn-device-model"`
@@ -260,16 +230,6 @@ func buildAmazonMusicSearchBody(sess *amazonMusicSession, query string) (string,
 	return string(out), nil
 }
 
-// --- response parsing --------------------------------------------------
-//
-// showSearch returns a deeply nested "Template Interface" UI-description tree
-// (the same schema Amazon's web player shares with its Alexa/FireTV
-// surfaces) rather than flat metadata. Card items are scattered throughout it
-// at no fixed depth, so we walk the whole decoded tree looking for the three
-// card-shaped element types and classify each one by the fields it carries.
-
-// walkAmazonMusicNode recursively visits every map/slice in a decoded JSON
-// tree, collecting each recognized card item as a deduplicated SearchResult.
 func walkAmazonMusicNode(node any, seen map[string]bool, out *[]domain.SearchResult) {
 	switch v := node.(type) {
 	case map[string]any:
@@ -297,9 +257,6 @@ func amazonMusicResultID(r domain.SearchResult) string {
 	return ""
 }
 
-// amazonMusicCardInterfaces are the item-element shapes that represent a
-// track/album/artist card (as opposed to the surrounding navigation/chrome
-// elements the same response also carries).
 func isAmazonMusicCardInterface(iface string) bool {
 	return strings.HasSuffix(iface, "SquareHorizontalItemElement") ||
 		strings.HasSuffix(iface, "SquareVerticalItemElement") ||
@@ -341,12 +298,6 @@ func mapAmazonMusicItem(obj map[string]any) (domain.SearchResult, bool) {
 		extras), true
 }
 
-// amazonMusicItemIdentity classifies a card and extracts its catalog id (plus
-// the owning album's ASIN, for a track). Artist cards carry a
-// primaryLink.deeplink of "/artists/{asin}/slug". Album AND track cards both
-// carry "/albums/{albumAsin}" — a track's adds a "?trackAsin={trackAsin}"
-// query param (Amazon Music has no standalone track page, so a track is
-// addressed as "this track within this album").
 func amazonMusicItemIdentity(obj map[string]any) (kind domain.ResultKind, externalID, albumASIN string, ok bool) {
 	link, ok2 := obj["primaryLink"].(map[string]any)
 	if !ok2 {
@@ -366,9 +317,6 @@ func amazonMusicItemIdentity(obj map[string]any) (kind domain.ResultKind, extern
 	return domain.ResultKindUnknown, "", "", false
 }
 
-// amazonMusicDeeplinkID extracts the id segment right after prefix, stopping
-// at the next "/" or "?" (a bare artist deeplink carries no query string, but
-// stopping at "?" too keeps this safe if one ever does).
 func amazonMusicDeeplinkID(deeplink, prefix string) (string, bool) {
 	rest, ok := strings.CutPrefix(deeplink, prefix)
 	if !ok || rest == "" {
@@ -382,8 +330,6 @@ func amazonMusicDeeplinkID(deeplink, prefix string) (string, bool) {
 	return id, true
 }
 
-// amazonMusicAlbumDeeplink splits a "/albums/{albumAsin}[/slug][?trackAsin=...]"
-// deeplink into the album id and, when present, the track id.
 func amazonMusicAlbumDeeplink(deeplink string) (albumID, trackID string, ok bool) {
 	rest, ok := strings.CutPrefix(deeplink, "/albums/")
 	if !ok || rest == "" {
@@ -402,9 +348,6 @@ func amazonMusicAlbumDeeplink(deeplink string) (albumID, trackID string, ok bool
 	return albumID, trackID, true
 }
 
-// amazonMusicSecondaryArtistASIN reads the artist cross-reference a
-// track/album card carries via its secondaryLink (the artist-name link under
-// the title) — additive identity signal, not part of the core schema.
 func amazonMusicSecondaryArtistASIN(obj map[string]any) string {
 	link, ok := obj["secondaryLink"].(map[string]any)
 	if !ok {
@@ -415,10 +358,6 @@ func amazonMusicSecondaryArtistASIN(obj map[string]any) string {
 	return id
 }
 
-// amazonMusicText reads a Template Interface text field, which is
-// inconsistently either a bare string or a {interface, text} element
-// depending on which field it is (primaryText is always the latter,
-// secondaryText observed as the former).
 func amazonMusicText(v any) string {
 	switch t := v.(type) {
 	case string:

@@ -8,7 +8,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// fakeInnerIdentityStore records calls so the cache's delegation is observable.
 type fakeInnerIdentityStore struct {
 	invalidated   []string
 	invalidateErr error
@@ -29,7 +28,7 @@ func (f *fakeInnerIdentityStore) Invalidate(_ context.Context, kind domain.Resul
 
 func TestRedisIdentityStore_Invalidate_DelegatesToDurableStore(t *testing.T) {
 	inner := &fakeInnerIdentityStore{}
-	store := NewRedisIdentityStore(inner, nil) // nil client: durable-only degradation
+	store := NewRedisIdentityStore(inner, nil)
 
 	if err := store.Invalidate(context.Background(), domain.ResultKindArtist, "deezer", "123"); err != nil {
 		t.Fatalf("Invalidate: %v", err)

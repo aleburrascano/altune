@@ -80,7 +80,6 @@ func TestSpotifyArtworkResolver_ResolveByIdentity(t *testing.T) {
 }
 
 func TestSpotifyArtworkResolver_NameResolveIsNoop(t *testing.T) {
-	// Identity-only: a name resolve must never call out (would risk a wrong face).
 	called := false
 	r := NewSpotifyArtworkResolver(&http.Client{Transport: fakeRoundTripper{fn: func(*http.Request) (*http.Response, error) {
 		called = true

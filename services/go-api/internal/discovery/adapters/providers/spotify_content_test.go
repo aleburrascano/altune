@@ -11,8 +11,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// newContentSpotifyAdapter points the pathfinder endpoint at a test server and
-// pre-seeds a valid session so content calls skip live token resolution.
 func newContentSpotifyAdapter(srv *httptest.Server) *SpotifyAdapter {
 	a := NewSpotifyAdapter(srv.Client())
 	a.pathfinderURL = srv.URL
@@ -25,7 +23,6 @@ func newContentSpotifyAdapter(srv *httptest.Server) *SpotifyAdapter {
 	return a
 }
 
-// operationNameOf reads the persisted-query operationName from a pathfinder body.
 func operationNameOf(t *testing.T, r *http.Request) string {
 	t.Helper()
 	raw, _ := io.ReadAll(r.Body)
@@ -39,8 +36,6 @@ func operationNameOf(t *testing.T, r *http.Request) string {
 }
 
 func TestSpotifyAdapter_GetArtistAlbums(t *testing.T) {
-	// queryArtistDiscographyAll shape: all.items[].releases.items[]. Two groups:
-	// an album (first of two variants — only the first is kept) and a single.
 	const discographyJSON = `{"data":{"artistUnion":{"discography":{"all":{"items":[
 		{"releases":{"items":[
 			{"id":"al1","name":"After Hours","type":"ALBUM","coverArt":{"sources":[{"url":"https://i/300.jpg","width":300},{"url":"https://i/640.jpg","width":640}]},"date":{"isoString":"2020-03-20T00:00:00Z","year":2020},"tracks":{"totalCount":14},"sharingInfo":{"shareUrl":"https://open.spotify.com/album/al1?si=abc"}},
@@ -157,7 +152,6 @@ func TestSpotifyAdapter_Content_surfacesGraphQLError(t *testing.T) {
 	}
 }
 
-// offsetOf reads the pathfinder variables.offset from a request body.
 func offsetOf(t *testing.T, raw []byte) int {
 	t.Helper()
 	var req struct {
@@ -172,8 +166,6 @@ func offsetOf(t *testing.T, raw []byte) int {
 }
 
 func TestSpotifyAdapter_GetArtistAlbums_paginates(t *testing.T) {
-	// totalCount says 3 groups; page 1 (offset 0) carries 2, page 2 (offset 50)
-	// carries the last, so the loop must stop after two requests.
 	const page1 = `{"data":{"artistUnion":{"discography":{"all":{"totalCount":3,"items":[
 		{"releases":{"items":[{"id":"al1","name":"First","type":"ALBUM"}]}},
 		{"releases":{"items":[{"id":"al2","name":"Second","type":"ALBUM"}]}}

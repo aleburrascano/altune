@@ -71,10 +71,6 @@ func (a *DiscogsAdapter) Resolve(ctx context.Context, kind domain.ResultKind, ti
 	return "", nil
 }
 
-// ResolveByIdentity fetches the primary image of the exact bridged Discogs
-// artist — identity-correct, no name search. This is the path that gets the
-// right face for same-name artists ("Che (38)" vs the seven other Ches): the
-// merge's MB→Discogs bridge already proved which Discogs entry this entity is.
 func (a *DiscogsAdapter) ResolveByIdentity(ctx context.Context, kind domain.ResultKind, id ports.ArtworkIdentity) (string, error) {
 	if kind != domain.ResultKindArtist {
 		return "", nil

@@ -10,8 +10,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// newTestSoundCloudAPI builds an adapter whose api-v2 base points at srv and
-// whose client_id is pre-seeded, so Search/Resolve skip homepage resolution.
 func newTestSoundCloudAPI(srv *httptest.Server, fallback searchFallback) *SoundCloudAPIAdapter {
 	a := NewSoundCloudAPIAdapter(srv.Client(), fallback)
 	a.baseURL = srv.URL
@@ -23,9 +21,6 @@ func trackKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{domain.ResultKindTrack: true}
 }
 
-// scContentServer routes the three artist-content endpoints used by the
-// discography path. The playlist "Empty Clip" (ep) owns tracks 1 & 2; the uploads
-// feed adds those two plus a standalone single (99).
 func scContentServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	const albumsJSON = `{"collection":[
@@ -59,8 +54,6 @@ func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T)
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
-	// Empty Clip (ep) + one standalone single (14 HAHAHA LOL). Tracks 1 & 2 belong
-	// to the playlist, so they must NOT also appear as singles.
 	if len(albums) != 2 {
 		t.Fatalf("got %d items, want 2 (1 EP + 1 standalone single): %+v", len(albums), albums)
 	}
@@ -88,12 +81,12 @@ func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T)
 func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/playlists/500"): // an EP playlist
+		case strings.HasPrefix(r.URL.Path, "/playlists/500"):
 			_, _ = w.Write([]byte(`{"tracks":[
 				{"id":1,"kind":"track","title":"Track A","user":{"username":"Che"}},
 				{"id":2,"kind":"track","title":"Track B","user":{"username":"Che"}}
 			]}`))
-		case strings.HasPrefix(r.URL.Path, "/playlists/99"): // a track id is not a playlist
+		case strings.HasPrefix(r.URL.Path, "/playlists/99"):
 			w.WriteHeader(http.StatusNotFound)
 		case strings.HasPrefix(r.URL.Path, "/tracks/99"):
 			_, _ = w.Write([]byte(`{"id":99,"kind":"track","title":"14 HAHAHA LOL","user":{"username":"Che"}}`))
@@ -104,7 +97,6 @@ func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
 	defer srv.Close()
 	a := newTestSoundCloudAPI(srv, nil)
 
-	// A playlist id → the playlist's tracks.
 	ep, err := a.GetAlbumTracks(t.Context(), domain.ProviderSoundCloud, "500")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks(playlist): %v", err)
@@ -113,7 +105,6 @@ func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
 		t.Fatalf("playlist tracks = %+v, want [Track A, Track B]", ep)
 	}
 
-	// A single's track id (playlist lookup 404s) → the single track itself.
 	single, err := a.GetAlbumTracks(t.Context(), domain.ProviderSoundCloud, "99")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks(single): %v", err)
@@ -127,7 +118,6 @@ func TestSoundCloud_GetArtistAlbums_resolvesBridgeHandle(t *testing.T) {
 	var resolvedHandle bool
 	srv := scContentServer(t)
 	defer srv.Close()
-	// Wrap to observe the /resolve call fired for the non-numeric handle.
 	inner := srv.Config.Handler
 	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/resolve") {
@@ -137,7 +127,7 @@ func TestSoundCloud_GetArtistAlbums_resolvesBridgeHandle(t *testing.T) {
 	})
 	a := newTestSoundCloudAPI(srv, nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "che") // handle, not numeric
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "che")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums(handle): %v", err)
 	}
@@ -172,7 +162,6 @@ func TestSoundCloudAPIAdapter_SearchTimeout(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_Search_NoKindsRequested(t *testing.T) {
-	// Empty kinds: no branch fires, so it returns nil without any network call.
 	a := NewSoundCloudAPIAdapter(http.DefaultClient, nil)
 	results, err := a.Search(context.Background(), "q", map[domain.ResultKind]bool{})
 	if err != nil {
@@ -334,7 +323,6 @@ func TestSoundCloudAPIAdapter_Search_Paginates(t *testing.T) {
 			_, _ = w.Write([]byte(`{"collection":[{"id":2,"kind":"track","title":"B","user":{"username":"u"}}],"next_href":""}`))
 			return
 		}
-		// First page: 20 tracks + a next_href pointing at offset=20.
 		var b strings.Builder
 		b.WriteString(`{"collection":[`)
 		for i := 0; i < 20; i++ {
@@ -361,8 +349,6 @@ func TestSoundCloudAPIAdapter_Search_Paginates(t *testing.T) {
 	}
 }
 
-// srv0URL reconstructs the test server's base URL from a request, so the
-// next_href the handler emits loops back to the same server.
 func srv0URL(r *http.Request) string {
 	scheme := "http"
 	return scheme + "://" + r.Host
@@ -372,7 +358,6 @@ func TestSoundCloudAPIAdapter_AuthFailure_ReResolvesClientID(t *testing.T) {
 	var searchCalls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		searchCalls++
-		// First search call: stale client_id → 401. Second: success.
 		if searchCalls == 1 {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -383,8 +368,6 @@ func TestSoundCloudAPIAdapter_AuthFailure_ReResolvesClientID(t *testing.T) {
 	defer srv.Close()
 
 	a := newTestSoundCloudAPI(srv, nil)
-	// The post-401 invalidate→re-resolve path needs a homepage+bundle to scrape
-	// a fresh client_id from.
 	bundle := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`x=1,client_id:"abcdefghijklmnopqrstuvwxyz012345",y=2`))
 	}))
@@ -408,8 +391,6 @@ func TestSoundCloudAPIAdapter_AuthFailure_ReResolvesClientID(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_FallsBackOnResolveFailure(t *testing.T) {
-	// api-v2 base points nowhere useful; resolver homepage 500s, so client_id
-	// resolution fails and the adapter must fall back.
 	home := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -419,7 +400,7 @@ func TestSoundCloudAPIAdapter_FallsBackOnResolveFailure(t *testing.T) {
 		{Kind: domain.ResultKindTrack, Title: "from yt-dlp"},
 	}}
 	a := NewSoundCloudAPIAdapter(http.DefaultClient, fb)
-	a.resolver.siteURL = home.URL // no seeded client_id → forces resolution
+	a.resolver.siteURL = home.URL
 
 	results, err := a.Search(context.Background(), "q", trackKinds())
 	if err != nil {
@@ -494,7 +475,6 @@ func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
 	defer srv.Close()
 	a := newTestSoundCloudAPI(srv, nil)
 
-	// Artist artwork → avatar, upgraded to 500px.
 	got, err := a.Resolve(context.Background(), domain.ResultKindArtist, "Underground Artist", "", "")
 	if err != nil {
 		t.Fatalf("Resolve(artist) error: %v", err)
@@ -503,7 +483,6 @@ func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
 		t.Errorf("artist artwork = %q", got)
 	}
 
-	// Track artwork → single-page search, top hit's image.
 	got, err = a.Resolve(context.Background(), domain.ResultKindTrack, "Leak", "Some Artist", "")
 	if err != nil {
 		t.Fatalf("Resolve(track) error: %v", err)
@@ -596,7 +575,6 @@ func TestClientIDResolver_ScrapesAndCaches(t *testing.T) {
 		t.Errorf("client_id = %q", id)
 	}
 
-	// Second get must be served from cache — no further homepage hit.
 	if _, err := r.get(context.Background()); err != nil {
 		t.Fatalf("cached get error: %v", err)
 	}
@@ -604,7 +582,6 @@ func TestClientIDResolver_ScrapesAndCaches(t *testing.T) {
 		t.Errorf("expected homepage scraped once, got %d", homeCalls)
 	}
 
-	// After invalidate (with the id in hand), it resolves again.
 	r.invalidate(id)
 	if _, err := r.get(context.Background()); err != nil {
 		t.Fatalf("post-invalidate get error: %v", err)
@@ -633,8 +610,6 @@ func TestUpgradeArtworkResolution(t *testing.T) {
 	}
 }
 
-// recordingFallback is a searchFallback that records invocation and returns a
-// canned result set — stands in for the yt-dlp adapter in fallback tests.
 type recordingFallback struct {
 	called  bool
 	results []domain.SearchResult

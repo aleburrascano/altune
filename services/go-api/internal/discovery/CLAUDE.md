@@ -99,6 +99,40 @@ a held-in-reserve, non-query-fit tiebreak for strict-#1 polish — not the gate.
 - **Pre-correction disabled** (it rewrote valid queries from vocabulary pollution);
   post-correction (zero-results-only) is sufficient.
 
+## Adapter invariants (`adapters/`)
+
+### Reverse-engineered providers — the fragile tier
+
+Spotify, Amazon Music, and Deezer's lyrics path ride undocumented internal endpoints, **against those providers' ToS**, accepted deliberately because the other providers already give graceful degradation if they break.
+
+- **Spotify is the most fragile integration here.** The search persisted-query hash and the `spotify_content` operation hashes **rotate without notice** whenever Spotify redeploys its web player; a stale hash must surface as a real error rather than an empty result. The TOTP secrets in `spotify_totp.go` also rotate periodically and cannot be derived analytically — they must be re-scraped. The access token's cached expiry is skewed a minute early so a request never starts against a token that expires mid-flight, and the TOTP counter needs Spotify's *server* time, not local time.
+- `deezer_lyrics` uses `pipe.deezer.com` + `auth.deezer.com` with an anonymous JWT. Expect rotation (401 → re-bootstrap **once**), and **never block the hot search path on it**.
+- SoundCloud rotates how its `client_id` is embedded, which periodically breaks the bootstrap.
+- Every one of these self-healing 401 handlers shares one rule: **a second 401 handler must not wipe the fresh credential the first one just obtained** — re-bootstrap only if the credential still matches the one the request failed with.
+- `ytmusic_client` breaks by *drift*, not by error: the request keeps succeeding while the response shape changes (the parser knew `musicShelfRenderer`). When results go empty, probe the raw response before assuming an outage.
+
+### Artwork chain
+
+Identity-only resolvers (those that fetch by a bridged id) are tried first and **never name-search**. Only after they miss may the chain fall back to a name search, and it **must label that result provisional, not identity**, so a same-name guess can never masquerade as a proven-identity image. `spotify_artwork`'s `Resolve` is a deliberate no-op for exactly this reason — oEmbed needs a Spotify URL, so it resolves only by proven id and a same-name artist ("Che") can never inherit another's face. Image-format handling is best-effort: a format change degrades to 320px, never to broken.
+
+The `ArtworkCache` repeats the port's overwrite guard: a weaker result never replaces a real, higher-confidence image.
+
+### Persistence
+
+- **A lookup failure must never break the search path** — degrade to a miss. A cache write failure must never fail the search.
+- `entity_identity_repo`: persisting a narrow xref (say only `{deezer}`) **must not erase** the `{spotify, discogs}` edges an earlier write learned.
+- Malformed JSON payloads are **skipped per row**, never allowed to raise a `22P02` that bricks the whole batch. Event ids are NULL for fire-and-forget events so they never collide on the idempotency key.
+- `related_tracks_repo`'s **cross-user scan (no `user_id` filter) is deliberate, not a bug** — it reads only non-identifying track metadata (title/artist/album/artwork URL), no user id and no PII. Do not "fix" it by adding a user filter.
+
+### Provider quirks worth keeping
+
+- Rate limiting is **per-provider, not uniform** — MusicBrainz reserves the strictest budget. MusicBrainz caches only successful results: errors and timeouts are never cached, so a transient failure doesn't freeze. A cancelled request must not keep sleeping out its backoff.
+- Last.fm's artist MBID is **deliberately not mapped** onto the result MBID — a stale Last.fm mbid that disagrees with MusicBrainz would corrupt identity. Last.fm's enrichment reads the body even on a non-200, because a 4xx-delivered miss otherwise looked transient and the negative cache never engaged.
+- iTunes/Apple ids can never bridge-match: the bridge is xref-gated and MusicBrainz url-relations never carry an Apple/iTunes id. iTunes title-suffix matching is **suffix-only** — a mid-title match ("Bad - Remix Album") must not trip it.
+- MusicBrainz enrichment resolves strictly or returns nothing ("nothing to enrich"), **never a fuzzy guess**, and ties break alphabetically so tests and the UI agree on order.
+- SoundCloud tracks otherwise never merge with other providers, and an EP track must never also render as a top-level single.
+- YouTube Music has no SLA, so a slow or hung request must not block a search indefinitely. Its by-name gathering is for artwork only — **never wire it into the search path**.
+
 ## Service invariants (`service/`)
 
 ### Search orchestration (`search.go`, `pipeline.go`, `fanout`)

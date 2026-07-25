@@ -13,32 +13,20 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// Compile-time proof that the one generic adapter satisfies every name-keyed
-// enrichment cache port (the per-provider interfaces are aliases of
-// ports.NameKeyedCache[T]).
 var (
-	_ ports.DeezerEnrichmentCache        = (*RedisNameKeyedCache[domain.DeezerEnrichment])(nil)
-	_ ports.LastFmEnrichmentCache        = (*RedisNameKeyedCache[domain.LastFmEnrichment])(nil)
-	_ ports.LyricsCache                  = (*RedisNameKeyedCache[domain.DeezerLyrics])(nil)
+	_ ports.DeezerEnrichmentCache = (*RedisNameKeyedCache[domain.DeezerEnrichment])(nil)
+	_ ports.LastFmEnrichmentCache = (*RedisNameKeyedCache[domain.LastFmEnrichment])(nil)
+	_ ports.LyricsCache           = (*RedisNameKeyedCache[domain.DeezerLyrics])(nil)
 )
 
-// negValue is the sentinel stored under a negative key; only its existence is
-// checked (Get err == nil), never its content.
 const negValue = "1"
 
 const (
-	nameKeyedPositiveTTL = 30 * 24 * time.Hour // detail data is near-static
-	nameKeyedNegativeTTL = 24 * time.Hour      // a name's resolvability can change
-	lyricsPositiveTTL    = 90 * 24 * time.Hour // lyrics are static — cache long
+	nameKeyedPositiveTTL = 30 * 24 * time.Hour
+	nameKeyedNegativeTTL = 24 * time.Hour
+	lyricsPositiveTTL    = 90 * 24 * time.Hour
 )
 
-// RedisNameKeyedCache is the one read-through Redis adapter behind every
-// name-keyed detail-enrichment cache (Deezer, Last.fm,
-// lyrics). Each provider differs only by value type T, key prefixes, and TTLs,
-// supplied by its constructor below; the positive path stores the whole value
-// object, the negative path a marker that a name resolved to nothing. A nil
-// client is a no-op (Get miss / Set no-op), so the services run uncached without
-// Redis.
 type RedisNameKeyedCache[T any] struct {
 	client    *goredis.Client
 	posPrefix string
@@ -89,20 +77,11 @@ func (c *RedisNameKeyedCache[T]) SetNegative(ctx context.Context, nameKey string
 	return c.client.Set(ctx, hashKey(c.negPrefix, nameKey), negValue, c.negTTL).Err()
 }
 
-// hashKey hashes the variable-length, user-derived name key under a fixed prefix
-// so the stored Redis key is bounded and opaque. Format is unchanged from the
-// per-provider adapters this generic replaced (prefix + first 16 bytes of the
-// SHA-256, hex), so existing cached keys remain valid.
 func hashKey(prefix, nameKey string) string {
 	h := sha256.Sum256([]byte(nameKey))
 	return fmt.Sprintf("%s%x", prefix, h[:16])
 }
 
-// NewRedisNameKeyedCache builds a read-through Redis-backed NameKeyedCache for
-// any value type — the general form the per-provider constructors below
-// specialize. Exported so callers whose value type isn't a domain enrichment
-// type (e.g. a service-layer read model) can still route through the one
-// generic adapter instead of hand-rolling a cache.
 func NewRedisNameKeyedCache[T any](client *goredis.Client, posPrefix, negPrefix string, posTTL, negTTL time.Duration, empty func() T) *RedisNameKeyedCache[T] {
 	return &RedisNameKeyedCache[T]{
 		client:    client,
@@ -114,8 +93,6 @@ func NewRedisNameKeyedCache[T any](client *goredis.Client, posPrefix, negPrefix 
 	}
 }
 
-// NewRedisDeezerEnrichmentCache caches DeezerEnrichment by normalized
-// (kind, artist, title) name key.
 func NewRedisDeezerEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[domain.DeezerEnrichment] {
 	return &RedisNameKeyedCache[domain.DeezerEnrichment]{
 		client:    client,
@@ -127,8 +104,6 @@ func NewRedisDeezerEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[
 	}
 }
 
-// NewRedisLastFmEnrichmentCache caches LastFmEnrichment by normalized
-// (kind, artist, title) name key.
 func NewRedisLastFmEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[domain.LastFmEnrichment] {
 	return &RedisNameKeyedCache[domain.LastFmEnrichment]{
 		client:    client,
@@ -140,11 +115,6 @@ func NewRedisLastFmEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[
 	}
 }
 
-
-
-// NewRedisDeezerLyricsCache caches DeezerLyrics by normalized (artist, title)
-// name key. Positive entries get a long TTL (lyrics are static); negative
-// entries a short one (availability is region/catalog dependent).
 func NewRedisDeezerLyricsCache(client *goredis.Client) *RedisNameKeyedCache[domain.DeezerLyrics] {
 	return &RedisNameKeyedCache[domain.DeezerLyrics]{
 		client:    client,

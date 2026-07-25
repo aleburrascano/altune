@@ -2,9 +2,6 @@ package providers
 
 import "testing"
 
-// MB is the discography completeness spine; its first-release-date is the
-// authoritative year for albums no other provider carries. Regression guard for
-// the map that used to drop it, leaving those albums blank and out of order.
 func TestMapMBReleaseGroup_carriesFirstReleaseDate(t *testing.T) {
 	r := mapMBReleaseGroup(mbReleaseGroup{
 		ID:               "rg-1",
@@ -27,7 +24,6 @@ func TestMapMBReleaseGroup_carriesFirstReleaseDate(t *testing.T) {
 	}
 }
 
-// A partial MB date (year only) still yields a usable release key.
 func TestMapMBReleaseGroup_partialDate(t *testing.T) {
 	r := mapMBReleaseGroup(mbReleaseGroup{ID: "rg-2", Title: "Early", FirstReleaseDate: "2005"})
 	if r.ReleaseDate != "2005" {

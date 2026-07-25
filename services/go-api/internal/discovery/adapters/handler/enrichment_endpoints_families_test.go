@@ -13,10 +13,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// Fakes for the per-source detail-open enrichment families (Last.fm, Deezer,
-// lyrics). Each stands in for the provider adapter behind its enrich service;
-// caches are left nil (uncached).
-
 type fakeLastFmEnricher struct {
 	enrichment discdomain.LastFmEnrichment
 }
@@ -24,8 +20,6 @@ type fakeLastFmEnricher struct {
 func (f *fakeLastFmEnricher) Lookup(context.Context, discdomain.ResultKind, string, string) (discdomain.LastFmEnrichment, error) {
 	return f.enrichment, nil
 }
-
-// --- fake Deezer enricher ---
 
 type fakeDeezerEnricher struct {
 	enrichment discdomain.DeezerEnrichment
@@ -39,8 +33,6 @@ func (f *fakeDeezerEnricher) Lookup(context.Context, discdomain.ResultKind, stri
 	return f.enrichment, nil
 }
 
-// --- fake lyrics provider ---
-
 type fakeLyricsProvider struct {
 	lyrics discdomain.DeezerLyrics
 }
@@ -53,8 +45,6 @@ func (f *fakeLyricsProvider) Lookup(context.Context, string) (discdomain.DeezerL
 	return f.lyrics, nil
 }
 
-// buildEnrichersRouter mounts a discovery handler with only the detail-open
-// enrichers wired (any nil member degrades its endpoint to an empty DTO).
 func buildEnrichersRouter(e DetailEnrichers) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{}).WithDetailEnrichers(e)
 	r := chi.NewRouter()
@@ -62,7 +52,6 @@ func buildEnrichersRouter(e DetailEnrichers) chi.Router {
 	r.Mount("/discovery", h.Routes())
 	return r
 }
-
 
 func TestHandleLastFmEnrichment(t *testing.T) {
 	t.Run("missing kind returns 400", func(t *testing.T) {
@@ -128,8 +117,6 @@ func TestHandleLastFmEnrichment(t *testing.T) {
 		}
 	})
 }
-
-// ==================== Deezer ====================
 
 func TestHandleDeezerEnrichment(t *testing.T) {
 	t.Run("missing kind returns 400", func(t *testing.T) {
@@ -200,8 +187,6 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 	})
 }
 
-// ==================== Lyrics ====================
-
 func TestHandleLyrics(t *testing.T) {
 	t.Run("missing title returns 400", func(t *testing.T) {
 		router := buildEnrichersRouter(DetailEnrichers{})
@@ -252,12 +237,6 @@ func TestHandleLyrics(t *testing.T) {
 		}
 	})
 }
-
-// ==================== mapper nil-collection guards ====================
-
-// The domain Empty* constructors already return non-nil slices, so the mappers'
-// nil-guards only fire on hand-built values — pin them so a null never leaks
-// onto the wire regardless of how the domain value was constructed.
 
 func TestEnrichmentToDTO_NilCollectionsBecomeEmpty(t *testing.T) {
 	dto := enrichmentToDTO(discdomain.MBEnrichment{})

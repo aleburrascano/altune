@@ -13,9 +13,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// Content-fetch endpoints: album tracks, artist top-tracks/albums, related
-// tracks — the detail-screen surfaces reached by (provider, externalId).
-
 type ContentFetchResponseDTO struct {
 	Provider string            `json:"provider_name"`
 	Status   string            `json:"status"`
@@ -48,8 +45,6 @@ func validateContentParams(w http.ResponseWriter, r *http.Request) (string, stri
 	return provider, externalID, true
 }
 
-// clampLimit parses the "limit" query param, falling back to def when absent
-// or non-positive and capping it at max.
 func clampLimit(r *http.Request, def, max int) int {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
@@ -61,8 +56,6 @@ func clampLimit(r *http.Request, def, max int) int {
 	return limit
 }
 
-// writeContentFetchError writes the degraded envelope every content-fetch
-// handler falls back to when its service isn't wired.
 func writeContentFetchError(w http.ResponseWriter, provider string) {
 	httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
 		Provider: provider, Status: "error", Items: []SearchResultDTO{},

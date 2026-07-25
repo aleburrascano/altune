@@ -8,28 +8,12 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// defaultKindOrder is the deterministic order kind-fan-out adapters attempt
-// their per-kind searches in. Fixed (not map iteration) so a provider's native
-// result ordering — which feeds the RRF position tiebreak in Rank — is stable
-// run-to-run.
 var defaultKindOrder = []domain.ResultKind{
 	domain.ResultKindArtist,
 	domain.ResultKindTrack,
 	domain.ResultKindAlbum,
 }
 
-// searchAcrossKinds is the single home for the per-kind fan-out that every
-// kind-iterating SearchProvider needs: run searchOne for each requested+supported
-// kind, aggregate the results, and surface an error ONLY when every attempted
-// kind failed. That last rule is load-bearing — it lets the circuit breaker see a
-// total provider outage while a partial mix (some kinds ok, some failed) still
-// ships. Before this, each adapter hand-rolled the loop and the partial/outage
-// decision; the deletion test concentrates that complexity here.
-//
-// The per-kind calls run SEQUENTIALLY, on purpose: most providers rate-limit by
-// host (MusicBrainz enforces ~1 req/sec), so firing a provider's 3 kind-searches
-// at once trips throttling and surfaces as timeouts. Serial calls stay within each
-// host's budget; the per-provider SearchTimeout is sized to cover all three.
 func searchAcrossKinds(
 	ctx context.Context,
 	provider, query string,

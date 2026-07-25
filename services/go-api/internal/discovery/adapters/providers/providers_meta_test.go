@@ -8,10 +8,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// Pins the trivially-stable adapter contract surface the fan-out wires on:
-// provider names, per-provider search budgets, supported kinds, and the
-// artwork-source tags the coverage telemetry keys by.
-
 func TestAdapterNames(t *testing.T) {
 	tests := []struct {
 		got, want domain.ProviderName

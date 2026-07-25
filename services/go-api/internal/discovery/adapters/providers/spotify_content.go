@@ -14,48 +14,16 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// Spotify artist content rides the SAME pathfinder GraphQL API the search path
-// uses (api-partner.spotify.com/pathfinder) — NOT the classic Web API
-// (api.spotify.com/v1). The anonymous web-player bearer token has effectively
-// zero quota on the classic Web API: every call 429s "API rate limit exceeded",
-// even from a cold IP, because that endpoint is the developer OAuth API, not the
-// path the web player itself uses. The earlier classic-API content path
-// therefore returned nothing on every artist. Pathfinder accepts the same token
-// that already works for search. Confirmed live 2026-07-23.
-//
-// AIDEV-WARNING: like the search persisted-query hash, these operation hashes
-// rotate when Spotify redeploys its web player. Unlike a browser network
-// capture, they are extractable straight from the public JS bundle — fetch
-// https://open.spotify.com/, find the linked web-player.<build>.js chunk, and
-// grep for the persisted-query registration:
-//
-//	new <mod>.l("queryArtistDiscographyAll","query","<sha256>",null)
-//	new <mod>.l("queryArtistOverview","query","<sha256>",null)
-//	new <mod>.l("queryAlbumTracks","query","<sha256>",null)
-//
-// A stale hash returns HTTP 412 "Invalid query hash" (not an auth status), so
-// isAuthStatus's retry can't mask it — content degrades to empty, the same
-// graceful-degradation posture as the rest of this adapter.
 const (
 	spotifyDiscographyAllHash = "5e07d323febb57b4a56a42abbf781490e58764aa45feb6e3dc0591564fc56599"
 	spotifyArtistOverviewHash = "ae0e2958a4ab645b35ca19ac04d0495ae12d9c5d7b7286217674801a9aab281a"
 	spotifyAlbumTracksHash    = "b9bfabef66ed756e5e13f68a942deb60bd4125ec1f1be8cc42769dc0259b4b10"
 )
 
-// spotifyContentLimit is the page size for the discography and album-tracks
-// fetches. Releases come newest-first (order=DATE_DESC).
 const spotifyContentLimit = 50
 
-// spotifyMaxContentPages caps pagination (50 per page → 500 items) so a
-// provider bug can't loop forever.
 const spotifyMaxContentPages = 10
 
-// GetArtistAlbums implements ports.ArtistContentProvider via the pathfinder
-// queryArtistDiscographyAll operation. externalID is the Spotify artist id
-// (bridged from MusicBrainz url-relations). Carries release date, cover art,
-// track count, and album/single/compilation type — merges by title into the
-// cross-provider discography (the empty album-artist is filled by another
-// provider in the best-of merge).
 func (a *SpotifyAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	var out []domain.SearchResult
 	fetched := 0
@@ -68,8 +36,6 @@ func (a *SpotifyAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderN
 		}
 		var body spotifyDiscographyResponse
 		if err := a.pathfinderContent(ctx, "queryArtistDiscographyAll", spotifyDiscographyAllHash, vars, &body); err != nil {
-			// Depth is best-effort, presence is not: a later-page failure keeps the
-			// pages already fetched rather than discarding the whole discography.
 			if page > 0 {
 				slog.DebugContext(ctx, "spotify.artist_albums_page_failed",
 					"artist", externalID, "page", page, "error", err)
@@ -82,8 +48,6 @@ func (a *SpotifyAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderN
 			break
 		}
 		for _, g := range groups {
-			// A group's releases are variants of one release (deluxe/clean/regional);
-			// the first is the representative the web player displays.
 			if len(g.Releases.Items) == 0 {
 				continue
 			}
@@ -92,8 +56,6 @@ func (a *SpotifyAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderN
 			}
 		}
 		totalCount := body.Data.ArtistUnion.Discography.All.TotalCount
-		// A missing/zero totalCount alongside a full page smells like schema
-		// drift — the loop would silently truncate to one page.
 		if totalCount == 0 && len(groups) == spotifyContentLimit {
 			slog.DebugContext(ctx, "spotify.artist_albums_totalcount_zero",
 				"artist", externalID, "page_items", len(groups))
@@ -106,8 +68,6 @@ func (a *SpotifyAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderN
 	return out, nil
 }
 
-// GetArtistTopTracks implements ports.ArtistContentProvider via the pathfinder
-// queryArtistOverview operation (its topTracks section).
 func (a *SpotifyAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	vars := map[string]any{"uri": "spotify:artist:" + externalID, "locale": ""}
 	var body spotifyOverviewResponse
@@ -124,12 +84,6 @@ func (a *SpotifyAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provid
 	return out, nil
 }
 
-// GetAlbumTracks implements ports.AlbumContentProvider via the pathfinder
-// queryAlbumTracks operation. externalID is the Spotify album id. Without this a
-// spotify-sourced album (common on identity-bridged cards, where the deezer
-// group was dropped by the MB anchor) has no native tracklist and the album-
-// tracks service falls back to a blind Deezer title search — which resolves to a
-// DIFFERENT artist's same-titled album. Returns tracks in album order.
 func (a *SpotifyAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	var out []domain.SearchResult
 	fetched := 0
@@ -137,7 +91,6 @@ func (a *SpotifyAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderNa
 		vars := map[string]any{"uri": "spotify:album:" + externalID, "offset": page * spotifyContentLimit, "limit": spotifyContentLimit}
 		var body spotifyAlbumTracksResponse
 		if err := a.pathfinderContent(ctx, "queryAlbumTracks", spotifyAlbumTracksHash, vars, &body); err != nil {
-			// Same partial-page policy as GetArtistAlbums above.
 			if page > 0 {
 				slog.DebugContext(ctx, "spotify.album_tracks_page_failed",
 					"album", externalID, "page", page, "error", err)
@@ -167,9 +120,6 @@ func (a *SpotifyAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderNa
 	return out, nil
 }
 
-// pathfinderContent POSTs a persisted-query operation to the pathfinder GraphQL
-// endpoint and decodes the 200 body into out, re-resolving the session once on
-// an auth failure (mirrors Search's rotation-tolerant retry).
 func (a *SpotifyAdapter) pathfinderContent(ctx context.Context, operationName, hash string, vars map[string]any, out any) error {
 	sess, err := a.resolver.get(ctx)
 	if err != nil {
@@ -219,9 +169,6 @@ func (a *SpotifyAdapter) doPathfinderContent(ctx context.Context, sess *spotifyS
 	if err != nil {
 		return resp.StatusCode, err
 	}
-	// Pathfinder signals a stale hash / rejected token with a top-level "errors"
-	// array while still returning HTTP 200 (same shape doSearch guards against);
-	// without this the empty data decodes cleanly and content silently vanishes.
 	var envelope struct {
 		Errors []struct {
 			Message string `json:"message"`
@@ -236,16 +183,12 @@ func (a *SpotifyAdapter) doPathfinderContent(ctx context.Context, sess *spotifyS
 	return resp.StatusCode, nil
 }
 
-// --- pathfinder request/response shapes ---------------------------------
-
 type spotifyPFRequest struct {
 	Variables     map[string]any    `json:"variables"`
 	OperationName string            `json:"operationName"`
 	Extensions    spotifyExtensions `json:"extensions"`
 }
 
-// spotifyDiscographyResponse decodes queryArtistDiscographyAll: releases are
-// grouped (all.items[]) with per-group variants (releases.items[]).
 type spotifyDiscographyResponse struct {
 	Data struct {
 		ArtistUnion struct {
@@ -283,8 +226,6 @@ type spotifyPFRelease struct {
 	} `json:"sharingInfo"`
 }
 
-// spotifyOverviewResponse decodes only queryArtistOverview's topTracks section
-// (the operation returns far more, but this is all the top-tracks endpoint needs).
 type spotifyOverviewResponse struct {
 	Data struct {
 		ArtistUnion struct {
@@ -323,7 +264,6 @@ type spotifyPFTrack struct {
 	} `json:"artists"`
 }
 
-// spotifyAlbumTracksResponse decodes queryAlbumTracks (albumUnion.tracksV2).
 type spotifyAlbumTracksResponse struct {
 	Data struct {
 		AlbumUnion struct {
@@ -356,22 +296,14 @@ type spotifyAlbumTrack struct {
 	} `json:"artists"`
 }
 
-// --- mapping -------------------------------------------------------------
-
 func mapSpotifyRelease(rel spotifyPFRelease) (domain.SearchResult, bool) {
 	if rel.Name == "" || rel.ID == "" {
 		return domain.SearchResult{}, false
 	}
 	var extras map[string]any
-	// type is ALBUM|SINGLE|COMPILATION — record all of it so the discography
-	// buckets correctly (the pipeline's record-type normalizer lowercases and
-	// maps compilation onto the same key the other providers use).
 	if rt := strings.ToLower(rel.Type); rt != "" {
 		extras = map[string]any{"record_type": rt}
 	}
-	// No album-artist here (the discography query omits it), so subtitle is empty:
-	// V2 clusters releases by canonical title, and the best-of merge adopts the
-	// album artist from whichever other provider carries it.
 	r := domain.NewProviderResult(domain.ResultKindAlbum, rel.Name, "",
 		spotifyBestImage(rel.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: rel.ID, URL: spotifyReleaseURL(rel.SharingInfo.ShareURL, rel.ID)},
@@ -416,8 +348,6 @@ func mapSpotifyAlbumTrack(t spotifyAlbumTrack) (domain.SearchResult, bool) {
 	if t.ContentRating.Label == "EXPLICIT" {
 		extras = map[string]any{"explicit": true}
 	}
-	// Album tracks carry no per-track artwork (they share the album cover the
-	// client already has); leave ImageURL empty.
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, artist, "",
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: id, URL: "https://open.spotify.com/track/" + id},
 		extras)
@@ -427,8 +357,6 @@ func mapSpotifyAlbumTrack(t spotifyAlbumTrack) (domain.SearchResult, bool) {
 	return r, true
 }
 
-// spotifyReleaseURL prefers the canonical share URL (stripped of its ?si=
-// tracking suffix), falling back to a constructed album link.
 func spotifyReleaseURL(shareURL, id string) string {
 	if shareURL != "" {
 		if i := strings.IndexByte(shareURL, '?'); i >= 0 {
@@ -439,8 +367,6 @@ func spotifyReleaseURL(shareURL, id string) string {
 	return "https://open.spotify.com/album/" + id
 }
 
-// spotifyReleaseDate normalizes pathfinder's ISO date to the YYYY-MM-DD form the
-// other providers use, falling back to the bare year when no full date is given.
 func spotifyReleaseDate(iso string, year int) string {
 	if len(iso) >= 10 {
 		return iso[:10]

@@ -22,7 +22,6 @@ func TestMusicBrainz_FetchReleaseGroups_laterPageErrorKeepsEarlierPages(t *testi
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		// release-group-count says there is more, forcing a second page.
 		_, _ = w.Write([]byte(`{
 			"release-groups": [{"id": "rg-1", "title": "One", "primary-type": "Album"}],
 			"release-group-count": 150
@@ -38,7 +37,6 @@ func TestMusicBrainz_FetchReleaseGroups_laterPageErrorKeepsEarlierPages(t *testi
 	if len(rgs) != 1 || rgs[0].Title != "One" {
 		t.Fatalf("rgs = %+v, want the 1 page-1 release-group kept", rgs)
 	}
-	// A truncated set must NOT be memoized — the next call refetches.
 	if _, ok := adapter.releaseMemo.get("mbid-1"); ok {
 		t.Error("partial release-group set was memoized; a truncated discography would be reused for hours")
 	}

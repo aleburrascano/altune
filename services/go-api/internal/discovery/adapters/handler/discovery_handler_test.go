@@ -21,21 +21,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// --- test constants ---
-
 var (
 	discTestUserUUID = uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 	discTestUserId   = shared.NewUserId(discTestUserUUID)
 )
 
-// --- fake token verifier ---
-
-// discVerifyAsTestUser always succeeds and returns discTestUserId.
 var discVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
 	return discTestUserId, nil
 })
-
-// --- fake search provider ---
 
 type fakeSearchProvider struct {
 	name    discdomain.ProviderName
@@ -57,8 +50,6 @@ func (p *fakeSearchProvider) SupportedKinds() map[discdomain.ResultKind]bool {
 		discdomain.ResultKindArtist: true,
 	}
 }
-
-// --- fake search history repo ---
 
 type fakeSearchHistoryRepo struct {
 	entries []*discdomain.SearchHistoryEntry
@@ -95,8 +86,6 @@ func (r *fakeSearchHistoryRepo) DeleteAllForUser(_ context.Context, _ shared.Use
 	return nil
 }
 
-// --- fake album content provider ---
-
 type fakeAlbumContentProvider struct {
 	results []discdomain.SearchResult
 	err     error
@@ -108,8 +97,6 @@ func (p *fakeAlbumContentProvider) GetAlbumTracks(_ context.Context, _ discdomai
 	}
 	return p.results, nil
 }
-
-// --- fake artist content provider ---
 
 type fakeArtistContentProvider struct {
 	topTracks []discdomain.SearchResult
@@ -130,8 +117,6 @@ func (p *fakeArtistContentProvider) GetArtistAlbums(_ context.Context, _ discdom
 	}
 	return p.albums, nil
 }
-
-// --- helpers ---
 
 func discServe(t *testing.T, router chi.Router, method, path string, body io.Reader) *httptest.ResponseRecorder {
 	t.Helper()
@@ -183,8 +168,6 @@ func discAssertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
 }
-
-// --- router builder ---
 
 func buildDiscoveryRouter(
 	searchProvider *fakeSearchProvider,
@@ -251,14 +234,10 @@ func TestHandleRecordEvent(t *testing.T) {
 	})
 }
 
-// nopEventStore satisfies ports.EventStore so the record-event service can be
-// wired into the handler under test.
 type nopEventStore struct{}
 
 func (nopEventStore) Append(context.Context, discdomain.InteractionEvent) error { return nil }
 
-// With the event service wired, the service-level validation errors must render
-// as 400 (via the structural StatusError contract), not 500.
 func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	h := NewDiscoveryHandler(DiscoveryServices{
 		Search: service.NewService(nil, service.NewCircuitBreaker()),
@@ -286,8 +265,6 @@ func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 		discAssertStatus(t, rec, http.StatusNoContent)
 	})
 }
-
-// ==================== Search ====================
 
 func TestHandleSearch(t *testing.T) {
 	tests := []struct {
@@ -332,7 +309,6 @@ func TestHandleSearch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			provider := &fakeSearchProvider{
 				name:    discdomain.ProviderDeezer,
 				results: tt.results,
@@ -340,10 +316,8 @@ func TestHandleSearch(t *testing.T) {
 			historyRepo := &fakeSearchHistoryRepo{}
 			router := buildDiscoveryRouter(provider, historyRepo, nil, nil)
 
-			// Act
 			rec := discServe(t, router, http.MethodGet, "/discovery/search"+tt.query, nil)
 
-			// Assert
 			discAssertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus == http.StatusOK {
@@ -365,18 +339,14 @@ func TestHandleSearch(t *testing.T) {
 }
 
 func TestHandleSearch_NoAuth(t *testing.T) {
-	// Arrange
 	router := buildDiscoveryRouter(&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
 
-	// Act
 	rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/search?q=test")
 
-	// Assert
 	discAssertStatus(t, rec, http.StatusUnauthorized)
 }
 
 func TestHandleSearch_ResponseShape(t *testing.T) {
-	// Arrange
 	provider := &fakeSearchProvider{
 		name: discdomain.ProviderDeezer,
 		results: []discdomain.SearchResult{
@@ -395,10 +365,8 @@ func TestHandleSearch_ResponseShape(t *testing.T) {
 	}
 	router := buildDiscoveryRouter(provider, &fakeSearchHistoryRepo{}, nil, nil)
 
-	// Act
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=shape+test", nil)
 
-	// Assert
 	discAssertStatus(t, rec, http.StatusOK)
 	var raw map[string]json.RawMessage
 	discDecodeJSON(t, rec, &raw)
@@ -410,8 +378,6 @@ func TestHandleSearch_ResponseShape(t *testing.T) {
 		}
 	}
 }
-
-// ==================== Search History ====================
 
 func TestHandleSearchHistory(t *testing.T) {
 	tests := []struct {
@@ -436,7 +402,6 @@ func TestHandleSearchHistory(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			historyRepo := &fakeSearchHistoryRepo{}
 			for i := 0; i < tt.seedEntries; i++ {
 				historyRepo.entries = append(historyRepo.entries, &discdomain.SearchHistoryEntry{
@@ -449,10 +414,8 @@ func TestHandleSearchHistory(t *testing.T) {
 			}
 			router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
 
-			// Act
 			rec := discServe(t, router, http.MethodGet, "/discovery/search-history?limit=10", nil)
 
-			// Assert
 			discAssertStatus(t, rec, tt.wantStatus)
 			discAssertJSON(t, rec)
 
@@ -469,7 +432,6 @@ func TestHandleSearchHistory(t *testing.T) {
 }
 
 func TestHandleClearSearchHistory(t *testing.T) {
-	// Arrange — seed a few entries.
 	historyRepo := &fakeSearchHistoryRepo{}
 	for i := 0; i < 3; i++ {
 		historyRepo.entries = append(historyRepo.entries, &discdomain.SearchHistoryEntry{
@@ -482,16 +444,13 @@ func TestHandleClearSearchHistory(t *testing.T) {
 	}
 	router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
 
-	// Act — clear.
 	rec := discServe(t, router, http.MethodDelete, "/discovery/search-history", nil)
 
-	// Assert — 204 and the entries are gone from the repo (persisted delete).
 	discAssertStatus(t, rec, http.StatusNoContent)
 	if len(historyRepo.entries) != 0 {
 		t.Errorf("expected repo entries cleared, got %d", len(historyRepo.entries))
 	}
 
-	// A follow-up GET returns empty — the clear survived at the repo layer.
 	getRec := discServe(t, router, http.MethodGet, "/discovery/search-history?limit=10", nil)
 	discAssertStatus(t, getRec, http.StatusOK)
 	var resp DiscoverySearchHistoryResponse
@@ -500,8 +459,6 @@ func TestHandleClearSearchHistory(t *testing.T) {
 		t.Errorf("expected 0 items after clear, got %d", len(resp.Items))
 	}
 }
-
-// ==================== Album Tracks ====================
 
 func TestHandleAlbumTracks(t *testing.T) {
 	tests := []struct {
@@ -537,16 +494,13 @@ func TestHandleAlbumTracks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
 				discdomain.ProviderDeezer: tt.albumProv,
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
-			// Act
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
 
-			// Assert
 			discAssertStatus(t, rec, tt.wantStatus)
 			discAssertJSON(t, rec)
 
@@ -560,8 +514,6 @@ func TestHandleAlbumTracks(t *testing.T) {
 		})
 	}
 }
-
-// ==================== Artist Top Tracks ====================
 
 func TestHandleArtistTopTracks(t *testing.T) {
 	tests := []struct {
@@ -597,23 +549,18 @@ func TestHandleArtistTopTracks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
 				discdomain.ProviderDeezer: tt.artistProv,
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
-			// Act
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
 
-			// Assert
 			discAssertStatus(t, rec, tt.wantStatus)
 			discAssertJSON(t, rec)
 		})
 	}
 }
-
-// ==================== Artist Albums ====================
 
 func TestHandleArtistAlbums(t *testing.T) {
 	tests := []struct {
@@ -649,16 +596,13 @@ func TestHandleArtistAlbums(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
 			artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
 				discdomain.ProviderDeezer: tt.artistProv,
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
-			// Act
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
 
-			// Assert
 			discAssertStatus(t, rec, tt.wantStatus)
 			discAssertJSON(t, rec)
 		})

@@ -12,35 +12,13 @@ import (
 	"strings"
 )
 
-// This file is a small, self-owned YouTube Music client + response parser. It
-// replaces github.com/raitonoberu/ytmusic, whose parser silently returned zero
-// results after YouTube Music restructured its search response (the unfiltered
-// search moved from a single `musicShelfRenderer` to a `musicCardShelfRenderer`
-// "top result" card plus many `itemSectionRenderer` sections; the library only
-// knew `musicShelfRenderer`). The request itself never broke — the keyless
-// internal endpoint, the static WEB_REMIX context, and the public key all still
-// work — so we keep the proven request and own the parse, which is the part that
-// drifts. Categorisation is done per item (by pageType / musicVideoType), which
-// handles the new card+section layout and the old single-shelf layout (still
-// used by filtered searches) uniformly.
-//
-// AIDEV-NOTE: when YouTube drifts again and results go empty, probe the raw
-// endpoint (POST music.youtube.com/youtubei/v1/search) and re-inspect the
-// renderer containers under sectionListRenderer.contents — the item-level field
-// paths below are stable; the outer container names are what change.
-
 const (
 	ytmEndpoint      = "https://music.youtube.com/youtubei/v1/search"
 	ytmClientName    = "WEB_REMIX"
 	ytmClientVersion = "1.20220715.04.00"
-	// ytmSearchKey is the public innertube key the YouTube Music web client ships
-	// with — not a secret, not account-scoped.
-	ytmSearchKey = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
+	ytmSearchKey     = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
 )
 
-// ytmFilter is the opaque `params` value that scopes a search to one category.
-// Empty means an unfiltered ("everything") search. Values credited to
-// github.com/sigma67/ytmusicapi via the raitonoberu/ytmusic library.
 type ytmFilter string
 
 const (
@@ -49,9 +27,6 @@ const (
 	ytmAlbumFilter  ytmFilter = "EgWKAQIYAWoMEA4QChADEAQQCRAF"
 	ytmArtistFilter ytmFilter = "EgWKAQIgAWoMEA4QChADEAQQCRAF"
 )
-
-// ytm result types — deliberately parallel to the shapes the adapter's
-// map* functions consume, so mapping logic stays unchanged.
 
 type ytmThumbnail struct {
 	URL    string
@@ -110,9 +85,6 @@ type ytmResult struct {
 	Artists []*ytmArtistItem
 }
 
-// ytmSearch performs one YouTube Music search and parses the response. It uses
-// the request context directly (the library ignored context, forcing a goroutine
-// bridge), so cancellation and the fan-out deadline are honoured natively.
 func ytmSearch(ctx context.Context, client *http.Client, query string, filter ytmFilter) (*ytmResult, error) {
 	body := map[string]any{
 		"context": map[string]any{
@@ -151,8 +123,6 @@ func ytmSearch(ctx context.Context, client *http.Client, query string, filter yt
 	}
 	defer resp.Body.Close()
 
-	// A rate-limit (HTTP 403) returns an HTML body that is not valid JSON; surface
-	// it as an error so the adapter's retry can fire.
 	var page any
 	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
 		return nil, fmt.Errorf("ytmusic decode (status %d): %w", resp.StatusCode, err)
@@ -161,9 +131,6 @@ func ytmSearch(ctx context.Context, client *http.Client, query string, filter yt
 	return parseYTMSearch(page), nil
 }
 
-// ytmPath navigates a decoded JSON tree by a sequence of string keys and int
-// indices, returning nil on any miss. JSON of this depth and dynamism is the one
-// place `any` navigation beats typed structs.
 type ytmPath []any
 
 func ytmGet(source any, path ytmPath) any {
@@ -204,10 +171,6 @@ func ytmList(v any) []any {
 	return nil
 }
 
-// parseYTMSearch walks sectionListRenderer.contents and collects results from
-// whichever container wraps them: musicShelfRenderer (filtered/legacy),
-// itemSectionRenderer (new per-item sections), or musicCardShelfRenderer (the
-// "top result" card — its header is itself a result, its contents are items).
 func parseYTMSearch(page any) *ytmResult {
 	res := &ytmResult{}
 	sections := ytmList(ytmGet(page, ytmPath{
@@ -237,9 +200,6 @@ func parseYTMSearch(page any) *ytmResult {
 	return res
 }
 
-// addCardHeader emits the top-result card's primary entity (artist or album)
-// when its title run navigates to one. Track/song cards are covered by the
-// card's contents items, so only artist/album headers are emitted here.
 func (r *ytmResult) addCardHeader(card any) {
 	pageType := ytmStr(card, ytmPath{"title", "runs", 0, "navigationEndpoint", "browseEndpoint", "browseEndpointContextSupportedConfigs", "browseEndpointContextMusicConfig", "pageType"})
 	title := ytmStr(card, ytmPath{"title", "runs", 0, "text"})
@@ -253,9 +213,6 @@ func (r *ytmResult) addCardHeader(card any) {
 	}
 }
 
-// addItem categorises one musicResponsiveListItemRenderer by its own pageType
-// (artist/album navigation) or musicVideoType (ATV track / OMV-UGC video).
-// Playlists, podcasts, and topic user-channels are intentionally ignored.
 func (r *ytmResult) addItem(item any) {
 	mr := ytmGet(item, ytmPath{"musicResponsiveListItemRenderer"})
 	if mr == nil {
@@ -337,8 +294,6 @@ func parseYTMArtist(mr any) *ytmArtistItem {
 	}
 }
 
-// parseYTMByline extracts artists (and, for tracks, the album) from the second
-// flex-column runs by reading each run's browse pageType.
 func parseYTMByline(runs []any) ([]ytmArtistRef, ytmAlbumRef) {
 	var artists []ytmArtistRef
 	var album ytmAlbumRef
@@ -360,8 +315,6 @@ func parseYTMByline(runs []any) ([]ytmArtistRef, ytmAlbumRef) {
 	return artists, album
 }
 
-// fallbackByline handles rows whose artist run carries no browse link: the
-// third run (index 2) is the plain artist name, sometimes a bare " • " divider.
 func fallbackByline(runs []any) []ytmArtistRef {
 	if len(runs) <= 2 {
 		return nil
@@ -403,8 +356,6 @@ func parseYTMThumbnails(v any) []ytmThumbnail {
 	return thumbs
 }
 
-// ytmDurationToSeconds converts a "4:20" duration to seconds (260). Non-duration
-// text (e.g. a view count) yields 0.
 func ytmDurationToSeconds(duration string) int {
 	if duration == "" || !strings.Contains(duration, ":") {
 		return 0

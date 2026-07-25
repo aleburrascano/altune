@@ -10,9 +10,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// TestSoundCloudAlbumTracksLive confirms a SoundCloud single's tracklist is the
-// single itself (not a wrong Deezer album), and an EP playlist returns its tracks.
-// Gated by SC_LIVE=1.
 func TestSoundCloudAlbumTracksLive(t *testing.T) {
 	if os.Getenv("SC_LIVE") != "1" {
 		t.Skip("set SC_LIVE=1")
@@ -20,7 +17,6 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 	a := NewSoundCloudAPIAdapter(&http.Client{Timeout: 20 * time.Second}, nil)
 	ctx := context.Background()
 
-	// Find "14 HAHAHA LOL" in Che's discography to get its real SC track id.
 	albums, err := a.GetArtistAlbums(ctx, domain.ProviderSoundCloud, "che")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)

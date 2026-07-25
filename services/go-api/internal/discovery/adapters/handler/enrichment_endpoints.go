@@ -9,13 +9,6 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
-// Detail-open enrichment endpoints — one family per source (MusicBrainz,
-// Last.fm, Deezer, lyrics), each with its DTOs and
-// mapper. These change only when a provider cap changes, never with the
-// ranking pipeline.
-
-// parseKindParam reads and validates the required "kind" query param, writing
-// the 400 response itself on failure.
 func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, bool) {
 	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
 	if kindStr == "" {
@@ -30,9 +23,6 @@ func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, 
 	return kind, true
 }
 
-// handleEnrichment serves MusicBrainz detail-open enrichment for one entity.
-// Always 200 with the DTO (or an empty DTO) on the happy path — degradation is
-// the service's concern; only request-shape problems are 4xx.
 func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Request) {
 	kind, ok := parseKindParam(w, r)
 	if !ok {
@@ -107,11 +97,6 @@ func nonNilStrings(s []string) []string {
 	return s
 }
 
-// handleLastFmEnrichment serves Last.fm detail-open enrichment for one entity:
-// listen-based popularity, weighted tags, bio, and (for artists) similar
-// artists (docs/providers/lastfm.md cap 3). Kind-dispatched from `kind` +
-// `title` + `subtitle`. Always 200 with the DTO (or an empty DTO); only
-// request-shape problems are 4xx.
 func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http.Request) {
 	kind, ok := parseKindParam(w, r)
 	if !ok {
@@ -164,11 +149,6 @@ func lastfmEnrichmentToDTO(e domain.LastFmEnrichment) LastFmEnrichmentResponseDT
 	}
 }
 
-// handleDeezerEnrichment serves Deezer detail-open enrichment for one track or
-// album: the audio fields (bpm/gain) + explicit flag for tracks, and label /
-// genres / barcode / record type for albums (docs/providers/deezer.md caps 7–8).
-// Kind-dispatched from `kind` + `title` + `subtitle`. Always 200 with the DTO
-// (or an empty DTO); only request-shape problems are 4xx.
 func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http.Request) {
 	kind, ok := parseKindParam(w, r)
 	if !ok {
@@ -221,11 +201,6 @@ func deezerEnrichmentToDTO(e domain.DeezerEnrichment) DeezerEnrichmentResponseDT
 	}
 }
 
-// handleLyrics serves Deezer lyrics for one track: the full plain text, the
-// time-synced lines (when available), the songwriter credits, and the copyright
-// line (docs/providers/deezer.md cap 6). Identified by `title` (track) +
-// `subtitle` (artist). Always 200 with the DTO (or an empty DTO); only
-// request-shape problems are 4xx. Lyrics apply to tracks only — no kind param.
 func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) {
 	title := strings.TrimSpace(r.URL.Query().Get("title"))
 	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))

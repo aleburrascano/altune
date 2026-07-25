@@ -52,9 +52,6 @@ func (a *DeezerAdapter) SearchStructured(ctx context.Context, artist, track stri
 	return results, nil
 }
 
-// deezerStripQuotes removes embedded double quotes from a value interpolated
-// into the quoted advanced-search syntax — Deezer has no escape, so a name like
-// `The "Best" Band` would otherwise break the query.
 func deezerStripQuotes(s string) string {
 	return strings.ReplaceAll(s, `"`, "")
 }
@@ -105,10 +102,6 @@ func deezerSearchEndpoint(kind domain.ResultKind) string {
 	}
 }
 
-// preferURL returns the higher-resolution URL when present, else the fallback.
-// Deezer decodes both the 1000px (cover_xl/picture_xl) and 500px (cover_big/
-// picture_big) variants; the search mapper used to ship only the 500px one while
-// the larger was already in hand.
 func preferURL(hi, lo string) string {
 	if hi != "" {
 		return hi
@@ -135,7 +128,7 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 			extras["preview_url"] = item.Preview
 		}
 		if item.ExplicitLyrics {
-			extras["explicit"] = true // explicit_lyrics rides on /search/track; was never decoded
+			extras["explicit"] = true
 		}
 	case domain.ResultKindAlbum:
 		title = item.Title
@@ -174,11 +167,6 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 	return r
 }
 
-// Deezer API response types
-
-// deezerAPIError is Deezer's in-band error envelope: quota exhaustion and
-// invalid ids come back as HTTP 200 with {"error":{...}} — without checking it,
-// a dead provider decodes as an empty success and looks healthy.
 type deezerAPIError struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
@@ -229,7 +217,6 @@ type deezerAlbum struct {
 	CoverXL  string `json:"cover_xl"`
 }
 
-// Resolve implements ArtworkResolver — best-effort cover lookup by search.
 func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
 	query := title
 	if subtitle != "" {
@@ -246,8 +233,6 @@ func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 		return "", nil
 	}
 	for _, item := range body.Data {
-		// Prefer the 1000px _xl artwork (docs/providers/deezer.md cap 2), falling
-		// back to 500px _big when xl is absent.
 		var img string
 		switch {
 		case item.Album != nil && item.Album.CoverXL != "":
@@ -270,8 +255,6 @@ func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	return "", nil
 }
 
-// --- AlbumContentProvider + ArtistContentProvider ---
-
 func (a *DeezerAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
 	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=50", url.PathEscape(externalID))
 	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
@@ -286,8 +269,6 @@ func (a *DeezerAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 	})
 }
 
-// deezerMaxDiscographyPages caps GetArtistAlbums pagination (100 per page →
-// 500 albums) so a provider bug can't loop forever.
 const deezerMaxDiscographyPages = 5
 
 func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
@@ -297,8 +278,6 @@ func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 			url.PathEscape(externalID), page*100)
 		var body deezerSearchResponse
 		if err := a.getJSON(ctx, u, &body); err != nil {
-			// Depth is best-effort, presence is not: a later-page failure keeps the
-			// pages already fetched rather than discarding the whole discography.
 			if page > 0 {
 				slog.DebugContext(ctx, "deezer.artist_albums_page_failed",
 					"artist", externalID, "page", page, "error", err)
@@ -328,8 +307,6 @@ func (a *DeezerAdapter) fetchList(ctx context.Context, u string, mapper func(dee
 	}
 	return results, nil
 }
-
-// --- ChartProvider ---
 
 func (a *DeezerAdapter) FetchCharts(ctx context.Context, limit int) ([]domain.VocabularyEntry, error) {
 	var entries []domain.VocabularyEntry
@@ -422,8 +399,6 @@ func IsDeezerPlaceholder(u string) bool {
 	return strings.Contains(u, "/images/artist//") || strings.Contains(u, "d41d8cd98f00b204e9800998ecf8427e")
 }
 
-// FetchTrackISRC fetches the ISRC for a Deezer track by its ID.
-// Returns empty string on error or if the track has no ISRC.
 func (a *DeezerAdapter) FetchTrackISRC(ctx context.Context, trackID string) (string, error) {
 	u := fmt.Sprintf("https://api.deezer.com/track/%s", url.PathEscape(trackID))
 	var detail struct {
