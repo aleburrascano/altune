@@ -165,23 +165,33 @@ func TestNewTrack(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 
 	tests := []struct {
-		name    string
-		title   string
-		artist  string
-		album   string
-		wantErr string
+		name      string
+		title     string
+		artist    string
+		album     string
+		wantAlbum string
+		wantErr   string
 	}{
 		{
-			name:   "valid with all fields",
-			title:  "Song Title",
-			artist: "Artist Name",
-			album:  "Album Name",
+			name:      "valid with all fields",
+			title:     "Song Title",
+			artist:    "Artist Name",
+			album:     "Album Name",
+			wantAlbum: "Album Name",
 		},
 		{
-			name:   "valid with empty album",
-			title:  "Song Title",
-			artist: "Artist Name",
-			album:  "",
+			name:      "empty album falls back to the title (a single)",
+			title:     "Song Title",
+			artist:    "Artist Name",
+			album:     "",
+			wantAlbum: "Song Title",
+		},
+		{
+			name:      "blank album falls back to the title",
+			title:     "Song Title",
+			artist:    "Artist Name",
+			album:     "   ",
+			wantAlbum: "Song Title",
 		},
 		{
 			name:    "empty title returns error",
@@ -230,8 +240,8 @@ func TestNewTrack(t *testing.T) {
 			if track.Artist != tt.artist {
 				t.Errorf("Artist = %q, want %q", track.Artist, tt.artist)
 			}
-			if track.Album != tt.album {
-				t.Errorf("Album = %q, want %q", track.Album, tt.album)
+			if track.Album != tt.wantAlbum {
+				t.Errorf("Album = %q, want %q", track.Album, tt.wantAlbum)
 			}
 			if track.AcquisitionStatus != AcquisitionPending {
 				t.Errorf("AcquisitionStatus = %v, want AcquisitionPending", track.AcquisitionStatus)
@@ -239,8 +249,8 @@ func TestNewTrack(t *testing.T) {
 			if track.DedupKey == "" {
 				t.Error("expected non-empty DedupKey")
 			}
-			if track.DedupKey != computeDedupKey(tt.title, tt.artist, tt.album) {
-				t.Errorf("DedupKey = %q, want %q", track.DedupKey, computeDedupKey(tt.title, tt.artist, tt.album))
+			if track.DedupKey != computeDedupKey(tt.title, tt.artist, tt.wantAlbum) {
+				t.Errorf("DedupKey = %q, want %q", track.DedupKey, computeDedupKey(tt.title, tt.artist, tt.wantAlbum))
 			}
 			if track.AddedAt.IsZero() {
 				t.Error("expected non-zero AddedAt")
@@ -433,4 +443,36 @@ func newTestTrack(t *testing.T) *Track {
 		t.Fatalf("newTestTrack: unexpected error: %v", err)
 	}
 	return track
+}
+
+func TestSetAlbum_KeepsTheDedupKeyInStep(t *testing.T) {
+	t.Parallel()
+	userId := shared.NewUserId(uuid.New())
+	track, err := NewTrack(userId, "Crook", "Raf Saperra", "Some Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+
+	track.SetAlbum("Other Album")
+
+	if track.Album != "Other Album" {
+		t.Errorf("Album = %q, want %q", track.Album, "Other Album")
+	}
+	if want := computeDedupKey("Crook", "Raf Saperra", "Other Album"); track.DedupKey != want {
+		t.Errorf("DedupKey = %q, want %q", track.DedupKey, want)
+	}
+}
+
+func TestSetAlbum_BlankFallsBackToTheTitle(t *testing.T) {
+	t.Parallel()
+	track := &Track{Title: "Crook", Artist: "Raf Saperra", Album: ""}
+
+	track.SetAlbum("")
+
+	if track.Album != "Crook" {
+		t.Errorf("Album = %q, want the title", track.Album)
+	}
+	if want := computeDedupKey("Crook", "Raf Saperra", "Crook"); track.DedupKey != want {
+		t.Errorf("DedupKey = %q, want %q", track.DedupKey, want)
+	}
 }

@@ -310,6 +310,9 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	for k, v := range sr.Extras {
 		extras[k] = v
 	}
+	if _, set := extras["album"]; !set && sr.Album != "" {
+		extras["album"] = sr.Album
+	}
 	if sr.ISRC != "" {
 		extras["isrc"] = sr.ISRC
 	}
