@@ -1,90 +1,63 @@
-# discover — feature-local context
+# discover — feature-local router
 
-Mobile screen for the unified music search surface. A greeting + "Discover" title sit above a `TextInput` with as-you-type debounce (300ms, 2+ chars) + enter-to-submit + clear (X) button; five-state body below ([state.ts](state.ts) `_viewForState` drives the switch); empty-no-query renders the user's last-10 distinct searches via [useSearchHistory.ts](hooks/useSearchHistory.ts). Shipped under spec `docs/specs/discover-music-v1/spec.md` + ADR-0007; restyled per ADR-0009; search UX + history fix per `docs/specs/discover-music-v4/spec.md`.
+Mobile screen for the unified music search surface: greeting + "Discover" title above a debounced `TextInput`, five-state body below. Sectioned Spotify-style results — filter chips (`All · Albums · Songs · Artists`), a Top Result card, then per-kind sections. Specs: `docs/specs/discover-music-v1/`, `-v2`, `-v4`; ADR-0007, restyled per ADR-0009.
 
-## Key terms
+`DiscoverView` is a five-state union — `loading | empty-no-query | results | zero-results | full-error` — mutually exclusive, driven by `_viewForState` in [state.ts](state.ts).
 
-- **DiscoverView** — five-state union: `loading | empty-no-query | results | zero-results | full-error`. Lives in [state.ts](state.ts). Mirror of the AC#20 testID set. The five states are mutually exclusive.
-- **`partial` flag** — server-emitted; true when any provider's `status !== 'ok'`. Still present on the wire but **no longer surfaced** in the UI (the banner was removed in ADR-0009); `results` renders normally regardless.
-- **`result_signature`** — server-computed stable hash `(kind, normalized title, normalized subtitle)`. Used as the testID suffix and as the click-tracking dedup key. We never compute it client-side; we echo what the wire returns. (Confirmed via spec §"result_signature definition".)
-- **Dual-trigger search** — as-you-type debounce (300ms, min 2 chars) auto-commits `inputValue` to `committedQuery`. Enter key bypasses debounce and commits immediately. Tapping a history row also commits. Clear (X) button resets both `inputValue` and `committedQuery`. **Debounced queries pass `save_history=false`** so only explicit submits (enter key, history tap) persist to search history — prevents intermediate partial queries from bloating the history chips.
+## Rules
 
-## Patterns specific here
+- Keep the state machine in `state.ts` as a pure function; JSX branches stay trivial wrappers.
+- Import query keys from the `discoveryKeys` factory in `@shared/lib/query-keys` — never write a `['discovery', …]` literal.
+- Never compute `result_signature` client-side; echo what the wire returns.
+- Never persist history on a debounced query — only explicit submits pass `save_history=true`.
+- Never surface the `partial` flag; it is wire-only since ADR-0009.
+- Never await the click-tracking mutation before navigating.
+- Report `position` as the result's global index in `results[]`, not the section-local display index.
+- Keep results surfaces on the shared `ui/ResultsList.tsx` shell; sections supply only data/key/renderItem.
+- Every tappable element needs `accessibilityRole="button"` + `accessibilityLabel`; "See all" targets ≥44pt.
+- Never rename a load-bearing testID without updating `docs/specs/discover-music-v1/spec.md`.
+- After changing `.env`, run `npx expo start --clear` — `EXPO_PUBLIC_API_URL` is baked at bundle time.
 
-- **State machine lives in `state.ts` as a pure function**, same as `library/state.ts`. `_viewForState` takes `{query, isLoading, data, error}` and returns the view literal. Tests assert the helper directly; the JSX branches in `DiscoverScreen.tsx` are trivial wrappers. Reason: same as library — jest-expo + RNTL is painful for full screens; pure helpers stay testable regardless.
-- **Debounce + submit** — `onChangeText` starts a 300ms debounce timer (cleared on each keystroke); `onSubmitEditing` clears the timer and commits immediately. The React Query hook keys on `committedQuery`. Clear (X) button clears both and returns to recent searches.
-- **Query keys come from `@shared/lib/query-keys`** — the `discoveryKeys` factory (`history`, `search(q)`, `searchPrefix`, `suggest(q)`) is the single definition every read/invalidate/cancel/optimistic-set imports; never write a `['discovery', …]` literal. (Promoted out of the feature-local `keys.ts` when Settings gained "Clear search history" — a second consumer, so a shared home beats a cross-feature import.)
-- **History cache invalidation** — after a successful search, the `discoveryKeys.history` query is invalidated so new searches appear as chips immediately (needed because the stack navigator keeps DiscoverScreen mounted). The hook exposes `historyItems: SearchHistoryItem[]`, not the query envelope.
-- **Results surfaces share `ui/ResultsList.tsx`** — the FlatList shell (correction banner, refresh, impression wiring) + a `ResultsCommonProps` object built once in `DiscoverBody`; `BlendedSection`/`FilteredResults` supply only data/key/renderItem. Row keys come from `state.ts`'s `resultKey`; kind display copy from `kindLabel` (the noun for `track` in UI copy is "Song" — one definition, four consumers).
-- **Search state persists across navigation** — `search-state.ts` (feature-local) holds the last query/input so navigating detail→back preserves the search. State is initialized from this module on mount and synced on every change.
-- **Interaction telemetry is fire-and-forget.** A result tap emits a `result_clicked` event via the shared `useRecordEvent` (`@shared/telemetry`) → `POST /v1/discovery/events`; errors are swallowed in `onError`. Best-effort telemetry is intentional per ADR-0007 §3.12. The legacy `/clicks` endpoint + `useRecordClick` were unified into the `/events` envelope. The event's `position` is the result's **global** index in `results[]` (the coordinate space `results_shown` impressions use), not the section-local display index testIDs are built from.
-- **History row text truncates at 40 chars** with a `…` suffix client-side. Full query is preserved in the server's `discovery_search_history.query` column; the truncation is purely visual.
-- **Accessibility** — all tappable elements have `accessibilityRole="button"` + `accessibilityLabel`: result rows (`DiscoverRow`), Top Result card, "See all" links. Touch targets ≥44pt on "See all".
-- **Filtered empty state** — `FilteredResults` shows "No songs/albums/artists found" when the filtered kind has no results.
-- **TestIDs are load-bearing** for AC#20:
-  - `discover-loading` — initial-load spinner
-  - `discover-empty-no-query` + `discover-history-row-<idx>` — empty state with history rows
-  - `discover-results` — results container (filter chips + FlatList)
-  - `discover-zero-results` — 0 results returned from a non-empty query
-  - `discover-full-error` + `discover-retry` — fetch failure with retry button
-  - `discover-search-input` — the TextInput itself
-  - `discover-row-<kind>-<position>` — individual result row
-  Never rename these without updating [docs/specs/discover-music-v1/spec.md](../../../../../docs/specs/discover-music-v1/spec.md).
+Load-bearing testIDs (AC#20): `discover-loading`, `discover-empty-no-query`, `discover-history-row-<idx>`, `discover-results`, `discover-zero-results`, `discover-full-error`, `discover-retry`, `discover-search-input`, `discover-row-<kind>-<position>`, `discover-top-result`, `discover-see-all-<kind>`.
 
-## Known gotchas
-
-- **`EXPO_PUBLIC_API_URL` is baked at bundle time.** Same gotcha as `library/`. After changing `.env`, run `npx expo start --clear`. The symptom otherwise is "search hangs forever, no API logs" — the bundle is hitting the stale URL.
-- **Bearer injection is unconditional.** `shared/api-client/index.ts` injects `Authorization: Bearer <supabase access token>` on every `apiFetch`. There's no opt-out here; if the user isn't authenticated, the discovery endpoint returns 401 and the screen renders `discover-full-error`. AuthGate at the route level prevents this in practice.
-- **Last.fm hook fires unconditionally on mount.** [useSearchHistory.ts](hooks/useSearchHistory.ts) is a `useQuery` with no `enabled` gate — it fetches `/v1/discovery/search-history` whenever the screen mounts. Cheap (one Postgres query, <50ms) but worth knowing if you ever want lazy history.
+Why each rule exists: `okf/mobile/discover-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
 
 <!-- AUTO-MAINTAINED:BEGIN -->
 <!-- /update-nested-claude-md regenerates this block after every 3rd commit touching this folder.
      Do not hand-edit this block — your changes will be lost on next regeneration.
-     Hand-edit above (Key terms / Patterns / Gotchas). -->
+     Hand-edit above (Rules / testIDs). -->
 
 ## Auto-maintained
 
 ### Files
 
 - [state.ts](state.ts) — pure `_viewForState` + blended-view helpers (`_groupByKind`, `_topResult`, `_sectionOrder`, `_cap`); no RN imports so jest runs without RN transform.
+- [tap.ts](tap.ts) — `stashHandoffForDetail`; the navigation seam, unit-testable without rendering.
+- [search-state.ts](search-state.ts) — feature-local last query/input, so detail→back preserves the search.
 - [hooks/useDiscoverSearch.ts](hooks/useDiscoverSearch.ts) — `useQuery<DiscoverySearchResponse>` keyed on trimmed query; `enabled` only when query non-empty.
 - [hooks/useSearchHistory.ts](hooks/useSearchHistory.ts) — `useQuery<DiscoverySearchHistoryResponse>`; powers empty-no-query state's history list.
 - [ui/DiscoverScreen.tsx](ui/DiscoverScreen.tsx) — entrypoint; owns `inputValue` + `committedQuery`; switches on `_viewForState` output.
 - [ui/DiscoverRow.tsx](ui/DiscoverRow.tsx) — single result row; testID `discover-row-<kind>-<position>`.
+- [ui/ResultsList.tsx](ui/ResultsList.tsx) — FlatList shell shared by `BlendedSection` and `FilteredResults`.
 
 ### Public API surface
 
-- `DiscoverScreen` (default export of [ui/DiscoverScreen.tsx](ui/DiscoverScreen.tsx)) — consumed by `apps/mobile/src/app/(tabs)/discover.tsx` (Expo Router tab page).
+- `DiscoverScreen` (default export of [ui/DiscoverScreen.tsx](ui/DiscoverScreen.tsx)) — consumed by `apps/mobile/src/app/(tabs)/discover/index.tsx`.
 - `_viewForState` + blended-view helpers — exported for unit testing; not consumed by other features.
 
 ### Dependencies on other features / shared
 
 - `@shared/api-client/discovery` — `searchDiscovery`, `listSearchHistory`, `clearSearchHistory`, `recordEvent` + wire types.
 - `@shared/telemetry/useRecordEvent` — shared fire-and-forget behavioral-event hook (`result_clicked`).
-- `@shared/api-client/index` — `apiFetch` underlying transport (transitively).
+- `@shared/lib/query-keys` — the `discoveryKeys` factory.
+- `@shared/lib/detail-handoff` — the discover↔detail seam.
 - `@tanstack/react-query` — `useQuery` + `useMutation`, via the root `QueryClientProvider`.
-- `@shared/ui` — design-system primitives (ADR-0008 / ADR-0009): the result row is the art-forward `Card` (`Artwork` + title/subtitle; no confidence, no glow); states use `Skeleton` / `Chip` / `Button`.
+- `@shared/ui` — design-system primitives (ADR-0008 / ADR-0009).
 - No cross-feature imports (vertical-slice rule preserved).
 
 ### Test files
 
-- [__tests__/state.test.ts](__tests__/state.test.ts) — `_viewForState` (all five view-state branches) + blended-view helpers (`_groupByKind`, `_topResult`, `_sectionOrder`, `_cap`).
+- [__tests__/state.test.ts](__tests__/state.test.ts) — `_viewForState` (all five view-state branches) + blended-view helpers.
+- [__tests__/tap.test.ts](__tests__/tap.test.ts) — `stashHandoffForDetail`.
 
 <!-- AUTO-MAINTAINED:END -->
-
-## discover-music-v2 update
-
-Rebuilt into a Spotify-style sectioned UI:
-- **Filter chips** `All · Albums · Songs · Artists` (no Playlists). `All` is the blended view: a **Top Result** card (`discover-top-result`, = `results[0]`), then per-kind sections (≤10 each, `discover-see-all-<kind>`); a kind chip filters to a flat list of that kind.
-- **Dynamic section order** via `_sectionOrder(results)` — the kind whose strongest member ranks earliest shows first (song query → Songs first). New pure helpers in [state.ts](state.ts): `_groupByKind`, `_topResult`, `_sectionOrder`, `_cap` (+ tests).
-- **Confidence badge removed** — `ConfidenceDot` and the verified glow are gone from `DiscoverRow`; rows are circular-art for artists, square-art for albums/tracks. Confidence is no longer shown anywhere.
-- The mobile client sends no `kinds` param, so the API returns all three kinds by default.
-
-## view-result-detail update
-
-- **Tapping a result opens the detail screen.** `onResultTap` calls `stashHandoffForDetail(result)` (in [tap.ts](tap.ts)) to stash the result into the shared `@shared/lib/detail-handoff`, then `router.push('/discover/detail')`. The click-tracking mutation stays fire-and-forget and is **not** awaited before navigating.
-- `tap.ts` is a pure helper (matches the `state.ts` pattern) so the navigation seam is unit-testable without rendering the screen — see [__tests__/tap.test.ts](__tests__/tap.test.ts).
-
-## Knowledge base
-
-`okf/mobile/discover-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

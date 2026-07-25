@@ -32,3 +32,15 @@ The hook **flattens pages back into one response object** — `results` concaten
 ## Honest failure copy + screen-reader announcements (2026-07-24)
 
 `full-error` distinguishes offline from a server fault via `isNetworkError` on the thrown error (`searchError` is threaded down for exactly this) — blaming the connection for a 500 sends people to restart their router. `_searchAnnouncement` feeds `useAnnounceChange` so a settled search announces its outcome; results replace the body in place with no focus change, so a screen reader otherwise gets no signal. It stays silent while loading, since announcing mid-flight fires on every debounced keystroke.
+
+## Search UX and telemetry details
+
+Search is dual-trigger: as-you-type debounce (300ms, minimum 2 characters) auto-commits `inputValue` to `committedQuery`, the enter key bypasses the debounce and commits immediately, and tapping a history row also commits. Debounced queries pass `save_history=false`, so only explicit submits persist to search history and intermediate partial queries cannot bloat the history chips. The clear button resets both `inputValue` and `committedQuery`.
+
+The `partial` flag is still server-emitted — true when any provider's status is not ok — but is no longer surfaced anywhere in the UI; the banner was removed in ADR-0009 and `results` renders normally regardless. `result_signature` is server-computed and never recomputed client-side; the client echoes what the wire returns.
+
+After a successful search the `discoveryKeys.history` query is invalidated so new searches appear as chips immediately, which is necessary because the stack navigator keeps `DiscoverScreen` mounted. History row text truncates at 40 characters visually; the full query is preserved server-side.
+
+Interaction telemetry is fire-and-forget per ADR-0007 §3.12: a result tap emits `result_clicked` through the shared `useRecordEvent` and errors are swallowed. The event's `position` is the result's **global** index in `results[]` — the coordinate space `results_shown` impressions use — not the section-local display index the testIDs are built from. Tapping a result stashes the handoff and pushes the detail route without awaiting the click mutation.
+
+`useSearchHistory` is a `useQuery` with no `enabled` gate, so it fetches whenever the screen mounts. That is cheap (one Postgres query, under 50ms) but worth knowing if lazy history is ever wanted.

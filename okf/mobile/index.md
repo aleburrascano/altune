@@ -30,3 +30,13 @@ Expo (React Native + TypeScript). Features own screens; shared subsystems own cr
 - [shared-telemetry](shared-telemetry.md) — session-id correlation, two-tier reliability outbox, unified recordEvent hook
 - [shared-ui](shared-ui.md) — token-based theming (ADR-0008/0009), semantic Theme contract, primitives, motion helpers
 - [shared-lib](shared-lib.md) — small pure-utility grab-bag, including the discover→detail in-memory handoff seam
+
+## Platform baseline
+
+Expo SDK 54 with the new architecture enabled (`newArchEnabled: true` in `app.json`), Expo Router file-based routing under `src/app/` with a tabbed shell in `app/(tabs)/`, React 19 and React Native 0.81. `typedRoutes` is on, so route paths are typed. Layouts live in `_layout.tsx`, and the root one wraps the tree in the theme, react-query and error-boundary providers.
+
+Path aliases are configured in both `tsconfig.json` and `babel.config.js`: `@/foo` maps to `src/foo`, `@features/<name>/...` to `src/features/<name>/...`, and `@shared/...` to `src/shared/...`.
+
+Chosen defaults: lists use `FlatList` / `SectionList` (or `FlashList` if performance demands it); images use `expo-image` for caching and remote loading; animation beyond `Animated` basics uses `react-native-reanimated`. Server state is React Query and local state is `useState` / `useReducer` / context — no global state library without an ADR. Sensitive values go in `expo-secure-store`; structured non-sensitive data in `expo-sqlite` and key/value in `AsyncStorage`. Testing is Jest with the `jest-expo` preset and `@testing-library/react-native`, with unit and component tests in `__tests__/` next to their source; Maestro is preferred over Detox for e2e. Debugging uses React DevTools, optionally `react-native-flipper`, and the `__DEV__` global for dev-only paths.
+
+Adding a native module may require `expo prebuild` if it is not in the managed pre-built clients, which is worth an ADR when it happens.

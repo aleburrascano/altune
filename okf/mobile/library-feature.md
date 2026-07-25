@@ -40,3 +40,11 @@ Key files: `hooks/useLibraryHome.ts`, `hooks/useLibrarySearch.ts`, `hooks/useLib
 **Responsive grids.** `ui/gridColumns.ts` derives column counts from viewport width (covers 2/3/4, avatars 3/5/6). `app.json` declares `supportsTablet: true` while every grid was hardcoded, so an iPad rendered phone-sized cells stretched across a 1024pt canvas. Breakpoints are on width alone, not a device class, so a rotated or split-view window gets the layout its actual width deserves. `FlatList` cannot change `numColumns` in place, hence the `key` remount.
 
 **Honest error copy.** The error view distinguishes offline from a server fault via `isNetworkError`, and a filtered result count is announced to screen readers.
+
+## Shape and deferred scope
+
+The model is spine plus lenses: Tracks and Playlists are what the user owns and are primary, while Albums and Artists are client-side groupings derived from saved tracks (`@shared/lib/derive-library-groups`) — UI read-side lenses, not domain types, with no backend endpoint. The chips are the navigation: selecting one swaps only the content area while search and per-chip sort persist, replacing the old stacked home plus separate `all-tracks` / `all-albums` / `all-artists` routes. "Recently Added" is simply Tracks sorted by Recent rather than a separate section.
+
+`LibraryNoResults` exists because a filtered-out library must never look like a missing one: the 2026-07-14 "entire library is missing" report turned out to be a persisted search filter, so the view names the query, states the library is intact, and offers a one-tap clear.
+
+Deferred deliberately: **Favorites / Liked** is not built, because saving is already the deliberate act — a pinned slot can be added later. **Jump back in / recently played** is a Home concern reserved for a future Home tab, not Library.

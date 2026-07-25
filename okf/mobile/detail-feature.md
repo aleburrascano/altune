@@ -40,3 +40,29 @@ Keeping `acquiring` separate is load-bearing: folding it into `unowned` offers t
 `playButtonState` names the count (`Play 3`) whenever the list is only partly playable — a bare "Play" over 3 of 12 tracks reads as a bug when the queue ends early. With nothing playable, Play is disabled and Save takes the primary variant, so the button that actually does something is always the prominent one. Artist detail hides the control entirely while its track section is loading or empty rather than showing a disabled button over nothing.
 
 TestIDs: `detail-album-play`, `detail-artist-play`, `detail-album-acquiring`. `detail-save-all` now labels itself `Save N` and renders only when something is unowned.
+
+## Screen shape after the declutter rework
+
+One vertical scroll — header, per-kind body, optional `Disclosure` — with no tabs and no always-on provider slabs. The header is back, hero artwork (square for track and album, circular for artist), title, and an `artist · year` subtitle where the artist is a tappable lateral-nav link and the year is appended muted. There is no kind label.
+
+The track body's hero action is a 50pt cobalt circle with a play/pause glyph (`PlayButton`) rather than a labelled pill. It morphs by state: the full track when downloaded, else the 30s preview with a muted caption, else disabled. Duration is no longer shown on the track body — it belongs to the full player. Preview is not a separate button; it is simply what Play does before a track is downloaded. The save control sits under it as an outline pill running the same acquire lifecycle as the row control.
+
+The old `GenrePills` row was removed from all three bodies in the "too much going on" pass; genre now surfaces only inside disclosures (Discogs styles, Last.fm tags) and never as chips on the main surface. The album "Details & credits" disclosure was removed entirely as not worth the surface, so album has no disclosure at all. The artist `About` disclosure is editorial and provider-agnostic: bio with Read more, `listeners · plays`, genre chips, similar artists as chips, with no provider name shown; the Discogs facts (real name, aliases, members) were dropped, and `artistHasAbout` gates on `enrichments.lastfm !== null`.
+
+The retired enrichment surface was deleted rather than left dark (2026-07-16 structure audit): the unrendered `Discogs*`, `Deezer`, `Lyrics` and `EnrichmentSection` components, their hooks and their api-client functions were firing fetches nobody rendered. `useDetailEnrichments` now composes exactly the three rendered providers — MusicBrainz for the header year on all kinds, Deezer for `featured_artists` on track and album, Last.fm for the artist About.
+
+A hero Play on album and artist is deliberately deferred: their tracklists are discovery results rather than downloaded tracks, and `buildPlayableQueue` only queues `ready` tracks, so "Play album" would have little or nothing to play. Building it needs a product decision between preview-play and only-downloaded.
+
+## Lifecycle and cache behavior
+
+`saveControlState` derives the add → saving → ready → failed lifecycle from the library React Query cache, and `saveControlLabel` plus `SaveGlyph` are shared between the hero save pill and the per-row `TrackSaveControl` so the lifecycle vocabulary cannot drift. It advances on query invalidation today; the `/v1/events` SSE `track_acquired` event makes it instant.
+
+`useSaveTrack` prepends a pending placeholder to the `libraryKeys.home` snapshot on mutate, rolls back to that snapshot on error, and invalidates on settle so a dedup hit reconciles to the server row. The placeholder includes null values for the extended metadata fields added by the `import-legacy-library` spec.
+
+`useEnrichResult` back-fills `sources` for a library item — saved rows store none — so it becomes playable and can fetch tracklists. It matches on title **and** artist, never title alone, and merges so the stored library `extras` always win: enrichment may only add `sources` and provider-only keys. A loose title-only match previously clobbered the real album, which is the "Green Day by Che swapped the album" bug.
+
+`useLateralNav` resolves artist and album by name through the shared `resolve-entity-query.ts` cache, which `useArtistDiscovery`, `useAlbumDiscovery` and `useEnrichResult` also use, so the landed screen reuses the hop's fetch. Its `searchingRef` guard never resets after a successful push, which is what prevents duplicate detail screens; the new screen gets its own fresh instance.
+
+`useArtistContent` unions MusicBrainz and Deezer albums via `dedupAlbumsByTitle` (normalized key, keep highest `track_count`, merge sources), sorted by release date descending. When the identity is verified and MB returned a non-empty list, Deezer may only enrich title-matched albums and contributes no new titles — Deezer's artist entities conflate same-name artists, and its album entries carry no artist field to filter on. Unverified artists keep the full union. Provider failures arrive as HTTP 200 with `status: 'timeout'`/`'error'` and empty items, so the hook treats any non-ok payload as that provider's failure and `isErrorAlbums` fires only when every available provider failed.
+
+Track numbers work in three layers. `toCreateTrackRequest` maps `extras.track_position` to `CreateTrackRequest.track_number` so new album-context saves store the real position. For tracks saved before that, `_withAlbumPositions` recovers order at view time by matching owned tracks against the authoritative tracklist — display-only and re-derived per view, so it can never go stale, and a stored position always wins. `usePersistTrackNumbers` then fire-and-forgets a `PATCH` per derived position so the database self-heals as albums are browsed; the server side is fill-only and therefore idempotent.

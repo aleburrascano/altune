@@ -24,3 +24,13 @@ Owns sign-in, sign-up, sign-out, OAuth (Apple/Google), password reset, and sessi
 Key files: `hooks/useSignIn.ts`, `hooks/useSignUp.ts`, `hooks/useOAuth.ts`, `hooks/useAuthDeepLink.ts`, `lib/parseAuthLink.ts`, `lib/completeAuthIntent.ts`, `lib/isNetworkError.ts`, `ui/AuthGate.tsx`, `ui/SessionExpiredNotice.tsx`, `ui/AuthForm.tsx`, `ui/SignInScreen.tsx`.
 
 **2026-07-24.** `lib/isNetworkError.ts` moved to `@shared/lib/isNetworkError` — Library became a second consumer. The four auth hooks import it from there; the `'network'` vs `'unknown'` reason mapping and `errorCopy.ts` are unchanged.
+
+## Boundary and caveats
+
+The mobile app receives an opaque session from the Supabase SDK and the backend verifies it, which is why no JWT is decoded or manipulated on the client. The error UI's exact wording is deliberately not asserted in tests — see the user-enumeration risk in the spec — so only `testID="auth-error"` is pinned.
+
+Screens import `@shared/ui` primitives directly by path rather than through the barrel, so the rendered component tests do not transitively load `expo-image`.
+
+**SSR caveat:** `expo-secure-store` falls back to `localStorage` on web per Expo's docs. Altune v1 is iOS and Android only; if a web bundle ever ships, the `supabaseClient` singleton needs a guard and the spec re-opens that risk.
+
+**e2e:** Maestro is the chosen runner (slice 15a/15b), requiring an iOS Simulator or Android Emulator locally and installed via `brew install maestro` or equivalent. Flows live under `apps/mobile/e2e/`, starting with `e2e/auth-session-persistence.yaml`.

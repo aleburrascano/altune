@@ -20,6 +20,4 @@ Two write paths feed it. `emitSearchEvent` (`service/telemetry.go`) builds the `
 
 Behavioral snapshots are published by swapping in a new map, never by editing a published one — callers must not mutate what they read, and a failed refresh must not clobber the last good snapshot. Telemetry writes are best-effort throughout: they never block the request, outlive request cancellation via `WithoutCancel` plus their own timeout, recover from panics, and log rather than surfacing. `pipelineVersionV2` stamps every rebuilt-pipeline event so ML training data stays separable.
 
-On the persistence side, a malformed JSON payload is skipped for that row rather than raising a `22P02` that would brick the whole batch, and `event_id` is NULL for fire-and-forget events so they never collide on the idempotency key.
-
 `InteractionEvent` is an append-only, immutable record of something a user or the search itself did, with `Payload` carrying the variable part of the envelope. `EventId` is the client-minted idempotency key for the label-critical events (`library_add`, `wrong_album`) delivered through the client outbox and retried on reconnect; dedup on insert makes the retry safe. `ClientOccurredAt` versus `received_at` measures outbox lag and offline buffering.
