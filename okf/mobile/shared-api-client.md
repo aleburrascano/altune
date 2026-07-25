@@ -34,3 +34,26 @@ Consumed by every feature that talks to the backend — discover, library, playl
 ## `ResultSection.has_more` (2026-07-25)
 
 Each blended section carries `has_more`. The client used to decide whether to draw "See all <kind>" by comparing a section's length against its own cap; with the slate built server-side it no longer holds the full per-kind list, so the server answers the question instead. Without it the affordance would either always show or never show, and both are wrong.
+
+## Weak signal: `NetworkError`, deadlines, and the fake 401 (2026-07-25)
+
+Reported symptom: on a weak connection the library renders empty and search returns nothing, while the backend is healthy and `/health` answers 200 the whole time. Two defects compounded, and the second is what made it *stick* rather than recover.
+
+**The fake 401.** `apiFetch` collapsed every `getSession()` failure into `ApiError(401)`. But `getSession` hits the network when the access token needs refreshing, and on a weak link that call fails with a transport error. Meanwhile the QueryClient's retry predicate excluded 401 from retries — correctly, since a real 401 will never succeed on retry. So a transient radio dropout was handed the one error code guaranteed **not** to be retried: every query on the screen failed at once and none of them came back until the app was restarted. Conflating "I could not reach the auth server" with "the auth server rejected you" is the whole bug; they need opposite responses.
+
+The split now mirrors Supabase's own discriminator, `error.name === 'AuthRetryableFetchError'` (`isAuthRetryableFetchError` in `@supabase/auth-js` is literally this check). Matching on the name rather than `instanceof AuthRetryableFetchError` keeps `errors.ts` free of a Supabase import and lets tests build the case from a plain object. A retryable fetch error becomes `NetworkError`; a genuinely stale refresh token still becomes the fail-fast `ApiError(401)` described above.
+
+**No timeout anywhere.** React Native's `fetch` has no default timeout, so a request on a dying connection hangs forever and the screen spins forever — no error, no retry, no empty state. `startDeadline` (`deadline.ts`) now gives every request a 15s `AbortSignal`. The precedent was already in the codebase: `fetchAudioUrls` had its own 2500ms `AbortController` and nothing else did.
+
+`deadline.ts` composes the caller's signal with the internal timer rather than replacing it, because the two aborts mean different things and must not be flattened:
+
+- **timer fired** → `NetworkError('timeout')`, retryable.
+- **caller aborted** (TanStack passes its own signal into `searchDiscovery`; `fetchAudioUrls` passes a 2500ms one) → the original `AbortError` is rethrown untouched. Relabelling it `NetworkError` would make it retryable, and TanStack would resurrect queries the component already cancelled on unmount — turning a cancellation into a retry storm on exactly the screens that navigate fastest.
+
+An already-aborted caller signal is relayed synchronously; `addEventListener` on a settled signal never fires, so without that check the request would hang on precisely the deadline meant to prevent hangs.
+
+**Truncated bodies.** A body that dies mid-transfer makes `response.json()` throw a `SyntaxError`. That is a network failure wearing a parse error's clothes, so `readBody` maps it to `NetworkError('transport')` — otherwise it surfaces as an unknown error and is not retried.
+
+**One retry layer.** `isRetryable` (`NetworkError`, plus `429`/`5xx`) is the single policy, applied by the QueryClient predicate. Deliberately *not* inside `apiFetch`: an inner retry loop would silently re-send non-idempotent POSTs whose first attempt may already have been applied server-side, and would multiply against TanStack's own retries. The predicate also no longer retries 4xx at all — the old one retried everything except 401, so a 404 burned three round trips before failing.
+
+Pinned by `__tests__/weak-signal.test.ts`, including the cancellation-stays-cancellation case and the hung-request case (fake timers; the test must flush microtasks until `fetch` is actually in flight before advancing them, or the deadline has not been armed yet and the advance is a no-op).
