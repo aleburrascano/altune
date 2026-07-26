@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"altune/go-api/internal/acquisition/ports"
@@ -162,5 +163,24 @@ func TestWithBinary_IgnoresEmpty(t *testing.T) {
 	}
 	if got := NewSource("tidal").WithBinary("/usr/bin/rip").bin; got != "/usr/bin/rip" {
 		t.Errorf("bin = %q", got)
+	}
+}
+
+func TestDiagnose_TurnsTracebacksIntoActionableCauses(t *testing.T) {
+	tests := []struct {
+		name   string
+		stderr string
+		want   string
+	}{
+		{"database", "sqlite3.OperationalError: unable to open database file", "downloads_enabled"},
+		{"quality", "NonStreamableError: Deezer HiFi is required for quality 2.", "lower [deezer] quality"},
+		{"unknown", "KeyError: 'url'", "stderr: KeyError: 'url'"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := diagnose(tt.stderr); !strings.Contains(got, tt.want) {
+				t.Errorf("diagnose(%q) = %q, want it to mention %q", tt.stderr, got, tt.want)
+			}
+		})
 	}
 }

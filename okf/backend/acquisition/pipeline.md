@@ -75,3 +75,13 @@ Three verification mechanisms replaced what would otherwise have been a rule per
 Correction to the note above: `SetDuration` is passed `ac.Selected.Duration`, which is the duration the *source reported in its metadata*, not the value `ProbeDuration` measured. The probed number is computed for the gate and discarded, so a stored duration is provider metadata rather than a measurement.
 
 Selection is gated offline by `cmd/acquisitioneval`, which runs the real `CoreSteps` pipeline in-process against committed goldens with case-driven fakes, scores per failure class, and fails against `baselines.json`. It replaced a suite that only proved the ranker was self-consistent against candidates we wrote ourselves — which it still is, since the goldens remain synthetic; recording real provider output is the outstanding upgrade.
+
+### Streamrip's usable envelope (verified 2026-07-26)
+
+Verified against streamrip 2.1.0 in the production image, and the honest result is that neither enabled service could fetch:
+
+- **The download database blocks every fetch.** Streamrip creates a sqlite dedup database at startup, under its config directory — which is a Docker-mounted path owned by root, so the `altune` user cannot write it, and *every* `rip` invocation dies with `unable to open database file` before touching a service. The `--no-db` flag does **not** prevent creation; only `downloads_enabled = false` and `failed_downloads_enabled = false` in `config.toml` do. That check also matters for correctness independently of permissions: with the database enabled, streamrip *skips* any track it has fetched before, so a re-acquisition would return no file at all. `Source.diagnose` maps this stderr to an actionable message rather than surfacing a Python traceback.
+- **Deezer needs a HiFi subscription.** A non-HiFi ARL fails with `Deezer HiFi is required for quality 2` regardless of the configured `[deezer] quality` or the `--quality` CLI flag, so the account tier — not our configuration — is the binding constraint.
+- **Streamrip's SoundCloud client is broken** at this version, failing inside its own response parsing (`AssertionError`, then `KeyError: 'url'` on a different track) before any download begins.
+
+`STREAMRIP_SERVICES` is therefore empty by default. The adapter and its tests stay, because the wiring is sound and the constraints are external — but enabling a service that cannot fetch only adds a failing source to every fan-out. SoundCloud remains covered by the yt-dlp `scsearch5:` text path, which works; what streamrip would have added there is a *resolved* fetch by permalink rather than new catalogue reach.
