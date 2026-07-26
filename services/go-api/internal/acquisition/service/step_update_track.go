@@ -34,6 +34,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext) e
 		if ac.Selected != nil && ac.Selected.Duration > 0 {
 			track.SetDuration(ac.Selected.Duration)
 		}
+		track.SetAcquisitionProvenance(ac.Provenance())
 		return nil
 	})
 }

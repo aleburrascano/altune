@@ -45,6 +45,13 @@ jobs:
           CGO_ENABLED: "1"
         run: go test -race -count=1 -coverprofile=coverage.out ./...
 
+      # Acquisition selection gate: does the pipeline store the right recording?
+      # Runs the real CoreSteps pipeline against committed goldens and fails on a
+      # drop below cmd/acquisitioneval/baselines.json. Provider-free and offline.
+      # Re-baseline explicitly with -update-baselines; never lower it to go green.
+      - name: acquisition selection gate
+        run: go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
+
       # Coverage ratchet: holds the measured baseline so coverage can't silently
       # regress. Raise MIN when a module is hardened (see the qa-slice skill);
       # never lower it to make CI green.

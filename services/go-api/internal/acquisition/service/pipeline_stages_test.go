@@ -53,7 +53,7 @@ func TestAcqStage_BuildSearchQueries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			queries := buildSearchQueries(tt.track)
+			queries := queriesFor(tt.track)
 			if len(queries) < tt.wantMin {
 				t.Errorf("expected at least %d queries, got %d: %v", tt.wantMin, len(queries), queries)
 			}
@@ -277,7 +277,7 @@ func TestAcqStage_FullSelectionTrace(t *testing.T) {
 		},
 	}
 
-	queries := buildSearchQueries(track)
+	queries := queriesFor(track)
 	t.Logf("Stage 1 — Search queries: %v", queries)
 
 	for _, c := range candidates {
@@ -301,4 +301,13 @@ func TestAcqStage_FullSelectionTrace(t *testing.T) {
 	if !strings.Contains(selected.Channel, "Topic") {
 		t.Errorf("expected Topic channel selected, got %q", selected.Channel)
 	}
+}
+
+func queriesFor(track TrackRef) []string {
+	return ports.SearchQueries(ports.FindRequest{
+		Title:  track.Title,
+		Artist: track.Artist,
+		Album:  track.Album,
+		ISRC:   track.ISRC,
+	})
 }

@@ -83,6 +83,18 @@ func (s *fakeAudioSearcher) Download(_ context.Context, url string, _ string) (s
 	return s.downloadPath, s.downloadErr
 }
 
+func (s *fakeAudioSearcher) Name() string { return "fake" }
+
+func (s *fakeAudioSearcher) Find(ctx context.Context, _ acqports.FindRequest) ([]acqports.AudioCandidate, error) {
+	return s.Search(ctx, "")
+}
+
+func (s *fakeAudioSearcher) Fetch(ctx context.Context, c acqports.AudioCandidate, outDir string) (string, error) {
+	return s.Download(ctx, c.URL, outDir)
+}
+
+func fakeRegistry(s *fakeAudioSearcher) *SourceRegistry { return NewSourceRegistry(s) }
+
 type fakeAudioStore struct {
 	stored map[string]bool
 	err    error
@@ -121,7 +133,7 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
 
-	svc := NewAcquireTrackAudioService(repo, searcher, store)
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 2)
@@ -143,7 +155,7 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
 
-	svc := NewAcquireTrackAudioService(repo, searcher, store)
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -171,7 +183,7 @@ func TestNewBackgroundAcquisitionScheduler_ReturnsNonNil(t *testing.T) {
 	repo := newFakeTrackRepository()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
-	svc := NewAcquireTrackAudioService(repo, searcher, store)
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)

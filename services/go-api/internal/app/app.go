@@ -7,13 +7,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"altune/go-api/internal/acquisition/adapters/chromaprint"
+	acqDiscoveryBridge "altune/go-api/internal/acquisition/adapters/discoverybridge"
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
 	"altune/go-api/internal/acquisition/adapters/id3"
+	"altune/go-api/internal/acquisition/adapters/streamrip"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
 	adminAlert "altune/go-api/internal/admin/alert"
@@ -218,7 +223,7 @@ func (a *App) setup(ctx context.Context) error {
 	tap := eventtap.New(a.eventBus)
 
 	disc := a.wireDiscovery(ctx)
-	cat := a.wireCatalog(tap, disc.featuredBridge)
+	cat := a.wireCatalog(tap, disc.featuredBridge, disc.searchSvc)
 	queueHandler := a.wirePlayback(cat.trackRepo)
 	disc.handler.
 		WithOwnership(discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo)).
@@ -252,26 +257,46 @@ type catalogWiring struct {
 	retryH            *acqHandler.RetryHandler
 }
 
-func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.FeaturedResolver) catalogWiring {
+func (a *App) wireCatalog(
+	tap *eventtap.Tap,
+	featuredBridge *discoverybridge.FeaturedResolver,
+	searchSvc *discoveryService.Service,
+) catalogWiring {
 	audioStore := a.buildAudioStore()
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
 	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
 
-	var audioSearcher acqPorts.AudioSearcher
+	var audioSources []acqPorts.AudioSource
 	if audioStore != nil {
-		audioSearcher = ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
+		searcher := ytdlp.NewYtDlpAudioSearcher(
+			a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
+		audioSources = append(audioSources, ytmusic.NewSource(searcher))
+		audioSources = append(audioSources, a.buildStreamripSources()...)
+		audioSources = append(audioSources, ytdlp.NewSource(searcher))
 	}
 
 	var scheduler catalogPorts.AcquisitionScheduler
-	if audioSearcher != nil && audioStore != nil {
+	if len(audioSources) > 0 && audioStore != nil {
 		audioProber := ytdlp.NewFfprobeProber(a.cfg.FFmpegLocation)
-		acquireSvc := acqService.NewAcquireTrackAudioService(
-			trackRepo,
-			audioSearcher,
-			audioStore,
+		acquireOpts := []func(*acqService.AcquireTrackAudioService){
 			acqService.WithAcquireEvents(tap),
 			acqService.WithAudioProber(audioProber),
 			acqService.WithAudioTagger(id3.NewTagger()),
+		}
+		if searchSvc != nil {
+			acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(
+				acqDiscoveryBridge.NewRecordingResolver(searchSvc)))
+		}
+		if a.cfg.AcoustIDAPIKey != "" {
+			acquireOpts = append(acquireOpts, acqService.WithAudioIdentifier(
+				chromaprint.NewIdentifier(a.cfg.FFmpegLocation, a.cfg.AcoustIDAPIKey)))
+			slog.Info("acquisition: fingerprint verification enabled")
+		}
+		acquireSvc := acqService.NewAcquireTrackAudioService(
+			trackRepo,
+			acqService.NewSourceRegistry(audioSources...),
+			audioStore,
+			acquireOpts...,
 		)
 		bgScheduler := acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem,
 			acqService.WithSchedulerEvents(tap))
@@ -317,6 +342,23 @@ func (a *App) wireCatalog(tap *eventtap.Tap, featuredBridge *discoverybridge.Fea
 		audioURLHandler:   audioURLHandler,
 		retryH:            retryH,
 	}
+}
+
+func (a *App) buildStreamripSources() []acqPorts.AudioSource {
+	var sources []acqPorts.AudioSource
+	for _, service := range a.cfg.StreamripServices {
+		service = strings.ToLower(strings.TrimSpace(service))
+		if service == "" {
+			continue
+		}
+		if !streamrip.Supported(service) {
+			slog.Warn("acquisition: unsupported streamrip service ignored", "service", service)
+			continue
+		}
+		sources = append(sources, streamrip.NewSource(service).WithBinary(a.cfg.StreamripBin))
+		slog.Info("acquisition: streamrip source enabled", "service", service)
+	}
+	return sources
 }
 
 func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) *playbackHandler.QueueHandler {

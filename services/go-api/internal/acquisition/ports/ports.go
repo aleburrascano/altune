@@ -14,6 +14,8 @@ type AudioCandidate struct {
 	Channel    string
 	Categories []string
 	ViewCount  int64
+	Source     string
+	Resolved   bool
 }
 
 func DedupeCandidatesByURL(merged []AudioCandidate, results []AudioCandidate, seen map[string]bool) []AudioCandidate {

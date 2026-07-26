@@ -21,6 +21,16 @@ func (s *fileWritingSearcher) Search(_ context.Context, _ string) ([]ports.Audio
 	return nil, nil
 }
 
+func (s *fileWritingSearcher) Name() string { return "filewriting" }
+
+func (s *fileWritingSearcher) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return nil, nil
+}
+
+func (s *fileWritingSearcher) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (string, error) {
+	return s.Download(ctx, c.URL, outDir)
+}
+
 func (s *fileWritingSearcher) Download(_ context.Context, url, outDir string) (string, error) {
 	s.gotURL = url
 	s.gotDir = outDir

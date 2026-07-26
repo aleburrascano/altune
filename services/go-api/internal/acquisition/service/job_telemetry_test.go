@@ -10,11 +10,13 @@ import (
 type recordingReporter struct {
 	stages []string
 	srcURL string
+	prov   string
 }
 
 func (r *recordingReporter) meta(string, string, string) {}
 func (r *recordingReporter) stage(n string)              { r.stages = append(r.stages, n) }
 func (r *recordingReporter) source(u string)             { r.srcURL = u }
+func (r *recordingReporter) provenance(p string)         { r.prov = p }
 
 type passStep struct{ n string }
 

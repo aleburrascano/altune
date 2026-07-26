@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
 )
 
 type Step interface {
@@ -66,12 +67,33 @@ func rollback(ctx context.Context, completed []Step, ac *AcquisitionContext) {
 }
 
 type AcquisitionContext struct {
-	Track      TrackRef
-	Candidates []ports.AudioCandidate
-	Ranked     []ports.AudioCandidate
-	Selected   *ports.AudioCandidate
-	TempPath   string
-	AudioRef   string
+	Track            TrackRef
+	Identity         ports.RecordingIdentity
+	Candidates       []ports.AudioCandidate
+	Ranked           []ports.AudioCandidate
+	Selected         *ports.AudioCandidate
+	TempPath         string
+	AudioRef         string
+	DurationVerified bool
+	IdentityVerified bool
+}
+
+func (ac *AcquisitionContext) Provenance() domain.AcquisitionProvenance {
+	switch {
+	case ac.IdentityVerified:
+		return domain.ProvenanceVerified
+	case ac.DurationVerified && ac.Identity.Duration > 0:
+		return domain.ProvenanceCorroborated
+	default:
+		return domain.ProvenanceBestEffort
+	}
+}
+
+func (ac *AcquisitionContext) durationAcceptable(actual float64) bool {
+	if ac.Identity.Duration > 0 {
+		return durationWithinAuthoritativeTolerance(ac.Track.Duration, actual)
+	}
+	return durationWithinTolerance(ac.Track.Duration, actual)
 }
 
 type TrackRef struct {

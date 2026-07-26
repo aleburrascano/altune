@@ -41,10 +41,13 @@ type Config struct {
 
 	MusicDir string `env:"MUSIC_DIR"`
 
-	FFmpegLocation         string `env:"FFMPEG_LOCATION"`
-	YtDLPCookieFile        string `env:"YTDLP_COOKIE_FILE"`
-	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
-	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
+	FFmpegLocation         string   `env:"FFMPEG_LOCATION"`
+	YtDLPCookieFile        string   `env:"YTDLP_COOKIE_FILE"`
+	YtDLPJSRuntime         string   `env:"YTDLP_JS_RUNTIME"`
+	AcquisitionConcurrency int      `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
+	AcoustIDAPIKey         string   `env:"ACOUSTID_API_KEY"`
+	StreamripBin           string   `env:"STREAMRIP_BIN"`
+	StreamripServices      []string `env:"STREAMRIP_SERVICES" envSeparator:","`
 
 	OperatorUserID             string  `env:"OPERATOR_USER_ID"`
 	AlertNtfyURL               string  `env:"ALERT_NTFY_URL"`

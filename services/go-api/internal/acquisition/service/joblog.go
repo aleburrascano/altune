@@ -29,6 +29,7 @@ type JobRecord struct {
 	ScheduledAt    time.Time `json:"scheduled_at"`
 	ElapsedMs      int64     `json:"elapsed_ms"`
 	Reason         string    `json:"reason,omitempty"`
+	Provenance     string    `json:"provenance,omitempty"`
 }
 
 type jobLog struct {

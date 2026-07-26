@@ -14,7 +14,7 @@ func TestAcquireTrackAudioService_Execute_TrackNotFound(t *testing.T) {
 	repo := newFakeTrackRepository()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
-	svc := NewAcquireTrackAudioService(repo, searcher, store)
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
 
 	userId := shared.NewUserId(uuid.New())
 	trackId := domain.NewTrackId()
@@ -42,7 +42,7 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioExists(t *testing.T)
 	store.stored[audioRef] = true
 
 	searcher := &fakeAudioSearcher{}
-	svc := NewAcquireTrackAudioService(repo, searcher, store)
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
 
 	execErr := svc.Execute(context.Background(), userId, track.ID)
 
@@ -71,7 +71,7 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioMissing(t *testing.T
 	store := newFakeAudioStore()
 
 	searcher := &fakeAudioSearcher{}
-	svc := NewAcquireTrackAudioService(repo, searcher, store)
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -94,7 +94,7 @@ func TestAcquireTrackAudioService_Execute_FailedStatus_RetriesToAcquire(t *testi
 
 	store := newFakeAudioStore()
 	searcher := &fakeAudioSearcher{}
-	svc := NewAcquireTrackAudioService(repo, searcher, store)
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
