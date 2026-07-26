@@ -13,6 +13,7 @@ x-go-api: &go-api
     - SUPABASE_ANON_KEY=sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
   volumes:
     - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
+    - /home/ubuntu/altune/streamrip.toml:/home/altune/.config/streamrip/config.toml
   tmpfs:
     - /tmp:size=1G
   depends_on:
