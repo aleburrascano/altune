@@ -22,9 +22,10 @@ type Outcome struct {
 func Run(ctx context.Context, kase Case) Outcome {
 	p := newCasePorts(kase)
 	ac := &service.AcquisitionContext{
-		Track:       trackRefFor(kase),
-		ExcludeURLs: kase.ExcludeURLs,
-		Identity:    identityFor(kase),
+		Track:         trackRefFor(kase),
+		ExcludeURLs:   kase.ExcludeURLs,
+		SkipTopRanked: kase.SkipTopRanked,
+		Identity:      identityFor(kase),
 	}
 
 	steps := service.CoreSteps(service.NewSourceRegistry(p), nil, p, p, p)

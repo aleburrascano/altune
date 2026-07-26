@@ -77,8 +77,9 @@ type AcquisitionContext struct {
 	DurationVerified bool
 	IdentityVerified bool
 
-	ExcludeURLs  []string
-	PreservedRef string
+	ExcludeURLs   []string
+	PreservedRef  string
+	SkipTopRanked bool
 }
 
 func (ac *AcquisitionContext) excludes(url string) bool {

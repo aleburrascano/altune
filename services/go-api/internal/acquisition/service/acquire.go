@@ -125,6 +125,10 @@ func (s *AcquireTrackAudioService) execute(
 			ac.ExcludeURLs = []string{current}
 			slog.InfoContext(ctx, "acquisition.replacing_source",
 				"track_id", trackId.String(), "excluded_source", current)
+		} else {
+			ac.SkipTopRanked = true
+			slog.InfoContext(ctx, "acquisition.replacing_unknown_source",
+				"track_id", trackId.String())
 		}
 	}
 	s.resolveIdentity(ctx, ac)
