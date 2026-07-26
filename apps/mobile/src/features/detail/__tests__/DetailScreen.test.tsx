@@ -93,9 +93,9 @@ afterEach(() => {
 describe('DetailScreen', () => {
   it('renders the header from the handoff result', () => {
     setDetailHandoff(_result());
-    const { getByTestId, getByText } = renderDetail();
+    const { getByTestId } = renderDetail();
     expect(getByTestId('detail-header')).toBeTruthy();
-    expect(getByText('Midnight City')).toBeTruthy();
+    expect(getByTestId('detail-banner-title')).toHaveTextContent('Midnight City');
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 

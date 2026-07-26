@@ -1,10 +1,12 @@
 # detail — feature-local router
 
-Read-only detail screen for a tapped discovery result (`view-result-detail` spec), fed by an in-memory handoff with no per-item backend fetch. A track can be saved to the library with an optimistic UI and a visible acquire lifecycle. One vertical scroll: header → per-kind body → optional `Disclosure`.
+Read-only detail screen for a tapped discovery result (`view-result-detail` spec, reworked by `detail-screens-rework`), fed by an in-memory handoff with no per-item backend fetch. A track can be saved to the library with an optimistic UI and a visible acquire lifecycle. One vertical scroll owned by `ui/DetailScaffold.tsx`: full-bleed artwork banner → action row → fact row → sections.
 
 Layout:
 
-- `ui/DetailScreen.tsx` — entrypoint and header; `ui/PlayButton.tsx`, `ui/TrackSaveControl.tsx`, `ui/SaveGlyph.tsx`; per-kind bodies and `DiscographySections`.
+- `ui/DetailScreen.tsx` — resolves the handoff and dispatches to one per-kind body; owns the banner title/secondary line and the back handler, nothing else.
+- `ui/DetailScaffold.tsx` — the one screen skeleton: floating app bar, banner, `actions`/`facts` slots, section children. `ui/DetailActions.tsx` — the grow-to-fill primary pill plus `SecondaryAction`. `ui/DetailFacts.tsx` — the labelled fact row. `ui/Section.tsx` — the one section header.
+- `ui/TrackDetailBody.tsx`, `ui/AlbumDetailBody.tsx`, `ui/ArtistDetailBody.tsx` — fill the scaffold's slots; `ui/TrackSaveControl.tsx`, `ui/SaveGlyph.tsx`, `ui/AlbumTrackRow.tsx`, `ui/DiscographySections.tsx`, `ui/RelatedTracksSection.tsx`, `ui/LastFmEnrichmentSection.tsx`, `ui/DetailSkeleton.tsx`, `ui/helpers.ts`.
 - `extras.ts` — `resolveFeatured`, `extractFeaturedFromText`. `extras-accessors.ts` — narrowing for the untyped wire map.
 - `play-source.ts` — `resolvePlaySource`. `save-control-state.ts` — lifecycle state + labels. `save-cache.ts` — the create-request mapper and the optimistic placeholder. `hooks/useOwnedTrack.ts` — server ownership stamp overlaid with the live acquisition status.
 - `navigation.ts` — `openDetail`. `hooks/` — `useSaveTrack`, `useLateralNav`, `useAlbumTracks`, `useArtistContent`, `useDetailEnrichments`, `useEnrichResult`, `useOwnedTrack`, `useAlbumDetailState`, `useArtistDetailState`.
@@ -25,12 +27,16 @@ Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@share
 - Never reset `searchingRef` after a successful push, or lateral nav duplicates screens.
 - Never let Deezer contribute new titles when the MB identity is verified and non-empty.
 - Never surface a provider's items when its payload status is not ok; error only when every provider failed.
-- Never nest a ScrollView — album and artist detail use one.
+- Never nest a ScrollView — `DetailScaffold` owns the only one.
 - Keep the back button outside the ScrollView, and check `router.canGoBack()` before `router.back()`.
+- Render every kind through `DetailScaffold`; a body supplies slot content and never its own header, action layout or section heading.
+- Put only intrinsic facts in the fact row — anything navigable belongs in a section row, and an absent value omits its cell rather than rendering empty.
+- Keep the collapsing app-bar title hidden from accessibility; it duplicates the banner title.
+- Never add a detail action that has no backing behaviour in the feature's hooks.
 - Every tappable element needs `accessibilityRole` + `accessibilityLabel`; touch targets ≥48pt.
 - Never rename a load-bearing testID without updating `docs/specs/view-result-detail/`.
 
-Load-bearing testIDs — header: `detail-header`, `detail-back`, `detail-artist-link`. Track: `detail-track-info`, `detail-play`, `detail-preview`, `detail-save`, `detail-save-error`, `detail-info-album`, `detail-info-featuring`, `detail-lateral-error`. Album: `detail-tracklist{,-loading,-error,-empty}`, `detail-track-<n>`, `detail-track-save-<n>`, `detail-album-meta`, `detail-more-from-album`. Artist: `detail-artist-content`, `detail-top-tracks-{loading,error}`, `detail-top-track-<n>`, `detail-top-track-save-<n>`, `detail-show-all-tracks`, `detail-albums-{loading,error}`, `detail-{album,single,ep}-<n>`, `detail-artist-about`.
+Load-bearing testIDs — scaffold: `detail-header`, `detail-back`, `detail-banner-title`, `detail-menu`, `detail-artist-link`. Track: `detail-track-info`, `detail-track-facts`, `detail-play`, `detail-preview`, `detail-save`, `detail-save-error`, `detail-info-album`, `detail-info-featuring`, `detail-lateral-error`. Album: `detail-tracklist{,-loading,-error,-empty}`, `detail-track-<n>`, `detail-track-save-<n>`, `detail-album-meta` (the fact row), `detail-album-play`, `detail-save-all`, `detail-more-from-album`. Artist: `detail-artist-content`, `detail-artist-facts`, `detail-artist-play`, `detail-top-tracks-{loading,error}`, `detail-top-track-<n>`, `detail-top-track-save-<n>`, `detail-show-all-tracks`, `detail-albums-{loading,error}`, `detail-{album,single,ep}-<n>`, `detail-artist-about`.
 
 Routing: a stack screen nested in each tab — `app/(tabs)/discover/detail.tsx` and `app/(tabs)/library/detail.tsx` render the same component, which uses `useSegments()` to build correct push paths.
 

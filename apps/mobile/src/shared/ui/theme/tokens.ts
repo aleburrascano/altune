@@ -30,11 +30,13 @@ export const fontFamily = {
 export type TypographyVariant =
   | 'displayXl'
   | 'displayL'
+  | 'editorial'
   | 'title'
   | 'body'
   | 'bodyStrong'
   | 'label'
-  | 'caption';
+  | 'caption'
+  | 'overline';
 
 export const typography: Record<
   TypographyVariant,
@@ -52,11 +54,23 @@ export const typography: Record<
     lineHeight: 34,
     letterSpacing: -0.5,
   },
+  editorial: {
+    fontFamily: fontFamily.displaySemiBold,
+    fontSize: 34,
+    lineHeight: 38,
+    letterSpacing: -1,
+  },
   title: { fontFamily: fontFamily.displayMedium, fontSize: 20, lineHeight: 26 },
   body: { fontFamily: fontFamily.bodyRegular, fontSize: 16, lineHeight: 22 },
   bodyStrong: { fontFamily: fontFamily.bodySemiBold, fontSize: 16, lineHeight: 22 },
   label: { fontFamily: fontFamily.bodyMedium, fontSize: 14, lineHeight: 18 },
   caption: { fontFamily: fontFamily.bodyMedium, fontSize: 12, lineHeight: 16 },
+  overline: {
+    fontFamily: fontFamily.bodySemiBold,
+    fontSize: 10,
+    lineHeight: 13,
+    letterSpacing: 0.8,
+  },
 };
 
 export const minInteractiveHeight = 48;
