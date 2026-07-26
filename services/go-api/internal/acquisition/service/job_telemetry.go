@@ -8,6 +8,7 @@ type jobReporter interface {
 	meta(title, artist, album string)
 	stage(name string)
 	source(url string)
+	provenance(value string)
 }
 
 type noopJobReporter struct{}
@@ -15,6 +16,7 @@ type noopJobReporter struct{}
 func (noopJobReporter) meta(_, _, _ string) {}
 func (noopJobReporter) stage(_ string)      {}
 func (noopJobReporter) source(_ string)     {}
+func (noopJobReporter) provenance(_ string) {}
 
 func withJobReporter(ctx context.Context, r jobReporter) context.Context {
 	return context.WithValue(ctx, jobReporterKey{}, r)

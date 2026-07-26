@@ -9,10 +9,11 @@ FROM alpine:3.21
 RUN apk add --no-cache \
     ca-certificates \
     ffmpeg \
+    chromaprint \
     nodejs \
     python3 \
     py3-pip \
-    && pip3 install --no-cache-dir --break-system-packages yt-dlp==2026.7.4 \
+    && pip3 install --no-cache-dir --break-system-packages yt-dlp==2026.7.4 streamrip \
     && adduser -D -u 1000 altune
 
 USER altune

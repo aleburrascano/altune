@@ -1,0 +1,213 @@
+{
+  "cases": [
+    {
+      "id": "ok-topic-exact",
+      "class": "OK",
+      "note": "the ordinary case: one Topic master, nothing to confuse it",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "album": "After Hours", "duration": 200 },
+      "candidates": [
+        { "title": "Blinding Lights", "url": "yt:master", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "view_count": 50000000, "correct": true }
+      ]
+    },
+    {
+      "id": "ok-topic-beats-vevo",
+      "class": "OK",
+      "note": "provenance beats popularity: Topic wins over a billion-view official video",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200 },
+      "candidates": [
+        { "title": "The Weeknd - Blinding Lights (Official Video)", "url": "yt:vevo", "channel": "TheWeekndVEVO", "categories": ["Music"], "duration": 203, "view_count": 3000000000 },
+        { "title": "Blinding Lights", "url": "yt:master", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "view_count": 50000000, "correct": true }
+      ]
+    },
+    {
+      "id": "f1-cover-alongside-master",
+      "class": "F1",
+      "note": "a piano cover must lose to the master",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200 },
+      "candidates": [
+        { "title": "Blinding Lights (Piano Cover)", "url": "yt:cover", "channel": "Piano Tutorials", "categories": ["Music"], "duration": 195, "view_count": 5000000, "recording_mbid": "mb-cover" },
+        { "title": "Blinding Lights", "url": "yt:master", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "view_count": 50000000, "correct": true }
+      ]
+    },
+    {
+      "id": "f1-cover-only",
+      "class": "F1",
+      "note": "only a cover exists; acquiring it is worse than acquiring nothing. Normalization strips (Piano Cover), so nothing in the title can tell them apart — the fingerprint can",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "mbid": "mb-master" },
+      "candidates": [
+        { "title": "Blinding Lights (Piano Cover)", "url": "yt:cover", "channel": "Piano Tutorials", "categories": ["Music"], "duration": 195, "view_count": 5000000, "recording_mbid": "mb-cover" }
+      ]
+    },
+    {
+      "id": "resolved-catalog-entry-wins",
+      "class": "OK",
+      "note": "a YouTube Music catalog hit is identified upstream, so it skips the resemblance gate and outranks a higher-view guess",
+      "track": { "title": "Smaxk Or Die", "artist": "Fatt Smaxk", "duration": 181, "authoritative_duration": 181 },
+      "candidates": [
+        { "title": "Fatt Smaxk - Smaxk Or Die (Official Music Video)", "url": "yt:video", "channel": "FattSmaxkVEVO", "categories": ["Music"], "duration": 181, "view_count": 2000000 },
+        { "title": "Smaxk Or Die", "url": "ytm:abc123", "channel": "YouTube Music catalog", "categories": ["Music"], "duration": 181, "resolved": true, "correct": true }
+      ]
+    },
+    {
+      "id": "resolved-candidate-still-gated-on-audio",
+      "class": "F5",
+      "note": "resolved skips the resemblance gate, never the audio gates — a contaminated catalog hit is still rejected",
+      "track": { "title": "Smaxk Or Die", "artist": "Fatt Smaxk", "duration": 181, "authoritative_duration": 181 },
+      "candidates": [
+        { "title": "Smaxk Or Die", "url": "ytm:bad", "channel": "YouTube Music catalog", "duration": 181, "actual_duration": 205, "resolved": true }
+      ]
+    },
+    {
+      "id": "f2-remix-alongside-master",
+      "class": "F2",
+      "note": "an extended remix runs long and must lose on duration",
+      "track": { "title": "Starboy", "artist": "The Weeknd", "duration": 230 },
+      "candidates": [
+        { "title": "The Weeknd - Starboy (Extended Remix)", "url": "yt:remix", "channel": "RandomUploader", "categories": ["Music"], "duration": 300, "view_count": 1000 },
+        { "title": "The Weeknd - Starboy (Audio)", "url": "yt:master", "channel": "AnotherUploader", "categories": ["Music"], "duration": 231, "view_count": 1000, "correct": true }
+      ]
+    },
+    {
+      "id": "f2-remix-only",
+      "class": "F2",
+      "note": "only a remix exists; the duration gate should reject it outright",
+      "track": { "title": "Starboy", "artist": "The Weeknd", "duration": 230 },
+      "candidates": [
+        { "title": "The Weeknd - Starboy (Extended Remix)", "url": "yt:remix", "channel": "RandomUploader", "categories": ["Music"], "duration": 300, "view_count": 400000 }
+      ]
+    },
+    {
+      "id": "f3-slowed-same-topic-channel",
+      "class": "F3",
+      "note": "master and slowed edit on the same Topic channel, identical identity score — the tie must resolve on expected length",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200 },
+      "candidates": [
+        { "title": "Blinding Lights (Slowed + Reverb)", "url": "yt:slowed", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 240, "view_count": 9000000 },
+        { "title": "Blinding Lights", "url": "yt:master", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "view_count": 50000000, "correct": true }
+      ]
+    },
+    {
+      "id": "f3-slowed-only",
+      "class": "F3",
+      "note": "only a slowed edit exists; it runs long enough for the duration gate to catch it",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200 },
+      "candidates": [
+        { "title": "Blinding Lights (Slowed + Reverb)", "url": "yt:slowed", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 240, "view_count": 9000000 }
+      ]
+    },
+    {
+      "id": "f3-sped-up-no-expected-duration",
+      "class": "F3",
+      "note": "no saved duration means no duration gate, and normalization has already deleted (Sped Up) — only the fingerprint is left to catch it",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "mbid": "mb-master" },
+      "candidates": [
+        { "title": "Blinding Lights (Sped Up)", "url": "yt:sped", "channel": "Nightcore Zone", "categories": ["Music"], "duration": 172, "view_count": 3000000, "recording_mbid": "mb-sped" }
+      ]
+    },
+    {
+      "id": "f4-radio-edit-alongside-master",
+      "class": "F4",
+      "note": "a radio edit is a different mix and runs shorter",
+      "track": { "title": "Die For You", "artist": "The Weeknd", "duration": 260 },
+      "candidates": [
+        { "title": "Die For You (Radio Edit)", "url": "yt:radio", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 215, "view_count": 4000000 },
+        { "title": "Die For You", "url": "yt:master", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 261, "view_count": 40000000, "correct": true }
+      ]
+    },
+    {
+      "id": "f5-music-video-with-intro-snippet",
+      "class": "F5",
+      "note": "the Smaxk Or Die case: correct recording, contaminated container. 12s of foreign audio at the head sits inside the loose tolerance and is only caught once discovery corroborates the length",
+      "track": { "title": "Smaxk Or Die", "artist": "Fatt Smaxk", "duration": 181, "authoritative_duration": 181 },
+      "candidates": [
+        { "title": "Fatt Smaxk - Smaxk Or Die (Official Music Video)", "url": "yt:video", "channel": "FattSmaxkVEVO", "categories": ["Music"], "duration": 193, "actual_duration": 193, "view_count": 2000000 }
+      ]
+    },
+    {
+      "id": "f6-soundcloud-preview-alongside-full",
+      "class": "F6",
+      "note": "SoundCloud serves a ~30s public preview; the probe must catch it and fall through",
+      "track": { "title": "Fell In Love", "artist": "Lil Tecca", "duration": 150 },
+      "candidates": [
+        { "title": "Lil Tecca - Fell In Love", "url": "sc:preview", "channel": "Lil Tecca", "duration": 150, "actual_duration": 29.8 },
+        { "title": "Lil Tecca - Fell In Love", "url": "yt:master", "channel": "Lil Tecca - Topic", "categories": ["Music"], "duration": 150, "view_count": 8000000, "correct": true }
+      ]
+    },
+    {
+      "id": "f6-preview-only",
+      "class": "F6",
+      "note": "only a preview exists; storing 30s as if it were the track is the defect the CLI threshold exists to repair",
+      "track": { "title": "Fell In Love", "artist": "Lil Tecca", "duration": 150 },
+      "candidates": [
+        { "title": "Lil Tecca - Fell In Love", "url": "sc:preview", "channel": "Lil Tecca", "duration": 150, "actual_duration": 29.8 }
+      ]
+    },
+    {
+      "id": "f7-namesake-die-hard",
+      "class": "F7",
+      "note": "two Topic channels, same title, different humans — the artist match decides",
+      "track": { "title": "Die Hard", "artist": "Dr. Dre", "duration": 280 },
+      "candidates": [
+        { "title": "DIE HARD", "url": "yt:kendrick", "channel": "Kendrick Lamar - Topic", "categories": ["Music"], "duration": 240, "view_count": 65000000 },
+        { "title": "Die Hard", "url": "yt:dre", "channel": "Dr. Dre - Topic", "categories": ["Music"], "duration": 282, "view_count": 5000000, "correct": true }
+      ]
+    },
+    {
+      "id": "f7-namesake-circles",
+      "class": "F7",
+      "track": { "title": "Circles", "artist": "Post Malone", "duration": 215 },
+      "candidates": [
+        { "title": "Circles", "url": "yt:macmiller", "channel": "Mac Miller - Topic", "categories": ["Music"], "duration": 283, "view_count": 15000000 },
+        { "title": "Circles", "url": "yt:postmalone", "channel": "Post Malone - Topic", "categories": ["Music"], "duration": 215, "view_count": 20000000, "correct": true }
+      ]
+    },
+    {
+      "id": "f8-feature-credit",
+      "class": "F8",
+      "note": "a (feat. X) track must not resolve to the solo cut, even at higher view count",
+      "track": { "title": "Smaxk Or Die (feat. Playboi Carti)", "artist": "Fatt Smaxk", "duration": 181 },
+      "candidates": [
+        { "title": "Fatt Smaxk - Smaxk Or Die (Official Music Video) | [Dir. By Kharkee]", "url": "yt:solo", "channel": "FattSmaxkVEVO", "categories": ["Music"], "duration": 150, "view_count": 2000000 },
+        { "title": "Fatt Smaxk - Smaxk Or Die (feat. Playboi Carti)", "url": "yt:feat", "channel": "FattSmaxk", "categories": ["Music"], "duration": 181, "view_count": 50000, "correct": true }
+      ]
+    },
+    {
+      "id": "f9-undecodable-falls-through",
+      "class": "F9",
+      "note": "valid container, corrupt samples — the decode gate must reject and walk on",
+      "track": { "title": "How Sweet", "artist": "NewJeans", "duration": 226 },
+      "candidates": [
+        { "title": "How Sweet", "url": "yt:corrupt", "channel": "NewJeans - Topic", "categories": ["Music"], "duration": 226, "view_count": 20000000, "undecodable": true },
+        { "title": "NewJeans - How Sweet", "url": "yt:good", "channel": "HALLYUSOUND", "categories": ["Music"], "duration": 227, "view_count": 1000, "correct": true }
+      ]
+    },
+    {
+      "id": "f9-all-undecodable",
+      "class": "F9",
+      "note": "every candidate is corrupt; storing nothing is the correct outcome",
+      "track": { "title": "How Sweet", "artist": "NewJeans", "duration": 226 },
+      "candidates": [
+        { "title": "How Sweet", "url": "yt:corrupt", "channel": "NewJeans - Topic", "categories": ["Music"], "duration": 226, "view_count": 20000000, "undecodable": true }
+      ]
+    },
+    {
+      "id": "unrelated-candidates-rejected",
+      "class": "F7",
+      "note": "nothing related to the track was returned; the identity gate must empty the list",
+      "track": { "title": "Save Your Tears", "artist": "The Weeknd", "duration": 215 },
+      "candidates": [
+        { "title": "Cooking Tutorial Episode 47", "url": "yt:cooking", "channel": "CookingChannel", "categories": ["Howto & Style"], "duration": 215, "view_count": 50000 }
+      ]
+    },
+    {
+      "id": "download-failure-falls-through",
+      "class": "OK",
+      "note": "a dead candidate must not end the walk",
+      "track": { "title": "Circles", "artist": "Post Malone", "duration": 215 },
+      "candidates": [
+        { "title": "Circles", "url": "yt:dead", "channel": "Post Malone - Topic", "categories": ["Music"], "duration": 215, "view_count": 30000000, "download_fails": true },
+        { "title": "Circles", "url": "yt:alive", "channel": "Post Malone - Topic", "categories": ["Music"], "duration": 215, "view_count": 20000000, "correct": true }
+      ]
+    }
+  ]
+}

@@ -22,3 +22,7 @@ verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 `Shutdown(ctx)` sets `closed` (so no new `Schedule` calls are accepted), cancels `baseCtx` (unblocking any goroutine still waiting on the semaphore or mid-flight, which observe cancellation through the pipeline's own context checks), and waits on the `WaitGroup` with a timeout race against `ctx.Done()` — a slow drain is logged as a warning rather than blocking shutdown indefinitely.
 
 `jobLog` is the operator console's view: current queued and running jobs, running succeeded/failed totals, and a bounded ring of recent terminal outcomes. `complete` is the single call site advancing all three, so they cannot drift apart. Failed jobs ride the same recent ring carrying their reason — there is no separate failure ring. The `jobReporter` is always resolved through `jobReporterFrom`, which returns a no-op when none is wired, so eval and test paths that call `Execute` without a scheduler are unaffected.
+
+## Provenance in the job record (2026-07-26)
+
+`jobReporter` gained a fourth method, `provenance(value string)`, and `JobRecord` a matching `Provenance` field (JSON `provenance`). `AcquireTrackAudioService.Execute` reports it once, on success, just before publishing `track_acquisition_completed` — so the operator console can see not just *that* a track was acquired but how strong the claim is (`verified` / `corroborated` / `best_effort`, see [pipeline](pipeline.md)). `noopJobReporter` absorbs it like the others, so eval and test paths that call `Execute` without a scheduler are unaffected.

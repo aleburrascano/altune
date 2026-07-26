@@ -17,24 +17,27 @@ import (
 )
 
 type AcquireTrackAudioService struct {
-	trackRepo     ports.TrackRepository
-	audioSearcher ports.AudioSearcher
-	audioStore    ports.AudioWriter
-	audioProber   ports.AudioProber
-	audioTagger   ports.AudioTagger
-	events        events.Publisher
+	trackRepo   ports.TrackRepository
+	sources     *SourceRegistry
+	audioStore  ports.AudioWriter
+	audioProber ports.AudioProber
+	audioTagger ports.AudioTagger
+	identifier  ports.AudioIdentifier
+	recordings  ports.RecordingResolver
+	events      events.Publisher
 }
 
 func NewAcquireTrackAudioService(
 	trackRepo ports.TrackRepository,
-	audioSearcher ports.AudioSearcher,
+	sources *SourceRegistry,
 	audioStore ports.AudioWriter,
 	opts ...func(*AcquireTrackAudioService),
 ) *AcquireTrackAudioService {
 	s := &AcquireTrackAudioService{
-		trackRepo:     trackRepo,
-		audioSearcher: audioSearcher,
-		audioStore:    audioStore,
+		trackRepo:  trackRepo,
+		sources:    sources,
+		audioStore: audioStore,
+		recordings: ports.NoopRecordingResolver(),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -46,12 +49,24 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.events = pub }
 }
 
+func WithRecordingResolver(r ports.RecordingResolver) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) {
+		if r != nil {
+			s.recordings = r
+		}
+	}
+}
+
 func WithAudioProber(p ports.AudioProber) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.audioProber = p }
 }
 
 func WithAudioTagger(t ports.AudioTagger) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.audioTagger = t }
+}
+
+func WithAudioIdentifier(i ports.AudioIdentifier) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.identifier = i }
 }
 
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
@@ -89,6 +104,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	}
 
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
+	s.resolveIdentity(ctx, ac)
 	err = RunPipeline(ctx, s.buildSteps(userId, trackId), ac)
 	CleanupTemp(ctx, ac)
 
@@ -109,6 +125,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		return err
 	}
 
+	jobReporterFrom(ctx).provenance(string(ac.Provenance()))
 	s.onAcquireCompleted(ctx, userId, trackId, ac.AudioRef)
 	return nil
 }
@@ -137,6 +154,33 @@ func reasonForStep(step string) (string, bool) {
 		return "audio storage failed", true
 	default:
 		return "", false
+	}
+}
+
+func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
+	identity, err := s.recordings.Resolve(ctx, ports.RecordingQuery{
+		Title:  ac.Track.Title,
+		Artist: ac.Track.Artist,
+		Album:  ac.Track.Album,
+		ISRC:   ac.Track.ISRC,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.identity_resolve_failed",
+			"track_id", ac.Track.ID, "error", err)
+		return
+	}
+	if identity.IsZero() {
+		return
+	}
+
+	ac.Identity = identity
+	if ac.Track.Duration <= 0 && identity.Duration > 0 {
+		ac.Track.Duration = identity.Duration
+		slog.InfoContext(ctx, "acquisition.identity_supplied_duration",
+			"track_id", ac.Track.ID, "duration", identity.Duration)
+	}
+	if ac.Track.ISRC == "" && identity.ISRC != "" {
+		ac.Track.ISRC = identity.ISRC
 	}
 }
 
@@ -179,16 +223,22 @@ func (s *AcquireTrackAudioService) revertToPending(ctx context.Context, track *d
 
 func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId) []Step {
 	return append(
-		CoreSteps(s.audioSearcher, s.audioTagger, s.audioStore, s.audioProber),
+		CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier),
 		NewUpdateTrackStep(s.trackRepo, userId, trackId),
 	)
 }
 
-func CoreSteps(searcher ports.AudioSearcher, tagger ports.AudioTagger, store ports.AudioWriter, prober ports.AudioProber) []Step {
+func CoreSteps(
+	sources *SourceRegistry,
+	tagger ports.AudioTagger,
+	store ports.AudioWriter,
+	prober ports.AudioProber,
+	identifier ports.AudioIdentifier,
+) []Step {
 	return []Step{
-		NewSearchStep(searcher),
+		NewSearchStep(sources),
 		NewSelectStep(),
-		NewDownloadStep(searcher, WithDownloadProber(prober)),
+		NewDownloadStep(sources, WithDownloadProber(prober), WithDownloadIdentifier(identifier)),
 		NewTagStep(tagger),
 		NewStoreStep(store, WithStoreProber(prober)),
 	}

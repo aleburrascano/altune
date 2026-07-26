@@ -355,6 +355,7 @@ function renderProviders(el, ps){
 /* ---------- acquisition ---------- */
 function jobLine(j){ const elapsed=(j.elapsed_ms/1000).toFixed(1); return `<div class="row2"><span class="cy">${esc((j.track_id||'').slice(0,8))}</span> ${badge(j.state)} <span class="mut">${elapsed}s${j.source_url?' · '+esc(j.source_url.slice(0,42)):''}${j.reason?' · '+esc(j.reason):''}</span></div>`; }
 const acqStages = ["search","select","download","tag","store","update_track"];
+const provenanceLabel = { verified: "fingerprint-verified", corroborated: "length-corroborated", best_effort: "best effort" };
 let acqJobs = [];
 let acqSelected = null;
 function acqRow(j,i){

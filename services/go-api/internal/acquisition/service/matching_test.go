@@ -208,6 +208,57 @@ func TestSelectBestCandidate(t *testing.T) {
 	}
 }
 
+func TestRankCandidates_TieIsDeterministicAndPrefersExpectedLength(t *testing.T) {
+	track := TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200}
+	candidates := []ports.AudioCandidate{
+		{
+			Title:      "Blinding Lights (Slowed + Reverb)",
+			Channel:    "The Weeknd - Topic",
+			Duration:   240,
+			URL:        "https://youtube.com/watch?v=slowed",
+			Categories: []string{"Music"},
+		},
+		{
+			Title:      "Blinding Lights",
+			Channel:    "The Weeknd - Topic",
+			Duration:   200,
+			URL:        "https://youtube.com/watch?v=master",
+			Categories: []string{"Music"},
+		},
+	}
+
+	for i := 0; i < 50; i++ {
+		ranked := rankCandidates(context.Background(), track, candidates)
+		if len(ranked) != 2 {
+			t.Fatalf("expected both candidates ranked, got %d", len(ranked))
+		}
+		if ranked[0].URL != "https://youtube.com/watch?v=master" {
+			t.Fatalf("run %d selected %q; the master must win a full identity tie on expected length",
+				i, ranked[0].URL)
+		}
+	}
+}
+
+func TestRankCandidates_TotalTieIsStillDeterministic(t *testing.T) {
+	track := TrackRef{Title: "Song", Artist: "Artist"}
+	candidates := []ports.AudioCandidate{
+		{Title: "Artist - Song", Channel: "Artist - Topic", URL: "https://b.example/x"},
+		{Title: "Artist - Song", Channel: "Artist - Topic", URL: "https://a.example/x"},
+	}
+
+	first := rankCandidates(context.Background(), track, candidates)
+	if len(first) == 0 {
+		t.Fatal("expected candidates to survive the identity gate")
+	}
+	for i := 0; i < 50; i++ {
+		again := rankCandidates(context.Background(), track, candidates)
+		if again[0].URL != first[0].URL {
+			t.Fatalf("run %d picked %q, first run picked %q — ranking is not deterministic",
+				i, again[0].URL, first[0].URL)
+		}
+	}
+}
+
 func TestDurationScore(t *testing.T) {
 	tests := []struct {
 		name     string

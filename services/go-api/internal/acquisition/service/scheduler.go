@@ -133,6 +133,9 @@ func (r schedulerJobReporter) stage(name string) {
 		})
 	}
 }
+func (r schedulerJobReporter) provenance(value string) {
+	r.log.update(r.trackID, func(j *JobRecord) { j.Provenance = value })
+}
 func (r schedulerJobReporter) source(url string) {
 	r.log.update(r.trackID, func(j *JobRecord) {
 		if j.ResolvedSource == "" {

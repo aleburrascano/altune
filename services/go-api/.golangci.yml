@@ -41,6 +41,20 @@ linters:
             - pkg: altune/go-api/internal/admin
               desc: catalog never imports admin (internal/catalog/CLAUDE.md)
 
+        acquisition-boundary:
+          files:
+            - "**/internal/acquisition/service/**"
+            - "**/internal/acquisition/ports/**"
+            - "**/internal/acquisition/adapters/ytdlp/**"
+            - "**/internal/acquisition/adapters/id3/**"
+          deny:
+            - pkg: altune/go-api/internal/discovery
+              desc: acquisition reaches discovery only through adapters/discoverybridge (internal/acquisition/CLAUDE.md)
+            - pkg: altune/go-api/internal/playback
+              desc: acquisition never imports playback (internal/acquisition/CLAUDE.md)
+            - pkg: altune/go-api/internal/admin
+              desc: acquisition never imports admin (internal/acquisition/CLAUDE.md)
+
         shared-bottom:
           files:
             - "**/internal/shared/**"

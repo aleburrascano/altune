@@ -75,3 +75,13 @@ Two properties matter and both come from the lock being session-scoped rather th
 - **Release is automatic.** A crashed or killed process drops its connection and Postgres releases the lock; the standby's 10s retry picks it up. There is no lease to expire and no way to leave the jobs permanently unowned — which is what rules out the simpler alternatives (an env flag on the standby, or an admin "promote" endpoint): both fail silently closed, leaving nobody running the loops after an unlucky restart.
 
 `verify` re-pings the held connection each tick and drops leadership if it died, so a half-open connection surfaces as a lost election rather than a leader that no longer holds anything. The acquisition scheduler is deliberately *not* gated — it is request-driven, not periodic, so it only acts on requests its own colour received.
+
+## Acquisition verification flags (2026-07-26)
+
+Three config fields were added for acquisition (see [acquisition/pipeline](acquisition/pipeline.md)):
+
+- `ACOUSTID_API_KEY` (`AcoustIDAPIKey`) — the AcoustID client key. Empty disables acoustic-fingerprint verification entirely; the composition root skips wiring the identifier rather than failing.
+- `STREAMRIP_SERVICES` (`StreamripServices`, comma-separated) — which streaming catalogues the `rip` CLI may fetch from (`tidal`, `deezer`, `qobuz`, `soundcloud`). Empty means no streamrip sources are registered. Tidal and Qobuz need a premium subscription; Deezer needs an account ARL cookie.
+- `STREAMRIP_BIN` (`StreamripBin`) — path to the `rip` binary, defaulting to `rip` on `PATH`.
+
+All three follow the house rule that an absent optional dependency switches a feature off and never fails startup. `FFMPEG_LOCATION` picked up a second job: it is also the directory searched for `fpcalc` before falling back to `PATH`.

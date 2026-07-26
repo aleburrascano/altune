@@ -28,7 +28,7 @@ func (r *blockingRepo) Update(_ context.Context, _ *domain.Track) error { return
 
 func TestBackgroundScheduler_Schedule_DedupsInflight(t *testing.T) {
 	repo := &blockingRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := NewAcquireTrackAudioService(repo, &fakeAudioSearcher{}, newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
@@ -58,7 +58,7 @@ func (r *countingRepo) Update(_ context.Context, _ *domain.Track) error { return
 
 func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
 	repo := &countingRepo{}
-	svc := NewAcquireTrackAudioService(repo, &fakeAudioSearcher{}, newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -84,7 +84,7 @@ func (r *panicRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.UserId
 func (r *panicRepo) Update(_ context.Context, _ *domain.Track) error { return nil }
 
 func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
-	svc := NewAcquireTrackAudioService(&panicRepo{}, &fakeAudioSearcher{}, newFakeAudioStore())
+	svc := NewAcquireTrackAudioService(&panicRepo{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)

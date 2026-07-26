@@ -23,7 +23,7 @@ func TestExecute_PublishesStartedEvent(t *testing.T) {
 	pub := &recordingProgressPublisher{}
 	svc := NewAcquireTrackAudioService(
 		repo,
-		&fakeAudioSearcher{},
+		fakeRegistry(&fakeAudioSearcher{}),
 		newFakeAudioStore(),
 		WithAcquireEvents(pub),
 	)

@@ -11,13 +11,18 @@ import (
 
 const maxVerifyAttempts = 4
 
-type DownloadStep struct {
-	searcher ports.AudioSearcher
-	prober   ports.AudioProber
+type candidateFetcher interface {
+	Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error)
 }
 
-func NewDownloadStep(searcher ports.AudioSearcher, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{searcher: searcher}
+type DownloadStep struct {
+	fetcher    candidateFetcher
+	prober     ports.AudioProber
+	identifier ports.AudioIdentifier
+}
+
+func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
+	s := &DownloadStep{fetcher: fetcher}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -28,67 +33,49 @@ func WithDownloadProber(p ports.AudioProber) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.prober = p }
 }
 
+func WithDownloadIdentifier(i ports.AudioIdentifier) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.identifier = i }
+}
+
 func (s *DownloadStep) Name() string { return "download" }
 
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
-	candidates := ac.Ranked
-
-	verify := s.prober != nil && ac.Track.Duration > 0
-
 	var lastErr error
 	attempts := 0
-	for i := range candidates {
+
+	for i := range ac.Ranked {
 		if attempts >= maxVerifyAttempts {
 			break
 		}
 		attempts++
-		c := candidates[i]
+		candidate := ac.Ranked[i]
 
 		tmpDir, err := os.MkdirTemp("", "altune-acquire-*")
 		if err != nil {
 			return fmt.Errorf("create temp dir: %w", err)
 		}
 
-		filePath, err := s.searcher.Download(ctx, c.URL, tmpDir)
+		filePath, err := s.fetcher.Fetch(ctx, candidate, tmpDir)
 		if err != nil {
 			os.RemoveAll(tmpDir)
 			lastErr = err
 			slog.WarnContext(ctx, "acquisition.candidate_download_failed",
-				"url", c.URL, "error", err)
+				"url", candidate.URL, "source", candidate.Source, "error", err)
 			continue
 		}
 
-		if verify {
-			actual, perr := s.prober.ProbeDuration(ctx, filePath)
-			switch {
-			case perr != nil:
-				slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
-					"url", c.URL, "error", perr)
-			case !durationWithinTolerance(ac.Track.Duration, actual):
-				slog.InfoContext(ctx, "acquisition.candidate_rejected_duration",
-					"url", c.URL,
-					"actual_duration", actual,
-					"expected_duration", ac.Track.Duration,
-				)
-				os.RemoveAll(tmpDir)
-				lastErr = fmt.Errorf("candidate %q duration %.0fs != expected %.0fs", c.URL, actual, ac.Track.Duration)
-				continue
-			}
+		rejection, verified := s.verify(ctx, ac, candidate, filePath)
+		if rejection != nil {
+			os.RemoveAll(tmpDir)
+			lastErr = rejection
+			continue
 		}
 
-		if s.prober != nil {
-			if derr := s.prober.ValidateDecodable(ctx, filePath); derr != nil {
-				slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
-					"url", c.URL, "error", derr)
-				os.RemoveAll(tmpDir)
-				lastErr = fmt.Errorf("candidate %q undecodable: %w", c.URL, derr)
-				continue
-			}
-		}
-
-		sel := c
-		ac.Selected = &sel
+		selected := candidate
+		ac.Selected = &selected
 		ac.TempPath = filePath
+		ac.DurationVerified = verified.duration
+		ac.IdentityVerified = verified.identity
 		return nil
 	}
 
@@ -96,6 +83,86 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) erro
 		return fmt.Errorf("no candidate produced acceptable audio: %w", lastErr)
 	}
 	return fmt.Errorf("no candidate produced acceptable audio")
+}
+
+type verificationResult struct {
+	duration bool
+	identity bool
+}
+
+func (s *DownloadStep) verify(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	filePath string,
+) (error, verificationResult) {
+	var result verificationResult
+
+	if s.prober != nil && ac.Track.Duration > 0 {
+		actual, err := s.prober.ProbeDuration(ctx, filePath)
+		switch {
+		case err != nil:
+			slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
+				"url", candidate.URL, "error", err)
+		case !ac.durationAcceptable(actual):
+			slog.InfoContext(ctx, "acquisition.candidate_rejected_duration",
+				"url", candidate.URL,
+				"actual_duration", actual,
+				"expected_duration", ac.Track.Duration,
+				"authoritative", ac.Identity.Duration > 0,
+			)
+			return fmt.Errorf("candidate %q duration %.0fs != expected %.0fs",
+				candidate.URL, actual, ac.Track.Duration), result
+		default:
+			result.duration = true
+		}
+	}
+
+	if s.prober != nil {
+		if err := s.prober.ValidateDecodable(ctx, filePath); err != nil {
+			slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
+				"url", candidate.URL, "error", err)
+			return fmt.Errorf("candidate %q undecodable: %w", candidate.URL, err), result
+		}
+	}
+
+	if rejection := s.identify(ctx, ac, candidate, filePath, &result); rejection != nil {
+		return rejection, result
+	}
+
+	return nil, result
+}
+
+func (s *DownloadStep) identify(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	filePath string,
+	result *verificationResult,
+) error {
+	if s.identifier == nil || ac.Identity.MBID == "" {
+		return nil
+	}
+
+	match, err := s.identifier.Identify(ctx, filePath)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.identify_failed_accepting",
+			"url", candidate.URL, "error", err)
+		return nil
+	}
+	if !match.Known() {
+		slog.InfoContext(ctx, "acquisition.identify_unknown_accepting",
+			"url", candidate.URL)
+		return nil
+	}
+	if !match.Matches(ac.Identity.MBID) {
+		slog.InfoContext(ctx, "acquisition.candidate_rejected_fingerprint",
+			"url", candidate.URL, "want_mbid", ac.Identity.MBID, "got_mbids", match.MBIDs)
+		return fmt.Errorf("candidate %q is a different recording", candidate.URL)
+	}
+
+	result.identity = true
+	return nil
 }
 
 func (s *DownloadStep) Rollback(_ context.Context, ac *AcquisitionContext) error {

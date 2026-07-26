@@ -94,7 +94,8 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 		return
 	}
 
-	steps := acqService.CoreSteps(searcher, id3.NewTagger(), audioStore, prober)
+	sources := acqService.NewSourceRegistry(ytdlp.NewSource(searcher))
+	steps := acqService.CoreSteps(sources, id3.NewTagger(), audioStore, prober, nil)
 
 	fixed, skipped := 0, 0
 	for i, t := range tracks {

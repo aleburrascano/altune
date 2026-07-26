@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"altune/go-api/internal/acquisition/ports"
@@ -98,8 +99,11 @@ func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when all searches fail, got nil")
 	}
-	if got := err.Error(); got != "no candidates found" {
-		t.Errorf("error = %q, want %q", got, "no candidates found")
+	if !strings.Contains(err.Error(), "network timeout") {
+		t.Errorf("error = %q, want the underlying source failure preserved for the log", err)
+	}
+	if got := failureReason(&StepError{Step: "search", Err: err}); got != "no matching audio found" {
+		t.Errorf("client-facing reason = %q, want %q", got, "no matching audio found")
 	}
 }
 

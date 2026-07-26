@@ -27,7 +27,7 @@ func TestExecute_AlwaysSearches(t *testing.T) {
 
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
-	svc := NewAcquireTrackAudioService(repo, searcher, store)
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), store)
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
