@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Altune — Screen Atlas</title>
+<style>
+:root{
+  --canvas:#121214; --s1:#1C1C20; --s2:#232328; --border:#2A2A30;
+  --scrim:rgba(0,0,0,.6);
+  --tp:#F4F4F6; --ts:#A6A6AE; --tt:#8C8C96; --t6:#74747E;
+  --accent:#2D5BFF; --accentPressed:#244BD6; --accentText:#6B8FFF; --accentTint:rgba(45,91,255,.25);
+  --onAccent:#fff; --green:#3DD68C; --amber:#F5B544; --red:#FF5A5F;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a0c;color:var(--tp);font-family:var(--font);-webkit-font-smoothing:antialiased}
+
+/* ---------- page chrome ---------- */
+.top{position:sticky;top:0;z-index:100;background:rgba(10,10,12,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.top-inner{max-width:1600px;margin:0 auto;padding:14px 24px 0}
+.brand{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+.brand h1{font-size:19px;letter-spacing:-.4px;font-weight:700}
+.brand span{font-size:12px;color:var(--tt)}
+.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{background:none;border:0;color:var(--ts);font:500 13px/1 var(--font);padding:11px 14px;border-radius:8px 8px 0 0;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}
+.tabs button:hover{color:var(--tp);background:rgba(255,255,255,.04)}
+.tabs button.on{color:var(--tp);border-bottom-color:var(--accent);background:rgba(45,91,255,.10)}
+.tabs button i{font-style:normal;color:var(--t6);margin-left:6px;font-size:11px}
+
+main{max-width:1600px;margin:0 auto;padding:28px 24px 80px}
+.panel{display:none}
+.panel.on{display:block}
+.panel-head{margin-bottom:22px;max-width:760px}
+.panel-head h2{font-size:24px;letter-spacing:-.5px;margin-bottom:6px}
+.panel-head p{font-size:14px;line-height:1.6;color:var(--ts)}
+.grid{display:flex;flex-wrap:wrap;gap:34px 28px;align-items:flex-start}
+
+.item{width:360px}
+.cap{margin-bottom:10px}
+.cap b{display:block;font-size:13px;font-weight:600;letter-spacing:-.1px}
+.cap code{display:block;font-size:11px;color:var(--t6);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:3px}
+.cap em{display:block;font-size:11.5px;color:var(--amber);font-style:normal;margin-top:4px;line-height:1.45}
+
+/* ---------- phone ---------- */
+.phone{width:360px;height:740px;background:var(--canvas);border:1px solid var(--border);border-radius:26px;overflow:hidden;position:relative;display:flex;flex-direction:column;box-shadow:0 18px 48px rgba(0,0,0,.5)}
+.status{height:40px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:11px;font-weight:600;color:var(--tp);opacity:.85}
+.status .dots{display:flex;gap:4px;align-items:center}
+.status .dots span{display:block;width:14px;height:9px;border:1px solid currentColor;border-radius:2px;opacity:.7}
+.screen{flex:1;display:flex;flex-direction:column;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#333 transparent}
+.screen::-webkit-scrollbar{width:4px}
+.screen::-webkit-scrollbar-thumb{background:#2f2f36;border-radius:2px}
+.pad{padding-left:16px;padding-right:16px}
+
+/* ---------- type ---------- */
+.dxl{font-size:34px;line-height:40px;font-weight:700;letter-spacing:-.5px}
+.dl{font-size:28px;line-height:34px;font-weight:700;letter-spacing:-.5px}
+.tt{font-size:20px;line-height:26px;font-weight:600}
+.bd{font-size:16px;line-height:22px}
+.bs{font-size:16px;line-height:22px;font-weight:600}
+.lb{font-size:14px;line-height:18px;font-weight:500}
+.cp{font-size:12px;line-height:16px;font-weight:500}
+.sec{color:var(--ts)} .ter{color:var(--tt)} .acc{color:var(--accentText)} .grn{color:var(--green)} .red{color:var(--red)} .amb{color:var(--amber)}
+.ell{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upp{text-transform:uppercase;letter-spacing:1px}
+.ctr{text-align:center}
+
+/* ---------- atoms ---------- */
+.row{display:flex;align-items:center;gap:12px}
+.between{display:flex;align-items:center;justify-content:space-between}
+.col{display:flex;flex-direction:column}
+.grow{flex:1;min-width:0}
+.mt4{margin-top:4px}.mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mt20{margin-top:20px}.mt24{margin-top:24px}.mt32{margin-top:32px}
+.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb16{margin-bottom:16px}.mb24{margin-bottom:24px}
+.center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;gap:4px}
+
+.art{border-radius:6px;flex:none;background:var(--s2);overflow:hidden;position:relative}
+.rnd{border-radius:999px}
+.a1{background:linear-gradient(140deg,#3a2d6d,#8f4fd6)}
+.a2{background:linear-gradient(140deg,#0f3b52,#2f9ec4)}
+.a3{background:linear-gradient(140deg,#5c1f2b,#d1554e)}
+.a4{background:linear-gradient(140deg,#1e4034,#4fbf8b)}
+.a5{background:linear-gradient(140deg,#4a3a12,#d6a13c)}
+.a6{background:linear-gradient(140deg,#2a2350,#5f6bd6)}
+.a7{background:linear-gradient(140deg,#3d1f3f,#a44fa0)}
+.a8{background:linear-gradient(140deg,#123043,#3f7fb0)}
+.a9{background:linear-gradient(140deg,#432a1a,#b57346)}
+.a0{background:linear-gradient(140deg,#242428,#3a3a42)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 20px;border-radius:12px;font:600 15px/1 var(--font);border:0;cursor:default}
+.btn-p{background:var(--accent);color:#fff}
+.btn-s{background:var(--s1);color:var(--tp)}
+.btn-g{background:none;color:var(--accentText);padding:0;min-height:44px}
+.btn-dis{background:var(--s2);color:var(--t6)}
+.full{width:100%}
+
+.chip{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 16px;border-radius:999px;background:var(--s2);color:var(--ts);font:500 14px/1 var(--font)}
+.chip.on{background:var(--accent);color:#fff}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+
+.field{height:48px;border-radius:12px;background:var(--s1);border:1px solid transparent;display:flex;align-items:center;padding:0 16px;color:var(--tt);font-size:16px}
+.field.on{border-color:var(--accent);color:var(--tp)}
+.field.err{border-color:var(--red)}
+.search{height:48px;border-radius:12px;background:var(--s1);border:1px solid transparent;display:flex;align-items:center;gap:12px;padding:0 14px;color:var(--tt);font-size:16px}
+.search.on{border-color:var(--accent)}
+.search.open{border-bottom-left-radius:0;border-bottom-right-radius:0}
+
+.banner{border-radius:12px;padding:12px 14px;font-size:14px;line-height:19px}
+.b-info{background:rgba(45,91,255,.12);color:var(--accentText);border:1px solid rgba(45,91,255,.28)}
+.b-danger{background:rgba(255,90,95,.12);color:#ff8a8e;border:1px solid rgba(255,90,95,.3)}
+
+.skel{background:linear-gradient(90deg,#1e1e23,#2a2a31,#1e1e23);border-radius:8px}
+.hair{height:1px;background:var(--border)}
+.divider{height:1px;background:var(--border);margin:16px 0}
+
+/* rows */
+.lrow{padding:8px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.drow{padding:12px 4px;display:flex;align-items:center;gap:12px;border-radius:12px}
+.trow{display:flex;align-items:center;gap:12px;min-height:52px}
+
+/* tabbar */
+.tabbar{flex:none;display:flex;border-top:1px solid var(--border);background:var(--canvas);padding-top:8px;padding-bottom:14px}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:0;color:var(--ts)}
+.tab .ind{width:28px;height:2px;border-radius:2px;background:transparent;margin-bottom:8px}
+.tab.on{color:var(--accent)} .tab.on .ind{background:var(--accent)}
+.tab .lbl{font-size:12px;font-weight:500;margin-top:4px}
+
+/* mini player */
+.mini{flex:none;background:var(--s1);border-top:1px solid var(--border)}
+.mini .prog{height:2px;background:var(--border)}
+.mini .prog i{display:block;height:2px;background:var(--accent)}
+.mini .body{display:flex;align-items:center;gap:12px;padding:8px 16px}
+
+/* downloads bar */
+.dlbar{flex:none;background:var(--s1);border-top:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:12px 16px}
+.segs{display:flex;gap:4px;margin-top:4px}
+.segs i{flex:1;height:4px;border-radius:2px;background:var(--border);display:block}
+.segs i.f{background:var(--accent)}
+
+/* overlays */
+.ovl{position:absolute;inset:0;background:var(--scrim);display:flex;flex-direction:column;justify-content:flex-end}
+.sheet{background:var(--s1);border-top-left-radius:20px;border-top-right-radius:20px;padding:12px 20px 32px}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--border);margin:0 auto 16px}
+.dialog{margin:auto;width:calc(100% - 48px);background:var(--s1);border-radius:16px;padding:20px}
+.menu{position:absolute;background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:6px;min-width:210px;box-shadow:0 14px 34px rgba(0,0,0,.6)}
+.menu div{padding:11px 12px;font-size:15px;border-radius:8px}
+
+/* misc */
+.gridcov{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.railh{display:flex;gap:16px;overflow:hidden}
+.hero-glow{position:absolute;top:0;left:0;right:0;height:340px;background:linear-gradient(180deg,rgba(45,91,255,.19),rgba(45,91,255,.03) 55%,transparent);pointer-events:none}
+.eq{display:flex;align-items:flex-end;gap:3px;height:22px}
+.eq i{width:4px;border-radius:2px;background:var(--accent);display:block}
+svg{flex:none}
+</style>
+</head>
+<body>
+
+<div class="top"><div class="top-inner">
+  <div class="brand"><h1>Altune — Screen Atlas</h1><span>every screen &amp; state, as built today · dark theme · 360×740</span></div>
+  <div class="tabs" id="tabs"></div>
+</div></div>
+
+<main id="main"></main>
+
+<script>
+/* ------------------------------------------------------------------ icons */
+const P = {
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  cleft:'<path d="m15 18-6-6 6-6"/>',
+  cright:'<path d="m9 18 6-6-6-6"/>',
+  cdown:'<path d="m6 9 6 6 6-6"/>',
+  cup:'<path d="m18 15-6-6-6 6"/>',
+  play:'<path d="M6 3.5v17l14-8.5z" fill="currentColor" stroke="none"/>',
+  pause:'<rect x="6" y="4" width="4" height="16" fill="currentColor" stroke="none"/><rect x="14" y="4" width="4" height="16" fill="currentColor" stroke="none"/>',
+  sback:'<path d="M19 20 9 12l10-8z" fill="currentColor" stroke="none"/><rect x="4" y="4" width="2.5" height="16" fill="currentColor" stroke="none"/>',
+  sfwd:'<path d="M5 4l10 8-10 8z" fill="currentColor" stroke="none"/><rect x="17.5" y="4" width="2.5" height="16" fill="currentColor" stroke="none"/>',
+  shuffle:'<path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/>',
+  repeat:'<path d="m17 2 4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3"/>',
+  more:'<circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/>',
+  moreh:'<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
+  list:'<path d="M3 6h11M3 12h11M3 18h7M18 5v11"/><circle cx="16" cy="17" r="2.4"/>',
+  mic:'<path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM5 10v1a7 7 0 0 0 14 0v-1M12 19v3"/>',
+  compass:'<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z" fill="currentColor" stroke="none"/>',
+  lib:'<path d="M16 6 22 18M4 4v16M9 4v16"/>',
+  cog:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 14.1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.9 3H10a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.3z"/>',
+  music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  check:'<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  down:'<circle cx="12" cy="12" r="9"/><path d="M12 8v7m0 0-3-3m3 3 3-3"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  rotate:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+  google:'<path d="M21 12.2c0-.7-.06-1.2-.2-1.8H12v3.4h5.1c-.1.9-.66 2.2-1.9 3.1l3 2.3c1.8-1.6 2.8-4.1 2.8-7z" fill="#4285F4" stroke="none"/><path d="M12 21c2.4 0 4.5-.8 6-2.2l-3-2.3c-.8.5-1.8.9-3 .9-2.3 0-4.3-1.5-5-3.6l-3 2.3A9 9 0 0 0 12 21z" fill="#34A853" stroke="none"/><path d="M7 13.8a5.4 5.4 0 0 1 0-3.5L4 8a9 9 0 0 0 0 8z" fill="#FBBC05" stroke="none"/><path d="M12 6.6c1.6 0 2.7.7 3.4 1.3l2.5-2.5A9 9 0 0 0 4 8l3 2.3c.7-2.1 2.7-3.7 5-3.7z" fill="#EA4335" stroke="none"/>',
+};
+function ic(n,s=20,c='currentColor'){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${P[n]}</svg>`}
+
+/* ------------------------------------------------------------ shared bits */
+const bar = (t='9:41')=>`<div class="status"><span>${t}</span><div class="dots"><span></span></div></div>`;
+const art = (cls,size,r='6px')=>`<div class="art ${cls}" style="width:${size}px;height:${size}px;border-radius:${r}"></div>`;
+const tabbar = (on)=>`<div class="tabbar">
+  ${['discover','library','settings'].map(k=>{
+    const I={discover:'compass',library:'lib',settings:'cog'}[k];
+    const L={discover:'Discover',library:'Library',settings:'Settings'}[k];
+    return `<div class="tab ${on===k?'on':''}"><div class="ind"></div>${ic(I,22)}<span class="lbl">${L}</span></div>`;
+  }).join('')}
+</div>`;
+const mini = (o={})=>`<div class="mini">
+  <div class="prog"><i style="width:${o.pct??38}%"></i></div>
+  <div class="body">${art('a1',44,'8px')}
+    <div class="grow"><div class="lb ell">${o.title??'Midnight City'}</div>
+      <div class="cp sec ell">${o.sub??'M83'}</div></div>
+    ${ic(o.icon??'pause',22)}${o.next?ic('sfwd',18):''}</div></div>`;
+
+const heroAuth = (tagline)=>`<div style="padding:40px 20px 0">
+  <div class="eq mb12"><i style="height:8px"></i><i style="height:18px"></i><i style="height:12px"></i><i style="height:22px"></i></div>
+  <div class="dxl" style="letter-spacing:-1px">altune</div>
+  ${tagline?`<div class="lb sec mt8">${tagline}</div>`:''}</div>`;
+
+/* ---------------------------------------------------------------- screens */
+const TABS = [];
+function tab(id,title,blurb,items){TABS.push({id,title,blurb,items})}
+function screen(name,route,note,inner,cls=''){return {name,route,note,inner,cls}}
+
+/* =================================================================== AUTH */
+tab('auth','Auth',
+ 'Everything before the tab shell. All six auth screens share <code>AuthHeroLayout</code> — the wordmark block is absolutely positioned at the top and the form is pinned to the bottom of the scroll view, so on a tall phone there is a large dead gap in the middle.',
+[
+screen('Sign in','app/(auth)/sign-in.tsx','Form is bottom-anchored; the middle third of the screen is empty.',`
+${heroAuth('Welcome back.')}
+<div class="grow"></div>
+<div class="pad" style="padding-bottom:24px;display:flex;flex-direction:column;gap:8px">
+  <div class="field">Email</div>
+  <div class="field">Password</div>
+  <div style="text-align:right;margin:4px 0"><span class="cp acc">Forgot password?</span></div>
+  <div class="btn btn-dis full">Sign in</div>
+  <div class="row mt12" style="gap:12px"><div class="hair grow"></div><span class="cp ter">or</span><div class="hair grow"></div></div>
+  <div style="display:flex;justify-content:center"><div class="row" style="border:1px solid var(--border);border-radius:999px;padding:8px 16px;gap:8px;background:var(--s1)">${ic('google',16)}<span class="lb">Google</span></div></div>
+  <div class="ctr mt12"><span class="lb sec">No account? <span class="acc">Sign up</span></span></div>
+</div>`),
+
+screen('Sign up','app/(auth)/sign-up.tsx','Adds Confirm password + password policy hint. Same layout.',`
+${heroAuth('Every track you own, in one place.')}
+<div class="grow"></div>
+<div class="pad" style="padding-bottom:24px;display:flex;flex-direction:column;gap:8px">
+  <div class="field on">ada@example.com</div>
+  <div class="field err">••••••</div>
+  <div class="cp red">At least 8 characters, with a letter and a number.</div>
+  <div class="field">Confirm password</div>
+  <div class="btn btn-dis full">Sign up</div>
+  <div class="row mt12" style="gap:12px"><div class="hair grow"></div><span class="cp ter">or</span><div class="hair grow"></div></div>
+  <div style="display:flex;justify-content:center"><div class="row" style="border:1px solid var(--border);border-radius:999px;padding:8px 16px;gap:8px;background:var(--s1)">${ic('google',16)}<span class="lb">Google</span></div></div>
+  <div class="ctr mt12"><span class="lb sec">Have an account? <span class="acc">Sign in</span></span></div>
+</div>`),
+
+screen('Sign in — error','SignInScreen / error state','Generic error banner sits above the button.',`
+${heroAuth('Welcome back.')}
+<div class="grow"></div>
+<div class="pad" style="padding-bottom:24px;display:flex;flex-direction:column;gap:8px">
+  <div class="field on">ada@example.com</div>
+  <div class="field on">••••••••</div>
+  <div style="text-align:right;margin:4px 0"><span class="cp acc">Forgot password?</span></div>
+  <div class="banner b-danger">Email or password is incorrect.</div>
+  <div class="btn btn-p full">Sign in</div>
+  <div class="row mt12" style="gap:12px"><div class="hair grow"></div><span class="cp ter">or</span><div class="hair grow"></div></div>
+  <div style="display:flex;justify-content:center"><div class="row" style="border:1px solid var(--border);border-radius:999px;padding:8px 16px;gap:8px;background:var(--s1)">${ic('google',16)}<span class="lb">Google</span></div></div>
+  <div class="ctr mt12"><span class="lb sec">No account? <span class="acc">Sign up</span></span></div>
+</div>`),
+
+screen('Check email','CheckEmailNotice.tsx','Terminal state after sign-up. Nothing to do but leave the app.',`
+${heroAuth('Almost there.')}
+<div class="grow"></div>
+<div class="pad" style="padding-bottom:24px;display:flex;flex-direction:column;gap:12px">
+  <div class="tt">Check your email</div>
+  <div class="banner b-info">We've sent you a link to confirm your account. Open it on this device to finish signing up.</div>
+  <div class="ctr mt8"><span class="lb acc">Back to sign in</span></div>
+</div>`),
+
+screen('Forgot password','app/(auth)/forgot-password.tsx','',`
+${heroAuth()}
+<div class="grow"></div>
+<div class="pad" style="padding-bottom:24px;display:flex;flex-direction:column;gap:12px">
+  <div class="tt">Reset your password</div>
+  <div class="lb sec">Enter your email and we'll send you a link to choose a new password.</div>
+  <div class="field">Email</div>
+  <div class="btn btn-dis full">Send reset link</div>
+  <div class="ctr mt8"><span class="lb acc">Back to sign in</span></div>
+</div>`),
+
+screen('Reset link sent','ForgotPasswordScreen / sent','',`
+${heroAuth()}
+<div class="grow"></div>
+<div class="pad" style="padding-bottom:24px;display:flex;flex-direction:column;gap:12px">
+  <div class="tt">Check your email</div>
+  <div class="banner b-info">If an account exists for that email, we've sent a reset link. Check your email and follow it to choose a new password.</div>
+  <div class="ctr mt8"><span class="lb acc">Back to sign in</span></div>
+</div>`),
+
+screen('Set new password','app/reset-password.tsx','The only auth screen with the artwork background layer switched on.',`
+<div style="position:absolute;inset:0;background:radial-gradient(120% 60% at 20% 0%,rgba(45,91,255,.22),transparent 60%),radial-gradient(90% 50% at 90% 20%,rgba(143,79,214,.18),transparent 60%);pointer-events:none"></div>
+${heroAuth()}
+<div class="grow"></div>
+<div class="pad" style="padding-bottom:24px;display:flex;flex-direction:column;gap:8px;position:relative">
+  <div class="tt">Choose a new password</div>
+  <div class="field">New password</div>
+  <div class="field">Confirm new password</div>
+  <div class="btn btn-dis full">Update password</div>
+</div>`),
+
+screen('Session expired','SessionExpiredNotice.tsx','Full-screen takeover from the API layer. No wordmark, no layout sharing with the rest of auth.',`
+<div class="center">
+  <div class="dl">Your session expired</div>
+  <div class="bd sec mt8">Sign in again to get back to your library. Nothing has been lost.</div>
+  <div class="btn btn-p mt16">Sign in again</div>
+</div>`),
+]);
+
+/* =============================================================== DISCOVER */
+const dRow = (a,title,sub,preview=true)=>`<div class="drow">${art(a,56,'12px')}
+  <div class="grow"><div class="bs ell">${title}</div><div class="lb sec ell mt4">${sub}</div></div>
+  ${preview?`<div style="width:36px;height:36px;border-radius:18px;background:var(--s2);display:flex;align-items:center;justify-content:center">${ic('play',18)}</div>`:''}</div>`;
+
+tab('discover','Discover',
+ 'Search-first tab. Eight distinct render states come out of <code>DiscoverBody</code>: loading, empty-no-query (with and without history), suggestions open, blended results, filtered results, zero results, and full error.',
+[
+screen('Empty — no history','app/(tabs)/discover/index.tsx','First-run. A single icon and one line of copy fill 600px of screen.',`
+<div class="pad" style="padding-top:8px"><div class="dl mt4">Discover</div></div>
+<div class="pad" style="padding-top:12px;padding-bottom:12px"><div class="search">${ic('search',16,'var(--tt)')}<span>Search music</span></div></div>
+<div class="center">${ic('search',32,'var(--tt)')}<div class="bd sec mt12">Search music to get started.</div></div>
+${mini({pct:0,icon:'play'})}${tabbar('discover')}`),
+
+screen('Empty — recent searches','DiscoverBody / empty-no-query','History renders as an unbounded chip cloud — no ordering signal, no per-item delete.',`
+<div class="pad" style="padding-top:8px"><div class="dl mt4">Discover</div></div>
+<div class="pad" style="padding-top:12px;padding-bottom:12px"><div class="search">${ic('search',16,'var(--tt)')}<span>Search music</span></div></div>
+<div class="pad">
+  <div class="between mb12"><span class="lb ter upp">Recent searches</span><span class="cp acc">Clear</span></div>
+  <div class="chips">${['daft punk','random access memories','tame impala','the less i know the better','burial untrue','bonobo','four tet','floating points','caribou'].map(q=>`<div class="chip">${q}</div>`).join('')}</div>
+</div>
+<div class="grow"></div>${tabbar('discover')}`),
+
+screen('Suggestions open','SuggestionsList.tsx','Dropdown attaches to the search field; the list below is still the old state.',`
+<div class="pad" style="padding-top:8px"><div class="dl mt4">Discover</div></div>
+<div class="pad" style="padding-top:12px;padding-bottom:12px;position:relative;z-index:5">
+  <div class="search on open">${ic('search',16,'var(--tt)')}<span style="color:var(--tp)">daft</span><div class="grow"></div>${ic('x',16,'var(--tt)')}</div>
+  <div style="background:var(--s1);border-bottom-left-radius:12px;border-bottom-right-radius:12px;border-top:1px solid var(--border);overflow:hidden">
+    ${[['daft punk','artist'],['daft punk discovery','album'],['daft punk one more time','track'],['daftside','artist']].map((s,i)=>`
+      <div class="row" style="padding:12px 16px;gap:12px;${i?'border-top:1px solid var(--border)':''}">
+        <div style="width:28px;height:28px;border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center">${ic('search',14,'var(--tt)')}</div>
+        <span class="bd grow ell">${s[0]}</span><span class="cp ter">${s[1]}</span></div>`).join('')}
+  </div>
+</div>
+<div class="grow"></div>${tabbar('discover')}`),
+
+screen('Loading','DiscoverBody / loading','Six skeleton rows.',`
+<div class="pad" style="padding-top:8px"><div class="dl mt4">Discover</div></div>
+<div class="pad" style="padding-top:12px;padding-bottom:12px"><div class="search on">${ic('search',16,'var(--tt)')}<span style="color:var(--tp)">daft punk</span><div class="grow"></div>${ic('x',16,'var(--tt)')}</div>
+<div style="height:2px;border-radius:1px;background:var(--accent);opacity:.6;margin-top:4px"></div></div>
+<div class="pad">${[70,45,80,55,65,50].map(w=>`<div class="row" style="padding:12px 4px;gap:12px">
+  <div class="skel" style="width:56px;height:56px;border-radius:12px"></div>
+  <div class="grow"><div class="skel" style="width:${w}%;height:14px"></div><div class="skel mt8" style="width:40%;height:12px"></div></div></div>`).join('')}</div>
+<div class="grow"></div>${tabbar('discover')}`),
+
+screen('Results — blended','DiscoverBody / results','Top Result card + one section per kind + "See all". This is the densest screen in the app.',`
+<div class="pad" style="padding-top:8px"><div class="dl mt4">Discover</div></div>
+<div class="pad" style="padding-top:12px;padding-bottom:12px"><div class="search on">${ic('search',16,'var(--tt)')}<span style="color:var(--tp)">daft punk</span><div class="grow"></div>${ic('x',16,'var(--tt)')}</div></div>
+<div class="pad">
+  <div class="chips mb12"><div class="chip on">All</div><div class="chip">Albums</div><div class="chip">Tracks</div><div class="chip">Artists</div></div>
+  <div class="lb ter upp mb12">Top result</div>
+  <div style="background:var(--s2);border-radius:16px;padding:20px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px">
+    ${art('a1',96,'999px')}
+    <div class="grow"><div class="tt">Daft Punk</div><div class="bd ter mt4">Artist</div></div></div>
+  <div class="lb ter upp" style="margin:8px 0">Tracks</div>
+  ${dRow('a2','One More Time','Track · Daft Punk · +2 versions')}
+  ${dRow('a3','Get Lucky','Track · Daft Punk, Pharrell Williams')}
+  ${dRow('a5','Instant Crush','Track · Daft Punk, Julian Casablancas')}
+  <div class="row" style="padding:12px 0;gap:4px"><span class="lb acc">See all tracks</span>${ic('cright',16,'var(--accentText)')}</div>
+  <div class="lb ter upp" style="margin:8px 0">Albums</div>
+  ${dRow('a6','Random Access Memories','Album · Daft Punk · 2013',false)}
+  ${dRow('a8','Discovery','Album · Daft Punk · 2001',false)}
+</div>${mini({pct:24,title:'One More Time',sub:'Daft Punk · Preview'})}${tabbar('discover')}`),
+
+screen('Results — filtered','FilteredResults.tsx','Chip filter swaps the blended list for a flat one. Header context is lost.',`
+<div class="pad" style="padding-top:8px"><div class="dl mt4">Discover</div></div>
+<div class="pad" style="padding-top:12px;padding-bottom:12px"><div class="search on">${ic('search',16,'var(--tt)')}<span style="color:var(--tp)">daft punk</span><div class="grow"></div>${ic('x',16,'var(--tt)')}</div></div>
+<div class="pad">
+  <div class="chips mb12"><div class="chip">All</div><div class="chip">Albums</div><div class="chip on">Tracks</div><div class="chip">Artists</div></div>
+  <div class="row" style="gap:8px;padding:8px 0;flex-wrap:wrap"><span class="cp sec">Showing results for <b style="color:var(--tp)">daft punk</b></span><span class="cp acc">Search for "daf punk"</span></div>
+  ${dRow('a2','One More Time','Track · Daft Punk')}
+  ${dRow('a3','Get Lucky','Track · Daft Punk, Pharrell Williams')}
+  ${dRow('a5','Instant Crush','Track · Daft Punk, Julian Casablancas')}
+  ${dRow('a6','Around the World','Track · Daft Punk')}
+  ${dRow('a8','Harder, Better, Faster, Stronger','Track · Daft Punk')}
+  ${dRow('a9','Digital Love','Track · Daft Punk')}
+</div>${tabbar('discover')}`),
+
+screen('Zero results','DiscoverBody / zero-results','Filter chips stay, so you can pivot without retyping.',`
+<div class="pad" style="padding-top:8px"><div class="dl mt4">Discover</div></div>
+<div class="pad" style="padding-top:12px;padding-bottom:12px"><div class="search on">${ic('search',16,'var(--tt)')}<span style="color:var(--tp)">qqqqzzz</span><div class="grow"></div>${ic('x',16,'var(--tt)')}</div></div>
+<div class="pad"><div class="chips"><div class="chip on">All</div><div class="chip">Albums</div><div class="chip">Tracks</div><div class="chip">Artists</div></div></div>
+<div class="center"><div class="tt">No matches</div><div class="lb sec mt4">Check spelling or try fewer words.</div></div>
+${tabbar('discover')}`),
+
+screen('Search failed / offline','DiscoverBody / full-error','Copy branches on network vs server error.',`
+<div class="pad" style="padding-top:8px"><div class="dl mt4">Discover</div></div>
+<div class="pad" style="padding-top:12px;padding-bottom:12px"><div class="search on">${ic('search',16,'var(--tt)')}<span style="color:var(--tp)">daft punk</span><div class="grow"></div>${ic('x',16,'var(--tt)')}</div></div>
+<div class="center"><div class="tt">No connection</div><div class="lb sec mt4 mb16">Check your connection and try again.</div><div class="btn btn-p">Retry</div></div>
+${tabbar('discover')}`),
+]);
+
+/* ================================================================ LIBRARY */
+const lRow = (a,t,s,extra='',dur='3:42')=>`<div class="lrow">${art(a,48)}
+  <div class="grow"><div class="bs ell">${t}</div><div class="lb sec ell" style="margin-top:2px">${s}</div>${extra}</div>
+  <div class="row" style="gap:8px">${dur?`<span class="cp ter">${dur}</span>`:''}${ic('more',18,'var(--tt)')}</div></div>`;
+
+tab('library','Library',
+ 'Owned music. One screen, four chips, each with its own sort key and its own layout (grid vs list vs avatar grid). Loading, empty, error and no-results are full-screen replacements — the chips and search bar disappear with them.',
+[
+screen('Playlists (default chip)','app/(tabs)/library/index.tsx','Lands here by default. "New Playlist" is a cell in the grid, not an action in the header.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px"><div class="dl">Library</div></div>
+<div class="pad" style="padding-bottom:12px"><div class="search">${ic('search',16,'var(--tt)')}<span>Search your library</span></div></div>
+<div class="pad"><div class="chips"><div class="chip on">Playlists</div><div class="chip">Tracks</div><div class="chip">Albums</div><div class="chip">Artists</div></div></div>
+<div class="pad between" style="padding-top:12px;padding-bottom:8px"><span class="lb ter">6 playlists</span><div class="row" style="gap:4px"><span class="lb">Recently added</span>${ic('cdown',14)}</div></div>
+<div class="pad gridcov">
+  <div><div style="width:100%;aspect-ratio:1;border:1px dashed var(--border);border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center"><span class="dl ter">+</span></div><div class="lb sec mt8">New Playlist</div></div>
+  ${[['Late night','12','a1'],['Focus','48','a2'],['Gym','23','a3'],['2013 nostalgia','31','a6'],['Sunday','9','a4']].map(p=>`
+    <div><div class="art ${p[2]}" style="width:100%;aspect-ratio:1;border-radius:8px"></div>
+    <div class="lb ell mt4">${p[0]}</div><div class="cp sec">${p[1]} tracks</div></div>`).join('')}
+</div>
+${mini({pct:38})}${tabbar('library')}`),
+
+screen('Tracks chip','LibraryScreen / tracks','Row shows acquisition state inline: pending, phase label, failure + Retry, offline check.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px"><div class="dl">Library</div></div>
+<div class="pad" style="padding-bottom:12px"><div class="search">${ic('search',16,'var(--tt)')}<span>Search your library</span></div></div>
+<div class="pad"><div class="chips"><div class="chip">Playlists</div><div class="chip on">Tracks</div><div class="chip">Albums</div><div class="chip">Artists</div></div></div>
+<div class="pad between" style="padding-top:12px;padding-bottom:8px"><span class="lb ter">184 tracks</span><div class="row" style="gap:4px"><span class="lb">Recently added</span>${ic('cdown',14)}</div></div>
+<div>
+  ${lRow('a1','Midnight City','M83 · Hurry Up, We’re Dreaming','','4:03')}
+  ${lRow('a2','One More Time','Daft Punk · Discovery','','5:20')}
+  ${lRow('a3','Nightcall','Kavinsky · OutRun','<div class="cp ter" style="margin-top:2px">Downloading…</div>','')}
+  ${lRow('a4','Teardrop','Massive Attack · Mezzanine','','5:29')}
+  ${lRow('a5','Alright','Kendrick Lamar · To Pimp a Butterfly','<div class="row" style="gap:8px;margin-top:2px"><span class="cp red ell">No source found</span><span class="cp acc">Retry</span></div>','')}
+  ${lRow('a6','Genesis','Justice · Cross','','3:54')}
+  ${lRow('a8','Weird Fishes','Radiohead · In Rainbows','','5:18')}
+</div>
+${tabbar('library')}`),
+
+screen('Albums chip','LibraryScreen / albums','2-column cover grid, artist · year caption.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px"><div class="dl">Library</div></div>
+<div class="pad" style="padding-bottom:12px"><div class="search">${ic('search',16,'var(--tt)')}<span>Search your library</span></div></div>
+<div class="pad"><div class="chips"><div class="chip">Playlists</div><div class="chip">Tracks</div><div class="chip on">Albums</div><div class="chip">Artists</div></div></div>
+<div class="pad between" style="padding-top:12px;padding-bottom:8px"><span class="lb ter">27 albums</span><div class="row" style="gap:4px"><span class="lb">A–Z</span>${ic('cdown',14)}</div></div>
+<div class="pad gridcov">
+  ${[['Cross','Justice · 2007','a6'],['Discovery','Daft Punk · 2001','a8'],['Hurry Up','M83 · 2011','a1'],['In Rainbows','Radiohead · 2007','a4'],['Mezzanine','Massive Attack · 1998','a0'],['OutRun','Kavinsky · 2013','a3']].map(x=>`
+    <div><div class="art ${x[2]}" style="width:100%;aspect-ratio:1;border-radius:8px"></div>
+    <div class="lb ell mt4">${x[0]}</div><div class="cp sec ell">${x[1]}</div></div>`).join('')}
+</div>${tabbar('library')}`),
+
+screen('Artists chip','LibraryScreen / artists','Fixed 100px avatars — the row does not stretch to fill the width, so there is a ragged right edge.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px"><div class="dl">Library</div></div>
+<div class="pad" style="padding-bottom:12px"><div class="search">${ic('search',16,'var(--tt)')}<span>Search your library</span></div></div>
+<div class="pad"><div class="chips"><div class="chip">Playlists</div><div class="chip">Tracks</div><div class="chip">Albums</div><div class="chip on">Artists</div></div></div>
+<div class="pad between" style="padding-top:12px;padding-bottom:8px"><span class="lb ter">19 artists</span><div class="row" style="gap:4px"><span class="lb">A–Z</span>${ic('cdown',14)}</div></div>
+<div class="pad" style="display:flex;flex-wrap:wrap;gap:12px">
+  ${[['Daft Punk','a1'],['Justice','a6'],['Kavinsky','a3'],['M83','a2'],['Radiohead','a4'],['Massive Attack','a0'],['Kendrick Lamar','a5'],['Burial','a8']].map(x=>`
+    <div style="width:108px;text-align:center">${art(x[1],100,'999px')}<div class="cp ell mt4">${x[0]}</div></div>`).join('')}
+</div>${tabbar('library')}`),
+
+screen('Loading','LibraryScreen / loading','Four skeleton tiles — but the chips and search bar are gone, so the header jumps when data lands.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px"><div class="dl">Library</div></div>
+<div class="pad" style="display:flex;flex-wrap:wrap;gap:12px;padding-top:20px">
+  ${[0,1,2,3].map(()=>`<div class="skel" style="width:47%;height:140px;border-radius:8px"></div>`).join('')}
+</div><div class="grow"></div>${tabbar('library')}`),
+
+screen('Empty library','LibraryScreen / empty','Only shown when there is no query, no playlists and no tracks at all.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px"><div class="dl">Library</div></div>
+<div class="center"><div class="tt">Your library is empty</div><div class="lb sec mt4 mb16">Tracks you add will show up here.</div><div class="btn btn-p">Discover Music</div></div>
+${tabbar('library')}`),
+
+screen('Load error','LibraryScreen / error','Offline copy reassures that nothing was lost.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px"><div class="dl">Library</div></div>
+<div class="center"><div class="tt">Couldn't load your library</div><div class="lb sec mt4 mb16">You appear to be offline. Your library is safe — reconnect and try again.</div><div class="btn btn-p">Retry</div></div>
+${tabbar('library')}`),
+
+screen('Search — no results','LibraryNoResults.tsx','Replaces the list but keeps the chips and search bar above it.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px"><div class="dl">Library</div></div>
+<div class="pad" style="padding-bottom:12px"><div class="search on">${ic('search',16,'var(--tt)')}<span style="color:var(--tp)">zzzz</span><div class="grow"></div>${ic('x',16,'var(--tt)')}</div></div>
+<div class="pad"><div class="chips"><div class="chip">Playlists</div><div class="chip on">Tracks</div><div class="chip">Albums</div><div class="chip">Artists</div></div></div>
+<div class="pad between" style="padding-top:12px;padding-bottom:8px"><span class="lb ter">0 tracks</span><div class="row" style="gap:4px"><span class="lb">Recently added</span>${ic('cdown',14)}</div></div>
+<div class="center"><div class="tt">No results for "zzzz"</div><div class="lb sec mt4 mb16">Your library is still here — it's just filtered by your search.</div><div class="btn btn-p">Clear search</div></div>
+${tabbar('library')}`),
+
+screen('Featuring','library/featuring.tsx','Reached from a featured-artist link on a track detail. Its own header shape — nothing else in the app looks like this.',`
+<div class="pad row" style="padding-top:8px;padding-bottom:12px;gap:8px">${ic('cleft',24)}
+  <div class="grow"><div class="cp ter">Featuring</div><div class="tt ell">Pharrell Williams</div></div></div>
+<div>
+  ${lRow('a3','Get Lucky','Daft Punk feat. Pharrell Williams · RAM','','6:09')}
+  ${lRow('a5','Lose Yourself to Dance','Daft Punk feat. Pharrell Williams · RAM','','5:53')}
+  ${lRow('a9','Happy','Pharrell Williams · G I R L','','3:53')}
+</div><div class="grow"></div>${tabbar('library')}`),
+
+screen('Featuring — empty','FeaturingScreen / empty','Offers a search escape hatch.',`
+<div class="pad row" style="padding-top:8px;padding-bottom:12px;gap:8px">${ic('cleft',24)}
+  <div class="grow"><div class="cp ter">Featuring</div><div class="tt ell">Julian Casablancas</div></div></div>
+<div class="center"><div class="bd sec">Nothing in your library featuring Julian Casablancas yet.</div>
+<div class="btn btn-g mt12">Search for Julian Casablancas</div></div>
+${tabbar('library')}`),
+]);
+
+/* ================================================================= DETAIL */
+tab('detail','Detail',
+ 'One route, three bodies. <code>DetailScreen</code> renders a shared 200px centred hero and then branches to Track / Album / Artist. The back button sits alone above the hero — there is no title bar, so on scroll you lose all context.',
+[
+screen('Track detail','discover/detail.tsx — kind: track','Play + Save are stacked vertically under the hero, so the primary action is ~420px down the screen.',`
+<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
+<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
+  ${art('a2',200,'16px')}
+  <div class="dl ctr" style="margin-top:16px;padding:0 20px">Get Lucky</div>
+  <div class="row"><span class="bd acc">Daft Punk feat. Pharrell Williams</span><span class="bd ter">&nbsp;&nbsp;·&nbsp;&nbsp;2013</span></div>
+</div>
+<div class="pad" style="margin-top:20px;display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+    <div style="width:50px;height:50px;border-radius:999px;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px rgba(45,91,255,.45)">${ic('play',22,'#fff')}</div>
+    <div class="cp ter upp">30s preview</div>
+    <div class="row" style="border:1px solid var(--border);border-radius:999px;min-height:40px;padding:0 20px;gap:8px">${ic('plus',18)}<span class="lb">Add to Library</span></div>
+  </div>
+  <div class="between" style="min-height:48px"><span class="lb ter">Album</span><span class="bd acc ell">Random Access Memories ›</span></div>
+  <div class="between" style="min-height:48px"><span class="lb ter">Featuring</span><span class="bd acc">Pharrell Williams, Nile Rodgers</span></div>
+  <div style="text-align:right"><span class="cp ter">Wrong album?</span></div>
+  <div class="mt8"><div class="lb sec mb12">Tracks you might like</div>
+    <div class="railh">${['a1','a6','a5'].map(c=>`<div style="width:132px">${art(c,132,'12px')}<div class="bd ell mt4">Instant Crush</div><div class="lb sec ell">Daft Punk</div></div>`).join('')}</div></div>
+</div>`),
+
+screen('Album detail','detail.tsx — kind: album','Play / Save N are side by side here but stacked on track detail — the two bodies disagree.',`
+<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
+<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
+  ${art('a6',200,'16px')}
+  <div class="dl ctr" style="margin-top:16px;padding:0 20px">Random Access Memories</div>
+  <div class="row"><span class="bd acc">Daft Punk</span><span class="bd ter">&nbsp;&nbsp;·&nbsp;&nbsp;2013</span></div>
+</div>
+<div class="pad mt16">
+  <div class="row mb12" style="gap:12px"><div class="btn btn-p grow">Play 8</div><div class="btn btn-s grow">Save 5</div></div>
+  <div class="cp ter ctr mb12">2 still downloading</div>
+  <div class="lb ter" style="margin:20px 0 8px">Tracks</div>
+  ${[['1','Give Life Back to Music','Daft Punk','4:35','ready'],['2','The Game of Love','Daft Punk','5:22','add'],['3','Giorgio by Moroder','Daft Punk, Giorgio Moroder','9:04','ready'],['4','Within','Daft Punk, Chilly Gonzales','3:48','add'],['5','Instant Crush','Daft Punk, Julian Casablancas','5:37','add'],['6','Lose Yourself to Dance','Daft Punk, Pharrell Williams','5:53','ready'],['7','Touch','Daft Punk, Paul Williams','8:18','add'],['8','Get Lucky','Daft Punk, Pharrell Williams','6:09','ready']].map(t=>`
+    <div class="trow"><span class="lb ter" style="width:24px;text-align:center">${t[0]}</span>
+      <div class="grow"><div class="bd ell">${t[1]}</div><div class="lb sec ell">${t[2]}</div></div>
+      <span class="lb ter">${t[3]}</span>
+      ${t[4]==='ready'
+        ? `<div style="width:40px;height:40px;border-radius:999px;background:rgba(61,214,140,.16);display:flex;align-items:center;justify-content:center">${ic('check',20,'var(--green)')}</div>`
+        : `<div style="width:40px;height:40px;border-radius:999px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center">${ic('plus',20,'var(--accentText)')}</div>`}
+    </div>`).join('')}
+  <div class="lb ter ctr mt16">2013 · 8 tracks · 48 min</div>
+</div>`),
+
+screen('Artist detail','detail.tsx — kind: artist','Top tracks capped at 5, then horizontal album rails per record type, then a collapsed "About".',`
+<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
+<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
+  ${art('a1',200,'999px')}
+  <div class="dl ctr" style="margin-top:16px">Daft Punk</div>
+</div>
+<div class="pad mt16">
+  <div class="btn btn-p full mb12">Play 12</div>
+  <div class="lb sec mb12">Popular Tracks</div>
+  ${[['Get Lucky','6:09'],['One More Time','5:20'],['Instant Crush','5:37'],['Harder, Better, Faster, Stronger','3:45'],['Around the World','7:09']].map((t,i)=>`
+    <div class="trow">${art(['a2','a3','a5','a6','a8'][i],40,'8px')}
+      <div class="grow"><div class="bd ell">${t[0]}</div></div><span class="lb ter">${t[1]}</span>
+      <div style="width:40px;height:40px;border-radius:999px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center">${ic('plus',20,'var(--accentText)')}</div></div>`).join('')}
+  <div class="lb sec" style="margin:20px 0 12px">Albums (6)</div>
+  <div class="railh">${['a6','a8','a1','a2'].map(c=>`<div style="width:120px">${art(c,120,'12px')}<div class="lb mt4" style="line-height:18px">Random Access Memories</div><div class="cp ter">2013</div><div class="cp ter">13 tracks</div></div>`).join('')}</div>
+  <div class="lb sec" style="margin:20px 0 12px">Singles (11)</div>
+  <div class="railh">${['a3','a5','a9','a4'].map(c=>`<div style="width:120px">${art(c,120,'12px')}<div class="lb mt4">Get Lucky</div><div class="cp ter">2013</div></div>`).join('')}</div>
+  <div style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-top:20px">
+    <div class="between" style="padding:16px 0;min-height:48px"><span class="lb sec">About Daft Punk</span>${ic('cright',18,'var(--ts)')}</div></div>
+</div>`),
+
+screen('Artist — About expanded','LastFmEnrichmentSection.tsx','Bio, listener counts, genre tags and similar artists all render as identical grey pills.',`
+<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
+<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
+  ${art('a1',160,'999px')}<div class="dl ctr mt16">Daft Punk</div></div>
+<div class="pad mt24">
+  <div style="border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+    <div class="between" style="padding:16px 0"><span class="lb sec">About Daft Punk</span>${ic('cdown',18,'var(--ts)')}</div>
+    <div style="padding-bottom:12px;display:flex;flex-direction:column;gap:12px">
+      <div><div class="bd sec">Daft Punk were a French electronic music duo formed in 1993 in Paris by Guy-Manuel de Homem-Christo and Thomas Bangalter. They achieved popularity in the late 1990s as part of the French house movement…</div>
+        <div class="lb acc mt8">Read more</div></div>
+      <div class="lb ter">5.6M listeners&nbsp;&nbsp;·&nbsp;&nbsp;412.8M plays</div>
+      <div class="chips">${['electronic','house','french','dance'].map(t=>`<div style="border:1px solid var(--border);border-radius:999px;padding:4px 12px"><span class="cp sec">${t}</span></div>`).join('')}</div>
+      <div><div class="lb ter upp mb8">Similar artists</div>
+        <div class="chips">${['Justice','Cassius','Modjo','Stardust','Air','Breakbot'].map(t=>`<div style="border:1px solid var(--border);border-radius:999px;padding:4px 12px"><span class="cp sec">${t}</span></div>`).join('')}</div></div>
+    </div>
+  </div>
+</div>`),
+
+screen('Album — tracklist loading','AlbumDetailBody / loading','Hero is live while the tracklist is still resolving.',`
+<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
+<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
+  ${art('a8',200,'16px')}<div class="dl ctr mt16">Discovery</div>
+  <div class="row"><span class="bd acc">Daft Punk</span><span class="bd ter">&nbsp;&nbsp;·&nbsp;&nbsp;2001</span></div></div>
+<div class="pad mt16"><div class="lb ter" style="margin:20px 0 8px">Tracks</div>
+${[0,1,2,3,4,5].map(()=>`<div class="row" style="gap:12px;padding:8px 0"><div class="skel" style="width:24px;height:14px"></div><div class="grow"><div class="skel" style="width:70%;height:14px"></div><div class="skel mt4" style="width:40%;height:12px"></div></div></div>`).join('')}</div>`),
+
+screen('Album — tracklist error','AlbumDetailBody / error','',`
+<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
+<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
+  ${art('a8',200,'16px')}<div class="dl ctr mt16">Discovery</div>
+  <div class="row"><span class="bd acc">Daft Punk</span><span class="bd ter">&nbsp;&nbsp;·&nbsp;&nbsp;2001</span></div></div>
+<div style="align-items:center;display:flex;flex-direction:column;margin-top:24px;gap:12px"><div class="bd red">Couldn't load tracks.</div><div class="btn btn-p">Retry</div></div>`),
+]);
+
+/* ================================================================= PLAYER */
+tab('player','Player',
+ 'Modal stack above the tabs: full player, queue and lyrics. The mini player lives in the tab shell and is the only entry point.',
+[
+screen('Full player','app/player/index.tsx','Artwork is screen-width minus 64. Title/artist are left-aligned while everything else is centred.',`
+<div class="pad row" style="padding:0 16px 16px">
+  <div class="grow">${ic('cdown',28)}</div>
+  <span class="cp sec">Now Playing</span>
+  <div class="grow row" style="justify-content:flex-end;gap:4px">${ic('mic',20)}${ic('list',22)}${ic('moreh',22)}</div></div>
+<div style="display:flex;justify-content:center;padding:0 32px 32px">
+  <div style="box-shadow:0 8px 24px rgba(45,91,255,.35)">${art('a1',296,'16px')}</div></div>
+<div style="padding:0 24px 20px">
+  <div class="dl">Midnight City</div>
+  <div class="bd sec mt4">M83</div></div>
+<div style="padding:0 24px">
+  <div style="height:3px;border-radius:2px;background:var(--border);position:relative">
+    <div style="position:absolute;left:0;top:0;height:3px;width:42%;background:var(--accent);border-radius:2px"></div>
+    <div style="position:absolute;left:42%;top:-5.5px;width:14px;height:14px;margin-left:-7px;border-radius:7px;background:var(--accent)"></div></div>
+  <div class="between mt8"><span class="cp sec">1:42</span><span class="cp sec">-2:21</span></div></div>
+<div class="row" style="justify-content:center;gap:20px;padding-top:24px">
+  ${ic('shuffle',20,'var(--tt)')}${ic('sback',24)}
+  <div style="width:64px;height:64px;border-radius:32px;background:var(--accent);display:flex;align-items:center;justify-content:center">${ic('pause',32,'#fff')}</div>
+  ${ic('sfwd',24)}${ic('repeat',20,'var(--tt)')}</div>`),
+
+screen('Full player — preview','FullPlayer / preview source','Shuffle, skip and repeat are replaced by empty spacers. The transport row looks broken.',`
+<div class="pad row" style="padding:0 16px 16px">
+  <div class="grow">${ic('cdown',28)}</div>
+  <span class="cp amb">Preview</span>
+  <div class="grow row" style="justify-content:flex-end;gap:4px">${ic('mic',20)}${ic('moreh',22)}</div></div>
+<div style="display:flex;justify-content:center;padding:0 32px 32px">
+  <div style="box-shadow:0 8px 24px rgba(45,91,255,.35)">${art('a3',296,'16px')}</div></div>
+<div style="padding:0 24px 20px"><div class="dl">Nightcall</div><div class="bd sec mt4">Kavinsky</div></div>
+<div style="padding:0 24px">
+  <div style="height:3px;border-radius:2px;background:var(--border);position:relative">
+    <div style="position:absolute;left:0;top:0;height:3px;width:66%;background:var(--accent);border-radius:2px"></div>
+    <div style="position:absolute;left:66%;top:-5.5px;width:14px;height:14px;margin-left:-7px;border-radius:7px;background:var(--accent)"></div></div>
+  <div class="between mt8"><span class="cp sec">0:20</span><span class="cp sec">-0:10</span></div></div>
+<div class="row" style="justify-content:center;gap:20px;padding-top:24px">
+  <div style="width:44px"></div>
+  <div style="width:64px;height:64px;border-radius:32px;background:var(--accent);display:flex;align-items:center;justify-content:center">${ic('pause',32,'#fff')}</div>
+  <div style="width:44px"></div></div>`),
+
+screen('Full player — error / ended','FullPlayer / error','All transport controls are swapped for a single Retry button.',`
+<div class="pad row" style="padding:0 16px 16px">
+  <div class="grow">${ic('cdown',28)}</div><span class="cp red">Error</span>
+  <div class="grow row" style="justify-content:flex-end;gap:4px">${ic('mic',20)}${ic('list',22)}${ic('moreh',22)}</div></div>
+<div style="display:flex;justify-content:center;padding:0 32px 32px"><div style="box-shadow:0 8px 24px rgba(45,91,255,.35)">${art('a0',296,'16px')}</div></div>
+<div style="padding:0 24px 20px"><div class="dl">Weird Fishes / Arpeggi</div><div class="bd sec mt4">Radiohead</div></div>
+<div style="padding:0 24px">
+  <div style="height:3px;border-radius:2px;background:var(--border)"></div>
+  <div class="between mt8"><span class="cp sec">0:00</span><span class="cp sec"></span></div></div>
+<div style="display:flex;justify-content:center;padding-top:24px"><div class="btn btn-p">Retry</div></div>`),
+
+screen('Queue','app/player/queue.tsx','Now Playing card, then Up Next. Reorder is hidden behind a per-row overflow menu; swipe-left removes.',`
+<div class="pad row between" style="padding:0 16px 8px">${ic('cdown',28)}
+  <div style="text-align:center"><div class="tt">Up Next</div><div class="cp sec">Playing from Late night</div></div>
+  <span class="cp red">Clear</span></div>
+<div style="margin:0 16px;background:var(--s1);border-radius:12px;padding:12px">
+  <div class="row" style="gap:12px">
+    <div style="position:relative">${art('a1',48,'8px')}
+      <div style="position:absolute;bottom:-2px;right:-2px;width:16px;height:16px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center">${ic('play',8,'#fff')}</div></div>
+    <div class="grow"><div class="cp acc upp" style="letter-spacing:.5px">Now Playing</div>
+      <div class="bs ell">Midnight City</div><div class="cp sec ell">M83</div></div>
+    <span class="cp ter">4:03</span></div></div>
+<div class="pad" style="padding-top:16px;padding-bottom:4px"><span class="cp sec upp" style="letter-spacing:.5px">Up Next · 6 tracks</span></div>
+${[['a2','One More Time','Daft Punk','5:20'],['a3','Nightcall','Kavinsky','4:18'],['a6','Genesis','Justice','3:54'],['a4','Teardrop','Massive Attack','5:29'],['a8','Weird Fishes','Radiohead','5:18'],['a5','Alright','Kendrick Lamar','3:39']].map(t=>`
+<div class="row" style="padding:8px 16px;gap:8px">${art(t[0],40,'8px')}
+  <div class="grow"><div class="lb ell">${t[1]}</div><div class="cp sec ell">${t[2]}</div></div>
+  <span class="cp ter">${t[3]}</span>${ic('more',18)}</div>`).join('')}`),
+
+screen('Queue — empty','QueueSheet / no upcoming','',`
+<div class="pad row between" style="padding:0 16px 8px">${ic('cdown',28)}
+  <div style="text-align:center"><div class="tt">Up Next</div><div class="cp sec">Playing from search</div></div>
+  <div style="width:44px"></div></div>
+<div style="margin:0 16px;background:var(--s1);border-radius:12px;padding:12px">
+  <div class="row" style="gap:12px">
+    <div style="position:relative">${art('a3',48,'8px')}
+      <div style="position:absolute;bottom:-2px;right:-2px;width:16px;height:16px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center">${ic('play',8,'#fff')}</div></div>
+    <div class="grow"><div class="cp acc upp" style="letter-spacing:.5px">Now Playing</div>
+      <div class="bs ell">Nightcall</div><div class="cp sec ell">Kavinsky</div></div>
+    <span class="cp ter">4:18</span></div></div>
+<div style="text-align:center;padding-top:32px"><span class="lb sec">No upcoming tracks</span></div>`),
+
+screen('Lyrics — synced','app/player/lyrics.tsx','Active line is white, everything else tertiary grey. Tap a line to seek.',`
+<div class="pad row between" style="padding:0 16px 8px">${ic('cdown',28)}
+  <div style="text-align:center"><div class="tt ell">Midnight City</div><div class="cp sec">M83</div></div>
+  <div style="width:44px"></div></div>
+<div style="padding:24px 24px 0;display:flex;flex-direction:column;gap:16px">
+  ${[['Waiting in a car',0],['Waiting for a ride in the dark',0],['The night city grows',0],['Look and see her eyes, they glow',1],['Waiting in a car',0],['Waiting for the right time',0],['♪',0],['The city is my church',0],['It wraps me in its blinding twilight',0]].map(l=>
+    `<div class="tt ${l[1]?'':'ter'}" style="${l[1]?'':''}">${l[0]}</div>`).join('')}
+</div>`),
+
+screen('Lyrics — unavailable','LyricsSheet / unavailable','Also covers the loading (6 skeleton lines) and error variants.',`
+<div class="pad row between" style="padding:0 16px 8px">${ic('cdown',28)}
+  <div style="text-align:center"><div class="tt ell">Genesis</div><div class="cp sec">Justice</div></div>
+  <div style="width:44px"></div></div>
+<div class="center"><div class="bd sec">No lyrics for this track.</div></div>`),
+
+screen('Mini player — states','MiniPlayer.tsx','Four variants stacked here for comparison. In the app only one renders, pinned above the tab bar.',`
+<div class="pad" style="padding-top:16px"><div class="lb ter mb12">playing</div></div>
+${mini({pct:38})}
+<div class="pad" style="padding-top:24px"><div class="lb ter mb12">preview</div></div>
+${mini({pct:70,title:'Nightcall',sub:'Kavinsky · Preview',icon:'pause'})}
+<div class="pad" style="padding-top:24px"><div class="lb ter mb12">error</div></div>
+<div class="mini"><div class="prog"><i style="width:0%"></i></div>
+  <div class="body">${art('a0',44,'8px')}
+    <div class="grow"><div class="lb ell">Weird Fishes</div><div class="cp sec ell">Playback error</div></div>
+    ${ic('rotate',22)}</div></div>
+<div class="pad" style="padding-top:24px"><div class="lb ter mb12">ended, with next in queue</div></div>
+<div class="mini"><div class="prog"><i style="width:100%"></i></div>
+  <div class="body">${art('a4',44,'8px')}
+    <div class="grow"><div class="lb ell">Teardrop</div><div class="cp sec ell">Finished</div></div>
+    ${ic('play',22)}${ic('sfwd',18)}</div></div>
+<div class="grow"></div>${tabbar('library')}`),
+]);
+
+/* =============================================================== PLAYLIST */
+tab('playlist','Playlist',
+ 'Playlist detail is the only screen with a gradient hero and edge-to-edge list. Renaming is an invisible affordance — you tap the title.',
+[
+screen('Playlist detail','library/playlist/[id].tsx','Accent gradient behind a 160px cover. Play / Shuffle are capped at 240px wide and centred.',`
+<div class="hero-glow"></div>
+<div class="between" style="padding:4px 16px 0;position:relative">${ic('cleft',24)}${ic('more',20)}</div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0 20px;position:relative">
+  <div style="box-shadow:0 8px 24px rgba(0,0,0,.45);display:grid;grid-template-columns:80px 80px;grid-template-rows:80px 80px;border-radius:8px;overflow:hidden">
+    <div class="a1"></div><div class="a2"></div><div class="a6"></div><div class="a3"></div></div>
+  <div class="dl ctr" style="padding:0 20px">Late night</div>
+  <div class="cp sec">12 tracks · 51m</div>
+  <div class="row mt8" style="gap:8px;width:100%;max-width:240px;padding:0 0">
+    <div class="row" style="flex:1;justify-content:center;gap:4px;background:var(--accent);border-radius:999px;padding:10px 0">${ic('play',14,'#fff')}<span class="lb" style="color:#fff">Play</span></div>
+    <div class="row" style="flex:1;justify-content:center;gap:4px;background:var(--s1);border:1px solid var(--border);border-radius:999px;padding:10px 0">${ic('shuffle',14)}<span class="lb">Shuffle</span></div></div>
+</div>
+<div>
+  ${lRow('a1','Midnight City','M83 · Hurry Up, We’re Dreaming','','4:03')}
+  ${lRow('a2','One More Time','Daft Punk · Discovery','','5:20')}
+  ${lRow('a3','Nightcall','Kavinsky · OutRun','','4:18')}
+  ${lRow('a6','Genesis','Justice · Cross','','3:54')}
+  ${lRow('a4','Teardrop','Massive Attack · Mezzanine','','5:29')}
+</div>${mini({pct:38})}${tabbar('library')}`),
+
+screen('Playlist — renaming','PlaylistHero / isEditing','Title becomes a bare underlined input mid-hero. Font size drops from 28 to 20 while editing.',`
+<div class="hero-glow"></div>
+<div class="between" style="padding:4px 16px 0;position:relative">${ic('cleft',24)}${ic('more',20)}</div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0 20px;position:relative">
+  <div style="box-shadow:0 8px 24px rgba(0,0,0,.45);display:grid;grid-template-columns:80px 80px;grid-template-rows:80px 80px;border-radius:8px;overflow:hidden">
+    <div class="a1"></div><div class="a2"></div><div class="a6"></div><div class="a3"></div></div>
+  <div style="min-width:200px;text-align:center;border-bottom:2px solid var(--accent);padding-bottom:4px;font-size:20px;font-weight:700">Late night|</div>
+  <div class="cp sec">12 tracks · 51m</div>
+  <div class="row mt8" style="gap:8px;width:100%;max-width:240px">
+    <div class="row" style="flex:1;justify-content:center;gap:4px;background:var(--accent);border-radius:999px;padding:10px 0">${ic('play',14,'#fff')}<span class="lb" style="color:#fff">Play</span></div>
+    <div class="row" style="flex:1;justify-content:center;gap:4px;background:var(--s1);border:1px solid var(--border);border-radius:999px;padding:10px 0">${ic('shuffle',14)}<span class="lb">Shuffle</span></div></div>
+</div>
+<div>${lRow('a1','Midnight City','M83 · Hurry Up, We’re Dreaming','','4:03')}${lRow('a2','One More Time','Daft Punk · Discovery','','5:20')}</div>
+<div class="grow"></div>${tabbar('library')}`),
+
+screen('Playlist — empty','PlaylistDetailScreen / no tracks','Play and Shuffle stay enabled with nothing to play.',`
+<div class="hero-glow"></div>
+<div class="between" style="padding:4px 16px 0;position:relative">${ic('cleft',24)}${ic('more',20)}</div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0 20px;position:relative">
+  <div style="box-shadow:0 8px 24px rgba(0,0,0,.45);width:160px;height:160px;border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center;opacity:.9">${ic('music',48,'var(--tt)')}</div>
+  <div class="dl ctr">Gym</div><div class="cp sec">0 tracks</div>
+  <div class="row mt8" style="gap:8px;width:100%;max-width:240px">
+    <div class="row" style="flex:1;justify-content:center;gap:4px;background:var(--accent);border-radius:999px;padding:10px 0">${ic('play',14,'#fff')}<span class="lb" style="color:#fff">Play</span></div>
+    <div class="row" style="flex:1;justify-content:center;gap:4px;background:var(--s1);border:1px solid var(--border);border-radius:999px;padding:10px 0">${ic('shuffle',14)}<span class="lb">Shuffle</span></div></div>
+</div>
+<div style="text-align:center;padding-top:24px"><div class="lb sec">No tracks yet</div><div class="cp ter mt4">Use the menu on any track to add it here</div></div>
+<div class="grow"></div>${tabbar('library')}`),
+
+screen('Playlist — options menu','ContextMenu anchored to header','Rename / download / delete. Download label changes with pin state.',`
+<div class="hero-glow"></div>
+<div class="between" style="padding:4px 16px 0;position:relative">${ic('cleft',24)}${ic('more',20)}</div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0 20px;position:relative;opacity:.35">
+  <div style="display:grid;grid-template-columns:80px 80px;grid-template-rows:80px 80px;border-radius:8px;overflow:hidden">
+    <div class="a1"></div><div class="a2"></div><div class="a6"></div><div class="a3"></div></div>
+  <div class="dl ctr">Late night</div><div class="cp sec">12 tracks · 51m</div></div>
+<div style="position:absolute;inset:0;background:rgba(0,0,0,.35)"></div>
+<div class="menu" style="top:52px;right:12px">
+  <div>Rename Playlist</div><div>Download all (9)</div><div style="color:var(--red)">Delete Playlist</div></div>`),
+]);
+
+/* =============================================================== SETTINGS */
+tab('settings','Settings',
+ 'A flat column of ghost buttons under grey section labels. Nothing is a real settings row — no chevrons, no switches, no grouped cards.',
+[
+screen('Settings','app/(tabs)/settings/index.tsx','Every control is a left-aligned text button. Theme is a button whose label is its own state.',`
+<div class="pad" style="padding-top:8px;padding-bottom:20px"><div class="dl">Settings</div></div>
+<div class="pad">
+  <div class="row" style="gap:16px;padding:16px 0">
+    <div style="width:56px;height:56px;border-radius:28px;background:var(--accent);display:flex;align-items:center;justify-content:center"><span class="dl" style="color:#fff">A</span></div>
+    <div class="grow"><div class="bs">ada@example.com</div><div class="cp sec mt4">Account</div></div></div>
+  <div class="divider"></div>
+  <div class="btn btn-g">Sign Out</div>
+  <div class="cp ter" style="margin-top:20px;margin-bottom:4px">Library maintenance</div>
+  <div class="btn btn-g">Resolve featured artists</div>
+  <div class="cp ter" style="margin-top:20px;margin-bottom:4px">Offline downloads</div>
+  <div class="lb sec">42 tracks · 318 MB</div>
+  <div class="btn btn-g">Remove all downloads</div>
+  <div class="cp ter" style="margin-top:20px;margin-bottom:4px">Appearance</div>
+  <div class="btn btn-g">Theme: Dark</div>
+  <div class="cp ter" style="margin-top:20px;margin-bottom:4px">Privacy</div>
+  <div class="btn btn-g">Clear search history</div>
+</div>
+<div class="grow"></div>
+<div class="cp ter ctr" style="padding-bottom:16px">Altune 1.4.0</div>
+${mini({pct:38})}${tabbar('settings')}`),
+
+screen('Settings — light theme note','SettingsScreen / scheme = light','Ships an in-app apology for the light theme (ADR-0008).',`
+<div class="pad" style="padding-top:8px;padding-bottom:20px"><div class="dl">Settings</div></div>
+<div class="pad">
+  <div class="row" style="gap:16px;padding:16px 0">
+    <div style="width:56px;height:56px;border-radius:28px;background:var(--accent);display:flex;align-items:center;justify-content:center"><span class="dl" style="color:#fff">A</span></div>
+    <div class="grow"><div class="bs">ada@example.com</div><div class="cp sec mt4">Account</div></div></div>
+  <div class="divider"></div>
+  <div class="btn btn-g">Sign Out</div>
+  <div class="cp ter" style="margin-top:20px;margin-bottom:4px">Library maintenance</div>
+  <div class="btn btn-g">Updated 18 of 184 tracks</div>
+  <div class="cp ter" style="margin-top:20px;margin-bottom:4px">Offline downloads</div>
+  <div class="lb sec">No downloads on this device</div>
+  <div class="cp ter" style="margin-top:20px;margin-bottom:4px">Appearance</div>
+  <div class="btn btn-g">Theme: Light</div>
+  <div class="cp ter mt4" style="max-width:320px">Light mode hasn't had a design pass yet (ADR-0008) — some screens will look rough.</div>
+  <div class="cp ter" style="margin-top:20px;margin-bottom:4px">Privacy</div>
+  <div class="btn btn-g">Search history cleared</div>
+</div><div class="grow"></div>${tabbar('settings')}`),
+]);
+
+/* =============================================================== OVERLAYS */
+tab('overlays','Overlays',
+ 'Modals, sheets and menus layered over whatever screen you were on. Four different presentation styles coexist: bottom sheet, centre dialog, anchored menu, and native <code>Alert</code>.',
+[
+screen('Add to playlist','AddToPlaylistSheet.tsx','Bottom sheet, max 70% height. "Create New Playlist" opens a second modal on top of this one.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px;opacity:.4"><div class="dl">Library</div></div>
+<div class="grow" style="opacity:.4"></div>
+<div class="ovl">
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="tt mb8">Add to Playlist</div>
+    <div class="cp sec mb16 ell">Midnight City — M83</div>
+    <div class="row" style="gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+      <div style="width:40px;height:40px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center"><span class="bs" style="color:#fff">+</span></div>
+      <span class="bs">Create New Playlist</span></div>
+    ${[['Late night','12'],['Focus','48'],['Gym','23'],['2013 nostalgia','31']].map((p,i)=>`
+      <div class="row" style="gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
+        <div style="width:40px;height:40px;border-radius:8px;background:var(--s2);display:flex;align-items:center;justify-content:center"><span class="cp ter">♫</span></div>
+        <div class="grow"><div class="bd ell">${p[0]}</div><div class="cp sec">${p[1]} tracks</div></div>
+        ${i===0?'<span class="cp grn">Added ✓</span>':''}</div>`).join('')}
+  </div></div>`),
+
+screen('Create playlist','CreatePlaylistModal.tsx','Centre dialog — the only one in the app. Everything else is a bottom sheet.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px;opacity:.4"><div class="dl">Library</div></div>
+<div class="grow" style="opacity:.4"></div>
+<div class="ovl" style="justify-content:center">
+  <div class="dialog">
+    <div class="tt mb16">New Playlist</div>
+    <div class="field on" style="background:var(--s2)">Playlist name|</div>
+    <div class="row mt16" style="justify-content:flex-end;gap:8px">
+      <div class="btn btn-g" style="padding:0 12px">Cancel</div>
+      <div class="btn btn-dis">Create</div></div>
+  </div></div>`),
+
+screen('Track context menu','ContextMenu.tsx','Anchored to the tapped ⋮. Position is measured per row.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px"><div class="dl">Library</div></div>
+<div class="pad" style="padding-bottom:12px"><div class="search">${ic('search',16,'var(--tt)')}<span>Search your library</span></div></div>
+<div class="pad"><div class="chips"><div class="chip">Playlists</div><div class="chip on">Tracks</div><div class="chip">Albums</div><div class="chip">Artists</div></div></div>
+<div class="pad between" style="padding-top:12px;padding-bottom:8px"><span class="lb ter">184 tracks</span><div class="row" style="gap:4px"><span class="lb">Recently added</span>${ic('cdown',14)}</div></div>
+<div>${lRow('a1','Midnight City','M83 · Hurry Up, We’re Dreaming','','4:03')}${lRow('a2','One More Time','Daft Punk · Discovery','','5:20')}${lRow('a3','Nightcall','Kavinsky · OutRun','','4:18')}</div>
+<div style="position:absolute;inset:0;background:rgba(0,0,0,.4)"></div>
+<div class="menu" style="top:300px;right:12px">
+  <div>Play Next</div><div>Add to Queue</div><div>Add to Playlist</div><div>View Details</div><div style="color:var(--red)">Remove from Library</div></div>`),
+
+screen('Sort action sheet','ActionSheet.tsx via SortControl','Bottom sheet with a title and plain option rows.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px;opacity:.4"><div class="dl">Library</div></div>
+<div class="grow" style="opacity:.4"></div>
+<div class="ovl">
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="cp ter upp mb12">Sort by</div>
+    ${['Recently added','A–Z','Artist','Duration'].map((o,i)=>`<div style="padding:14px 0;${i?'border-top:1px solid var(--border)':''}"><span class="bd">${o}</span></div>`).join('')}
+  </div></div>`),
+
+screen('Downloads bar + mini player','DownloadsBar.tsx in ActivityDock','Both docks stack above the tab bar — the bottom of the screen can be 3 bars deep.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px"><div class="dl">Library</div></div>
+<div class="pad" style="padding-bottom:12px"><div class="search">${ic('search',16,'var(--tt)')}<span>Search your library</span></div></div>
+<div class="pad"><div class="chips"><div class="chip">Playlists</div><div class="chip on">Tracks</div><div class="chip">Albums</div><div class="chip">Artists</div></div></div>
+<div class="grow"></div>
+<div class="dlbar">${art('a5',40,'8px')}
+  <div class="grow"><div class="row"><span class="lb grow ell">Downloading 3 songs</span>${ic('cup',18,'var(--tt)')}</div>
+    <div class="cp acc">Downloading…</div>
+    <div class="segs"><i class="f"></i><i class="f"></i><i></i></div></div></div>
+${mini({pct:38})}${tabbar('library')}`),
+
+screen('Downloads sheet','DownloadsSheet.tsx','Per-track phase labels. No progress percentage, no cancel.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px;opacity:.4"><div class="dl">Library</div></div>
+<div class="grow" style="opacity:.4"></div>
+<div class="ovl">
+  <div class="sheet" style="border:1px solid var(--border);border-bottom:0">
+    <div class="grab"></div>
+    <div class="between mb12"><span class="tt">Downloads</span><span class="cp ter">3 in progress</span></div>
+    ${[['a5','Alright','Kendrick Lamar','Finding source…'],['a3','Nightcall','Kavinsky','Downloading…'],['a9','Digital Love','Daft Punk','Finishing up…']].map(d=>`
+      <div class="row" style="gap:12px;padding:12px 0">${art(d[0],44,'8px')}
+        <div class="grow"><div class="bs ell">${d[1]}</div><div class="cp sec ell">${d[2]}</div><div class="cp acc mt4">${d[3]}</div></div></div>`).join('')}
+  </div></div>`),
+
+screen('Destructive confirm','React Native Alert','Native alert — does not use the app theme at all.',`
+<div class="pad" style="padding-top:8px;padding-bottom:12px;opacity:.4"><div class="dl">Library</div></div>
+<div class="grow" style="opacity:.4"></div>
+<div class="ovl" style="justify-content:center;align-items:center">
+  <div style="width:270px;background:#2b2b30;border-radius:14px;overflow:hidden;text-align:center;font-family:-apple-system,'Segoe UI',sans-serif">
+    <div style="padding:20px 16px 16px"><div style="font-size:17px;font-weight:600">Remove from Library</div>
+      <div style="font-size:13px;color:#c8c8d0;margin-top:4px">Remove "Midnight City" from your library?</div></div>
+    <div style="display:flex;border-top:.5px solid #45454c">
+      <div style="flex:1;padding:12px;font-size:17px;border-right:.5px solid #45454c">Cancel</div>
+      <div style="flex:1;padding:12px;font-size:17px;color:#FF453A;font-weight:600">Remove</div></div>
+  </div></div>`),
+]);
+
+/* ------------------------------------------------------------------ render */
+const tabsEl=document.getElementById('tabs'), mainEl=document.getElementById('main');
+TABS.forEach((t,i)=>{
+  const b=document.createElement('button');
+  b.innerHTML = t.title + `<i>${t.items.length}</i>`;
+  b.onclick=()=>select(t.id);
+  b.id='tb-'+t.id; tabsEl.appendChild(b);
+
+  const p=document.createElement('section');
+  p.className='panel'; p.id='pn-'+t.id;
+  p.innerHTML = `<div class="panel-head"><h2>${t.title}</h2><p>${t.blurb}</p></div>
+   <div class="grid">${t.items.map(s=>`
+     <div class="item">
+       <div class="cap"><b>${s.name}</b><code>${s.route}</code>${s.note?`<em>${s.note}</em>`:''}</div>
+       <div class="phone">${bar()}<div class="screen">${s.inner}</div></div>
+     </div>`).join('')}</div>`;
+  mainEl.appendChild(p);
+});
+function select(id){
+  TABS.forEach(t=>{
+    document.getElementById('tb-'+t.id).classList.toggle('on',t.id===id);
+    document.getElementById('pn-'+t.id).classList.toggle('on',t.id===id);
+  });
+  location.hash=id; window.scrollTo(0,0);
+}
+select(location.hash.slice(1)||TABS[0].id);
+</script>
+</body>
+</html>
