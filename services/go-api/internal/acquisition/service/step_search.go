@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"altune/go-api/internal/acquisition/ports"
 )
@@ -26,11 +27,20 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext) error 
 	if err != nil {
 		return err
 	}
-	if len(candidates) == 0 {
+
+	kept := make([]ports.AudioCandidate, 0, len(candidates))
+	for _, c := range candidates {
+		if ac.excludes(c.URL) {
+			slog.InfoContext(ctx, "acquisition.candidate_excluded", "url", c.URL)
+			continue
+		}
+		kept = append(kept, c)
+	}
+	if len(kept) == 0 {
 		return fmt.Errorf("no candidates found")
 	}
 
-	ac.Candidates = candidates
+	ac.Candidates = kept
 	return nil
 }
 

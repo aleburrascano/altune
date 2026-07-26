@@ -29,6 +29,7 @@ export function buildTrackMenuItems(
   opts: {
     queue: QueueActions;
     onViewDetails: () => void;
+    onReacquire?: () => void;
     onAddToPlaylist?: () => void;
     danger: { label: string; onPress: () => void };
   },
@@ -43,6 +44,9 @@ export function buildTrackMenuItems(
       : []),
     ...(opts.onAddToPlaylist ? [{ label: 'Add to Playlist', onPress: opts.onAddToPlaylist }] : []),
     ...(ready ? [offlineItem(track.id)] : []),
+    ...(ready && opts.onReacquire
+      ? [{ label: 'Re-acquire audio', onPress: opts.onReacquire }]
+      : []),
     { label: 'View Details', onPress: opts.onViewDetails },
     { label: opts.danger.label, tone: 'danger' as const, onPress: opts.danger.onPress },
   ];

@@ -57,3 +57,7 @@ An already-aborted caller signal is relayed synchronously; `addEventListener` on
 **One retry layer.** `isRetryable` (`NetworkError`, plus `429`/`5xx`) is the single policy, applied by the QueryClient predicate. Deliberately *not* inside `apiFetch`: an inner retry loop would silently re-send non-idempotent POSTs whose first attempt may already have been applied server-side, and would multiply against TanStack's own retries. The predicate also no longer retries 4xx at all — the old one retried everything except 401, so a 404 burned three round trips before failing.
 
 Pinned by `__tests__/weak-signal.test.ts`, including the cancellation-stays-cancellation case and the hung-request case (fake timers; the test must flush microtasks until `fetch` is actually in flight before advancing them, or the deadline has not been armed yet and the advance is a no-op).
+
+## reacquireTrack (2026-07-26)
+
+`reacquireTrack(trackId)` posts to `/v1/tracks/{trackId}/reacquire`, sitting beside `retryAcquisition` and shaped identically (void, no body). The two are separate calls rather than one parameterised call because the server treats them as different operations with opposite preconditions: retry requires a failed track, re-acquire requires a ready one, and each returns 409 for the other's state.

@@ -27,6 +27,7 @@ import {
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { LibraryRow } from './LibraryRow';
 import { PlaylistHero } from './PlaylistHero';
+import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { buildTrackMenuItems } from './trackMenu';
 import { useLibraryNavigation } from './useLibraryNavigation';
 
@@ -62,6 +63,7 @@ export function PlaylistDetailScreen(): ReactElement {
   const pinMany = usePinnedStore((s) => s.pinMany);
   const unpin = usePinnedStore((s) => s.unpin);
   const retryMut = useRetryAcquisition();
+  const reacquireMutation = useReacquireTrack();
   const retryingTrackId = retryMut.isPending ? retryMut.variables : undefined;
   const { navigateToTrack } = useLibraryNavigation(router);
   const playback = usePlayback();
@@ -73,6 +75,7 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const trackMenuItems = (track: TrackResponse) =>
     buildTrackMenuItems(track, {
+      onReacquire: () => reacquireMutation.mutate(track.id),
       queue,
       onViewDetails: () => navigateToTrack(track),
       danger: { label: 'Remove from Playlist', onPress: () => removeMut.mutate(track.id) },

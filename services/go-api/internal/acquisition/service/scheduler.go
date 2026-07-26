@@ -60,7 +60,20 @@ func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionSchedu
 	return func(s *BackgroundAcquisitionScheduler) { s.events = pub }
 }
 
+func (s *BackgroundAcquisitionScheduler) ScheduleReplace(userId shared.UserId, trackId domain.TrackId) {
+	s.schedule(userId, trackId, "", true)
+}
+
 func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string) {
+	s.schedule(userId, trackId, sourceURL, false)
+}
+
+func (s *BackgroundAcquisitionScheduler) schedule(
+	userId shared.UserId,
+	trackId domain.TrackId,
+	sourceURL string,
+	replace bool,
+) {
 	if s.closed.Load() {
 		slog.Warn("schedule_after_shutdown", "track_id", trackId.String())
 		return
@@ -104,7 +117,11 @@ func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId 
 		jobCtx := withJobReporter(s.baseCtx, schedulerJobReporter{
 			log: s.log, events: s.events, trackID: key, userId: userId,
 		})
-		if err := s.svc.Execute(jobCtx, userId, trackId); err != nil {
+		run := s.svc.Execute
+		if replace {
+			run = s.svc.ExecuteReplace
+		}
+		if err := run(jobCtx, userId, trackId); err != nil {
 			s.log.complete(key, "failed", err.Error())
 			slog.Error("background acquisition failed",
 				"track_id", key, "error", err)

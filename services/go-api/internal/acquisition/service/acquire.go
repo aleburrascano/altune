@@ -70,6 +70,19 @@ func WithAudioIdentifier(i ports.AudioIdentifier) func(*AcquireTrackAudioService
 }
 
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+	return s.execute(ctx, userId, trackId, false)
+}
+
+func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+	return s.execute(ctx, userId, trackId, true)
+}
+
+func (s *AcquireTrackAudioService) execute(
+	ctx context.Context,
+	userId shared.UserId,
+	trackId domain.TrackId,
+	replace bool,
+) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 
@@ -82,12 +95,14 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		return nil
 	}
 
-	proceed, err := s.reconcileForReacquire(ctx, track)
-	if err != nil {
-		return err
-	}
-	if !proceed {
-		return nil
+	if !replace {
+		proceed, reconcileErr := s.reconcileForReacquire(ctx, track)
+		if reconcileErr != nil {
+			return reconcileErr
+		}
+		if !proceed {
+			return nil
+		}
 	}
 
 	jobReporterFrom(ctx).meta(track.Title, track.Artist, track.Album)
@@ -104,6 +119,14 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	}
 
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
+	if replace {
+		ac.PreservedRef = deref(track.AudioRef)
+		if current := deref(track.AudioSourceURL); current != "" {
+			ac.ExcludeURLs = []string{current}
+			slog.InfoContext(ctx, "acquisition.replacing_source",
+				"track_id", trackId.String(), "excluded_source", current)
+		}
+	}
 	s.resolveIdentity(ctx, ac)
 	err = RunPipeline(ctx, s.buildSteps(userId, trackId), ac)
 	CleanupTemp(ctx, ac)
@@ -112,10 +135,13 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 		slog.WarnContext(ctx, "track_acquisition_failed",
 			"track_id", trackId.String(),
 			"user_id", userId.String(),
+			"replace", replace,
 			"error", err,
 		)
 		reason := failureReason(err)
-		s.markFailed(ctx, trackId, userId, reason)
+		if !replace {
+			s.markFailed(ctx, trackId, userId, reason)
+		}
 		if s.events != nil {
 			s.events.Publish(userId, "track_acquisition_failed", map[string]any{
 				"track_id": trackId.String(),

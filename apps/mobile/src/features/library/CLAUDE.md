@@ -9,7 +9,7 @@ Layout:
 - `ui/PlaylistsGrid.tsx`, `ui/TracksList.tsx`, `ui/AlbumsGrid.tsx`, `ui/ArtistsGrid.tsx`, `ui/LibraryRow.tsx`.
 - `ui/PlaylistDetailScreen.tsx` / `ui/PlaylistHero.tsx` — route `/library/playlist/[id]`.
 - `ui/trackMenu.ts` — `buildTrackMenuItems`. `ui/sort.ts` — the `*_SORT_OPTIONS` label lists; the sort keys are wire values the server applies.
-- `hooks/useLibraryHome.ts` — `useLibraryTracks` (infinite), `useLibraryAlbums`, `useLibraryArtists`, one query per chip. `hooks/usePlaylistMutations.ts`, `hooks/useLibrarySearch.ts` (debounce only). `state.ts` — `_viewForState`.
+- `hooks/useLibraryHome.ts` — `useLibraryTracks` (infinite), `useLibraryAlbums`, `useLibraryArtists`, one query per chip. `hooks/usePlaylistMutations.ts`, `hooks/useLibrarySearch.ts` (debounce only), `hooks/useRetryAcquisition.ts` (failed tracks), `hooks/useReacquireTrack.ts` (replace the audio of a ready track). `state.ts` — `_viewForState`.
 - `__tests__/` — `LibraryScreen`, `LibraryRow{,.retry,.liveness}`, `library-to-discovery`, `useLibrarySearch`, `LibraryNoResults`, `useRetryAcquisition`, `gridColumns`.
 
 Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` directly — native deps, structure audit F2), `@shared/api-client/library`, `@shared/lib/{format,detail-handoff,query-keys}`, `@shared/playback`.
@@ -17,6 +17,8 @@ Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` di
 ## Rules
 
 - The noun is **Track**, never "Song" — chip and list vocabulary included.
+- Re-acquire patches the cache on success only; a playing track must never be shown pending before the server accepts.
+- Keep "Download" meaning offline pinning; audio replacement is "Re-acquire".
 - Import cache keys from `libraryKeys` / `playlistKeys` in `@shared/lib/query-keys`; never retype a key literal.
 - Route every playlist write through `usePlaylistMutations` — it owns the optimistic-patch/rollback/alert/invalidate policy; screens keep only UI state.
 - Assemble the track context menu only in `ui/trackMenu.ts`.

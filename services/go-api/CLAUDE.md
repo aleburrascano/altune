@@ -42,7 +42,7 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.0 run
 - Register every periodic background loop through `App.whenLeader`, never `Start(ctx)` directly, and always before `startBackgroundWhenLeader` runs.
 - Keep `deploy/lib.sh`'s `log` on stderr — `active_color` is read via command substitution.
 - A migration must stay compatible with the previous version — both colours share one database during the swap.
-- Migrations are applied by hand (psql or an equivalent client), never by the pipeline; `011_track_acquisition_provenance.sql` is the latest.
+- Migrations are applied by hand (psql or an equivalent client), never by the pipeline; `012_track_audio_source_url.sql` is the latest.
 - Keep `deploy/Caddyfile` a single `import` — the colour lives in `deploy/caddy/upstream.conf`.
 - Keep `name:` pinned in both compose files — dropping it re-derives the project name from the directory and orphans every existing container and volume.
 - Delete `LEGACY_UPSTREAM_FILE` from `deploy/lib.sh` once the VM has deployed at least once after the `deploy/` move.

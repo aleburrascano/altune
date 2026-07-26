@@ -75,3 +75,9 @@ Two things the migration changed by accident, and how they were put back:
 **The empty-library CTA.** It used to key off the always-loaded track list, so it could show on any chip. With per-chip queries there is no such list, and the CTA collapsed to the Playlists chip only. `useLibraryIsEmpty` restores it: a `limit: 1` probe reading `total === 0`.
 
 That probe sits under `libraryKeys.summary`, deliberately **outside** the `['library','tracks']` prefix. The patchers sweep that prefix expecting `InfiniteData`, and a flat `ListTracksResponse` parked under it would blow up `mapPages` on the first acquisition event. It is invalidated with the album and artist lenses instead, since like them it is derived from the whole collection rather than from one row.
+
+## Re-acquire audio (2026-07-26)
+
+`buildTrackMenuItems` gained a **Re-acquire audio** entry, shown only for ready tracks and only when the screen supplies `onReacquire`. It is deliberately worded away from "download": in this menu `Download` / `Remove download` already mean *offline pinning*, which is a different concept from replacing the acquired master. The action answers "this is the wrong recording — a music video, a remix — get me another one" without the delete/search/re-add loop.
+
+`useReacquireTrack` posts to `/v1/tracks/{id}/reacquire` and patches the track to `pending` **on success only**, unlike `useRetryAcquisition` which patches optimistically in `onMutate`. The difference matters: a retry starts from a failed track that has nothing to lose, while a re-acquire starts from a track that is playing fine, so showing it as pending before the server has accepted would misreport a working track. On error it says so explicitly — the current audio is unchanged — because that is the server's actual guarantee. Wired into `LibraryScreen`, `PlaylistDetailScreen` and `FeaturingScreen`, the three screens that already build the track menu.

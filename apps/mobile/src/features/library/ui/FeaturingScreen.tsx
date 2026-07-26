@@ -19,6 +19,7 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { useTracksFeaturing } from '../hooks/useTracksFeaturing';
+import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { buildTrackMenuItems } from './trackMenu';
 import { TracksList } from './TracksList';
 
@@ -40,6 +41,7 @@ export function FeaturingScreen(): ReactElement {
   const { data, isLoading, isError, isRefetching, refetch } = useTracksFeaturing(fa);
   const deleteMutation = useDeleteTrack();
   const retryMutation = useRetryAcquisition();
+  const reacquireMutation = useReacquireTrack();
   const playback = usePlayback();
   const queue = useQueuePlayback();
 
@@ -83,6 +85,7 @@ export function FeaturingScreen(): ReactElement {
 
   const trackMenuItems = (track: TrackResponse) =>
     buildTrackMenuItems(track, {
+      onReacquire: () => reacquireMutation.mutate(track.id),
       queue,
       onViewDetails: () => openTrackDetail(track),
       danger: { label: 'Remove from Library', onPress: () => deleteMutation.mutate(track.id) },

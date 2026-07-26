@@ -51,11 +51,16 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 }
 
 func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {
-	if ac.AudioRef != "" {
-		if err := s.audioStore.Delete(ctx, ac.AudioRef); err != nil {
-			slog.ErrorContext(ctx, "orphaned audio file after rollback",
-				"audio_ref", ac.AudioRef, "error", err)
-		}
+	if ac.AudioRef == "" {
+		return nil
+	}
+	if ac.AudioRef == ac.PreservedRef {
+		slog.WarnContext(ctx, "acquisition.rollback_kept_preserved_audio", "audio_ref", ac.AudioRef)
+		return nil
+	}
+	if err := s.audioStore.Delete(ctx, ac.AudioRef); err != nil {
+		slog.ErrorContext(ctx, "orphaned audio file after rollback",
+			"audio_ref", ac.AudioRef, "error", err)
 	}
 	return nil
 }
