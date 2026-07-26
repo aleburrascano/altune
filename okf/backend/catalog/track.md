@@ -38,3 +38,7 @@ The map lived in the mobile client, which meant the backend could introduce a ne
 `domain/library_lens.go` sits beside the aggregate but is deliberately not part of it: `AlbumGroup`, `ArtistGroup` and `OwnedTrackRef` are read-side projections over many tracks, with no identity and no invariants. They are here rather than in `service/` so the pgx adapter can return them without importing the application layer.
 
 `LibrarySort` is a three-state enum (`recent` / `az` / `year`) parsed at the edge; an unknown value is a `ValidationError`, never a silent default.
+
+## AcquisitionProvenance (2026-07-26)
+
+`Track` carries a nullable `AcquisitionProvenance *string`, written only through `SetAcquisitionProvenance(AcquisitionProvenance)` — which silently ignores any value outside the three-member vocabulary (`verified`, `corroborated`, `best_effort`), so an unknown string can never reach the column. It records *how strong the claim is* that the stored audio is the recording the user saved: `verified` means an acoustic fingerprint matched the expected MusicBrainz recording, `corroborated` means the audio length agreed with an independently resolved duration, `best_effort` means neither check could run. It is deliberately not part of `MarkReady`'s signature: readiness and confidence are separate facts, and a track acquired before this existed is legitimately `NULL` rather than retroactively downgraded. Set by acquisition's `UpdateTrackStep`; see [acquisition/pipeline](../acquisition/pipeline.md).

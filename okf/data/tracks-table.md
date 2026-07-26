@@ -30,3 +30,7 @@ No column changed. Three read shapes were added over `tracks`:
 The grouping keys are lowercase-only, deliberately: they reproduce the keys the mobile client used, so no group splits or merges on the way over. They are *not* `dedup_key` - that folds punctuation and would merge albums the user sees as distinct.
 
 Worth knowing if the library grows: the ownership read is unindexed beyond `user_id` and is a full per-user scan. A stored normalized `title|artist` column with an index is the escape hatch, and it needs a backfill whose normalization matches `textnorm.NormalizeForMatch` exactly.
+
+## acquisition_provenance (011, 2026-07-26)
+
+`011_track_acquisition_provenance.sql` adds `acquisition_provenance TEXT` (nullable) plus a partial index `idx_tracks_acquisition_provenance ON tracks (user_id, acquisition_provenance) WHERE acquisition_provenance IS NOT NULL`, so "which of my tracks could not be verified" is an index scan rather than a full per-user pass. Both statements are `IF NOT EXISTS`, and the column is additive-nullable — required, because blue-green runs both versions against one database during the swap, so the outgoing version must tolerate the new schema. The three values and why they exist are documented in [catalog/track](../backend/catalog/track.md); the column is written only by acquisition's `UpdateTrackStep` through the aggregate method, and read into `Track.AcquisitionProvenance` via `trackColumns` / `trackScanDest` like every other field.

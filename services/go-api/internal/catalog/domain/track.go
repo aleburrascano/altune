@@ -88,6 +88,8 @@ type Track struct {
 	AudioRef          *string
 	FailureReason     *string
 	FeaturedArtists   []FeaturedArtist
+
+	AcquisitionProvenance *string
 }
 
 func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {
@@ -122,6 +124,22 @@ func (t *Track) SetAlbum(album string) {
 	t.DedupKey = computeDedupKey(t.Title, t.Artist, t.Album)
 }
 
+type AcquisitionProvenance string
+
+const (
+	ProvenanceVerified     AcquisitionProvenance = "verified"
+	ProvenanceCorroborated AcquisitionProvenance = "corroborated"
+	ProvenanceBestEffort   AcquisitionProvenance = "best_effort"
+)
+
+func (p AcquisitionProvenance) Valid() bool {
+	switch p {
+	case ProvenanceVerified, ProvenanceCorroborated, ProvenanceBestEffort:
+		return true
+	}
+	return false
+}
+
 func (t *Track) MarkReady(audioRef string) error {
 	if audioRef == "" {
 		return errors.New("audio_ref required for ready status")
@@ -130,6 +148,14 @@ func (t *Track) MarkReady(audioRef string) error {
 	t.AudioRef = &audioRef
 	t.FailureReason = nil
 	return nil
+}
+
+func (t *Track) SetAcquisitionProvenance(p AcquisitionProvenance) {
+	if !p.Valid() {
+		return
+	}
+	value := string(p)
+	t.AcquisitionProvenance = &value
 }
 
 func (t *Track) SetDuration(seconds float64) {
