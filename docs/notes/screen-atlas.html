@@ -146,6 +146,30 @@ main{max-width:1600px;margin:0 auto;padding:28px 24px 80px}
 .menu{position:absolute;background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:6px;min-width:210px;box-shadow:0 14px 34px rgba(0,0,0,.6)}
 .menu div{padding:11px 12px;font-size:15px;border-radius:8px}
 
+/* shipped detail scaffold */
+.statusov{position:absolute;top:0;left:0;right:0;height:38px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:11px;font-weight:600;z-index:7;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.fbar{position:absolute;top:6px;left:12px;right:12px;height:44px;display:flex;align-items:center;gap:8px;z-index:6}
+.fbar .g{width:40px;height:40px;border-radius:20px;background:rgba(10,10,12,.42);display:flex;align-items:center;justify-content:center;flex:none}
+.barsolid{flex:none;height:52px;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--canvas);border-bottom:1px solid var(--border)}
+.bleed{position:relative;width:100%;height:318px;flex:none}
+.bleed .bg{position:absolute;inset:0}
+.bleed .scr{position:absolute;inset:0;background:linear-gradient(180deg,rgba(18,18,20,.55) 0%,rgba(18,18,20,.10) 24%,rgba(18,18,20,.34) 54%,rgba(18,18,20,.90) 86%,var(--canvas) 100%)}
+.bleed .btxt{position:absolute;left:16px;right:16px;bottom:16px}
+.edit{font-size:34px;line-height:38px;font-weight:700;letter-spacing:-1px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ppill{display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;border-radius:999px;background:var(--accent);color:#fff;font-size:16px;font-weight:600}
+.ppill.dis{background:var(--s2);color:var(--t6)}
+.spill{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:999px;border:1px solid var(--border);background:var(--s1);flex:none}
+.facts{display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:12px;margin-top:20px}
+.fk{font-size:10px;line-height:13px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--t6)}
+.fv{font-size:16px;line-height:22px;font-weight:600;margin-top:1px}
+.fv.amb{color:var(--amber)}.fv.grn{color:var(--green)}
+.sechead{display:flex;align-items:baseline;justify-content:space-between;margin:22px 0 10px}
+.navrow{display:flex;align-items:center;gap:12px;min-height:56px;border-bottom:1px solid var(--border)}
+.sdot{width:36px;height:36px;border-radius:999px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;flex:none}
+.sdot.on{background:rgba(61,214,140,.16);border-color:transparent}
+.trow2{display:flex;align-items:center;gap:12px;min-height:52px}
+.simrow2{display:flex;align-items:center;gap:10px;min-height:52px;border-bottom:1px solid var(--border)}
+
 /* misc */
 .gridcov{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .railh{display:flex;gap:16px;overflow:hidden}
@@ -188,6 +212,7 @@ const P = {
   cog:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 14.1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.9 3H10a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.3z"/>',
   music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
   check:'<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  check2:'<path d="m4 12.5 5 5L20 6.5"/>',
   down:'<circle cx="12" cy="12" r="9"/><path d="M12 8v7m0 0-3-3m3 3 3-3"/>',
   plus:'<path d="M12 5v14M5 12h14"/>',
   rotate:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
@@ -211,6 +236,25 @@ const mini = (o={})=>`<div class="mini">
     <div class="grow"><div class="lb ell">${o.title??'Midnight City'}</div>
       <div class="cp sec ell">${o.sub??'M83'}</div></div>
     ${ic(o.icon??'pause',22)}${o.next?ic('sfwd',18):''}</div></div>`;
+
+/* --- shipped detail scaffold (1ad8377) --- */
+const bleedTop = ()=>`
+ <div class="statusov"><span>9:41</span><span>▯</span></div>
+ <div class="fbar"><div class="g">${ic('cleft',22)}</div><div class="grow"></div><div class="g">${ic('moreh',20)}</div></div>`;
+const bleedBanner = (a,title,secondary)=>`
+ <div class="bleed"><div class="bg ${a}"></div><div class="scr"></div>
+   <div class="btxt"><div class="edit">${title}</div><div class="mt4">${secondary}</div></div></div>`;
+const playPill = (label,disabled=0)=>`<div class="ppill grow${disabled?' dis':''}">${ic('play',18,disabled?'var(--t6)':'#fff')}<span>${label}</span></div>`;
+const savePill = (label,done=0)=>`<div class="spill">${done?ic('check2',18,'var(--green)'):ic('plus',18,'var(--accentText)')}<span class="lb ${done?'grn':''}">${label}</span></div>`;
+const factRow = (cells)=>`<div class="pad"><div class="facts">${cells.map(c=>
+  `<div><div class="fk">${c[0].toUpperCase()}</div><div class="fv ${c[2]}">${c[1]}</div></div>`).join('')}</div></div>`;
+const sec = (label,action)=>`<div class="sechead"><span class="fk">${label.toUpperCase()}</span>${action?`<span class="cp acc">${action}</span>`:''}</div>`;
+const navRow = (a,kicker,value,r)=>`<div class="navrow">${art(a,36,r)}
+  <div class="grow"><div class="fk">${kicker.toUpperCase()}</div><div class="bd ell">${value}</div></div>
+  ${ic('cright',16,'var(--tt)')}</div>`;
+const saveDot = (on)=>on
+  ? `<div class="sdot on">${ic('check2',17,'var(--green)')}</div>`
+  : `<div class="sdot">${ic('plus',17,'var(--accentText)')}</div>`;
 
 const heroAuth = (tagline)=>`<div style="padding:40px 20px 0">
   <div class="eq mb12"><i style="height:8px"></i><i style="height:18px"></i><i style="height:12px"></i><i style="height:22px"></i></div>
@@ -508,106 +552,96 @@ ${tabbar('library')}`),
 
 /* ================================================================= DETAIL */
 tab('detail','Detail',
- 'One route, three bodies. <code>DetailScreen</code> renders a shared 200px centred hero and then branches to Track / Album / Artist. The back button sits alone above the hero — there is no title bar, so on scroll you lose all context.',
+ 'Reworked and shipped in <code>1ad8377</code>. One scaffold, four slots: floating app bar → full-bleed 318pt banner carrying identity only → grow-to-fill action row → labelled fact row → sections. <code>DetailScreen</code> draws nothing now; it resolves the handoff, builds the banner title and secondary line, and dispatches to a body that fills slots.',
 [
-screen('Track detail','discover/detail.tsx — kind: track','Play + Save are stacked vertically under the hero, so the primary action is ~420px down the screen.',`
-<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
-<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
-  ${art('a2',200,'16px')}
-  <div class="dl ctr" style="margin-top:16px;padding:0 20px">Get Lucky</div>
-  <div class="row"><span class="bd acc">Daft Punk feat. Pharrell Williams</span><span class="bd ter">&nbsp;&nbsp;·&nbsp;&nbsp;2013</span></div>
-</div>
-<div class="pad" style="margin-top:20px;display:flex;flex-direction:column;gap:16px">
-  <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
-    <div style="width:50px;height:50px;border-radius:999px;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px rgba(45,91,255,.45)">${ic('play',22,'#fff')}</div>
-    <div class="cp ter upp">30s preview</div>
-    <div class="row" style="border:1px solid var(--border);border-radius:999px;min-height:40px;padding:0 20px;gap:8px">${ic('plus',18)}<span class="lb">Add to Library</span></div>
-  </div>
-  <div class="between" style="min-height:48px"><span class="lb ter">Album</span><span class="bd acc ell">Random Access Memories ›</span></div>
-  <div class="between" style="min-height:48px"><span class="lb ter">Featuring</span><span class="bd acc">Pharrell Williams, Nile Rodgers</span></div>
-  <div style="text-align:right"><span class="cp ter">Wrong album?</span></div>
-  <div class="mt8"><div class="lb sec mb12">Tracks you might like</div>
-    <div class="railh">${['a1','a6','a5'].map(c=>`<div style="width:132px">${art(c,132,'12px')}<div class="bd ell mt4">Instant Crush</div><div class="lb sec ell">Daft Punk</div></div>`).join('')}</div></div>
-</div>`),
+screen('Track detail','TrackDetailBody.tsx — kind: track','Play is a labelled pill at ~340px, down from ~420px. Length / Released / Source replace the dot-separated grey line.',`
+${bleedTop()}
+${bleedBanner('a2','Get Lucky','<span class="bd sec">Daft Punk</span>')}
+<div class="pad row" style="gap:8px;margin-top:14px">
+  ${playPill('Play preview')}${savePill('Save')}</div>
+${factRow([['Length','6:09',''],['Released','2013',''],['Source','Preview','amb']])}
+<div class="pad">
+  ${sec('Details')}
+  ${navRow('a6','Album','Random Access Memories','6px')}
+  ${navRow('a9','Featuring','Pharrell Williams','999px')}
+  ${navRow('a5','Featuring','Nile Rodgers','999px')}
+  ${sec('Tracks you might like','See all')}
+  <div class="railh">${[['a1','Instant Crush','Daft Punk'],['a6','Genesis','Justice'],['a5','Midnight City','M83']].map(c=>`<div style="width:128px">${art(c[0],128,'12px')}<div class="bd ell mt4">${c[1]}</div><div class="lb sec ell">${c[2]}</div></div>`).join('')}</div>
+  <div style="height:28px"></div>
+</div>`,'bleed'),
 
-screen('Album detail','detail.tsx — kind: album','Play / Save N are side by side here but stacked on track detail — the two bodies disagree.',`
-<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
-<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
-  ${art('a6',200,'16px')}
-  <div class="dl ctr" style="margin-top:16px;padding:0 20px">Random Access Memories</div>
-  <div class="row"><span class="bd acc">Daft Punk</span><span class="bd ter">&nbsp;&nbsp;·&nbsp;&nbsp;2013</span></div>
-</div>
-<div class="pad mt16">
-  <div class="row mb12" style="gap:12px"><div class="btn btn-p grow">Play 8</div><div class="btn btn-s grow">Save 5</div></div>
-  <div class="cp ter ctr mb12">2 still downloading</div>
-  <div class="lb ter" style="margin:20px 0 8px">Tracks</div>
-  ${[['1','Give Life Back to Music','Daft Punk','4:35','ready'],['2','The Game of Love','Daft Punk','5:22','add'],['3','Giorgio by Moroder','Daft Punk, Giorgio Moroder','9:04','ready'],['4','Within','Daft Punk, Chilly Gonzales','3:48','add'],['5','Instant Crush','Daft Punk, Julian Casablancas','5:37','add'],['6','Lose Yourself to Dance','Daft Punk, Pharrell Williams','5:53','ready'],['7','Touch','Daft Punk, Paul Williams','8:18','add'],['8','Get Lucky','Daft Punk, Pharrell Williams','6:09','ready']].map(t=>`
-    <div class="trow"><span class="lb ter" style="width:24px;text-align:center">${t[0]}</span>
-      <div class="grow"><div class="bd ell">${t[1]}</div><div class="lb sec ell">${t[2]}</div></div>
-      <span class="lb ter">${t[3]}</span>
-      ${t[4]==='ready'
-        ? `<div style="width:40px;height:40px;border-radius:999px;background:rgba(61,214,140,.16);display:flex;align-items:center;justify-content:center">${ic('check',20,'var(--green)')}</div>`
-        : `<div style="width:40px;height:40px;border-radius:999px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center">${ic('plus',20,'var(--accentText)')}</div>`}
-    </div>`).join('')}
-  <div class="lb ter ctr mt16">2013 · 8 tracks · 48 min</div>
-</div>`),
+screen('Album detail','AlbumDetailBody.tsx — kind: album','Tracks / Runtime / Released moved up from below the tracklist. No progress bar, no "n still downloading".',`
+${bleedTop()}
+${bleedBanner('a6','Random Access Memories','<span class="bd sec">Daft Punk</span>')}
+<div class="pad row" style="gap:8px;margin-top:14px">
+  ${playPill('Play 8')}${savePill('Save 5')}</div>
+${factRow([['Tracks','13',''],['Runtime','1 hr 14 min',''],['Released','2013','']])}
+<div class="pad">
+  ${sec('Tracks')}
+  ${[['1','Give Life Back to Music','4:35',1],['2','The Game of Love','5:22',0],['3','Giorgio by Moroder','9:04',1],['4','Within','3:48',0],['5','Instant Crush','5:37',0],['6','Lose Yourself to Dance','5:53',1],['7','Touch','8:18',0],['8','Get Lucky','6:09',1]].map(t=>`
+  <div class="trow2"><span class="lb ter" style="width:20px;text-align:center">${t[0]}</span>
+    <div class="grow"><div class="bd ell">${t[1]}</div></div>
+    <span class="lb ter">${t[2]}</span>${t[3]?saveDot(1):saveDot(0)}</div>`).join('')}
+  ${sec('More from this album','Show 5')}
+  <div style="height:28px"></div>
+</div>`,'bleed'),
 
-screen('Artist detail','detail.tsx — kind: artist','Top tracks capped at 5, then horizontal album rails per record type, then a collapsed "About".',`
-<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
-<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
-  ${art('a1',200,'999px')}
-  <div class="dl ctr" style="margin-top:16px">Daft Punk</div>
-</div>
-<div class="pad mt16">
-  <div class="btn btn-p full mb12">Play 12</div>
-  <div class="lb sec mb12">Popular Tracks</div>
-  ${[['Get Lucky','6:09'],['One More Time','5:20'],['Instant Crush','5:37'],['Harder, Better, Faster, Stronger','3:45'],['Around the World','7:09']].map((t,i)=>`
-    <div class="trow">${art(['a2','a3','a5','a6','a8'][i],40,'8px')}
-      <div class="grow"><div class="bd ell">${t[0]}</div></div><span class="lb ter">${t[1]}</span>
-      <div style="width:40px;height:40px;border-radius:999px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center">${ic('plus',20,'var(--accentText)')}</div></div>`).join('')}
-  <div class="lb sec" style="margin:20px 0 12px">Albums (6)</div>
-  <div class="railh">${['a6','a8','a1','a2'].map(c=>`<div style="width:120px">${art(c,120,'12px')}<div class="lb mt4" style="line-height:18px">Random Access Memories</div><div class="cp ter">2013</div><div class="cp ter">13 tracks</div></div>`).join('')}</div>
-  <div class="lb sec" style="margin:20px 0 12px">Singles (11)</div>
-  <div class="railh">${['a3','a5','a9','a4'].map(c=>`<div style="width:120px">${art(c,120,'12px')}<div class="lb mt4">Get Lucky</div><div class="cp ter">2013</div></div>`).join('')}</div>
-  <div style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-top:20px">
-    <div class="between" style="padding:16px 0;min-height:48px"><span class="lb sec">About Daft Punk</span>${ic('cright',18,'var(--ts)')}</div></div>
-</div>`),
+screen('Artist detail','ArtistDetailBody.tsx — kind: artist','Genres became the banner secondary line; listeners became a fact cell. Same full-bleed banner as the other two — no circular crop special case.',`
+${bleedTop()}
+${bleedBanner('a1','Daft Punk','<span class="bd sec">Electronic · House</span>')}
+<div class="pad row" style="gap:8px;margin-top:14px">${playPill('Play 12')}</div>
+${factRow([['Releases','19',''],['In library','12',''],['Listeners','5.6M','']])}
+<div class="pad">
+  ${sec('Popular tracks','Show all 12')}
+  ${[['1','Get Lucky','6:09','a2'],['2','One More Time','5:20','a3'],['3','Instant Crush','5:37','a5'],['4','Harder, Better, Faster','3:45','a6'],['5','Around the World','7:09','a8']].map(t=>`
+  <div class="trow2"><span class="lb ter" style="width:14px">${t[0]}</span>${art(t[3],40,'8px')}
+    <div class="grow"><div class="bd ell">${t[1]}</div></div><span class="lb ter">${t[2]}</span>${saveDot(0)}</div>`).join('')}
+  ${sec('Albums')}
+  <div class="railh">${[['a6','Random Access Memories','2013'],['a8','Discovery','2001'],['a1','Homework','1997'],['a2','Human After All','2005']].map(c=>`<div style="width:128px">${art(c[0],128,'12px')}<div class="lb mt4 ell">${c[1]}</div><div class="cp ter">${c[2]}</div></div>`).join('')}</div>
+  ${sec('About')}
+  <div class="bd sec">French electronic duo formed in Paris in 1993 by Guy-Manuel de Homem-Christo and Thomas Bangalter. They achieved popularity in the late 1990s as part of the French house movement…</div>
+  <div class="lb acc mt8">Read more</div>
+  ${sec('Similar artists')}
+  ${[['a6','Justice'],['a8','Cassius'],['a4','Air']].map(s=>`<div class="simrow2">${art(s[0],36,'999px')}<span class="bd grow">${s[1]}</span>${ic('cright',16,'var(--tt)')}</div>`).join('')}
+  <div style="height:28px"></div>
+</div>`,'bleed'),
 
-screen('Artist — About expanded','LastFmEnrichmentSection.tsx','Bio, listener counts, genre tags and similar artists all render as identical grey pills.',`
-<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
-<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
-  ${art('a1',160,'999px')}<div class="dl ctr mt16">Daft Punk</div></div>
-<div class="pad mt24">
-  <div style="border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
-    <div class="between" style="padding:16px 0"><span class="lb sec">About Daft Punk</span>${ic('cdown',18,'var(--ts)')}</div>
-    <div style="padding-bottom:12px;display:flex;flex-direction:column;gap:12px">
-      <div><div class="bd sec">Daft Punk were a French electronic music duo formed in 1993 in Paris by Guy-Manuel de Homem-Christo and Thomas Bangalter. They achieved popularity in the late 1990s as part of the French house movement…</div>
-        <div class="lb acc mt8">Read more</div></div>
-      <div class="lb ter">5.6M listeners&nbsp;&nbsp;·&nbsp;&nbsp;412.8M plays</div>
-      <div class="chips">${['electronic','house','french','dance'].map(t=>`<div style="border:1px solid var(--border);border-radius:999px;padding:4px 12px"><span class="cp sec">${t}</span></div>`).join('')}</div>
-      <div><div class="lb ter upp mb8">Similar artists</div>
-        <div class="chips">${['Justice','Cassius','Modjo','Stardust','Air','Breakbot'].map(t=>`<div style="border:1px solid var(--border);border-radius:999px;padding:4px 12px"><span class="cp sec">${t}</span></div>`).join('')}</div></div>
-    </div>
-  </div>
-</div>`),
+screen('Scrolled — app bar solid','DetailScaffold.tsx / chromeOpacity → 1','Once the banner scrolls past, the bar takes an opaque canvas background and the title. That title is hidden from accessibility — it duplicates the banner title.',`
+<div class="barsolid">${ic('cleft',22)}<span class="bs grow ctr ell">Random Access Memories</span>${ic('moreh',20)}</div>
+${factRow([['Tracks','13',''],['Runtime','1 hr 14 min',''],['Released','2013','']])}
+<div class="pad">
+  ${sec('Tracks')}
+  ${[['3','Giorgio by Moroder','9:04',1],['4','Within','3:48',0],['5','Instant Crush','5:37',0],['6','Lose Yourself to Dance','5:53',1],['7','Touch','8:18',0],['8','Get Lucky','6:09',1],['9','Beyond','4:50',0],['10','Motherboard','5:41',0]].map(t=>`
+  <div class="trow2"><span class="lb ter" style="width:20px;text-align:center">${t[0]}</span>
+    <div class="grow"><div class="bd ell">${t[1]}</div></div>
+    <span class="lb ter">${t[2]}</span>${t[3]?saveDot(1):saveDot(0)}</div>`).join('')}
+</div>`,'bleed'),
 
-screen('Album — tracklist loading','AlbumDetailBody / loading','Hero is live while the tracklist is still resolving.',`
-<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
-<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
-  ${art('a8',200,'16px')}<div class="dl ctr mt16">Discovery</div>
-  <div class="row"><span class="bd acc">Daft Punk</span><span class="bd ter">&nbsp;&nbsp;·&nbsp;&nbsp;2001</span></div></div>
-<div class="pad mt16"><div class="lb ter" style="margin:20px 0 8px">Tracks</div>
-${[0,1,2,3,4,5].map(()=>`<div class="row" style="gap:12px;padding:8px 0"><div class="skel" style="width:24px;height:14px"></div><div class="grow"><div class="skel" style="width:70%;height:14px"></div><div class="skel mt4" style="width:40%;height:12px"></div></div></div>`).join('')}</div>`),
+screen('Track — no facts available','DetailFacts.tsx returns null','A cell whose value is absent is omitted; when every value is absent the whole row disappears rather than rendering an empty band.',`
+${bleedTop()}
+${bleedBanner('a3','Nightcall','<span class="bd sec">Kavinsky</span>')}
+<div class="pad row" style="gap:8px;margin-top:14px">
+  ${playPill('Play')}${savePill('Saved',1)}</div>
+<div class="pad">
+  ${sec('Details')}
+  ${navRow('a3','Album','OutRun','6px')}
+  <div style="height:28px"></div>
+</div>`,'bleed'),
 
-screen('Album — tracklist error','AlbumDetailBody / error','',`
-<div class="pad" style="padding:16px 16px 0">${ic('cleft',24)}</div>
-<div style="display:flex;flex-direction:column;align-items:center;padding-top:16px;gap:8px">
-  ${art('a8',200,'16px')}<div class="dl ctr mt16">Discovery</div>
-  <div class="row"><span class="bd acc">Daft Punk</span><span class="bd ter">&nbsp;&nbsp;·&nbsp;&nbsp;2001</span></div></div>
-<div style="align-items:center;display:flex;flex-direction:column;margin-top:24px;gap:12px"><div class="bd red">Couldn't load tracks.</div><div class="btn btn-p">Retry</div></div>`),
+screen('Overflow menu','ContextMenu anchored under the app bar','"Wrong album?" lives here now. The menu is hidden entirely when it has no items, which is why album and artist show no ⋯ today.',`
+${bleedTop()}
+<div style="opacity:.4">${bleedBanner('a2','Get Lucky','<span class="bd sec">Daft Punk</span>')}</div>
+<div style="position:absolute;inset:0;background:rgba(0,0,0,.4)"></div>
+<div class="menu" style="top:58px;right:12px"><div>Wrong album?</div></div>`,'bleed'),
+
+screen('Album — tracklist loading','AlbumDetailBody / isLoading','The banner and action row are live while the tracklist resolves — the header no longer disappears behind a loading state.',`
+${bleedTop()}
+${bleedBanner('a8','Discovery','<span class="bd sec">Daft Punk</span>')}
+<div class="pad row" style="gap:8px;margin-top:14px">${playPill('Play',0,1)}</div>
+${factRow([['Released','2001','']])}
+<div class="pad">${sec('Tracks')}
+${[0,1,2,3,4,5].map(()=>`<div class="row" style="gap:12px;padding:8px 0"><div class="skel" style="width:40px;height:40px;border-radius:8px"></div><div class="grow"><div class="skel" style="width:65%;height:13px"></div><div class="skel mt4" style="width:40%;height:11px"></div></div><div class="skel" style="width:24px;height:24px;border-radius:12px"></div></div>`).join('')}</div>`,'bleed'),
 ]);
-
-/* ================================================================= PLAYER */
 tab('player','Player',
  'Modal stack above the tabs: full player, queue and lyrics. The mini player lives in the tab shell and is the only entry point.',
 [
@@ -937,7 +971,7 @@ TABS.forEach((t,i)=>{
    <div class="grid">${t.items.map(s=>`
      <div class="item">
        <div class="cap"><b>${s.name}</b><code>${s.route}</code>${s.note?`<em>${s.note}</em>`:''}</div>
-       <div class="phone">${bar()}<div class="screen">${s.inner}</div></div>
+       <div class="phone">${s.cls==='bleed'?'':bar()}<div class="screen">${s.inner}</div></div>
      </div>`).join('')}</div>`;
   mainEl.appendChild(p);
 });
