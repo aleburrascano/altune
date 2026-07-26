@@ -76,6 +76,18 @@ type AcquisitionContext struct {
 	AudioRef         string
 	DurationVerified bool
 	IdentityVerified bool
+
+	ExcludeURLs  []string
+	PreservedRef string
+}
+
+func (ac *AcquisitionContext) excludes(url string) bool {
+	for _, excluded := range ac.ExcludeURLs {
+		if excluded == url {
+			return true
+		}
+	}
+	return false
 }
 
 func (ac *AcquisitionContext) Provenance() domain.AcquisitionProvenance {

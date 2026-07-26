@@ -90,6 +90,7 @@ type Track struct {
 	FeaturedArtists   []FeaturedArtist
 
 	AcquisitionProvenance *string
+	AudioSourceURL        *string
 }
 
 func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {
@@ -148,6 +149,13 @@ func (t *Track) MarkReady(audioRef string) error {
 	t.AudioRef = &audioRef
 	t.FailureReason = nil
 	return nil
+}
+
+func (t *Track) SetAudioSource(url string) {
+	if url == "" {
+		return
+	}
+	t.AudioSourceURL = &url
 }
 
 func (t *Track) SetAcquisitionProvenance(p AcquisitionProvenance) {

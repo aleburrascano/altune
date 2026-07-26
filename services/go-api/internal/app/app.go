@@ -255,6 +255,7 @@ type catalogWiring struct {
 	streamHandler     *catalogHandler.StreamHandler
 	audioURLHandler   *catalogHandler.AudioURLHandler
 	retryH            *acqHandler.RetryHandler
+	reacquireH        *acqHandler.ReacquireHandler
 }
 
 func (a *App) wireCatalog(
@@ -328,8 +329,10 @@ func (a *App) wireCatalog(
 	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc)
 
 	var retryH *acqHandler.RetryHandler
+	var reacquireH *acqHandler.ReacquireHandler
 	if scheduler != nil {
 		retryH = acqHandler.NewRetryHandler(trackRepo, scheduler)
+		reacquireH = acqHandler.NewReacquireHandler(trackRepo, a.scheduler)
 	}
 
 	return catalogWiring{
@@ -341,6 +344,7 @@ func (a *App) wireCatalog(
 		streamHandler:     streamHandler,
 		audioURLHandler:   audioURLHandler,
 		retryH:            retryH,
+		reacquireH:        reacquireH,
 	}
 }
 
@@ -404,6 +408,9 @@ func (a *App) mountRoutes(
 		r.Get("/tracks/{trackId}/audio", cat.streamHandler.HandleStreamAudio)
 		r.Post("/tracks/{trackId}/audio/recover", cat.streamHandler.HandleRecover)
 		r.Post("/audio-urls", cat.audioURLHandler.HandleResolve)
+		if cat.reacquireH != nil {
+			r.Post("/tracks/{trackId}/reacquire", cat.reacquireH.HandleReacquire)
+		}
 		if cat.retryH != nil {
 			r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
 		}

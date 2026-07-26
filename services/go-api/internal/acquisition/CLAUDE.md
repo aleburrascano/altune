@@ -4,11 +4,11 @@ The yt-dlp pipeline that finds, ranks, downloads, verifies, tags and stores audi
 
 Layout:
 
-- `service/` — `acquire.go` (`Execute`, `resolveIdentity`, `CoreSteps`, `failureReason`), `pipeline.go` (the `Step` chain), `steps_*.go`, `matching.go` (candidate scoring), `scheduler.go`, `joblog.go`, `retry_admission.go`.
+- `service/` — `acquire.go` (`Execute`, `resolveIdentity`, `CoreSteps`, `failureReason`), `pipeline.go` (the `Step` chain), `steps_*.go`, `matching.go` (candidate scoring), `scheduler.go`, `joblog.go`, `retry_admission.go` (`RetryAdmission`, `ReacquireAdmission`, the shared `cooldownGate`). `Execute` acquires; `ExecuteReplace` swaps the audio of an already-ready track.
 - `service/eval/` — the offline selection harness: `case.go` (golden format + embedded `goldens/`), `ports.go` (case-driven fakes), `harness.go` (`Run` over the real `CoreSteps`), `report.go` (per-class accuracy, baseline gating). Goldens are `goldens/selection.json` (ranking and the audio gates) and `goldens/verification.json` (identity, fingerprint corroboration, tolerance edges). Driven by `cmd/acquisitioneval`.
 - `service/registry.go` — `SourceRegistry`: equal-treatment fan-out across every `AudioSource`, merge by URL, `Fetch` routed back to the owning source.
 - `ports/` — `AudioSearcher`, `AudioTagger`, `AudioProber`, `AudioWriter`, `TrackRepository`; `source.go`'s `AudioSource` / `FindRequest` / `SearchQueries`; `recording.go`'s `RecordingResolver` / `RecordingIdentity`; `identify.go`'s `AudioIdentifier` / `RecordingMatch`.
-- `adapters/` — `ytdlp/` (searcher, prober, `Source` — text search), `ytmusic/` (`Source` — catalog-resolved by video id), `streamrip/` (`Source` per service — catalog-resolved via the `rip` CLI), `id3/` (tagger), `chromaprint/` (fpcalc + AcoustID identifier), `handler/` (retry endpoint), `discoverybridge/` (`RecordingResolver` over discovery's search service).
+- `adapters/` — `handler/` (retry + reacquire endpoints), `ytdlp/` (searcher, prober, `Source` — text search), `ytmusic/` (`Source` — catalog-resolved by video id), `streamrip/` (`Source` per service — catalog-resolved via the `rip` CLI), `id3/` (tagger), `chromaprint/` (fpcalc + AcoustID identifier), `discoverybridge/` (`RecordingResolver` over discovery's search service).
 
 ## Rules
 
@@ -26,6 +26,9 @@ Layout:
 - Change the pipeline's shape only in `CoreSteps`, never in one caller.
 - `CleanupTemp` takes the parent of `TempPath`, never `TempPath` itself.
 - Manual retry stays admission-gated: `AcquisitionFailed` only, one per track per 60s.
+- Manual re-acquire is the mirror: ready-with-audio only, its own 60s cooldown.
+- A replace never marks a track failed and never deletes the audio it preserved.
+- A replace excludes the stored `AudioSourceURL`, or ranking returns the same file.
 - `complete` is the only call site that advances job counters.
 - Never reach discovery directly — go through `adapters/discoverybridge`.
 - Identity resolution is fill-only and fail-open: it never overwrites saved metadata and never fails acquisition.
@@ -40,7 +43,7 @@ Layout:
 - Streamrip services stay config-gated; an unset `STREAMRIP_SERVICES` disables them without failing startup.
 - One source failing never fails the search; only every source failing does.
 - Tighten the duration gate only when the length is corroborated (`Identity.Duration > 0`).
-- Fingerprint mismatch rejects; fingerprint *unknown* accepts and downgrades provenance.
+- The fingerprint only ever corroborates: it marks `verified` on a cluster hit and never rejects.
 - Set provenance only through `Track.SetAcquisitionProvenance`, and only from `AcquisitionContext.Provenance()`.
 
 Why each rule exists: `okf/backend/acquisition/index.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

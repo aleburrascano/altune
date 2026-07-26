@@ -35,6 +35,9 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext) e
 			track.SetDuration(ac.Selected.Duration)
 		}
 		track.SetAcquisitionProvenance(ac.Provenance())
+		if ac.Selected != nil {
+			track.SetAudioSource(ac.Selected.URL)
+		}
 		return nil
 	})
 }

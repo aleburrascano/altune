@@ -16,11 +16,11 @@ import (
 
 const trackColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
-	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance`
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url`
 
 const trackColumnsPrefixed = `t.id, t.user_id, t.title, t.artist, t.album, t.duration_seconds,
 	t.added_at, t.artwork_url, t.acquisition_status, t.dedup_key,
-	t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason, t.acquisition_provenance`
+	t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason, t.acquisition_provenance, t.audio_source_url`
 
 type PgxTrackRepository struct {
 	pool *pgxpool.Pool
@@ -42,15 +42,15 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 		`INSERT INTO tracks (
 			id, user_id, title, artist, album, duration_seconds,
 			added_at, artwork_url, acquisition_status, dedup_key,
-			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		ON CONFLICT (user_id, dedup_key) DO NOTHING
 		RETURNING id`,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.Title, track.Artist, track.Album, track.DurationSeconds,
 		track.AddedAt, track.ArtworkURL, track.AcquisitionStatus.String(), track.DedupKey,
 		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
-		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance,
+		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -154,13 +154,13 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) er
 			title=$3, artist=$4, album=$5, duration_seconds=$6,
 			artwork_url=$7, acquisition_status=$8, dedup_key=$9,
 			year=$10, genre=$11, track_number=$12, album_artist=$13,
-			isrc=$14, audio_ref=$15, failure_reason=$16, acquisition_provenance=$17
+			isrc=$14, audio_ref=$15, failure_reason=$16, acquisition_provenance=$17, audio_source_url=$18
 		WHERE id = $1 AND user_id = $2`,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.Title, track.Artist, track.Album, track.DurationSeconds,
 		track.ArtworkURL, track.AcquisitionStatus.String(), track.DedupKey,
 		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
-		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance,
+		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 	)
 	if err != nil {
 		return err
@@ -268,12 +268,13 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 		audioRef      *string
 		failureReason *string
 		provenance    *string
+		sourceURL     *string
 	)
 
 	dest = []any{
 		&id, &userId, &title, &artist, &album, &durSecs,
 		&addedAt, &artworkURL, &acqStatus, &dedupKey,
-		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason, &provenance,
+		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason, &provenance, &sourceURL,
 	}
 
 	build = func() (*domain.Track, error) {
@@ -306,6 +307,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 			AudioRef:              audioRef,
 			FailureReason:         failureReason,
 			AcquisitionProvenance: provenance,
+			AudioSourceURL:        sourceURL,
 		}, nil
 	}
 	return dest, build

@@ -1,6 +1,27 @@
 {
   "cases": [
     {
+      "id": "replace-excludes-the-current-source",
+      "class": "OK",
+      "note": "re-acquire must not hand back the file already stored; the current source is excluded so the next best wins",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "authoritative_duration": 200 },
+      "exclude_urls": ["yt:video"],
+      "candidates": [
+        { "title": "The Weeknd - Blinding Lights (Official Video)", "url": "yt:video", "channel": "TheWeekndVEVO", "categories": ["Music"], "duration": 200, "view_count": 3000000000 },
+        { "title": "Blinding Lights", "url": "yt:master", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "view_count": 50000000, "correct": true }
+      ]
+    },
+    {
+      "id": "replace-with-nothing-else-available-fails-cleanly",
+      "class": "OK",
+      "note": "when the excluded source was the only candidate the pipeline must fail rather than store it again; the caller keeps the original audio",
+      "track": { "title": "Rare Leak", "artist": "Some Artist", "duration": 200, "authoritative_duration": 200 },
+      "exclude_urls": ["sc:only"],
+      "candidates": [
+        { "title": "Some Artist - Rare Leak", "url": "sc:only", "channel": "Some Artist", "duration": 200 }
+      ]
+    },
+    {
       "id": "fp-cluster-excludes-expected-mbid",
       "class": "F0",
       "note": "the Don't Stop the Music failure: AcoustID returns the recording's whole MBID cluster and discovery's chosen MBID is not in it. A recording has many MBIDs (album, single, compilation), so a non-intersection is NOT evidence of a different recording and must never reject",

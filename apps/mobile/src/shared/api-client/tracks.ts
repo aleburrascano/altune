@@ -59,3 +59,7 @@ export type BackfillFeaturedResult = { scanned: number; updated: number };
 export async function backfillFeaturedArtists(): Promise<BackfillFeaturedResult> {
   return apiFetch<BackfillFeaturedResult>('/v1/tracks/featured-backfill', { method: 'POST' });
 }
+
+export async function reacquireTrack(trackId: string): Promise<void> {
+  await apiFetch<void>(`/v1/tracks/${trackId}/reacquire`, { method: 'POST' });
+}

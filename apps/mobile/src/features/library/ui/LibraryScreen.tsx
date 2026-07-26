@@ -35,6 +35,7 @@ import { LibraryNoResults } from './LibraryNoResults';
 import { PlaylistsGrid } from './PlaylistsGrid';
 import type { ListRefresh } from './refresh';
 import { SortControl } from './SortControl';
+import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { buildTrackMenuItems } from './trackMenu';
 import { TracksList } from './TracksList';
 import {
@@ -82,6 +83,7 @@ export function LibraryScreen(): ReactElement {
   const { navigateToTrack, navigateToAlbum, navigateToArtist } = useLibraryNavigation(router);
   const deleteMutation = useDeleteTrack();
   const retryMutation = useRetryAcquisition();
+  const reacquireMutation = useReacquireTrack();
   const playback = usePlayback();
   const queue = useQueuePlayback();
 
@@ -104,6 +106,7 @@ export function LibraryScreen(): ReactElement {
 
   const trackMenuItems = (track: TrackResponse) =>
     buildTrackMenuItems(track, {
+      onReacquire: () => reacquireMutation.mutate(track.id),
       queue,
       onViewDetails: () => navigateToTrack(track),
       onAddToPlaylist: () => pl.setAddToPlaylistTrack(track),

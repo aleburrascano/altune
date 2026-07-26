@@ -48,11 +48,12 @@ func (c Candidate) probedDuration() float64 {
 }
 
 type Case struct {
-	ID         string      `json:"id"`
-	Class      string      `json:"class"`
-	Note       string      `json:"note,omitempty"`
-	Track      Track       `json:"track"`
-	Candidates []Candidate `json:"candidates"`
+	ID          string      `json:"id"`
+	Class       string      `json:"class"`
+	Note        string      `json:"note,omitempty"`
+	Track       Track       `json:"track"`
+	ExcludeURLs []string    `json:"exclude_urls,omitempty"`
+	Candidates  []Candidate `json:"candidates"`
 }
 
 func (c Case) hasCorrectCandidate() bool {

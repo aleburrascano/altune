@@ -26,3 +26,9 @@ verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ## Provenance in the job record (2026-07-26)
 
 `jobReporter` gained a fourth method, `provenance(value string)`, and `JobRecord` a matching `Provenance` field (JSON `provenance`). `AcquireTrackAudioService.Execute` reports it once, on success, just before publishing `track_acquisition_completed` — so the operator console can see not just *that* a track was acquired but how strong the claim is (`verified` / `corroborated` / `best_effort`, see [pipeline](pipeline.md)). `noopJobReporter` absorbs it like the others, so eval and test paths that call `Execute` without a scheduler are unaffected.
+
+## Scheduling a replace (2026-07-26)
+
+`Schedule` and `ScheduleReplace` both funnel into an unexported `schedule(userId, trackId, sourceURL, replace)`, so dedup, the semaphore, panic recovery, the job record and the reporter are identical for both — only the service method differs (`Execute` vs `ExecuteReplace`). The in-flight dedup is shared deliberately: a track already being acquired must not also be replaced concurrently, since both write `audio_ref` for the same track.
+
+`ScheduleReplace` is not on catalog's `AcquisitionScheduler` port, which stays the single-method interface catalog needs. The reacquire handler declares its own one-method `replaceScheduler` interface instead — the consumer-defined-interface habit the rest of the codebase already follows.
