@@ -13,6 +13,9 @@ Structure:
 - Navigate with `useRouter` from `expo-router`, and use the typed route paths.
 - Read grouped, filtered and sorted collections from the API; never re-derive them on the device (`@shared/api-client/library`).
 - Read a track's ownership from the server stamp on a result, overlaid with `@shared/acquisition/trackStatusStore` for liveness; never hold the whole library to answer it.
+- Never render server-mutable state from a snapshot (a route param, a module handoff, a value computed once in a parent) — subscribe to the query cache or the owning store so the screen updates in place.
+- Every server event the backend publishes is declared in `@shared/events/eventTypes` and handled in `applyServerEvent`; an unhandled type is a compile error, not a silent no-op.
+- A component that displays server-mutable state gets a liveness test: mutate the store, assert the rendered output changed.
 
 Platform:
 

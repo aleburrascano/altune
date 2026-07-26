@@ -30,8 +30,27 @@ import {
   upsertTrackInCaches,
 } from './trackCachePatch';
 import type { ServerEvent } from './sse-client';
+import {
+  isServerEventType,
+  recordUnhandledEvent,
+  type ServerEventType,
+} from './eventTypes';
 
-const INVALIDATION_MAP: Record<string, readonly (readonly string[])[]> = {
+type InvalidateOnlyEvent = Exclude<
+  ServerEventType,
+  | 'resync'
+  | 'track_added_to_library'
+  | 'track_deleted'
+  | 'track_acquisition_started'
+  | 'track_acquisition_progress'
+  | 'track_acquisition_completed'
+  | 'track_acquisition_failed'
+  | 'playlist_renamed'
+  | 'track_removed_from_playlist'
+  | 'playlist_reordered'
+>;
+
+const INVALIDATION_MAP: Record<InvalidateOnlyEvent, readonly (readonly string[])[]> = {
   playlist_created: [playlistKeys.list],
   playlist_deleted: [playlistKeys.list, playlistKeys.details],
   track_added_to_playlist: [playlistKeys.details, playlistKeys.list],
@@ -99,14 +118,22 @@ function invalidateDerived(queryClient: QueryClient): void {
 }
 
 export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): void {
-  if (event.type === 'resync') {
+  if (!isServerEventType(event.type)) {
+    recordUnhandledEvent(event.type);
+    return;
+  }
+  route(queryClient, event, event.type);
+}
+
+function route(queryClient: QueryClient, event: ServerEvent, type: ServerEventType): void {
+  if (type === 'resync') {
     for (const queryKey of RESYNC_KEYS) {
       void queryClient.invalidateQueries({ queryKey });
     }
     return;
   }
 
-  if (event.type === 'track_added_to_library') {
+  if (type === 'track_added_to_library') {
     const track = parseAddedTrack(event.data);
     invalidateDerived(queryClient);
     if (track) {
@@ -123,7 +150,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     return;
   }
 
-  if (event.type === 'track_deleted') {
+  if (type === 'track_deleted') {
     const trackId = asString(event.data.track_id);
     if (trackId) {
       removeTrackFromCaches(queryClient, trackId);
@@ -134,7 +161,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     return;
   }
 
-  if (event.type === 'track_acquisition_started') {
+  if (type === 'track_acquisition_started') {
     const trackId = asString(event.data.track_id);
     if (trackId) {
       startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
@@ -148,7 +175,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     return;
   }
 
-  if (event.type === 'track_acquisition_progress') {
+  if (type === 'track_acquisition_progress') {
     const trackId = asString(event.data.track_id);
     const phase = progressPhase(asString(event.data.stage));
     if (trackId && phase) {
@@ -157,7 +184,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     return;
   }
 
-  if (event.type === 'track_acquisition_completed') {
+  if (type === 'track_acquisition_completed') {
     const trackId = asString(event.data.track_id);
     if (trackId) {
       patchTrackInCaches(queryClient, trackId, {
@@ -170,7 +197,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     return;
   }
 
-  if (event.type === 'track_acquisition_failed') {
+  if (type === 'track_acquisition_failed') {
     const trackId = asString(event.data.track_id);
     if (trackId) {
       patchTrackInCaches(queryClient, trackId, {
@@ -188,21 +215,21 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     return;
   }
 
-  if (event.type === 'playlist_renamed') {
+  if (type === 'playlist_renamed') {
     const playlistId = asString(event.data.playlist_id);
     const name = asString(event.data.name);
     if (playlistId && name != null) patchPlaylistName(queryClient, playlistId, name);
     return;
   }
 
-  if (event.type === 'track_removed_from_playlist') {
+  if (type === 'track_removed_from_playlist') {
     const playlistId = asString(event.data.playlist_id);
     const trackId = asString(event.data.track_id);
     if (playlistId && trackId) removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
     return;
   }
 
-  if (event.type === 'playlist_reordered') {
+  if (type === 'playlist_reordered') {
     const playlistId = asString(event.data.playlist_id);
     const trackIds = Array.isArray(event.data.track_ids)
       ? event.data.track_ids.filter((v): v is string => typeof v === 'string')
@@ -211,9 +238,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
     return;
   }
 
-  const keys = INVALIDATION_MAP[event.type];
-  if (!keys) return;
-  for (const queryKey of keys) {
+  for (const queryKey of INVALIDATION_MAP[type]) {
     void queryClient.invalidateQueries({ queryKey });
   }
 }
