@@ -1,0 +1,214 @@
+{
+  "cases": [
+    {
+      "id": "fp-cluster-excludes-expected-mbid",
+      "class": "F0",
+      "note": "the Don't Stop the Music failure: AcoustID returns the recording's whole MBID cluster and discovery's chosen MBID is not in it. A recording has many MBIDs (album, single, compilation), so a non-intersection is NOT evidence of a different recording and must never reject",
+      "track": { "title": "Don't Stop the Music", "artist": "Rihanna", "duration": 267, "authoritative_duration": 267, "mbid": "014b764e-ac05-4611-a191-f737dbcd77a8" },
+      "candidates": [
+        { "title": "Don't Stop the Music", "url": "yt:master", "channel": "Rihanna - Topic", "categories": ["Music"], "duration": 267, "recording_mbids": ["4c0566be-d3d9-42b2-964d-cf349972123b", "56ea005b-9f0d-471e-8c5f-2ce65e30adeb", "875d3bd9-58dc-4828-b5d6-ab17370a9040"], "correct": true }
+      ]
+    },
+    {
+      "id": "fp-cluster-includes-expected-mbid",
+      "class": "F0",
+      "note": "when the expected MBID is in the cluster the track is verified rather than merely accepted",
+      "track": { "title": "Umbrella", "artist": "Rihanna", "duration": 275, "authoritative_duration": 275, "mbid": "aaa-expected" },
+      "candidates": [
+        { "title": "Umbrella", "url": "yt:master", "channel": "Rihanna - Topic", "categories": ["Music"], "duration": 275, "recording_mbids": ["bbb-other", "aaa-expected"], "correct": true }
+      ]
+    },
+    {
+      "id": "fp-unknown-audio-still-accepted",
+      "class": "F0",
+      "note": "AcoustID has no entry for unreleased material; unknown must accept or the long tail becomes unacquirable",
+      "track": { "title": "Smaxk Or Die", "artist": "Fatt Smaxk", "duration": 181, "authoritative_duration": 181, "mbid": "aaa-expected" },
+      "candidates": [
+        { "title": "Fatt Smaxk - Smaxk Or Die", "url": "sc:leak", "channel": "Fatt Smaxk", "duration": 181, "correct": true }
+      ]
+    },
+    {
+      "id": "fp-no-expected-mbid-skips-identification",
+      "class": "F0",
+      "note": "without a resolved MBID there is nothing to compare against; the gate must not run at all",
+      "track": { "title": "Some Leak", "artist": "Unknown Artist", "duration": 200 },
+      "candidates": [
+        { "title": "Unknown Artist - Some Leak", "url": "sc:leak", "channel": "Unknown Artist", "duration": 200, "recording_mbids": ["zzz-unrelated"], "correct": true }
+      ]
+    },
+    {
+      "id": "f2-live-version-runs-long",
+      "class": "F2",
+      "note": "a live cut carries crowd noise and an intro; length is the signal",
+      "track": { "title": "Creep", "artist": "Radiohead", "duration": 238, "authoritative_duration": 238 },
+      "candidates": [
+        { "title": "Creep (Live at Glastonbury)", "url": "yt:live", "channel": "Radiohead - Topic", "categories": ["Music"], "duration": 300, "actual_duration": 300, "view_count": 40000000 },
+        { "title": "Creep", "url": "yt:master", "channel": "Radiohead - Topic", "categories": ["Music"], "duration": 238, "actual_duration": 238, "view_count": 20000000, "correct": true }
+      ]
+    },
+    {
+      "id": "f4-instrumental-same-length",
+      "class": "F4",
+      "note": "an instrumental is the same length as the vocal cut; only a fingerprint can separate them, and here it corroborates the master",
+      "track": { "title": "Circles", "artist": "Post Malone", "duration": 215, "authoritative_duration": 215, "mbid": "aaa-expected" },
+      "candidates": [
+        { "title": "Circles (Instrumental)", "url": "yt:inst", "channel": "Karaoke Nation", "categories": ["Music"], "duration": 215, "recording_mbids": ["inst-mbid"] },
+        { "title": "Circles", "url": "yt:master", "channel": "Post Malone - Topic", "categories": ["Music"], "duration": 215, "recording_mbids": ["aaa-expected"], "correct": true }
+      ]
+    },
+    {
+      "id": "f6-truncated-upload-beats-nothing",
+      "class": "F6",
+      "note": "a 60s upload of a 240s track must be rejected even though it is well over the 45s preview threshold",
+      "track": { "title": "Alright", "artist": "Kendrick Lamar", "duration": 219, "authoritative_duration": 219 },
+      "candidates": [
+        { "title": "Alright", "url": "yt:snippet", "channel": "Kendrick Lamar - Topic", "categories": ["Music"], "duration": 219, "actual_duration": 60 }
+      ]
+    },
+    {
+      "id": "attempt-cap-starves-a-good-candidate",
+      "class": "F0",
+      "note": "maxVerifyAttempts caps downloads at 4, and rejection only happens at download time, so five bad candidates ahead of the master exhaust the budget",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "authoritative_duration": 200 },
+      "candidates": [
+        { "title": "Blinding Lights (Remix 1)", "url": "yt:bad1", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "actual_duration": 300 },
+        { "title": "Blinding Lights (Remix 2)", "url": "yt:bad2", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "actual_duration": 301 },
+        { "title": "Blinding Lights (Remix 3)", "url": "yt:bad3", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "actual_duration": 302 },
+        { "title": "Blinding Lights (Remix 4)", "url": "yt:bad4", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "actual_duration": 303 },
+        { "title": "Blinding Lights", "url": "yt:master", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "actual_duration": 200, "correct": true }
+      ]
+    },
+    {
+      "id": "resolved-source-download-fails-falls-through",
+      "class": "OK",
+      "note": "a catalog hit that will not download must not end the walk",
+      "track": { "title": "Circles", "artist": "Post Malone", "duration": 215, "authoritative_duration": 215 },
+      "candidates": [
+        { "title": "Circles", "url": "ytm:dead", "channel": "YouTube Music catalog", "duration": 215, "resolved": true, "download_fails": true },
+        { "title": "Circles", "url": "yt:master", "channel": "Post Malone - Topic", "categories": ["Music"], "duration": 215, "correct": true }
+      ]
+    },
+    {
+      "id": "two-resolved-candidates-closest-length-wins",
+      "class": "OK",
+      "note": "sources are equal; the tie between two catalog hits resolves on distance from the corroborated length",
+      "track": { "title": "Circles", "artist": "Post Malone", "duration": 215, "authoritative_duration": 215 },
+      "candidates": [
+        { "title": "Circles", "url": "ytm:long", "channel": "YouTube Music catalog", "duration": 222, "actual_duration": 222 },
+        { "title": "Circles", "url": "ytm:exact", "channel": "YouTube Music catalog", "duration": 215, "actual_duration": 215, "resolved": true, "correct": true }
+      ]
+    },
+    {
+      "id": "resolved-undecodable-falls-back-to-search",
+      "class": "F9",
+      "note": "a catalog hit with corrupt samples must not be trusted for being resolved",
+      "track": { "title": "How Sweet", "artist": "NewJeans", "duration": 226, "authoritative_duration": 226 },
+      "candidates": [
+        { "title": "How Sweet", "url": "ytm:corrupt", "channel": "YouTube Music catalog", "duration": 226, "resolved": true, "undecodable": true },
+        { "title": "NewJeans - How Sweet", "url": "yt:good", "channel": "NewJeans - Topic", "categories": ["Music"], "duration": 226, "correct": true }
+      ]
+    },
+    {
+      "id": "long-track-uses-fractional-tolerance",
+      "class": "F2",
+      "note": "a 12-minute track gets a 3% window when corroborated, so a 40s difference is a different recording",
+      "track": { "title": "Echoes", "artist": "Pink Floyd", "duration": 1380, "authoritative_duration": 1380 },
+      "candidates": [
+        { "title": "Echoes (Edit)", "url": "yt:edit", "channel": "Pink Floyd - Topic", "categories": ["Music"], "duration": 1380, "actual_duration": 1320 },
+        { "title": "Echoes", "url": "yt:master", "channel": "Pink Floyd - Topic", "categories": ["Music"], "duration": 1380, "actual_duration": 1385, "correct": true }
+      ]
+    },
+    {
+      "id": "short-track-uses-absolute-slack",
+      "class": "OK",
+      "note": "a 90s interlude gets the 5s absolute floor, not 3% of 90",
+      "track": { "title": "Interlude", "artist": "Tyler, The Creator", "duration": 90, "authoritative_duration": 90 },
+      "candidates": [
+        { "title": "Interlude", "url": "yt:master", "channel": "Tyler, The Creator - Topic", "categories": ["Music"], "duration": 90, "actual_duration": 94, "correct": true }
+      ]
+    },
+    {
+      "id": "candidate-metadata-duration-missing",
+      "class": "OK",
+      "note": "search metadata often omits duration; the probe is what decides, so a zero must not disqualify",
+      "track": { "title": "Circles", "artist": "Post Malone", "duration": 215, "authoritative_duration": 215 },
+      "candidates": [
+        { "title": "Circles", "url": "yt:nodur", "channel": "Post Malone - Topic", "categories": ["Music"], "actual_duration": 215, "correct": true }
+      ]
+    },
+    {
+      "id": "diacritics-and-case-match",
+      "class": "F7",
+      "note": "normalization must fold diacritics and case so the right artist still matches",
+      "track": { "title": "Cafe con Pan", "artist": "Bjork", "duration": 200, "authoritative_duration": 200 },
+      "candidates": [
+        { "title": "Café con Pan", "url": "yt:master", "channel": "Björk - Topic", "categories": ["Music"], "duration": 200, "correct": true }
+      ]
+    },
+    {
+      "id": "ampersand-artist-normalizes",
+      "class": "F7",
+      "note": "& expands to 'and' in normalization; both spellings must reach the same candidate",
+      "track": { "title": "Now And Then", "artist": "Simon and Garfunkel", "duration": 200, "authoritative_duration": 200 },
+      "candidates": [
+        { "title": "Now & Then", "url": "yt:master", "channel": "Simon & Garfunkel - Topic", "categories": ["Music"], "duration": 200, "correct": true }
+      ]
+    },
+    {
+      "id": "empty-channel-does-not-crash-ranking",
+      "class": "OK",
+      "note": "some uploads report no channel at all",
+      "track": { "title": "Circles", "artist": "Post Malone", "duration": 215, "authoritative_duration": 215 },
+      "candidates": [
+        { "title": "Post Malone - Circles", "url": "yt:nochan", "duration": 215, "correct": true }
+      ]
+    },
+    {
+      "id": "feature-listed-with-instead-of-feat",
+      "class": "F8",
+      "note": "featuredRe deliberately excludes 'with', so a candidate spelling the credit that way is not recognised as naming the guest",
+      "track": { "title": "Smaxk Or Die (feat. Playboi Carti)", "artist": "Fatt Smaxk", "duration": 181, "authoritative_duration": 181 },
+      "candidates": [
+        { "title": "Fatt Smaxk - Smaxk Or Die (with Playboi Carti)", "url": "yt:with", "channel": "Fatt Smaxk", "categories": ["Music"], "duration": 181, "correct": true }
+      ]
+    },
+    {
+      "id": "bracketed-live-marker-is-stripped",
+      "class": "F2",
+      "note": "normalization deletes (Live at Wembley) so identity cannot see it; only the corroborated length separates them",
+      "track": { "title": "Bohemian Rhapsody", "artist": "Queen", "duration": 355, "authoritative_duration": 355 },
+      "candidates": [
+        { "title": "Bohemian Rhapsody (Live at Wembley)", "url": "yt:live", "channel": "Queen - Topic", "categories": ["Music"], "duration": 355, "actual_duration": 402 },
+        { "title": "Bohemian Rhapsody", "url": "yt:master", "channel": "Queen - Topic", "categories": ["Music"], "duration": 355, "actual_duration": 355, "correct": true }
+      ]
+    },
+    {
+      "id": "remaster-is-the-same-recording",
+      "class": "OK",
+      "note": "a remaster is the recording the user wants; near-identical length must not disqualify it",
+      "track": { "title": "Come Together", "artist": "The Beatles", "duration": 259, "authoritative_duration": 259 },
+      "candidates": [
+        { "title": "Come Together (2019 Mix)", "url": "yt:remaster", "channel": "The Beatles - Topic", "categories": ["Music"], "duration": 260, "actual_duration": 260, "correct": true }
+      ]
+    },
+    {
+      "id": "every-candidate-download-fails",
+      "class": "OK",
+      "note": "a dead query must fail cleanly rather than store nothing and report success",
+      "track": { "title": "Ghost Track", "artist": "Nobody", "duration": 200, "authoritative_duration": 200 },
+      "candidates": [
+        { "title": "Nobody - Ghost Track", "url": "yt:dead1", "channel": "Nobody - Topic", "duration": 200, "download_fails": true },
+        { "title": "Nobody - Ghost Track", "url": "yt:dead2", "channel": "Nobody - Topic", "duration": 200, "download_fails": true }
+      ]
+    },
+    {
+      "id": "uncorroborated-duration-keeps-loose-window",
+      "class": "OK",
+      "note": "without discovery corroboration the old 15s window applies, so a 10s difference is still accepted",
+      "track": { "title": "Circles", "artist": "Post Malone", "duration": 215 },
+      "candidates": [
+        { "title": "Circles", "url": "yt:master", "channel": "Post Malone - Topic", "categories": ["Music"], "duration": 215, "actual_duration": 225, "correct": true }
+      ]
+    }
+  ]
+}

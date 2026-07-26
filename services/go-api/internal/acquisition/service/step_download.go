@@ -9,7 +9,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 )
 
-const maxVerifyAttempts = 4
+const maxVerifyAttempts = 8
 
 type candidateFetcher interface {
 	Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error)
@@ -126,9 +126,7 @@ func (s *DownloadStep) verify(
 		}
 	}
 
-	if rejection := s.identify(ctx, ac, candidate, filePath, &result); rejection != nil {
-		return rejection, result
-	}
+	s.identify(ctx, ac, candidate, filePath, &result)
 
 	return nil, result
 }
@@ -139,30 +137,25 @@ func (s *DownloadStep) identify(
 	candidate ports.AudioCandidate,
 	filePath string,
 	result *verificationResult,
-) error {
+) {
 	if s.identifier == nil || ac.Identity.MBID == "" {
-		return nil
+		return
 	}
 
 	match, err := s.identifier.Identify(ctx, filePath)
-	if err != nil {
-		slog.WarnContext(ctx, "acquisition.identify_failed_accepting",
+	switch {
+	case err != nil:
+		slog.WarnContext(ctx, "acquisition.identify_failed",
 			"url", candidate.URL, "error", err)
-		return nil
-	}
-	if !match.Known() {
-		slog.InfoContext(ctx, "acquisition.identify_unknown_accepting",
+	case !match.Known():
+		slog.InfoContext(ctx, "acquisition.identify_unknown",
 			"url", candidate.URL)
-		return nil
-	}
-	if !match.Matches(ac.Identity.MBID) {
-		slog.InfoContext(ctx, "acquisition.candidate_rejected_fingerprint",
+	case match.Matches(ac.Identity.MBID):
+		result.identity = true
+	default:
+		slog.InfoContext(ctx, "acquisition.identify_uncorroborated",
 			"url", candidate.URL, "want_mbid", ac.Identity.MBID, "got_mbids", match.MBIDs)
-		return fmt.Errorf("candidate %q is a different recording", candidate.URL)
 	}
-
-	result.identity = true
-	return nil
 }
 
 func (s *DownloadStep) Rollback(_ context.Context, ac *AcquisitionContext) error {

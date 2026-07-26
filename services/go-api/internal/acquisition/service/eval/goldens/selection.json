@@ -25,7 +25,7 @@
       "note": "a piano cover must lose to the master",
       "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200 },
       "candidates": [
-        { "title": "Blinding Lights (Piano Cover)", "url": "yt:cover", "channel": "Piano Tutorials", "categories": ["Music"], "duration": 195, "view_count": 5000000, "recording_mbid": "mb-cover" },
+        { "title": "Blinding Lights (Piano Cover)", "url": "yt:cover", "channel": "Piano Tutorials", "categories": ["Music"], "duration": 195, "view_count": 5000000, "recording_mbids": ["mb-cover"] },
         { "title": "Blinding Lights", "url": "yt:master", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "view_count": 50000000, "correct": true }
       ]
     },
@@ -35,7 +35,7 @@
       "note": "only a cover exists; acquiring it is worse than acquiring nothing. Normalization strips (Piano Cover), so nothing in the title can tell them apart — the fingerprint can",
       "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "mbid": "mb-master" },
       "candidates": [
-        { "title": "Blinding Lights (Piano Cover)", "url": "yt:cover", "channel": "Piano Tutorials", "categories": ["Music"], "duration": 195, "view_count": 5000000, "recording_mbid": "mb-cover" }
+        { "title": "Blinding Lights (Piano Cover)", "url": "yt:cover", "channel": "Piano Tutorials", "categories": ["Music"], "duration": 195, "view_count": 5000000, "recording_mbids": ["mb-cover"] }
       ]
     },
     {
@@ -101,7 +101,7 @@
       "note": "no saved duration means no duration gate, and normalization has already deleted (Sped Up) — only the fingerprint is left to catch it",
       "track": { "title": "Blinding Lights", "artist": "The Weeknd", "mbid": "mb-master" },
       "candidates": [
-        { "title": "Blinding Lights (Sped Up)", "url": "yt:sped", "channel": "Nightcore Zone", "categories": ["Music"], "duration": 172, "view_count": 3000000, "recording_mbid": "mb-sped" }
+        { "title": "Blinding Lights (Sped Up)", "url": "yt:sped", "channel": "Nightcore Zone", "categories": ["Music"], "duration": 172, "view_count": 3000000, "recording_mbids": ["mb-sped"] }
       ]
     },
     {
