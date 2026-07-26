@@ -35,7 +35,7 @@ type Candidate struct {
 	ActualDuration float64  `json:"actual_duration,omitempty"`
 	Undecodable    bool     `json:"undecodable,omitempty"`
 	DownloadFails  bool     `json:"download_fails,omitempty"`
-	RecordingMBID  string   `json:"recording_mbid,omitempty"`
+	RecordingMBIDs []string `json:"recording_mbids,omitempty"`
 	Resolved       bool     `json:"resolved,omitempty"`
 	Correct        bool     `json:"correct,omitempty"`
 }

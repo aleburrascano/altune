@@ -83,10 +83,10 @@ func (p *casePorts) ValidateDecodable(_ context.Context, filePath string) error 
 
 func (p *casePorts) Identify(_ context.Context, filePath string) (ports.RecordingMatch, error) {
 	cand, ok := p.byPath[filePath]
-	if !ok || cand.RecordingMBID == "" {
+	if !ok || len(cand.RecordingMBIDs) == 0 {
 		return ports.RecordingMatch{}, nil
 	}
-	return ports.RecordingMatch{MBIDs: []string{cand.RecordingMBID}, Score: 1}, nil
+	return ports.RecordingMatch{MBIDs: cand.RecordingMBIDs, Score: 1}, nil
 }
 
 func (p *casePorts) Exists(_ context.Context, _ string) (bool, error) { return false, nil }

@@ -78,10 +78,10 @@ failure taxonomy, because it is also the spec any future verification must satis
 
 | # | Failure | Example | Defended by |
 |---|---|---|---|
-| F1 | **Different performance** — cover, tribute, karaoke, AI clone | "Blinding Lights (Piano Cover)" | ✅ fingerprint; ranking when a master competes |
-| F2 | **Different edit — longer** — remix, extended mix, live, mashup | "Starboy (Extended Remix)" | ✅ duration gate + fingerprint |
-| F3 | **Different edit — same length** — slowed, sped-up, reverb, nightcore, 8D | "Blinding Lights (Slowed + Reverb)" | ✅ fingerprint (pitch/tempo break it); length tiebreak |
-| F4 | **Different mix of the same performance** — radio edit, clean/explicit swap | "…(Radio Edit)" | ✅ duration gate + fingerprint |
+| F1 | **Different performance** — cover, tribute, karaoke, AI clone | "Blinding Lights (Piano Cover)" | ⚠️ ranking only when a master competes; **undefended when a cover is all that exists** |
+| F2 | **Different edit — longer** — remix, extended mix, live, mashup | "Starboy (Extended Remix)" | ✅ duration gate |
+| F3 | **Different edit — same length** — slowed, sped-up, reverb, nightcore, 8D | "Blinding Lights (Slowed + Reverb)" | ⚠️ length tiebreak and duration gate; **undefended when no duration is known** |
+| F4 | **Different mix of the same performance** — radio edit, clean/explicit swap | "…(Radio Edit)" | ✅ duration gate |
 | F5 | **Right recording, contaminated container** — music video with a spoken intro, an unrelated snippet | the Smaxk Or Die music video | ✅ corroborated-duration gate |
 | F6 | **Truncated** — a preview stub sold as the full track | SoundCloud's ~30s public preview | ✅ duration gate + the 45s CLI threshold |
 | F7 | **Wrong artist, same title** — namesake | Dr. Dre "Die Hard" vs Kendrick's "DIE HARD" | ✅ identity + Topic artist-match |
@@ -90,15 +90,23 @@ failure taxonomy, because it is also the spec any future verification must satis
 | F10 | **Corrupted by our own pipeline** — ID3 written onto a non-MP3 container | m4a whose `ftyp` got displaced | ✅ tagger skips non-MP3 |
 
 Every class is gated by `cmd/acquisitioneval` against a committed baseline; the
-suite currently scores **20/20**. Three mechanisms cover the whole table rather
-than one rule per row:
+suite currently scores **42/44**, and the two failures are the genuine open gaps
+named in the table rather than defects to fix before shipping. Three mechanisms
+cover most of the table rather than one rule per row:
 
 1. **Resolve identity before fetching** — discovery supplies ISRC/MBID/duration
    (`RecordingResolver`), so the pipeline knows *what* it wants.
-2. **Verify the bytes** — `AudioIdentifier` (fpcalc → AcoustID → MusicBrainz
-   recording id) asks whether the downloaded audio *is* that recording. A
-   mismatch rejects; an *unknown* accepts and downgrades provenance, so
-   unreleased material stays acquirable.
+2. **Corroborate the bytes — positive evidence only, never a veto.**
+   `AudioIdentifier` (fpcalc → AcoustID → MusicBrainz recording ids) marks a
+   track `verified` when the expected MBID appears in AcoustID's cluster for the
+   audio. It must **not** reject on a mismatch: a recording carries many MBIDs
+   (album, single, compilation, remaster each get their own), so the cluster
+   legitimately need not contain the one MBID discovery happened to pick.
+   Shipping this as a veto rejected every candidate for Rihanna's "Don't Stop
+   the Music" — AcoustID returned the same seven correct MBIDs for three
+   different uploads, none of them the expected one. Restoring rejection power
+   needs cluster-to-cluster comparison (AcoustID's `track/list_by_mbid` maps the
+   expected MBID to its own AcoustID set), not MBID equality.
 3. **Reconcile length** — when discovery corroborates the duration the gate
    tightens from ±max(15s, 7%) to ±max(5s, 3%), which is what catches a
    contaminated container carrying the right recording.
