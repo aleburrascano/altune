@@ -104,10 +104,22 @@ func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outD
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("streamrip %s: %w (stderr: %s)", s.service, err, truncate(stderr.String()))
+		return "", fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr.String()))
 	}
 
 	return largestAudioFile(outDir)
+}
+
+func diagnose(stderr string) string {
+	switch {
+	case strings.Contains(stderr, "unable to open database file"):
+		return "streamrip could not create its download database: set downloads_enabled and " +
+			"failed_downloads_enabled to false in config.toml"
+	case strings.Contains(stderr, "Deezer HiFi is required"):
+		return "the configured Deezer account cannot stream at the requested quality; lower [deezer] quality"
+	default:
+		return "stderr: " + truncate(stderr)
+	}
 }
 
 func truncate(s string) string {
