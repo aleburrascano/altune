@@ -1,11 +1,20 @@
 import type { AcquisitionStatus } from '@shared/api-client/types';
-import { useTrackStatus } from '@shared/acquisition/trackStatusStore';
+import {
+  trackIdentityKey,
+  useTrackIdForIdentity,
+  useTrackStatus,
+} from '@shared/acquisition/trackStatusStore';
 
 import type { TrackExtras } from '../extras-accessors';
 
 export type OwnedTrack = {
   trackId: string;
   acquisitionStatus: AcquisitionStatus;
+};
+
+export type TrackIdentity = {
+  title: string;
+  artist: string | null;
 };
 
 export function ownedFromExtras(te: TrackExtras): OwnedTrack | null {
@@ -15,11 +24,18 @@ export function ownedFromExtras(te: TrackExtras): OwnedTrack | null {
   return { trackId: te.trackId, acquisitionStatus: te.acquisitionStatus };
 }
 
-export function useOwnedTrack(te: TrackExtras): OwnedTrack | null {
+export function useOwnedTrack(te: TrackExtras, identity?: TrackIdentity): OwnedTrack | null {
   const stamped = ownedFromExtras(te);
-  const live = useTrackStatus(stamped?.trackId ?? null);
-  if (stamped === null) {
+  const key = identity != null ? trackIdentityKey(identity.title, identity.artist ?? '') : null;
+  const linkedId = useTrackIdForIdentity(stamped === null ? key : null);
+  const trackId = stamped?.trackId ?? linkedId ?? null;
+  const live = useTrackStatus(trackId);
+
+  if (trackId === null) {
     return null;
   }
-  return live ? { trackId: stamped.trackId, acquisitionStatus: live.acquisitionStatus } : stamped;
+  if (live) {
+    return { trackId, acquisitionStatus: live.acquisitionStatus };
+  }
+  return stamped;
 }

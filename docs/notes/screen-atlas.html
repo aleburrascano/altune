@@ -168,6 +168,8 @@ main{max-width:1600px;margin:0 auto;padding:28px 24px 80px}
 .sdot{width:36px;height:36px;border-radius:999px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;flex:none}
 .sdot.on{background:rgba(61,214,140,.16);border-color:transparent}
 .trow2{display:flex;align-items:center;gap:12px;min-height:52px}
+.dchip{min-height:36px;display:flex;align-items:center;padding:0 12px;border-radius:999px;background:var(--s2);border:1px solid var(--border);color:var(--ts);font-size:14px;font-weight:500}
+.dchip.on{background:var(--accent);border-color:transparent;color:#fff}
 .simrow2{display:flex;align-items:center;gap:10px;min-height:52px;border-bottom:1px solid var(--border)}
 
 /* misc */
@@ -596,7 +598,8 @@ ${factRow([['Releases','19',''],['In library','12',''],['Listeners','5.6M','']])
   ${[['1','Get Lucky','6:09','a2'],['2','One More Time','5:20','a3'],['3','Instant Crush','5:37','a5'],['4','Harder, Better, Faster','3:45','a6'],['5','Around the World','7:09','a8']].map(t=>`
   <div class="trow2"><span class="lb ter" style="width:14px">${t[0]}</span>${art(t[3],40,'8px')}
     <div class="grow"><div class="bd ell">${t[1]}</div></div><span class="lb ter">${t[2]}</span>${saveDot(0)}</div>`).join('')}
-  ${sec('Albums')}
+  ${sec('Discography')}
+  <div class="row mb12" style="gap:8px"><div class="dchip on">Albums 6</div><div class="dchip">Singles 11</div><div class="dchip">EPs 2</div></div>
   <div class="railh">${[['a6','Random Access Memories','2013'],['a8','Discovery','2001'],['a1','Homework','1997'],['a2','Human After All','2005']].map(c=>`<div style="width:128px">${art(c[0],128,'12px')}<div class="lb mt4 ell">${c[1]}</div><div class="cp ter">${c[2]}</div></div>`).join('')}</div>
   ${sec('About')}
   <div class="bd sec">French electronic duo formed in Paris in 1993 by Guy-Manuel de Homem-Christo and Thomas Bangalter. They achieved popularity in the late 1990s as part of the French house movement…</div>

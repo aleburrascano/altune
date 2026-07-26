@@ -99,7 +99,11 @@ export function ArtistDetailBody({
           </Section>
         ) : null}
 
-        {artist.hasSources ? renderApiDiscography() : renderExplore()}
+        {artist.hasSources ? (
+          <Section label="Discography">{renderApiDiscography()}</Section>
+        ) : (
+          renderExplore()
+        )}
 
         {hasAbout ? (
           <View testID="detail-artist-about">
@@ -174,6 +178,7 @@ export function ArtistDetailBody({
                 testID={`detail-top-track-save-${index}`}
                 state={artist.saveStateFor(track)}
                 title={track.title}
+                artist={track.subtitle ?? result.title}
                 onPress={() => artist.onQuickSave(track)}
               />
             </Pressable>
@@ -186,17 +191,14 @@ export function ArtistDetailBody({
   function renderApiDiscography(): ReactElement {
     if (artist.isLoadingAlbums) {
       return (
-        <View testID="detail-albums-loading" style={sharedStyles.albumsSection}>
+        <View testID="detail-albums-loading">
           <AlbumCardsSkeleton />
         </View>
       );
     }
     if (artist.isErrorAlbums) {
       return (
-        <View
-          testID="detail-albums-error"
-          style={[styles.sectionError, sharedStyles.albumsSection]}
-        >
+        <View testID="detail-albums-error" style={styles.sectionError}>
           <Text variant="body" tone="danger">
             Couldn&apos;t load albums.
           </Text>
@@ -211,11 +213,7 @@ export function ArtistDetailBody({
     }
     if (artist.apiAlbums.length === 0) {
       return (
-        <Text
-          variant="body"
-          tone="tertiary"
-          style={[styles.emptySection, sharedStyles.albumsSection]}
-        >
+        <Text variant="body" tone="tertiary" style={styles.emptySection}>
           No albums found.
         </Text>
       );
