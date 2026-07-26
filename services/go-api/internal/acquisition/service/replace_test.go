@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 
@@ -153,5 +154,70 @@ func TestRetryAdmission_StillFailedOnlyWithCooldown(t *testing.T) {
 	}
 	if err := admission.Admit(failed); err != ErrRetryCooldown {
 		t.Errorf("second call: err = %v, want ErrRetryCooldown", err)
+	}
+}
+
+func TestExecuteReplace_LegacyTrackSkipsTopRankedInsteadOfExcluding(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := newFakeTrackRepository()
+	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "")
+
+	store := newFakeAudioStore()
+	store.stored["u/a/b/c.mp3"] = true
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), store)
+
+	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
+
+	updated := repo.tracks[track.ID.String()+":"+userId.String()]
+	if updated.AcquisitionStatus != domain.AcquisitionReady {
+		t.Errorf("status = %v, want the track left ready", updated.AcquisitionStatus)
+	}
+}
+
+func TestSelectStep_SkipTopRankedDropsTheLeader(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:         TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+		SkipTopRanked: true,
+		Candidates: []ports.AudioCandidate{
+			{Title: "Blinding Lights", URL: "leader", Channel: "The Weeknd - Topic", Duration: 200},
+			{Title: "The Weeknd - Blinding Lights", URL: "runner-up", Channel: "Someone", Duration: 201},
+		},
+	}
+
+	if err := NewSelectStep().Execute(context.Background(), ac); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if ac.Selected == nil || ac.Selected.URL != "runner-up" {
+		t.Fatalf("selected = %+v, want the runner-up", ac.Selected)
+	}
+}
+
+func TestSelectStep_SkipTopRankedWithOneCandidateFails(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:         TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+		SkipTopRanked: true,
+		Candidates: []ports.AudioCandidate{
+			{Title: "Blinding Lights", URL: "only", Channel: "The Weeknd - Topic", Duration: 200},
+		},
+	}
+
+	if err := NewSelectStep().Execute(context.Background(), ac); err == nil {
+		t.Fatal("expected failure rather than re-storing the only candidate")
+	}
+}
+
+func TestSelectStep_SkipTopRankedOffByDefault(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+		Candidates: []ports.AudioCandidate{
+			{Title: "Blinding Lights", URL: "leader", Channel: "The Weeknd - Topic", Duration: 200},
+		},
+	}
+
+	if err := NewSelectStep().Execute(context.Background(), ac); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if ac.Selected == nil || ac.Selected.URL != "leader" {
+		t.Fatalf("an ordinary acquire must keep the leader, got %+v", ac.Selected)
 	}
 }

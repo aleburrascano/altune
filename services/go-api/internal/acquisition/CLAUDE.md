@@ -29,6 +29,7 @@ Layout:
 - Manual re-acquire is the mirror: ready-with-audio only, its own 60s cooldown.
 - A replace never marks a track failed and never deletes the audio it preserved.
 - A replace excludes the stored `AudioSourceURL`, or ranking returns the same file.
+- With no recorded source, a replace skips the top-ranked candidate rather than excluding nothing.
 - `complete` is the only call site that advances job counters.
 - Never reach discovery directly — go through `adapters/discoverybridge`.
 - Identity resolution is fill-only and fail-open: it never overwrites saved metadata and never fails acquisition.

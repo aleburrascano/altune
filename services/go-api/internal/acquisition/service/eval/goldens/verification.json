@@ -22,6 +22,27 @@
       ]
     },
     {
+      "id": "replace-legacy-track-skips-the-top-ranked",
+      "class": "OK",
+      "note": "a track acquired before audio_source_url existed has nothing to exclude; skipping the top-ranked candidate is what makes the first replace return something different instead of silently re-storing the same file",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "authoritative_duration": 200 },
+      "skip_top_ranked": true,
+      "candidates": [
+        { "title": "Blinding Lights", "url": "yt:presumed-current", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "view_count": 50000000 },
+        { "title": "The Weeknd - Blinding Lights (Audio)", "url": "yt:alternate", "channel": "AnotherUploader", "categories": ["Music"], "duration": 201, "view_count": 1000, "correct": true }
+      ]
+    },
+    {
+      "id": "replace-legacy-track-with-one-candidate-fails-cleanly",
+      "class": "OK",
+      "note": "skipping the only candidate leaves nothing to store; the pipeline must fail so the caller keeps the original audio rather than re-storing the same file",
+      "track": { "title": "Rare Leak", "artist": "Some Artist", "duration": 200, "authoritative_duration": 200 },
+      "skip_top_ranked": true,
+      "candidates": [
+        { "title": "Some Artist - Rare Leak", "url": "sc:only", "channel": "Some Artist", "duration": 200 }
+      ]
+    },
+    {
       "id": "fp-cluster-excludes-expected-mbid",
       "class": "F0",
       "note": "the Don't Stop the Music failure: AcoustID returns the recording's whole MBID cluster and discovery's chosen MBID is not in it. A recording has many MBIDs (album, single, compilation), so a non-intersection is NOT evidence of a different recording and must never reject",
