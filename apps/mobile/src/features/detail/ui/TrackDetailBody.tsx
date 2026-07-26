@@ -73,7 +73,7 @@ export function TrackDetailBody({
   const wrongAlbum = useReportWrongAlbum(result);
   const playback = usePlayback();
   const te = trackExtras(result.extras);
-  const owned = useOwnedTrack(te);
+  const owned = useOwnedTrack(te, { title: result.title, artist: result.subtitle });
 
   const canSave = (result.subtitle ?? '').length > 0;
   const albumName = te.album;

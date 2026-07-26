@@ -1,6 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import { patchTrackStatus, removeTrackStatus } from '@shared/acquisition/trackStatusStore';
+import {
+  linkTrackIdentity,
+  patchTrackStatus,
+  removeTrackStatus,
+  trackIdentityKey,
+} from '@shared/acquisition/trackStatusStore';
 import {
   startDownload,
   progressDownload,
@@ -110,6 +115,7 @@ export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): 
         acquisitionStatus: track.acquisition_status,
         failureMessage: track.failure_message ?? null,
       });
+      linkTrackIdentity(trackIdentityKey(track.title, track.artist), track.id);
     } else {
       void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
       void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });

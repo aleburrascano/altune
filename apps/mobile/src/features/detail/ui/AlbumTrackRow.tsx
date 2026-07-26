@@ -64,6 +64,7 @@ export function AlbumTrackRow({
         testID={`detail-track-save-${index}`}
         state={saveState}
         title={track.title}
+        artist={track.subtitle}
         onPress={onQuickSave}
       />
     </Pressable>

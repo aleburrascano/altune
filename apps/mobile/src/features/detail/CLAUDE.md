@@ -10,7 +10,7 @@ Layout:
 - `extras.ts` — `resolveFeatured`, `extractFeaturedFromText`. `extras-accessors.ts` — narrowing for the untyped wire map.
 - `play-source.ts` — `resolvePlaySource`. `save-control-state.ts` — lifecycle state + labels. `save-cache.ts` — the create-request mapper and the optimistic placeholder. `hooks/useOwnedTrack.ts` — server ownership stamp overlaid with the live acquisition status.
 - `navigation.ts` — `openDetail`. `hooks/` — `useSaveTrack`, `useLateralNav`, `useAlbumTracks`, `useArtistContent`, `useDetailEnrichments`, `useEnrichResult`, `useOwnedTrack`, `useAlbumDetailState`, `useArtistDetailState`.
-- `__tests__/` — `extras`, `play-source`, `save-control-state`, `save-cache`, `owned-playback`, `useSaveTrack`, `useLateralNav`, `DetailScreen`.
+- `__tests__/` — `extras`, `extras-accessors`, `helpers`, `play-source`, `save-control-state`, `save-cache`, `owned-playback`, `ownership-liveness`, `useSaveTrack`, `useLateralNav`, `useEnrichment`, `useDeezerEnrichment`, `useLastFmEnrichment`, `useRelatedTracks`, `DetailScreen`, `DetailScaffold`, `LastFmEnrichmentSection`, `RelatedTracksSection`.
 
 Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@shared/api-client/{tracks,discovery,enrichment}`, `@shared/ui/primitives/*` (imported directly, not the barrel), `@tanstack/react-query`. No cross-feature imports.
 
@@ -31,6 +31,8 @@ Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@share
 - Keep the back button outside the ScrollView, and check `router.canGoBack()` before `router.back()`.
 - Render every kind through `DetailScaffold`; a body supplies slot content and never its own header, action layout or section heading.
 - Put only intrinsic facts in the fact row — anything navigable belongs in a section row, and an absent value omits its cell rather than rendering empty.
+- Resolve ownership through `useOwnedTrack(extras, identity)` so an unowned track goes live on save; never read it from a static handoff alone.
+- Show one discography rail behind record-type chips, never a stacked rail per type.
 - Keep the collapsing app-bar title hidden from accessibility; it duplicates the banner title.
 - Never add a detail action that has no backing behaviour in the feature's hooks.
 - Every tappable element needs `accessibilityRole` + `accessibilityLabel`; touch targets ≥48pt.
