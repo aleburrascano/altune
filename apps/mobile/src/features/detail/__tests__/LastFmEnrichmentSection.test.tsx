@@ -25,15 +25,14 @@ function _render(kind: DiscoveryKind, enrichment: LastFmEnrichmentResponse | nul
 }
 
 describe('LastFmEnrichmentSection', () => {
-  it('renders compact popularity and tags', () => {
-    const { getByTestId } = _render('artist', _enrichment());
+  it('leaves genres and listener counts to the banner and the fact row', () => {
+    const { getByTestId, queryByTestId } = _render('artist', _enrichment());
     expect(getByTestId('detail-lastfm')).toBeTruthy();
-    expect(getByTestId('detail-lastfm-popularity')).toHaveTextContent(/5\.2M listeners/);
-    expect(getByTestId('detail-lastfm-popularity')).toHaveTextContent(/1\.1B plays/);
-    expect(getByTestId('detail-lastfm-tag-0')).toBeTruthy();
+    expect(queryByTestId('detail-lastfm-popularity')).toBeNull();
+    expect(queryByTestId('detail-lastfm-tag-0')).toBeNull();
   });
 
-  it('shows the bio and similar artists as chips for an artist (Editorial About)', () => {
+  it('shows the bio and similar artists as rows for an artist (Editorial About)', () => {
     const { getByTestId } = _render('artist', _enrichment());
     expect(getByTestId('detail-lastfm-bio')).toHaveTextContent('A song blurb.');
     expect(getByTestId('detail-lastfm-similar')).toBeTruthy();

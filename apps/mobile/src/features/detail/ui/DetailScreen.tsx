@@ -1,49 +1,34 @@
 import { Redirect, useRouter, useSegments } from 'expo-router';
-import type { ReactElement } from 'react';
-import { ChevronLeft } from 'lucide-react-native';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import type { ReactElement, ReactNode } from 'react';
+import { Pressable } from 'react-native';
 
-import { Artwork } from '@shared/ui/primitives/Artwork';
-import { IconButton } from '@shared/ui/primitives/IconButton';
-import { Screen } from '@shared/ui/primitives/Screen';
 import { Text } from '@shared/ui/primitives/Text';
-import { radius, spacing } from '@shared/ui/theme/tokens';
 
 import { getDetailHandoff } from '@shared/lib/detail-handoff';
 import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
 
-import { trackExtras } from '../extras-accessors';
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
 import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
 import { useEnrichResult } from '../hooks/useEnrichResult';
 import { useLateralNav } from '../hooks/useLateralNav';
 import { detailRouteFor, tabRootFromSegments } from '../navigation';
 
-import { _albumYear } from './helpers';
 import { TrackDetailBody } from './TrackDetailBody';
 import { AlbumDetailBody } from './AlbumDetailBody';
 import { ArtistDetailBody } from './ArtistDetailBody';
-import { Disclosure } from './Disclosure';
-import { LastFmEnrichmentSection } from './LastFmEnrichmentSection';
+import type { DetailChrome } from './DetailScaffold';
 
-const HERO_SIZE = 200;
+const EMPTY_RESULT = {
+  kind: 'track' as const,
+  title: '',
+  subtitle: null,
+  image_url: null,
+  confidence: 'low' as const,
+  sources: [],
+  extras: {},
+};
 
-function _headerYear(result: ReturnType<typeof getDetailHandoff>, mbYear: number): string | null {
-  if (result === null) {
-    return null;
-  }
-  if (mbYear > 0) {
-    return String(mbYear);
-  }
-  if (result.kind === 'album') {
-    return _albumYear(result);
-  }
-  if (result.kind === 'track') {
-    const y = trackExtras(result.extras).year;
-    return y != null ? String(y) : null;
-  }
-  return null;
-}
+const MAX_GENRES = 2;
 
 export function DetailScreen(): ReactElement {
   const router = useRouter();
@@ -51,17 +36,7 @@ export function DetailScreen(): ReactElement {
   const tabRoot = tabRootFromSegments(segments);
   const detailRoute = detailRouteFor(tabRoot);
   const rawResult = getDetailHandoff();
-  const { enriched: result } = useEnrichResult(
-    rawResult ?? {
-      kind: 'track',
-      title: '',
-      subtitle: null,
-      image_url: null,
-      confidence: 'low',
-      sources: [],
-      extras: {},
-    },
-  );
+  const { enriched: result } = useEnrichResult(rawResult ?? EMPTY_RESULT);
   const lateralNav = useLateralNav();
 
   const isFromLibrary = (rawResult?.sources.length ?? 0) === 0;
@@ -77,140 +52,96 @@ export function DetailScreen(): ReactElement {
     return <Redirect href="/discover" />;
   }
 
-  const heroImageUrl =
+  const artworkUrl =
     (result.image_url ?? '') !== ''
       ? result.image_url
-      : isLibraryArtist && artistDiscovery.imageUrl != null
+      : isLibraryArtist
         ? artistDiscovery.imageUrl
         : result.image_url;
 
-  const yearLabel = _headerYear(rawResult, enrichments.musicbrainz?.year ?? 0);
-  const canNavToArtist = result.subtitle !== null && result.kind !== 'artist';
-
-  const onArtistPress = (): void => {
-    if (canNavToArtist && result.subtitle !== null) {
-      void lateralNav.navigateTo(result.subtitle, 'artist');
-    }
-  };
-
-  const artistHasAbout = enrichments.lastfm !== null;
-
-  const backButton = (
-    <View style={styles.back}>
-      <IconButton
-        testID="detail-back"
-        icon={ChevronLeft}
-        size={24}
-        onPress={() => {
-          if (router.canGoBack()) {
-            router.back();
-          } else {
-            router.replace(`/${tabRoot}` as '/discover' | '/library');
-          }
-        }}
-        accessibilityLabel="Go back"
-      />
-    </View>
-  );
-
   const albumCollaborators =
     result.kind === 'album' ? featuredArtistsFromExtras(enrichments.deezer?.featured_artists) : [];
-  const subtitleDisplay =
-    result.subtitle !== null ? withFeaturing(result.subtitle, albumCollaborators) : null;
 
-  const heroContent = (
-    <View style={styles.hero}>
-      <Artwork
-        uri={heroImageUrl}
-        size={HERO_SIZE}
-        radius={isArtist ? radius.full : radius.lg}
-        accessibilityLabel={result.title}
+  const chrome: DetailChrome = {
+    title: result.title,
+    artworkUrl,
+    secondary: secondaryLine(),
+    onBack: () => {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace(`/${tabRoot}` as '/discover' | '/library');
+      }
+    },
+  };
+
+  if (result.kind === 'album') {
+    return (
+      <AlbumDetailBody
+        chrome={chrome}
+        result={result}
+        detailRoute={detailRoute}
+        isFromLibrary={isFromLibrary}
+        mbYear={enrichments.musicbrainz?.year ?? 0}
       />
-      <Text variant="displayL" style={styles.title} numberOfLines={2}>
-        {result.title}
-      </Text>
-      {result.subtitle !== null || yearLabel !== null ? (
-        <View style={styles.subRow}>
-          {result.subtitle !== null ? (
-            canNavToArtist ? (
-              <Pressable
-                testID="detail-artist-link"
-                onPress={onArtistPress}
-                disabled={lateralNav.state === 'searching'}
-                accessibilityRole="link"
-                accessibilityLabel={`View artist ${result.subtitle}`}
-                accessibilityHint="Opens artist detail"
-                style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
-              >
-                <Text variant="body" tone="accent" numberOfLines={1}>
-                  {subtitleDisplay}
-                </Text>
-              </Pressable>
-            ) : (
-              <Text variant="body" tone="secondary" numberOfLines={1}>
-                {subtitleDisplay}
-              </Text>
-            )
-          ) : null}
-          {yearLabel !== null ? (
-            <Text variant="body" tone="tertiary">
-              {result.subtitle !== null ? `  ·  ${yearLabel}` : yearLabel}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  );
+    );
+  }
+
+  if (result.kind === 'artist') {
+    return (
+      <ArtistDetailBody
+        chrome={chrome}
+        result={result}
+        detailRoute={detailRoute}
+        isFromLibrary={isFromLibrary}
+        lastfm={enrichments.lastfm}
+      />
+    );
+  }
 
   return (
-    <Screen testID="detail-header">
-      {backButton}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {heroContent}
-
-        {result.kind === 'track' ? (
-          <TrackDetailBody
-            result={result}
-            lateralNav={lateralNav}
-            detailRoute={detailRoute}
-            deezerFeatured={featuredArtistsFromExtras(enrichments.deezer?.featured_artists)}
-          />
-        ) : null}
-
-        {result.kind === 'album' ? (
-          <AlbumDetailBody
-            result={result}
-            detailRoute={detailRoute}
-            isFromLibrary={isFromLibrary}
-          />
-        ) : null}
-
-        {result.kind === 'artist' ? (
-          <ArtistDetailBody
-            result={result}
-            detailRoute={detailRoute}
-            isFromLibrary={isFromLibrary}
-          />
-        ) : null}
-        {result.kind === 'artist' && artistHasAbout ? (
-          <Disclosure label={`About ${result.title}`} testID="detail-artist-about">
-            <LastFmEnrichmentSection kind="artist" enrichment={enrichments.lastfm} />
-          </Disclosure>
-        ) : null}
-      </ScrollView>
-    </Screen>
+    <TrackDetailBody
+      chrome={chrome}
+      result={result}
+      lateralNav={lateralNav}
+      detailRoute={detailRoute}
+      deezerFeatured={featuredArtistsFromExtras(enrichments.deezer?.featured_artists)}
+      mbYear={enrichments.musicbrainz?.year ?? 0}
+    />
   );
-}
 
-const styles = StyleSheet.create({
-  scrollContent: { paddingBottom: 140 },
-  back: { paddingVertical: spacing.lg, alignSelf: 'flex-start', minHeight: 48 },
-  hero: { alignItems: 'center', paddingTop: spacing.lg, gap: spacing.sm },
-  title: { textAlign: 'center', marginTop: spacing.lg },
-  subRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-  },
-});
+  function secondaryLine(): ReactNode {
+    if (isArtist) {
+      const genres = (enrichments.lastfm?.tags ?? []).slice(0, MAX_GENRES);
+      if (genres.length === 0) {
+        return null;
+      }
+      return (
+        <Text variant="body" tone="secondary" numberOfLines={1}>
+          {genres.join(' · ')}
+        </Text>
+      );
+    }
+
+    const artist = result.subtitle;
+    if (artist === null) {
+      return null;
+    }
+
+    return (
+      <Pressable
+        testID="detail-artist-link"
+        onPress={() => void lateralNav.navigateTo(artist, 'artist')}
+        disabled={lateralNav.state === 'searching'}
+        accessibilityRole="link"
+        accessibilityLabel={`View artist ${artist}`}
+        accessibilityHint="Opens artist detail"
+        style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
+      >
+        <Text variant="body" tone="accent" numberOfLines={1}>
+          {withFeaturing(artist, albumCollaborators)}
+        </Text>
+      </Pressable>
+    );
+  }
+}

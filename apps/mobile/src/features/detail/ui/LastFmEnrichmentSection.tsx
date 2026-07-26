@@ -1,24 +1,18 @@
 import { useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { ChevronRight } from 'lucide-react-native';
+
+import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
-import { useTheme } from '@shared/ui/theme/useTheme';
-import { radius, spacing } from '@shared/ui/theme/tokens';
+import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryKind } from '@shared/api-client/discovery';
 
-const MAX_TAGS = 4;
 const MAX_SIMILAR = 6;
 const BIO_COLLAPSED_LINES = 4;
 const BIO_LONG_THRESHOLD = 220;
-
-function compactCount(n: number): string {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
 
 export function LastFmEnrichmentSection({
   kind,
@@ -36,16 +30,9 @@ export function LastFmEnrichmentSection({
 
   const bio = enrichment.bio;
   const longBio = bio.length > BIO_LONG_THRESHOLD;
-  const tags = enrichment.tags.slice(0, MAX_TAGS);
   const similar = kind === 'artist' ? enrichment.similar.slice(0, MAX_SIMILAR) : [];
 
-  const popularity = [
-    enrichment.listeners > 0 ? `${compactCount(enrichment.listeners)} listeners` : null,
-    enrichment.playcount > 0 ? `${compactCount(enrichment.playcount)} plays` : null,
-  ].filter((p): p is string => p !== null);
-
-  const hasContent = popularity.length > 0 || tags.length > 0 || similar.length > 0 || bio !== '';
-  if (!hasContent) {
+  if (bio === '' && similar.length === 0) {
     return null;
   }
 
@@ -77,46 +64,24 @@ export function LastFmEnrichmentSection({
         </View>
       ) : null}
 
-      {popularity.length > 0 ? (
-        <Text testID="detail-lastfm-popularity" variant="label" tone="tertiary">
-          {popularity.join('  ·  ')}
-        </Text>
-      ) : null}
-
-      {tags.length > 0 ? (
-        <View style={styles.chips}>
-          {tags.map((tag, index) => (
+      {similar.length > 0 ? (
+        <View testID="detail-lastfm-similar">
+          <Text variant="overline" tone="tertiary" style={styles.seclabel}>
+            SIMILAR ARTISTS
+          </Text>
+          {similar.map((name, index) => (
             <View
-              key={tag}
-              testID={`detail-lastfm-tag-${index}`}
-              style={[styles.chip, { borderColor: theme.color.border }]}
+              key={name}
+              testID={`detail-lastfm-similar-${index}`}
+              style={[styles.simRow, { borderBottomColor: theme.color.border }]}
             >
-              <Text variant="caption" tone="secondary">
-                {tag}
+              <Artwork uri={null} size={36} radius={radius.full} />
+              <Text variant="body" style={styles.simName} numberOfLines={1}>
+                {name}
               </Text>
+              <ChevronRight size={16} color={theme.color.textTertiary} />
             </View>
           ))}
-        </View>
-      ) : null}
-
-      {similar.length > 0 ? (
-        <View testID="detail-lastfm-similar" style={styles.block}>
-          <Text variant="label" tone="tertiary" style={styles.seclabel}>
-            Similar artists
-          </Text>
-          <View style={styles.chips}>
-            {similar.map((name, index) => (
-              <View
-                key={name}
-                testID={`detail-lastfm-similar-${index}`}
-                style={[styles.chip, { borderColor: theme.color.border }]}
-              >
-                <Text variant="caption" tone="secondary">
-                  {name}
-                </Text>
-              </View>
-            ))}
-          </View>
         </View>
       ) : null}
     </View>
@@ -124,18 +89,15 @@ export function LastFmEnrichmentSection({
 }
 
 const styles = StyleSheet.create({
-  section: { marginTop: spacing.sm, gap: spacing.md },
+  section: { gap: spacing.lg },
   block: { gap: spacing.sm },
-  seclabel: { textTransform: 'uppercase', letterSpacing: 0.6 },
-  chips: {
+  seclabel: { marginBottom: spacing.sm },
+  simRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 52,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  chip: {
-    borderWidth: 1,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
+  simName: { flex: 1 },
 });
