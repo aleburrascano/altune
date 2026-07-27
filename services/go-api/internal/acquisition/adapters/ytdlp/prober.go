@@ -27,6 +27,19 @@ func NewFfprobeProber(ffmpegLocation string) *FfprobeProber {
 	}
 }
 
+func (p *FfprobeProber) Available() (ffprobe bool, ffmpeg bool) {
+	return binaryRunnable(p.ffprobe), binaryRunnable(p.ffmpeg)
+}
+
+func binaryRunnable(path string) bool {
+	if filepath.IsAbs(path) {
+		_, err := os.Stat(path)
+		return err == nil
+	}
+	_, err := exec.LookPath(path)
+	return err == nil
+}
+
 func resolveBinary(name, ffmpegLocation string) string {
 	if ffmpegLocation != "" {
 		candidate := name

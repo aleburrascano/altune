@@ -74,17 +74,19 @@ type AcquisitionContext struct {
 	Selected         *ports.AudioCandidate
 	TempPath         string
 	AudioRef         string
+	ProbedDuration   float64
 	DurationVerified bool
 	IdentityVerified bool
 
-	ExcludeURLs   []string
+	ExcludeKeys   []string
 	PreservedRef  string
 	SkipTopRanked bool
 }
 
 func (ac *AcquisitionContext) excludes(url string) bool {
-	for _, excluded := range ac.ExcludeURLs {
-		if excluded == url {
+	key := sourceKey(url)
+	for _, excluded := range ac.ExcludeKeys {
+		if excluded == key {
 			return true
 		}
 	}
@@ -95,18 +97,46 @@ func (ac *AcquisitionContext) Provenance() domain.AcquisitionProvenance {
 	switch {
 	case ac.IdentityVerified:
 		return domain.ProvenanceVerified
-	case ac.DurationVerified && ac.Identity.Duration > 0:
+	case ac.DurationVerified && ac.lengthCorroborated():
 		return domain.ProvenanceCorroborated
 	default:
 		return domain.ProvenanceBestEffort
 	}
 }
 
-func (ac *AcquisitionContext) durationAcceptable(actual float64) bool {
-	if ac.Identity.Duration > 0 {
-		return durationWithinAuthoritativeTolerance(ac.Track.Duration, actual)
+func (ac *AcquisitionContext) MeasuredDuration() float64 {
+	if ac.ProbedDuration > 0 {
+		return ac.ProbedDuration
 	}
-	return durationWithinTolerance(ac.Track.Duration, actual)
+	if ac.Selected != nil {
+		return ac.Selected.Duration
+	}
+	return 0
+}
+
+func (ac *AcquisitionContext) lengthCorroborated() bool {
+	saved, resolved := ac.Track.Duration, ac.Identity.Duration
+	if resolved <= 0 {
+		return false
+	}
+	if saved <= 0 {
+		return true
+	}
+	return durationWithinAuthoritativeTolerance(saved, resolved)
+}
+
+func (ac *AcquisitionContext) durationAcceptable(actual float64) bool {
+	saved, resolved := ac.Track.Duration, ac.Identity.Duration
+	if ac.lengthCorroborated() {
+		if saved <= 0 {
+			return durationWithinAuthoritativeTolerance(resolved, actual)
+		}
+		return durationWithinAuthoritativeTolerance(saved, actual)
+	}
+	if resolved > 0 {
+		return durationWithinTolerance(saved, actual) || durationWithinTolerance(resolved, actual)
+	}
+	return durationWithinTolerance(saved, actual)
 }
 
 type TrackRef struct {

@@ -2,6 +2,8 @@ package chromaprint
 
 import (
 	"testing"
+
+	"altune/go-api/internal/acquisition/ports"
 )
 
 func TestBestMatch_PicksHighestScoreAboveThreshold(t *testing.T) {
@@ -52,7 +54,7 @@ func TestBestMatch_IgnoresLowScores(t *testing.T) {
 	}
 }
 
-func TestBestMatch_IgnoresResultsWithNoRecordings(t *testing.T) {
+func TestBestMatch_KeepsResultsWithOnlyAnAcoustID(t *testing.T) {
 	var parsed lookupResponse
 	parsed.Status = "ok"
 	parsed.Results = []struct {
@@ -62,11 +64,24 @@ func TestBestMatch_IgnoresResultsWithNoRecordings(t *testing.T) {
 			ID string `json:"id"`
 		} `json:"recordings"`
 	}{
-		{ID: "no-recordings", Score: 0.99},
+		{ID: "acoustid-only", Score: 0.99},
 	}
 
-	if got := bestMatch(parsed); got.Known() {
-		t.Errorf("a result carrying no recording ids is unknown, got %+v", got)
+	got := bestMatch(parsed)
+	if !got.Known() {
+		t.Fatalf("an AcoustID with no MusicBrainz links still identifies the audio for cluster comparison, got %+v", got)
+	}
+	if !got.InCluster([]string{"other", "acoustid-only"}) {
+		t.Errorf("InCluster must match on the AcoustID, got %+v", got)
+	}
+	if got.InCluster([]string{"other"}) {
+		t.Error("an AcoustID outside the expected cluster is a different recording")
+	}
+}
+
+func TestRecordingMatch_EmptyAcoustIDNeverMatchesACluster(t *testing.T) {
+	if (ports.RecordingMatch{MBIDs: []string{"mb"}}).InCluster([]string{"", "a"}) {
+		t.Error("a match with no AcoustID must never be read as being in the cluster")
 	}
 }
 

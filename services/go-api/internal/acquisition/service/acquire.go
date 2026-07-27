@@ -121,10 +121,13 @@ func (s *AcquireTrackAudioService) execute(
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
 	if replace {
 		ac.PreservedRef = deref(track.AudioRef)
-		if current := deref(track.AudioSourceURL); current != "" {
-			ac.ExcludeURLs = []string{current}
+		ac.ExcludeKeys = mergeSourceKeys(
+			track.RejectedSourceKeys,
+			sourceKey(deref(track.AudioSourceURL)),
+		)
+		if len(ac.ExcludeKeys) > 0 {
 			slog.InfoContext(ctx, "acquisition.replacing_source",
-				"track_id", trackId.String(), "excluded_source", current)
+				"track_id", trackId.String(), "excluded_keys", ac.ExcludeKeys)
 		} else {
 			ac.SkipTopRanked = true
 			slog.InfoContext(ctx, "acquisition.replacing_unknown_source",
@@ -143,9 +146,16 @@ func (s *AcquireTrackAudioService) execute(
 			"error", err,
 		)
 		reason := failureReason(err)
-		if !replace {
-			s.markFailed(ctx, trackId, userId, reason)
+		if replace {
+			if s.events != nil {
+				s.events.Publish(userId, "track_replace_failed", map[string]any{
+					"track_id": trackId.String(),
+					"reason":   reason,
+				})
+			}
+			return err
 		}
+		s.markFailed(ctx, trackId, userId, reason)
 		if s.events != nil {
 			s.events.Publish(userId, "track_acquisition_failed", map[string]any{
 				"track_id": trackId.String(),
@@ -212,6 +222,29 @@ func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *Acqu
 	if ac.Track.ISRC == "" && identity.ISRC != "" {
 		ac.Track.ISRC = identity.ISRC
 	}
+	s.resolveExpectedCluster(ctx, ac)
+}
+
+func (s *AcquireTrackAudioService) resolveExpectedCluster(ctx context.Context, ac *AcquisitionContext) {
+	if s.identifier == nil || ac.Identity.MBID == "" {
+		return
+	}
+
+	cluster, err := s.identifier.AcoustIDsFor(ctx, ac.Identity.MBID)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.expected_cluster_failed",
+			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "error", err)
+		return
+	}
+	if len(cluster) == 0 {
+		slog.InfoContext(ctx, "acquisition.expected_cluster_unknown",
+			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID)
+		return
+	}
+
+	ac.Identity.AcoustIDs = cluster
+	slog.InfoContext(ctx, "acquisition.expected_cluster_resolved",
+		"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "acoustids", len(cluster))
 }
 
 func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, track *domain.Track) (proceed bool, err error) {

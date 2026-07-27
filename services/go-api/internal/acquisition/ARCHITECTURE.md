@@ -78,9 +78,9 @@ failure taxonomy, because it is also the spec any future verification must satis
 
 | # | Failure | Example | Defended by |
 |---|---|---|---|
-| F1 | **Different performance** — cover, tribute, karaoke, AI clone | "Blinding Lights (Piano Cover)" | ⚠️ ranking only when a master competes; **undefended when a cover is all that exists** |
+| F1 | **Different performance** — cover, tribute, karaoke, acoustic take, AI clone | "Sunglasses at Night (Acoustic Version)" | ✅ qualifier distance when a master competes; fingerprint cluster rejection when it doesn't — **undefended only where AcoustID has no cluster for the expected recording** |
 | F2 | **Different edit — longer** — remix, extended mix, live, mashup | "Starboy (Extended Remix)" | ✅ duration gate |
-| F3 | **Different edit — same length** — slowed, sped-up, reverb, nightcore, 8D | "Blinding Lights (Slowed + Reverb)" | ⚠️ length tiebreak and duration gate; **undefended when no duration is known** |
+| F3 | **Different edit — same length** — slowed, sped-up, reverb, nightcore, 8D | "Blinding Lights (Slowed + Reverb)" | ✅ qualifier distance, then fingerprint cluster rejection — no longer dependent on a known duration |
 | F4 | **Different mix of the same performance** — radio edit, clean/explicit swap | "…(Radio Edit)" | ✅ duration gate |
 | F5 | **Right recording, contaminated container** — music video with a spoken intro, an unrelated snippet | the Smaxk Or Die music video | ✅ corroborated-duration gate |
 | F6 | **Truncated** — a preview stub sold as the full track | SoundCloud's ~30s public preview | ✅ duration gate + the 45s CLI threshold |
@@ -90,26 +90,30 @@ failure taxonomy, because it is also the spec any future verification must satis
 | F10 | **Corrupted by our own pipeline** — ID3 written onto a non-MP3 container | m4a whose `ftyp` got displaced | ✅ tagger skips non-MP3 |
 
 Every class is gated by `cmd/acquisitioneval` against a committed baseline; the
-suite currently scores **42/44**, and the two failures are the genuine open gaps
-named in the table rather than defects to fix before shipping. Three mechanisms
-cover most of the table rather than one rule per row:
+suite currently scores **54/54**. Four mechanisms cover the table rather than one
+rule per row:
 
 1. **Resolve identity before fetching** — discovery supplies ISRC/MBID/duration
-   (`RecordingResolver`), so the pipeline knows *what* it wants.
-2. **Corroborate the bytes — positive evidence only, never a veto.**
-   `AudioIdentifier` (fpcalc → AcoustID → MusicBrainz recording ids) marks a
-   track `verified` when the expected MBID appears in AcoustID's cluster for the
-   audio. It must **not** reject on a mismatch: a recording carries many MBIDs
-   (album, single, compilation, remaster each get their own), so the cluster
-   legitimately need not contain the one MBID discovery happened to pick.
-   Shipping this as a veto rejected every candidate for Rihanna's "Don't Stop
-   the Music" — AcoustID returned the same seven correct MBIDs for three
-   different uploads, none of them the expected one. Restoring rejection power
-   needs cluster-to-cluster comparison (AcoustID's `track/list_by_mbid` maps the
-   expected MBID to its own AcoustID set), not MBID equality.
-3. **Reconcile length** — when discovery corroborates the duration the gate
-   tightens from ±max(15s, 7%) to ±max(5s, 3%), which is what catches a
-   contaminated container carrying the right recording.
+   (`RecordingResolver`), so the pipeline knows *what* it wants, and
+   `resolveExpectedCluster` resolves the expected recording's AcoustID set.
+2. **Compare the bytes cluster-to-cluster.** `AudioIdentifier` (fpcalc → AcoustID)
+   marks a track `verified` when the audio's AcoustID falls inside the expected
+   recording's cluster, and **rejects** when the cluster is known and the audio
+   sits outside it. The earlier version compared MBID *equality* and was unsound —
+   a recording carries many MBIDs (album, single, compilation, remaster), so the
+   sets legitimately need not intersect; that version rejected every candidate for
+   Rihanna's "Don't Stop the Music". Cluster comparison is immune to that, and
+   rejection is confined to the case where AcoustID actually knows the expected
+   recording, so unreleased material stays acquirable.
+3. **Score the words normalization deleted.** `qualifierDistance` reads the raw
+   titles and ranks on the symmetric difference of their bracketed-qualifier token
+   sets, which is what separates a master from an acoustic take or a music video
+   on the same Topic channel.
+4. **Reconcile length by agreement.** When the saved and resolved durations agree
+   the gate tightens from ±max(15s, 7%) to ±max(5s, 3%), catching a contaminated
+   container. When they disagree neither is corroborated, so the loose window
+   around either accepts — a 7" edit and an album cut differ by more than the
+   tight window and the correct file must not be thrown away.
 
 What survives is honestly two-tiered, and the tier is recorded on the track:
 `verified` (fingerprint-matched), `corroborated` (length agreed with an
@@ -288,6 +292,14 @@ admit what the first refuses.
 A change should preserve all of these; if it can't, that's the discussion.
 
 - The pipeline shape is defined once, in `CoreSteps`. Never in a caller.
+- The fingerprint rejects only against a known expected cluster; unknown audio always passes.
+- Fingerprints are compared cluster-to-cluster, never by MBID equality.
+- A tightened duration window requires the saved and resolved lengths to *agree*.
+- Variant markers are read from the raw title; `NormalizeForMatch` is never "fixed" to keep them.
+- Exclusion matches a normalized `sourceKey`, and a key is normalized exactly once.
+- A replace never drops a previously rejected source from the set.
+- A failed replace never publishes `track_acquisition_failed`.
+- Event names stay literal at their `Publish` call sites.
 - Every `Step` implements `Rollback` honestly.
 - Tagging failure is logged and swallowed — never fatal.
 - Non-MP3 containers are never ID3-tagged.
@@ -311,66 +323,49 @@ A change should preserve all of these; if it can't, that's the discussion.
 Current state → tension → candidate direction. Ordered by how much they cost the
 user, not by how hard they are.
 
-### 7.1 Normalization deletes the words that distinguish variants
+### 7.1 ~~Normalization deletes the words that distinguish variants~~ — closed
 
-`identityScore` compares titles through `textnorm.NormalizeForMatch`, which strips
-every bracketed segment. `"Blinding Lights (Slowed + Reverb)"`,
-`"Blinding Lights (Sped Up)"` and `"Blinding Lights"` all normalize to
-`blinding lights` and score **identically**. Against track "Blinding Lights"/"The
-Weeknd" every one of them scores exactly 60.0 — the threshold, which passes.
+`qualifierDistance` now generalizes the `extractFeaturedArtists` workaround: it reads
+the raw titles, tokenizes their bracketed segments, and ranks on the symmetric
+difference (unrequested marker 1, requested-but-missing 2). `NormalizeForMatch` was
+left alone, as §8 requires. The asymmetry is preserved — a user who saves
+"Song (Slowed)" gets the slowed take.
 
-This is F3, and it is completely undefended. The module already knows the failure
-mode: `extractFeaturedArtists` reads the raw title *precisely because*
-normalization ate `(feat. X)`. That workaround was never generalized.
+What remains deliberate: an unrequested marker is a *ranking penalty*, not a veto.
+Vetoing would require knowing which qualifiers name a different recording
+("Acoustic") and which name the same one repackaged ("Official Audio", "Remastered"),
+and that is a word bank. The fingerprint answers that question with evidence
+instead.
 
-**Direction:** extract variant markers from the raw title the way features already
-are, and treat an *unrequested* marker as disqualifying rather than as a tiebreak —
-if the saved track's title doesn't say "remix", a candidate that does is a different
-recording. The asymmetry matters: a user who saves "Song (Slowed)" should get the
-slowed version. **Constraint:** do not "fix" this inside `NormalizeForMatch` — it is
-shared with discovery's merge, consensus, correction and result-signature join key
-(§8).
+### 7.2 ~~The duration gate is conditional, and its input is optional~~ — closed
 
-### 7.2 The duration gate is conditional, and its input is optional
+A track saved without a duration used to get no length check at all.
+`resolveIdentity` is fill-only: when the saved duration is absent it supplies
+discovery's, so the gate runs on every acquisition that can be identified at all.
+What remains: a track discovery cannot resolve *and* that was saved without a
+duration still has no length to check against — the fingerprint is the only defense
+left there.
 
-`verify := s.prober != nil && ac.Track.Duration > 0`. A track saved without a
-duration gets **no length check at all** — the only real defense against F1/F2
-silently disappears. `DurationSeconds` is a nullable column filled from whatever
-discovery metadata came with the save.
+### 7.3 ~~Ties are resolved non-deterministically~~ — closed
 
-Meanwhile discovery *already resolved this track* to a canonical entity carrying an
-authoritative duration, and acquisition drops it and re-searches by text.
+Both sorts are `sort.SliceStable` with an explicit `breakTie` on distance from the
+expected length, then URL, and the source registry writes each source's results into
+its own slot so tie order never depends on completion order. The same candidate set
+yields the same pick run-to-run, which is what makes the eval in §7.8 meaningful.
 
-**Direction:** thread discovery's duration into `TrackRef.Duration` so the gate
-always runs. Highest value-per-line change available, and it needs no new
-dependency.
+### 7.4 ~~Nothing verifies the *contents* of the chosen file~~ — closed
 
-### 7.3 Ties are resolved non-deterministically
+`ProbeDuration` reads a container header and `ValidateDecodable` asks only whether
+ffmpeg can decode the stream; neither asks whether the audio *is the recording*.
+`AudioIdentifier` does, and now rejects on it (§1.2). A contaminated container is
+caught by the corroborated-duration gate, and a different performance by the
+AcoustID cluster comparison.
 
-Both sorts use `sort.Slice`, which is **not stable**. Two candidates on the same
-Topic channel with equal identity, artist-match and feature-match — exactly the
-master-vs-sped-up case in §7.1 — are ordered arbitrarily. Which version enters the
-library depends on the order yt-dlp happened to return, and is not reproducible
-run-to-run.
-
-**Direction:** `sort.SliceStable` plus an explicit final tiebreak (URL, or duration
-distance from expected) so the same candidate set always yields the same pick.
-Cheap, and a precondition for any golden-set evaluation (§7.8).
-
-### 7.4 Nothing verifies the *contents* of the chosen file
-
-`ProbeDuration` reads a container header; `ValidateDecodable` asks only whether
-ffmpeg can decode the stream. Neither asks whether the audio *is the recording*.
-F5 — a music video whose first 12 seconds are an unrelated snippet — passes every
-gate, and when no Topic channel exists (the common case for underground releases)
-the official video is the correct *selection* and still the wrong *file*.
-
-**Direction:** acoustic fingerprinting (chromaprint/`fpcalc` → AcoustID →
-MusicBrainz recording id) turns "does this title look right" into "is this the
-recording", and catches F1–F5 in one pass. It is a new binary, but ffmpeg already
-ships to the VM and MusicBrainz is already a wired provider. A cheaper partial:
-compare probed duration against an authoritative duration and flag a *head/tail
-excess* rather than only a total mismatch.
+What remains: rejection needs AcoustID to know the expected recording. Where it
+doesn't — unreleased and underground material, the same long tail where Topic
+channels don't exist — the file is still accepted on resemblance alone. There is no
+head/tail excess detection either: a container whose *total* length matches but whose
+audio is offset passes.
 
 ### 7.5 The source set is two engines wide
 
@@ -381,7 +376,7 @@ and `Download` are separate methods. Bandcamp and Audiomack are the obvious
 additions for exactly the underground long tail where Topic channels don't exist and
 §7.4 bites hardest.
 
-### 7.6 Fail-open is broader than it reads
+### 7.6 Fail-open is broader than it reads — partially closed
 
 `ValidateDecodable` returns `nil` for any error that isn't an `exec.ExitError` — a
 missing binary, a bad path, a timeout. A misconfigured `FFMPEG_LOCATION` therefore
@@ -389,9 +384,11 @@ disables **both** the duration gate and the decode gate silently, and every gate
 §1's table that depends on them. Nothing surfaces this: there is no startup probe,
 no health signal, no counter.
 
-**Direction:** resolve the binaries once at construction and log/expose a
-`verification_available` flag on the admin acquisition panel, so "gates are off"
-is visible rather than inferred from a rise in bad audio.
+**Done:** `FfprobeProber.Available()` / `Identifier.Available()` resolve the binaries
+at construction and the composition root folds them into
+`AcquisitionStatus.Verification`, logged loudly at startup when anything is missing.
+**Still open:** the fail-open *behavior* is unchanged — a validator that dies
+mid-run still skips its gate silently for that candidate.
 
 ### 7.7 ISRC is a search hint, never an identity check
 
@@ -400,7 +397,7 @@ yt-dlp doesn't expose one — so nothing verifies the returned candidate *is* th
 recording. The strongest identifier the system holds is used only to bias a text
 search.
 
-### 7.8 Selection is tested for self-consistency, not correctness
+### 7.8 Selection is tested for self-consistency, not correctness — partially closed
 
 Every matching test feeds hand-written candidate lists. That proves the ranking
 function is internally consistent; it proves nothing about behavior on what YouTube
@@ -422,16 +419,15 @@ only the latest one, and only in the client-safe vocabulary. Two deploy colours 
 keep separate logs and separate `RetryAdmission` maps, so a retry cooldown does not
 hold across a swap.
 
-### 7.10 The stored duration is unverified
+### 7.10 ~~The stored duration is unverified~~ — closed
 
-`UpdateTrackStep` writes `ac.Selected.Duration` — the duration yt-dlp *reported in
-search metadata*, not the value `ProbeDuration` measured. The probed number is
-computed, used for the gate, and discarded. So a track's stored duration is provider
-metadata, and any later consumer that trusts it (including a future run of this same
-pipeline, via §7.2) inherits that trust. *(Note: `okf/backend/acquisition/pipeline.md`
-currently describes this as the probed duration — that line is out of date.)*
+`UpdateTrackStep` now writes `AcquisitionContext.MeasuredDuration()`: the value
+`ProbeDuration` measured, falling back to provider metadata only when nothing was
+probed. A stored duration is therefore a measurement wherever a prober was wired,
+so the feedback loop into the next run's gate carries fact rather than a provider's
+claim.
 
-### 7.11 The attempt cap can starve a good candidate
+### 7.11 The attempt cap can starve a good candidate — narrowed
 
 `maxVerifyAttempts = 4` bounds downloads, not candidates — and rejection only
 happens *at download time*. A query returning three plausible-but-wrong variants
@@ -476,6 +472,10 @@ flowchart TD
 | the `rankCandidates` sorts | which recording enters the library | a tiebreak that looks harmless reorders every equal-identity pair (§7.3) |
 | `metadataRank` weights | non-Topic ordering only — Topic bucketing is upstream of it | tuning views/duration while the real problem is bucket membership |
 | `durationWithinTolerance` | the only F1/F2 defense | tighter rejects legitimate intro/outro trims; looser admits remixes |
+| `lengthCorroborated` | which window every download is measured against | making it laxer silently re-tightens the gate around an unverified saved duration |
+| `qualifierDistance` or its sort position | master-vs-variant on the same channel; label-vs-fan upload off it | promoting it above `metadataRank` outside the Topic bucket puts a lyrics re-upload ahead of the label's own master |
+| `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "cluster known" makes the underground long tail unacquirable — the failure that forced the first rollback |
+| `sourceKey` | every stored `rejected_source_keys` value | changing the key shape orphans the memory and re-acquire silently toggles again |
 | a `Step.Name()` string | `failureReason`'s vocabulary, the admin console's stage list, the `progress` event payload the mobile client renders | rename compiles clean and breaks the console and the client silently |
 | `CoreSteps` | production *and* every reacquire CLI command | a step added for the service also runs in bulk repair, on the whole library |
 | `BuildAudioRef` / the sanitizer | the storage layout *and* `cmd/backfillaudio`'s key derivation | a layout change orphans every existing object and makes backfill unable to find them |

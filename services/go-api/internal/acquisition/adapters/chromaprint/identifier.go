@@ -22,29 +22,49 @@ const (
 	lookupTimeout      = 15 * time.Second
 	minScore           = 0.85
 	defaultEndpoint    = "https://api.acoustid.org/v2/lookup"
+	clusterEndpoint    = "https://api.acoustid.org/v2/track/list_by_mbid"
 )
 
 var _ ports.AudioIdentifier = (*Identifier)(nil)
 
 type Identifier struct {
-	fpcalc   string
-	apiKey   string
-	endpoint string
-	client   *http.Client
+	fpcalc          string
+	apiKey          string
+	endpoint        string
+	clusterEndpoint string
+	client          *http.Client
 }
 
 func NewIdentifier(binDir, apiKey string) *Identifier {
 	return &Identifier{
-		fpcalc:   resolveBinary("fpcalc", binDir),
-		apiKey:   apiKey,
-		endpoint: defaultEndpoint,
-		client:   &http.Client{Timeout: lookupTimeout},
+		fpcalc:          resolveBinary("fpcalc", binDir),
+		apiKey:          apiKey,
+		endpoint:        defaultEndpoint,
+		clusterEndpoint: clusterEndpoint,
+		client:          &http.Client{Timeout: lookupTimeout},
 	}
 }
 
 func (i *Identifier) WithEndpoint(endpoint string) *Identifier {
 	i.endpoint = endpoint
 	return i
+}
+
+func (i *Identifier) WithClusterEndpoint(endpoint string) *Identifier {
+	i.clusterEndpoint = endpoint
+	return i
+}
+
+func (i *Identifier) Available() bool {
+	if i.apiKey == "" {
+		return false
+	}
+	if filepath.IsAbs(i.fpcalc) {
+		_, err := os.Stat(i.fpcalc)
+		return err == nil
+	}
+	_, err := exec.LookPath(i.fpcalc)
+	return err == nil
 }
 
 func resolveBinary(name, binDir string) string {
@@ -149,6 +169,56 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 	return bestMatch(parsed), nil
 }
 
+type clusterResponse struct {
+	Status string `json:"status"`
+	Error  struct {
+		Message string `json:"message"`
+	} `json:"error"`
+	Tracks []struct {
+		ID string `json:"id"`
+	} `json:"tracks"`
+}
+
+func (i *Identifier) AcoustIDsFor(ctx context.Context, mbid string) ([]string, error) {
+	if i.apiKey == "" || mbid == "" {
+		return nil, nil
+	}
+
+	endpoint := fmt.Sprintf("%s?client=%s&mbid=%s&format=json",
+		i.clusterEndpoint, url.QueryEscape(i.apiKey), url.QueryEscape(mbid))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build acoustid cluster request: %w", err)
+	}
+
+	resp, err := i.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("acoustid cluster lookup: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("acoustid cluster lookup: status %d", resp.StatusCode)
+	}
+
+	var parsed clusterResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return nil, fmt.Errorf("parse acoustid cluster response: %w", err)
+	}
+	if parsed.Status != "ok" {
+		return nil, fmt.Errorf("acoustid cluster lookup: %s", parsed.Error.Message)
+	}
+
+	ids := make([]string, 0, len(parsed.Tracks))
+	for _, track := range parsed.Tracks {
+		if track.ID != "" {
+			ids = append(ids, track.ID)
+		}
+	}
+	return ids, nil
+}
+
 func bestMatch(parsed lookupResponse) ports.RecordingMatch {
 	var best ports.RecordingMatch
 	for _, result := range parsed.Results {
@@ -161,7 +231,7 @@ func bestMatch(parsed lookupResponse) ports.RecordingMatch {
 				mbids = append(mbids, rec.ID)
 			}
 		}
-		if len(mbids) == 0 {
+		if result.ID == "" && len(mbids) == 0 {
 			continue
 		}
 		best = ports.RecordingMatch{AcoustID: result.ID, MBIDs: mbids, Score: result.Score}

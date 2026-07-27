@@ -45,7 +45,43 @@ func featureMatch(trackTitle, candidateTitle string) bool {
 	return true
 }
 
+var qualifierRe = regexp.MustCompile(`[\(\[\{]([^\)\]\}]*)[\)\]\}]`)
+
+func qualifierTokens(title string) map[string]bool {
+	tokens := make(map[string]bool)
+	for _, segment := range qualifierRe.FindAllStringSubmatch(title, -1) {
+		if featuredRe.MatchString(segment[1]) {
+			continue
+		}
+		for _, word := range strings.Fields(textnorm.NormalizeForMatch(segment[1])) {
+			tokens[word] = true
+		}
+	}
+	return tokens
+}
+
+func qualifierDistance(trackTitle, candidateTitle string) int {
+	want := qualifierTokens(trackTitle)
+	got := qualifierTokens(candidateTitle)
+
+	distance := 0
+	for token := range got {
+		if !want[token] {
+			distance += unrequestedQualifierCost
+		}
+	}
+	for token := range want {
+		if !got[token] {
+			distance += unfulfilledQualifierCost
+		}
+	}
+	return distance
+}
+
 const (
+	unrequestedQualifierCost = 1
+	unfulfilledQualifierCost = 2
+
 	identityMin   = 60.0
 	durationTight = 3
 	durationLoose = 15
@@ -132,6 +168,7 @@ type candidateEntry struct {
 	ident         float64
 	meta          float64
 	durationDelta float64
+	qualDistance  int
 	artistMatch   bool
 	featMatch     bool
 	candidate     ports.AudioCandidate
@@ -170,6 +207,9 @@ func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.Audi
 		if topic[i].featMatch != topic[j].featMatch {
 			return topic[i].featMatch
 		}
+		if topic[i].qualDistance != topic[j].qualDistance {
+			return topic[i].qualDistance < topic[j].qualDistance
+		}
 		if topic[i].ident != topic[j].ident {
 			return topic[i].ident > topic[j].ident
 		}
@@ -184,6 +224,9 @@ func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.Audi
 		}
 		if other[i].meta != other[j].meta {
 			return other[i].meta > other[j].meta
+		}
+		if other[i].qualDistance != other[j].qualDistance {
+			return other[i].qualDistance < other[j].qualDistance
 		}
 		return breakTie(other[i], other[j])
 	})
@@ -229,6 +272,7 @@ func classifyCandidates(
 		meta := metadataRank(c, track.Duration, maxViews)
 		artMatch := artistMatchesChannel(track.Artist, c.Channel)
 		featMatch := featureMatch(track.Title, c.Title)
+		qualDist := qualifierDistance(track.Title, c.Title)
 
 		slog.InfoContext(ctx, "candidate_evaluated",
 			"candidate_title", c.Title,
@@ -237,6 +281,7 @@ func classifyCandidates(
 			"candidate_views", c.ViewCount,
 			"identity_score", math.Round(ident*10)/10,
 			"metadata_rank", math.Round(meta*1000)/1000,
+			"qualifier_distance", qualDist,
 			"is_topic", isTopicChannel(c.Channel),
 			"artist_match", artMatch,
 			"feature_match", featMatch,
@@ -247,6 +292,7 @@ func classifyCandidates(
 			ident:         ident,
 			meta:          meta,
 			durationDelta: durationDelta(track.Duration, c.Duration),
+			qualDistance:  qualDist,
 			artistMatch:   artMatch,
 			featMatch:     featMatch,
 			candidate:     c,

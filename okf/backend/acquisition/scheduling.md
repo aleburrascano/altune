@@ -32,3 +32,9 @@ verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 `Schedule` and `ScheduleReplace` both funnel into an unexported `schedule(userId, trackId, sourceURL, replace)`, so dedup, the semaphore, panic recovery, the job record and the reporter are identical for both — only the service method differs (`Execute` vs `ExecuteReplace`). The in-flight dedup is shared deliberately: a track already being acquired must not also be replaced concurrently, since both write `audio_ref` for the same track.
 
 `ScheduleReplace` is not on catalog's `AcquisitionScheduler` port, which stays the single-method interface catalog needs. The reacquire handler declares its own one-method `replaceScheduler` interface instead — the consumer-defined-interface habit the rest of the codebase already follows.
+
+## Verification availability rides on the status (2026-07-26)
+
+`AcquisitionStatus` gained a `Verification` block (`ffprobe` / `ffmpeg` / `fpcalc`), set once at wiring time through `WithVerificationStatus` and reported unchanged thereafter. The scheduler carries it because `Status()` is already the operator console's single read model — a second endpoint for three booleans would be a parallel surface that could disagree with the jobs beside it.
+
+The reason it exists at all: every audio gate fails open, so a missing binary disables the duration gate, the decode gate and the fingerprint simultaneously and *silently*. The only previous symptom was a gradual rise in wrong audio with no signal anywhere. `WithVerificationStatus` logs at `warn` when anything is unresolved and at `info` when all three are armed, so the condition is visible in the log ring as well as the panel. The values are resolved by the adapters (`FfprobeProber.Available`, `Identifier.Available`) rather than by the scheduler, which knows nothing about binaries.

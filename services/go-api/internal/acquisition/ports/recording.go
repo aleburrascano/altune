@@ -9,10 +9,11 @@ type RecordingSource struct {
 }
 
 type RecordingIdentity struct {
-	ISRC     string
-	MBID     string
-	Duration float64
-	Sources  []RecordingSource
+	ISRC      string
+	MBID      string
+	Duration  float64
+	Sources   []RecordingSource
+	AcoustIDs []string
 }
 
 func (r RecordingIdentity) IsZero() bool {

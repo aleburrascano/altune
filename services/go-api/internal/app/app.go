@@ -279,6 +279,9 @@ func (a *App) wireCatalog(
 	var scheduler catalogPorts.AcquisitionScheduler
 	if len(audioSources) > 0 && audioStore != nil {
 		audioProber := ytdlp.NewFfprobeProber(a.cfg.FFmpegLocation)
+		ffprobeOK, ffmpegOK := audioProber.Available()
+		verification := acqService.AcquisitionVerification{Ffprobe: ffprobeOK, Ffmpeg: ffmpegOK}
+
 		acquireOpts := []func(*acqService.AcquireTrackAudioService){
 			acqService.WithAcquireEvents(tap),
 			acqService.WithAudioProber(audioProber),
@@ -289,9 +292,10 @@ func (a *App) wireCatalog(
 				acqDiscoveryBridge.NewRecordingResolver(searchSvc)))
 		}
 		if a.cfg.AcoustIDAPIKey != "" {
-			acquireOpts = append(acquireOpts, acqService.WithAudioIdentifier(
-				chromaprint.NewIdentifier(a.cfg.FFmpegLocation, a.cfg.AcoustIDAPIKey)))
-			slog.Info("acquisition: fingerprint verification enabled")
+			identifier := chromaprint.NewIdentifier(a.cfg.FFmpegLocation, a.cfg.AcoustIDAPIKey)
+			verification.Fpcalc = identifier.Available()
+			acquireOpts = append(acquireOpts, acqService.WithAudioIdentifier(identifier))
+			slog.Info("acquisition: fingerprint verification enabled", "fpcalc", verification.Fpcalc)
 		}
 		acquireSvc := acqService.NewAcquireTrackAudioService(
 			trackRepo,
@@ -300,7 +304,8 @@ func (a *App) wireCatalog(
 			acquireOpts...,
 		)
 		bgScheduler := acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem,
-			acqService.WithSchedulerEvents(tap))
+			acqService.WithSchedulerEvents(tap),
+			acqService.WithVerificationStatus(verification))
 		a.scheduler = bgScheduler
 		scheduler = bgScheduler
 	}

@@ -7,6 +7,7 @@ Layout:
 - `service/` — `acquire.go` (`Execute`, `resolveIdentity`, `CoreSteps`, `failureReason`), `pipeline.go` (the `Step` chain), `steps_*.go`, `matching.go` (candidate scoring), `scheduler.go`, `joblog.go`, `retry_admission.go` (`RetryAdmission`, `ReacquireAdmission`, the shared `cooldownGate`). `Execute` acquires; `ExecuteReplace` swaps the audio of an already-ready track.
 - `service/eval/` — the offline selection harness: `case.go` (golden format + embedded `goldens/`), `ports.go` (case-driven fakes), `harness.go` (`Run` over the real `CoreSteps`), `report.go` (per-class accuracy, baseline gating). Goldens are `goldens/selection.json` (ranking and the audio gates) and `goldens/verification.json` (identity, fingerprint corroboration, tolerance edges). Driven by `cmd/acquisitioneval`.
 - `service/registry.go` — `SourceRegistry`: equal-treatment fan-out across every `AudioSource`, merge by URL, `Fetch` routed back to the owning source.
+- `service/sourcekey.go` — `sourceKey` / `SourceKeys` / `mergeSourceKeys`: the one normalizer collapsing a recording's URL spellings to a single exclusion key.
 - `ports/` — `AudioSearcher`, `AudioTagger`, `AudioProber`, `AudioWriter`, `TrackRepository`; `source.go`'s `AudioSource` / `FindRequest` / `SearchQueries`; `recording.go`'s `RecordingResolver` / `RecordingIdentity`; `identify.go`'s `AudioIdentifier` / `RecordingMatch`.
 - `adapters/` — `handler/` (retry + reacquire endpoints), `ytdlp/` (searcher, prober, `Source` — text search), `ytmusic/` (`Source` — catalog-resolved by video id), `streamrip/` (`Source` per service — catalog-resolved via the `rip` CLI), `id3/` (tagger), `chromaprint/` (fpcalc + AcoustID identifier), `discoverybridge/` (`RecordingResolver` over discovery's search service).
 
@@ -43,8 +44,18 @@ Layout:
 - An unresolvable catalog source returns no candidates, never an error.
 - Streamrip services stay config-gated; an unset `STREAMRIP_SERVICES` disables them without failing startup.
 - One source failing never fails the search; only every source failing does.
-- Tighten the duration gate only when the length is corroborated (`Identity.Duration > 0`).
-- The fingerprint only ever corroborates: it marks `verified` on a cluster hit and never rejects.
+- Tighten the duration gate only when the saved and resolved lengths agree; on disagreement accept either window.
+- Never claim `corroborated` provenance for a length the two sources disagree on.
+- Store the probed duration, never the provider's — `MeasuredDuration()` is the only source.
+- The fingerprint rejects only when the expected AcoustID cluster is known; unknown audio and an unknown cluster always accept.
+- Compare fingerprints cluster-to-cluster, never by MBID equality.
+- Extract variant markers from the raw title; never let a bracketed segment reach the matcher through `NormalizeForMatch`.
+- Rank qualifier distance above identity inside the Topic bucket and below `metadataRank` outside it.
+- Exclude sources by normalized `sourceKey`, never by raw URL.
+- Normalize a source key exactly once — a stored key is already normalized.
+- A replace carries every previously rejected source forward; `rejected_source_keys` only grows.
+- A failed replace publishes `track_replace_failed`, never `track_acquisition_failed`.
+- Write every event name as a literal at its `Publish` call site — the client contract test greps for them.
 - Set provenance only through `Track.SetAcquisitionProvenance`, and only from `AcquisitionContext.Provenance()`.
 
 Why each rule exists: `okf/backend/acquisition/index.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
