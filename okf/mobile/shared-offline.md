@@ -57,4 +57,12 @@ The sequential worker had a matching hole: `downloadPinned` writes the file, the
 
 The honest limit of that guarantee: deletion is best-effort, so a file can still outlive its index entry. `deleteAllPinned` deletes per file rather than aborting the sweep on the first throw, but a file the OS refuses to delete stays while `unpinAll` clears the index regardless; and if `pinnedDir().list()` throws, `findPinned` returns null and `reconcile()` drops otherwise-`ready` entries whose files are still on disk (documented in the reconcile rules above). Both leave invisible residue. Closing it properly needs a directory sweep that can delete files with no index entry — deliberately not built, and the reason this section does not claim a hard invariant.
 
-The prefetch cache (`features/playback/audioPrefetch.ts`) is deliberately *not* cleared here. It lives in `Paths.cache` (OS-purgeable), is keyed by track UUID so no other account can resolve it, and `shared/` may not import from `features/` — so wiring it would need the composition root. Left alone as inert.
+The prefetch cache (`features/playback/audioPrefetch.ts`) is deliberately *not* cleared on sign-out. It lives in `Paths.cache` (OS-purgeable) and is keyed by track UUID so no other account can resolve it. Left alone as inert.
+
+## Re-pinning after the audio underneath changes (2026-07-26)
+
+A pinned file is keyed by track id, and a re-acquire replaces the audio at the *same* object key — so the ref the client holds stays valid while the bytes behind it change, and `signedUrl` prefers `pinnedUri` over the freshly presigned URL unconditionally. A downloaded track therefore kept playing the old recording forever after a successful re-acquire, which is indistinguishable from "re-acquire does nothing".
+
+`repinIfPinned` closes it: on `track_acquisition_completed` the entry is unpinned (deleting the file) and re-pinned (queueing a fresh download), but only when an entry already exists — completing an acquisition must never *start* pinning a track the user never downloaded. It is deliberately a delete-then-download rather than an in-place overwrite, so a failed re-download leaves a `queued`/`failed` entry the existing `reconcile` pass already understands rather than a stale file wearing a fresh label.
+
+The prefetch cache is invalidated through the same event by a different route: `shared/acquisition/audioCacheInvalidation` is a registration seam (`registerAudioCacheInvalidator`), because `applyServerEvent` lives in `shared/` and the cache lives in `features/playback/`. `playbackService()` registers `evictCached` at startup; nothing is wired when playback never starts, which is correct — there is no cache to clear.

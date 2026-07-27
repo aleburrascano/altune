@@ -34,4 +34,10 @@ It exists because the detail screen used to read that status out of the full lib
 
 Writers: `useSaveTrack` links the identity to the optimistic id in `onMutate` (so the control flips to *Saving…* on tap), relinks to the real id in `onSuccess`, and unlinks in `onError` alongside the cache rollback; the SSE router links on `track_added_to_library`, so a save made on one screen resolves on any other screen already open. Readers: `useOwnedTrack(extras, identity)` and `TrackSaveControl` resolve `stamped id ?? linked id` and then subscribe to the status under it.
 
+## track_replace_failed and the cache seam (2026-07-26)
+
+Re-acquire optimistically patches a track to `pending` and the backend publishes `track_acquisition_started` for a replace exactly as for an acquire — so a *failed* replace needs its own terminal event, or the track is left showing pending forever. It cannot reuse `track_acquisition_failed`: that handler patches `acquisition_status: 'failed'` and `audio_ref: null`, which would render a track that is still perfectly playable as broken. `track_replace_failed` restores `ready` and clears the download indicator instead; the server-side row was never mutated.
+
+`audioCacheInvalidation` is a registration seam holding `(trackId) => void` callbacks, invoked on `track_acquisition_completed`. It exists because the stale-audio problem lives in `features/playback` (the prefetch cache) while the event router lives in `shared/` and may not import a feature. Registration happens in `playbackService()`; invalidation failures are swallowed per-callback so one bad invalidator cannot stop the others or break event routing.
+
 Both halves of the key are required — `trackIdentityKey` returns `null` when either the title or the artist is empty, so a half-known result can never collide with a real track that happens to share a title. The index holds only tracks touched this session, which is what keeps it compatible with the standing rule against holding the whole library to answer ownership.

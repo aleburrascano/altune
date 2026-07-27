@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
+import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
 import type {
   ListPlaylistsResponse,
   ListTracksResponse,
@@ -138,6 +139,49 @@ describe('applyServerEvent', () => {
       audio_ref: null,
     });
     expect(phaseOf('track-1')).toBe('failed');
+  });
+
+  it('leaves a track playable when a replace fails', () => {
+    const qc = new QueryClient();
+    seedLibraryHome(
+      qc,
+      makeTrack({ id: 'track-1', acquisition_status: 'ready', audio_ref: 'ref-1' }),
+    );
+    applyServerEvent(qc, {
+      id: '3',
+      type: 'track_acquisition_started',
+      data: { track_id: 'track-1' },
+    });
+
+    applyServerEvent(qc, {
+      id: '4',
+      type: 'track_replace_failed',
+      data: { track_id: 'track-1', reason: 'no matching audio found' },
+    });
+
+    const data = { items: readTracks(qc) };
+    expect(data?.items[0]).toMatchObject({
+      acquisition_status: 'ready',
+      failure_reason: null,
+    });
+    expect(data?.items[0]?.audio_ref).toBe('ref-1');
+    expect(phaseOf('track-1')).toBe('failed');
+  });
+
+  it('evicts cached audio when an acquisition completes so the old file cannot keep playing', () => {
+    const qc = new QueryClient();
+    seedLibraryHome(qc);
+    const evicted: string[] = [];
+    const unregister = registerAudioCacheInvalidator((trackId) => evicted.push(trackId));
+
+    applyServerEvent(qc, {
+      id: '5',
+      type: 'track_acquisition_completed',
+      data: { track_id: 'track-1', audio_ref: 'ref-2' },
+    });
+    unregister();
+
+    expect(evicted).toEqual(['track-1']);
   });
 
   it('inserts a full track from a track_added_to_library payload without refetching (F10)', () => {

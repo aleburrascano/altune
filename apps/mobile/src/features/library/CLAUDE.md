@@ -18,6 +18,7 @@ Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` di
 
 - The noun is **Track**, never "Song" — chip and list vocabulary included.
 - Re-acquire patches the cache on success only; a playing track must never be shown pending before the server accepts.
+- A failed re-acquire restores the track to ready — it never renders a playable track as broken.
 - Keep "Download" meaning offline pinning; audio replacement is "Re-acquire".
 - Import cache keys from `libraryKeys` / `playlistKeys` in `@shared/lib/query-keys`; never retype a key literal.
 - Route every playlist write through `usePlaylistMutations` — it owns the optimistic-patch/rollback/alert/invalidate policy; screens keep only UI state.

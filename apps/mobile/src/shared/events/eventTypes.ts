@@ -6,6 +6,7 @@ export const SERVER_EVENT_TYPES = [
   'track_acquisition_progress',
   'track_acquisition_completed',
   'track_acquisition_failed',
+  'track_replace_failed',
   'track_added_to_playlist',
   'track_removed_from_playlist',
   'playlist_created',

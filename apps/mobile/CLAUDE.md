@@ -9,6 +9,7 @@ TS pattern vocabulary: **Read `~/.claude/lexicon/MANIFEST-ts.md` before proposin
 Structure:
 
 - Never import across features. Extraction to `shared/` requires 2+ real consumers.
+- Reach a feature's cache from `shared/` only through a registration seam — `@shared/acquisition/audioCacheInvalidation` is the one for on-disk audio.
 - Use path aliases (`@/`, `@features/`, `@shared/`) over relative `../../` beyond one level.
 - Navigate with `useRouter` from `expo-router`, and use the typed route paths.
 - Read grouped, filtered and sorted collections from the API; never re-derive them on the device (`@shared/api-client/library`).
