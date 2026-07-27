@@ -21,8 +21,9 @@ type Track struct {
 	Duration float64 `json:"duration,omitempty"`
 	ISRC     string  `json:"isrc,omitempty"`
 
-	AuthoritativeDuration float64 `json:"authoritative_duration,omitempty"`
-	MBID                  string  `json:"mbid,omitempty"`
+	AuthoritativeDuration float64  `json:"authoritative_duration,omitempty"`
+	MBID                  string   `json:"mbid,omitempty"`
+	AcoustIDs             []string `json:"acoustids,omitempty"`
 }
 
 type Candidate struct {
@@ -36,6 +37,7 @@ type Candidate struct {
 	Undecodable    bool     `json:"undecodable,omitempty"`
 	DownloadFails  bool     `json:"download_fails,omitempty"`
 	RecordingMBIDs []string `json:"recording_mbids,omitempty"`
+	AcoustID       string   `json:"acoustid,omitempty"`
 	Resolved       bool     `json:"resolved,omitempty"`
 	Correct        bool     `json:"correct,omitempty"`
 }

@@ -76,6 +76,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) erro
 		ac.TempPath = filePath
 		ac.DurationVerified = verified.duration
 		ac.IdentityVerified = verified.identity
+		ac.ProbedDuration = verified.probed
 		return nil
 	}
 
@@ -88,6 +89,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) erro
 type verificationResult struct {
 	duration bool
 	identity bool
+	probed   float64
 }
 
 func (s *DownloadStep) verify(
@@ -115,6 +117,7 @@ func (s *DownloadStep) verify(
 				candidate.URL, actual, ac.Track.Duration), result
 		default:
 			result.duration = true
+			result.probed = actual
 		}
 	}
 
@@ -126,7 +129,9 @@ func (s *DownloadStep) verify(
 		}
 	}
 
-	s.identify(ctx, ac, candidate, filePath, &result)
+	if rejected := s.identify(ctx, ac, candidate, filePath, &result); rejected {
+		return fmt.Errorf("candidate %q is a different recording", candidate.URL), result
+	}
 
 	return nil, result
 }
@@ -137,9 +142,9 @@ func (s *DownloadStep) identify(
 	candidate ports.AudioCandidate,
 	filePath string,
 	result *verificationResult,
-) {
+) (rejected bool) {
 	if s.identifier == nil || ac.Identity.MBID == "" {
-		return
+		return false
 	}
 
 	match, err := s.identifier.Identify(ctx, filePath)
@@ -147,14 +152,27 @@ func (s *DownloadStep) identify(
 	case err != nil:
 		slog.WarnContext(ctx, "acquisition.identify_failed",
 			"url", candidate.URL, "error", err)
+		return false
 	case !match.Known():
 		slog.InfoContext(ctx, "acquisition.identify_unknown",
 			"url", candidate.URL)
-	case match.Matches(ac.Identity.MBID):
+		return false
+	case match.Matches(ac.Identity.MBID), match.InCluster(ac.Identity.AcoustIDs):
 		result.identity = true
-	default:
+		return false
+	case len(ac.Identity.AcoustIDs) == 0:
 		slog.InfoContext(ctx, "acquisition.identify_uncorroborated",
 			"url", candidate.URL, "want_mbid", ac.Identity.MBID, "got_mbids", match.MBIDs)
+		return false
+	default:
+		slog.InfoContext(ctx, "acquisition.candidate_rejected_fingerprint",
+			"url", candidate.URL,
+			"want_mbid", ac.Identity.MBID,
+			"want_acoustids", ac.Identity.AcoustIDs,
+			"got_acoustid", match.AcoustID,
+			"got_mbids", match.MBIDs,
+		)
+		return true
 	}
 }
 

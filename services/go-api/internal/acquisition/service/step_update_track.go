@@ -31,10 +31,13 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext) e
 		if err := track.MarkReady(ac.AudioRef); err != nil {
 			return fmt.Errorf("mark ready: %w", err)
 		}
-		if ac.Selected != nil && ac.Selected.Duration > 0 {
-			track.SetDuration(ac.Selected.Duration)
+		if duration := ac.MeasuredDuration(); duration > 0 {
+			track.SetDuration(duration)
 		}
 		track.SetAcquisitionProvenance(ac.Provenance())
+		for _, key := range ac.ExcludeKeys {
+			track.RejectAudioSource(key)
+		}
 		if ac.Selected != nil {
 			track.SetAudioSource(ac.Selected.URL)
 		}

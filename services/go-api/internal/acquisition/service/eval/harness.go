@@ -23,7 +23,7 @@ func Run(ctx context.Context, kase Case) Outcome {
 	p := newCasePorts(kase)
 	ac := &service.AcquisitionContext{
 		Track:         trackRefFor(kase),
-		ExcludeURLs:   kase.ExcludeURLs,
+		ExcludeKeys:   service.SourceKeys(kase.ExcludeURLs),
 		SkipTopRanked: kase.SkipTopRanked,
 		Identity:      identityFor(kase),
 	}
@@ -77,9 +77,10 @@ func judge(kase Case, out Outcome) (bool, string) {
 
 func identityFor(kase Case) ports.RecordingIdentity {
 	return ports.RecordingIdentity{
-		ISRC:     kase.Track.ISRC,
-		MBID:     kase.Track.MBID,
-		Duration: kase.Track.AuthoritativeDuration,
+		ISRC:      kase.Track.ISRC,
+		MBID:      kase.Track.MBID,
+		Duration:  kase.Track.AuthoritativeDuration,
+		AcoustIDs: kase.Track.AcoustIDs,
 	}
 }
 

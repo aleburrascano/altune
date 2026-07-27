@@ -32,10 +32,39 @@
     {
       "id": "f1-cover-only",
       "class": "F1",
-      "note": "only a cover exists; acquiring it is worse than acquiring nothing. Normalization strips (Piano Cover), so nothing in the title can tell them apart — the fingerprint can",
-      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "mbid": "mb-master" },
+      "note": "only a cover exists; acquiring it is worse than acquiring nothing. Normalization strips (Piano Cover), so nothing in the title can tell them apart — the fingerprint can, because the cover's AcoustID is not in the master recording's cluster",
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "mbid": "mb-master", "acoustids": ["ac-master-a", "ac-master-b"] },
       "candidates": [
-        { "title": "Blinding Lights (Piano Cover)", "url": "yt:cover", "channel": "Piano Tutorials", "categories": ["Music"], "duration": 195, "view_count": 5000000, "recording_mbids": ["mb-cover"] }
+        { "title": "Blinding Lights (Piano Cover)", "url": "yt:cover", "channel": "Piano Tutorials", "categories": ["Music"], "duration": 195, "view_count": 5000000, "recording_mbids": ["mb-cover"], "acoustid": "ac-cover" }
+      ]
+    },
+    {
+      "id": "f1-acoustic-alongside-master",
+      "class": "F1",
+      "note": "the Corey Hart case: an acoustic take runs a similar length and normalizes to the same title, so only the qualifier set separates them in ranking",
+      "track": { "title": "Sunglasses at Night", "artist": "Corey Hart", "duration": 232, "authoritative_duration": 232 },
+      "candidates": [
+        { "title": "Sunglasses at Night (Acoustic Version)", "url": "yt:acoustic", "channel": "Corey Hart - Topic", "categories": ["Music"], "duration": 228, "actual_duration": 228, "view_count": 900000 },
+        { "title": "Sunglasses at Night", "url": "yt:master", "channel": "Corey Hart - Topic", "categories": ["Music"], "duration": 232, "actual_duration": 232, "view_count": 4000000, "correct": true }
+      ]
+    },
+    {
+      "id": "f1-acoustic-only-rejected-by-fingerprint",
+      "class": "F1",
+      "note": "the acoustic take is the only candidate and its length is inside the window; ranking cannot save this one, the fingerprint must reject it outright",
+      "track": { "title": "Sunglasses at Night", "artist": "Corey Hart", "duration": 232, "authoritative_duration": 232, "mbid": "mb-sunglasses", "acoustids": ["ac-sunglasses"] },
+      "candidates": [
+        { "title": "Sunglasses at Night (Acoustic Version)", "url": "yt:acoustic", "channel": "Corey Hart - Topic", "categories": ["Music"], "duration": 230, "actual_duration": 230, "view_count": 900000, "acoustid": "ac-acoustic", "recording_mbids": ["mb-acoustic"] }
+      ]
+    },
+    {
+      "id": "f1-music-video-loses-to-audio-on-the-same-channel",
+      "class": "F1",
+      "note": "the second thing the Corey Hart re-acquire returned: a music video upload alongside the plain audio, same channel, same length",
+      "track": { "title": "Never Surrender", "artist": "Corey Hart", "duration": 262, "authoritative_duration": 262 },
+      "candidates": [
+        { "title": "Never Surrender (Official Music Video)", "url": "yt:video", "channel": "Corey Hart - Topic", "categories": ["Music"], "duration": 264, "actual_duration": 264, "view_count": 8000000 },
+        { "title": "Never Surrender", "url": "yt:master", "channel": "Corey Hart - Topic", "categories": ["Music"], "duration": 262, "actual_duration": 262, "view_count": 3000000, "correct": true }
       ]
     },
     {
@@ -99,9 +128,9 @@
       "id": "f3-sped-up-no-expected-duration",
       "class": "F3",
       "note": "no saved duration means no duration gate, and normalization has already deleted (Sped Up) — only the fingerprint is left to catch it",
-      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "mbid": "mb-master" },
+      "track": { "title": "Blinding Lights", "artist": "The Weeknd", "mbid": "mb-master", "acoustids": ["ac-master"] },
       "candidates": [
-        { "title": "Blinding Lights (Sped Up)", "url": "yt:sped", "channel": "Nightcore Zone", "categories": ["Music"], "duration": 172, "view_count": 3000000, "recording_mbids": ["mb-sped"] }
+        { "title": "Blinding Lights (Sped Up)", "url": "yt:sped", "channel": "Nightcore Zone", "categories": ["Music"], "duration": 172, "view_count": 3000000, "recording_mbids": ["mb-sped"], "acoustid": "ac-sped" }
       ]
     },
     {

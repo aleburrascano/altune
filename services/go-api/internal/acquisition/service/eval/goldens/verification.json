@@ -45,10 +45,37 @@
     {
       "id": "fp-cluster-excludes-expected-mbid",
       "class": "F0",
-      "note": "the Don't Stop the Music failure: AcoustID returns the recording's whole MBID cluster and discovery's chosen MBID is not in it. A recording has many MBIDs (album, single, compilation), so a non-intersection is NOT evidence of a different recording and must never reject",
-      "track": { "title": "Don't Stop the Music", "artist": "Rihanna", "duration": 267, "authoritative_duration": 267, "mbid": "014b764e-ac05-4611-a191-f737dbcd77a8" },
+      "note": "the Don't Stop the Music failure: AcoustID returns the recording's whole MBID cluster and discovery's chosen MBID is not in it. A recording has many MBIDs (album, single, compilation), so MBID non-intersection is NOT evidence of a different recording. The AcoustID cluster is what settles it, and here the audio's AcoustID is in the expected recording's cluster",
+      "track": { "title": "Don't Stop the Music", "artist": "Rihanna", "duration": 267, "authoritative_duration": 267, "mbid": "014b764e-ac05-4611-a191-f737dbcd77a8", "acoustids": ["ac-dstm-1", "ac-dstm-2"] },
       "candidates": [
-        { "title": "Don't Stop the Music", "url": "yt:master", "channel": "Rihanna - Topic", "categories": ["Music"], "duration": 267, "recording_mbids": ["4c0566be-d3d9-42b2-964d-cf349972123b", "56ea005b-9f0d-471e-8c5f-2ce65e30adeb", "875d3bd9-58dc-4828-b5d6-ab17370a9040"], "correct": true }
+        { "title": "Don't Stop the Music", "url": "yt:master", "channel": "Rihanna - Topic", "categories": ["Music"], "duration": 267, "acoustid": "ac-dstm-2", "recording_mbids": ["4c0566be-d3d9-42b2-964d-cf349972123b", "56ea005b-9f0d-471e-8c5f-2ce65e30adeb", "875d3bd9-58dc-4828-b5d6-ab17370a9040"], "correct": true }
+      ]
+    },
+    {
+      "id": "fp-no-expected-cluster-never-rejects",
+      "class": "F0",
+      "note": "AcoustID knows nothing about the expected recording, so there is no ground truth to reject against; a mismatching fingerprint must still be accepted or the long tail becomes unacquirable",
+      "track": { "title": "Rare Leak", "artist": "Some Artist", "duration": 200, "authoritative_duration": 200, "mbid": "mb-expected" },
+      "candidates": [
+        { "title": "Some Artist - Rare Leak", "url": "sc:leak", "channel": "Some Artist", "duration": 200, "acoustid": "ac-something-else", "recording_mbids": ["mb-unrelated"], "correct": true }
+      ]
+    },
+    {
+      "id": "duration-disagreement-does-not-tighten-the-gate",
+      "class": "F2",
+      "note": "a 1984 single edit saved at 3:52 against an album cut discovery reports at 4:36: the two disagree, so neither is corroborated and the loose window around either must accept the real recording rather than the tight window around an unverified number",
+      "track": { "title": "Sunglasses at Night", "artist": "Corey Hart", "duration": 232, "authoritative_duration": 276 },
+      "candidates": [
+        { "title": "Sunglasses at Night", "url": "yt:album-cut", "channel": "Corey Hart - Topic", "categories": ["Music"], "duration": 276, "actual_duration": 276, "correct": true }
+      ]
+    },
+    {
+      "id": "duration-agreement-still-tightens-the-gate",
+      "class": "F5",
+      "note": "when the saved and resolved lengths agree, corroboration is real and the tight window still catches a contaminated container",
+      "track": { "title": "Never Surrender", "artist": "Corey Hart", "duration": 262, "authoritative_duration": 263 },
+      "candidates": [
+        { "title": "Never Surrender", "url": "yt:contaminated", "channel": "Corey Hart - Topic", "categories": ["Music"], "duration": 262, "actual_duration": 276 }
       ]
     },
     {

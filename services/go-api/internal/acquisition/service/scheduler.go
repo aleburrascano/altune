@@ -12,12 +12,23 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
+type AcquisitionVerification struct {
+	Ffprobe bool `json:"ffprobe"`
+	Ffmpeg  bool `json:"ffmpeg"`
+	Fpcalc  bool `json:"fpcalc"`
+}
+
+func (v AcquisitionVerification) FullyArmed() bool {
+	return v.Ffprobe && v.Ffmpeg && v.Fpcalc
+}
+
 type AcquisitionStatus struct {
-	InFlight   int         `json:"in_flight"`
-	Succeeded  uint64      `json:"succeeded"`
-	Failed     uint64      `json:"failed"`
-	ActiveJobs []JobRecord `json:"jobs"`
-	Recent     []JobRecord `json:"recent"`
+	InFlight     int                     `json:"in_flight"`
+	Succeeded    uint64                  `json:"succeeded"`
+	Failed       uint64                  `json:"failed"`
+	Verification AcquisitionVerification `json:"verification"`
+	ActiveJobs   []JobRecord             `json:"jobs"`
+	Recent       []JobRecord             `json:"recent"`
 }
 
 type BackgroundAcquisitionScheduler struct {
@@ -32,7 +43,8 @@ type BackgroundAcquisitionScheduler struct {
 
 	inflightCount atomic.Int64
 
-	log *jobLog
+	verification AcquisitionVerification
+	log          *jobLog
 }
 
 func NewBackgroundAcquisitionScheduler(
@@ -58,6 +70,18 @@ func NewBackgroundAcquisitionScheduler(
 
 func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.events = pub }
+}
+
+func WithVerificationStatus(v AcquisitionVerification) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) {
+		s.verification = v
+		if !v.FullyArmed() {
+			slog.Warn("acquisition.verification_degraded",
+				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc)
+			return
+		}
+		slog.Info("acquisition.verification_armed")
+	}
 }
 
 func (s *BackgroundAcquisitionScheduler) ScheduleReplace(userId shared.UserId, trackId domain.TrackId) {
@@ -165,11 +189,12 @@ func (s *BackgroundAcquisitionScheduler) Status() AcquisitionStatus {
 	jobs, recent := s.log.snapshot()
 	succeeded, failed := s.log.counts()
 	return AcquisitionStatus{
-		InFlight:   int(s.inflightCount.Load()),
-		Succeeded:  succeeded,
-		Failed:     failed,
-		ActiveJobs: jobs,
-		Recent:     recent,
+		InFlight:     int(s.inflightCount.Load()),
+		Succeeded:    succeeded,
+		Failed:       failed,
+		Verification: s.verification,
+		ActiveJobs:   jobs,
+		Recent:       recent,
 	}
 }
 
