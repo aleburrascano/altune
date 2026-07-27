@@ -14,7 +14,9 @@ import {
   type DownloadMeta,
   type DownloadPhase,
 } from '@shared/acquisition/downloadStore';
+import { invalidateAudioCaches } from '@shared/acquisition/audioCacheInvalidation';
 import { stageToPhase } from '@shared/acquisition/stagePhase';
+import { repinIfPinned } from '@shared/offline/pinnedStore';
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
@@ -45,6 +47,7 @@ type InvalidateOnlyEvent = Exclude<
   | 'track_acquisition_progress'
   | 'track_acquisition_completed'
   | 'track_acquisition_failed'
+  | 'track_replace_failed'
   | 'playlist_renamed'
   | 'track_removed_from_playlist'
   | 'playlist_reordered'
@@ -193,6 +196,22 @@ function route(queryClient: QueryClient, event: ServerEvent, type: ServerEventTy
       });
       patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
       completeDownload(trackId);
+      invalidateAudioCaches(trackId);
+      repinIfPinned(trackId);
+    }
+    return;
+  }
+
+  if (type === 'track_replace_failed') {
+    const trackId = asString(event.data.track_id);
+    if (trackId) {
+      patchTrackInCaches(queryClient, trackId, {
+        acquisition_status: 'ready',
+        failure_reason: null,
+        failure_message: null,
+      });
+      patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
+      failDownload(trackId);
     }
     return;
   }

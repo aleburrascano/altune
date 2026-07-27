@@ -172,3 +172,10 @@ export function pinnedUri(trackId: string): string | undefined {
   const entry = usePinnedStore.getState().entries[trackId];
   return entry?.status === 'ready' ? entry.uri : undefined;
 }
+
+export function repinIfPinned(trackId: string): void {
+  const store = usePinnedStore.getState();
+  if (store.entries[trackId] === undefined) return;
+  store.unpin(trackId);
+  store.pin(trackId);
+}

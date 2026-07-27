@@ -53,9 +53,18 @@ The table exists because the gap that bit us was not a routing gap — the route
 | `track_acquisition_progress` | — | `downloadStore` phase | library row phase, Activity Dock |
 | `track_acquisition_completed` | track row status + `audio_ref` | `downloadStore` complete, `trackStatusStore` ready | library row, detail `Source` → `Library`, play source |
 | `track_acquisition_failed` | track row status + failure | `downloadStore` fail, `trackStatusStore` failed | library row retry affordance, detail save control |
+| `track_replace_failed` | track row back to ready | `downloadStore` fail, `trackStatusStore` ready | library row, Activity Dock |
 | `playlist_renamed` | playlist detail name | — | playlist detail hero |
 | `playlist_reordered` | playlist detail order | — | playlist detail list |
 | `track_removed_from_playlist` | playlist detail | — | playlist detail list |
 | `playlist_created` / `playlist_deleted` / `track_added_to_playlist` | invalidate only | — | playlist grid, playlist detail |
 
 The last row is the weak one: invalidation refetches only *active* queries, so it costs a round trip and does nothing while offline. Those three are candidates for direct patching if they ever feel slow.
+
+## A completed acquisition also invalidates cached audio (2026-07-26)
+
+`track_acquisition_completed` has a third effect the table above cannot express, because its target is neither a query cache nor a store: the audio bytes cached on disk. A re-acquired track keeps its object key, so the prefetch file and any pinned download — both keyed by track id — stay resolvable and keep playing the *previous* recording. The handler therefore also calls `invalidateAudioCaches` and `repinIfPinned`.
+
+`invalidateAudioCaches` dispatches through a registration seam (`shared/acquisition/audioCacheInvalidation`) rather than importing the cache directly, because the prefetch cache lives in `features/playback` and `shared/` may not import a feature. `playbackService()` registers the evictor; when playback never starts nothing is registered, which is correct — there is no cache to clear. Each callback is invoked inside its own try/catch so one failing invalidator cannot break event routing for everything downstream.
+
+`track_replace_failed` exists for the mirror-image reason: replace publishes `track_acquisition_started` exactly as an acquire does, so a failed replace needs a terminal event or the row shows pending forever — but it must not reuse `track_acquisition_failed`, whose handler nulls `audio_ref` and would present a track that is still playing as broken.

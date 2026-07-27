@@ -5,8 +5,9 @@ import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
+import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
 import { recoverAudio } from '@shared/api-client/audio';
-import { prefetchNext, repairActiveToStreaming, wasSwappedToLocal } from './audioPrefetch';
+import { evictCached, prefetchNext, repairActiveToStreaming, wasSwappedToLocal } from './audioPrefetch';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
 import { reportPlaybackError } from './playbackErrorStore';
 
@@ -37,6 +38,8 @@ async function handlePlaybackError(message: string): Promise<void> {
 }
 
 export async function playbackService() {
+  registerAudioCacheInvalidator(evictCached);
+
   TrackPlayer.addEventListener(Event.RemotePause, () => {
     void TrackPlayer.pause();
   });

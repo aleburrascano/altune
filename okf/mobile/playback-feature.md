@@ -58,3 +58,9 @@ The **sleep timer** (`sleepTimerStore`) stores an absolute `endsAt`, never a dec
 `useQueueResume` used to pack and parse the queue's origin itself: `buildSourceId` produced `playlist:<id>:<url-encoded name>` and `parseSourceId` picked it apart on restore, with a `decodeOrEmpty` guard for malformed input. That format is the server's, and the URL-encoding existed only so a `:` in a playlist name could not be read as a separator.
 
 The wire now carries a structured `source` object and the two functions are a pair of small mappers between it and the store's `QueueSource` union. The packing lives in `playback/domain/queue_source.go` (see [playback](../backend/playback.md)).
+
+## Evicting prefetched audio when the recording changes (2026-07-26)
+
+`prefetchNext` caches the next track's audio under `<trackId>.<ext>` and `findCached` resolves it by that id alone — deliberately, since the presigned URL rotates on every resolve and could never be a cache key. The cost surfaced when re-acquire shipped: a replacement lands on the *same* object key, so the id still resolves and `swapUpcomingToLocal` kept feeding the player the old recording. Eviction is by track id for the same reason the cache is: the file's identity is the track, and its content is whatever the server last stored.
+
+`evictCached` deletes the cached file and drops the id from `swappedToLocal`, and is registered into `shared/acquisition/audioCacheInvalidation` by `playbackService()` so `applyServerEvent` can reach it without `shared/` importing this feature. It is registered in the service rather than at module load because the service is already the playback lifecycle entry point, and a registration that happened on import would fire in every test that touches the module graph.

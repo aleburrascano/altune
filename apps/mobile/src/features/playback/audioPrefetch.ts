@@ -24,6 +24,14 @@ export function forgetAllSwaps(): void {
   swappedToLocal.clear();
 }
 
+export function evictCached(trackId: string): void {
+  swappedToLocal.delete(trackId);
+  try {
+    const file = findCached(trackId);
+    if (file !== null) file.delete();
+  } catch {}
+}
+
 function cacheDir(): Directory {
   const dir = new Directory(Paths.cache, CACHE_SUBDIR);
   if (!dir.exists) dir.create({ intermediates: true });
