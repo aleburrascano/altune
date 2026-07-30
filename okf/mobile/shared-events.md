@@ -88,3 +88,13 @@ A token failure was equally silent: `connect()` returned without scheduling anyt
 - `reorderPlaylistCache` mapped `trackIds` straight to cached tracks with no dedup, so a payload naming an id twice grew the list. The named sequence is deduplicated first.
 
 Two more handlers clobbered good data with `null` on a thin redelivery: `track_acquisition_completed` always wrote `audio_ref`, and `track_acquisition_failed` always wrote `failure_message`. Both now omit the key when the field is absent. `failure_message` matters twice over — the Go publisher at `internal/acquisition/service/acquire.go` sends only `{track_id, reason}` for that event, so the client was reading a field the server has never sent and nulling the REST-supplied value on every failure. `LibraryRow` falls back to "Acquisition failed" when it is null, which is why this was invisible. Note that mutation testing *cannot* find this class: replacing a read of a never-sent field with `null` is an equivalent mutation.
+
+## Two survivors worth killing, three worth explaining (2026-07-30)
+
+The first mutation run over the rebuilt suite left 56 survivors. Triaging them rather than chasing the number found that most were equivalent mutations, and two named real gaps:
+
+- **Nothing asserted the request itself.** Blanking `xhr.open('GET', …)`, the `Authorization: Bearer …` header or `Accept: text/event-stream` all survived. Both headers are hard contracts — the API needs the token, and SSE needs that `Accept` — so a test now pins the method, URL and both headers.
+- **An empty progress event re-armed the watchdog.** `if (newText.length > 0)` guards the "bytes arrived, so the stream is alive" reset. Relaxed to `>= 0`, an `onprogress` that delivered no new bytes also reset the 60s watchdog, so a connection that kept firing empty progress events would never be force-reconnected — precisely the silent-stream case the watchdog exists for.
+
+The `fieldOf` survivors are **equivalent, not gaps**, and are recorded here so nobody re-litigates them: removing the leading-colon comment guard, removing the `colon === -1` guard, or changing it to `colon === +1` all produce a field whose `name` is the empty string, and `parseBlock` dispatches only on `name === 'id' | 'event' | 'data'`. Every one of those mutants is therefore unobservable through the public surface. A test that killed them would have to assert on `fieldOf` directly, which is testing the mechanism rather than the behaviour.
+

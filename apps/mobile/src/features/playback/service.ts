@@ -70,7 +70,6 @@ export async function playbackService() {
     if (!shouldApplyActiveIndex(data.index)) return;
     const key = typeof data.track?.id === 'string' ? data.track.id : undefined;
     useQueueStore.getState().syncCurrentIndex(data.index, key);
-    console.log(`[audio-timing] track-transition index=${data.index} at=${Date.now()}`);
     void prefetchNext(useQueueStore.getState().currentIndex);
   });
 }

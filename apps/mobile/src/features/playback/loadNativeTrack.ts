@@ -1,4 +1,4 @@
-import TrackPlayer, { Event, State } from 'react-native-track-player';
+import TrackPlayer from 'react-native-track-player';
 
 import { pinnedUri } from '@shared/offline/pinnedStore';
 
@@ -26,26 +26,6 @@ function isStale(token: number): boolean {
   return token !== loadToken;
 }
 
-type TimingMarks = { start: number; [phase: string]: number };
-
-function reportTiming(scenario: string, marks: TimingMarks): void {
-  const { start, ...rest } = marks;
-  const offsets = Object.entries(rest)
-    .map(([label, t]) => `${label}=${t - start}ms`)
-    .join(' ');
-  console.log(`[audio-timing] ${scenario} total_ms=${Date.now() - start} ${offsets}`);
-}
-
-function logTimeToPlaying(scenario: string, token: number, marks: TimingMarks): void {
-  const sub = TrackPlayer.addEventListener(Event.PlaybackState, (e) => {
-    if (e.state !== State.Playing || isStale(token)) return;
-    clearTimeout(timeout);
-    sub.remove();
-    reportTiming(scenario, marks);
-  });
-  const timeout = setTimeout(() => sub.remove(), 15000);
-}
-
 async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<Map<string, string>> {
   const ids: string[] = [];
   for (const t of tracks) {
@@ -71,7 +51,6 @@ export async function loadNativeTrack(
   options: LoadNativeTrackOptions = {},
 ): Promise<void> {
   const { autoplay = true, startPositionMs = 0 } = options;
-  const marks: TimingMarks = { start: Date.now() };
 
   const token = claimLoad();
   await ensurePlayerSetup();
@@ -80,18 +59,14 @@ export async function loadNativeTrack(
   forgetAllSwaps();
   if (isStale(token)) return;
   const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
-  marks.headers = Date.now();
   const resolved = await resolveLibraryUrls([track]);
-  marks.resolve = Date.now();
   if (isStale(token)) return;
   await TrackPlayer.add(toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }));
-  marks.added = Date.now();
 
   if (startPositionMs > 0) {
     await TrackPlayer.seekTo(startPositionMs / 1000);
   }
   if (autoplay) {
-    logTimeToPlaying('play', token, marks);
     await TrackPlayer.play();
   }
 }
@@ -102,7 +77,6 @@ export async function loadNativeQueue(
   options: LoadNativeTrackOptions = {},
 ): Promise<void> {
   const { autoplay = true, startPositionMs = 0 } = options;
-  const marks: TimingMarks = { start: Date.now() };
 
   const token = claimLoad();
   await ensurePlayerSetup();
@@ -113,9 +87,7 @@ export async function loadNativeQueue(
 
   const needsAuth = tracks.some((t) => t.source.kind === 'library');
   const headers = needsAuth ? await audioRequestHeaders() : {};
-  marks.headers = Date.now();
   const resolved = await resolveLibraryUrls(tracks.slice(startIndex));
-  marks.resolve = Date.now();
   if (isStale(token)) return;
 
   const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
@@ -129,10 +101,8 @@ export async function loadNativeQueue(
     endNativeLoad();
     throw err;
   }
-  marks.added = Date.now();
   if (startPositionMs > 0) await TrackPlayer.seekTo(startPositionMs / 1000);
   if (autoplay) {
-    logTimeToPlaying('queue-start', token, marks);
     await TrackPlayer.play();
   }
 }

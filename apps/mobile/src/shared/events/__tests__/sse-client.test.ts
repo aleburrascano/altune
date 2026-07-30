@@ -98,6 +98,20 @@ describe('SSEClient', () => {
     jest.restoreAllMocks();
   });
 
+  describe('request contract', () => {
+    it('opens a GET and sends the bearer token and SSE Accept header', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      const xhr = xhrAt(0);
+      expect(xhr.method).toBe('GET');
+      expect(xhr.url).toBe('https://api.example.com/v1/events');
+      expect(xhr.requestHeaders.Authorization).toBe('Bearer token-1');
+      expect(xhr.requestHeaders.Accept).toBe('text/event-stream');
+      expect(xhr.sent).toBe(true);
+    });
+  });
+
   describe('framing', () => {
     it('dispatches a well-formed event with id, type and data', async () => {
       const { client, onEvent } = makeClient();
@@ -419,6 +433,18 @@ describe('SSEClient', () => {
       expect(FakeXHR.instances.length).toBe(1);
 
       await jest.advanceTimersByTimeAsync(990);
+      expect(FakeXHR.instances.length).toBe(2);
+    });
+
+    it('does not re-arm the watchdog on a progress event that carried no bytes', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      await jest.advanceTimersByTimeAsync(HEARTBEAT_WATCHDOG_MS - 1_000);
+      xhrAt(0).emit('');
+
+      await jest.advanceTimersByTimeAsync(1_000);
+
       expect(FakeXHR.instances.length).toBe(2);
     });
 
