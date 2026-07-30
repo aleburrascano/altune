@@ -16,7 +16,7 @@ export function extFromUrl(url: string): string {
   const path = url.split('?')[0] ?? '';
   const slash = path.lastIndexOf('/');
   const dot = path.lastIndexOf('.');
-  return dot > slash ? path.slice(dot) : '.mp3';
+  return dot > slash && dot < path.length - 1 ? path.slice(dot) : '.mp3';
 }
 
 function pinnedFilesOnDisk(): readonly File[] {
@@ -26,6 +26,15 @@ function pinnedFilesOnDisk(): readonly File[] {
       .filter((entry): entry is File => entry instanceof File);
   } catch {
     return [];
+  }
+}
+
+export function pinnedDirReadable(): boolean {
+  try {
+    pinnedDir().list();
+    return true;
+  } catch {
+    return false;
   }
 }
 

@@ -7,6 +7,7 @@ const pendingFailures = {
   delete: null,
   download: null,
   createDirectory: null,
+  list: null,
 };
 
 const Paths = {
@@ -64,6 +65,7 @@ class Directory {
   }
 
   list() {
+    takeFailure('list');
     if (!this.exists) throw new Error(`ENOENT: no such directory, ${this.uri}`);
     return childUris(this.uri).map((uri) =>
       fileContents.has(uri) ? fileFromUri(uri) : directoryFromUri(uri),

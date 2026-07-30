@@ -3,7 +3,13 @@ import { create } from 'zustand';
 
 import { fetchAudioUrls } from '@shared/api-client/audio';
 
-import { deleteAllPinned, deletePinned, downloadPinned, findPinned } from './pinnedFiles';
+import {
+  deleteAllPinned,
+  deletePinned,
+  downloadPinned,
+  findPinned,
+  pinnedDirReadable,
+} from './pinnedFiles';
 
 export type PinnedStatus = 'queued' | 'downloading' | 'ready' | 'failed';
 
@@ -27,7 +33,7 @@ function loadIndex(): Record<string, PinnedEntry> {
     const file = indexFile();
     if (!file.exists) return {};
     const parsed: unknown = JSON.parse(file.textSync());
-    if (typeof parsed !== 'object' || parsed === null) return {};
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
     return parsed as Record<string, PinnedEntry>;
   } catch {
     return {};
@@ -38,6 +44,10 @@ function saveIndex(entries: Record<string, PinnedEntry>): void {
   try {
     indexFile().write(JSON.stringify(entries));
   } catch {}
+}
+
+function needsDownload(entry: PinnedEntry | undefined): boolean {
+  return entry === undefined || entry.status === 'failed';
 }
 
 export type PinnedState = {
@@ -57,8 +67,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   isWorking: false,
 
   pin: (trackId) => {
-    const existing = get().entries[trackId];
-    if (existing?.status === 'ready' || existing?.status === 'downloading') return;
+    if (!needsDownload(get().entries[trackId])) return;
     set((s) => {
       const entries = { ...s.entries, [trackId]: { trackId, status: 'queued' as const } };
       saveIndex(entries);
@@ -69,9 +78,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
 
   pinMany: (trackIds) => {
     const { entries } = get();
-    const fresh = trackIds.filter(
-      (id) => entries[id]?.status !== 'ready' && entries[id]?.status !== 'downloading',
-    );
+    const fresh = trackIds.filter((id) => needsDownload(entries[id]));
     if (fresh.length === 0) return;
     set((s) => {
       const next = { ...s.entries };
@@ -99,6 +106,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   },
 
   reconcile: () => {
+    if (!pinnedDirReadable()) return;
     const { entries } = get();
     const next: Record<string, PinnedEntry> = {};
     for (const [trackId, entry] of Object.entries(entries)) {
@@ -159,8 +167,8 @@ async function downloadOne(trackId: string, set: Setter, get: Getter): Promise<v
     uri = undefined;
   }
 
-  const unpinnedWhileDownloading = get().entries[trackId] === undefined;
-  if (unpinnedWhileDownloading) {
+  const supersededWhileDownloading = get().entries[trackId]?.status !== 'downloading';
+  if (supersededWhileDownloading) {
     deletePinned(trackId);
     return;
   }

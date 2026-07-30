@@ -58,6 +58,17 @@ describe('filesystem double', () => {
     expect(file.textSync()).toBe('["kept"]');
   });
 
+  it('injects a listing failure on a directory that exists, distinct from an absent one', () => {
+    const dir = new Directory(Paths.document, 'offline-audio');
+    dir.create();
+    new File(dir, 't1.mp3').write('audio');
+    __fs.failNext('list', new Error('EIO: i/o error'));
+
+    expect(() => dir.list()).toThrow('EIO: i/o error');
+    expect(dir.exists).toBe(true);
+    expect(dir.list()).toHaveLength(1);
+  });
+
   it('resets between tests', () => {
     expect(Object.keys(__fs.allFiles())).toHaveLength(0);
   });
