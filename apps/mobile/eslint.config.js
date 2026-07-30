@@ -48,6 +48,7 @@ const relaxationsForJestModuleMockingAndInlineMockComponents = {
   rules: {
     '@typescript-eslint/no-require-imports': 'off',
     'react/display-name': 'off',
+    'import/no-named-as-default-member': 'off',
   },
 };
 

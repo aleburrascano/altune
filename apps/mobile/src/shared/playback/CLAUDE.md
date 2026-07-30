@@ -10,4 +10,6 @@ Invariants:
 - `canPlay.ts` is the **only** place playability (`AcquisitionStatus === 'ready'`) is checked.
 - Feature UIs call the `useQueuePlayback` facade — never the store or native controls directly.
 
+Tests: none yet — this slice's suite was reset on 2026-07-30 and is rebuilt per `okf/playbooks/test-taxonomy.md`, with the per-category verdict committed to `okf/testing/<slice>.md`.
+
 Knowledge base: `okf/mobile/shared-playback.md`; server snapshot: `okf/backend/playback.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).

@@ -24,3 +24,7 @@ ios/
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+
+# Mutation testing (Stryker sandbox + reports)
+.stryker-tmp/
+reports/

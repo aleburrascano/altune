@@ -4,7 +4,7 @@ title: Detail
 description: Read-only track/album/artist detail screen fed by an in-memory handoff, with multi-provider enrichment and optimistic save-to-library.
 resource: apps/mobile/src/features/detail/
 tags: [mobile, feature, detail, enrichment, react-query, optimistic-update]
-verified_commit: 650555c091fab169d723fa9bd938c0ab97f89541
+verified_commit: 98dcd6a8b6c41a7ceeab71d24771c1752819a8eb
 ---
 
 Renders the detail screen for a tapped discovery result. It is fed entirely by an in-memory handoff (`@shared/lib/detail-handoff`, written by [discover-feature](discover-feature.md)) — there is no per-item backend fetch on open; an empty handoff (cold start/reload/deep link) redirects to `/discover`. `ui/DetailScreen.tsx` no longer draws anything: it resolves the handoff, computes the banner's title and secondary line, and dispatches to one per-kind body (`TrackDetailBody`/`AlbumDetailBody`/`ArtistDetailBody`). Each body renders `ui/DetailScaffold.tsx`, which owns the single vertical scroll and its shape — see [Screen shape](#screen-shape-detail-screens-rework-2026-07-26). There are no tabs, no always-on provider slabs, and no genre pills. Content loads with shape-matched skeletons (`ui/DetailSkeleton.tsx` — `TrackRowsSkeleton` for the album tracklist and artist top-tracks, `AlbumCardsSkeleton` for the discography sections), the same idiom discover/library use, rather than a bare centered spinner; the only remaining `ActivityIndicator` is the labelled inline "Searching…" feedback for a lateral-nav hop.

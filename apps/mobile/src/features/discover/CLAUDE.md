@@ -58,7 +58,6 @@ Why each rule exists: `okf/mobile/discover-feature.md` — read before structura
 
 ### Test files
 
-- [__tests__/state.test.ts](__tests__/state.test.ts) — `_viewForState` (all five view-state branches) + `kindLabel` / `resultKey`.
-- [__tests__/tap.test.ts](__tests__/tap.test.ts) — `stashHandoffForDetail`.
+None yet; rebuild per `okf/playbooks/test-taxonomy.md`.
 
 <!-- AUTO-MAINTAINED:END -->

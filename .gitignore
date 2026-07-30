@@ -79,3 +79,5 @@ CLAUDE.local.md
 
 # Blue-green active-upstream pointer, written on the VM by deploy/blue-green.sh
 services/go-api/deploy/caddy/upstream.conf
+# Mutation testing sandbox (Stryker; kept outside apps/mobile so jest never collects it)
+.stryker-tmp/

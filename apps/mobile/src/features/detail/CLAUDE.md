@@ -10,7 +10,7 @@ Layout:
 - `extras.ts` — `resolveFeatured`, `extractFeaturedFromText`. `extras-accessors.ts` — narrowing for the untyped wire map.
 - `play-source.ts` — `resolvePlaySource`. `save-control-state.ts` — lifecycle state + labels. `save-cache.ts` — the create-request mapper and the optimistic placeholder. `hooks/useOwnedTrack.ts` — server ownership stamp overlaid with the live acquisition status.
 - `navigation.ts` — `openDetail`. `hooks/` — `useSaveTrack`, `useLateralNav`, `useAlbumTracks`, `useArtistContent`, `useDetailEnrichments`, `useEnrichResult`, `useOwnedTrack`, `useAlbumDetailState`, `useArtistDetailState`.
-- `__tests__/` — `extras`, `extras-accessors`, `helpers`, `play-source`, `save-control-state`, `save-cache`, `owned-playback`, `ownership-liveness`, `useSaveTrack`, `useLateralNav`, `useEnrichment`, `useDeezerEnrichment`, `useLastFmEnrichment`, `useRelatedTracks`, `DetailScreen`, `DetailScaffold`, `LastFmEnrichmentSection`, `RelatedTracksSection`.
+- `__tests__/` — none yet; rebuild per `okf/playbooks/test-taxonomy.md`.
 
 Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@shared/api-client/{tracks,discovery,enrichment}`, `@shared/ui/primitives/*` (imported directly, not the barrel), `@tanstack/react-query`. No cross-feature imports.
 

@@ -11,7 +11,7 @@ Layout:
 - `ui/Dialog.tsx` — centre-dialog shell (backdrop, keyboard avoidance, scroll). `ui/ConfirmDialog.tsx`, `ui/ReportIssueDialog.tsx` are its two users.
 - `ui/reportDiagnostics.ts` — `reportDiagnostics`, `diagnosticsSummary`.
 - `hooks/useSubmitReport.ts` — the mutation plus `submitFailureMessage`. `hooks/useBackfillFeatured.ts`, `hooks/useClearSearchHistory.ts`.
-- `__tests__/` — `SettingsScreen`, `ReportIssueDialog`.
+- `__tests__/` — none yet; rebuild per `okf/playbooks/test-taxonomy.md`.
 
 Dependencies: `@shared/ui` (plus `primitives/TextField` directly), `@shared/api-client/feedback`, `@shared/auth/{useSession,useSignOut}`, `@shared/offline/{pinnedStore,pinnedFiles}`, `@shared/ui/theme/themePreference`, `lucide-react-native`.
 

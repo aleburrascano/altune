@@ -10,7 +10,7 @@ Layout:
 - `ui/PlaylistDetailScreen.tsx` / `ui/PlaylistHero.tsx` — route `/library/playlist/[id]`.
 - `ui/trackMenu.ts` — `buildTrackMenuItems`. `ui/sort.ts` — the `*_SORT_OPTIONS` label lists; the sort keys are wire values the server applies.
 - `hooks/useLibraryHome.ts` — `useLibraryTracks` (infinite), `useLibraryAlbums`, `useLibraryArtists`, one query per chip. `hooks/usePlaylistMutations.ts`, `hooks/useLibrarySearch.ts` (debounce only), `hooks/useRetryAcquisition.ts` (failed tracks), `hooks/useReacquireTrack.ts` (replace the audio of a ready track). `state.ts` — `_viewForState`.
-- `__tests__/` — `LibraryScreen`, `LibraryRow{,.retry,.liveness}`, `library-to-discovery`, `useLibrarySearch`, `LibraryNoResults`, `useRetryAcquisition`, `gridColumns`.
+- `__tests__/` — none yet; rebuild per `okf/playbooks/test-taxonomy.md`.
 
 Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` directly — native deps, structure audit F2), `@shared/api-client/library`, `@shared/lib/{format,detail-handoff,query-keys}`, `@shared/playback`.
 

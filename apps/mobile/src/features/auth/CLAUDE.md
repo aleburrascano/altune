@@ -16,4 +16,5 @@ The singleton SDK client, `useSession` (+ `SessionState`), `useSignOut` and the 
 - Never assert the exact error wording in tests — pin `testID="auth-error"` only.
 - Import `@shared/ui` primitives directly by path, not through the barrel.
 
+Tests: none yet — this slice's suite was reset on 2026-07-30 and is rebuilt per `okf/playbooks/test-taxonomy.md`, with the per-category verdict committed to `okf/testing/<slice>.md`.
 Why each rule exists, plus the web/SSR caveat and the e2e setup: `okf/mobile/auth-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
