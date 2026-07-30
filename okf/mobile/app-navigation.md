@@ -4,7 +4,7 @@ title: App navigation (Expo Router)
 description: File-based route tree — auth group, tabbed shell, nested per-tab stacks, and a fullscreen-modal player group — wired at the root layout.
 resource: apps/mobile/src/app/
 tags: [mobile, feature, navigation, expo-router, routing]
-verified_commit: 650555c091fab169d723fa9bd938c0ab97f89541
+verified_commit: 98dcd6a8b6c41a7ceeab71d24771c1752819a8eb
 ---
 
 The file-based route tree (Expo Router) that composes every feature into the running app. `_layout.tsx` (root) is the composition point: it holds the single `QueryClientProvider` (ADR-0005 — every feature's hooks inherit this one client, configured with 30s `staleTime` and a custom `retry` predicate delegating to `isRetryable` from [shared-api-client](shared-api-client.md)), `ThemeProvider` (dark-only v1, ADR-0008, see [shared-ui](shared-ui.md)), font-loading gated behind the native splash screen (prevents a FOUT flash), and Android nav-bar dark-forcing (re-applied on every `AppState` "active" to kill a resume-time white flash). It conditionally `require`s `registerPlaybackService` only outside Expo Go, mirroring the same native-module-avoidance pattern as the [playback-feature](playback-feature.md) itself. `AuthGate` (from [auth-feature](auth-feature.md)) wraps the entire routed tree, with `ServerEventsBridge` and `AuthDeepLinkBridge` mounted as null-rendering components inside it so SSE and deep-link subscriptions only run once a session exists. The root `<Stack>` has four screens: `(tabs)`, `(auth)`, `reset-password` (a top-level route AuthGate deliberately lets through during password recovery), and `player` (presented as a `fullScreenModal` with `slide_from_bottom`).

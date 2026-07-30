@@ -4,7 +4,7 @@ title: Shared playback (Queue)
 description: Client-owned queue state machine (Zustand) plus resume-on-reopen persistence and playability gating shared by every feature that plays audio.
 resource: apps/mobile/src/shared/playback/
 tags: [mobile, shared, playback, queue, zustand, state-machine]
-verified_commit: 650555c091fab169d723fa9bd938c0ab97f89541
+verified_commit: 98dcd6a8b6c41a7ceeab71d24771c1752819a8eb
 ---
 
 The playback subsystem separates two concerns: the **Queue** (an ordered play sequence + cursor, client-owned) and the **native player** (actual audio, reached through `PlaybackControls`, see [playback-feature](playback-feature.md)). `queueStore.ts` defines `useQueueStore`, a Zustand store (`QueueState & QueueActions`) holding `tracks: readonly PlaybackTrack[]`, `playOrder: readonly number[]` (an index permutation — never a re-sorted copy of `tracks`), `currentIndex`, `repeatMode: RepeatMode` (`'off' | 'all' | 'one'`), `shuffled`, `source: QueueSource | null` (`playlist | library | search`, discriminated union), plus two resume-flow fields: `resumePositionMs` (saved playback offset shown on the scrubber until native progress goes live — once live progress is > 0 the provider ignores and retires the seed, so it never fights real playback or reappears at the top of later tracks) and `generation` (a monotonic ownership token bumped only when the queue is *replaced* — `loadQueue`/`restoreQueue`/`clearQueue`/emptying `removeFromQueue` — never on within-queue transitions like skip/enqueue/shuffle; a slow async flow such as resume reads it before its network fetches and bails if a user tap replaced the queue meanwhile; it never rewinds, deliberately, to prevent ABA).

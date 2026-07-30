@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "npm",
+  "testRunner": "jest",
+  "jest": {
+    "projectType": "custom",
+    "configFile": "jest.config.js",
+    "enableFindRelatedTests": true
+  },
+  "coverageAnalysis": "perTest",
+  "reporters": ["progress", "clear-text", "json"],
+  "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
+  "clearTextReporter": { "maxTestsToLog": 0 },
+  "tempDirName": "../../.stryker-tmp",
+  "cleanTempDir": true,
+  "concurrency": 4,
+  "timeoutMS": 20000,
+  "disableTypeChecks": true,
+  "mutate": ["src/shared/events/**/*.ts", "!src/shared/events/**/__tests__/**"],
+  "thresholds": { "high": 90, "low": 80, "break": 89 },
+  "ignorePatterns": [".expo", "android", "ios", "reports", "coverage"]
+}

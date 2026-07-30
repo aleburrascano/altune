@@ -21,4 +21,5 @@ Consumers: `features/auth`, `features/discover`, `features/library`, `features/d
 - Never use `react-native-reanimated` here — motion is RN's built-in `Animated`.
 - Never ship light mode without a dedicated design pass; `lightTheme` is drafted, not tuned.
 
+Tests: none yet — this slice's suite was reset on 2026-07-30 and is rebuilt per `okf/playbooks/test-taxonomy.md`, with the per-category verdict committed to `okf/testing/<slice>.md`.
 Why each rule exists: `okf/mobile/shared-ui.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

@@ -12,4 +12,6 @@ Invariants:
 - Never attribute a `PlaybackError` to the store's current track — resolve the failing one from `getActiveTrack()`.
 - Playback errors live in `playbackErrorStore`, keyed by `trackKey` — never clear the store on a track change.
 
+Tests: none yet — this slice's suite was reset on 2026-07-30 and is rebuilt per `okf/playbooks/test-taxonomy.md`, with the per-category verdict committed to `okf/testing/<slice>.md`.
+
 Knowledge base: `okf/mobile/playback-feature.md` (+ `okf/mobile/shared-playback.md` for the Queue) — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).

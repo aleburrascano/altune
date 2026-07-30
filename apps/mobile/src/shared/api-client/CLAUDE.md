@@ -15,4 +15,6 @@ Invariants:
 - `feedback.ts` is the write side of in-app reports: `submitReport` POSTs to `/v1/feedback/reports`, which 404s on a deploy with no issue tracker configured and never throttles a reporter.
 - `library.ts` is the read side of the collection: `/v1/library/albums` and `/v1/library/artists` return server-grouped lenses, and `getTracks` takes `q` / `sort`.
 
+Tests: none yet — this slice's suite was reset on 2026-07-30 and is rebuilt per `okf/playbooks/test-taxonomy.md`, with the per-category verdict committed to `okf/testing/<slice>.md`.
+
 Knowledge base: `okf/mobile/shared-api-client.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).
