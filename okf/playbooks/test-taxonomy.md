@@ -2,7 +2,7 @@
 type: Playbook
 title: Test taxonomy
 description: The twenty categories of test a slice can deserve, each with the code property that triggers it and the condition that closes it — the input to qa-slice's category selection.
-resource: .claude/skills/qa-slice/SKILL.md, .github/workflows/test-backend.yml
+resource: .claude/skills/qa-slice/SKILL.md
 tags: [testing, mutation-testing, coverage, quality-gates, methodology]
 verified_commit: 98dcd6a8b6c41a7ceeab71d24771c1752819a8eb
 ---

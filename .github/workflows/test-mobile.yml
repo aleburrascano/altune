@@ -17,6 +17,9 @@ on:
     paths:
       - 'apps/mobile/**'
       - '.github/workflows/test-mobile.yml'
+  # Callable, so release-ios.yml can gate a tagged build on it. Tag pushes match
+  # neither trigger above, so without this a release ships unverified.
+  workflow_call:
 
 concurrency:
   group: test-mobile-${{ github.event.pull_request.number || github.ref }}
