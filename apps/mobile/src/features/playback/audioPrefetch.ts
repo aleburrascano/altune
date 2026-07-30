@@ -137,28 +137,20 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
   const next = ordered[activeIndex + 1];
   if (!next || next.source.kind !== 'library') return;
   const trackId = next.source.trackId;
-  const start = Date.now();
 
   const existing = findCached(trackId);
   if (existing) {
     await swapUpcomingToLocal(next, existing.uri);
     evict(ordered, s.currentIndex);
-    console.log(
-      `[audio-timing] prefetch-next track=${trackId} cache=hit swap_ms=${Date.now() - start}`,
-    );
     return;
   }
   if (inflight.has(trackId)) return;
   inflight.add(trackId);
   try {
-    const resolveStart = Date.now();
     const [resolved] = await fetchAudioUrls([trackId]);
-    const resolveMs = Date.now() - resolveStart;
     if (!resolved) return;
     const dest = new File(cacheDir(), `${trackId}${extFromUrl(resolved.url)}`);
-    const downloadStart = Date.now();
     const file = await File.downloadFileAsync(resolved.url, dest, { idempotent: true });
-    const downloadMs = Date.now() - downloadStart;
 
     const s2 = useQueueStore.getState();
     const ordered2 = orderedQueueTracks(s2);
@@ -167,9 +159,6 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
       await swapUpcomingToLocal(stillNext, file.uri);
     }
     evict(ordered2, s2.currentIndex);
-    console.log(
-      `[audio-timing] prefetch-next track=${trackId} cache=miss resolve_ms=${resolveMs} download_ms=${downloadMs} total_ms=${Date.now() - start}`,
-    );
   } catch {
   } finally {
     inflight.delete(trackId);

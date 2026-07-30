@@ -46,21 +46,28 @@ Rebuilt blind on 2026-07-30: the authors were given the source and the taxonomy 
 
 Pre-rebuild baseline (2026-07-29, against the deleted suite): 9 mutations applied, **0 killed**, 9 survived.
 
-Post-rebuild (2026-07-30, Stryker over 563 mutants in the slice's 6 source files, 3m44s):
+Post-rebuild (2026-07-30, Stryker over 563 mutants in the slice's 6 source files, ~3 min):
 
-| file | score | killed | survived |
+| file | first run | after survivor triage | survived |
 |---|---|---|---|
-| `eventTypes.ts` | 100.00 | 5 | 0 |
-| `playlistCachePatch.ts` | 95.77 | 68 | 3 |
-| `applyServerEvent.ts` | 93.68 | 178 | 11 |
-| `trackCachePatch.ts` | 90.98 | 121 | 11 |
-| `sse-client.ts` | 80.99 | 115 | 26 |
-| `useServerEvents.ts` | 76.19 | 16 | 5 |
-| **total** | **89.50** | **503** | **56** |
+| `eventTypes.ts` | 100.00 | 100.00 | 0 |
+| `playlistCachePatch.ts` | 95.77 | 95.77 | 3 |
+| `applyServerEvent.ts` | 93.68 | 93.68 | 11 |
+| `trackCachePatch.ts` | 90.98 | 90.98 | 11 |
+| `sse-client.ts` | 80.99 | **85.92** | 19 |
+| `useServerEvents.ts` | 76.19 | 76.19 | 5 |
+| **total** | **89.50** | **90.75** | **49** |
 
-**0% → 89.50%.** `thresholds.break` in `stryker.config.json` is set to 89 and is raise-only from here, on the same terms as the coverage floors.
+**0% → 90.75%.** `thresholds.break` in `stryker.config.json` is 90 and raise-only, on the same terms as the coverage floors.
 
-The remaining work is concentrated: `sse-client.ts` and `useServerEvents.ts` hold 31 of the 56 survivors. One of them is worth calling out because it is a genuine gap rather than an equivalent mutation — changing `useEffect`'s dependency array from `[queryClient]` to `[]` survives, so nothing constrains the effect's re-subscription behavior when the query client changes. Coverage for both files is high; that is exactly the divergence the kill rate exists to expose.
+The triage pass added exactly two tests and killed seven mutants. Both were verified by hand — the mutation applied, the intended test confirmed red, the source reverted — because a passing test proves nothing about what it constrains:
+
+- **The request itself was unasserted.** Blanking the method, the `Authorization: Bearer …` header or `Accept: text/event-stream` all survived. Both headers are hard contracts with the API.
+- **An empty progress event re-armed the watchdog.** `newText.length > 0` relaxed to `>= 0` means an `onprogress` carrying no new bytes still resets the 60s timer, so a connection that keeps firing empty progress events is never force-reconnected — the exact silent-stream case the watchdog exists for.
+
+The three `fieldOf` survivors were classified **equivalent, not gaps**: removing the leading-colon comment guard, removing the `colon === -1` guard, or flipping it to `+1` all produce a field whose `name` is `''`, and `parseBlock` dispatches only on `'id' | 'event' | 'data'`, so none is observable through the public surface. Killing them would mean asserting on `fieldOf` directly, which tests the mechanism rather than the behaviour.
+
+The remaining 49 were left deliberately. `useServerEvents.ts` (76.19) and `sse-client.ts` (85.92) still hold 24 of them, including one real gap — `useEffect`'s deps `[queryClient]` → `[]` survives, so nothing constrains re-subscription when the query client changes. The rest are guard-clause conditionals and error-message strings; this repo's own convention forbids asserting error copy, which makes those equivalent by rule. Chasing the number past this point would mean writing tests for mutants that name no defect, which is the coverage trap in a new costume.
 
 `test-assassin` is retained alongside it, not replaced by it: Stryker gives the reproducible number a ratchet needs, the agent gives the semantic mutations no generator produces — swapping two adjacent same-typed fields, reversing a spread so the stale copy wins, committing before the send is confirmed. Those three found the worst defects in the 2026-07-29 audit and none of them are in a standard mutator's repertoire.
 
