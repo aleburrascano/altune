@@ -4,7 +4,11 @@ import { Animated, Pressable, StyleSheet, View } from 'react-native';
 
 import { ChevronUp } from 'lucide-react-native';
 
-import { aggregatePhase, type DownloadEntry } from '@shared/acquisition/downloadStore';
+import {
+  aggregatePhase,
+  type DownloadEntry,
+  type DownloadPhase,
+} from '@shared/acquisition/downloadStore';
 import { ACQUISITION_PHASES, phaseLabel } from '@shared/acquisition/stagePhase';
 import { Text, spacing, useTheme } from '@shared/ui';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
@@ -14,6 +18,29 @@ import { radius } from '@shared/ui/theme/tokens';
 interface DownloadsBarProps {
   items: DownloadEntry[];
   onPress: () => void;
+}
+
+export interface BarDisplay {
+  phase: DownloadPhase;
+  activeIndex: number;
+  count: number;
+  heading: string;
+}
+
+export function deriveBarDisplay(items: DownloadEntry[]): BarDisplay {
+  const first = items[0];
+  const phase = aggregatePhase(items) ?? 'finding';
+  const activeIndex =
+    phase === 'done' ? ACQUISITION_PHASES.length : ACQUISITION_PHASES.indexOf(phase);
+  const active = items.filter((i) => i.phase !== 'done').length;
+  const count = active > 0 ? active : items.length;
+  const heading =
+    phase === 'done'
+      ? 'Done'
+      : count === 1
+        ? `Downloading "${first?.title ?? 'track'}"`
+        : `Downloading ${count} tracks`;
+  return { phase, activeIndex, count, heading };
 }
 
 export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElement | null {
@@ -38,17 +65,7 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
     return () => loop.stop();
   }, [enter, pulse]);
 
-  const phase = aggregatePhase(items) ?? 'finding';
-  const activeIndex =
-    phase === 'done' ? ACQUISITION_PHASES.length : ACQUISITION_PHASES.indexOf(phase);
-  const active = items.filter((i) => i.phase !== 'done').length;
-  const count = active > 0 ? active : items.length;
-  const heading =
-    phase === 'done'
-      ? 'Done'
-      : count === 1
-        ? `Downloading "${first?.title ?? 'track'}"`
-        : `Downloading ${count} songs`;
+  const { phase, activeIndex, heading } = deriveBarDisplay(items);
 
   useAnnounceChange(first == null ? '' : `${heading}. ${phaseLabel(phase)}`);
 
