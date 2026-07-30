@@ -28,7 +28,9 @@ export function useServerEvents(): void {
       applyServerEvent(queryClient, event);
     };
 
-    const handleError = (): void => {};
+    const handleError = (error: unknown): void => {
+      console.warn('[sse]', error);
+    };
 
     const client = new SSEClient(url, getAccessToken, handleEvent, handleError);
     clientRef.current = client;

@@ -1,187 +1,527 @@
 import { SSEClient, HEARTBEAT_WATCHDOG_MS, MAX_RESPONSE_BYTES } from '../sse-client';
+import type { ServerEvent } from '../sse-client';
 
-const flush = (): Promise<void> => new Promise<void>((resolve) => setImmediate(resolve));
-
-type XhrHandler = (() => void) | null;
+type Handler = () => void;
 
 class FakeXHR {
   static instances: FakeXHR[] = [];
-  onprogress: XhrHandler = null;
-  onerror: XhrHandler = null;
-  onloadend: XhrHandler = null;
+
   responseText = '';
-  headers: Record<string, string> = {};
   method = '';
   url = '';
+  requestHeaders: Record<string, string> = {};
   aborted = false;
   sent = false;
+
+  onprogress: Handler | null = null;
+  onerror: Handler | null = null;
+  onloadend: Handler | null = null;
 
   constructor() {
     FakeXHR.instances.push(this);
   }
+
   open(method: string, url: string): void {
     this.method = method;
     this.url = url;
   }
-  setRequestHeader(key: string, value: string): void {
-    this.headers[key] = value;
+
+  setRequestHeader(name: string, value: string): void {
+    this.requestHeaders[name] = value;
   }
+
   send(): void {
     this.sent = true;
   }
+
   abort(): void {
     this.aborted = true;
   }
-  push(text: string): void {
-    this.responseText += text;
+
+  emit(chunk: string): void {
+    this.responseText += chunk;
     this.onprogress?.();
+  }
+
+  triggerError(): void {
+    this.onerror?.();
+  }
+
+  triggerLoadEnd(): void {
+    this.onloadend?.();
   }
 }
 
-describe('SSEClient', () => {
-  const realXHR = (global as { XMLHttpRequest?: unknown }).XMLHttpRequest;
+function xhrAt(index: number): FakeXHR {
+  const xhr = FakeXHR.instances[index];
+  if (!xhr) throw new Error(`no FakeXHR instance at index ${index}`);
+  return xhr;
+}
 
+function block({
+  id = '',
+  type = '',
+  data,
+}: {
+  id?: string;
+  type?: string;
+  data: unknown;
+}): string {
+  const lines: string[] = [];
+  if (id) lines.push(`id: ${id}`);
+  if (type) lines.push(`event: ${type}`);
+  lines.push(`data: ${JSON.stringify(data)}`);
+  return `${lines.join('\n')}\n\n`;
+}
+
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+function makeClient(getToken = jest.fn<Promise<string | null>, []>().mockResolvedValue('token-1')) {
+  const onEvent = jest.fn<void, [ServerEvent]>();
+  const onError = jest.fn<void, [unknown]>();
+  const client = new SSEClient('https://api.example.com/v1/events', getToken, onEvent, onError);
+  return { client, onEvent, onError, getToken };
+}
+
+describe('SSEClient', () => {
   beforeEach(() => {
     FakeXHR.instances = [];
-    (global as { XMLHttpRequest: unknown }).XMLHttpRequest = FakeXHR;
+    (global as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = FakeXHR;
+    jest.useFakeTimers();
   });
+
   afterEach(() => {
-    (global as { XMLHttpRequest: unknown }).XMLHttpRequest = realXHR;
-  });
-
-  async function connect(onEvent = jest.fn()): Promise<{
-    client: SSEClient;
-    onEvent: jest.Mock;
-    xhr: FakeXHR;
-  }> {
-    const client = new SSEClient(
-      'http://api/v1/events',
-      async () => 'tok',
-      onEvent,
-      () => {},
-    );
-    await client.connect();
-    return { client, onEvent, xhr: FakeXHR.instances[0]! };
-  }
-
-  it('sends the bearer token and accepts the event stream', async () => {
-    const { xhr, client } = await connect();
-    expect(xhr.headers.Authorization).toBe('Bearer tok');
-    expect(xhr.headers.Accept).toBe('text/event-stream');
-    client.dispose();
-  });
-
-  it('parses a complete SSE event', async () => {
-    const { xhr, onEvent, client } = await connect();
-    xhr.push('id: 1\nevent: track_acquisition_completed\ndata: {"track_id":"t1"}\n\n');
-    expect(onEvent).toHaveBeenCalledWith({
-      id: '1',
-      type: 'track_acquisition_completed',
-      data: { track_id: 't1' },
-    });
-    client.dispose();
-  });
-
-  it('parses an event split across progress chunks', async () => {
-    const { xhr, onEvent, client } = await connect();
-    xhr.push('id: 2\nevent: track_acquisition_failed\nda');
-    xhr.push('ta: {"track_id":"t2","reason":"boom"}\n\n');
-    expect(onEvent).toHaveBeenCalledTimes(1);
-    expect(onEvent).toHaveBeenCalledWith({
-      id: '2',
-      type: 'track_acquisition_failed',
-      data: { track_id: 't2', reason: 'boom' },
-    });
-    client.dispose();
-  });
-
-  it('replays from the last event id on reconnect', async () => {
-    const { xhr, client } = await connect();
-    xhr.push('id: 7\nevent: track_acquisition_completed\ndata: {}\n\n');
-    await client.connect();
-    expect(FakeXHR.instances[0]!.aborted).toBe(true);
-    expect(FakeXHR.instances[1]!.headers['Last-Event-ID']).toBe('7');
-    client.dispose();
-  });
-
-  it('does not reconnect after dispose', async () => {
-    const { xhr, client } = await connect();
-    client.dispose();
-    expect(xhr.aborted).toBe(true);
-    const count = FakeXHR.instances.length;
-    await client.connect();
-    expect(FakeXHR.instances.length).toBe(count);
-  });
-
-  it('opens no connection without a token', async () => {
-    const client = new SSEClient(
-      'http://api/v1/events',
-      async () => null,
-      jest.fn(),
-      () => {},
-    );
-    await client.connect();
-    expect(FakeXHR.instances).toHaveLength(0);
-    client.dispose();
-  });
-
-  it('does not blank the cursor on an id-less control event (resync)', async () => {
-    const { xhr, onEvent, client } = await connect();
-    xhr.push('id: 5\nevent: track_deleted\ndata: {}\n\n');
-    xhr.push('event: resync\ndata: {}\n\n');
-    expect(onEvent).toHaveBeenLastCalledWith({ id: '', type: 'resync', data: {} });
-
-    await client.connect();
-    expect(FakeXHR.instances[1]!.headers['Last-Event-ID']).toBe('5');
-    client.dispose();
-  });
-
-  it('force-reconnects when the heartbeat watchdog elapses (F2)', async () => {
-    jest.useFakeTimers();
-    const { xhr, client } = await connect();
-    xhr.push(':ok\n\n');
-
-    await jest.advanceTimersByTimeAsync(HEARTBEAT_WATCHDOG_MS + 1_000);
-
-    expect(xhr.aborted).toBe(true);
-    expect(FakeXHR.instances.length).toBeGreaterThanOrEqual(2);
-    expect(FakeXHR.instances[1]!.sent).toBe(true);
-    client.dispose();
     jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
-  it('recycles the XHR once responseText grows past the cap, preserving Last-Event-ID (F3)', async () => {
-    const { xhr, client } = await connect();
-    xhr.push('id: 9\nevent: track_acquisition_completed\ndata: {}\n\n');
-    xhr.push(`:${' '.repeat(MAX_RESPONSE_BYTES)}\n\n`);
-    await flush();
+  describe('framing', () => {
+    it('dispatches a well-formed event with id, type and data', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
 
-    const next = FakeXHR.instances[FakeXHR.instances.length - 1]!;
-    expect(next).not.toBe(xhr);
-    expect(xhr.aborted).toBe(true);
-    expect(next.headers['Last-Event-ID']).toBe('9');
-    client.dispose();
+      xhrAt(0).emit(block({ id: '1', type: 'track_added_to_library', data: { a: 1 } }));
+
+      expect(onEvent).toHaveBeenCalledTimes(1);
+      expect(onEvent).toHaveBeenCalledWith({
+        id: '1',
+        type: 'track_added_to_library',
+        data: { a: 1 },
+      });
+    });
+
+    it('defaults the event type to message when no event line is present', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit(`id: 1\ndata: {"a":1}\n\n`);
+
+      expect(onEvent).toHaveBeenCalledWith({ id: '1', type: 'message', data: { a: 1 } });
+    });
+
+    it('defaults id to empty string when no id line is present', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit(`event: resync\ndata: {}\n\n`);
+
+      expect(onEvent).toHaveBeenCalledWith({ id: '', type: 'resync', data: {} });
+    });
+
+    it('dispatches multiple events found in a single chunk, in order', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit(block({ id: '1', data: { seq: 1 } }) + block({ id: '2', data: { seq: 2 } }));
+
+      expect(onEvent).toHaveBeenCalledTimes(2);
+      expect(onEvent.mock.calls[0]?.[0]?.data).toEqual({ seq: 1 });
+      expect(onEvent.mock.calls[1]?.[0]?.data).toEqual({ seq: 2 });
+    });
+
+    it('reassembles a block split across a chunk boundary mid-data-line', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+      const xhr = xhrAt(0);
+
+      xhr.emit('id: 1\ndata: {"a":1');
+      expect(onEvent).not.toHaveBeenCalled();
+
+      xhr.emit('}\n\n');
+      expect(onEvent).toHaveBeenCalledTimes(1);
+      expect(onEvent).toHaveBeenCalledWith({ id: '1', type: 'message', data: { a: 1 } });
+    });
+
+    it('reassembles a block delivered byte-by-byte', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+      const xhr = xhrAt(0);
+      const full = block({ id: '9', type: 'resync', data: { deep: { nested: true } } });
+
+      for (const char of full) {
+        xhr.emit(char);
+      }
+
+      expect(onEvent).toHaveBeenCalledTimes(1);
+      expect(onEvent).toHaveBeenCalledWith({
+        id: '9',
+        type: 'resync',
+        data: { deep: { nested: true } },
+      });
+    });
   });
 
-  it('backs off with jitter on reconnect and grows the delay per attempt (F4)', async () => {
-    jest.useFakeTimers();
-    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
-    const { xhr, client } = await connect();
+  describe('adversarial frames', () => {
+    it('drops a block with no data line, without dispatching or throwing', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
 
-    xhr.onloadend?.();
-    await jest.advanceTimersByTimeAsync(999);
-    expect(FakeXHR.instances.length).toBe(1);
-    await jest.advanceTimersByTimeAsync(2);
-    expect(FakeXHR.instances.length).toBe(2);
+      expect(() => xhrAt(0).emit('id: 1\nevent: ping\n\n')).not.toThrow();
+      expect(onEvent).not.toHaveBeenCalled();
+    });
 
-    FakeXHR.instances[1]!.onloadend?.();
-    await jest.advanceTimersByTimeAsync(1_500);
-    expect(FakeXHR.instances.length).toBe(2);
-    await jest.advanceTimersByTimeAsync(600);
-    expect(FakeXHR.instances.length).toBe(3);
+    it('dispatches an event of an unrecognized type unchanged', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
 
-    randomSpy.mockRestore();
-    client.dispose();
-    jest.useRealTimers();
+      xhrAt(0).emit(block({ id: '1', type: 'a_type_nobody_declared', data: { x: 1 } }));
+
+      expect(onEvent).toHaveBeenCalledWith({
+        id: '1',
+        type: 'a_type_nobody_declared',
+        data: { x: 1 },
+      });
+    });
+
+    it('drops a block whose data is not valid JSON but still dispatches a valid block in the same chunk', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit('id: 1\ndata: not-json\n\nid: 2\ndata: {"ok":true}\n\n');
+
+      expect(onEvent).toHaveBeenCalledTimes(1);
+      expect(onEvent).toHaveBeenCalledWith({ id: '2', type: 'message', data: { ok: true } });
+    });
+
+    it('ignores blank blocks (heartbeat padding) between real events', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit(`\n\n${block({ id: '1', data: { a: 1 } })}`);
+
+      expect(onEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores unrecognized field lines such as SSE comments or retry:', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit(': keepalive\nretry: 5000\nid: 1\ndata: {"a":1}\n\n');
+
+      expect(onEvent).toHaveBeenCalledWith({ id: '1', type: 'message', data: { a: 1 } });
+    });
+
+    it('joins multiple data: lines with a newline, per the SSE spec', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit('id: 1\ndata: {"split":\ndata: 2}\n\n');
+
+      expect(onEvent).toHaveBeenCalledTimes(1);
+      expect(onEvent).toHaveBeenCalledWith({ id: '1', type: 'message', data: { split: 2 } });
+    });
+
+    it('flushes a block terminated by CRLF CRLF', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit('id: 1\r\nevent: message\r\ndata: {"a":1}\r\n\r\n');
+
+      expect(onEvent).toHaveBeenCalledWith({ id: '1', type: 'message', data: { a: 1 } });
+    });
+
+    it('accepts a data line that omits the optional space after the colon', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit('id: 1\nevent: message\ndata:{"a":1}\n\n');
+
+      expect(onEvent).toHaveBeenCalledWith({ id: '1', type: 'message', data: { a: 1 } });
+    });
+
+    it('does not treat a comment line as a field', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit(': keep-alive\nid: 1\ndata: {"a":1}\n\n');
+
+      expect(onEvent).toHaveBeenCalledWith({ id: '1', type: 'message', data: { a: 1 } });
+    });
+  });
+
+  describe('failure injection', () => {
+    it('invokes onError and schedules a reconnect when the transport reports an error', async () => {
+      const { client, onError } = makeClient();
+      await client.connect();
+
+      xhrAt(0).triggerError();
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
+
+      await jest.advanceTimersByTimeAsync(30_000);
+      expect(FakeXHR.instances.length).toBe(2);
+    });
+
+    it('schedules a reconnect when the stream ends without an error firing', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      xhrAt(0).triggerLoadEnd();
+
+      await jest.advanceTimersByTimeAsync(30_000);
+      expect(FakeXHR.instances.length).toBe(2);
+    });
+
+    it('does not double-schedule a reconnect when error and loadend both fire for one failure', async () => {
+      jest.spyOn(Math, 'random').mockReturnValue(0);
+      const { client } = makeClient();
+      await client.connect();
+
+      const first = xhrAt(0);
+      first.triggerError();
+      first.triggerLoadEnd();
+
+      await jest.advanceTimersByTimeAsync(999);
+      expect(FakeXHR.instances.length).toBe(1);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(FakeXHR.instances.length).toBe(2);
+
+      const second = xhrAt(1);
+      second.triggerError();
+      await jest.advanceTimersByTimeAsync(1_999);
+      expect(FakeXHR.instances.length).toBe(2);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(FakeXHR.instances.length).toBe(3);
+    });
+
+    it('forces an immediate reconnect, bypassing backoff, once the buffered response exceeds MAX_RESPONSE_BYTES', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit('x'.repeat(MAX_RESPONSE_BYTES));
+      await flush();
+
+      expect(FakeXHR.instances.length).toBe(2);
+    });
+
+    it('retries after a null token so a sign-in during the session still connects', async () => {
+      const getToken = jest.fn<Promise<string | null>, []>().mockResolvedValue(null);
+      const { client } = makeClient(getToken);
+
+      await client.connect();
+      expect(FakeXHR.instances.length).toBe(0);
+
+      getToken.mockResolvedValue('token-after-sign-in');
+      await jest.advanceTimersByTimeAsync(30_000);
+
+      expect(FakeXHR.instances.length).toBe(1);
+    });
+
+    it('reports a rejected getToken() and schedules a retry instead of rejecting', async () => {
+      const getToken = jest
+        .fn<Promise<string | null>, []>()
+        .mockRejectedValue(new Error('secure store unavailable'));
+      const { client, onError } = makeClient(getToken);
+
+      await expect(client.connect()).resolves.toBeUndefined();
+
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'secure store unavailable' }));
+      expect(FakeXHR.instances.length).toBe(0);
+
+      getToken.mockResolvedValue('token-after-recovery');
+      await jest.advanceTimersByTimeAsync(30_000);
+
+      expect(FakeXHR.instances.length).toBe(1);
+    });
+  });
+
+  describe('concurrency and ordering', () => {
+    it('ignores frames on the xhr superseded by a second overlapping connect()', async () => {
+      const { client, onEvent } = makeClient();
+
+      const first = client.connect();
+      const second = client.connect();
+      await Promise.all([first, second]);
+
+      expect(FakeXHR.instances.length).toBe(2);
+      const stale = xhrAt(0);
+      const active = xhrAt(1);
+
+      stale.emit(block({ id: '1', data: { from: 'stale' } }));
+      expect(onEvent).not.toHaveBeenCalled();
+
+      active.emit(block({ id: '2', data: { from: 'active' } }));
+      expect(onEvent).toHaveBeenCalledTimes(1);
+      expect(onEvent).toHaveBeenCalledWith({ id: '2', type: 'message', data: { from: 'active' } });
+    });
+
+    it('delivers no more events after disconnect(), even if the network still emits', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+      const xhr = xhrAt(0);
+
+      client.disconnect();
+      xhr.emit(block({ id: '1', data: { a: 1 } }));
+
+      expect(onEvent).not.toHaveBeenCalled();
+    });
+
+    it('clears a pending reconnect timer on disconnect(), so a teardown never races a reconnect', async () => {
+      const { client } = makeClient();
+      await client.connect();
+      xhrAt(0).triggerError();
+
+      client.disconnect();
+      await jest.advanceTimersByTimeAsync(60_000);
+
+      expect(FakeXHR.instances.length).toBe(1);
+    });
+
+    it('does not connect when dispose() happens while the token fetch is still in flight', async () => {
+      let resolveToken!: (value: string | null) => void;
+      const getToken = jest.fn<Promise<string | null>, []>(
+        () => new Promise<string | null>((resolve) => (resolveToken = resolve)),
+      );
+      const { client } = makeClient(getToken);
+
+      const connectPromise = client.connect();
+      client.dispose();
+      resolveToken('token-1');
+      await connectPromise;
+
+      expect(FakeXHR.instances.length).toBe(0);
+    });
+  });
+
+  describe('timing and dwell', () => {
+    it('jitters the reconnect delay into [base, 2*base) rather than firing at base', async () => {
+      jest.spyOn(Math, 'random').mockReturnValue(0.99);
+      const { client } = makeClient();
+      await client.connect();
+
+      xhrAt(0).triggerError();
+
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(FakeXHR.instances.length).toBe(1);
+
+      await jest.advanceTimersByTimeAsync(990);
+      expect(FakeXHR.instances.length).toBe(2);
+    });
+
+    it('forces a reconnect exactly at the watchdog timeout, not before', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      await jest.advanceTimersByTimeAsync(HEARTBEAT_WATCHDOG_MS - 1);
+      expect(FakeXHR.instances.length).toBe(1);
+
+      await jest.advanceTimersByTimeAsync(1);
+      expect(FakeXHR.instances.length).toBe(2);
+    });
+
+    it('resets the watchdog window on data receipt, deferring the forced reconnect', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      await jest.advanceTimersByTimeAsync(59_000);
+      expect(FakeXHR.instances.length).toBe(1);
+
+      xhrAt(0).emit(block({ id: '1', data: { a: 1 } }));
+
+      await jest.advanceTimersByTimeAsync(59_000);
+      expect(FakeXHR.instances.length).toBe(1);
+
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(FakeXHR.instances.length).toBe(2);
+    });
+
+    it('reconnects at the exact base backoff delay after the first failure', async () => {
+      jest.spyOn(Math, 'random').mockReturnValue(0);
+      const { client } = makeClient();
+      await client.connect();
+
+      xhrAt(0).triggerError();
+
+      await jest.advanceTimersByTimeAsync(999);
+      expect(FakeXHR.instances.length).toBe(1);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(FakeXHR.instances.length).toBe(2);
+    });
+
+    it('doubles the backoff on consecutive failures and resets it after a successful data receipt', async () => {
+      jest.spyOn(Math, 'random').mockReturnValue(0);
+      const { client } = makeClient();
+      await client.connect();
+
+      xhrAt(0).triggerError();
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(FakeXHR.instances.length).toBe(2);
+
+      xhrAt(1).triggerError();
+      await jest.advanceTimersByTimeAsync(1_999);
+      expect(FakeXHR.instances.length).toBe(2);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(FakeXHR.instances.length).toBe(3);
+
+      xhrAt(2).emit(block({ id: '1', data: { a: 1 } }));
+      xhrAt(2).triggerError();
+      await jest.advanceTimersByTimeAsync(999);
+      expect(FakeXHR.instances.length).toBe(3);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(FakeXHR.instances.length).toBe(4);
+    });
+
+    it('caps the backoff delay at MAX_RECONNECT_MS after repeated failures', async () => {
+      jest.spyOn(Math, 'random').mockReturnValue(0);
+      const { client } = makeClient();
+      await client.connect();
+
+      for (let i = 0; i < 5; i++) {
+        xhrAt(FakeXHR.instances.length - 1).triggerError();
+        await jest.advanceTimersByTimeAsync(30_000);
+      }
+      expect(FakeXHR.instances.length).toBe(6);
+
+      xhrAt(5).triggerError();
+      await jest.advanceTimersByTimeAsync(29_999);
+      expect(FakeXHR.instances.length).toBe(6);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(FakeXHR.instances.length).toBe(7);
+    });
+  });
+
+  describe('resume via Last-Event-ID', () => {
+    it('sends no Last-Event-ID header before any id has been seen', async () => {
+      const { client } = makeClient();
+      await client.connect();
+
+      expect(xhrAt(0).requestHeaders['Last-Event-ID']).toBeUndefined();
+    });
+
+    it('sends the last seen id as Last-Event-ID on reconnect', async () => {
+      jest.spyOn(Math, 'random').mockReturnValue(0);
+      const { client } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit(block({ id: 'evt-42', data: { a: 1 } }));
+      xhrAt(0).triggerError();
+
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(xhrAt(1).requestHeaders['Last-Event-ID']).toBe('evt-42');
+    });
   });
 });

@@ -1,42 +1,48 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 
+import {
+  registerAudioCacheInvalidator,
+  _resetAudioCacheInvalidatorsForTest,
+} from '@shared/acquisition/audioCacheInvalidation';
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
-import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
+import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import type {
   ListPlaylistsResponse,
   ListTracksResponse,
   PlaylistDetailResponse,
+  PlaylistResponse,
   TrackResponse,
 } from '@shared/api-client/types';
+import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
 import { applyServerEvent } from '../applyServerEvent';
+import { _resetUnhandledEventsForTest, unhandledEventTypes } from '../eventTypes';
+import type { ServerEvent } from '../sse-client';
 
-type TrackPages = { pages: ListTracksResponse[]; pageParams: number[] };
+type TrackPages = InfiniteData<ListTracksResponse>;
 
-function seedTracks(qc: QueryClient, items: TrackResponse[]): void {
-  qc.setQueryData<TrackPages>(['library', 'tracks', '', 'recent'], {
-    pages: [{ items, total: items.length, limit: 200, offset: 0, has_more: false }],
-    pageParams: [0],
+function makeClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 }
 
-function readTracks(qc: QueryClient): TrackResponse[] {
-  return qc.getQueryData<TrackPages>(['library', 'tracks', '', 'recent'])?.pages.flatMap((p) => p.items) ?? [];
+function serverEvent(type: string, data: Record<string, unknown> = {}): ServerEvent {
+  return { id: '1', type, data };
 }
 
+function invalidatedKeys(spy: jest.SpyInstance): unknown[] {
+  return spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown }).queryKey);
+}
 
-beforeEach(() => {
-  useDownloadStore.getState().reset();
-});
-
-function makeTrack(overrides: Partial<TrackResponse>): TrackResponse {
+function trackFixture(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 'track-1',
-    title: 'Midnight City',
-    artist: 'M83',
+    id: 't1',
+    title: 'Original Title',
+    artist: 'Original Artist',
     album: null,
-    duration_seconds: 243,
-    added_at: '2026-06-30T00:00:00Z',
+    duration_seconds: null,
+    added_at: '2026-01-01T00:00:00Z',
     acquisition_status: 'pending',
     artwork_url: null,
     failure_reason: null,
@@ -50,340 +56,794 @@ function makeTrack(overrides: Partial<TrackResponse>): TrackResponse {
   };
 }
 
-function seedLibraryHome(qc: QueryClient, track = makeTrack({ id: 'track-1' })): void {
-  seedTracks(qc, [track]);
+function seedTrackPages(
+  queryClient: QueryClient,
+  items: TrackResponse[],
+  total = items.length,
+): readonly unknown[] {
+  const key = libraryKeys.tracks('', 'recent');
+  const data: TrackPages = {
+    pageParams: [0],
+    pages: [{ items, total, limit: 20, offset: 0, has_more: false }],
+  };
+  queryClient.setQueryData(key, data);
+  return key;
 }
 
-const entries = (): Record<string, unknown> => useDownloadStore.getState().entries;
-const phaseOf = (id: string): string | undefined => useDownloadStore.getState().entries[id]?.phase;
+function readTrackPages(queryClient: QueryClient, key: readonly unknown[]): ListTracksResponse {
+  return (queryClient.getQueryData(key) as TrackPages).pages[0]!;
+}
 
-describe('applyServerEvent', () => {
-  it('seeds the download store and flips the row to pending on a started event', () => {
-    const qc = new QueryClient();
-    seedLibraryHome(
-      qc,
-      makeTrack({ id: 'track-1', acquisition_status: 'failed', failure_reason: 'x' }),
-    );
+function playlistDetailFixture(
+  overrides: Partial<PlaylistDetailResponse> = {},
+): PlaylistDetailResponse {
+  return {
+    id: 'p1',
+    name: 'Old Name',
+    track_count: 0,
+    preview_artwork_urls: [],
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    total_duration_seconds: 0,
+    tracks: [],
+    ...overrides,
+  };
+}
 
-    applyServerEvent(qc, {
-      id: '0',
-      type: 'track_acquisition_started',
-      data: { track_id: 'track-1' },
-    });
+function playlistSummaryFixture(overrides: Partial<PlaylistResponse> = {}): PlaylistResponse {
+  return {
+    id: 'p1',
+    name: 'Old Name',
+    track_count: 0,
+    preview_artwork_urls: [],
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
 
-    expect(phaseOf('track-1')).toBe('finding');
-    const data = { items: readTracks(qc) };
-    expect(data?.items[0]).toMatchObject({ acquisition_status: 'pending', failure_reason: null });
-    expect(useDownloadStore.getState().entries['track-1']).toMatchObject({
-      title: 'Midnight City',
-      artist: 'M83',
-    });
-  });
+beforeEach(() => {
+  useTrackStatusStore.getState().reset();
+  useDownloadStore.getState().reset();
+  _resetAudioCacheInvalidatorsForTest();
+  _resetUnhandledEventsForTest();
+});
 
-  it('records the phase in the download store on a progress event, without invalidating', () => {
-    const qc = new QueryClient();
-    seedLibraryHome(qc);
-    const spy = jest.spyOn(qc, 'invalidateQueries');
+afterEach(() => {
+  useDownloadStore.getState().reset();
+});
 
-    applyServerEvent(qc, {
-      id: '0',
-      type: 'track_acquisition_progress',
-      data: { track_id: 'track-1', stage: 'download' },
-    });
+describe('unrecognized event type', () => {
+  it('records it instead of throwing or invalidating anything', () => {
+    const queryClient = makeClient();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    expect(phaseOf('track-1')).toBe('downloading');
+    expect(() =>
+      applyServerEvent(queryClient, serverEvent('track_favourited', { track_id: 't1' })),
+    ).not.toThrow();
+
+    expect(unhandledEventTypes()).toEqual(['track_favourited']);
     expect(spy).not.toHaveBeenCalled();
   });
+});
 
-  it('ignores a progress event with an unknown stage', () => {
-    const qc = new QueryClient();
-    applyServerEvent(qc, {
-      id: '0',
-      type: 'track_acquisition_progress',
-      data: { track_id: 'track-1', stage: 'bogus' },
-    });
-    expect(phaseOf('track-1')).toBeUndefined();
+describe('resync', () => {
+  it('invalidates exactly the resync key set, in the declared order, once each', () => {
+    const queryClient = makeClient();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    applyServerEvent(queryClient, serverEvent('resync'));
+
+    expect(invalidatedKeys(spy)).toEqual([
+      libraryKeys.tracksPrefix,
+      libraryKeys.lookupPrefix,
+      libraryKeys.albumsPrefix,
+      libraryKeys.artistsPrefix,
+      libraryKeys.summary,
+      libraryKeys.featuringPrefix,
+      playlistKeys.list,
+      playlistKeys.details,
+    ]);
   });
+});
 
-  it('patches a completed acquisition to ready and runs the terminal sequence', () => {
-    const qc = new QueryClient();
-    seedLibraryHome(qc);
-    useDownloadStore.getState().progress('track-1', 'downloading');
+describe('track_added_to_library', () => {
+  it('upserts a fully-populated track into a seeded page and links its identity', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, []);
 
-    applyServerEvent(qc, {
-      id: '1',
-      type: 'track_acquisition_completed',
-      data: { track_id: 'track-1', audio_ref: 'ref-1' },
-    });
-
-    const data = { items: readTracks(qc) };
-    expect(data?.items[0]).toMatchObject({ acquisition_status: 'ready', audio_ref: 'ref-1' });
-    expect(phaseOf('track-1')).toBe('finishing');
-  });
-
-  it('patches a failed acquisition to failed with reason and marks the store failed', () => {
-    const qc = new QueryClient();
-    seedLibraryHome(qc);
-    useDownloadStore.getState().progress('track-1', 'downloading');
-
-    applyServerEvent(qc, {
-      id: '2',
-      type: 'track_acquisition_failed',
-      data: { track_id: 'track-1', reason: 'no source found' },
-    });
-
-    const data = { items: readTracks(qc) };
-    expect(data?.items[0]).toMatchObject({
-      acquisition_status: 'failed',
-      failure_reason: 'no source found',
-      audio_ref: null,
-    });
-    expect(phaseOf('track-1')).toBe('failed');
-  });
-
-  it('leaves a track playable when a replace fails', () => {
-    const qc = new QueryClient();
-    seedLibraryHome(
-      qc,
-      makeTrack({ id: 'track-1', acquisition_status: 'ready', audio_ref: 'ref-1' }),
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_added_to_library', {
+        id: 't1',
+        title: 'Song Title',
+        artist: 'The Artist',
+        added_at: '2026-01-01T00:00:00Z',
+        acquisition_status: 'pending',
+        album: 'The Album',
+        duration_seconds: 210,
+        artwork_url: 'https://cdn/art.png',
+        year: 2020,
+        genre: 'Rock',
+        track_number: 3,
+        album_artist: 'Album Artist',
+        isrc: 'ISRC1',
+      }),
     );
-    applyServerEvent(qc, {
-      id: '3',
-      type: 'track_acquisition_started',
-      data: { track_id: 'track-1' },
-    });
 
-    applyServerEvent(qc, {
-      id: '4',
-      type: 'track_replace_failed',
-      data: { track_id: 'track-1', reason: 'no matching audio found' },
-    });
+    const page = readTrackPages(queryClient, key);
+    expect(page.items[0]).toEqual(
+      trackFixture({
+        id: 't1',
+        title: 'Song Title',
+        artist: 'The Artist',
+        album: 'The Album',
+        duration_seconds: 210,
+        artwork_url: 'https://cdn/art.png',
+        year: 2020,
+        genre: 'Rock',
+        track_number: 3,
+        album_artist: 'Album Artist',
+        isrc: 'ISRC1',
+      }),
+    );
+    expect(page.total).toBe(1);
 
-    const data = { items: readTracks(qc) };
-    expect(data?.items[0]).toMatchObject({
-      acquisition_status: 'ready',
-      failure_reason: null,
+    expect(useTrackStatusStore.getState().statuses.t1).toEqual({
+      acquisitionStatus: 'pending',
+      failureMessage: null,
     });
-    expect(data?.items[0]?.audio_ref).toBe('ref-1');
-    expect(phaseOf('track-1')).toBe('failed');
+    const identity = trackIdentityKey('Song Title', 'The Artist')!;
+    expect(useTrackStatusStore.getState().identities[identity]).toBe('t1');
   });
 
-  it('evicts cached audio when an acquisition completes so the old file cannot keep playing', () => {
-    const qc = new QueryClient();
-    seedLibraryHome(qc);
-    const evicted: string[] = [];
-    const unregister = registerAudioCacheInvalidator((trackId) => evicted.push(trackId));
+  it('defaults every optional field to null when the thin payload omits it', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, []);
 
-    applyServerEvent(qc, {
-      id: '5',
-      type: 'track_acquisition_completed',
-      data: { track_id: 'track-1', audio_ref: 'ref-2' },
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_added_to_library', {
+        id: 't1',
+        title: 'Song Title',
+        artist: 'The Artist',
+        added_at: '2026-01-01T00:00:00Z',
+        acquisition_status: 'pending',
+      }),
+    );
+
+    const page = readTrackPages(queryClient, key);
+    expect(page.items[0]).toEqual(
+      trackFixture({ id: 't1', title: 'Song Title', artist: 'The Artist' }),
+    );
+  });
+
+  it('falls back to the legacy track_id field when id is absent', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, []);
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_added_to_library', {
+        track_id: 't2',
+        title: 'Song Title',
+        artist: 'The Artist',
+        added_at: '2026-01-01T00:00:00Z',
+        acquisition_status: 'pending',
+      }),
+    );
+
+    expect(readTrackPages(queryClient, key).items[0]!.id).toBe('t2');
+  });
+
+  it('coerces a numeric field carrying the wrong JSON type to null instead of stringifying it', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, []);
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_added_to_library', {
+        id: 't1',
+        title: 'Song Title',
+        artist: 'The Artist',
+        added_at: '2026-01-01T00:00:00Z',
+        acquisition_status: 'pending',
+        duration_seconds: '210',
+      }),
+    );
+
+    expect(readTrackPages(queryClient, key).items[0]!.duration_seconds).toBeNull();
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    [
+      'both id and track_id',
+      { title: 't', artist: 'a', added_at: 'd', acquisition_status: 'pending' },
+    ],
+    ['title', { id: '1', artist: 'a', added_at: 'd', acquisition_status: 'pending' }],
+    ['artist', { id: '1', title: 't', added_at: 'd', acquisition_status: 'pending' }],
+    ['added_at', { id: '1', title: 't', artist: 'a', acquisition_status: 'pending' }],
+    ['acquisition_status', { id: '1', title: 't', artist: 'a', added_at: 'd' }],
+  ])('falls back to refetch-invalidation when the payload is missing %s', (_label, payload) => {
+    const queryClient = makeClient();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    applyServerEvent(queryClient, serverEvent('track_added_to_library', payload));
+
+    expect(invalidatedKeys(spy)).toEqual([
+      libraryKeys.albumsPrefix,
+      libraryKeys.artistsPrefix,
+      libraryKeys.summary,
+      libraryKeys.tracksPrefix,
+      libraryKeys.featuringPrefix,
+    ]);
+  });
+
+  it('never upserts a blank-id, blank-artist track when a required field is the wrong JSON type', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, []);
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_added_to_library', {
+        id: 't1',
+        title: 'Song Title',
+        artist: 42,
+        added_at: '2026-01-01T00:00:00Z',
+        acquisition_status: 'pending',
+      }),
+    );
+
+    expect(readTrackPages(queryClient, key).items).toHaveLength(0);
+  });
+
+  it('replaying the same event twice does not duplicate the track', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, []);
+    const payload = {
+      id: 't1',
+      title: 'Song Title',
+      artist: 'The Artist',
+      added_at: '2026-01-01T00:00:00Z',
+      acquisition_status: 'pending',
+    };
+
+    applyServerEvent(queryClient, serverEvent('track_added_to_library', payload));
+    applyServerEvent(queryClient, serverEvent('track_added_to_library', payload));
+
+    const page = readTrackPages(queryClient, key);
+    expect(page.items).toHaveLength(1);
+    expect(page.total).toBe(1);
+  });
+});
+
+describe('track_deleted', () => {
+  it('removes the track from library and playlist caches and clears its status', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [trackFixture({ id: 't1' })], 1);
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' })], track_count: 1 }),
+    );
+    useTrackStatusStore.getState().patch('t1', { acquisitionStatus: 'ready', failureMessage: null });
+
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    applyServerEvent(queryClient, serverEvent('track_deleted', { track_id: 't1' }));
+
+    const page = readTrackPages(queryClient, key);
+    expect(page.items).toHaveLength(0);
+    expect(page.total).toBe(0);
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.tracks,
+    ).toHaveLength(0);
+    expect(useTrackStatusStore.getState().statuses.t1).toBeUndefined();
+    expect(invalidatedKeys(spy)).toEqual([
+      libraryKeys.albumsPrefix,
+      libraryKeys.artistsPrefix,
+      libraryKeys.summary,
+      playlistKeys.list,
+    ]);
+  });
+
+  it('still invalidates library and playlist summaries when track_id is missing', () => {
+    const queryClient = makeClient();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    applyServerEvent(queryClient, serverEvent('track_deleted', {}));
+
+    expect(invalidatedKeys(spy)).toEqual([
+      libraryKeys.albumsPrefix,
+      libraryKeys.artistsPrefix,
+      libraryKeys.summary,
+      playlistKeys.list,
+    ]);
+  });
+
+  it('replaying the same deletion twice leaves the cache empty rather than erroring', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [trackFixture({ id: 't1' })], 1);
+
+    applyServerEvent(queryClient, serverEvent('track_deleted', { track_id: 't1' }));
+    applyServerEvent(queryClient, serverEvent('track_deleted', { track_id: 't1' }));
+
+    const page = readTrackPages(queryClient, key);
+    expect(page.items).toHaveLength(0);
+    expect(page.total).toBe(0);
+  });
+});
+
+describe('track_acquisition_started', () => {
+  it('starts the download entry blank and marks the track pending when nothing is cached', () => {
+    const queryClient = makeClient();
+
+    applyServerEvent(queryClient, serverEvent('track_acquisition_started', { track_id: 't1' }));
+
+    expect(useDownloadStore.getState().entries.t1).toEqual({
+      trackId: 't1',
+      phase: 'finding',
+      title: null,
+      artist: null,
+      artworkUrl: null,
     });
+    expect(useTrackStatusStore.getState().statuses.t1).toEqual({
+      acquisitionStatus: 'pending',
+      failureMessage: null,
+    });
+  });
+
+  it('carries the cached title, artist and artwork into the new download entry', () => {
+    const queryClient = makeClient();
+    seedTrackPages(queryClient, [
+      trackFixture({
+        id: 't1',
+        title: 'Known Title',
+        artist: 'Known Artist',
+        artwork_url: 'art.png',
+        acquisition_status: 'failed',
+        failure_reason: 'no_source',
+      }),
+    ]);
+
+    applyServerEvent(queryClient, serverEvent('track_acquisition_started', { track_id: 't1' }));
+
+    expect(useDownloadStore.getState().entries.t1).toEqual({
+      trackId: 't1',
+      phase: 'finding',
+      title: 'Known Title',
+      artist: 'Known Artist',
+      artworkUrl: 'art.png',
+    });
+  });
+
+  it('clears a prior failure and reverts the cached track to pending', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({ id: 't1', acquisition_status: 'failed', failure_reason: 'no_source' }),
+    ]);
+
+    applyServerEvent(queryClient, serverEvent('track_acquisition_started', { track_id: 't1' }));
+
+    const patched = readTrackPages(queryClient, key).items[0]!;
+    expect(patched.acquisition_status).toBe('pending');
+    expect(patched.failure_reason).toBeNull();
+  });
+
+  it('is a no-op when track_id is missing from the payload', () => {
+    const queryClient = makeClient();
+
+    applyServerEvent(queryClient, serverEvent('track_acquisition_started', {}));
+
+    expect(useDownloadStore.getState().entries).toEqual({});
+    expect(useTrackStatusStore.getState().statuses).toEqual({});
+  });
+});
+
+describe('track_acquisition_progress', () => {
+  it.each<[string | undefined, string | undefined]>([
+    ['search', 'finding'],
+    ['select', 'finding'],
+    ['download', 'downloading'],
+    ['tag', 'finishing'],
+    ['store', 'finishing'],
+    ['update_track', 'finishing'],
+    ['some_unrecognized_stage', undefined],
+    [undefined, undefined],
+  ])('routes stage %s to download phase %s', (stage, expectedPhase) => {
+    const queryClient = makeClient();
+    const data: Record<string, unknown> = { track_id: 't1' };
+    if (stage !== undefined) data.stage = stage;
+
+    applyServerEvent(queryClient, serverEvent('track_acquisition_progress', data));
+
+    if (expectedPhase === undefined) {
+      expect(useDownloadStore.getState().entries.t1).toBeUndefined();
+    } else {
+      expect(useDownloadStore.getState().entries.t1?.phase).toBe(expectedPhase);
+    }
+  });
+
+  it('is a no-op when track_id is missing from the payload', () => {
+    const queryClient = makeClient();
+
+    applyServerEvent(queryClient, serverEvent('track_acquisition_progress', { stage: 'download' }));
+
+    expect(useDownloadStore.getState().entries).toEqual({});
+  });
+
+  it('does not regress the phase when a stale progress event arrives after a later one', () => {
+    const queryClient = makeClient();
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_progress', { track_id: 't1', stage: 'tag' }),
+    );
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_progress', { track_id: 't1', stage: 'download' }),
+    );
+
+    expect(useDownloadStore.getState().entries.t1?.phase).toBe('finishing');
+  });
+});
+
+describe('track_acquisition_completed', () => {
+  it('marks the track ready with the new audio_ref and finishes the download', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({ id: 't1', acquisition_status: 'pending', audio_ref: null }),
+    ]);
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_completed', { track_id: 't1', audio_ref: 'ref-123' }),
+    );
+
+    const patched = readTrackPages(queryClient, key).items[0]!;
+    expect(patched.acquisition_status).toBe('ready');
+    expect(patched.audio_ref).toBe('ref-123');
+    expect(useTrackStatusStore.getState().statuses.t1).toEqual({
+      acquisitionStatus: 'ready',
+      failureMessage: null,
+    });
+    expect(useDownloadStore.getState().entries.t1?.phase).toBe('finishing');
+  });
+
+  it('keeps a previously-set audio_ref when a thin completion event omits it', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({ id: 't1', acquisition_status: 'pending', audio_ref: 'old-ref' }),
+    ]);
+
+    applyServerEvent(queryClient, serverEvent('track_acquisition_completed', { track_id: 't1' }));
+
+    const track = readTrackPages(queryClient, key).items[0]!;
+    expect(track.acquisition_status).toBe('ready');
+    expect(track.audio_ref).toBe('old-ref');
+  });
+
+  it('notifies registered audio cache invalidators with the completed trackId', () => {
+    const queryClient = makeClient();
+    seedTrackPages(queryClient, [trackFixture({ id: 't1' })]);
+    const notified: string[] = [];
+    const unregister = registerAudioCacheInvalidator((trackId) => notified.push(trackId));
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_completed', { track_id: 't1', audio_ref: 'ref-123' }),
+    );
     unregister();
 
-    expect(evicted).toEqual(['track-1']);
+    expect(notified).toEqual(['t1']);
   });
 
-  it('inserts a full track from a track_added_to_library payload without refetching (F10)', () => {
-    const qc = new QueryClient();
-    seedTracks(qc, []);
-    const spy = jest.spyOn(qc, 'invalidateQueries');
+  it('is a no-op when track_id is missing from the payload', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({ id: 't1', acquisition_status: 'pending' }),
+    ]);
 
-    applyServerEvent(qc, {
-      id: '9',
-      type: 'track_added_to_library',
-      data: {
-        id: 'track-9',
-        title: 'New',
-        artist: 'Artist',
-        album: null,
-        duration_seconds: 100,
-        added_at: '2026-07-04T00:00:00Z',
+    applyServerEvent(queryClient, serverEvent('track_acquisition_completed', { audio_ref: 'r' }));
+
+    expect(readTrackPages(queryClient, key).items[0]!.acquisition_status).toBe('pending');
+  });
+});
+
+describe('track_replace_failed', () => {
+  it('reverts to ready, clears the failure state, and keeps the preserved audio_ref', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({
+        id: 't1',
+        acquisition_status: 'failed',
+        failure_reason: 'no_source',
+        audio_ref: 'preserved-ref',
+      }),
+    ]);
+    useTrackStatusStore
+      .getState()
+      .patch('t1', { acquisitionStatus: 'failed', failureMessage: 'No source found' });
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_replace_failed', { track_id: 't1', reason: 'no_source' }),
+    );
+
+    const patched = readTrackPages(queryClient, key).items[0]!;
+    expect(patched.acquisition_status).toBe('ready');
+    expect(patched.failure_reason).toBeNull();
+    expect(patched.audio_ref).toBe('preserved-ref');
+    expect(useTrackStatusStore.getState().statuses.t1).toEqual({
+      acquisitionStatus: 'ready',
+      failureMessage: null,
+    });
+    expect(useDownloadStore.getState().entries.t1?.phase).toBe('failed');
+  });
+
+  it('is a no-op when track_id is missing from the payload', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({ id: 't1', acquisition_status: 'failed' }),
+    ]);
+
+    applyServerEvent(queryClient, serverEvent('track_replace_failed', { reason: 'no_source' }));
+
+    expect(readTrackPages(queryClient, key).items[0]!.acquisition_status).toBe('failed');
+  });
+});
+
+describe('track_acquisition_failed', () => {
+  it('marks the track failed using only the fields the server actually sends', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({ id: 't1', acquisition_status: 'pending', audio_ref: 'stale-ref' }),
+    ]);
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_failed', { track_id: 't1', reason: 'no_candidates' }),
+    );
+
+    const patched = readTrackPages(queryClient, key).items[0]!;
+    expect(patched.acquisition_status).toBe('failed');
+    expect(patched.failure_reason).toBe('no_candidates');
+    expect(patched.audio_ref).toBeNull();
+    expect(useTrackStatusStore.getState().statuses.t1).toEqual({
+      acquisitionStatus: 'failed',
+      failureMessage: null,
+    });
+    expect(useDownloadStore.getState().entries.t1?.phase).toBe('failed');
+  });
+
+  it('preserves an existing failure_message when the event omits one', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({
+        id: 't1',
         acquisition_status: 'pending',
-        artwork_url: null,
-      },
-    });
+        failure_message: 'No sources matched this recording',
+      }),
+    ]);
 
-    expect(readTracks(qc).map((t) => t.id)).toEqual(['track-9']);
-    expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library', 'tracks'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'albums'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'artists'] });
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_failed', { track_id: 't1', reason: 'no_candidates' }),
+    );
+
+    expect(readTrackPages(queryClient, key).items[0]!.failure_message).toBe(
+      'No sources matched this recording',
+    );
   });
 
-  it('falls back to invalidate for a thin track_added payload (track_id only)', () => {
-    const qc = new QueryClient();
-    const spy = jest.spyOn(qc, 'invalidateQueries');
+  it('is a no-op when track_id is missing from the payload', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({ id: 't1', acquisition_status: 'pending' }),
+    ]);
 
-    applyServerEvent(qc, {
-      id: '9',
-      type: 'track_added_to_library',
-      data: { track_id: 'track-9' },
-    });
+    applyServerEvent(queryClient, serverEvent('track_acquisition_failed', { reason: 'x' }));
 
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'tracks'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'featuring'] });
+    expect(readTrackPages(queryClient, key).items[0]!.acquisition_status).toBe('pending');
   });
+});
 
-  it('removes the row on track_deleted instead of refetching the library (F11)', () => {
-    const qc = new QueryClient();
-    seedLibraryHome(qc);
-    const spy = jest.spyOn(qc, 'invalidateQueries');
-
-    applyServerEvent(qc, { id: '10', type: 'track_deleted', data: { track_id: 'track-1' } });
-
-    expect(readTracks(qc)).toEqual([]);
-    expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library', 'tracks'] });
-    expect(spy).not.toHaveBeenCalledWith({ queryKey: ['library'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] });
-  });
-
-  it('invalidates list queries for membership events', () => {
-    const qc = new QueryClient();
-    const spy = jest.spyOn(qc, 'invalidateQueries');
-
-    applyServerEvent(qc, { id: '3', type: 'track_added_to_playlist', data: {} });
-
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['playlist'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] });
-  });
-
-  it('fully reconciles every SSE-covered family on a resync control event', () => {
-    const qc = new QueryClient();
-    const spy = jest.spyOn(qc, 'invalidateQueries');
-
-    applyServerEvent(qc, { id: '', type: 'resync', data: {} });
-
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'tracks'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['library', 'featuring'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['playlists'] });
-    expect(spy).toHaveBeenCalledWith({ queryKey: ['playlist'] });
-  });
-
-  it('patches the playlist name on playlist_renamed (F13)', () => {
-    const qc = new QueryClient();
-    qc.setQueryData<PlaylistDetailResponse>(['playlist', 'p1'], {
-      id: 'p1',
-      name: 'Old',
-      track_count: 0,
-      preview_artwork_urls: [],
-      total_duration_seconds: 0,
-      created_at: 'x',
-      updated_at: 'x',
-      tracks: [],
-    });
-    const spy = jest.spyOn(qc, 'invalidateQueries');
-
-    applyServerEvent(qc, {
-      id: '1',
-      type: 'playlist_renamed',
-      data: { playlist_id: 'p1', name: 'New' },
-    });
-
-    expect(qc.getQueryData<PlaylistDetailResponse>(['playlist', 'p1'])?.name).toBe('New');
-    expect(spy).not.toHaveBeenCalled();
-  });
-
-  it('removes a track from the playlist detail on track_removed_from_playlist (F13)', () => {
-    const qc = new QueryClient();
-    qc.setQueryData<PlaylistDetailResponse>(['playlist', 'p1'], {
-      id: 'p1',
-      name: 'PL',
-      track_count: 2,
-      preview_artwork_urls: [],
-      total_duration_seconds: 0,
-      created_at: 'x',
-      updated_at: 'x',
-      tracks: [makeTrack({ id: 'a' }), makeTrack({ id: 'b' })],
-    });
-
-    applyServerEvent(qc, {
-      id: '2',
-      type: 'track_removed_from_playlist',
-      data: { playlist_id: 'p1', track_id: 'a' },
-    });
-
-    const detail = qc.getQueryData<PlaylistDetailResponse>(['playlist', 'p1']);
-    expect(detail?.tracks.map((t) => t.id)).toEqual(['b']);
-    expect(detail?.track_count).toBe(1);
-  });
-
-  it('reorders the playlist detail tracks on playlist_reordered (F13)', () => {
-    const qc = new QueryClient();
-    qc.setQueryData<PlaylistDetailResponse>(['playlist', 'p1'], {
-      id: 'p1',
-      name: 'PL',
-      track_count: 3,
-      preview_artwork_urls: [],
-      total_duration_seconds: 0,
-      created_at: 'x',
-      updated_at: 'x',
-      tracks: [makeTrack({ id: 'a' }), makeTrack({ id: 'b' }), makeTrack({ id: 'c' })],
-    });
-
-    applyServerEvent(qc, {
-      id: '3',
-      type: 'playlist_reordered',
-      data: { playlist_id: 'p1', track_ids: ['c', 'a', 'b'] },
-    });
-
-    expect(
-      qc.getQueryData<PlaylistDetailResponse>(['playlist', 'p1'])?.tracks.map((t) => t.id),
-    ).toEqual(['c', 'a', 'b']);
-  });
-
-  it('reconciles playlist list counts alongside a removal (F13)', () => {
-    const qc = new QueryClient();
-    qc.setQueryData<ListPlaylistsResponse>(['playlists'], {
-      items: [
-        {
-          id: 'p1',
-          name: 'PL',
-          track_count: 2,
-          preview_artwork_urls: [],
-          created_at: 'x',
-          updated_at: 'x',
-        },
-      ],
+describe('playlist_renamed', () => {
+  it('renames the playlist in both the detail and list caches', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(playlistKeys.detail('p1'), playlistDetailFixture());
+    queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, {
+      items: [playlistSummaryFixture()],
       total: 1,
     });
-    qc.setQueryData<PlaylistDetailResponse>(['playlist', 'p1'], {
-      id: 'p1',
-      name: 'PL',
-      track_count: 2,
-      preview_artwork_urls: [],
-      total_duration_seconds: 0,
-      created_at: 'x',
-      updated_at: 'x',
-      tracks: [makeTrack({ id: 'a' })],
-    });
 
-    applyServerEvent(qc, {
-      id: '4',
-      type: 'track_removed_from_playlist',
-      data: { playlist_id: 'p1', track_id: 'a' },
-    });
-
-    expect(qc.getQueryData<ListPlaylistsResponse>(['playlists'])?.items[0]?.track_count).toBe(1);
-  });
-
-  it('ignores unknown event types', () => {
-    const qc = new QueryClient();
-    const spy = jest.spyOn(qc, 'invalidateQueries');
-
-    applyServerEvent(qc, { id: '4', type: 'some_future_event', data: {} });
-
-    expect(spy).not.toHaveBeenCalled();
-  });
-
-  it('ignores an acquisition event with no track_id', () => {
-    const qc = new QueryClient();
-    seedLibraryHome(qc);
-
-    applyServerEvent(qc, { id: '5', type: 'track_acquisition_completed', data: {} });
+    applyServerEvent(
+      queryClient,
+      serverEvent('playlist_renamed', { playlist_id: 'p1', name: 'New Name' }),
+    );
 
     expect(
-      readTracks(qc)[0]?.acquisition_status,
-    ).toBe('pending');
-    expect(entries()).toEqual({});
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name,
+    ).toBe('New Name');
+    expect(
+      queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.name,
+    ).toBe('New Name');
+  });
+
+  it('accepts an empty string as a valid new name', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(playlistKeys.detail('p1'), playlistDetailFixture());
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('playlist_renamed', { playlist_id: 'p1', name: '' }),
+    );
+
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name,
+    ).toBe('');
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['name', { playlist_id: 'p1' }],
+    ['playlist_id', { name: 'New Name' }],
+  ])('leaves the cache untouched when %s is missing', (_label, payload) => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(playlistKeys.detail('p1'), playlistDetailFixture());
+
+    applyServerEvent(queryClient, serverEvent('playlist_renamed', payload));
+
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name,
+    ).toBe('Old Name');
+  });
+});
+
+describe('track_removed_from_playlist', () => {
+  it('removes the track from the detail cache and decrements the list track_count', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({
+        tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })],
+        track_count: 2,
+      }),
+    );
+    queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, {
+      items: [playlistSummaryFixture({ track_count: 2 })],
+      total: 1,
+    });
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_removed_from_playlist', { playlist_id: 'p1', track_id: 't1' }),
+    );
+
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    expect(detail.tracks.map((t) => t.id)).toEqual(['t2']);
+    expect(detail.track_count).toBe(1);
+    expect(
+      queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count,
+    ).toBe(1);
+  });
+
+  it('replaying the same removal twice never drives track_count negative', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' })], track_count: 1 }),
+    );
+    queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, {
+      items: [playlistSummaryFixture({ track_count: 1 })],
+      total: 1,
+    });
+    const removal = serverEvent('track_removed_from_playlist', {
+      playlist_id: 'p1',
+      track_id: 't1',
+    });
+
+    applyServerEvent(queryClient, removal);
+    applyServerEvent(queryClient, removal);
+
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    expect(detail.track_count).toBe(0);
+    expect(
+      queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count,
+    ).toBe(0);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['track_id', { playlist_id: 'p1' }],
+    ['playlist_id', { track_id: 't1' }],
+  ])('leaves the cache untouched when %s is missing', (_label, payload) => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' })], track_count: 1 }),
+    );
+
+    applyServerEvent(queryClient, serverEvent('track_removed_from_playlist', payload));
+
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.track_count,
+    ).toBe(1);
+  });
+});
+
+describe('playlist_reordered', () => {
+  it('reorders tracks to match the given order and appends unlisted tracks at the end', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({
+        tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' }), trackFixture({ id: 't3' })],
+      }),
+    );
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('playlist_reordered', { playlist_id: 'p1', track_ids: ['t3', 't1'] }),
+    );
+
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    expect(detail.tracks.map((t) => t.id)).toEqual(['t3', 't1', 't2']);
+  });
+
+  it('ignores non-string entries mixed into track_ids', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })] }),
+    );
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('playlist_reordered', { playlist_id: 'p1', track_ids: ['t2', 123, null, 't1'] }),
+    );
+
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    expect(detail.tracks.map((t) => t.id)).toEqual(['t2', 't1']);
+  });
+
+  it('leaves the order untouched when track_ids is not an array', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })] }),
+    );
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('playlist_reordered', { playlist_id: 'p1', track_ids: 'not-an-array' }),
+    );
+
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    expect(detail.tracks.map((t) => t.id)).toEqual(['t1', 't2']);
+  });
+
+  it('leaves the order untouched when playlist_id is missing', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })] }),
+    );
+
+    applyServerEvent(queryClient, serverEvent('playlist_reordered', { track_ids: ['t2', 't1'] }));
+
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    expect(detail.tracks.map((t) => t.id)).toEqual(['t1', 't2']);
+  });
+});
+
+describe('invalidate-only events', () => {
+  it.each<[string, (readonly string[])[]]>([
+    ['playlist_created', [playlistKeys.list]],
+    ['playlist_deleted', [playlistKeys.list, playlistKeys.details]],
+    ['track_added_to_playlist', [playlistKeys.details, playlistKeys.list]],
+  ])('invalidates exactly the mapped keys for %s', (type, expectedKeys) => {
+    const queryClient = makeClient();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    applyServerEvent(queryClient, serverEvent(type, { playlist_id: 'p1' }));
+
+    expect(invalidatedKeys(spy)).toEqual(expectedKeys);
   });
 });
