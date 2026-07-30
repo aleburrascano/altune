@@ -40,8 +40,14 @@ The screen had grown by accretion: every new control arrived as another left-ali
 
 `reportDiagnostics(screen)` collects only what needs no new native dependency: app version from `expo-constants`, `Platform.OS` and `Platform.Version`, and the screen name passed in by the caller. Device model was considered and dropped — it would have meant `expo-device` for one line of a bug report.
 
-Failure handling is the part worth not regressing. `submitFailureMessage` maps 429 to "give it an hour" and 400 to "describe it in a bit more detail"; everything else, including transport failure, becomes "could not reach the server — your report is saved". On failure the dialog stays open with the draft intact and the send button relabelled "Try again"; only success clears the form, and success shows the issue number (`Filed as #42`) because "sent" is weaker than a number the tester can quote back. The mutation sets `retry: false` — a report that silently retried could file duplicates, and this is one of the few writes where the user is watching the outcome.
+Failure handling is the part worth not regressing. `submitFailureMessage` maps 400 to "describe it in a bit more detail"; everything else, including transport failure, becomes "could not reach the server — your report is saved". On failure the dialog stays open with the draft intact and the send button relabelled "Try again"; only success clears the form, and success shows the issue number (`Filed as #42`) because "sent" is weaker than a number the tester can quote back. The mutation sets `retry: false` — a report that silently retried could file duplicates, and this is one of the few writes where the user is watching the outcome.
 
 The whole report flow lives in this feature rather than `shared/`: it has exactly one consumer, and the extraction bar is two. That also keeps the cross-feature import rule intact — settings owns the dialog it opens.
 
 Server side: [backend/feedback](../backend/feedback.md). The endpoint is absent, not broken, on a deploy with no issue tracker configured.
+
+## No throttle, and a way to keep going (2026-07-30)
+
+The server's per-user hourly report cap is gone (see [backend/feedback](../backend/feedback.md) for the session that killed it), so `submitFailureMessage` no longer has a 429 branch.
+
+The success screen gained **Send another** beside **Done**. Done closes the dialog; Send another clears the draft and stays put. The two share `clearDraft`, and `close` still calls it on the way out so a reopened dialog is never pre-filled with the last report. This exists for the same reason the throttle does not: someone with a backlog to empty should not have to walk back through Settings between each entry.

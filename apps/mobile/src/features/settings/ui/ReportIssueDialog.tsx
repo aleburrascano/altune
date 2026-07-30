@@ -37,13 +37,15 @@ export function ReportIssueDialog({
   const diagnostics = reportDiagnostics(screen);
   const ready = kind !== null && message.trim().length >= MIN_MESSAGE_LENGTH;
 
+  const clearDraft = (): void => {
+    submit.reset();
+    setKind(null);
+    setMessage('');
+  };
+
   const close = (): void => {
     onClose();
-    if (submit.isSuccess) {
-      submit.reset();
-      setKind(null);
-      setMessage('');
-    }
+    if (submit.isSuccess) clearDraft();
   };
 
   const send = (): void => {
@@ -63,7 +65,21 @@ export function ReportIssueDialog({
             Filed as #{submit.data.issue_number}. Every report gets read.
           </Text>
         </View>
-        <Button label="Done" variant="secondary" onPress={close} style={styles.fullAction} />
+        <View style={styles.actions}>
+          <Button
+            testID="report-issue-done"
+            label="Done"
+            variant="secondary"
+            onPress={close}
+            style={styles.action}
+          />
+          <Button
+            testID="report-issue-another"
+            label="Send another"
+            onPress={clearDraft}
+            style={styles.action}
+          />
+        </View>
       </Dialog>
     );
   }
@@ -158,7 +174,6 @@ const styles = StyleSheet.create({
   diagnostics: { marginTop: spacing.md },
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
   action: { flex: 1 },
-  fullAction: { marginTop: spacing.xl },
   sent: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   sentGlyph: {
     width: 52,

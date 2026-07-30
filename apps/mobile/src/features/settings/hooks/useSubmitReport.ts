@@ -12,9 +12,6 @@ export function useSubmitReport() {
 }
 
 export function submitFailureMessage(error: unknown): string {
-  if (error instanceof ApiError && error.status === 429) {
-    return 'That is a few reports in a short window — give it an hour and send the next one. Your draft is kept.';
-  }
   if (error instanceof ApiError && error.status === 400) {
     return 'That report was rejected — try describing it in a bit more detail.';
   }

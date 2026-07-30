@@ -18,11 +18,10 @@ type SubmitReportInput struct {
 
 type SubmitReportService struct {
 	tracker ports.IssueTracker
-	limiter *RateLimiter
 }
 
-func NewSubmitReportService(tracker ports.IssueTracker, limiter *RateLimiter) *SubmitReportService {
-	return &SubmitReportService{tracker: tracker, limiter: limiter}
+func NewSubmitReportService(tracker ports.IssueTracker) *SubmitReportService {
+	return &SubmitReportService{tracker: tracker}
 }
 
 func (s *SubmitReportService) Execute(
@@ -36,9 +35,6 @@ func (s *SubmitReportService) Execute(
 	}
 	report, err := domain.NewReport(userId, kind, input.Message, input.Diagnostics)
 	if err != nil {
-		return ports.IssueRef{}, err
-	}
-	if err := s.limiter.Allow(userId); err != nil {
 		return ports.IssueRef{}, err
 	}
 	return s.create(ctx, report)

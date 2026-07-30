@@ -2,10 +2,7 @@ package handler
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
-	"strconv"
-	"time"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/feedback/domain"
@@ -65,27 +62,11 @@ func (h *FeedbackHandler) handleSubmitReport(w http.ResponseWriter, r *http.Requ
 		},
 	})
 	if err != nil {
-		writeSubmitError(w, r, err)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusCreated, SubmitReportResponse{
 		IssueNumber: ref.Number,
 		IssueURL:    ref.URL,
 	})
-}
-
-func writeSubmitError(w http.ResponseWriter, r *http.Request, err error) {
-	var limited *service.RateLimitedError
-	if errors.As(err, &limited) {
-		w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(limited.RetryAfter)))
-	}
-	httputil.HandleServiceError(w, r, err)
-}
-
-func retryAfterSeconds(d time.Duration) int {
-	seconds := int(d.Seconds())
-	if seconds < 1 {
-		return 1
-	}
-	return seconds
 }

@@ -6,7 +6,7 @@ Layout:
 
 - `domain/report.go` — `Report`, `Kind` (`bug` / `idea` / `confusing`) and its GitHub label mapping, `Diagnostics`, `NewReport`, `Title`, `ValidationError`.
 - `ports/issue_tracker.go` — `IssueTracker`, `IssueRef`.
-- `service/submit_report.go` — `SubmitReportService`. `service/rate_limiter.go` — in-memory per-user `RateLimiter` and `RateLimitedError`.
+- `service/submit_report.go` — `SubmitReportService`.
 - `adapters/github/issue_tracker.go` — GitHub REST v3 issue creation and the issue-body markdown.
 - `adapters/handler/feedback_handler.go` — `POST /v1/feedback/reports`.
 - Tests: `domain/report_test.go`, `service/submit_report_test.go`, `adapters/github/issue_tracker_test.go`, `adapters/handler/feedback_handler_test.go`.
@@ -18,9 +18,7 @@ Dependencies: `internal/auth`, `internal/shared` (`UserId`, `httputil`), `chi`. 
 - The issue body carries the reporter's `UserId` and nothing else about the account — never an email, never a display name.
 - Keep the reporter out of the issue title; titles are read in lists.
 - Flatten and cap every diagnostics field before it reaches the issue body; escape `|`.
-- Check the rate limit only after the report validates — a rejected report must not spend quota.
-- Keep the limiter in memory; never add a store for it without an ADR.
+- Never throttle reports. A tester emptying their head in one sitting is the feature working, not abuse.
 - Mount the route only when `HasIssueTracker()` — an unconfigured deploy must 404, not 500.
-- Set `Retry-After` on every 429.
 
 Why each rule exists: `okf/backend/feedback.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
