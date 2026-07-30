@@ -13,6 +13,8 @@ The suite was not sloppy. It had zero snapshot tests, dense assertions, and one 
 
 A coverage percentage answers "did this line run." This taxonomy answers "which constraints does this code deserve, and do they exist." That is the question the 43 survivors were hiding behind.
 
+Why this exists, and which alternatives were rejected and should not be re-proposed: [ADR-0020](../../docs/adr/0020-test-taxonomy-and-ratchet-gates.md). Current slice ledger: [docs/specs/test-hardening/plan.md](../../docs/specs/test-hardening/plan.md).
+
 ## How to use it
 
 Per slice — a mobile feature (`apps/mobile/src/features/<name>/`), a mobile shared subsystem (`apps/mobile/src/shared/<name>/`), or a Go module (`services/go-api/internal/<name>/`):
