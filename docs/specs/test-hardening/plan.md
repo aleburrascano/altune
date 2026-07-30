@@ -24,7 +24,7 @@ Order is bottom-up through the dependency graph — `shared/` before `features/`
 | # | slice | status | kill rate | coverage floor |
 |---|---|---|---|---|
 | 1 | `shared/events` | **done** (2026-07-30) | 90.75% | 97/90/100/100 |
-| 2 | `shared/acquisition` | next — [record pre-filled](../../../okf/testing/shared-acquisition.md) | — | 0 |
+| 2 | `shared/acquisition` | **done** (2026-07-30) | 79.44%* | 97/88/100/100 |
 | 3 | `shared/playback` | todo | — | 0 |
 | 4 | `shared/offline` | todo | — | 0 |
 | 5 | `shared/api-client` | todo | — | 0 |
@@ -41,8 +41,11 @@ Order is bottom-up through the dependency graph — `shared/` before `features/`
 
 `shared/ui` is 1,660 lines of primitives and theme: the cheapest coverage in the repo and the least meaningful. It gets two categories, not twenty.
 
+*Slice 2's kill rate is a scoped `stryker run` measurement, not a `stryker.config.json`-enforced gate — see Outstanding.
+
 ## Outstanding
 
+- **`stryker.config.json` doesn't scale past one slice.** One `mutate` glob and one global `thresholds.break`, raise-only. `shared/acquisition` measures 79.44% (dragged down almost entirely by `StyleSheet`/`Animated`-config mutations in its two presentational components, which this repo's own convention says not to chase); folding it into the same glob as `shared/events` (90.75%) would pull the *combined* score under the committed 90 threshold, and lowering the threshold to fit is exactly what raise-only forbids. Left `shared/events`-only for now. Every future slice with a UI component will hit this same ceiling — needs either per-slice Stryker configs/CI jobs or a different thresholding strategy before slice 9 (`features/detail`, the first UI-heavy feature slice) gets here.
 - **Device smoke of the event stream.** The slice-1 SSE fixes (CRLF framing, retry-on-null-token, error logging) and the playlist cache-consistency fixes are verified only by tests written in the same session. Sign in, save a track, watch the row flip, background and foreground, confirm reconnect.
 - **Re-measure the complexity ceiling from CI.** The step in `test-mobile.yml` is `continue-on-error` because a locally-derived 137 scored 145 on a depth-1 clone. With `fetch-depth: 0` in place, read the number from a green run, set `MAX`, drop `continue-on-error`.
 - **Two gates never executed.** `deploy-backend`'s test dependency needs a `services/go-api/**` push; `release-ios`'s needs a tag. Both are wired and unproven.
@@ -59,3 +62,4 @@ Order is bottom-up through the dependency graph — `shared/` before `features/`
 - `deploy-backend` and `release-ios` now consume their test workflows via `workflow_call` + `needs`.
 - `.fallowrc.json` boundary zones corrected to match `apps/mobile/CLAUDE.md`; they had permitted three cross-feature edges and `shared -> feature-auth`.
 - Slice 1: nine defects fixed, 186 tests, 0% → 90.75%.
+- Slice 2: three defects fixed (a NUL-byte identity-key separator, a banned "songs" noun, a store `remove()` that would have wiped every other track), 106 tests, 0% → 98.83%.

@@ -6,7 +6,7 @@ export type AcquisitionPhase =
   | 'failed'
   | 'working';
 
-const STAGE_TO_PHASE: Record<string, AcquisitionPhase> = {
+export const STAGE_TO_PHASE: Record<string, AcquisitionPhase> = {
   search: 'finding',
   select: 'finding',
   download: 'downloading',
