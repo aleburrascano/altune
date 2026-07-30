@@ -55,9 +55,75 @@ jobs:
       - name: lint
         run: npx eslint "src/**/*.{ts,tsx}"
 
+      # Architecture, dead code and duplication (fallow). Zero tolerance: as of
+      # 2026-07-30 both report "no issues", so any new finding fails the build.
+      # circular-dependencies and boundary-violation are `error` severity in
+      # .fallowrc.json, and its boundary zones now mirror the two rules in
+      # apps/mobile/CLAUDE.md exactly — they previously permitted
+      # feature-detail -> feature-playback, feature-* -> feature-auth and even
+      # shared -> feature-auth, none of which the architecture allows.
+      #
+      # NOTE: fallow's own exit code ignores rule severity — `fallow dead-code`
+      # exits 0 even with an error-severity finding. --fail-on-issues is what
+      # actually gates. Verified by flipping a rule to error and observing 0.
+      - name: architecture, dead code and duplication (fallow)
+        run: npm run fallow
+
+      # Complexity health is a RATCHET, not a floor. The 137 findings are mostly
+      # "split this high-impact file" and "these complex functions have no test
+      # coverage path" — prioritisation advice, not defects, so blocking on zero
+      # would be wrong. Blocking on an increase is not. Lower MAX as the number
+      # comes down; never raise it to make CI green.
+      # fallow writes its summary to STDERR and exits non-zero while any finding
+      # is above threshold, so this captures 2>&1 and ignores the exit code,
+      # judging only the count. If the summary cannot be parsed the step FAILS
+      # rather than defaulting to zero — a gate that silently measures nothing
+      # is worse than no gate.
+      - name: complexity ratchet (fallow)
+        run: |
+          MAX=137
+          OUT=$(npm run --silent fallow:health 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true)
+          echo "$OUT" | tail -3
+          SUMMARY=$(echo "$OUT" | grep -E 'above threshold|No issues found' | tail -1 || true)
+          if [ -z "$SUMMARY" ]; then
+            echo "::error::could not parse fallow health output; the complexity ratchet verified nothing"
+            exit 1
+          fi
+          N=$(echo "$SUMMARY" | grep -oE '[0-9]+ above threshold' | grep -oE '[0-9]+' || echo 0)
+          echo "complexity findings: ${N} (ceiling ${MAX})"
+          [ "$N" -le "$MAX" ] || { echo "::error::complexity findings rose to ${N}, above the ${MAX} ceiling"; exit 1; }
+
       # Per-glob coverage floors live in jest.config.js as RATCHET_RAISE_ONLY.
       # They are per-directory on purpose: a single global average lets an
       # uncovered reducer hide behind well-covered UI. Raise a slice's floor
       # when qa-slice finishes it; never lower one to make CI green.
       - name: test with coverage ratchet
         run: npx jest --coverage --ci
+
+      # React-specific quality (react-doctor): security, bugs, performance,
+      # maintainability. Errors are zero-tolerance — the two that existed
+      # (query-destructure-result, subscribing a component to every field of a
+      # useInfiniteQuery result) were fixed on 2026-07-30. Warnings are a
+      # ratchet at the measured 106; react-doctor.yml posts the per-PR delta.
+      #
+      # Uses the pinned devDependency, NOT `npx react-doctor@latest`: a gate
+      # must not change behaviour because upstream shipped a new rule.
+      - name: react quality gate (react-doctor)
+        run: |
+          MAX_WARNINGS=106
+          npm run --silent doctor:ci > doctor-report.json || true
+          node -e "
+            const s = require('./doctor-report.json').summary;
+            console.log('errors:', s.errorCount, '| warnings:', s.warningCount, '(ceiling', $MAX_WARNINGS + ')');
+            if (s.errorCount > 0) { console.log('::error::react-doctor reported ' + s.errorCount + ' error(s)'); process.exit(1); }
+            if (s.warningCount > $MAX_WARNINGS) { console.log('::error::react-doctor warnings rose to ' + s.warningCount + ', above the $MAX_WARNINGS ceiling'); process.exit(1); }
+          "
+
+      - name: upload react-doctor report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-doctor-report
+          path: apps/mobile/doctor-report.json
+          if-no-files-found: ignore
+          retention-days: 14

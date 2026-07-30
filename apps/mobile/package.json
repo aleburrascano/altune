@@ -12,7 +12,10 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "test": "jest",
     "mutate": "stryker run",
-    "doctor": "npx react-doctor@latest"
+    "fallow": "fallow dead-code --fail-on-issues && fallow dupes --fail-on-issues",
+    "fallow:health": "fallow health",
+    "doctor": "npx react-doctor@latest",
+    "doctor:ci": "react-doctor --no-score --json --json-compact"
   },
   "prettier": {
     "printWidth": 100,

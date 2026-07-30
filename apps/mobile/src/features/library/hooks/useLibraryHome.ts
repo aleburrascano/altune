@@ -8,7 +8,16 @@ export const TRACKS_PAGE_SIZE = 200;
 const PENDING_POLL_MS = 60_000;
 
 export function useLibraryTracks(query: string, sort: LibrarySort, enabled: boolean) {
-  const infinite = useInfiniteQuery({
+  const {
+    data,
+    isLoading,
+    isRefetching,
+    error,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+  } = useInfiniteQuery({
     queryKey: libraryKeys.tracks(query, sort),
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
@@ -25,21 +34,21 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
     },
   });
 
-  const pages = infinite.data?.pages ?? [];
+  const pages = data?.pages ?? [];
   const tracks = pages.flatMap((page) => page.items);
 
   return {
     tracks,
     total: pages[0]?.total ?? 0,
-    isLoading: infinite.isLoading,
-    isRefetching: infinite.isRefetching,
-    error: infinite.error as Error | null,
-    isFetchingNextPage: infinite.isFetchingNextPage,
+    isLoading,
+    isRefetching,
+    error: error as Error | null,
+    isFetchingNextPage,
     onEndReached: () => {
-      if (infinite.hasNextPage && !infinite.isFetchingNextPage) void infinite.fetchNextPage();
+      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
     },
     refetch: () => {
-      void infinite.refetch();
+      void refetch();
     },
   };
 }

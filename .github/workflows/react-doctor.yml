@@ -35,8 +35,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Advisory, not blocking: this workflow sat under apps/mobile/.github/ where
-      # GitHub never read it, so its findings have never gated a commit.
+      # This workflow exists for the sticky per-PR delta comment, not for gating.
+      # The actual gate moved to test-mobile.yml on 2026-07-30, where it runs the
+      # PINNED devDependency and asserts errorCount == 0 with a warning ceiling.
+      # That split is deliberate: the comment is allowed to follow upstream's
+      # newest rules, a gate must not change behaviour because upstream shipped
+      # one. Do not make this step blocking — you would be gating on @latest.
       # Full knob reference: https://www.react.doctor/ci
       - uses: millionco/react-doctor@v2
         with:
