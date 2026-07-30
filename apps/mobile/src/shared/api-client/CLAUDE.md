@@ -12,6 +12,7 @@ Invariants:
 - Retry policy lives only in the QueryClient predicate (`isRetryable`) — never add a retry loop inside `apiFetch`.
 - Wire types are hand-maintained (`types.ts` flags the sync risk) — a backend response-shape change must update them in the same change.
 - Enrichment responses follow the null-object contract: collections always present, unresolved entity = empty payload; `has_content` is the server's verdict on whether a section is worth rendering.
+- `feedback.ts` is the write side of in-app reports: `submitReport` POSTs to `/v1/feedback/reports`, which 404s on a deploy with no issue tracker configured and 429s when a user's hourly quota is spent.
 - `library.ts` is the read side of the collection: `/v1/library/albums` and `/v1/library/artists` return server-grouped lenses, and `getTracks` takes `q` / `sort`.
 
 Knowledge base: `okf/mobile/shared-api-client.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).
