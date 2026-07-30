@@ -29,7 +29,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The release gate. test-mobile.yml triggers on pull_request and pushes to
+  # main, so a tag push matched nothing and every .ipa published here shipped
+  # with zero checks — no typecheck, no lint, no tests. This runs them against
+  # the tagged commit before anything is built, on a cheap ubuntu runner rather
+  # than the macOS one.
+  verify:
+    uses: ./.github/workflows/test-mobile.yml
+
   build:
+    needs: verify
     runs-on: macos-15
     outputs:
       version: ${{ steps.meta.outputs.version }}

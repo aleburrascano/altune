@@ -31,7 +31,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The deploy gate. Until 2026-07-30 this workflow and test-backend.yml fired on
+  # the same push and ran in PARALLEL, so a deploy could reach production while
+  # its own test run was still going — or after it had already failed. Calling
+  # the test workflow makes it a prerequisite instead of a coincidence, and a
+  # reusable workflow runs against the caller's ref, so what gets tested is
+  # exactly the commit that gets shipped.
+  test:
+    uses: ./.github/workflows/test-backend.yml
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Check out repo (full history for migration diff)
