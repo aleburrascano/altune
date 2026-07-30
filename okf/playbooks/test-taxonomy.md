@@ -27,6 +27,33 @@ Per slice — a mobile feature (`apps/mobile/src/features/<name>/`), a mobile sh
 
 A rejection with a reason is a finding. A category silently omitted is a hole, and it is indistinguishable from the 43.
 
+## Amending a slice that already has a record
+
+Rebuilding a slice is a `/qa-slice` run. **Changing** one — a bug fix, a new field, a new call site — is not, and does not need to be. But it is not nothing either, and the ratchets alone will not carry it.
+
+The ratchets measure the *quantity* of constraint, not its *shape*. Per-file coverage floors and the Stryker `break` threshold both catch a slice getting broadly worse, which is what makes them worth having. Neither can tell you that a change introduced a new persisted shape covered only by table tests: the addition is small, the floor still clears, the combined kill rate barely moves, and the missing category is invisible. That is the failure this section exists to prevent.
+
+The forcing function already exists. Every record declares `resource:` as its slice directory, so the pre-commit staleness hook blocks any commit that touches the slice without updating `okf/testing/<slice>.md`. When it fires, that is the moment to re-derive — not a box to tick.
+
+**Regression is a floor, never a cap.** A bug fix satisfies the Regression trigger by definition ("a bug reached a user, or a mutation survived"), so it always earns a test that fails on the pre-fix code and passes after. Every other category still triggers on its own terms, independently: a fix that adds a branch also triggers Table, one inside a store also triggers Reducer, one that reads a new server field also triggers Cross-surface contract. Selecting Regression does not discharge the rest.
+
+Four changes are the ones most often missed, because each adds a category rather than extending an existing one:
+
+| the change | the category it adds |
+|---|---|
+| a new I/O call site | Failure injection |
+| a new persisted shape, or a new field on one | Persistence round-trip, Legacy/compat |
+| a new store transition or event type | Reducer, Idempotence/replay |
+| reading a new field the other surface produces | Cross-surface contract |
+
+Scoped tooling, so this costs minutes rather than a full run:
+
+- `npx stryker run --mutate "<the changed files>"` — a kill rate for the diff, not the glob.
+- `npx fallow audit` — dead code, complexity and duplication over changed files only.
+- `npx react-doctor --scope changed --base origin/main` — only issues the change introduced.
+
+Then update the record: add the categories to SELECTED with the test that satisfies each, and move anything the change invalidated out of REJECTED with a note on what changed. A record that still claims a category is rejected after the code grew into it is worse than no record.
+
 ## When authoring finds a bug
 
 A test asserts **intended** behavior. Never a defect.
