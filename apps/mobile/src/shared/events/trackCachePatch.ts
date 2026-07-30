@@ -117,9 +117,11 @@ export function removeTrackFromCaches(queryClient: QueryClient, trackId: string)
     );
   }
 
-  queryClient.setQueriesData<PlaylistDetailResponse>({ queryKey: playlistKeys.details }, (prev) =>
-    prev ? { ...prev, tracks: drop(prev.tracks) } : prev,
-  );
+  queryClient.setQueriesData<PlaylistDetailResponse>({ queryKey: playlistKeys.details }, (prev) => {
+    if (!prev) return prev;
+    const tracks = drop(prev.tracks);
+    return { ...prev, tracks, track_count: tracks.length };
+  });
 }
 
 export function patchTrackInCaches(

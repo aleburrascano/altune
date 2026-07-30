@@ -13,6 +13,17 @@ export interface ServerEvent {
 type EventHandler = (event: ServerEvent) => void;
 type ErrorHandler = (error: unknown) => void;
 
+type WireField = { name: string; value: string };
+
+function fieldOf(line: string): WireField | null {
+  if (line.startsWith(':')) return null;
+  const colon = line.indexOf(':');
+  if (colon === -1) return null;
+  const name = line.substring(0, colon);
+  const raw = line.substring(colon + 1);
+  return { name, value: raw.startsWith(' ') ? raw.substring(1) : raw };
+}
+
 export class SSEClient {
   private xhr: XMLHttpRequest | null = null;
   private lastEventId = '';
@@ -43,8 +54,20 @@ export class SSEClient {
   async connect(): Promise<void> {
     if (this.disposed) return;
 
-    const token = await this.getToken();
-    if (!token || this.disposed) return;
+    let token: string | null;
+    try {
+      token = await this.getToken();
+    } catch (error) {
+      if (this.disposed) return;
+      this.onError(error);
+      this.scheduleReconnect();
+      return;
+    }
+    if (this.disposed) return;
+    if (!token) {
+      this.scheduleReconnect();
+      return;
+    }
 
     this.closeConnection();
 
@@ -150,7 +173,7 @@ export class SSEClient {
   }
 
   private parseChunk(text: string): void {
-    this.buffer += text;
+    this.buffer += text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     const blocks = this.buffer.split('\n\n');
     this.buffer = blocks.pop() ?? '';
 
@@ -167,22 +190,20 @@ export class SSEClient {
   private parseBlock(block: string): ServerEvent | null {
     let id = '';
     let type = 'message';
-    let dataLine = '';
+    const dataLines: string[] = [];
 
     for (const line of block.split('\n')) {
-      if (line.startsWith('id: ')) {
-        id = line.substring(4);
-      } else if (line.startsWith('event: ')) {
-        type = line.substring(7);
-      } else if (line.startsWith('data: ')) {
-        dataLine = line.substring(6);
-      }
+      const field = fieldOf(line);
+      if (field === null) continue;
+      if (field.name === 'id') id = field.value;
+      else if (field.name === 'event') type = field.value;
+      else if (field.name === 'data') dataLines.push(field.value);
     }
 
-    if (!dataLine) return null;
+    if (dataLines.length === 0) return null;
 
     try {
-      const data = JSON.parse(dataLine) as Record<string, unknown>;
+      const data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
       return { id, type, data };
     } catch {
       return null;

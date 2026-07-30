@@ -190,9 +190,10 @@ function route(queryClient: QueryClient, event: ServerEvent, type: ServerEventTy
   if (type === 'track_acquisition_completed') {
     const trackId = asString(event.data.track_id);
     if (trackId) {
+      const audioRef = asString(event.data.audio_ref);
       patchTrackInCaches(queryClient, trackId, {
         acquisition_status: 'ready',
-        audio_ref: asString(event.data.audio_ref),
+        ...(audioRef === null ? {} : { audio_ref: audioRef }),
       });
       patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
       completeDownload(trackId);
@@ -219,15 +220,16 @@ function route(queryClient: QueryClient, event: ServerEvent, type: ServerEventTy
   if (type === 'track_acquisition_failed') {
     const trackId = asString(event.data.track_id);
     if (trackId) {
+      const failureMessage = asString(event.data.failure_message);
       patchTrackInCaches(queryClient, trackId, {
         acquisition_status: 'failed',
         failure_reason: asString(event.data.reason),
-        failure_message: asString(event.data.failure_message),
+        ...(failureMessage === null ? {} : { failure_message: failureMessage }),
         audio_ref: null,
       });
       patchTrackStatus(trackId, {
         acquisitionStatus: 'failed',
-        failureMessage: asString(event.data.failure_message),
+        failureMessage,
       });
       failDownload(trackId);
     }
