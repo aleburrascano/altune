@@ -40,7 +40,7 @@ Rebuilt blind on 2026-07-30: the authors were given the source and the taxonomy 
 
 ## DEFERRED
 
-- **`repinIfPinned`'s async fan-out** inside `track_acquisition_completed`. Driving it past its synchronous no-op would pin `pinnedStore`'s microtask scheduling rather than this reducer's contract. Unblocks when `shared/offline` is rebuilt and exposes a controllable queue.
+- ~~**`repinIfPinned`'s async fan-out** inside `track_acquisition_completed`.~~ **Resolved 2026-07-30 by slice 4.** The deferral was correct about the cost and wrong about the risk: while it stood, no test in this file ever pinned a track before dispatching the event, so `repinIfPinned` always took its never-pinned early return and **the entire call could have been deleted from the handler with this suite still green** — the `shared/offline` rebuild found it as a vacuous suspect. Two tests now cover both arms of the guard: a pinned track is re-downloaded, and a track the user never downloaded does not start pinning. Neither pins microtask scheduling, because `pin` advances synchronously to `downloading` before the worker's first `await`; `@shared/api-client/audio` is mocked at the module boundary so no download proceeds past url resolution.
 
 ## MUTATION AUDIT
 

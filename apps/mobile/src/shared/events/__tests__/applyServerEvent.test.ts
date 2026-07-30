@@ -14,10 +14,13 @@ import type {
   TrackResponse,
 } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { applyServerEvent } from '../applyServerEvent';
 import { _resetUnhandledEventsForTest, unhandledEventTypes } from '../eventTypes';
 import type { ServerEvent } from '../sse-client';
+
+jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
 
 type TrackPages = InfiniteData<ListTracksResponse>;
 
@@ -545,6 +548,36 @@ describe('track_acquisition_completed', () => {
     applyServerEvent(queryClient, serverEvent('track_acquisition_completed', { audio_ref: 'r' }));
 
     expect(readTrackPages(queryClient, key).items[0]!.acquisition_status).toBe('pending');
+  });
+
+  it('re-downloads a pinned track whose audio the server has just replaced', () => {
+    const queryClient = makeClient();
+    seedTrackPages(queryClient, [trackFixture({ id: 't1' })]);
+    usePinnedStore.setState({
+      entries: { t1: { trackId: 't1', status: 'ready', uri: 'file:///stale.mp3' } },
+      queue: [],
+      isWorking: false,
+    });
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_completed', { track_id: 't1', audio_ref: 'ref-123' }),
+    );
+
+    expect(usePinnedStore.getState().entries.t1?.status).toBe('downloading');
+  });
+
+  it('does not start pinning a track the user never downloaded', () => {
+    const queryClient = makeClient();
+    seedTrackPages(queryClient, [trackFixture({ id: 't1' })]);
+    usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_completed', { track_id: 't1', audio_ref: 'ref-123' }),
+    );
+
+    expect(usePinnedStore.getState().entries).toEqual({});
   });
 });
 

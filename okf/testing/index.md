@@ -14,3 +14,4 @@ A category listed as selected without its done-condition met is a lie; a categor
 - [shared-events](shared-events.md) — mobile SSE event bus and cache patchers
 - [shared-acquisition](shared-acquisition.md) — download lifecycle and track-status overlay
 - [shared-playback](shared-playback.md) — the client-owned Queue state machine and its facade
+- [shared-offline](shared-offline.md) — pinned downloads: the on-disk audio, its index, and the launch reconciliation
