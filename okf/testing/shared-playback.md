@@ -83,8 +83,9 @@ Both mechanisms, as ADR-0020 requires.
 | `queueStore.ts` | 39 | 33 | 4 real, 2 equivalent |
 | `useQueuePlayback.ts` | 31 | 30 | 0, 1 equivalent |
 | primitives + Go DTOs | 34 | 30 | 1 real, 2 equivalent |
-| seam + invariant scanners | 20 | 14 | 3 real (all one root cause) |
-| **total** | **124** | **107** | **8 real, 5 equivalent** |
+| seam + invariant scanners | 20 | 17 | 3 real (all one root cause) |
+
+Around 124 mutations, ~110 killed outright. Deliberately not summed to a headline figure: one agent's own tally did not reconcile (four survivors claimed against a three-row survivor table), and another narrated a single mutation as killed, then survived, then hedged — it turned out to be a real gap, but only because it was re-run by hand. The number worth trusting is the verified one below.
 
 All eight real survivors were killed and each repair verified by hand — mutation applied, intended test observed red, mutation reverted, suite observed green:
 
