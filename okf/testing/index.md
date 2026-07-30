@@ -5,6 +5,8 @@ description: Per-slice records of which taxonomy categories apply, which were re
 tags: [index, testing]
 ---
 
+Programme plan and slice ledger: [docs/specs/test-hardening/plan.md](../../docs/specs/test-hardening/plan.md); rationale and rejected alternatives: [ADR-0020](../../docs/adr/0020-test-taxonomy-and-ratchet-gates.md).
+
 One record per slice, written by `/qa-slice` step 2 and updated at step 7. The categories come from [test-taxonomy](../playbooks/test-taxonomy.md).
 
 A category listed as selected without its done-condition met is a lie; a category missing from a record entirely is a hole. Rejections carry reasons.
