@@ -61,3 +61,7 @@ Pinned by `__tests__/weak-signal.test.ts`, including the cancellation-stays-canc
 ## reacquireTrack (2026-07-26)
 
 `reacquireTrack(trackId)` posts to `/v1/tracks/{trackId}/reacquire`, sitting beside `retryAcquisition` and shaped identically (void, no body). The two are separate calls rather than one parameterised call because the server treats them as different operations with opposite preconditions: retry requires a failed track, re-acquire requires a ready one, and each returns 409 for the other's state.
+
+## feedback.ts (2026-07-29)
+
+`submitReport` POSTs `/v1/feedback/reports` and returns `{issue_number, issue_url}` — the number is what the report dialog shows back to the tester, so this is one of the few writes whose response body the UI actually renders. Three failure statuses are meaningful to the caller and are distinguished by the settings feature rather than here: 400 (the server rejected the message), 429 (hourly quota spent, with `Retry-After`), and 404 (this deploy has no issue tracker configured, so the route was never mounted). Everything else, including a transport failure, is presented to the tester as "could not reach the server, your draft is kept".

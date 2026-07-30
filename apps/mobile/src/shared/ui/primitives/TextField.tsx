@@ -12,12 +12,16 @@ export interface TextFieldProps extends Omit<
   secure?: boolean;
   surface?: 'surface1' | 'surface2';
   error?: boolean;
+  rows?: number;
 }
+
+const rowHeight = typography.body.lineHeight;
 
 export function TextField({
   secure = false,
   surface = 'surface1',
   error = false,
+  rows,
   onFocus,
   onBlur,
   placeholder,
@@ -58,6 +62,9 @@ export function TextField({
                 : theme.color.border,
           },
           secure ? styles.inputSecure : null,
+          rows != null
+            ? { minHeight: rows * rowHeight + spacing.lg, textAlignVertical: 'top' as const }
+            : null,
         ]}
       />
       {secure ? (

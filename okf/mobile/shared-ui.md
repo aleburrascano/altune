@@ -36,3 +36,7 @@ Typography sets `fontFamily` per weight rather than `fontWeight` so the `@expo-g
 Motion uses React Native's built-in `Animated` rather than `react-native-reanimated`: zero native modules, so it runs in Expo Go. Reanimated 4's worklets TurboModule is not present in Expo Go and crashed at startup — see ADR-0008.
 
 In jest, `react-native-safe-area-context` is mocked in `apps/mobile/jest/setup-after-env.js` because `Screen` calls `useSafeAreaInsets`, which throws with no provider; RN `Animated` needs no mock. The Android system nav bar is painted dark on mount and on every `AppState` transition to active, and that resume re-assert is what kills the white-flash bug under SDK 54 edge-to-edge (ADR-0009).
+
+## TextField gets `rows` (2026-07-29)
+
+`TextField` deliberately omits `style` from its props so callers cannot reach past the design system — which left multi-line fields with no way to be taller than one row. `rows` fills that gap inside the system instead of outside it: it sets `minHeight` to `rows * typography.body.lineHeight + spacing.lg` and flips `textAlignVertical` to `top` so the caret starts at the top of the box on Android instead of floating in the vertical centre. Pass it alongside `multiline`; without `multiline` it just makes a single-line field tall, which is never what you want. First consumer is the report-an-issue dialog in the settings feature.

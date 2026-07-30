@@ -17,7 +17,7 @@ Expo (React Native + TypeScript). Features own screens; shared subsystems own cr
 - [detail-feature](detail-feature.md) — read-only track/album/artist detail fed by in-memory handoff, with enrichment and optimistic save
 - [library-feature](library-feature.md) — chip-filtered personal collection with client-side grouping and acquisition retry
 - [playback-feature](playback-feature.md) — react-native-track-player integration, Expo-Go no-op fallback, native gapless queueing, mini/full player
-- [settings-feature](settings-feature.md) — account screen: profile card, featured-artist backfill trigger, sign-out
+- [settings-feature](settings-feature.md) — grouped-card settings screen: account, in-app issue reporting, appearance, downloads, and a confirm-gated danger zone
 
 ## Shared subsystems
 
