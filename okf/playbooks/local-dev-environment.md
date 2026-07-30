@@ -24,3 +24,7 @@ It pins `name: altune` at the top. That is load-bearing, not decoration: Compose
 ## Acquisition verification env (2026-07-26)
 
 `.env.example` documents three new optional flags, all of which leave the app working when unset: `ACOUSTID_API_KEY` (acoustic-fingerprint verification), `STREAMRIP_SERVICES` (comma-separated catalogues the `rip` CLI may fetch from) and `STREAMRIP_BIN`. Locally, none are needed to run or test — acquisition degrades to text search plus the loose duration gate, and `cmd/acquisitioneval` exercises every verification path with fakes, so selection work needs no credentials at all. `fpcalc` (Alpine package `chromaprint`) and `streamrip` ship in the production image but are not required on a dev box.
+
+## Optional: in-app feedback (2026-07-29)
+
+`GITHUB_ISSUE_REPO` / `GITHUB_ISSUE_TOKEN` in `.env.example` are optional for local work and left empty by default. With them empty the server does not mount `POST /v1/feedback/reports` at all, so the app's Report-an-issue dialog fails with "could not reach the server" — expected, not a broken setup. To exercise the flow end-to-end locally, point `GITHUB_ISSUE_REPO` at a throwaway repo (`owner/name`) and use a fine-grained PAT scoped to that repo with `issues: write` only; every send files a real issue, and the per-user quota is 5 an hour. See [backend/feedback](../backend/feedback.md).

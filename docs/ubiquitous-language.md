@@ -88,6 +88,11 @@ When `/feature-spec` or domain modeling introduces a new term:
 - **Queue** — the runtime playback sequence: ordered tracks, current index, shuffle state, repeat mode. Created on play-from-playlist/library/search. Client-managed; server persists a snapshot for resume-on-reopen. Defined in `apps/mobile/src/shared/playback/queueStore.ts`.
 - **RepeatMode** — three-state enum: `off` (stop at end), `all` (loop queue), `one` (loop current track). Defined in `apps/mobile/src/shared/playback/types.ts`.
 
+- **Report** — one piece of in-app feedback from a tester: `(Reporter, Kind, Message, Diagnostics, SubmittedAt)`. Aggregate root of the **feedback** bounded context, with no identity of its own — it is created, filed as an Issue, and never read back. Invariants: message 10–2000 runes after trimming, non-zero `Reporter`, flattened diagnostics. Defined in `services/go-api/internal/feedback/domain/report.go`.
+- **Kind** (Report) — three-state enum on `Report`: `bug`, `idea`, `confusing`. Wire-serialized lowercase; maps to the GitHub labels `bug` / `enhancement` / `ux` via a separate `Label()` projection, so tester vocabulary and tracker vocabulary can drift independently. Defined in `services/go-api/internal/feedback/domain/report.go`.
+- **Diagnostics** — the device context carried by a `Report`: `app_version`, `platform`, `os_version`, `screen`. Client-supplied and therefore sanitized (whitespace collapsed, capped at 64 runes) before reaching the public Issue body, where they are rendered as a table alongside the reporter's `UserId`. Shown to the tester before sending; never includes an email or display name. Defined in `services/go-api/internal/feedback/domain/report.go`.
+- **IssueRef** — what filing a `Report` returns: `(Number, URL)` of the created GitHub issue. The number is surfaced back to the tester as confirmation. Defined in `services/go-api/internal/feedback/ports/issue_tracker.go`.
+
 ### Future (illustrative — to be added when the spec that introduces them ships)
 
 - **Library** — a user's personal collection. Each user has exactly one library. The library references tracks from the catalog; it does not own them.

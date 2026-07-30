@@ -49,6 +49,9 @@ type Config struct {
 	StreamripBin           string   `env:"STREAMRIP_BIN"`
 	StreamripServices      []string `env:"STREAMRIP_SERVICES" envSeparator:","`
 
+	GitHubIssueRepo  string `env:"GITHUB_ISSUE_REPO"`
+	GitHubIssueToken string `env:"GITHUB_ISSUE_TOKEN"`
+
 	OperatorUserID             string  `env:"OPERATOR_USER_ID"`
 	AlertNtfyURL               string  `env:"ALERT_NTFY_URL"`
 	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
@@ -127,6 +130,10 @@ func (c *Config) HasAlertPush() bool {
 	return c.AlertNtfyURL != ""
 }
 
+func (c *Config) HasIssueTracker() bool {
+	return c.GitHubIssueRepo != "" && c.GitHubIssueToken != ""
+}
+
 func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("env", c.Env),
@@ -140,5 +147,6 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_fanarttv", c.HasFanartTV()),
 		slog.Bool("has_genius", c.HasGenius()),
 		slog.Bool("has_discogs", c.HasDiscogs()),
+		slog.Bool("has_issue_tracker", c.HasIssueTracker()),
 	)
 }
