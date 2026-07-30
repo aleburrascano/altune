@@ -13,6 +13,7 @@ Altune is a self-hosted music manager: an Expo (React Native + TypeScript) mobil
 - [mobile/](mobile/index.md) — the Expo app's features and shared subsystems (`apps/mobile/src/`)
 - [data/](data/index.md) — Postgres tables: schema intent, migration history, ownership
 - [providers/](providers/index.md) — external music-metadata provider integrations and what each one uniquely contributes
+- [testing/](testing/index.md) — per-slice test-category selections: what applies, what was rejected, the mutation result
 - [playbooks/](playbooks/index.md) — operational runbooks: local dev, CI/CD, production deployment
 
 ## Conventions
