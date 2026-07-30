@@ -46,6 +46,20 @@ jobs:
 
       - run: npm ci
 
+      # app.json sets experiments.typedRoutes, so expo-router GENERATES the
+      # types that make useSegments()/useRouter() precise, into .expo/types/ —
+      # which tsconfig.json includes and .gitignore excludes. A dev machine has
+      # that file from the last `expo start`; a fresh CI checkout does not, so
+      # without this step CI typechecks against a fallback where useSegments()
+      # is a `[string]` 1-tuple. The first real run failed on exactly that:
+      # FeaturingScreen's `segments[1]` was an error in CI and clean locally.
+      #
+      # `expo customize tsconfig.json` is the documented way to generate them
+      # without booting a dev server. Verified it leaves tsconfig.json
+      # byte-identical, so it only emits the declaration.
+      - name: generate typed routes
+        run: npx expo customize tsconfig.json
+
       - name: typecheck
         run: npx tsc --noEmit
 
