@@ -44,6 +44,9 @@ import (
 	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/discovery/service/eval"
+	feedbackGithub "altune/go-api/internal/feedback/adapters/github"
+	feedbackHandler "altune/go-api/internal/feedback/adapters/handler"
+	feedbackService "altune/go-api/internal/feedback/service"
 	"altune/go-api/internal/playback/adapters/catalogbridge"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
@@ -229,7 +232,7 @@ func (a *App) setup(ctx context.Context) error {
 		WithOwnership(discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo)).
 		WithTrackNumberFiller(discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc))
 
-	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler)
+	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler, a.wireFeedback())
 	a.wireAdmin(ctx, r, verifier, tap, disc.requestStore, disc.searchSvc, disc.artistSvc)
 
 	a.startAlertMonitor(ctx)
@@ -377,11 +380,24 @@ func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) *playbackH
 	return playbackHandler.NewQueueHandler(queueSvc)
 }
 
+func (a *App) wireFeedback() *feedbackHandler.FeedbackHandler {
+	if !a.cfg.HasIssueTracker() {
+		slog.Info("feedback: issue tracker not configured, in-app reports disabled")
+		return nil
+	}
+	tracker := feedbackGithub.NewIssueTracker(a.cfg.GitHubIssueRepo, a.cfg.GitHubIssueToken)
+	limiter := feedbackService.NewRateLimiter(feedbackReportsPerHour, time.Hour)
+	return feedbackHandler.NewFeedbackHandler(feedbackService.NewSubmitReportService(tracker, limiter))
+}
+
+const feedbackReportsPerHour = 5
+
 func (a *App) mountRoutes(
 	verifier auth.TokenVerifier,
 	cat catalogWiring,
 	queueHandler *playbackHandler.QueueHandler,
 	discoveryH *discoveryHandler.DiscoveryHandler,
+	feedbackH *feedbackHandler.FeedbackHandler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -423,6 +439,9 @@ func (a *App) mountRoutes(
 		r.Mount("/playlists", cat.playlistHandler.Routes())
 		r.Mount("/playback", queueHandler.Routes())
 		r.Mount("/discovery", discoveryH.Routes())
+		if feedbackH != nil {
+			r.Mount("/feedback", feedbackH.Routes())
+		}
 		r.Handle("/events", &sseHandler{bus: a.eventBus})
 	})
 

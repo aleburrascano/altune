@@ -85,3 +85,7 @@ Three config fields were added for acquisition (see [acquisition/pipeline](acqui
 - `STREAMRIP_BIN` (`StreamripBin`) — path to the `rip` binary, defaulting to `rip` on `PATH`.
 
 All three follow the house rule that an absent optional dependency switches a feature off and never fails startup. `FFMPEG_LOCATION` picked up a second job: it is also the directory searched for `fpcalc` before falling back to `PATH`.
+
+## Issue-tracker config (2026-07-29)
+
+`GITHUB_ISSUE_REPO` (`owner/name`) and `GITHUB_ISSUE_TOKEN` (a PAT needing only `issues: write`) gate the [feedback](feedback.md) context. `HasIssueTracker()` requires both; with either missing the composition root does not mount the route, so an unconfigured deploy 404s rather than failing inside a handler. `LogValue` reports `has_issue_tracker` — the token itself is never logged, like every other secret here.

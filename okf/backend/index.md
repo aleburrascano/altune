@@ -14,6 +14,7 @@ Each bounded context is a hexagon: `domain/` (pure core) → `ports/` (interface
 - [discovery](discovery/index.md) — multi-provider search, merge, ranking, enrichment (the largest context; has its own index)
 - [playback](playback.md) — server-side persistence of the client-owned playback Queue snapshot (resume-on-reopen)
 - [auth](auth.md) — Supabase JWT verification middleware injecting the verified user id into context
+- [feedback](feedback.md) — in-app tester bug reports and suggestions, filed as GitHub issues server-side so the token never ships in the app
 - [admin](admin/index.md) — Mission Control: the single-operator observability console under /admin (deliberately not hexagonal)
 
 ## Cross-cutting
