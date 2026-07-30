@@ -100,8 +100,8 @@ describe('ReportIssueDialog', () => {
     );
   });
 
-  it('names the rate limit rather than blaming the network', async () => {
-    submitReportMock.mockRejectedValue(new ApiError(429, 'too many'));
+  it('asks for more detail rather than blaming the network on a rejection', async () => {
+    submitReportMock.mockRejectedValue(new ApiError(400, 'too short'));
     const { getByTestId } = renderDialog();
 
     fireEvent.press(getByTestId('report-issue-kind-bug'));
@@ -111,7 +111,25 @@ describe('ReportIssueDialog', () => {
     });
 
     await waitFor(() =>
-      expect(getByTestId('report-issue-error')).toHaveTextContent(/give it an hour/i),
+      expect(getByTestId('report-issue-error')).toHaveTextContent(/more detail/i),
     );
+  });
+
+  it('lets a tester file report after report without being throttled', async () => {
+    submitReportMock.mockResolvedValue({ issue_number: 1, issue_url: 'https://x/1' });
+    const { getByTestId } = renderDialog();
+
+    for (let i = 0; i < 5; i++) {
+      submitReportMock.mockResolvedValue({ issue_number: i, issue_url: `https://x/${i}` });
+      fireEvent.press(getByTestId('report-issue-kind-bug'));
+      fireEvent.changeText(getByTestId('report-issue-message'), `report number ${i} of many`);
+      await act(async () => {
+        fireEvent.press(getByTestId('report-issue-send'));
+      });
+      await waitFor(() => expect(getByTestId('report-issue-another')).toBeTruthy());
+      fireEvent.press(getByTestId('report-issue-another'));
+    }
+
+    expect(submitReportMock).toHaveBeenCalledTimes(5);
   });
 });

@@ -386,11 +386,8 @@ func (a *App) wireFeedback() *feedbackHandler.FeedbackHandler {
 		return nil
 	}
 	tracker := feedbackGithub.NewIssueTracker(a.cfg.GitHubIssueRepo, a.cfg.GitHubIssueToken)
-	limiter := feedbackService.NewRateLimiter(feedbackReportsPerHour, time.Hour)
-	return feedbackHandler.NewFeedbackHandler(feedbackService.NewSubmitReportService(tracker, limiter))
+	return feedbackHandler.NewFeedbackHandler(feedbackService.NewSubmitReportService(tracker))
 }
-
-const feedbackReportsPerHour = 5
 
 func (a *App) mountRoutes(
 	verifier auth.TokenVerifier,
