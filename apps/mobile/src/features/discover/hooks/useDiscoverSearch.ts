@@ -10,7 +10,15 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
   const trimmed = query.trim();
   const queryClient = useQueryClient();
 
-  const infinite = useInfiniteQuery({
+  const {
+    data: infiniteData,
+    isLoading,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: discoveryKeys.search(trimmed),
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) => {
@@ -33,11 +41,11 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
     enabled: trimmed.length > 0,
   });
 
-  const pages = infinite.data?.pages ?? [];
+  const pages = infiniteData?.pages ?? [];
   const first = pages[0];
 
   const data: DiscoverySearchResponse | undefined =
     first === undefined ? undefined : { ...first, results: pages.flatMap((p) => p.results) };
 
-  return { ...infinite, data };
+  return { data, isLoading, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage };
 }

@@ -28,3 +28,6 @@ yarn-error.*
 # Mutation testing (Stryker sandbox + reports)
 .stryker-tmp/
 reports/
+
+# react-doctor CI report (regenerated per run)
+doctor-report.json

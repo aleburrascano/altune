@@ -13,7 +13,10 @@
   "ignoreDependencies": [
     "react-doctor",
     "expo-audio",
-    "react-native-web"
+    "react-native-web",
+    "fast-check",
+    "@stryker-mutator/core",
+    "@stryker-mutator/jest-runner"
   ],
   "ignoreUnresolvedImports": [
     "@react-navigation/bottom-tabs"
@@ -40,12 +43,12 @@
     "rules": [
       { "from": "app", "allow": ["feature-auth", "feature-detail", "feature-discover", "feature-library", "feature-playback", "feature-settings", "shared"] },
       { "from": "feature-auth", "allow": ["shared"] },
-      { "from": "feature-detail", "allow": ["feature-playback", "shared"] },
+      { "from": "feature-detail", "allow": ["shared"] },
       { "from": "feature-discover", "allow": ["shared"] },
-      { "from": "feature-library", "allow": ["feature-auth", "shared"] },
-      { "from": "feature-playback", "allow": ["feature-auth", "shared"] },
-      { "from": "feature-settings", "allow": ["feature-auth", "shared"] },
-      { "from": "shared", "allow": ["feature-auth"] }
+      { "from": "feature-library", "allow": ["shared"] },
+      { "from": "feature-playback", "allow": ["shared"] },
+      { "from": "feature-settings", "allow": ["shared"] },
+      { "from": "shared", "allow": [] }
     ]
   },
   "health": {
