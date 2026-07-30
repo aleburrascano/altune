@@ -1,0 +1,60 @@
+# Mobile test gate. Runs on PRs and pushes that touch the Expo app.
+#
+# Until 2026-07-30 the only workflow watching apps/mobile/** was react-doctor,
+# which is advisory (blocking: warning). The coverage ratchet in jest.config.js,
+# the feature-isolation zones in eslint.config.js, and `tsc --noEmit` all
+# existed and none of them ever gated a commit. This workflow is what makes
+# them real.
+name: Test mobile
+
+on:
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/test-mobile.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/test-mobile.yml'
+
+concurrency:
+  group: test-mobile-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+        # The cross-surface contract test derives the backend's published event
+        # names from services/go-api source at test time, so the Go tree must be
+        # present. A shallow single-commit checkout is enough — it reads files,
+        # never history.
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - run: npm ci
+
+      - name: typecheck
+        run: npx tsc --noEmit
+
+      # Feature isolation (never import across features; shared never imports a
+      # feature) is enforced here by import/no-restricted-paths, the mobile
+      # counterpart to the backend's depguard rules.
+      - name: lint
+        run: npx eslint "src/**/*.{ts,tsx}"
+
+      # Per-glob coverage floors live in jest.config.js as RATCHET_RAISE_ONLY.
+      # They are per-directory on purpose: a single global average lets an
+      # uncovered reducer hide behind well-covered UI. Raise a slice's floor
+      # when qa-slice finishes it; never lower one to make CI green.
+      - name: test with coverage ratchet
+        run: npx jest --coverage --ci
