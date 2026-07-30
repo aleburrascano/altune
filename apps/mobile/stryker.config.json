@@ -16,7 +16,7 @@
   "concurrency": 4,
   "timeoutMS": 20000,
   "disableTypeChecks": true,
-  "mutate": ["src/shared/events/**/*.ts", "!src/shared/events/**/__tests__/**"],
-  "thresholds": { "high": 90, "low": 80, "break": 90 },
+  "mutate": ["src/shared/events/**/*.ts", "!src/shared/events/**/__tests__/**", "src/shared/playback/**/*.ts", "!src/shared/playback/**/__tests__/**"],
+  "thresholds": { "high": 90, "low": 80, "break": 91 },
   "ignorePatterns": [".expo", "android", "ios", "reports", "coverage"]
 }

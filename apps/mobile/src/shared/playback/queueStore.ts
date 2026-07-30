@@ -123,7 +123,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({
       tracks,
       playOrder: order,
-      currentIndex: startIndex,
+      currentIndex: order.length === 0 ? -1 : startIndex,
       shuffled: false,
       source,
       resumePositionMs: 0,
