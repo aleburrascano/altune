@@ -18,3 +18,4 @@ A category listed as selected without its done-condition met is a lie; a categor
 - [shared-api-client](shared-api-client.md) — the typed HTTP client: auth injection, deadlines, and the error taxonomy
 - [shared-lib](shared-lib.md) — the shared utilities: the query-key topology, the extras parsers, and the discover↔detail handoff
 - [shared-telemetry](shared-telemetry.md) — the rotating session id, the durable critical outbox, and the event POST
+- [shared-auth](shared-auth.md) — the Supabase client singleton, the keychain adapter, and the identity boundary between two users on one device
