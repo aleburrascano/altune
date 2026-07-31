@@ -5,7 +5,7 @@ const RATCHET_RAISE_ONLY = {
   'src/shared/playback/**': { statements: 99, branches: 99, functions: 100, lines: 99 },
   'src/shared/acquisition/**': { statements: 97, branches: 88, functions: 100, lines: 100 },
   'src/shared/offline/**': { statements: 99, branches: 86, functions: 100, lines: 100 },
-  'src/shared/api-client/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
+  'src/shared/api-client/**': { statements: 100, branches: 100, functions: 100, lines: 100 },
   'src/shared/telemetry/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   'src/shared/lib/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
   'src/shared/auth/**': { statements: 0, branches: 0, functions: 0, lines: 0 },
