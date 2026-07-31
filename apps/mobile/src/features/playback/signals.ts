@@ -17,7 +17,7 @@ export type TrackEventPayload = {
   source_kind: string;
   track_id: string | null;
   surface: string | null;
-  result_signature: string | null;
+  result_signature?: string;
   dwell_ms?: number;
 };
 
@@ -40,8 +40,8 @@ export function buildTrackPayload(
     source_kind: track.source.kind,
     track_id: track.source.kind === 'library' ? track.source.trackId : null,
     surface: queueSource?.kind ?? null,
-    result_signature: track.resultSignature ?? null,
   };
+  if (track.resultSignature != null) payload.result_signature = track.resultSignature;
   if (dwellMs !== undefined) payload.dwell_ms = Math.round(dwellMs);
   return payload;
 }

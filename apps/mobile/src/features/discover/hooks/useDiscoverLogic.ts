@@ -132,7 +132,9 @@ export function useDiscoverLogic(): DiscoverLogic {
         position: globalIndex >= 0 ? globalIndex : position,
         confidence: result.confidence,
         provider: result.sources[0]?.provider ?? null,
-        result_signature: result.result_signature ?? null,
+        ...(result.result_signature != null
+          ? { result_signature: result.result_signature }
+          : {}),
       },
     });
     router.push(stashHandoffForDetail(result, searchData?.search_id));

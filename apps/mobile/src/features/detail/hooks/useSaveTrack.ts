@@ -56,7 +56,9 @@ export function useSaveTrack() {
           artist: body.artist,
           album: body.album,
           year: body.year,
-          result_signature: handoff?.result_signature ?? null,
+          ...(handoff?.result_signature != null
+            ? { result_signature: handoff.result_signature }
+            : {}),
         },
       });
     },

@@ -41,7 +41,7 @@ The `partial` flag is still server-emitted — true when any provider's status i
 
 After a successful search the `discoveryKeys.history` query is invalidated so new searches appear as chips immediately, which is necessary because the stack navigator keeps `DiscoverScreen` mounted. History row text truncates at 40 characters visually; the full query is preserved server-side.
 
-Interaction telemetry is fire-and-forget per ADR-0007 §3.12: a result tap emits `result_clicked` through the shared `useRecordEvent` and errors are swallowed. The event's `position` is the result's **global** index in `results[]` — the coordinate space `results_shown` impressions use — not the section-local display index the testIDs are built from. Tapping a result stashes the handoff and pushes the detail route without awaiting the click mutation.
+Interaction telemetry is fire-and-forget per ADR-0007 §3.12: a result tap emits `result_clicked` through the shared `useRecordEvent` and errors are swallowed. The event's `position` is the result's **global** index in `results[]` — the coordinate space `results_shown` impressions use — not the section-local display index the testIDs are built from. The payload **omits** `result_signature` when the result carries none rather than sending `null` — Go's `validatePayloadTypes` 400s a present-but-non-string value and a JSON `null` decodes to `nil`, so the null form silently lost every click on an unsignatured result. Tapping a result stashes the handoff and pushes the detail route without awaiting the click mutation.
 
 `useSearchHistory` is a `useQuery` with no `enabled` gate, so it fetches whenever the screen mounts. That is cheap (one Postgres query, under 50ms) but worth knowing if lazy history is ever wanted.
 
