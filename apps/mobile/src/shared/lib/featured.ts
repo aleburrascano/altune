@@ -15,7 +15,10 @@ export function featuredArtistsFromExtras(raw: unknown): FeaturedArtist[] {
       out.push({
         name,
         mbid: typeof rec['mbid'] === 'string' ? rec['mbid'] : null,
-        deezer_id: typeof rec['deezer_id'] === 'number' ? rec['deezer_id'] : null,
+        deezer_id:
+          typeof rec['deezer_id'] === 'number' && Number.isFinite(rec['deezer_id'])
+            ? rec['deezer_id']
+            : null,
       });
     }
   }
