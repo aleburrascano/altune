@@ -45,6 +45,22 @@ describe('filesystem double', () => {
     expect(file.exists).toBe(false);
   });
 
+  it('throws when creating a directory that already exists, as the native module does', () => {
+    const dir = new Directory(Paths.document, 'telemetry');
+    dir.create();
+
+    expect(() => dir.create()).toThrow('already exists');
+    expect(dir.exists).toBe(true);
+  });
+
+  it('creates idempotently only when the caller asks for it', () => {
+    const dir = new Directory(Paths.document, 'telemetry');
+    dir.create();
+
+    expect(() => dir.create({ idempotent: true })).not.toThrow();
+    expect(dir.exists).toBe(true);
+  });
+
   it('lists only direct children, as File instances', () => {
     const dir = new Directory(Paths.document, 'offline-audio');
     dir.create();

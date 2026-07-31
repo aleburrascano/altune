@@ -51,8 +51,11 @@ class Directory {
     return directories.has(this.uri);
   }
 
-  create() {
+  create(options) {
     takeFailure('createDirectory');
+    if (directories.has(this.uri) && options?.idempotent !== true) {
+      throw new Error(`ERR_DIRECTORY_EXISTS: directory already exists, ${this.uri}`);
+    }
     directories.add(this.uri);
   }
 

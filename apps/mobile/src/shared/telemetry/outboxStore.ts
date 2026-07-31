@@ -17,10 +17,11 @@ export function loadPersistedOutbox(): OutboxEntry[] {
     if (!file.exists) return [];
     const parsed: unknown = JSON.parse(file.textSync());
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (e): e is OutboxEntry =>
-        typeof e === 'object' && e !== null && typeof (e as OutboxEntry).event_id === 'string',
-    );
+    return parsed.filter((e): e is OutboxEntry => {
+      if (typeof e !== 'object' || e === null) return false;
+      const eventId = (e as OutboxEntry).event_id;
+      return typeof eventId === 'string' && eventId.length > 0;
+    });
   } catch {
     return [];
   }
