@@ -27,8 +27,9 @@ export function useSession(): SessionState {
   useEffect(() => {
     let active = true;
 
-    function apply(session: Session | null): void {
+    function apply(incoming: Session | null): void {
       if (!active) return;
+      const session = incoming?.user != null ? incoming : null;
       const userId = session?.user.id ?? null;
       if (seededRef.current && userIdRef.current !== userId) {
         forgetPreviousUsersLocalData(queryClient);
@@ -44,7 +45,7 @@ export function useSession(): SessionState {
         apply(data.session);
       })
       .catch(() => {
-        apply(null);
+        if (!seededRef.current) apply(null);
       });
 
     const {

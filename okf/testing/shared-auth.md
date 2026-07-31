@@ -4,7 +4,7 @@ title: Test selection — shared/auth
 description: Which of the twenty taxonomy categories apply to the mobile auth slice — the Supabase client singleton, the keychain storage adapter, the session hook's identity boundary, the session-expired signal, and sign-out — which were rejected and why, and the mutation result.
 resource: apps/mobile/src/shared/auth/
 tags: [testing, mobile, shared, auth, supabase, session, security]
-verified_commit: 0ec0f895bc6683b7864fa0247652e019b9ec7cfb
+verified_commit: f46818e0886bb99695b7c67358c002f52ba37649
 ---
 
 SLICE: `apps/mobile/src/shared/auth/`
@@ -33,7 +33,7 @@ That boundary is what makes this slice worth more than its 176 lines. It is also
 - **Idempotence / replay** — every input here is redelivered in normal operation. Supabase emits `INITIAL_SESSION` and then `SIGNED_IN` for the same session on a cold start, and `TOKEN_REFRESHED` roughly hourly for the same user. Asserted: `apply(s)` twice equals once (no second cache clear), `markSessionExpired` twice emits once, `signOut` re-entered after completion, and the `getSession()` seed racing an `onAuthStateChange` event carrying the same session. `__tests__/useSession.test.tsx`, `__tests__/sessionExpired.test.ts`.
 - **Adversarial** — the `Session` object is a trust boundary: it is parsed by the SDK from keychain bytes and from a server response, and this slice reads into it. Cases: a session with no `user`, a `user` with an empty or absent `id`, a session whose `access_token` is absent, and a keychain value that is not the JSON the SDK expects. `__tests__/useSession.test.tsx`, `__tests__/supabaseClient.test.ts`.
 - **Failure injection** — five I/O call sites, each with a test where it fails, via the `expo-secure-store` double's `__secureStore.failNext(op)`: `getItemAsync` (which the source catches to `null`), `setItemAsync` and `deleteItemAsync` (which it does **not** catch — see the defect list), plus `supabase.auth.getSession()` rejecting and `supabase.auth.signOut()` both resolving-with-error and throwing. `__tests__/supabaseClient.test.ts`, `__tests__/useSession.test.tsx`, `__tests__/useSignOut.test.tsx`.
-- **Concurrency / ordering** — two real interleavings. The `active` flag must discard a `getSession()` promise that resolves *after* unmount (otherwise `setState` lands on a dead component and, worse, `seededRef` is written by a stale closure); and the seed racing the listener — Supabase fires `INITIAL_SESSION` synchronously on subscribe, so which of the two writes `seededRef` first decides whether the *next* real identity change is seen at all. Both orders are driven and asserted, and the unsubscribe has a test that fails without it. `__tests__/useSession.test.tsx`.
+- **Concurrency / ordering** — three real interleavings, across two files. In `useSession`: the `active` flag must discard a `getSession()` promise that resolves *after* unmount (otherwise `setState` lands on a dead component and, worse, `seededRef` is written by a stale closure); and the seed racing the listener — Supabase fires `INITIAL_SESSION` synchronously on subscribe, so which of the two writes `seededRef` first decides whether the *next* real identity change is seen at all. Both orders are driven and asserted, and the unsubscribe has a test that fails without it. In `useSignOut`: the cache clear must follow the SDK call, never precede it — **added by the mutation audit, which is the honest history of this line.** The original selection assigned this category to `useSession` alone; a survivor proved `useSignOut` had an ordering constraint nobody had written down. `__tests__/useSession.test.tsx`, `__tests__/useSignOut.test.tsx`.
 - **Security** — the category this slice exists to satisfy, and one with written rules and no test behind them until now. Asserted: nothing in the slice imports or writes `AsyncStorage`; `KEYCHAIN_OPTS` is `AFTER_FIRST_UNLOCK` and is passed to **all three** keychain operations (an asymmetric option set silently orphans the item); no access token, refresh token, or anon key reaches a React Query key, a `console.*` call, or an error message; the slice never decodes or inspects the token; and `supabaseClient.ts` is the only file in the app that value-imports `@supabase/supabase-js`. `__tests__/slice-invariants.test.ts`.
 - **Functional / acceptance** — `docs/specs/auth-integration/spec.md`'s criteria that this slice owns, asserted through the public interface in `docs/ubiquitous-language.md` terms: **AC#4** (a session persists across process death — write through the adapter, discard the module registry, re-import, and the session is restored) and **AC#5(b)** (sign-out invalidates the cache, verified by a representative authenticated query refetching rather than by a mock-was-called check). AC#1/2/3/6 are `features/auth` (slice 13); AC#7–13 are backend. `__tests__/acceptance.test.tsx`.
 - **Invariant / architecture** — four `CLAUDE.md` rules over this slice are mechanically checkable and now checked: the single-`createClient` rule, the never-value-import rule, "never decode or manipulate the access token here", and no `console.log`. Plus the banned noun. `__tests__/slice-invariants.test.ts`.
@@ -52,8 +52,65 @@ That boundary is what makes this slice worth more than its 176 lines. It is also
 
 ## DEFECTS FIXED
 
-_(filled in at step 7)_
+**Two in `useSession`, both on the identity boundary, both silent, and both reachable only because the `Session` type is more trustworthy than the value.**
+
+1. **A session carrying no `user` object crashed the hook, and would have crashed Settings next.** `apply` read `session?.user.id` — the optional chain stops after `session?`, so `user` being absent is a `TypeError` thrown synchronously inside the `onAuthStateChange` callback, where nothing catches it. The reason this is reachable rather than a type-system impossibility is in the SDK: `GoTrueClient._isValidSession` accepts any stored blob holding `access_token`, `refresh_token` and `expires_at`, and **never checks `user`** — so a keychain entry written by an older version passes validation, becomes `currentSession`, and is handed to this hook. Fixed by treating a user-less session as **no session** rather than as a signed-in session with a null identity, which is the shape every consumer needs: `SettingsScreen.tsx:48` reads `sessionState.session.user.email` off the `signed-in` arm and would have thrown on the next render. This is slice 6's rule applied again — fix where the function's own contract is violated, and a value crossing from disk is exactly that.
+2. **A failed `getSession()` wiped the local data of a user the listener had already confirmed.** The `.catch` arm called `apply(null)` unconditionally. Its purpose is to stop a failed cold-start read from stranding `AuthGate` on the splash screen forever — but `onAuthStateChange` fires synchronously on subscribe, so by the time a rejection lands the listener has usually already seeded a real identity, and `apply(null)` then reads as an identity change from that user to signed-out: `queryClient.clear()`, `clearSessionExpired()`, and `unpinAll()` deleting their offline downloads. The guard is now `if (!seededRef.current) apply(null)`, which keeps the splash-screen protection and drops the wipe. Note this also corrects a claim in [shared-api-client](shared-api-client.md): `getSession()` **can** reject, because `__loadSession` awaits `_removeSession()` inside a `try`/`finally` with no `catch` and the storage adapter's `removeItem` does not swallow a keychain failure.
+
+**One test seam added to production**, which the programme's own doctrine required. `sessionExpired.ts` gained `_listenerCountForTest()`. Replacing `subscribe`'s cleanup with `return () => {}` left the entire 1,500-test repo suite green: React's `useSyncExternalStore` listener for an unmounted fiber is a silent no-op in this version, so a leaked listener and a released one were indistinguishable through every public surface while the module-global `Set` grew a dead closure per mount. That is the `write() {}` hole of ADR-0020 in a different costume — code whose state cannot be read cannot be constrained — and the fix is the same one the ADR prescribes: make the write observable by a read.
+
+## HAZARDS RECORDED, NOT FIXED
+
+- **`useSignOut` has no reentrancy guard**, so a second `signOut()` while the first is `pending` fires a second SDK call. An `it.failing()` marker for it was **rejected**: every consumer already gates it — `SettingsScreen.tsx:152` disables the row on `pending`, `SessionExpiredNotice.tsx:33` disables its button, and `ConfirmDialog` calls `onClose()` before `onConfirm()` so the dialog is gone before the call starts. A marker that can never be promoted is noise the next person deletes, which is the rule slice 6 established. The test asserts the invariant that actually holds — `pending` is observable synchronously, on the same tick, which is the thing callers gate on.
+- **`setItemAsync` and `deleteItemAsync` do not catch, while `getItemAsync` does.** Deliberately left alone. Swallowing a keychain *write* failure would trade a loud failure for a silent one on the slice's own durability guarantee, which is the worse trade; the asymmetry is defensible as written. Its one real consequence — a failing `removeItem` propagating out of `getSession()` — is now contained by defect 2's fix, which no longer wipes on a rejection.
+
+## STILL DARK, DELIBERATELY
+
+- `supabaseClient.ts:6-7` — the `?? ''` fallbacks on the two `EXPO_PUBLIC_` reads. `jest/setup-env.js` sets both variables unconditionally, so no test can reach them and both mutants are equivalent under this harness. This is the whole of the gap between the file's 100% statements and its 80% branches.
 
 ## MUTATION AUDIT
 
-_(filled in at step 7)_
+Both mechanisms, as ADR-0020 requires.
+
+**`test-assassin` — 55 semantic mutations across four sequential passes**, grouped by source file, never concurrent. Six survived; all six were weak tests rather than source defects, and all six are now dead.
+
+| pass | target | applied | killed | survived → fixed |
+|---|---|---|---|---|
+| 1 | `sessionExpired.ts` | 10 | 8 | 2 (1 fixed, 1 equivalent) |
+| 2 | `useSession.ts` | 20 | 18 | 0 (2 equivalent) |
+| 3 | `useSignOut.ts`, `supabaseClient.ts` | 25 | 20 | 3 |
+| 4 | re-run over the repairs | 9 | 7 | 0 (1 equivalent) |
+
+Pass 2 mattered most: both fixes from the defect list above were confirmed to have a gate that goes red against the pre-fix source, which is the only thing that makes a fix a regression test rather than a hope.
+
+The single most instructive kill came from pass 3 and is an **ordering** defect, not an omission. Moving `queryClient.clear()` to *before* `await supabase.auth.signOut()` left all nine `useSignOut` tests green — because every one of them awaited the whole call and asserted only the settled state, which constrains *"was cleared at some point"* and never *"was cleared no earlier than the SDK call resolved."* The reordering is a live multi-tenancy leak: the session stays valid until `signOut()` resolves, so a refetch landing in that window succeeds on user A's credentials and repopulates a cache nothing will clear again. The new test writes an entry mid-flight and asserts it is gone after settle. This is the same shape as slice 7's commit-before-send hazard, and it means **Concurrency / ordering applies to `useSignOut`, not only to `useSession`** — a category the original selection missed and this audit added.
+
+**Stryker — 103 mutants over the slice's 4 files, `94.90%`.**
+
+| file | score | killed | survived | no-cov | errors |
+|---|---|---|---|---|---|
+| `useSignOut.ts` | 100.00 | 15 | 0 | 0 | 0 |
+| `supabaseClient.ts` | 93.33 | 28 | 0 | 2 | 5 |
+| `useSession.ts` | 97.30 | 36 | 1 | 0 | 0 |
+| `sessionExpired.ts` | 87.50 | 14 | 2 | 0 | 0 |
+| **total** | **94.90** | **93** | **3** | **2** | **5** |
+
+Three sweeps: **91.84% → 92.86% → 94.90%**. Two survivors were real gaps and were closed.
+
+The first was `let expired = false` → `true` in `sessionExpired.ts`, which survived every test because they all establish a known state before asserting and none observed the value the module *starts life with* — so the app could boot straight into the session-expired screen with the suite green. It now has a `jest.isolateModules` test that reads a pristine copy of the module.
+
+The second was the whole `typeof window !== 'undefined' && window.localStorage != null` condition in `supabaseClient.ts`, and getting it right took two wrong turns worth recording. The web-fallback test *selected* the no-op arm but could not *constrain* it: both arms return `null` for a key that was never written, so every mutant forcing the condition true survived. The fix is an `it.each` over the two sub-clauses — one case deletes `global.window` outright, the other leaves `window` but makes `localStorage` undefined — and each asserts the thing only a black hole does: write a value, then read it back as `null`, with the backing map and the keychain both still empty. All five condition mutants now die, and the file went from two survivors to zero.
+
+The remaining three survivors and two no-coverage mutants are each equivalent **under this harness**, checked against the replacement Stryker actually applied:
+
+- `if (expired) return;` and `if (!expired) return;` → `if (false)` (2 mutants). The only listener `subscribe` ever registers is React's own `useSyncExternalStore` callback, which re-reads `getSnapshot()` and bails via `Object.is` before scheduling a render. A redundant `emit()` on unchanged state is therefore unobservable through every public surface. Note the equivalence is **contingent on there being exactly one kind of consumer**: export `subscribe` to anything that treats each `emit()` as a discrete event and the guards become load-bearing immediately. *Inverting* either guard, as opposed to deleting it, is a real defect and dies against seven assertions.
+- `[queryClient]` → `[]` in `useSession`'s effect deps. `app/_layout.tsx` builds the `QueryClient` once via `useState(() => new QueryClient(…))`, so the reference is stable for the lifetime of a mounted tree and the effect never needs to re-run. Latently a stale-closure bug if a caller ever remounted this hook under a *different* provider without unmounting; no path in the app does.
+- `?? ''` on the two `EXPO_PUBLIC_` reads (2 no-coverage). `jest/setup-env.js` sets both variables unconditionally, so nothing can reach the fallback. This is the entire gap between `supabaseClient.ts`'s 100% statements and its 80% branches.
+
+**Five mutants are `RuntimeError` rather than killed or survived, and that is worth recording rather than hiding.** Stryker excludes them from the score denominator, so they neither help nor hurt the number — but they are unmeasured, and this repo has lost two full mutation runs to crash-classified mutants before. Two make `createClient` throw at import (`?? ''` → `&& ''`, so the URL is empty); three install a nonsense storage adapter. In all five the module fails to construct, and because sibling test files in the slice use the *real* `@supabase/supabase-js` rather than mocking it, the failure lands as a crashed Jest worker instead of a failed assertion. They are detected — the run is not green — just not classifiable.
+
+**The lesson of this slice's audit is that a branch test can select an arm without constraining it.** Three iterations of the same test taught it: version one left `window.localStorage` undefined past its own scope, so unrelated mutants that flipped adapter selection threw inside a worker and died as errors rather than kills. Version two restored a working `localStorage` too early, which stopped the crashes and made all five condition mutants *survive*, because both arms then answered `null` for an unwritten key. Only version three — asserting the arms **disagree**, by writing a value and reading back `null` — actually constrained anything. Coverage counted the arm as covered in all three.
+
+Coverage: **25.35/34.61/18.51/25.75 → 100/93.33/100/100** in aggregate, and **100/80/100/100** per file, which is what the ratchet records. Verified per-file against the exact CI command before committing: the only per-file breaches in the repo remain slice 1's two `shared/events` files.
+
+**Gate impact.** `shared/auth` joined `stryker.config.json`'s `mutate` glob — it is `.ts`-only with no component, so like the four slices before it, it did not force the unresolved question about component-heavy slices. The combined score over all 46 files measured **93.70%** (2,126 scored mutants) and `break` **stays at 93**, because 94 does not clear. That combined figure was measured with this slice at its interim 92.86; the final 94.90 can only have raised it.
