@@ -271,4 +271,47 @@ func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 	}
 }
 
+func TestHandleCreateTrackPersistsTrackNumber(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+
+	trackNumber := 7
+	body := CreateTrackRequest{
+		Title:       "Dreams",
+		Artist:      "Fleetwood Mac",
+		Album:       strPtr("Rumours"),
+		TrackNumber: &trackNumber,
+	}
+
+	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+
+	assertStatus(t, rec, http.StatusCreated)
+
+	var resp TrackResponse
+	decodeJSON(t, rec, &resp)
+	if resp.TrackNumber == nil {
+		t.Fatal("track_number was dropped: the client sends it on every album-context save")
+	}
+	if *resp.TrackNumber != trackNumber {
+		t.Errorf("TrackNumber = %d, want %d", *resp.TrackNumber, trackNumber)
+	}
+}
+
+func TestHandleCreateTrackOmitsTrackNumberWhenAbsent(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+
+	body := CreateTrackRequest{Title: "Single", Artist: "Artist"}
+
+	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+
+	assertStatus(t, rec, http.StatusCreated)
+
+	var resp TrackResponse
+	decodeJSON(t, rec, &resp)
+	if resp.TrackNumber != nil {
+		t.Errorf("TrackNumber = %d, want nil for a track saved outside an album context", *resp.TrackNumber)
+	}
+}
+
 func strPtr(s string) *string { return &s }

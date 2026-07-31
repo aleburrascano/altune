@@ -424,22 +424,20 @@ describe('ListTracksResponse (types.ts) <-> ListTracksResponse (track_handler.go
 });
 
 describe('CreateTrackRequest (types.ts) <-> CreateTrackRequest (track_handler.go)', () => {
-  it.failing(
-    'has the same field set on both sides — track_number is on the TS type and is populated by the real caller (features/detail/save-cache.ts toCreateTrackRequest), but the Go wire DTO has no track_number field at all, so json.Decode silently drops it and it never reaches AddTrackInput.TrackNumber',
-    () => {
-      const trackHandlerSource = fs.readFileSync(
-        goPath('internal', 'catalog', 'adapters', 'handler', 'track_handler.go'),
-        'utf8',
-      );
-      const goFields = deriveGoFields(extractGoStruct(trackHandlerSource, 'CreateTrackRequest'));
-      const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
-      const tsLines = extractTsTypeLines(typesSource, 'CreateTrackRequest');
+  it('has the same field set on both sides, including the track_number the album-context save sends', () => {
+    const trackHandlerSource = fs.readFileSync(
+      goPath('internal', 'catalog', 'adapters', 'handler', 'track_handler.go'),
+      'utf8',
+    );
+    const goFields = deriveGoFields(extractGoStruct(trackHandlerSource, 'CreateTrackRequest'));
+    const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
+    const tsLines = extractTsTypeLines(typesSource, 'CreateTrackRequest');
 
-      expect(goFields.size).toBeGreaterThan(0);
-      expect(tsLines.size).toBeGreaterThan(0);
-      expect([...tsLines.keys()].sort()).toEqual([...goFields.keys()].sort());
-    },
-  );
+    expect(goFields.size).toBeGreaterThan(0);
+    expect(tsLines.size).toBeGreaterThan(0);
+    expect(goFields.has('track_number')).toBe(true);
+    expect([...tsLines.keys()].sort()).toEqual([...goFields.keys()].sort());
+  });
 
   it('every omitempty Go field is optional or nullable on the TS side', () => {
     const trackHandlerSource = fs.readFileSync(
