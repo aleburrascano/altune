@@ -1,9 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import type { AcquisitionPhase } from '../stagePhase';
 import {
   ACQUISITION_PHASES,
-  AcquisitionPhase,
   STAGE_TO_PHASE,
   phaseLabel,
   stageLabel,

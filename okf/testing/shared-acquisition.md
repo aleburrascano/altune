@@ -4,7 +4,7 @@ title: Test selection — shared/acquisition
 description: Which of the twenty taxonomy categories apply to the mobile downloads-bar/track-status slice, which were rejected and why, and the mutation result. Done — 0% to 98.83% coverage, three defects fixed.
 resource: apps/mobile/src/shared/acquisition/
 tags: [testing, mobile, shared, acquisition, download]
-verified_commit: 98dcd6a8b6c41a7ceeab71d24771c1752819a8eb
+verified_commit: 00a76cb
 ---
 
 SLICE: `apps/mobile/src/shared/acquisition/`
@@ -117,3 +117,11 @@ The two UI files carry nearly all of the remaining 73 survivors, and essentially
 - `fallow health` ranks `trackStatusStore.ts` and `downloadStore.ts` as high-impact (5 dependents each) — a change here amplifies.
 - The re-acquisition flow is the app's most recently changed area and the subject of four consecutive fixes in the log, so **Legacy/compat** and **Idempotence/replay** deserve hard looks.
 - `applyServerEvent.ts` drives this store from SSE and is already at 93.68% mutation score, so the event-side contract is constrained; what is missing is this store's own behaviour.
+
+## AMENDMENT — type-only import (2026-07-30)
+
+`stagePhase.test.ts` imported `AcquisitionPhase` as a value where it is used only as a type (one `as [AcquisitionPhase, string][]` cast), which `@typescript-eslint/consistent-type-imports` reports as an error, so `npm run lint` — a CI gate — was red across the whole mobile app on this one line. Made type-only.
+
+Re-derived per the taxonomy's *Amending a slice that already has a record*: **no category is triggered.** No assertion, table row, fixture or subject changed; the emitted JavaScript is identical, because a type-only import is erased at compile time. None of the four changes the taxonomy names as most-missed applies — no I/O call site, no persisted shape, no store transition, no newly-read cross-surface field. Regression is not triggered either: its condition is *"a bug reached a user, or a mutation survived"*, and a lint-rule violation is neither.
+
+Recorded because the staleness hook is right to demand it — a change under this slice's `resource:` must be looked at, and "looked at, nothing triggered" is a finding rather than an exemption.
