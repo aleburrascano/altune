@@ -1,5 +1,7 @@
 import { AppState } from 'react-native';
 
+import { ApiError } from '@shared/api-client';
+
 import { loadPersistedOutbox, persistOutbox } from './outboxStore';
 import { recordEvent, type DiscoveryEvent } from './recordEvent';
 
@@ -68,6 +70,10 @@ export async function enqueueCritical(event: DiscoveryEvent): Promise<void> {
   await flushOutbox();
 }
 
+function isPermanentlyRejected(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 400;
+}
+
 export async function flushOutbox(): Promise<void> {
   ensureRestored();
   if (_flushing || _queue.length === 0) return;
@@ -76,10 +82,10 @@ export async function flushOutbox(): Promise<void> {
     for (const entry of [..._queue]) {
       try {
         await recordEvent(entry);
-        commit(_queue.filter((e) => e.event_id !== entry.event_id));
-      } catch {
-        break;
+      } catch (error) {
+        if (!isPermanentlyRejected(error)) break;
       }
+      commit(_queue.filter((e) => e.event_id !== entry.event_id));
     }
   } finally {
     _flushing = false;
