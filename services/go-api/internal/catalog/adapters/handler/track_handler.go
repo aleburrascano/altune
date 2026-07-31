@@ -89,6 +89,7 @@ type CreateTrackRequest struct {
 	Year            *int                        `json:"year,omitempty"`
 	Genre           *string                     `json:"genre,omitempty"`
 	AlbumArtist     *string                     `json:"album_artist,omitempty"`
+	TrackNumber     *int                        `json:"track_number,omitempty"`
 	FeaturedArtists []service.FeaturedArtistDTO `json:"featured_artists,omitempty"`
 	SourceURL       *string                     `json:"source_url,omitempty"`
 }
@@ -167,6 +168,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 		Genre:           req.Genre,
 		ISRC:            req.ISRC,
 		AlbumArtist:     req.AlbumArtist,
+		TrackNumber:     req.TrackNumber,
 		FeaturedArtists: domainFeaturedFromDTOs(req.FeaturedArtists),
 		SourceURL:       req.SourceURL,
 	}

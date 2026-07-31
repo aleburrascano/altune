@@ -62,6 +62,12 @@ Pinned by `__tests__/weak-signal.test.ts` — pending rebuild per [test-taxonomy
 
 `reacquireTrack(trackId)` posts to `/v1/tracks/{trackId}/reacquire`, sitting beside `retryAcquisition` and shaped identically (void, no body). The two are separate calls rather than one parameterised call because the server treats them as different operations with opposite preconditions: retry requires a failed track, re-acquire requires a ready one, and each returns 409 for the other's state.
 
+## `track_number` reached the server and was thrown away (2026-07-30)
+
+`CreateTrackRequest` here has always declared `track_number: number | null` as a **required** field, and `features/detail/save-cache.ts`'s `toCreateTrackRequest` has always populated it from the discovery result's track position. The Go handler's wire DTO had no such field, so `encoding/json` discarded it on every save — silently, because Go ignores unknown fields by default. Every Track saved from an album context landed with a null position and the library counted 1..N instead of rendering the real tracklist order. Fixed on the backend; the client never needed changing. Detail, including why the second path (`setTrackNumber`, zero call sites) did not heal it: [catalog track](../backend/catalog/track.md).
+
+Worth keeping for what it says about *which* test could find it. Client-side this is an **equivalent mutation**: the field is serialized and ignored, so no mutation of `tracks.ts` or `save-cache.ts` changes anything observable, and no coverage or kill-rate number on either surface could have moved. It was found by the cross-surface contract test deriving both sides from source at test time and comparing them — the one category whose whole purpose is that neither surface can see the drift alone.
+
 ## Path-segment encoding, and the 304 that never arrives (2026-07-30)
 
 Two things the slice-5 test rebuild settled.
