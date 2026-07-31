@@ -4,7 +4,7 @@ title: Test selection — shared/auth
 description: Which of the twenty taxonomy categories apply to the mobile auth slice — the Supabase client singleton, the keychain storage adapter, the session hook's identity boundary, the session-expired signal, and sign-out — which were rejected and why, and the mutation result.
 resource: apps/mobile/src/shared/auth/
 tags: [testing, mobile, shared, auth, supabase, session, security]
-verified_commit: f46818e0886bb99695b7c67358c002f52ba37649
+verified_commit: 8f62214ad6a310774661717e2b0acdda4d345f46
 ---
 
 SLICE: `apps/mobile/src/shared/auth/`
