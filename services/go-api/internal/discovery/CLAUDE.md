@@ -60,6 +60,6 @@ Telemetry:
 - One event per search, not per page.
 - Exploration shuffles a copy; never mutate the cached list.
 - Never persist identity or telemetry on the request path — detached context, off the hot path.
-- `search_performed` and `results_shown` are server-emitted; reject them at `POST /events`.
+- `search_performed` is server-emitted; reject it at `POST /events`. `results_shown` is client-emitted and accepted there.
 
 Why each rule exists: `okf/backend/discovery/*.md` and `okf/providers/*.md`. Read the relevant concept before structural work; update it in the same commit when behavior changes (pre-commit hook enforces).
