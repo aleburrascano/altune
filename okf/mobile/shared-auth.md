@@ -4,7 +4,7 @@ title: Shared auth
 description: The promoted Supabase client singleton plus the session hook, session-expired signal, and sign-out hook that keep SDK auth state, the backend's 401s, and the React Query cache consistent.
 resource: apps/mobile/src/shared/auth/
 tags: [mobile, shared, auth, supabase, session]
-verified_commit: f46818e0886bb99695b7c67358c002f52ba37649
+verified_commit: 8f62214ad6a310774661717e2b0acdda4d345f46
 ---
 
 `supabaseClient.ts` is the app's single `createClient` call (ADR-0006), promoted from `features/auth/api/` once 2+ features depended on it (api-client, playback); every consumer — including the auth feature itself — imports it from here directly (the old feature-local re-export is gone). Session persistence is `expo-secure-store`, NOT `AsyncStorage` (Risk-#3 in the auth-integration spec), via an adapter that maps Supabase's storage interface to SecureStore's async API. Two load-bearing details: `keychainAccessible: AFTER_FIRST_UNLOCK` lets the SDK read tokens when the app wakes in the background on a locked device — the default `WHEN_UNLOCKED` fails the auto-refresh tick with "User interaction is not allowed" — and `getItem` catches SecureStore throws and returns `null` (for tokens stored before that change), which the SDK treats as "no session" and re-authenticates. Web falls back to `localStorage` (or a no-op store), config is `persistSession: true`, `autoRefreshToken: true`, `detectSessionInUrl: false`, and credentials come from `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`. Invariant: this is the only file that value-imports `@supabase/supabase-js`; everything else takes the singleton, and only `useSession.ts` here (plus feature code) may `import type` from the package.
