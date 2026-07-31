@@ -28,7 +28,7 @@ export async function getAlbumTracks(
   if (albumArtist) params.set('artist', albumArtist);
   if (mbExternalId) params.set('mbid', mbExternalId);
   const qs = params.toString();
-  const url = `/v1/discovery/albums/${provider}/${encodeURIComponent(externalId)}/tracks${qs ? `?${qs}` : ''}`;
+  const url = `/v1/discovery/albums/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/tracks${qs ? `?${qs}` : ''}`;
   return apiFetch<ContentFetchResponse>(url);
 }
 
@@ -42,7 +42,7 @@ export async function getArtistTopTracks(
   if (limit !== undefined) params.set('limit', String(limit));
   if (artistName) params.set('name', artistName);
   const qs = params.toString();
-  const url = `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/top-tracks${qs ? `?${qs}` : ''}`;
+  const url = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/top-tracks${qs ? `?${qs}` : ''}`;
   return apiFetch<ContentFetchResponse>(url);
 }
 
@@ -56,7 +56,7 @@ export async function getArtistAlbums(
   if (limit !== undefined) params.set('limit', String(limit));
   if (artistName) params.set('name', artistName);
   const qs = params.toString();
-  const url = `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/albums${qs ? `?${qs}` : ''}`;
+  const url = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/albums${qs ? `?${qs}` : ''}`;
   return apiFetch<ContentFetchResponse>(url);
 }
 
@@ -67,7 +67,7 @@ export async function getRelatedTracks(
 ): Promise<ContentFetchResponse> {
   return apiFetch<ContentFetchResponse>(
     _contentUrl(
-      `/v1/discovery/tracks/${provider}/${encodeURIComponent(externalId)}/related`,
+      `/v1/discovery/tracks/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/related`,
       limit,
     ),
   );
@@ -164,6 +164,6 @@ export async function getArtistContent(
   if (opts.tracksLimit !== undefined) params.set('tracks_limit', String(opts.tracksLimit));
   if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
   const qs = params.toString();
-  const url = `/v1/discovery/artists/${provider}/${encodeURIComponent(externalId)}/content${qs ? `?${qs}` : ''}`;
+  const url = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/content${qs ? `?${qs}` : ''}`;
   return apiFetch<ArtistContentResponse>(url);
 }
