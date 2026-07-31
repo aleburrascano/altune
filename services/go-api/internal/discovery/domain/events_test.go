@@ -83,7 +83,7 @@ func TestEventType_ClientSubmittable(t *testing.T) {
 	}{
 		{EventTypeUnknown, false},
 		{EventTypeSearchPerformed, false},
-		{EventTypeResultsShown, false},
+		{EventTypeResultsShown, true},
 		{EventTypeResultClicked, true},
 		{EventTypePlay, true},
 		{EventTypeSkip, true},

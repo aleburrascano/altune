@@ -56,7 +56,7 @@ func (e EventType) String() string {
 
 func (e EventType) ClientSubmittable() bool {
 	switch e {
-	case EventTypeResultClicked, EventTypePlay, EventTypeSkip,
+	case EventTypeResultsShown, EventTypeResultClicked, EventTypePlay, EventTypeSkip,
 		EventTypeCompleted, EventTypeLibraryAdd, EventTypeWrongAlbum:
 		return true
 	}

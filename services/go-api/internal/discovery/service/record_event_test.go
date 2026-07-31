@@ -96,11 +96,26 @@ func assertRejected400(t *testing.T, store *fakeEventStore, err error) {
 }
 
 func TestRecordEventService_Execute_RejectsServerReservedTypes(t *testing.T) {
-	for _, typ := range []domain.EventType{domain.EventTypeSearchPerformed, domain.EventTypeResultsShown} {
+	for _, typ := range []domain.EventType{domain.EventTypeSearchPerformed} {
 		store := &fakeEventStore{}
 		svc := NewRecordEventService(store)
 		err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{Type: typ})
 		assertRejected400(t, store, err)
+	}
+}
+
+func TestRecordEventService_Execute_AcceptsResultsShown(t *testing.T) {
+	store := &fakeEventStore{}
+	svc := NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+		Type:    domain.EventTypeResultsShown,
+		Payload: map[string]any{"results": []any{}},
+	})
+	if err != nil {
+		t.Fatalf("results_shown should be client-submittable, got %v", err)
+	}
+	if len(store.recorded()) != 1 {
+		t.Errorf("appended %d events, want 1", len(store.recorded()))
 	}
 }
 

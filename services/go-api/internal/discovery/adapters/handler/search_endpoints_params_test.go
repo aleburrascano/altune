@@ -389,12 +389,32 @@ func TestHandleRecordEvent_ClientOccurredAt(t *testing.T) {
 func TestHandleRecordEvent_ServerReservedTypes(t *testing.T) {
 	router := buildEventRouter(&recordingEventStore{})
 
-	for _, reserved := range []string{"search_performed", "results_shown"} {
+	for _, reserved := range []string{"search_performed"} {
 		body := map[string]any{"type": reserved}
 		rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("type %q: status = %d, want 400 (server-reserved)", reserved, rec.Code)
 		}
+	}
+}
+
+func TestHandleRecordEvent_ResultsShownIsClientSubmittable(t *testing.T) {
+	store := &recordingEventStore{}
+	router := buildEventRouter(store)
+
+	body := map[string]any{
+		"type":      "results_shown",
+		"search_id": "9f1c2a3e-0000-4000-8000-000000000001",
+		"payload":   map[string]any{"results": []any{}},
+	}
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+	discAssertStatus(t, rec, http.StatusNoContent)
+
+	if len(store.events) != 1 {
+		t.Fatalf("stored events = %d, want 1", len(store.events))
+	}
+	if store.events[0].Type != discdomain.EventTypeResultsShown {
+		t.Errorf("stored type = %v, want results_shown", store.events[0].Type)
 	}
 }
 
