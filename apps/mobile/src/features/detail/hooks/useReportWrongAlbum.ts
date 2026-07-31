@@ -22,7 +22,9 @@ export function useReportWrongAlbum(result: DiscoveryResult): {
         title: result.title,
         subtitle: result.subtitle ?? null,
         album,
-        result_signature: result.result_signature ?? null,
+        ...(result.result_signature != null
+          ? { result_signature: result.result_signature }
+          : {}),
       },
     });
   };
