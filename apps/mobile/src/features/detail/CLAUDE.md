@@ -12,7 +12,7 @@ Layout:
 - `navigation.ts` — `openDetail`. `hooks/` — `useSaveTrack`, `useLateralNav`, `useAlbumTracks`, `useArtistContent`, `useDetailEnrichments`, `useEnrichResult`, `useOwnedTrack`, `useAlbumDetailState`, `useArtistDetailState`.
 - `__tests__/` — `play-source`; the rest is rebuilt per `okf/playbooks/test-taxonomy.md`.
 
-Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@shared/api-client/{tracks,discovery,enrichment}`, `@shared/ui/primitives/*` (imported directly, not the barrel), `@tanstack/react-query`. No cross-feature imports.
+Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@shared/api-client/{tracks,discovery,enrichment}`, `@shared/ui/primitives/*` (imported directly, not the barrel), `@shared/playlists` (the picker), `@tanstack/react-query`. No cross-feature imports.
 
 ## Rules
 
@@ -23,6 +23,7 @@ Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@share
 - Read ownership from the server stamp (`owned_track_id` / `owned_acquisition_status`), never by scanning a library cache.
 - Fetch artist top-tracks and albums in one call; never merge per-provider discographies on the device.
 - Never save a Track with a null artist — the control disables and `onSave` short-circuits.
+- Add an unowned Track to a playlist by saving it first and adding the returned id; never send an optimistic placeholder id to the server.
 - Never let `useEnrichResult` match on title alone, and never let it overwrite stored library `extras`.
 - Never reset `searchingRef` after a successful push, or lateral nav duplicates screens.
 - Never let Deezer contribute new titles when the MB identity is verified and non-empty.
@@ -39,7 +40,7 @@ Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@share
 - Every tappable element needs `accessibilityRole` + `accessibilityLabel`; touch targets ≥48pt.
 - Never rename a load-bearing testID without updating `docs/specs/view-result-detail/`.
 
-Load-bearing testIDs — scaffold: `detail-header`, `detail-back`, `detail-banner-title`, `detail-menu`, `detail-artist-link`. Track: `detail-track-info`, `detail-track-facts`, `detail-play`, `detail-preview`, `detail-save`, `detail-save-error`, `detail-info-album`, `detail-info-featuring`, `detail-lateral-error`. Album: `detail-tracklist{,-loading,-error,-empty}`, `detail-track-<n>`, `detail-track-save-<n>`, `detail-album-meta` (the fact row), `detail-album-play`, `detail-save-all`, `detail-more-from-album`. Artist: `detail-artist-content`, `detail-artist-facts`, `detail-artist-play`, `detail-top-tracks-{loading,error}`, `detail-top-track-<n>`, `detail-top-track-save-<n>`, `detail-show-all-tracks`, `detail-albums-{loading,error}`, `detail-{album,single,ep}-<n>`, `detail-artist-about`.
+Load-bearing testIDs — scaffold: `detail-header`, `detail-back`, `detail-banner-title`, `detail-menu`, `detail-artist-link`. Track: `detail-track-info`, `detail-track-facts`, `detail-play`, `detail-preview`, `detail-save`, `detail-add-to-playlist`, `detail-save-error`, `detail-info-album`, `detail-info-featuring`, `detail-lateral-error`. Album: `detail-tracklist{,-loading,-error,-empty}`, `detail-track-<n>`, `detail-track-save-<n>`, `detail-album-meta` (the fact row), `detail-album-play`, `detail-save-all`, `detail-more-from-album`. Artist: `detail-artist-content`, `detail-artist-facts`, `detail-artist-play`, `detail-top-tracks-{loading,error}`, `detail-top-track-<n>`, `detail-top-track-save-<n>`, `detail-show-all-tracks`, `detail-albums-{loading,error}`, `detail-{album,single,ep}-<n>`, `detail-artist-about`.
 
 Routing: a stack screen nested in each tab — `app/(tabs)/discover/detail.tsx` and `app/(tabs)/library/detail.tsx` render the same component, which uses `useSegments()` to build correct push paths.
 

@@ -15,6 +15,7 @@ Invariants:
 - Enrichment responses follow the null-object contract: collections always present, unresolved entity = empty payload; `has_content` is the server's verdict on whether a section is worth rendering.
 - `feedback.ts` is the write side of in-app reports: `submitReport` POSTs to `/v1/feedback/reports`, which 404s on a deploy with no issue tracker configured and never throttles a reporter.
 - `library.ts` is the read side of the collection: `/v1/library/albums` and `/v1/library/artists` return server-grouped lenses, and `getTracks` takes `q` / `sort`.
+- `playlists.ts` writes membership only in batches — `POST …/tracks/batch` and `DELETE …/tracks` both take a `track_ids` list and answer with counts, never a bare 204.
 
 Tests: `__tests__/` — `apiFetch.auth`, `transport`, `deadline`, `isRetryable`, `tracks`, `playlists`, `library`, `discovery`, `queryString.property`, `enrichment`, `lyrics`, `audio`, `playback`, `feedback`, `contract`, `invariants`. Categories and rejections: `okf/testing/shared-api-client.md`.
 

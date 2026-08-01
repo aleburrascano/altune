@@ -468,7 +468,10 @@ describe('Playlist DTOs (playlist_handler.go) <-> types.ts', () => {
     'ListPlaylistsResponse',
     'PlaylistDetailResponse',
     'CreatePlaylistRequest',
-    'AddTrackToPlaylistRequest',
+    'AddTracksToPlaylistRequest',
+    'AddTracksToPlaylistResponse',
+    'RemoveTracksFromPlaylistRequest',
+    'RemoveTracksFromPlaylistResponse',
     'ReorderTracksRequest',
   ])('%s has the same field set on both sides', (name) => {
     const goFields = deriveGoFields(extractGoStruct(playlistHandlerSource, name));

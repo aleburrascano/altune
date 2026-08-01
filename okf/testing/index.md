@@ -19,3 +19,4 @@ A category listed as selected without its done-condition met is a lie; a categor
 - [shared-lib](shared-lib.md) — the shared utilities: the query-key topology, the extras parsers, and the discover↔detail handoff
 - [shared-telemetry](shared-telemetry.md) — the rotating session id, the durable critical outbox, and the event POST
 - [shared-auth](shared-auth.md) — the Supabase client singleton, the keychain adapter, and the identity boundary between two users on one device
+- [shared-playlists](shared-playlists.md) — the playlist write module: batch membership, optimistic rollback, and the save-on-pick seam

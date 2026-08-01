@@ -31,7 +31,9 @@ func (h *PlaylistHandler) Routes() chi.Router {
 	r.Patch("/{playlistId}", h.handleRename)
 	r.Delete("/{playlistId}", h.handleDelete)
 	r.Post("/{playlistId}/tracks", h.handleAddTrack)
+	r.Post("/{playlistId}/tracks/batch", h.handleAddTracks)
 	r.Delete("/{playlistId}/tracks/{trackId}", h.handleRemoveTrack)
+	r.Delete("/{playlistId}/tracks", h.handleRemoveTracks)
 	r.Patch("/{playlistId}/tracks/reorder", h.handleReorder)
 	return r
 }
@@ -46,6 +48,23 @@ type RenamePlaylistRequest struct {
 
 type AddTrackToPlaylistRequest struct {
 	TrackID uuid.UUID `json:"track_id"`
+}
+
+type AddTracksToPlaylistRequest struct {
+	TrackIDs []uuid.UUID `json:"track_ids"`
+}
+
+type AddTracksToPlaylistResponse struct {
+	Added   int `json:"added"`
+	Skipped int `json:"skipped"`
+}
+
+type RemoveTracksFromPlaylistRequest struct {
+	TrackIDs []uuid.UUID `json:"track_ids"`
+}
+
+type RemoveTracksFromPlaylistResponse struct {
+	Removed int `json:"removed"`
 }
 
 type ReorderTracksRequest struct {
@@ -239,6 +258,44 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
+	if err != nil {
+		httputil.BadRequest(w, "invalid playlist ID")
+		return
+	}
+
+	var req AddTracksToPlaylistRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if len(req.TrackIDs) == 0 {
+		httputil.BadRequest(w, "track_ids required")
+		return
+	}
+
+	trackIds := make([]domain.TrackId, len(req.TrackIDs))
+	for i, id := range req.TrackIDs {
+		trackIds[i] = domain.TrackIdFromUUID(id)
+	}
+
+	added, err := h.membership.AddTracks(r.Context(), userId, playlistId, trackIds)
+	if err != nil {
+		httputil.HandleServiceError(w, r, err)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, AddTracksToPlaylistResponse{
+		Added:   added,
+		Skipped: len(trackIds) - added,
+	})
+}
+
 func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
@@ -261,6 +318,41 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
+	if err != nil {
+		httputil.BadRequest(w, "invalid playlist ID")
+		return
+	}
+
+	var req RemoveTracksFromPlaylistRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.BadRequest(w, "invalid request body")
+		return
+	}
+	if len(req.TrackIDs) == 0 {
+		httputil.BadRequest(w, "track_ids required")
+		return
+	}
+
+	trackIds := make([]domain.TrackId, len(req.TrackIDs))
+	for i, id := range req.TrackIDs {
+		trackIds[i] = domain.TrackIdFromUUID(id)
+	}
+
+	removed, err := h.membership.RemoveTracks(r.Context(), userId, playlistId, trackIds)
+	if err != nil {
+		httputil.HandleServiceError(w, r, err)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, RemoveTracksFromPlaylistResponse{Removed: removed})
 }
 
 func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) {

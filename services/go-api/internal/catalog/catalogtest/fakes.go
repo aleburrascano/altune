@@ -245,8 +245,13 @@ type PlaylistRepo struct {
 	ErrOnDelete        error
 	ErrOnUpdate        error
 	ErrOnAddTrack      error
+	ErrOnAddTracks     error
 	ErrOnRemoveTrack   error
+	ErrOnRemoveTracks  error
 	ErrOnReorder       error
+
+	Added   []domain.PlaylistTrack
+	Removed []domain.TrackId
 }
 
 var _ ports.PlaylistRepository = (*PlaylistRepo)(nil)
@@ -333,8 +338,24 @@ func (r *PlaylistRepo) AddTrack(_ context.Context, _ domain.PlaylistId, _ domain
 	return r.ErrOnAddTrack
 }
 
+func (r *PlaylistRepo) AddTracks(_ context.Context, _ domain.PlaylistId, tracks []domain.PlaylistTrack) error {
+	if r.ErrOnAddTracks != nil {
+		return r.ErrOnAddTracks
+	}
+	r.Added = append(r.Added, tracks...)
+	return nil
+}
+
 func (r *PlaylistRepo) RemoveTrack(_ context.Context, _ domain.PlaylistId, _ domain.TrackId) error {
 	return r.ErrOnRemoveTrack
+}
+
+func (r *PlaylistRepo) RemoveTracks(_ context.Context, _ domain.PlaylistId, trackIds []domain.TrackId) error {
+	if r.ErrOnRemoveTracks != nil {
+		return r.ErrOnRemoveTracks
+	}
+	r.Removed = append(r.Removed, trackIds...)
+	return nil
 }
 
 func (r *PlaylistRepo) ReorderTracks(_ context.Context, _ domain.PlaylistId, _ []domain.PlaylistTrack) error {

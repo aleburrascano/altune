@@ -17,7 +17,10 @@ Layout:
 - Never derive a client-facing audio version from a clock.
 - Change `Album` only through `SetAlbum` — it recomputes `DedupKey`, and the two may never drift.
 - A blank album resolves to the track's title; apply that in the aggregate, never at the API edge.
-- Change `Playlist` positions only through `AddTrack` / `RemoveTrack` / `Reorder`; they stay contiguous 0..N-1 with no duplicates.
+- Change `Playlist` positions only through `AddTrack` / `RemoveTrack` / `Reorder`; they stay contiguous 0..N-1 with no duplicates. A batch write loops those same methods, never a second positioning rule.
+- Skip a track a batch write cannot apply — already a member, not a member, not owned — and answer with the count; never fail the whole batch.
+- Cap every playlist batch at `MaxPlaylistBatchSize`.
+- Persist a batch of playlist rows in one transaction, and renumber inside it.
 - Never import acquisition — go through the `AcquisitionScheduler` port.
 - Never import discovery — go through `adapters/discoverybridge`.
 - Keep `AudioContentType` the only place a stored ref maps to a MIME type; upload and serve sides must agree.

@@ -15,7 +15,7 @@ Rebuilt blind on 2026-07-30: the authors were given the source and the taxonomy 
 ## SELECTED
 
 - **Table** — `progressPhase`'s six named stages plus unknown and missing; `parseAddedTrack`'s required-field guard; the wire-field parser. `__tests__/applyServerEvent.test.ts`, `__tests__/sse-client.test.ts`.
-- **Reducer** — all 14 `ServerEventType`s against seeded non-trivial cache state, enumerated from `SERVER_EVENT_TYPES` rather than from the handler's branches. `__tests__/applyServerEvent.test.ts`.
+- **Reducer** — all 16 `ServerEventType`s against seeded non-trivial cache state, enumerated from `SERVER_EVENT_TYPES` rather than from the handler's branches. `__tests__/applyServerEvent.test.ts`.
 - **Property** — `reorderPlaylistCache` preserves membership and count over any shuffled subsequence; `patchTrackInCaches` replay-idempotence over generated patches (`fast-check`). `__tests__/playlistCachePatch.test.ts`, `__tests__/trackCachePatch.test.ts`.
 - **Cross-surface contract** — `__tests__/eventContract.test.ts` derives the published event set from the Go source at test time (`git ls-files *.go`, every `.Publish(…, "name")` literal plus the handler's `event: resync`) and asserts equality with `SERVER_EVENT_TYPES` in both directions. Derived, never restated.
 - **Invalidation** — exact query keys asserted by identity for `resync`, `track_deleted`, the thin-payload fallback, and every `INVALIDATION_MAP` entry.
@@ -72,3 +72,17 @@ The remaining 49 were left deliberately. `useServerEvents.ts` (76.19) and `sse-c
 `test-assassin` is retained alongside it, not replaced by it: Stryker gives the reproducible number a ratchet needs, the agent gives the semantic mutations no generator produces — swapping two adjacent same-typed fields, reversing a spread so the stale copy wins, committing before the send is confirmed. Those three found the worst defects in the 2026-07-29 audit and none of them are in a standard mutator's repertoire.
 
 Note on method: the blind rebuild and the mutation audit find **disjoint** defect classes. Mutation asks whether the suite notices a change and so finds weak tests over correct code; blind derivation asks whether the code is right and so finds wrong code. The `failure_message` defect proves the gap — the field is never sent by the server, so replacing its read with `null` is an equivalent mutation and no mutation runner can surface it.
+
+## AMENDED 2026-08-01 — batch playlist events
+
+Two event types were added: `tracks_added_to_playlist` (invalidate-only) and `tracks_removed_from_playlist` (patching). The changed surface re-triggers five categories.
+
+- **Reducer** — the enumeration widened from 14 to 16 `ServerEventType`s. It reads `SERVER_EVENT_TYPES` rather than the handler's branches, so both new names were in scope the moment they were declared.
+- **Invalidation** — `tracks_added_to_playlist` added to the `INVALIDATION_MAP` table, asserting `[playlistKeys.details, playlistKeys.list]` by identity.
+- **Idempotence / replay** — the batch removal applied twice, asserted equal to once. This is the category that caught the `track_count` divergence on the singular form; the batch form recomputes from the array through the same patcher, so the property holds for the same reason and is now pinned rather than assumed.
+- **Adversarial** — `track_ids` missing, `playlist_id` missing, and a mixed array (`['t1', 42, null]`) asserting non-strings are dropped rather than removing a track named `undefined`.
+- **Cross-surface contract** — no new test needed. `eventContract.test.ts` derives the published set from the Go source at test time, so both names were checked against the `.Publish(…)` literals in `playlist_membership.go` automatically.
+
+Rejected: **Timing / dwell**, **Concurrency / ordering**, **Failure injection**, **Legacy / compat** — the batch handlers are pure cache functions over an already-parsed event, sharing the transport, ordering and framing paths the existing tests cover. Nothing about them is time- or transport-dependent.
+
+**Mutation audit not re-run for this change.** The slice's Stryker number stands at 90.75 from the 2026-07-30 rebuild; the added handler is a four-line loop over the shared patcher, and the next full `npm run mutate` covers it.

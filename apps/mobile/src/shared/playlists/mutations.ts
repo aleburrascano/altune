@@ -2,14 +2,22 @@ import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import {
-  addTrackToPlaylist,
+  addTracksToPlaylist,
   createPlaylist,
   deletePlaylist,
-  removeTrackFromPlaylist,
+  removeTracksFromPlaylist,
   renamePlaylist,
 } from '@shared/api-client/playlists';
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { playlistKeys } from '@shared/lib/query-keys';
+
+type AddTracksVariables = { playlistId: string; trackIds: string[] };
+type CreateWithTracksVariables = { name: string; trackIds: string[] };
+
+function alreadyThereMessage(skipped: number, playlistName: string | undefined): string {
+  const where = playlistName != null ? `already in ${playlistName}` : 'already in the playlist';
+  return skipped === 1 ? `One track was ${where}.` : `${skipped} tracks were ${where}.`;
+}
 
 export function useCreatePlaylist() {
   const queryClient = useQueryClient();
@@ -22,25 +30,30 @@ export function useCreatePlaylist() {
   });
 }
 
-export function useCreatePlaylistWithTrack(trackId: string) {
+export function useCreatePlaylistWithTracks() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (name: string) => {
-      const pl = await createPlaylist({ name });
-      let addFailed = false;
+    mutationFn: async ({ name, trackIds }: CreateWithTracksVariables) => {
+      const playlist = await createPlaylist({ name });
       try {
-        await addTrackToPlaylist(pl.id, { track_id: trackId });
+        const { added } = await addTracksToPlaylist(playlist.id, { track_ids: trackIds });
+        return { playlist, added, addFailed: false };
       } catch {
-        addFailed = true;
+        return { playlist, added: 0, addFailed: true };
       }
-      return { pl, addFailed };
     },
-    onSuccess: ({ addFailed }) => {
+    onSuccess: ({ addFailed, added, playlist }, { trackIds }) => {
       if (addFailed) {
         Alert.alert(
           'Note',
-          'Playlist created, but the track could not be added. Try adding it manually.',
+          trackIds.length === 1
+            ? 'Playlist created, but the track could not be added. Try adding it manually.'
+            : 'Playlist created, but the tracks could not be added. Try adding them manually.',
         );
+        return;
+      }
+      if (added < trackIds.length) {
+        Alert.alert('Note', alreadyThereMessage(trackIds.length - added, playlist.name));
       }
     },
     onError: () => {
@@ -50,30 +63,44 @@ export function useCreatePlaylistWithTrack(trackId: string) {
   });
 }
 
-export function useAddTrackToPlaylist(trackId: string) {
+export function useAddTracksToPlaylist() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (playlistId: string) => addTrackToPlaylist(playlistId, { track_id: trackId }),
-    onMutate: async (playlistId) => {
+    mutationFn: ({ playlistId, trackIds }: AddTracksVariables) =>
+      addTracksToPlaylist(playlistId, { track_ids: trackIds }),
+    onMutate: async ({ playlistId, trackIds }) => {
       await queryClient.cancelQueries({ queryKey: playlistKeys.list });
       const previous = queryClient.getQueryData<{ items: PlaylistResponse[] }>(playlistKeys.list);
       if (previous) {
         queryClient.setQueryData<{ items: PlaylistResponse[] }>(playlistKeys.list, {
           ...previous,
           items: previous.items.map((p) =>
-            p.id === playlistId ? { ...p, track_count: p.track_count + 1 } : p,
+            p.id === playlistId ? { ...p, track_count: p.track_count + trackIds.length } : p,
           ),
         });
       }
       return { previous };
     },
-    onError: (_err, _playlistId, context) => {
+    onSuccess: (result, { playlistId, trackIds }) => {
+      if (result.added < trackIds.length) {
+        const name = queryClient
+          .getQueryData<{ items: PlaylistResponse[] }>(playlistKeys.list)
+          ?.items.find((p) => p.id === playlistId)?.name;
+        Alert.alert('Note', alreadyThereMessage(trackIds.length - result.added, name));
+      }
+    },
+    onError: (_err, { trackIds }, context) => {
       if (context?.previous) {
         queryClient.setQueryData(playlistKeys.list, context.previous);
       }
-      Alert.alert('Add failed', 'Could not add the track to the playlist. Please try again.');
+      Alert.alert(
+        'Add failed',
+        trackIds.length === 1
+          ? 'Could not add the track to the playlist. Please try again.'
+          : 'Could not add the tracks to the playlist. Please try again.',
+      );
     },
-    onSettled: (_data, _error, playlistId) =>
+    onSettled: (_data, _error, { playlistId }) =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: playlistKeys.list }),
         queryClient.invalidateQueries({ queryKey: playlistKeys.detail(playlistId) }),
@@ -121,28 +148,35 @@ export function useDeletePlaylist(playlistId: string) {
   });
 }
 
-export function useRemoveTrackFromPlaylist(playlistId: string) {
+export function useRemoveTracksFromPlaylist(playlistId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (trackId: string) => removeTrackFromPlaylist(playlistId, trackId),
-    onMutate: async (trackId) => {
+    mutationFn: (trackIds: string[]) =>
+      removeTracksFromPlaylist(playlistId, { track_ids: trackIds }),
+    onMutate: async (trackIds) => {
       await queryClient.cancelQueries({ queryKey: playlistKeys.detail(playlistId) });
       const previous = queryClient.getQueryData<{ tracks: { id: string }[] }>(
         playlistKeys.detail(playlistId),
       );
       if (previous) {
+        const removing = new Set(trackIds);
         queryClient.setQueryData(playlistKeys.detail(playlistId), {
           ...previous,
-          tracks: previous.tracks.filter((t) => t.id !== trackId),
+          tracks: previous.tracks.filter((t) => !removing.has(t.id)),
         });
       }
       return { previous };
     },
-    onError: (_err, _trackId, context) => {
+    onError: (_err, trackIds, context) => {
       if (context?.previous) {
         queryClient.setQueryData(playlistKeys.detail(playlistId), context.previous);
       }
-      Alert.alert('Remove failed', 'Could not remove the track. Please try again.');
+      Alert.alert(
+        'Remove failed',
+        trackIds.length === 1
+          ? 'Could not remove the track. Please try again.'
+          : 'Could not remove the tracks. Please try again.',
+      );
     },
     onSettled: () =>
       Promise.all([

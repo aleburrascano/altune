@@ -5,7 +5,7 @@ import { getPlaylists } from '@shared/api-client/playlists';
 import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
 import { playlistKeys } from '@shared/lib/query-keys';
 
-import { useCreatePlaylist } from './usePlaylistMutations';
+import { useCreatePlaylist } from '@shared/playlists';
 
 export type PlaylistActionsState = {
   playlists: PlaylistResponse[];

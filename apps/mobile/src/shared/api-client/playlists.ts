@@ -1,10 +1,13 @@
 import { apiFetch } from './index';
 import type {
-  AddTrackToPlaylistRequest,
+  AddTracksToPlaylistRequest,
+  AddTracksToPlaylistResponse,
   CreatePlaylistRequest,
   ListPlaylistsResponse,
   PlaylistDetailResponse,
   PlaylistResponse,
+  RemoveTracksFromPlaylistRequest,
+  RemoveTracksFromPlaylistResponse,
   ReorderTracksRequest,
 } from './types';
 
@@ -36,21 +39,32 @@ export async function deletePlaylist(id: string): Promise<void> {
   await apiFetch<void>(`/v1/playlists/${id}`, { method: 'DELETE' });
 }
 
-export async function addTrackToPlaylist(
+export async function addTracksToPlaylist(
   playlistId: string,
-  body: AddTrackToPlaylistRequest,
-): Promise<void> {
-  await apiFetch<void>(`/v1/playlists/${playlistId}/tracks`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  body: AddTracksToPlaylistRequest,
+): Promise<AddTracksToPlaylistResponse> {
+  return apiFetch<AddTracksToPlaylistResponse>(
+    `/v1/playlists/${encodeURIComponent(playlistId)}/tracks/batch`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
-export async function removeTrackFromPlaylist(playlistId: string, trackId: string): Promise<void> {
-  await apiFetch<void>(`/v1/playlists/${playlistId}/tracks/${trackId}`, {
-    method: 'DELETE',
-  });
+export async function removeTracksFromPlaylist(
+  playlistId: string,
+  body: RemoveTracksFromPlaylistRequest,
+): Promise<RemoveTracksFromPlaylistResponse> {
+  return apiFetch<RemoveTracksFromPlaylistResponse>(
+    `/v1/playlists/${encodeURIComponent(playlistId)}/tracks`,
+    {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 export async function reorderPlaylistTracks(

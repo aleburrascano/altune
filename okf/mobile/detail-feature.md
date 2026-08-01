@@ -98,3 +98,17 @@ The server now stamps every track result with `extras.owned_track_id` and `extra
 `usePersistTrackNumbers` is gone. The server fills a missing `track_number` from the provider tracklist's own order when the album is fetched, so the database still self-heals as albums are browsed, without one `PATCH` per track leaving the phone.
 
 `useSaveTrack` keeps its optimistic placeholder — instant feedback is a client concern — but it now inserts into the paged tracks cache via `upsertTrackInCaches` and swaps in the real row with `replaceTrackInCaches`. The old "never seed an absent cache" invariant survives in those helpers: both no-op when nothing is cached.
+
+## Adding to a playlist without waiting for the save (2026-08-01, issue #18)
+
+The reported flow was "download it to your library, then press the three dots and add it to a playlist, because it's very slow". The slowness is not network — it is that reaching a playlist required leaving the detail screen, finding the track again in the library, and opening a menu. `TrackDetailBody` now renders a `SecondaryAction` beside the save pill (`detail-add-to-playlist`, a `ListPlus` circle) that opens the shared picker directly.
+
+The interesting part is ordering. A track the user has not saved has no server id — `useSaveTrack` writes an optimistic placeholder id into the cache, and that id means nothing to the API. So the screen hands the sheet a thunk rather than ids:
+
+```
+async () => [owned?.trackId ?? (await save.mutateAsync(toCreateTrackRequest(result))).id]
+```
+
+`owned` comes from `useOwnedTrack`, which overlays the server stamp with live acquisition status, so an already-saved track skips the save entirely and an unsaved one saves exactly once. The thunk runs when a playlist is picked, not when the sheet opens, so opening the picker and backing out saves nothing. See [shared-playlists](shared-playlists.md) for why the seam is a thunk.
+
+The button appears only when `canSave` — the same guard the save pill uses, since a Track with a null artist cannot be created and therefore cannot reach a playlist either. Album and artist rows keep their plain save control; the issue was about the track screen, and a per-row playlist button on a twelve-track album tracklist would crowd rows that already carry a save control.

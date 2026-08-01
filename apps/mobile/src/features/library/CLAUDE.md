@@ -4,15 +4,16 @@ Single chip-filtered Library screen (`docs/superpowers/specs/2026-06-28-library-
 
 Layout:
 
-- `ui/LibraryScreen.tsx` — orchestrator; owns `chip`, per-chip `sortByChip`, search, the track action sheet, and the loading/error/empty branches.
+- `ui/LibraryScreen.tsx` — orchestrator; owns `chip`, per-chip `sortByChip`, search, the track action sheet, selection mode, and the loading/error/empty branches.
 - `ui/LibraryChips.tsx`, `ui/SortControl.tsx`, `ui/LibraryNoResults.tsx`.
 - `ui/PlaylistsGrid.tsx`, `ui/TracksList.tsx`, `ui/AlbumsGrid.tsx`, `ui/ArtistsGrid.tsx`, `ui/LibraryRow.tsx`.
-- `ui/PlaylistDetailScreen.tsx` / `ui/PlaylistHero.tsx` — route `/library/playlist/[id]`.
+- `ui/PlaylistDetailScreen.tsx` / `ui/PlaylistHero.tsx` — route `/library/playlist/[id]`. `ui/AddTracksToPlaylistModal.tsx` — the library picker that fills a playlist in bulk.
+- `useSelection.ts` — multi-select state for a track list. `ui/SelectionBar.tsx` — the bar and its `SelectionAction` list.
 - `ui/trackMenu.ts` — `buildTrackMenuItems`. `ui/sort.ts` — the `*_SORT_OPTIONS` label lists; the sort keys are wire values the server applies.
-- `hooks/useLibraryHome.ts` — `useLibraryTracks` (infinite), `useLibraryAlbums`, `useLibraryArtists`, one query per chip. `hooks/usePlaylistMutations.ts`, `hooks/useLibrarySearch.ts` (debounce only), `hooks/useRetryAcquisition.ts` (failed tracks), `hooks/useReacquireTrack.ts` (replace the audio of a ready track). `state.ts` — `_viewForState`.
-- `__tests__/` — none yet; rebuild per `okf/playbooks/test-taxonomy.md`.
+- `hooks/useLibraryHome.ts` — `useLibraryTracks` (infinite), `useLibraryAlbums`, `useLibraryArtists`, one query per chip. `hooks/usePlaylistActions.ts`, `hooks/useLibrarySearch.ts` (debounce only), `hooks/useDeleteTrack.ts` (`useDeleteTrack` / `useDeleteTracks`), `hooks/useRetryAcquisition.ts` (failed tracks), `hooks/useReacquireTrack.ts` (replace the audio of a ready track). `state.ts` — `_viewForState`.
+- `__tests__/` — `useSelection`; the rest is rebuilt per `okf/playbooks/test-taxonomy.md`.
 
-Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` directly — native deps, structure audit F2), `@shared/api-client/library`, `@shared/lib/{format,detail-handoff,query-keys}`, `@shared/playback`.
+Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` directly — native deps, structure audit F2), `@shared/api-client/library`, `@shared/lib/{format,detail-handoff,query-keys}`, `@shared/playback`, `@shared/playlists`, `@shared/offline/pinnedStore`.
 
 ## Rules
 
@@ -21,8 +22,12 @@ Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` di
 - A failed re-acquire restores the track to ready — it never renders a playable track as broken.
 - Keep "Download" meaning offline pinning; audio replacement is "Re-acquire".
 - Import cache keys from `libraryKeys` / `playlistKeys` in `@shared/lib/query-keys`; never retype a key literal.
-- Route every playlist write through `usePlaylistMutations` — it owns the optimistic-patch/rollback/alert/invalidate policy; screens keep only UI state.
+- Route every playlist write through `@shared/playlists` — it owns the optimistic-patch/rollback/alert/invalidate policy; screens keep only UI state.
 - Assemble the track context menu only in `ui/trackMenu.ts`.
+- Hold multi-select state only in `useSelection`; a screen never keeps its own selected-id array.
+- Act on a selection in one request per action — never a loop of single-track requests, except library deletion, which has no batch endpoint and reports how many of the requested tracks it removed.
+- Offer selection mode only on track lists — never on the Albums or Artists grids.
+- Confirm a destructive bulk action before it runs, and name the count in the prompt.
 - Send `q` and `sort` to the server; never filter or sort a library list in JS.
 - Read albums and artists from `/v1/library/*`; never regroup a track list on the device.
 - Keep each chip on its own query, enabled only while that chip is active.

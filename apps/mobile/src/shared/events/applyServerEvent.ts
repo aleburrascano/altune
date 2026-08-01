@@ -50,6 +50,7 @@ type InvalidateOnlyEvent = Exclude<
   | 'track_replace_failed'
   | 'playlist_renamed'
   | 'track_removed_from_playlist'
+  | 'tracks_removed_from_playlist'
   | 'playlist_reordered'
 >;
 
@@ -57,6 +58,7 @@ const INVALIDATION_MAP: Record<InvalidateOnlyEvent, readonly (readonly string[])
   playlist_created: [playlistKeys.list],
   playlist_deleted: [playlistKeys.list, playlistKeys.details],
   track_added_to_playlist: [playlistKeys.details, playlistKeys.list],
+  tracks_added_to_playlist: [playlistKeys.details, playlistKeys.list],
 };
 
 const RESYNC_KEYS: readonly (readonly string[])[] = [
@@ -247,6 +249,19 @@ function route(queryClient: QueryClient, event: ServerEvent, type: ServerEventTy
     const playlistId = asString(event.data.playlist_id);
     const trackId = asString(event.data.track_id);
     if (playlistId && trackId) removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
+    return;
+  }
+
+  if (type === 'tracks_removed_from_playlist') {
+    const playlistId = asString(event.data.playlist_id);
+    const trackIds = Array.isArray(event.data.track_ids)
+      ? event.data.track_ids.filter((v): v is string => typeof v === 'string')
+      : null;
+    if (playlistId && trackIds) {
+      for (const trackId of trackIds) {
+        removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
+      }
+    }
     return;
   }
 

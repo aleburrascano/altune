@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { Play, Shuffle } from 'lucide-react-native';
+import { Play, Plus, Shuffle } from 'lucide-react-native';
 
 import { Text, spacing, useTheme } from '@shared/ui';
 import { fontFamily } from '@shared/ui/theme/tokens';
@@ -23,6 +23,7 @@ interface PlaylistHeroProps {
   onConfirmRename: () => void;
   onPlay: () => void;
   onShuffle: () => void;
+  onAddTracks: () => void;
 }
 
 function formatTotalDuration(totalSeconds: number | undefined): string {
@@ -42,6 +43,7 @@ export function PlaylistHero({
   onConfirmRename,
   onPlay,
   onShuffle,
+  onAddTracks,
 }: PlaylistHeroProps): ReactElement {
   const theme = useTheme();
   const duration = formatTotalDuration(playlist.total_duration_seconds);
@@ -110,6 +112,18 @@ export function PlaylistHero({
             <Shuffle size={14} color={theme.color.textPrimary} />
             <Text variant="label">Shuffle</Text>
           </Pressable>
+          <Pressable
+            testID="playlist-add-tracks"
+            onPress={onAddTracks}
+            style={[
+              styles.addBtn,
+              { backgroundColor: theme.color.surface1, borderColor: theme.color.border },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Add tracks from your library"
+          >
+            <Plus size={18} color={theme.color.textPrimary} />
+          </Pressable>
         </View>
       </View>
     </View>
@@ -146,7 +160,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.sm,
     width: '100%',
-    maxWidth: 240,
+    maxWidth: 290,
   },
   playBtn: {
     flex: 1,
@@ -156,6 +170,14 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingVertical: spacing.sm + 2,
     borderRadius: 999,
+  },
+  addBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 44,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: 999,
+    borderWidth: 1,
   },
   shuffleBtn: {
     flex: 1,
