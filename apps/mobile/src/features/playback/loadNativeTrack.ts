@@ -2,7 +2,7 @@ import TrackPlayer from 'react-native-track-player';
 
 import { pinnedUri } from '@shared/offline/pinnedStore';
 
-import { audioRequestHeaders, fetchAudioUrls } from '@shared/api-client/audio';
+import { audioRequestHeaders, fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 import { forgetAllSwaps } from './audioPrefetch';
 import { ensurePlayerSetup } from './initPlayer';
 import { toNativeTrack } from './nativeTrack';
@@ -26,7 +26,9 @@ function isStale(token: number): boolean {
   return token !== loadToken;
 }
 
-async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<Map<string, string>> {
+async function resolveLibraryUrls(
+  tracks: readonly PlaybackTrack[],
+): Promise<Map<string, ResolvedAudioUrl>> {
   const ids: string[] = [];
   for (const t of tracks) {
     if (t.source.kind === 'library') ids.push(t.source.trackId);
@@ -35,15 +37,19 @@ async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<Map
   if (ids.length === 0) return new Map();
   try {
     const resolved = await fetchAudioUrls(ids);
-    return new Map(resolved.map((r) => [r.trackId, r.url]));
+    return new Map(resolved.map((r) => [r.trackId, r]));
   } catch {
     return new Map();
   }
 }
 
-function signedUrl(track: PlaybackTrack, resolved: Map<string, string>): string | undefined {
+function signedUrl(
+  track: PlaybackTrack,
+  resolved: Map<string, ResolvedAudioUrl>,
+): string | undefined {
   if (track.source.kind !== 'library') return undefined;
-  return pinnedUri(track.source.trackId) ?? resolved.get(track.source.trackId);
+  const match = resolved.get(track.source.trackId);
+  return pinnedUri(track.source.trackId, match?.version) ?? match?.url;
 }
 
 export async function loadNativeTrack(

@@ -86,6 +86,7 @@ type Track struct {
 	AlbumArtist       *string
 	ISRC              *string
 	AudioRef          *string
+	AudioVersion      string
 	FailureReason     *string
 	FeaturedArtists   []FeaturedArtist
 
@@ -150,6 +151,7 @@ func (t *Track) MarkReady(audioRef string) error {
 	}
 	t.AcquisitionStatus = AcquisitionReady
 	t.AudioRef = &audioRef
+	t.AudioVersion = uuid.NewString()
 	t.FailureReason = nil
 	return nil
 }

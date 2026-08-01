@@ -16,6 +16,7 @@ const audioURLTTL = time.Hour
 type ResolvedAudioURL struct {
 	TrackID   domain.TrackId
 	URL       string
+	Version   string
 	ExpiresAt time.Time
 }
 
@@ -64,7 +65,7 @@ func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, tra
 			slog.WarnContext(ctx, "audio_url.presign_failed", "track_id", id.String(), "error", err)
 			continue
 		}
-		out = append(out, ResolvedAudioURL{TrackID: id, URL: url, ExpiresAt: expiresAt})
+		out = append(out, ResolvedAudioURL{TrackID: id, URL: url, Version: track.AudioVersion, ExpiresAt: expiresAt})
 	}
 	slog.InfoContext(ctx, "audio_url.resolved",
 		"requested", len(trackIds),

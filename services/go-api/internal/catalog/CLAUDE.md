@@ -12,7 +12,9 @@ Layout:
 
 ## Rules
 
-- Change `AcquisitionStatus` / `AudioRef` / `FailureReason` / `RejectedSourceKeys` only through aggregate methods, never by direct field mutation.
+- Change `AcquisitionStatus` / `AudioRef` / `AudioVersion` / `FailureReason` / `RejectedSourceKeys` only through aggregate methods, never by direct field mutation.
+- Re-stamp `AudioVersion` on every write of the audio, never reuse the previous token.
+- Never derive a client-facing audio version from a clock.
 - Change `Album` only through `SetAlbum` — it recomputes `DedupKey`, and the two may never drift.
 - A blank album resolves to the track's title; apply that in the aggregate, never at the API edge.
 - Change `Playlist` positions only through `AddTrack` / `RemoveTrack` / `Reorder`; they stay contiguous 0..N-1 with no duplicates.

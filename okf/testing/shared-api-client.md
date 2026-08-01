@@ -130,3 +130,14 @@ The first pass measured 97.37% with twelve survivors; five were closed and the r
 - **`discovery.ts:99`, `params.offset !== undefined` → `true`.** The mutant leaves `params.offset > 0`, and because `undefined > 0` evaluates to `false`, the two conditions agree on **every** input — `undefined`, `0`, negatives, `NaN`. The `!== undefined` conjunct is redundant; no test can kill this and none should be written for it. Worth recording as a small finding in its own right: the guard reads as if it protects against `undefined` when the comparison already does.
 
 The last of these is the one to remember. It was initially mis-triaged as a weak test and sent back for repair; the author refused, reproduced the *whole-condition* mutation, showed three tests going red, and reported that the hole did not exist. Both were right — Stryker had mutated only the left conjunct, which is a different and genuinely equivalent mutation. A survivor's label is a hypothesis, and the mutant's exact span is what settles it.
+
+## Re-derivation — audio version field (2026-07-31)
+
+`audioURLDTO` gained `version`, `ResolvedAudioUrl` gained `version: string`, and `fetchAudioUrls` maps it with a `?? ''` fallback. Categories the changed surface triggers:
+
+- **Cross-surface contract** (already selected, extended) — the `audioURLDTO`↔`ResolvedAudioUrl` case now asserts a four-field Go set against a three-field TS set. The deliberate-narrowing assertion was rewritten from a two-name exclusion to an explicit carried-field list, so adding a *fifth* Go field fails here instead of silently joining `expires_at` in the dropped bucket. `expires_at` remains the one field dropped on purpose.
+- **Legacy / compat** (already selected, extended) — `version` is absent from every response a server deployed before migration 014 produces, and blue-green runs both versions against one database during a swap, so an older API answering a newer client is a real state and not a hypothetical. The `?? ''` fallback has its own fixture asserting the omitted-field response yields `version: ''` rather than `undefined`; the distinction is load-bearing downstream, where `shared/offline` reads `''` as "no expectation, keep the local copy" and `undefined` would take the same branch by accident rather than by contract.
+- **Table** (already selected, extended) — `version` is carried verbatim as an opaque token. A fixture sends a non-numeric version to pin that the client compares and never parses it, so the server stays free to change the token's shape (it moved from a timestamp to a UUID before landing) without a client release.
+- **Regression** — the incident is recorded in full in `okf/testing/shared-offline.md`; this slice's part is the transport of the field.
+
+**STATUS: done.** 3 tests added to `audio.test.ts`, 1 rewritten in `contract.test.ts`.

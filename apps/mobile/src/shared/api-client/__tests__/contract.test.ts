@@ -515,10 +515,11 @@ describe('audioURLDTO (audio_url_handler.go) <-> ResolvedAudioUrl (audio.ts) —
     expect(goFields.size).toBeGreaterThan(0);
     expect(tsLines.size).toBeGreaterThan(0);
 
-    expect([...tsLines.keys()].sort()).toEqual(['trackId', 'url']);
-    expect([...goFields.keys()].sort()).toEqual(['expires_at', 'track_id', 'url']);
+    expect([...tsLines.keys()].sort()).toEqual(['trackId', 'url', 'version']);
+    expect([...goFields.keys()].sort()).toEqual(['expires_at', 'track_id', 'url', 'version']);
 
-    const droppedByTs = [...goFields.keys()].filter((k) => k !== 'track_id' && k !== 'url');
+    const carried = ['track_id', 'url', 'version'];
+    const droppedByTs = [...goFields.keys()].filter((k) => !carried.includes(k));
     expect(droppedByTs).toEqual(['expires_at']);
   });
 });

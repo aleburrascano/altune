@@ -306,8 +306,62 @@ func TestTrack_MarkReady(t *testing.T) {
 			if track.FailureReason != nil {
 				t.Errorf("FailureReason should be nil after MarkReady, got %q", *track.FailureReason)
 			}
+			if track.AudioVersion == "" {
+				t.Error("a ready track must carry a non-empty audio version")
+			}
 		})
 	}
+}
+
+func TestTrack_AudioVersion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("is empty until audio has been written", func(t *testing.T) {
+		t.Parallel()
+		track := newTestTrack(t)
+
+		if track.AudioVersion != "" {
+			t.Errorf("AudioVersion = %q, want empty for a track with no audio", track.AudioVersion)
+		}
+	})
+
+	t.Run("changes on every re-acquisition, even when the audio ref is byte-identical", func(t *testing.T) {
+		t.Parallel()
+		track := newTestTrack(t)
+		const sameRef = "s3://bucket/track.opus"
+
+		seen := make(map[string]bool)
+		for i := 0; i < 100; i++ {
+			if err := track.MarkReady(sameRef); err != nil {
+				t.Fatalf("acquisition %d: %v", i, err)
+			}
+			if seen[track.AudioVersion] {
+				t.Fatalf("AudioVersion %q repeated on acquisition %d — a client keyed on it would keep the old audio", track.AudioVersion, i)
+			}
+			seen[track.AudioVersion] = true
+		}
+	})
+
+	t.Run("survives a round trip through MarkFailed and back", func(t *testing.T) {
+		t.Parallel()
+		track := newTestTrack(t)
+
+		if err := track.MarkReady("s3://bucket/track.opus"); err != nil {
+			t.Fatalf("first acquisition: %v", err)
+		}
+		first := track.AudioVersion
+
+		if err := track.MarkFailed("download_failed"); err != nil {
+			t.Fatalf("mark failed: %v", err)
+		}
+		if err := track.MarkReady("s3://bucket/track.opus"); err != nil {
+			t.Fatalf("retry: %v", err)
+		}
+
+		if track.AudioVersion == first {
+			t.Error("a retry after a failure must still publish a fresh version")
+		}
+	})
 }
 
 func TestTrack_MarkFailed(t *testing.T) {
