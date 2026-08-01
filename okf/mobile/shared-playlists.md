@@ -14,7 +14,11 @@ Every membership hook takes a list. `useAddTracksToPlaylist` mutates on `{playli
 
 The server decides how many tracks actually landed, and the mutation reports that rather than assuming the request size. `addTracksToPlaylist` answers `{added, skipped}`; when `added < trackIds.length` the hook alerts with the count and the playlist name ("2 tracks were already in Focus."). This is the client half of the backend's skip-don't-fail contract — see [catalog playlist](../backend/catalog/playlist.md#batch-membership-2026-08-01). The optimistic patch bumps `track_count` by the *requested* size because that is all it knows at `onMutate` time; the `onSettled` invalidation of `playlistKeys.list` is what corrects an over-count after a skip, so the optimism is bounded by a refetch rather than by a guess.
 
-`useCreatePlaylistWithTracks` deliberately treats a failed add as a *success* with a note, not an error: the playlist was created, and rolling it back would throw away work the user asked for. Its `mutationFn` swallows the add failure and returns `addFailed`, so the created playlist survives in `data` and the caller's `onSettled` still closes the modal.
+`useCreatePlaylistWithTracks` deliberately treats a failed add as a *success* with a note, not an error: the playlist was created, and rolling it back would throw away work the user asked for. Its `mutationFn` swallows the add failure and returns `addFailed`, so the created playlist survives in `data` and the caller's `onSuccess` still closes the modal.
+
+That distinction is why the sheet closes on `onSuccess` rather than `onSettled`. A swallowed *add* failure still resolves the mutation, so the modal closes exactly as before; a failed *create* rejects it, and the picker now stays open behind the "Please try again" alert instead of vanishing with the user's typed name. Closing on `onSettled` treated the two identically, so the one case the copy explicitly invites a retry for was the one case the retry surface was destroyed — found by the 2026-08-01 `/qa-slice` run.
+
+One note on a mid-flow session expiry: an `ApiError(401)` from the batch add lands in the same `catch`, so the user is told the tracks could not be added rather than that the session ended. The signal is not lost — `apiFetch` has already called `markSessionExpired()` and `AuthGate` offers re-auth — but the copy is less precise than the cause.
 
 ## The resolveTrackIds seam
 
@@ -23,6 +27,12 @@ The server decides how many tracks actually landed, and the mutation reports tha
 A thunk is what makes that expressible without a union type or a mode flag. Callers with ids already in hand write `() => Promise.resolve(selection.ids)`; the detail screen writes `async () => [owned?.trackId ?? (await save.mutateAsync(req)).id]`. The save-then-add ordering lives with the caller that knows about saving, and the sheet stays ignorant of tracks entirely — it knows playlists and a promise of ids.
 
 The thunk runs on pick, never on open, so opening the sheet on an unsaved track saves nothing until a playlist is chosen; backing out costs the user nothing. A rejected thunk closes the sheet and never calls the add endpoint — a failed save must not be followed by an add against an id that does not exist. `resolving` folds into the same `busy` flag as the two mutations, so the row list is inert for the whole save-then-add sequence rather than only its second half.
+
+## The confirmation timer
+
+A successful add holds "Added ✓" on the row for 700ms before closing the sheet. The timer lives in a ref and is cancelled in three places: before arming a new one, on a manual close, and on unmount. All three matter because **the sheet is never unmounted in production** — every call site renders it unconditionally and toggles only `visible`, so the unmount cleanup that looks like it covers everything covers almost nothing.
+
+Two orderings were live until the 2026-08-01 `/qa-slice` run. A second add inside the window used to overwrite the ref while leaving the first timer scheduled, so the first add's callback fired at its own 700ms mark and cut the second confirmation short. And a manual close left the timer running, so it fired later against a sheet the user had already dismissed — reopening the picker within 700ms meant it closed itself, and on the bulk path that `onClose` also runs `selection.clear()`, discarding a selection the user had just rebuilt.
 
 ## Cache keys
 

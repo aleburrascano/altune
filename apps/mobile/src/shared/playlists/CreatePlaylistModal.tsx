@@ -21,6 +21,7 @@ export function CreatePlaylistModal({
   const [name, setName] = useState('');
 
   const handleCreate = () => {
+    if (loading) return;
     const trimmed = name.trim();
     if (trimmed.length > 0) {
       onCreate(trimmed);
