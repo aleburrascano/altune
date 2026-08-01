@@ -83,3 +83,11 @@ Two things the slice-5 test rebuild settled.
 ## feedback.ts (2026-07-29)
 
 `submitReport` POSTs `/v1/feedback/reports` and returns `{issue_number, issue_url}` — the number is what the report dialog shows back to the tester, so this is one of the few writes whose response body the UI actually renders. Two failure statuses are meaningful to the caller and are distinguished by the settings feature rather than here: 400 (the server rejected the message) and 404 (this deploy has no issue tracker configured, so the route was never mounted). There is deliberately no 429 — reports are never throttled. Everything else, including a transport failure, is presented to the tester as "could not reach the server, your draft is kept".
+
+## Playlist membership went batch-only (2026-08-01)
+
+`addTrackToPlaylist` and `removeTrackFromPlaylist` were deleted from the client and replaced by `addTracksToPlaylist` (`POST …/tracks/batch`) and `removeTracksFromPlaylist` (`DELETE …/tracks`), both taking a `track_ids` list and both returning counts rather than resolving void on a 204. Nothing in the app calls a single-track membership endpoint any more — a caller with one track sends a one-element list — so keeping the singular wrappers would have left two dead exports and a wire type (`AddTrackToPlaylistRequest`) the contract test was pinning for no consumer. The Go endpoints stay published; blue-green shares a database across the swap and app versions in the field still call them.
+
+The remove side is a `DELETE` with a JSON body, which is legal but uncommon. The alternative was a `POST …/tracks/batch-delete` to dodge any proxy that strips DELETE bodies; the honest verb won because Caddy passes bodies through and the endpoint is symmetric with the singular `DELETE …/tracks/{trackId}` it sits beside. If a future proxy does strip it, the symptom is a 400 "track_ids required", not silent data loss.
+
+Both new functions run the playlist id through `encodeURIComponent`, unlike the older playlist functions beside them, which interpolate raw — `getPlaylist`'s own test pins the unescaped behaviour as-is. New code follows the encoding rule; the older functions are a separate cleanup.

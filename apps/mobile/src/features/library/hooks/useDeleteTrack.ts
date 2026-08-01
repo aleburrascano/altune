@@ -18,3 +18,32 @@ export function useDeleteTrack() {
     },
   });
 }
+
+export function useDeleteTracks() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (trackIds: string[]) => {
+      let deleted = 0;
+      for (const trackId of trackIds) {
+        const ok = await deleteTrack(trackId).then(
+          () => true,
+          () => false,
+        );
+        if (ok) {
+          removeTrackFromCaches(queryClient, trackId);
+          removeTrackStatus(trackId);
+          deleted += 1;
+        }
+      }
+      return { deleted, requested: trackIds.length };
+    },
+    onSuccess: ({ deleted, requested }) => {
+      if (deleted < requested) {
+        Alert.alert(
+          'Delete failed',
+          `${requested - deleted} of ${requested} tracks could not be removed. Please try again.`,
+        );
+      }
+    },
+  });
+}

@@ -196,6 +196,36 @@ func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, playlistId domain.
 	return err
 }
 
+func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
+	if len(tracks) == 0 {
+		return nil
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	batch := &pgx.Batch{}
+	for _, t := range tracks {
+		batch.Queue(
+			`INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES ($1, $2, $3)`,
+			playlistId.UUID(), t.TrackId.UUID(), t.Position,
+		)
+	}
+	br := tx.SendBatch(ctx, batch)
+	for range tracks {
+		if _, err := br.Exec(); err != nil {
+			br.Close()
+			return err
+		}
+	}
+	br.Close()
+
+	return tx.Commit(ctx)
+}
+
 func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -206,6 +236,37 @@ func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, playlistId doma
 	_, err = tx.Exec(ctx,
 		`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = $2`,
 		playlistId.UUID(), trackId.UUID(),
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := renumberPlaylistPositions(ctx, tx, playlistId.UUID()); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *PgxPlaylistRepository) RemoveTracks(ctx context.Context, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
+	if len(trackIds) == 0 {
+		return nil
+	}
+
+	uuids := make([]uuid.UUID, len(trackIds))
+	for i, id := range trackIds {
+		uuids[i] = id.UUID()
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx,
+		`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = ANY($2)`,
+		playlistId.UUID(), uuids,
 	)
 	if err != nil {
 		return err

@@ -801,6 +801,106 @@ describe('track_removed_from_playlist', () => {
   });
 });
 
+describe('tracks_removed_from_playlist', () => {
+  it('removes every listed track in one pass and lands track_count on the true remainder', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({
+        tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' }), trackFixture({ id: 't3' })],
+        track_count: 3,
+      }),
+    );
+    queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, {
+      items: [playlistSummaryFixture({ track_count: 3 })],
+      total: 1,
+    });
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('tracks_removed_from_playlist', {
+        playlist_id: 'p1',
+        track_ids: ['t1', 't3'],
+      }),
+    );
+
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    expect(detail.tracks.map((t) => t.id)).toEqual(['t2']);
+    expect(detail.track_count).toBe(1);
+    expect(
+      queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count,
+    ).toBe(1);
+  });
+
+  it('replaying the same batch removal twice equals applying it once', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({
+        tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })],
+        track_count: 2,
+      }),
+    );
+    queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, {
+      items: [playlistSummaryFixture({ track_count: 2 })],
+      total: 1,
+    });
+    const removal = serverEvent('tracks_removed_from_playlist', {
+      playlist_id: 'p1',
+      track_ids: ['t1', 't2'],
+    });
+
+    applyServerEvent(queryClient, removal);
+    applyServerEvent(queryClient, removal);
+
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    expect(detail.tracks).toEqual([]);
+    expect(detail.track_count).toBe(0);
+    expect(
+      queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count,
+    ).toBe(0);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['track_ids', { playlist_id: 'p1' }],
+    ['playlist_id', { track_ids: ['t1'] }],
+  ])('leaves the cache untouched when %s is missing', (_label, payload) => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' })], track_count: 1 }),
+    );
+
+    applyServerEvent(queryClient, serverEvent('tracks_removed_from_playlist', payload));
+
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.track_count,
+    ).toBe(1);
+  });
+
+  it('drops non-string entries rather than removing a track named "undefined"', () => {
+    const queryClient = makeClient();
+    queryClient.setQueryData(
+      playlistKeys.detail('p1'),
+      playlistDetailFixture({
+        tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })],
+        track_count: 2,
+      }),
+    );
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('tracks_removed_from_playlist', {
+        playlist_id: 'p1',
+        track_ids: ['t1', 42, null],
+      }),
+    );
+
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    expect(detail.tracks.map((t) => t.id)).toEqual(['t2']);
+  });
+});
+
 describe('playlist_reordered', () => {
   it('reorders tracks to match the given order and appends unlisted tracks at the end', () => {
     const queryClient = makeClient();
@@ -871,6 +971,7 @@ describe('invalidate-only events', () => {
     ['playlist_created', [playlistKeys.list]],
     ['playlist_deleted', [playlistKeys.list, playlistKeys.details]],
     ['track_added_to_playlist', [playlistKeys.details, playlistKeys.list]],
+    ['tracks_added_to_playlist', [playlistKeys.details, playlistKeys.list]],
   ])('invalidates exactly the mapped keys for %s', (type, expectedKeys) => {
     const queryClient = makeClient();
     const spy = jest.spyOn(queryClient, 'invalidateQueries');

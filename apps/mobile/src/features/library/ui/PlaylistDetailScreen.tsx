@@ -4,11 +4,20 @@ import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
+import {
+  ChevronLeft,
+  Download,
+  EllipsisVertical,
+  ListEnd,
+  ListPlus,
+  Trash2,
+  XCircle,
+} from 'lucide-react-native';
 
 import { getPlaylist } from '@shared/api-client/playlists';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
+import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { playlistKeys } from '@shared/lib/query-keys';
@@ -18,15 +27,20 @@ import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { TrackResponse } from '@shared/api-client/types';
-
 import {
+  AddToPlaylistSheet,
+  useAddTracksToPlaylist,
   useDeletePlaylist,
-  useRemoveTrackFromPlaylist,
+  useRemoveTracksFromPlaylist,
   useRenamePlaylist,
-} from '../hooks/usePlaylistMutations';
+} from '@shared/playlists';
+
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
+import { useSelection } from '../useSelection';
+import { AddTracksToPlaylistModal } from './AddTracksToPlaylistModal';
 import { LibraryRow } from './LibraryRow';
 import { PlaylistHero } from './PlaylistHero';
+import { SelectionBar, type SelectionAction } from './SelectionBar';
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { buildTrackMenuItems } from './trackMenu';
 import { useLibraryNavigation } from './useLibraryNavigation';
@@ -39,6 +53,8 @@ export function PlaylistDetailScreen(): ReactElement {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
+  const [addTracksVisible, setAddTracksVisible] = useState(false);
+  const [addToPlaylistVisible, setAddToPlaylistVisible] = useState(false);
 
   const {
     data: playlistData,
@@ -55,7 +71,8 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const renameMut = useRenamePlaylist(playlistId);
   const deleteMut = useDeletePlaylist(playlistId);
-  const removeMut = useRemoveTrackFromPlaylist(playlistId);
+  const removeMut = useRemoveTracksFromPlaylist(playlistId);
+  const addTracksMut = useAddTracksToPlaylist();
 
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -68,6 +85,7 @@ export function PlaylistDetailScreen(): ReactElement {
   const { navigateToTrack } = useLibraryNavigation(router);
   const playback = usePlayback();
   const queue = useQueuePlayback();
+  const selection = useSelection();
   const [trackAction, setTrackAction] = useState<{
     track: TrackResponse;
     anchor: MenuAnchor;
@@ -78,7 +96,7 @@ export function PlaylistDetailScreen(): ReactElement {
       onReacquire: () => reacquireMutation.mutate(track.id),
       queue,
       onViewDetails: () => navigateToTrack(track),
-      danger: { label: 'Remove from Playlist', onPress: () => removeMut.mutate(track.id) },
+      danger: { label: 'Remove from Playlist', onPress: () => removeMut.mutate([track.id]) },
     });
 
   const handleDelete = () => {
@@ -208,6 +226,71 @@ export function PlaylistDetailScreen(): ReactElement {
             onPress: () => pinMany(downloadableIds),
           };
 
+  const selectedTracks = pl.tracks.filter((t) => selection.has(t.id));
+  const selectedReady = selectedTracks.filter((t) => t.acquisition_status === 'ready');
+  const selectedAllPinned =
+    selectedReady.length > 0 &&
+    selectedReady.every((t) => pinnedEntries[t.id]?.status === 'ready');
+
+  const confirmRemoveSelected = () => {
+    const ids = selection.ids;
+    Alert.alert(
+      'Remove from Playlist',
+      `Remove ${ids.length} ${ids.length === 1 ? 'track' : 'tracks'} from ${pl.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            removeMut.mutate(ids);
+            selection.clear();
+          },
+        },
+      ],
+    );
+  };
+
+  const selectionActions: SelectionAction[] = [
+    {
+      key: 'playlist',
+      label: 'Add to Playlist',
+      icon: ListPlus,
+      onPress: () => setAddToPlaylistVisible(true),
+    },
+    {
+      key: 'offline',
+      label: selectedAllPinned ? 'Remove download' : 'Download',
+      icon: selectedAllPinned ? XCircle : Download,
+      disabled: selectedReady.length === 0,
+      onPress: () => {
+        if (selectedAllPinned) {
+          selectedReady.forEach((t) => unpin(t.id));
+        } else {
+          pinMany(selectedReady.map((t) => t.id));
+        }
+        selection.clear();
+      },
+    },
+    {
+      key: 'queue',
+      label: 'Add to Queue',
+      icon: ListEnd,
+      disabled: selectedReady.length === 0,
+      onPress: () => {
+        selectedReady.forEach((t) => queue.addToQueue(toPlaybackTrack(t)));
+        selection.clear();
+      },
+    },
+    {
+      key: 'remove',
+      label: 'Remove',
+      icon: Trash2,
+      tone: 'danger',
+      onPress: confirmRemoveSelected,
+    },
+  ];
+
   return (
     <Screen padded={false}>
       <LinearGradient
@@ -230,6 +313,7 @@ export function PlaylistDetailScreen(): ReactElement {
         onClose={() => setMenuVisible(false)}
         anchorTop={insets.top + spacing.xs + 44 + spacing.xs}
         items={[
+          { label: 'Add Tracks', onPress: () => setAddTracksVisible(true) },
           { label: 'Rename Playlist', onPress: startEditing },
           offlineAction,
           { label: 'Delete Playlist', onPress: handleDelete, tone: 'danger' },
@@ -255,6 +339,7 @@ export function PlaylistDetailScreen(): ReactElement {
             onConfirmRename={confirmRename}
             onPlay={handlePlay}
             onShuffle={handleShuffle}
+            onAddTracks={() => setAddTracksVisible(true)}
           />
         }
         renderItem={({ item }) => (
@@ -275,6 +360,15 @@ export function PlaylistDetailScreen(): ReactElement {
                 : {})}
               onPress={() => navigateToTrack(item)}
               onMore={(anchor) => setTrackAction({ track: item, anchor })}
+              onLongPress={() => selection.begin(item.id)}
+              {...(selection.active
+                ? {
+                    selectable: {
+                      selected: selection.has(item.id),
+                      onToggle: () => selection.toggle(item.id),
+                    },
+                  }
+                : {})}
               {...(item.acquisition_status === 'failed'
                 ? { onRetry: () => retryMut.mutate(item.id) }
                 : {})}
@@ -288,17 +382,54 @@ export function PlaylistDetailScreen(): ReactElement {
             <Text variant="label" tone="secondary">
               No tracks yet
             </Text>
-            <Text variant="caption" tone="tertiary">
-              Use the menu on any track to add it here
-            </Text>
+            <Button label="Add Tracks" onPress={() => setAddTracksVisible(true)} />
           </View>
         }
       />
+
+      {selection.active ? (
+        <SelectionBar
+          count={selection.count}
+          allSelected={selection.count === pl.tracks.length}
+          onSelectAll={() =>
+            selection.count === pl.tracks.length
+              ? selection.clear()
+              : selection.selectAll(pl.tracks.map((t) => t.id))
+          }
+          onCancel={selection.clear}
+          actions={selectionActions}
+        />
+      ) : null}
+
       <ContextMenu
         visible={trackAction != null}
         anchor={trackAction?.anchor}
         items={trackAction != null ? trackMenuItems(trackAction.track) : []}
         onClose={() => setTrackAction(null)}
+      />
+
+      <AddTracksToPlaylistModal
+        visible={addTracksVisible}
+        playlistName={pl.name}
+        existingTrackIds={pl.tracks.map((t) => t.id)}
+        adding={addTracksMut.isPending}
+        onAdd={(trackIds) =>
+          addTracksMut.mutate(
+            { playlistId, trackIds },
+            { onSuccess: () => setAddTracksVisible(false) },
+          )
+        }
+        onClose={() => setAddTracksVisible(false)}
+      />
+
+      <AddToPlaylistSheet
+        visible={addToPlaylistVisible}
+        label={`${selection.count} ${selection.count === 1 ? 'track' : 'tracks'}`}
+        resolveTrackIds={() => Promise.resolve(selection.ids)}
+        onClose={() => {
+          setAddToPlaylistVisible(false);
+          selection.clear();
+        }}
       />
     </Screen>
   );
@@ -329,7 +460,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
   emptyTracks: {
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.lg,
     paddingTop: spacing['2xl'],
   },
 });

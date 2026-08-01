@@ -141,3 +141,16 @@ The last of these is the one to remember. It was initially mis-triaged as a weak
 - **Regression** — the incident is recorded in full in `okf/testing/shared-offline.md`; this slice's part is the transport of the field.
 
 **STATUS: done.** 3 tests added to `audio.test.ts`, 1 rewritten in `contract.test.ts`.
+
+## AMENDED 2026-08-01 — playlist membership went batch-only
+
+`addTrackToPlaylist` / `removeTrackFromPlaylist` were removed from the client and replaced by `addTracksToPlaylist` / `removeTracksFromPlaylist`. Their two tests were replaced rather than deleted, and the changed surface re-triggers three categories.
+
+- **Request shape** — method, path, `Content-Type` and the exact `track_ids` body asserted for both, plus `countFor` proving one request carries the whole list rather than one request per track. That last assertion is the point of the endpoints; without it the test would pass against a client that looped.
+- **Response decoding** — `{added, skipped}` and `{removed}` returned to the caller. The singular endpoints answered 204, so this is a new class for this file: a membership write now has a verdict the caller must read, and a client that dropped the body would look identical to one that did not.
+- **Path-segment encoding** — a playlist id containing `/` asserted to escape to `%2F` rather than forging an extra path segment. The older playlist functions interpolate raw and `getPlaylist`'s own test pins that as-is; the two new functions follow the encoding rule, so the file now documents both behaviours deliberately.
+- **Cross-surface contract** — `contract.test.ts` swaps `AddTrackToPlaylistRequest` for the four new DTOs (`AddTracksToPlaylistRequest`/`Response`, `RemoveTracksFromPlaylistRequest`/`Response`), each field-set-checked against the Go struct.
+
+Rejected: **Failure injection**, **Adversarial**, **Timing** — both functions go through `apiFetch`, whose transport, deadline, retry-classification and auth behaviour are covered once for every typed function in `transport`, `deadline` and `apiFetch.auth`. Duplicating them per endpoint would test the wrapper twice.
+
+**Mutation audit not re-run for this change.**

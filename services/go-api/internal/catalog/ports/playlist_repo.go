@@ -15,6 +15,8 @@ type PlaylistRepository interface {
 	Delete(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (deleted bool, err error)
 	Update(ctx context.Context, playlist *domain.Playlist) error
 	AddTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId, position int) error
+	AddTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error
 	RemoveTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId) error
+	RemoveTracks(ctx context.Context, playlistId domain.PlaylistId, trackIds []domain.TrackId) error
 	ReorderTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error
 }

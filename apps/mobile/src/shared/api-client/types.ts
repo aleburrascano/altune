@@ -72,8 +72,21 @@ export type CreatePlaylistRequest = {
   name: string;
 };
 
-export type AddTrackToPlaylistRequest = {
-  track_id: string;
+export type AddTracksToPlaylistRequest = {
+  track_ids: string[];
+};
+
+export type AddTracksToPlaylistResponse = {
+  added: number;
+  skipped: number;
+};
+
+export type RemoveTracksFromPlaylistRequest = {
+  track_ids: string[];
+};
+
+export type RemoveTracksFromPlaylistResponse = {
+  removed: number;
 };
 
 export type ReorderTracksRequest = {

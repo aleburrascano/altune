@@ -100,3 +100,11 @@ The first mutation run over the rebuilt suite left 56 survivors. Triaging them r
 
 The `fieldOf` survivors are **equivalent, not gaps**, and are recorded here so nobody re-litigates them: removing the leading-colon comment guard, removing the `colon === -1` guard, or changing it to `colon === +1` all produce a field whose `name` is the empty string, and `parseBlock` dispatches only on `name === 'id' | 'event' | 'data'`. Every one of those mutants is therefore unobservable through the public surface. A test that killed them would have to assert on `fieldOf` directly, which is testing the mechanism rather than the behaviour.
 
+
+## Batch playlist events (2026-08-01)
+
+`tracks_added_to_playlist` and `tracks_removed_from_playlist` join the singular pair, carrying a `track_ids` array of what the server actually applied. They exist because the batch endpoints (see [catalog playlist](../backend/catalog/playlist.md#batch-membership-2026-08-01)) apply one user gesture to N tracks: publishing the singular event N times would have fanned out N identical invalidations of `playlistKeys.details` and `playlistKeys.list` for a single "add 40 tracks" tap.
+
+The added form is invalidate-only, matching its singular counterpart. The removed form patches, looping `removeTrackFromPlaylistCache` over the ids — which keeps the existing `track_count`-recomputed-from-the-array rule and stays replay-idempotent for free, since removing an id that is already gone is a no-op. Non-string entries are filtered out of `track_ids` before the loop, the same guard `playlist_reordered` uses; an `undefined` reaching the patcher would look like a track id and match nothing, which is harmless but hides a malformed payload.
+
+`SERVER_EVENT_TYPES` is now 16 entries. The contract test derives the published set from the Go source, so the two names were checked against `.Publish(…)` literals rather than trusted.

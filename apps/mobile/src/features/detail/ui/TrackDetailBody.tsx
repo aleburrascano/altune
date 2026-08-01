@@ -1,7 +1,9 @@
-import type { ReactElement } from 'react';
+import { useCallback, useState, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { ChevronRight, Pause, Play } from 'lucide-react-native';
+import { ChevronRight, ListPlus, Pause, Play } from 'lucide-react-native';
 import { useRouter, type Href } from 'expo-router';
+
+import { AddToPlaylistSheet } from '@shared/playlists';
 
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Banner } from '@shared/ui/primitives/Banner';
@@ -30,7 +32,7 @@ import {
   type SaveControlState,
 } from '../save-control-state';
 
-import { DetailActions } from './DetailActions';
+import { DetailActions, SecondaryAction } from './DetailActions';
 import { DetailFacts, type DetailFact } from './DetailFacts';
 import { DetailScaffold, type DetailChrome } from './DetailScaffold';
 import { RelatedTracksSection } from './RelatedTracksSection';
@@ -69,6 +71,7 @@ export function TrackDetailBody({
   const theme = useTheme();
   const router = useRouter();
   const save = useSaveTrack();
+  const [playlistSheetVisible, setPlaylistSheetVisible] = useState(false);
   const wrongAlbum = useReportWrongAlbum(result);
   const playback = usePlayback();
   const te = trackExtras(result.extras);
@@ -131,6 +134,14 @@ export function TrackDetailBody({
     save.mutate(toCreateTrackRequest(result));
   };
 
+  const resolveTrackIds = useCallback(async (): Promise<string[]> => {
+    if (owned !== null) {
+      return [owned.trackId];
+    }
+    const saved = await save.mutateAsync(toCreateTrackRequest(result));
+    return [saved.id];
+  }, [owned, result, save]);
+
   const playLabel = playing ? 'Pause' : isPreview ? 'Play preview' : 'Play';
 
   return (
@@ -158,24 +169,34 @@ export function TrackDetailBody({
             accessibilityLabel: playLabel,
           }}
           secondary={
-            <Pressable
-              testID="detail-save"
-              onPress={onSave}
-              disabled={!saveInteractive}
-              accessibilityRole="button"
-              accessibilityLabel={saveControlLabel(saveDisplayState, result.title)}
-              accessibilityState={{ disabled: !saveInteractive, busy: saveState === 'saving' }}
-              style={({ pressed }) => [
-                styles.savePill,
-                { borderColor: theme.color.border, backgroundColor: theme.color.surface1 },
-                pressed && saveInteractive ? styles.pressed : null,
-              ]}
-            >
-              <SaveGlyph state={saveDisplayState} addSize={18} addTone="accent" />
-              <Text variant="label" tone={saveState === 'ready' ? 'success' : 'primary'}>
-                {saveControlText(saveDisplayState)}
-              </Text>
-            </Pressable>
+            <>
+              <Pressable
+                testID="detail-save"
+                onPress={onSave}
+                disabled={!saveInteractive}
+                accessibilityRole="button"
+                accessibilityLabel={saveControlLabel(saveDisplayState, result.title)}
+                accessibilityState={{ disabled: !saveInteractive, busy: saveState === 'saving' }}
+                style={({ pressed }) => [
+                  styles.savePill,
+                  { borderColor: theme.color.border, backgroundColor: theme.color.surface1 },
+                  pressed && saveInteractive ? styles.pressed : null,
+                ]}
+              >
+                <SaveGlyph state={saveDisplayState} addSize={18} addTone="accent" />
+                <Text variant="label" tone={saveState === 'ready' ? 'success' : 'primary'}>
+                  {saveControlText(saveDisplayState)}
+                </Text>
+              </Pressable>
+              {canSave ? (
+                <SecondaryAction
+                  testID="detail-add-to-playlist"
+                  icon={ListPlus}
+                  onPress={() => setPlaylistSheetVisible(true)}
+                  accessibilityLabel={`Add ${result.title} to a playlist`}
+                />
+              ) : null}
+            </>
           }
         />
       }
@@ -274,6 +295,13 @@ export function TrackDetailBody({
         ) : null}
 
         <RelatedTracksSection result={result} detailRoute={detailRoute} />
+
+        <AddToPlaylistSheet
+          visible={playlistSheetVisible}
+          label={`${result.title}${result.subtitle != null ? ` — ${result.subtitle}` : ''}`}
+          resolveTrackIds={resolveTrackIds}
+          onClose={() => setPlaylistSheetVisible(false)}
+        />
       </View>
     </DetailScaffold>
   );

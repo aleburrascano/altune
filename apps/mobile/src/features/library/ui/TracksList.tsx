@@ -5,6 +5,7 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { Text, spacing } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
+import type { Selection } from '../useSelection';
 import { LibraryRow } from './LibraryRow';
 import type { ListRefresh } from './refresh';
 
@@ -20,6 +21,7 @@ type TracksListProps = {
   isPlaying: (trackId: string) => boolean;
   onEndReached?: () => void;
   isFetchingNextPage?: boolean;
+  selection?: Selection;
 };
 
 export function TracksList({
@@ -34,6 +36,7 @@ export function TracksList({
   isPlaying,
   onEndReached,
   isFetchingNextPage,
+  selection,
 }: TracksListProps): ReactElement {
   return (
     <FlatList
@@ -68,6 +71,15 @@ export function TracksList({
           {...(item.acquisition_status === 'ready' ? { onPlay: () => onPlay(item) } : {})}
           onPress={() => onPress(item)}
           onMore={(anchor) => onMore(item, anchor)}
+          {...(selection != null ? { onLongPress: () => selection.begin(item.id) } : {})}
+          {...(selection?.active
+            ? {
+                selectable: {
+                  selected: selection.has(item.id),
+                  onToggle: () => selection.toggle(item.id),
+                },
+              }
+            : {})}
           {...(item.acquisition_status === 'failed' ? { onRetry: () => onRetry(item) } : {})}
           retrying={retryingTrackId === item.id}
           isPlaying={isPlaying(item.id)}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   type ListRenderItemInfo,
   Modal,
@@ -14,25 +15,26 @@ import type { PlaylistResponse } from '@shared/api-client/types';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { Text, spacing, useTheme } from '@shared/ui';
 
-import { useAddTrackToPlaylist, useCreatePlaylistWithTrack } from '../hooks/usePlaylistMutations';
 import { CreatePlaylistModal } from './CreatePlaylistModal';
+import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from './mutations';
 
 type AddToPlaylistSheetProps = {
   visible: boolean;
-  trackId: string;
-  trackTitle: string;
+  label: string;
+  resolveTrackIds: () => Promise<string[]>;
   onClose: () => void;
 };
 
 export function AddToPlaylistSheet({
   visible,
-  trackId,
-  trackTitle,
+  label,
+  resolveTrackIds,
   onClose,
 }: AddToPlaylistSheetProps): ReactElement {
   const theme = useTheme();
   const [createVisible, setCreateVisible] = useState(false);
   const [addedTo, setAddedTo] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -48,31 +50,57 @@ export function AddToPlaylistSheet({
     staleTime: Infinity,
   });
 
-  const addMut = useAddTrackToPlaylist(trackId);
-  const createMut = useCreatePlaylistWithTrack(trackId);
+  const addMut = useAddTracksToPlaylist();
+  const createMut = useCreatePlaylistWithTracks();
+  const busy = resolving || addMut.isPending || createMut.isPending;
+
+  const withTrackIds = useCallback(
+    async (run: (trackIds: string[]) => void): Promise<void> => {
+      setResolving(true);
+      try {
+        const trackIds = await resolveTrackIds();
+        if (trackIds.length > 0) run(trackIds);
+      } catch {
+        onClose();
+      } finally {
+        setResolving(false);
+      }
+    },
+    [onClose, resolveTrackIds],
+  );
 
   const addToPlaylist = useCallback(
     (playlistId: string): void => {
-      addMut.mutate(playlistId, {
-        onSuccess: () => {
-          setAddedTo(playlistId);
-          closeTimer.current = setTimeout(() => {
-            setAddedTo(null);
-            onClose();
-          }, 700);
-        },
-      });
+      void withTrackIds((trackIds) =>
+        addMut.mutate(
+          { playlistId, trackIds },
+          {
+            onSuccess: () => {
+              setAddedTo(playlistId);
+              closeTimer.current = setTimeout(() => {
+                setAddedTo(null);
+                onClose();
+              }, 700);
+            },
+          },
+        ),
+      );
     },
-    [addMut, onClose],
+    [addMut, onClose, withTrackIds],
   );
 
   const createAndAdd = (name: string): void => {
-    createMut.mutate(name, {
-      onSettled: () => {
-        setCreateVisible(false);
-        onClose();
-      },
-    });
+    void withTrackIds((trackIds) =>
+      createMut.mutate(
+        { name, trackIds },
+        {
+          onSettled: () => {
+            setCreateVisible(false);
+            onClose();
+          },
+        },
+      ),
+    );
   };
 
   const playlists = playlistsData?.items ?? [];
@@ -82,7 +110,10 @@ export function AddToPlaylistSheet({
       <Pressable
         testID={`add-to-playlist-${item.id}`}
         onPress={() => addToPlaylist(item.id)}
-        disabled={addMut.isPending}
+        disabled={busy}
+        accessibilityRole="button"
+        accessibilityLabel={`Add to ${item.name}, ${item.track_count} ${item.track_count === 1 ? 'track' : 'tracks'}`}
+        accessibilityState={{ disabled: busy }}
         style={({ pressed }) => [
           styles.playlistRow,
           { borderBottomColor: theme.color.border },
@@ -109,14 +140,7 @@ export function AddToPlaylistSheet({
         ) : null}
       </Pressable>
     ),
-    [
-      addMut.isPending,
-      addToPlaylist,
-      addedTo,
-      theme.color.border,
-      theme.color.surface2,
-      theme.color.success,
-    ],
+    [addToPlaylist, addedTo, busy, theme.color.border, theme.color.surface2, theme.color.success],
   );
 
   const handleClose = () => {
@@ -146,13 +170,17 @@ export function AddToPlaylistSheet({
           <Text variant="title" style={styles.sheetTitle}>
             Add to Playlist
           </Text>
-          <Text variant="caption" tone="secondary" numberOfLines={1} style={styles.trackLabel}>
-            {trackTitle}
-          </Text>
+          <View style={styles.subtitle}>
+            <Text variant="caption" tone="secondary" numberOfLines={1} style={styles.trackLabel}>
+              {label}
+            </Text>
+            {busy ? <ActivityIndicator size="small" testID="add-to-playlist-busy" /> : null}
+          </View>
 
           <Pressable
             testID="add-to-playlist-create-new"
             onPress={() => setCreateVisible(true)}
+            disabled={busy}
             accessibilityRole="button"
             accessibilityLabel="Create new playlist"
             style={({ pressed }) => [
@@ -191,7 +219,7 @@ export function AddToPlaylistSheet({
         visible={createVisible}
         onClose={() => setCreateVisible(false)}
         onCreate={createAndAdd}
-        loading={createMut.isPending}
+        loading={busy}
       />
     </>
   );
@@ -215,7 +243,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   sheetTitle: { marginBottom: spacing.xs },
-  trackLabel: { marginBottom: spacing.lg },
+  subtitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  trackLabel: { flex: 1 },
   list: { flexGrow: 0 },
   playlistRow: {
     flexDirection: 'row',

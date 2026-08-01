@@ -1,10 +1,10 @@
 import {
-  addTrackToPlaylist,
+  addTracksToPlaylist,
   createPlaylist,
   deletePlaylist,
   getPlaylist,
   getPlaylists,
-  removeTrackFromPlaylist,
+  removeTracksFromPlaylist,
   renamePlaylist,
   reorderPlaylistTracks,
 } from '../playlists';
@@ -135,30 +135,66 @@ describe('deletePlaylist', () => {
   });
 });
 
-describe('addTrackToPlaylist', () => {
-  it('POSTs { track_id } to the playlist tracks collection', async () => {
-    __http.reply('POST /v1/playlists/p1/tracks', { status: 204 });
+describe('addTracksToPlaylist', () => {
+  it('POSTs the whole id list to the batch endpoint in one request', async () => {
+    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+      status: 200,
+      json: { added: 2, skipped: 1 },
+    });
 
-    await addTrackToPlaylist('p1', { track_id: 't1' });
+    const result = await addTracksToPlaylist('p1', { track_ids: ['t1', 't2', 't3'] });
 
     const request = __http.last();
     expect(request.method).toBe('POST');
-    expect(request.path).toBe('/v1/playlists/p1/tracks');
+    expect(request.path).toBe('/v1/playlists/p1/tracks/batch');
     expect(request.headers['Content-Type']).toBe('application/json');
-    expect(JSON.parse(request.body)).toEqual({ track_id: 't1' });
+    expect(JSON.parse(request.body)).toEqual({ track_ids: ['t1', 't2', 't3'] });
+    expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(1);
+    expect(result).toEqual({ added: 2, skipped: 1 });
+  });
+
+  it('reports the server verdict rather than assuming every requested track landed', async () => {
+    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+      status: 200,
+      json: { added: 0, skipped: 2 },
+    });
+
+    await expect(addTracksToPlaylist('p1', { track_ids: ['t1', 't2'] })).resolves.toEqual({
+      added: 0,
+      skipped: 2,
+    });
+  });
+
+  it('escapes the playlist id so a "/" cannot forge an extra path segment', async () => {
+    __http.reply('POST /v1/playlists/p%2F1/tracks/batch', { status: 200, json: { added: 1, skipped: 0 } });
+
+    await addTracksToPlaylist('p/1', { track_ids: ['t1'] });
+
+    expect(__http.last().path).toBe('/v1/playlists/p%2F1/tracks/batch');
   });
 });
 
-describe('removeTrackFromPlaylist', () => {
-  it('addresses exactly that Playlist and that Track, and nothing else', async () => {
-    __http.reply('DELETE /v1/playlists/p1/tracks/t1', { status: 204 });
-    __http.reply('DELETE /v1/playlists/t1/tracks/p1', { status: 500 });
+describe('removeTracksFromPlaylist', () => {
+  it('DELETEs the tracks collection with the id list in the body', async () => {
+    __http.reply('DELETE /v1/playlists/p1/tracks', { status: 200, json: { removed: 2 } });
 
-    await removeTrackFromPlaylist('p1', 't1');
+    const result = await removeTracksFromPlaylist('p1', { track_ids: ['t1', 't2'] });
 
-    expect(__http.last().method).toBe('DELETE');
-    expect(__http.last().path).toBe('/v1/playlists/p1/tracks/t1');
-    expect(__http.countFor('DELETE /v1/playlists/t1/tracks/p1')).toBe(0);
+    const request = __http.last();
+    expect(request.method).toBe('DELETE');
+    expect(request.path).toBe('/v1/playlists/p1/tracks');
+    expect(request.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(request.body)).toEqual({ track_ids: ['t1', 't2'] });
+    expect(result).toEqual({ removed: 2 });
+  });
+
+  it('addresses exactly that Playlist, and nothing else', async () => {
+    __http.reply('DELETE /v1/playlists/p1/tracks', { status: 200, json: { removed: 1 } });
+    __http.reply('DELETE /v1/playlists/t1/tracks', { status: 500 });
+
+    await removeTracksFromPlaylist('p1', { track_ids: ['t1'] });
+
+    expect(__http.countFor('DELETE /v1/playlists/t1/tracks')).toBe(0);
   });
 });
 

@@ -1,7 +1,7 @@
 import { memo, useRef, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { ArrowDownCircle, CircleCheck, MoreVertical } from 'lucide-react-native';
+import { ArrowDownCircle, Check, CircleCheck, MoreVertical } from 'lucide-react-native';
 
 import { useDownloadPhase } from '@shared/acquisition/downloadStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
@@ -22,6 +22,8 @@ type LibraryRowProps = {
   onRetry?: (() => void) | undefined;
   retrying?: boolean;
   isPlaying?: boolean;
+  selectable?: { selected: boolean; onToggle: () => void } | undefined;
+  onLongPress?: (() => void) | undefined;
 };
 
 function LibraryRowImpl({
@@ -32,6 +34,8 @@ function LibraryRowImpl({
   onRetry,
   retrying,
   isPlaying,
+  selectable,
+  onLongPress,
 }: LibraryRowProps): ReactElement {
   const theme = useTheme();
   const moreRef = useRef<View>(null);
@@ -65,6 +69,10 @@ function LibraryRowImpl({
       : null;
 
   const handlePress = () => {
+    if (selectable) {
+      selectable.onToggle();
+      return;
+    }
     if (isReady && onPlay) {
       onPlay();
     } else {
@@ -76,11 +84,14 @@ function LibraryRowImpl({
     <Pressable
       testID={`library-row-${track.id}`}
       onPress={handlePress}
-      accessibilityRole="button"
+      {...(onLongPress != null ? { onLongPress } : {})}
+      accessibilityRole={selectable ? 'checkbox' : 'button'}
       accessibilityLabel={a11yLabel}
+      {...(selectable ? { accessibilityState: { checked: selectable.selected } } : {})}
       style={({ pressed }) => [
         styles.row,
         { borderBottomColor: theme.color.border },
+        selectable?.selected ? { backgroundColor: `${theme.color.accent}1A` } : null,
         pressed ? styles.pressed : null,
       ]}
     >
@@ -89,40 +100,54 @@ function LibraryRowImpl({
           <Artwork uri={track.artwork_url} size={48} radius={6} accessibilityLabel="Album art" />
         }
         trailing={
-          <View style={styles.trailing}>
-            {pinned === 'ready' ? (
-              <CircleCheck
-                testID={`library-row-offline-${track.id}`}
-                size={14}
-                color={theme.color.accent}
-              />
-            ) : pinned === 'downloading' || pinned === 'queued' ? (
-              <ArrowDownCircle
-                testID={`library-row-offline-pending-${track.id}`}
-                size={14}
-                color={theme.color.textTertiary}
-              />
-            ) : null}
-            {duration != null ? (
-              <Text variant="caption" tone="tertiary">
-                {duration}
-              </Text>
-            ) : null}
-            <Pressable
-              ref={moreRef}
-              testID={`library-row-more-${track.id}`}
-              onPress={(e) => {
-                e.stopPropagation?.();
-                handleMore();
-              }}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={`More options for ${track.title}`}
-              style={styles.moreBtn}
+          selectable ? (
+            <View
+              testID={`library-row-check-${track.id}`}
+              style={[
+                styles.checkbox,
+                selectable.selected
+                  ? { backgroundColor: theme.color.accent, borderColor: theme.color.accent }
+                  : { borderColor: theme.color.border },
+              ]}
             >
-              <MoreVertical size={18} color={theme.color.textTertiary} />
-            </Pressable>
-          </View>
+              {selectable.selected ? <Check size={14} color={theme.color.onAccent} /> : null}
+            </View>
+          ) : (
+            <View style={styles.trailing}>
+              {pinned === 'ready' ? (
+                <CircleCheck
+                  testID={`library-row-offline-${track.id}`}
+                  size={14}
+                  color={theme.color.accent}
+                />
+              ) : pinned === 'downloading' || pinned === 'queued' ? (
+                <ArrowDownCircle
+                  testID={`library-row-offline-pending-${track.id}`}
+                  size={14}
+                  color={theme.color.textTertiary}
+                />
+              ) : null}
+              {duration != null ? (
+                <Text variant="caption" tone="tertiary">
+                  {duration}
+                </Text>
+              ) : null}
+              <Pressable
+                ref={moreRef}
+                testID={`library-row-more-${track.id}`}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  handleMore();
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`More options for ${track.title}`}
+                style={styles.moreBtn}
+              >
+                <MoreVertical size={18} color={theme.color.textTertiary} />
+              </Pressable>
+            </View>
+          )
         }
       >
         <Text
@@ -209,6 +234,14 @@ const styles = StyleSheet.create({
   failedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 2 },
   failed: { flexShrink: 1 },
   trailing: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   moreBtn: {
     minWidth: 44,
     minHeight: 44,
@@ -232,6 +265,9 @@ export const LibraryRow = memo(LibraryRowImpl, (prev, next) => {
     a.failure_message === b.failure_message &&
     prev.retrying === next.retrying &&
     prev.isPlaying === next.isPlaying &&
+    prev.selectable?.selected === next.selectable?.selected &&
+    (prev.selectable == null) === (next.selectable == null) &&
+    (prev.onLongPress == null) === (next.onLongPress == null) &&
     (prev.onPlay == null) === (next.onPlay == null) &&
     (prev.onRetry == null) === (next.onRetry == null)
   );
