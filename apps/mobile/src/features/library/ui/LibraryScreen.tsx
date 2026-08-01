@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Download, ListEnd, ListPlus, Trash2, XCircle } from 'lucide-react-native';
 
 import type { TrackResponse } from '@shared/api-client/types';
 import { isNetworkError } from '@shared/lib/isNetworkError';
@@ -16,7 +15,6 @@ import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
-import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { useDeleteTrack, useDeleteTracks } from '../hooks/useDeleteTrack';
@@ -34,7 +32,8 @@ import { useSelection } from '../useSelection';
 import { AlbumsGrid } from './AlbumsGrid';
 import { ArtistsGrid } from './ArtistsGrid';
 import { LibraryChips, type LibraryChip } from './LibraryChips';
-import { SelectionBar, type SelectionAction } from './SelectionBar';
+import { SelectionBar } from './SelectionBar';
+import { buildSelectionActions } from './selectionActions';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryNoResults } from './LibraryNoResults';
 import { PlaylistsGrid } from './PlaylistsGrid';
@@ -124,11 +123,6 @@ export function LibraryScreen(): ReactElement {
       danger: { label: 'Remove from Library', onPress: () => confirmRemoveTrack(track) },
     });
 
-  const selectedTracks = tracksState.tracks.filter((t) => selection.has(t.id));
-  const selectedReady = selectedTracks.filter((t) => t.acquisition_status === 'ready');
-  const selectedAllPinned =
-    selectedReady.length > 0 && selectedReady.every((t) => pinnedEntries[t.id]?.status === 'ready');
-
   const confirmDeleteSelected = (): void => {
     const ids = selection.ids;
     Alert.alert(
@@ -148,45 +142,18 @@ export function LibraryScreen(): ReactElement {
     );
   };
 
-  const selectionActions: SelectionAction[] = [
+  const selectionActions = buildSelectionActions(
+    tracksState.tracks.filter((t) => selection.has(t.id)),
     {
-      key: 'playlist',
-      label: 'Add to Playlist',
-      icon: ListPlus,
-      onPress: () => setBulkPlaylistVisible(true),
+      pinnedEntries,
+      pinMany,
+      unpin,
+      queue,
+      onAddToPlaylist: () => setBulkPlaylistVisible(true),
+      onDone: selection.clear,
+      danger: { label: 'Remove', onPress: confirmDeleteSelected },
     },
-    {
-      key: 'offline',
-      label: selectedAllPinned ? 'Remove download' : 'Download',
-      icon: selectedAllPinned ? XCircle : Download,
-      disabled: selectedReady.length === 0,
-      onPress: () => {
-        if (selectedAllPinned) {
-          selectedReady.forEach((t) => unpin(t.id));
-        } else {
-          pinMany(selectedReady.map((t) => t.id));
-        }
-        selection.clear();
-      },
-    },
-    {
-      key: 'queue',
-      label: 'Add to Queue',
-      icon: ListEnd,
-      disabled: selectedReady.length === 0,
-      onPress: () => {
-        selectedReady.forEach((t) => queue.addToQueue(toPlaybackTrack(t)));
-        selection.clear();
-      },
-    },
-    {
-      key: 'delete',
-      label: 'Remove',
-      icon: Trash2,
-      tone: 'danger',
-      onPress: confirmDeleteSelected,
-    },
-  ];
+  );
 
   const sortKey = sortByChip[chip];
   const setSort = (key: SortKey): void => setSortByChip((prev) => ({ ...prev, [chip]: key }));

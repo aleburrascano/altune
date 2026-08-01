@@ -8,7 +8,7 @@ Layout:
 - `ui/LibraryChips.tsx`, `ui/SortControl.tsx`, `ui/LibraryNoResults.tsx`.
 - `ui/PlaylistsGrid.tsx`, `ui/TracksList.tsx`, `ui/AlbumsGrid.tsx`, `ui/ArtistsGrid.tsx`, `ui/LibraryRow.tsx`.
 - `ui/PlaylistDetailScreen.tsx` / `ui/PlaylistHero.tsx` — route `/library/playlist/[id]`. `ui/AddTracksToPlaylistModal.tsx` — the library picker that fills a playlist in bulk.
-- `useSelection.ts` — multi-select state for a track list. `ui/SelectionBar.tsx` — the bar and its `SelectionAction` list.
+- `useSelection.ts` — multi-select state for a track list. `ui/SelectionBar.tsx` — the bar and its `SelectionAction` type. `ui/selectionActions.ts` — `buildSelectionActions`.
 - `ui/trackMenu.ts` — `buildTrackMenuItems`. `ui/sort.ts` — the `*_SORT_OPTIONS` label lists; the sort keys are wire values the server applies.
 - `hooks/useLibraryHome.ts` — `useLibraryTracks` (infinite), `useLibraryAlbums`, `useLibraryArtists`, one query per chip. `hooks/usePlaylistActions.ts`, `hooks/useLibrarySearch.ts` (debounce only), `hooks/useDeleteTrack.ts` (`useDeleteTrack` / `useDeleteTracks`), `hooks/useRetryAcquisition.ts` (failed tracks), `hooks/useReacquireTrack.ts` (replace the audio of a ready track). `state.ts` — `_viewForState`.
 - `__tests__/` — `useSelection`; the rest is rebuilt per `okf/playbooks/test-taxonomy.md`.
@@ -23,7 +23,7 @@ Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` di
 - Keep "Download" meaning offline pinning; audio replacement is "Re-acquire".
 - Import cache keys from `libraryKeys` / `playlistKeys` in `@shared/lib/query-keys`; never retype a key literal.
 - Route every playlist write through `@shared/playlists` — it owns the optimistic-patch/rollback/alert/invalidate policy; screens keep only UI state.
-- Assemble the track context menu only in `ui/trackMenu.ts`.
+- Assemble the track context menu only in `ui/trackMenu.ts`, and the selection bar's actions only in `ui/selectionActions.ts`.
 - Hold multi-select state only in `useSelection`; a screen never keeps its own selected-id array.
 - Act on a selection in one request per action — never a loop of single-track requests, except library deletion, which has no batch endpoint and reports how many of the requested tracks it removed.
 - Offer selection mode only on track lists — never on the Albums or Artists grids.
