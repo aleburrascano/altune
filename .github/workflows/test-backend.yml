@@ -70,7 +70,7 @@ jobs:
       # deploy, NOT because 62 is acceptable. Raise-only resumes from here:
       # ratchet back to 65 as discovery/adapters and catalog/adapters gain
       # tests, and never lower it again. Tracked in
-      # docs/specs/test-hardening/plan.md's Outstanding section.
+      # okf/testing/programme.md's Outstanding section.
       - name: coverage ratchet
         run: |
           MIN=62

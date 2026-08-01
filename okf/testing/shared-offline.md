@@ -16,7 +16,7 @@ Rebuilt blind on 2026-07-30, same protocol as `shared/events`, `shared/acquisiti
 
 The per-glob floor in `jest.config.js` (`src/shared/offline/**`) went 0/0/0/0 → **99/86/100/100**, raise-only. Those are the **per-file minima**, not the aggregate: Jest applies a glob threshold to every matching file individually, which is what left slice 1's floor red, so each of the three files was checked against the floor separately before it was committed. `pinnedFiles.ts` holds branch coverage down to 86.36% and cannot go higher — all three of its uncovered branches are listed under LEFT DARK.
 
-This is the slice ADR-0020 names as the origin of the whole programme: the `expo-file-system` double had `write() {}` unwired from `textSync()`, so **gutting `pinnedStore.saveIndex` left the suite green** — one of the app's two durability guarantees was unassertable. The double has since been rebuilt to round-trip writes through reads and to take injected failures, which is what makes Persistence round-trip and Failure injection selectable here at all.
+This is the slice the programme names as the origin of the whole programme: the `expo-file-system` double had `write() {}` unwired from `textSync()`, so **gutting `pinnedStore.saveIndex` left the suite green** — one of the app's two durability guarantees was unassertable. The double has since been rebuilt to round-trip writes through reads and to take injected failures, which is what makes Persistence round-trip and Failure injection selectable here at all.
 
 ## SELECTED
 
@@ -46,7 +46,7 @@ This is the slice ADR-0020 names as the origin of the whole programme: the `expo
 
 ## DEFERRED
 
-- **Device e2e** — no device or Maestro harness runs in CI for any slice yet; tracked at programme level in `docs/specs/test-hardening/plan.md`'s Outstanding section, not reopened per-slice. What it would uniquely catch here: the doubles model a filesystem that never runs out of space, never has a file locked by another process, and never has the OS reclaim a directory — and "the file is really still there after a reboot" is the entire promise of this slice.
+- **Device e2e** — no device or Maestro harness runs in CI for any slice yet; tracked at programme level in [programme](programme.md)'s Outstanding section, not reopened per-slice. What it would uniquely catch here: the doubles model a filesystem that never runs out of space, never has a file locked by another process, and never has the OS reclaim a directory — and "the file is really still there after a reboot" is the entire promise of this slice.
 
 ## REGRESSION CANDIDATES
 
@@ -78,7 +78,7 @@ Nine findings came back from the four blind authors and the cartographer. Each w
 
 ## MUTATION AUDIT
 
-Both mechanisms, as ADR-0020 requires.
+Both mechanisms, as the programme requires.
 
 **Hand mutation — 98 applied, 89 killed, 9 surviving as argued equivalents, 0 carried as source defects.**
 

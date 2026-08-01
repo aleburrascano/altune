@@ -44,7 +44,7 @@ Its four predecessors (`canPlay.test.ts`, `previewUrl.test.ts`, `queue-generatio
 
 ## DEFERRED
 
-- **Device e2e** — no device/Maestro harness runs in CI for any slice yet; tracked at programme level in `docs/specs/test-hardening/plan.md`'s Outstanding section, not reopened per-slice. This slice is where its absence bites hardest: the store↔native 1:1 that `syncCurrentIndex` exists to repair can only genuinely break on a real `TrackPlayer`.
+- **Device e2e** — no device/Maestro harness runs in CI for any slice yet; tracked at programme level in [programme](programme.md)'s Outstanding section, not reopened per-slice. This slice is where its absence bites hardest: the store↔native 1:1 that `syncCurrentIndex` exists to repair can only genuinely break on a real `TrackPlayer`.
 
 ## REGRESSION CANDIDATES
 
@@ -53,7 +53,7 @@ Harvested from the four test files deleted on 2026-07-30 (`git show 76a029d^`), 
 - **`generation` must bump when a Queue is *replaced* and never on a transition within one.** The deleted `queue-generation.test.ts` had five cases: bumps on `loadQueue`, bumps on `restoreQueue`, does *not* bump on skip/enqueue/shuffle, and — twice over — **never rewinds** when the Queue empties or when the last Track is removed. `generation` is the ownership token a slow async resume reads before its network fetches and re-checks after, so a rewind is an ABA bug: a stale resume would conclude it still owns a Queue the user has since replaced.
 - **`syncCurrentIndex` must heal native drift, not follow it.** Six deleted cases: takes the native index when no key is supplied, ignores an out-of-range index, follows the *identity* when the native queue has drifted, resolves the identity through the **play order** rather than the track order, ignores a key that is not in the Queue at all, and picks the occurrence **nearest the reported index** when the same Track appears twice. Before this existed, one dropped native slot silently offset every later transition and the UI showed the wrong Track — artwork, title and lyrics — until the Queue was rebuilt.
 - **Shuffle is tail-only.** `toggleShuffle` must shuffle only the entries after `currentIndex`, leaving history and the playing Track in place, and un-shuffling must sort only that tail back to ascending order. The playing Track never moves, so the native player never re-buffers it.
-- **`skipToPrevious`'s `if (prev >= 0)` guard survived a mutation in the 2026-07-29 audit** — cited in ADR-0020 as the case that refuted "refactor for testability first". Only an input at `currentIndex === 1` distinguishes `>= 0` from `> 0`; extracting the condition to a named function would not have killed it. That exact row is owed a test.
+- **`skipToPrevious`'s `if (prev >= 0)` guard survived a mutation in the 2026-07-29 audit** — cited in the programme as the case that refuted "refactor for testability first". Only an input at `currentIndex === 1` distinguishes `>= 0` from `> 0`; extracting the condition to a named function would not have killed it. That exact row is owed a test.
 - **Repeat-one advances on manual skip.** `skipToNext` under `repeatMode === 'one'` moves to the next Track and does *not* wrap at the end; only `'all'` wraps. This mirrors native `RepeatMode.Track`, where repeat-one loops on auto-advance only. `hasNext()` returning true on the last Track under `'one'`/`'off'` previously rendered an enabled Next button that silently did nothing.
 
 ## FINDINGS (pre-authoring, verified against the source)
@@ -74,7 +74,7 @@ Six findings came back from the six blind authors. Each was verified against the
 
 ## MUTATION AUDIT
 
-Both mechanisms, as ADR-0020 requires.
+Both mechanisms, as the programme requires.
 
 **`test-assassin`, four agents grouped by source file (not by test file, so no two agents mutated the same file concurrently), every mutation hand-applied and hand-reverted:**
 
@@ -111,7 +111,7 @@ Survivors left as equivalent, with the argument in each case: `removeFromQueue`'
 
 Stryker found one real weakness the hand-triage missed, now fixed: **a test named "flips the flag without touching playOrder" asserted only `playOrder`, never the flag**, so `set({ shuffled })` → `set({})` survived — and the accompanying idempotence test compared `twice.shuffled` to `once.shuffled`, which also holds when the setter does nothing. Both now assert the value. This is the clearest case in the run for keeping both mechanisms: a test whose name claims more than it asserts is invisible to a human reading the name, and to an agent that wrote it.
 
-Of the 35 remaining, 12 are `ArrayDeclaration` mutations on `useCallback` dependency arrays in `useQueuePlayback.ts` — the React-hook analogue of the `StyleSheet` noise that dominated `shared/acquisition`'s residue, and the reason that file scores 77.78 despite zero hand-mutation survivors across 31 targeted mutations. The rest are guard-clause and boundary variants inside `shuffleTail`'s Fisher-Yates loop and `trackAt`'s invariant-protected null guard. Triaged and recorded, not chased — per ADR-0020's rejected alternative.
+Of the 35 remaining, 12 are `ArrayDeclaration` mutations on `useCallback` dependency arrays in `useQueuePlayback.ts` — the React-hook analogue of the `StyleSheet` noise that dominated `shared/acquisition`'s residue, and the reason that file scores 77.78 despite zero hand-mutation survivors across 31 targeted mutations. The rest are guard-clause and boundary variants inside `shuffleTail`'s Fisher-Yates loop and `trackAt`'s invariant-protected null guard. Triaged and recorded, not chased — per the programme's rejected alternative.
 
 **Now CI-gated.** `shared/acquisition` could not join the Stryker gate because its two presentational components dragged it to 79.44%. This slice has no component, so the combined `shared/events` + `shared/playback` glob scores **91.69%** and `thresholds.break` was raised 90 → 91. The structural ceiling in the Outstanding list is therefore specific to **UI-bearing** slices, not to adding slices as such — logic slices can keep joining the same glob.
 
