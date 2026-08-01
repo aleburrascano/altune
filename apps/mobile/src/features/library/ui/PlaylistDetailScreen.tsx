@@ -4,20 +4,11 @@ import { Alert, FlatList, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  ChevronLeft,
-  Download,
-  EllipsisVertical,
-  ListEnd,
-  ListPlus,
-  Trash2,
-  XCircle,
-} from 'lucide-react-native';
+import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 
 import { getPlaylist } from '@shared/api-client/playlists';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
-import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { playlistKeys } from '@shared/lib/query-keys';
@@ -40,7 +31,8 @@ import { useSelection } from '../useSelection';
 import { AddTracksToPlaylistModal } from './AddTracksToPlaylistModal';
 import { LibraryRow } from './LibraryRow';
 import { PlaylistHero } from './PlaylistHero';
-import { SelectionBar, type SelectionAction } from './SelectionBar';
+import { SelectionBar } from './SelectionBar';
+import { buildSelectionActions } from './selectionActions';
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { buildTrackMenuItems } from './trackMenu';
 import { useLibraryNavigation } from './useLibraryNavigation';
@@ -226,12 +218,6 @@ export function PlaylistDetailScreen(): ReactElement {
             onPress: () => pinMany(downloadableIds),
           };
 
-  const selectedTracks = pl.tracks.filter((t) => selection.has(t.id));
-  const selectedReady = selectedTracks.filter((t) => t.acquisition_status === 'ready');
-  const selectedAllPinned =
-    selectedReady.length > 0 &&
-    selectedReady.every((t) => pinnedEntries[t.id]?.status === 'ready');
-
   const confirmRemoveSelected = () => {
     const ids = selection.ids;
     Alert.alert(
@@ -251,45 +237,18 @@ export function PlaylistDetailScreen(): ReactElement {
     );
   };
 
-  const selectionActions: SelectionAction[] = [
+  const selectionActions = buildSelectionActions(
+    pl.tracks.filter((t) => selection.has(t.id)),
     {
-      key: 'playlist',
-      label: 'Add to Playlist',
-      icon: ListPlus,
-      onPress: () => setAddToPlaylistVisible(true),
+      pinnedEntries,
+      pinMany,
+      unpin,
+      queue,
+      onAddToPlaylist: () => setAddToPlaylistVisible(true),
+      onDone: selection.clear,
+      danger: { label: 'Remove', onPress: confirmRemoveSelected },
     },
-    {
-      key: 'offline',
-      label: selectedAllPinned ? 'Remove download' : 'Download',
-      icon: selectedAllPinned ? XCircle : Download,
-      disabled: selectedReady.length === 0,
-      onPress: () => {
-        if (selectedAllPinned) {
-          selectedReady.forEach((t) => unpin(t.id));
-        } else {
-          pinMany(selectedReady.map((t) => t.id));
-        }
-        selection.clear();
-      },
-    },
-    {
-      key: 'queue',
-      label: 'Add to Queue',
-      icon: ListEnd,
-      disabled: selectedReady.length === 0,
-      onPress: () => {
-        selectedReady.forEach((t) => queue.addToQueue(toPlaybackTrack(t)));
-        selection.clear();
-      },
-    },
-    {
-      key: 'remove',
-      label: 'Remove',
-      icon: Trash2,
-      tone: 'danger',
-      onPress: confirmRemoveSelected,
-    },
-  ];
+  );
 
   return (
     <Screen padded={false}>
