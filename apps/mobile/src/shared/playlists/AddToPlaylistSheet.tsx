@@ -36,12 +36,13 @@ export function AddToPlaylistSheet({
   const [addedTo, setAddedTo] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-    },
-    [],
-  );
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }, []);
+  useEffect(() => clearCloseTimer, [clearCloseTimer]);
 
   const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
     queryKey: playlistKeys.list,
@@ -76,8 +77,10 @@ export function AddToPlaylistSheet({
           { playlistId, trackIds },
           {
             onSuccess: () => {
+              clearCloseTimer();
               setAddedTo(playlistId);
               closeTimer.current = setTimeout(() => {
+                closeTimer.current = null;
                 setAddedTo(null);
                 onClose();
               }, 700);
@@ -86,7 +89,7 @@ export function AddToPlaylistSheet({
         ),
       );
     },
-    [addMut, onClose, withTrackIds],
+    [addMut, clearCloseTimer, onClose, withTrackIds],
   );
 
   const createAndAdd = (name: string): void => {
@@ -94,7 +97,7 @@ export function AddToPlaylistSheet({
       createMut.mutate(
         { name, trackIds },
         {
-          onSettled: () => {
+          onSuccess: () => {
             setCreateVisible(false);
             onClose();
           },
@@ -144,6 +147,7 @@ export function AddToPlaylistSheet({
   );
 
   const handleClose = () => {
+    clearCloseTimer();
     setAddedTo(null);
     onClose();
   };

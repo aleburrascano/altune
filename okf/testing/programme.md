@@ -101,6 +101,7 @@ Feature slices have no dependency edges between them — `apps/mobile/CLAUDE.md`
 | 6 | `shared/lib` | **done** (2026-07-31) | 97.35% (gated) | 100/100/100/100 |
 | 7 | `shared/telemetry` | **done** (2026-07-31) | 93.94% (gated) | 100/100/100/100 |
 | 8 | `shared/auth` | **done** (2026-07-31) | 94.90% (gated) | 100/80/100/100 |
+| 8b | `shared/playlists` | **done** (2026-08-01) | 94.30% | 100/92/100/100 |
 | 9 | `features/detail` | todo | — | 0 |
 | 10 | `features/library` | todo | — | 0 |
 | 11 | `features/playback` | todo | — | 0 |
@@ -110,6 +111,8 @@ Feature slices have no dependency edges between them — `apps/mobile/CLAUDE.md`
 | 15 | `shared/ui` | todo — Accessibility + Liveness only, deliberately | — | 0 |
 
 `shared/ui` is 1,660 lines of primitives and theme: the cheapest coverage in the repo and the least meaningful. It gets two categories, not twenty.
+
+`shared/playlists` is numbered 8b because it did not exist when this order was drawn: playlist writes and the picker were extracted out of `features/library` on 2026-08-01, once `features/detail` became a second consumer, and were hardened the same day. It sits after 8 and before the feature slices for the usual reason — a feature slice that mocks an unconstrained shared module inherits its gaps. Its kill rate is unmarked because `stryker.config.json` is unchanged: `mutations.ts` clears the threshold at 94.30% on its own, but the glob may only be extended once the combined score is measured rather than inferred.
 
 *Slice 2's kill rate is a scoped `stryker run` measurement, not a `stryker.config.json`-enforced gate — see Outstanding.
 
