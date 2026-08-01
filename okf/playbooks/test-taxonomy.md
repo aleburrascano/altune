@@ -13,7 +13,7 @@ The suite was not sloppy. It had zero snapshot tests, dense assertions, and one 
 
 A coverage percentage answers "did this line run." This taxonomy answers "which constraints does this code deserve, and do they exist." That is the question the 43 survivors were hiding behind.
 
-Why this exists, and which alternatives were rejected and should not be re-proposed: [ADR-0020](../../docs/adr/0020-test-taxonomy-and-ratchet-gates.md). Current slice ledger: [docs/specs/test-hardening/plan.md](../../docs/specs/test-hardening/plan.md).
+Why this exists, which alternatives were rejected and should not be re-proposed, and the current slice ledger: [the programme](../testing/programme.md).
 
 ## How to use it
 
@@ -84,7 +84,7 @@ Every slice with behavior needs this family. If nothing here is selected, the se
 | **Table** | a pure function with two or more branches | each branch computes the right value, at its boundaries | every branch and every boundary is a row, including the exact value a comparison turns on | `progressPhase` lost its `finishing` arm undetected — the suite only ever sent `download` and one bogus stage |
 | **Derivation** | display or gating state is computed inside a component | the rules deciding what shows and what unlocks | the truth table over the derived outputs is covered — extract the derivation to a pure function first | `AuthForm.tsx:60-69` computes four display/gating booleans reachable only by rendering and driving text inputs |
 | **Reducer** | a store, or a `(state, event) → state` function | every legal transition, not a diagonal through them | every state × event pair the domain permits has a case; illegal pairs are asserted as rejected | `applyServerEvent` handles 14 event types and killed 0 of 9 mutations; `playlist_created` and `playlist_deleted` are sent by no test in the repo |
-| **Property** | an invariant holds across an input space too large to enumerate | the invariant itself, over generated input | the property is stated as a law and generated against; shrunk counterexamples become Table rows | `queueStore.playOrder` must always be a permutation of `tracks` indices — one property kills several index-arithmetic survivors at once. No property-based library is installed on either surface |
+| **Property** | an invariant holds across an input space too large to enumerate | the invariant itself, over generated input | the property is stated as a law and generated against; shrunk counterexamples become Table rows | `queueStore.playOrder` must always be a permutation of `tracks` indices — one property kills several index-arithmetic survivors at once. `fast-check` is installed on the mobile surface (`^4.9.0`); Go has no equivalent beyond stdlib fuzzing |
 
 ## Data and contracts
 
