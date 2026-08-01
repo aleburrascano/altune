@@ -109,7 +109,31 @@ describe('recoverAudio', () => {
 });
 
 describe('fetchAudioUrls', () => {
-  it('maps the wire shape {track_id, url} to {trackId, url}', async () => {
+  it('maps the wire shape {track_id, url, version} to {trackId, url, version}', async () => {
+    withSession();
+    __http.reply('POST /v1/audio-urls', {
+      status: 200,
+      json: { urls: [{ track_id: 't1', url: 'https://cdn.example/t1.mp3', version: '1770000000000' }] },
+    });
+
+    await expect(fetchAudioUrls(['t1'])).resolves.toEqual([
+      { trackId: 't1', url: 'https://cdn.example/t1.mp3', version: '1770000000000' },
+    ]);
+  });
+
+  it('carries the version verbatim as an opaque token — it is compared, never parsed', async () => {
+    withSession();
+    __http.reply('POST /v1/audio-urls', {
+      status: 200,
+      json: { urls: [{ track_id: 't1', url: 'https://cdn.example/t1.mp3', version: 'not-a-number' }] },
+    });
+
+    await expect(fetchAudioUrls(['t1'])).resolves.toEqual([
+      { trackId: 't1', url: 'https://cdn.example/t1.mp3', version: 'not-a-number' },
+    ]);
+  });
+
+  it('falls back to an empty version when the server omits one, so a track never acquired since the column landed reads as "unknown" rather than crashing', async () => {
     withSession();
     __http.reply('POST /v1/audio-urls', {
       status: 200,
@@ -117,7 +141,7 @@ describe('fetchAudioUrls', () => {
     });
 
     await expect(fetchAudioUrls(['t1'])).resolves.toEqual([
-      { trackId: 't1', url: 'https://cdn.example/t1.mp3' },
+      { trackId: 't1', url: 'https://cdn.example/t1.mp3', version: '' },
     ]);
   });
 
@@ -127,15 +151,15 @@ describe('fetchAudioUrls', () => {
       status: 200,
       json: {
         urls: [
-          { track_id: 't1', url: 'https://cdn.example/t1.mp3' },
-          { track_id: 't2', url: 'https://cdn.example/t2.mp3' },
+          { track_id: 't1', url: 'https://cdn.example/t1.mp3', version: 'v1' },
+          { track_id: 't2', url: 'https://cdn.example/t2.mp3', version: 'v2' },
         ],
       },
     });
 
     await expect(fetchAudioUrls(['t1', 't2'])).resolves.toEqual([
-      { trackId: 't1', url: 'https://cdn.example/t1.mp3' },
-      { trackId: 't2', url: 'https://cdn.example/t2.mp3' },
+      { trackId: 't1', url: 'https://cdn.example/t1.mp3', version: 'v1' },
+      { trackId: 't2', url: 'https://cdn.example/t2.mp3', version: 'v2' },
     ]);
   });
 

@@ -17,6 +17,7 @@ export async function audioRequestHeaders(): Promise<Record<string, string>> {
 export interface ResolvedAudioUrl {
   trackId: string;
   url: string;
+  version: string;
 }
 
 export async function recoverAudio(trackId: string): Promise<void> {
@@ -29,13 +30,16 @@ export async function fetchAudioUrls(trackIds: string[]): Promise<ResolvedAudioU
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
   try {
-    const data = await apiFetch<{ urls: { track_id: string; url: string }[] }>('/v1/audio-urls', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ track_ids: trackIds }),
-      signal: controller.signal,
-    });
-    return data.urls.map((u) => ({ trackId: u.track_id, url: u.url }));
+    const data = await apiFetch<{ urls: { track_id: string; url: string; version?: string }[] }>(
+      '/v1/audio-urls',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ track_ids: trackIds }),
+        signal: controller.signal,
+      },
+    );
+    return data.urls.map((u) => ({ trackId: u.track_id, url: u.url, version: u.version ?? '' }));
   } finally {
     clearTimeout(timeout);
   }

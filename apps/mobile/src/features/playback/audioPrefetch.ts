@@ -27,8 +27,9 @@ export function forgetAllSwaps(): void {
 export function evictCached(trackId: string): void {
   swappedToLocal.delete(trackId);
   try {
-    const file = findCached(trackId);
-    if (file !== null) file.delete();
+    for (const entry of cacheDir().list()) {
+      if (entry instanceof File && baseName(entry.uri).startsWith(`${trackId}.`)) entry.delete();
+    }
   } catch {}
 }
 
@@ -49,9 +50,9 @@ function extFromUrl(url: string): string {
   return dot > slash ? path.slice(dot) : '.mp3';
 }
 
-function findCached(trackId: string): File | null {
+function findCached(trackId: string, version: string): File | null {
   for (const entry of cacheDir().list()) {
-    if (entry instanceof File && baseName(entry.uri).startsWith(`${trackId}.`)) return entry;
+    if (entry instanceof File && baseName(entry.uri).startsWith(`${trackId}.${version}.`)) return entry;
   }
   return null;
 }
@@ -138,18 +139,20 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
   if (!next || next.source.kind !== 'library') return;
   const trackId = next.source.trackId;
 
-  const existing = findCached(trackId);
-  if (existing) {
-    await swapUpcomingToLocal(next, existing.uri);
-    evict(ordered, s.currentIndex);
-    return;
-  }
   if (inflight.has(trackId)) return;
   inflight.add(trackId);
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
     if (!resolved) return;
-    const dest = new File(cacheDir(), `${trackId}${extFromUrl(resolved.url)}`);
+
+    const existing = findCached(trackId, resolved.version);
+    if (existing) {
+      await swapUpcomingToLocal(next, existing.uri);
+      evict(ordered, s.currentIndex);
+      return;
+    }
+
+    const dest = new File(cacheDir(), `${trackId}.${resolved.version}${extFromUrl(resolved.url)}`);
     const file = await File.downloadFileAsync(resolved.url, dest, { idempotent: true });
 
     const s2 = useQueueStore.getState();

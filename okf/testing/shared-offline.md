@@ -127,3 +127,28 @@ Nine survivors remain, each argued rather than asserted:
 - `pinnedStore.ts:152` — the `s.entries[trackId] === undefined` re-check inside `downloadOne`'s `mark` closure. Unreachable: zustand commits `entries` and `queue` in one synchronous `set`, and there is no `await` between the outer guard and either `mark` call. The slice's only uncovered statement.
 - `pinnedFiles.ts:12` and `pinnedFiles.ts:16` — the `?? ''` fallbacks in `baseName` and `extFromUrl`. Unreachable at runtime, mandated by `noUncheckedIndexedAccess`. Two of the three uncovered branches in the file.
 - `pinnedFiles.ts:66` — the null arm of `file.size ?? 0`. Not reachable through the double, which only lists files it holds contents for. The third uncovered branch, and the one that is reachable on a real device.
+
+## Re-derivation — audio version gate (2026-07-31)
+
+`pinnedUri` gained an `expectedVersion` parameter and a self-healing re-pin, `downloadOne` records the version it fetched under, `reconcile()` carries that version forward, and `PinnedEntry` gained `version?: string`. Re-deriving which categories the changed surface triggers:
+
+- **Table** (already selected, extended) — `pinnedUri` is no longer a one-dimensional status check. Its truth table is now status × (expected version vs recorded version), with three distinct "serve the local copy" reasons that must not collapse into each other: versions match, expected is `undefined` (URL resolution failed — an offline load must still play), and expected is `''` (the server has no version — a track not acquired since the column landed must not re-download on every play). Each is a row in `pinnedStore.version.test.ts`, and the status gate is re-asserted on top of a *matching* version so a version match cannot resurrect a `failed` entry.
+- **Regression** (mandatory — bug fix) — the incident below.
+- **Idempotence / replay** (already selected, extended) — repeated `pinnedUri` calls during the heal must not stack re-pins. Covered: three consecutive mismatching calls issue exactly one `fetchAudioUrls`, because the first re-pin leaves the entry `downloading` and the status gate then declines before reaching the version gate.
+- **Persistence round-trip** (already selected, extended) — the recorded version must survive the index write and the relaunch read, and must survive `reconcile()`. The `reconcile` case is the load-bearing one: rebuilding the entry from scratch instead of spreading it would drop the version on every launch, mismatch every pinned track, and silently re-download the entire offline library. The existing worker suite covers the write side (its `toEqual` assertions now name `version`).
+- **Cross-surface contract** (still rejected here) — `version` crosses the same `audioURLDTO` → `ResolvedAudioUrl` boundary the original rejection assigned to `shared/api-client`, and it is derived there. The rejection stands for the same reason; recorded so the new field is not assumed to be uncovered.
+- **Concurrency / ordering** (already selected) — the heal can fire while that track is mid-download. No new ordering: `repinIfPinned`'s existing unpin-then-pin and `downloadOne`'s still-`downloading` supersession check already own that interleaving, and the version gate reaches them only through the `ready` arm.
+
+**STATUS: done.** 9 new tests in `pinnedStore.version.test.ts`, taking the slice from 187 to **196**; `shared/api-client` goes 304 → 307, and the full mobile suite is 1515 across 86 files, green. No coverage floor moved — the new lines sit in already-covered functions.
+
+### Regression — a re-acquisition the device never heard about (2026-07-31)
+
+The 2026-07-26 entry above fixed this bug's foreground half and is the reason the tail was so hard to see. Both `repinIfPinned` and the prefetch `evictCached` hang off one live SSE event, `track_acquisition_completed`. Nothing else ever re-examined a cached file: `pinnedUri` answered from the index, `findPinned` matched `<trackId>.*`, and `reconcile()` checked only that a file *exists* — none of them had any notion of *which* audio the file held. A re-acquisition completing while the app was backgrounded, offline, or not running therefore left the old recording authoritative on that device permanently.
+
+The reporting path is worth keeping, because every signal pointed away from the client: the admin panel showed the job succeeded, the resolved source URL was the correct new video, the pipeline logs showed the duration heuristic correctly skipping the bad candidate, and the bytes in S3 were right. Deleting the track and re-adding it "fixed" it — which reads as the bucket healing, but is actually a **new `trackId`** missing both caches by key. The natural hypotheses (a failed S3 overwrite, a wrong duration sent on re-acquire) were both wrong, and both are disproven by the same fact: `BuildAudioRef` is deterministic, so re-acquisition overwrites the same object and every id the client could key on stayed identical.
+
+The fix makes the event an optimisation rather than the only thing standing between a re-acquisition and a permanently wrong file. What must stay true, and what a future edit could quietly break:
+
+- The three "no expectation" arms must keep serving the local copy. Turning `''` or `undefined` into a mismatch trades this bug for a worse one — an offline device that refuses to play its own downloads.
+- `reconcile()` must keep carrying `version`.
+- A mismatch must re-pin as it declines, not merely decline; declining alone fixes playback for that session while leaving the wrong bytes on disk for the next offline launch.

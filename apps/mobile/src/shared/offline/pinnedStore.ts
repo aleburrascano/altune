@@ -17,6 +17,7 @@ export type PinnedEntry = {
   trackId: string;
   status: PinnedStatus;
   uri?: string;
+  version?: string;
 };
 
 const INDEX_DIR = 'offline';
@@ -112,7 +113,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     for (const [trackId, entry] of Object.entries(entries)) {
       const file = findPinned(trackId);
       if (file !== null) {
-        next[trackId] = { trackId, status: 'ready', uri: file.uri };
+        next[trackId] = { ...entry, trackId, status: 'ready', uri: file.uri };
       } else if (entry.status === 'queued' || entry.status === 'downloading') {
         next[trackId] = { trackId, status: 'queued' };
       }
@@ -159,9 +160,11 @@ async function downloadOne(trackId: string, set: Setter, get: Getter): Promise<v
   mark({ trackId, status: 'downloading' });
 
   let uri: string | undefined;
+  let version = '';
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
     if (!resolved) throw new Error('no signed url');
+    version = resolved.version;
     uri = await downloadPinned(trackId, resolved.url);
   } catch {
     uri = undefined;
@@ -173,12 +176,17 @@ async function downloadOne(trackId: string, set: Setter, get: Getter): Promise<v
     return;
   }
 
-  mark(uri === undefined ? { trackId, status: 'failed' } : { trackId, status: 'ready', uri });
+  mark(uri === undefined ? { trackId, status: 'failed' } : { trackId, status: 'ready', uri, version });
 }
 
-export function pinnedUri(trackId: string): string | undefined {
+export function pinnedUri(trackId: string, expectedVersion?: string): string | undefined {
   const entry = usePinnedStore.getState().entries[trackId];
-  return entry?.status === 'ready' ? entry.uri : undefined;
+  if (entry?.status !== 'ready') return undefined;
+  if (expectedVersion !== undefined && expectedVersion !== '' && entry.version !== expectedVersion) {
+    repinIfPinned(trackId);
+    return undefined;
+  }
+  return entry.uri;
 }
 
 export function repinIfPinned(trackId: string): void {

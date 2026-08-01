@@ -2,7 +2,7 @@
 type: Database Table
 title: tracks
 description: Storage for the catalog bounded context's Track aggregate — a user's saved audio recording plus its acquisition lifecycle.
-resource: services/go-api/migrations/001_baseline.sql, services/go-api/internal/catalog/domain/track.go, services/go-api/internal/catalog/adapters/persistence/track_repo.go, services/go-api/migrations/010_track_featured_artists.sql, services/go-api/migrations/002_relationship_indexes.sql
+resource: services/go-api/migrations/001_baseline.sql, services/go-api/internal/catalog/domain/track.go, services/go-api/internal/catalog/adapters/persistence/track_repo.go, services/go-api/migrations/010_track_featured_artists.sql, services/go-api/migrations/002_relationship_indexes.sql, services/go-api/migrations/014_track_audio_version.sql
 tags: [database-table, catalog, aggregate-root, track]
 verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
 ---
@@ -42,3 +42,13 @@ Worth knowing if the library grows: the ownership read is unindexed beyond `user
 ## rejected_source_keys (013, 2026-07-26)
 
 `013_track_rejected_sources.sql` adds `rejected_source_keys TEXT[]` (nullable, `IF NOT EXISTS`, no index — read only for the row being re-acquired). It is the memory that makes repeated re-acquisition monotonic: every source a replace has moved away from, held as a normalized key (`youtube:<videoId>`, else a scheme/query-stripped URL) so one recording cannot re-enter under a second URL spelling. Written only through `Track.RejectAudioSource`, which is idempotent and bounded at 25 entries so a row cannot grow without limit. Without it a replace could exclude only the single current source, and because ranking is deterministic the second press returned the file the first press had just moved away from. Why the key is normalized rather than the raw URL: `okf/backend/acquisition/pipeline.md`.
+
+## audio_version (014, 2026-07-31)
+
+`014_track_audio_version.sql` adds `audio_version TEXT` (nullable, `IF NOT EXISTS`, no index — it is read only for rows already being presigned). It is an opaque token, a fresh `uuid.NewString()`, rewritten by `Track.MarkReady` on every acquisition; the aggregate is the only writer and `AudioVersion` is a plain `string` whose empty value means "no audio has been written under the versioning scheme yet".
+
+It exists because `audio_ref` is *stable by design*. `BuildAudioRef` derives the object key from `userId/artist/album/title.ext`, so re-acquiring a track overwrites the same S3 object and leaves `audio_ref` byte-identical. Every identifier the client could key a cached copy on therefore stayed the same across a re-acquisition, and the mobile app's two on-disk audio caches — the offline pin store and the prefetch cache, both keyed by `trackId` alone — had no way to tell that the bytes behind that id had changed. Their only invalidation signal was the live `track_acquisition_completed` SSE event, so a re-acquisition completing while the device was backgrounded or offline left the *old* audio playing on that device permanently, with the admin panel, the resolved source URL and the bucket all correctly showing the new one. `audio_version` is the missing content identity: `/v1/audio-urls` returns it beside the signed URL, and the client compares it against what it cached.
+
+Why a random token rather than an `audio_updated_at` timestamp — the first shape tried: the invariant needed is "every audio write publishes a version distinct from the previous one", and a wall-clock stamp only satisfies that at the clock's granularity. Two `MarkReady` calls inside the same millisecond render the same version. In production that cannot happen for one track (the pipeline takes tens of seconds), but it makes the invariant clock-dependent and untestable without sleeping. A per-write UUID is distinct by construction and the property is asserted directly (100 consecutive `MarkReady` calls on one aggregate, all versions unique). The operational "when was audio last written" reading was the only thing lost, and nothing consumed it.
+
+Null for every row predating the migration, which is deliberate: the client treats an empty version as "no expectation" and keeps its existing cached copy, so shipping this does not re-download every pinned track. The first re-acquisition of a track stamps it, and the mismatch against the client's unversioned entry is what heals that track. Pre-existing stale copies on a device are therefore *not* repaired by this change until the track is re-acquired again — an accepted limit, not an oversight.

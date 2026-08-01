@@ -32,6 +32,10 @@ function signedUrl(trackId: string, generation = 1): string {
   return `https://cdn.example.com/audio/${trackId}.mp3?sig=token-${generation}&exp=999`;
 }
 
+function resolved(trackId: string, generation = 1): ResolvedAudioUrl {
+  return { trackId, url: signedUrl(trackId, generation), version: `v${generation}` };
+}
+
 type PendingCall = {
   ids: readonly string[];
   resolve: (urls: ResolvedAudioUrl[]) => void;
@@ -67,7 +71,7 @@ async function drainWorker(calls: PendingCall[], nextIndex: number): Promise<str
     if (call === undefined) {
       throw new Error('worker still marked isWorking with no pending fetchAudioUrls call left to resolve');
     }
-    const urls = call.ids.map((id) => ({ trackId: id, url: signedUrl(id, i + 1) }));
+    const urls = call.ids.map((id) => resolved(id, i + 1));
     call.resolve(urls);
     usedUrls.push(urls[0]?.url ?? '');
     i += 1;
@@ -99,7 +103,7 @@ describe('repinIfPinned — replace arm', () => {
 
     usePinnedStore.getState().pin('A');
     await act(async () => {
-      calls[0]?.resolve([{ trackId: 'A', url: signedUrl('A', 1) }]);
+      calls[0]?.resolve([resolved('A', 1)]);
       await flush();
     });
     expect(usePinnedStore.getState().entries['A']?.status).toBe('ready');
@@ -111,7 +115,7 @@ describe('repinIfPinned — replace arm', () => {
     expect(calls).toHaveLength(2);
 
     await act(async () => {
-      calls[1]?.resolve([{ trackId: 'A', url: signedUrl('A', 2) }]);
+      calls[1]?.resolve([resolved('A', 2)]);
       await flush();
     });
 
@@ -119,6 +123,7 @@ describe('repinIfPinned — replace arm', () => {
       trackId: 'A',
       status: 'ready',
       uri: pinnedUri('A.mp3'),
+      version: 'v2',
     });
     expect(__fs.readFile(pinnedUri('A.mp3'))).toBe(`downloaded:${signedUrl('A', 2)}`);
   });
@@ -128,7 +133,7 @@ describe('repinIfPinned — replace arm', () => {
 
     usePinnedStore.getState().pin('A');
     await act(async () => {
-      calls[0]?.resolve([{ trackId: 'A', url: signedUrl('A', 1) }]);
+      calls[0]?.resolve([resolved('A', 1)]);
       await flush();
     });
 
@@ -162,7 +167,7 @@ describe('repinIfPinned firing while the track is currently downloading', () => 
     expect(usePinnedStore.getState().queue).toEqual(['A']);
 
     await act(async () => {
-      calls[0]?.resolve([{ trackId: 'A', url: signedUrl('A', 1) }]);
+      calls[0]?.resolve([resolved('A', 1)]);
       await flush();
     });
 
@@ -171,7 +176,7 @@ describe('repinIfPinned firing while the track is currently downloading', () => 
     expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
 
     await act(async () => {
-      calls[1]?.resolve([{ trackId: 'A', url: signedUrl('A', 2) }]);
+      calls[1]?.resolve([resolved('A', 2)]);
       await flush();
     });
 
@@ -179,6 +184,7 @@ describe('repinIfPinned firing while the track is currently downloading', () => 
       trackId: 'A',
       status: 'ready',
       uri: pinnedUri('A.mp3'),
+      version: 'v2',
     });
     expect(__fs.readFile(pinnedUri('A.mp3'))).toBe(`downloaded:${signedUrl('A', 2)}`);
     expect(usePinnedStore.getState().isWorking).toBe(false);
@@ -194,7 +200,7 @@ describe('repinIfPinned firing while the track is currently downloading', () => 
 
     let sawStaleReady = false;
     await act(async () => {
-      calls[0]?.resolve([{ trackId: 'A', url: signedUrl('A', 1) }]);
+      calls[0]?.resolve([resolved('A', 1)]);
       for (let i = 0; i < 60; i += 1) {
         await Promise.resolve();
         const entry = usePinnedStore.getState().entries['A'];
@@ -215,7 +221,7 @@ describe('repinIfPinned firing while the track is currently downloading', () => 
 
     let sawUnexpectedWrite = false;
     await act(async () => {
-      calls[0]?.resolve([{ trackId: 'A', url: signedUrl('A', 1) }]);
+      calls[0]?.resolve([resolved('A', 1)]);
       for (let i = 0; i < 60; i += 1) {
         await Promise.resolve();
         const status = usePinnedStore.getState().entries['A']?.status;

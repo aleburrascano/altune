@@ -29,6 +29,7 @@ type resolveAudioURLsRequest struct {
 type audioURLDTO struct {
 	TrackID   string `json:"track_id"`
 	URL       string `json:"url"`
+	Version   string `json:"version"`
 	ExpiresAt string `json:"expires_at"`
 }
 
@@ -74,6 +75,7 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 		urls = append(urls, audioURLDTO{
 			TrackID:   ru.TrackID.String(),
 			URL:       ru.URL,
+			Version:   ru.Version,
 			ExpiresAt: ru.ExpiresAt.Format(time.RFC3339),
 		})
 	}
