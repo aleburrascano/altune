@@ -8,9 +8,9 @@ Layout:
 - `ui/DetailScaffold.tsx` — the one screen skeleton: floating app bar, banner, `actions`/`facts` slots, section children. `ui/DetailActions.tsx` — the grow-to-fill primary pill plus `SecondaryAction`. `ui/DetailFacts.tsx` — the labelled fact row. `ui/Section.tsx` — the one section header.
 - `ui/TrackDetailBody.tsx`, `ui/AlbumDetailBody.tsx`, `ui/ArtistDetailBody.tsx` — fill the scaffold's slots; `ui/TrackSaveControl.tsx`, `ui/SaveGlyph.tsx`, `ui/AlbumTrackRow.tsx`, `ui/DiscographySections.tsx`, `ui/RelatedTracksSection.tsx`, `ui/LastFmEnrichmentSection.tsx`, `ui/DetailSkeleton.tsx`, `ui/helpers.ts`.
 - `extras.ts` — `resolveFeatured`, `extractFeaturedFromText`. `extras-accessors.ts` — narrowing for the untyped wire map.
-- `play-source.ts` — `resolvePlaySource`. `save-control-state.ts` — lifecycle state + labels. `save-cache.ts` — the create-request mapper and the optimistic placeholder. `hooks/useOwnedTrack.ts` — server ownership stamp overlaid with the live acquisition status.
+- `play-source.ts` — `resolvePlaySource`, `isResultPlaying`. `save-control-state.ts` — lifecycle state + labels. `save-cache.ts` — the create-request mapper and the optimistic placeholder. `hooks/useOwnedTrack.ts` — server ownership stamp overlaid with the live acquisition status.
 - `navigation.ts` — `openDetail`. `hooks/` — `useSaveTrack`, `useLateralNav`, `useAlbumTracks`, `useArtistContent`, `useDetailEnrichments`, `useEnrichResult`, `useOwnedTrack`, `useAlbumDetailState`, `useArtistDetailState`.
-- `__tests__/` — none yet; rebuild per `okf/playbooks/test-taxonomy.md`.
+- `__tests__/` — `play-source`; the rest is rebuilt per `okf/playbooks/test-taxonomy.md`.
 
 Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@shared/api-client/{tracks,discovery,enrichment}`, `@shared/ui/primitives/*` (imported directly, not the barrel), `@tanstack/react-query`. No cross-feature imports.
 
@@ -35,6 +35,7 @@ Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@share
 - Show one discography rail behind record-type chips, never a stacked rail per type.
 - Keep the collapsing app-bar title hidden from accessibility; it duplicates the banner title.
 - Never add a detail action that has no backing behaviour in the feature's hooks.
+- Read the play/pause state from `isResultPlaying` — every source the result can play, not just the one `resolvePlaySource` would start next.
 - Every tappable element needs `accessibilityRole` + `accessibilityLabel`; touch targets ≥48pt.
 - Never rename a load-bearing testID without updating `docs/specs/view-result-detail/`.
 

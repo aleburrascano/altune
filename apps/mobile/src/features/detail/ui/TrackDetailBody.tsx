@@ -21,7 +21,7 @@ import { useOwnedTrack } from '../hooks/useOwnedTrack';
 import { useReportWrongAlbum } from '../hooks/useReportWrongAlbum';
 import { useSaveTrack } from '../hooks/useSaveTrack';
 import { featuringRouteFor, type DetailRoute } from '../navigation';
-import { resolvePlaySource } from '../play-source';
+import { isResultPlaying, resolvePlaySource } from '../play-source';
 import { toCreateTrackRequest } from '../save-cache';
 import {
   saveControlLabel,
@@ -33,7 +33,6 @@ import {
 import { DetailActions } from './DetailActions';
 import { DetailFacts, type DetailFact } from './DetailFacts';
 import { DetailScaffold, type DetailChrome } from './DetailScaffold';
-import { isCurrentlyPlaying } from './helpers';
 import { RelatedTracksSection } from './RelatedTracksSection';
 import { SaveGlyph } from './SaveGlyph';
 import { Section } from './Section';
@@ -80,7 +79,7 @@ export function TrackDetailBody({
   const featured = resolveFeatured(result.extras, deezerFeatured, result.title, result.subtitle);
 
   const source = resolvePlaySource(te, owned);
-  const playing = source !== null && isCurrentlyPlaying(playback, source);
+  const playing = isResultPlaying(playback, te, owned);
   const isPreview = source?.kind === 'preview';
 
   const saveState: SaveState = !canSave
@@ -107,11 +106,11 @@ export function TrackDetailBody({
   ];
 
   const onTogglePlay = (): void => {
-    if (source === null) {
-      return;
-    }
     if (playing) {
       playback.pause();
+      return;
+    }
+    if (source === null) {
       return;
     }
     void playback.play({
