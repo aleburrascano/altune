@@ -42,7 +42,7 @@ Rebuilt blind on 2026-07-30, same protocol as `shared/events`: authors received 
 
 ## DEFERRED
 
-- **Device e2e** — no device/Maestro harness runs in CI for any slice yet; tracked at the programme level in `docs/specs/test-hardening/plan.md`'s Outstanding section, not reopened per-slice.
+- **Device e2e** — no device/Maestro harness runs in CI for any slice yet; tracked at the programme level in [programme](programme.md)'s Outstanding section, not reopened per-slice.
 
 ## REGRESSION CANDIDATES
 
@@ -63,7 +63,7 @@ Two further `trackStatusStore` survivors from the same audit — dropping `artis
 
 Pre-rebuild baseline (2026-07-29, against the deleted suite): 8 mutations applied, **0 killed**, 8 survived (the eight regression candidates above).
 
-Post-rebuild (2026-07-30), two mechanisms as ADR-0020 requires:
+Post-rebuild (2026-07-30), two mechanisms as the programme requires:
 
 **`test-assassin`, one agent per authored test file, hand-applied mutations, verified by hand (mutation → red → revert):**
 
@@ -107,9 +107,9 @@ Survivors left as accepted, with reasons (none are shipped defects):
 | `DownloadsSheet.tsx` | 21.88 | 21.88 | 25 |
 | **total** | **75.21** | **79.44** | **73** |
 
-The two UI files carry nearly all of the remaining 73 survivors, and essentially all of them are `StyleSheet.create` object/string mutations and `Animated.timing` config objects (`useNativeDriver`, `duration`) that no test — in this file or anywhere in the repo — asserts on, by the project's own convention (`.claude/rules/tests.md`: *"UI components — meaningful tests on interactive logic; don't chase coverage on pure presentational components"*). `test-assassin`'s hand-triage of the same two files found exactly 2 genuine gaps (both fixed above) and discarded the rest as the same class of presentational noise; Stryker's blanket mutator set simply generates far more instances of it than a human triager would bother enumerating one by one. Chasing these to raise the number would mean writing tests that assert exact `StyleSheet` values and animation config — the coverage-inflation trap the taxonomy explicitly rejects ("Chase 100% mutation score" is a rejected alternative in ADR-0020).
+The two UI files carry nearly all of the remaining 73 survivors, and essentially all of them are `StyleSheet.create` object/string mutations and `Animated.timing` config objects (`useNativeDriver`, `duration`) that no test — in this file or anywhere in the repo — asserts on, by the project's own convention (`.claude/rules/tests.md`: *"UI components — meaningful tests on interactive logic; don't chase coverage on pure presentational components"*). `test-assassin`'s hand-triage of the same two files found exactly 2 genuine gaps (both fixed above) and discarded the rest as the same class of presentational noise; Stryker's blanket mutator set simply generates far more instances of it than a human triager would bother enumerating one by one. Chasing these to raise the number would mean writing tests that assert exact `StyleSheet` values and animation config — the coverage-inflation trap the taxonomy explicitly rejects ("Chase 100% mutation score" is a rejected alternative in the programme).
 
-**Not wired into `stryker.config.json`'s CI-enforced gate.** `stryker.config.json` supports one `mutate` glob and one global `thresholds.break` for the whole file. It currently covers only `shared/events` (committed score ≈90.75%, threshold 90, raise-only). Adding `shared/acquisition` to the same glob would average this slice's 79.44% against `shared/events`' 90.75%, landing the *combined* score below 90 and breaking the existing gate — and lowering `thresholds.break` to accommodate that is exactly what "raise-only" forbids. `stryker.config.json` was therefore left untouched (reverted after the scoped CLI run used to produce the table above), and this slice's Stryker number is recorded here only, not CI-enforced. **This is a structural gap in the ratchet design, not a decision about this slice** — every future slice with a UI/presentational component will hit the same ceiling. Surfaced in `docs/specs/test-hardening/plan.md`'s Outstanding section rather than resolved unilaterally, since fixing it means either per-slice Stryker configs/CI jobs or a different threshold strategy, both bigger than a raise-only floor bump.
+**Not wired into `stryker.config.json`'s CI-enforced gate.** `stryker.config.json` supports one `mutate` glob and one global `thresholds.break` for the whole file. It currently covers only `shared/events` (committed score ≈90.75%, threshold 90, raise-only). Adding `shared/acquisition` to the same glob would average this slice's 79.44% against `shared/events`' 90.75%, landing the *combined* score below 90 and breaking the existing gate — and lowering `thresholds.break` to accommodate that is exactly what "raise-only" forbids. `stryker.config.json` was therefore left untouched (reverted after the scoped CLI run used to produce the table above), and this slice's Stryker number is recorded here only, not CI-enforced. **This is a structural gap in the ratchet design, not a decision about this slice** — every future slice with a UI/presentational component will hit the same ceiling. Surfaced in [programme](programme.md)'s Outstanding section rather than resolved unilaterally, since fixing it means either per-slice Stryker configs/CI jobs or a different threshold strategy, both bigger than a raise-only floor bump.
 
 ## KNOWN CONTEXT
 

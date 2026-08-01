@@ -5,12 +5,13 @@ description: Per-slice records of which taxonomy categories apply, which were re
 tags: [index, testing]
 ---
 
-Programme plan and slice ledger: [docs/specs/test-hardening/plan.md](../../docs/specs/test-hardening/plan.md); rationale and rejected alternatives: [ADR-0020](../../docs/adr/0020-test-taxonomy-and-ratchet-gates.md).
+Rationale, the slice ledger, and the outstanding cross-slice findings: [programme](programme.md).
 
 One record per slice, written by `/qa-slice` step 2 and updated at step 7. The categories come from [test-taxonomy](../playbooks/test-taxonomy.md).
 
 A category listed as selected without its done-condition met is a lie; a category missing from a record entirely is a hole. Rejections carry reasons.
 
+- [programme](programme.md) — why the suite was rebuilt, the six decisions, the slice ledger, and the outstanding findings
 - [shared-events](shared-events.md) — mobile SSE event bus and cache patchers
 - [shared-acquisition](shared-acquisition.md) — download lifecycle and track-status overlay
 - [shared-playback](shared-playback.md) — the client-owned Queue state machine and its facade

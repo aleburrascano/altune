@@ -10,7 +10,7 @@ verified_commit: 98dcd6a8b6c41a7ceeab71d24771c1752819a8eb
 SLICE: `apps/mobile/src/shared/lib/`
 TAXONOMY: [test-taxonomy](../playbooks/test-taxonomy.md)
 
-Slice 6 of the [test-hardening programme](../../docs/specs/test-hardening/plan.md). Rebuilt blind on 2026-07-31: authors were given the source, the types it imports, and the taxonomy only — no `okf/`, no deleted tests via git, no nested `CLAUDE.md` test list.
+Slice 6 of the [test-hardening programme](programme.md). Rebuilt blind on 2026-07-31: authors were given the source, the types it imports, and the taxonomy only — no `okf/`, no deleted tests via git, no nested `CLAUDE.md` test list.
 
 Seven files, 4.4 KB, and the smallest slice in the programme by source size — but not by reach. Every one of the other twelve mobile slices imports something from here, and the taxonomy's own Invalidation row names this slice's `query-keys.ts` as having **zero references in any test file** while a mutation to an `INVALIDATION_MAP` entry keyed off it survived. Low line count, high blast radius: that combination is what this record exists to constrain.
 
@@ -49,7 +49,7 @@ None. Every category is either satisfied at its done-condition or rejected above
 
 ## MUTATION AUDIT
 
-Two mechanisms, as ADR-0020 requires, and they found different things.
+Two mechanisms, as the programme requires, and they found different things.
 
 **`test-assassin` — 65 semantic mutations, run in three sequential passes.** Never concurrently: two assassins share one working tree, so each runs the suite while the other has a mutation applied, and every *kill* becomes unattributable. Grouped by source file, one at a time.
 

@@ -10,15 +10,15 @@ verified_commit: 8f62214ad6a310774661717e2b0acdda4d345f46
 SLICE: `apps/mobile/src/shared/auth/`
 TAXONOMY: [test-taxonomy](../playbooks/test-taxonomy.md)
 
-Slice 8 of the [test-hardening programme](../../docs/specs/test-hardening/plan.md). Rebuilt blind on 2026-07-31: authors were given the source, the types it imports, and the taxonomy only — no `okf/`, no deleted tests via git, no nested `CLAUDE.md` test list.
+Slice 8 of the [test-hardening programme](programme.md). Rebuilt blind on 2026-07-31: authors were given the source, the types it imports, and the taxonomy only — no `okf/`, no deleted tests via git, no nested `CLAUDE.md` test list.
 
 Four files, no `__tests__/` directory and no nested `CLAUDE.md` before this run. Baseline **25.35 / 34.61 / 18.51 / 25.75**, and the cartographer established that essentially all of it is an accounting artifact rather than constraint:
 
-- `supabaseClient.ts`'s 38.88% comes entirely from four **`shared/telemetry`** test files that do not mock the client — they import `recordEvent` → `apiFetch` → `authorization()` → `supabase.auth.getSession()`, hitting the real singleton and its real `SecureStore.getItemAsync` arm 16 times while asserting nothing whatever about session state or storage. The fifteen test files that *do* `jest.mock('@shared/auth/supabaseClient')` module-wide contribute a true 0%, so the ADR-0020 hazard is at least reporting itself honestly here.
+- `supabaseClient.ts`'s 38.88% comes entirely from four **`shared/telemetry`** test files that do not mock the client — they import `recordEvent` → `apiFetch` → `authorization()` → `supabase.auth.getSession()`, hitting the real singleton and its real `SecureStore.getItemAsync` arm 16 times while asserting nothing whatever about session state or storage. The fifteen test files that *do* `jest.mock('@shared/auth/supabaseClient')` module-wide contribute a true 0%, so the the programme hazard is at least reporting itself honestly here.
 - The one genuine constraint touching the slice before this run is `shared/api-client/__tests__/apiFetch.auth.test.ts`, which drives real `getSessionExpired()` transitions across a server 401 and a 500.
 - `useSession.ts` and `useSignOut.ts` were at a flat zero. Between them they own the **local-data boundary between two user identities on one device** — the only thing that stops user A's cached library, playlists and offline downloads from being readable by user B.
 
-That boundary is what makes this slice worth more than its 176 lines. It is also the slice where the app's *third* durability guarantee lives: the session in the keychain. ADR-0020 was written about the first (offline pins) and slice 7 hardened the second (the critical telemetry outbox); this is the one whose failure mode is a silent forced re-login on every cold start.
+That boundary is what makes this slice worth more than its 176 lines. It is also the slice where the app's *third* durability guarantee lives: the session in the keychain. The programme was written about the first (offline pins) and slice 7 hardened the second (the critical telemetry outbox); this is the one whose failure mode is a silent forced re-login on every cold start.
 
 ## SELECTED
 
@@ -57,7 +57,7 @@ That boundary is what makes this slice worth more than its 176 lines. It is also
 1. **A session carrying no `user` object crashed the hook, and would have crashed Settings next.** `apply` read `session?.user.id` — the optional chain stops after `session?`, so `user` being absent is a `TypeError` thrown synchronously inside the `onAuthStateChange` callback, where nothing catches it. The reason this is reachable rather than a type-system impossibility is in the SDK: `GoTrueClient._isValidSession` accepts any stored blob holding `access_token`, `refresh_token` and `expires_at`, and **never checks `user`** — so a keychain entry written by an older version passes validation, becomes `currentSession`, and is handed to this hook. Fixed by treating a user-less session as **no session** rather than as a signed-in session with a null identity, which is the shape every consumer needs: `SettingsScreen.tsx:48` reads `sessionState.session.user.email` off the `signed-in` arm and would have thrown on the next render. This is slice 6's rule applied again — fix where the function's own contract is violated, and a value crossing from disk is exactly that.
 2. **A failed `getSession()` wiped the local data of a user the listener had already confirmed.** The `.catch` arm called `apply(null)` unconditionally. Its purpose is to stop a failed cold-start read from stranding `AuthGate` on the splash screen forever — but `onAuthStateChange` fires synchronously on subscribe, so by the time a rejection lands the listener has usually already seeded a real identity, and `apply(null)` then reads as an identity change from that user to signed-out: `queryClient.clear()`, `clearSessionExpired()`, and `unpinAll()` deleting their offline downloads. The guard is now `if (!seededRef.current) apply(null)`, which keeps the splash-screen protection and drops the wipe. Note this also corrects a claim in [shared-api-client](shared-api-client.md): `getSession()` **can** reject, because `__loadSession` awaits `_removeSession()` inside a `try`/`finally` with no `catch` and the storage adapter's `removeItem` does not swallow a keychain failure.
 
-**One test seam added to production**, which the programme's own doctrine required. `sessionExpired.ts` gained `_listenerCountForTest()`. Replacing `subscribe`'s cleanup with `return () => {}` left the entire 1,500-test repo suite green: React's `useSyncExternalStore` listener for an unmounted fiber is a silent no-op in this version, so a leaked listener and a released one were indistinguishable through every public surface while the module-global `Set` grew a dead closure per mount. That is the `write() {}` hole of ADR-0020 in a different costume — code whose state cannot be read cannot be constrained — and the fix is the same one the ADR prescribes: make the write observable by a read.
+**One test seam added to production**, which the programme's own doctrine required. `sessionExpired.ts` gained `_listenerCountForTest()`. Replacing `subscribe`'s cleanup with `return () => {}` left the entire 1,500-test repo suite green: React's `useSyncExternalStore` listener for an unmounted fiber is a silent no-op in this version, so a leaked listener and a released one were indistinguishable through every public surface while the module-global `Set` grew a dead closure per mount. That is the `write() {}` hole of the programme in a different costume — code whose state cannot be read cannot be constrained — and the fix is the same one the ADR prescribes: make the write observable by a read.
 
 ## HAZARDS RECORDED, NOT FIXED
 
@@ -70,7 +70,7 @@ That boundary is what makes this slice worth more than its 176 lines. It is also
 
 ## MUTATION AUDIT
 
-Both mechanisms, as ADR-0020 requires.
+Both mechanisms, as the programme requires.
 
 **`test-assassin` — 55 semantic mutations across four sequential passes**, grouped by source file, never concurrent. Six survived; all six were weak tests rather than source defects, and all six are now dead.
 
