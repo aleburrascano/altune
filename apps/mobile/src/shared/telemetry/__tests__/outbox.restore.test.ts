@@ -1,5 +1,7 @@
+import type * as OutboxNamespace from '../outbox';
 import type { DiscoveryEvent } from '../recordEvent';
-import type { OutboxEntry } from '../outbox';
+
+type OutboxEntry = OutboxNamespace.OutboxEntry;
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -24,7 +26,7 @@ jest.mock('react-native/Libraries/AppState/AppState', () => {
   };
 });
 
-type OutboxModule = typeof import('../outbox');
+type OutboxModule = typeof OutboxNamespace;
 type SupabaseAuthMock = { auth: { getSession: jest.Mock } };
 type FailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
 
