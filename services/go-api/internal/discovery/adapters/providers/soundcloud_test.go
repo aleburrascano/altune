@@ -466,8 +466,8 @@ func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
 			_, _ = w.Write([]byte(`{"collection":[{"id":1,"kind":"user","username":"Underground Artist",
 				"avatar_url":"https://i1.sndcdn.com/avatars-z-large.jpg"}]}`))
 		case strings.HasPrefix(r.URL.Path, "/search/tracks"):
-			_, _ = w.Write([]byte(`{"collection":[{"id":2,"kind":"track","title":"Leak",
-				"artwork_url":"https://i1.sndcdn.com/artworks-q-large.jpg","user":{"username":"x"}}],"next_href":""}`))
+			_, _ = w.Write([]byte(`{"collection":[{"id":2,"kind":"track","title":"Leak (Official Audio)",
+				"artwork_url":"https://i1.sndcdn.com/artworks-q-large.jpg","user":{"username":"Some Artist"}}],"next_href":""}`))
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
@@ -488,6 +488,60 @@ func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
 		t.Fatalf("Resolve(track) error: %v", err)
 	}
 	if got != "https://i1.sndcdn.com/artworks-q-t500x500.jpg" {
+		t.Errorf("track artwork = %q", got)
+	}
+}
+
+func TestSoundCloudAPIAdapter_ResolveArtwork_RejectsUnrelatedUpload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/search/tracks"):
+			_, _ = w.Write([]byte(`{"collection":[{"id":3,"kind":"track","title":"Some Other Song",
+				"artwork_url":"https://i1.sndcdn.com/artworks-a-large.jpg","user":{"username":"Random Uploader"}}],
+				"next_href":""}`))
+		case strings.HasPrefix(r.URL.Path, "/search/users"):
+			_, _ = w.Write([]byte(`{"collection":[{"id":4,"kind":"user","username":"Unrelated Person",
+				"avatar_url":"https://i1.sndcdn.com/avatars-a-large.jpg"}]}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "No Idea", "Don Toliver", "")
+	if err != nil {
+		t.Fatalf("Resolve(track) error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("unrelated upload accepted as track artwork: %q", got)
+	}
+
+	got, err = a.Resolve(context.Background(), domain.ResultKindArtist, "Don Toliver", "", "")
+	if err != nil {
+		t.Fatalf("Resolve(artist) error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("unrelated user accepted as artist artwork: %q", got)
+	}
+}
+
+func TestSoundCloudAPIAdapter_ResolveArtwork_AcceptsUploaderCreditedInTitle(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"collection":[{"id":5,"kind":"track","title":"Don Toliver - No Idea",
+			"artwork_url":"https://i1.sndcdn.com/artworks-b-large.jpg","user":{"username":"leakvault"}}],
+			"next_href":""}`))
+	}))
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "No Idea", "Don Toliver", "")
+	if err != nil {
+		t.Fatalf("Resolve(track) error: %v", err)
+	}
+	if got != "https://i1.sndcdn.com/artworks-b-t500x500.jpg" {
 		t.Errorf("track artwork = %q", got)
 	}
 }

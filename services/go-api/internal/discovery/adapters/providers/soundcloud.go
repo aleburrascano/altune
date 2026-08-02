@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 type SoundCloudAPIAdapter struct {
@@ -268,11 +269,43 @@ func (a *SoundCloudAPIAdapter) Resolve(ctx context.Context, kind domain.ResultKi
 		return "", nil
 	}
 	for _, r := range results {
-		if r.ImageURL != "" {
+		if r.ImageURL != "" && scArtworkMatches(kind, title, subtitle, r) {
 			return r.ImageURL, nil
 		}
 	}
 	return "", nil
+}
+
+func scArtworkMatches(kind domain.ResultKind, title, subtitle string, r domain.SearchResult) bool {
+	if kind == domain.ResultKindArtist {
+		return coversTokensOf(r.Title, title)
+	}
+	if !coversTokensOf(r.Title, title) {
+		return false
+	}
+	return subtitle == "" || coversTokensOf(r.Title+" "+r.Subtitle, subtitle)
+}
+
+func coversTokensOf(haystack, needle string) bool {
+	want := strings.Fields(textnorm.NormalizeForMatch(needle))
+	if len(want) == 0 {
+		return false
+	}
+	have := tokenSet(haystack)
+	for _, token := range want {
+		if !have[token] {
+			return false
+		}
+	}
+	return true
+}
+
+func tokenSet(s string) map[string]bool {
+	tokens := map[string]bool{}
+	for _, token := range strings.Fields(textnorm.NormalizeForMatch(s)) {
+		tokens[token] = true
+	}
+	return tokens
 }
 
 func (a *SoundCloudAPIAdapter) searchArtworkTracks(ctx context.Context, query string) ([]domain.SearchResult, error) {

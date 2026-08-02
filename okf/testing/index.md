@@ -21,3 +21,4 @@ A category listed as selected without its done-condition met is a lie; a categor
 - [shared-telemetry](shared-telemetry.md) — the rotating session id, the durable critical outbox, and the event POST
 - [shared-auth](shared-auth.md) — the Supabase client singleton, the keychain adapter, and the identity boundary between two users on one device
 - [shared-playlists](shared-playlists.md) — the playlist write module: batch membership, optimistic rollback, and the save-on-pick seam
+- [shared-favorites](shared-favorites.md) — the Favorites toggle: optimistic rollback, wire-derived identity, and the double-tap ordering case (not started)

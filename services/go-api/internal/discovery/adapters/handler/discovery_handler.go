@@ -21,6 +21,7 @@ type DiscoveryHandler struct {
 	enrichSvc       *service.EnrichmentService
 	suggestSvc      *service.SuggestService
 	eventSvc        *service.RecordEventService
+	favoritesSvc    *service.FavoritesService
 
 	enrichers DetailEnrichers
 
@@ -83,6 +84,7 @@ type DiscoveryServices struct {
 	Enrich       *service.EnrichmentService
 	Suggest      *service.SuggestService
 	Event        *service.RecordEventService
+	Favorites    *service.FavoritesService
 }
 
 func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
@@ -96,6 +98,7 @@ func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
 		enrichSvc:       svcs.Enrich,
 		suggestSvc:      svcs.Suggest,
 		eventSvc:        svcs.Event,
+		favoritesSvc:    svcs.Favorites,
 	}
 }
 
@@ -106,6 +109,9 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/search-history", h.handleSearchHistory)
 	r.Delete("/search-history", h.handleClearSearchHistory)
 	r.Post("/events", h.handleRecordEvent)
+	r.Get("/favorites", h.handleListFavorites)
+	r.Put("/favorites", h.handleAddFavorite)
+	r.Delete("/favorites", h.handleRemoveFavorite)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/content", h.handleArtistContent)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)

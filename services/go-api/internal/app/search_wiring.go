@@ -71,6 +71,9 @@ func BuildSearchServiceWithTransport(
 			discoveryService.WithFindRelatedService(findRelatedSvc),
 		)
 		if pool != nil {
+			opts = append(opts, discoveryService.WithFavorites(
+				discoveryPersistence.NewPgxFavoritesRepository(pool),
+			))
 			identityStore := discoveryCacheAdapters.NewRedisIdentityStore(
 				discoveryPersistence.NewPgxIdentityStore(pool),
 				redisClient,

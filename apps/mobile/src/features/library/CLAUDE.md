@@ -29,6 +29,8 @@ Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` di
 - Offer selection mode only on track lists — never on the Albums or Artists grids.
 - Confirm a destructive bulk action before it runs, and name the count in the prompt.
 - Send `q` and `sort` to the server; never filter or sort a library list in JS.
+- Playing from the Tracks chip queues the **whole** collection via `tracksState.loadAll()` — never the loaded pages, which would silently scope shuffle to what the user happened to scroll.
+- Every chip's query keeps its previous results while a new `q`/`sort` is in flight (`placeholderData: keepPreviousData`); a search must never drop the screen into the full-page skeleton.
 - Read albums and artists from `/v1/library/*`; never regroup a track list on the device.
 - Keep each chip on its own query, enabled only while that chip is active.
 - Never show the empty-library CTA when a search has merely filtered the view to zero.

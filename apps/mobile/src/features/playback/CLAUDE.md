@@ -11,6 +11,9 @@ Invariants:
 - Every native entry carries `id: trackKey(track)`; anything that reconciles or mutates a native slot resolves it by that id, never by a remembered index.
 - Never attribute a `PlaybackError` to the store's current track — resolve the failing one from `getActiveTrack()`.
 - Playback errors live in `playbackErrorStore`, keyed by `trackKey` — never clear the store on a track change.
+- Every mutation of the native queue (load, reset, add, remove, reorder, skip, prefetch swap) runs inside `withNativeQueue` (`nativeQueueLock.ts`); network work is resolved *before* taking the lock, never inside it.
+- A native entry always carries an `artwork` — `nativeTrack.ts` substitutes `assets/artwork-placeholder.png` when a track has none, so the lock screen can never keep the previous track's cover.
+- `initPlayer.ts` sets up the player with `autoHandleInterruptions: true`; never add a `RemoteDuck` handler alongside it.
 
 Tests: none yet — this slice's suite was reset on 2026-07-30 and is rebuilt per `okf/playbooks/test-taxonomy.md`, with the per-category verdict committed to `okf/testing/<slice>.md`.
 

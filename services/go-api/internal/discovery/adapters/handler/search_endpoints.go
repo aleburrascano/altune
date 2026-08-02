@@ -25,6 +25,7 @@ type SearchResultDTO struct {
 	ArtworkSource   string         `json:"artwork_source,omitempty"`
 	Confidence      string         `json:"confidence"`
 	ResultSignature string         `json:"result_signature"`
+	FavoriteKey     string         `json:"favorite_key"`
 	Sources         []SourceRefDTO `json:"sources"`
 	Extras          map[string]any `json:"extras"`
 }
@@ -368,6 +369,7 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 		ArtworkSource:   sr.ArtworkSource,
 		Confidence:      sr.Confidence.String(),
 		ResultSignature: signature,
+		FavoriteKey:     domain.FavoriteKeyOf(sr),
 		Sources:         sources,
 		Extras:          extras,
 	}

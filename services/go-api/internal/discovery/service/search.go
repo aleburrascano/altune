@@ -53,6 +53,7 @@ type Service struct {
 	correctionSvc    *CorrectionService
 	findRelatedSvc   *FindRelatedService
 	resultCache      ports.ResultCache
+	favoritesRepo    ports.FavoritesRepository
 
 	rankingExperiments
 
@@ -147,6 +148,10 @@ func WithFindRelatedService(r *FindRelatedService) Option {
 
 func WithResultCache(c ports.ResultCache) Option {
 	return func(s *Service) { s.resultCache = c }
+}
+
+func WithFavorites(repo ports.FavoritesRepository) Option {
+	return func(s *Service) { s.favoritesRepo = repo }
 }
 
 func WithTailDemotion() Option {
@@ -245,6 +250,8 @@ func (s *Service) Execute(
 			s.resultCache.Set(ctx, cacheKey, ranked)
 		}
 	}
+
+	ranked = s.liftFavorites(ctx, userId, ranked)
 
 	var related []domain.RelatedGroup
 	if s.findRelatedSvc != nil && len(ranked) > 0 {

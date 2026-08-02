@@ -183,6 +183,9 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
+	favoritesSvc := discoveryService.NewFavoritesService(
+		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
+	)
 
 	enrichSvc := a.wireDiscoveryEnrichment(sharedMB)
 
@@ -196,6 +199,7 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		Enrich:       enrichSvc,
 		Suggest:      content.suggestSvc,
 		Event:        eventSvc,
+		Favorites:    favoritesSvc,
 	})
 	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
 	a.providerHealth = providerhealth.NewStore()

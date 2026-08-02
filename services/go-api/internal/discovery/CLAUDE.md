@@ -4,7 +4,7 @@ The search pipeline (`service/`), providers (`adapters/providers/`), and the val
 
 Layout:
 
-- `domain/` — `SearchResult`, the enrichment value objects, telemetry events, `FeaturedArtist`, identity read-models.
+- `domain/` — `SearchResult`, the enrichment value objects, telemetry events, `FeaturedArtist`, identity read-models, `favorite.go` (the `Favorite` value object and its key derivation).
 - `ports/` — provider, artwork, cache, identity-store and catalog-ownership interfaces.
 - `service/` — `search.go` (the `Service` orchestrator), `merge.go` / `rank.go` / `diversity.go` (the Merge→Rank→reshape core), `enrich/` (detail-open enrichers), `eval/` (offline harness cores, including `library_corpus.go`'s frozen-corpus load/save).
 - `adapters/` — `providers/` (one file per provider), `cache/`, `persistence/`, `handler/`, `catalogbridge/` (the read-only seam onto catalog for ownership stamping and track-number fill).
@@ -28,6 +28,7 @@ Identity and artwork:
 - Never write artwork at lower confidence over an existing positive entry.
 - Never key identity on names — provider ids only.
 - `MBIDIndex` is cache-only; never call MusicBrainz from the search path.
+- A search-backed artwork resolver accepts a hit only when the candidate's own text covers the requested title (and artist, when one is given) — a blank cover beats a confidently wrong one.
 
 Degradation:
 
@@ -54,6 +55,13 @@ Ownership and shaping:
 - An ownership lookup failure degrades to an unstamped result — never a failed search.
 - Fill a track number off the request path, on a detached context.
 - `BuildBlendedSlate` reads the ranked order and never re-ranks; the top result is excluded from its own section.
+
+Favorites:
+
+- Apply the Favorites lift per request, after the shared result cache — that cache is keyed by query, not by user.
+- `domain.FavoriteKey` is the only place a Favorite's key is derived; the wire echoes it as `favorite_key` and clients never recompute it.
+- A favorited artist lifts their tracks and albums too; a favorite is only lifted inside `favoriteLiftWindow`, never from the far tail.
+- A favorites read failure leaves the ranked order untouched — it never fails the search.
 
 Telemetry:
 

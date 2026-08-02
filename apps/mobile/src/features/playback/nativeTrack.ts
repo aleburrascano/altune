@@ -1,9 +1,14 @@
+import { Image } from 'react-native';
 import { type AddTrack } from 'react-native-track-player';
 
 import type { PlaybackTrack } from '@shared/playback/types';
 import { trackKey } from '@shared/playback/trackKey';
 
 import { audioStreamUrl } from '@shared/api-client/audio';
+
+const ARTWORK_PLACEHOLDER = Image.resolveAssetSource(
+  require('../../../assets/artwork-placeholder.png'),
+).uri;
 
 export function toNativeTrack(
   track: PlaybackTrack,
@@ -13,7 +18,7 @@ export function toNativeTrack(
     id: trackKey(track),
     title: track.title,
     artist: track.artist,
-    ...(track.artworkUrl != null ? { artwork: track.artworkUrl } : {}),
+    artwork: track.artworkUrl ?? ARTWORK_PLACEHOLDER,
   };
   if (opts.streamUrl) return { ...base, url: opts.streamUrl };
   if (track.source.kind === 'preview') return { ...base, url: track.source.previewUrl };

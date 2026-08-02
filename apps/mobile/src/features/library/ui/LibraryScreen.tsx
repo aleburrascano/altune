@@ -123,6 +123,12 @@ export function LibraryScreen(): ReactElement {
       danger: { label: 'Remove from Library', onPress: () => confirmRemoveTrack(track) },
     });
 
+  const playWholeLibraryFrom = async (track: TrackResponse): Promise<void> => {
+    const all = await tracksState.loadAll();
+    const { playable, startIndex } = buildPlayableQueue(all, track.id);
+    queue.playFromList(playable, startIndex, { kind: 'library' });
+  };
+
   const confirmDeleteSelected = (): void => {
     const ids = selection.ids;
     Alert.alert(
@@ -338,10 +344,7 @@ export function LibraryScreen(): ReactElement {
               refresh={refresh}
               onEndReached={tracksState.onEndReached}
               isFetchingNextPage={tracksState.isFetchingNextPage}
-              onPlay={(track) => {
-                const { playable, startIndex } = buildPlayableQueue(tracksState.tracks, track.id);
-                queue.playFromList(playable, startIndex, { kind: 'library' });
-              }}
+              onPlay={(track) => void playWholeLibraryFrom(track)}
               onPress={navigateToTrack}
               onMore={(track, anchor) => setAction({ track, anchor })}
               onRetry={(track) => retryMutation.mutate(track.id)}

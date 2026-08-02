@@ -16,6 +16,8 @@ Invariants:
 - `feedback.ts` is the write side of in-app reports: `submitReport` POSTs to `/v1/feedback/reports`, which 404s on a deploy with no issue tracker configured and never throttles a reporter.
 - `library.ts` is the read side of the collection: `/v1/library/albums` and `/v1/library/artists` return server-grouped lenses, and `getTracks` takes `q` / `sort`.
 - `playlists.ts` writes membership only in batches — `POST …/tracks/batch` and `DELETE …/tracks` both take a `track_ids` list and answer with counts, never a bare 204.
+- `tracks.ts` exposes `getAllTracks` for callers that need the whole collection in server order; it pages until `has_more` is false and is never used to render a list.
+- `favorites.ts` identifies a Favorite only by the server's `favorite_key` — never derive that key on the device.
 
 Tests: `__tests__/` — `apiFetch.auth`, `transport`, `deadline`, `isRetryable`, `tracks`, `playlists`, `library`, `discovery`, `queryString.property`, `enrichment`, `lyrics`, `audio`, `playback`, `feedback`, `contract`, `invariants`. Categories and rejections: `okf/testing/shared-api-client.md`.
 

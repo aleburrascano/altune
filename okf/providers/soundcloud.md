@@ -22,3 +22,9 @@ SoundCloud periodically rotates how its `client_id` is embedded, which breaks th
 Track duration is decoded as `DurationMs` (wire tag `duration`) — SoundCloud reports it in milliseconds.
 
 One SoundCloud adapter instance is shared across the album, artist and related content maps: each call resolves its own `client_id`, so sharing avoids redundant resolution.
+
+**Artwork resolution verifies the candidate (2026-08-02).** `SoundCloudAPIAdapter.Resolve` used to return the first search hit that had any image at all. SoundCloud is last in the artwork chain, which means it is exactly the resolver that fires for entities no identity provider knows — unreleased tracks and leaks — and its full-text search returns re-uploads, remixes, DJ mixes and unrelated tracks. The first hit with a thumbnail won, so those entities acquired confidently wrong covers. The reported symptom was "unreleased songs and some released songs show up with incorrect or no album covers".
+
+`scArtworkMatches` now gates acceptance: the candidate's own title must contain every normalized token of the requested title, and when an artist is given, the candidate's title *or* uploader name must contain every token of it. Token containment rather than `TokenSortRatio` is deliberate — SoundCloud titles carry noise ("Artist - Title (Official Audio)"), and a whole-string similarity score rejects those correct matches while containment tolerates the prefix and the suffix. `YouTubeMusicArtworkResolver.pickArtistArtwork` already applied the same idea via `EqualFold`; this closes the gap on the one resolver that had no check.
+
+This trades coverage for correctness: a candidate that cannot be verified now yields a blank cover instead of a wrong one. That is the intended direction — the artwork path already treats a name-only match as provisional, and a wrong cover is a worse failure than none.

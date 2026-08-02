@@ -11,6 +11,8 @@ CLAUDE.md files load on demand, imports only expand at launch). Full entries und
 `~/.claude/lexicon/site/{path}/index.html` — Grep an entry for `Avoid|Cost` and
 quote its cost line when tradeoffs matter; never read a whole entry (~40k chars).
 
+`migrations/` is append-only: numbered `NNN_<name>.sql`, applied in order, never edited once shipped. Latest is `015_discovery_favorites.sql` (the per-user Favorites table behind the Discovery search lift).
+
 Everything about running this service — dev and prod — lives in `deploy/`: `compose.dev.yml` (Postgres + Redis for local work), `compose.prod.yml`, `Dockerfile`, `Caddyfile`, `caddy/`, and the deploy scripts. The module root holds Go code and its lint/env config, nothing else.
 
 ```bash
