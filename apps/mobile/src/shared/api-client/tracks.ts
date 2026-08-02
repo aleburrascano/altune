@@ -22,6 +22,20 @@ export async function getTracks(params: {
   return apiFetch<ListTracksResponse>(`/v1/tracks?${qs.toString()}`);
 }
 
+const MAX_PAGE = 2000;
+
+export async function getAllTracks(params: {
+  q?: string;
+  sort?: LibrarySort;
+}): Promise<TrackResponse[]> {
+  const items: TrackResponse[] = [];
+  for (;;) {
+    const page = await getTracks({ ...params, limit: MAX_PAGE, offset: items.length });
+    items.push(...page.items);
+    if (!page.has_more || page.items.length === 0) return items;
+  }
+}
+
 export async function createTrack(body: CreateTrackRequest): Promise<TrackResponse> {
   return apiFetch<TrackResponse>('/v1/tracks', {
     method: 'POST',

@@ -2,6 +2,7 @@ export const libraryKeys = {
   summary: ['library', 'summary'] as const,
   tracksPrefix: ['library', 'tracks'] as const,
   tracks: (query: string, sort: string) => ['library', 'tracks', query, sort] as const,
+  tracksAll: (query: string, sort: string) => ['library', 'tracks', 'all', query, sort] as const,
   lookupPrefix: ['library', 'lookup'] as const,
   lookup: (query: string) => ['library', 'lookup', query] as const,
   albumsPrefix: ['library', 'albums'] as const,
@@ -14,6 +15,7 @@ export const libraryKeys = {
 
 export const discoveryKeys = {
   history: ['discovery', 'history'] as const,
+  favorites: ['discovery', 'favorites'] as const,
   searchPrefix: ['discovery', 'search'] as const,
   search: (query: string) => ['discovery', 'search', query] as const,
   suggest: (query: string) => ['discovery', 'suggest', query] as const,

@@ -7,6 +7,7 @@ import { Row, Text, radius, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
+import { FavoriteButton } from '@shared/favorites';
 
 import { kindLabel } from '../state';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -97,17 +98,31 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
           />
         }
         trailing={
-          previewUrl !== null ? (
-            <View style={[styles.previewWrap, { backgroundColor: theme.color.surface2 }]}>
-              <IconButton
-                testID={`discover-preview-${position}`}
-                icon={isThisPreviewPlaying ? Pause : Play}
-                size={18}
-                onPress={onPreviewPress}
-                accessibilityLabel={isThisPreviewPlaying ? 'Pause preview' : 'Play preview'}
+          <View style={styles.trailing}>
+            {result.favorite_key != null ? (
+              <FavoriteButton
+                testID={`discover-favorite-${position}`}
+                target={{
+                  kind: result.kind,
+                  favorite_key: result.favorite_key,
+                  title: result.title,
+                  subtitle: result.subtitle ?? '',
+                  image_url: result.image_url ?? undefined,
+                }}
               />
-            </View>
-          ) : undefined
+            ) : null}
+            {previewUrl !== null ? (
+              <View style={[styles.previewWrap, { backgroundColor: theme.color.surface2 }]}>
+                <IconButton
+                  testID={`discover-preview-${position}`}
+                  icon={isThisPreviewPlaying ? Pause : Play}
+                  size={18}
+                  onPress={onPreviewPress}
+                  accessibilityLabel={isThisPreviewPlaying ? 'Pause preview' : 'Play preview'}
+                />
+              </View>
+            ) : null}
+          </View>
         }
       >
         <Text variant="bodyStrong" numberOfLines={1}>
@@ -128,6 +143,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   secondary: { marginTop: spacing.xs },
+  trailing: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.xs,
+  },
   previewWrap: {
     width: 36,
     height: 36,

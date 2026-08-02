@@ -10,7 +10,7 @@ export function ensurePlayerSetup(): Promise<void> {
 }
 
 async function setup(): Promise<void> {
-  await TrackPlayer.setupPlayer({});
+  await TrackPlayer.setupPlayer({ autoHandleInterruptions: true });
   await TrackPlayer.updateOptions({
     capabilities: [
       Capability.Play,

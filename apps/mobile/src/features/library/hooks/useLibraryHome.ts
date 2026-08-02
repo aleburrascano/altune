@@ -1,13 +1,20 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import { getLibraryAlbums, getLibraryArtists, type LibrarySort } from '@shared/api-client/library';
-import { getTracks } from '@shared/api-client/tracks';
+import { getAllTracks, getTracks } from '@shared/api-client/tracks';
+import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys } from '@shared/lib/query-keys';
 
 export const TRACKS_PAGE_SIZE = 200;
 const PENDING_POLL_MS = 60_000;
 
 export function useLibraryTracks(query: string, sort: LibrarySort, enabled: boolean) {
+  const queryClient = useQueryClient();
   const {
     data,
     isLoading,
@@ -26,6 +33,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
       lastPage.has_more ? lastPage.offset + lastPage.items.length : undefined,
     enabled,
     staleTime: Infinity,
+    placeholderData: keepPreviousData,
     refetchInterval: (q) => {
       const pending = q.state.data?.pages.some((page) =>
         page.items.some((t) => t.acquisition_status === 'pending'),
@@ -50,6 +58,14 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
     refetch: () => {
       void refetch();
     },
+    loadAll: (): Promise<TrackResponse[]> =>
+      queryClient
+        .fetchQuery({
+          queryKey: libraryKeys.tracksAll(query, sort),
+          queryFn: () => getAllTracks({ q: query, sort }),
+          staleTime: Infinity,
+        })
+        .catch(() => tracks),
   };
 }
 
@@ -68,6 +84,7 @@ export function useLibraryAlbums(query: string, sort: LibrarySort, enabled: bool
     queryFn: () => getLibraryAlbums({ q: query, sort }),
     enabled,
     staleTime: Infinity,
+    placeholderData: keepPreviousData,
   });
 
   return {
@@ -87,6 +104,7 @@ export function useLibraryArtists(query: string, sort: LibrarySort, enabled: boo
     queryFn: () => getLibraryArtists({ q: query, sort }),
     enabled,
     staleTime: Infinity,
+    placeholderData: keepPreviousData,
   });
 
   return {

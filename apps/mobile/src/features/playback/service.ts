@@ -8,6 +8,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
 import { recoverAudio } from '@shared/api-client/audio';
 import { evictCached, prefetchNext, repairActiveToStreaming, wasSwappedToLocal } from './audioPrefetch';
+import { withNativeQueue } from './nativeQueueLock';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
 import { reportPlaybackError } from './playbackErrorStore';
 
@@ -47,15 +48,15 @@ export async function playbackService() {
     void TrackPlayer.play();
   });
   TrackPlayer.addEventListener(Event.RemoteNext, () => {
-    void TrackPlayer.skipToNext();
+    void withNativeQueue(() => TrackPlayer.skipToNext()).catch(() => {});
   });
   TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
     const { position } = await TrackPlayer.getProgress();
     if (position > RESTART_THRESHOLD_SECONDS) {
       await TrackPlayer.seekTo(0);
-    } else {
-      await TrackPlayer.skipToPrevious();
+      return;
     }
+    await withNativeQueue(() => TrackPlayer.skipToPrevious()).catch(() => {});
   });
   TrackPlayer.addEventListener(Event.RemoteSeek, (data) => {
     void TrackPlayer.seekTo(data.position);

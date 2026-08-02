@@ -26,6 +26,7 @@ Expo (React Native + TypeScript). Features own screens; shared subsystems own cr
 - [shared-auth](shared-auth.md) — promoted Supabase client singleton, session-expired signal, sign-out hook (cache-clear invariants)
 - [shared-events](shared-events.md) — hand-rolled SSE client (watchdog/recycle/backoff) + pure event router patching TanStack Query caches
 - [shared-playlists](shared-playlists.md) — every playlist write plus the picker: batch-only membership and the resolveTrackIds save-on-pick seam
+- [shared-favorites](shared-favorites.md) — saved artists/albums/tracks: server-derived identity, optimistic toggle, and the search lift it feeds
 - [shared-acquisition](shared-acquisition.md) — SSE-fed download lifecycle store: six pipeline stages → three display phases, forward-only
 - [shared-offline](shared-offline.md) — user-pinned offline downloads: document-directory audio, files-win-over-index reconcile, sequential worker
 - [shared-telemetry](shared-telemetry.md) — session-id correlation, two-tier reliability outbox, unified recordEvent hook

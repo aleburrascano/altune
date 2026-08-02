@@ -18,6 +18,7 @@ import type {
 
 import { derivePlaybackState } from '../derivePlaybackState';
 import { ensurePlayerSetup } from '../initPlayer';
+import { withNativeQueue } from '../nativeQueueLock';
 import { seekPreservingPlayback } from '../seekControls';
 import {
   appendNativeTrack,
@@ -155,25 +156,27 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   const skipToQueueIndex = useCallback(
     (index: number) =>
-      ignoringNativeRejection(async () => {
-        await TrackPlayer.skip(index);
-        await TrackPlayer.play();
-      }),
+      ignoringNativeRejection(() =>
+        withNativeQueue(async () => {
+          await TrackPlayer.skip(index);
+          await TrackPlayer.play();
+        }),
+      ),
     [],
   );
 
   const skipNext = useCallback(
-    () => ignoringNativeRejection(() => TrackPlayer.skipToNext()),
+    () => ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.skipToNext())),
     [],
   );
 
   const skipPrevious = useCallback(
-    () => ignoringNativeRejection(() => TrackPlayer.skipToPrevious()),
+    () => ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.skipToPrevious())),
     [],
   );
 
   const removeQueueIndex = useCallback(
-    (index: number) => ignoringNativeRejection(() => TrackPlayer.remove(index)),
+    (index: number) => ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.remove(index))),
     [],
   );
 

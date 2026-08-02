@@ -6,6 +6,7 @@ import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { audioRequestHeaders, fetchAudioUrls } from '@shared/api-client/audio';
+import { withNativeQueue } from './nativeQueueLock';
 import { toNativeTrack } from './nativeTrack';
 import { reportPlaybackError } from './playbackErrorStore';
 
@@ -74,13 +75,16 @@ async function toStreamingNative(track: PlaybackTrack): Promise<AddTrack> {
 }
 
 export async function repairActiveToStreaming(track: PlaybackTrack): Promise<void> {
-  const active = await TrackPlayer.getActiveTrack().catch(() => undefined);
-  if (active != null && active.id !== trackKey(track)) return;
-  if (track.source.kind === 'library') swappedToLocal.delete(track.source.trackId);
-  try {
-    await TrackPlayer.load(await toStreamingNative(track));
-    await TrackPlayer.play();
-  } catch {}
+  const native = await toStreamingNative(track);
+  await withNativeQueue(async () => {
+    const active = await TrackPlayer.getActiveTrack().catch(() => undefined);
+    if (active != null && active.id !== trackKey(track)) return;
+    if (track.source.kind === 'library') swappedToLocal.delete(track.source.trackId);
+    try {
+      await TrackPlayer.load(native);
+      await TrackPlayer.play();
+    } catch {}
+  });
 }
 
 async function upcomingSlotOf(key: string): Promise<number | null> {
@@ -92,16 +96,17 @@ async function upcomingSlotOf(key: string): Promise<number | null> {
 }
 
 export async function swapUpcomingToLocal(track: PlaybackTrack, uri: string): Promise<void> {
-  const key = trackKey(track);
-  const index = await upcomingSlotOf(key);
-  if (index === null) return;
+  await withNativeQueue(async () => {
+    const index = await upcomingSlotOf(trackKey(track));
+    if (index === null) return;
 
-  try {
-    await TrackPlayer.remove(index);
-  } catch {
-    return;
-  }
-  await refillSlot(index, track, uri);
+    try {
+      await TrackPlayer.remove(index);
+    } catch {
+      return;
+    }
+    await refillSlot(index, track, uri);
+  });
 }
 
 async function refillSlot(index: number, track: PlaybackTrack, uri: string): Promise<void> {

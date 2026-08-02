@@ -2,6 +2,8 @@
 
 Vertical slices under `src/features/` — a feature owns its UI/hooks/api/tests end-to-end. Routes in `src/app/` (Expo Router, file-based, tabbed shell under `app/(tabs)/`); shared code in `src/shared/`, each with its own nested `CLAUDE.md`.
 
+`assets/` holds the bundled binaries: `icon.png` (the app icon) and `artwork-placeholder.png` (the lock-screen cover for a track with no artwork). Hand a bundled image to a native module as a URI via `Image.resolveAssetSource`, never as a bare `require` handle.
+
 Test harness: `jest.config.js` (per-glob coverage floors, raise-only), `jest/setup-env.js` + `jest/setup-after-env.js`, native doubles in `jest/doubles/` (`expo-file-system`, `expo-secure-store`, `react-native-track-player`, `fetch`), and `__tests__/harness.test.ts` which constrains the doubles themselves. There is no `e2e/` directory and no `__mocks__/` directory — both were removed on 2026-07-30.
 
 TS pattern vocabulary: **Read `~/.claude/lexicon/MANIFEST-ts.md` before proposing or rejecting any abstraction** (an `@`-import here does not expand — nested CLAUDE.md files load on demand, imports only expand at launch). Full entries under `~/.claude/lexicon/site/{path}/index.html` — Grep an entry for `Avoid|Cost` and quote its cost line when tradeoffs matter; never read a whole entry (~40k chars).
