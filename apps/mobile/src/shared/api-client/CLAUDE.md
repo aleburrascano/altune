@@ -19,6 +19,6 @@ Invariants:
 - `tracks.ts` exposes `getAllTracks` for callers that need the whole collection in server order; it pages until `has_more` is false and is never used to render a list.
 - `favorites.ts` identifies a Favorite only by the server's `favorite_key` — never derive that key on the device.
 
-Tests: `__tests__/` — `apiFetch.auth`, `transport`, `deadline`, `isRetryable`, `tracks`, `playlists`, `library`, `discovery`, `queryString.property`, `enrichment`, `lyrics`, `audio`, `playback`, `feedback`, `contract`, `invariants`. Categories and rejections: `okf/testing/shared-api-client.md`.
+Tests: `__tests__/` — `apiFetch.auth`, `transport`, `deadline`, `isRetryable`, `tracks`, `playlists`, `library`, `discovery`, `favorites`, `queryString.property`, `enrichment`, `lyrics`, `audio`, `playback`, `feedback`, `contract`, `invariants`. Categories and rejections: `okf/testing/shared-api-client.md`.
 
 Knowledge base: `okf/mobile/shared-api-client.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).

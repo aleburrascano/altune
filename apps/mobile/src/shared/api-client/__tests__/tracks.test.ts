@@ -2,6 +2,7 @@ import {
   backfillFeaturedArtists,
   createTrack,
   deleteTrack,
+  getAllTracks,
   getTracks,
   listTracksFeaturing,
   reacquireTrack,
@@ -315,5 +316,57 @@ describe('backfillFeaturedArtists', () => {
     await expect(backfillFeaturedArtists()).resolves.toEqual({ scanned: 120, updated: 8 });
     expect(__http.last().method).toBe('POST');
     expect(__http.last().path).toBe('/v1/tracks/featured-backfill');
+  });
+});
+
+describe('getAllTracks', () => {
+  function page(items: { id: string }[], offset: number, total: number, hasMore: boolean) {
+    return { status: 200, json: { items, total, limit: 2000, offset, has_more: hasMore } };
+  }
+
+  it('returns the single page when the server says there is no more', async () => {
+    __http.reply('GET /v1/tracks', page([{ id: 'a' }, { id: 'b' }], 0, 2, false));
+
+    await expect(getAllTracks({})).resolves.toHaveLength(2);
+    expect(__http.countFor('GET /v1/tracks')).toBe(1);
+  });
+
+  it('follows has_more and offsets each request by what it has already collected', async () => {
+    __http.replyOnce('GET /v1/tracks', page([{ id: 'a' }, { id: 'b' }], 0, 3, true));
+    __http.replyOnce('GET /v1/tracks', page([{ id: 'c' }], 2, 3, false));
+
+    const all = await getAllTracks({});
+
+    expect(all.map((t) => t.id)).toEqual(['a', 'b', 'c']);
+    expect(__http.countFor('GET /v1/tracks')).toBe(2);
+    expect(new URLSearchParams(__http.requests[1].query).get('offset')).toBe('2');
+  });
+
+  it('requests the server cap as the page size, so a whole library is at most a few calls', async () => {
+    __http.reply('GET /v1/tracks', page([], 0, 0, false));
+
+    await getAllTracks({});
+
+    expect(new URLSearchParams(__http.last().query).get('limit')).toBe('2000');
+  });
+
+  it('stops on an empty page even when the server still claims has_more, rather than looping forever', async () => {
+    __http.reply('GET /v1/tracks', page([], 0, 99, true));
+
+    await expect(getAllTracks({})).resolves.toEqual([]);
+    expect(__http.countFor('GET /v1/tracks')).toBe(1);
+  });
+
+  it('forwards q and sort to every page, so a filtered collection pages under the same filter', async () => {
+    __http.replyOnce('GET /v1/tracks', page([{ id: 'a' }], 0, 2, true));
+    __http.replyOnce('GET /v1/tracks', page([{ id: 'b' }], 1, 2, false));
+
+    await getAllTracks({ q: 'radiohead', sort: 'az' });
+
+    for (const request of __http.requests) {
+      const params = new URLSearchParams(request.query);
+      expect(params.get('q')).toBe('radiohead');
+      expect(params.get('sort')).toBe('az');
+    }
   });
 });
