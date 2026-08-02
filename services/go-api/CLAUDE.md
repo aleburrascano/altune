@@ -11,7 +11,7 @@ CLAUDE.md files load on demand, imports only expand at launch). Full entries und
 `~/.claude/lexicon/site/{path}/index.html` — Grep an entry for `Avoid|Cost` and
 quote its cost line when tradeoffs matter; never read a whole entry (~40k chars).
 
-`migrations/` is append-only: numbered `NNN_<name>.sql`, applied in order, never edited once shipped. Latest is `015_discovery_favorites.sql` (the per-user Favorites table behind the Discovery search lift).
+`migrations/` is append-only: numbered `NNN_<name>.sql`, applied in order, never edited once shipped.
 
 Everything about running this service — dev and prod — lives in `deploy/`: `compose.dev.yml` (Postgres + Redis for local work), `compose.prod.yml`, `Dockerfile`, `Caddyfile`, `caddy/`, and the deploy scripts. The module root holds Go code and its lint/env config, nothing else.
 
@@ -44,7 +44,7 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.0 run
 - Register every periodic background loop through `App.whenLeader`, never `Start(ctx)` directly, and always before `startBackgroundWhenLeader` runs.
 - Keep `deploy/lib.sh`'s `log` on stderr — `active_color` is read via command substitution.
 - A migration must stay compatible with the previous version — both colours share one database during the swap.
-- Migrations are applied by hand (psql or an equivalent client), never by the pipeline; `014_track_audio_version.sql` is the latest.
+- Migrations are applied by hand (psql or an equivalent client), never by the pipeline; `015_discovery_favorites.sql` is the latest, applied to production on 2026-08-02.
 - Keep `deploy/Caddyfile` a single `import` — the colour lives in `deploy/caddy/upstream.conf`.
 - Keep `name:` pinned in both compose files — dropping it re-derives the project name from the directory and orphans every existing container and volume.
 - Delete `LEGACY_UPSTREAM_FILE` from `deploy/lib.sh` once the VM has deployed at least once after the `deploy/` move.
