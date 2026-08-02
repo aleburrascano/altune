@@ -17,8 +17,10 @@ jest.mock('react-native/Libraries/AppState/AppState', () => {
   };
 });
 
-import { advanceSession, makeSessionId, SESSION_INACTIVITY_MS } from '../session';
-import type { SessionState } from '../session';
+import * as SessionNamespace from '../session';
+
+const { advanceSession, makeSessionId, SESSION_INACTIVITY_MS } = SessionNamespace;
+type SessionState = SessionNamespace.SessionState;
 
 type MockAppStateModule = {
   default: { addEventListener: jest.Mock };
@@ -28,7 +30,8 @@ type MockAppStateModule = {
 function loadFreshSession(initialNow: number) {
   jest.resetModules();
   const dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(initialNow);
-  const session: typeof import('../session') = require('../session');
+  const session: typeof SessionNamespace = require('../session');
+
   const appState: MockAppStateModule = require('react-native/Libraries/AppState/AppState');
   return { session, appState, dateNowSpy };
 }
