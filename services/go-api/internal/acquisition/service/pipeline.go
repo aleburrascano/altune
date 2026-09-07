@@ -118,31 +118,6 @@ func (ac *AcquisitionContext) MeasuredDuration() float64 {
 	return 0
 }
 
-func (ac *AcquisitionContext) lengthCorroborated() bool {
-	saved, resolved := ac.Track.Duration, ac.Identity.Duration
-	if resolved <= 0 {
-		return false
-	}
-	if saved <= 0 {
-		return true
-	}
-	return durationWithinAuthoritativeTolerance(saved, resolved)
-}
-
-func (ac *AcquisitionContext) durationAcceptable(actual float64) bool {
-	saved, resolved := ac.Track.Duration, ac.Identity.Duration
-	if ac.lengthCorroborated() {
-		if saved <= 0 {
-			return durationWithinAuthoritativeTolerance(resolved, actual)
-		}
-		return durationWithinAuthoritativeTolerance(saved, actual)
-	}
-	if resolved > 0 {
-		return durationWithinTolerance(saved, actual) || durationWithinTolerance(resolved, actual)
-	}
-	return durationWithinTolerance(saved, actual)
-}
-
 type TrackRef struct {
 	ID          string
 	UserID      string

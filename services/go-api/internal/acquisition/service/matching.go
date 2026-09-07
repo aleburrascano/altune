@@ -85,12 +85,6 @@ const (
 	identityMin   = 60.0
 	durationTight = 3
 	durationLoose = 15
-
-	durationMatchSlackSecs = 15.0
-	durationMatchFraction  = 0.07
-
-	authoritativeSlackSecs = 5.0
-	authoritativeFraction  = 0.03
 )
 
 func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
@@ -188,6 +182,42 @@ func breakTie(a, b candidateEntry) bool {
 	return a.candidate.URL < b.candidate.URL
 }
 
+func lessResolved(a, b candidateEntry) bool {
+	return breakTie(a, b)
+}
+
+func lessTopic(a, b candidateEntry) bool {
+	if a.artistMatch != b.artistMatch {
+		return a.artistMatch
+	}
+	if a.featMatch != b.featMatch {
+		return a.featMatch
+	}
+	if a.qualDistance != b.qualDistance {
+		return a.qualDistance < b.qualDistance
+	}
+	if a.ident != b.ident {
+		return a.ident > b.ident
+	}
+	return breakTie(a, b)
+}
+
+func lessOther(a, b candidateEntry) bool {
+	if a.ident != b.ident {
+		return a.ident > b.ident
+	}
+	if a.featMatch != b.featMatch {
+		return a.featMatch
+	}
+	if a.meta != b.meta {
+		return a.meta > b.meta
+	}
+	if a.qualDistance != b.qualDistance {
+		return a.qualDistance < b.qualDistance
+	}
+	return breakTie(a, b)
+}
+
 func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate) []ports.AudioCandidate {
 	if len(candidates) == 0 {
 		return nil
@@ -197,38 +227,13 @@ func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.Audi
 	resolved, topic, other := classifyCandidates(ctx, track, candidates, maxViews)
 
 	sort.SliceStable(resolved, func(i, j int) bool {
-		return breakTie(resolved[i], resolved[j])
+		return lessResolved(resolved[i], resolved[j])
 	})
-
 	sort.SliceStable(topic, func(i, j int) bool {
-		if topic[i].artistMatch != topic[j].artistMatch {
-			return topic[i].artistMatch
-		}
-		if topic[i].featMatch != topic[j].featMatch {
-			return topic[i].featMatch
-		}
-		if topic[i].qualDistance != topic[j].qualDistance {
-			return topic[i].qualDistance < topic[j].qualDistance
-		}
-		if topic[i].ident != topic[j].ident {
-			return topic[i].ident > topic[j].ident
-		}
-		return breakTie(topic[i], topic[j])
+		return lessTopic(topic[i], topic[j])
 	})
 	sort.SliceStable(other, func(i, j int) bool {
-		if other[i].ident != other[j].ident {
-			return other[i].ident > other[j].ident
-		}
-		if other[i].featMatch != other[j].featMatch {
-			return other[i].featMatch
-		}
-		if other[i].meta != other[j].meta {
-			return other[i].meta > other[j].meta
-		}
-		if other[i].qualDistance != other[j].qualDistance {
-			return other[i].qualDistance < other[j].qualDistance
-		}
-		return breakTie(other[i], other[j])
+		return lessOther(other[i], other[j])
 	})
 
 	ranked := make([]ports.AudioCandidate, 0, len(resolved)+len(topic)+len(other))
@@ -240,16 +245,6 @@ func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.Audi
 	return ranked
 }
 
-func durationWithinTolerance(expected, actual float64) bool {
-	tolerance := math.Max(durationMatchSlackSecs, expected*durationMatchFraction)
-	return math.Abs(expected-actual) <= tolerance
-}
-
-func durationWithinAuthoritativeTolerance(expected, actual float64) bool {
-	tolerance := math.Max(authoritativeSlackSecs, expected*authoritativeFraction)
-	return math.Abs(expected-actual) <= tolerance
-}
-
 func maxViewCount(candidates []ports.AudioCandidate) int64 {
 	var maxViews int64
 	for _, c := range candidates {
@@ -258,6 +253,22 @@ func maxViewCount(candidates []ports.AudioCandidate) int64 {
 		}
 	}
 	return maxViews
+}
+
+func logCandidateEvaluated(ctx context.Context, track TrackRef, c ports.AudioCandidate, ident, meta float64, qualDist int, artMatch, featMatch bool) {
+	slog.InfoContext(ctx, "candidate_evaluated",
+		"candidate_title", c.Title,
+		"candidate_channel", c.Channel,
+		"candidate_duration", c.Duration,
+		"candidate_views", c.ViewCount,
+		"identity_score", math.Round(ident*10)/10,
+		"metadata_rank", math.Round(meta*1000)/1000,
+		"qualifier_distance", qualDist,
+		"is_topic", isTopicChannel(c.Channel),
+		"artist_match", artMatch,
+		"feature_match", featMatch,
+		"track_artist", track.Artist,
+	)
 }
 
 func classifyCandidates(
@@ -274,19 +285,7 @@ func classifyCandidates(
 		featMatch := featureMatch(track.Title, c.Title)
 		qualDist := qualifierDistance(track.Title, c.Title)
 
-		slog.InfoContext(ctx, "candidate_evaluated",
-			"candidate_title", c.Title,
-			"candidate_channel", c.Channel,
-			"candidate_duration", c.Duration,
-			"candidate_views", c.ViewCount,
-			"identity_score", math.Round(ident*10)/10,
-			"metadata_rank", math.Round(meta*1000)/1000,
-			"qualifier_distance", qualDist,
-			"is_topic", isTopicChannel(c.Channel),
-			"artist_match", artMatch,
-			"feature_match", featMatch,
-			"track_artist", track.Artist,
-		)
+		logCandidateEvaluated(ctx, track, c, ident, meta, qualDist, artMatch, featMatch)
 
 		entry := candidateEntry{
 			ident:         ident,
