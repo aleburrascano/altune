@@ -29,6 +29,38 @@ func DedupeCandidatesByURL(merged []AudioCandidate, results []AudioCandidate, se
 	return merged
 }
 
+func CollectCandidates(
+	n int,
+	run func(i int) ([]AudioCandidate, error),
+	onSuccess func(i int, candidates []AudioCandidate),
+	onFailure func(i int, err error),
+	allFailed func(firstErr error) error,
+) ([]AudioCandidate, error) {
+	seen := make(map[string]bool)
+	var merged []AudioCandidate
+	var firstErr error
+	failures := 0
+
+	for i := 0; i < n; i++ {
+		candidates, err := run(i)
+		if err != nil {
+			failures++
+			if firstErr == nil {
+				firstErr = err
+			}
+			onFailure(i, err)
+			continue
+		}
+		onSuccess(i, candidates)
+		merged = DedupeCandidatesByURL(merged, candidates, seen)
+	}
+
+	if failures == n && firstErr != nil {
+		return nil, allFailed(firstErr)
+	}
+	return merged, nil
+}
+
 type AudioSearcher interface {
 	Search(ctx context.Context, query string) ([]AudioCandidate, error)
 	Download(ctx context.Context, url string, outDir string) (filePath string, err error)
