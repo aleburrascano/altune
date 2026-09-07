@@ -47,6 +47,10 @@ linters:
             - "**/internal/acquisition/ports/**"
             - "**/internal/acquisition/adapters/ytdlp/**"
             - "**/internal/acquisition/adapters/id3/**"
+            - "**/internal/acquisition/adapters/ytmusic/**"
+            - "**/internal/acquisition/adapters/streamrip/**"
+            - "**/internal/acquisition/adapters/chromaprint/**"
+            - "**/internal/acquisition/adapters/handler/**"
           deny:
             - pkg: altune/go-api/internal/discovery
               desc: acquisition reaches discovery only through adapters/discoverybridge (internal/acquisition/CLAUDE.md)
