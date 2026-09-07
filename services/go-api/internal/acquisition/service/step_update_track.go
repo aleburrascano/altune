@@ -35,7 +35,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext) e
 			track.SetDuration(duration)
 		}
 		track.SetAcquisitionProvenance(ac.Provenance())
-		for _, key := range ac.ExcludeKeys {
+		for _, key := range ac.Replace.ExcludeKeys {
 			track.RejectAudioSource(key)
 		}
 		if ac.Selected != nil {

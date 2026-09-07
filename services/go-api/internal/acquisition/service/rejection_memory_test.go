@@ -48,9 +48,9 @@ func TestUpdateTrackStep_PersistsTheRejectedSources(t *testing.T) {
 	repo.tracks[track.ID.String()+":"+userId.String()] = track
 
 	ac := &AcquisitionContext{
-		AudioRef:    "u/a/b/c.mp3",
-		ExcludeKeys: []string{"youtube:previousAAA", "youtube:currentAAAA"},
-		Selected:    &ports.AudioCandidate{URL: "https://youtube.com/watch?v=freshAAAAAA"},
+		AudioRef: "u/a/b/c.mp3",
+		Replace:  ReplaceState{ExcludeKeys: []string{"youtube:previousAAA", "youtube:currentAAAA"}},
+		Selected: &ports.AudioCandidate{URL: "https://youtube.com/watch?v=freshAAAAAA"},
 	}
 
 	if err := NewUpdateTrackStep(repo, userId, track.ID).Execute(context.Background(), ac); err != nil {
