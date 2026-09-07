@@ -178,9 +178,13 @@ service/     pipeline.go  — Step, StepError, RunPipeline, rollback, Acquisitio
              job_telemetry.go — the jobReporter context seam
              retry_admission.go — RetryAdmission
 adapters/
-  ytdlp/       YtDlpAudioSearcher (search + download), FfprobeProber (duration + decode)
-  id3/         Tagger (ID3v2.4, MP3-only)
-  handler/     RetryHandler (the one inbound HTTP surface)
+  handler/         RetryHandler + ReacquireHandler — the inbound HTTP surface
+  ytdlp/           YtDlpAudioSearcher (search + download), FfprobeProber (duration + decode), Source (text search)
+  ytmusic/         Source — catalog-resolved by video id
+  streamrip/       Source per service — catalog-resolved via the `rip` CLI
+  id3/             Tagger (ID3v2.4, MP3-only)
+  chromaprint/     Identifier — fpcalc + AcoustID cluster comparison
+  discoverybridge/ RecordingResolver over discovery's search service
 ```
 
 Ports are deliberately **narrow slices of larger capabilities**: `AudioWriter` is
@@ -209,7 +213,7 @@ flowchart TD
     GO --> EVS["publish track_acquisition_started"]
     EVS --> S1["SEARCH · 4 query variants → dedupe by URL"]
     S1 --> S2["SELECT · rankCandidates → best"]
-    S2 --> S3["DOWNLOAD · walk ranked list, ≤4 attempts"]
+    S2 --> S3["DOWNLOAD · walk ranked list, ≤8 attempts"]
     S3 --> G1{"duration gate<br/>only if prober AND Track.Duration > 0"}
     G1 -->|fail| S3
     G1 --> G2{"decode gate<br/>whenever prober wired"}
@@ -249,7 +253,7 @@ The title-only 0.6 penalty exists because an unqualified title match is ambiguou
 normalization strips `(feat. X)` before the matcher ever sees it — the one place the
 module already works around the normalization blindness that §7.1 is about.
 
-**Download** walks the ranked list (cap 4 — each attempt is a full download) and
+**Download** walks the ranked list (cap 8 — each attempt is a full download) and
 applies two per-candidate gates, falling through to the next candidate on rejection.
 **Tag** is a no-op for non-MP3 containers, because ID3v2 prepends a block at byte 0
 and that invalidates an MP4 sample-offset table. **Store** re-runs the decode check
@@ -397,19 +401,21 @@ yt-dlp doesn't expose one — so nothing verifies the returned candidate *is* th
 recording. The strongest identifier the system holds is used only to bias a text
 search.
 
-### 7.8 Selection is tested for self-consistency, not correctness — partially closed
+### 7.8 Selection is tested against curated goldens, not live results — partially closed
 
-Every matching test feeds hand-written candidate lists. That proves the ranking
-function is internally consistent; it proves nothing about behavior on what YouTube
-actually returns. There is no golden set, no accuracy number, and no gate — so
-"did that change improve selection?" is currently unanswerable.
+**Done:** `service/eval/` runs the real `CoreSteps` selection in-process against a
+committed golden set — `goldens/selection.json` (ranking and the audio gates) and
+`goldens/verification.json` (identity, fingerprint corroboration, tolerance edges),
+54 cases spanning every class in §1's table. `report.go` scores per-failure-class
+accuracy and gates the headline number against `cmd/acquisitioneval`'s committed
+baseline, re-baselined explicitly — the same shape discovery uses in
+`cmd/discoveryeval`. "Did that change improve selection?" now has an answer, and a
+selection change that regresses the baseline fails the gate.
 
-Discovery solved exactly this shape with `cmd/discoveryeval`: run the real pipeline
-in-process against committed goldens, gate headline metrics against a measured
-baseline, re-baseline explicitly. **Direction:** an `acquisitioneval` counterpart
-over *recorded real yt-dlp candidate lists*, gating selection accuracy and a
-per-failure-class breakdown from §1's table. This is the artifact that makes every
-other item here provable rather than plausible.
+**Still open:** every golden is a *hand-authored* candidate list, not a recording of
+what yt-dlp actually returned. The gate proves selection is correct on the cases we
+can imagine; it still says nothing about the distribution YouTube serves in the
+wild. Capturing real yt-dlp candidate lists as goldens is the remaining step.
 
 ### 7.9 Acquisition history is in-memory only
 
@@ -429,11 +435,12 @@ claim.
 
 ### 7.11 The attempt cap can starve a good candidate — narrowed
 
-`maxVerifyAttempts = 4` bounds downloads, not candidates — and rejection only
-happens *at download time*. A query returning three plausible-but-wrong variants
+`maxVerifyAttempts = 8` bounds downloads, not candidates — and rejection only
+happens *at download time*. A query returning eight plausible-but-wrong variants
 ahead of the master exhausts the budget and fails the track, even though the right
-answer was ranked fifth. Better ranking (§7.1) reduces the pressure; a
-cheap pre-download filter would remove it.
+answer was ranked ninth. The wider cap makes that pathological, not routine, but it
+cannot close the gap: rejection is still paid one full download at a time. Better
+ranking (§7.1) reduces the pressure; a cheap pre-download filter would remove it.
 
 ### 7.12 Retry admission is untested
 
@@ -489,4 +496,4 @@ hard logic lives and where change is safest: `matching.go` in its entirety
 exhaustively testable with plain data. Every gate that has ever failed a user lives
 in one of them — and, per §7.8, every one of them is currently tested only against
 data we wrote ourselves. Put new selection logic in a pure core, add a golden case
-first, and treat the (unbuilt) eval gate as the backstop.
+first, and treat the `cmd/acquisitioneval` gate as the backstop.
