@@ -1,0 +1,41 @@
+name: Task
+description: One small, self-contained unit of work for a single fresh chat.
+title: "[Task]: "
+labels: ["ready"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: The one thing to do, in a sentence.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context (everything the chat needs)
+      description: >
+        File paths, why this matters, links, prior decisions. The chat sees
+        NOTHING else. Assume it just walked in.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: A checklist the chat can tick off, so it knows when to stop.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Out of scope
+      description: What NOT to touch. Stops the chat wandering.
+  - type: input
+    id: deps
+    attributes:
+      label: Depends on
+      description: e.g. "#12 must be merged first". Leave blank if none.
