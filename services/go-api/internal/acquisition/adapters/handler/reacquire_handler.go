@@ -25,11 +25,11 @@ type ReacquireHandler struct {
 	admission *service.ReacquireAdmission
 }
 
-func NewReacquireHandler(trackRepo ports.TrackRepository, scheduler replaceScheduler) *ReacquireHandler {
+func NewReacquireHandler(trackRepo ports.TrackRepository, scheduler replaceScheduler, admission *service.ReacquireAdmission) *ReacquireHandler {
 	return &ReacquireHandler{
 		trackRepo: trackRepo,
 		scheduler: scheduler,
-		admission: service.NewReacquireAdmission(),
+		admission: admission,
 	}
 }
 

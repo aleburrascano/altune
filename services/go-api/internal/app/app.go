@@ -339,8 +339,8 @@ func (a *App) wireCatalog(
 	var retryH *acqHandler.RetryHandler
 	var reacquireH *acqHandler.ReacquireHandler
 	if scheduler != nil {
-		retryH = acqHandler.NewRetryHandler(trackRepo, scheduler)
-		reacquireH = acqHandler.NewReacquireHandler(trackRepo, a.scheduler)
+		retryH = acqHandler.NewRetryHandler(trackRepo, scheduler, acqService.NewRetryAdmission())
+		reacquireH = acqHandler.NewReacquireHandler(trackRepo, a.scheduler, acqService.NewReacquireAdmission())
 	}
 
 	return catalogWiring{
