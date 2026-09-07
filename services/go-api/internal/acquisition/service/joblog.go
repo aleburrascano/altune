@@ -18,18 +18,18 @@ const (
 )
 
 type JobRecord struct {
-	TrackID        string    `json:"track_id"`
-	Title          string    `json:"title,omitempty"`
-	Artist         string    `json:"artist,omitempty"`
-	Album          string    `json:"album,omitempty"`
-	SourceURL      string    `json:"source_url,omitempty"`
-	ResolvedSource string    `json:"source,omitempty"`
-	State          string    `json:"state"`
-	Stage          string    `json:"stage,omitempty"`
-	ScheduledAt    time.Time `json:"scheduled_at"`
-	ElapsedMs      int64     `json:"elapsed_ms"`
-	Reason         string    `json:"reason,omitempty"`
-	Provenance     string    `json:"provenance,omitempty"`
+	TrackID        string
+	Title          string
+	Artist         string
+	Album          string
+	SourceURL      string
+	ResolvedSource string
+	State          string
+	Stage          string
+	ScheduledAt    time.Time
+	ElapsedMs      int64
+	Reason         string
+	Provenance     string
 }
 
 type jobLog struct {
