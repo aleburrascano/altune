@@ -7,14 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
 )
 
 const (
@@ -37,7 +35,7 @@ type Identifier struct {
 
 func NewIdentifier(binDir, apiKey string) *Identifier {
 	return &Identifier{
-		fpcalc:          resolveBinary("fpcalc", binDir),
+		fpcalc:          binpath.Resolve("fpcalc", binDir),
 		apiKey:          apiKey,
 		endpoint:        defaultEndpoint,
 		clusterEndpoint: clusterEndpoint,
@@ -59,26 +57,7 @@ func (i *Identifier) Available() bool {
 	if i.apiKey == "" {
 		return false
 	}
-	if filepath.IsAbs(i.fpcalc) {
-		_, err := os.Stat(i.fpcalc)
-		return err == nil
-	}
-	_, err := exec.LookPath(i.fpcalc)
-	return err == nil
-}
-
-func resolveBinary(name, binDir string) string {
-	if binDir != "" {
-		candidate := name
-		if runtime.GOOS == "windows" {
-			candidate = name + ".exe"
-		}
-		full := filepath.Join(binDir, candidate)
-		if _, err := os.Stat(full); err == nil {
-			return full
-		}
-	}
-	return name
+	return binpath.Runnable(i.fpcalc)
 }
 
 type fingerprint struct {

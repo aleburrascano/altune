@@ -10,6 +10,7 @@ Layout:
 - `events/` — `InProcessBus`, the SSE event bus.
 - `httputil/` — `StatusError`, `HandleServiceError`, correlation/logging/recovery middleware.
 - `httptrace/` — `Recorder` and `Replayer`.
+- `binpath/` — `Resolve` (find a named binary near a dir, else fall back to PATH) and `Runnable` (is a resolved binary present), shared by the chromaprint and ytdlp adapters.
 - `textnorm/` — `NormalizeForMatch`, `TokenSortRatio`, `LevenshteinDistance`.
 - `phonetics/` — `DoubleMetaphone`, `MetaphoneKey`.
 - `leader/` — `Election`, the Postgres advisory lock electing one instance to run background loops (`election_test.go`, skipped without `DATABASE_URL`).

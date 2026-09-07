@@ -16,6 +16,8 @@ Re-derived after #52 extracted `execute`'s replace-exclusion setup (`configureRe
 
 Re-derived after #49 moved `RetryAdmission`/`ReacquireAdmission` construction out of the handlers and into the composition root (injected through `NewRetryHandler`/`NewReacquireHandler`). This is a structure-only change with no behavior change: the same cooldown gates and the same 429s survive, so no category verdict flips. Idempotence/replay (the cooldown denial) and Functional/acceptance (the handler status codes) still cover the surface exactly as before; the composition-root wiring is the Invariant/architecture lens already selected.
 
+#55 (structure-only) extracted the duplicated `resolveBinary`/availability-probe out of the chromaprint and ytdlp adapters into `internal/shared/binpath`; its `Table` unit test moved with it to `internal/shared/binpath/binpath_test.go` (outside this slice). No behavior changed and no taxonomy verdict below is affected.
+
 This is an **orchestration-heavy, I/O-heavy** context whose entire input is untrusted provider output, so the environment family (Adversarial, Failure injection, Concurrency) carries most of the weight, and the pure `matching.go`/`failureReason`/`BuildAudioRef` core carries the Logic family. It owns no UI, no client cache and no aggregate, so the display and cache families reject cleanly.
 
 ## SELECTED
