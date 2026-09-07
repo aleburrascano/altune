@@ -4,7 +4,7 @@ Single-operator observability console under `/admin`. Deliberately **not** hexag
 
 Layout:
 
-- `handler/` — transport only; `AdminHandler`, `OperatorOnly`, the per-panel endpoints, `sse.go`.
+- `handler/` — transport only; `AdminHandler`, `OperatorOnly`, the per-panel endpoints, `sse.go`. `acquisition_handler_test.go` pins the acquisition panel's exact wire JSON.
 - `alert/` — `Monitor`, `Condition`, `NopNotifier` / `NtfyNotifier`.
 - `evalmeter/` — `Meter`, the background eval ticker.
 - `eventtap/` — `Tap` (the `events.Publisher` decorator) and `Feed`.
