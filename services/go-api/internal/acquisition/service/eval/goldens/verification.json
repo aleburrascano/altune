@@ -137,7 +137,7 @@
     {
       "id": "attempt-cap-starves-a-good-candidate",
       "class": "F0",
-      "note": "maxVerifyAttempts caps downloads at 4, and rejection only happens at download time, so five bad candidates ahead of the master exhaust the budget",
+      "note": "maxDownloadAttempts caps downloads at 4, and rejection only happens at download time, so five bad candidates ahead of the master exhaust the budget",
       "track": { "title": "Blinding Lights", "artist": "The Weeknd", "duration": 200, "authoritative_duration": 200 },
       "candidates": [
         { "title": "Blinding Lights (Remix 1)", "url": "yt:bad1", "channel": "The Weeknd - Topic", "categories": ["Music"], "duration": 200, "actual_duration": 300 },

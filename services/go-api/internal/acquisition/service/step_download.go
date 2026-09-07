@@ -9,7 +9,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 )
 
-const maxVerifyAttempts = 8
+const maxDownloadAttempts = 8
 
 type candidateFetcher interface {
 	Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error)
@@ -44,7 +44,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) erro
 	attempts := 0
 
 	for i := range ac.Ranked {
-		if attempts >= maxVerifyAttempts {
+		if attempts >= maxDownloadAttempts {
 			break
 		}
 		attempts++
@@ -64,7 +64,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) erro
 			continue
 		}
 
-		rejection, verified := s.verify(ctx, ac, candidate, filePath)
+		verified, rejection := s.verify(ctx, ac, candidate, filePath)
 		if rejection != nil {
 			os.RemoveAll(tmpDir)
 			lastErr = rejection
@@ -97,7 +97,7 @@ func (s *DownloadStep) verify(
 	ac *AcquisitionContext,
 	candidate ports.AudioCandidate,
 	filePath string,
-) (error, verificationResult) {
+) (verificationResult, error) {
 	var result verificationResult
 
 	if s.prober != nil && ac.Track.Duration > 0 {
@@ -113,8 +113,8 @@ func (s *DownloadStep) verify(
 				"expected_duration", ac.Track.Duration,
 				"authoritative", ac.Identity.Duration > 0,
 			)
-			return fmt.Errorf("candidate %q duration %.0fs != expected %.0fs",
-				candidate.URL, actual, ac.Track.Duration), result
+			return result, fmt.Errorf("candidate %q duration %.0fs != expected %.0fs",
+				candidate.URL, actual, ac.Track.Duration)
 		default:
 			result.duration = true
 			result.probed = actual
@@ -125,15 +125,15 @@ func (s *DownloadStep) verify(
 		if err := s.prober.ValidateDecodable(ctx, filePath); err != nil {
 			slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
 				"url", candidate.URL, "error", err)
-			return fmt.Errorf("candidate %q undecodable: %w", candidate.URL, err), result
+			return result, fmt.Errorf("candidate %q undecodable: %w", candidate.URL, err)
 		}
 	}
 
 	if rejected := s.identify(ctx, ac, candidate, filePath, &result); rejected {
-		return fmt.Errorf("candidate %q is a different recording", candidate.URL), result
+		return result, fmt.Errorf("candidate %q is a different recording", candidate.URL)
 	}
 
-	return nil, result
+	return result, nil
 }
 
 func (s *DownloadStep) identify(

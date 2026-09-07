@@ -65,7 +65,7 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 	case errors.Is(err, service.ErrRetryNotFailed):
 		httputil.Conflict(w, "track is not in failed state")
 		return
-	case errors.Is(err, service.ErrRetryCooldown):
+	case errors.Is(err, service.ErrCooldownActive):
 		httputil.WriteJSON(w, http.StatusTooManyRequests, map[string]string{
 			"error": "retry cooldown active, try again later",
 		})

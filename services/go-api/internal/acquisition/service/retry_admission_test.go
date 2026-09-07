@@ -133,14 +133,14 @@ func TestRetryAdmission_Admit(t *testing.T) {
 		}
 	})
 
-	t.Run("second failed retry within cooldown yields ErrRetryCooldown", func(t *testing.T) {
+	t.Run("second failed retry within cooldown yields ErrCooldownActive", func(t *testing.T) {
 		a := NewRetryAdmission()
 		track := failedTrack(t)
 		if err := a.Admit(track); err != nil {
 			t.Fatalf("first Admit = %v, want nil", err)
 		}
-		if err := a.Admit(track); !errors.Is(err, ErrRetryCooldown) {
-			t.Errorf("second Admit = %v, want ErrRetryCooldown", err)
+		if err := a.Admit(track); !errors.Is(err, ErrCooldownActive) {
+			t.Errorf("second Admit = %v, want ErrCooldownActive", err)
 		}
 	})
 
@@ -177,14 +177,14 @@ func TestReacquireAdmission_Admit(t *testing.T) {
 		}
 	})
 
-	t.Run("second reacquire within cooldown yields ErrRetryCooldown", func(t *testing.T) {
+	t.Run("second reacquire within cooldown yields ErrCooldownActive", func(t *testing.T) {
 		a := NewReacquireAdmission()
 		track := readyTrack(t)
 		if err := a.Admit(track); err != nil {
 			t.Fatalf("first Admit = %v, want nil", err)
 		}
-		if err := a.Admit(track); !errors.Is(err, ErrRetryCooldown) {
-			t.Errorf("second Admit = %v, want ErrRetryCooldown", err)
+		if err := a.Admit(track); !errors.Is(err, ErrCooldownActive) {
+			t.Errorf("second Admit = %v, want ErrCooldownActive", err)
 		}
 	})
 }
