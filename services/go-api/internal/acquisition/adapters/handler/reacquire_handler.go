@@ -61,7 +61,7 @@ func (h *ReacquireHandler) HandleReacquire(w http.ResponseWriter, r *http.Reques
 	case errors.Is(err, service.ErrReacquireNotReady):
 		httputil.Conflict(w, "track has no audio to replace")
 		return
-	case errors.Is(err, service.ErrRetryCooldown):
+	case errors.Is(err, service.ErrCooldownActive):
 		httputil.WriteJSON(w, http.StatusTooManyRequests, map[string]string{
 			"error": "reacquire cooldown active, try again later",
 		})

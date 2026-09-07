@@ -435,7 +435,7 @@ claim.
 
 ### 7.11 The attempt cap can starve a good candidate — narrowed
 
-`maxVerifyAttempts = 8` bounds downloads, not candidates — and rejection only
+`maxDownloadAttempts = 8` bounds downloads, not candidates — and rejection only
 happens *at download time*. A query returning eight plausible-but-wrong variants
 ahead of the master exhausts the budget and fails the track, even though the right
 answer was ranked ninth. The wider cap makes that pathological, not routine, but it
