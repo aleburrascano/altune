@@ -4,13 +4,15 @@ title: Test selection — backend acquisition
 description: Which of the twenty taxonomy categories apply to the Go acquisition module (search → rank → download → verify → tag → store → ready), which were rejected and why. Records the test set standing after #35 (retry_admission), #36 (reacquire_handler) and #37 (registry).
 resource: services/go-api/internal/acquisition/
 tags: [testing, backend, go-api, acquisition]
-verified_commit: 653db958
+verified_commit: 89bba33a
 ---
 
 SLICE: `services/go-api/internal/acquisition/`
 TAXONOMY: [test-taxonomy](../playbooks/test-taxonomy.md) @ 98dcd6a8
 
 Recorded on 2026-09-07 over the test set that exists after the three tests-first tickets landed — #35 (`service/retry_admission_test.go`), #36 (`adapters/handler/reacquire_handler_test.go`), #37 (`service/registry_test.go`) — plus the pipeline, matching, steps, scheduler and eval suites already in the module. This is the selection record the root `CLAUDE.md` requires and that `ARCHITECTURE.md §7.12` ("retry admission is untested") flagged as the standing gap; #35 closed it. No new tests were written for this record — it is the twenty-category verdict over the module as it now stands. The mobile slice `okf/testing/shared-acquisition.md` (`resource:` the RN downloads-bar) is a different slice and is not touched here.
+
+Re-derived after #52 extracted `execute`'s replace-exclusion setup (`configureReplaceExclusion`) and its dual failure branch (`reportAcquisitionFailure`) into named helpers: a structure-only, no-behavior-change refactor triggers no new category and needs no new test. The changed surface stays covered by the verdicts already recorded — Legacy / compat (the no-recorded-source replace path, `replace_test.go`), Failure injection (the mark-failed-and-publish branch, `acquire_test.go`), and Cross-surface contract (the `track_replace_failed`/`track_acquisition_failed` names stay literals at their `Publish` call sites).
 
 This is an **orchestration-heavy, I/O-heavy** context whose entire input is untrusted provider output, so the environment family (Adversarial, Failure injection, Concurrency) carries most of the weight, and the pure `matching.go`/`failureReason`/`BuildAudioRef` core carries the Logic family. It owns no UI, no client cache and no aggregate, so the display and cache families reject cleanly.
 

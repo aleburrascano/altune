@@ -120,54 +120,62 @@ func (s *AcquireTrackAudioService) execute(
 
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
 	if replace {
-		ac.PreservedRef = deref(track.AudioRef)
-		ac.ExcludeKeys = mergeSourceKeys(
-			track.RejectedSourceKeys,
-			sourceKey(deref(track.AudioSourceURL)),
-		)
-		if len(ac.ExcludeKeys) > 0 {
-			slog.InfoContext(ctx, "acquisition.replacing_source",
-				"track_id", trackId.String(), "excluded_keys", ac.ExcludeKeys)
-		} else {
-			ac.SkipTopRanked = true
-			slog.InfoContext(ctx, "acquisition.replacing_unknown_source",
-				"track_id", trackId.String())
-		}
+		configureReplaceExclusion(ctx, ac, track, trackId)
 	}
 	s.resolveIdentity(ctx, ac)
 	err = RunPipeline(ctx, s.buildSteps(userId, trackId), ac)
 	CleanupTemp(ctx, ac)
 
 	if err != nil {
-		slog.WarnContext(ctx, "track_acquisition_failed",
-			"track_id", trackId.String(),
-			"user_id", userId.String(),
-			"replace", replace,
-			"error", err,
-		)
-		reason := failureReason(err)
-		if replace {
-			if s.events != nil {
-				s.events.Publish(userId, "track_replace_failed", map[string]any{
-					"track_id": trackId.String(),
-					"reason":   reason,
-				})
-			}
-			return err
-		}
-		s.markFailed(ctx, trackId, userId, reason)
+		return s.reportAcquisitionFailure(ctx, userId, trackId, replace, err)
+	}
+
+	jobReporterFrom(ctx).provenance(string(ac.Provenance()))
+	s.onAcquireCompleted(ctx, userId, trackId, ac.AudioRef)
+	return nil
+}
+
+func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *domain.Track, trackId domain.TrackId) {
+	ac.PreservedRef = deref(track.AudioRef)
+	ac.ExcludeKeys = mergeSourceKeys(
+		track.RejectedSourceKeys,
+		sourceKey(deref(track.AudioSourceURL)),
+	)
+	if len(ac.ExcludeKeys) > 0 {
+		slog.InfoContext(ctx, "acquisition.replacing_source",
+			"track_id", trackId.String(), "excluded_keys", ac.ExcludeKeys)
+	} else {
+		ac.SkipTopRanked = true
+		slog.InfoContext(ctx, "acquisition.replacing_unknown_source",
+			"track_id", trackId.String())
+	}
+}
+
+func (s *AcquireTrackAudioService) reportAcquisitionFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, replace bool, err error) error {
+	slog.WarnContext(ctx, "track_acquisition_failed",
+		"track_id", trackId.String(),
+		"user_id", userId.String(),
+		"replace", replace,
+		"error", err,
+	)
+	reason := failureReason(err)
+	if replace {
 		if s.events != nil {
-			s.events.Publish(userId, "track_acquisition_failed", map[string]any{
+			s.events.Publish(userId, "track_replace_failed", map[string]any{
 				"track_id": trackId.String(),
 				"reason":   reason,
 			})
 		}
 		return err
 	}
-
-	jobReporterFrom(ctx).provenance(string(ac.Provenance()))
-	s.onAcquireCompleted(ctx, userId, trackId, ac.AudioRef)
-	return nil
+	s.markFailed(ctx, trackId, userId, reason)
+	if s.events != nil {
+		s.events.Publish(userId, "track_acquisition_failed", map[string]any{
+			"track_id": trackId.String(),
+			"reason":   reason,
+		})
+	}
+	return err
 }
 
 func failureReason(err error) string {
