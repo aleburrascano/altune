@@ -15,7 +15,7 @@ const (
 
 var (
 	ErrRetryNotFailed    = errors.New("track is not in failed state")
-	ErrRetryCooldown     = errors.New("retry cooldown active")
+	ErrCooldownActive    = errors.New("cooldown active")
 	ErrReacquireNotReady = errors.New("track has no audio to replace")
 )
 
@@ -59,7 +59,7 @@ func (a *RetryAdmission) Admit(track *domain.Track) error {
 		return ErrRetryNotFailed
 	}
 	if !a.gate.admit(track.ID.String()) {
-		return ErrRetryCooldown
+		return ErrCooldownActive
 	}
 	return nil
 }
@@ -77,7 +77,7 @@ func (a *ReacquireAdmission) Admit(track *domain.Track) error {
 		return ErrReacquireNotReady
 	}
 	if !a.gate.admit(track.ID.String()) {
-		return ErrRetryCooldown
+		return ErrCooldownActive
 	}
 	return nil
 }

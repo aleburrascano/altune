@@ -132,8 +132,8 @@ func TestReacquireAdmission(t *testing.T) {
 	if err := admission.Admit(ready); err != nil {
 		t.Fatalf("ready track: err = %v, want admitted", err)
 	}
-	if err := admission.Admit(ready); err != ErrRetryCooldown {
-		t.Errorf("second call: err = %v, want ErrRetryCooldown", err)
+	if err := admission.Admit(ready); err != ErrCooldownActive {
+		t.Errorf("second call: err = %v, want ErrCooldownActive", err)
 	}
 }
 
@@ -152,8 +152,8 @@ func TestRetryAdmission_StillFailedOnlyWithCooldown(t *testing.T) {
 	if err := admission.Admit(failed); err != nil {
 		t.Fatalf("failed track: err = %v, want admitted", err)
 	}
-	if err := admission.Admit(failed); err != ErrRetryCooldown {
-		t.Errorf("second call: err = %v, want ErrRetryCooldown", err)
+	if err := admission.Admit(failed); err != ErrCooldownActive {
+		t.Errorf("second call: err = %v, want ErrCooldownActive", err)
 	}
 }
 
