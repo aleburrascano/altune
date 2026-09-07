@@ -89,7 +89,7 @@ func TestStoreRollback_KeepsThePreservedRef(t *testing.T) {
 	store.stored["u/a/b/c.mp3"] = true
 	step := NewStoreStep(store)
 
-	ac := &AcquisitionContext{AudioRef: "u/a/b/c.mp3", PreservedRef: "u/a/b/c.mp3"}
+	ac := &AcquisitionContext{AudioRef: "u/a/b/c.mp3", Replace: ReplaceState{PreservedRef: "u/a/b/c.mp3"}}
 	if err := step.Rollback(context.Background(), ac); err != nil {
 		t.Fatalf("Rollback: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestStoreRollback_DeletesAFreshlyWrittenRef(t *testing.T) {
 	store.stored["u/a/b/new.mp3"] = true
 	step := NewStoreStep(store)
 
-	ac := &AcquisitionContext{AudioRef: "u/a/b/new.mp3", PreservedRef: "u/a/b/old.mp3"}
+	ac := &AcquisitionContext{AudioRef: "u/a/b/new.mp3", Replace: ReplaceState{PreservedRef: "u/a/b/old.mp3"}}
 	if err := step.Rollback(context.Background(), ac); err != nil {
 		t.Fatalf("Rollback: %v", err)
 	}
@@ -176,8 +176,8 @@ func TestExecuteReplace_LegacyTrackSkipsTopRankedInsteadOfExcluding(t *testing.T
 
 func TestSelectStep_SkipTopRankedDropsTheLeader(t *testing.T) {
 	ac := &AcquisitionContext{
-		Track:         TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
-		SkipTopRanked: true,
+		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+		Replace: ReplaceState{SkipTopRanked: true},
 		Candidates: []ports.AudioCandidate{
 			{Title: "Blinding Lights", URL: "leader", Channel: "The Weeknd - Topic", Duration: 200},
 			{Title: "The Weeknd - Blinding Lights", URL: "runner-up", Channel: "Someone", Duration: 201},
@@ -194,8 +194,8 @@ func TestSelectStep_SkipTopRankedDropsTheLeader(t *testing.T) {
 
 func TestSelectStep_SkipTopRankedWithOneCandidateFails(t *testing.T) {
 	ac := &AcquisitionContext{
-		Track:         TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
-		SkipTopRanked: true,
+		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
+		Replace: ReplaceState{SkipTopRanked: true},
 		Candidates: []ports.AudioCandidate{
 			{Title: "Blinding Lights", URL: "only", Channel: "The Weeknd - Topic", Duration: 200},
 		},

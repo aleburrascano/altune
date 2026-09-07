@@ -78,14 +78,18 @@ type AcquisitionContext struct {
 	DurationVerified bool
 	IdentityVerified bool
 
+	Replace ReplaceState
+}
+
+type ReplaceState struct {
 	ExcludeKeys   []string
 	PreservedRef  string
 	SkipTopRanked bool
 }
 
-func (ac *AcquisitionContext) excludes(url string) bool {
+func (r ReplaceState) excludes(url string) bool {
 	key := sourceKey(url)
-	for _, excluded := range ac.ExcludeKeys {
+	for _, excluded := range r.ExcludeKeys {
 		if excluded == key {
 			return true
 		}

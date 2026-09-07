@@ -54,7 +54,7 @@ func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error 
 	if ac.AudioRef == "" {
 		return nil
 	}
-	if ac.AudioRef == ac.PreservedRef {
+	if ac.AudioRef == ac.Replace.PreservedRef {
 		slog.WarnContext(ctx, "acquisition.rollback_kept_preserved_audio", "audio_ref", ac.AudioRef)
 		return nil
 	}

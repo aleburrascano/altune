@@ -54,12 +54,12 @@ func TestSourceKeys_DedupesAndDropsEmpty(t *testing.T) {
 }
 
 func TestExcludes_MatchesAcrossURLSpellings(t *testing.T) {
-	ac := &AcquisitionContext{ExcludeKeys: SourceKeys([]string{"https://music.youtube.com/watch?v=dQw4w9WgXcQ"})}
+	r := ReplaceState{ExcludeKeys: SourceKeys([]string{"https://music.youtube.com/watch?v=dQw4w9WgXcQ"})}
 
-	if !ac.excludes("https://www.youtube.com/watch?v=dQw4w9WgXcQ") {
+	if !r.excludes("https://www.youtube.com/watch?v=dQw4w9WgXcQ") {
 		t.Error("a replace must not hand back the same video under its other URL")
 	}
-	if ac.excludes("https://www.youtube.com/watch?v=aaaaaaaaaaa") {
+	if r.excludes("https://www.youtube.com/watch?v=aaaaaaaaaaa") {
 		t.Error("a different video must not be excluded")
 	}
 }
