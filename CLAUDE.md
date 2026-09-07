@@ -17,10 +17,6 @@ Music manager. Expo (RN + TS) mobile in `apps/mobile/` + Go hexagonal modular mo
 - Conventional Commits (scopes in `commitlint.config.js`); never write `Co-Authored-By: Claude` / `🤖 Generated with…` trailers.
 - Check Context7 before answering from memory on: Expo SDK, React Native, React Navigation, TanStack Query, Zustand, Reanimated, Go stdlib, chi, sqlx.
 
-## Patterns
-
-`~/.claude/lexicon/` is the authoritative pattern reference. Manifests are **never auto-loaded** — Read the language manifest (`MANIFEST-go.md` / `MANIFEST-ts.md`) before proposing or rejecting any abstraction, and check `INDEX.md` for cross-cutting manifests (caching, event-driven, observability…) when the work touches those domains. Full entries at `~/.claude/lexicon/site/{path}/index.html` — Grep for `Avoid|Cost` and quote the cost line when tradeoffs matter. When proposing an abstraction: name its manifest pattern — or "no pattern — direct code" **plus the closest manifest entry and why it loses** (an unchecked "no pattern" is an assertion, not a verdict) — name the concrete second implementation ("flexibility" isn't one), and honor its _Cost:_ line — no cost line means unproven, not free. One constraint outranks any pattern: imports point one direction, the object graph is wired explicitly in the composition root, behavior lives with its data.
-
 ## CodeGraph
 
 In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
