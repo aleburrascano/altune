@@ -102,6 +102,8 @@ That last sentence is exactly why `wireCatalog` now asks each adapter whether it
 
 `wireCatalog` builds a second acquisition handler alongside the retry one, gated on the same condition (a scheduler exists, which requires both an audio store and a source). `NewReacquireHandler` takes `a.scheduler` — the concrete `*BackgroundAcquisitionScheduler` — rather than the `catalogPorts.AcquisitionScheduler` interface, because `ScheduleReplace` deliberately is not on that port; catalog only ever needs plain `Schedule`. `POST /v1/tracks/{trackId}/reacquire` mounts next to `/retry`, and like it is absent entirely when acquisition is switched off.
 
+Both handlers' admission gates are constructed here too: `wireCatalog` calls `acqService.NewRetryAdmission()` and `acqService.NewReacquireAdmission()` and injects them through `NewRetryHandler`/`NewReacquireHandler`, rather than letting each handler `new` its own. The gates carry the per-track cooldown map, so owning their construction at the composition root keeps that state where the object graph is wired explicitly and leaves a future second entry point free to share the same instance (see [acquisition/retry](acquisition/retry.md)).
+
 ## Feedback wiring (2026-07-29)
 
 `wireFeedback` follows the optional-dependency shape already used for the acquisition handlers: it returns nil when `cfg.HasIssueTracker()` is false (logging that in-app reports are disabled), and `mountRoutes` takes the handler as a parameter and skips `r.Mount("/feedback", …)` when it is nil. The consequence worth knowing: a deploy without `GITHUB_ISSUE_REPO`/`GITHUB_ISSUE_TOKEN` answers 404 on `POST /v1/feedback/reports`, which the mobile client reports to the tester as an unreachable server rather than pretending the report was filed.

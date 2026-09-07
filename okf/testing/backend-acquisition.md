@@ -14,6 +14,8 @@ Recorded on 2026-09-07 over the test set that exists after the three tests-first
 
 Re-derived after #52 extracted `execute`'s replace-exclusion setup (`configureReplaceExclusion`) and its dual failure branch (`reportAcquisitionFailure`) into named helpers: a structure-only, no-behavior-change refactor triggers no new category and needs no new test. The changed surface stays covered by the verdicts already recorded — Legacy / compat (the no-recorded-source replace path, `replace_test.go`), Failure injection (the mark-failed-and-publish branch, `acquire_test.go`), and Cross-surface contract (the `track_replace_failed`/`track_acquisition_failed` names stay literals at their `Publish` call sites).
 
+Re-derived after #49 moved `RetryAdmission`/`ReacquireAdmission` construction out of the handlers and into the composition root (injected through `NewRetryHandler`/`NewReacquireHandler`). This is a structure-only change with no behavior change: the same cooldown gates and the same 429s survive, so no category verdict flips. Idempotence/replay (the cooldown denial) and Functional/acceptance (the handler status codes) still cover the surface exactly as before; the composition-root wiring is the Invariant/architecture lens already selected.
+
 This is an **orchestration-heavy, I/O-heavy** context whose entire input is untrusted provider output, so the environment family (Adversarial, Failure injection, Concurrency) carries most of the weight, and the pure `matching.go`/`failureReason`/`BuildAudioRef` core carries the Logic family. It owns no UI, no client cache and no aggregate, so the display and cache families reject cleanly.
 
 ## SELECTED

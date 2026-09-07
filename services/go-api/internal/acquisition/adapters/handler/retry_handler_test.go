@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
 	catdomain "altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -120,7 +121,7 @@ func makeReadyRetryTrack(userId shared.UserId, title, artist, album, audioRef st
 }
 
 func buildRetryRouter(trackRepo *retryFakeTrackRepo, scheduler *retryFakeScheduler) chi.Router {
-	h := NewRetryHandler(trackRepo, scheduler)
+	h := NewRetryHandler(trackRepo, scheduler, service.NewRetryAdmission())
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(retryVerifyAsTestUser))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
