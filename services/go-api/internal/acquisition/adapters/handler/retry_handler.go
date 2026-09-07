@@ -28,11 +28,12 @@ type RetryHandler struct {
 func NewRetryHandler(
 	trackRepo ports.TrackRepository,
 	scheduler acquisitionScheduler,
+	admission *service.RetryAdmission,
 ) *RetryHandler {
 	return &RetryHandler{
 		trackRepo: trackRepo,
 		scheduler: scheduler,
-		admission: service.NewRetryAdmission(),
+		admission: admission,
 	}
 }
 
