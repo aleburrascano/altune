@@ -4,7 +4,7 @@ title: Test taxonomy
 description: The twenty categories of test a slice can deserve, each with the code property that triggers it and the condition that closes it — the input to qa-slice's category selection.
 resource: .claude/skills/qa-slice/SKILL.md
 tags: [testing, mutation-testing, coverage, quality-gates, methodology]
-verified_commit: 98dcd6a8b6c41a7ceeab71d24771c1752819a8eb
+verified_commit: 9ac0bd92091d420d07714bbce2be26f815837ec1
 ---
 
 This list exists because of one measurement. On 2026-07-29 a mutation pass ran 72 mutations against six `apps/mobile/src/shared/` subsystems under a suite of 552 passing tests. 26 mutations were killed. 43 survived — each one a change to production code that would ship a user-visible defect and that the suite did not notice. Kill rate: 38%.
@@ -48,7 +48,7 @@ Four changes are the ones most often missed, because each adds a category rather
 
 Scoped tooling, so this costs minutes rather than a full run:
 
-- `npx stryker run --mutate "<the changed files>"` — a kill rate for the diff, not the glob.
+- `npx stryker run --mutate "<the changed files>" --reporters progress-append-only,json` — a kill rate for the diff, not the glob; read the score from `reports/mutation/mutation.json`, and if you add an exclude keep both patterns comma-separated inside the one `--mutate` flag (a second `--mutate` flag silently mutates nothing and reports a passing `NaN`).
 - `npx fallow audit` — dead code, complexity and duplication over changed files only.
 - `npx react-doctor --scope changed --base origin/main` — only issues the change introduced.
 
