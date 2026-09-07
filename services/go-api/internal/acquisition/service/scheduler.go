@@ -13,9 +13,9 @@ import (
 )
 
 type AcquisitionVerification struct {
-	Ffprobe bool `json:"ffprobe"`
-	Ffmpeg  bool `json:"ffmpeg"`
-	Fpcalc  bool `json:"fpcalc"`
+	Ffprobe bool
+	Ffmpeg  bool
+	Fpcalc  bool
 }
 
 func (v AcquisitionVerification) FullyArmed() bool {
@@ -23,12 +23,12 @@ func (v AcquisitionVerification) FullyArmed() bool {
 }
 
 type AcquisitionStatus struct {
-	InFlight     int                     `json:"in_flight"`
-	Succeeded    uint64                  `json:"succeeded"`
-	Failed       uint64                  `json:"failed"`
-	Verification AcquisitionVerification `json:"verification"`
-	ActiveJobs   []JobRecord             `json:"jobs"`
-	Recent       []JobRecord             `json:"recent"`
+	InFlight     int
+	Succeeded    uint64
+	Failed       uint64
+	Verification AcquisitionVerification
+	ActiveJobs   []JobRecord
+	Recent       []JobRecord
 }
 
 type BackgroundAcquisitionScheduler struct {
