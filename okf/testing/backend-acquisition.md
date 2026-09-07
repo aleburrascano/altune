@@ -18,6 +18,8 @@ Re-derived after #49 moved `RetryAdmission`/`ReacquireAdmission` construction ou
 
 #55 (structure-only) extracted the duplicated `resolveBinary`/availability-probe out of the chromaprint and ytdlp adapters into `internal/shared/binpath`; its `Table` unit test moved with it to `internal/shared/binpath/binpath_test.go` (outside this slice). No behavior changed and no taxonomy verdict below is affected.
 
+Re-derived after #50 DRYed the retry and reacquire handler bodies into one `acquisitionCommand.serve` (`adapters/handler/command.go`), each handler now filling that struct with its own sentinel/messages/schedule closure: a structure-only, no-behavior-change refactor triggers no new category. Functional/acceptance still covers the surface exactly — the same 202/409/429/404/400/401 outcomes in `retry_handler_test.go` / `reacquire_handler_test.go` pass unchanged over the shared flow, and Idempotence/replay (`TestHandleReacquire_Cooldown`) still pins the 429.
+
 This is an **orchestration-heavy, I/O-heavy** context whose entire input is untrusted provider output, so the environment family (Adversarial, Failure injection, Concurrency) carries most of the weight, and the pure `matching.go`/`failureReason`/`BuildAudioRef` core carries the Logic family. It owns no UI, no client cache and no aggregate, so the display and cache families reject cleanly.
 
 ## SELECTED

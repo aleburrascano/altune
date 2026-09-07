@@ -9,7 +9,7 @@ Layout:
 - `service/registry.go` — `SourceRegistry`: equal-treatment fan-out across every `AudioSource`, merge by URL, `Fetch` routed back to the owning source. Characterized by `service/registry_test.go`.
 - `service/sourcekey.go` — `sourceKey` / `SourceKeys` / `mergeSourceKeys`: the one normalizer collapsing a recording's URL spellings to a single exclusion key.
 - `ports/` — `AudioSearcher`, `AudioTagger`, `AudioProber`, `AudioWriter`, `TrackRepository`; `source.go`'s `AudioSource` / `FindRequest` / `SearchQueries`; `recording.go`'s `RecordingResolver` / `RecordingIdentity`; `identify.go`'s `AudioIdentifier` / `RecordingMatch`.
-- `adapters/` — `handler/` (retry + reacquire endpoints), `ytdlp/` (searcher, prober, `Source` — text search), `ytmusic/` (`Source` — catalog-resolved by video id), `streamrip/` (`Source` per service — catalog-resolved via the `rip` CLI), `id3/` (tagger), `chromaprint/` (fpcalc + AcoustID identifier), `discoverybridge/` (`RecordingResolver` over discovery's search service).
+- `adapters/` — `handler/` (retry + reacquire endpoints, sharing one `acquisitionCommand` flow in `command.go`), `ytdlp/` (searcher, prober, `Source` — text search), `ytmusic/` (`Source` — catalog-resolved by video id), `streamrip/` (`Source` per service — catalog-resolved via the `rip` CLI), `id3/` (tagger), `chromaprint/` (fpcalc + AcoustID identifier), `discoverybridge/` (`RecordingResolver` over discovery's search service).
 
 ## Rules
 
