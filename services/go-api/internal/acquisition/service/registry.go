@@ -68,30 +68,21 @@ func mergeSlots(
 	slots [][]ports.AudioCandidate,
 	errs []error,
 ) ([]ports.AudioCandidate, error) {
-	seen := make(map[string]bool)
-	var merged []ports.AudioCandidate
-	var firstErr error
-	failures := 0
-
-	for i := range sources {
-		if errs[i] != nil {
-			failures++
-			if firstErr == nil {
-				firstErr = errs[i]
-			}
+	return ports.CollectCandidates(
+		len(sources),
+		func(i int) ([]ports.AudioCandidate, error) { return slots[i], errs[i] },
+		func(i int, candidates []ports.AudioCandidate) {
+			slog.InfoContext(ctx, "acquisition.source_find_results",
+				"source", sources[i].Name(), "candidates", len(candidates))
+		},
+		func(i int, err error) {
 			slog.WarnContext(ctx, "acquisition.source_find_failed",
-				"source", sources[i].Name(), "error", errs[i])
-			continue
-		}
-		slog.InfoContext(ctx, "acquisition.source_find_results",
-			"source", sources[i].Name(), "candidates", len(slots[i]))
-		merged = ports.DedupeCandidatesByURL(merged, slots[i], seen)
-	}
-
-	if failures == len(sources) {
-		return nil, fmt.Errorf("every audio source failed: %w", firstErr)
-	}
-	return merged, nil
+				"source", sources[i].Name(), "error", err)
+		},
+		func(firstErr error) error {
+			return fmt.Errorf("every audio source failed: %w", firstErr)
+		},
+	)
 }
 
 func stampSource(name string, candidates []ports.AudioCandidate) []ports.AudioCandidate {

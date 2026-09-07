@@ -37,30 +37,23 @@ func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpA
 }
 
 func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.AudioCandidate, error) {
-	seen := make(map[string]bool)
-	merged := []ports.AudioCandidate{}
-	var firstErr error
-	failures := 0
-
-	for _, engine := range searchEngines {
-		spec := engine + query
-		candidates, err := s.runSearch(ctx, spec)
-		if err != nil {
-			failures++
-			if firstErr == nil {
-				firstErr = err
-			}
-			slog.WarnContext(ctx, "acquisition.engine_search_failed", "spec", spec, "error", err)
-			continue
-		}
-		slog.InfoContext(ctx, "acquisition.engine_search_results", "spec", spec, "candidates", len(candidates))
-		merged = ports.DedupeCandidatesByURL(merged, candidates, seen)
-	}
-
-	if failures == len(searchEngines) {
-		return nil, fmt.Errorf("all search engines failed: %w", firstErr)
-	}
-	return merged, nil
+	return ports.CollectCandidates(
+		len(searchEngines),
+		func(i int) ([]ports.AudioCandidate, error) {
+			return s.runSearch(ctx, searchEngines[i]+query)
+		},
+		func(i int, candidates []ports.AudioCandidate) {
+			slog.InfoContext(ctx, "acquisition.engine_search_results",
+				"spec", searchEngines[i]+query, "candidates", len(candidates))
+		},
+		func(i int, err error) {
+			slog.WarnContext(ctx, "acquisition.engine_search_failed",
+				"spec", searchEngines[i]+query, "error", err)
+		},
+		func(firstErr error) error {
+			return fmt.Errorf("all search engines failed: %w", firstErr)
+		},
+	)
 }
 
 func (s *YtDlpAudioSearcher) prependAuthFlags(args []string) []string {
