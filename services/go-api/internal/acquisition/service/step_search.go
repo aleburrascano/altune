@@ -30,7 +30,7 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext) error 
 
 	kept := make([]ports.AudioCandidate, 0, len(candidates))
 	for _, c := range candidates {
-		if ac.excludes(c.URL) {
+		if ac.Replace.excludes(c.URL) {
 			slog.InfoContext(ctx, "acquisition.candidate_excluded", "url", c.URL)
 			continue
 		}

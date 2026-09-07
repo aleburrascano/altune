@@ -136,16 +136,16 @@ func (s *AcquireTrackAudioService) execute(
 }
 
 func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *domain.Track, trackId domain.TrackId) {
-	ac.PreservedRef = deref(track.AudioRef)
-	ac.ExcludeKeys = mergeSourceKeys(
+	ac.Replace.PreservedRef = deref(track.AudioRef)
+	ac.Replace.ExcludeKeys = mergeSourceKeys(
 		track.RejectedSourceKeys,
 		sourceKey(deref(track.AudioSourceURL)),
 	)
-	if len(ac.ExcludeKeys) > 0 {
+	if len(ac.Replace.ExcludeKeys) > 0 {
 		slog.InfoContext(ctx, "acquisition.replacing_source",
-			"track_id", trackId.String(), "excluded_keys", ac.ExcludeKeys)
+			"track_id", trackId.String(), "excluded_keys", ac.Replace.ExcludeKeys)
 	} else {
-		ac.SkipTopRanked = true
+		ac.Replace.SkipTopRanked = true
 		slog.InfoContext(ctx, "acquisition.replacing_unknown_source",
 			"track_id", trackId.String())
 	}
