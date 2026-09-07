@@ -6,13 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"altune/go-api/internal/shared/binpath"
 )
 
 type FfprobeProber struct {
@@ -22,36 +21,13 @@ type FfprobeProber struct {
 
 func NewFfprobeProber(ffmpegLocation string) *FfprobeProber {
 	return &FfprobeProber{
-		ffprobe: resolveBinary("ffprobe", ffmpegLocation),
-		ffmpeg:  resolveBinary("ffmpeg", ffmpegLocation),
+		ffprobe: binpath.Resolve("ffprobe", ffmpegLocation),
+		ffmpeg:  binpath.Resolve("ffmpeg", ffmpegLocation),
 	}
 }
 
 func (p *FfprobeProber) Available() (ffprobe bool, ffmpeg bool) {
-	return binaryRunnable(p.ffprobe), binaryRunnable(p.ffmpeg)
-}
-
-func binaryRunnable(path string) bool {
-	if filepath.IsAbs(path) {
-		_, err := os.Stat(path)
-		return err == nil
-	}
-	_, err := exec.LookPath(path)
-	return err == nil
-}
-
-func resolveBinary(name, ffmpegLocation string) string {
-	if ffmpegLocation != "" {
-		candidate := name
-		if runtime.GOOS == "windows" {
-			candidate = name + ".exe"
-		}
-		full := filepath.Join(ffmpegLocation, candidate)
-		if _, err := os.Stat(full); err == nil {
-			return full
-		}
-	}
-	return name
+	return binpath.Runnable(p.ffprobe), binpath.Runnable(p.ffmpeg)
 }
 
 func (p *FfprobeProber) ProbeDuration(ctx context.Context, filePath string) (float64, error) {

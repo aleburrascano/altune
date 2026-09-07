@@ -85,15 +85,6 @@ func TestRecordingMatch_EmptyAcoustIDNeverMatchesACluster(t *testing.T) {
 	}
 }
 
-func TestResolveBinary_FallsBackToPath(t *testing.T) {
-	if got := resolveBinary("fpcalc", ""); got != "fpcalc" {
-		t.Errorf("resolveBinary = %q, want the bare name for PATH lookup", got)
-	}
-	if got := resolveBinary("fpcalc", t.TempDir()); got != "fpcalc" {
-		t.Errorf("resolveBinary = %q, want the bare name when the dir has no binary", got)
-	}
-}
-
 func TestNewIdentifier_DefaultsToAcoustIDEndpoint(t *testing.T) {
 	id := NewIdentifier("", "key")
 	if id.endpoint != defaultEndpoint {
