@@ -48,8 +48,12 @@ Every one of these cost a run.
 - **Take the verdict from the exit code, never the output text.** And when you anchor a mutation to a line, anchor on something unique and assert the anchor matched — a 4-space anchor once matched inside a 6-space line elsewhere in the file, and two results were silently attributed to the wrong call site.
 - **Harvest before deleting anything.** A finding that lives only in this transcript is lost when the session ends. Write it to the slice record as you go.
 - **Blind means blind.** The one permitted `okf/` file for an author is the taxonomy. A pre-filled selection record is for you, never for them.
+- **No agent may run `git checkout` / `git restore` / `git stash` — ever.** Parallel authors do hand red proofs in one shared tree, so a repo-wide revert aimed at one agent's mutation wipes another's finished work. This cost a completed 39-test rebuild: the reverted file was the slice's only *tracked* test file, so it silently returned to its committed state while every untracked sibling survived, and the loss was invisible until the counts were checked. Tell every author to revert with the Edit tool on the exact line, and verify restoration against a byte-copy taken before the edit, never against `HEAD` — the tree legitimately holds this run's uncommitted work.
+- **Judge suite health under load, not in isolation.** A slice suite can be green every time you run it alone and fail ~40% of the time in the full parallel run. Two causes recur: a genuinely leaked timer (a debounce with no unmount cleanup), and jest's 5s default being too tight for a heavy screen suite under 8-way contention. Run the *whole* suite several times before believing it is stable; a flaky suite poisons every mutation measurement downstream.
 - **Never leave an unhandled rejection in a test of a fire-and-forget API.** Mutation empties function bodies, so a `void`-ed call rejects; under Node 25 that kills the *worker* rather than failing the test, and Stryker abandons the run after a handful of crashes. Attach a `.catch()`.
-- **A source-scanning test must resolve the repo root, never `__dirname`.** Stryker runs from a sandbox copy with mutant switches inlined, so a `__dirname`-relative read passes under jest and fails the *dry run* — aborting before a single mutant is applied and reporting it as a config error.
+- **A source-scanning test must resolve the repo root, never `__dirname`, and must then step *out* of Stryker's sandbox.** Stryker runs from a sandbox copy with mutant switches inlined, so a `__dirname`-relative read passes under jest and fails the *dry run* — aborting before a single mutant is applied and reporting it as a config error. Resolving from `process.cwd()` is necessary but not sufficient: inside the sandbox the cwd *is* the sandbox, and the source there is instrumented, so a scanner reads `stryNS_9fa48` scaffolding instead of your code and finds no vocabulary at all. Truncate the cwd at `.stryker-tmp` and assert the resolved path contains no such segment.
+- **Repeated `--mutate` flags do not accumulate — the last one wins.** Passing two flags silently mutates *nothing*, and Stryker then reports `Final mutation score of NaN is greater than or equal to break threshold` and **exits 0**. A run that measured nothing looks exactly like a pass. Always comma-separate the patterns inside one flag, and always sanity-check the `Instrumented N source file(s) with M mutant(s)` line before believing a score.
+- **Read the mutation score from the JSON report, never the console.** The default `clear-text` reporter prints every test name against every mutant and can kill the run at exit 255 on a large slice. Use `--reporters progress-append-only,json` and parse `reports/mutation/mutation.json`.
 
 ## Steps
 
@@ -136,7 +140,16 @@ Do not accept a survivor because "the test is close enough." That is exactly the
 
 ### 7. Record, measure, commit
 
-Run the full slice suite, `npx tsc --noEmit` (mobile) or `go vet ./...` (Go), and a **scoped** mutation measurement — `npx stryker run --mutate "src/<path>/**/*.ts" --mutate "!src/<path>/**/__tests__/**"`. Measure `.ts` and `.tsx` separately if the slice has components; `/qa-integrate` needs both numbers to decide the glob.
+Run the full slice suite, `npx tsc --noEmit` (mobile) or `go vet ./...` (Go), and a **scoped** mutation measurement:
+
+```
+npx stryker run --mutate "src/<path>/**/*.ts,!src/<path>/**/__tests__/**" \
+  --reporters progress-append-only,json --concurrency 2
+```
+
+The patterns are comma-separated **inside one `--mutate` flag** — two flags mutate nothing and report a passing `NaN` (see Traps). Confirm the `Instrumented N source file(s) with M mutant(s)` line is non-zero, then read the score from `reports/mutation/mutation.json`.
+
+Measure `.ts` and `.tsx` separately if the slice has components; `/qa-integrate` needs both numbers to decide the glob. Budget for it: a 17-file / 436-mutant `.ts` surface takes ~40 minutes at `--concurrency 2`, and a component surface is several times larger.
 
 **Do not touch `stryker.config.json`, `jest.config.js`, or `okf/testing/programme.md`.** Those three are the only files a concurrent run also wants, and every gate move happens once, at integration, where the combined score can actually be measured. Your numbers go in your own record.
 
