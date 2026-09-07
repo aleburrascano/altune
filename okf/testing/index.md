@@ -22,3 +22,4 @@ A category listed as selected without its done-condition met is a lie; a categor
 - [shared-auth](shared-auth.md) — the Supabase client singleton, the keychain adapter, and the identity boundary between two users on one device
 - [shared-playlists](shared-playlists.md) — the playlist write module: batch membership, optimistic rollback, and the save-on-pick seam
 - [shared-favorites](shared-favorites.md) — the Favorites toggle: optimistic rollback, wire-derived identity, and the double-tap ordering case (not started)
+- [backend-acquisition](backend-acquisition.md) — the Go acquisition module: search→rank→download→verify→tag→store, the provider trust boundary, and the retry/reacquire admission gates
