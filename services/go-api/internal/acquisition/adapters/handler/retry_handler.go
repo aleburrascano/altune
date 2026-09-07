@@ -1,18 +1,12 @@
 package handler
 
 import (
-	"errors"
-	"log/slog"
 	"net/http"
 
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/httputil"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type acquisitionScheduler interface {
@@ -38,42 +32,15 @@ func NewRetryHandler(
 }
 
 func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
-	if !ok {
-		return
-	}
-	trackIdStr := chi.URLParam(r, "trackId")
-
-	trackId, err := domain.ParseTrackId(trackIdStr)
-	if err != nil {
-		httputil.BadRequest(w, "invalid track ID")
-		return
-	}
-
-	track, err := h.trackRepo.GetByID(r.Context(), trackId, userId)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "retry acquisition: get track failed",
-			"error", err, "track_id", trackIdStr)
-		httputil.InternalError(w)
-		return
-	}
-	if track == nil {
-		httputil.NotFound(w, "track not found")
-		return
-	}
-
-	switch err := h.admission.Admit(track); {
-	case errors.Is(err, service.ErrRetryNotFailed):
-		httputil.Conflict(w, "track is not in failed state")
-		return
-	case errors.Is(err, service.ErrCooldownActive):
-		httputil.WriteJSON(w, http.StatusTooManyRequests, map[string]string{
-			"error": "retry cooldown active, try again later",
-		})
-		return
-	}
-
-	h.scheduler.Schedule(userId, trackId, "")
-
-	w.WriteHeader(http.StatusAccepted)
+	acquisitionCommand{
+		trackRepo:     h.trackRepo,
+		admission:     h.admission,
+		ineligibleErr: service.ErrRetryNotFailed,
+		ineligibleMsg: "track is not in failed state",
+		cooldownMsg:   "retry cooldown active, try again later",
+		logMsg:        "retry acquisition: get track failed",
+		schedule: func(userId shared.UserId, trackId domain.TrackId) {
+			h.scheduler.Schedule(userId, trackId, "")
+		},
+	}.serve(w, r)
 }
