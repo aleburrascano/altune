@@ -3,8 +3,18 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+function requiredEnv(value: string | undefined, name: string): string {
+  if (value == null || value === '') {
+    throw new Error(`Missing required environment variable ${name}`);
+  }
+  return value;
+}
+
+const SUPABASE_URL = requiredEnv(process.env.EXPO_PUBLIC_SUPABASE_URL, 'EXPO_PUBLIC_SUPABASE_URL');
+const SUPABASE_ANON_KEY = requiredEnv(
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  'EXPO_PUBLIC_SUPABASE_ANON_KEY',
+);
 
 const webStorage =
   typeof window !== 'undefined' && window.localStorage != null

@@ -66,7 +66,7 @@ That boundary is what makes this slice worth more than its 176 lines. It is also
 
 ## STILL DARK, DELIBERATELY
 
-- `supabaseClient.ts:6-7` — the `?? ''` fallbacks on the two `EXPO_PUBLIC_` reads. `jest/setup-env.js` sets both variables unconditionally, so no test can reach them and both mutants are equivalent under this harness. This is the whole of the gap between the file's 100% statements and its 80% branches.
+- ~~`supabaseClient.ts:6-7` — the `?? ''` fallbacks on the two `EXPO_PUBLIC_` reads.~~ **Closed 2026-09-07 (issue #121).** The `?? ''` fallbacks are gone: the two reads now go through `requiredEnv`, which throws `Missing required environment variable <NAME>` at import when the value is missing or empty. `__tests__/supabaseClient.config.test.ts` deletes each variable (and, separately, sets it to `''`), `jest.resetModules()`, and asserts `require('../supabaseClient')` throws naming that exact variable — plus a positive control that construction does not throw when both are present. This is the **Configuration** category (robustness-domains: missing config fails at startup naming the var), added to the slice by this change alongside the mandatory **Regression** gate against the pre-fix `?? ''` source. The former 80% branch figure on this file was that dark fallback; with the branch now exercised the gap is closed rather than merely accounted for.
 
 ## MUTATION AUDIT
 
