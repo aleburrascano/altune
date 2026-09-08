@@ -42,11 +42,26 @@ let _queue: OutboxEntry[] = [];
 let _flushing = false;
 let _listening = false;
 let _restored = false;
+let _droppedCritical = 0;
+
+export function droppedCriticalCount(): number {
+  return _droppedCritical;
+}
+
+function capCritical(entries: readonly OutboxEntry[]): OutboxEntry[] {
+  const capped = capEntries(entries, MAX_ENTRIES);
+  const dropped = entries.length - capped.length;
+  if (dropped > 0) {
+    _droppedCritical += dropped;
+    console.warn(`[telemetry] dropped ${dropped} label-critical outbox ${dropped === 1 ? 'entry' : 'entries'} at cap`);
+  }
+  return capped;
+}
 
 function ensureRestored(): void {
   if (_restored) return;
   _restored = true;
-  _queue = capEntries(dedupeById([...loadPersistedOutbox(), ..._queue]), MAX_ENTRIES);
+  _queue = capCritical(dedupeById([...loadPersistedOutbox(), ..._queue]));
 }
 
 function commit(next: OutboxEntry[]): void {
@@ -66,7 +81,7 @@ export async function enqueueCritical(event: DiscoveryEvent): Promise<void> {
   ensureRestored();
   ensureFlushOnForeground();
   const entry = withEnvelope(event, makeEventId(), new Date().toISOString());
-  commit(capEntries(dedupeById([..._queue, entry]), MAX_ENTRIES));
+  commit(capCritical(dedupeById([..._queue, entry])));
   await flushOutbox();
 }
 
@@ -96,4 +111,5 @@ export function _resetOutboxForTest(): void {
   _queue = [];
   _flushing = false;
   _restored = true;
+  _droppedCritical = 0;
 }

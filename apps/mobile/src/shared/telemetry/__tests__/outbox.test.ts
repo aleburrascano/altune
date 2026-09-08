@@ -1,7 +1,12 @@
 import { ApiError, NetworkError } from '@shared/api-client';
 
 import type { OutboxEntry } from '../outbox';
-import { enqueueCritical, flushOutbox, _resetOutboxForTest } from '../outbox';
+import {
+  enqueueCritical,
+  flushOutbox,
+  droppedCriticalCount,
+  _resetOutboxForTest,
+} from '../outbox';
 import { loadPersistedOutbox, persistOutbox } from '../outboxStore';
 import { recordEvent, type DiscoveryEvent } from '../recordEvent';
 
@@ -89,6 +94,33 @@ describe('Reducer: enqueueCritical', () => {
     const persisted = lastPersisted();
     expect(persisted).toHaveLength(1);
     expect(persisted?.[0]?.query_norm).toBe('second');
+  });
+});
+
+describe('Backpressure: shedding a label-critical entry at the cap is recorded, never silent', () => {
+  it('records the drop when enqueuing past MAX_ENTRIES sheds the oldest label-critical entry', async () => {
+    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    for (let i = 0; i <= MAX_ENTRIES; i += 1) {
+      await enqueueCritical(event({ query_norm: `q${i}` }));
+    }
+
+    expect(lastPersisted()).toHaveLength(MAX_ENTRIES);
+    expect(droppedCriticalCount()).toBe(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('label-critical'));
+
+    warn.mockRestore();
+  });
+
+  it('does not record a drop while the queue stays within the cap', async () => {
+    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+
+    for (let i = 0; i < MAX_ENTRIES; i += 1) {
+      await enqueueCritical(event({ query_norm: `q${i}` }));
+    }
+
+    expect(droppedCriticalCount()).toBe(0);
   });
 });
 
