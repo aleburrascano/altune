@@ -19,7 +19,7 @@ func TestHandleStreamAudio(t *testing.T) {
 		{
 			name: "mp3 track serves audio/mpeg",
 			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
-				track := makeReadyTrack(testUserId, "Song", "Artist", "Album", "audio/123.mp3")
+				track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/123.mp3")
 				repo.Seed(track)
 				store.Seed("audio/123.mp3", []byte("fake-audio-data"))
 				return track.ID.UUID().String()
@@ -31,7 +31,7 @@ func TestHandleStreamAudio(t *testing.T) {
 		{
 			name: "m4a track serves audio/mp4",
 			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
-				track := makeReadyTrack(testUserId, "Song", "Artist", "Album", "audio/456.m4a")
+				track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/456.m4a")
 				repo.Seed(track)
 				store.Seed("audio/456.m4a", []byte("fake-audio-data"))
 				return track.ID.UUID().String()
@@ -43,7 +43,7 @@ func TestHandleStreamAudio(t *testing.T) {
 		{
 			name: "opus track serves audio/opus",
 			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
-				track := makeReadyTrack(testUserId, "Song", "Artist", "Album", "audio/789.opus")
+				track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/789.opus")
 				repo.Seed(track)
 				store.Seed("audio/789.opus", []byte("fake-audio-data"))
 				return track.ID.UUID().String()

@@ -39,13 +39,13 @@ func TestBackfillFeaturedService(t *testing.T) {
 
 	t.Run("resolves and persists, idempotent", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		t1 := newTrackFeat(t, userId, "Song A")
-		t2 := newTrackFeat(t, userId, "Song B")
+		t1 := newTrackFeat(t, userId, "Track A")
+		t2 := newTrackFeat(t, userId, "Track B")
 		repo.Seed(t1)
 		repo.Seed(t2)
 
 		resolver := fakeResolver{byTitle: map[string][]domain.FeaturedArtist{
-			"Song A": {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
+			"Track A": {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
 		}}
 		svc := NewBackfillFeaturedService(repo, resolver)
 
