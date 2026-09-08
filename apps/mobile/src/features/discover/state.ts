@@ -41,7 +41,7 @@ export function _viewForState(state: DiscoverHookState): DiscoverView {
 const KIND_LABELS: Record<DiscoveryKind, readonly [string, string]> = {
   artist: ['Artist', 'Artists'],
   album: ['Album', 'Albums'],
-  track: ['Song', 'Songs'],
+  track: ['Track', 'Tracks'],
 };
 
 export function kindLabel(kind: DiscoveryKind, opts?: { plural?: boolean }): string {
