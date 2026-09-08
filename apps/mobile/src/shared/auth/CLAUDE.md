@@ -14,6 +14,7 @@ Dependencies: `@supabase/supabase-js`, `expo-secure-store`, `@tanstack/react-que
 ## Rules
 
 - Keep `createClient` to this one call site; every other file takes the `supabase` singleton.
+- Missing `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` throws at import naming the variable; never default them to `''`.
 - Never value-import `@supabase/supabase-js` outside `supabaseClient.ts` — `import type` is fine anywhere.
 - Never decode, parse or inspect the access token here; it is opaque and the backend verifies it.
 - Persist the session through `expo-secure-store`, never `AsyncStorage`.
@@ -23,6 +24,6 @@ Dependencies: `@supabase/supabase-js`, `expo-secure-store`, `@tanstack/react-que
 - Keep `markSessionExpired` a signal, not an action — never sign the user out from a 401.
 - Clear the query cache on sign-out whether the SDK call succeeds, errors or throws.
 
-Tests: `__tests__/` — `supabaseClient`, `sessionExpired` (`.ts` + `.tsx`), `useSession`, `useSession.property`, `useSignOut`, `authContract`, `acceptance`, `slice-invariants`. Categories and rejections: `okf/testing/shared-auth.md`.
+Tests: `__tests__/` — `supabaseClient`, `supabaseClient.config`, `sessionExpired` (`.ts` + `.tsx`), `useSession`, `useSession.property`, `useSignOut`, `authContract`, `acceptance`, `slice-invariants`. Categories and rejections: `okf/testing/shared-auth.md`.
 
 Knowledge base: `okf/mobile/shared-auth.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).
