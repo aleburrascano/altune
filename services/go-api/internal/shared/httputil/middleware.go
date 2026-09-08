@@ -15,13 +15,38 @@ type ctxKey string
 
 const correlationIDKey ctxKey = "correlation_id"
 
+const (
+	correlationHeader   = "X-Correlation-ID"
+	maxCorrelationIDLen = 64
+)
+
 func CorrelationID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := uuid.New().String()[:8]
+		id := inboundCorrelationID(r)
+		if id == "" {
+			id = uuid.New().String()[:8]
+		}
 		ctx := context.WithValue(r.Context(), correlationIDKey, id)
-		w.Header().Set("X-Correlation-ID", id)
+		w.Header().Set(correlationHeader, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func inboundCorrelationID(r *http.Request) string {
+	id := r.Header.Get(correlationHeader)
+	if id == "" || len(id) > maxCorrelationIDLen || !isWellFormedCorrelationID(id) {
+		return ""
+	}
+	return id
+}
+
+func isWellFormedCorrelationID(id string) bool {
+	for _, c := range id {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 func GetCorrelationID(ctx context.Context) string {
