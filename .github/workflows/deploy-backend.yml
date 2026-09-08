@@ -86,7 +86,7 @@ jobs:
             cd /home/ubuntu/altune
             git fetch --prune origin
             git checkout main
-            git pull --ff-only origin main
+            git reset --hard origin/main
             cd services/go-api
             # Builds the idle colour, health-gates it, then flips Caddy onto it.
             # A build or health failure leaves the live colour serving and exits
