@@ -86,3 +86,12 @@ Two event types were added: `tracks_added_to_playlist` (invalidate-only) and `tr
 Rejected: **Timing / dwell**, **Concurrency / ordering**, **Failure injection**, **Legacy / compat** — the batch handlers are pure cache functions over an already-parsed event, sharing the transport, ordering and framing paths the existing tests cover. Nothing about them is time- or transport-dependent.
 
 **Mutation audit not re-run for this change.** The slice's Stryker number stands at 90.75 from the 2026-07-30 rebuild; the added handler is a four-line loop over the shared patcher, and the next full `npm run mutate` covers it.
+
+## AMENDED 2026-09-07 — `acquisition_status` boundary validation
+
+`parseAddedTrack` stopped casting `acquisition_status` `as` the union and now narrows it through a membership check (see [shared-events](../mobile/shared-events.md#acquisition_status-is-validated-at-the-sse-boundary-not-asserted-2026-09-07)). Two categories re-trigger.
+
+- **Adversarial** — `track_added_to_library` carrying an off-contract `acquisition_status` (`"queued"`) asserts the row is not seeded into the track pages and `trackStatusStore` stays empty, and that the event drops onto the thin-payload invalidate fallback. Sits beside the existing "wrong JSON type on a required field" case in `__tests__/applyServerEvent.test.ts`.
+- **Regression** — the bug fix carries that test; red-proofed by hand against the pre-fix cast (the invalid status seeded the cache with length 1) before the narrowing was restored.
+
+The aligned `as RepeatMode` cast in `features/playback/hooks/useQueueResume.ts` was already guarded by an `=== 'all' || === 'one'` check before use, so it owes no new test — the value it feeds `setRepeatMode` was already union-safe; the change only made the narrowing explicit.
