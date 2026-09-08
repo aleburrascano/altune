@@ -137,7 +137,9 @@ export function useQueueResume() {
         source: toWireSource(s.source),
         natural_order: naturalOrder,
       });
-    } catch {}
+    } catch {
+      console.warn('[playback] failed to save queue state');
+    }
   }, []);
 
   useEffect(() => {
@@ -191,7 +193,9 @@ export function useQueueResume() {
             startPositionMs: saved.position_ms,
           });
         }
-      } catch {}
+      } catch {
+        console.warn('[playback] failed to restore the saved queue');
+      }
     })();
   }, []);
 

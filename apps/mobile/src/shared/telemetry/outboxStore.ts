@@ -58,5 +58,7 @@ export function persistOutbox(entries: readonly OutboxEntry[]): void {
       return;
     }
     file.write(JSON.stringify(entries));
-  } catch {}
+  } catch {
+    console.warn('[telemetry] failed to persist outbox; keeping in-memory only');
+  }
 }

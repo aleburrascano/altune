@@ -14,7 +14,10 @@ Invariants:
 - Every mutation of the native queue (load, reset, add, remove, reorder, skip, prefetch swap) runs inside `withNativeQueue` (`nativeQueueLock.ts`); network work is resolved *before* taking the lock, never inside it.
 - A native entry always carries an `artwork` — `nativeTrack.ts` substitutes `assets/artwork-placeholder.png` when a track has none, so the lock screen can never keep the previous track's cover.
 - `initPlayer.ts` sets up the player with `autoHandleInterruptions: true`; never add a `RemoteDuck` handler alongside it.
+- Swallow a prefetch cache-eviction failure (`audioPrefetch.ts` `evictCached`, `evict`); a stale cached file is harmless and reclaimed on the next eviction pass.
+- In `refillSlot`, let the local re-add's failure fall through to the streaming re-add; only that streaming re-add surfaces a `PlaybackError`.
+- Surface a `PlaybackError` when `repairActiveToStreaming`'s native load or play throws; never let the active track fail silently.
 
-Tests: `__tests__/sleepTimer.test.tsx` (sleep-timer write path and `SleepTimerBridge` driven by an injected clock). The rest of this slice's suite was reset on 2026-07-30 and is rebuilt per `okf/playbooks/test-taxonomy.md`, with the per-category verdict committed to `okf/testing/<slice>.md`.
+Tests: `__tests__/sleepTimer.test.tsx` (sleep-timer write path and `SleepTimerBridge` driven by an injected clock), `__tests__/audioPrefetch.repair.test.ts` (`repairActiveToStreaming` surfaces a `PlaybackError` on a native load/play failure). The rest of this slice's suite was reset on 2026-07-30 and is rebuilt per `okf/playbooks/test-taxonomy.md`, with the per-category verdict committed to `okf/testing/<slice>.md`.
 
 Knowledge base: `okf/mobile/playback-feature.md` (+ `okf/mobile/shared-playback.md` for the Queue) — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).

@@ -131,6 +131,19 @@ describe('unpinAll — writes an empty index to disk', () => {
   });
 });
 
+describe('index write failure — logged with context, never a bare swallow, never a throw', () => {
+  it('a failed saveIndex write logs and degrades to in-memory rather than throwing', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    __fs.failNext('write', new Error('disk full'));
+
+    expect(() => usePinnedStore.getState().pin('t1')).not.toThrow();
+
+    expect(warn).toHaveBeenCalledWith('[offline] failed to persist pinned index; keeping in-memory only');
+    expect(usePinnedStore.getState().entries['t1']).toBeDefined();
+    warn.mockRestore();
+  });
+});
+
 describe('relaunch — what one session persists is exactly what a fresh module import loads back', () => {
   it('a session left with entries queued and downloading survives a fresh import unchanged', () => {
     usePinnedStore.getState().pin('t1');
