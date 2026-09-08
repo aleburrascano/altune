@@ -4,7 +4,7 @@ import { startDeadline } from './deadline';
 import type { Deadline } from './deadline';
 import { ApiError, NetworkError, isAbort, isSessionFetchFailure } from './errors';
 
-export { ApiError, NetworkError, isRetryable } from './errors';
+export { ApiError, NetworkError, ContractError, isRetryable } from './errors';
 export type { NetworkFailure } from './errors';
 
 const DEFAULT_BASE = 'http://127.0.0.1:8000';

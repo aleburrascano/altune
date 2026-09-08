@@ -5,7 +5,7 @@ import {
   clearSearchHistory,
 } from '../discovery';
 import type { DiscoveryKind, DiscoveryResult, DiscoverySearchResponse } from '../discovery';
-import { apiBase, ApiError } from '../index';
+import { apiBase, ApiError, ContractError } from '../index';
 import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -456,8 +456,8 @@ describe('Legacy/compat: an older server response missing newer fields', () => {
   });
 });
 
-describe('Adversarial: malformed/thin discovery payloads', () => {
-  it('a DiscoveryResult missing sources passes through untouched (no runtime shape validation)', async () => {
+describe('Adversarial: malformed/off-contract discovery payloads fail as a typed ContractError', () => {
+  it('a DiscoveryResult missing its required sources array is a ContractError, not a pass-through', async () => {
     const raw = {
       query: 'q',
       query_norm: 'q',
@@ -481,15 +481,13 @@ describe('Adversarial: malformed/thin discovery payloads', () => {
     };
     __http.reply('GET /v1/discovery/search', { status: 200, json: raw });
 
-    const result = await searchDiscovery({ q: 'q' });
-
-    expect(result.results[0]).not.toHaveProperty('sources');
+    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
   });
 
-  it('a null response body throws a TypeError (well-formed JSON, unguarded cast)', async () => {
+  it('a null response body is a ContractError, not a TypeError that escapes the boundary', async () => {
     __http.reply('GET /v1/discovery/search', { status: 200, json: null });
 
-    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(TypeError);
+    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
   });
 
   const wrongTypeResultsCases: [string, unknown][] = [
@@ -499,7 +497,7 @@ describe('Adversarial: malformed/thin discovery payloads', () => {
   ];
 
   for (const [label, value] of wrongTypeResultsCases) {
-    it(`results as ${label} throws a TypeError (well-formed JSON, unguarded cast)`, async () => {
+    it(`results as ${label} is a ContractError`, async () => {
       const raw = {
         query: 'q',
         query_norm: 'q',
@@ -514,11 +512,11 @@ describe('Adversarial: malformed/thin discovery payloads', () => {
       };
       __http.reply('GET /v1/discovery/search', { status: 200, json: raw });
 
-      await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(TypeError);
+      await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
     });
   }
 
-  it('a section whose entries have no items throws a TypeError (well-formed JSON, unguarded cast)', async () => {
+  it('a section whose entries have no items is a ContractError', async () => {
     const raw = {
       query: 'q',
       query_norm: 'q',
@@ -533,13 +531,78 @@ describe('Adversarial: malformed/thin discovery payloads', () => {
     };
     __http.reply('GET /v1/discovery/search', { status: 200, json: raw });
 
-    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(TypeError);
+    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
   });
 
-  it('a 204 landing where a DiscoverySearchResponse was expected throws a TypeError (unguarded cast dereferences undefined)', async () => {
+  it('a 204 landing where a DiscoverySearchResponse was expected is a ContractError', async () => {
     __http.reply('GET /v1/discovery/search', { status: 204 });
 
-    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(TypeError);
+    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
+  });
+});
+
+describe('Off-contract union values fail at the boundary rather than flowing on (the highlighted gap)', () => {
+  function responseWith(result: Record<string, unknown>): unknown {
+    return {
+      query: 'q',
+      query_norm: 'q',
+      results: [result],
+      sections: [],
+      providers: [],
+      partial: false,
+      cache: { hit: false, fetched_at: null },
+      total: 1,
+      offset: 0,
+      has_more: false,
+    };
+  }
+
+  function baseResult(): Record<string, unknown> {
+    return {
+      kind: 'track',
+      title: 'Weird Fishes',
+      subtitle: null,
+      image_url: null,
+      confidence: 'high',
+      sources: [],
+      extras: {},
+    };
+  }
+
+  it("a confidence outside 'high'|'medium'|'low' is a ContractError, not passed through as a bad union", async () => {
+    __http.reply('GET /v1/discovery/search', {
+      status: 200,
+      json: responseWith({ ...baseResult(), confidence: 'extreme' }),
+    });
+
+    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
+  });
+
+  it("a kind outside 'artist'|'album'|'track' is a ContractError", async () => {
+    __http.reply('GET /v1/discovery/search', {
+      status: 200,
+      json: responseWith({ ...baseResult(), kind: 'playlist' }),
+    });
+
+    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
+  });
+
+  it('a provider status outside the declared set is a ContractError', async () => {
+    const raw = {
+      query: 'q',
+      query_norm: 'q',
+      results: [],
+      sections: [],
+      providers: [{ provider: 'musicbrainz', status: 'exploded', result_count: 0, latency_ms: 5 }],
+      partial: false,
+      cache: { hit: false, fetched_at: null },
+      total: 0,
+      offset: 0,
+      has_more: false,
+    };
+    __http.reply('GET /v1/discovery/search', { status: 200, json: raw });
+
+    await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ContractError);
   });
 });
 

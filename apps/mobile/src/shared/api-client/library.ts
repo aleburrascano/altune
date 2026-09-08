@@ -1,4 +1,5 @@
 import { apiFetch } from './index';
+import { parseListAlbumsResponse, parseListArtistsResponse } from './parse';
 
 export type LibrarySort = 'recent' | 'az' | 'year';
 
@@ -44,9 +45,13 @@ function libraryQueryString(query: LibraryQuery): string {
 }
 
 export async function getLibraryAlbums(query: LibraryQuery = {}): Promise<ListAlbumsResponse> {
-  return apiFetch<ListAlbumsResponse>(`/v1/library/albums${libraryQueryString(query)}`);
+  return parseListAlbumsResponse(
+    await apiFetch<unknown>(`/v1/library/albums${libraryQueryString(query)}`),
+  );
 }
 
 export async function getLibraryArtists(query: LibraryQuery = {}): Promise<ListArtistsResponse> {
-  return apiFetch<ListArtistsResponse>(`/v1/library/artists${libraryQueryString(query)}`);
+  return parseListArtistsResponse(
+    await apiFetch<unknown>(`/v1/library/artists${libraryQueryString(query)}`),
+  );
 }
