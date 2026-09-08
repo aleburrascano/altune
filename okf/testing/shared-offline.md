@@ -162,3 +162,13 @@ The fix makes the event an optimisation rather than the only thing standing betw
 - **Regression** (mandatory — bug fix) — the seeded-malformed-status entry is the red-proof; it fails against the pre-fix cast and passes after. Verified by stashing the source and re-running.
 
 **STATUS: done.** 5 new/rewritten rows in `pinnedStore.index.test.ts`; the offline slice stays green (all suites), red-proof confirmed against the pre-fix source. No coverage floor moved — the new lines sit in the load path already exercised by the legacy-shape fixtures.
+
+## Re-derivation — split the query from the repin command (2026-09-07)
+
+`pinnedUri`'s version mismatch used to trigger `repinIfPinned` and then return `undefined` — a query with a mutating side effect. The mutation is now a separately-named command, `repinIfStale(trackId, expectedVersion?)`, sharing a private `versionDisagrees` predicate with the pure query; the one caller that relied on the self-heal (`loadNativeTrack.signedUrl`) now calls the command explicitly before the query. No behaviour changed for any caller — this is a refactor, not a bug fix, so Regression is not newly triggered. Re-deriving which categories the changed surface triggers:
+
+- **Table** (already selected, corrected) — `pinnedUri`'s truth table shrinks: it no longer has a self-healing arm, only the pure status × version-agreement decision. The "serve the local copy" reasons (match, `undefined`, `''`) and the status gate are unchanged. The self-heal moved out and is re-asserted as a command below.
+- **Idempotence / replay** (already selected, moved) — the "three consecutive mismatching calls issue exactly one `fetchAudioUrls`" law now belongs to `repinIfStale`, since it is the function that mutates; the query calls do nothing. Rewritten in `pinnedStore.version.test.ts` to drive `repinIfStale`.
+- **Regression** (already covered, re-pointed) — the self-heal regression test ("a stale pinned file is replaced without an acquisition event") now exercises `repinIfStale` rather than `pinnedUri`; the invariant it guards — a mismatch both refuses *and* re-pins — is preserved at the `loadNativeTrack.signedUrl` seam. A new pure-query row asserts `pinnedUri` on a mismatch leaves the entry and queue untouched (the red-proof that the side effect is gone from the getter).
+
+**STATUS: done.** `pinnedStore.version.test.ts` reorganised into three describes — the pure `pinnedUri` version gate, `pinnedUri` no-side-effect, and `repinIfStale` self-healing; the offline and playback suites stay green (265 tests across the touched files). No coverage floor moved — the split reuses lines already exercised.

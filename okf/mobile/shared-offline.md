@@ -83,7 +83,16 @@ Both halves of the section above hang off one live SSE event. If `track_acquisit
 
 The reason it presented as an S3 problem: deleting the track and re-adding it fixed it, which looks like the bucket healing. It is not. A re-added track gets a **new** `trackId`, so it misses both caches by key and downloads fresh. The bytes in S3 were correct the whole time.
 
-The fix gives the audio a content identity the client can compare against — `audio_version`, an opaque per-write token returned beside the signed URL (see [tracks-table](../data/tracks-table.md#audio_version-014-2026-07-31) for why it is a random token and not a timestamp). `PinnedEntry` records the version it downloaded, and `pinnedUri(trackId, expectedVersion)` refuses a copy whose version disagrees, triggering `repinIfPinned` as it declines. That makes the event an *optimisation* — it still repairs the cache promptly for a foregrounded app — rather than the only thing standing between a re-acquisition and a permanently wrong file.
+The fix gives the audio a content identity the client can compare against — `audio_version`, an opaque per-write token returned beside the signed URL (see [tracks-table](../data/tracks-table.md#audio_version-014-2026-07-31) for why it is a random token and not a timestamp). `PinnedEntry` records the version it downloaded, and `pinnedUri(trackId, expectedVersion)` refuses a copy whose version disagrees. That makes the event an *optimisation* — it still repairs the cache promptly for a foregrounded app — rather than the only thing standing between a re-acquisition and a permanently wrong file.
+
+### Query and command are two functions, not one (2026-09-07)
+
+`pinnedUri` used to do both jobs at once: on a version mismatch it triggered `repinIfPinned` and *then* returned `undefined`. That is a query with a mutating side effect — a getter that deletes a file and queues a download — sitting on the playback-resolution path, where a caller reasonably expects reading a uri to change nothing. The two jobs are now separate exported functions sharing one private `versionDisagrees` predicate:
+
+- `pinnedUri(trackId, expectedVersion?)` — pure query. Returns the ready copy's uri when the version matches (or when there is no expectation), `undefined` otherwise. It never writes.
+- `repinIfStale(trackId, expectedVersion?)` — command. When the entry is `ready` and its version disagrees with a present, non-empty `expectedVersion`, it calls `repinIfPinned`; otherwise it does nothing.
+
+The self-heal is preserved at exactly the one caller that had it: `loadNativeTrack.signedUrl` now calls `repinIfStale(trackId, match?.version)` immediately before `pinnedUri(trackId, match?.version) ?? match?.url`. A stale copy is refused (the query returns `undefined`, playback falls through to the presigned URL) *and* re-pinned (the command queues the fresh download) — the same pair of effects as before, now requested explicitly rather than smuggled through the read. `applyServerEvent`'s `repinIfPinned` call on `track_acquisition_completed` is unchanged: it re-pins unconditionally because the event itself is the mismatch signal, with no version to compare.
 
 Three cases deliberately still serve the local copy, because each means "no expectation to check against" rather than "mismatch":
 

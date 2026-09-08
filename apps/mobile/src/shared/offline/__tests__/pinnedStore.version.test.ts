@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system';
 
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 
-import { pinnedUri, usePinnedStore } from '../pinnedStore';
+import { pinnedUri, repinIfStale, usePinnedStore } from '../pinnedStore';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
@@ -16,7 +16,14 @@ const { __fs } = FileSystem as unknown as {
 const PINNED_A = 'file:///document/offline-audio/A.mp3';
 
 function readyEntry(version?: string) {
-  return { A: { trackId: 'A', status: 'ready' as const, uri: PINNED_A, ...(version === undefined ? {} : { version }) } };
+  return {
+    A: {
+      trackId: 'A',
+      status: 'ready' as const,
+      uri: PINNED_A,
+      ...(version === undefined ? {} : { version }),
+    },
+  };
 }
 
 async function flush(rounds = 20): Promise<void> {
@@ -71,14 +78,31 @@ describe('pinnedUri — version gate', () => {
   });
 });
 
-describe('pinnedUri — self-healing on a version mismatch', () => {
+describe('pinnedUri — no side effect on a version mismatch', () => {
+  it('REGRESSION: the pure query never triggers a re-pin, leaving the stale entry untouched', () => {
+    usePinnedStore.setState({ entries: readyEntry('v1') });
+
+    expect(pinnedUri('A', 'v2')).toBeUndefined();
+
+    expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
+    expect(usePinnedStore.getState().entries['A']).toEqual({
+      trackId: 'A',
+      status: 'ready',
+      uri: PINNED_A,
+      version: 'v1',
+    });
+    expect(usePinnedStore.getState().queue).toEqual([]);
+  });
+});
+
+describe('repinIfStale — self-healing on a version mismatch', () => {
   it('REGRESSION: a stale pinned file is replaced with the current audio without any acquisition event arriving', async () => {
     usePinnedStore.setState({ entries: readyEntry('v1') });
     fetchAudioUrlsMock.mockResolvedValue([
       { trackId: 'A', url: 'https://cdn.example/A.mp3?gen=2', version: 'v2' },
     ]);
 
-    expect(pinnedUri('A', 'v2')).toBeUndefined();
+    repinIfStale('A', 'v2');
 
     await act(async () => {
       await flush();
@@ -94,8 +118,17 @@ describe('pinnedUri — self-healing on a version mismatch', () => {
     expect(pinnedUri('A', 'v2')).toBe(PINNED_A);
   });
 
+  it('leaves a matching version in place — no re-pin when the local copy is current', () => {
+    usePinnedStore.setState({ entries: readyEntry('v1') });
+
+    repinIfStale('A', 'v1');
+
+    expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
+    expect(usePinnedStore.getState().queue).toEqual([]);
+  });
+
   it('does not re-pin a track that was never pinned', () => {
-    pinnedUri('never-pinned', 'v2');
+    repinIfStale('never-pinned', 'v2');
 
     expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
     expect(usePinnedStore.getState().entries['never-pinned']).toBeUndefined();
@@ -106,9 +139,9 @@ describe('pinnedUri — self-healing on a version mismatch', () => {
     const pending = new Promise<ResolvedAudioUrl[]>(() => {});
     fetchAudioUrlsMock.mockReturnValue(pending);
 
-    pinnedUri('A', 'v2');
-    pinnedUri('A', 'v2');
-    pinnedUri('A', 'v2');
+    repinIfStale('A', 'v2');
+    repinIfStale('A', 'v2');
+    repinIfStale('A', 'v2');
 
     expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
     expect(usePinnedStore.getState().queue).toEqual([]);
