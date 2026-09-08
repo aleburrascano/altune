@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 
 	"github.com/caarlos0/env/v11"
@@ -79,13 +80,26 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) validate() error {
-	if c.SupabaseJWTJWKSURL == "" {
-		return fmt.Errorf("SUPABASE_JWT_JWKS_URL must be set (HS256 mode is not supported)")
+	if err := c.validateSupabase(); err != nil {
+		return err
 	}
 	if c.MusicBrainzUserAgent != "" {
 		if !strings.Contains(c.MusicBrainzUserAgent, "@") && !strings.Contains(strings.ToLower(c.MusicBrainzUserAgent), "http") {
 			return fmt.Errorf("MUSICBRAINZ_USER_AGENT must contain a contact form URL or email")
 		}
+	}
+	return nil
+}
+
+func (c *Config) validateSupabase() error {
+	if c.SupabaseJWTJWKSURL == "" {
+		return fmt.Errorf("SUPABASE_JWT_JWKS_URL must be set (HS256 mode is not supported)")
+	}
+	if c.SupabaseProjectURL == "" {
+		return fmt.Errorf("SUPABASE_PROJECT_URL must be set (the JWT issuer is derived from it)")
+	}
+	if u, err := url.Parse(c.SupabaseProjectURL); err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("SUPABASE_PROJECT_URL must be a valid URL, got %q", c.SupabaseProjectURL)
 	}
 	return nil
 }
