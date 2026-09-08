@@ -7,6 +7,8 @@ import (
 	"altune/go-api/internal/shared"
 )
 
+const MaxQueueLength = 10000
+
 type ValidationError struct {
 	Message string
 }
@@ -76,6 +78,13 @@ func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error)
 		return nil, &ValidationError{Message: fmt.Sprintf("positionMs must be non-negative, got %d", in.PositionMs)}
 	}
 	trackIds := emptyIfNil(in.TrackIds)
+	naturalOrder := emptyIfNil(in.NaturalOrder)
+	if err := lengthWithinBound("trackIds", len(trackIds)); err != nil {
+		return nil, err
+	}
+	if err := lengthWithinBound("naturalOrder", len(naturalOrder)); err != nil {
+		return nil, err
+	}
 	currentIdx, err := indexWithinQueue(in.CurrentIdx, len(trackIds))
 	if err != nil {
 		return nil, err
@@ -88,7 +97,7 @@ func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error)
 		Shuffled:     in.Shuffled,
 		RepeatMode:   in.RepeatMode,
 		SourceId:     in.SourceId,
-		NaturalOrder: emptyIfNil(in.NaturalOrder),
+		NaturalOrder: naturalOrder,
 		UpdatedAt:    updatedAt,
 	}, nil
 }
@@ -98,6 +107,13 @@ func emptyIfNil(trackIds []string) []string {
 		return []string{}
 	}
 	return trackIds
+}
+
+func lengthWithinBound(field string, length int) error {
+	if length > MaxQueueLength {
+		return &ValidationError{Message: fmt.Sprintf("%s length %d exceeds maximum %d", field, length, MaxQueueLength)}
+	}
+	return nil
 }
 
 func indexWithinQueue(currentIdx, queueLen int) (int, error) {
