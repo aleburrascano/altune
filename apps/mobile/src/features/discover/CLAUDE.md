@@ -1,6 +1,6 @@
 # discover — feature-local router
 
-Mobile screen for the unified music search surface: greeting + "Discover" title above a debounced `TextInput`, five-state body below. Sectioned Spotify-style results — filter chips (`All · Albums · Songs · Artists`), a Top Result card, then per-kind sections. Specs: `docs/specs/discover-music-v1/`, `-v2`, `-v4`; ADR-0007, restyled per ADR-0009.
+Mobile screen for the unified music search surface: greeting + "Discover" title above a debounced `TextInput`, five-state body below. Sectioned Spotify-style results — filter chips (`All · Albums · Tracks · Artists`), a Top Result card, then per-kind sections. Specs: `docs/specs/discover-music-v1/`, `-v2`, `-v4`; ADR-0007, restyled per ADR-0009.
 
 `DiscoverView` is a five-state union — `loading | empty-no-query | results | zero-results | full-error` — mutually exclusive, driven by `_viewForState` in [state.ts](state.ts).
 
@@ -58,6 +58,8 @@ Why each rule exists: `okf/mobile/discover-feature.md` — read before structura
 
 ### Test files
 
-None yet; rebuild per `okf/playbooks/test-taxonomy.md`.
+- [__tests__/slice-invariants.test.ts](__tests__/slice-invariants.test.ts) — greps the slice's `.ts`/`.tsx` sources for the banned noun (`song`/`songs`, case- and case-style-insensitive), the guard that would have caught the `kindLabel` violation.
+
+The rest is rebuilt per `okf/playbooks/test-taxonomy.md`.
 
 <!-- AUTO-MAINTAINED:END -->
