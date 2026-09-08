@@ -94,3 +94,9 @@ func TestReportTitle_UsesFirstLineOnly(t *testing.T) {
 		t.Fatalf("title = %q, want only the first line", report.Title())
 	}
 }
+
+func TestFeedbackValidationErrorCode(t *testing.T) {
+	if got := (&ValidationError{Message: "x"}).ErrorCode(); got != "feedback.validation_error" {
+		t.Errorf("code: got %q, want %q", got, "feedback.validation_error")
+	}
+}

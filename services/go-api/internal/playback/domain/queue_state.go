@@ -13,8 +13,9 @@ type ValidationError struct {
 	Message string
 }
 
-func (e *ValidationError) Error() string   { return e.Message }
-func (e *ValidationError) HTTPStatus() int { return 400 }
+func (e *ValidationError) Error() string     { return e.Message }
+func (e *ValidationError) HTTPStatus() int   { return 400 }
+func (e *ValidationError) ErrorCode() string { return "playback.validation_error" }
 
 type RepeatMode int
 

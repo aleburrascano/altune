@@ -29,8 +29,9 @@ type RecordEventInput struct {
 
 type invalidEventError struct{ msg string }
 
-func (e *invalidEventError) Error() string   { return e.msg }
-func (e *invalidEventError) HTTPStatus() int { return 400 }
+func (e *invalidEventError) Error() string     { return e.msg }
+func (e *invalidEventError) HTTPStatus() int   { return 400 }
+func (e *invalidEventError) ErrorCode() string { return "discovery.invalid_event" }
 
 func validatePayloadTypes(payload map[string]any) error {
 	for _, key := range [...]string{"dwell_ms", "tail_noise_top5"} {
