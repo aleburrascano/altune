@@ -194,40 +194,62 @@ func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, user
 	}
 	defer tx.Rollback(ctx)
 
-	affectedPlaylists, err := tx.Query(ctx,
-		`SELECT DISTINCT playlist_id FROM playlist_tracks WHERE track_id = $1`, id.UUID())
-	if err != nil {
-		return false, nil, err
-	}
-	playlistIds, err := pgx.CollectRows(affectedPlaylists, pgx.RowTo[uuid.UUID])
+	affectedPlaylists, err := removeTrackFromPlaylists(ctx, tx, id)
 	if err != nil {
 		return false, nil, err
 	}
 
-	_, err = tx.Exec(ctx, `DELETE FROM playlist_tracks WHERE track_id = $1`, id.UUID())
-	if err != nil {
+	if err := renumberPlaylists(ctx, tx, affectedPlaylists); err != nil {
 		return false, nil, err
 	}
 
-	for _, playlistId := range playlistIds {
-		if err := renumberPlaylistPositions(ctx, tx, playlistId); err != nil {
-			return false, nil, err
-		}
-	}
-
-	var ref *string
-	err = tx.QueryRow(ctx,
-		`DELETE FROM tracks WHERE id = $1 AND user_id = $2 RETURNING audio_ref`,
-		id.UUID(), userId.UUID(),
-	).Scan(&ref)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil, tx.Commit(ctx)
-	}
+	deleted, ref, err := deleteTrackRow(ctx, tx, id, userId)
 	if err != nil {
 		return false, nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
+		return false, nil, err
+	}
+	return deleted, ref, nil
+}
+
+func removeTrackFromPlaylists(ctx context.Context, tx pgx.Tx, id domain.TrackId) ([]uuid.UUID, error) {
+	rows, err := tx.Query(ctx,
+		`SELECT DISTINCT playlist_id FROM playlist_tracks WHERE track_id = $1`, id.UUID())
+	if err != nil {
+		return nil, err
+	}
+	playlistIds, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM playlist_tracks WHERE track_id = $1`, id.UUID()); err != nil {
+		return nil, err
+	}
+	return playlistIds, nil
+}
+
+func renumberPlaylists(ctx context.Context, tx pgx.Tx, playlistIds []uuid.UUID) error {
+	for _, playlistId := range playlistIds {
+		if err := renumberPlaylistPositions(ctx, tx, playlistId); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func deleteTrackRow(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId shared.UserId) (bool, *string, error) {
+	var ref *string
+	err := tx.QueryRow(ctx,
+		`DELETE FROM tracks WHERE id = $1 AND user_id = $2 RETURNING audio_ref`,
+		id.UUID(), userId.UUID(),
+	).Scan(&ref)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil, nil
+	}
+	if err != nil {
 		return false, nil, err
 	}
 	return true, ref, nil
