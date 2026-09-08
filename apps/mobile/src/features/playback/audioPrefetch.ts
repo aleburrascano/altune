@@ -83,7 +83,9 @@ export async function repairActiveToStreaming(track: PlaybackTrack): Promise<voi
     try {
       await TrackPlayer.load(native);
       await TrackPlayer.play();
-    } catch {}
+    } catch {
+      reportPlaybackError(trackKey(track), 'Could not load this track');
+    }
   });
 }
 

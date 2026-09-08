@@ -172,3 +172,12 @@ The fix makes the event an optimisation rather than the only thing standing betw
 - **Regression** (already covered, re-pointed) — the self-heal regression test ("a stale pinned file is replaced without an acquisition event") now exercises `repinIfStale` rather than `pinnedUri`; the invariant it guards — a mismatch both refuses *and* re-pins — is preserved at the `loadNativeTrack.signedUrl` seam. A new pure-query row asserts `pinnedUri` on a mismatch leaves the entry and queue untouched (the red-proof that the side effect is gone from the getter).
 
 **STATUS: done.** `pinnedStore.version.test.ts` reorganised into three describes — the pure `pinnedUri` version gate, `pinnedUri` no-side-effect, and `repinIfStale` self-healing; the offline and playback suites stay green (265 tests across the touched files). No coverage floor moved — the split reuses lines already exercised.
+
+## Re-derivation — differentiate the empty-catch persistence swallow (2026-09-07)
+
+`saveIndex`'s disk write was a bare `catch {}`; it now `console.warn`s (`[offline] failed to persist pinned index; keeping in-memory only`) while degrading to in-memory exactly as before. Re-deriving which categories the changed surface triggers:
+
+- **Fault injection** (already selected, extended) — the persistence suite already forced write/read/delete/createDirectory faults and asserted the store never throws. That contract is unchanged; the new surface is the diagnostic log on a write fault. A new row in `pinnedStore.persistence.test.ts` injects a write failure, drives `pin`, and asserts both the `[offline]` warn and that the entry stays live in memory.
+- **Regression** (mandatory — bug fix) — the bare swallow left a persistence failure with no trace anywhere. The new row is the red-proof: against the pre-fix `catch {}` it fails (no warn), and passes after. Verified against the pre-fix source.
+
+The rejections stand: no new component, no timing surface, and `console.warn` (not `console.log`) keeps the no-`console.log` invariant intact. **STATUS: done.** 1 new row in `pinnedStore.persistence.test.ts`; the offline slice stays green. Coverage floors unmoved — the warn sits in the write path already exercised by the fault-injection rows.

@@ -314,6 +314,16 @@ describe('failure injection — a disk failure degrades to in-memory-only, never
     expect(() => persistOutbox([])).not.toThrow();
     expect(__fs.readFile(OUTBOX_FILE_URI)).toBeDefined();
   });
+
+  it('a write failure is logged with context rather than swallowed into a bare catch', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    __fs.failNext('write', new Error('disk full'));
+
+    persistOutbox([entry({ event_id: 'e1' })]);
+
+    expect(warn).toHaveBeenCalledWith('[telemetry] failed to persist outbox; keeping in-memory only');
+    warn.mockRestore();
+  });
 });
 
 describe('idempotence — applying the same write or read twice yields the same result', () => {
