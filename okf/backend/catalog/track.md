@@ -4,7 +4,7 @@ title: Catalog track
 description: The Track aggregate — metadata, acquisition-status invariant, dedup — plus AddTrackService, DeleteTrackService, and SetTrackNumberService.
 resource: services/go-api/internal/catalog/domain/track.go, services/go-api/internal/catalog/domain/dedup.go, services/go-api/internal/catalog/service/add_track.go, services/go-api/internal/catalog/service/delete_track.go, services/go-api/internal/catalog/service/set_track_number.go, services/go-api/internal/catalog/service/list_tracks.go, services/go-api/internal/catalog/service/get_track_status.go, services/go-api/internal/catalog/adapters/persistence/track_repo.go, services/go-api/internal/catalog/adapters/handler/track_handler.go, services/go-api/internal/catalog/service/track_dto.go
 tags: [catalog, track, aggregate, dedup, go-api]
-verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
+verified_commit: 0ed99f3181c689b32c13566193ee0203a9f583c3
 ---
 
 `Track` (`domain/track.go`) is the catalog context's primary aggregate root, identified by the wrapped-UUID `TrackId` and owned by a `shared.UserId`. It carries title/artist/album plus optional metadata (year, genre, track_number, album_artist, isrc, duration), an ordered `FeaturedArtists []FeaturedArtist` of guest credits (see [featured-artists](featured-artists.md)), and an `AcquisitionStatus` enum (`AcquisitionPending`/`Ready`/`Failed`, zero-value = pending). The status/`AudioRef`/`FailureReason` invariant is enforced only through aggregate methods — `MarkReady(audioRef)` (requires a non-empty ref), `MarkFailed(reason)` (requires a reason, clears the ref), `RevertToPending()` (clears both), `IsStreamable()` (`Ready` AND a non-nil ref) — never by direct field mutation.
