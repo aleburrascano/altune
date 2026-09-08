@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
@@ -123,8 +122,6 @@ func (h *TrackHandler) handleListTracks(w http.ResponseWriter, r *http.Request) 
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
-	query.Limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
-	query.Offset, _ = strconv.Atoi(r.URL.Query().Get("offset"))
 
 	result, err := h.listTracks.Execute(r.Context(), userId, query)
 	if err != nil {
