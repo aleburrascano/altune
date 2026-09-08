@@ -77,7 +77,7 @@ func (s *FindRelatedService) Execute(
 					items := matchesToSearchResults(matches)
 					mu.Lock()
 					groups = append(groups, domain.RelatedGroup{
-						Relationship: "library_matches",
+						Relationship: domain.RelationshipLibraryMatches,
 						RelatedTo:    r.Title,
 						Items:        items,
 					})
@@ -100,7 +100,7 @@ func (s *FindRelatedService) Execute(
 						}
 						mu.Lock()
 						groups = append(groups, domain.RelatedGroup{
-							Relationship: "album_tracks",
+							Relationship: domain.RelationshipAlbumTracks,
 							RelatedTo:    r.Title,
 							Items:        tracks,
 						})
@@ -129,7 +129,7 @@ func (s *FindRelatedService) Execute(
 					}
 					mu.Lock()
 					groups = append(groups, domain.RelatedGroup{
-						Relationship: "artist_albums",
+						Relationship: domain.RelationshipArtistAlbums,
 						RelatedTo:    r.Title,
 						Items:        albums,
 					})

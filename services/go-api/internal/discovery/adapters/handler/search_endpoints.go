@@ -390,7 +390,7 @@ func relatedGroupsToDTOs(groups []domain.RelatedGroup) []RelatedGroupDTO {
 	dtos := make([]RelatedGroupDTO, 0, len(groups))
 	for _, g := range groups {
 		dtos = append(dtos, RelatedGroupDTO{
-			Relationship: g.Relationship,
+			Relationship: string(g.Relationship),
 			RelatedTo:    g.RelatedTo,
 			Items:        searchResultsToDTOs(g.Items),
 		})
