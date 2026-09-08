@@ -15,7 +15,7 @@ Altune is sideloaded onto friends' and family's devices, and the point of this c
 
 `Diagnostics{AppVersion, Platform, OSVersion, Screen}` is client-supplied, so it is treated as hostile: `sanitized()` runs each field through `singleLine`, which collapses all whitespace runs to single spaces and truncates to 64 runes. That is not cosmetic. The issue body is markdown containing a table, and a field carrying a newline plus pipes could forge extra rows — the flattening is what makes the diagnostics table trustworthy. `Title()` takes only the first line of the message, truncates to 72 runes with an ellipsis, and prefixes the kind, so an issue list stays scannable no matter how long the report is.
 
-`ValidationError` structurally implements `httputil.StatusError` with a plain int 400 — the domain never imports `net/http`.
+`ValidationError` structurally implements `httputil.StatusError` with a plain int 400 — the domain never imports `net/http`. It also implements `httputil.ErrorCoder` structurally (ADR-0021): `ErrorCode()` returns the stable machine code `feedback.validation_error`, emitted in the error body's `code` field beside the human `detail`.
 
 **Ports**: `ports/issue_tracker.go` is a one-method port, `IssueTracker.Create(ctx, *Report) (IssueRef, error)`, returning `IssueRef{Number, URL}`. The number is what the confirmation dialog shows the tester, which is the whole reason the port returns anything at all rather than just an error — "sent" is weaker than "filed as #42".
 

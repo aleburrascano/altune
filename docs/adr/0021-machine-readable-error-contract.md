@@ -1,6 +1,6 @@
 # ADR-0021: Add a stable machine-readable `code` to the service error contract, purely additively
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-07
 - **Deciders:** solo + Claude
 - **Context tags:** [pattern | policy | layer]
