@@ -24,6 +24,35 @@ func TestPublish_EpochSeedsEventIDs(t *testing.T) {
 	}
 }
 
+func TestEvictIdleUsers_ReclaimsIdleButKeepsActiveAndRecent(t *testing.T) {
+	current := time.Unix(0, 0).UTC()
+	bus := newBusWithClock(func() time.Time { return current })
+
+	idle := shared.NewUserId(uuid.New())
+	active := shared.NewUserId(uuid.New())
+	bus.Publish(idle, "e", nil)
+	_, cancelActive := bus.Subscribe(active)
+	defer cancelActive()
+	bus.Publish(active, "e", nil)
+
+	current = current.Add(userIdleTTL + time.Minute)
+
+	recent := shared.NewUserId(uuid.New())
+	bus.Publish(recent, "e", nil)
+	trigger := shared.NewUserId(uuid.New())
+	bus.Publish(trigger, "e", nil)
+
+	if _, ok := bus.users.Load(idle.String()); ok {
+		t.Fatalf("idle subscriber-less user was not evicted")
+	}
+	if _, ok := bus.users.Load(active.String()); !ok {
+		t.Fatalf("active subscribed user was wrongly evicted")
+	}
+	if _, ok := bus.users.Load(recent.String()); !ok {
+		t.Fatalf("recently active subscriber-less user was wrongly evicted")
+	}
+}
+
 func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	user := shared.NewUserId(uuid.New())
 
