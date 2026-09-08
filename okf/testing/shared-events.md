@@ -18,7 +18,7 @@ Rebuilt blind on 2026-07-30: the authors were given the source and the taxonomy 
 - **Reducer** — all 16 `ServerEventType`s against seeded non-trivial cache state, enumerated from `SERVER_EVENT_TYPES` rather than from the handler's branches. `__tests__/applyServerEvent.test.ts`.
 - **Property** — `reorderPlaylistCache` preserves membership and count over any shuffled subsequence; `patchTrackInCaches` replay-idempotence over generated patches (`fast-check`). `__tests__/playlistCachePatch.test.ts`, `__tests__/trackCachePatch.test.ts`.
 - **Cross-surface contract** — `__tests__/eventContract.test.ts` derives the published event set from the Go source at test time (`git ls-files *.go`, every `.Publish(…, "name")` literal plus the handler's `event: resync`) and asserts equality with `SERVER_EVENT_TYPES` in both directions. Derived, never restated.
-- **Invalidation** — exact query keys asserted by identity for `resync`, `track_deleted`, the thin-payload fallback, and every `INVALIDATION_MAP` entry.
+- **Invalidation** — exact query keys asserted by identity for `resync`, `track_deleted`, the thin-payload fallback, and every invalidate-only handler in the `HANDLERS` table.
 - **Idempotence / replay** — `track_added_to_library`, `track_deleted`, `track_removed_from_playlist`, and both cache patchers applied twice, asserted equal to once. This is the category that caught the `track_count` divergence.
 - **Adversarial** — one missing required field at a time, wrong JSON types, non-array `track_ids`, duplicate ids, malformed frames, bad JSON beside a good block, comment and `retry:` lines, blocks split byte-by-byte.
 - **Failure injection** — transport error, `onloadend`, `MAX_RESPONSE_BYTES` recycle, a rejected `getToken()`, a null token.
@@ -36,7 +36,7 @@ Rebuilt blind on 2026-07-30: the authors were given the source and the taxonomy 
 - **Accessibility** — no rendered output.
 - **Functional / acceptance** — no user-visible requirement lives at this layer; the requirements it serves ("a save on another device appears here") belong to the feature slices that render the caches.
 - **Device e2e** — deferred to the spine flow, not this slice.
-- **Invariant / architecture** — the one rule that applies (every published event is handled) is already enforced by Cross-surface contract plus the `Exclude<ServerEventType, …>` compile-time exhaustiveness in `applyServerEvent.ts`.
+- **Invariant / architecture** — the one rule that applies (every published event is handled) is already enforced by Cross-surface contract plus the `Record<ServerEventType, Handler>` compile-time exhaustiveness of the `HANDLERS` dispatch table in `applyServerEvent.ts`.
 
 ## DEFERRED
 
@@ -106,3 +106,9 @@ The aligned `as RepeatMode` cast in `features/playback/hooks/useQueueResume.ts` 
 The other transport categories (Failure injection, Timing / dwell, Legacy / compat) are unchanged: the guard spans only the entry-to-`send()` window and leaves the `onerror`/`onloadend`/watchdog/backoff paths intact, all of which run when the flag is already clear.
 
 **Mutation audit not re-run for this change.** The added guard is one field and a `try/finally`; the next full `npm run mutate` covers it against the standing 90.75 number.
+
+## AMENDED 2026-09-07 — `route()` if-ladder replaced by a dispatch table
+
+The 147-line `route()` if-ladder became a `HANDLERS: Record<ServerEventType, Handler>` dispatch table indexed by `applyServerEvent`; each branch is now a named `(queryClient, event) => void` handler, and the invalidate-only membership events are supplied by an `invalidateKeys` factory that replaced `INVALIDATION_MAP`. Pure refactor, no behaviour change — every event routes to the same effects and all existing tests stayed green unchanged.
+
+No category re-triggers with a new test. The changed surface strengthens the **Invariant / architecture** guard already recorded as rejected: exhaustiveness now covers the whole union (a missing key is a TS2741 on the object literal) rather than only the invalidate-only subset the old `Exclude<…>` map guarded, and a new type can no longer fall through to the invalidate-only path. Re-verified by hand — a fake `track_favourited` added to `SERVER_EVENT_TYPES` makes `tsc` reject the `HANDLERS` literal. Mutation audit not re-run; the number stands at 90.75 and the next full `npm run mutate` covers the restructured file.
