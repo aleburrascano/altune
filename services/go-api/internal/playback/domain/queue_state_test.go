@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -88,6 +89,51 @@ func TestEmptyQueueState_IsValidAndEmpty(t *testing.T) {
 	}
 	if state.RepeatMode != RepeatOff {
 		t.Errorf("RepeatMode = %v, want RepeatOff", state.RepeatMode)
+	}
+}
+
+func repeatIds(n int) []string {
+	ids := make([]string, n)
+	for i := range ids {
+		ids[i] = "a"
+	}
+	return ids
+}
+
+func TestNewQueueState_BoundsQueueLength(t *testing.T) {
+	tests := []struct {
+		name         string
+		trackIds     []string
+		naturalOrder []string
+		wantErr      bool
+	}{
+		{name: "trackIds at limit accepted", trackIds: repeatIds(MaxQueueLength)},
+		{name: "trackIds over limit rejected", trackIds: repeatIds(MaxQueueLength + 1), wantErr: true},
+		{name: "naturalOrder at limit accepted", trackIds: repeatIds(1), naturalOrder: repeatIds(MaxQueueLength)},
+		{name: "naturalOrder over limit rejected", trackIds: repeatIds(1), naturalOrder: repeatIds(MaxQueueLength + 1), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewQueueState(QueueStateInput{
+				UserId:       testUser(),
+				TrackIds:     tt.trackIds,
+				NaturalOrder: tt.naturalOrder,
+			})
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected over-limit queue to be rejected")
+			}
+			var validationErr *ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("error = %T, want *ValidationError", err)
+			}
+		})
 	}
 }
 

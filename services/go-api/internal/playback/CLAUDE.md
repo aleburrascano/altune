@@ -15,6 +15,7 @@ Layout:
 - Construct a `QueueState` only through `newQueueState` — including rehydration from storage.
 - Keep `TrackIds` as `[]string`; never wrap it in catalog's `TrackId`.
 - Never let `TrackIds` or `NaturalOrder` be nil — `emptyIfNil` is the one home for that.
+- Cap `TrackIds` and `NaturalOrder` at `MaxQueueLength`; `newQueueState` rejects longer input.
 - Never reason over `NaturalOrder`; carry it through opaquely.
 - Never import `net/http` from `domain/` — `ValidationError` carries a plain int status.
 - `Resume` returns `EmptyQueueState`, never nil.
