@@ -9,7 +9,17 @@ import (
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+type PgxLibraryLensRepository struct {
+	pool *pgxpool.Pool
+}
+
+func NewPgxLibraryLensRepository(pool *pgxpool.Pool) *PgxLibraryLensRepository {
+	return &PgxLibraryLensRepository{pool: pool}
+}
 
 const albumGroupKey = `lower(t.album) || '|||' || lower(coalesce(t.album_artist, t.artist))`
 const artistGroupKey = `lower(t.artist)`
@@ -57,7 +67,7 @@ func artistOrderBy(sort domain.LibrarySort) string {
 	return ` ORDER BY max(t.added_at) DESC`
 }
 
-func (r *PgxTrackRepository) ListAlbumsForUser(
+func (r *PgxLibraryLensRepository) ListAlbumsForUser(
 	ctx context.Context,
 	userId shared.UserId,
 	query domain.LibraryQuery,
@@ -89,7 +99,7 @@ func (r *PgxTrackRepository) ListAlbumsForUser(
 	return albums, rows.Err()
 }
 
-func (r *PgxTrackRepository) ListArtistsForUser(
+func (r *PgxLibraryLensRepository) ListArtistsForUser(
 	ctx context.Context,
 	userId shared.UserId,
 	query domain.LibraryQuery,
@@ -132,7 +142,7 @@ func trackOrderBy(sort domain.LibrarySort) string {
 	}
 }
 
-func (r *PgxTrackRepository) ListFilteredForUser(
+func (r *PgxLibraryLensRepository) ListFilteredForUser(
 	ctx context.Context,
 	userId shared.UserId,
 	query domain.LibraryQuery,
@@ -178,28 +188,4 @@ func (r *PgxTrackRepository) ListFilteredForUser(
 		return nil, 0, err
 	}
 	return tracks, total, nil
-}
-
-func (r *PgxTrackRepository) ListOwnedTrackRefs(
-	ctx context.Context,
-	userId shared.UserId,
-) ([]domain.OwnedTrackRef, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT id, title, artist, acquisition_status, track_number FROM tracks WHERE user_id = $1`,
-		userId.UUID(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("list owned track refs: %w", err)
-	}
-	defer rows.Close()
-
-	refs := []domain.OwnedTrackRef{}
-	for rows.Next() {
-		var ref domain.OwnedTrackRef
-		if err := rows.Scan(&ref.ID, &ref.Title, &ref.Artist, &ref.AcquisitionStatus, &ref.TrackNumber); err != nil {
-			return nil, fmt.Errorf("scan owned track ref: %w", err)
-		}
-		refs = append(refs, ref)
-	}
-	return refs, rows.Err()
 }

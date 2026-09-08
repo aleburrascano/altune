@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func seedLibraryTrack(t *testing.T, repo *PgxTrackRepository, userId shared.UserId, spec libraryTrackSpec) *domain.Track {
+func seedLibraryTrack(t *testing.T, repo *PgxCatalogTrackRepository, userId shared.UserId, spec libraryTrackSpec) *domain.Track {
 	t.Helper()
 	track, err := domain.NewTrack(userId, spec.title, spec.artist, spec.album)
 	if err != nil {
@@ -63,7 +63,7 @@ func assertOrder(t *testing.T, sort domain.LibrarySort, got, want []string) {
 
 func TestPgxTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -107,7 +107,7 @@ func TestPgxTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 
 func TestPgxTrackRepo_ListFilteredForUser_IlikeMatching(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -172,7 +172,7 @@ func albumsOf(gs []domain.AlbumGroup) []string {
 
 func TestPgxTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -213,7 +213,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 
 func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -266,7 +266,7 @@ func artistsOf(gs []domain.ArtistGroup) []string {
 
 func TestPgxTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -306,7 +306,7 @@ func TestPgxTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
 
 func TestPgxTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxTrackRepository(pool)
+	repo := NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 

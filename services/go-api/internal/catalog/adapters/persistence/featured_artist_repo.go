@@ -9,10 +9,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+type PgxFeaturedArtistRepository struct {
+	pool *pgxpool.Pool
+}
+
+func NewPgxFeaturedArtistRepository(pool *pgxpool.Pool) *PgxFeaturedArtistRepository {
+	return &PgxFeaturedArtistRepository{pool: pool}
 }
 
 func writeTrackFeatured(
@@ -96,7 +105,7 @@ func loadFeaturedForTracks(ctx context.Context, q querier, tracks []*domain.Trac
 	return rows.Err()
 }
 
-func (r *PgxTrackRepository) ReplaceFeaturedArtists(
+func (r *PgxFeaturedArtistRepository) ReplaceFeaturedArtists(
 	ctx context.Context,
 	id domain.TrackId,
 	userId shared.UserId,
@@ -129,7 +138,7 @@ func (r *PgxTrackRepository) ReplaceFeaturedArtists(
 	return tx.Commit(ctx)
 }
 
-func (r *PgxTrackRepository) ListTracksFeaturing(
+func (r *PgxFeaturedArtistRepository) ListTracksFeaturing(
 	ctx context.Context,
 	userId shared.UserId,
 	fa domain.FeaturedArtist,
