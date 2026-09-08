@@ -77,6 +77,73 @@ func TestGetCorrelationID_EmptyContext(t *testing.T) {
 	}
 }
 
+func TestCorrelationID_AdoptsInboundHeader(t *testing.T) {
+	prev := slog.Default()
+	defer slog.SetDefault(prev)
+	ring := logging.Setup("info", false)
+
+	const inbound = "trace-abc12345"
+	var capturedID string
+	handler := CorrelationID(RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedID = GetCorrelationID(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})))
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Correlation-ID", inbound)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if capturedID != inbound {
+		t.Errorf("context ID = %q, want inbound %q", capturedID, inbound)
+	}
+	if got := rec.Header().Get("X-Correlation-ID"); got != inbound {
+		t.Errorf("response header = %q, want inbound %q", got, inbound)
+	}
+	sawStart := false
+	for _, r := range ring.Snapshot() {
+		if r.Message == "request.start" {
+			sawStart = true
+			if r.Attrs["corr_id"] != inbound {
+				t.Errorf("log corr_id = %q, want inbound %q", r.Attrs["corr_id"], inbound)
+			}
+		}
+	}
+	if !sawStart {
+		t.Fatal("expected request.start log line so the corr_id assertion is meaningful")
+	}
+}
+
+func TestCorrelationID_MintsWhenHeaderAbsent(t *testing.T) {
+	handler := CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	id := rec.Header().Get("X-Correlation-ID")
+	if len(id) != 8 {
+		t.Errorf("minted id length = %d, want 8 (uuid[:8]); got %q", len(id), id)
+	}
+}
+
+func TestCorrelationID_MintsWhenHeaderMalformed(t *testing.T) {
+	handler := CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-Correlation-ID", "bad id\nwith spaces")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if got := rec.Header().Get("X-Correlation-ID"); got == "bad id\nwith spaces" || len(got) != 8 {
+		t.Errorf("expected minted 8-char id for malformed inbound header, got %q", got)
+	}
+}
+
 func TestRequestLogger_DoesNotPanic(t *testing.T) {
 	handler := RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
