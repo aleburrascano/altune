@@ -5,7 +5,11 @@ import { usePlayback } from '@shared/playback/usePlayback';
 
 import { useSleepTimerStore } from '../sleepTimerStore';
 
-export function SleepTimerBridge(): ReactElement | null {
+export function SleepTimerBridge({
+  now = Date.now,
+}: {
+  now?: () => number;
+} = {}): ReactElement | null {
   const endsAt = useSleepTimerStore((s) => s.endsAt);
   const cancel = useSleepTimerStore((s) => s.cancel);
   const { pause } = usePlayback();
@@ -18,7 +22,7 @@ export function SleepTimerBridge(): ReactElement | null {
       cancel();
     };
 
-    const remaining = endsAt - Date.now();
+    const remaining = endsAt - now();
     if (remaining <= 0) {
       fire();
       return;
@@ -26,14 +30,14 @@ export function SleepTimerBridge(): ReactElement | null {
 
     const timeout = setTimeout(fire, remaining);
     const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active' && Date.now() >= endsAt) fire();
+      if (next === 'active' && now() >= endsAt) fire();
     });
 
     return () => {
       clearTimeout(timeout);
       sub.remove();
     };
-  }, [endsAt, pause, cancel]);
+  }, [endsAt, pause, cancel, now]);
 
   return null;
 }

@@ -3,14 +3,14 @@ import { create } from 'zustand';
 export type SleepTimerState = {
   endsAt: number | null;
   minutes: number | null;
-  start: (minutes: number) => void;
+  start: (minutes: number, now?: number) => void;
   cancel: () => void;
 };
 
 export const useSleepTimerStore = create<SleepTimerState>((set) => ({
   endsAt: null,
   minutes: null,
-  start: (minutes) => set({ endsAt: Date.now() + minutes * 60_000, minutes }),
+  start: (minutes, now = Date.now()) => set({ endsAt: now + minutes * 60_000, minutes }),
   cancel: () => set({ endsAt: null, minutes: null }),
 }));
 
