@@ -152,3 +152,13 @@ The fix makes the event an optimisation rather than the only thing standing betw
 - The three "no expectation" arms must keep serving the local copy. Turning `''` or `undefined` into a mismatch trades this bug for a worse one — an offline device that refuses to play its own downloads.
 - `reconcile()` must keep carrying `version`.
 - A mismatch must re-pin as it declines, not merely decline; declining alone fixes playback for that session while leaving the wrong bytes on disk for the next offline launch.
+
+## Re-derivation — validate persisted shapes at the storage boundary (2026-09-07)
+
+`loadIndex` gained per-entry shape validation (`narrowEntry` / `narrowIndex`): a value that is not an object with a string `trackId`, a known `PinnedStatus`, and (when present) string `uri`/`version` is dropped rather than seeded into store state, and the drop count is logged. Re-deriving which categories the changed surface triggers:
+
+- **Adversarial** (already selected, extended) — `pinned.json` was already named as a trust boundary, but the enumeration stopped at "degrade to an empty index, never throw". The boundary is finer than that now: a malformed *entry* beside valid ones must be dropped individually while its siblings load. New rows in `pinnedStore.index.test.ts` cover an unrecognised `status`, a wrong-typed `uri`, a wrong-typed `version`, an entry with no `status`, and a `null` value dropped without discarding a valid neighbour.
+- **Legacy / compat** (already selected, corrected) — the fixture "an entry whose status this version does not know is loaded as-is" asserted the exact behaviour this change reverses, so it was rewritten to assert the entry is dropped. The `noUncheckedIndexedAccess`-shaped "no uri field loads intact" and "key/trackId disagree loads verbatim" fixtures still pass: a valid entry is preserved whole, trackId included.
+- **Regression** (mandatory — bug fix) — the seeded-malformed-status entry is the red-proof; it fails against the pre-fix cast and passes after. Verified by stashing the source and re-running.
+
+**STATUS: done.** 5 new/rewritten rows in `pinnedStore.index.test.ts`; the offline slice stays green (all suites), red-proof confirmed against the pre-fix source. No coverage floor moved — the new lines sit in the load path already exercised by the legacy-shape fixtures.

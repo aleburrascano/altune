@@ -15,6 +15,7 @@ Dependencies: `@shared/api-client/audio` (`fetchAudioUrls`), `expo-file-system`,
 
 - Pin audio under `Paths.document`, never `Paths.cache`.
 - Rebuild the index from disk in `reconcile()` — the files are the source of truth, the index is a cache of them.
+- Validate each persisted index entry's shape in `loadIndex()`; drop a malformed entry rather than seeding it into store state.
 - Skip the reconcile pass when the audio directory cannot be listed; never read an unreadable directory as an empty one.
 - Drop a `ready` entry whose file is gone rather than keeping it.
 - Re-queue an entry that was `queued` or `downloading` and has no file.

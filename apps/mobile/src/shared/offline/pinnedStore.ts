@@ -29,13 +29,48 @@ function indexFile(): File {
   return new File(dir, INDEX_FILE);
 }
 
+const PINNED_STATUSES: Record<PinnedStatus, true> = {
+  queued: true,
+  downloading: true,
+  ready: true,
+  failed: true,
+};
+
+function isPinnedStatus(value: unknown): value is PinnedStatus {
+  return typeof value === 'string' && PINNED_STATUSES[value as PinnedStatus] === true;
+}
+
+function narrowEntry(value: unknown): PinnedEntry | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record['trackId'] !== 'string' || !isPinnedStatus(record['status'])) return null;
+  if (record['uri'] !== undefined && typeof record['uri'] !== 'string') return null;
+  if (record['version'] !== undefined && typeof record['version'] !== 'string') return null;
+  const entry: PinnedEntry = { trackId: record['trackId'], status: record['status'] };
+  if (typeof record['uri'] === 'string') entry.uri = record['uri'];
+  if (typeof record['version'] === 'string') entry.version = record['version'];
+  return entry;
+}
+
+function narrowIndex(parsed: Record<string, unknown>): Record<string, PinnedEntry> {
+  const entries: Record<string, PinnedEntry> = {};
+  let dropped = 0;
+  for (const [trackId, value] of Object.entries(parsed)) {
+    const entry = narrowEntry(value);
+    if (entry === null) dropped += 1;
+    else entries[trackId] = entry;
+  }
+  if (dropped > 0) console.warn(`[offline] dropped ${dropped} malformed pinned entries at load`);
+  return entries;
+}
+
 function loadIndex(): Record<string, PinnedEntry> {
   try {
     const file = indexFile();
     if (!file.exists) return {};
     const parsed: unknown = JSON.parse(file.textSync());
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
-    return parsed as Record<string, PinnedEntry>;
+    return narrowIndex(parsed as Record<string, unknown>);
   } catch {
     return {};
   }
