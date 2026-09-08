@@ -11,6 +11,7 @@ Invariants:
 - `flushOutbox` drops an entry the server rejects with 400 and keeps draining; every other failure stops the drain and retries later.
 - Never send a payload key Go constrains to a string as `null` — omit the key instead.
 - Guard every `Directory.create` with `if (!dir.exists)`; the native call throws on an existing directory unless `idempotent` is set.
+- Validate the full persisted outbox entry shape in `loadPersistedOutbox` (known `type`, non-empty `event_id`, string `client_occurred_at`); drop a malformed entry rather than replaying it.
 
 Tests: `__tests__/` — `outbox`, `outbox.pure`, `outbox.property`, `outbox.restore`, `outboxStore`, `session`, `recordEvent`, `useRecordEvent`, `eventContract`, `slice-invariants`. Categories and rejections: `okf/testing/shared-telemetry.md`.
 
