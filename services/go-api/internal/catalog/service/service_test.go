@@ -9,6 +9,7 @@ import (
 
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
@@ -1191,7 +1192,10 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 	}
 }
 
-type featuringErrLister struct{ err error }
+type featuringErrLister struct {
+	ports.TrackRepository
+	err error
+}
 
 func (f featuringErrLister) ListTracksFeaturing(_ context.Context, _ shared.UserId, _ domain.FeaturedArtist) ([]*domain.Track, error) {
 	return nil, f.err

@@ -5,19 +5,15 @@ import (
 	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 )
 
-type libraryLensReader interface {
-	ListAlbumsForUser(ctx context.Context, userId shared.UserId, query domain.LibraryQuery) ([]domain.AlbumGroup, error)
-	ListArtistsForUser(ctx context.Context, userId shared.UserId, query domain.LibraryQuery) ([]domain.ArtistGroup, error)
-}
-
 type LibraryLensService struct {
-	trackRepo libraryLensReader
+	trackRepo ports.TrackRepository
 }
 
-func NewLibraryLensService(trackRepo libraryLensReader) *LibraryLensService {
+func NewLibraryLensService(trackRepo ports.TrackRepository) *LibraryLensService {
 	return &LibraryLensService{trackRepo: trackRepo}
 }
 

@@ -5,12 +5,9 @@ import (
 	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 )
-
-type trackLister interface {
-	ListFilteredForUser(ctx context.Context, userId shared.UserId, query domain.LibraryQuery) (tracks []*domain.Track, total int, err error)
-}
 
 type ListTracksOutput struct {
 	Tracks  []*domain.Track
@@ -20,10 +17,10 @@ type ListTracksOutput struct {
 }
 
 type ListTracksService struct {
-	trackRepo trackLister
+	trackRepo ports.TrackRepository
 }
 
-func NewListTracksService(trackRepo trackLister) *ListTracksService {
+func NewListTracksService(trackRepo ports.TrackRepository) *ListTracksService {
 	return &ListTracksService{trackRepo: trackRepo}
 }
 

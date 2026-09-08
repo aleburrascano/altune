@@ -30,17 +30,13 @@ type AddTrackOutput struct {
 	Created bool
 }
 
-type trackAdder interface {
-	Add(ctx context.Context, track *domain.Track) (stored *domain.Track, created bool, err error)
-}
-
 type AddTrackService struct {
-	trackRepo trackAdder
+	trackRepo ports.TrackRepository
 	events    events.Publisher
 	scheduler ports.AcquisitionScheduler
 }
 
-func NewAddTrackService(trackRepo trackAdder, opts ...func(*AddTrackService)) *AddTrackService {
+func NewAddTrackService(trackRepo ports.TrackRepository, opts ...func(*AddTrackService)) *AddTrackService {
 	s := &AddTrackService{
 		trackRepo: trackRepo,
 		events:    events.NoopPublisher(),

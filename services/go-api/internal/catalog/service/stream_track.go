@@ -17,19 +17,14 @@ type StreamOutput struct {
 	Track  *domain.Track
 }
 
-type streamTrackRepo interface {
-	trackByIDGetter
-	Update(ctx context.Context, track *domain.Track) error
-}
-
 type StreamTrackService struct {
-	trackRepo  streamTrackRepo
+	trackRepo  ports.TrackRepository
 	audioStore ports.AudioStore
 	scheduler  ports.AcquisitionScheduler
 }
 
 func NewStreamTrackService(
-	trackRepo streamTrackRepo,
+	trackRepo ports.TrackRepository,
 	audioStore ports.AudioStore,
 	opts ...func(*StreamTrackService),
 ) *StreamTrackService {

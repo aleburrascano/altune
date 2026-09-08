@@ -14,18 +14,13 @@ import (
 
 const MaxPlaylistBatchSize = 500
 
-type playlistTrackReader interface {
-	trackByIDGetter
-	trackBatchReader
-}
-
 type PlaylistMembershipService struct {
 	playlistRepo ports.PlaylistRepository
-	trackRepo    playlistTrackReader
+	trackRepo    ports.TrackRepository
 	events       events.Publisher
 }
 
-func NewPlaylistMembershipService(playlistRepo ports.PlaylistRepository, trackRepo playlistTrackReader, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
+func NewPlaylistMembershipService(playlistRepo ports.PlaylistRepository, trackRepo ports.TrackRepository, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
 	s := &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: events.NoopPublisher()}
 	for _, opt := range opts {
 		opt(s)
