@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -136,16 +137,19 @@ func (r *PgxTrackRepository) ListFilteredForUser(
 	userId shared.UserId,
 	query domain.LibraryQuery,
 ) ([]*domain.Track, int, error) {
-	sql := `SELECT ` + trackColumns + `, COUNT(*) OVER () AS total FROM tracks WHERE user_id = $1`
-	args := []any{userId.UUID()}
-	if query.Search != "" {
-		sql += ` AND (title ILIKE $4 OR artist ILIKE $4 OR album ILIKE $4)`
+	var args []any
+	placeholder := func(v any) string {
+		args = append(args, v)
+		return "$" + strconv.Itoa(len(args))
 	}
-	sql += trackOrderBy(query.Sort) + ` LIMIT $2 OFFSET $3`
-	args = append(args, query.Limit, query.Offset)
+
+	sql := `SELECT ` + trackColumns + `, COUNT(*) OVER () AS total FROM tracks WHERE user_id = ` + placeholder(userId.UUID())
 	if query.Search != "" {
-		args = append(args, likePattern(query.Search))
+		p := placeholder(likePattern(query.Search))
+		sql += ` AND (title ILIKE ` + p + ` OR artist ILIKE ` + p + ` OR album ILIKE ` + p + `)`
 	}
+	sql += trackOrderBy(query.Sort)
+	sql += ` LIMIT ` + placeholder(query.Limit) + ` OFFSET ` + placeholder(query.Offset)
 
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
