@@ -44,7 +44,6 @@ func RequestLogger(next http.Handler) http.Handler {
 			"corr_id", corrID,
 			"method", r.Method,
 			"path", r.URL.Path,
-			"query", r.URL.RawQuery,
 			"remote", r.RemoteAddr,
 		)
 

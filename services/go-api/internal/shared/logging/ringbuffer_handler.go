@@ -102,6 +102,7 @@ func (h *ringHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *ringHandler) Handle(ctx context.Context, r slog.Record) error {
+	r = withoutSensitiveAttrs(r)
 	h.ring.append(CapturedRecord{
 		Time:    r.Time,
 		Level:   r.Level.String(),
@@ -112,6 +113,32 @@ func (h *ringHandler) Handle(ctx context.Context, r slog.Record) error {
 		return h.inner.Handle(ctx, r)
 	}
 	return nil
+}
+
+var sensitiveLogKeys = map[string]struct{}{
+	"query": {},
+}
+
+func withoutSensitiveAttrs(r slog.Record) slog.Record {
+	present := false
+	r.Attrs(func(a slog.Attr) bool {
+		if _, ok := sensitiveLogKeys[a.Key]; ok {
+			present = true
+			return false
+		}
+		return true
+	})
+	if !present {
+		return r
+	}
+	clean := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	r.Attrs(func(a slog.Attr) bool {
+		if _, ok := sensitiveLogKeys[a.Key]; !ok {
+			clean.AddAttrs(a)
+		}
+		return true
+	})
+	return clean
 }
 
 func (h *ringHandler) flattenedAttrs(r slog.Record) map[string]string {
