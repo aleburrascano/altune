@@ -38,28 +38,7 @@ import {
   type ServerEventType,
 } from './eventTypes';
 
-type InvalidateOnlyEvent = Exclude<
-  ServerEventType,
-  | 'resync'
-  | 'track_added_to_library'
-  | 'track_deleted'
-  | 'track_acquisition_started'
-  | 'track_acquisition_progress'
-  | 'track_acquisition_completed'
-  | 'track_acquisition_failed'
-  | 'track_replace_failed'
-  | 'playlist_renamed'
-  | 'track_removed_from_playlist'
-  | 'tracks_removed_from_playlist'
-  | 'playlist_reordered'
->;
-
-const INVALIDATION_MAP: Record<InvalidateOnlyEvent, readonly (readonly string[])[]> = {
-  playlist_created: [playlistKeys.list],
-  playlist_deleted: [playlistKeys.list, playlistKeys.details],
-  track_added_to_playlist: [playlistKeys.details, playlistKeys.list],
-  tracks_added_to_playlist: [playlistKeys.details, playlistKeys.list],
-};
+type Handler = (queryClient: QueryClient, event: ServerEvent) => void;
 
 const RESYNC_KEYS: readonly (readonly string[])[] = [
   libraryKeys.tracksPrefix,
@@ -130,159 +109,160 @@ function invalidateDerived(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: libraryKeys.summary });
 }
 
+function stringArray(value: unknown): string[] | null {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : null;
+}
+
+function invalidateKeys(keys: readonly (readonly string[])[]): Handler {
+  return (queryClient) => {
+    for (const queryKey of keys) {
+      void queryClient.invalidateQueries({ queryKey });
+    }
+  };
+}
+
+function handleResync(queryClient: QueryClient): void {
+  for (const queryKey of RESYNC_KEYS) {
+    void queryClient.invalidateQueries({ queryKey });
+  }
+}
+
+function handleTrackAddedToLibrary(queryClient: QueryClient, event: ServerEvent): void {
+  const track = parseAddedTrack(event.data);
+  invalidateDerived(queryClient);
+  if (!track) {
+    void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
+    void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
+    return;
+  }
+  upsertTrackInCaches(queryClient, track);
+  patchTrackStatus(track.id, {
+    acquisitionStatus: track.acquisition_status,
+    failureMessage: track.failure_message ?? null,
+  });
+  linkTrackIdentity(trackIdentityKey(track.title, track.artist), track.id);
+}
+
+function handleTrackDeleted(queryClient: QueryClient, event: ServerEvent): void {
+  const trackId = asString(event.data.track_id);
+  if (trackId) {
+    removeTrackFromCaches(queryClient, trackId);
+    removeTrackStatus(trackId);
+  }
+  invalidateDerived(queryClient);
+  void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
+}
+
+function handleTrackAcquisitionStarted(queryClient: QueryClient, event: ServerEvent): void {
+  const trackId = asString(event.data.track_id);
+  if (!trackId) return;
+  startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
+  patchTrackInCaches(queryClient, trackId, {
+    acquisition_status: 'pending',
+    failure_reason: null,
+    failure_message: null,
+  });
+  patchTrackStatus(trackId, { acquisitionStatus: 'pending', failureMessage: null });
+}
+
+function handleTrackAcquisitionProgress(queryClient: QueryClient, event: ServerEvent): void {
+  const trackId = asString(event.data.track_id);
+  const phase = progressPhase(asString(event.data.stage));
+  if (trackId && phase) {
+    progressDownload(trackId, phase, trackMeta(getTrackFromCaches(queryClient, trackId)));
+  }
+}
+
+function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: ServerEvent): void {
+  const trackId = asString(event.data.track_id);
+  if (!trackId) return;
+  const audioRef = asString(event.data.audio_ref);
+  patchTrackInCaches(queryClient, trackId, {
+    acquisition_status: 'ready',
+    ...(audioRef === null ? {} : { audio_ref: audioRef }),
+  });
+  patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
+  completeDownload(trackId);
+  invalidateAudioCaches(trackId);
+  repinIfPinned(trackId);
+}
+
+function handleTrackReplaceFailed(queryClient: QueryClient, event: ServerEvent): void {
+  const trackId = asString(event.data.track_id);
+  if (!trackId) return;
+  patchTrackInCaches(queryClient, trackId, {
+    acquisition_status: 'ready',
+    failure_reason: null,
+    failure_message: null,
+  });
+  patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
+  failDownload(trackId);
+}
+
+function handleTrackAcquisitionFailed(queryClient: QueryClient, event: ServerEvent): void {
+  const trackId = asString(event.data.track_id);
+  if (!trackId) return;
+  const failureMessage = asString(event.data.failure_message);
+  patchTrackInCaches(queryClient, trackId, {
+    acquisition_status: 'failed',
+    failure_reason: asString(event.data.reason),
+    ...(failureMessage === null ? {} : { failure_message: failureMessage }),
+    audio_ref: null,
+  });
+  patchTrackStatus(trackId, { acquisitionStatus: 'failed', failureMessage });
+  failDownload(trackId);
+}
+
+function handlePlaylistRenamed(queryClient: QueryClient, event: ServerEvent): void {
+  const playlistId = asString(event.data.playlist_id);
+  const name = asString(event.data.name);
+  if (playlistId && name != null) patchPlaylistName(queryClient, playlistId, name);
+}
+
+function handleTrackRemovedFromPlaylist(queryClient: QueryClient, event: ServerEvent): void {
+  const playlistId = asString(event.data.playlist_id);
+  const trackId = asString(event.data.track_id);
+  if (playlistId && trackId) removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
+}
+
+function handleTracksRemovedFromPlaylist(queryClient: QueryClient, event: ServerEvent): void {
+  const playlistId = asString(event.data.playlist_id);
+  const trackIds = stringArray(event.data.track_ids);
+  if (!playlistId || !trackIds) return;
+  for (const trackId of trackIds) {
+    removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
+  }
+}
+
+function handlePlaylistReordered(queryClient: QueryClient, event: ServerEvent): void {
+  const playlistId = asString(event.data.playlist_id);
+  const trackIds = stringArray(event.data.track_ids);
+  if (playlistId && trackIds) reorderPlaylistCache(queryClient, playlistId, trackIds);
+}
+
+const HANDLERS: Record<ServerEventType, Handler> = {
+  resync: handleResync,
+  track_added_to_library: handleTrackAddedToLibrary,
+  track_deleted: handleTrackDeleted,
+  track_acquisition_started: handleTrackAcquisitionStarted,
+  track_acquisition_progress: handleTrackAcquisitionProgress,
+  track_acquisition_completed: handleTrackAcquisitionCompleted,
+  track_acquisition_failed: handleTrackAcquisitionFailed,
+  track_replace_failed: handleTrackReplaceFailed,
+  track_added_to_playlist: invalidateKeys([playlistKeys.details, playlistKeys.list]),
+  tracks_added_to_playlist: invalidateKeys([playlistKeys.details, playlistKeys.list]),
+  track_removed_from_playlist: handleTrackRemovedFromPlaylist,
+  tracks_removed_from_playlist: handleTracksRemovedFromPlaylist,
+  playlist_created: invalidateKeys([playlistKeys.list]),
+  playlist_deleted: invalidateKeys([playlistKeys.list, playlistKeys.details]),
+  playlist_renamed: handlePlaylistRenamed,
+  playlist_reordered: handlePlaylistReordered,
+};
+
 export function applyServerEvent(queryClient: QueryClient, event: ServerEvent): void {
   if (!isServerEventType(event.type)) {
     recordUnhandledEvent(event.type);
     return;
   }
-  route(queryClient, event, event.type);
-}
-
-function route(queryClient: QueryClient, event: ServerEvent, type: ServerEventType): void {
-  if (type === 'resync') {
-    for (const queryKey of RESYNC_KEYS) {
-      void queryClient.invalidateQueries({ queryKey });
-    }
-    return;
-  }
-
-  if (type === 'track_added_to_library') {
-    const track = parseAddedTrack(event.data);
-    invalidateDerived(queryClient);
-    if (track) {
-      upsertTrackInCaches(queryClient, track);
-      patchTrackStatus(track.id, {
-        acquisitionStatus: track.acquisition_status,
-        failureMessage: track.failure_message ?? null,
-      });
-      linkTrackIdentity(trackIdentityKey(track.title, track.artist), track.id);
-    } else {
-      void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
-      void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
-    }
-    return;
-  }
-
-  if (type === 'track_deleted') {
-    const trackId = asString(event.data.track_id);
-    if (trackId) {
-      removeTrackFromCaches(queryClient, trackId);
-      removeTrackStatus(trackId);
-    }
-    invalidateDerived(queryClient);
-    void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
-    return;
-  }
-
-  if (type === 'track_acquisition_started') {
-    const trackId = asString(event.data.track_id);
-    if (trackId) {
-      startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
-      patchTrackInCaches(queryClient, trackId, {
-        acquisition_status: 'pending',
-        failure_reason: null,
-        failure_message: null,
-      });
-      patchTrackStatus(trackId, { acquisitionStatus: 'pending', failureMessage: null });
-    }
-    return;
-  }
-
-  if (type === 'track_acquisition_progress') {
-    const trackId = asString(event.data.track_id);
-    const phase = progressPhase(asString(event.data.stage));
-    if (trackId && phase) {
-      progressDownload(trackId, phase, trackMeta(getTrackFromCaches(queryClient, trackId)));
-    }
-    return;
-  }
-
-  if (type === 'track_acquisition_completed') {
-    const trackId = asString(event.data.track_id);
-    if (trackId) {
-      const audioRef = asString(event.data.audio_ref);
-      patchTrackInCaches(queryClient, trackId, {
-        acquisition_status: 'ready',
-        ...(audioRef === null ? {} : { audio_ref: audioRef }),
-      });
-      patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
-      completeDownload(trackId);
-      invalidateAudioCaches(trackId);
-      repinIfPinned(trackId);
-    }
-    return;
-  }
-
-  if (type === 'track_replace_failed') {
-    const trackId = asString(event.data.track_id);
-    if (trackId) {
-      patchTrackInCaches(queryClient, trackId, {
-        acquisition_status: 'ready',
-        failure_reason: null,
-        failure_message: null,
-      });
-      patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
-      failDownload(trackId);
-    }
-    return;
-  }
-
-  if (type === 'track_acquisition_failed') {
-    const trackId = asString(event.data.track_id);
-    if (trackId) {
-      const failureMessage = asString(event.data.failure_message);
-      patchTrackInCaches(queryClient, trackId, {
-        acquisition_status: 'failed',
-        failure_reason: asString(event.data.reason),
-        ...(failureMessage === null ? {} : { failure_message: failureMessage }),
-        audio_ref: null,
-      });
-      patchTrackStatus(trackId, {
-        acquisitionStatus: 'failed',
-        failureMessage,
-      });
-      failDownload(trackId);
-    }
-    return;
-  }
-
-  if (type === 'playlist_renamed') {
-    const playlistId = asString(event.data.playlist_id);
-    const name = asString(event.data.name);
-    if (playlistId && name != null) patchPlaylistName(queryClient, playlistId, name);
-    return;
-  }
-
-  if (type === 'track_removed_from_playlist') {
-    const playlistId = asString(event.data.playlist_id);
-    const trackId = asString(event.data.track_id);
-    if (playlistId && trackId) removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
-    return;
-  }
-
-  if (type === 'tracks_removed_from_playlist') {
-    const playlistId = asString(event.data.playlist_id);
-    const trackIds = Array.isArray(event.data.track_ids)
-      ? event.data.track_ids.filter((v): v is string => typeof v === 'string')
-      : null;
-    if (playlistId && trackIds) {
-      for (const trackId of trackIds) {
-        removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
-      }
-    }
-    return;
-  }
-
-  if (type === 'playlist_reordered') {
-    const playlistId = asString(event.data.playlist_id);
-    const trackIds = Array.isArray(event.data.track_ids)
-      ? event.data.track_ids.filter((v): v is string => typeof v === 'string')
-      : null;
-    if (playlistId && trackIds) reorderPlaylistCache(queryClient, playlistId, trackIds);
-    return;
-  }
-
-  for (const queryKey of INVALIDATION_MAP[type]) {
-    void queryClient.invalidateQueries({ queryKey });
-  }
+  HANDLERS[event.type](queryClient, event);
 }
