@@ -12,6 +12,7 @@ import (
 const (
 	defaultRingSize    = 100
 	subscriberChanSize = 16
+	userIdleTTL        = 30 * time.Minute
 )
 
 type userState struct {
@@ -22,6 +23,13 @@ type userState struct {
 	nextID      uint64
 	subscribers map[uint64]chan Event
 	subCounter  uint64
+	lastActive  time.Time
+}
+
+func (us *userState) isReclaimable(cutoff time.Time) bool {
+	us.mu.RLock()
+	defer us.mu.RUnlock()
+	return len(us.subscribers) == 0 && us.lastActive.Before(cutoff)
 }
 
 type InProcessBus struct {
@@ -29,6 +37,7 @@ type InProcessBus struct {
 	ringCap int
 	idBase  uint64
 	dropped atomic.Uint64
+	now     func() time.Time
 }
 
 func (b *InProcessBus) Dropped() uint64 { return b.dropped.Load() }
@@ -39,7 +48,11 @@ var (
 )
 
 func NewInProcessBus() *InProcessBus {
-	return &InProcessBus{ringCap: defaultRingSize, idBase: idBaseMonotonicAcrossRestarts()}
+	return newBusWithClock(time.Now)
+}
+
+func newBusWithClock(now func() time.Time) *InProcessBus {
+	return &InProcessBus{ringCap: defaultRingSize, idBase: idBaseMonotonicAcrossRestarts(), now: now}
 }
 
 func idBaseMonotonicAcrossRestarts() uint64 {
@@ -51,19 +64,32 @@ func (b *InProcessBus) getOrCreateUser(userId shared.UserId) *userState {
 	if v, ok := b.users.Load(key); ok {
 		return v.(*userState)
 	}
+	b.evictIdleUsers()
 	us := &userState{
 		ring:        make([]Event, b.ringCap),
 		subscribers: make(map[uint64]chan Event),
 		nextID:      b.idBase,
+		lastActive:  b.now(),
 	}
 	actual, _ := b.users.LoadOrStore(key, us)
 	return actual.(*userState)
+}
+
+func (b *InProcessBus) evictIdleUsers() {
+	cutoff := b.now().Add(-userIdleTTL)
+	b.users.Range(func(key, value any) bool {
+		if value.(*userState).isReclaimable(cutoff) {
+			b.users.Delete(key)
+		}
+		return true
+	})
 }
 
 func (b *InProcessBus) Publish(userId shared.UserId, eventType string, payload map[string]any) {
 	us := b.getOrCreateUser(userId)
 	us.mu.Lock()
 
+	us.lastActive = b.now()
 	us.nextID++
 	evt := Event{
 		ID:        us.nextID,
@@ -114,6 +140,7 @@ func (b *InProcessBus) Subscribe(userId shared.UserId) (<-chan Event, func()) {
 	cancel := func() {
 		us.mu.Lock()
 		delete(us.subscribers, id)
+		us.lastActive = b.now()
 		us.mu.Unlock()
 	}
 	return ch, cancel
