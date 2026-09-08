@@ -1,3 +1,8 @@
+export type ApiErrorBody = {
+  detail?: string;
+  code?: string;
+};
+
 export type AcquisitionStatus = 'pending' | 'ready' | 'failed';
 
 export type FeaturedArtist = {

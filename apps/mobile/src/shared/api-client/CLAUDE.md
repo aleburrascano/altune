@@ -8,6 +8,7 @@ Invariants:
 - A migrated read parses its wire body through `parse.ts` (`apiFetch<unknown>` → per-type parser) and returns the domain type; a malformed/off-contract/old-server body is a `ContractError`, never an unguarded `as T`.
 - Narrow a wire field in `parse.ts` field by field including union membership; a required field's absence or wrong type throws, an optional/legacy field defaults, and no downstream code re-parses.
 - `parse.ts` closes the high-traffic reads (search, library tracks/albums/artists, `createTrack`); the remaining endpoints still cast and are migrated as they are touched.
+- A non-2xx reads its JSON error body through `parseErrorBody` and threads the optional `code` onto `ApiError.code`; callers branch on `error.code`, never the message text, and a bodyless/non-JSON error still yields a status-only `ApiError`.
 - A missing/errored Supabase session **fails fast**: `apiFetch` throws `ApiError(401)` before any network request (`getSession` resolves with `{session: null, error}` — read the `error` field, it never throws). A *server* 401 additionally calls `markSessionExpired()` so `AuthGate` can offer re-auth; a 500 never marks it.
 - A transport failure is never an `ApiError`. `NetworkError` covers a failed session refresh (`error.name === 'AuthRetryableFetchError'`), an unreachable host, a timeout and a truncated body; only these plus `429`/`5xx` are retryable.
 - Every request gets a deadline via `startDeadline` — never call `fetch` without one.
