@@ -112,3 +112,13 @@ Coverage: **0/0/0/0 → 100/100/100/100**, per file and in aggregate — the thi
 - **Regression** (mandatory — bug fix) — a persisted entry with a garbage/missing `type` used to pass the `event_id`-only gate and replay to `/events` verbatim; the new adversarial rows are the red-proof, failing against the pre-fix predicate and passing after. Verified by stashing the source and re-running.
 
 The rejections stand: no new component, no cache, no timing surface. **STATUS: done.** 7 new/rewritten rows in `outboxStore.test.ts`; the telemetry slice stays green (all suites), red-proof confirmed against the pre-fix source. Coverage floors unmoved — the new branches sit inside `loadPersistedOutbox`, already at 100% line coverage.
+
+## Re-derivation — record a shed label-critical entry at the cap (2026-09-07)
+
+`capEntries(…, 50)` silently dropped the oldest entries on overflow, and since every entry in the outbox is label-critical, that was an unrecorded loss of a relevance label. Both cap sites (`enqueueCritical`, the disk restore) now route through the stateful `capCritical` wrapper, which counts the shed, adds it to `_droppedCritical` (read via `droppedCriticalCount()`), and `console.warn`s it — the bound stays at `MAX_ENTRIES = 50`. Re-deriving which categories the changed surface triggers:
+
+- **Reducer** (already selected, extended) — the `cap/dedupe` transition of the `_queue` store gains an observable effect: overflowing it past the cap now increments a recorded counter. New rows in `outbox.test.ts` drive the enqueue-onto-full case both across the cap (drop recorded, count 1, warn carries `label-critical`) and just under it (no drop, count 0).
+- **Regression** (mandatory — bug fix) — the shed used to be silent, so a lost `library_add`/`wrong_album` at the cap left no trace. The new backpressure rows are the red-proof: against the pre-fix source (recording removed) they fail with `droppedCriticalCount()` stuck at 0; after the fix they pass. Verified by stashing the recording and re-running.
+- **Invariant / architecture** (already selected, unchanged in count) — "every shed is recorded" joins the slice's checkable rules in spirit, but is asserted through the Reducer/Regression rows rather than a new `slice-invariants` case, since it is a behaviour of the reducer, not a structural fact about the file tree.
+
+The rejections stand: no new component, no cache, no timing surface, and `console.warn` (not `console.log`) keeps the no-`console.log` invariant intact. **STATUS: done.** 2 new rows in `outbox.test.ts`; the telemetry slice stays green (all 165 tests), red-proof confirmed against the pre-fix source. Coverage floors unmoved — the new branch sits inside `capCritical`, exercised by both new rows.
