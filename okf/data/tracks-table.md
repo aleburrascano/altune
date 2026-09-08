@@ -4,7 +4,7 @@ title: tracks
 description: Storage for the catalog bounded context's Track aggregate — a user's saved audio recording plus its acquisition lifecycle.
 resource: services/go-api/migrations/001_baseline.sql, services/go-api/internal/catalog/domain/track.go, services/go-api/internal/catalog/adapters/persistence/track_repo.go, services/go-api/migrations/010_track_featured_artists.sql, services/go-api/migrations/002_relationship_indexes.sql, services/go-api/migrations/014_track_audio_version.sql
 tags: [database-table, catalog, aggregate-root, track]
-verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
+verified_commit: 0ed99f3181c689b32c13566193ee0203a9f583c3
 ---
 
 The `tracks` table (defined in `001_baseline.sql`) persists the catalog context's `Track` aggregate root (see [catalog/track](../backend/catalog/track.md)). Columns: `id UUID PK` (default `uuid_generate_v4()`), `user_id UUID NOT NULL` (owning user, no FK — cross-context reference by id per `shared.UserId`), `title`/`artist TEXT NOT NULL`, `album TEXT` (nullable, mapped to Go's `""` when absent), `duration_seconds DOUBLE PRECISION`, `added_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `artwork_url TEXT`, `acquisition_status TEXT NOT NULL DEFAULT 'pending'`, `dedup_key TEXT NOT NULL` with `UNIQUE (user_id, dedup_key)`, plus the extended metadata columns (all present in the baseline itself — there is no later migration adding them): `year`, `genre`, `track_number`, `album_artist`, `isrc`, `audio_ref`, `failure_reason`.
