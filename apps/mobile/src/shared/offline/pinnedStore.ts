@@ -79,7 +79,9 @@ function loadIndex(): Record<string, PinnedEntry> {
 function saveIndex(entries: Record<string, PinnedEntry>): void {
   try {
     indexFile().write(JSON.stringify(entries));
-  } catch {}
+  } catch {
+    console.warn('[offline] failed to persist pinned index; keeping in-memory only');
+  }
 }
 
 function needsDownload(entry: PinnedEntry | undefined): boolean {

@@ -122,3 +122,12 @@ The rejections stand: no new component, no cache, no timing surface. **STATUS: d
 - **Invariant / architecture** (already selected, unchanged in count) — "every shed is recorded" joins the slice's checkable rules in spirit, but is asserted through the Reducer/Regression rows rather than a new `slice-invariants` case, since it is a behaviour of the reducer, not a structural fact about the file tree.
 
 The rejections stand: no new component, no cache, no timing surface, and `console.warn` (not `console.log`) keeps the no-`console.log` invariant intact. **STATUS: done.** 2 new rows in `outbox.test.ts`; the telemetry slice stays green (all 165 tests), red-proof confirmed against the pre-fix source. Coverage floors unmoved — the new branch sits inside `capCritical`, exercised by both new rows.
+
+## Re-derivation — differentiate the empty-catch persistence swallow (2026-09-07)
+
+`persistOutbox`'s disk write was a bare `catch {}`; it now `console.warn`s (`[telemetry] failed to persist outbox; keeping in-memory only`) while the in-memory-degrade-never-throw behaviour is unchanged. Re-deriving which categories the changed surface triggers:
+
+- **Fault injection** (already selected, extended) — the failure-injection suite already forced a write fault and asserted the prior on-disk queue is left untouched and no throw escapes. That contract is unchanged; the new surface is the diagnostic log. A new row in `outboxStore.test.ts` injects a write failure and asserts the `[telemetry]` warn fires.
+- **Regression** (mandatory — bug fix) — the bare swallow left a disk-persist failure invisible. The new row is the red-proof: against the pre-fix `catch {}` it fails (no warn) and passes after. Verified against the pre-fix source.
+
+The rejections stand: no new component, no cache, no timing surface, and `console.warn` (not `console.log`) keeps the no-`console.log` invariant intact. **STATUS: done.** 1 new row in `outboxStore.test.ts`; the telemetry slice stays green. Coverage floors unmoved — the warn sits inside `persistOutbox`, already exercised by the fault-injection row.
