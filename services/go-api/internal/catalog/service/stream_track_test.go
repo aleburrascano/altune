@@ -26,7 +26,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		{
 			name: "ready track with present audio streams",
 			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := seedReadyTrack(t, trRepo, userId, "Song", "Artist", "Album", "audio/ok.opus")
+				track := seedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 				store.Seed("audio/ok.opus", []byte("data"))
 				return track.ID
 			},
@@ -37,7 +37,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		{
 			name: "ready track with missing file is marked failed and reacquired",
 			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := seedReadyTrack(t, trRepo, userId, "Song", "Artist", "Album", "audio/gone.opus")
+				track := seedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/gone.opus")
 				store.ErrOnStream = errors.New("not found")
 				return track.ID
 			},
@@ -48,7 +48,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		{
 			name: "transient stream error over present file stays ready",
 			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := seedReadyTrack(t, trRepo, userId, "Song", "Artist", "Album", "audio/here.opus")
+				track := seedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/here.opus")
 				store.Seed("audio/here.opus", []byte("data"))
 				store.ErrOnStream = errors.New("transient")
 				return track.ID
@@ -60,7 +60,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		{
 			name: "exists check error does not mark failed",
 			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := seedReadyTrack(t, trRepo, userId, "Song", "Artist", "Album", "audio/err.opus")
+				track := seedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/err.opus")
 				store.ErrOnStream = errors.New("stream fail")
 				store.ErrOnExists = errors.New("s3 down")
 				return track.ID
@@ -72,7 +72,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 		{
 			name: "pending track is not streamable",
 			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
+				track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
 				return track.ID
 			},
 			wantErr:       ErrAudioNotAvailable,

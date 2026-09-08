@@ -174,24 +174,24 @@ func TestNewTrack(t *testing.T) {
 	}{
 		{
 			name:      "valid with all fields",
-			title:     "Song Title",
+			title:     "Track Title",
 			artist:    "Artist Name",
 			album:     "Album Name",
 			wantAlbum: "Album Name",
 		},
 		{
 			name:      "empty album falls back to the title (a single)",
-			title:     "Song Title",
+			title:     "Track Title",
 			artist:    "Artist Name",
 			album:     "",
-			wantAlbum: "Song Title",
+			wantAlbum: "Track Title",
 		},
 		{
 			name:      "blank album falls back to the title",
-			title:     "Song Title",
+			title:     "Track Title",
 			artist:    "Artist Name",
 			album:     "   ",
-			wantAlbum: "Song Title",
+			wantAlbum: "Track Title",
 		},
 		{
 			name:    "empty title returns error",
@@ -202,7 +202,7 @@ func TestNewTrack(t *testing.T) {
 		},
 		{
 			name:    "empty artist returns error",
-			title:   "Song Title",
+			title:   "Track Title",
 			artist:  "",
 			album:   "Album Name",
 			wantErr: "track artist required",

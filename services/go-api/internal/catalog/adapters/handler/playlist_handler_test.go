@@ -127,7 +127,7 @@ func TestHandleGetPlaylist(t *testing.T) {
 			name: "found returns detail with tracks",
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) string {
 				pl := makePlaylist(testUserId, "Rock")
-				track := makeTrack(testUserId, "Song", "Artist", "Album")
+				track := makeTrack(testUserId, "Track", "Artist", "Album")
 				plRepo.SeedWithTracks(pl, []*catdomain.Track{track})
 				return pl.ID.UUID().String()
 			},
@@ -292,7 +292,7 @@ func TestHandleAddTrack(t *testing.T) {
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
 				pl := makePlaylist(testUserId, "My List")
 				plRepo.Seed(pl)
-				track := makeTrack(testUserId, "Song", "Artist", "Album")
+				track := makeTrack(testUserId, "Track", "Artist", "Album")
 				trRepo.Seed(track)
 				return pl.ID.UUID().String(), track.ID.UUID()
 			},
@@ -302,7 +302,7 @@ func TestHandleAddTrack(t *testing.T) {
 			name: "duplicate track returns 409 Conflict",
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
 				pl := makePlaylist(testUserId, "My List")
-				track := makeTrack(testUserId, "Song", "Artist", "Album")
+				track := makeTrack(testUserId, "Track", "Artist", "Album")
 				trRepo.Seed(track)
 				_ = pl.AddTrack(track.ID)
 				plRepo.Seed(pl)
@@ -313,7 +313,7 @@ func TestHandleAddTrack(t *testing.T) {
 		{
 			name: "playlist not found returns 404",
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
-				track := makeTrack(testUserId, "Song", "Artist", "Album")
+				track := makeTrack(testUserId, "Track", "Artist", "Album")
 				trRepo.Seed(track)
 				return uuid.New().String(), track.ID.UUID()
 			},

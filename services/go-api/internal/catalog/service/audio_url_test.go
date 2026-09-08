@@ -28,7 +28,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 
 	t.Run("ready tracks get signed urls, non-streamable are skipped", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		ready := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/ok.opus")
+		ready := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		pending := seedTrack(t, repo, userId, "Pending", "Artist", "Album")
 		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore()})
 
@@ -58,7 +58,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 
 	t.Run("a re-acquired track resolves under a new version so a cached client copy stops matching", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		ready := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/ok.opus")
+		ready := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore()})
 
 		before, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
@@ -87,7 +87,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 
 	t.Run("a track acquired before the column existed resolves with an empty version", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		ready := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/ok.opus")
+		ready := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		ready.AudioVersion = ""
 		if err := repo.Update(ctx, ready); err != nil {
 			t.Fatalf("update: %v", err)
@@ -108,7 +108,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 
 	t.Run("no signer returns nothing (client proxies)", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		ready := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/ok.opus")
+		ready := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		svc := NewAudioURLService(repo, catalogtest.NewAudioStore())
 
 		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
@@ -122,7 +122,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 
 	t.Run("presign failure skips only that track", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
-		ready := seedReadyTrack(t, repo, userId, "Song", "Artist", "Album", "audio/ok.opus")
+		ready := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore(), err: errors.New("boom")})
 
 		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
