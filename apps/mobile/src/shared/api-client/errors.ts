@@ -8,6 +8,16 @@ export class ApiError extends Error {
   }
 }
 
+export class ContractError extends Error {
+  constructor(
+    public readonly at: string,
+    detail: string,
+  ) {
+    super(`API contract violation at ${at}: ${detail}`);
+    this.name = 'ContractError';
+  }
+}
+
 export type NetworkFailure = 'timeout' | 'transport';
 
 export class NetworkError extends Error {

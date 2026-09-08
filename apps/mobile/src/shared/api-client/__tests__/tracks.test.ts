@@ -9,9 +9,9 @@ import {
   retryAcquisition,
   setTrackNumber,
 } from '../tracks';
-import { NetworkError } from '../errors';
+import { ContractError, NetworkError } from '../errors';
 import { supabase } from '@shared/auth/supabaseClient';
-import type { CreateTrackRequest, FeaturedArtist } from '../types';
+import type { CreateTrackRequest, FeaturedArtist, TrackResponse } from '../types';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -25,6 +25,27 @@ beforeEach(() => {
     error: null,
   });
 });
+
+function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
+  return {
+    id: 't1',
+    title: 'Kid A',
+    artist: 'Radiohead',
+    album: null,
+    duration_seconds: null,
+    added_at: '2024-01-01T00:00:00Z',
+    acquisition_status: 'ready',
+    artwork_url: null,
+    failure_reason: null,
+    year: null,
+    genre: null,
+    track_number: null,
+    album_artist: null,
+    isrc: null,
+    audio_ref: null,
+    ...overrides,
+  };
+}
 
 function baseCreateBody(): CreateTrackRequest {
   return {
@@ -110,21 +131,19 @@ describe('getTracks', () => {
     expect(params.get('offset')).toBe('0');
   });
 
-  it('hands the caller a response missing items as-is, without inventing a default list', async () => {
+  it('rejects a response missing its required items array as a ContractError, not a silent partial', async () => {
     __http.reply('GET /v1/tracks', {
       status: 200,
       json: { total: 0, limit: 20, offset: 0, has_more: false },
     });
 
-    const result = await getTracks({ limit: 20, offset: 0 });
-
-    expect((result as { items?: unknown }).items).toBeUndefined();
+    await expect(getTracks({ limit: 20, offset: 0 })).rejects.toBeInstanceOf(ContractError);
   });
 
-  it('hands the caller a null body as-is rather than throwing', async () => {
+  it('rejects a null body as a ContractError rather than handing null to the caller', async () => {
     __http.reply('GET /v1/tracks', { status: 200, json: null });
 
-    await expect(getTracks({ limit: 20, offset: 0 })).resolves.toBeNull();
+    await expect(getTracks({ limit: 20, offset: 0 })).rejects.toBeInstanceOf(ContractError);
   });
 
   it('surfaces a transport failure as NetworkError rather than swallowing it', async () => {
@@ -136,7 +155,7 @@ describe('getTracks', () => {
 
 describe('createTrack', () => {
   it('POSTs the track with JSON content-type and no optional fields when neither is supplied', async () => {
-    __http.reply('POST /v1/tracks', { status: 201, json: { id: 't1' } });
+    __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
 
     await createTrack(baseCreateBody());
 
@@ -152,7 +171,7 @@ describe('createTrack', () => {
   });
 
   it('serializes featured_artists and source_url when the caller supplies them', async () => {
-    __http.reply('POST /v1/tracks', { status: 201, json: { id: 't1' } });
+    __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
     const featured: FeaturedArtist[] = [{ name: 'Thom Yorke', mbid: 'mbid-1', deezer_id: 0 }];
 
     await createTrack({
@@ -169,7 +188,7 @@ describe('createTrack', () => {
   it('resolves with the server track on success', async () => {
     __http.reply('POST /v1/tracks', {
       status: 201,
-      json: { id: 't1', title: 'Kid A', acquisition_status: 'pending' },
+      json: trackResponse({ id: 't1', title: 'Kid A', acquisition_status: 'pending' }),
     });
 
     await expect(createTrack(baseCreateBody())).resolves.toMatchObject({
@@ -321,7 +340,16 @@ describe('backfillFeaturedArtists', () => {
 
 describe('getAllTracks', () => {
   function page(items: { id: string }[], offset: number, total: number, hasMore: boolean) {
-    return { status: 200, json: { items, total, limit: 2000, offset, has_more: hasMore } };
+    return {
+      status: 200,
+      json: {
+        items: items.map((it) => trackResponse({ id: it.id })),
+        total,
+        limit: 2000,
+        offset,
+        has_more: hasMore,
+      },
+    };
   }
 
   it('returns the single page when the server says there is no more', async () => {
