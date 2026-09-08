@@ -5,7 +5,7 @@ The Track and Playlist aggregate context: a user's owned music metadata, dedup, 
 Layout:
 
 - `domain/` — `Track`, `Playlist`, `FeaturedArtist`, `CodedError`, the library read-models (`AlbumGroup`, `ArtistGroup`, `LibraryQuery`, `LibrarySort`, `OwnedTrackRef`).
-- `ports/` — `TrackRepository`, `PlaylistRepository`, `AudioStore`, `AudioURLSigner`, `AudioLister`, `AcquisitionScheduler`, `FeaturedArtistResolver`.
+- `ports/` — `PlaylistRepository`, `AudioStore`, `AudioURLSigner`, `AudioLister`, `AcquisitionScheduler`, `FeaturedArtistResolver`.
 - `service/` — track/playlist use cases, audio-URL resolution, streaming, featured backfill, `LibraryLensService`.
 - `adapters/` — `persistence/` (pgx repos), `storage/` (filesystem + object storage), `handler/`, `discoverybridge/`.
 - `catalogtest/` — in-memory fakes shared by the service and handler test packages.
