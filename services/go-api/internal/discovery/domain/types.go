@@ -348,8 +348,16 @@ type ProviderSearchResponse struct {
 	ResultCount int
 }
 
+type RelationshipKind string
+
+const (
+	RelationshipLibraryMatches RelationshipKind = "library_matches"
+	RelationshipAlbumTracks    RelationshipKind = "album_tracks"
+	RelationshipArtistAlbums   RelationshipKind = "artist_albums"
+)
+
 type RelatedGroup struct {
-	Relationship string
+	Relationship RelationshipKind
 	RelatedTo    string
 	Items        []SearchResult
 }
