@@ -211,17 +211,28 @@ async function downloadOne(trackId: string, set: Setter, get: Getter): Promise<v
     return;
   }
 
-  mark(uri === undefined ? { trackId, status: 'failed' } : { trackId, status: 'ready', uri, version });
+  mark(
+    uri === undefined ? { trackId, status: 'failed' } : { trackId, status: 'ready', uri, version },
+  );
+}
+
+function versionDisagrees(entry: PinnedEntry | undefined, expectedVersion?: string): boolean {
+  if (entry?.status !== 'ready') return false;
+  return (
+    expectedVersion !== undefined && expectedVersion !== '' && entry.version !== expectedVersion
+  );
 }
 
 export function pinnedUri(trackId: string, expectedVersion?: string): string | undefined {
   const entry = usePinnedStore.getState().entries[trackId];
   if (entry?.status !== 'ready') return undefined;
-  if (expectedVersion !== undefined && expectedVersion !== '' && entry.version !== expectedVersion) {
-    repinIfPinned(trackId);
-    return undefined;
-  }
+  if (versionDisagrees(entry, expectedVersion)) return undefined;
   return entry.uri;
+}
+
+export function repinIfStale(trackId: string, expectedVersion?: string): void {
+  const entry = usePinnedStore.getState().entries[trackId];
+  if (versionDisagrees(entry, expectedVersion)) repinIfPinned(trackId);
 }
 
 export function repinIfPinned(trackId: string): void {

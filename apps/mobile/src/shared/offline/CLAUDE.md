@@ -5,7 +5,7 @@ User-pinned local copies of library audio: the on-disk files, the index that tra
 Layout:
 
 - `pinnedFiles.ts` — the `offline-audio/` directory and everything that touches it: `pinnedDir`, `pinnedDirReadable`, `findPinned`, `deletePinned`, `deleteAllPinned`, `pinnedBytes`, `downloadPinned`, plus `extFromUrl` and `formatBytes`.
-- `pinnedStore.ts` — `usePinnedStore` (`pin`, `pinMany`, `unpin`, `unpinAll`, `reconcile`), the `pinned.json` index seam, the sequential download worker, and the exported `pinnedUri` / `repinIfPinned`.
+- `pinnedStore.ts` — `usePinnedStore` (`pin`, `pinMany`, `unpin`, `unpinAll`, `reconcile`), the `pinned.json` index seam, the sequential download worker, and the exported `pinnedUri` (pure query) / `repinIfStale` (version-gated command) / `repinIfPinned`.
 - `OfflineReconcileBridge.tsx` — mounts `reconcile()` once per launch; renders nothing.
 - `__tests__/` — `pinnedFiles.test.ts`, `pinnedFiles.property.test.ts`, `invariants.test.ts`, `pinnedStore.actions.test.ts`, `pinnedStore.index.test.ts`, `pinnedStore.persistence.test.ts`, `pinnedStore.pinnedUri.test.ts`, `pinnedStore.property.test.ts`, `pinnedStore.worker.test.ts`, `pinnedStore.repin.test.ts`, `pinnedStore.version.test.ts`, `pinnedStore.reconcile.test.ts`, `OfflineReconcileBridge.test.tsx`.
 
@@ -26,8 +26,10 @@ Dependencies: `@shared/api-client/audio` (`fetchAudioUrls`), `expo-file-system`,
 - Keep `repinIfPinned` a delete-then-download, never an in-place overwrite.
 - Persist only local `file://` uris — a signed URL never reaches the index.
 - Return a uri from `pinnedUri` only for a `ready` entry.
+- Keep `pinnedUri` a pure query; never let it mutate state.
 - Record the `audio_version` a download was fetched under, and carry it through `reconcile()`.
-- Refuse a pinned copy whose recorded version disagrees with the server's, and re-pin as you refuse.
+- Refuse a pinned copy from `pinnedUri` whose recorded version disagrees with the server's.
+- Re-pin a version-mismatched copy only through the explicit `repinIfStale` command, and call it on the playback-resolution path.
 - Treat an absent or empty expected version as "no expectation" and serve the local copy — never as a mismatch.
 - Clear every pinned track when the signed-in user id changes.
 

@@ -1,8 +1,12 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
-import { pinnedUri } from '@shared/offline/pinnedStore';
+import { pinnedUri, repinIfStale } from '@shared/offline/pinnedStore';
 
-import { audioRequestHeaders, fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
+import {
+  audioRequestHeaders,
+  fetchAudioUrls,
+  type ResolvedAudioUrl,
+} from '@shared/api-client/audio';
 import { forgetAllSwaps } from './audioPrefetch';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
@@ -50,6 +54,7 @@ function signedUrl(
 ): string | undefined {
   if (track.source.kind !== 'library') return undefined;
   const match = resolved.get(track.source.trackId);
+  repinIfStale(track.source.trackId, match?.version);
   return pinnedUri(track.source.trackId, match?.version) ?? match?.url;
 }
 

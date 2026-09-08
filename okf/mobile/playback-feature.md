@@ -51,6 +51,8 @@ The **sleep timer** (`sleepTimerStore`) stores an absolute `endsAt`, never a dec
 
 **Offline playback (2026-07-24).** `loadNativeTrack.signedUrl` is the single seam where a library track's URL is chosen, and it now prefers a pinned local file over the presigned URL, with the authenticated proxy still last. The pinned check goes first deliberately: once a track is on disk, playback must not depend on a signed URL that expires or a network that is not there. See [shared-offline](shared-offline.md); note it is a different concern from `audioPrefetch`, which is a cache-directory optimisation the OS may purge.
 
+The version self-heal is requested here explicitly rather than smuggled through the read (2026-09-07). `pinnedUri` used to re-pin a version-mismatched copy as a side effect of being read; it is now a pure query, so `signedUrl` calls `repinIfStale(trackId, match?.version)` immediately before `pinnedUri(trackId, match?.version) ?? match?.url`. A stale copy is both refused (the query returns `undefined`, playback falls through to the presigned URL) and re-pinned (the command queues a fresh download) — the same pair of effects as before, now split into a query and a command per [shared-offline](shared-offline.md#query-and-command-are-two-functions-not-one-2026-09-07).
+
 **TestID (2026-07-24).** `MiniPlayer`'s root carries `testID="mini-player"`. It had none, and it is the observable that proves playback actually started in the `search-save-play` e2e flow — the dock appearing above the tab bar is the only user-visible confirmation that audio is playing.
 
 ## Structured queue source (2026-07-25)
