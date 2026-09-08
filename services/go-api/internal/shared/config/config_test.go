@@ -7,6 +7,7 @@ import (
 
 func TestLoad_MinimalValid(t *testing.T) {
 	setEnv(t, map[string]string{
+		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
 	})
 
@@ -34,8 +35,39 @@ func TestLoad_MissingJWKSURL(t *testing.T) {
 	}
 }
 
+func TestLoad_SupabaseProjectURLMissingOrMalformed(t *testing.T) {
+	tests := []struct {
+		name       string
+		projectURL string
+	}{
+		{name: "missing", projectURL: ""},
+		{name: "no scheme", projectURL: "example.supabase.co"},
+		{name: "no host", projectURL: "https://"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := map[string]string{
+				"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+			}
+			if tt.projectURL != "" {
+				env["SUPABASE_PROJECT_URL"] = tt.projectURL
+			}
+			setEnv(t, env)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error for missing/malformed SUPABASE_PROJECT_URL")
+			}
+			if !searchString(err.Error(), "SUPABASE_PROJECT_URL") {
+				t.Errorf("expected error to name SUPABASE_PROJECT_URL, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestLoad_MusicBrainzUAWithoutContact(t *testing.T) {
 	setEnv(t, map[string]string{
+		"SUPABASE_PROJECT_URL":   "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL":  "https://example.supabase.co/auth/v1/.well-known/jwks.json",
 		"MUSICBRAINZ_USER_AGENT": "altune/0.1",
 	})
@@ -48,6 +80,7 @@ func TestLoad_MusicBrainzUAWithoutContact(t *testing.T) {
 
 func TestLoad_MusicBrainzUAWithEmail(t *testing.T) {
 	setEnv(t, map[string]string{
+		"SUPABASE_PROJECT_URL":   "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL":  "https://example.supabase.co/auth/v1/.well-known/jwks.json",
 		"MUSICBRAINZ_USER_AGENT": "altune/0.1 ( mailto:dev@altune.test )",
 	})
