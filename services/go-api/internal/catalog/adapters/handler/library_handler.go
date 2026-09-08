@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -61,9 +62,13 @@ func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 	if err != nil {
 		return domain.LibraryQuery{}, err
 	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	return domain.LibraryQuery{
 		Search: strings.TrimSpace(r.URL.Query().Get("q")),
 		Sort:   sort,
+		Limit:  limit,
+		Offset: offset,
 	}, nil
 }
 
