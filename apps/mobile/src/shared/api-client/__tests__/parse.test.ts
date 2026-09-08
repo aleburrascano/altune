@@ -8,6 +8,7 @@ import {
   member,
   nullableNumber,
   nullableString,
+  parseErrorBody,
   parseDiscoverySearchResponse,
   parseListAlbumsResponse,
   parseListArtistsResponse,
@@ -67,6 +68,29 @@ describe('primitive narrowers return the value or throw a ContractError', () => 
 
   it('classifies a ContractError as non-retryable (an off-contract body will not heal on retry)', () => {
     expect(isRetryable(new ContractError('x', 'y'))).toBe(false);
+  });
+});
+
+describe('parseErrorBody — lenient extraction of the machine-readable error code', () => {
+  it('pulls code and detail from a well-formed error body', () => {
+    expect(parseErrorBody({ detail: 'track not found', code: 'catalog.track_not_found' })).toEqual({
+      detail: 'track not found',
+      code: 'catalog.track_not_found',
+    });
+  });
+
+  it('omits code when absent, still returning the detail (a usable body)', () => {
+    expect(parseErrorBody({ detail: 'message required' })).toEqual({ detail: 'message required' });
+  });
+
+  it('returns an empty object for a non-object, null, or array body rather than throwing', () => {
+    expect(parseErrorBody(null)).toEqual({});
+    expect(parseErrorBody('boom')).toEqual({});
+    expect(parseErrorBody([1, 2])).toEqual({});
+  });
+
+  it('ignores a non-string code or detail rather than throwing, unlike the strict narrowers', () => {
+    expect(parseErrorBody({ code: 42, detail: true })).toEqual({});
   });
 });
 

@@ -1,6 +1,7 @@
 import { ContractError } from './errors';
 import type {
   AcquisitionStatus,
+  ApiErrorBody,
   FeaturedArtist,
   ListTracksResponse,
   TrackResponse,
@@ -53,6 +54,22 @@ export function nullableString(value: unknown, at: string): string | null {
 
 export function nullableNumber(value: unknown, at: string): number | null {
   return value == null ? null : asNumber(value, at);
+}
+
+function optionalString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+export function parseErrorBody(value: unknown): ApiErrorBody {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
+  const record = value as Record<string, unknown>;
+  const code = optionalString(record, 'code');
+  const detail = optionalString(record, 'detail');
+  return {
+    ...(code !== undefined ? { code } : {}),
+    ...(detail !== undefined ? { detail } : {}),
+  };
 }
 
 export function member<T extends string>(value: unknown, allowed: readonly T[], at: string): T {

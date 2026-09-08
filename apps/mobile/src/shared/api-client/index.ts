@@ -3,6 +3,7 @@ import { markSessionExpired } from '../auth/sessionExpired';
 import { startDeadline } from './deadline';
 import type { Deadline } from './deadline';
 import { ApiError, NetworkError, isAbort, isSessionFetchFailure } from './errors';
+import { parseErrorBody } from './parse';
 
 export { ApiError, NetworkError, ContractError, isRetryable } from './errors';
 export type { NetworkFailure } from './errors';
@@ -41,6 +42,14 @@ async function send(url: string, init: RequestInit, deadline: Deadline): Promise
   }
 }
 
+async function errorCode(response: Response): Promise<string | undefined> {
+  try {
+    return parseErrorBody(await response.json()).code;
+  } catch {
+    return undefined;
+  }
+}
+
 async function readBody<T>(response: Response, path: string): Promise<T> {
   if (response.status === 202 || response.status === 204 || response.status === 304) {
     return undefined as T;
@@ -64,7 +73,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     const response = await send(`${apiBase}${path}`, { ...init, headers }, deadline);
     if (response.status === 401) markSessionExpired();
     if (!response.ok) {
-      throw new ApiError(response.status, `API ${path} returned ${response.status}`);
+      throw new ApiError(
+        response.status,
+        `API ${path} returned ${response.status}`,
+        await errorCode(response),
+      );
     }
     return await readBody<T>(response, path);
   } finally {

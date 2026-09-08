@@ -178,6 +178,51 @@ describe('non-2xx status ladder throws ApiError(status)', () => {
   });
 });
 
+describe('the machine-readable error code (ADR-0021) surfaces on ApiError', () => {
+  it('carries the error body code onto ApiError.code, and a caller can branch on it', async () => {
+    withSession();
+    __http.reply('GET /v1/tracks/t1', {
+      status: 404,
+      json: { detail: 'track not found', code: 'catalog.track_not_found' },
+    });
+
+    const error = await apiFetch('/v1/tracks/t1').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).code).toBe('catalog.track_not_found');
+
+    const branch =
+      error instanceof ApiError && error.code === 'catalog.track_not_found'
+        ? 'missing-track'
+        : 'other';
+    expect(branch).toBe('missing-track');
+  });
+
+  it('leaves code undefined when the error body omits it, still yielding a usable ApiError', async () => {
+    withSession();
+    __http.reply('POST /v1/feedback/reports', { status: 400, json: { detail: 'message required' } });
+
+    const error = await apiFetch('/v1/feedback/reports', { method: 'POST' }).catch(
+      (e: unknown) => e,
+    );
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(400);
+    expect((error as ApiError).code).toBeUndefined();
+  });
+
+  it('leaves code undefined when the error body is not JSON, degrading to status-only branching', async () => {
+    withSession();
+    __http.reply('GET /v1/library/tracks', { status: 503, malformed: true });
+
+    const error = await apiFetch('/v1/library/tracks').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(503);
+    expect((error as ApiError).code).toBeUndefined();
+  });
+});
+
 describe('readBody status short-circuit (202/204 vs 200/201), and the unreachable 304 arm', () => {
   it.each([202, 204])('returns undefined for status %i without parsing a body', async (status) => {
     withSession();
