@@ -35,6 +35,7 @@ Layout:
 - Never let the wire response and the `track_added_to_library` payload diverge — both are `service.TrackDTO`.
 - Albums and Artists are SQL groupings, never derived by a caller — `ListAlbumsForUser` / `ListArtistsForUser` are the only producers.
 - Filter and sort tracks in SQL through `LibraryQuery`; never hand a caller the whole library to sort.
+- Pin every `LibrarySort` order and `ILIKE` filter change with the `DATABASE_URL`-gated tests in `adapters/persistence/library_lens_repo_test.go`.
 - Reject `sort=year` for artists rather than silently falling back.
 - Keep `FailureMessage` the one map from a failure reason to human copy.
 
