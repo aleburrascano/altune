@@ -1,4 +1,5 @@
 import { apiFetch } from './index';
+import { parseDiscoverySearchResponse } from './parse';
 
 export type DiscoveryKind = 'artist' | 'album' | 'track';
 export type DiscoveryConfidence = 'high' | 'medium' | 'low';
@@ -103,26 +104,11 @@ export async function searchDiscovery(
   if (params.saveHistory === false) {
     qs.set('save_history', 'false');
   }
-  const response = await apiFetch<DiscoverySearchResponse>(
+  const body = await apiFetch<unknown>(
     `/v1/discovery/search?${qs.toString()}`,
     signal ? { signal } : undefined,
   );
-  return {
-    ...response,
-    results: (response.results ?? []).map(normalizeResult),
-    ...(response.top_result ? { top_result: normalizeResult(response.top_result) } : {}),
-    sections: (response.sections ?? []).map((section) => ({
-      ...section,
-      items: section.items.map(normalizeResult),
-    })),
-    total: response.total ?? (response.results ?? []).length,
-    offset: response.offset ?? 0,
-    has_more: response.has_more ?? false,
-  };
-}
-
-function normalizeResult(r: DiscoveryResult): DiscoveryResult {
-  return { ...r, subtitle: r.subtitle ?? null, image_url: r.image_url ?? null };
+  return parseDiscoverySearchResponse(body);
 }
 
 export async function suggestDiscovery(params: {
