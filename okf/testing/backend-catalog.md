@@ -4,7 +4,7 @@ title: Test selection — backend catalog
 description: Which of the twenty taxonomy categories apply to the Go catalog module (Track and Playlist aggregates, dedup, library lenses, audio-URL resolution, streaming, storage), which were rejected and why. Records the test set standing after the get_track_status / list_featuring service coverage and the DATABASE_URL-gated library_lens_repo tests landed.
 resource: services/go-api/internal/catalog/
 tags: [testing, backend, go-api, catalog]
-verified_commit: 3a57e112
+verified_commit: 5adb91f8
 ---
 
 SLICE: `services/go-api/internal/catalog/`
@@ -15,6 +15,8 @@ Recorded on 2026-09-07 over the test set that exists after the two tests-first t
 Re-derived 2026-09-07 after the position-safe rebuild of `ListFilteredForUser`'s SQL arguments (the hardcoded `$4` search placeholder replaced by a placeholder closure that appends each value and emits its own `$N` in lockstep): a structure-only refactor with no behavior change, so the triggered surface (the `ILIKE` literal-`%` guard under Adversarial and the `DATABASE_URL`-gated order/filter pins in `library_lens_repo_test.go`) and every category verdict below stand unchanged; the DB integration suite was re-run green before and after.
 
 Re-derived again after unifying the track repository interface seam (issue #80): the ~11 one-method consumer-side track role-interfaces were replaced by a single cohesive `ports.TrackRepository` that every track service now depends on, matching the flat `PlaylistRepository`. A structure-only refactor with no behavior change — the seam moved, no code path did — so no category is newly triggered and every verdict below stands unchanged; `go test ./internal/...`, `go build ./...`, `go vet` and `golangci-lint` were all green before and after across the whole backend (catalog plus the acquisition and playback consumers that bind the concrete repository).
+
+Re-derived again after splitting the concrete `PgxTrackRepository` god struct (issue #83, ADR-0020): it became three focused pgx structs — `PgxTrackRepository` (CRUD + `ListOwnedTrackRefs`), `PgxLibraryLensRepository`, `PgxFeaturedArtistRepository` — recombined by the `PgxCatalogTrackRepository` composite behind the same unchanged `ports.TrackRepository`. Receivers and file moved; no SQL text, no port contract, no DTO changed, so the triggered surface is only **Regression** (tests green before and after) and every category verdict below stands unchanged. The DATABASE_URL-gated `track_repo_test.go` / `library_lens_repo_test.go` / `featured_artist_repo_test.go` are the standing pins (the lens tests now drive the composite, whose promoted methods are the same code); `go test ./internal/...`, `go build ./...` and `go vet ./...` were all green before and after.
 
 This is an **aggregate-owning, DB-and-storage-backed** context. The Logic family carries the domain core (the pure `Track`/`Playlist`/`FeaturedArtist` methods and the dedup/library-lens value objects), and the Persistence and Functional families carry most of the weight because this is the app's durable store and its public library/playlist HTTP surface. It owns no rendered component and no client-side query cache, so the display family (Derivation, Liveness) and the cache family (Invalidation) reject cleanly; the environment family reduces to the two trust boundaries it actually has — the on-disk audio path and untrusted HTTP/query input.
 

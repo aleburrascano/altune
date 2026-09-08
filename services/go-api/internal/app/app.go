@@ -268,6 +268,7 @@ func (a *App) wireCatalog(
 ) catalogWiring {
 	audioStore := a.buildAudioStore()
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
+	catalogTrackRepo := persistence.NewPgxCatalogTrackRepository(a.pool)
 	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
 
 	var audioSources []acqPorts.AudioSource
@@ -314,26 +315,26 @@ func (a *App) wireCatalog(
 	}
 
 	addTrackSvc := catalogService.NewAddTrackService(
-		trackRepo,
+		catalogTrackRepo,
 		catalogService.WithAddTrackEvents(tap),
 		catalogService.WithAcquisitionScheduler(scheduler),
 	)
-	listTracksSvc := catalogService.NewListTracksService(trackRepo)
-	deleteTrackSvc := catalogService.NewDeleteTrackService(trackRepo, audioStore, catalogService.WithDeleteTrackEvents(tap))
-	setTrackNumberSvc := catalogService.NewSetTrackNumberService(trackRepo)
+	listTracksSvc := catalogService.NewListTracksService(catalogTrackRepo)
+	deleteTrackSvc := catalogService.NewDeleteTrackService(catalogTrackRepo, audioStore, catalogService.WithDeleteTrackEvents(tap))
+	setTrackNumberSvc := catalogService.NewSetTrackNumberService(catalogTrackRepo)
 	playlistLifecycleSvc := catalogService.NewPlaylistLifecycleService(playlistRepo, catalogService.WithPlaylistLifecycleEvents(tap))
-	playlistMembershipSvc := catalogService.NewPlaylistMembershipService(playlistRepo, trackRepo, catalogService.WithPlaylistMembershipEvents(tap))
+	playlistMembershipSvc := catalogService.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, catalogService.WithPlaylistMembershipEvents(tap))
 
-	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(trackRepo, featuredBridge)
-	listFeaturingSvc := catalogService.NewListFeaturingService(trackRepo)
+	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(catalogTrackRepo, featuredBridge)
+	listFeaturingSvc := catalogService.NewListFeaturingService(catalogTrackRepo)
 
-	getTrackStatusSvc := catalogService.NewGetTrackStatusService(trackRepo)
+	getTrackStatusSvc := catalogService.NewGetTrackStatusService(catalogTrackRepo)
 	featuredArtistHandler := catalogHandler.NewFeaturedArtistHandler(backfillFeaturedSvc, listFeaturingSvc)
 	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, getTrackStatusSvc, deleteTrackSvc, setTrackNumberSvc, featuredArtistHandler)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistLifecycleSvc, playlistMembershipSvc)
-	streamTrackSvc := catalogService.NewStreamTrackService(trackRepo, audioStore, catalogService.WithStreamScheduler(scheduler))
+	streamTrackSvc := catalogService.NewStreamTrackService(catalogTrackRepo, audioStore, catalogService.WithStreamScheduler(scheduler))
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
-	audioURLSvc := catalogService.NewAudioURLService(trackRepo, audioStore)
+	audioURLSvc := catalogService.NewAudioURLService(catalogTrackRepo, audioStore)
 	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc)
 
 	var retryH *acqHandler.RetryHandler
@@ -347,7 +348,7 @@ func (a *App) wireCatalog(
 		trackRepo:         trackRepo,
 		setTrackNumberSvc: setTrackNumberSvc,
 		trackHandler:      trackHandler,
-		libraryHandler:    catalogHandler.NewLibraryHandler(catalogService.NewLibraryLensService(trackRepo)),
+		libraryHandler:    catalogHandler.NewLibraryHandler(catalogService.NewLibraryLensService(catalogTrackRepo)),
 		playlistHandler:   playlistHandler,
 		streamHandler:     streamHandler,
 		audioURLHandler:   audioURLHandler,

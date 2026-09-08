@@ -7,7 +7,7 @@ Layout:
 - `domain/` — `Track`, `Playlist`, `FeaturedArtist`, `CodedError`, the library read-models (`AlbumGroup`, `ArtistGroup`, `LibraryQuery`, `LibrarySort`, `OwnedTrackRef`).
 - `ports/` — `TrackRepository`, `PlaylistRepository`, `AudioStore`, `AudioURLSigner`, `AudioLister`, `AcquisitionScheduler`, `FeaturedArtistResolver`.
 - `service/` — track/playlist use cases, audio-URL resolution, streaming, featured backfill, `LibraryLensService`.
-- `adapters/` — `persistence/` (pgx repos), `storage/` (filesystem + object storage), `handler/`, `discoverybridge/`.
+- `adapters/` — `persistence/` (pgx repos: `track_repo.go` core CRUD, `library_lens_repo.go` grouping/filter reads, `featured_artist_repo.go` featured joins, `catalog_track_repo.go` the `PgxCatalogTrackRepository` composite, `playlist_repo.go`), `storage/` (filesystem + object storage), `handler/`, `discoverybridge/`.
 - `catalogtest/` — in-memory fakes shared by the service and handler test packages.
 
 ## Rules
@@ -29,6 +29,7 @@ Layout:
 - Never `os.Rename` audio into place without the `EXDEV` fallback.
 - Always close the handle `Stream` returns.
 - Keep `PreviewArtworkLimit`, `trackColumns`, `playlistTrackCountSubquery`, `renumberPlaylistPositions` and `trackScanDest` single-definition — every sharer reads the same one.
+- Wire catalog services through the `PgxCatalogTrackRepository` composite; keep `ListOwnedTrackRefs` on the core `PgxTrackRepository` so acquisition, playback and discovery bind the core struct unchanged.
 - Never add the `FeaturedArtists` join to `GetByID` / `ListByIDs`; their callers don't need it.
 - `SetTrackNumber` is fill-only — never clobber an existing value.
 - Keep `FeaturedArtist.IdentityKey` in step with the generated column on `featured_artists`.

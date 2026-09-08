@@ -271,6 +271,30 @@ func (r *PgxTrackRepository) GetByDedupKey(ctx context.Context, userId shared.Us
 	return track, nil
 }
 
+func (r *PgxTrackRepository) ListOwnedTrackRefs(
+	ctx context.Context,
+	userId shared.UserId,
+) ([]domain.OwnedTrackRef, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, title, artist, acquisition_status, track_number FROM tracks WHERE user_id = $1`,
+		userId.UUID(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list owned track refs: %w", err)
+	}
+	defer rows.Close()
+
+	refs := []domain.OwnedTrackRef{}
+	for rows.Next() {
+		var ref domain.OwnedTrackRef
+		if err := rows.Scan(&ref.ID, &ref.Title, &ref.Artist, &ref.AcquisitionStatus, &ref.TrackNumber); err != nil {
+			return nil, fmt.Errorf("scan owned track ref: %w", err)
+		}
+		refs = append(refs, ref)
+	}
+	return refs, rows.Err()
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }
