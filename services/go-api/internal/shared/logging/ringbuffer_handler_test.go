@@ -3,6 +3,7 @@ package logging
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -38,6 +39,29 @@ func TestRingHandler_CapturesAndGroupsByCorrID(t *testing.T) {
 	}
 	if abc != 2 {
 		t.Errorf("records with corr_id abc123 = %d, want 2", abc)
+	}
+}
+
+func TestRingHandler_RedactsQueryTextAtTheBoundary(t *testing.T) {
+	logger, ring := newCaptureLogger(t, 10)
+
+	const secret = "taylorswiftsecretdiary"
+	logger.Info("search.v2.start", "corr_id", "abc123", "query", secret)
+
+	snap := ring.Snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("snapshot len = %d, want 1", len(snap))
+	}
+	if v, ok := snap[0].Attrs["query"]; ok {
+		t.Errorf("query attr reached the ring: %q", v)
+	}
+	for k, v := range snap[0].Attrs {
+		if strings.Contains(v, secret) {
+			t.Errorf("raw query text leaked into ring attr %q = %q", k, v)
+		}
+	}
+	if snap[0].Attrs["corr_id"] != "abc123" {
+		t.Errorf("non-sensitive attr dropped by redaction: corr_id = %q, want abc123", snap[0].Attrs["corr_id"])
 	}
 }
 
