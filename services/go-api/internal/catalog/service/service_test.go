@@ -63,12 +63,12 @@ func TestAddTrackService_Execute(t *testing.T) {
 		{
 			name: "new track is created",
 			input: AddTrackInput{
-				Title:  "Song",
+				Title:  "Track",
 				Artist: "Artist",
 				Album:  "Album",
 			},
 			wantCreated: true,
-			wantTitle:   "Song",
+			wantTitle:   "Track",
 		},
 		{
 			name: "duplicate returns existing track not created",
@@ -95,7 +95,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 		{
 			name: "empty artist returns validation error",
 			input: AddTrackInput{
-				Title:  "Song",
+				Title:  "Track",
 				Artist: "",
 				Album:  "Album",
 			},
@@ -104,7 +104,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 		{
 			name: "repo error propagates",
 			input: AddTrackInput{
-				Title:  "Song",
+				Title:  "Track",
 				Artist: "Artist",
 				Album:  "Album",
 			},
@@ -274,7 +274,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		{
 			name: "existing track is deleted",
 			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
-				track := seedTrack(t, repo, userId, "Song", "Artist", "Album")
+				track := seedTrack(t, repo, userId, "Track", "Artist", "Album")
 				return track.ID
 			},
 			wantErr: nil,
@@ -289,7 +289,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		{
 			name: "repo error propagates",
 			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
-				track := seedTrack(t, repo, userId, "Song", "Artist", "Album")
+				track := seedTrack(t, repo, userId, "Track", "Artist", "Album")
 				repo.ErrOnDelete = errRepo
 				return track.ID
 			},
@@ -401,7 +401,7 @@ func TestPlaylistLifecycleService_Get(t *testing.T) {
 			name: "found playlist with tracks",
 			setup: func(repo *catalogtest.PlaylistRepo) domain.PlaylistId {
 				pl := seedPlaylist(t, repo, userId, "Rock")
-				track, _ := domain.NewTrack(userId, "Song", "Artist", "Album")
+				track, _ := domain.NewTrack(userId, "Track", "Artist", "Album")
 				repo.SeedWithTracks(pl, []*domain.Track{track})
 				return pl.ID
 			},
@@ -605,14 +605,14 @@ func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 			name: "track added to playlist",
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
-				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
+				track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
 				return pl.ID, track.ID
 			},
 		},
 		{
 			name: "playlist not found returns ErrPlaylistNotFound",
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
-				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
+				track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
 				return domain.NewPlaylistId(), track.ID
 			},
 			wantErr: ErrPlaylistNotFound,
@@ -629,7 +629,7 @@ func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 			name: "track already in playlist returns ErrTrackAlreadyInPlaylist",
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
-				track := seedTrack(t, trRepo, userId, "Song", "Artist", "Album")
+				track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
 				_ = pl.AddTrack(track.ID)
 				return pl.ID, track.ID
 			},
@@ -1127,10 +1127,10 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 		{
 			name: "existing track is returned",
 			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
-				track := seedTrack(t, repo, userId, "Song", "Artist", "Album")
+				track := seedTrack(t, repo, userId, "Track", "Artist", "Album")
 				return track.ID
 			},
-			wantTitle: "Song",
+			wantTitle: "Track",
 		},
 		{
 			name: "non-existent track returns ErrTrackNotFound",
@@ -1143,7 +1143,7 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 			name: "track owned by another user returns ErrTrackNotFound",
 			setup: func(repo *catalogtest.TrackRepo) domain.TrackId {
 				other := shared.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
-				track := seedTrack(t, repo, other, "Song", "Artist", "Album")
+				track := seedTrack(t, repo, other, "Track", "Artist", "Album")
 				return track.ID
 			},
 			wantErr: ErrTrackNotFound,

@@ -4,7 +4,7 @@ title: Test selection — backend catalog
 description: Which of the twenty taxonomy categories apply to the Go catalog module (Track and Playlist aggregates, dedup, library lenses, audio-URL resolution, streaming, storage), which were rejected and why. Records the test set standing after the get_track_status / list_featuring service coverage and the DATABASE_URL-gated library_lens_repo tests landed.
 resource: services/go-api/internal/catalog/
 tags: [testing, backend, go-api, catalog]
-verified_commit: 0ed99f31
+verified_commit: d0ce3a4e
 ---
 
 SLICE: `services/go-api/internal/catalog/`
