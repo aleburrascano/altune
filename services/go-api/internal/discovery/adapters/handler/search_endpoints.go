@@ -128,7 +128,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 
 	entries, err := h.suggestSvc.Execute(r.Context(), q, limit)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "suggest failed", "error", err, "query", q)
+		slog.ErrorContext(r.Context(), "suggest failed", "error", err)
 		httputil.InternalError(w)
 		return
 	}
@@ -182,7 +182,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	result, err := h.searchSvc.Execute(r.Context(), userId, query, saveHistory)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "search failed", "error", err, "query", q)
+		slog.ErrorContext(r.Context(), "search failed", "error", err)
 		httputil.InternalError(w)
 		return
 	}

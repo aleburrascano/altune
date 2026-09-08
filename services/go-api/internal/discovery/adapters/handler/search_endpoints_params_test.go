@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -168,6 +170,35 @@ func TestHandleSuggest(t *testing.T) {
 		rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/suggest?q=x")
 		discAssertStatus(t, rec, http.StatusUnauthorized)
 	})
+}
+
+func TestHandleSuggest_StoreErrorDoesNotLogQueryText(t *testing.T) {
+	prev := slog.Default()
+	defer slog.SetDefault(prev)
+	ring := logging.Setup("error", false)
+
+	const secret = "kendricksecretunreleasedcut"
+	router := buildSuggestRouter(&fakeVocabStore{err: context.DeadlineExceeded})
+	rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q="+secret, nil)
+	discAssertStatus(t, rec, http.StatusInternalServerError)
+
+	sawFailureLog := false
+	for _, r := range ring.Snapshot() {
+		if r.Message == "suggest failed" {
+			sawFailureLog = true
+		}
+		if strings.Contains(r.Message, secret) {
+			t.Errorf("query text leaked into ring message: %q", r.Message)
+		}
+		for k, v := range r.Attrs {
+			if strings.Contains(v, secret) {
+				t.Errorf("query text leaked into ring attr %q = %q", k, v)
+			}
+		}
+	}
+	if !sawFailureLog {
+		t.Fatal("expected the suggest failure to be logged, so the redaction assertion is meaningful")
+	}
 }
 
 func TestHandleSearch_LimitBoundaries(t *testing.T) {
