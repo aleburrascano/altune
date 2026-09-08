@@ -176,3 +176,9 @@ func TestRecordEventService_Execute_WrapsStoreError(t *testing.T) {
 		t.Fatal("expected error when the store fails")
 	}
 }
+
+func TestInvalidEventErrorCode(t *testing.T) {
+	if got := (&invalidEventError{msg: "x"}).ErrorCode(); got != "discovery.invalid_event" {
+		t.Errorf("code: got %q, want %q", got, "discovery.invalid_event")
+	}
+}

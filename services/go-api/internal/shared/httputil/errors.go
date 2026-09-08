@@ -7,8 +7,11 @@ import (
 	"net/http"
 )
 
+const internalServerErrorDetail = "internal server error"
+
 type ErrorResponse struct {
 	Detail string `json:"detail"`
+	Code   string `json:"code,omitempty"`
 }
 
 type StatusError interface {
@@ -16,15 +19,48 @@ type StatusError interface {
 	HTTPStatus() int
 }
 
+type ErrorCoder interface {
+	ErrorCode() string
+}
+
 func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	var se StatusError
 	if errors.As(err, &se) {
-		WriteError(w, se.HTTPStatus(), se.Error())
+		WriteJSON(w, se.HTTPStatus(), ErrorResponse{
+			Detail: se.Error(),
+			Code:   resolveErrorCode(err, se.HTTPStatus()),
+		})
 		return
 	}
 	slog.ErrorContext(r.Context(), "service.unhandled_error",
 		"method", r.Method, "path", r.URL.Path, "error", err)
-	InternalError(w)
+	WriteJSON(w, http.StatusInternalServerError, ErrorResponse{
+		Detail: internalServerErrorDetail,
+		Code:   "internal",
+	})
+}
+
+func resolveErrorCode(err error, status int) string {
+	var coder ErrorCoder
+	if errors.As(err, &coder) {
+		if code := coder.ErrorCode(); code != "" {
+			return code
+		}
+	}
+	return statusFallbackCode(status)
+}
+
+func statusFallbackCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad_request"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusConflict:
+		return "conflict"
+	default:
+		return "error"
+	}
 }
 
 func WriteJSON(w http.ResponseWriter, status int, v any) {
@@ -65,7 +101,7 @@ func Forbidden(w http.ResponseWriter, message string) {
 }
 
 func InternalError(w http.ResponseWriter, msgs ...string) {
-	msg := "internal server error"
+	msg := internalServerErrorDetail
 	if len(msgs) > 0 && msgs[0] != "" {
 		msg = msgs[0]
 	}
