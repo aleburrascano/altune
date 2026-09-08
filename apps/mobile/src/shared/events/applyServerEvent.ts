@@ -17,7 +17,7 @@ import {
 import { invalidateAudioCaches } from '@shared/acquisition/audioCacheInvalidation';
 import { stageToPhase } from '@shared/acquisition/stagePhase';
 import { repinIfPinned } from '@shared/offline/pinnedStore';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
 import {
@@ -80,12 +80,20 @@ function asNumber(value: unknown): number | null {
   return typeof value === 'number' ? value : null;
 }
 
+const ACQUISITION_STATUSES: readonly string[] = ['pending', 'ready', 'failed'];
+
+function asAcquisitionStatus(value: unknown): AcquisitionStatus | null {
+  return typeof value === 'string' && ACQUISITION_STATUSES.includes(value)
+    ? (value as AcquisitionStatus)
+    : null;
+}
+
 function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
   const id = asString(data.id) ?? asString(data.track_id);
   const title = asString(data.title);
   const artist = asString(data.artist);
   const addedAt = asString(data.added_at);
-  const status = asString(data.acquisition_status);
+  const status = asAcquisitionStatus(data.acquisition_status);
   if (!id || !title || !artist || !addedAt || !status) return null;
   return {
     id,
@@ -94,7 +102,7 @@ function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
     album: asString(data.album),
     duration_seconds: asNumber(data.duration_seconds),
     added_at: addedAt,
-    acquisition_status: status as TrackResponse['acquisition_status'],
+    acquisition_status: status,
     artwork_url: asString(data.artwork_url),
     failure_reason: asString(data.failure_reason),
     year: asNumber(data.year),

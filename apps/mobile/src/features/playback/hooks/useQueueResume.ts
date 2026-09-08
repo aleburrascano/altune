@@ -42,6 +42,10 @@ function fromWireSource(
   return { kind: 'library' };
 }
 
+function asRepeatMode(value: unknown): RepeatMode | null {
+  return value === 'off' || value === 'all' || value === 'one' ? value : null;
+}
+
 async function currentPositionMsOrZero(): Promise<number> {
   try {
     const progress = await TrackPlayer.getProgress();
@@ -174,7 +178,7 @@ export function useQueueResume() {
 
         useQueueStore.getState().setResumePosition(saved.position_ms);
 
-        const repeatMode = saved.repeat_mode as RepeatMode;
+        const repeatMode = asRepeatMode(saved.repeat_mode);
         if (repeatMode === 'all' || repeatMode === 'one') {
           useQueueStore.getState().setRepeatMode(repeatMode);
         }

@@ -282,6 +282,33 @@ describe('track_added_to_library', () => {
     ]);
   });
 
+  it('rejects an off-contract acquisition_status instead of seeding the cache with it', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, []);
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_added_to_library', {
+        id: 't1',
+        title: 'Song Title',
+        artist: 'The Artist',
+        added_at: '2026-01-01T00:00:00Z',
+        acquisition_status: 'queued',
+      }),
+    );
+
+    expect(readTrackPages(queryClient, key).items).toHaveLength(0);
+    expect(useTrackStatusStore.getState().statuses.t1).toBeUndefined();
+    expect(invalidatedKeys(spy)).toEqual([
+      libraryKeys.albumsPrefix,
+      libraryKeys.artistsPrefix,
+      libraryKeys.summary,
+      libraryKeys.tracksPrefix,
+      libraryKeys.featuringPrefix,
+    ]);
+  });
+
   it('never upserts a blank-id, blank-artist track when a required field is the wrong JSON type', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, []);
