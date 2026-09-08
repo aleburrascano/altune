@@ -90,10 +90,42 @@ describe('loadIndex — legacy pinned.json shapes must not crash app launch', ()
     expect(importFreshEntries()).toEqual({ t1: { trackId: 't1', status: 'ready' } });
   });
 
-  it('an entry whose status this version does not know is loaded as-is instead of being rejected', () => {
+  it('an entry whose status this version does not know is dropped rather than seeded into store state', () => {
     __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: 't1', status: 'archived' } }));
 
-    expect(importFreshEntries()).toEqual({ t1: { trackId: 't1', status: 'archived' } });
+    expect(importFreshEntries()).toEqual({});
+  });
+
+  it('an entry whose uri is the wrong type is dropped rather than seeded', () => {
+    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: 't1', status: 'ready', uri: 42 } }));
+
+    expect(importFreshEntries()).toEqual({});
+  });
+
+  it('an entry whose version is the wrong type is dropped rather than seeded', () => {
+    __fs.seedFile(
+      INDEX_URI,
+      JSON.stringify({ t1: { trackId: 't1', status: 'ready', uri: `${AUDIO_DIR_URI}/t1.mp3`, version: 7 } }),
+    );
+
+    expect(importFreshEntries()).toEqual({});
+  });
+
+  it('an entry with no status field is dropped rather than seeded', () => {
+    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: 't1' } }));
+
+    expect(importFreshEntries()).toEqual({});
+  });
+
+  it('a null entry value is dropped without discarding a valid sibling', () => {
+    __fs.seedFile(
+      INDEX_URI,
+      JSON.stringify({ bad: null, good: { trackId: 'good', status: 'ready', uri: `${AUDIO_DIR_URI}/good.mp3` } }),
+    );
+
+    expect(importFreshEntries()).toEqual({
+      good: { trackId: 'good', status: 'ready', uri: `${AUDIO_DIR_URI}/good.mp3` },
+    });
   });
 
   it('an entry whose map key and trackId field disagree is loaded under the map key verbatim', () => {

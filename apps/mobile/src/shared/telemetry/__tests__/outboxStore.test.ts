@@ -91,11 +91,11 @@ describe('loadPersistedOutbox — legacy shapes still in the wild', () => {
     expect(loadPersistedOutbox()).toEqual([]);
   });
 
-  it('an entry missing client_occurred_at still loads, since only event_id is validated', () => {
-    const legacy = { type: 'play', event_id: 'e1' };
-    seed([legacy]);
+  it('an entry missing client_occurred_at is dropped, since a persisted entry must carry the full envelope', () => {
+    const partial = { type: 'play', event_id: 'e1' };
+    seed([partial]);
 
-    expect(loadPersistedOutbox()).toEqual([legacy]);
+    expect(loadPersistedOutbox()).toEqual([]);
   });
 
   it('an entry carrying an unknown key written by a newer app version loads intact rather than being stripped', () => {
@@ -173,6 +173,31 @@ describe('loadPersistedOutbox — adversarial: the on-disk file is a trust bound
     expect(loadPersistedOutbox()).toEqual([]);
   });
 
+  it('an entry whose type is not a known discovery event is dropped rather than replayed to the server', () => {
+    seed([{ type: 'not-a-real-type', event_id: 'e1', client_occurred_at: '2026-07-31T00:00:00.000Z' }]);
+
+    expect(loadPersistedOutbox()).toEqual([]);
+  });
+
+  it('an entry with no type field is dropped rather than replayed to the server', () => {
+    seed([{ event_id: 'e1', client_occurred_at: '2026-07-31T00:00:00.000Z' }]);
+
+    expect(loadPersistedOutbox()).toEqual([]);
+  });
+
+  it('an entry whose client_occurred_at is the wrong type is dropped rather than replayed', () => {
+    seed([{ type: 'play', event_id: 'e1', client_occurred_at: 42 }]);
+
+    expect(loadPersistedOutbox()).toEqual([]);
+  });
+
+  it('keeps a fully-shaped entry beside one missing its envelope, replaying only the valid one', () => {
+    const good = entry({ event_id: 'keep-me', type: 'library_add' });
+    seed([{ type: 'play', event_id: 'bad' }, good]);
+
+    expect(loadPersistedOutbox()).toEqual([good]);
+  });
+
   it('two entries with an empty-string event_id are both rejected rather than collapsing into one', () => {
     seed([entry({ event_id: '', type: 'library_add' }), entry({ event_id: '', type: 'wrong_album' })]);
 
@@ -182,7 +207,7 @@ describe('loadPersistedOutbox — adversarial: the on-disk file is a trust bound
   it('a __proto__ key on an entry loads as a plain own property, without polluting Object.prototype', () => {
     __fs.seedFile(
       OUTBOX_FILE_URI,
-      '[{"event_id":"e1","type":"play","__proto__":{"polluted":true}}]',
+      '[{"event_id":"e1","type":"play","client_occurred_at":"2026-07-31T00:00:00.000Z","__proto__":{"polluted":true}}]',
     );
 
     const result = loadPersistedOutbox();
@@ -196,6 +221,9 @@ describe('loadPersistedOutbox — adversarial: the on-disk file is a trust bound
 describe('loadPersistedOutbox — every early-return arm and filter conjunct as a row', () => {
   const validEntry = entry({ event_id: 'e1' });
   const withoutEventId = { type: 'play', client_occurred_at: '2026-07-31T00:00:00.000Z' };
+  const withoutType = { event_id: 'e1', client_occurred_at: '2026-07-31T00:00:00.000Z' };
+  const unknownType = { type: 'archived', event_id: 'e1', client_occurred_at: '2026-07-31T00:00:00.000Z' };
+  const withoutOccurredAt = { type: 'play', event_id: 'e1' };
 
   it.each<[string, string | undefined, OutboxEntry[]]>([
     ['arm 1 — no file at all', undefined, []],
@@ -205,6 +233,9 @@ describe('loadPersistedOutbox — every early-return arm and filter conjunct as 
     ['conjunct 1 — a non-object element (a string)', JSON.stringify(['not-an-object']), []],
     ['conjunct 2 — a null element', JSON.stringify([null]), []],
     ['conjunct 3 — an element whose event_id is absent', JSON.stringify([withoutEventId]), []],
+    ['conjunct 4 — an element whose type is absent', JSON.stringify([withoutType]), []],
+    ['conjunct 5 — an element whose type is unknown', JSON.stringify([unknownType]), []],
+    ['conjunct 6 — an element whose client_occurred_at is absent', JSON.stringify([withoutOccurredAt]), []],
   ])('%s', (_label, seeded, expected) => {
     if (seeded !== undefined) __fs.seedFile(OUTBOX_FILE_URI, seeded);
 
