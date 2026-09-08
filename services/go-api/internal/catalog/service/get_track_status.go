@@ -5,14 +5,15 @@ import (
 	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 )
 
 type GetTrackStatusService struct {
-	trackRepo trackByIDGetter
+	trackRepo ports.TrackRepository
 }
 
-func NewGetTrackStatusService(trackRepo trackByIDGetter) *GetTrackStatusService {
+func NewGetTrackStatusService(trackRepo ports.TrackRepository) *GetTrackStatusService {
 	return &GetTrackStatusService{trackRepo: trackRepo}
 }
 

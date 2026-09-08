@@ -5,18 +5,15 @@ import (
 	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 )
 
-type trackNumberSetter interface {
-	SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (updated bool, err error)
-}
-
 type SetTrackNumberService struct {
-	trackRepo trackNumberSetter
+	trackRepo ports.TrackRepository
 }
 
-func NewSetTrackNumberService(trackRepo trackNumberSetter) *SetTrackNumberService {
+func NewSetTrackNumberService(trackRepo ports.TrackRepository) *SetTrackNumberService {
 	return &SetTrackNumberService{trackRepo: trackRepo}
 }
 
