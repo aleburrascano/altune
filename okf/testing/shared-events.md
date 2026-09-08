@@ -95,3 +95,14 @@ Rejected: **Timing / dwell**, **Concurrency / ordering**, **Failure injection**,
 - **Regression** — the bug fix carries that test; red-proofed by hand against the pre-fix cast (the invalid status seeded the cache with length 1) before the narrowing was restored.
 
 The aligned `as RepeatMode` cast in `features/playback/hooks/useQueueResume.ts` was already guarded by an `=== 'all' || === 'one'` check before use, so it owes no new test — the value it feeds `setRepeatMode` was already union-safe; the change only made the narrowing explicit.
+
+## AMENDED 2026-09-07 — single-flight `connect()`
+
+`SSEClient.connect()` gained a `connecting` reentrancy guard so overlapping calls open exactly one socket (see [shared-events](../mobile/shared-events.md#connect-is-single-flight-2026-09-07)). Two categories re-trigger.
+
+- **Concurrency / ordering** — the pre-existing "two overlapping `connect()`s" case now asserts the stronger post-guard contract: two concurrent connects open one live, un-aborted socket that delivers, and a `connect()` fired while the first is still awaiting its token is coalesced (the token is fetched once, one socket opens). `__tests__/sse-client.test.ts`. Both were red-proofed by hand against the pre-guard source — without the flag each produced two sockets and two token fetches — before the guard was restored.
+- **Regression** — the coalescing test carries the fix; it is the assertion that the connection-churn the guard eliminates cannot recur.
+
+The other transport categories (Failure injection, Timing / dwell, Legacy / compat) are unchanged: the guard spans only the entry-to-`send()` window and leaves the `onerror`/`onloadend`/watchdog/backoff paths intact, all of which run when the flag is already clear.
+
+**Mutation audit not re-run for this change.** The added guard is one field and a `try/finally`; the next full `npm run mutate` covers it against the standing 90.75 number.

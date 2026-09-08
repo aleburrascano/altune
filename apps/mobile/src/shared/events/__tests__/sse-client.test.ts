@@ -364,23 +364,38 @@ describe('SSEClient', () => {
   });
 
   describe('concurrency and ordering', () => {
-    it('ignores frames on the xhr superseded by a second overlapping connect()', async () => {
+    it('opens exactly one live socket when two connect() calls overlap', async () => {
       const { client, onEvent } = makeClient();
 
       const first = client.connect();
       const second = client.connect();
       await Promise.all([first, second]);
 
-      expect(FakeXHR.instances.length).toBe(2);
-      const stale = xhrAt(0);
-      const active = xhrAt(1);
+      expect(FakeXHR.instances.length).toBe(1);
+      const socket = xhrAt(0);
+      expect(socket.sent).toBe(true);
+      expect(socket.aborted).toBe(false);
 
-      stale.emit(block({ id: '1', data: { from: 'stale' } }));
-      expect(onEvent).not.toHaveBeenCalled();
-
-      active.emit(block({ id: '2', data: { from: 'active' } }));
+      socket.emit(block({ id: '1', data: { from: 'active' } }));
       expect(onEvent).toHaveBeenCalledTimes(1);
-      expect(onEvent).toHaveBeenCalledWith({ id: '2', type: 'message', data: { from: 'active' } });
+      expect(onEvent).toHaveBeenCalledWith({ id: '1', type: 'message', data: { from: 'active' } });
+    });
+
+    it('coalesces a connect() fired while the first is still fetching its token', async () => {
+      let resolveToken!: (value: string | null) => void;
+      const getToken = jest.fn<Promise<string | null>, []>(
+        () => new Promise<string | null>((resolve) => (resolveToken = resolve)),
+      );
+      const { client } = makeClient(getToken);
+
+      const first = client.connect();
+      const second = client.connect();
+      expect(getToken).toHaveBeenCalledTimes(1);
+
+      resolveToken('token-1');
+      await Promise.all([first, second]);
+
+      expect(FakeXHR.instances.length).toBe(1);
     });
 
     it('delivers no more events after disconnect(), even if the network still emits', async () => {

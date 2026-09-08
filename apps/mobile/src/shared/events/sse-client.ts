@@ -33,6 +33,7 @@ export class SSEClient {
   private reconnectAttempt = 0;
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
+  private connecting = false;
 
   private url: string;
   private getToken: () => Promise<string | null>;
@@ -52,8 +53,16 @@ export class SSEClient {
   }
 
   async connect(): Promise<void> {
-    if (this.disposed) return;
+    if (this.disposed || this.connecting) return;
+    this.connecting = true;
+    try {
+      await this.openStream();
+    } finally {
+      this.connecting = false;
+    }
+  }
 
+  private async openStream(): Promise<void> {
     let token: string | null;
     try {
       token = await this.getToken();

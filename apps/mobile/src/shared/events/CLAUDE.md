@@ -11,6 +11,7 @@ Invariants:
 - A handler must not write a field the event did not carry — omit the key instead of writing `null`, or a thin redelivery erases good data.
 - Every handler is idempotent: applying the same event twice equals applying it once, because the server can redeliver.
 - Parse the wire format per the SSE spec, not per what the current server happens to send: `\r\n` terminators, multiple `data:` lines joined with `\n`, and the space after the colon optional.
+- `connect()` is single-flight: overlapping calls open at most one socket.
 
 Tests: `__tests__/` — `applyServerEvent`, `trackCachePatch`, `playlistCachePatch`, `sse-client`, `useServerEvents`, `eventTypes`, `eventContract`. Categories and rejections: `okf/testing/shared-events.md`.
 
