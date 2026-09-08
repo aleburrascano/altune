@@ -11,17 +11,13 @@ import (
 	"altune/go-api/internal/shared/events"
 )
 
-type trackDeleter interface {
-	Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error)
-}
-
 type DeleteTrackService struct {
-	trackRepo  trackDeleter
+	trackRepo  ports.TrackRepository
 	audioStore ports.AudioStore
 	events     events.Publisher
 }
 
-func NewDeleteTrackService(trackRepo trackDeleter, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
+func NewDeleteTrackService(trackRepo ports.TrackRepository, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
 	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore, events: events.NoopPublisher()}
 	for _, opt := range opts {
 		opt(s)

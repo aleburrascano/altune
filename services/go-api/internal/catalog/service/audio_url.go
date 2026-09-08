@@ -20,17 +20,13 @@ type ResolvedAudioURL struct {
 	ExpiresAt time.Time
 }
 
-type trackBatchReader interface {
-	ListByIDs(ctx context.Context, userId shared.UserId, ids []domain.TrackId) ([]*domain.Track, error)
-}
-
 type AudioURLService struct {
-	trackRepo trackBatchReader
+	trackRepo ports.TrackRepository
 	signer    ports.AudioURLSigner
 	ttl       time.Duration
 }
 
-func NewAudioURLService(trackRepo trackBatchReader, store ports.AudioStore) *AudioURLService {
+func NewAudioURLService(trackRepo ports.TrackRepository, store ports.AudioStore) *AudioURLService {
 	signer, _ := store.(ports.AudioURLSigner)
 	return &AudioURLService{trackRepo: trackRepo, signer: signer, ttl: audioURLTTL}
 }

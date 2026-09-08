@@ -5,18 +5,15 @@ import (
 	"fmt"
 
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 )
 
-type featuringLister interface {
-	ListTracksFeaturing(ctx context.Context, userId shared.UserId, fa domain.FeaturedArtist) ([]*domain.Track, error)
-}
-
 type ListFeaturingService struct {
-	trackRepo featuringLister
+	trackRepo ports.TrackRepository
 }
 
-func NewListFeaturingService(trackRepo featuringLister) *ListFeaturingService {
+func NewListFeaturingService(trackRepo ports.TrackRepository) *ListFeaturingService {
 	return &ListFeaturingService{trackRepo: trackRepo}
 }
 

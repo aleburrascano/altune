@@ -5,23 +5,17 @@ import (
 	"fmt"
 	"log/slog"
 
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 )
 
-type featuredBackfillRepo interface {
-	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
-	ReplaceFeaturedArtists(ctx context.Context, id domain.TrackId, userId shared.UserId, feats []domain.FeaturedArtist) error
-}
-
 type BackfillFeaturedService struct {
-	trackRepo featuredBackfillRepo
+	trackRepo ports.TrackRepository
 	resolver  ports.FeaturedArtistResolver
 }
 
 func NewBackfillFeaturedService(
-	trackRepo featuredBackfillRepo,
+	trackRepo ports.TrackRepository,
 	resolver ports.FeaturedArtistResolver,
 ) *BackfillFeaturedService {
 	return &BackfillFeaturedService{trackRepo: trackRepo, resolver: resolver}
