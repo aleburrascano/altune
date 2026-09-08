@@ -1,6 +1,6 @@
 # ADR-0020: Split the `PgxTrackRepository` god repo into focused pgx adapters behind the unified port
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-07
 - **Deciders:** solo + Claude
 - **Context tags:** [pattern | layer | arch]

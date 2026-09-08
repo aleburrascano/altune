@@ -76,6 +76,10 @@ The ordering is load-bearing and slightly awkward: `wireDiscovery` runs first (c
 
 Both dependencies are optional at the handler - nil means results ship unstamped and no track numbers are filled, which is what the eval and re-run harnesses get.
 
+## Catalog track repository is a composite (2026-09-07)
+
+`wireCatalog` builds two track repositories from the same pool: the core `persistence.NewPgxTrackRepository(a.pool)` and `persistence.NewPgxCatalogTrackRepository(a.pool)`, the ADR-0020 composite that embeds the core CRUD struct, the library-lens struct and the featured-artist struct so method promotion satisfies the full `ports.TrackRepository`. Every catalog service (add/list/delete/set-number/stream/audio-URL/playlist-membership/backfill/list-featuring/library-lens) binds the composite, because their constructors take the full unified port. The cross-module consumers stay on the narrow core struct they always used: acquisition (`acquireSvc`, `retryH`, `reacquireH`) and, via the returned `cat.trackRepo`, playback (`wirePlayback`) and the discovery ownership bridge — each needs only methods that live on core, so their wiring is byte-for-byte unchanged. See [catalog/track](catalog/track.md) for why the concrete struct was split.
+
 ## Background loops start only on the leader (2026-07-25)
 
 `setup` ends with `startBackgroundWhenLeader`, which constructs a `leader.Election` (see [shared-infra](shared-infra.md)) over the pgx pool and spawns one goroutine that waits on `Await(ctx)` and then runs every start function registered through `whenLeader`.

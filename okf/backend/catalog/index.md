@@ -3,7 +3,7 @@ type: Index
 title: Catalog subsystems
 description: The catalog bounded context decomposed into its four sub-features — Track aggregate/dedup, Playlist aggregate, featured-artist credits, and audio storage/streaming.
 tags: [index, catalog]
-verified_commit: b1b3e3867ff5d3319beb9b3d361d8625cea3ec94
+verified_commit: 5adb91f814edf059e1e39125797b5a657e697066
 ---
 
 Catalog is the identity-and-metadata bounded context for a user's saved music (`services/go-api/internal/catalog/`). Its two aggregate roots are `Track` and `Playlist`, both identified by wrapped-UUID value objects and owned by a `shared.UserId`. Every coded error in the context (`ValidationError`, `ErrTrackAlreadyInPlaylist`, the `service.Err*` sentinels) implements `HTTPStatus()`, so handlers route uniformly through `httputil.HandleServiceError`.
@@ -26,6 +26,8 @@ They are now read models produced by SQL. `domain/library_lens.go` holds the val
 `GET /v1/tracks` gained the same `?q=` and `?sort=`, applied in SQL by `ListFilteredForUser`. `ListTracksService.Execute` now takes a `LibraryQuery` instead of a bare limit/offset. The old unfiltered `ListForUser` survives for `BackfillFeaturedService`, which pages the whole library deliberately.
 
 `ListOwnedTrackRefs` is a narrow projection — id, title, artist, acquisition status, track number — used by discovery's ownership stamping (see [discovery](../discovery/index.md)); it deliberately skips the featured-artists join, like the other narrow reads.
+
+The pgx repository behind the unified `ports.TrackRepository` was split per ADR-0020 into three focused structs — `PgxTrackRepository` (track CRUD, keeps `ListOwnedTrackRefs`), `PgxLibraryLensRepository` (the grouping/filtering read models here), and `PgxFeaturedArtistRepository` — recombined by the `PgxCatalogTrackRepository` composite behind the same port. See [track](track.md) for the split and how each consumer rebinds unchanged.
 
 ## Failure copy and playlist duration
 
