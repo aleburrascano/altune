@@ -8,7 +8,7 @@
 #
 # Body (why > what):
 # Explain *why* this change is needed. The diff shows what changed.
-# Reference specs/ADRs/solutions when relevant: see docs/specs/<name>/spec.md
+# Reference the issue and any ADR when relevant.
 #
 # Footer (optional):
 # Refs: #issue, ADR-NNNN

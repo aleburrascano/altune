@@ -102,7 +102,5 @@ The duration gate remains unchanged — it catches genuinely wrong results (live
 
 ## Related
 
-- `docs/specs/acquire-track/design.md` — documents the gate-based design (to be updated when matching is redesigned)
-- `docs/specs/discover-music-v3/spec.md` — documents the discovery pipeline's adoption of `token_sort_ratio`
 - `docs/adr/0007-unified-music-search.md` — notes "ISRC + JW + per-source-priors as the dedup contract. Reversible to embeddings or other models adapter-internally"
 - `docs/solutions/2026-06-07-extras-merge-provider-priority.md` — related discovery matching doc (different problem: merge display vs acquisition accuracy)

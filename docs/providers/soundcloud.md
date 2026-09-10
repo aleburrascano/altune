@@ -85,7 +85,7 @@ implement `ports.ArtistContentProvider`, wired as `"soundcloud"` in the artist-c
 in its `SourceRef`, so no separate id-resolution is needed. Reuses the track/album mappers.
 Read-only enrichment, off the ranking path — no eval gate.
 
-### 5. Related tracks (recommendations) — ✅ BUILT (Unit C — `docs/specs/related-tracks/`, spec+plan; 2026-06-21)
+### 5. Related tracks (recommendations) — ✅ BUILT (Unit C — 2026-06-21)
 `/tracks/{id}/related` → `GetRelatedTracks` on the api-v2 adapter (reuses `mapSoundCloudAPITrack`),
 a `RelatedTracksProvider` port, `GetRelatedTracksService`, and the
 `GET /discovery/tracks/{provider}/{externalId}/related` route. Mobile: `useRelatedTracks` (SC-gated)
@@ -101,7 +101,7 @@ undefined, which is why this is **not** another adapter bolt-on:
 Decide these in a `/feature-spec`, then the adapter method is trivial (one endpoint, reuse
 `mapSoundCloudAPITrack`).
 
-### 6. Audio acquisition — 🟨 CODE-COMPLETE, UNVERIFIED END-TO-END (Unit D — `docs/specs/acquire-soundcloud/`, 2026-06-21)
+### 6. Audio acquisition — 🟨 CODE-COMPLETE, UNVERIFIED END-TO-END (Unit D — 2026-06-21)
 > **Not "done".** The code + unit tests are written, but every test mocks `Download` and `Store` — the
 > two steps that actually touch SoundCloud and OCI. Done requires a real run: save a SoundCloud-sourced
 > track on a live backend (yt-dlp + SoundCloud reachable + OCI bucket) and confirm it downloads the
@@ -167,13 +167,13 @@ Capabilities 1–4 are **built and committed** on branch `refactor/discovery-pip
 
 Adapter-level maximization is **done** (1–4). Units C and D have now landed too:
 
-1. **Unit C — related tracks (capability 5).** ✅ **BUILT** — `docs/specs/related-tracks/`
-   (spec + plan). Backend: `RelatedTracksProvider` port, `GetRelatedTracks` on the api-v2 adapter,
+1. **Unit C — related tracks (capability 5).** ✅ **BUILT**.
+   Backend: `RelatedTracksProvider` port, `GetRelatedTracks` on the api-v2 adapter,
    `GetRelatedTracksService`, `GET /discovery/tracks/{provider}/{externalId}/related`. Mobile:
    `useRelatedTracks` (SC-gated) → "Related on SoundCloud" rail in `TrackDetailBody`. SoundCloud-only,
    off the ranking path (no eval gate). 483 discovery tests green; 7 new mobile tests green.
-2. **Unit D — audio acquisition (capability 6).** 🟨 **CODE-COMPLETE, UNVERIFIED END-TO-END** —
-   `docs/specs/acquire-soundcloud/` (spec + plan). **Not "done":** the logic + wiring are written and
+2. **Unit D — audio acquisition (capability 6).** 🟨 **CODE-COMPLETE, UNVERIFIED END-TO-END**.
+   **Not "done":** the logic + wiring are written and
    unit-tested, but the tests mock `Download` and `Store`, so nothing has proven real audio is acquired
    correctly. **Done bar:** a live save of a SoundCloud-sourced track downloads the correct full MP3 into
    OCI, goes `ready`, and plays back — not yet run (needs a running backend + yt-dlp + OCI + a device).

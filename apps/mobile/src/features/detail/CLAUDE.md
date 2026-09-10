@@ -38,7 +38,7 @@ Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@share
 - Never add a detail action that has no backing behaviour in the feature's hooks.
 - Read the play/pause state from `isResultPlaying` — every source the result can play, not just the one `resolvePlaySource` would start next.
 - Every tappable element needs `accessibilityRole` + `accessibilityLabel`; touch targets ≥48pt.
-- Never rename a load-bearing testID without updating `docs/specs/view-result-detail/`.
+- Never rename a load-bearing testID without updating its consumers and tests.
 
 Load-bearing testIDs — scaffold: `detail-header`, `detail-back`, `detail-banner-title`, `detail-menu`, `detail-artist-link`. Track: `detail-track-info`, `detail-track-facts`, `detail-play`, `detail-preview`, `detail-save`, `detail-add-to-playlist`, `detail-save-error`, `detail-info-album`, `detail-info-featuring`, `detail-lateral-error`. Album: `detail-tracklist{,-loading,-error,-empty}`, `detail-track-<n>`, `detail-track-save-<n>`, `detail-album-meta` (the fact row), `detail-album-play`, `detail-save-all`, `detail-more-from-album`. Artist: `detail-artist-content`, `detail-artist-facts`, `detail-artist-play`, `detail-top-tracks-{loading,error}`, `detail-top-track-<n>`, `detail-top-track-save-<n>`, `detail-show-all-tracks`, `detail-albums-{loading,error}`, `detail-{album,single,ep}-<n>`, `detail-artist-about`.
 

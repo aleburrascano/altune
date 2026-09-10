@@ -82,7 +82,7 @@ lookup (capability 3).
 `LookupAlbumArtist` (contamination check). Off the ranking path; feeds the consensus engine and the
 identity resolver. This is the only place lookups happen today — and they fetch the *thin* projection.
 
-### 3. Artist & album enrichment via `inc=` lookup — ✅ BUILT (`docs/specs/musicbrainz-enrichment/`, 2026-06-22)
+### 3. Artist & album enrichment via `inc=` lookup — ✅ BUILT (2026-06-22)
 The single highest-value addition. One lookup per resolved entity yields:
 - **Curated `genres[]`** (with vote counts) — e.g. for Kendrick: *conscious hip hop, hip hop, jazz
   rap, west coast hip hop, trap*. Distinct from raw `tags[]` (which include decade/mood noise like
