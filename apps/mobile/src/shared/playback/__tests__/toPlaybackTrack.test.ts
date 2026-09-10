@@ -1,11 +1,12 @@
 import type { QueueStateCurrentTrack } from '@shared/api-client/playback';
 import type { TrackResponse } from '@shared/api-client/types';
+import { asTrackId } from '@shared/api-client/ids';
 
 import { currentTrackToPlaybackTrack, toPlaybackTrack } from '../toPlaybackTrack';
 
 function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 'track-1',
+    id: asTrackId('track-1'),
     title: 'Title',
     artist: 'Artist',
     album: 'Album',
@@ -60,7 +61,7 @@ describe('toPlaybackTrack', () => {
   });
 
   it('derives a library source keyed by the Track id', () => {
-    expect(toPlaybackTrack(trackResponse({ id: 'track-42' })).source).toEqual({
+    expect(toPlaybackTrack(trackResponse({ id: asTrackId('track-42') })).source).toEqual({
       kind: 'library',
       trackId: 'track-42',
     });
@@ -79,9 +80,7 @@ describe('currentTrackToPlaybackTrack', () => {
   });
 
   it('falls back to null artwork when artwork_url is missing', () => {
-    expect(
-      currentTrackToPlaybackTrack(currentTrack({ artwork_url: null })).artworkUrl,
-    ).toBeNull();
+    expect(currentTrackToPlaybackTrack(currentTrack({ artwork_url: null })).artworkUrl).toBeNull();
   });
 
   it('falls back to undefined duration when duration_seconds is missing', () => {
@@ -91,7 +90,7 @@ describe('currentTrackToPlaybackTrack', () => {
   });
 
   it('agrees with toPlaybackTrack on identity for the same Track id', () => {
-    const fromLibraryRebuild = toPlaybackTrack(trackResponse({ id: 'shared-id' }));
+    const fromLibraryRebuild = toPlaybackTrack(trackResponse({ id: asTrackId('shared-id') }));
     const fromResumePlaceholder = currentTrackToPlaybackTrack(currentTrack({ id: 'shared-id' }));
 
     expect(fromResumePlaceholder.source).toEqual(fromLibraryRebuild.source);

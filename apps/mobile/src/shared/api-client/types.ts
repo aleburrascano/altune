@@ -1,3 +1,5 @@
+import type { PlaylistId, TrackId } from './ids';
+
 export type ApiErrorBody = {
   detail?: string;
   code?: string;
@@ -12,7 +14,7 @@ export type FeaturedArtist = {
 };
 
 export type TrackResponse = {
-  id: string;
+  id: TrackId;
   title: string;
   artist: string;
   album: string | null;
@@ -55,7 +57,7 @@ export type ListTracksResponse = {
 };
 
 export type PlaylistResponse = {
-  id: string;
+  id: PlaylistId;
   name: string;
   track_count: number;
   preview_artwork_urls: string[];
@@ -78,7 +80,7 @@ export type CreatePlaylistRequest = {
 };
 
 export type AddTracksToPlaylistRequest = {
-  track_ids: string[];
+  track_ids: TrackId[];
 };
 
 export type AddTracksToPlaylistResponse = {
@@ -87,7 +89,7 @@ export type AddTracksToPlaylistResponse = {
 };
 
 export type RemoveTracksFromPlaylistRequest = {
-  track_ids: string[];
+  track_ids: TrackId[];
 };
 
 export type RemoveTracksFromPlaylistResponse = {
@@ -95,5 +97,5 @@ export type RemoveTracksFromPlaylistResponse = {
 };
 
 export type ReorderTracksRequest = {
-  track_ids: string[];
+  track_ids: TrackId[];
 };

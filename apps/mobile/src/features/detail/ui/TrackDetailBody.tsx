@@ -11,6 +11,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { TrackId } from '@shared/api-client/ids';
 import type { FeaturedArtist } from '@shared/api-client/types';
 
 import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
@@ -134,7 +135,7 @@ export function TrackDetailBody({
     save.mutate(toCreateTrackRequest(result));
   };
 
-  const resolveTrackIds = useCallback(async (): Promise<string[]> => {
+  const resolveTrackIds = useCallback(async (): Promise<TrackId[]> => {
     if (owned !== null) {
       return [owned.trackId];
     }
@@ -240,16 +241,17 @@ export function TrackDetailBody({
                 {featured.map((f) => (
                   <Pressable
                     key={f.mbid ?? f.name}
-                    onPress={() =>
-                      router.push({
+                    onPress={() => {
+                      const href: Href = {
                         pathname: featuringRouteFor(detailRoute),
                         params: {
                           name: f.name,
                           ...(f.mbid ? { mbid: f.mbid } : {}),
                           ...(f.deezer_id != null ? { deezer_id: String(f.deezer_id) } : {}),
                         },
-                      } as unknown as Href)
-                    }
+                      };
+                      router.push(href);
+                    }}
                     accessibilityRole="link"
                     accessibilityLabel={`Tracks featuring ${f.name}`}
                     style={({ pressed }) => [

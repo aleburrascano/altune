@@ -1,22 +1,24 @@
 import { useCallback, useMemo, useState } from 'react';
 
+import type { TrackId } from '@shared/api-client/ids';
+
 export type Selection = {
   active: boolean;
-  ids: string[];
+  ids: TrackId[];
   count: number;
-  has: (id: string) => boolean;
-  begin: (id: string) => void;
-  toggle: (id: string) => void;
-  selectAll: (ids: string[]) => void;
+  has: (id: TrackId) => boolean;
+  begin: (id: TrackId) => void;
+  toggle: (id: TrackId) => void;
+  selectAll: (ids: TrackId[]) => void;
   clear: () => void;
 };
 
 export function useSelection(): Selection {
-  const [selected, setSelected] = useState<readonly string[] | null>(null);
+  const [selected, setSelected] = useState<readonly TrackId[] | null>(null);
 
   const set = useMemo(() => new Set(selected ?? []), [selected]);
 
-  const toggle = useCallback((id: string) => {
+  const toggle = useCallback((id: TrackId) => {
     setSelected((current) => {
       if (current === null) return [id];
       if (!current.includes(id)) return [...current, id];
@@ -25,11 +27,11 @@ export function useSelection(): Selection {
     });
   }, []);
 
-  const begin = useCallback((id: string) => {
+  const begin = useCallback((id: TrackId) => {
     setSelected((current) => (current === null ? [id] : current));
   }, []);
 
-  const selectAll = useCallback((ids: string[]) => {
+  const selectAll = useCallback((ids: TrackId[]) => {
     setSelected(ids);
   }, []);
 

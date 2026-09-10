@@ -1,9 +1,10 @@
 import { apiFetch } from './index';
 import type { DiscoveryKind } from './discovery';
+import type { FavoriteKey } from './ids';
 
 export type Favorite = {
   kind: DiscoveryKind;
-  key: string;
+  key: FavoriteKey;
   title: string;
   subtitle?: string | undefined;
   image_url?: string | undefined;
@@ -21,7 +22,7 @@ export type FavoriteRef = {
   image_url?: string | undefined;
 };
 
-export type FavoriteTarget = FavoriteRef & { favorite_key: string };
+export type FavoriteTarget = FavoriteRef & { favorite_key: FavoriteKey };
 
 export async function listFavorites(): Promise<FavoritesResponse> {
   return apiFetch<FavoritesResponse>('/v1/discovery/favorites');

@@ -1,3 +1,5 @@
+import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
+
 import { useQueueStore } from '../queueStore';
 import type { PlaybackTrack, QueueSource } from '../types';
 
@@ -5,14 +7,18 @@ const INITIAL_STATE = useQueueStore.getState();
 
 function track(id: string): PlaybackTrack {
   return {
-    source: { kind: 'library', trackId: id },
+    source: { kind: 'library', trackId: asTrackId(id) },
     title: `Track ${id}`,
     artist: 'Artist',
     artworkUrl: null,
   };
 }
 
-const PLAYLIST_SOURCE: QueueSource = { kind: 'playlist', playlistId: 'p1', name: 'Chill' };
+const PLAYLIST_SOURCE: QueueSource = {
+  kind: 'playlist',
+  playlistId: asPlaylistId('p1'),
+  name: 'Chill',
+};
 
 beforeEach(() => {
   useQueueStore.setState(INITIAL_STATE, true);
@@ -225,15 +231,18 @@ describe('setShuffled', () => {
     ],
   ];
 
-  it.each(seeds)('flips the flag without touching playOrder, over %s', (_label, seed, expectedOrder) => {
-    seed();
-    const before = useQueueStore.getState().shuffled;
+  it.each(seeds)(
+    'flips the flag without touching playOrder, over %s',
+    (_label, seed, expectedOrder) => {
+      seed();
+      const before = useQueueStore.getState().shuffled;
 
-    useQueueStore.getState().setShuffled(!before);
+      useQueueStore.getState().setShuffled(!before);
 
-    expect(useQueueStore.getState().shuffled).toBe(!before);
-    expect(useQueueStore.getState().playOrder).toEqual(expectedOrder);
-  });
+      expect(useQueueStore.getState().shuffled).toBe(!before);
+      expect(useQueueStore.getState().playOrder).toEqual(expectedOrder);
+    },
+  );
 
   it('setting the same value twice is idempotent', () => {
     useQueueStore

@@ -1,3 +1,5 @@
+import { asTrackId } from '@shared/api-client/ids';
+
 import { useQueueStore } from '../queueStore';
 import { trackKey } from '../trackKey';
 import type { PlaybackTrack, RepeatMode } from '../types';
@@ -10,7 +12,7 @@ beforeEach(() => {
 
 function track(id: string): PlaybackTrack {
   return {
-    source: { kind: 'library', trackId: id },
+    source: { kind: 'library', trackId: asTrackId(id) },
     title: `Track ${id}`,
     artist: 'Test Artist',
     artworkUrl: null,
@@ -60,12 +62,15 @@ describe('hasNext / hasPrevious truth table', () => {
     ['one', 0, true, false],
     ['one', 1, true, true],
     ['one', 2, false, true],
-  ])('repeatMode=%s at index %i -> hasNext=%s hasPrevious=%s', (repeatMode, index, next, previous) => {
-    seed([track('a'), track('b'), track('c')], [0, 1, 2], index, repeatMode);
+  ])(
+    'repeatMode=%s at index %i -> hasNext=%s hasPrevious=%s',
+    (repeatMode, index, next, previous) => {
+      seed([track('a'), track('b'), track('c')], [0, 1, 2], index, repeatMode);
 
-    expect(useQueueStore.getState().hasNext()).toBe(next);
-    expect(useQueueStore.getState().hasPrevious()).toBe(previous);
-  });
+      expect(useQueueStore.getState().hasNext()).toBe(next);
+      expect(useQueueStore.getState().hasPrevious()).toBe(previous);
+    },
+  );
 
   it.each<RepeatMode>(['off', 'all', 'one'])(
     'is false for an empty queue regardless of repeatMode=%s',

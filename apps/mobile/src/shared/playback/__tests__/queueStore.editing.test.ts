@@ -1,5 +1,7 @@
 import fc from 'fast-check';
 
+import { asTrackId } from '@shared/api-client/ids';
+
 import { orderedQueueTracks, useQueueStore } from '../queueStore';
 import { trackKey } from '../trackKey';
 import type { PlaybackTrack } from '../types';
@@ -8,7 +10,7 @@ const INITIAL_STATE = useQueueStore.getState();
 
 function track(id: string): PlaybackTrack {
   return {
-    source: { kind: 'library', trackId: id },
+    source: { kind: 'library', trackId: asTrackId(id) },
     title: `Track ${id}`,
     artist: 'Test Artist',
     artworkUrl: null,
@@ -363,11 +365,14 @@ describe('cycleRepeatMode', () => {
 });
 
 describe('setRepeatMode', () => {
-  it.each<['off' | 'all' | 'one']>([['off'], ['all'], ['one']])('sets repeatMode to %s directly', (mode) => {
-    useQueueStore.getState().setRepeatMode(mode);
+  it.each<['off' | 'all' | 'one']>([['off'], ['all'], ['one']])(
+    'sets repeatMode to %s directly',
+    (mode) => {
+      useQueueStore.getState().setRepeatMode(mode);
 
-    expect(useQueueStore.getState().repeatMode).toBe(mode);
-  });
+      expect(useQueueStore.getState().repeatMode).toBe(mode);
+    },
+  );
 });
 
 describe('orderedQueueTracks', () => {

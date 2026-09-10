@@ -1,13 +1,14 @@
 import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import type { TrackId } from '@shared/api-client/ids';
 import { reacquireTrack } from '@shared/api-client/tracks';
 import { patchTrackInCaches } from '@shared/events/trackCachePatch';
 
 export function useReacquireTrack() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (trackId: string) => reacquireTrack(trackId),
+    mutationFn: (trackId: TrackId) => reacquireTrack(trackId),
     onSuccess: (_data, trackId) => {
       patchTrackInCaches(queryClient, trackId, { acquisition_status: 'pending' });
     },

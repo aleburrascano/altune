@@ -3,11 +3,8 @@ import { AppState } from 'react-native';
 
 import TrackPlayer from 'react-native-track-player';
 
-import {
-  getQueueState,
-  saveQueueState,
-  type QueueSourceWire,
-} from '@shared/api-client/playback';
+import { asPlaylistId } from '@shared/api-client/ids';
+import { getQueueState, saveQueueState, type QueueSourceWire } from '@shared/api-client/playback';
 import { getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
@@ -36,7 +33,11 @@ function fromWireSource(
 ): ReturnType<typeof useQueueStore.getState>['source'] {
   if (!source) return null;
   if (source.kind === 'playlist') {
-    return { kind: 'playlist', playlistId: source.playlist_id ?? '', name: source.name ?? '' };
+    return {
+      kind: 'playlist',
+      playlistId: asPlaylistId(source.playlist_id ?? ''),
+      name: source.name ?? '',
+    };
   }
   if (source.kind === 'search') return { kind: 'search', query: source.query ?? '' };
   return { kind: 'library' };
@@ -166,7 +167,7 @@ export function useQueueResume() {
         if (!home.items.length) return;
         if (userTookOver(owned)) return;
 
-        const trackMap = new Map(home.items.map((t) => [t.id, t]));
+        const trackMap = new Map<string, TrackResponse>(home.items.map((t) => [t.id, t]));
         const isReady = (id: string): boolean => {
           const t = trackMap.get(id);
           return t != null && t.acquisition_status === 'ready';

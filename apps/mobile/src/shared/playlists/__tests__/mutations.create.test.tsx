@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 
 import { useCreatePlaylist, useCreatePlaylistWithTracks } from '../mutations';
+import { asTrackId } from '@shared/api-client/ids';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { supabase } from '@shared/auth/supabaseClient';
 
@@ -50,7 +51,7 @@ describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPla
 
     let data!: Awaited<ReturnType<typeof result.current.mutateAsync>>;
     await act(async () => {
-      data = await result.current.mutateAsync({ name: 'Focus', trackIds: ['t1'] });
+      data = await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
     });
 
     expect(result.current.isError).toBe(false);
@@ -67,7 +68,10 @@ describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPla
 
     let data!: Awaited<ReturnType<typeof result.current.mutateAsync>>;
     await act(async () => {
-      data = await result.current.mutateAsync({ name: 'Chill', trackIds: ['t1', 't2'] });
+      data = await result.current.mutateAsync({
+        name: 'Chill',
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
     });
 
     expect(result.current.isError).toBe(false);
@@ -78,26 +82,33 @@ describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPla
 
 describe('useCreatePlaylistWithTracks: onSuccess add-failed note (:45-54)', () => {
   it.each([
-    ['a single requested track', ['t1'], 'Playlist created, but the track could not be added. Try adding it manually.'],
+    [
+      'a single requested track',
+      [asTrackId('t1')],
+      'Playlist created, but the track could not be added. Try adding it manually.',
+    ],
     [
       'more than one requested track',
-      ['t1', 't2'],
+      [asTrackId('t1'), asTrackId('t2')],
       'Playlist created, but the tracks could not be added. Try adding them manually.',
     ],
-  ] as const)('%s -> the singular/plural copy branch on trackIds.length === 1', async (_label, trackIds, expectedMessage) => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
-    __http.fail('POST /v1/playlists/p1/tracks/batch');
-    const queryClient = freshClient();
-    const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
-      wrapper: createWrapper(queryClient),
-    });
+  ] as const)(
+    '%s -> the singular/plural copy branch on trackIds.length === 1',
+    async (_label, trackIds, expectedMessage) => {
+      __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
+      __http.fail('POST /v1/playlists/p1/tracks/batch');
+      const queryClient = freshClient();
+      const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+        wrapper: createWrapper(queryClient),
+      });
 
-    await act(async () => {
-      await result.current.mutateAsync({ name: 'Focus', trackIds: [...trackIds] });
-    });
+      await act(async () => {
+        await result.current.mutateAsync({ name: 'Focus', trackIds: [...trackIds] });
+      });
 
-    expect(alertSpy).toHaveBeenCalledWith('Note', expectedMessage);
-  });
+      expect(alertSpy).toHaveBeenCalledWith('Note', expectedMessage);
+    },
+  );
 
   it('the early return suppresses the skip-count alert even though added(0) < trackIds.length', async () => {
     __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
@@ -108,7 +119,10 @@ describe('useCreatePlaylistWithTracks: onSuccess add-failed note (:45-54)', () =
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ name: 'Focus', trackIds: ['t1', 't2'] });
+      await result.current.mutateAsync({
+        name: 'Focus',
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
     });
 
     expect(alertSpy).toHaveBeenCalledTimes(1);
@@ -119,28 +133,28 @@ describe('useCreatePlaylistWithTracks: onSuccess skip-count note on a brand-new 
   it.each([
     [
       'a duplicate track id inside one request, playlist name known from the create response',
-      ['t1', 't1'],
+      [asTrackId('t1'), asTrackId('t1')],
       { added: 1, skipped: 1 },
       'Focus',
       'One track was already in Focus.',
     ],
     [
       'a track deleted between building the selection and the request landing, playlist name known',
-      ['t1', 't2', 't3'],
+      [asTrackId('t1'), asTrackId('t2'), asTrackId('t3')],
       { added: 1, skipped: 2 },
       'Focus',
       '2 tracks were already in Focus.',
     ],
     [
       'skipped count of one, but the create response is a thin payload missing name',
-      ['t1', 't2'],
+      [asTrackId('t1'), asTrackId('t2')],
       { added: 1, skipped: 1 },
       undefined,
       'One track was already in the playlist.',
     ],
     [
       'skipped count of two, but the create response is a thin payload missing name',
-      ['t1', 't2', 't3'],
+      [asTrackId('t1'), asTrackId('t2'), asTrackId('t3')],
       { added: 1, skipped: 2 },
       undefined,
       '2 tracks were already in the playlist.',
@@ -175,7 +189,10 @@ describe('useCreatePlaylistWithTracks: onSuccess skip-count note on a brand-new 
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ name: 'Focus', trackIds: ['t1', 't2'] });
+      await result.current.mutateAsync({
+        name: 'Focus',
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
     });
 
     expect(alertSpy).not.toHaveBeenCalled();
@@ -193,7 +210,10 @@ describe('useCreatePlaylistWithTracks: onSuccess skip-count note on a brand-new 
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ name: 'Focus', trackIds: ['t1', 't2'] });
+      await result.current.mutateAsync({
+        name: 'Focus',
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
     });
 
     expect(alertSpy).not.toHaveBeenCalled();
@@ -219,7 +239,10 @@ describe('createPlaylist itself failing (:26-28, :59-61)', () => {
 
     expect(caught).toBeDefined();
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(alertSpy).toHaveBeenCalledWith('Error', 'Could not create the playlist. Please try again.');
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Error',
+      'Could not create the playlist. Please try again.',
+    );
   });
 
   it('useCreatePlaylistWithTracks surfaces the same failure, and never reaches the batch-add endpoint', async () => {
@@ -232,7 +255,7 @@ describe('createPlaylist itself failing (:26-28, :59-61)', () => {
     let caught: unknown;
     await act(async () => {
       try {
-        await result.current.mutateAsync({ name: 'Focus', trackIds: ['t1'] });
+        await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
       } catch (error) {
         caught = error;
       }
@@ -240,8 +263,13 @@ describe('createPlaylist itself failing (:26-28, :59-61)', () => {
 
     expect(caught).toBeDefined();
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(alertSpy).toHaveBeenCalledWith('Error', 'Could not create the playlist. Please try again.');
-    expect(__http.requests.filter((r: { path: string }) => r.path.includes('tracks/batch'))).toHaveLength(0);
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Error',
+      'Could not create the playlist. Please try again.',
+    );
+    expect(
+      __http.requests.filter((r: { path: string }) => r.path.includes('tracks/batch')),
+    ).toHaveLength(0);
   });
 });
 
@@ -287,7 +315,7 @@ describe('onSettled invalidation (:29, :62) — exact key identity', () => {
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ name: 'Focus', trackIds: ['t1'] });
+      await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
     });
 
     expect(invalidateSpy).toHaveBeenCalledTimes(1);
@@ -325,7 +353,10 @@ describe('request bodies sent over the wire', () => {
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ name: 'Road Trip Mix', trackIds: ['t1', 't2'] });
+      await result.current.mutateAsync({
+        name: 'Road Trip Mix',
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
     });
 
     const createRequest = __http.requests.find(
