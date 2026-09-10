@@ -1,4 +1,5 @@
 import { getSearchState, setSearchState } from '../search-state';
+import type * as SearchStateModule from '../search-state';
 
 beforeEach(() => {
   setSearchState('', '');
@@ -29,7 +30,7 @@ describe('search-state preserves the last query across a detail round trip', () 
 
   it('defaults both fields to empty strings before anything has been written', () => {
     jest.isolateModules(() => {
-      const fresh: typeof import('../search-state') = require('../search-state');
+      const fresh: typeof SearchStateModule = require('../search-state');
 
       expect(fresh.getSearchState()).toEqual({ query: '', inputValue: '' });
     });
