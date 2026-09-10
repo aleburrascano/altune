@@ -42,7 +42,7 @@ jobs:
       # Import direction (structure audit F1): domain purity + shared never
       # imports features. Rules live in services/go-api/.golangci.yml.
       - name: import direction (depguard)
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           working-directory: services/go-api
