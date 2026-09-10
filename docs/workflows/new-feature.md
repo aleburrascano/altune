@@ -55,7 +55,7 @@ Final user sign-off on the plan. Approve, revise, or reject. Approval → Claude
 
 For each slice in order:
 
-1. **RED**: write the failing test (`test-author` subagent can be dispatched if useful). Run it. Confirm fail. Commit `test(<scope>): add failing test for <behavior>`.
+1. **RED**: write the failing test. Run it. Confirm fail. Commit `test(<scope>): add failing test for <behavior>`.
 2. **GREEN**: write minimum code to pass. Run. Confirm pass. Commit `feat(<scope>): <summary>`.
 3. **REFACTOR**: improve without breaking. Re-run. Commit `refactor(<scope>): <improvement>` (only if meaningful).
 
