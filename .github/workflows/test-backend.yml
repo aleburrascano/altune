@@ -72,7 +72,7 @@ jobs:
         run: go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
 
       # Coverage ratchet: holds the measured baseline so coverage can't silently
-      # regress. Raise MIN when a module is hardened (see the qa-slice skill);
+      # regress. Raise MIN when a module gains coverage;
       # never lower it to make CI green.
       # TEMPORARILY 62, was 65 — floor breached for 8+ runs while this ran in
       # parallel with the deploy and nothing enforced it. Ratchet back to 65 as
