@@ -1,6 +1,6 @@
 # discover — feature-local router
 
-Mobile screen for the unified music search surface: greeting + "Discover" title above a debounced `TextInput`, five-state body below. Sectioned Spotify-style results — filter chips (`All · Albums · Tracks · Artists`), a Top Result card, then per-kind sections. Specs: `docs/specs/discover-music-v1/`, `-v2`, `-v4`; ADR-0007, restyled per ADR-0009.
+Mobile screen for the unified music search surface: greeting + "Discover" title above a debounced `TextInput`, five-state body below. Sectioned Spotify-style results — filter chips (`All · Albums · Tracks · Artists`), a Top Result card, then per-kind sections. ADR-0007, restyled per ADR-0009.
 
 `DiscoverView` is a five-state union — `loading | empty-no-query | results | zero-results | full-error` — mutually exclusive, driven by `_viewForState` in [state.ts](state.ts).
 
@@ -16,7 +16,7 @@ Mobile screen for the unified music search surface: greeting + "Discover" title 
 - Report `position` as the result's global index in `results[]`, not the section-local display index.
 - Keep results surfaces on the shared `ui/ResultsList.tsx` shell; sections supply only data/key/renderItem.
 - Every tappable element needs `accessibilityRole="button"` + `accessibilityLabel`; "See all" targets ≥44pt.
-- Never rename a load-bearing testID without updating `docs/specs/discover-music-v1/spec.md`.
+- Never rename a load-bearing testID without updating its consumers and tests.
 - After changing `.env`, run `npx expo start --clear` — `EXPO_PUBLIC_API_URL` is baked at bundle time.
 
 Load-bearing testIDs (AC#20): `discover-loading`, `discover-empty-no-query`, `discover-history-row-<idx>`, `discover-results`, `discover-zero-results`, `discover-full-error`, `discover-retry`, `discover-search-input`, `discover-row-<kind>-<position>`, `discover-top-result`, `discover-see-all-<kind>`.

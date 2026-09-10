@@ -26,7 +26,7 @@ The only exception: a migration created in this same uncommitted branch that has
 ## Pre-deploy verification
 
 Before applying a migration to production:
-1. **Backup**. The runbook in `docs/workflows/refactor.md` (migration sub-section) covers this.
+1. **Backup**. Take a full backup of the target database before applying.
 2. Test on a copy of production data (testcontainers + snapshot).
 3. Confirm the `downgrade()` runs successfully on that copy.
 
