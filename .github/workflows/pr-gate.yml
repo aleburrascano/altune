@@ -1,0 +1,57 @@
+# Single required check for main. Path-filtered CI (test-backend, test-mobile)
+# cannot be required directly: a PR that doesn't touch a path never runs that
+# workflow, and a required check that never runs leaves the PR stuck pending
+# forever. This gate always runs on every PR to main, calls only the reusable
+# suites whose paths changed, and ends in one `gate` job that is the branch's
+# sole required status check.
+
+name: PR gate
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'services/go-api/**'
+            mobile:
+              - 'apps/mobile/**'
+              - '.github/workflows/test-mobile.yml'
+
+  backend:
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' }}
+    uses: ./.github/workflows/test-backend.yml
+
+  mobile:
+    needs: changes
+    if: ${{ needs.changes.outputs.mobile == 'true' }}
+    uses: ./.github/workflows/test-mobile.yml
+
+  gate:
+    needs: [backend, mobile]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assert applicable suites passed
+        run: |
+          for name in backend mobile; do
+            result="${{ needs.backend.result }}"
+            [ "$name" = "mobile" ] && result="${{ needs.mobile.result }}"
+            case "$result" in
+              success|skipped) echo "$name: $result" ;;
+              *) echo "$name gate did not pass: $result"; exit 1 ;;
+            esac
+          done
+          echo "all applicable suites passed"
