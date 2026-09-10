@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 
+import { asPlaylistId } from '@shared/api-client/ids';
 import { getPlaylist } from '@shared/api-client/playlists';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
@@ -40,7 +41,7 @@ import { useLibraryNavigation } from './useLibraryNavigation';
 export function PlaylistDetailScreen(): ReactElement {
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
-  const playlistId = params.id ?? '';
+  const playlistId = asPlaylistId(params.id ?? '');
 
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');

@@ -1,3 +1,5 @@
+import { asTrackId } from '@shared/api-client/ids';
+
 import type { PlaybackContextValue, PlaybackSource, PlaybackStatus } from '../types';
 import { isCurrentlyPlaying } from '../isCurrentlyPlaying';
 
@@ -10,27 +12,25 @@ function playbackWith(status: PlaybackStatus, source: PlaybackSource | null): Pl
   };
 }
 
-const LIBRARY_A: PlaybackSource = { kind: 'library', trackId: 'track-a' };
-const LIBRARY_B: PlaybackSource = { kind: 'library', trackId: 'track-b' };
+const LIBRARY_A: PlaybackSource = { kind: 'library', trackId: asTrackId('track-a') };
+const LIBRARY_B: PlaybackSource = { kind: 'library', trackId: asTrackId('track-b') };
 const PREVIEW_A: PlaybackSource = { kind: 'preview', previewUrl: 'https://cdn.example.com/a.mp3' };
 const PREVIEW_B: PlaybackSource = { kind: 'preview', previewUrl: 'https://cdn.example.com/b.mp3' };
 
 const ALL_STATUSES: PlaybackStatus[] = ['idle', 'loading', 'playing', 'paused', 'ended', 'error'];
 
 describe('isCurrentlyPlaying', () => {
-  it.each(ALL_STATUSES.map((status) => [status, status === 'playing' || status === 'loading'] as const))(
-    'status %s with a matching library source -> %s',
-    (status, expectedActive) => {
-      expect(isCurrentlyPlaying(playbackWith(status, LIBRARY_A), LIBRARY_A)).toBe(expectedActive);
-    },
-  );
+  it.each(
+    ALL_STATUSES.map((status) => [status, status === 'playing' || status === 'loading'] as const),
+  )('status %s with a matching library source -> %s', (status, expectedActive) => {
+    expect(isCurrentlyPlaying(playbackWith(status, LIBRARY_A), LIBRARY_A)).toBe(expectedActive);
+  });
 
-  it.each(ALL_STATUSES.map((status) => [status, status === 'playing' || status === 'loading'] as const))(
-    'status %s with a matching preview source -> %s',
-    (status, expectedActive) => {
-      expect(isCurrentlyPlaying(playbackWith(status, PREVIEW_A), PREVIEW_A)).toBe(expectedActive);
-    },
-  );
+  it.each(
+    ALL_STATUSES.map((status) => [status, status === 'playing' || status === 'loading'] as const),
+  )('status %s with a matching preview source -> %s', (status, expectedActive) => {
+    expect(isCurrentlyPlaying(playbackWith(status, PREVIEW_A), PREVIEW_A)).toBe(expectedActive);
+  });
 
   it('is inactive the moment before loading and active from loading onward', () => {
     expect(isCurrentlyPlaying(playbackWith('idle', LIBRARY_A), LIBRARY_A)).toBe(false);
@@ -48,13 +48,20 @@ describe('isCurrentlyPlaying', () => {
   it('does not match a library source against a preview Track carrying the same string', () => {
     const playback = playbackWith('playing', { kind: 'preview', previewUrl: 'shared-string' });
 
-    expect(isCurrentlyPlaying(playback, { kind: 'library', trackId: 'shared-string' })).toBe(false);
+    expect(
+      isCurrentlyPlaying(playback, { kind: 'library', trackId: asTrackId('shared-string') }),
+    ).toBe(false);
   });
 
   it('does not match a preview source against a library Track carrying the same string', () => {
-    const playback = playbackWith('playing', { kind: 'library', trackId: 'shared-string' });
+    const playback = playbackWith('playing', {
+      kind: 'library',
+      trackId: asTrackId('shared-string'),
+    });
 
-    expect(isCurrentlyPlaying(playback, { kind: 'preview', previewUrl: 'shared-string' })).toBe(false);
+    expect(isCurrentlyPlaying(playback, { kind: 'preview', previewUrl: 'shared-string' })).toBe(
+      false,
+    );
   });
 
   it('is not currently playing when there is no current track, even while active', () => {

@@ -6,6 +6,7 @@ import {
 } from '@shared/acquisition/audioCacheInvalidation';
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
 import { trackIdentityKey, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
 import type {
   ListPlaylistsResponse,
   ListTracksResponse,
@@ -40,7 +41,7 @@ function invalidatedKeys(spy: jest.SpyInstance): unknown[] {
 
 function trackFixture(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 't1',
+    id: asTrackId('t1'),
     title: 'Original Title',
     artist: 'Original Artist',
     album: null,
@@ -81,7 +82,7 @@ function playlistDetailFixture(
   overrides: Partial<PlaylistDetailResponse> = {},
 ): PlaylistDetailResponse {
   return {
-    id: 'p1',
+    id: asPlaylistId('p1'),
     name: 'Old Name',
     track_count: 0,
     preview_artwork_urls: [],
@@ -95,7 +96,7 @@ function playlistDetailFixture(
 
 function playlistSummaryFixture(overrides: Partial<PlaylistResponse> = {}): PlaylistResponse {
   return {
-    id: 'p1',
+    id: asPlaylistId('p1'),
     name: 'Old Name',
     track_count: 0,
     preview_artwork_urls: [],
@@ -177,7 +178,7 @@ describe('track_added_to_library', () => {
     const page = readTrackPages(queryClient, key);
     expect(page.items[0]).toEqual(
       trackFixture({
-        id: 't1',
+        id: asTrackId('t1'),
         title: 'Song Title',
         artist: 'The Artist',
         album: 'The Album',
@@ -217,7 +218,7 @@ describe('track_added_to_library', () => {
 
     const page = readTrackPages(queryClient, key);
     expect(page.items[0]).toEqual(
-      trackFixture({ id: 't1', title: 'Song Title', artist: 'The Artist' }),
+      trackFixture({ id: asTrackId('t1'), title: 'Song Title', artist: 'The Artist' }),
     );
   });
 
@@ -350,12 +351,14 @@ describe('track_added_to_library', () => {
 describe('track_deleted', () => {
   it('removes the track from library and playlist caches and clears its status', () => {
     const queryClient = makeClient();
-    const key = seedTrackPages(queryClient, [trackFixture({ id: 't1' })], 1);
+    const key = seedTrackPages(queryClient, [trackFixture({ id: asTrackId('t1') })], 1);
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
-      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' })], track_count: 1 }),
+      playlistDetailFixture({ tracks: [trackFixture({ id: asTrackId('t1') })], track_count: 1 }),
     );
-    useTrackStatusStore.getState().patch('t1', { acquisitionStatus: 'ready', failureMessage: null });
+    useTrackStatusStore
+      .getState()
+      .patch('t1', { acquisitionStatus: 'ready', failureMessage: null });
 
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     applyServerEvent(queryClient, serverEvent('track_deleted', { track_id: 't1' }));
@@ -391,7 +394,7 @@ describe('track_deleted', () => {
 
   it('replaying the same deletion twice leaves the cache empty rather than erroring', () => {
     const queryClient = makeClient();
-    const key = seedTrackPages(queryClient, [trackFixture({ id: 't1' })], 1);
+    const key = seedTrackPages(queryClient, [trackFixture({ id: asTrackId('t1') })], 1);
 
     applyServerEvent(queryClient, serverEvent('track_deleted', { track_id: 't1' }));
     applyServerEvent(queryClient, serverEvent('track_deleted', { track_id: 't1' }));
@@ -425,7 +428,7 @@ describe('track_acquisition_started', () => {
     const queryClient = makeClient();
     seedTrackPages(queryClient, [
       trackFixture({
-        id: 't1',
+        id: asTrackId('t1'),
         title: 'Known Title',
         artist: 'Known Artist',
         artwork_url: 'art.png',
@@ -448,7 +451,11 @@ describe('track_acquisition_started', () => {
   it('clears a prior failure and reverts the cached track to pending', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
-      trackFixture({ id: 't1', acquisition_status: 'failed', failure_reason: 'no_source' }),
+      trackFixture({
+        id: asTrackId('t1'),
+        acquisition_status: 'failed',
+        failure_reason: 'no_source',
+      }),
     ]);
 
     applyServerEvent(queryClient, serverEvent('track_acquisition_started', { track_id: 't1' }));
@@ -520,7 +527,7 @@ describe('track_acquisition_completed', () => {
   it('marks the track ready with the new audio_ref and finishes the download', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
-      trackFixture({ id: 't1', acquisition_status: 'pending', audio_ref: null }),
+      trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending', audio_ref: null }),
     ]);
 
     applyServerEvent(
@@ -541,7 +548,7 @@ describe('track_acquisition_completed', () => {
   it('keeps a previously-set audio_ref when a thin completion event omits it', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
-      trackFixture({ id: 't1', acquisition_status: 'pending', audio_ref: 'old-ref' }),
+      trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending', audio_ref: 'old-ref' }),
     ]);
 
     applyServerEvent(queryClient, serverEvent('track_acquisition_completed', { track_id: 't1' }));
@@ -553,7 +560,7 @@ describe('track_acquisition_completed', () => {
 
   it('notifies registered audio cache invalidators with the completed trackId', () => {
     const queryClient = makeClient();
-    seedTrackPages(queryClient, [trackFixture({ id: 't1' })]);
+    seedTrackPages(queryClient, [trackFixture({ id: asTrackId('t1') })]);
     const notified: string[] = [];
     const unregister = registerAudioCacheInvalidator((trackId) => notified.push(trackId));
 
@@ -569,7 +576,7 @@ describe('track_acquisition_completed', () => {
   it('is a no-op when track_id is missing from the payload', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
-      trackFixture({ id: 't1', acquisition_status: 'pending' }),
+      trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending' }),
     ]);
 
     applyServerEvent(queryClient, serverEvent('track_acquisition_completed', { audio_ref: 'r' }));
@@ -579,7 +586,7 @@ describe('track_acquisition_completed', () => {
 
   it('re-downloads a pinned track whose audio the server has just replaced', () => {
     const queryClient = makeClient();
-    seedTrackPages(queryClient, [trackFixture({ id: 't1' })]);
+    seedTrackPages(queryClient, [trackFixture({ id: asTrackId('t1') })]);
     usePinnedStore.setState({
       entries: { t1: { trackId: 't1', status: 'ready', uri: 'file:///stale.mp3' } },
       queue: [],
@@ -596,7 +603,7 @@ describe('track_acquisition_completed', () => {
 
   it('does not start pinning a track the user never downloaded', () => {
     const queryClient = makeClient();
-    seedTrackPages(queryClient, [trackFixture({ id: 't1' })]);
+    seedTrackPages(queryClient, [trackFixture({ id: asTrackId('t1') })]);
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
 
     applyServerEvent(
@@ -613,7 +620,7 @@ describe('track_replace_failed', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({
-        id: 't1',
+        id: asTrackId('t1'),
         acquisition_status: 'failed',
         failure_reason: 'no_source',
         audio_ref: 'preserved-ref',
@@ -642,7 +649,7 @@ describe('track_replace_failed', () => {
   it('is a no-op when track_id is missing from the payload', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
-      trackFixture({ id: 't1', acquisition_status: 'failed' }),
+      trackFixture({ id: asTrackId('t1'), acquisition_status: 'failed' }),
     ]);
 
     applyServerEvent(queryClient, serverEvent('track_replace_failed', { reason: 'no_source' }));
@@ -655,7 +662,7 @@ describe('track_acquisition_failed', () => {
   it('marks the track failed using only the fields the server actually sends', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
-      trackFixture({ id: 't1', acquisition_status: 'pending', audio_ref: 'stale-ref' }),
+      trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending', audio_ref: 'stale-ref' }),
     ]);
 
     applyServerEvent(
@@ -678,7 +685,7 @@ describe('track_acquisition_failed', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({
-        id: 't1',
+        id: asTrackId('t1'),
         acquisition_status: 'pending',
         failure_message: 'No sources matched this recording',
       }),
@@ -697,7 +704,7 @@ describe('track_acquisition_failed', () => {
   it('is a no-op when track_id is missing from the payload', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
-      trackFixture({ id: 't1', acquisition_status: 'pending' }),
+      trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending' }),
     ]);
 
     applyServerEvent(queryClient, serverEvent('track_acquisition_failed', { reason: 'x' }));
@@ -720,26 +727,23 @@ describe('playlist_renamed', () => {
       serverEvent('playlist_renamed', { playlist_id: 'p1', name: 'New Name' }),
     );
 
-    expect(
-      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name,
-    ).toBe('New Name');
-    expect(
-      queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.name,
-    ).toBe('New Name');
+    expect(queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name).toBe(
+      'New Name',
+    );
+    expect(queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.name).toBe(
+      'New Name',
+    );
   });
 
   it('accepts an empty string as a valid new name', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(playlistKeys.detail('p1'), playlistDetailFixture());
 
-    applyServerEvent(
-      queryClient,
-      serverEvent('playlist_renamed', { playlist_id: 'p1', name: '' }),
-    );
+    applyServerEvent(queryClient, serverEvent('playlist_renamed', { playlist_id: 'p1', name: '' }));
 
-    expect(
-      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name,
-    ).toBe('');
+    expect(queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name).toBe(
+      '',
+    );
   });
 
   it.each<[string, Record<string, unknown>]>([
@@ -751,9 +755,9 @@ describe('playlist_renamed', () => {
 
     applyServerEvent(queryClient, serverEvent('playlist_renamed', payload));
 
-    expect(
-      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name,
-    ).toBe('Old Name');
+    expect(queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name).toBe(
+      'Old Name',
+    );
   });
 });
 
@@ -763,7 +767,7 @@ describe('track_removed_from_playlist', () => {
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
       playlistDetailFixture({
-        tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })],
+        tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
         track_count: 2,
       }),
     );
@@ -789,7 +793,7 @@ describe('track_removed_from_playlist', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
-      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' })], track_count: 1 }),
+      playlistDetailFixture({ tracks: [trackFixture({ id: asTrackId('t1') })], track_count: 1 }),
     );
     queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, {
       items: [playlistSummaryFixture({ track_count: 1 })],
@@ -817,7 +821,7 @@ describe('track_removed_from_playlist', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
-      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' })], track_count: 1 }),
+      playlistDetailFixture({ tracks: [trackFixture({ id: asTrackId('t1') })], track_count: 1 }),
     );
 
     applyServerEvent(queryClient, serverEvent('track_removed_from_playlist', payload));
@@ -834,7 +838,11 @@ describe('tracks_removed_from_playlist', () => {
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
       playlistDetailFixture({
-        tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' }), trackFixture({ id: 't3' })],
+        tracks: [
+          trackFixture({ id: asTrackId('t1') }),
+          trackFixture({ id: asTrackId('t2') }),
+          trackFixture({ id: asTrackId('t3') }),
+        ],
         track_count: 3,
       }),
     );
@@ -864,7 +872,7 @@ describe('tracks_removed_from_playlist', () => {
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
       playlistDetailFixture({
-        tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })],
+        tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
         track_count: 2,
       }),
     );
@@ -895,7 +903,7 @@ describe('tracks_removed_from_playlist', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
-      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' })], track_count: 1 }),
+      playlistDetailFixture({ tracks: [trackFixture({ id: asTrackId('t1') })], track_count: 1 }),
     );
 
     applyServerEvent(queryClient, serverEvent('tracks_removed_from_playlist', payload));
@@ -910,7 +918,7 @@ describe('tracks_removed_from_playlist', () => {
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
       playlistDetailFixture({
-        tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })],
+        tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
         track_count: 2,
       }),
     );
@@ -934,7 +942,11 @@ describe('playlist_reordered', () => {
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
       playlistDetailFixture({
-        tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' }), trackFixture({ id: 't3' })],
+        tracks: [
+          trackFixture({ id: asTrackId('t1') }),
+          trackFixture({ id: asTrackId('t2') }),
+          trackFixture({ id: asTrackId('t3') }),
+        ],
       }),
     );
 
@@ -951,7 +963,9 @@ describe('playlist_reordered', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
-      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })] }),
+      playlistDetailFixture({
+        tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
+      }),
     );
 
     applyServerEvent(
@@ -967,7 +981,9 @@ describe('playlist_reordered', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
-      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })] }),
+      playlistDetailFixture({
+        tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
+      }),
     );
 
     applyServerEvent(
@@ -983,7 +999,9 @@ describe('playlist_reordered', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
       playlistKeys.detail('p1'),
-      playlistDetailFixture({ tracks: [trackFixture({ id: 't1' }), trackFixture({ id: 't2' })] }),
+      playlistDetailFixture({
+        tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
+      }),
     );
 
     applyServerEvent(queryClient, serverEvent('playlist_reordered', { track_ids: ['t2', 't1'] }));

@@ -1,3 +1,4 @@
+import type { TrackId } from '@shared/api-client/ids';
 import type { AcquisitionStatus } from '@shared/api-client/types';
 import {
   trackIdentityKey,
@@ -8,7 +9,7 @@ import {
 import type { TrackExtras } from '../extras-accessors';
 
 export type OwnedTrack = {
-  trackId: string;
+  trackId: TrackId;
   acquisitionStatus: AcquisitionStatus;
 };
 

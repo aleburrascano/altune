@@ -1,4 +1,5 @@
 import { apiFetch } from './index';
+import type { PlaylistId } from './ids';
 import type {
   AddTracksToPlaylistRequest,
   AddTracksToPlaylistResponse,
@@ -15,7 +16,7 @@ export async function getPlaylists(): Promise<ListPlaylistsResponse> {
   return apiFetch<ListPlaylistsResponse>('/v1/playlists');
 }
 
-export async function getPlaylist(id: string): Promise<PlaylistDetailResponse> {
+export async function getPlaylist(id: PlaylistId): Promise<PlaylistDetailResponse> {
   return apiFetch<PlaylistDetailResponse>(`/v1/playlists/${id}`);
 }
 
@@ -27,7 +28,7 @@ export async function createPlaylist(body: CreatePlaylistRequest): Promise<Playl
   });
 }
 
-export async function renamePlaylist(id: string, name: string): Promise<PlaylistResponse> {
+export async function renamePlaylist(id: PlaylistId, name: string): Promise<PlaylistResponse> {
   return apiFetch<PlaylistResponse>(`/v1/playlists/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -35,12 +36,12 @@ export async function renamePlaylist(id: string, name: string): Promise<Playlist
   });
 }
 
-export async function deletePlaylist(id: string): Promise<void> {
+export async function deletePlaylist(id: PlaylistId): Promise<void> {
   await apiFetch<void>(`/v1/playlists/${id}`, { method: 'DELETE' });
 }
 
 export async function addTracksToPlaylist(
-  playlistId: string,
+  playlistId: PlaylistId,
   body: AddTracksToPlaylistRequest,
 ): Promise<AddTracksToPlaylistResponse> {
   return apiFetch<AddTracksToPlaylistResponse>(
@@ -54,7 +55,7 @@ export async function addTracksToPlaylist(
 }
 
 export async function removeTracksFromPlaylist(
-  playlistId: string,
+  playlistId: PlaylistId,
   body: RemoveTracksFromPlaylistRequest,
 ): Promise<RemoveTracksFromPlaylistResponse> {
   return apiFetch<RemoveTracksFromPlaylistResponse>(
@@ -68,7 +69,7 @@ export async function removeTracksFromPlaylist(
 }
 
 export async function reorderPlaylistTracks(
-  playlistId: string,
+  playlistId: PlaylistId,
   body: ReorderTracksRequest,
 ): Promise<void> {
   await apiFetch<void>(`/v1/playlists/${playlistId}/tracks/reorder`, {
