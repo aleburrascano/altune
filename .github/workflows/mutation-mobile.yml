@@ -57,7 +57,7 @@ jobs:
       # and a failed run is exactly when you want to read it.
       - name: upload mutation report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mutation-report
           path: apps/mobile/reports/mutation/
