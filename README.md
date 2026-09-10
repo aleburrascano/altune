@@ -27,7 +27,6 @@ cd apps/mobile && npm start
 ├── CLAUDE.md            # project constitution — rules that are always in force
 ├── apps/mobile/         # Expo app; vertical slices under src/features/
 ├── services/go-api/     # Go API; hexagonal, deploy/ holds everything Docker
-├── okf/                 # knowledge bundle — why the code is the way it is
 ├── docs/                # decisions and history (see docs/README.md)
 ├── scripts/             # the pre-commit staleness checks + AltStore source update
 └── .github/workflows/   # all CI — a nested .github/ elsewhere is never read
@@ -35,8 +34,8 @@ cd apps/mobile && npm start
 
 Two conventions carry most of the weight:
 
-- **`CLAUDE.md` instructs, `okf/` explains.** Every directory worth knowing about has a nested `CLAUDE.md` acting as its file map; the reasoning behind the rules lives in `okf/`, indexed from [`okf/index.md`](okf/index.md). Pre-commit hooks block commits that let either go stale.
-- **`apps/mobile/` and `services/go-api/` are comment-free.** If code needs explaining, it gets renamed or split — durable rationale goes in the two files above.
+- **Nested `CLAUDE.md` files are the file maps.** Every directory worth knowing about has one, listing its files, tests, and the rules in force there. Read the relevant one before structural work; a pre-commit hook blocks commits that let one go stale.
+- **`apps/mobile/` and `services/go-api/` are comment-free.** If code needs explaining, it gets renamed or split — durable rationale goes in the nested `CLAUDE.md` files.
 
 ## Conventions
 

@@ -1,9 +1,10 @@
 # <type>(<scope>): <short summary, imperative, no period>
 #
 # Types:   feat | fix | refactor | chore | docs | test | perf | style | ci | revert
-# Scopes:  feature slice (library, playback, catalog, metadata, ...)
-#          OR layer (domain, application, adapters, platform)
-#          OR cross-cutting (mobile, api, docs, deps, tooling, claude-md)
+# Scope:   REQUIRED — one of the scopes in commitlint.config.js (a layer, a
+#          cross-cutting area, or a feature slice). The commit-msg hook rejects
+#          an empty or unknown scope.
+# Summary: lower-case, imperative, no period, <= 72 chars incl. type(scope).
 #
 # Body (why > what):
 # Explain *why* this change is needed. The diff shows what changed.
