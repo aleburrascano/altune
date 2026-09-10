@@ -1,44 +1,44 @@
 # Backend test gate. Runs on PRs and pushes that touch the Go API.
 #
-# Crucially runs the race detector (go test -race), which needs cgo — the local
-# dev box (Windows, no C toolchain) can't, so this Linux runner is where data
-# races in the concurrent telemetry code (log ring, event tap, provider store,
-# scheduler counters, alert monitor) actually get caught.
+# Two parallel jobs: `static` (vet + depguard, fast, fails in seconds) and
+# `test` (the slow race detector + gates). They run at once, so a lint break
+# surfaces without waiting behind `go test -race`.
+#
+# `go test -race` needs cgo — the local dev box (Windows, no C toolchain) can't,
+# so this Linux runner is where data races in the concurrent telemetry code (log
+# ring, event tap, provider store, scheduler counters, alert monitor) get caught.
 name: Test backend
 
 on:
   pull_request:
     paths:
       - 'services/go-api/**'
+      - '.github/workflows/test-backend.yml'
   push:
     branches: [main]
     paths:
       - 'services/go-api/**'
+      - '.github/workflows/test-backend.yml'
   # Callable, so deploy-backend.yml can make this a prerequisite rather than a
   # parallel race. A reusable workflow runs against the caller's ref, so the
-  # deploy gate tests exactly the commit it is about to ship. This does mean a
-  # push to main runs these checks twice — once here, once as the deploy's gate.
-  # That is deliberate: this workflow stays the independent record that main is
-  # green even if the deploy workflow is edited, disabled, or fails on infra.
+  # deploy gate tests exactly the commit it is about to ship. That the record of
+  # a green main stays independent of the deploy workflow is deliberate.
   workflow_call:
 
 jobs:
-  test:
+  static:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: services/go-api
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
-
       - name: go vet
         run: go vet ./...
-
       # Import direction (structure audit F1): domain purity + shared never
       # imports features. Rules live in services/go-api/.golangci.yml.
       - name: import direction (depguard)
@@ -46,6 +46,18 @@ jobs:
         with:
           version: v2.12.2
           working-directory: services/go-api
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/go-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: services/go-api/go.sum
 
       - name: go test -race
         env:
@@ -62,14 +74,9 @@ jobs:
       # Coverage ratchet: holds the measured baseline so coverage can't silently
       # regress. Raise MIN when a module is hardened (see the qa-slice skill);
       # never lower it to make CI green.
-      # TEMPORARILY 62, was 65. The floor had been breached for at least eight
-      # runs (62.1 → 62.4) while this workflow ran in PARALLEL with the deploy,
-      # so nothing enforced it. cb26d1c made the deploy depend on this job, and
-      # the first push after that — an unrelated one-line audio fix — was the
-      # first thing the floor ever actually blocked. Lowered to unblock that
-      # deploy, NOT because 62 is acceptable. Raise-only resumes from here:
-      # ratchet back to 65 as discovery/adapters and catalog/adapters gain
-      # tests, and never lower it again. Tracked in
+      # TEMPORARILY 62, was 65 — floor breached for 8+ runs while this ran in
+      # parallel with the deploy and nothing enforced it. Ratchet back to 65 as
+      # discovery/adapters and catalog/adapters gain tests. Tracked in
       # okf/testing/programme.md's Outstanding section.
       - name: coverage ratchet
         run: |
