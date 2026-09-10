@@ -1,19 +1,21 @@
 # docs/
 
-Decisions and history. **This is a record, not a reference** — entries are written once and left alone, so a path or a claim inside an old spec may describe a version of the repo that no longer exists. For how the code works *today* and the rules in force, read the nearest `CLAUDE.md`.
+Durable outcomes only. **If it's here, it's current.** History and pre-decision
+thinking do not live here — they live in git and in the GitHub issue they belong to.
+
+Everything durable is one of four things:
 
 | Directory | What lands here |
 |---|---|
-| [`adr/`](adr/) | Architecture decision records — numbered, immutable once accepted |
-| [`specs/`](specs/) | One folder per feature: spec + plan, written before the code |
-| [`plans/`](plans/) | Standalone implementation plans not tied to a feature spec |
-| [`workflows/`](workflows/) | The playbooks themselves: new-feature, bug-fix, refactor |
-| [`solutions/`](solutions/) | Compound-engineering learnings captured after the fact |
-| [`providers/`](providers/) | Per-provider integration notes (MusicBrainz, Last.fm, Discogs…) |
-| [`handoffs/`](handoffs/) | Point-in-time state dumps for resuming long-running work |
-| [`brainstorms/`](brainstorms/) | Expirable exploration — 30-day TTL, safe to prune |
-| [`ideation/`](ideation/) | Product-level idea capture, upstream of a spec |
-| [`notes/`](notes/) | Permanent notes that fit nowhere else |
-| [`superpowers/`](superpowers/) | Skill and tooling notes for the Claude Code setup |
+| [`adr/`](adr/) | Architecture decision records — numbered, append-only: a decision and its why |
+| [`providers/`](providers/) | How each external provider integration works today |
+| [`solutions/`](solutions/) | A bug and its fix, written down so it never recurs |
 
-Loose files at this level: [`ubiquitous-language.md`](ubiquitous-language.md) is the binding glossary (not a record — keep it current); the two `discovery-detail-*` files are a handoff and a pipeline sketch.
+Plus the glossary: [`ubiquitous-language.md`](ubiquitous-language.md) — the binding
+vocabulary, kept current.
+
+**What does NOT go here:** brainstorms, plans, specs, ideation, handoffs. That
+thinking belongs to a ticket — the GitHub issue is the spec. `docs/` holds only
+what outlives the ticket. When you reach for a doc that isn't a decision, a
+provider note, a postmortem, or the glossary, it's a sign the thing wants to be
+an issue instead.

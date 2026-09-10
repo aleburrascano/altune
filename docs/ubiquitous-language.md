@@ -4,7 +4,7 @@ Shared vocabulary across code, tests, conversation, and documentation. When a te
 
 Reference: `[vault: wiki/concepts/Ubiquitous Language.md]`, `[vault: wiki/concepts/Domain-Driven Design.md]`.
 
-This file stays **definitional** — what a term IS (shape, invariants, code location). Deep implementation rationale for discovery/provider concepts lives elsewhere and is fetched on demand — don't re-inflate entries with design narrative that belongs there. Spec provenance ("introduced by X") lives in `docs/specs/`, not here.
+This file stays **definitional** — what a term IS (shape, invariants, code location). Deep implementation rationale for discovery/provider concepts lives elsewhere and is fetched on demand — don't re-inflate entries with design narrative that belongs there. Provenance ("introduced by X") lives in the originating issue or ADR, not here.
 
 ## Rules
 

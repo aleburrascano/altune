@@ -1,6 +1,6 @@
 # library — feature-local router
 
-Single chip-filtered Library screen (`docs/superpowers/specs/2026-06-28-library-redesign-design.md`). Opens to Playlists; a persistent search + chip bar swaps one focused view at a time. `LibraryChip` is the active view: `'playlists' | 'tracks' | 'albums' | 'artists'`.
+Single chip-filtered Library screen. Opens to Playlists; a persistent search + chip bar swaps one focused view at a time. `LibraryChip` is the active view: `'playlists' | 'tracks' | 'albums' | 'artists'`.
 
 Layout:
 
