@@ -57,5 +57,3 @@ Layout:
 - A failed replace publishes `track_replace_failed`, never `track_acquisition_failed`.
 - Write every event name as a literal at its `Publish` call site — the client contract test greps for them.
 - Set provenance only through `Track.SetAcquisitionProvenance`, and only from `AcquisitionContext.Provenance()`.
-
-Why each rule exists: `okf/backend/acquisition/index.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

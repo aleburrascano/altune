@@ -32,5 +32,3 @@ Dependencies: `@shared/api-client/audio` (`fetchAudioUrls`), `expo-file-system`,
 - Re-pin a version-mismatched copy only through the explicit `repinIfStale` command, and call it on the playback-resolution path.
 - Treat an absent or empty expected version as "no expectation" and serve the local copy — never as a mismatch.
 - Clear every pinned track when the signed-in user id changes.
-
-Why each rule exists, and the limits this design deliberately accepts: `okf/mobile/shared-offline.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces). Test-category verdicts: `okf/testing/shared-offline.md`.

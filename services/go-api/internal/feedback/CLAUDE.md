@@ -20,5 +20,3 @@ Dependencies: `internal/auth`, `internal/shared` (`UserId`, `httputil`), `chi`. 
 - Flatten and cap every diagnostics field before it reaches the issue body; escape `|`.
 - Never throttle reports. A tester emptying their head in one sitting is the feature working, not abuse.
 - Mount the route only when `HasIssueTracker()` — an unconfigured deploy must 404, not 500.
-
-Why each rule exists: `okf/backend/feedback.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

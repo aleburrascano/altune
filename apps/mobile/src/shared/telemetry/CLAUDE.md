@@ -14,6 +14,4 @@ Invariants:
 - Guard every `Directory.create` with `if (!dir.exists)`; the native call throws on an existing directory unless `idempotent` is set.
 - Validate the full persisted outbox entry shape in `loadPersistedOutbox` (known `type`, non-empty `event_id`, string `client_occurred_at`); drop a malformed entry rather than replaying it.
 
-Tests: `__tests__/` — `outbox`, `outbox.pure`, `outbox.property`, `outbox.restore`, `outboxStore`, `session`, `recordEvent`, `useRecordEvent`, `eventContract`, `slice-invariants`. Categories and rejections: `okf/testing/shared-telemetry.md`.
-
-Knowledge base: `okf/mobile/shared-telemetry.md`; backend consumer: `okf/backend/discovery/telemetry.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).
+Tests: `__tests__/` — `outbox`, `outbox.pure`, `outbox.property`, `outbox.restore`, `outboxStore`, `session`, `recordEvent`, `useRecordEvent`, `eventContract`, `slice-invariants`.

@@ -24,6 +24,4 @@ Dependencies: `@supabase/supabase-js`, `expo-secure-store`, `@tanstack/react-que
 - Keep `markSessionExpired` a signal, not an action — never sign the user out from a 401.
 - Clear the query cache on sign-out whether the SDK call succeeds, errors or throws.
 
-Tests: `__tests__/` — `supabaseClient`, `supabaseClient.config`, `sessionExpired` (`.ts` + `.tsx`), `useSession`, `useSession.property`, `useSignOut`, `authContract`, `acceptance`, `slice-invariants`. Categories and rejections: `okf/testing/shared-auth.md`.
-
-Knowledge base: `okf/mobile/shared-auth.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).
+Tests: `__tests__/` — `supabaseClient`, `supabaseClient.config`, `sessionExpired` (`.ts` + `.tsx`), `useSession`, `useSession.property`, `useSignOut`, `authContract`, `acceptance`, `slice-invariants`.

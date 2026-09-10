@@ -21,8 +21,6 @@ Mobile screen for the unified music search surface: greeting + "Discover" title 
 
 Load-bearing testIDs (AC#20): `discover-loading`, `discover-empty-no-query`, `discover-history-row-<idx>`, `discover-results`, `discover-zero-results`, `discover-full-error`, `discover-retry`, `discover-search-input`, `discover-row-<kind>-<position>`, `discover-top-result`, `discover-see-all-<kind>`.
 
-Why each rule exists: `okf/mobile/discover-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
-
 <!-- AUTO-MAINTAINED:BEGIN -->
 <!-- /update-nested-claude-md regenerates this block after every 3rd commit touching this folder.
      Do not hand-edit this block — your changes will be lost on next regeneration.
@@ -59,7 +57,5 @@ Why each rule exists: `okf/mobile/discover-feature.md` — read before structura
 ### Test files
 
 - [__tests__/slice-invariants.test.ts](__tests__/slice-invariants.test.ts) — greps the slice's `.ts`/`.tsx` sources for the banned noun (`song`/`songs`, case- and case-style-insensitive), the guard that would have caught the `kindLabel` violation.
-
-The rest is rebuilt per `okf/playbooks/test-taxonomy.md`.
 
 <!-- AUTO-MAINTAINED:END -->

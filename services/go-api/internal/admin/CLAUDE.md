@@ -26,5 +26,3 @@ Layout:
 - Keep the tap's payload vocabulary here, never in `internal/shared/events`.
 - Hold same-feature collaborators as concrete pointers; don't reintroduce single-impl reader interfaces.
 - Forward `http.Flusher` through every middleware wrapper or SSE breaks.
-
-Why each rule exists: `okf/backend/admin/index.md` — read before structural work; update the relevant concept in the same commit when behavior it describes changes (pre-commit hook enforces).

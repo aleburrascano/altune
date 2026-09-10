@@ -55,5 +55,3 @@ Flags: `-limit N`, `-concurrency N`, `-top-k 3`, `-query "X"`, `-json path`, `-c
 - Never answer an unmatched replay request with an empty result.
 - Never write fixtures indented.
 - Never run `detail` against the durable identity store — it uses the seeded one.
-
-Why each rule exists, the mode semantics and the report field glossary: `okf/backend/discovery/eval-harness.md`.

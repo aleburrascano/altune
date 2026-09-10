@@ -5,8 +5,6 @@ module in the backend: multi-provider music **search** and detail-open **browse*
 over ~a dozen third-party catalogues, merged into one identity-resolved,
 ranked view. This document is the whole-module map — the design philosophy, the
 two pipelines, the shared identity spine, and the open tensions worth improving.
-Per-subsystem prose lives in `okf/backend/discovery/`; this is the map between
-those docs and the code, plus the reasoning a reviewer needs to find edge cases.
 
 Everything here is described in the present tense — how the module *is* and *why*.
 The recurring adversary the whole design fights is the **same-name-different-human
@@ -119,8 +117,7 @@ adapters/
   cache/       Redis read-through caches (each a Proxy with a Null-Object fallback)
 ```
 
-The composition root builds the object graph (`internal/app`, see
-`okf/backend/app-wiring.md`). Two cross-cutting facts:
+The composition root builds the object graph (`internal/app`). Two cross-cutting facts:
 
 - **One shared, process-wide HTTP transport** with per-host rate limiters. It must
   stay shared — per-client limiters would let N providers each hit N× a host's

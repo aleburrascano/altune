@@ -26,5 +26,3 @@ Dependencies: type-only imports from `@shared/api-client/{types,discovery}`. Not
 - Never render server-mutable state from the detail handoff — read it once for identity, then subscribe to the owning store or cache.
 - Never assume a wire string is non-empty: an empty `artwork_url` must collapse to `null`, not reach an image request.
 - `slice-invariants.test.ts` enumerates this directory from disk — a new file here is automatically subject to the purity, 2+-consumer and banned-noun rules.
-
-Why each rule exists: `okf/mobile/shared-lib.md`; the test selection is `okf/testing/shared-lib.md` — read before structural work, update in the same commit when behavior changes (pre-commit hook enforces).

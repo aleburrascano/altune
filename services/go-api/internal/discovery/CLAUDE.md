@@ -17,7 +17,7 @@ Ranking and merge:
 - Any rank-affecting change must re-clear `discoveryeval` before it ships.
 - A/B on an identical deterministic sample (`-limit`, no `-random`); never compare across random samples.
 - Keep `rankLess`'s multi-source comparison unconditional — gating it broke transitivity.
-- Never re-wire popularity into the search path without reading `okf/backend/discovery/ranking.md` first.
+- Never re-wire popularity into the search path.
 - Never add a fuzzy-title threshold to `Merge`.
 - A later merge must never downgrade an entity's already-proven identity.
 
@@ -69,5 +69,3 @@ Telemetry:
 - Exploration shuffles a copy; never mutate the cached list.
 - Never persist identity or telemetry on the request path — detached context, off the hot path.
 - `search_performed` is server-emitted; reject it at `POST /events`. `results_shown` is client-emitted and accepted there.
-
-Why each rule exists: `okf/backend/discovery/*.md` and `okf/providers/*.md`. Read the relevant concept before structural work; update it in the same commit when behavior changes (pre-commit hook enforces).

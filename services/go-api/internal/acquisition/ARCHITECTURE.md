@@ -5,9 +5,7 @@ saved `Track` into a playable audio file: it searches public sources by metadata
 ranks the candidates, downloads one, verifies it, tags it, stores it, and marks the
 Track ready. This document is the whole-module map — what a *correct* acquisition
 means, the design principles the pipeline serves, the invariants a change must
-preserve, and the open tensions worth improving. Per-step prose lives in
-`okf/backend/acquisition/`; this is the map between those docs and the code, plus
-the reasoning a reviewer needs before changing selection behavior.
+preserve, and the open tensions worth improving.
 
 Everything here is present tense — how the module *is* and *why*. The recurring
 adversary the whole design fights is the **right-song-wrong-recording problem**: a
@@ -54,9 +52,9 @@ flowchart LR
     PIPE -. "progress" .-> EV
 ```
 
-- **[pipeline](okf/backend/acquisition/pipeline.md)** — the `Step` chain that does the work.
-- **[scheduling](okf/backend/acquisition/scheduling.md)** — concurrency, dedupe, panic isolation, operator telemetry.
-- **[retry](okf/backend/acquisition/retry.md)** — the admission policy in front of manual re-acquisition.
+- **pipeline** — the `Step` chain that does the work.
+- **scheduling** — concurrency, dedupe, panic isolation, operator telemetry.
+- **retry** — the admission policy in front of manual re-acquisition.
 
 The load-bearing seam between them: **the scheduler threads a `jobReporter` through
 `context`**, so pipeline steps report live stage/source without the pipeline package

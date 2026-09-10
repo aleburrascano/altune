@@ -17,5 +17,3 @@ go run ./cmd/backfillaudio -apply                     # write
 - Never mutate a track outside `MarkReady` + `repo.Update`.
 - Never match a track to an object by anything but its exact derived key — no fuzzy title matching.
 - Default to a dry run; writing requires `-apply`. `-list` and `-verify` never write.
-
-Why each rule exists: `okf/backend/catalog/index.md`.
