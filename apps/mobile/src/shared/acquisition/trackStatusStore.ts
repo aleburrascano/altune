@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { AcquisitionStatus } from '@shared/api-client/types';
 
 export type TrackStatus = {
@@ -57,8 +58,12 @@ export function unlinkTrackIdentity(identity: string | null): void {
   useTrackStatusStore.getState().unlink(identity);
 }
 
-export function useTrackIdForIdentity(identity: string | null): string | undefined {
-  return useTrackStatusStore((s) => (identity === null ? undefined : s.identities[identity]));
+export function useTrackIdForIdentity(identity: string | null): TrackId | undefined {
+  return useTrackStatusStore((s) => {
+    if (identity === null) return undefined;
+    const id = s.identities[identity];
+    return id === undefined ? undefined : asTrackId(id);
+  });
 }
 
 export function patchTrackStatus(trackId: string, status: TrackStatus): void {

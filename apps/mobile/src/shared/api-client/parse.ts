@@ -1,4 +1,5 @@
 import { ContractError } from './errors';
+import { asFavoriteKey, asTrackId } from './ids';
 import type {
   AcquisitionStatus,
   ApiErrorBody,
@@ -97,7 +98,7 @@ export function parseTrackResponse(value: unknown, at = 'TrackResponse'): TrackR
     `${at}.acquisition_status`,
   );
   return {
-    id: asString(r.id, `${at}.id`),
+    id: asTrackId(asString(r.id, `${at}.id`)),
     title: asString(r.title, `${at}.title`),
     artist: asString(r.artist, `${at}.artist`),
     album: nullableString(r.album, `${at}.album`),
@@ -216,7 +217,7 @@ function parseDiscoveryResult(value: unknown, at: string): DiscoveryResult {
       ? { result_signature: asString(r.result_signature, `${at}.result_signature`) }
       : {}),
     ...(r.favorite_key != null
-      ? { favorite_key: asString(r.favorite_key, `${at}.favorite_key`) }
+      ? { favorite_key: asFavoriteKey(asString(r.favorite_key, `${at}.favorite_key`)) }
       : {}),
   };
 }

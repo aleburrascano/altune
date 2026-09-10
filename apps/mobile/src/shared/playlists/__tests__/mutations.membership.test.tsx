@@ -10,6 +10,7 @@ import {
   useRemoveTracksFromPlaylist,
   useRenamePlaylist,
 } from '../mutations';
+import { asPlaylistId, asTrackId, type TrackId } from '@shared/api-client/ids';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
@@ -43,7 +44,7 @@ afterEach(() => {
 
 function makePlaylist(overrides: Partial<PlaylistResponse> = {}): PlaylistResponse {
   return {
-    id: 'p1',
+    id: asPlaylistId('p1'),
     name: 'Focus',
     track_count: 5,
     preview_artwork_urls: [],
@@ -59,7 +60,7 @@ function makeList(items: PlaylistResponse[]): ListPlaylistsResponse {
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 't1',
+    id: asTrackId('t1'),
     title: 'Track One',
     artist: 'Artist One',
     album: null,
@@ -84,7 +85,7 @@ function makeDetail(
   overrides: Partial<PlaylistDetailResponse> = {},
 ): PlaylistDetailResponse {
   return {
-    id,
+    id: asPlaylistId(id),
     name: 'Focus',
     track_count: tracks.length,
     preview_artwork_urls: [],
@@ -119,8 +120,8 @@ describe('useAddTracksToPlaylist(): onMutate optimistic bump', () => {
     jest.useFakeTimers();
     __http.hang('POST /v1/playlists/p1/tracks/batch');
     const queryClient = newClient();
-    const target = makePlaylist({ id: 'p1', track_count: 5 });
-    const other = makePlaylist({ id: 'p2', name: 'Chill', track_count: 3 });
+    const target = makePlaylist({ id: asPlaylistId('p1'), track_count: 5 });
+    const other = makePlaylist({ id: asPlaylistId('p2'), name: 'Chill', track_count: 3 });
     queryClient.setQueryData(playlistKeys.list, makeList([target, other]));
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
@@ -128,7 +129,10 @@ describe('useAddTracksToPlaylist(): onMutate optimistic bump', () => {
     });
 
     act(() => {
-      result.current.mutate({ playlistId: 'p1', trackIds: ['t1', 't2'] });
+      result.current.mutate({
+        playlistId: asPlaylistId('p1'),
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
     });
     await act(async () => {
       await flushMicrotasks();
@@ -156,7 +160,10 @@ describe('useAddTracksToPlaylist(): onMutate optimistic bump', () => {
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1'] });
+      await result.current.mutateAsync({
+        playlistId: asPlaylistId('p1'),
+        trackIds: [asTrackId('t1')],
+      });
     });
 
     expect(queryClient.getQueryData(playlistKeys.list)).toBeUndefined();
@@ -172,7 +179,7 @@ describe('useAddTracksToPlaylist(): onMutate optimistic bump', () => {
 
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1'] }),
+        result.current.mutateAsync({ playlistId: asPlaylistId('p1'), trackIds: [asTrackId('t1')] }),
       ).rejects.toThrow();
     });
 
@@ -188,7 +195,10 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       json: { added: 1, skipped: 1 },
     });
     const queryClient = newClient();
-    queryClient.setQueryData(playlistKeys.list, makeList([makePlaylist({ id: 'p1', name: 'Focus' })]));
+    queryClient.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylist({ id: asPlaylistId('p1'), name: 'Focus' })]),
+    );
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
       wrapper: createWrapper(queryClient),
@@ -196,7 +206,10 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
 
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1', 't2'] }),
+        result.current.mutateAsync({
+          playlistId: asPlaylistId('p1'),
+          trackIds: [asTrackId('t1'), asTrackId('t2')],
+        }),
       ).resolves.toEqual({ added: 1, skipped: 1 });
     });
 
@@ -210,14 +223,20 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       json: { added: 1, skipped: 2 },
     });
     const queryClient = newClient();
-    queryClient.setQueryData(playlistKeys.list, makeList([makePlaylist({ id: 'p1', name: 'Focus' })]));
+    queryClient.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylist({ id: asPlaylistId('p1'), name: 'Focus' })]),
+    );
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
       wrapper: createWrapper(queryClient),
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1', 't2', 't3'] });
+      await result.current.mutateAsync({
+        playlistId: asPlaylistId('p1'),
+        trackIds: [asTrackId('t1'), asTrackId('t2'), asTrackId('t3')],
+      });
     });
 
     expect(alertSpy).toHaveBeenCalledWith('Note', '2 tracks were already in Focus.');
@@ -229,14 +248,20 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       json: { added: 1, skipped: 1 },
     });
     const queryClient = newClient();
-    queryClient.setQueryData(playlistKeys.list, makeList([makePlaylist({ id: 'p1', name: 'Focus' })]));
+    queryClient.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylist({ id: asPlaylistId('p1'), name: 'Focus' })]),
+    );
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
       wrapper: createWrapper(queryClient),
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ playlistId: 'missing', trackIds: ['t1', 't2'] });
+      await result.current.mutateAsync({
+        playlistId: asPlaylistId('missing'),
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
     });
 
     expect(alertSpy).toHaveBeenCalledWith('Note', 'One track was already in the playlist.');
@@ -255,7 +280,10 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
 
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1', 't2'] }),
+        result.current.mutateAsync({
+          playlistId: asPlaylistId('p1'),
+          trackIds: [asTrackId('t1'), asTrackId('t2')],
+        }),
       ).resolves.toEqual({ added: 1, skipped: 1 });
     });
 
@@ -268,14 +296,20 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       json: { added: 2, skipped: 0 },
     });
     const queryClient = newClient();
-    queryClient.setQueryData(playlistKeys.list, makeList([makePlaylist({ id: 'p1', name: 'Focus' })]));
+    queryClient.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylist({ id: asPlaylistId('p1'), name: 'Focus' })]),
+    );
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
       wrapper: createWrapper(queryClient),
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1', 't2'] });
+      await result.current.mutateAsync({
+        playlistId: asPlaylistId('p1'),
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
     });
 
     expect(alertSpy).not.toHaveBeenCalled();
@@ -287,7 +321,10 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       json: { added: 9, skipped: 0 },
     });
     const queryClient = newClient();
-    queryClient.setQueryData(playlistKeys.list, makeList([makePlaylist({ id: 'p1', name: 'Focus' })]));
+    queryClient.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylist({ id: asPlaylistId('p1'), name: 'Focus' })]),
+    );
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
       wrapper: createWrapper(queryClient),
@@ -295,7 +332,7 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
 
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1'] }),
+        result.current.mutateAsync({ playlistId: asPlaylistId('p1'), trackIds: [asTrackId('t1')] }),
       ).resolves.toEqual({ added: 9, skipped: 0 });
     });
 
@@ -308,14 +345,17 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       json: { added: 0, skipped: 0 },
     });
     const queryClient = newClient();
-    queryClient.setQueryData(playlistKeys.list, makeList([makePlaylist({ id: 'p1', track_count: 5 })]));
+    queryClient.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylist({ id: asPlaylistId('p1'), track_count: 5 })]),
+    );
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
       wrapper: createWrapper(queryClient),
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ playlistId: 'p1', trackIds: [] });
+      await result.current.mutateAsync({ playlistId: asPlaylistId('p1'), trackIds: [] });
     });
 
     expect(
@@ -330,8 +370,8 @@ describe('useAddTracksToPlaylist(): onError rollback', () => {
     __http.fail('POST /v1/playlists/p1/tracks/batch');
     const queryClient = newClient();
     const seeded = makeList([
-      makePlaylist({ id: 'p1', track_count: 5 }),
-      makePlaylist({ id: 'p2', name: 'Chill', track_count: 3 }),
+      makePlaylist({ id: asPlaylistId('p1'), track_count: 5 }),
+      makePlaylist({ id: asPlaylistId('p2'), name: 'Chill', track_count: 3 }),
     ]);
     queryClient.setQueryData(playlistKeys.list, seeded);
 
@@ -341,30 +381,41 @@ describe('useAddTracksToPlaylist(): onError rollback', () => {
 
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1', 't2'] }),
+        result.current.mutateAsync({
+          playlistId: asPlaylistId('p1'),
+          trackIds: [asTrackId('t1'), asTrackId('t2')],
+        }),
       ).rejects.toThrow();
     });
 
     expect(queryClient.getQueryData(playlistKeys.list)).toEqual(seeded);
   });
 
-  it.each<[string[], string]>([
-    [['t1'], 'Could not add the track to the playlist. Please try again.'],
-    [['t1', 't2'], 'Could not add the tracks to the playlist. Please try again.'],
-  ])('alerts with the copy the exact batch length turns on (trackIds=%j)', async (trackIds, message) => {
-    __http.fail('POST /v1/playlists/p1/tracks/batch');
-    const queryClient = newClient();
+  it.each<[TrackId[], string]>([
+    [[asTrackId('t1')], 'Could not add the track to the playlist. Please try again.'],
+    [
+      [asTrackId('t1'), asTrackId('t2')],
+      'Could not add the tracks to the playlist. Please try again.',
+    ],
+  ])(
+    'alerts with the copy the exact batch length turns on (trackIds=%j)',
+    async (trackIds, message) => {
+      __http.fail('POST /v1/playlists/p1/tracks/batch');
+      const queryClient = newClient();
 
-    const { result } = renderHook(() => useAddTracksToPlaylist(), {
-      wrapper: createWrapper(queryClient),
-    });
+      const { result } = renderHook(() => useAddTracksToPlaylist(), {
+        wrapper: createWrapper(queryClient),
+      });
 
-    await act(async () => {
-      await expect(result.current.mutateAsync({ playlistId: 'p1', trackIds })).rejects.toThrow();
-    });
+      await act(async () => {
+        await expect(
+          result.current.mutateAsync({ playlistId: asPlaylistId('p1'), trackIds }),
+        ).rejects.toThrow();
+      });
 
-    expect(alertSpy).toHaveBeenCalledWith('Add failed', message);
-  });
+      expect(alertSpy).toHaveBeenCalledWith('Add failed', message);
+    },
+  );
 });
 
 describe('useAddTracksToPlaylist(): onSettled invalidation', () => {
@@ -381,7 +432,10 @@ describe('useAddTracksToPlaylist(): onSettled invalidation', () => {
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1'] });
+      await result.current.mutateAsync({
+        playlistId: asPlaylistId('p1'),
+        trackIds: [asTrackId('t1')],
+      });
     });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.list });
@@ -399,7 +453,7 @@ describe('useAddTracksToPlaylist(): onSettled invalidation', () => {
 
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1'] }),
+        result.current.mutateAsync({ playlistId: asPlaylistId('p1'), trackIds: [asTrackId('t1')] }),
       ).rejects.toThrow();
     });
 
@@ -415,7 +469,10 @@ describe('useAddTracksToPlaylist(): replay is not idempotent, and the list inval
       json: { added: 2, skipped: 0 },
     });
     const queryClient = newClient();
-    queryClient.setQueryData(playlistKeys.list, makeList([makePlaylist({ id: 'p1', track_count: 5 })]));
+    queryClient.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylist({ id: asPlaylistId('p1'), track_count: 5 })]),
+    );
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
@@ -423,10 +480,16 @@ describe('useAddTracksToPlaylist(): replay is not idempotent, and the list inval
     });
 
     await act(async () => {
-      await result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1', 't2'] });
+      await result.current.mutateAsync({
+        playlistId: asPlaylistId('p1'),
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
     });
     await act(async () => {
-      await result.current.mutateAsync({ playlistId: 'p1', trackIds: ['t1', 't2'] });
+      await result.current.mutateAsync({
+        playlistId: asPlaylistId('p1'),
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
     });
 
     expect(
@@ -441,8 +504,8 @@ describe('useAddTracksToPlaylist(): replay is not idempotent, and the list inval
 
 describe('useAddTracksToPlaylist(): law — an add patch touches only the target playlist', () => {
   it('every other playlist is byte-identical for any cache', async () => {
-    const idPool = ['p1', 'p2', 'p3', 'p4', 'p5'];
-    const trackPool = ['t1', 't2', 't3', 't4'];
+    const idPool = ['p1', 'p2', 'p3', 'p4', 'p5'].map(asPlaylistId);
+    const trackPool = ['t1', 't2', 't3', 't4'].map(asTrackId);
     idPool.forEach((id) => {
       __http.reply(`POST /v1/playlists/${id}/tracks/batch`, {
         status: 200,
@@ -490,10 +553,10 @@ describe('useRenamePlaylist(): onMutate optimistic rename', () => {
     jest.useFakeTimers();
     __http.hang('PATCH /v1/playlists/p1');
     const queryClient = newClient();
-    const seeded = makeDetail('p1', [makeTrack({ id: 'a' })], { name: 'Old Name' });
+    const seeded = makeDetail('p1', [makeTrack({ id: asTrackId('a') })], { name: 'Old Name' });
     queryClient.setQueryData(playlistKeys.detail('p1'), seeded);
 
-    const { result } = renderHook(() => useRenamePlaylist('p1'), {
+    const { result } = renderHook(() => useRenamePlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
@@ -518,11 +581,11 @@ describe('useRenamePlaylist(): onMutate optimistic rename', () => {
   it('does not throw and leaves the detail cache untouched when nothing is cached', async () => {
     __http.reply('PATCH /v1/playlists/p1', {
       status: 200,
-      json: makePlaylist({ id: 'p1', name: 'New Name' }),
+      json: makePlaylist({ id: asPlaylistId('p1'), name: 'New Name' }),
     });
     const queryClient = newClient();
 
-    const { result } = renderHook(() => useRenamePlaylist('p1'), {
+    const { result } = renderHook(() => useRenamePlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
@@ -541,7 +604,7 @@ describe('useRenamePlaylist(): onError rollback', () => {
     const seeded = makeDetail('p1', [], { name: 'Old Name' });
     queryClient.setQueryData(playlistKeys.detail('p1'), seeded);
 
-    const { result } = renderHook(() => useRenamePlaylist('p1'), {
+    const { result } = renderHook(() => useRenamePlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
@@ -560,7 +623,7 @@ describe('useRenamePlaylist(): onError rollback', () => {
     __http.fail('PATCH /v1/playlists/p1');
     const queryClient = newClient();
 
-    const { result } = renderHook(() => useRenamePlaylist('p1'), {
+    const { result } = renderHook(() => useRenamePlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
@@ -576,12 +639,12 @@ describe('useRenamePlaylist(): onSettled invalidation', () => {
   it('invalidates exactly playlistKeys.detail(playlistId) and playlistKeys.list, by identity', async () => {
     __http.reply('PATCH /v1/playlists/p1', {
       status: 200,
-      json: makePlaylist({ id: 'p1', name: 'New Name' }),
+      json: makePlaylist({ id: asPlaylistId('p1'), name: 'New Name' }),
     });
     const queryClient = newClient();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    const { result } = renderHook(() => useRenamePlaylist('p1'), {
+    const { result } = renderHook(() => useRenamePlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
@@ -600,7 +663,7 @@ describe('useDeletePlaylist(): onSuccess invalidation', () => {
     const queryClient = newClient();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    const { result } = renderHook(() => useDeletePlaylist('p1'), {
+    const { result } = renderHook(() => useDeletePlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
@@ -617,13 +680,13 @@ describe('useDeletePlaylist(): a failed delete invalidates nothing — onSuccess
   it('leaves the cache exactly as it was and issues no invalidation when the delete request fails', async () => {
     __http.fail('DELETE /v1/playlists/p1');
     const queryClient = newClient();
-    const seededList = makeList([makePlaylist({ id: 'p1' })]);
+    const seededList = makeList([makePlaylist({ id: asPlaylistId('p1') })]);
     const seededDetail = makeDetail('p1', []);
     queryClient.setQueryData(playlistKeys.list, seededList);
     queryClient.setQueryData(playlistKeys.detail('p1'), seededDetail);
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    const { result } = renderHook(() => useDeletePlaylist('p1'), {
+    const { result } = renderHook(() => useDeletePlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
@@ -646,15 +709,19 @@ describe('useRemoveTracksFromPlaylist(): onMutate filter', () => {
     jest.useFakeTimers();
     __http.hang('DELETE /v1/playlists/p1/tracks');
     const queryClient = newClient();
-    const tracks = [makeTrack({ id: 'a' }), makeTrack({ id: 'b' }), makeTrack({ id: 'c' })];
+    const tracks = [
+      makeTrack({ id: asTrackId('a') }),
+      makeTrack({ id: asTrackId('b') }),
+      makeTrack({ id: asTrackId('c') }),
+    ];
     queryClient.setQueryData(playlistKeys.detail('p1'), makeDetail('p1', tracks));
 
-    const { result } = renderHook(() => useRemoveTracksFromPlaylist('p1'), {
+    const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
     act(() => {
-      result.current.mutate(['b']);
+      result.current.mutate([asTrackId('b')]);
     });
     await act(async () => {
       await flushMicrotasks();
@@ -669,51 +736,54 @@ describe('useRemoveTracksFromPlaylist(): onMutate filter', () => {
     });
   });
 
-  it.each<[string, string[]]>([
-    ['a single-track removal from the row context menu', ['b']],
-    ['a bulk selection removal', ['b', 'c']],
-  ])('%s filters the detail cache to exactly the surviving tracks, order preserved', async (_label, removeIds) => {
-    __http.reply('DELETE /v1/playlists/p1/tracks', {
-      status: 200,
-      json: { removed: removeIds.length },
-    });
-    const queryClient = newClient();
-    const tracks = [
-      makeTrack({ id: 'a' }),
-      makeTrack({ id: 'b' }),
-      makeTrack({ id: 'c' }),
-      makeTrack({ id: 'd' }),
-    ];
-    queryClient.setQueryData(playlistKeys.detail('p1'), makeDetail('p1', tracks));
+  it.each<[string, TrackId[]]>([
+    ['a single-track removal from the row context menu', [asTrackId('b')]],
+    ['a bulk selection removal', [asTrackId('b'), asTrackId('c')]],
+  ])(
+    '%s filters the detail cache to exactly the surviving tracks, order preserved',
+    async (_label, removeIds) => {
+      __http.reply('DELETE /v1/playlists/p1/tracks', {
+        status: 200,
+        json: { removed: removeIds.length },
+      });
+      const queryClient = newClient();
+      const tracks = [
+        makeTrack({ id: asTrackId('a') }),
+        makeTrack({ id: asTrackId('b') }),
+        makeTrack({ id: asTrackId('c') }),
+        makeTrack({ id: asTrackId('d') }),
+      ];
+      queryClient.setQueryData(playlistKeys.detail('p1'), makeDetail('p1', tracks));
 
-    const { result } = renderHook(() => useRemoveTracksFromPlaylist('p1'), {
-      wrapper: createWrapper(queryClient),
-    });
+      const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
+        wrapper: createWrapper(queryClient),
+      });
 
-    await act(async () => {
-      await result.current.mutateAsync(removeIds);
-    });
+      await act(async () => {
+        await result.current.mutateAsync(removeIds);
+      });
 
-    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
-    const expected = tracks.filter((t) => !removeIds.includes(t.id)).map((t) => t.id);
-    expect(detail.tracks.map((t) => t.id)).toEqual(expected);
+      const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+      const expected = tracks.filter((t) => !removeIds.includes(t.id)).map((t) => t.id);
+      expect(detail.tracks.map((t) => t.id)).toEqual(expected);
 
-    const request = __http.last();
-    expect(request.method).toBe('DELETE');
-    expect(request.path).toBe('/v1/playlists/p1/tracks');
-    expect(JSON.parse(request.body)).toEqual({ track_ids: removeIds });
-  });
+      const request = __http.last();
+      expect(request.method).toBe('DELETE');
+      expect(request.path).toBe('/v1/playlists/p1/tracks');
+      expect(JSON.parse(request.body)).toEqual({ track_ids: removeIds });
+    },
+  );
 
   it('does not throw and leaves the detail cache untouched when nothing is cached', async () => {
     __http.reply('DELETE /v1/playlists/p1/tracks', { status: 200, json: { removed: 1 } });
     const queryClient = newClient();
 
-    const { result } = renderHook(() => useRemoveTracksFromPlaylist('p1'), {
+    const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
     await act(async () => {
-      await result.current.mutateAsync(['t1']);
+      await result.current.mutateAsync([asTrackId('t1')]);
     });
 
     expect(queryClient.getQueryData(playlistKeys.detail('p1'))).toBeUndefined();
@@ -724,16 +794,20 @@ describe('useRemoveTracksFromPlaylist(): onError rollback', () => {
   it('restores the exact pre-mutation detail cache on a failed, destructive removal', async () => {
     __http.fail('DELETE /v1/playlists/p1/tracks');
     const queryClient = newClient();
-    const tracks = [makeTrack({ id: 'a' }), makeTrack({ id: 'b' }), makeTrack({ id: 'c' })];
+    const tracks = [
+      makeTrack({ id: asTrackId('a') }),
+      makeTrack({ id: asTrackId('b') }),
+      makeTrack({ id: asTrackId('c') }),
+    ];
     const seeded = makeDetail('p1', tracks);
     queryClient.setQueryData(playlistKeys.detail('p1'), seeded);
 
-    const { result } = renderHook(() => useRemoveTracksFromPlaylist('p1'), {
+    const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
     await act(async () => {
-      await expect(result.current.mutateAsync(['b'])).rejects.toThrow();
+      await expect(result.current.mutateAsync([asTrackId('b')])).rejects.toThrow();
     });
 
     expect(queryClient.getQueryData(playlistKeys.detail('p1'))).toEqual(seeded);
@@ -743,35 +817,38 @@ describe('useRemoveTracksFromPlaylist(): onError rollback', () => {
     __http.fail('DELETE /v1/playlists/p1/tracks');
     const queryClient = newClient();
 
-    const { result } = renderHook(() => useRemoveTracksFromPlaylist('p1'), {
+    const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
     await act(async () => {
-      await expect(result.current.mutateAsync(['t1'])).rejects.toThrow();
+      await expect(result.current.mutateAsync([asTrackId('t1')])).rejects.toThrow();
     });
 
     expect(queryClient.getQueryData(playlistKeys.detail('p1'))).toBeUndefined();
     expect(alertSpy).toHaveBeenCalledWith('Remove failed', expect.any(String));
   });
 
-  it.each<[string[], string]>([
-    [['t1'], 'Could not remove the track. Please try again.'],
-    [['t1', 't2'], 'Could not remove the tracks. Please try again.'],
-  ])('alerts with the copy the exact batch length turns on (trackIds=%j)', async (trackIds, message) => {
-    __http.fail('DELETE /v1/playlists/p1/tracks');
-    const queryClient = newClient();
+  it.each<[TrackId[], string]>([
+    [[asTrackId('t1')], 'Could not remove the track. Please try again.'],
+    [[asTrackId('t1'), asTrackId('t2')], 'Could not remove the tracks. Please try again.'],
+  ])(
+    'alerts with the copy the exact batch length turns on (trackIds=%j)',
+    async (trackIds, message) => {
+      __http.fail('DELETE /v1/playlists/p1/tracks');
+      const queryClient = newClient();
 
-    const { result } = renderHook(() => useRemoveTracksFromPlaylist('p1'), {
-      wrapper: createWrapper(queryClient),
-    });
+      const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
+        wrapper: createWrapper(queryClient),
+      });
 
-    await act(async () => {
-      await expect(result.current.mutateAsync(trackIds)).rejects.toThrow();
-    });
+      await act(async () => {
+        await expect(result.current.mutateAsync(trackIds)).rejects.toThrow();
+      });
 
-    expect(alertSpy).toHaveBeenCalledWith('Remove failed', message);
-  });
+      expect(alertSpy).toHaveBeenCalledWith('Remove failed', message);
+    },
+  );
 });
 
 describe('useRemoveTracksFromPlaylist(): onSettled invalidation', () => {
@@ -780,12 +857,12 @@ describe('useRemoveTracksFromPlaylist(): onSettled invalidation', () => {
     const queryClient = newClient();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
-    const { result } = renderHook(() => useRemoveTracksFromPlaylist('p1'), {
+    const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
     await act(async () => {
-      await result.current.mutateAsync(['t1']);
+      await result.current.mutateAsync([asTrackId('t1')]);
     });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.detail('p1') });
@@ -797,20 +874,24 @@ describe('useRemoveTracksFromPlaylist(): idempotent replay', () => {
   it('re-removing the same id is a no-op: apply(apply(e)) equals apply(e)', async () => {
     __http.reply('DELETE /v1/playlists/p1/tracks', { status: 200, json: { removed: 1 } });
     const queryClient = newClient();
-    const tracks = [makeTrack({ id: 'a' }), makeTrack({ id: 'b' }), makeTrack({ id: 'c' })];
+    const tracks = [
+      makeTrack({ id: asTrackId('a') }),
+      makeTrack({ id: asTrackId('b') }),
+      makeTrack({ id: asTrackId('c') }),
+    ];
     queryClient.setQueryData(playlistKeys.detail('p1'), makeDetail('p1', tracks));
 
-    const { result } = renderHook(() => useRemoveTracksFromPlaylist('p1'), {
+    const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
     });
 
     await act(async () => {
-      await result.current.mutateAsync(['b']);
+      await result.current.mutateAsync([asTrackId('b')]);
     });
     const afterFirst = queryClient.getQueryData(playlistKeys.detail('p1'));
 
     await act(async () => {
-      await result.current.mutateAsync(['b']);
+      await result.current.mutateAsync([asTrackId('b')]);
     });
     const afterSecond = queryClient.getQueryData(playlistKeys.detail('p1'));
 
@@ -820,7 +901,7 @@ describe('useRemoveTracksFromPlaylist(): idempotent replay', () => {
 
 describe('useRemoveTracksFromPlaylist(): law — the remove patch is the order-preserving set difference', () => {
   it('holds for any track list and any removal subset', async () => {
-    const ids = ['a', 'b', 'c', 'd', 'e', 'f'];
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f'].map(asTrackId);
     __http.reply('DELETE /v1/playlists/p1/tracks', { status: 200, json: { removed: 0 } });
 
     await fc.assert(
@@ -828,12 +909,18 @@ describe('useRemoveTracksFromPlaylist(): law — the remove patch is the order-p
         const queryClient = newClient();
         queryClient.setQueryData(
           playlistKeys.detail('p1'),
-          makeDetail('p1', ids.map((id) => makeTrack({ id }))),
+          makeDetail(
+            'p1',
+            ids.map((id) => makeTrack({ id })),
+          ),
         );
 
-        const { result, unmount } = renderHook(() => useRemoveTracksFromPlaylist('p1'), {
-          wrapper: createWrapper(queryClient),
-        });
+        const { result, unmount } = renderHook(
+          () => useRemoveTracksFromPlaylist(asPlaylistId('p1')),
+          {
+            wrapper: createWrapper(queryClient),
+          },
+        );
 
         await act(async () => {
           await result.current.mutateAsync(removeIds);

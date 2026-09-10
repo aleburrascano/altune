@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, View } from 
 import { ChevronLeft } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
@@ -16,9 +17,9 @@ import { LibraryRow } from './LibraryRow';
 type AddTracksToPlaylistModalProps = {
   visible: boolean;
   playlistName: string;
-  existingTrackIds: string[];
+  existingTrackIds: TrackId[];
   adding: boolean;
-  onAdd: (trackIds: string[]) => void;
+  onAdd: (trackIds: TrackId[]) => void;
   onClose: () => void;
 };
 
@@ -79,12 +80,7 @@ export function AddTracksToPlaylistModal({
   };
 
   return (
-    <Modal
-      testID="add-tracks-modal"
-      visible={visible}
-      animationType="slide"
-      onRequestClose={close}
-    >
+    <Modal testID="add-tracks-modal" visible={visible} animationType="slide" onRequestClose={close}>
       <View
         style={[styles.screen, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}
       >
@@ -125,7 +121,9 @@ export function AddTracksToPlaylistModal({
             ListEmptyComponent={
               <View style={styles.center}>
                 <Text variant="label" tone="secondary">
-                  {search.hasQuery ? 'No tracks match that search' : 'No tracks in your library yet'}
+                  {search.hasQuery
+                    ? 'No tracks match that search'
+                    : 'No tracks in your library yet'}
                 </Text>
               </View>
             }
@@ -140,7 +138,9 @@ export function AddTracksToPlaylistModal({
         >
           <Pressable
             testID="add-tracks-select-all"
-            onPress={() => (allSelected ? selection.clear() : selection.selectAll(addable.map((t) => t.id)))}
+            onPress={() =>
+              allSelected ? selection.clear() : selection.selectAll(addable.map((t) => t.id))
+            }
             disabled={addable.length === 0}
             hitSlop={8}
             accessibilityRole="button"

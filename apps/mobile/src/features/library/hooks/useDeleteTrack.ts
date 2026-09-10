@@ -1,6 +1,7 @@
 import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import type { TrackId } from '@shared/api-client/ids';
 import { deleteTrack } from '@shared/api-client/tracks';
 import { removeTrackFromCaches } from '@shared/events/trackCachePatch';
 import { removeTrackStatus } from '@shared/acquisition/trackStatusStore';
@@ -8,8 +9,8 @@ import { removeTrackStatus } from '@shared/acquisition/trackStatusStore';
 export function useDeleteTrack() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (trackId: string) => deleteTrack(trackId),
-    onMutate: (trackId: string) => {
+    mutationFn: (trackId: TrackId) => deleteTrack(trackId),
+    onMutate: (trackId: TrackId) => {
       removeTrackFromCaches(queryClient, trackId);
       removeTrackStatus(trackId);
     },
@@ -22,7 +23,7 @@ export function useDeleteTrack() {
 export function useDeleteTracks() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (trackIds: string[]) => {
+    mutationFn: async (trackIds: TrackId[]) => {
       let deleted = 0;
       for (const trackId of trackIds) {
         const ok = await deleteTrack(trackId).then(

@@ -1,3 +1,4 @@
+import { asTrackId } from '@shared/api-client/ids';
 import type { QueueStateCurrentTrack } from '@shared/api-client/playback';
 import type { TrackResponse } from '@shared/api-client/types';
 
@@ -16,7 +17,7 @@ export function toPlaybackTrack(t: TrackResponse): PlaybackTrack {
 
 export function currentTrackToPlaybackTrack(t: QueueStateCurrentTrack): PlaybackTrack {
   return {
-    source: { kind: 'library', trackId: t.id },
+    source: { kind: 'library', trackId: asTrackId(t.id) },
     title: t.title,
     artist: t.artist,
     artworkUrl: t.artwork_url ?? null,

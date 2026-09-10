@@ -1,4 +1,5 @@
 import { apiFetch } from './index';
+import type { TrackId } from './ids';
 import type { LibrarySort } from './library';
 import { parseListTracksResponse, parseTrackResponse } from './parse';
 import type {
@@ -47,11 +48,11 @@ export async function createTrack(body: CreateTrackRequest): Promise<TrackRespon
   );
 }
 
-export async function deleteTrack(trackId: string): Promise<void> {
+export async function deleteTrack(trackId: TrackId): Promise<void> {
   await apiFetch<void>(`/v1/tracks/${trackId}`, { method: 'DELETE' });
 }
 
-export async function setTrackNumber(trackId: string, trackNumber: number): Promise<void> {
+export async function setTrackNumber(trackId: TrackId, trackNumber: number): Promise<void> {
   await apiFetch<void>(`/v1/tracks/${trackId}/track-number`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -59,7 +60,7 @@ export async function setTrackNumber(trackId: string, trackNumber: number): Prom
   });
 }
 
-export async function retryAcquisition(trackId: string): Promise<void> {
+export async function retryAcquisition(trackId: TrackId): Promise<void> {
   await apiFetch<void>(`/v1/tracks/${trackId}/retry`, { method: 'POST' });
 }
 
@@ -77,6 +78,6 @@ export async function backfillFeaturedArtists(): Promise<BackfillFeaturedResult>
   return apiFetch<BackfillFeaturedResult>('/v1/tracks/featured-backfill', { method: 'POST' });
 }
 
-export async function reacquireTrack(trackId: string): Promise<void> {
+export async function reacquireTrack(trackId: TrackId): Promise<void> {
   await apiFetch<void>(`/v1/tracks/${trackId}/reacquire`, { method: 'POST' });
 }

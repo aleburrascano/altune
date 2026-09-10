@@ -27,7 +27,7 @@ export function FeaturingScreen(): ReactElement {
   const params = useLocalSearchParams<{ name?: string; mbid?: string; deezer_id?: string }>();
   const router = useRouter();
   const segments = useSegments();
-  const tabRoot = segments[1] === 'discover' ? 'discover' : 'library';
+  const tabRoot = (segments as readonly string[])[1] === 'discover' ? 'discover' : 'library';
 
   const fa: FeaturedArtist = useMemo(
     () => ({

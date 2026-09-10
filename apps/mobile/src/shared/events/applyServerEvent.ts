@@ -17,6 +17,7 @@ import {
 import { invalidateAudioCaches } from '@shared/acquisition/audioCacheInvalidation';
 import { stageToPhase } from '@shared/acquisition/stagePhase';
 import { repinIfPinned } from '@shared/offline/pinnedStore';
+import { asTrackId } from '@shared/api-client/ids';
 import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
@@ -32,11 +33,7 @@ import {
   upsertTrackInCaches,
 } from './trackCachePatch';
 import type { ServerEvent } from './sse-client';
-import {
-  isServerEventType,
-  recordUnhandledEvent,
-  type ServerEventType,
-} from './eventTypes';
+import { isServerEventType, recordUnhandledEvent, type ServerEventType } from './eventTypes';
 
 type Handler = (queryClient: QueryClient, event: ServerEvent) => void;
 
@@ -75,7 +72,7 @@ function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
   const status = asAcquisitionStatus(data.acquisition_status);
   if (!id || !title || !artist || !addedAt || !status) return null;
   return {
-    id,
+    id: asTrackId(id),
     title,
     artist,
     album: asString(data.album),

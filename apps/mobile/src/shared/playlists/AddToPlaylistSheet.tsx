@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 
+import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import { getPlaylists } from '@shared/api-client/playlists';
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { playlistKeys } from '@shared/lib/query-keys';
@@ -21,7 +22,7 @@ import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from './mutations
 type AddToPlaylistSheetProps = {
   visible: boolean;
   label: string;
-  resolveTrackIds: () => Promise<string[]>;
+  resolveTrackIds: () => Promise<TrackId[]>;
   onClose: () => void;
 };
 
@@ -56,7 +57,7 @@ export function AddToPlaylistSheet({
   const busy = resolving || addMut.isPending || createMut.isPending;
 
   const withTrackIds = useCallback(
-    async (run: (trackIds: string[]) => void): Promise<void> => {
+    async (run: (trackIds: TrackId[]) => void): Promise<void> => {
       setResolving(true);
       try {
         const trackIds = await resolveTrackIds();
@@ -71,7 +72,7 @@ export function AddToPlaylistSheet({
   );
 
   const addToPlaylist = useCallback(
-    (playlistId: string): void => {
+    (playlistId: PlaylistId): void => {
       void withTrackIds((trackIds) =>
         addMut.mutate(
           { playlistId, trackIds },
