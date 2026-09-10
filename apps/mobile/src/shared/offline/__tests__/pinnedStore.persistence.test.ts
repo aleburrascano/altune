@@ -6,12 +6,15 @@ jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
 }));
 
+type FsFailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
+
 const { __fs } = FileSystem as unknown as {
   __fs: {
     reset(): void;
     seedFile(uri: string, contents: string): void;
     readFile(uri: string): string | undefined;
     allFiles(): Record<string, string>;
+    failNext(kind: FsFailureKind, error?: Error): void;
   };
 };
 
@@ -170,5 +173,23 @@ describe('relaunch — what one session persists is exactly what a fresh module 
     });
 
     expect(reloadedEntries).toEqual({});
+  });
+
+  it('a ready entry keeps its recorded audio version across a fresh import', () => {
+    const seed = { t1: { trackId: 't1', status: 'ready', uri: audioUri('t1'), version: 'v3' } };
+    __fs.seedFile(INDEX_URI, JSON.stringify(seed));
+
+    let reloadedEntries: Record<string, PinnedEntry> | undefined;
+    jest.isolateModules(() => {
+      const mod = require('../pinnedStore') as { usePinnedStore: typeof usePinnedStore };
+      reloadedEntries = mod.usePinnedStore.getState().entries;
+    });
+
+    expect(reloadedEntries?.['t1']).toEqual({
+      trackId: 't1',
+      status: 'ready',
+      uri: audioUri('t1'),
+      version: 'v3',
+    });
   });
 });
