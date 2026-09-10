@@ -122,6 +122,42 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
 
     expect(droppedCriticalCount()).toBe(0);
   });
+
+  it('records a plural drop when a restored outbox exceeds the cap by more than one', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let dropped: number | undefined;
+
+    jest.isolateModules(() => {
+      const outboxStoreModule = require('../outboxStore') as {
+        loadPersistedOutbox: jest.MockedFunction<typeof loadPersistedOutbox>;
+        persistOutbox: jest.MockedFunction<typeof persistOutbox>;
+      };
+      const recordEventModule = require('../recordEvent') as {
+        recordEvent: jest.MockedFunction<typeof recordEvent>;
+      };
+      const overfull: OutboxEntry[] = Array.from({ length: MAX_ENTRIES + 2 }, (_, i) => ({
+        ...event({ query_norm: `q${i}` }),
+        event_id: `persisted-${i}`,
+        client_occurred_at: '2026-01-01T00:00:00.000Z',
+      }));
+      outboxStoreModule.loadPersistedOutbox.mockReturnValue(overfull);
+      recordEventModule.recordEvent.mockRejectedValue(new Error('send unavailable'));
+
+      const outbox = require('../outbox') as {
+        flushOutbox: typeof flushOutbox;
+        droppedCriticalCount: typeof droppedCriticalCount;
+      };
+      // ensureRestored fires synchronously inside flushOutbox, capping the 52
+      // restored entries to 50 and shedding 2 in a single call — the plural path.
+      void outbox.flushOutbox();
+      dropped = outbox.droppedCriticalCount();
+    });
+
+    expect(dropped).toBe(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('entries at cap'));
+
+    warn.mockRestore();
+  });
 });
 
 describe('Reducer: flushOutbox', () => {
