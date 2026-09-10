@@ -11,6 +11,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: pr-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   changes:
     runs-on: ubuntu-latest
