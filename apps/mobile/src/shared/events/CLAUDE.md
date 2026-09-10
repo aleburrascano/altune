@@ -13,6 +13,4 @@ Invariants:
 - Parse the wire format per the SSE spec, not per what the current server happens to send: `\r\n` terminators, multiple `data:` lines joined with `\n`, and the space after the colon optional.
 - `connect()` is single-flight: overlapping calls open at most one socket.
 
-Tests: `__tests__/` — `applyServerEvent`, `trackCachePatch`, `playlistCachePatch`, `sse-client`, `useServerEvents`, `eventTypes`, `eventContract`. Categories and rejections: `okf/testing/shared-events.md`.
-
-Knowledge base: `okf/mobile/shared-events.md`; backend counterpart: `okf/backend/app-wiring.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).
+Tests: `__tests__/` — `applyServerEvent`, `trackCachePatch`, `playlistCachePatch`, `sse-client`, `useServerEvents`, `eventTypes`, `eventContract`.

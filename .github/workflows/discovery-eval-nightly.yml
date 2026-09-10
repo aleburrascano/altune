@@ -4,9 +4,6 @@
 # per-PR. This workflow runs every gated mode against the frozen corpus and
 # reports each metric against cmd/discoveryeval/baselines.json.
 #
-# Why the corpus is frozen, why the modes are split into two groups, and what a
-# metric delta means: okf/backend/discovery/eval-harness.md.
-#
 # Repo secrets required:
 #   DATABASE_URL        (Supabase Postgres — identity store + metric history)
 #   SUPABASE_JWT_JWKS_URL                (config.Load() validates this even though

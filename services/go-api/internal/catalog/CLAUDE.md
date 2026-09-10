@@ -39,5 +39,3 @@ Layout:
 - Pin every `LibrarySort` order and `ILIKE` filter change with the `DATABASE_URL`-gated tests in `adapters/persistence/library_lens_repo_test.go`.
 - Reject `sort=year` for artists rather than silently falling back.
 - Keep `FailureMessage` the one map from a failure reason to human copy.
-
-Why each rule exists: `okf/backend/catalog/index.md`; tables in `okf/data/tracks-table.md` and `okf/data/playlists-table.md` — read before structural work; update in the same commit when behavior they describe changes (pre-commit hook enforces).

@@ -11,7 +11,7 @@ Layout:
 - `useSelection.ts` — multi-select state for a track list. `ui/SelectionBar.tsx` — the bar and its `SelectionAction` type. `ui/selectionActions.ts` — `buildSelectionActions`.
 - `ui/trackMenu.ts` — `buildTrackMenuItems`. `ui/sort.ts` — the `*_SORT_OPTIONS` label lists; the sort keys are wire values the server applies.
 - `hooks/useLibraryHome.ts` — `useLibraryTracks` (infinite), `useLibraryAlbums`, `useLibraryArtists`, one query per chip. `hooks/usePlaylistActions.ts`, `hooks/useLibrarySearch.ts` (debounce only), `hooks/useDeleteTrack.ts` (`useDeleteTrack` / `useDeleteTracks`), `hooks/useRetryAcquisition.ts` (failed tracks), `hooks/useReacquireTrack.ts` (replace the audio of a ready track). `state.ts` — `_viewForState`.
-- `__tests__/` — `useSelection`; the rest is rebuilt per `okf/playbooks/test-taxonomy.md`.
+- `__tests__/` — `useSelection`.
 
 Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` directly — native deps, structure audit F2), `@shared/api-client/library`, `@shared/lib/{format,detail-handoff,query-keys}`, `@shared/playback`, `@shared/playlists`, `@shared/offline/pinnedStore`.
 
@@ -35,5 +35,3 @@ Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` di
 - Keep each chip on its own query, enabled only while that chip is active.
 - Never show the empty-library CTA when a search has merely filtered the view to zero.
 - Navigate to detail through `useLibraryNavigation` + the handoff seam.
-
-Why each rule exists, and what is deliberately deferred: `okf/mobile/library-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

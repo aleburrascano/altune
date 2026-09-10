@@ -30,5 +30,3 @@ Layout:
 - Never log a config value — `LogValue` reports `has_*` booleans only.
 - Never point `DATABASE_URL` at a transaction-mode pooler: `leader.Election` needs session-scoped advisory locks.
 - Never start a periodic background loop outside `App.whenLeader` — two deploy colours would both run it.
-
-Why each rule exists, and what every config flag does: `okf/backend/shared-infra.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).

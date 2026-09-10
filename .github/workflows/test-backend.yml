@@ -76,8 +76,7 @@ jobs:
       # never lower it to make CI green.
       # TEMPORARILY 62, was 65 — floor breached for 8+ runs while this ran in
       # parallel with the deploy and nothing enforced it. Ratchet back to 65 as
-      # discovery/adapters and catalog/adapters gain tests. Tracked in
-      # okf/testing/programme.md's Outstanding section.
+      # discovery/adapters and catalog/adapters gain tests.
       - name: coverage ratchet
         run: |
           MIN=62

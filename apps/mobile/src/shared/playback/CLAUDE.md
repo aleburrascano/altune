@@ -13,6 +13,4 @@ Invariants:
 - `RESTART_THRESHOLD_MS` is never restated as a literal by a consumer.
 - `manual` holds the track indices a user queued by hand (`enqueue` / `playNext`); shuffling and un-shuffling never reorder them — they stay, in insertion order, in front of the rest of the tail. Anything that remaps `playOrder` remaps `manual` the same way.
 
-Tests: `__tests__/queueStore.lifecycle.test.ts`, `queueStore.navigation.test.ts`, `queueStore.editing.test.ts`, `queueStore.property.test.ts`, `useQueuePlayback.test.tsx`, `canPlay.test.ts`, `isCurrentlyPlaying.test.ts`, `trackKey.test.ts`, `previewUrl.test.ts`, `toPlaybackTrack.test.ts`, `playFromList.test.ts`, `crossSurfaceContract.test.ts`, `playbackContext.test.tsx`, `invariants.test.ts`. Selection record and mutation result: `okf/testing/shared-playback.md`.
-
-Knowledge base: `okf/mobile/shared-playback.md`; server snapshot: `okf/backend/playback.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).
+Tests: `__tests__/queueStore.lifecycle.test.ts`, `queueStore.navigation.test.ts`, `queueStore.editing.test.ts`, `queueStore.property.test.ts`, `useQueuePlayback.test.tsx`, `canPlay.test.ts`, `isCurrentlyPlaying.test.ts`, `trackKey.test.ts`, `previewUrl.test.ts`, `toPlaybackTrack.test.ts`, `playFromList.test.ts`, `crossSurfaceContract.test.ts`, `playbackContext.test.tsx`, `invariants.test.ts`.

@@ -12,5 +12,3 @@ go run ./cmd/discoverytrace -mode single -provider soundcloud -query "…"  # on
 - Never hand-mirror the provider list — take it from `app.BuildDiscoveryProviders`.
 - Never change the production path from here; it is offline and read-only.
 - Never add a per-result score breakdown back to `printRanked` — order is the signal.
-
-Why each rule exists, and what the dumps deliberately omit: `okf/backend/discovery/eval-harness.md`.

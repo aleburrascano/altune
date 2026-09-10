@@ -18,6 +18,4 @@ Invariants:
 - In `refillSlot`, let the local re-add's failure fall through to the streaming re-add; only that streaming re-add surfaces a `PlaybackError`.
 - Surface a `PlaybackError` when `repairActiveToStreaming`'s native load or play throws; never let the active track fail silently.
 
-Tests: `__tests__/sleepTimer.test.tsx` (sleep-timer write path and `SleepTimerBridge` driven by an injected clock), `__tests__/audioPrefetch.repair.test.ts` (`repairActiveToStreaming` surfaces a `PlaybackError` on a native load/play failure). The rest of this slice's suite was reset on 2026-07-30 and is rebuilt per `okf/playbooks/test-taxonomy.md`, with the per-category verdict committed to `okf/testing/<slice>.md`.
-
-Knowledge base: `okf/mobile/playback-feature.md` (+ `okf/mobile/shared-playback.md` for the Queue) — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).
+Tests: `__tests__/sleepTimer.test.tsx` (sleep-timer write path and `SleepTimerBridge` driven by an injected clock), `__tests__/audioPrefetch.repair.test.ts` (`repairActiveToStreaming` surfaces a `PlaybackError` on a native load/play failure). The rest of this slice's suite was reset on 2026-07-30.

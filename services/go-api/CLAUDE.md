@@ -1,8 +1,7 @@
 # Go API
 
 Hexagonal: dependencies point inward only (`adapters → service → domain`); ports in
-`ports/`, wiring in `internal/app/`. Full layout: `okf/backend/index.md` (read
-on demand). Bounded contexts carry their own nested `CLAUDE.md` (e.g.
+`ports/`, wiring in `internal/app/`. Bounded contexts carry their own nested `CLAUDE.md` (e.g.
 `internal/discovery/CLAUDE.md`).
 
 Go pattern vocabulary: **Read `~/.claude/lexicon/MANIFEST-go.md` before proposing
@@ -51,10 +50,6 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.0 run
 
 ## Comment policy
 
-`services/go-api/` is **comment-free**, matching `apps/mobile/`. The code is the source of truth: if something needs explaining, rename it or split it out. Only compiler directives (`//go:build`, `//go:embed`) are allowed. Durable rationale — invariants, provider fragility, regression history, anything a name cannot hold — lives in the nested `CLAUDE.md` files and `okf/`.
+`services/go-api/` is **comment-free**, matching `apps/mobile/`. The code is the source of truth: if something needs explaining, rename it or split it out. Only compiler directives (`//go:build`, `//go:embed`) are allowed. Durable rationale — invariants, provider fragility, regression history, anything a name cannot hold — lives in the nested `CLAUDE.md` files.
 
 Code changes don't take effect until you rebuild and restart the process.
-
-## Knowledge base
-
-`okf/backend/index.md` indexes the curated concept docs for every context and subsystem — read the relevant one before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

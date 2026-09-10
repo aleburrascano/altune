@@ -11,7 +11,7 @@ Layout:
 - `ui/Dialog.tsx` — centre-dialog shell (backdrop, keyboard avoidance, scroll). `ui/ConfirmDialog.tsx`, `ui/ReportIssueDialog.tsx` are its two users.
 - `ui/reportDiagnostics.ts` — `reportDiagnostics`, `diagnosticsSummary`.
 - `hooks/useSubmitReport.ts` — the mutation plus `submitFailureMessage`. `hooks/useBackfillFeatured.ts`, `hooks/useClearSearchHistory.ts`.
-- `__tests__/` — none yet; rebuild per `okf/playbooks/test-taxonomy.md`.
+- `__tests__/` — none yet.
 
 Dependencies: `@shared/ui` (plus `primitives/TextField` directly), `@shared/api-client/feedback`, `@shared/auth/{useSession,useSignOut}`, `@shared/offline/{pinnedStore,pinnedFiles}`, `@shared/ui/theme/themePreference`, `lucide-react-native`.
 
@@ -24,5 +24,3 @@ Dependencies: `@shared/ui` (plus `primitives/TextField` directly), `@shared/api-
 - Keep the report dialog's draft on failure; only a success clears it.
 - Read a row's live value from its store, never from a value computed once on mount.
 - Keep the whole report flow in this feature: it has one consumer, so it does not move to `shared/`.
-
-Why each rule exists: `okf/mobile/settings-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).
