@@ -8,7 +8,7 @@ const RATCHET_RAISE_ONLY = {
   // identically at 5a5e81f, before the release branch. It went unnoticed because
   // lint failed ahead of this step on every push since 2026-07-30, so the step
   // never ran. Set to the measured minimum, not to zero, so it still catches a
-  // real regression. Raise it back to 97/90 when qa-slice finishes shared/events.
+  // real regression. Raise it back to 97/90 once shared/events is fully covered.
   'src/shared/events/**': { statements: 94, branches: 78, functions: 100, lines: 100 },
   'src/shared/playback/**': { statements: 99, branches: 99, functions: 100, lines: 99 },
   'src/shared/acquisition/**': { statements: 97, branches: 88, functions: 100, lines: 100 },
