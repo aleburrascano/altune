@@ -1,27 +1,3 @@
 # Altune
 
-Music manager. Expo (RN + TS) mobile in `apps/mobile/` + Go hexagonal modular monolith in `services/go-api/`. Solo + Claude, production-grade.
-
-## Knowledge base
-
-`okf/` is the curated knowledge bundle (OKF format: markdown concepts, YAML frontmatter, one concept per file). Start at `okf/index.md` and descend only into the branch you need — before exploring an unfamiliar module, read its concept doc first. A pre-commit hook blocks commits that change a concept's `resource:` files without updating the concept.
-
-## Always in force
-
-- Domain terms come from `docs/ubiquitous-language.md`; code matches it verbatim, and a new term gets its glossary entry in the same commit. **"Song" is banned — the noun is `Track`.**
-- `apps/mobile/` and `services/go-api/` are comment-free: the code is the source of truth. No prose comments, no JSDoc, no godoc — if something needs explaining, rename it or split it out. Only linter/compiler pragmas (`eslint-disable`, `@ts-expect-error`, `//go:build`, `//go:embed`) are allowed. This extends to the backend's SQL migrations and config files. Durable rationale lives in the nested `CLAUDE.md` files and `okf/`.
-- A nested `CLAUDE.md` is the file map of its directory. Add, delete or rename a file under one and update that `CLAUDE.md` in the same commit — its layout, test-file list and dependency notes (a pre-commit hook blocks the commit otherwise).
-- **`CLAUDE.md` instructs; `okf/` explains.** Ask of every sentence: is it an instruction or an explanation? An instruction — something you can violate by accident while editing — belongs in `CLAUDE.md`, as **one line, with no rationale attached**. An explanation — how something works, why it is that way, what broke before, what a field or metric means — belongs in `okf/`. **Every fact has exactly one home:** `CLAUDE.md` may *name* a rule, `okf/` is the only place that *justifies* it. If stating a rule takes more than one line, the overflow is explanation — move it. This is what keeps a router small enough to stay ambient; there is no line budget, because a file of pure imperatives cannot bloat.
-- A slice's tests are chosen from the twenty categories in `okf/playbooks/test-taxonomy.md`, and the per-category verdict — selected, rejected with a reason, or deferred — is committed to `okf/testing/<slice>.md`.
-- Changing a slice that has a record in `okf/testing/` re-derives which categories the changed surface triggers and updates that record; a bug fix always includes Regression, in addition to whatever else it triggers.
-- Conventional Commits (scopes in `commitlint.config.js`); never write `Co-Authored-By: Claude` / `🤖 Generated with…` trailers.
-- Check Context7 before answering from memory on: Expo SDK, React Native, React Navigation, TanStack Query, Zustand, Reanimated, Go stdlib, chi, sqlx.
-
-## CodeGraph
-
-In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
-
-- **MCP tool** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them, including dynamic-dispatch hops grep can't follow. Name a file or symbol in the query to read its current line-numbered source. If it's listed but deferred, load it by name via tool search.
-- **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
-
-If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
+Production-grade music manager. Expo (RN + TS) mobile in `apps/mobile/` + Go hexagonal modular monolith in `services/go-api/`.
