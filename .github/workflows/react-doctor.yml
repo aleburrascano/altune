@@ -33,7 +33,11 @@ jobs:
   react-doctor:
     runs-on: ubuntu-latest
     steps:
+      # Full history so react-doctor can find the merge base and comment only on
+      # the issues this PR introduces, not every pre-existing one in changed files.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       # This workflow exists for the sticky per-PR delta comment, not for gating.
       # The actual gate moved to test-mobile.yml on 2026-07-30, where it runs the
