@@ -18,4 +18,4 @@ Invariants:
 - In `refillSlot`, let the local re-add's failure fall through to the streaming re-add; only that streaming re-add surfaces a `PlaybackError`.
 - Surface a `PlaybackError` when `repairActiveToStreaming`'s native load or play throws; never let the active track fail silently.
 
-Tests: `__tests__/sleepTimer.test.tsx` (sleep-timer write path and `SleepTimerBridge` driven by an injected clock), `__tests__/audioPrefetch.repair.test.ts` (`repairActiveToStreaming` surfaces a `PlaybackError` on a native load/play failure). The rest of this slice's suite was reset on 2026-07-30.
+Tests: the suite was reset on 2026-07-30 and rebuilt for the slice's testable-in-isolation units on 2026-09-10 (issue #126). The `/qa-slice` selection record is `okf/testing/features-playback.md`: pure logic (`derivePlaybackState`, `lyrics-sync`, `signals`, `resumeQueue`, `nativeTrack`, the flat stores) and the live native-queue coordination primitives (`nativeQueueLock` concurrency, `nativeSyncGuard` idempotence/ordering, `audioPrefetch` native-slot swap/repair). Deferred with follow-up tickets: the `.tsx` player UI, the on-disk prefetch cache internals, and the event-wiring hooks.
