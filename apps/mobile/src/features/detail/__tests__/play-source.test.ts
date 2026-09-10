@@ -33,6 +33,12 @@ describe('resolvePlaySource', () => {
   it('has nothing to start for an unowned Track with no preview', () => {
     expect(resolvePlaySource(trackExtras({}), null)).toBeNull();
   });
+
+  it('falls back to the preview when the status reads ready but no trackId exists', () => {
+    const te = trackExtras({ acquisition_status: 'ready', preview_url: PREVIEW_URL });
+
+    expect(resolvePlaySource(te, null)).toEqual({ kind: 'preview', previewUrl: PREVIEW_URL });
+  });
 });
 
 describe('isResultPlaying', () => {
