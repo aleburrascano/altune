@@ -1,0 +1,31 @@
+name: Mobile setup
+description: Node 22, npm-cached deps, and optionally the generated typed routes.
+
+inputs:
+  typed-routes:
+    description: >
+      Run `expo customize tsconfig.json` to emit the typed-route declarations
+      into .expo/types/. app.json sets experiments.typedRoutes, so expo-router
+      GENERATES the types that make useSegments()/useRouter() precise. That file
+      is gitignored, so a fresh CI checkout lacks it and tsc would check against
+      a fallback where useSegments() is a [string] 1-tuple. Only the typecheck
+      job needs it; `expo customize` leaves tsconfig.json byte-identical.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: apps/mobile/package-lock.json
+
+    - run: npm ci
+      shell: bash
+      working-directory: apps/mobile
+
+    - if: ${{ inputs.typed-routes == 'true' }}
+      run: npx expo customize tsconfig.json
+      shell: bash
+      working-directory: apps/mobile
