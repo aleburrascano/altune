@@ -9,10 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
-
-	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -34,10 +31,8 @@ func (s *spotifySession) valid() bool {
 }
 
 type spotifyTokenResolver struct {
+	*cachedResolver[*spotifySession]
 	client *http.Client
-	sf     singleflight.Group
-	mu     sync.Mutex
-	cached *spotifySession
 
 	serverTimeURL  string
 	accessTokenURL string
@@ -45,69 +40,34 @@ type spotifyTokenResolver struct {
 }
 
 func newSpotifyTokenResolver(client *http.Client) *spotifyTokenResolver {
-	return &spotifyTokenResolver{
+	r := &spotifyTokenResolver{
 		client:         client,
 		serverTimeURL:  spotifyServerTimeURL,
 		accessTokenURL: spotifyAccessTokenURL,
 		clientTokenURL: spotifyClientTokenURL,
 	}
-}
-
-func (r *spotifyTokenResolver) get(ctx context.Context) (*spotifySession, error) {
-	r.mu.Lock()
-	cached := r.cached
-	r.mu.Unlock()
-	if cached.valid() {
-		return cached, nil
-	}
-
-	v, err, _ := r.sf.Do("session", func() (any, error) {
-		r.mu.Lock()
-		existing := r.cached
-		r.mu.Unlock()
-		if existing.valid() {
-			return existing, nil
-		}
-		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), spotifyResolveTimeout)
-		defer cancel()
-		return r.resolve(rctx)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return v.(*spotifySession), nil
+	r.cachedResolver = newCachedResolver("session", spotifyResolveTimeout, r.resolve, (*spotifySession).valid)
+	return r
 }
 
 const spotifyResolveTimeout = 20 * time.Second
 
-func (r *spotifyTokenResolver) invalidate(failed *spotifySession) {
-	r.mu.Lock()
-	if r.cached == failed {
-		r.cached = nil
-	}
-	r.mu.Unlock()
-}
-
-func (r *spotifyTokenResolver) resolve(ctx context.Context) (*spotifySession, error) {
+func (r *spotifyTokenResolver) resolve(ctx context.Context) (*spotifySession, time.Time, error) {
 	accessToken, accessExpiry, err := r.resolveAccessToken(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("resolve access token: %w", err)
+		return nil, time.Time{}, fmt.Errorf("resolve access token: %w", err)
 	}
 	clientToken, clientExpiry, err := r.resolveClientToken(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("resolve client token: %w", err)
+		return nil, time.Time{}, fmt.Errorf("resolve client token: %w", err)
 	}
 
-	sess := &spotifySession{
+	return &spotifySession{
 		accessToken:  accessToken,
 		accessExpiry: accessExpiry,
 		clientToken:  clientToken,
 		clientExpiry: clientExpiry,
-	}
-	r.mu.Lock()
-	r.cached = sess
-	r.mu.Unlock()
-	return sess, nil
+	}, time.Time{}, nil
 }
 
 func (r *spotifyTokenResolver) resolveAccessToken(ctx context.Context) (string, time.Time, error) {

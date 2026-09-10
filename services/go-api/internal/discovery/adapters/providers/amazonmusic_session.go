@@ -5,10 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
-
-	"golang.org/x/sync/singleflight"
 )
 
 const amzConfigURL = "https://music.amazon.com/config.json"
@@ -26,68 +23,32 @@ type amazonMusicSession struct {
 }
 
 type amazonMusicSessionResolver struct {
+	*cachedResolver[*amazonMusicSession]
 	client    *http.Client
 	configURL string
-	sf        singleflight.Group
-	mu        sync.Mutex
-	cached    *amazonMusicSession
 }
 
 func newAmazonMusicSessionResolver(client *http.Client) *amazonMusicSessionResolver {
-	return &amazonMusicSessionResolver{client: client, configURL: amzConfigURL}
-}
-
-func (r *amazonMusicSessionResolver) get(ctx context.Context) (*amazonMusicSession, error) {
-	r.mu.Lock()
-	cached := r.cached
-	r.mu.Unlock()
-	if cached != nil {
-		return cached, nil
-	}
-
-	v, err, _ := r.sf.Do("session", func() (any, error) {
-		r.mu.Lock()
-		existing := r.cached
-		r.mu.Unlock()
-		if existing != nil {
-			return existing, nil
-		}
-		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), amzResolveTimeout)
-		defer cancel()
-		return r.resolve(rctx)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return v.(*amazonMusicSession), nil
+	r := &amazonMusicSessionResolver{client: client, configURL: amzConfigURL}
+	r.cachedResolver = newCachedResolver("session", amzResolveTimeout, r.resolve, func(s *amazonMusicSession) bool { return s != nil })
+	return r
 }
 
 const amzResolveTimeout = 10 * time.Second
 
-func (r *amazonMusicSessionResolver) invalidate(failed *amazonMusicSession) {
-	r.mu.Lock()
-	if r.cached == failed {
-		r.cached = nil
-	}
-	r.mu.Unlock()
-}
-
-func (r *amazonMusicSessionResolver) resolve(ctx context.Context) (*amazonMusicSession, error) {
+func (r *amazonMusicSessionResolver) resolve(ctx context.Context) (*amazonMusicSession, time.Time, error) {
 	status, body, err := getBytes(ctx, r.client, r.configURL, withHeader("User-Agent", amzUserAgent))
 	if err != nil {
-		return nil, fmt.Errorf("fetch config.json: status %d: %w", status, err)
+		return nil, time.Time{}, fmt.Errorf("fetch config.json: status %d: %w", status, err)
 	}
 
 	var sess amazonMusicSession
 	if err := json.Unmarshal(body, &sess); err != nil {
-		return nil, fmt.Errorf("decode config.json: %w", err)
+		return nil, time.Time{}, fmt.Errorf("decode config.json: %w", err)
 	}
 	if sess.CSRF.Token == "" || sess.SessionID == "" {
-		return nil, fmt.Errorf("config.json did not yield a usable session")
+		return nil, time.Time{}, fmt.Errorf("config.json did not yield a usable session")
 	}
 
-	r.mu.Lock()
-	r.cached = &sess
-	r.mu.Unlock()
-	return &sess, nil
+	return &sess, time.Time{}, nil
 }

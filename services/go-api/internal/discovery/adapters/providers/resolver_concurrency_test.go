@@ -184,7 +184,8 @@ func TestSpotifyTokenResolver_expiredSessionTriggersReResolve(t *testing.T) {
 }
 
 func TestClientIDResolver_concurrentStaleInvalidateNoops(t *testing.T) {
-	r := &clientIDResolver{cached: "fresh"}
+	r := newClientIDResolver(nil)
+	r.cached = "fresh"
 
 	var wg sync.WaitGroup
 	for i := 0; i < 16; i++ {
@@ -215,7 +216,8 @@ func TestClientIDResolver_concurrentStaleInvalidateNoops(t *testing.T) {
 func TestSpotifyTokenResolver_concurrentStaleInvalidateNoops(t *testing.T) {
 	fresh := &spotifySession{accessToken: "fresh"}
 	stale := &spotifySession{accessToken: "stale"}
-	r := &spotifyTokenResolver{cached: fresh}
+	r := newSpotifyTokenResolver(nil)
+	r.cached = fresh
 
 	var wg sync.WaitGroup
 	for i := 0; i < 16; i++ {
