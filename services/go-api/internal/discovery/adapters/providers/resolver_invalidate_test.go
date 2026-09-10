@@ -6,7 +6,8 @@ import (
 )
 
 func TestClientIDResolver_staleInvalidateNoops(t *testing.T) {
-	r := &clientIDResolver{cached: "fresh"}
+	r := newClientIDResolver(nil)
+	r.cached = "fresh"
 	r.invalidate("stale")
 	if r.cached != "fresh" {
 		t.Fatal("stale invalidate wiped the fresh client_id")
@@ -18,7 +19,9 @@ func TestClientIDResolver_staleInvalidateNoops(t *testing.T) {
 }
 
 func TestAppleMusicTokenResolver_staleInvalidateNoops(t *testing.T) {
-	r := &appleMusicTokenResolver{cached: "fresh", expiry: time.Now().Add(time.Hour)}
+	r := newAppleMusicTokenResolver(nil)
+	r.cached = "fresh"
+	r.expiry = time.Now().Add(time.Hour)
 	r.invalidate("stale")
 	if r.cached != "fresh" {
 		t.Fatal("stale invalidate wiped the fresh token")
@@ -30,7 +33,8 @@ func TestAppleMusicTokenResolver_staleInvalidateNoops(t *testing.T) {
 }
 
 func TestDeezerJWTResolver_staleInvalidateNoops(t *testing.T) {
-	r := &deezerJWTResolver{cached: "fresh"}
+	r := newDeezerJWTResolver(nil)
+	r.cached = "fresh"
 	r.invalidate("stale")
 	if r.cached != "fresh" {
 		t.Fatal("stale invalidate wiped the fresh jwt")
@@ -44,7 +48,8 @@ func TestDeezerJWTResolver_staleInvalidateNoops(t *testing.T) {
 func TestSpotifyTokenResolver_staleInvalidateNoops(t *testing.T) {
 	fresh := &spotifySession{accessToken: "fresh"}
 	stale := &spotifySession{accessToken: "stale"}
-	r := &spotifyTokenResolver{cached: fresh}
+	r := newSpotifyTokenResolver(nil)
+	r.cached = fresh
 	r.invalidate(stale)
 	if r.cached != fresh {
 		t.Fatal("stale invalidate wiped the fresh session")
@@ -58,7 +63,8 @@ func TestSpotifyTokenResolver_staleInvalidateNoops(t *testing.T) {
 func TestAmazonMusicSessionResolver_staleInvalidateNoops(t *testing.T) {
 	fresh := &amazonMusicSession{SessionID: "fresh"}
 	stale := &amazonMusicSession{SessionID: "stale"}
-	r := &amazonMusicSessionResolver{cached: fresh}
+	r := newAmazonMusicSessionResolver(nil)
+	r.cached = fresh
 	r.invalidate(stale)
 	if r.cached != fresh {
 		t.Fatal("stale invalidate wiped the fresh session")

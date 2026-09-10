@@ -9,10 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
-
-	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -26,84 +23,46 @@ var (
 )
 
 type appleMusicTokenResolver struct {
+	*cachedResolver[string]
 	client        *http.Client
 	siteURL       string
 	bundleBaseURL string
-	sf            singleflight.Group
-	mu            sync.Mutex
-	cached        string
-	expiry        time.Time
 }
 
 func newAppleMusicTokenResolver(client *http.Client) *appleMusicTokenResolver {
-	return &appleMusicTokenResolver{
+	r := &appleMusicTokenResolver{
 		client:        client,
 		siteURL:       appleMusicSiteURL,
 		bundleBaseURL: "https://music.apple.com/",
 	}
-}
-
-func (r *appleMusicTokenResolver) get(ctx context.Context) (string, error) {
-	r.mu.Lock()
-	cached, expiry := r.cached, r.expiry
-	r.mu.Unlock()
-	if cached != "" && time.Now().Before(expiry) {
-		return cached, nil
-	}
-
-	v, err, _ := r.sf.Do("token", func() (any, error) {
-		r.mu.Lock()
-		existing, existingExpiry := r.cached, r.expiry
-		r.mu.Unlock()
-		if existing != "" && time.Now().Before(existingExpiry) {
-			return existing, nil
-		}
-		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), appleMusicResolveTimeout)
-		defer cancel()
-		return r.resolve(rctx)
-	})
-	if err != nil {
-		return "", err
-	}
-	return v.(string), nil
+	r.cachedResolver = newCachedResolver("token", appleMusicResolveTimeout, r.resolve, nonEmpty)
+	return r
 }
 
 const appleMusicResolveTimeout = 20 * time.Second
 
-func (r *appleMusicTokenResolver) invalidate(failed string) {
-	r.mu.Lock()
-	if r.cached == failed {
-		r.cached = ""
-	}
-	r.mu.Unlock()
-}
-
-func (r *appleMusicTokenResolver) resolve(ctx context.Context) (string, error) {
+func (r *appleMusicTokenResolver) resolve(ctx context.Context) (string, time.Time, error) {
 	html, err := r.fetchText(ctx, r.siteURL)
 	if err != nil {
-		return "", fmt.Errorf("fetch apple music page: %w", err)
+		return "", time.Time{}, fmt.Errorf("fetch apple music page: %w", err)
 	}
 
 	bundlePath := appleMusicBundleRe.FindString(html)
 	if bundlePath == "" {
-		return "", errors.New("no index bundle found on apple music page")
+		return "", time.Time{}, errors.New("no index bundle found on apple music page")
 	}
 
 	js, err := r.fetchText(ctx, r.bundleBaseURL+bundlePath)
 	if err != nil {
-		return "", fmt.Errorf("fetch apple music bundle: %w", err)
+		return "", time.Time{}, fmt.Errorf("fetch apple music bundle: %w", err)
 	}
 
 	token, expiry, ok := extractAppleMusicToken(js)
 	if !ok {
-		return "", errors.New("no anonymous devToken found in apple music bundle")
+		return "", time.Time{}, errors.New("no anonymous devToken found in apple music bundle")
 	}
 
-	r.mu.Lock()
-	r.cached = token
-	r.expiry = expiry
-	r.mu.Unlock()
-	return token, nil
+	return token, expiry, nil
 }
 
 func (r *appleMusicTokenResolver) fetchText(ctx context.Context, u string) (string, error) {

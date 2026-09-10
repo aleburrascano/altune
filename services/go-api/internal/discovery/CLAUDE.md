@@ -42,7 +42,8 @@ Degradation:
 Adapters:
 
 - Never wire YouTube Music by-name gathering into the search path (artwork only).
-- A second 401 handler must not wipe a credential the first one just obtained.
+- A second 401 handler must not wipe a credential the first one just obtained. The single owner of this dance is the generic `cachedResolver[T]` in `adapters/providers/resolver.go`; the five providers pass only their own `resolve`/`valid` — never re-hand-roll the lock, singleflight, detached timeout or invalidate.
+- In `cachedResolver`, a zero expiry from `resolve` means never-expires; a provider that has an expiry concept must always return a non-zero expiry, or its credential caches forever.
 - Never block the hot search path on Deezer lyrics.
 - Never add a `user_id` filter to `related_tracks_repo`'s cross-user scan — it is deliberate.
 - Never let a malformed row payload fail a whole batch; skip the row.

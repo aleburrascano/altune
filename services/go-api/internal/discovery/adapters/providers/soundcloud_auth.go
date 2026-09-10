@@ -6,10 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"sync"
 	"time"
-
-	"golang.org/x/sync/singleflight"
 )
 
 var scAssetURLRe = regexp.MustCompile(`https?://[^"' ]+/assets/[^"' ]+\.js`)
@@ -22,84 +19,46 @@ const (
 )
 
 type clientIDResolver struct {
+	*cachedResolver[string]
 	client  *http.Client
 	siteURL string
-	sf      singleflight.Group
-	mu      sync.Mutex
-	cached  string
 }
 
 func newClientIDResolver(client *http.Client) *clientIDResolver {
-	return &clientIDResolver{client: client, siteURL: scSiteURL}
-}
-
-func (r *clientIDResolver) get(ctx context.Context) (string, error) {
-	r.mu.Lock()
-	cached := r.cached
-	r.mu.Unlock()
-	if cached != "" {
-		return cached, nil
-	}
-
-	v, err, _ := r.sf.Do("client_id", func() (any, error) {
-		r.mu.Lock()
-		existing := r.cached
-		r.mu.Unlock()
-		if existing != "" {
-			return existing, nil
-		}
-		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), scResolveTimeout)
-		defer cancel()
-		return r.resolve(rctx)
-	})
-	if err != nil {
-		return "", err
-	}
-
-	id, _ := v.(string)
-	if id == "" {
-		return "", errors.New("soundcloud: resolved empty client_id")
-	}
-	r.mu.Lock()
-	r.cached = id
-	r.mu.Unlock()
-	return id, nil
+	r := &clientIDResolver{client: client, siteURL: scSiteURL}
+	r.cachedResolver = newCachedResolver("client_id", scResolveTimeout, r.resolve, nonEmpty)
+	return r
 }
 
 const scResolveTimeout = 20 * time.Second
 
-func (r *clientIDResolver) invalidate(failed string) {
-	r.mu.Lock()
-	if r.cached == failed {
-		r.cached = ""
-	}
-	r.mu.Unlock()
-}
-
-func (r *clientIDResolver) resolve(ctx context.Context) (string, error) {
+func (r *clientIDResolver) resolve(ctx context.Context) (string, time.Time, error) {
 	html, err := r.fetchText(ctx, r.siteURL)
 	if err != nil {
-		return "", fmt.Errorf("fetch soundcloud home: %w", err)
+		return "", time.Time{}, fmt.Errorf("fetch soundcloud home: %w", err)
 	}
 
 	assets := dedupePreserveOrder(scAssetURLRe.FindAllString(html, -1))
 	if len(assets) == 0 {
-		return "", errors.New("no asset bundles found on soundcloud home")
+		return "", time.Time{}, errors.New("no asset bundles found on soundcloud home")
 	}
 
 	for i := len(assets) - 1; i >= 0; i-- {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", time.Time{}, ctx.Err()
 		}
 		body, err := r.fetchText(ctx, assets[i])
 		if err != nil {
 			continue
 		}
 		if m := scClientIDRe.FindStringSubmatch(body); m != nil {
-			return m[1], nil
+			if m[1] == "" {
+				return "", time.Time{}, errors.New("soundcloud: resolved empty client_id")
+			}
+			return m[1], time.Time{}, nil
 		}
 	}
-	return "", errors.New("client_id not found in any asset bundle")
+	return "", time.Time{}, errors.New("client_id not found in any asset bundle")
 }
 
 func (r *clientIDResolver) fetchText(ctx context.Context, u string) (string, error) {

@@ -9,13 +9,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-
-	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -182,79 +179,42 @@ func splitDeezerWriters(s string) []string {
 }
 
 type deezerJWTResolver struct {
+	*cachedResolver[string]
 	client  *http.Client
 	authURL string
-	sf      singleflight.Group
-	mu      sync.Mutex
-	cached  string
 }
 
 func newDeezerJWTResolver(client *http.Client) *deezerJWTResolver {
-	return &deezerJWTResolver{client: client, authURL: deezerAuthAnonymousURL}
-}
-
-func (r *deezerJWTResolver) get(ctx context.Context) (string, error) {
-	r.mu.Lock()
-	cached := r.cached
-	r.mu.Unlock()
-	if cached != "" {
-		return cached, nil
-	}
-
-	v, err, _ := r.sf.Do("anon_jwt", func() (any, error) {
-		r.mu.Lock()
-		existing := r.cached
-		r.mu.Unlock()
-		if existing != "" {
-			return existing, nil
-		}
-		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deezerJWTResolveTimeout)
-		defer cancel()
-		return r.resolve(rctx)
-	})
-	if err != nil {
-		return "", err
-	}
-
-	jwt, _ := v.(string)
-	if jwt == "" {
-		return "", errors.New("deezer: resolved empty anonymous jwt")
-	}
-	r.mu.Lock()
-	r.cached = jwt
-	r.mu.Unlock()
-	return jwt, nil
+	r := &deezerJWTResolver{client: client, authURL: deezerAuthAnonymousURL}
+	r.cachedResolver = newCachedResolver("anon_jwt", deezerJWTResolveTimeout, r.resolve, nonEmpty)
+	return r
 }
 
 const deezerJWTResolveTimeout = 10 * time.Second
 
-func (r *deezerJWTResolver) invalidate(failed string) {
-	r.mu.Lock()
-	if r.cached == failed {
-		r.cached = ""
-	}
-	r.mu.Unlock()
-}
-
-func (r *deezerJWTResolver) resolve(ctx context.Context) (string, error) {
+func (r *deezerJWTResolver) resolve(ctx context.Context) (string, time.Time, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.authURL, nil)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	resp, err := r.client.Do(req)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("deezer anonymous auth returned %d", resp.StatusCode)
+		return "", time.Time{}, fmt.Errorf("deezer anonymous auth returned %d", resp.StatusCode)
 	}
 
 	var out struct {
 		JWT string `json:"jwt"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, deezerLyricsMaxBody)).Decode(&out); err != nil {
-		return "", fmt.Errorf("decode deezer anonymous jwt: %w", err)
+		return "", time.Time{}, fmt.Errorf("decode deezer anonymous jwt: %w", err)
 	}
-	return strings.TrimSpace(out.JWT), nil
+	jwt := strings.TrimSpace(out.JWT)
+	if jwt == "" {
+		return "", time.Time{}, errors.New("deezer: resolved empty anonymous jwt")
+	}
+	return jwt, time.Time{}, nil
 }
