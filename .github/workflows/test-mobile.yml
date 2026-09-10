@@ -1,10 +1,14 @@
 # Mobile test gate. Runs on PRs and pushes that touch the Expo app.
 #
+# The checks are independent, so they run as PARALLEL jobs (typecheck, lint,
+# architecture, test, react-quality) rather than one serial chain. Wall time is
+# the slowest lane, not the sum. Shared node+deps setup lives in the local
+# .github/actions/mobile-setup composite action.
+#
 # Until 2026-07-30 the only workflow watching apps/mobile/** was react-doctor,
-# which is advisory (blocking: warning). The coverage ratchet in jest.config.js,
-# the feature-isolation zones in eslint.config.js, and `tsc --noEmit` all
-# existed and none of them ever gated a commit. This workflow is what makes
-# them real.
+# which is advisory. The coverage ratchet in jest.config.js, the feature-
+# isolation zones in eslint.config.js, and `tsc --noEmit` all existed and none
+# gated a commit. This workflow is what makes them real.
 name: Test mobile
 
 on:
@@ -12,11 +16,13 @@ on:
     paths:
       - 'apps/mobile/**'
       - '.github/workflows/test-mobile.yml'
+      - '.github/actions/mobile-setup/**'
   push:
     branches: [main]
     paths:
       - 'apps/mobile/**'
       - '.github/workflows/test-mobile.yml'
+      - '.github/actions/mobile-setup/**'
   # Callable, so release-ios.yml can gate a tagged build on it. Tag pushes match
   # neither trigger above, so without this a release ships unverified.
   workflow_call:
@@ -26,7 +32,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mobile-setup
+        with:
+          typed-routes: "true"
+      - name: typecheck
+        run: npx tsc --noEmit
+
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mobile-setup
+      # Persist eslint's result cache across runs so unchanged files are skipped.
+      - uses: actions/cache@v4
+        with:
+          path: apps/mobile/.eslintcache
+          key: eslint-${{ hashFiles('apps/mobile/eslint.config.js', 'apps/mobile/package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            eslint-${{ hashFiles('apps/mobile/eslint.config.js', 'apps/mobile/package-lock.json') }}-
+      # Feature isolation (never import across features; shared never imports a
+      # feature) enforced by import/no-restricted-paths, the mobile counterpart
+      # to the backend's depguard rules.
+      - name: lint
+        run: npx eslint "src/**/*.{ts,tsx}" --cache --cache-location .eslintcache
+
+  architecture:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,73 +74,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history, for two reasons. The cross-surface contract test reads
-          # services/go-api source (files, not history), but fallow's health
-          # scoring weights git CHURN — under the default depth-1 clone it has
-          # none, and scored 145 findings where a full local clone scores 137.
+          # Full history: fallow's health scoring weights git CHURN. Under a
+          # depth-1 clone it has none and the numbers drift from a local run.
           fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: apps/mobile/package-lock.json
-
-      - run: npm ci
-
-      # app.json sets experiments.typedRoutes, so expo-router GENERATES the
-      # types that make useSegments()/useRouter() precise, into .expo/types/ —
-      # which tsconfig.json includes and .gitignore excludes. A dev machine has
-      # that file from the last `expo start`; a fresh CI checkout does not, so
-      # without this step CI typechecks against a fallback where useSegments()
-      # is a `[string]` 1-tuple. The first real run failed on exactly that:
-      # FeaturingScreen's `segments[1]` was an error in CI and clean locally.
-      #
-      # `expo customize tsconfig.json` is the documented way to generate them
-      # without booting a dev server. Verified it leaves tsconfig.json
-      # byte-identical, so it only emits the declaration.
-      - name: generate typed routes
-        run: npx expo customize tsconfig.json
-
-      - name: typecheck
-        run: npx tsc --noEmit
-
-      # Feature isolation (never import across features; shared never imports a
-      # feature) is enforced here by import/no-restricted-paths, the mobile
-      # counterpart to the backend's depguard rules.
-      - name: lint
-        run: npx eslint "src/**/*.{ts,tsx}"
-
-      # Architecture, dead code and duplication (fallow). Zero tolerance: as of
-      # 2026-07-30 both report "no issues", so any new finding fails the build.
-      # circular-dependencies and boundary-violation are `error` severity in
-      # .fallowrc.json, and its boundary zones now mirror the two rules in
-      # apps/mobile/CLAUDE.md exactly — they previously permitted
-      # feature-detail -> feature-playback, feature-* -> feature-auth and even
-      # shared -> feature-auth, none of which the architecture allows.
-      #
-      # NOTE: fallow's own exit code ignores rule severity — `fallow dead-code`
-      # exits 0 even with an error-severity finding. --fail-on-issues is what
-      # actually gates. Verified by flipping a rule to error and observing 0.
+      - uses: ./.github/actions/mobile-setup
+      # Architecture, dead code and duplication (fallow). Zero tolerance:
+      # circular-dependencies and boundary-violation are `error` in .fallowrc.json.
+      # fallow's own exit code ignores rule severity; --fail-on-issues (in the
+      # `fallow` script) is what actually gates.
       - name: architecture, dead code and duplication (fallow)
         run: npm run fallow
-
-      # Complexity health is a RATCHET, not a floor. The 137 findings are mostly
-      # "split this high-impact file" and "these complex functions have no test
-      # coverage path" — prioritisation advice, not defects, so blocking on zero
-      # would be wrong. Blocking on an increase is not. Lower MAX as the number
-      # comes down; never raise it to make CI green.
-      # fallow writes its summary to STDERR and exits non-zero while any finding
-      # is above threshold, so this captures 2>&1 and ignores the exit code,
-      # judging only the count. If the summary cannot be parsed the step FAILS
-      # rather than defaulting to zero — a gate that silently measures nothing
-      # is worse than no gate.
-      #
-      # ADVISORY until the ceiling is re-measured FROM CI. The first run scored
-      # 145 against a locally-derived 137 (see fetch-depth above); a ratchet
-      # whose number depends on the environment gates nothing honestly. Read the
-      # number this step prints on a green main, set MAX to it, and delete
-      # continue-on-error. Everything else in this workflow blocks already.
+      # Complexity health is a RATCHET, not a floor. ADVISORY until the ceiling is
+      # re-measured FROM CI (the first run scored 145 vs a locally-derived 137, see
+      # fetch-depth above). Read the number a green main prints, set MAX to it, and
+      # delete continue-on-error. If the summary can't be parsed the step FAILS —
+      # a gate that silently measures nothing is worse than no gate.
       - name: complexity ratchet (fallow)
         continue-on-error: true
         run: |
@@ -116,21 +104,39 @@ jobs:
           echo "complexity findings: ${N} (ceiling ${MAX})"
           [ "$N" -le "$MAX" ] || { echo "::error::complexity findings rose to ${N}, above the ${MAX} ceiling"; exit 1; }
 
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mobile-setup
+      # Persist jest's transform cache across runs.
+      - uses: actions/cache@v4
+        with:
+          path: apps/mobile/.jestcache
+          key: jest-${{ hashFiles('apps/mobile/package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            jest-${{ hashFiles('apps/mobile/package-lock.json') }}-
       # Per-glob coverage floors live in jest.config.js as RATCHET_RAISE_ONLY.
-      # They are per-directory on purpose: a single global average lets an
-      # uncovered reducer hide behind well-covered UI. Raise a slice's floor
-      # when qa-slice finishes it; never lower one to make CI green.
+      # Per-directory on purpose: a single global average lets an uncovered
+      # reducer hide behind well-covered UI. Never lower a floor to go green.
       - name: test with coverage ratchet
-        run: npx jest --coverage --ci
+        run: npx jest --coverage --ci --cacheDirectory .jestcache
 
+  react-quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mobile-setup
       # React-specific quality (react-doctor): security, bugs, performance,
-      # maintainability. Errors are zero-tolerance — the two that existed
-      # (query-destructure-result, subscribing a component to every field of a
-      # useInfiniteQuery result) were fixed on 2026-07-30. Warnings are a
-      # ratchet at the measured 106; react-doctor.yml posts the per-PR delta.
-      #
-      # Uses the pinned devDependency, NOT `npx react-doctor@latest`: a gate
-      # must not change behaviour because upstream shipped a new rule.
+      # maintainability. Errors are zero-tolerance; warnings are a ratchet at the
+      # measured 106. Uses the pinned devDependency, NOT react-doctor@latest: a
+      # gate must not change behaviour because upstream shipped a new rule.
       - name: react quality gate (react-doctor)
         run: |
           MAX_WARNINGS=106
@@ -141,7 +147,6 @@ jobs:
             if (s.errorCount > 0) { console.log('::error::react-doctor reported ' + s.errorCount + ' error(s)'); process.exit(1); }
             if (s.warningCount > $MAX_WARNINGS) { console.log('::error::react-doctor warnings rose to ' + s.warningCount + ', above the $MAX_WARNINGS ceiling'); process.exit(1); }
           "
-
       - name: upload react-doctor report
         if: always()
         uses: actions/upload-artifact@v4

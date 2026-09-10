@@ -29,9 +29,11 @@ jobs:
           filters: |
             backend:
               - 'services/go-api/**'
+              - '.github/workflows/test-backend.yml'
             mobile:
               - 'apps/mobile/**'
               - '.github/workflows/test-mobile.yml'
+              - '.github/actions/mobile-setup/**'
 
   backend:
     needs: changes
