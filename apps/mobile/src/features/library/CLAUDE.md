@@ -11,7 +11,7 @@ Layout:
 - `useSelection.ts` — multi-select state for a track list. `ui/SelectionBar.tsx` — the bar and its `SelectionAction` type. `ui/selectionActions.ts` — `buildSelectionActions`.
 - `ui/trackMenu.ts` — `buildTrackMenuItems`. `ui/sort.ts` — the `*_SORT_OPTIONS` label lists; the sort keys are wire values the server applies.
 - `hooks/useLibraryHome.ts` — `useLibraryTracks` (infinite), `useLibraryAlbums`, `useLibraryArtists`, one query per chip. `hooks/usePlaylistActions.ts`, `hooks/useLibrarySearch.ts` (debounce only), `hooks/useDeleteTrack.ts` (`useDeleteTrack` / `useDeleteTracks`), `hooks/useRetryAcquisition.ts` (failed tracks), `hooks/useReacquireTrack.ts` (replace the audio of a ready track). `state.ts` — `_viewForState`.
-- `__tests__/` — `useSelection`.
+- `__tests__/` — `useSelection`; the logic units `_viewForState`, `gridColumns`, `library-to-discovery`, `selectionActions`, `trackMenu`, `sort` and `useLibrarySearch`; and the Track-not-Song vocabulary invariant. Selection record: `okf/testing/features-library.md`.
 
 Dependencies: `@shared/ui` (plus `primitives/{ActionSheet,Artwork,SearchBar}` directly — native deps, structure audit F2), `@shared/api-client/library`, `@shared/lib/{format,detail-handoff,query-keys}`, `@shared/playback`, `@shared/playlists`, `@shared/offline/pinnedStore`.
 
