@@ -19,5 +19,3 @@ Layout:
 - Never delete the old file when the DB update failed.
 - Never leave a failed or gate-rejected re-acquire having mutated the file or the row.
 - Always pass `reacquireTrack` an expected duration, or the prober cannot reject a wrong-length recording.
-
-Why each rule exists, and what the 45s truncation threshold is for: `okf/backend/acquisition/pipeline.md`.

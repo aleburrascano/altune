@@ -25,5 +25,3 @@ Layout:
 - Never put query text, user ids or connection strings in an alert message.
 - Never let the recording transport affect the search path.
 - Drain background goroutines here, not in the scheduler.
-
-Why each rule exists: `okf/backend/app-wiring.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

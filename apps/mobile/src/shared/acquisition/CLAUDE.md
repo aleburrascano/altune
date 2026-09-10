@@ -10,6 +10,4 @@ Invariants:
 - `STAGE_TO_PHASE`'s keys must equal the acquisition pipeline's step names in `services/go-api/internal/acquisition/service/step_*.go`, derived from the Go source at test time.
 - A component that renders server-mutable state from these stores subscribes directly to it (`DownloadsSheet`'s `DownloadRow` via `useDownloadPhase`) rather than reading a prop snapshot.
 
-Tests: `__tests__/` — `downloadStore`, `trackStatusStore`, `stagePhase`, `useActiveDownloads`, `audioCacheInvalidation`; `ui/__tests__/` — `DownloadsBar`, `DownloadsSheet`. Categories and rejections: `okf/testing/shared-acquisition.md`.
-
-Knowledge base: `okf/mobile/shared-acquisition.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).
+Tests: `__tests__/` — `downloadStore`, `trackStatusStore`, `stagePhase`, `useActiveDownloads`, `audioCacheInvalidation`; `ui/__tests__/` — `DownloadsBar`, `DownloadsSheet`.

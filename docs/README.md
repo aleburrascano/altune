@@ -1,6 +1,6 @@
 # docs/
 
-Decisions and history. **This is a record, not a reference** — entries are written once and left alone, so a path or a claim inside an old spec may describe a version of the repo that no longer exists. For how the code works *today*, read [`okf/`](../okf/index.md); for the rules in force, read the nearest `CLAUDE.md`.
+Decisions and history. **This is a record, not a reference** — entries are written once and left alone, so a path or a claim inside an old spec may describe a version of the repo that no longer exists. For how the code works *today* and the rules in force, read the nearest `CLAUDE.md`.
 
 | Directory | What lands here |
 |---|---|

@@ -10,7 +10,7 @@ Layout:
 - `extras.ts` — `resolveFeatured`, `extractFeaturedFromText`. `extras-accessors.ts` — narrowing for the untyped wire map.
 - `play-source.ts` — `resolvePlaySource`, `isResultPlaying`. `save-control-state.ts` — lifecycle state + labels. `save-cache.ts` — the create-request mapper and the optimistic placeholder. `hooks/useOwnedTrack.ts` — server ownership stamp overlaid with the live acquisition status.
 - `navigation.ts` — `openDetail`. `hooks/` — `useSaveTrack`, `useLateralNav`, `useAlbumTracks`, `useArtistContent`, `useDetailEnrichments`, `useEnrichResult`, `useOwnedTrack`, `useAlbumDetailState`, `useArtistDetailState`.
-- `__tests__/` — `play-source`; the rest is rebuilt per `okf/playbooks/test-taxonomy.md`.
+- `__tests__/` — `play-source`.
 
 Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@shared/api-client/{tracks,discovery,enrichment}`, `@shared/ui/primitives/*` (imported directly, not the barrel), `@shared/playlists` (the picker), `@tanstack/react-query`. No cross-feature imports.
 
@@ -43,5 +43,3 @@ Dependencies: `@shared/lib/detail-handoff` (the discover↔detail seam), `@share
 Load-bearing testIDs — scaffold: `detail-header`, `detail-back`, `detail-banner-title`, `detail-menu`, `detail-artist-link`. Track: `detail-track-info`, `detail-track-facts`, `detail-play`, `detail-preview`, `detail-save`, `detail-add-to-playlist`, `detail-save-error`, `detail-info-album`, `detail-info-featuring`, `detail-lateral-error`. Album: `detail-tracklist{,-loading,-error,-empty}`, `detail-track-<n>`, `detail-track-save-<n>`, `detail-album-meta` (the fact row), `detail-album-play`, `detail-save-all`, `detail-more-from-album`. Artist: `detail-artist-content`, `detail-artist-facts`, `detail-artist-play`, `detail-top-tracks-{loading,error}`, `detail-top-track-<n>`, `detail-top-track-save-<n>`, `detail-show-all-tracks`, `detail-albums-{loading,error}`, `detail-{album,single,ep}-<n>`, `detail-artist-about`.
 
 Routing: a stack screen nested in each tab — `app/(tabs)/discover/detail.tsx` and `app/(tabs)/library/detail.tsx` render the same component, which uses `useSegments()` to build correct push paths.
-
-Why each rule exists: `okf/mobile/detail-feature.md` — read before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

@@ -22,5 +22,3 @@ Layout:
 - Never grow queue logic here: advance/prev/shuffle/repeat live on the client.
 - Pack and parse `source_id` only through `QueueSource`; the wire carries the structured `source`.
 - Keep emitting `source_id` alongside `source` until every client reads the structured field.
-
-Why each rule exists: `okf/backend/playback.md`; table in `okf/data/playback-queue-state-table.md` — read before structural work; update in the same commit when behavior they describe changes (pre-commit hook enforces).

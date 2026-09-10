@@ -47,5 +47,3 @@ Never ship:
 - Inline styles that should be theme tokens.
 - Class components.
 - A React Native package that `expo install` doesn't resolve.
-
-Why each rule exists, and the platform baseline (SDK version, aliases, chosen libraries, testing and debugging setup): `okf/mobile/index.md` — it indexes the concept doc for every feature and shared subsystem. Read the relevant one before structural work; update it in the same commit when behavior it describes changes (pre-commit hook enforces).

@@ -15,8 +15,6 @@ Invariants:
 - Every write is optimistic and rolls back on error; the list is invalidated on settle.
 - Feature UIs reach Favorites only through `index.ts` — nothing imports `useFavorites.ts` or the button file directly.
 
-Tests: none yet; author per `okf/playbooks/test-taxonomy.md` — the per-category verdict is already recorded in `okf/testing/shared-favorites.md`.
+Tests: none yet.
 
 Dependencies: `@shared/api-client/favorites`, `@shared/lib/query-keys`, `@shared/ui` (+ `primitives/IconButton`), `@tanstack/react-query`, `expo-haptics`.
-
-Knowledge base: `okf/mobile/shared-favorites.md` — read before structural work; update in the same commit when behavior it describes changes (pre-commit hook enforces).

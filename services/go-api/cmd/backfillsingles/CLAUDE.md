@@ -14,5 +14,3 @@ go run ./cmd/backfillsingles -apply       # write
 - Never abort the run on a `23505`; that track already has a twin and is reported as skipped.
 - Never touch `audio_ref` — the stored key stays historical and keeps streaming.
 - Default to a dry run; writing requires `-apply`.
-
-Why each rule exists: `okf/backend/catalog/track.md`.
