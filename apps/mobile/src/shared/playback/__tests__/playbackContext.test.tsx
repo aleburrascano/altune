@@ -1,6 +1,8 @@
 import React from 'react';
 import { renderHook } from '@testing-library/react-native';
 
+import { asTrackId } from '@shared/api-client/ids';
+
 import { usePlayback } from '../usePlayback';
 import { PlaybackContext } from '../PlaybackContext';
 import type { PlaybackContextValue } from '../types';
@@ -9,7 +11,7 @@ function buildContextValue(): PlaybackContextValue {
   return {
     status: 'playing',
     track: {
-      source: { kind: 'library', trackId: 'track-1' },
+      source: { kind: 'library', trackId: asTrackId('track-1') },
       title: 'Test Track',
       artist: 'Test Artist',
       artworkUrl: null,

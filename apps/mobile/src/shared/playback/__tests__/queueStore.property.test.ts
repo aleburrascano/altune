@@ -1,5 +1,7 @@
 import fc from 'fast-check';
 
+import { asTrackId } from '@shared/api-client/ids';
+
 import { orderedQueueTracks, useQueueStore } from '../queueStore';
 import type { PlaybackTrack } from '../types';
 
@@ -7,7 +9,7 @@ const INITIAL_STATE = useQueueStore.getState();
 
 function track(id: string): PlaybackTrack {
   return {
-    source: { kind: 'library', trackId: id },
+    source: { kind: 'library', trackId: asTrackId(id) },
     title: `Track ${id}`,
     artist: 'Test Artist',
     artworkUrl: null,

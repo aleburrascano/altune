@@ -1,3 +1,4 @@
+import { asTrackId } from '@shared/api-client/ids';
 import type {
   CreateTrackRequest,
   ListTracksResponse,
@@ -28,7 +29,7 @@ export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackReques
 
 export function optimisticTrack(body: CreateTrackRequest, addedAt: string): TrackResponse {
   return {
-    id: `optimistic:${body.title}${body.artist}`,
+    id: asTrackId(`optimistic:${body.title}${body.artist}`),
     title: body.title,
     artist: body.artist,
     album: body.album,

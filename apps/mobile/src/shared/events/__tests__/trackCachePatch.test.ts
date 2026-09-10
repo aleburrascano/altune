@@ -1,6 +1,7 @@
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import fc from 'fast-check';
 
+import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
 import type {
   ListTracksResponse,
   PlaylistDetailResponse,
@@ -18,7 +19,7 @@ import {
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 't1',
+    id: asTrackId('t1'),
     title: 'Track One',
     artist: 'Artist One',
     album: null,
@@ -54,7 +55,7 @@ function makePlaylistDetail(
   overrides: Partial<PlaylistDetailResponse> = {},
 ): PlaylistDetailResponse {
   return {
-    id,
+    id: asPlaylistId(id),
     name: 'My Playlist',
     track_count: tracks.length,
     preview_artwork_urls: [],
@@ -82,16 +83,16 @@ describe('getTrackFromCaches', () => {
 
   it('finds a track on a later page of a paged tracksPrefix cache', () => {
     const client = newClient();
-    const target = makeTrack({ id: 'target' });
-    seedTracksPrefix(client, [makePage([makeTrack({ id: 'a' })]), makePage([target])]);
+    const target = makeTrack({ id: asTrackId('target') });
+    seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('a') })]), makePage([target])]);
 
     expect(getTrackFromCaches(client, 'target')).toEqual(target);
   });
 
   it('prefers the tracksPrefix copy over a stale copy in the lookup cache', () => {
     const client = newClient();
-    const fresh = makeTrack({ id: 'shared', title: 'Fresh Title' });
-    const stale = makeTrack({ id: 'shared', title: 'Stale Title' });
+    const fresh = makeTrack({ id: asTrackId('shared'), title: 'Fresh Title' });
+    const stale = makeTrack({ id: asTrackId('shared'), title: 'Stale Title' });
     seedTracksPrefix(client, [makePage([fresh])]);
     client.setQueryData(libraryKeys.lookup('q'), makePage([stale]));
 
@@ -100,7 +101,7 @@ describe('getTrackFromCaches', () => {
 
   it('falls back to the lookup cache when the track is not in any paged cache', () => {
     const client = newClient();
-    const target = makeTrack({ id: 'lookup-only' });
+    const target = makeTrack({ id: asTrackId('lookup-only') });
     client.setQueryData(libraryKeys.lookup('q'), makePage([target]));
 
     expect(getTrackFromCaches(client, 'lookup-only')).toEqual(target);
@@ -108,7 +109,7 @@ describe('getTrackFromCaches', () => {
 
   it('falls back to the featuring cache', () => {
     const client = newClient();
-    const target = makeTrack({ id: 'featuring-only' });
+    const target = makeTrack({ id: asTrackId('featuring-only') });
     client.setQueryData(libraryKeys.featuring('identity'), makePage([target]));
 
     expect(getTrackFromCaches(client, 'featuring-only')).toEqual(target);
@@ -116,7 +117,7 @@ describe('getTrackFromCaches', () => {
 
   it('falls back to a cached playlist detail when not found elsewhere', () => {
     const client = newClient();
-    const target = makeTrack({ id: 'playlist-only' });
+    const target = makeTrack({ id: asTrackId('playlist-only') });
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [target]));
 
     expect(getTrackFromCaches(client, 'playlist-only')).toEqual(target);
@@ -124,9 +125,12 @@ describe('getTrackFromCaches', () => {
 
   it('returns undefined for an id absent from every populated family', () => {
     const client = newClient();
-    seedTracksPrefix(client, [makePage([makeTrack({ id: 'a' })])]);
-    client.setQueryData(libraryKeys.lookup('q'), makePage([makeTrack({ id: 'b' })]));
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [makeTrack({ id: 'c' })]));
+    seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('a') })])]);
+    client.setQueryData(libraryKeys.lookup('q'), makePage([makeTrack({ id: asTrackId('b') })]));
+    client.setQueryData(
+      playlistKeys.detail('p1'),
+      makePlaylistDetail('p1', [makeTrack({ id: asTrackId('c') })]),
+    );
 
     expect(getTrackFromCaches(client, 'missing')).toBeUndefined();
   });
@@ -135,11 +139,11 @@ describe('getTrackFromCaches', () => {
 describe('upsertTrackInCaches', () => {
   it('prepends a brand-new track to the first page and increments only that page total', () => {
     const client = newClient();
-    const page1 = makePage([makeTrack({ id: 'a' })], { total: 5 });
-    const page2 = makePage([makeTrack({ id: 'b' })], { total: 3 });
+    const page1 = makePage([makeTrack({ id: asTrackId('a') })], { total: 5 });
+    const page2 = makePage([makeTrack({ id: asTrackId('b') })], { total: 3 });
     seedTracksPrefix(client, [page1, page2]);
 
-    const incoming = makeTrack({ id: 'new' });
+    const incoming = makeTrack({ id: asTrackId('new') });
     upsertTrackInCaches(client, incoming);
 
     const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
@@ -152,26 +156,26 @@ describe('upsertTrackInCaches', () => {
 
   it('merges into place on a later page instead of moving or duplicating the track', () => {
     const client = newClient();
-    const existing = makeTrack({ id: 'b', title: 'Old Title' });
-    const page1 = makePage([makeTrack({ id: 'a' })], { total: 5 });
+    const existing = makeTrack({ id: asTrackId('b'), title: 'Old Title' });
+    const page1 = makePage([makeTrack({ id: asTrackId('a') })], { total: 5 });
     const page2 = makePage([existing], { total: 3 });
     seedTracksPrefix(client, [page1, page2]);
 
-    upsertTrackInCaches(client, makeTrack({ id: 'b', title: 'New Title' }));
+    upsertTrackInCaches(client, makeTrack({ id: asTrackId('b'), title: 'New Title' }));
 
     const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
     )!;
     expect(result.pages[0]!.items.map((t) => t.id)).toEqual(['a']);
-    expect(result.pages[1]!.items).toEqual([makeTrack({ id: 'b', title: 'New Title' })]);
+    expect(result.pages[1]!.items).toEqual([makeTrack({ id: asTrackId('b'), title: 'New Title' })]);
     expect(result.pages[0]!.total).toBe(5);
     expect(result.pages[1]!.total).toBe(3);
   });
 
   it('is idempotent for a new track: applying it twice yields one copy and a single increment', () => {
     const client = newClient();
-    seedTracksPrefix(client, [makePage([makeTrack({ id: 'a' })], { total: 1 })]);
-    const incoming = makeTrack({ id: 'new' });
+    seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('a') })], { total: 1 })]);
+    const incoming = makeTrack({ id: asTrackId('new') });
 
     upsertTrackInCaches(client, incoming);
     upsertTrackInCaches(client, incoming);
@@ -187,7 +191,7 @@ describe('upsertTrackInCaches', () => {
     const client = newClient();
     seedTracksPrefix(client, []);
 
-    upsertTrackInCaches(client, makeTrack({ id: 'new' }));
+    upsertTrackInCaches(client, makeTrack({ id: asTrackId('new') }));
 
     const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
@@ -197,13 +201,15 @@ describe('upsertTrackInCaches', () => {
 
   it('does not propagate to the lookup, featuring, or playlist detail caches', () => {
     const client = newClient();
-    seedTracksPrefix(client, [makePage([makeTrack({ id: 'shared', title: 'Old' })])]);
-    const lookupBefore = makePage([makeTrack({ id: 'shared', title: 'Old' })]);
-    const detailBefore = makePlaylistDetail('p1', [makeTrack({ id: 'shared', title: 'Old' })]);
+    seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('shared'), title: 'Old' })])]);
+    const lookupBefore = makePage([makeTrack({ id: asTrackId('shared'), title: 'Old' })]);
+    const detailBefore = makePlaylistDetail('p1', [
+      makeTrack({ id: asTrackId('shared'), title: 'Old' }),
+    ]);
     client.setQueryData(libraryKeys.lookup('q'), lookupBefore);
     client.setQueryData(playlistKeys.detail('p1'), detailBefore);
 
-    upsertTrackInCaches(client, makeTrack({ id: 'shared', title: 'New' }));
+    upsertTrackInCaches(client, makeTrack({ id: asTrackId('shared'), title: 'New' }));
 
     expect(client.getQueryData(libraryKeys.lookup('q'))).toEqual(lookupBefore);
     expect(client.getQueryData(playlistKeys.detail('p1'))).toEqual(detailBefore);
@@ -213,11 +219,11 @@ describe('upsertTrackInCaches', () => {
 describe('replaceTrackInCaches', () => {
   it('swaps an optimistic id for the real track, preserving its position and total', () => {
     const client = newClient();
-    const optimistic = makeTrack({ id: 'optimistic-1' });
-    const other = makeTrack({ id: 'other' });
+    const optimistic = makeTrack({ id: asTrackId('optimistic-1') });
+    const other = makeTrack({ id: asTrackId('other') });
     seedTracksPrefix(client, [makePage([optimistic, other])]);
 
-    const real = makeTrack({ id: 'real-1', title: 'Server Title' });
+    const real = makeTrack({ id: asTrackId('real-1'), title: 'Server Title' });
     replaceTrackInCaches(client, 'optimistic-1', real);
 
     const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
@@ -229,8 +235,8 @@ describe('replaceTrackInCaches', () => {
 
   it('drops the duplicate and decrements total when the real track is already cached in the same page', () => {
     const client = newClient();
-    const optimistic = makeTrack({ id: 'optimistic-1' });
-    const real = makeTrack({ id: 'real-1' });
+    const optimistic = makeTrack({ id: asTrackId('optimistic-1') });
+    const real = makeTrack({ id: asTrackId('real-1') });
     seedTracksPrefix(client, [makePage([optimistic, real], { total: 2 })]);
 
     replaceTrackInCaches(client, 'optimistic-1', real);
@@ -244,10 +250,10 @@ describe('replaceTrackInCaches', () => {
 
   it('leaves the cache unchanged when the optimistic id is not present', () => {
     const client = newClient();
-    const page = makePage([makeTrack({ id: 'a' }), makeTrack({ id: 'b' })]);
+    const page = makePage([makeTrack({ id: asTrackId('a') }), makeTrack({ id: asTrackId('b') })]);
     seedTracksPrefix(client, [page]);
 
-    replaceTrackInCaches(client, 'no-such-optimistic-id', makeTrack({ id: 'real-1' }));
+    replaceTrackInCaches(client, 'no-such-optimistic-id', makeTrack({ id: asTrackId('real-1') }));
 
     expect(
       client.getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort')),
@@ -256,10 +262,10 @@ describe('replaceTrackInCaches', () => {
 
   it('is idempotent: replaying the same replacement leaves the cache exactly as the first application did', () => {
     const client = newClient();
-    const optimistic = makeTrack({ id: 'optimistic-1' });
-    const other = makeTrack({ id: 'other' });
+    const optimistic = makeTrack({ id: asTrackId('optimistic-1') });
+    const other = makeTrack({ id: asTrackId('other') });
     seedTracksPrefix(client, [makePage([optimistic, other])]);
-    const real = makeTrack({ id: 'real-1' });
+    const real = makeTrack({ id: asTrackId('real-1') });
 
     replaceTrackInCaches(client, 'optimistic-1', real);
     const afterFirst = client.getQueryData<InfiniteData<ListTracksResponse>>(
@@ -278,9 +284,9 @@ describe('replaceTrackInCaches', () => {
 describe('removeTrackFromCaches', () => {
   it('removes the track from its page and decrements only that page total', () => {
     const client = newClient();
-    const target = makeTrack({ id: 'target' });
-    const page1 = makePage([makeTrack({ id: 'a' })], { total: 5 });
-    const page2 = makePage([target, makeTrack({ id: 'b' })], { total: 8 });
+    const target = makeTrack({ id: asTrackId('target') });
+    const page1 = makePage([makeTrack({ id: asTrackId('a') })], { total: 5 });
+    const page2 = makePage([target, makeTrack({ id: asTrackId('b') })], { total: 8 });
     seedTracksPrefix(client, [page1, page2]);
 
     removeTrackFromCaches(client, 'target');
@@ -295,11 +301,14 @@ describe('removeTrackFromCaches', () => {
 
   it('removes the track from the lookup and featuring flat lists and decrements their totals', () => {
     const client = newClient();
-    const target = makeTrack({ id: 'target' });
-    client.setQueryData(libraryKeys.lookup('q'), makePage([target, makeTrack({ id: 'a' })], { total: 9 }));
+    const target = makeTrack({ id: asTrackId('target') });
+    client.setQueryData(
+      libraryKeys.lookup('q'),
+      makePage([target, makeTrack({ id: asTrackId('a') })], { total: 9 }),
+    );
     client.setQueryData(
       libraryKeys.featuring('identity'),
-      makePage([makeTrack({ id: 'b' }), target], { total: 4 }),
+      makePage([makeTrack({ id: asTrackId('b') }), target], { total: 4 }),
     );
 
     removeTrackFromCaches(client, 'target');
@@ -314,9 +323,15 @@ describe('removeTrackFromCaches', () => {
 
   it('removes the track from every cached playlist detail regardless of playlist', () => {
     const client = newClient();
-    const target = makeTrack({ id: 'target' });
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [target, makeTrack({ id: 'a' })]));
-    client.setQueryData(playlistKeys.detail('p2'), makePlaylistDetail('p2', [makeTrack({ id: 'b' }), target]));
+    const target = makeTrack({ id: asTrackId('target') });
+    client.setQueryData(
+      playlistKeys.detail('p1'),
+      makePlaylistDetail('p1', [target, makeTrack({ id: asTrackId('a') })]),
+    );
+    client.setQueryData(
+      playlistKeys.detail('p2'),
+      makePlaylistDetail('p2', [makeTrack({ id: asTrackId('b') }), target]),
+    );
 
     removeTrackFromCaches(client, 'target');
 
@@ -328,10 +343,10 @@ describe('removeTrackFromCaches', () => {
 
   it('keeps a playlist detail track_count consistent with its tracks after the removal', () => {
     const client = newClient();
-    const target = makeTrack({ id: 'target' });
+    const target = makeTrack({ id: asTrackId('target') });
     client.setQueryData(
       playlistKeys.detail('p1'),
-      makePlaylistDetail('p1', [target, makeTrack({ id: 'a' })], { track_count: 2 }),
+      makePlaylistDetail('p1', [target, makeTrack({ id: asTrackId('a') })], { track_count: 2 }),
     );
 
     removeTrackFromCaches(client, 'target');
@@ -342,8 +357,8 @@ describe('removeTrackFromCaches', () => {
 
   it('is idempotent: removing an already-removed track a second time makes no further change', () => {
     const client = newClient();
-    const target = makeTrack({ id: 'target' });
-    seedTracksPrefix(client, [makePage([target, makeTrack({ id: 'a' })], { total: 6 })]);
+    const target = makeTrack({ id: asTrackId('target') });
+    seedTracksPrefix(client, [makePage([target, makeTrack({ id: asTrackId('a') })], { total: 6 })]);
 
     removeTrackFromCaches(client, 'target');
     const afterFirst = client.getQueryData<InfiniteData<ListTracksResponse>>(
@@ -360,9 +375,9 @@ describe('removeTrackFromCaches', () => {
 
   it('is a no-op across every family when the id is not cached anywhere', () => {
     const client = newClient();
-    const page = makePage([makeTrack({ id: 'a' })]);
-    const lookup = makePage([makeTrack({ id: 'b' })]);
-    const detail = makePlaylistDetail('p1', [makeTrack({ id: 'c' })]);
+    const page = makePage([makeTrack({ id: asTrackId('a') })]);
+    const lookup = makePage([makeTrack({ id: asTrackId('b') })]);
+    const detail = makePlaylistDetail('p1', [makeTrack({ id: asTrackId('c') })]);
     seedTracksPrefix(client, [page]);
     client.setQueryData(libraryKeys.lookup('q'), lookup);
     client.setQueryData(playlistKeys.detail('p1'), detail);
@@ -380,8 +395,12 @@ describe('removeTrackFromCaches', () => {
 describe('patchTrackInCaches', () => {
   it('applies a partial patch to the matching track in a page, preserving unrelated fields and total', () => {
     const client = newClient();
-    const target = makeTrack({ id: 'target', acquisition_status: 'pending', title: 'Original' });
-    const other = makeTrack({ id: 'other' });
+    const target = makeTrack({
+      id: asTrackId('target'),
+      acquisition_status: 'pending',
+      title: 'Original',
+    });
+    const other = makeTrack({ id: asTrackId('other') });
     seedTracksPrefix(client, [makePage([target, other], { total: 9 })]);
 
     patchTrackInCaches(client, 'target', { acquisition_status: 'ready' });
@@ -399,16 +418,35 @@ describe('patchTrackInCaches', () => {
 
   it('propagates an identical patch to every family caching a copy of the track', () => {
     const client = newClient();
-    const inPage = makeTrack({ id: 'shared', acquisition_status: 'pending', title: 'Page Copy' });
-    const inLookup = makeTrack({ id: 'shared', acquisition_status: 'pending', title: 'Lookup Copy' });
-    const inFeaturing = makeTrack({ id: 'shared', acquisition_status: 'pending', title: 'Featuring Copy' });
-    const inDetail = makeTrack({ id: 'shared', acquisition_status: 'pending', title: 'Detail Copy' });
+    const inPage = makeTrack({
+      id: asTrackId('shared'),
+      acquisition_status: 'pending',
+      title: 'Page Copy',
+    });
+    const inLookup = makeTrack({
+      id: asTrackId('shared'),
+      acquisition_status: 'pending',
+      title: 'Lookup Copy',
+    });
+    const inFeaturing = makeTrack({
+      id: asTrackId('shared'),
+      acquisition_status: 'pending',
+      title: 'Featuring Copy',
+    });
+    const inDetail = makeTrack({
+      id: asTrackId('shared'),
+      acquisition_status: 'pending',
+      title: 'Detail Copy',
+    });
     seedTracksPrefix(client, [makePage([inPage])]);
     client.setQueryData(libraryKeys.lookup('q'), makePage([inLookup]));
     client.setQueryData(libraryKeys.featuring('identity'), makePage([inFeaturing]));
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [inDetail]));
 
-    patchTrackInCaches(client, 'shared', { acquisition_status: 'failed', failure_reason: 'network' });
+    patchTrackInCaches(client, 'shared', {
+      acquisition_status: 'failed',
+      failure_reason: 'network',
+    });
 
     const page = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
@@ -417,7 +455,12 @@ describe('patchTrackInCaches', () => {
     const featuring = client.getQueryData<ListTracksResponse>(libraryKeys.featuring('identity'))!;
     const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
 
-    for (const copy of [page.pages[0]!.items[0], lookup.items[0], featuring.items[0], detail.tracks[0]]) {
+    for (const copy of [
+      page.pages[0]!.items[0],
+      lookup.items[0],
+      featuring.items[0],
+      detail.tracks[0],
+    ]) {
       expect(copy!.acquisition_status).toBe('failed');
       expect(copy!.failure_reason).toBe('network');
     }
@@ -429,8 +472,8 @@ describe('patchTrackInCaches', () => {
 
   it('leaves every family untouched when the id is not present', () => {
     const client = newClient();
-    const page = makePage([makeTrack({ id: 'a' })]);
-    const lookup = makePage([makeTrack({ id: 'b' })]);
+    const page = makePage([makeTrack({ id: asTrackId('a') })]);
+    const lookup = makePage([makeTrack({ id: asTrackId('b') })]);
     seedTracksPrefix(client, [page]);
     client.setQueryData(libraryKeys.lookup('q'), lookup);
 
@@ -444,7 +487,9 @@ describe('patchTrackInCaches', () => {
 
   it('is idempotent: applying the same patch twice equals applying it once', () => {
     const client = newClient();
-    seedTracksPrefix(client, [makePage([makeTrack({ id: 'target', title: 'Original' })])]);
+    seedTracksPrefix(client, [
+      makePage([makeTrack({ id: asTrackId('target'), title: 'Original' })]),
+    ]);
 
     patchTrackInCaches(client, 'target', { title: 'Patched' });
     const afterFirst = client.getQueryData<InfiniteData<ListTracksResponse>>(
@@ -468,7 +513,12 @@ describe('patchTrackInCaches', () => {
         }),
         (patch) => {
           const client = newClient();
-          seedTracksPrefix(client, [makePage([makeTrack({ id: 'target' }), makeTrack({ id: 'other' })])]);
+          seedTracksPrefix(client, [
+            makePage([
+              makeTrack({ id: asTrackId('target') }),
+              makeTrack({ id: asTrackId('other') }),
+            ]),
+          ]);
 
           patchTrackInCaches(client, 'target', patch as Partial<TrackResponse>);
           const once = client.getQueryData<InfiniteData<ListTracksResponse>>(

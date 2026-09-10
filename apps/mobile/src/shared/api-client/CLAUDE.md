@@ -1,6 +1,6 @@
 # shared/api-client — router
 
-Typed HTTP client for go-api: `apiFetch<T>` base wrapper + `errors.ts` / `deadline.ts` + `parse.ts` (boundary narrowing) + per-context typed function files.
+Typed HTTP client for go-api: `apiFetch<T>` base wrapper + `errors.ts` / `deadline.ts` + `parse.ts` (boundary narrowing) + `ids.ts` (branded domain ids) + per-context typed function files.
 
 Invariants:
 
@@ -16,6 +16,7 @@ Invariants:
 - A caller's `AbortError` is rethrown as-is, never relabelled `NetworkError`.
 - Retry policy lives only in the QueryClient predicate (`isRetryable`) — never add a retry loop inside `apiFetch`.
 - Wire types are hand-maintained (`types.ts` flags the sync risk) — a backend response-shape change must update them in the same change.
+- Domain ids are branded in `ids.ts` (`TrackId`, `PlaylistId`, `FavoriteKey`) so the compiler keeps them unmixable; a raw string becomes one only through `asTrackId`/`asPlaylistId`/`asFavoriteKey` at a boundary (`parse.ts`, a route/event/extras seam), never by a bare cast at a call site.
 - Enrichment responses follow the null-object contract: collections always present, unresolved entity = empty payload; `has_content` is the server's verdict on whether a section is worth rendering.
 - `feedback.ts` is the write side of in-app reports: `submitReport` POSTs to `/v1/feedback/reports`, which 404s on a deploy with no issue tracker configured and never throttles a reporter.
 - `library.ts` is the read side of the collection: `/v1/library/albums` and `/v1/library/artists` return server-grouped lenses, and `getTracks` takes `q` / `sort`.

@@ -1,3 +1,4 @@
+import type { FavoriteKey } from './ids';
 import { apiFetch } from './index';
 import { parseDiscoverySearchResponse } from './parse';
 
@@ -18,7 +19,7 @@ export type DiscoveryResult = {
   image_url: string | null;
   confidence: DiscoveryConfidence;
   result_signature?: string | undefined;
-  favorite_key?: string | undefined;
+  favorite_key?: FavoriteKey | undefined;
   sources: DiscoverySource[];
   extras: Record<string, unknown>;
 };

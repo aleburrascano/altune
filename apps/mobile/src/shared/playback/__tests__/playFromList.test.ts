@@ -1,10 +1,11 @@
 import type { TrackResponse } from '@shared/api-client/types';
+import { asTrackId } from '@shared/api-client/ids';
 
 import { buildPlayableQueue } from '../playFromList';
 
 function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 'track-1',
+    id: asTrackId('track-1'),
     title: 'Title',
     artist: 'Artist',
     album: null,
@@ -26,10 +27,10 @@ function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
 describe('buildPlayableQueue', () => {
   it('filters out unplayable Tracks and keeps the rest in order', () => {
     const tracks = [
-      trackResponse({ id: 'a', acquisition_status: 'ready' }),
-      trackResponse({ id: 'b', acquisition_status: 'pending' }),
-      trackResponse({ id: 'c', acquisition_status: 'failed' }),
-      trackResponse({ id: 'd', acquisition_status: 'ready' }),
+      trackResponse({ id: asTrackId('a'), acquisition_status: 'ready' }),
+      trackResponse({ id: asTrackId('b'), acquisition_status: 'pending' }),
+      trackResponse({ id: asTrackId('c'), acquisition_status: 'failed' }),
+      trackResponse({ id: asTrackId('d'), acquisition_status: 'ready' }),
     ];
 
     const { playable } = buildPlayableQueue(tracks, 'a');
@@ -42,9 +43,9 @@ describe('buildPlayableQueue', () => {
 
   it('finds the start index of the tapped Track within the filtered, playable list', () => {
     const tracks = [
-      trackResponse({ id: 'a', acquisition_status: 'pending' }),
-      trackResponse({ id: 'b', acquisition_status: 'ready' }),
-      trackResponse({ id: 'c', acquisition_status: 'ready' }),
+      trackResponse({ id: asTrackId('a'), acquisition_status: 'pending' }),
+      trackResponse({ id: asTrackId('b'), acquisition_status: 'ready' }),
+      trackResponse({ id: asTrackId('c'), acquisition_status: 'ready' }),
     ];
 
     expect(buildPlayableQueue(tracks, 'c').startIndex).toBe(1);
@@ -52,8 +53,8 @@ describe('buildPlayableQueue', () => {
 
   it('falls back to index 0 when the tapped Track became unacquirable between render and tap', () => {
     const tracks = [
-      trackResponse({ id: 'a', acquisition_status: 'ready' }),
-      trackResponse({ id: 'b', acquisition_status: 'ready' }),
+      trackResponse({ id: asTrackId('a'), acquisition_status: 'ready' }),
+      trackResponse({ id: asTrackId('b'), acquisition_status: 'ready' }),
     ];
 
     const { startIndex } = buildPlayableQueue(tracks, 'no-longer-ready');
@@ -63,8 +64,8 @@ describe('buildPlayableQueue', () => {
 
   it('falls back to index 0 for a deliberately empty target id, as used for a shuffle-all action', () => {
     const tracks = [
-      trackResponse({ id: 'a', acquisition_status: 'ready' }),
-      trackResponse({ id: 'b', acquisition_status: 'ready' }),
+      trackResponse({ id: asTrackId('a'), acquisition_status: 'ready' }),
+      trackResponse({ id: asTrackId('b'), acquisition_status: 'ready' }),
     ];
 
     const { startIndex } = buildPlayableQueue(tracks, '');
@@ -74,8 +75,8 @@ describe('buildPlayableQueue', () => {
 
   it('returns an empty playable list when every Track is unacquirable', () => {
     const tracks = [
-      trackResponse({ id: 'a', acquisition_status: 'pending' }),
-      trackResponse({ id: 'b', acquisition_status: 'failed' }),
+      trackResponse({ id: asTrackId('a'), acquisition_status: 'pending' }),
+      trackResponse({ id: asTrackId('b'), acquisition_status: 'failed' }),
     ];
 
     const { playable, startIndex } = buildPlayableQueue(tracks, 'a');

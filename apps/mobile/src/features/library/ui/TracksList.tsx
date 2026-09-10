@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 
+import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import { Text, spacing } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
@@ -18,7 +19,7 @@ type TracksListProps = {
   onMore: (track: TrackResponse, anchor: MenuAnchor) => void;
   onRetry: (track: TrackResponse) => void;
   retryingTrackId: string | undefined;
-  isPlaying: (trackId: string) => boolean;
+  isPlaying: (trackId: TrackId) => boolean;
   onEndReached?: () => void;
   isFetchingNextPage?: boolean;
   selection?: Selection;

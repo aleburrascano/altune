@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 
 import { AddToPlaylistSheet } from '../AddToPlaylistSheet';
 import { playlistKeys } from '@shared/lib/query-keys';
+import { asPlaylistId, asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { supabase } from '@shared/auth/supabaseClient';
 
@@ -16,7 +17,7 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 
 function playlist(overrides: Partial<PlaylistResponse> = {}): PlaylistResponse {
   return {
-    id: 'p1',
+    id: asPlaylistId('p1'),
     name: 'Focus',
     track_count: 3,
     preview_artwork_urls: [],
@@ -35,14 +36,14 @@ function freshClient(): QueryClient {
 type RenderOptions = {
   visible?: boolean;
   label?: string;
-  resolveTrackIds?: () => Promise<string[]>;
+  resolveTrackIds?: () => Promise<TrackId[]>;
   queryClient?: QueryClient;
 };
 
 function renderSheet(options: RenderOptions = {}) {
   const queryClient = options.queryClient ?? freshClient();
   const onClose = jest.fn();
-  const resolveTrackIds = options.resolveTrackIds ?? (() => Promise.resolve(['t1']));
+  const resolveTrackIds = options.resolveTrackIds ?? (() => Promise.resolve([asTrackId('t1')]));
   const utils = render(
     <QueryClientProvider client={queryClient}>
       <AddToPlaylistSheet
@@ -74,7 +75,7 @@ describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and neve
   it('a resolveTrackIds rejection, from a Track that failed to save, closes the sheet without ever calling the batch-add endpoint', async () => {
     __http.reply('GET /v1/playlists', {
       status: 200,
-      json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
     });
     const resolveTrackIds = jest.fn().mockRejectedValue(new Error('save failed'));
     const { onClose } = renderSheet({ resolveTrackIds });
@@ -91,7 +92,7 @@ describe("AddToPlaylistSheet(): withTrackIds's trackIds.length > 0 guard (:62)",
   it('an empty resolved array fires no add request and leaves the sheet open, untouched', async () => {
     __http.reply('GET /v1/playlists', {
       status: 200,
-      json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
     });
     const resolveTrackIds = jest.fn().mockResolvedValue([]);
     const { onClose } = renderSheet({ resolveTrackIds });
@@ -112,9 +113,12 @@ describe('AddToPlaylistSheet(): functional — picking a playlist adds exactly t
   it('a Track id resolved only at pick time is the id sent to the batch-add endpoint', async () => {
     __http.reply('GET /v1/playlists', {
       status: 200,
-      json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
     });
-    __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { added: 1, skipped: 0 } });
+    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+      status: 200,
+      json: { added: 1, skipped: 0 },
+    });
     const resolveTrackIds = jest.fn().mockResolvedValue(['track-saved-just-now']);
     renderSheet({ resolveTrackIds });
 
@@ -131,10 +135,13 @@ describe('AddToPlaylistSheet(): functional — picking a playlist adds exactly t
   it('one gesture over a bulk selection of many Tracks produces exactly one batch request, not one per track', async () => {
     __http.reply('GET /v1/playlists', {
       status: 200,
-      json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
     });
-    __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { added: 5, skipped: 0 } });
-    const ids = ['t1', 't2', 't3', 't4', 't5'];
+    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+      status: 200,
+      json: { added: 5, skipped: 0 },
+    });
+    const ids = ['t1', 't2', 't3', 't4', 't5'].map(asTrackId);
     renderSheet({ resolveTrackIds: () => Promise.resolve(ids) });
 
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
@@ -152,7 +159,7 @@ describe('AddToPlaylistSheet(): liveness — renders playlist track counts live 
   it('a track_count patched into playlistKeys.list while the sheet is open updates the rendered row without new props', async () => {
     const queryClient = freshClient();
     queryClient.setQueryData(playlistKeys.list, {
-      items: [playlist({ id: 'p1', name: 'Focus', track_count: 3 })],
+      items: [playlist({ id: asPlaylistId('p1'), name: 'Focus', track_count: 3 })],
       total: 1,
     });
     renderSheet({ queryClient });
@@ -161,7 +168,7 @@ describe('AddToPlaylistSheet(): liveness — renders playlist track counts live 
 
     await act(async () => {
       queryClient.setQueryData(playlistKeys.list, {
-        items: [playlist({ id: 'p1', name: 'Focus', track_count: 5 })],
+        items: [playlist({ id: asPlaylistId('p1'), name: 'Focus', track_count: 5 })],
         total: 1,
       });
       await Promise.resolve();
@@ -172,15 +179,18 @@ describe('AddToPlaylistSheet(): liveness — renders playlist track counts live 
   });
 });
 
-describe("AddToPlaylistSheet(): busy = resolving || addMut.isPending || createMut.isPending (:55)", () => {
+describe('AddToPlaylistSheet(): busy = resolving || addMut.isPending || createMut.isPending (:55)', () => {
   it('resolving alone keeps the picker busy while resolveTrackIds is in flight', async () => {
     __http.reply('GET /v1/playlists', {
       status: 200,
-      json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
     });
-    __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { added: 1, skipped: 0 } });
-    let resolveIds!: (ids: string[]) => void;
-    const pending = new Promise<string[]>((resolve) => {
+    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+      status: 200,
+      json: { added: 1, skipped: 0 },
+    });
+    let resolveIds!: (ids: TrackId[]) => void;
+    const pending = new Promise<TrackId[]>((resolve) => {
       resolveIds = resolve;
     });
     renderSheet({ resolveTrackIds: () => pending });
@@ -190,25 +200,27 @@ describe("AddToPlaylistSheet(): busy = resolving || addMut.isPending || createMu
 
     await waitFor(() => expect(screen.getByTestId('add-to-playlist-busy')).toBeTruthy());
     expect(screen.getByTestId('add-to-playlist-p1').props.accessibilityState.disabled).toBe(true);
-    expect(screen.getByTestId('add-to-playlist-create-new').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('add-to-playlist-create-new').props.accessibilityState.disabled).toBe(
+      true,
+    );
 
     await act(async () => {
-      resolveIds(['t1']);
+      resolveIds([asTrackId('t1')]);
       await pending;
     });
 
     await waitFor(() => expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull());
   });
 
-  it("addMut.isPending alone keeps the picker busy after resolveTrackIds has already settled", async () => {
+  it('addMut.isPending alone keeps the picker busy after resolveTrackIds has already settled', async () => {
     jest.useFakeTimers();
     try {
       __http.reply('GET /v1/playlists', {
         status: 200,
-        json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+        json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
       });
       __http.hang('POST /v1/playlists/p1/tracks/batch');
-      renderSheet({ resolveTrackIds: () => Promise.resolve(['t1']) });
+      renderSheet({ resolveTrackIds: () => Promise.resolve([asTrackId('t1')]) });
 
       await act(async () => {
         await jest.advanceTimersByTimeAsync(0);
@@ -246,7 +258,9 @@ describe("AddToPlaylistSheet(): busy = resolving || addMut.isPending || createMu
         await jest.advanceTimersByTimeAsync(0);
       });
 
-      expect(screen.getByTestId('create-playlist-confirm').props.accessibilityState.busy).toBe(true);
+      expect(screen.getByTestId('create-playlist-confirm').props.accessibilityState.busy).toBe(
+        true,
+      );
 
       await act(async () => {
         await jest.advanceTimersByTimeAsync(15_000);
@@ -262,7 +276,9 @@ describe('AddToPlaylistSheet(): which modal is on screen tracks visible && !crea
     __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
     renderSheet();
 
-    await waitFor(() => expect(screen.getByTestId('add-to-playlist-sheet').props.visible).toBe(true));
+    await waitFor(() =>
+      expect(screen.getByTestId('add-to-playlist-sheet').props.visible).toBe(true),
+    );
     expect(screen.queryByTestId('create-playlist-modal')).toBeNull();
   });
 
@@ -289,7 +305,7 @@ describe('AddToPlaylistSheet(): the playlist query is enabled only while visible
           <AddToPlaylistSheet
             visible={false}
             label="1 track"
-            resolveTrackIds={() => Promise.resolve(['t1'])}
+            resolveTrackIds={() => Promise.resolve([asTrackId('t1')])}
             onClose={jest.fn()}
           />
         </QueryClientProvider>,
@@ -313,7 +329,7 @@ describe('AddToPlaylistSheet(): the playlist query is enabled only while visible
           <AddToPlaylistSheet
             visible
             label="1 track"
-            resolveTrackIds={() => Promise.resolve(['t1'])}
+            resolveTrackIds={() => Promise.resolve([asTrackId('t1')])}
             onClose={jest.fn()}
           />
         </QueryClientProvider>,
@@ -365,8 +381,8 @@ describe('AddToPlaylistSheet(): renderPlaylistItem accessibility and pluralisati
       status: 200,
       json: {
         items: [
-          playlist({ id: 'p1', name: 'Focus', track_count: 1 }),
-          playlist({ id: 'p2', name: 'Chill', track_count: 4 }),
+          playlist({ id: asPlaylistId('p1'), name: 'Focus', track_count: 1 }),
+          playlist({ id: asPlaylistId('p2'), name: 'Chill', track_count: 4 }),
         ],
         total: 2,
       },
@@ -382,10 +398,10 @@ describe('AddToPlaylistSheet(): renderPlaylistItem accessibility and pluralisati
   it("marks the row's accessibilityState.disabled true while its own add is in flight, not just its disabled prop", async () => {
     __http.reply('GET /v1/playlists', {
       status: 200,
-      json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
     });
-    let resolveIds!: (ids: string[]) => void;
-    const pending = new Promise<string[]>((resolve) => {
+    let resolveIds!: (ids: TrackId[]) => void;
+    const pending = new Promise<TrackId[]>((resolve) => {
       resolveIds = resolve;
     });
     renderSheet({ resolveTrackIds: () => pending });
@@ -400,7 +416,7 @@ describe('AddToPlaylistSheet(): renderPlaylistItem accessibility and pluralisati
     );
 
     await act(async () => {
-      resolveIds(['t1']);
+      resolveIds([asTrackId('t1')]);
       await pending;
     });
   });
@@ -408,12 +424,17 @@ describe('AddToPlaylistSheet(): renderPlaylistItem accessibility and pluralisati
   it('pluralises a zero-Track playlist as "tracks" — the boundary === 1 alone gets wrong (the label at :118 and the visible text at :136 are two separate expressions)', async () => {
     __http.reply('GET /v1/playlists', {
       status: 200,
-      json: { items: [playlist({ id: 'p0', name: 'Empty Crate', track_count: 0 })], total: 1 },
+      json: {
+        items: [playlist({ id: asPlaylistId('p0'), name: 'Empty Crate', track_count: 0 })],
+        total: 1,
+      },
     });
 
     renderSheet();
 
-    expect(await screen.findByRole('button', { name: 'Add to Empty Crate, 0 tracks' })).toBeTruthy();
+    expect(
+      await screen.findByRole('button', { name: 'Add to Empty Crate, 0 tracks' }),
+    ).toBeTruthy();
     expect(within(screen.getByTestId('add-to-playlist-p0')).getByText('0 tracks')).toBeTruthy();
   });
 });
@@ -424,9 +445,13 @@ describe('AddToPlaylistSheet(): accessibility — both close affordances are ind
     const { onClose } = renderSheet();
 
     await waitFor(() =>
-      expect(within(screen.getByTestId('add-to-playlist-sheet')).getByRole('button', { name: 'Close' })).toBeTruthy(),
+      expect(
+        within(screen.getByTestId('add-to-playlist-sheet')).getByRole('button', { name: 'Close' }),
+      ).toBeTruthy(),
     );
-    fireEvent.press(within(screen.getByTestId('add-to-playlist-sheet')).getByRole('button', { name: 'Close' }));
+    fireEvent.press(
+      within(screen.getByTestId('add-to-playlist-sheet')).getByRole('button', { name: 'Close' }),
+    );
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -449,17 +474,19 @@ describe('AddToPlaylistSheet(): failure injection', () => {
     const { onClose } = renderSheet();
 
     await waitFor(() => expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull());
-    expect(__http.requests.filter((r: { path: string }) => r.path.includes('/tracks/batch'))).toHaveLength(0);
+    expect(
+      __http.requests.filter((r: { path: string }) => r.path.includes('/tracks/batch')),
+    ).toHaveLength(0);
     expect(onClose).not.toHaveBeenCalled();
   });
 
   it('a failed add alerts the user, leaves the sheet open, and never shows a false confirmation', async () => {
     __http.reply('GET /v1/playlists', {
       status: 200,
-      json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
     });
     __http.fail('POST /v1/playlists/p1/tracks/batch');
-    const { onClose } = renderSheet({ resolveTrackIds: () => Promise.resolve(['t1']) });
+    const { onClose } = renderSheet({ resolveTrackIds: () => Promise.resolve([asTrackId('t1')]) });
 
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
     fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
@@ -481,10 +508,15 @@ describe('AddToPlaylistSheet(): the 700ms confirmation dwell is a real hold, not
     try {
       __http.reply('GET /v1/playlists', {
         status: 200,
-        json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+        json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
       });
-      __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { added: 1, skipped: 0 } });
-      const { onClose } = renderSheet({ resolveTrackIds: () => Promise.resolve(['t1']) });
+      __http.reply('POST /v1/playlists/p1/tracks/batch', {
+        status: 200,
+        json: { added: 1, skipped: 0 },
+      });
+      const { onClose } = renderSheet({
+        resolveTrackIds: () => Promise.resolve([asTrackId('t1')]),
+      });
 
       await act(async () => {
         await jest.advanceTimersByTimeAsync(0);
@@ -519,10 +551,15 @@ describe('AddToPlaylistSheet(): unmounting clears a pending confirmation timer (
     try {
       __http.reply('GET /v1/playlists', {
         status: 200,
-        json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+        json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
       });
-      __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { added: 1, skipped: 0 } });
-      const { onClose, unmount } = renderSheet({ resolveTrackIds: () => Promise.resolve(['t1']) });
+      __http.reply('POST /v1/playlists/p1/tracks/batch', {
+        status: 200,
+        json: { added: 1, skipped: 0 },
+      });
+      const { onClose, unmount } = renderSheet({
+        resolveTrackIds: () => Promise.resolve([asTrackId('t1')]),
+      });
 
       await act(async () => {
         await jest.advanceTimersByTimeAsync(0);
@@ -549,95 +586,111 @@ describe('AddToPlaylistSheet(): unmounting clears a pending confirmation timer (
 });
 
 describe('AddToPlaylistSheet(): a second add before the first timer fires cancels the first timer rather than orphaning it', () => {
-  it(
-    "does not cut short the second add's own 700ms confirmation window",
-    async () => {
-      jest.useFakeTimers();
-      try {
-        __http.reply('GET /v1/playlists', {
-          status: 200,
-          json: {
-            items: [playlist({ id: 'p1', name: 'Focus' }), playlist({ id: 'p2', name: 'Chill' })],
-            total: 2,
-          },
-        });
-        __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { added: 1, skipped: 0 } });
-        __http.reply('POST /v1/playlists/p2/tracks/batch', { status: 200, json: { added: 1, skipped: 0 } });
-        renderSheet({ resolveTrackIds: () => Promise.resolve(['t1']) });
+  it("does not cut short the second add's own 700ms confirmation window", async () => {
+    jest.useFakeTimers();
+    try {
+      __http.reply('GET /v1/playlists', {
+        status: 200,
+        json: {
+          items: [
+            playlist({ id: asPlaylistId('p1'), name: 'Focus' }),
+            playlist({ id: asPlaylistId('p2'), name: 'Chill' }),
+          ],
+          total: 2,
+        },
+      });
+      __http.reply('POST /v1/playlists/p1/tracks/batch', {
+        status: 200,
+        json: { added: 1, skipped: 0 },
+      });
+      __http.reply('POST /v1/playlists/p2/tracks/batch', {
+        status: 200,
+        json: { added: 1, skipped: 0 },
+      });
+      renderSheet({ resolveTrackIds: () => Promise.resolve([asTrackId('t1')]) });
 
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(0);
-        });
-        fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(0);
-        });
-        expect(screen.getByText('Added ✓')).toBeTruthy();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText('Added ✓')).toBeTruthy();
 
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(300);
-        });
-        fireEvent.press(screen.getByTestId('add-to-playlist-p2'));
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(0);
-        });
-        expect(screen.getByText('Added ✓')).toBeTruthy();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(300);
+      });
+      fireEvent.press(screen.getByTestId('add-to-playlist-p2'));
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText('Added ✓')).toBeTruthy();
 
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(400);
-        });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(400);
+      });
 
-        expect(screen.getByText('Added ✓')).toBeTruthy();
-      } finally {
-        jest.useRealTimers();
-      }
-    },
-  );
+      expect(screen.getByText('Added ✓')).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe('AddToPlaylistSheet(): handleClose cancels a pending confirmation timer (:146-149)', () => {
-  it(
-    'a manual close is the final call to onClose — no further, delayed call comes from the orphaned timer',
-    async () => {
-      jest.useFakeTimers();
-      try {
-        __http.reply('GET /v1/playlists', {
-          status: 200,
-          json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
-        });
-        __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { added: 1, skipped: 0 } });
-        const { onClose } = renderSheet({ resolveTrackIds: () => Promise.resolve(['t1']) });
+  it('a manual close is the final call to onClose — no further, delayed call comes from the orphaned timer', async () => {
+    jest.useFakeTimers();
+    try {
+      __http.reply('GET /v1/playlists', {
+        status: 200,
+        json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
+      });
+      __http.reply('POST /v1/playlists/p1/tracks/batch', {
+        status: 200,
+        json: { added: 1, skipped: 0 },
+      });
+      const { onClose } = renderSheet({
+        resolveTrackIds: () => Promise.resolve([asTrackId('t1')]),
+      });
 
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(0);
-        });
-        fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(0);
-        });
-        expect(screen.getByText('Added ✓')).toBeTruthy();
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText('Added ✓')).toBeTruthy();
 
-        fireEvent.press(within(screen.getByTestId('add-to-playlist-sheet')).getByRole('button', { name: 'Close' }));
-        expect(onClose).toHaveBeenCalledTimes(1);
+      fireEvent.press(
+        within(screen.getByTestId('add-to-playlist-sheet')).getByRole('button', { name: 'Close' }),
+      );
+      expect(onClose).toHaveBeenCalledTimes(1);
 
-        await act(async () => {
-          await jest.advanceTimersByTimeAsync(700);
-        });
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(700);
+      });
 
-        expect(onClose).toHaveBeenCalledTimes(1);
-      } finally {
-        jest.useRealTimers();
-      }
-    },
-  );
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe('AddToPlaylistSheet(): createAndAdd (:92-104)', () => {
   it('a successful create-and-add closes both the create modal and the sheet', async () => {
     __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
-    __http.reply('POST /v1/playlists', { status: 201, json: playlist({ id: 'p9', name: 'Road Trip Mix' }) });
-    __http.reply('POST /v1/playlists/p9/tracks/batch', { status: 200, json: { added: 1, skipped: 0 } });
-    const { onClose } = renderSheet({ resolveTrackIds: () => Promise.resolve(['t1']) });
+    __http.reply('POST /v1/playlists', {
+      status: 201,
+      json: playlist({ id: asPlaylistId('p9'), name: 'Road Trip Mix' }),
+    });
+    __http.reply('POST /v1/playlists/p9/tracks/batch', {
+      status: 200,
+      json: { added: 1, skipped: 0 },
+    });
+    const { onClose } = renderSheet({ resolveTrackIds: () => Promise.resolve([asTrackId('t1')]) });
 
     await waitFor(() => screen.getByTestId('add-to-playlist-create-new'));
     fireEvent.press(screen.getByTestId('add-to-playlist-create-new'));
@@ -648,31 +701,28 @@ describe('AddToPlaylistSheet(): createAndAdd (:92-104)', () => {
     expect(screen.queryByTestId('create-playlist-modal')).toBeNull();
   });
 
-  it(
-    'a failed playlist creation leaves the create modal open so the user can retry, instead of closing everything (:97-100)',
-    async () => {
-      __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
-      __http.fail('POST /v1/playlists');
-      const { onClose } = renderSheet({ resolveTrackIds: () => Promise.resolve(['t1']) });
+  it('a failed playlist creation leaves the create modal open so the user can retry, instead of closing everything (:97-100)', async () => {
+    __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
+    __http.fail('POST /v1/playlists');
+    const { onClose } = renderSheet({ resolveTrackIds: () => Promise.resolve([asTrackId('t1')]) });
 
-      await waitFor(() => screen.getByTestId('add-to-playlist-create-new'));
-      fireEvent.press(screen.getByTestId('add-to-playlist-create-new'));
-      fireEvent.changeText(screen.getByTestId('create-playlist-input'), 'Road Trip Mix');
-      fireEvent.press(screen.getByTestId('create-playlist-confirm'));
+    await waitFor(() => screen.getByTestId('add-to-playlist-create-new'));
+    fireEvent.press(screen.getByTestId('add-to-playlist-create-new'));
+    fireEvent.changeText(screen.getByTestId('create-playlist-input'), 'Road Trip Mix');
+    fireEvent.press(screen.getByTestId('create-playlist-confirm'));
 
-      await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
 
-      expect(onClose).not.toHaveBeenCalled();
-      expect(screen.getByTestId('create-playlist-modal').props.visible).toBe(true);
-    },
-  );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId('create-playlist-modal').props.visible).toBe(true);
+  });
 });
 
 describe('AddToPlaylistSheet(): backing out of the nested create modal returns to the picker (:224)', () => {
   it('cancelling the create modal closes only that modal, leaving the picker open and the sheet never closed', async () => {
     __http.reply('GET /v1/playlists', {
       status: 200,
-      json: { items: [playlist({ id: 'p1', name: 'Focus' })], total: 1 },
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
     });
     const { onClose } = renderSheet();
 

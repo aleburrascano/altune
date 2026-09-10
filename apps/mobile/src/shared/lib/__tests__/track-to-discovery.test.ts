@@ -1,10 +1,11 @@
 import { trackToDiscoveryResult } from '../track-to-discovery';
 
+import { asTrackId } from '@shared/api-client/ids';
 import type { FeaturedArtist, TrackResponse } from '@shared/api-client/types';
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 'track-1',
+    id: asTrackId('track-1'),
     title: 'Midnight City',
     artist: 'M83',
     album: null,
@@ -25,7 +26,11 @@ function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
 
 describe('trackToDiscoveryResult — fixed shape', () => {
   it('maps kind, title, subtitle, image_url, confidence and sources for a SAVED library track', () => {
-    const track = makeTrack({ title: 'Midnight City', artist: 'M83', artwork_url: 'https://a.example/art.jpg' });
+    const track = makeTrack({
+      title: 'Midnight City',
+      artist: 'M83',
+      artwork_url: 'https://a.example/art.jpg',
+    });
     const result = trackToDiscoveryResult(track);
     expect(result.kind).toBe('track');
     expect(result.title).toBe('Midnight City');
@@ -44,7 +49,7 @@ describe('trackToDiscoveryResult — fixed shape', () => {
   });
 
   it('extras always carries acquisition_status and track_id', () => {
-    const track = makeTrack({ acquisition_status: 'failed', id: 'track-42' });
+    const track = makeTrack({ acquisition_status: 'failed', id: asTrackId('track-42') });
     const result = trackToDiscoveryResult(track);
     expect(result.extras['acquisition_status']).toBe('failed');
     expect(result.extras['track_id']).toBe('track-42');
@@ -61,9 +66,9 @@ describe('trackToDiscoveryResult — album spread arm: != null, so "" survives',
   });
 
   it('includes a non-empty album', () => {
-    expect(trackToDiscoveryResult(makeTrack({ album: 'Hurry Up, We\'re Dreaming' })).extras['album']).toBe(
-      "Hurry Up, We're Dreaming",
-    );
+    expect(
+      trackToDiscoveryResult(makeTrack({ album: "Hurry Up, We're Dreaming" })).extras['album'],
+    ).toBe("Hurry Up, We're Dreaming");
   });
 });
 
@@ -75,13 +80,15 @@ describe('trackToDiscoveryResult — duration_seconds spread arm: != null, so 0 
   });
 
   it('includes duration_seconds of exactly 0, the falsy-but-valid boundary', () => {
-    expect(trackToDiscoveryResult(makeTrack({ duration_seconds: 0 })).extras['duration_seconds']).toBe(0);
+    expect(
+      trackToDiscoveryResult(makeTrack({ duration_seconds: 0 })).extras['duration_seconds'],
+    ).toBe(0);
   });
 
   it('includes a positive duration_seconds', () => {
-    expect(trackToDiscoveryResult(makeTrack({ duration_seconds: 245 })).extras['duration_seconds']).toBe(
-      245,
-    );
+    expect(
+      trackToDiscoveryResult(makeTrack({ duration_seconds: 245 })).extras['duration_seconds'],
+    ).toBe(245);
   });
 });
 
@@ -116,9 +123,9 @@ describe('trackToDiscoveryResult — featured_artists spread arm: truthiness + l
 
   it('includes featured_artists verbatim when at least one credit is present', () => {
     const featured: FeaturedArtist[] = [{ name: 'Rihanna', mbid: null, deezer_id: 564 }];
-    expect(trackToDiscoveryResult(makeTrack({ featured_artists: featured })).extras['featured_artists']).toEqual(
-      featured,
-    );
+    expect(
+      trackToDiscoveryResult(makeTrack({ featured_artists: featured })).extras['featured_artists'],
+    ).toEqual(featured);
   });
 });
 
@@ -126,7 +133,7 @@ describe('trackToDiscoveryResult — idempotence / replay, no input mutation', (
   it('applying twice to the same frozen TrackResponse yields deep-equal results and never throws', () => {
     const track = Object.freeze(
       makeTrack({
-        album: 'Hurry Up, We\'re Dreaming',
+        album: "Hurry Up, We're Dreaming",
         duration_seconds: 0,
         track_number: 3,
         featured_artists: [{ name: 'Rihanna', mbid: null, deezer_id: 564 }],
@@ -147,7 +154,7 @@ describe('trackToDiscoveryResult — idempotence / replay, no input mutation', (
 });
 
 describe('trackToDiscoveryResult — FeaturingScreen path: every track has non-empty featured_artists by construction', () => {
-  it('spreads the artist-filtered query\'s featured_artists into extras for every track', () => {
+  it("spreads the artist-filtered query's featured_artists into extras for every track", () => {
     const featured: FeaturedArtist[] = [
       { name: 'Drake', mbid: 'mb-drake', deezer_id: null },
       { name: 'SZA', mbid: null, deezer_id: 7 },

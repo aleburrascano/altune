@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 
 import { act, renderHook } from '@testing-library/react-native';
 
+import { asTrackId } from '@shared/api-client/ids';
+
 import { useQueuePlayback } from '../useQueuePlayback';
 import { useQueueStore } from '../queueStore';
 import { PlaybackContext } from '../PlaybackContext';
@@ -15,7 +17,7 @@ beforeEach(() => {
 
 function track(id: string): PlaybackTrack {
   return {
-    source: { kind: 'library', trackId: id },
+    source: { kind: 'library', trackId: asTrackId(id) },
     title: `Title ${id}`,
     artist: `Artist ${id}`,
     artworkUrl: null,
@@ -331,9 +333,7 @@ describe('skipToIndex / removeFromQueue / moveQueueItem', () => {
 
   it('moveQueueItem recomputes Up Next from the store after the reorder, not before', () => {
     act(() => {
-      useQueueStore
-        .getState()
-        .loadQueue([track('a'), track('b'), track('c'), track('d')], 1, null);
+      useQueueStore.getState().loadQueue([track('a'), track('b'), track('c'), track('d')], 1, null);
     });
     let playOrderAtCall: readonly number[] = [];
     const controls = makeControls({
@@ -354,9 +354,7 @@ describe('skipToIndex / removeFromQueue / moveQueueItem', () => {
 
   it('leaves the reorder committed in the store even when native reorderUpcoming rejects', () => {
     act(() => {
-      useQueueStore
-        .getState()
-        .loadQueue([track('a'), track('b'), track('c'), track('d')], 1, null);
+      useQueueStore.getState().loadQueue([track('a'), track('b'), track('c'), track('d')], 1, null);
     });
     const controls = makeControls({ reorderUpcoming: jest.fn(() => resolvedRejection()) });
     const { result } = setup(controls);
@@ -414,9 +412,7 @@ describe('toggleShuffle / cycleRepeatMode', () => {
   it('hands native only the shuffled upcoming slice, never restarting the playing track', () => {
     const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
     act(() => {
-      useQueueStore
-        .getState()
-        .loadQueue([track('a'), track('b'), track('c'), track('d')], 1, null);
+      useQueueStore.getState().loadQueue([track('a'), track('b'), track('c'), track('d')], 1, null);
     });
     const controls = makeControls();
     const { result } = setup(controls);
@@ -435,9 +431,7 @@ describe('toggleShuffle / cycleRepeatMode', () => {
   it('leaves the shuffle committed in the store even when native reorderUpcoming rejects', () => {
     const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
     act(() => {
-      useQueueStore
-        .getState()
-        .loadQueue([track('a'), track('b'), track('c'), track('d')], 1, null);
+      useQueueStore.getState().loadQueue([track('a'), track('b'), track('c'), track('d')], 1, null);
     });
     const controls = makeControls({ reorderUpcoming: jest.fn(() => resolvedRejection()) });
     const { result } = setup(controls);

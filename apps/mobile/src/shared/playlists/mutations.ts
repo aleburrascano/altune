@@ -8,11 +8,12 @@ import {
   removeTracksFromPlaylist,
   renamePlaylist,
 } from '@shared/api-client/playlists';
+import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { playlistKeys } from '@shared/lib/query-keys';
 
-type AddTracksVariables = { playlistId: string; trackIds: string[] };
-type CreateWithTracksVariables = { name: string; trackIds: string[] };
+type AddTracksVariables = { playlistId: PlaylistId; trackIds: TrackId[] };
+type CreateWithTracksVariables = { name: string; trackIds: TrackId[] };
 
 function alreadyThereMessage(skipped: number, playlistName: string | undefined): string {
   const where = playlistName != null ? `already in ${playlistName}` : 'already in the playlist';
@@ -108,7 +109,7 @@ export function useAddTracksToPlaylist() {
   });
 }
 
-export function useRenamePlaylist(playlistId: string) {
+export function useRenamePlaylist(playlistId: PlaylistId) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (name: string) => renamePlaylist(playlistId, name),
@@ -134,7 +135,7 @@ export function useRenamePlaylist(playlistId: string) {
   });
 }
 
-export function useDeletePlaylist(playlistId: string) {
+export function useDeletePlaylist(playlistId: PlaylistId) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => deletePlaylist(playlistId),
@@ -148,14 +149,14 @@ export function useDeletePlaylist(playlistId: string) {
   });
 }
 
-export function useRemoveTracksFromPlaylist(playlistId: string) {
+export function useRemoveTracksFromPlaylist(playlistId: PlaylistId) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (trackIds: string[]) =>
+    mutationFn: (trackIds: TrackId[]) =>
       removeTracksFromPlaylist(playlistId, { track_ids: trackIds }),
     onMutate: async (trackIds) => {
       await queryClient.cancelQueries({ queryKey: playlistKeys.detail(playlistId) });
-      const previous = queryClient.getQueryData<{ tracks: { id: string }[] }>(
+      const previous = queryClient.getQueryData<{ tracks: { id: TrackId }[] }>(
         playlistKeys.detail(playlistId),
       );
       if (previous) {

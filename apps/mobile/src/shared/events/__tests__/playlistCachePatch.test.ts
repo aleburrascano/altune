@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import fc from 'fast-check';
 
+import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
@@ -17,7 +18,7 @@ import {
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 't1',
+    id: asTrackId('t1'),
     title: 'Track One',
     artist: 'Artist One',
     album: null,
@@ -38,7 +39,7 @@ function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
 
 function makePlaylistSummary(overrides: Partial<PlaylistResponse> = {}): PlaylistResponse {
   return {
-    id: 'p1',
+    id: asPlaylistId('p1'),
     name: 'My Playlist',
     track_count: 0,
     preview_artwork_urls: [],
@@ -54,7 +55,7 @@ function makePlaylistDetail(
   overrides: Partial<PlaylistDetailResponse> = {},
 ): PlaylistDetailResponse {
   return {
-    id,
+    id: asPlaylistId(id),
     name: 'My Playlist',
     track_count: tracks.length,
     preview_artwork_urls: [],
@@ -66,7 +67,10 @@ function makePlaylistDetail(
   };
 }
 
-function makeList(items: PlaylistResponse[], overrides: Partial<ListPlaylistsResponse> = {}): ListPlaylistsResponse {
+function makeList(
+  items: PlaylistResponse[],
+  overrides: Partial<ListPlaylistsResponse> = {},
+): ListPlaylistsResponse {
   return { items, total: items.length, ...overrides };
 }
 
@@ -77,7 +81,9 @@ function newClient(): QueryClient {
 describe('patchPlaylistName', () => {
   it('renames the cached detail while leaving other fields untouched', () => {
     const client = newClient();
-    const detail = makePlaylistDetail('p1', [makeTrack({ id: 'a' })], { name: 'Old Name' });
+    const detail = makePlaylistDetail('p1', [makeTrack({ id: asTrackId('a') })], {
+      name: 'Old Name',
+    });
     client.setQueryData(playlistKeys.detail('p1'), detail);
 
     patchPlaylistName(client, 'p1', 'New Name');
@@ -90,8 +96,8 @@ describe('patchPlaylistName', () => {
 
   it('renames only the matching entry in the cached list', () => {
     const client = newClient();
-    const target = makePlaylistSummary({ id: 'p1', name: 'Old Name' });
-    const other = makePlaylistSummary({ id: 'p2', name: 'Other' });
+    const target = makePlaylistSummary({ id: asPlaylistId('p1'), name: 'Old Name' });
+    const other = makePlaylistSummary({ id: asPlaylistId('p2'), name: 'Other' });
     client.setQueryData(playlistKeys.list, makeList([target, other]));
 
     patchPlaylistName(client, 'p1', 'New Name');
@@ -104,7 +110,10 @@ describe('patchPlaylistName', () => {
   it('keeps the detail and list caches in agreement when both are cached', () => {
     const client = newClient();
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [], { name: 'Old' }));
-    client.setQueryData(playlistKeys.list, makeList([makePlaylistSummary({ id: 'p1', name: 'Old' })]));
+    client.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylistSummary({ id: asPlaylistId('p1'), name: 'Old' })]),
+    );
 
     patchPlaylistName(client, 'p1', 'Renamed');
 
@@ -116,7 +125,10 @@ describe('patchPlaylistName', () => {
 
   it('is a no-op on the detail cache when nothing is cached for that id, but still patches the list', () => {
     const client = newClient();
-    client.setQueryData(playlistKeys.list, makeList([makePlaylistSummary({ id: 'p1', name: 'Old' })]));
+    client.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylistSummary({ id: asPlaylistId('p1'), name: 'Old' })]),
+    );
 
     patchPlaylistName(client, 'p1', 'New Name');
 
@@ -155,7 +167,11 @@ describe('patchPlaylistName', () => {
 describe('removeTrackFromPlaylistCache', () => {
   it('removes the track from the detail cache and recomputes track_count from the remaining tracks', () => {
     const client = newClient();
-    const tracks = [makeTrack({ id: 'a' }), makeTrack({ id: 'target' }), makeTrack({ id: 'c' })];
+    const tracks = [
+      makeTrack({ id: asTrackId('a') }),
+      makeTrack({ id: asTrackId('target') }),
+      makeTrack({ id: asTrackId('c') }),
+    ];
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', tracks));
 
     removeTrackFromPlaylistCache(client, 'p1', 'target');
@@ -170,8 +186,8 @@ describe('removeTrackFromPlaylistCache', () => {
     client.setQueryData(
       playlistKeys.list,
       makeList([
-        makePlaylistSummary({ id: 'p1', track_count: 3 }),
-        makePlaylistSummary({ id: 'p2', track_count: 5 }),
+        makePlaylistSummary({ id: asPlaylistId('p1'), track_count: 3 }),
+        makePlaylistSummary({ id: asPlaylistId('p2'), track_count: 5 }),
       ]),
     );
 
@@ -184,16 +200,21 @@ describe('removeTrackFromPlaylistCache', () => {
 
   it('never drops the list track_count below zero', () => {
     const client = newClient();
-    client.setQueryData(playlistKeys.list, makeList([makePlaylistSummary({ id: 'p1', track_count: 0 })]));
+    client.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylistSummary({ id: asPlaylistId('p1'), track_count: 0 })]),
+    );
 
     removeTrackFromPlaylistCache(client, 'p1', 'target');
 
-    expect(client.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count).toBe(0);
+    expect(
+      client.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count,
+    ).toBe(0);
   });
 
   it('leaves the detail cache unchanged when the track was never in it', () => {
     const client = newClient();
-    const tracks = [makeTrack({ id: 'a' }), makeTrack({ id: 'b' })];
+    const tracks = [makeTrack({ id: asTrackId('a') }), makeTrack({ id: asTrackId('b') })];
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', tracks));
 
     removeTrackFromPlaylistCache(client, 'p1', 'not-in-playlist');
@@ -211,7 +232,10 @@ describe('removeTrackFromPlaylistCache', () => {
 
   it('is a no-op on the list cache when the list is not cached', () => {
     const client = newClient();
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [makeTrack({ id: 'target' })]));
+    client.setQueryData(
+      playlistKeys.detail('p1'),
+      makePlaylistDetail('p1', [makeTrack({ id: asTrackId('target') })]),
+    );
 
     expect(() => removeTrackFromPlaylistCache(client, 'p1', 'target')).not.toThrow();
     expect(client.getQueryData(playlistKeys.list)).toBeUndefined();
@@ -219,9 +243,19 @@ describe('removeTrackFromPlaylistCache', () => {
 
   it('keeps the list track_count in agreement with the detail track_count when the removal is redelivered', () => {
     const client = newClient();
-    const tracks = [makeTrack({ id: 'a' }), makeTrack({ id: 'target' }), makeTrack({ id: 'c' })];
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', tracks, { track_count: 3 }));
-    client.setQueryData(playlistKeys.list, makeList([makePlaylistSummary({ id: 'p1', track_count: 3 })]));
+    const tracks = [
+      makeTrack({ id: asTrackId('a') }),
+      makeTrack({ id: asTrackId('target') }),
+      makeTrack({ id: asTrackId('c') }),
+    ];
+    client.setQueryData(
+      playlistKeys.detail('p1'),
+      makePlaylistDetail('p1', tracks, { track_count: 3 }),
+    );
+    client.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylistSummary({ id: asPlaylistId('p1'), track_count: 3 })]),
+    );
 
     removeTrackFromPlaylistCache(client, 'p1', 'target');
     removeTrackFromPlaylistCache(client, 'p1', 'target');
@@ -235,7 +269,11 @@ describe('removeTrackFromPlaylistCache', () => {
 describe('reorderPlaylistCache', () => {
   it('reorders cached tracks to match the given id sequence', () => {
     const client = newClient();
-    const [a, b, c] = [makeTrack({ id: 'a' }), makeTrack({ id: 'b' }), makeTrack({ id: 'c' })];
+    const [a, b, c] = [
+      makeTrack({ id: asTrackId('a') }),
+      makeTrack({ id: asTrackId('b') }),
+      makeTrack({ id: asTrackId('c') }),
+    ];
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b, c]));
 
     reorderPlaylistCache(client, 'p1', ['c', 'a', 'b']);
@@ -247,10 +285,10 @@ describe('reorderPlaylistCache', () => {
   it('appends tracks not named in the sequence after the named ones, preserving their original relative order', () => {
     const client = newClient();
     const [a, b, c, d] = [
-      makeTrack({ id: 'a' }),
-      makeTrack({ id: 'b' }),
-      makeTrack({ id: 'c' }),
-      makeTrack({ id: 'd' }),
+      makeTrack({ id: asTrackId('a') }),
+      makeTrack({ id: asTrackId('b') }),
+      makeTrack({ id: asTrackId('c') }),
+      makeTrack({ id: asTrackId('d') }),
     ];
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b, c, d]));
 
@@ -262,7 +300,7 @@ describe('reorderPlaylistCache', () => {
 
   it('drops sequence ids that are not in the cache without inserting placeholders', () => {
     const client = newClient();
-    const [a, b] = [makeTrack({ id: 'a' }), makeTrack({ id: 'b' })];
+    const [a, b] = [makeTrack({ id: asTrackId('a') }), makeTrack({ id: asTrackId('b') })];
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b]));
 
     reorderPlaylistCache(client, 'p1', ['x', 'a', 'y', 'b']);
@@ -273,7 +311,7 @@ describe('reorderPlaylistCache', () => {
 
   it('preserves the original order when the sequence is empty', () => {
     const client = newClient();
-    const [a, b] = [makeTrack({ id: 'a' }), makeTrack({ id: 'b' })];
+    const [a, b] = [makeTrack({ id: asTrackId('a') }), makeTrack({ id: asTrackId('b') })];
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b]));
 
     reorderPlaylistCache(client, 'p1', []);
@@ -290,7 +328,11 @@ describe('reorderPlaylistCache', () => {
 
   it('is idempotent: reordering twice with the same sequence yields the same order', () => {
     const client = newClient();
-    const [a, b, c] = [makeTrack({ id: 'a' }), makeTrack({ id: 'b' }), makeTrack({ id: 'c' })];
+    const [a, b, c] = [
+      makeTrack({ id: asTrackId('a') }),
+      makeTrack({ id: asTrackId('b') }),
+      makeTrack({ id: asTrackId('c') }),
+    ];
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b, c]));
 
     reorderPlaylistCache(client, 'p1', ['c', 'a', 'b']);
@@ -304,7 +346,7 @@ describe('reorderPlaylistCache', () => {
 
   it('keeps every cached track exactly once even when the sequence names an id twice', () => {
     const client = newClient();
-    const [a, b] = [makeTrack({ id: 'a' }), makeTrack({ id: 'b' })];
+    const [a, b] = [makeTrack({ id: asTrackId('a') }), makeTrack({ id: asTrackId('b') })];
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b]));
 
     reorderPlaylistCache(client, 'p1', ['a', 'a', 'b']);
@@ -318,7 +360,7 @@ describe('reorderPlaylistCache', () => {
     fc.assert(
       fc.property(fc.shuffledSubarray(ids), (sequence) => {
         const client = newClient();
-        const tracks = ids.map((id) => makeTrack({ id }));
+        const tracks = ids.map((id) => makeTrack({ id: asTrackId(id) }));
         client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', tracks));
 
         reorderPlaylistCache(client, 'p1', sequence);

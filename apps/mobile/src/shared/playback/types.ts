@@ -1,9 +1,10 @@
+import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import type { FeaturedArtist } from '@shared/api-client/types';
 
 export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'ended' | 'error';
 
 export type PlaybackSource =
-  | { readonly kind: 'library'; readonly trackId: string }
+  | { readonly kind: 'library'; readonly trackId: TrackId }
   | { readonly kind: 'preview'; readonly previewUrl: string };
 
 export interface PlaybackTrack {
@@ -52,6 +53,6 @@ export type PlaybackContextValue = PlaybackState & PlaybackControls;
 export type RepeatMode = 'off' | 'all' | 'one';
 
 export type QueueSource =
-  | { readonly kind: 'playlist'; readonly playlistId: string; readonly name: string }
+  | { readonly kind: 'playlist'; readonly playlistId: PlaylistId; readonly name: string }
   | { readonly kind: 'library' }
   | { readonly kind: 'search'; readonly query: string };

@@ -11,6 +11,7 @@ import {
 } from '../tracks';
 import { ContractError, NetworkError } from '../errors';
 import { supabase } from '@shared/auth/supabaseClient';
+import { asTrackId } from '@shared/api-client/ids';
 import type { CreateTrackRequest, FeaturedArtist, TrackResponse } from '../types';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -28,7 +29,7 @@ beforeEach(() => {
 
 function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 't1',
+    id: asTrackId('t1'),
     title: 'Kid A',
     artist: 'Radiohead',
     album: null,
@@ -188,7 +189,7 @@ describe('createTrack', () => {
   it('resolves with the server track on success', async () => {
     __http.reply('POST /v1/tracks', {
       status: 201,
-      json: trackResponse({ id: 't1', title: 'Kid A', acquisition_status: 'pending' }),
+      json: trackResponse({ id: asTrackId('t1'), title: 'Kid A', acquisition_status: 'pending' }),
     });
 
     await expect(createTrack(baseCreateBody())).resolves.toMatchObject({
@@ -202,7 +203,7 @@ describe('deleteTrack', () => {
   it('DELETEs the exact track path and resolves void on 204', async () => {
     __http.reply('DELETE /v1/tracks/t1', { status: 204 });
 
-    await expect(deleteTrack('t1')).resolves.toBeUndefined();
+    await expect(deleteTrack(asTrackId('t1'))).resolves.toBeUndefined();
     expect(__http.last().method).toBe('DELETE');
     expect(__http.last().path).toBe('/v1/tracks/t1');
   });
@@ -210,7 +211,7 @@ describe('deleteTrack', () => {
   it('interpolates the trackId into the path unescaped, so a "/" is carried through as an extra path segment', async () => {
     __http.reply('DELETE /v1/tracks/t1/track-number', { status: 204 });
 
-    await deleteTrack('t1/track-number');
+    await deleteTrack(asTrackId('t1/track-number'));
 
     expect(__http.last().path).toBe('/v1/tracks/t1/track-number');
   });
@@ -220,7 +221,7 @@ describe('setTrackNumber', () => {
   it('PATCHes the track-number endpoint with a { track_number } body', async () => {
     __http.reply('PATCH /v1/tracks/t1/track-number', { status: 204 });
 
-    await setTrackNumber('t1', 7);
+    await setTrackNumber(asTrackId('t1'), 7);
 
     const request = __http.last();
     expect(request.method).toBe('PATCH');
@@ -234,7 +235,7 @@ describe('retryAcquisition and reacquireTrack are distinct endpoints', () => {
   it('retryAcquisition POSTs to /retry', async () => {
     __http.reply('POST /v1/tracks/t1/retry', { status: 204 });
 
-    await retryAcquisition('t1');
+    await retryAcquisition(asTrackId('t1'));
 
     expect(__http.last().method).toBe('POST');
     expect(__http.last().path).toBe('/v1/tracks/t1/retry');
@@ -243,7 +244,7 @@ describe('retryAcquisition and reacquireTrack are distinct endpoints', () => {
   it('reacquireTrack POSTs to /reacquire, a different path from retry', async () => {
     __http.reply('POST /v1/tracks/t1/reacquire', { status: 204 });
 
-    await reacquireTrack('t1');
+    await reacquireTrack(asTrackId('t1'));
 
     expect(__http.last().method).toBe('POST');
     expect(__http.last().path).toBe('/v1/tracks/t1/reacquire');
@@ -252,7 +253,7 @@ describe('retryAcquisition and reacquireTrack are distinct endpoints', () => {
   it('retryAcquisition never touches the reacquire path', async () => {
     __http.reply('POST /v1/tracks/t1/retry', { status: 204 });
 
-    await retryAcquisition('t1');
+    await retryAcquisition(asTrackId('t1'));
 
     expect(__http.countFor('POST /v1/tracks/t1/reacquire')).toBe(0);
   });
@@ -343,7 +344,7 @@ describe('getAllTracks', () => {
     return {
       status: 200,
       json: {
-        items: items.map((it) => trackResponse({ id: it.id })),
+        items: items.map((it) => trackResponse({ id: asTrackId(it.id) })),
         total,
         limit: 2000,
         offset,
