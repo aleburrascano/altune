@@ -1,0 +1,34 @@
+name: Epic
+description: A goal too big for one ticket. Split it into child tasks.
+title: "[Epic]: "
+labels: ["epic"]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome
+      description: The one thing that is true when this epic is done.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now
+      description: What this unblocks or fixes. The reason it earns a slot.
+    validations:
+      required: true
+  - type: textarea
+    id: children
+    attributes:
+      label: Child tasks
+      description: The tasks this splits into. Link them as they get filed.
+      value: |
+        - [ ] #
+        - [ ] #
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Out of scope
+      description: What this epic deliberately does not cover.
