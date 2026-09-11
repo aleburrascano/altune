@@ -7,24 +7,14 @@ import (
 	"os"
 
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/database"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func RunDedupMigration(cfg *config.Config, execute bool) {
-	if cfg.DatabaseURL == "" {
-		fmt.Println("ERROR: DATABASE_URL not set")
-		os.Exit(1)
-	}
-
 	ctx := context.Background()
-	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
-	if err != nil {
-		fmt.Printf("ERROR: database connection failed: %v\n", err)
-		os.Exit(1)
-	}
+	pool := mustOpenPool(ctx, cfg)
 	defer pool.Close()
 
 	rows, err := pool.Query(ctx,
@@ -99,14 +89,13 @@ func RunDedupMigration(cfg *config.Config, execute bool) {
 		}
 	}
 
-	fmt.Printf("\n%s\n", "==================================================")
-	fmt.Println("Dedup migration complete:")
+	printSummary("Dedup migration complete:")
 	fmt.Printf("  Duplicate groups: %d\n", len(groups))
 	if execute {
 		fmt.Printf("  Tracks deleted:   %d\n", tracksDeleted)
 		fmt.Printf("  Playlists remapped: %d\n", playlistsRemapped)
 	} else {
-		fmt.Println("\n  Run with --execute to apply changes.")
+		printDryRunHint()
 	}
 	fmt.Println()
 

@@ -22,3 +22,4 @@ Layout:
 - Never grow queue logic here: advance/prev/shuffle/repeat live on the client.
 - Pack and parse `source_id` only through `QueueSource`; the wire carries the structured `source`.
 - Keep emitting `source_id` alongside `source` until every client reads the structured field.
+- Every DB round trip derives its own deadline (`context.WithTimeout`) — the queue-state repo (`Upsert`, `GetForUser`) and the catalog bridge (`Lookup`) each bound the raw request context so a stuck dependency can never pin a pgx pool connection and drain the shared pool. The timeouts are package vars so tests can shrink them.

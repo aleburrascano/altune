@@ -2,10 +2,9 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
@@ -28,34 +27,28 @@ func main() {
 		return
 	}
 
-	switch os.Args[1] {
+	cmd, args := os.Args[1], os.Args[2:]
+	switch cmd {
 	case "serve":
 		runServer(cfg, logRing)
 	case "migrate-dedup":
-		execute := hasFlag("--execute")
-		commands.RunDedupMigration(cfg, execute)
+		commands.RunDedupMigration(cfg, parseExecute(cmd, args))
 	case "health-check":
-		fix := hasFlag("--fix")
-		commands.RunHealthCheck(cfg, fix)
+		commands.RunHealthCheck(cfg, parseFix(cmd, args))
 	case "fix-audio-refs":
-		execute := hasFlag("--execute")
-		commands.RunFixAudioRefs(cfg, execute)
+		commands.RunFixAudioRefs(cfg, parseExecute(cmd, args))
 	case "backfill-duration":
-		execute := hasFlag("--execute")
-		commands.RunBackfillDuration(cfg, execute)
+		commands.RunBackfillDuration(cfg, parseExecute(cmd, args))
 	case "reconcile-truncated":
-		execute := hasFlag("--execute")
-		commands.RunReconcileTruncated(cfg, execute)
+		commands.RunReconcileTruncated(cfg, parseExecute(cmd, args))
 	case "backfill-m4a":
-		execute := hasFlag("--execute")
-		limit := flagInt("--limit", 0)
+		execute, limit := parseExecuteLimit(cmd, args)
 		commands.RunBackfillM4a(cfg, execute, limit)
 	case "reacquire-corrupt-m4a":
-		execute := hasFlag("--execute")
-		limit := flagInt("--limit", 0)
+		execute, limit := parseExecuteLimit(cmd, args)
 		commands.RunReacquireCorruptM4a(cfg, execute, limit)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated|backfill-m4a|reacquire-corrupt-m4a]\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated|backfill-m4a|reacquire-corrupt-m4a]\n", cmd)
 		os.Exit(1)
 	}
 }
@@ -68,28 +61,24 @@ func runServer(cfg *config.Config, logRing *logging.RingBuffer) {
 	}
 }
 
-func hasFlag(flag string) bool {
-	for _, arg := range os.Args[2:] {
-		if arg == flag {
-			return true
-		}
-	}
-	return false
+func parseExecute(name string, args []string) bool {
+	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	execute := fs.Bool("execute", false, "apply changes instead of a dry-run")
+	_ = fs.Parse(args)
+	return *execute
 }
 
-func flagInt(name string, fallback int) int {
-	args := os.Args[2:]
-	for i, arg := range args {
-		if strings.HasPrefix(arg, name+"=") {
-			if v, err := strconv.Atoi(strings.TrimPrefix(arg, name+"=")); err == nil {
-				return v
-			}
-		}
-		if arg == name && i+1 < len(args) {
-			if v, err := strconv.Atoi(args[i+1]); err == nil {
-				return v
-			}
-		}
-	}
-	return fallback
+func parseFix(name string, args []string) bool {
+	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	fix := fs.Bool("fix", false, "apply fixes instead of a dry-run")
+	_ = fs.Parse(args)
+	return *fix
+}
+
+func parseExecuteLimit(name string, args []string) (bool, int) {
+	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	execute := fs.Bool("execute", false, "apply changes instead of a dry-run")
+	limit := fs.Int("limit", 0, "cap rows touched (<= 0 means all)")
+	_ = fs.Parse(args)
+	return *execute, *limit
 }

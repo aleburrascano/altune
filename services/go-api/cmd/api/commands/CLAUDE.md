@@ -4,7 +4,8 @@ Operator-run repair commands for the `api` binary: `api <command> [--execute] [-
 
 Layout:
 
-- `common.go` — shared CLI helpers (audio store construction, duration probing).
+- `common.go` — shared CLI helpers: `mustOpenPool`, `NewAudioStoreFromConfig`/`mustAudioStore`, `loadReadyTracks`, `markTrackFailed` (the failed-transition invariant routed through `domain.Track.MarkFailed`), `printSummary`/`printDryRunHint`.
+- `backfill_duration.go` — also holds `probeDuration`, the shared ffprobe helper.
 - `reacquire.go` — the shared re-acquisition loop (`runReacquire`), `reacquireSpec`, `reacquireTrack`, `expectedDuration`.
 - `backfill_m4a.go` — re-acquires ready tracks stored as `.mp3`.
 - `reacquire_corrupt.go` — re-acquires ready tracks stored as `.m4a`.

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"altune/go-api/internal/playback/domain"
@@ -16,8 +17,15 @@ import (
 
 var _ ports.QueueStateRepository = (*PgxQueueStateRepository)(nil)
 
+var queueStateOpTimeout = 3 * time.Second
+
+type querier interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 type PgxQueueStateRepository struct {
-	pool *pgxpool.Pool
+	pool querier
 }
 
 func NewPgxQueueStateRepository(pool *pgxpool.Pool) *PgxQueueStateRepository {
@@ -25,6 +33,9 @@ func NewPgxQueueStateRepository(pool *pgxpool.Pool) *PgxQueueStateRepository {
 }
 
 func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.QueueState) error {
+	ctx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
+	defer cancel()
+
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO playback_queue_state (user_id, track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -54,6 +65,9 @@ func (r *PgxQueueStateRepository) GetForUser(
 	ctx context.Context,
 	userId shared.UserId,
 ) (*domain.QueueState, error) {
+	ctx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
+	defer cancel()
+
 	var (
 		trackIds     []string
 		currentIdx   int

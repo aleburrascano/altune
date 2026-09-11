@@ -18,6 +18,7 @@ import { useSignOut } from '@shared/auth/useSignOut';
 import { useThemePreference } from '@shared/ui/theme/themePreference';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { formatBytes, pinnedBytes } from '@shared/offline/pinnedFiles';
+import { countLabel } from '@shared/lib/format';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -91,7 +92,7 @@ export function SettingsScreen(): ReactElement {
             label={
               downloadCount === 0
                 ? 'No downloads on this device'
-                : `${downloadCount} ${downloadCount === 1 ? 'track' : 'tracks'}`
+                : `${downloadCount} ${countLabel(downloadCount, 'track')}`
             }
             detail={downloadCount === 0 ? undefined : downloadSize}
           />
@@ -171,7 +172,7 @@ export function SettingsScreen(): ReactElement {
         visible={confirming === 'downloads'}
         icon={Trash2}
         title="Remove all downloads?"
-        body={`${downloadCount} ${downloadCount === 1 ? 'track' : 'tracks'} (${downloadSize}) will be deleted from this device. They stay in your library and can be downloaded again.`}
+        body={`${downloadCount} ${countLabel(downloadCount, 'track')} (${downloadSize}) will be deleted from this device. They stay in your library and can be downloaded again.`}
         confirmLabel="Remove"
         onConfirm={unpinAll}
         onClose={() => setConfirming(null)}
