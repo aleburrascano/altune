@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -38,6 +39,14 @@ type fakeNowPlaying struct {
 
 func (f *fakeNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*ports.NowPlayingTrack, error) {
 	return f.tracks[trackId], nil
+}
+
+type erroringNowPlaying struct {
+	err error
+}
+
+func (f *erroringNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*ports.NowPlayingTrack, error) {
+	return nil, f.err
 }
 
 func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
@@ -91,6 +100,55 @@ func TestQueueService_ResumeView_UnknownTrackOmitsCurrentTrackWithoutFailing(t *
 	}
 	if view.State.CurrentIdx != 1 {
 		t.Errorf("state should still resume: idx=%d", view.State.CurrentIdx)
+	}
+}
+
+func TestQueueService_ResumeView_CatalogErrorDegradesButKeepsResume(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	catalogTimingOut := &erroringNowPlaying{err: errors.New("catalog db timeout")}
+	svc := NewQueueService(repo, catalogTimingOut)
+	user := testUser()
+
+	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
+		TrackIds:   []string{"x", "y"},
+		CurrentIdx: 1,
+		RepeatMode: "off",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	view, err := svc.ResumeView(context.Background(), user)
+	if err != nil {
+		t.Fatalf("catalog enrichment error must not fail the resume: %v", err)
+	}
+	if view.CurrentTrack != nil {
+		t.Errorf("expected no current track when lookup errors, got %+v", view.CurrentTrack)
+	}
+	if view.State.CurrentIdx != 1 || len(view.State.TrackIds) != 2 {
+		t.Errorf("queue snapshot must be preserved when enrichment fails: %+v", view.State)
+	}
+}
+
+func TestQueueService_ResumeView_CanceledLookupDegradesButKeepsResume(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	clientDisconnected := &erroringNowPlaying{err: context.Canceled}
+	svc := NewQueueService(repo, clientDisconnected)
+	user := testUser()
+
+	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
+		TrackIds:   []string{"x", "y"},
+		CurrentIdx: 1,
+		RepeatMode: "off",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	view, err := svc.ResumeView(context.Background(), user)
+	if err != nil {
+		t.Fatalf("canceled lookup must not become a 500: %v", err)
+	}
+	if view.CurrentTrack != nil {
+		t.Errorf("expected no current track when lookup is canceled, got %+v", view.CurrentTrack)
 	}
 }
 
