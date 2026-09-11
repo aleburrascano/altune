@@ -58,6 +58,14 @@ func clampLimit(r *http.Request, def, max int) int {
 	return limit
 }
 
+func limitResetOnOverflow(r *http.Request, def, max int) int {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 || limit > max {
+		return def
+	}
+	return limit
+}
+
 func writeContentFetchError(w http.ResponseWriter, provider string) {
 	httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
 		Provider: provider, Status: "error", Items: []SearchResultDTO{},

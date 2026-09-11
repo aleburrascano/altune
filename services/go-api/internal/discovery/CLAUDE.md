@@ -70,3 +70,7 @@ Telemetry:
 - Exploration shuffles a copy; never mutate the cached list.
 - Never persist identity or telemetry on the request path — detached context, off the hot path.
 - `search_performed` is server-emitted; reject it at `POST /events`. `results_shown` is client-emitted and accepted there.
+
+Endpoint limit policies (deliberately not one call):
+
+- The three search-endpoint `limit` params carry three different, test-pinned overflow policies and live in three different layers — they are not foldable into content's `clampLimit` (`<=0->def`, `>max->max`). `suggest` resets on overflow in the handler (`<=0` or `>10` -> `5`, so `limit=11` -> `5`, never clamp-to-cap) via `limitResetOnOverflow`. `search` only defaults `<=0->20` in the handler; the `>50` cap is a domain invariant rejected with 400 by `NewSearchQuery` (`limit=51` -> 400), never clamped up in the adapter. `search-history` passes the raw limit through; the `<=0->10` default is a service concern (`service/list_history.go`) and there is no upper cap. Routing `search`/`history` through a handler helper would drag domain/service policy into the adapter — keep each where its layer owns it.
