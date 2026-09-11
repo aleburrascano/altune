@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	"altune/go-api/internal/acquisition/adapters/id3"
@@ -13,7 +12,6 @@ import (
 	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/database"
 )
 
 const perTrackTimeout = 10 * time.Minute
@@ -28,24 +26,11 @@ type reacquireSpec struct {
 }
 
 func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpec) {
-	if cfg.DatabaseURL == "" {
-		fmt.Println("ERROR: DATABASE_URL not set")
-		os.Exit(1)
-	}
-
 	ctx := context.Background()
-	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
-	if err != nil {
-		fmt.Printf("ERROR: database connection failed: %v\n", err)
-		os.Exit(1)
-	}
+	pool := mustOpenPool(ctx, cfg)
 	defer pool.Close()
 
-	audioStore := buildAudioStoreForCLI(cfg)
-	if audioStore == nil {
-		fmt.Println("ERROR: no audio store configured (need MUSIC_DIR or OCI_S3_* env vars)")
-		os.Exit(1)
-	}
+	audioStore := mustAudioStore(cfg)
 	searcher := ytdlp.NewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime)
 	prober := ytdlp.NewFfprobeProber(cfg.FFmpegLocation)
 
@@ -134,8 +119,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 		fixed++
 	}
 
-	fmt.Printf("\n%s\n", strings.Repeat("=", 50))
-	fmt.Println(spec.doneHeading)
+	printSummary(spec.doneHeading)
 	fmt.Printf("  Candidates: %d\n", len(tracks))
 	fmt.Printf("  %-11s %d\n", spec.successLabel+":", fixed)
 	fmt.Printf("  Skipped:    %d  (old file kept, safe to re-run)\n", skipped)
