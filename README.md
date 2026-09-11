@@ -42,4 +42,3 @@ Two conventions carry most of the weight:
 - Commits: [Conventional Commits](https://www.conventionalcommits.org/), scopes in `commitlint.config.js`, template in `.gitmessage`
 - Domain vocabulary is fixed by [`docs/ubiquitous-language.md`](docs/ubiquitous-language.md) — "Song" is banned; the noun is `Track`
 - Features are planned and tracked as GitHub issues — one ticket per unit of work, closed by its PR
-- Architecture decisions land in [`docs/adr/`](docs/adr/)
