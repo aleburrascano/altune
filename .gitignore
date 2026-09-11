@@ -81,3 +81,6 @@ CLAUDE.local.md
 services/go-api/deploy/caddy/upstream.conf
 # Mutation testing sandbox (Stryker; kept outside apps/mobile so jest never collects it)
 .stryker-tmp/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
