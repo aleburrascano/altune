@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Pause, Play, RotateCcw, SkipForward } from 'lucide-react-native';
@@ -21,9 +21,7 @@ export function MiniPlayer() {
   const theme = useTheme();
   const router = useRouter();
 
-  const progressRef = useRef<Animated.Value | null>(null);
-  if (progressRef.current === null) progressRef.current = new Animated.Value(0);
-  const progressAnim = progressRef.current;
+  const [progressAnim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const target = durationMs > 0 ? positionMs / durationMs : 0;

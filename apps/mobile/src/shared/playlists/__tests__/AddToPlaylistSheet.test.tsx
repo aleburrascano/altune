@@ -73,22 +73,33 @@ afterEach(() => {
 
 describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and never reaches the add endpoint (:57-70)', () => {
   it('a resolveTrackIds rejection, from a Track that failed to save, closes the sheet without ever calling the batch-add endpoint', async () => {
-    __http.reply('GET /v1/playlists', {
-      status: 200,
-      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
+    // Seed the picker's list into the query cache instead of stubbing the GET.
+    // On CI, when this ran first in its jest worker, waiting on the network-backed
+    // GET to render the row starved to a 5000ms timeout (green wherever the worker
+    // ordering differed). A cache-seeded query resolves synchronously with
+    // staleTime Infinity, so the row is present without any request or timer —
+    // the same technique the liveness test below relies on.
+    const queryClient = freshClient();
+    queryClient.setQueryData(playlistKeys.list, {
+      items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })],
+      total: 1,
     });
     const resolveTrackIds = jest.fn().mockRejectedValue(new Error('save failed'));
-    const { onClose } = renderSheet({ resolveTrackIds });
+    const { onClose } = renderSheet({ queryClient, resolveTrackIds });
 
-    await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
-    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
-    // React 19.2: act()/waitFor hang trying to stabilize a *rejected* in-flight
-    // resolve (verified on CI: the counts are already correct — onClose 1,
-    // resolve 1, post 0 — but act never settles). These assertions read mock
-    // counters, not rendered output, so let the catch (-> onClose) run via a raw
-    // macrotask flush, then assert synchronously.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const row = await screen.findByTestId('add-to-playlist-p1');
+    fireEvent.press(row);
 
+    // The rejection settles through microtasks: await resolveTrackIds() throws ->
+    // catch -> close() (-> onClose) -> finally setResolving(false). Flush those
+    // microtasks rather than wrapping in act(...), which under React 19.2 (Expo
+    // 57) never settles on a rejected in-flight resolve. These assertions read
+    // mock counters, not rendered output, so a microtask drain is deterministic.
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+
+    expect(resolveTrackIds).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
   });
