@@ -73,21 +73,22 @@ afterEach(() => {
 
 describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and never reaches the add endpoint (:57-70)', () => {
   it('a resolveTrackIds rejection, from a Track that failed to save, closes the sheet without ever calling the batch-add endpoint', async () => {
-    // Pin real timers first. This file's fake-timer tests restore in a finally,
-    // but jest can run an earlier suite that leaked fake timers into this worker;
-    // as the first test here, we inherit that state and it starves both waitFor
-    // and any real-timer flush — the single failure this test hit on CI, green
-    // wherever the worker ordering differed. Pinning real timers neutralises it.
-    jest.useRealTimers();
-    __http.reply('GET /v1/playlists', {
-      status: 200,
-      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
+    // Seed the picker's list into the query cache instead of stubbing the GET.
+    // On CI, when this ran first in its jest worker, waiting on the network-backed
+    // GET to render the row starved to a 5000ms timeout (green wherever the worker
+    // ordering differed). A cache-seeded query resolves synchronously with
+    // staleTime Infinity, so the row is present without any request or timer —
+    // the same technique the liveness test below relies on.
+    const queryClient = freshClient();
+    queryClient.setQueryData(playlistKeys.list, {
+      items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })],
+      total: 1,
     });
     const resolveTrackIds = jest.fn().mockRejectedValue(new Error('save failed'));
-    const { onClose } = renderSheet({ resolveTrackIds });
+    const { onClose } = renderSheet({ queryClient, resolveTrackIds });
 
-    await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
-    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    const row = await screen.findByTestId('add-to-playlist-p1');
+    fireEvent.press(row);
 
     // The rejection settles through microtasks: await resolveTrackIds() throws ->
     // catch -> close() (-> onClose) -> finally setResolving(false). Flush those
