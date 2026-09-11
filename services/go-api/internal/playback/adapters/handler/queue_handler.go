@@ -78,13 +78,19 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.svc.Save(r.Context(), userId, service.SaveQueueStateInput{
+	sourceId, err := domain.PackSourceId(sourceFromDTO(body.Source), body.SourceId)
+	if err != nil {
+		httputil.HandleServiceError(w, r, err)
+		return
+	}
+
+	err = h.svc.Save(r.Context(), userId, service.SaveQueueStateInput{
 		TrackIds:     body.TrackIds,
 		CurrentIdx:   body.CurrentIdx,
 		PositionMs:   body.PositionMs,
 		Shuffled:     body.Shuffled,
 		RepeatMode:   body.RepeatMode,
-		SourceId:     saveSourceId(body),
+		SourceId:     sourceId,
 		NaturalOrder: body.NaturalOrder,
 	})
 	if err != nil {
@@ -133,13 +139,6 @@ func toResponse(view *service.ResumeView) queueStateResponse {
 		}
 	}
 	return resp
-}
-
-func saveSourceId(body saveQueueRequest) string {
-	if body.Source != nil {
-		return sourceFromDTO(body.Source).Format()
-	}
-	return body.SourceId
 }
 
 func sourceFromDTO(dto *queueSourceDTO) domain.QueueSource {
