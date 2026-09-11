@@ -36,6 +36,12 @@ export function AddToPlaylistSheet({
   const [createVisible, setCreateVisible] = useState(false);
   const [addedTo, setAddedTo] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
+  // Synchronous re-entrancy lock. `resolving` state drives the disabled UI, but
+  // a state update can't gate the very gesture that starts it: React 19.2's
+  // scheduler may defer the disabling re-render past a second press dispatch,
+  // letting two resolveTrackIds()/onClose() calls slip through for one gesture.
+  // A ref flips before any await or setState, so one gesture = one resolve.
+  const resolvingRef = useRef(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearCloseTimer = useCallback(() => {
     if (closeTimer.current) {
@@ -58,6 +64,8 @@ export function AddToPlaylistSheet({
 
   const withTrackIds = useCallback(
     async (run: (trackIds: TrackId[]) => void): Promise<void> => {
+      if (resolvingRef.current) return;
+      resolvingRef.current = true;
       setResolving(true);
       try {
         const trackIds = await resolveTrackIds();
@@ -65,6 +73,7 @@ export function AddToPlaylistSheet({
       } catch {
         onClose();
       } finally {
+        resolvingRef.current = false;
         setResolving(false);
       }
     },
