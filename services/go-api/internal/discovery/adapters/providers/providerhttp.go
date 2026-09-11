@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,6 +23,17 @@ func withHeader(key, value string) reqOption {
 
 func newGetRequest(ctx context.Context, url string, opts ...reqOption) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, opt := range opts {
+		opt(req)
+	}
+	return req, nil
+}
+
+func newPostRequest(ctx context.Context, url string, body io.Reader, opts ...reqOption) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -69,4 +81,40 @@ func getBytesCapped(ctx context.Context, client *http.Client, url string, cap in
 		return resp.StatusCode, nil, readErr
 	}
 	return resp.StatusCode, body, nil
+}
+
+func postJSON(ctx context.Context, client *http.Client, url string, body []byte, dst any, opts ...reqOption) (int, error) {
+	req, err := newPostRequest(ctx, url, bytes.NewReader(body), opts...)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+		return resp.StatusCode, err
+	}
+	return resp.StatusCode, nil
+}
+
+func postBytesCapped(ctx context.Context, client *http.Client, url string, body io.Reader, cap int64, opts ...reqOption) (int, []byte, error) {
+	req, err := newPostRequest(ctx, url, body, opts...)
+	if err != nil {
+		return 0, nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	data, readErr := io.ReadAll(io.LimitReader(resp.Body, cap))
+	if readErr != nil {
+		return resp.StatusCode, nil, readErr
+	}
+	return resp.StatusCode, data, nil
 }
