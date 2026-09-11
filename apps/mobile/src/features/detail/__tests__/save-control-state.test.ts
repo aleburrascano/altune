@@ -1,3 +1,5 @@
+import { asTrackId } from '@shared/api-client/ids';
+
 import type { OwnedTrack } from '../hooks/useOwnedTrack';
 import {
   saveControlLabel,
@@ -7,7 +9,7 @@ import {
 } from '../save-control-state';
 
 function owned(acquisitionStatus: OwnedTrack['acquisitionStatus']): OwnedTrack {
-  return { trackId: 'track-a', acquisitionStatus };
+  return { trackId: asTrackId('track-a'), acquisitionStatus };
 }
 
 describe('saveControlState', () => {

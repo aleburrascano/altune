@@ -119,7 +119,7 @@ func (s *BackgroundAcquisitionScheduler) schedule(
 		defer s.inflightCount.Add(-1)
 		defer func() {
 			if r := recover(); r != nil {
-				s.log.complete(key, "failed", "panic")
+				s.log.complete(key, JobFailed, "panic")
 				slog.Error("acquisition_panic",
 					"track_id", key,
 					"panic", r,
@@ -146,7 +146,7 @@ func (s *BackgroundAcquisitionScheduler) schedule(
 			run = s.svc.ExecuteReplace
 		}
 		if err := run(jobCtx, userId, trackId); err != nil {
-			s.log.complete(key, "failed", err.Error())
+			s.log.complete(key, JobFailed, err.Error())
 			slog.Error("background acquisition failed",
 				"track_id", key, "error", err)
 			return
