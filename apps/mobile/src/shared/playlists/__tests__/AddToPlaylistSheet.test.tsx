@@ -77,21 +77,26 @@ describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and neve
       status: 200,
       json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
     });
-    const resolveTrackIds = jest.fn().mockRejectedValue(new Error('save failed'));
+    // Use a controlled deferred, not mockRejectedValue: an eagerly-rejected
+    // promise floats unhandled until the component's await attaches its catch,
+    // and under React 19.2 (Expo 57) that race hangs act/waitFor on CI. Rejecting
+    // explicitly inside act — then awaiting the settle — flushes the catch (->
+    // onClose) and setResolving(false) deterministically. Mirrors the working
+    // "resolving alone keeps the picker busy" test below.
+    let rejectIds!: (error: Error) => void;
+    const pending = new Promise<TrackId[]>((_, reject) => {
+      rejectIds = reject;
+    });
+    const resolveTrackIds = jest.fn(() => pending);
     const { onClose } = renderSheet({ resolveTrackIds });
 
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
     fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
-    // React 19.2: act()/waitFor hang trying to stabilize a *rejected* in-flight
-    // resolve (verified on CI: the counts settle correctly — onClose 1, resolve
-    // 1, post 0 — but act never returns). These assertions read mock counters,
-    // not rendered output, so drain macrotasks until the catch (-> onClose) has
-    // run. Bounded and condition-gated: exits the instant onClose fires (usually
-    // 1-2 ticks) and still fails fast on a real regression rather than hanging.
-    // A single fixed tick was flaky on CI when the rejection needed more.
-    for (let i = 0; i < 50 && onClose.mock.calls.length === 0; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+
+    await act(async () => {
+      rejectIds(new Error('save failed'));
+      await pending.catch(() => {});
+    });
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
