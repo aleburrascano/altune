@@ -16,10 +16,8 @@ export function usePlaybackSignals(args: {
 }): void {
   const recordEvent = useRecordEvent();
   const recordRef = useRef(recordEvent);
-  recordRef.current = recordEvent;
   const queueSource = useQueueStore((s) => s.source);
   const queueSourceRef = useRef(queueSource);
-  queueSourceRef.current = queueSource;
 
   const emit = (
     type: 'play' | 'skip' | 'completed',
@@ -33,7 +31,14 @@ export function usePlaybackSignals(args: {
     });
   };
   const emitRef = useRef(emit);
-  emitRef.current = emit;
+
+  // Keep the latest recorder, queue source and emitter reachable from the
+  // event callbacks below without writing refs during render (react-hooks/refs).
+  useEffect(() => {
+    recordRef.current = recordEvent;
+    queueSourceRef.current = queueSource;
+    emitRef.current = emit;
+  });
 
   const { track, positionMs, durationMs } = args;
   const playRef = useRef<{ key: string | null; emitted: boolean }>({ key: null, emitted: false });

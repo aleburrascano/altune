@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'expo-router';
 import { Keyboard } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -92,9 +92,12 @@ export function useDiscoverLogic(): DiscoverLogic {
     }
   }, [searchData, queryClient]);
 
-  const prevQueryRef = useRef(search.committedQuery);
-  if (prevQueryRef.current !== search.committedQuery) {
-    prevQueryRef.current = search.committedQuery;
+  // Reset the filter to "all" whenever a new query is committed. Tracking the
+  // previous query in state (not a ref) keeps this an adjust-state-during-render
+  // pattern rather than a ref access during render (react-hooks/refs).
+  const [filterQuery, setFilterQuery] = useState(search.committedQuery);
+  if (filterQuery !== search.committedQuery) {
+    setFilterQuery(search.committedQuery);
     setFilter('all');
   }
 

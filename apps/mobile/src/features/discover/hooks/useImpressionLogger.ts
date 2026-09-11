@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ViewToken } from 'react-native';
 
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
@@ -16,12 +16,17 @@ export function useImpressionLogger(
 ): ImpressionHandlers {
   const recordEvent = useRecordEvent();
   const recordRef = useRef(recordEvent);
-  recordRef.current = recordEvent;
   const dataRef = useRef(searchData);
-  dataRef.current = searchData;
   const emittedFor = useRef<string | null>(null);
 
-  const handlers = useRef<ImpressionHandlers>({
+  // Keep the latest event recorder and search data reachable from the
+  // viewability callback without reading them during render (react-hooks/refs).
+  useEffect(() => {
+    recordRef.current = recordEvent;
+    dataRef.current = searchData;
+  });
+
+  const [handlers] = useState<ImpressionHandlers>(() => ({
     viewabilityConfig: { itemVisiblePercentThreshold: 50 },
     onViewableItemsChanged: ({ viewableItems }) => {
       const data = dataRef.current;
@@ -38,7 +43,7 @@ export function useImpressionLogger(
         payload: { results: rows },
       });
     },
-  });
+  }));
 
-  return handlers.current;
+  return handlers;
 }

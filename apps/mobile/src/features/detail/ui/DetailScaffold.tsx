@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { useState, type ReactElement, type ReactNode } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -47,7 +47,7 @@ export function DetailScaffold({
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const scrollY = useRef(new Animated.Value(0)).current;
+  const [scrollY] = useState(() => new Animated.Value(0));
   const bannerHeight = BANNER_HEIGHT + insets.top;
   const chromeOpacity = scrollY.interpolate({
     inputRange: [bannerHeight - BAR_HEIGHT - insets.top - 40, bannerHeight - BAR_HEIGHT - insets.top],

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type AccessibilityActionEvent,
   Animated,
+  type GestureResponderHandlers,
   type LayoutChangeEvent,
   PanResponder,
   StyleSheet,
@@ -28,21 +29,29 @@ function formatTime(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+function ratioFromPageX(pageX: number, layout: { pageX: number; width: number }): number {
+  const x = pageX - layout.pageX;
+  return Math.max(0, Math.min(1, x / (layout.width || 1)));
+}
+
 export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
   const theme = useTheme();
   const trackRef = useRef<View>(null);
   const layoutRef = useRef({ pageX: 0, width: 0 });
 
   const durationRef = useRef(durationMs);
-  durationRef.current = durationMs;
   const onSeekRef = useRef(onSeek);
-  onSeekRef.current = onSeek;
   const positionRef = useRef(positionMs);
-  positionRef.current = positionMs;
 
-  const progressRef = useRef<Animated.Value | null>(null);
-  if (progressRef.current === null) progressRef.current = new Animated.Value(0);
-  const progress = progressRef.current;
+  // Keep the latest props reachable from the gesture callbacks without reading
+  // or writing refs during render (react-hooks/refs).
+  useEffect(() => {
+    durationRef.current = durationMs;
+    onSeekRef.current = onSeek;
+    positionRef.current = positionMs;
+  });
+
+  const [progress] = useState(() => new Animated.Value(0));
   const isDraggingRef = useRef(false);
   const isHoldingSeek = useRef(false);
   const seekHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,14 +67,13 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
     }
   }, [positionMs, durationMs, progress]);
 
-  const ratioFromPageX = (pageX: number): number => {
-    const x = pageX - layoutRef.current.pageX;
-    return Math.max(0, Math.min(1, x / (layoutRef.current.width || 1)));
-  };
-
-  const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
-  if (panResponderRef.current === null) {
-    panResponderRef.current = PanResponder.create({
+  // Build the pan responder in an effect, not during render: passing its
+  // ref-reading gesture callbacks into PanResponder.create() during render trips
+  // react-hooks/refs. Inside an effect, reading refs and the clock is allowed;
+  // its handlers reach the component through state read during render.
+  const [panHandlers, setPanHandlers] = useState<GestureResponderHandlers>({});
+  useEffect(() => {
+    const responder = PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
@@ -77,13 +85,13 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
           seekHoldTimer.current = null;
         }
         isHoldingSeek.current = false;
-        const ratio = ratioFromPageX(evt.nativeEvent.pageX);
+        const ratio = ratioFromPageX(evt.nativeEvent.pageX, layoutRef.current);
         progress.setValue(ratio);
         setLabelMs(ratio * durationRef.current);
         lastLabelUpdate.current = Date.now();
       },
       onPanResponderMove: (evt) => {
-        const ratio = ratioFromPageX(evt.nativeEvent.pageX);
+        const ratio = ratioFromPageX(evt.nativeEvent.pageX, layoutRef.current);
         progress.setValue(ratio);
         const now = Date.now();
         if (now - lastLabelUpdate.current > 80) {
@@ -92,7 +100,7 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
         }
       },
       onPanResponderRelease: (evt) => {
-        const ratio = ratioFromPageX(evt.nativeEvent.pageX);
+        const ratio = ratioFromPageX(evt.nativeEvent.pageX, layoutRef.current);
         const ms = ratio * durationRef.current;
         progress.setValue(ratio);
         setLabelMs(ms);
@@ -118,8 +126,14 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
         }
       },
     });
-  }
-  const panResponder = panResponderRef.current;
+    setPanHandlers(responder.panHandlers);
+    return () => {
+      if (seekHoldTimer.current) {
+        clearTimeout(seekHoldTimer.current);
+        seekHoldTimer.current = null;
+      }
+    };
+  }, [progress]);
 
   const remeasure = useCallback(() => {
     trackRef.current?.measureInWindow((x, _y, width) => {
@@ -166,7 +180,7 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
         }}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={onAccessibilityAction}
-        {...panResponder.panHandlers}
+        {...panHandlers}
       >
         <View style={[styles.trackBg, { backgroundColor: theme.color.border }]} />
         <Animated.View

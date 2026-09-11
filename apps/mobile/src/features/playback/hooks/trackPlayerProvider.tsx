@@ -65,7 +65,6 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     void ensurePlayerSetup();
   }, []);
 
-  const frozenPositionMs = useRef(0);
   const livePositionMs = progress.position * 1000;
   const resumePositionMs = useQueueStore((s) => s.resumePositionMs);
   const displayPositionMs = livePositionMs > 0 ? livePositionMs : resumePositionMs;
@@ -74,8 +73,16 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
       useQueueStore.getState().setResumePosition(0);
     }
   }, [livePositionMs, resumePositionMs]);
-  if (isForeground) frozenPositionMs.current = displayPositionMs;
-  const positionMs = isForeground ? displayPositionMs : frozenPositionMs.current;
+  // Freeze the last foreground position so backgrounding never surfaces a stale
+  // or reset native progress. Captured when foreground flips off by adjusting
+  // state during render, not by writing a ref in render (react-hooks/refs).
+  const [frozenPositionMs, setFrozenPositionMs] = useState(0);
+  const [wasForeground, setWasForeground] = useState(isForeground);
+  if (wasForeground !== isForeground) {
+    setWasForeground(isForeground);
+    if (!isForeground) setFrozenPositionMs(displayPositionMs);
+  }
+  const positionMs = isForeground ? displayPositionMs : frozenPositionMs;
   const rawDurationMs = progress.duration * 1000;
 
   const trackDurationMs =
@@ -91,7 +98,9 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const isEnded = tpState === State.Ended;
 
   const isPlayingRef = useRef(isPlaying);
-  isPlayingRef.current = isPlaying;
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  });
 
   const state: PlaybackState = useMemo(
     () =>
@@ -221,11 +230,18 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
 
   const currentQueueTrack = useQueueStore((s) => s.currentTrack());
 
-  useEffect(() => {
-    if (!currentQueueTrack) return;
+  // Mirror the queue's active track into local state when it changes. Adjusting
+  // state during render (tracking the previous value in state) avoids syncing
+  // state from an effect (react-hooks/set-state-in-effect).
+  const [syncedQueueTrack, setSyncedQueueTrack] = useState(currentQueueTrack);
+  if (currentQueueTrack && currentQueueTrack !== syncedQueueTrack) {
+    setSyncedQueueTrack(currentQueueTrack);
     setTrack(currentQueueTrack);
-    lastPlayedTrack.current = currentQueueTrack;
-  }, [currentQueueTrack]);
+  }
+
+  useEffect(() => {
+    if (track) lastPlayedTrack.current = track;
+  }, [track]);
 
   useQueueResume();
 

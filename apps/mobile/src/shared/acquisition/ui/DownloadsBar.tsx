@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 
 import { ChevronUp } from 'lucide-react-native';
@@ -47,12 +47,8 @@ export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElemen
   const theme = useTheme();
   const first = items[0];
 
-  const enterRef = useRef<Animated.Value | null>(null);
-  if (enterRef.current === null) enterRef.current = new Animated.Value(0);
-  const enter = enterRef.current;
-  const pulseRef = useRef<Animated.Value | null>(null);
-  if (pulseRef.current === null) pulseRef.current = new Animated.Value(0.5);
-  const pulse = pulseRef.current;
+  const [enter] = useState(() => new Animated.Value(0));
+  const [pulse] = useState(() => new Animated.Value(0.5));
   useEffect(() => {
     Animated.timing(enter, { toValue: 1, duration: 240, useNativeDriver: true }).start();
     const loop = Animated.loop(

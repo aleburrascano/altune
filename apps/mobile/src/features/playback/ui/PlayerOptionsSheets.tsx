@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 
 import { usePlayback } from '@shared/playback/usePlayback';
 import { ActionSheet, type ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
@@ -43,7 +43,22 @@ export function PlayerOptionsSheets({
     close();
   };
 
-  const remaining = minutesRemaining(endsAt, Date.now());
+  // Read the wall clock outside render (react-hooks/purity): capture it in state
+  // and refresh while a timer is running — immediately via rAF on change, then
+  // once a second to keep the countdown live.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (endsAt === null) return undefined;
+    const tick = (): void => setNow(Date.now());
+    const raf = requestAnimationFrame(tick);
+    const id = setInterval(tick, 1000);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(id);
+    };
+  }, [endsAt]);
+
+  const remaining = minutesRemaining(endsAt, now);
   const sleepValue = endsAt === null ? 'Off' : `${remaining} min left`;
 
   const rootOptions: ActionSheetOption[] = [
