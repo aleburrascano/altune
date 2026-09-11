@@ -73,33 +73,37 @@ afterEach(() => {
 
 describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and never reaches the add endpoint (:57-70)', () => {
   it('a resolveTrackIds rejection, from a Track that failed to save, closes the sheet without ever calling the batch-add endpoint', async () => {
-    __http.reply('GET /v1/playlists', {
-      status: 200,
-      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
-    });
-    // Use a controlled deferred, not mockRejectedValue: an eagerly-rejected
-    // promise floats unhandled until the component's await attaches its catch,
-    // and under React 19.2 (Expo 57) that race hangs act/waitFor on CI. Rejecting
-    // explicitly inside act — then awaiting the settle — flushes the catch (->
-    // onClose) and setResolving(false) deterministically. Mirrors the working
-    // "resolving alone keeps the picker busy" test below.
-    let rejectIds!: (error: Error) => void;
-    const pending = new Promise<TrackId[]>((_, reject) => {
-      rejectIds = reject;
-    });
-    const resolveTrackIds = jest.fn(() => pending);
-    const { onClose } = renderSheet({ resolveTrackIds });
+    // Fake timers, not a real-timer flush. The catch (-> close -> onClose) runs a
+    // microtask after resolveTrackIds() rejects, but under React 19.2 (Expo 57)
+    // that continuation rides the concurrent scheduler: with real timers its
+    // settle is nondeterministic across environments — green locally, red on CI —
+    // so mockRejectedValue+setTimeout, a bounded macrotask poll, and a controlled
+    // deferred all flaked. advanceTimersByTimeAsync(0) inside act drives the
+    // scheduler deterministically and drains the microtask that runs the catch,
+    // exactly like the addMut.isPending and 700ms-dwell tests below.
+    jest.useFakeTimers();
+    try {
+      __http.reply('GET /v1/playlists', {
+        status: 200,
+        json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
+      });
+      const resolveTrackIds = jest.fn().mockRejectedValue(new Error('save failed'));
+      const { onClose } = renderSheet({ resolveTrackIds });
 
-    await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
-    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
 
-    await act(async () => {
-      rejectIds(new Error('save failed'));
-      await pending.catch(() => {});
-    });
-
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
+      expect(resolveTrackIds).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
