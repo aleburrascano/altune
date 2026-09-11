@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"altune/go-api/internal/catalog/domain"
@@ -18,9 +19,17 @@ const trackColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
 	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version`
 
-const trackColumnsPrefixed = `t.id, t.user_id, t.title, t.artist, t.album, t.duration_seconds,
-	t.added_at, t.artwork_url, t.acquisition_status, t.dedup_key,
-	t.year, t.genre, t.track_number, t.album_artist, t.isrc, t.audio_ref, t.failure_reason, t.acquisition_provenance, t.audio_source_url, t.rejected_source_keys, t.audio_version`
+var trackColumnsPrefixed = prefixColumns(trackColumns, "t.")
+
+func prefixColumns(columns, prefix string) string {
+	parts := strings.Split(columns, ",")
+	for i, part := range parts {
+		name := strings.TrimLeft(part, " \n\t")
+		lead := part[:len(part)-len(name)]
+		parts[i] = lead + prefix + name
+	}
+	return strings.Join(parts, ",")
+}
 
 type PgxTrackRepository struct {
 	pool *pgxpool.Pool
