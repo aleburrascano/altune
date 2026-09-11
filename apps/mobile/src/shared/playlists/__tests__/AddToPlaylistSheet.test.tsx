@@ -81,9 +81,15 @@ describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and neve
     const { onClose } = renderSheet({ resolveTrackIds });
 
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
-    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    // React 19.2: drive the press and let its rejected-resolve continuation
+    // (catch -> onClose -> setResolving) settle inside act, rather than leaving a
+    // floating promise for waitFor to chase — which the concurrent scheduler no
+    // longer flushes reliably.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    });
 
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
   });
 });
@@ -98,10 +104,14 @@ describe("AddToPlaylistSheet(): withTrackIds's trackIds.length > 0 guard (:62)",
     const { onClose } = renderSheet({ resolveTrackIds });
 
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
-    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    // React 19.2: settle the empty-resolve continuation inside act so busy
+    // clears deterministically instead of racing a floating promise.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    });
 
-    await waitFor(() => expect(resolveTrackIds).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull());
+    expect(resolveTrackIds).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull();
 
     expect(onClose).not.toHaveBeenCalled();
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
@@ -121,14 +131,18 @@ describe('AddToPlaylistSheet(): single-flight — one gesture, one resolve (:59-
     const { onClose } = renderSheet({ resolveTrackIds });
 
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
-    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    });
 
-    await waitFor(() => expect(resolveTrackIds).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull());
+    expect(resolveTrackIds).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull();
 
     // The row is enabled again, but the single-flight lock must still swallow a
     // replayed press so resolveTrackIds does not run a second time.
-    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    });
     expect(resolveTrackIds).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled();
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
