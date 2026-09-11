@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -83,36 +82,25 @@ func (a *AmazonMusicAdapter) doSearch(ctx context.Context, sess *amazonMusicSess
 		return nil, 0, fmt.Errorf("build request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.searchURL, strings.NewReader(reqBody))
+	status, body, err := postBytesCapped(ctx, a.client, a.searchURL, strings.NewReader(reqBody), amzResponseBodyCap,
+		withHeader("Content-Type", "text/plain;charset=UTF-8"),
+		withHeader("User-Agent", amzUserAgent))
 	if err != nil {
-		return nil, 0, err
+		return nil, status, err
 	}
-	req.Header.Set("Content-Type", "text/plain;charset=UTF-8")
-	req.Header.Set("User-Agent", amzUserAgent)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, amzResponseBodyCap))
-	if resp.StatusCode != http.StatusOK {
-		return nil, resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
-	}
-	if readErr != nil {
-		return nil, resp.StatusCode, readErr
+	if status != http.StatusOK {
+		return nil, status, fmt.Errorf("http status %d", status)
 	}
 
 	var root any
 	if err := json.Unmarshal(body, &root); err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("decode showSearch response: %w", err)
+		return nil, status, fmt.Errorf("decode showSearch response: %w", err)
 	}
 
 	seen := map[string]bool{}
 	var results []domain.SearchResult
 	walkAmazonMusicNode(root, seen, &results)
-	return results, resp.StatusCode, nil
+	return results, status, nil
 }
 
 type amzSearchRequest struct {

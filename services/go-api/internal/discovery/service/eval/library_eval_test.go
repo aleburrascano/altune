@@ -102,7 +102,7 @@ func TestEvalOne(t *testing.T) {
 				byQuery: map[string][]domain.SearchResult{query: tt.results},
 				err:     tt.searchErr,
 			}
-			got := evalOne(context.Background(), tt.entity, searcher, tt.k)
+			got := evalOneQuery(context.Background(), query, tt.entity, searcher, tt.k)
 
 			if got.Outcome != tt.wantOutcome {
 				t.Fatalf("outcome = %v, want %v", got.Outcome, tt.wantOutcome)

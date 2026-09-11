@@ -1,5 +1,6 @@
 import { Download, XCircle } from 'lucide-react-native';
 
+import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import type { PinnedEntry } from '@shared/offline/pinnedStore';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -8,7 +9,7 @@ import { buildSelectionActions } from '../ui/selectionActions';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 'track-1',
+    id: asTrackId('track-1'),
     title: 'Aerodynamic',
     artist: 'Daft Punk',
     album: 'Discovery',
@@ -92,9 +93,9 @@ describe('buildSelectionActions — offline action acts on ready tracks only', (
   it('pins every ready track in a single pinMany call, never a per-track loop, and excludes non-ready ids', () => {
     const opts = makeOpts();
     const selected = [
-      makeTrack({ id: 'r1', acquisition_status: 'ready' }),
-      makeTrack({ id: 'p1', acquisition_status: 'pending' }),
-      makeTrack({ id: 'r2', acquisition_status: 'ready' }),
+      makeTrack({ id: asTrackId('r1'), acquisition_status: 'ready' }),
+      makeTrack({ id: asTrackId('p1'), acquisition_status: 'pending' }),
+      makeTrack({ id: asTrackId('r2'), acquisition_status: 'ready' }),
     ];
     buildSelectionActions(selected, opts).find((a) => a.key === 'offline')!.onPress();
     expect(opts.pinMany).toHaveBeenCalledTimes(1);
@@ -107,7 +108,7 @@ describe('buildSelectionActions — offline label flips only when every ready tr
   it('shows Download with the download icon while any ready track is unpinned', () => {
     const opts = makeOpts({ pinnedEntries: { r1: pinned('ready') } });
     const offline = buildSelectionActions(
-      [makeTrack({ id: 'r1', acquisition_status: 'ready' }), makeTrack({ id: 'r2', acquisition_status: 'ready' })],
+      [makeTrack({ id: asTrackId('r1'), acquisition_status: 'ready' }), makeTrack({ id: asTrackId('r2'), acquisition_status: 'ready' })],
       opts,
     ).find((a) => a.key === 'offline')!;
     expect(offline.label).toBe('Download');
@@ -117,7 +118,7 @@ describe('buildSelectionActions — offline label flips only when every ready tr
   it('shows Remove download with the remove icon and unpins each ready track when all are pinned', () => {
     const opts = makeOpts({ pinnedEntries: { r1: pinned('ready'), r2: pinned('ready') } });
     const offline = buildSelectionActions(
-      [makeTrack({ id: 'r1', acquisition_status: 'ready' }), makeTrack({ id: 'r2', acquisition_status: 'ready' })],
+      [makeTrack({ id: asTrackId('r1'), acquisition_status: 'ready' }), makeTrack({ id: asTrackId('r2'), acquisition_status: 'ready' })],
       opts,
     ).find((a) => a.key === 'offline')!;
     expect(offline.label).toBe('Remove download');
@@ -134,7 +135,7 @@ describe('buildSelectionActions — offline label flips only when every ready tr
   it('treats a pending-download entry as not-pinned, so a partly-downloaded selection still shows Download', () => {
     const opts = makeOpts({ pinnedEntries: { r1: pinned('ready'), r2: pinned('downloading') } });
     const offline = buildSelectionActions(
-      [makeTrack({ id: 'r1', acquisition_status: 'ready' }), makeTrack({ id: 'r2', acquisition_status: 'ready' })],
+      [makeTrack({ id: asTrackId('r1'), acquisition_status: 'ready' }), makeTrack({ id: asTrackId('r2'), acquisition_status: 'ready' })],
       opts,
     ).find((a) => a.key === 'offline')!;
     expect(offline.label).toBe('Download');
@@ -154,8 +155,8 @@ describe('buildSelectionActions — queue action', () => {
     const added: PlaybackTrack[] = [];
     const opts = makeOpts({ queue: { addToQueue: (t: PlaybackTrack) => added.push(t) } });
     const selected = [
-      makeTrack({ id: 'r1', acquisition_status: 'ready' }),
-      makeTrack({ id: 'p1', acquisition_status: 'pending' }),
+      makeTrack({ id: asTrackId('r1'), acquisition_status: 'ready' }),
+      makeTrack({ id: asTrackId('p1'), acquisition_status: 'pending' }),
     ];
     buildSelectionActions(selected, opts).find((a) => a.key === 'queue')!.onPress();
     expect(added).toHaveLength(1);
