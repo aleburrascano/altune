@@ -105,7 +105,7 @@ export function ContextMenu({
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   menu: {
     position: 'absolute',

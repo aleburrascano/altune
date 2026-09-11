@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs } from 'expo-router/js-tabs';
 import { View } from 'react-native';
 
 import { useActiveDownloads } from '../../shared/acquisition/useActiveDownloads';
