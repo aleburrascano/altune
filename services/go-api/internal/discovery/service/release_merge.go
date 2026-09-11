@@ -106,21 +106,10 @@ func mergeReleaseExtras(a, b map[string]any) map[string]any {
 }
 
 func mergeRecordType(a, b string) string {
-	if recordTypeRank(b) > recordTypeRank(a) {
+	if ParseRecordType(b).Rank() > ParseRecordType(a).Rank() {
 		return b
 	}
 	return a
-}
-
-func recordTypeRank(t string) int {
-	switch t {
-	case "single", "ep", "compilation":
-		return 2
-	case "album":
-		return 1
-	default:
-		return 0
-	}
 }
 
 func hasStrongID(r domain.SearchResult) bool {
@@ -131,7 +120,7 @@ func unionSources(a, b []domain.SourceRef) []domain.SourceRef {
 	seen := make(map[string]bool, len(a)+len(b))
 	out := make([]domain.SourceRef, 0, len(a)+len(b))
 	for _, s := range append(append([]domain.SourceRef{}, a...), b...) {
-		key := s.Provider.String() + ":" + s.ExternalID
+		key := sourceKey(s.Provider, s.ExternalID)
 		if seen[key] {
 			continue
 		}
@@ -139,6 +128,10 @@ func unionSources(a, b []domain.SourceRef) []domain.SourceRef {
 		out = append(out, s)
 	}
 	return out
+}
+
+func sourceKey(provider domain.ProviderName, id string) string {
+	return provider.String() + ":" + id
 }
 
 func stringExtra(extras map[string]any, key string) string {

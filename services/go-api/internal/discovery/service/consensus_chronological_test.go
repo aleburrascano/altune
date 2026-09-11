@@ -24,7 +24,7 @@ func TestSortChronological_NewestFirstUnknownLast(t *testing.T) {
 		chronoAlbum("Older", 2017),
 	}
 
-	sortChronological(in)
+	sortByReleaseDateDesc(in, consensusAlbumSortKey)
 
 	got := make([]string, len(in))
 	for i, a := range in {

@@ -153,7 +153,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 	}
 
 	normalizeAlbumYears(results)
-	sortAlbumsByReleaseDateDesc(results)
+	sortByReleaseDateDesc(results, albumReleaseSortKey)
 
 	return okContentResponse(providerName, results, limit), nil
 }
