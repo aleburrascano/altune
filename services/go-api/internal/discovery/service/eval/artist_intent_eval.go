@@ -2,12 +2,9 @@ package eval
 
 import (
 	"context"
-	"sync/atomic"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
-
-	"golang.org/x/sync/errgroup"
 )
 
 type ArtistIntentOutcome int
@@ -85,36 +82,14 @@ func rate(n, d int) float64 {
 }
 
 func RunArtistIntentEval(ctx context.Context, artists []string, searcher Searcher, concurrency, k int, corpus string, progress func(done, total int)) ArtistIntentReport {
-	if concurrency < 1 {
-		concurrency = 1
-	}
 	if k < 1 {
 		k = 1
 	}
 
-	total := len(artists)
-	step := total / 20
-	if step < 1 {
-		step = 1
-	}
-
-	results := make([]ArtistIntentResult, total)
-	var done int32
-	g := new(errgroup.Group)
-	g.SetLimit(concurrency)
-
-	for i, artist := range artists {
-		i, artist := i, artist
-		g.Go(func() error {
-			results[i] = evalOneArtist(ctx, artist, searcher, k)
-			n := int(atomic.AddInt32(&done, 1))
-			if progress != nil && (n%step == 0 || n == total) {
-				progress(n, total)
-			}
-			return nil
-		})
-	}
-	_ = g.Wait()
+	results := make([]ArtistIntentResult, len(artists))
+	runParallel(artists, concurrency, progress, func(i int, artist string) {
+		results[i] = evalOneArtist(ctx, artist, searcher, k)
+	})
 
 	report := aggregateArtistIntent(results, k)
 	report.Corpus = corpus

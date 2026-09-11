@@ -4,12 +4,9 @@ import (
 	"context"
 	"slices"
 	"strings"
-	"sync/atomic"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
-
-	"golang.org/x/sync/errgroup"
 )
 
 type LibraryEntity struct {
@@ -118,44 +115,18 @@ func RunLibraryEval(ctx context.Context, entities []LibraryEntity, searcher Sear
 }
 
 func RunLibraryEvalMode(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency, k int, mode QueryMode, progress func(done, total int)) EvalReport {
-	if concurrency < 1 {
-		concurrency = 1
-	}
 	if k < 1 {
 		k = 1
 	}
 
-	total := len(entities)
-	step := total / 20
-	if step < 1 {
-		step = 1
-	}
-
-	results := make([]EvalResult, total)
-	var done int32
-	g := new(errgroup.Group)
-	g.SetLimit(concurrency)
-
-	for i, entity := range entities {
-		i, entity := i, entity
-		g.Go(func() error {
-			results[i] = evalOneQuery(ctx, mode.queryFor(entity), entity, searcher, k)
-			n := int(atomic.AddInt32(&done, 1))
-			if progress != nil && (n%step == 0 || n == total) {
-				progress(n, total)
-			}
-			return nil
-		})
-	}
-	_ = g.Wait()
+	results := make([]EvalResult, len(entities))
+	runParallel(entities, concurrency, progress, func(i int, entity LibraryEntity) {
+		results[i] = evalOneQuery(ctx, mode.queryFor(entity), entity, searcher, k)
+	})
 
 	report := aggregate(results, k)
 	report.Corpus = mode.label()
 	return report
-}
-
-func evalOne(ctx context.Context, entity LibraryEntity, searcher Searcher, k int) EvalResult {
-	return evalOneQuery(ctx, entity.Artist+" "+entity.Title, entity, searcher, k)
 }
 
 func evalOneQuery(ctx context.Context, query string, entity LibraryEntity, searcher Searcher, k int) EvalResult {
