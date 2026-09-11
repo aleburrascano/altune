@@ -8,23 +8,13 @@ import (
 	"strings"
 
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/database"
 
 	"github.com/google/uuid"
 )
 
 func RunFixAudioRefs(cfg *config.Config, execute bool) {
-	if cfg.DatabaseURL == "" {
-		fmt.Println("ERROR: DATABASE_URL not set")
-		os.Exit(1)
-	}
-
 	ctx := context.Background()
-	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
-	if err != nil {
-		fmt.Printf("ERROR: database connection failed: %v\n", err)
-		os.Exit(1)
-	}
+	pool := mustOpenPool(ctx, cfg)
 	defer pool.Close()
 
 	rows, err := pool.Query(ctx,

@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"testing"
 
 	"altune/go-api/internal/shared"
@@ -207,6 +208,34 @@ func TestNewTrack(t *testing.T) {
 			album:   "Album Name",
 			wantErr: "track artist required",
 		},
+		{
+			name:    "whitespace-only title returns error",
+			title:   "   ",
+			artist:  "Artist Name",
+			album:   "Album Name",
+			wantErr: "track title required",
+		},
+		{
+			name:    "whitespace-only artist returns error",
+			title:   "Track Title",
+			artist:  "\t\n ",
+			album:   "Album Name",
+			wantErr: "track artist required",
+		},
+		{
+			name:    "overlong title returns error",
+			title:   strings.Repeat("a", 301),
+			artist:  "Artist Name",
+			album:   "Album Name",
+			wantErr: "track title exceeds 300 characters",
+		},
+		{
+			name:    "overlong artist returns error",
+			title:   "Track Title",
+			artist:  strings.Repeat("b", 301),
+			album:   "Album Name",
+			wantErr: "track artist exceeds 300 characters",
+		},
 	}
 
 	for _, tt := range tests {
@@ -256,6 +285,25 @@ func TestNewTrack(t *testing.T) {
 				t.Error("expected non-zero AddedAt")
 			}
 		})
+	}
+}
+
+func TestNewTrack_StoresTrimmedTitleAndArtist(t *testing.T) {
+	t.Parallel()
+	userId := shared.NewUserId(uuid.New())
+
+	track, err := NewTrack(userId, "  Track Title  ", "\tArtist Name\n", "Album Name")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if track.Title != "Track Title" {
+		t.Errorf("Title = %q, want trimmed %q", track.Title, "Track Title")
+	}
+	if track.Artist != "Artist Name" {
+		t.Errorf("Artist = %q, want trimmed %q", track.Artist, "Artist Name")
+	}
+	if want := computeDedupKey("Track Title", "Artist Name", "Album Name"); track.DedupKey != want {
+		t.Errorf("DedupKey = %q, want %q", track.DedupKey, want)
 	}
 }
 

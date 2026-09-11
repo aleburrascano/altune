@@ -17,8 +17,8 @@ import {
 import { invalidateAudioCaches } from '@shared/acquisition/audioCacheInvalidation';
 import { stageToPhase } from '@shared/acquisition/stagePhase';
 import { repinIfPinned } from '@shared/offline/pinnedStore';
-import { asTrackId } from '@shared/api-client/ids';
-import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
+import { tryParseTrackResponse } from '@shared/api-client/parse';
+import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
 import {
@@ -52,42 +52,11 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function asNumber(value: unknown): number | null {
-  return typeof value === 'number' ? value : null;
-}
-
-const ACQUISITION_STATUSES: readonly string[] = ['pending', 'ready', 'failed'];
-
-function asAcquisitionStatus(value: unknown): AcquisitionStatus | null {
-  return typeof value === 'string' && ACQUISITION_STATUSES.includes(value)
-    ? (value as AcquisitionStatus)
-    : null;
-}
-
+// The SSE `track_added_to_library` payload carries the id under `id`, or `track_id`
+// on older servers; normalise before handing it to the shared TrackResponse parser.
 function parseAddedTrack(data: Record<string, unknown>): TrackResponse | null {
-  const id = asString(data.id) ?? asString(data.track_id);
-  const title = asString(data.title);
-  const artist = asString(data.artist);
-  const addedAt = asString(data.added_at);
-  const status = asAcquisitionStatus(data.acquisition_status);
-  if (!id || !title || !artist || !addedAt || !status) return null;
-  return {
-    id: asTrackId(id),
-    title,
-    artist,
-    album: asString(data.album),
-    duration_seconds: asNumber(data.duration_seconds),
-    added_at: addedAt,
-    acquisition_status: status,
-    artwork_url: asString(data.artwork_url),
-    failure_reason: asString(data.failure_reason),
-    year: asNumber(data.year),
-    genre: asString(data.genre),
-    track_number: asNumber(data.track_number),
-    album_artist: asString(data.album_artist),
-    isrc: asString(data.isrc),
-    audio_ref: asString(data.audio_ref),
-  };
+  const payload = typeof data.id === 'string' ? data : { ...data, id: data.track_id };
+  return tryParseTrackResponse(payload);
 }
 
 function trackMeta(track: TrackResponse | undefined): DownloadMeta | undefined {

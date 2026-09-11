@@ -13,6 +13,7 @@ import { ChevronDown, EllipsisVertical, Play } from 'lucide-react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
+import { countLabel } from '@shared/lib/format';
 import { withFeaturing } from '@shared/lib/featured';
 import type { FeaturedArtist } from '@shared/api-client/types';
 import { useQueueStore } from '@shared/playback/queueStore';
@@ -234,7 +235,7 @@ export function QueueSheet(): ReactElement {
       {upNextItems.length > 0 ? (
         <View style={styles.sectionHeader}>
           <Text variant="caption" tone="secondary" style={styles.sectionLabel}>
-            UP NEXT · {upNextItems.length} {upNextItems.length === 1 ? 'track' : 'tracks'}
+            UP NEXT · {upNextItems.length} {countLabel(upNextItems.length, 'track')}
           </Text>
         </View>
       ) : null}

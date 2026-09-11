@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 )
+
+const minPlausibleYear = 1860
 
 type AddTrackInput struct {
 	Title           string
@@ -66,11 +69,16 @@ func WithAcquisitionScheduler(scheduler ports.AcquisitionScheduler) func(*AddTra
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, input AddTrackInput) (*AddTrackOutput, error) {
+	if err := validateAddTrackInput(input); err != nil {
+		return nil, err
+	}
 	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album)
 	if err != nil {
 		return nil, err
 	}
-	track.DurationSeconds = input.DurationSeconds
+	if input.DurationSeconds != nil {
+		track.SetDuration(*input.DurationSeconds)
+	}
 	track.ArtworkURL = input.ArtworkURL
 	track.Year = input.Year
 	track.Genre = input.Genre
@@ -103,6 +111,23 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	}
 
 	return &AddTrackOutput{Track: track, Created: created}, nil
+}
+
+func validateAddTrackInput(input AddTrackInput) error {
+	if input.TrackNumber != nil && *input.TrackNumber <= 0 {
+		return &domain.ValidationError{Message: "track_number must be positive"}
+	}
+	if input.DurationSeconds != nil && *input.DurationSeconds < 0 {
+		return &domain.ValidationError{Message: "duration_seconds must not be negative"}
+	}
+	if input.Year != nil && !plausibleYear(*input.Year) {
+		return &domain.ValidationError{Message: "year is implausible"}
+	}
+	return nil
+}
+
+func plausibleYear(year int) bool {
+	return year >= minPlausibleYear && year <= time.Now().UTC().Year()+1
 }
 
 func trackAddedPayload(t *domain.Track) map[string]any {
