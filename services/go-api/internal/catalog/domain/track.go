@@ -97,12 +97,16 @@ type Track struct {
 
 const maxRejectedSourceKeys = 25
 
+const maxTrackTextLength = 300
+
 func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {
-	if title == "" {
-		return nil, &ValidationError{Message: "track title required"}
+	title = strings.TrimSpace(title)
+	if err := validateTrackText(title, "title"); err != nil {
+		return nil, err
 	}
-	if artist == "" {
-		return nil, &ValidationError{Message: "track artist required"}
+	artist = strings.TrimSpace(artist)
+	if err := validateTrackText(artist, "artist"); err != nil {
+		return nil, err
 	}
 	resolved := resolveAlbum(album, title)
 	return &Track{
@@ -115,6 +119,16 @@ func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error)
 		AcquisitionStatus: AcquisitionPending,
 		DedupKey:          computeDedupKey(title, artist, resolved),
 	}, nil
+}
+
+func validateTrackText(value, field string) error {
+	if value == "" {
+		return &ValidationError{Message: "track " + field + " required"}
+	}
+	if len(value) > maxTrackTextLength {
+		return &ValidationError{Message: "track " + field + " exceeds 300 characters"}
+	}
+	return nil
 }
 
 func resolveAlbum(album, title string) string {
