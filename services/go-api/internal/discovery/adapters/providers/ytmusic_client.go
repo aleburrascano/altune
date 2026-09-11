@@ -13,10 +13,12 @@ import (
 )
 
 const (
-	ytmEndpoint      = "https://music.youtube.com/youtubei/v1/search"
-	ytmClientName    = "WEB_REMIX"
-	ytmClientVersion = "1.20220715.04.00"
-	ytmSearchKey     = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
+	ytmEndpoint        = "https://music.youtube.com/youtubei/v1/search"
+	ytmClientName      = "WEB_REMIX"
+	ytmClientVersion   = "1.20220715.04.00"
+	ytmSearchKey       = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
+	ytmResponseBodyCap = 16 << 20
+	ytmUserAgent       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36"
 )
 
 type ytmFilter string
@@ -109,23 +111,17 @@ func ytmSearch(ctx context.Context, client *http.Client, query string, filter yt
 
 	params := url.Values{}
 	params.Add("key", ytmSearchKey)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ytmEndpoint+"?"+params.Encode(), bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("ytmusic request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	req.Header.Set("Referer", "https://music.youtube.com/search")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36")
-
-	resp, err := client.Do(req)
+	status, raw, err := postBytesCapped(ctx, client, ytmEndpoint+"?"+params.Encode(), bytes.NewReader(payload), ytmResponseBodyCap,
+		withHeader("Content-Type", "application/json; charset=utf-8"),
+		withHeader("Referer", "https://music.youtube.com/search"),
+		withHeader("User-Agent", ytmUserAgent))
 	if err != nil {
 		return nil, fmt.Errorf("ytmusic do: %w", err)
 	}
-	defer resp.Body.Close()
 
 	var page any
-	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
-		return nil, fmt.Errorf("ytmusic decode (status %d): %w", resp.StatusCode, err)
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return nil, fmt.Errorf("ytmusic decode (status %d): %w", status, err)
 	}
 
 	return parseYTMSearch(page), nil

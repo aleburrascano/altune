@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -81,6 +82,86 @@ func TestGetBytes_transportErrorZeroStatus(t *testing.T) {
 	}
 	if status != 0 {
 		t.Errorf("status = %d, want 0 on a transport error", status)
+	}
+}
+
+func TestPostJSON_non200IsError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	var dst map[string]any
+	status, err := postJSON(context.Background(), srv.Client(), srv.URL, []byte(`{}`), &dst)
+	if err == nil || !strings.Contains(err.Error(), "http status 500") {
+		t.Fatalf("err = %v, want an http status 500 error", err)
+	}
+	if status != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500 (callers branch on it)", status)
+	}
+}
+
+func TestPostJSON_forwardsBodyAndDecodes(t *testing.T) {
+	var posted string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		posted = string(b)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	var dst struct {
+		OK bool `json:"ok"`
+	}
+	status, err := postJSON(context.Background(), srv.Client(), srv.URL, []byte(`{"q":1}`), &dst)
+	if err != nil {
+		t.Fatalf("postJSON: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Errorf("status = %d, want 200", status)
+	}
+	if posted != `{"q":1}` {
+		t.Errorf("posted body = %q, want the payload forwarded", posted)
+	}
+	if !dst.OK {
+		t.Error("want the response decoded into dst")
+	}
+}
+
+func TestPostBytesCapped_non200ReturnsStatusAndBodyWithoutError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"detail":"boom"}`))
+	}))
+	defer srv.Close()
+
+	status, body, err := postBytesCapped(context.Background(), srv.Client(), srv.URL, strings.NewReader("q"), 1<<20)
+	if err != nil {
+		t.Fatalf("postBytesCapped must not gate on status (callers branch on it): %v", err)
+	}
+	if status != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", status)
+	}
+	if !strings.Contains(string(body), "boom") {
+		t.Errorf("body = %q, want the 500 body returned for inspection", body)
+	}
+}
+
+func TestPostBytesCapped_capsBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", 100)))
+	}))
+	defer srv.Close()
+
+	status, body, err := postBytesCapped(context.Background(), srv.Client(), srv.URL, nil, 10)
+	if err != nil {
+		t.Fatalf("postBytesCapped: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Errorf("status = %d, want 200", status)
+	}
+	if len(body) != 10 {
+		t.Errorf("len(body) = %d, want the 10-byte cap applied", len(body))
 	}
 }
 
