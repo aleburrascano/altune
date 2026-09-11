@@ -244,6 +244,58 @@ func TestPgxTrackRepo_Delete(t *testing.T) {
 	}
 }
 
+func TestPgxTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
+	pool := testPool(t)
+	trackRepo := NewPgxTrackRepository(pool)
+	playlistRepo := NewPgxPlaylistRepository(pool)
+	ctx := context.Background()
+
+	userB := shared.NewUserId(uuid.New())
+	userA := shared.NewUserId(uuid.New())
+
+	trackB := newTestTrackForDB(t, userB)
+	cleanupTrack(t, pool, trackB.ID, userB)
+	if _, _, err := trackRepo.Add(ctx, trackB); err != nil {
+		t.Fatalf("Add track B: %v", err)
+	}
+
+	plB := newTestPlaylistForDB(t, userB)
+	cleanupPlaylist(t, pool, plB.ID, userB)
+	if err := playlistRepo.Create(ctx, plB); err != nil {
+		t.Fatalf("Create playlist B: %v", err)
+	}
+	if err := playlistRepo.AddTrack(ctx, plB.ID, trackB.ID, 0); err != nil {
+		t.Fatalf("AddTrack B: %v", err)
+	}
+
+	deleted, _, err := trackRepo.Delete(ctx, trackB.ID, userA)
+	if err != nil {
+		t.Fatalf("Delete(trackB, userA) error = %v", err)
+	}
+	if deleted {
+		t.Error("Delete(trackB, userA) deleted = true, want false (not owner)")
+	}
+
+	got, err := trackRepo.GetByID(ctx, trackB.ID, userB)
+	if err != nil {
+		t.Fatalf("GetByID after cross-tenant delete: %v", err)
+	}
+	if got == nil {
+		t.Fatal("B's track vanished after A's delete attempt")
+	}
+
+	_, gotTracks, err := playlistRepo.GetWithTracks(ctx, plB.ID, userB)
+	if err != nil {
+		t.Fatalf("GetWithTracks after cross-tenant delete: %v", err)
+	}
+	if len(gotTracks) != 1 {
+		t.Fatalf("B's playlist has %d tracks after A's delete, want 1", len(gotTracks))
+	}
+	if gotTracks[0].ID.UUID() != trackB.ID.UUID() {
+		t.Errorf("B's playlist track = %v, want %v", gotTracks[0].ID.UUID(), trackB.ID.UUID())
+	}
+}
+
 func TestPgxTrackRepo_GetByID_NotFound(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
