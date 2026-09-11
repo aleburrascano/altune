@@ -2,11 +2,8 @@ package eval
 
 import (
 	"context"
-	"sync"
 
 	"altune/go-api/internal/discovery/domain"
-
-	"golang.org/x/sync/errgroup"
 )
 
 type VariantSearcher interface {
@@ -48,54 +45,31 @@ func RunDiversityEval(ctx context.Context, entities []LibraryEntity, vs VariantS
 }
 
 func RunDiversityEvalMode(ctx context.Context, entities []LibraryEntity, vs VariantSearcher, concurrency, k int, mode QueryMode, progress func(done, total int)) DiversityReport {
-	if concurrency < 1 {
-		concurrency = 1
-	}
 	if k < 1 {
 		k = 1
 	}
-	total := len(entities)
-	step := total / 20
-	if step < 1 {
-		step = 1
-	}
 
-	results := make([]DiversityResult, total)
-	concWith := make([]float64, total)
-	concWithout := make([]float64, total)
-	scored := make([]bool, total)
+	results := make([]DiversityResult, len(entities))
+	concWith := make([]float64, len(entities))
+	concWithout := make([]float64, len(entities))
+	scored := make([]bool, len(entities))
 
-	var mu sync.Mutex
-	var done int
-	g := new(errgroup.Group)
-	g.SetLimit(concurrency)
-	for i, entity := range entities {
-		i, entity := i, entity
-		g.Go(func() error {
-			if entity.Artist != "" {
-				query := mode.queryFor(entity)
-				with, without := vs.SearchVariants(ctx, query)
-				results[i] = DiversityResult{
-					Entity:        entity,
-					Query:         query,
-					InTopKWith:    entityInTopK(with, entity, k),
-					InTopKWithout: entityInTopK(without, entity, k),
-				}
-				concWith[i] = topKConcentration(with, k)
-				concWithout[i] = topKConcentration(without, k)
-				scored[i] = true
-			}
-			mu.Lock()
-			done++
-			n := done
-			mu.Unlock()
-			if progress != nil && (n%step == 0 || n == total) {
-				progress(n, total)
-			}
-			return nil
-		})
-	}
-	_ = g.Wait()
+	runParallel(entities, concurrency, progress, func(i int, entity LibraryEntity) {
+		if entity.Artist == "" {
+			return
+		}
+		query := mode.queryFor(entity)
+		with, without := vs.SearchVariants(ctx, query)
+		results[i] = DiversityResult{
+			Entity:        entity,
+			Query:         query,
+			InTopKWith:    entityInTopK(with, entity, k),
+			InTopKWithout: entityInTopK(without, entity, k),
+		}
+		concWith[i] = topKConcentration(with, k)
+		concWithout[i] = topKConcentration(without, k)
+		scored[i] = true
+	})
 
 	report := aggregateDiversity(results, concWith, concWithout, scored, k)
 	report.Corpus = mode.label()

@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
-
-	"golang.org/x/sync/errgroup"
 )
 
 type HealthReport struct {
@@ -24,60 +22,38 @@ type HealthReport struct {
 }
 
 func RunHealthEval(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency int, progress func(done, total int)) HealthReport {
-	if concurrency < 1 {
-		concurrency = 1
-	}
-	total := len(entities)
-	step := total / 20
-	if step < 1 {
-		step = 1
-	}
-
 	var (
 		mu        sync.Mutex
 		results   int
 		artwork   int
 		bridged   int
 		latencies []int64
-		done      int
 	)
 
-	g := new(errgroup.Group)
-	g.SetLimit(concurrency)
-	for _, entity := range entities {
-		entity := entity
-		g.Go(func() error {
-			if entity.Artist != "" {
-				query := entity.Artist + " " + entity.Title
-				start := time.Now()
-				shown, err := searcher.Search(ctx, query)
-				ms := time.Since(start).Milliseconds()
-				if err == nil {
-					mu.Lock()
-					latencies = append(latencies, ms)
-					for _, r := range shown {
-						results++
-						if r.ImageURL != "" {
-							artwork++
-						}
-						if domain.ResolutionTierFromExtras(r.Extras) == domain.EntityResolutionBridge {
-							bridged++
-						}
-					}
-					mu.Unlock()
-				}
+	runParallel(entities, concurrency, progress, func(_ int, entity LibraryEntity) {
+		if entity.Artist == "" {
+			return
+		}
+		query := entity.Artist + " " + entity.Title
+		start := time.Now()
+		shown, err := searcher.Search(ctx, query)
+		ms := time.Since(start).Milliseconds()
+		if err != nil {
+			return
+		}
+		mu.Lock()
+		latencies = append(latencies, ms)
+		for _, r := range shown {
+			results++
+			if r.ImageURL != "" {
+				artwork++
 			}
-			mu.Lock()
-			done++
-			n := done
-			mu.Unlock()
-			if progress != nil && (n%step == 0 || n == total) {
-				progress(n, total)
+			if domain.ResolutionTierFromExtras(r.Extras) == domain.EntityResolutionBridge {
+				bridged++
 			}
-			return nil
-		})
-	}
-	_ = g.Wait()
+		}
+		mu.Unlock()
+	})
 
 	report := HealthReport{
 		Searches:      len(latencies),
