@@ -36,32 +36,28 @@ export function AddToPlaylistSheet({
   const [createVisible, setCreateVisible] = useState(false);
   const [addedTo, setAddedTo] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
-  // Single-flight lock for one add gesture. `resolving` state drives the
-  // disabled UI, but that alone can't dedupe the gesture: under React 19.2
-  // (Expo 57) one press can be dispatched a second time by a concurrent
-  // re-commit, landing in this press's microtask flush — after the resolve has
-  // settled and the disabled state cleared. On the empty/reject paths there is
-  // no pending mutation to keep the row disabled, so the replay slips through
-  // and calls resolveTrackIds()/onClose() twice. The ref blocks re-entry, and
-  // its release is deferred to a macrotask: JS drains every microtask before
-  // any macrotask, so a same-gesture replay is dropped while a genuine later
-  // re-tap (a separate gesture) still succeeds.
-  const resolvingRef = useRef(false);
+  // Single-flight lock for one add gesture. `resolving` drives the disabled UI,
+  // but that alone can't dedupe the gesture: under React 19.2 (Expo 57) the
+  // concurrent renderer can re-dispatch one press a moment later, during the
+  // test's/interaction's settle window. When the resolve yields ids a mutation
+  // starts and its `isPending` keeps the row disabled, so the replay is
+  // harmlessly swallowed there — but on the empty/reject paths no mutation runs,
+  // busy clears, and the replay used to re-run resolveTrackIds()/onClose(). So:
+  // engage the lock on entry, and only release it once a mutation has taken over
+  // the gesture; an empty or rejected resolve keeps it engaged (there is nothing
+  // to add anywhere), which drops the replay. A fresh open clears it.
+  const dispatchedRef = useRef(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const unlockTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const clearCloseTimer = useCallback(() => {
     if (closeTimer.current) {
       clearTimeout(closeTimer.current);
       closeTimer.current = null;
     }
   }, []);
-  useEffect(
-    () => () => {
-      clearCloseTimer();
-      clearTimeout(unlockTimer.current);
-    },
-    [clearCloseTimer],
-  );
+  useEffect(() => clearCloseTimer, [clearCloseTimer]);
+  useEffect(() => {
+    if (!visible) dispatchedRef.current = false;
+  }, [visible]);
 
   const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
     queryKey: playlistKeys.list,
@@ -76,24 +72,21 @@ export function AddToPlaylistSheet({
 
   const withTrackIds = useCallback(
     async (run: (trackIds: TrackId[]) => void): Promise<void> => {
-      if (resolvingRef.current) return;
-      resolvingRef.current = true;
+      if (dispatchedRef.current) return;
+      dispatchedRef.current = true;
       setResolving(true);
       try {
         const trackIds = await resolveTrackIds();
-        if (trackIds.length > 0) run(trackIds);
+        if (trackIds.length > 0) {
+          // A mutation now owns the gesture; its pending state guards the row
+          // against a replayed press, so hand the lock back for later gestures.
+          dispatchedRef.current = false;
+          run(trackIds);
+        }
       } catch {
         onClose();
       } finally {
         setResolving(false);
-        // Release the lock a macrotask later: a same-gesture replay arrives
-        // within this press's microtask flush, so it stays blocked; a genuine
-        // later re-tap runs after and proceeds. clearTimeout on a stale/absent
-        // id is a no-op, so no branch is needed to cancel a prior release.
-        clearTimeout(unlockTimer.current);
-        unlockTimer.current = setTimeout(() => {
-          resolvingRef.current = false;
-        }, 0);
       }
     },
     [onClose, resolveTrackIds],

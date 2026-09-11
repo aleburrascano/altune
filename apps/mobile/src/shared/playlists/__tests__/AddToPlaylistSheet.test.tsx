@@ -110,46 +110,28 @@ describe("AddToPlaylistSheet(): withTrackIds's trackIds.length > 0 guard (:62)",
 });
 
 describe('AddToPlaylistSheet(): single-flight — one gesture, one resolve (:59-72)', () => {
-  it('ignores a duplicate press that arrives after busy clears but before the lock releases', async () => {
-    jest.useFakeTimers();
-    try {
-      __http.reply('GET /v1/playlists', {
-        status: 200,
-        json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
-      });
-      // Empty resolve → no mutation to hold the row disabled, so busy clears the
-      // instant the resolve settles: the case where the SDK-57 double dispatch
-      // bit. The lock, however, is held until a macrotask.
-      const resolveTrackIds = jest.fn().mockResolvedValue([]);
-      renderSheet({ resolveTrackIds });
+  it('drops a replayed press after an empty resolve, even once the row re-enables', async () => {
+    __http.reply('GET /v1/playlists', {
+      status: 200,
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
+    });
+    // Empty resolve → no mutation keeps the row disabled, so busy clears the
+    // instant the resolve settles: the case the SDK-57 double dispatch bit.
+    const resolveTrackIds = jest.fn().mockResolvedValue([]);
+    const { onClose } = renderSheet({ resolveTrackIds });
 
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(0);
-      });
+    await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
+    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
 
-      // First dispatch of the gesture. Flushing microtasks (without advancing
-      // timers) settles the resolve and re-enables the row, but leaves the
-      // macrotask lock-release still pending.
-      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
+    await waitFor(() => expect(resolveTrackIds).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull());
 
-      // Second dispatch of the SAME gesture, on the now-enabled row: the lock
-      // must swallow it, so resolveTrackIds is not called again.
-      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
-      expect(resolveTrackIds).toHaveBeenCalledTimes(1);
-
-      // The macrotask release then re-opens the lock for a genuine later re-tap.
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(0);
-      });
-      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
-      expect(resolveTrackIds).toHaveBeenCalledTimes(2);
-    } finally {
-      jest.useRealTimers();
-    }
+    // The row is enabled again, but the single-flight lock must still swallow a
+    // replayed press so resolveTrackIds does not run a second time.
+    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    expect(resolveTrackIds).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
   });
 });
 
