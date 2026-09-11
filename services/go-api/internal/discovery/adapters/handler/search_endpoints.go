@@ -121,10 +121,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 || limit > 10 {
-		limit = 5
-	}
+	limit := limitResetOnOverflow(r, 5, 10)
 
 	entries, err := h.suggestSvc.Execute(r.Context(), q, limit)
 	if err != nil {
