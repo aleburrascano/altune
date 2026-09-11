@@ -36,20 +36,32 @@ export function AddToPlaylistSheet({
   const [createVisible, setCreateVisible] = useState(false);
   const [addedTo, setAddedTo] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
-  // Synchronous re-entrancy lock. `resolving` state drives the disabled UI, but
-  // a state update can't gate the very gesture that starts it: React 19.2's
-  // scheduler may defer the disabling re-render past a second press dispatch,
-  // letting two resolveTrackIds()/onClose() calls slip through for one gesture.
-  // A ref flips before any await or setState, so one gesture = one resolve.
+  // Single-flight lock for one add gesture. `resolving` state drives the
+  // disabled UI, but that alone can't dedupe the gesture: under React 19.2
+  // (Expo 57) one press can be dispatched a second time by a concurrent
+  // re-commit, landing in this press's microtask flush — after the resolve has
+  // settled and the disabled state cleared. On the empty/reject paths there is
+  // no pending mutation to keep the row disabled, so the replay slips through
+  // and calls resolveTrackIds()/onClose() twice. The ref blocks re-entry, and
+  // its release is deferred to a macrotask: JS drains every microtask before
+  // any macrotask, so a same-gesture replay is dropped while a genuine later
+  // re-tap (a separate gesture) still succeeds.
   const resolvingRef = useRef(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unlockTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const clearCloseTimer = useCallback(() => {
     if (closeTimer.current) {
       clearTimeout(closeTimer.current);
       closeTimer.current = null;
     }
   }, []);
-  useEffect(() => clearCloseTimer, [clearCloseTimer]);
+  useEffect(
+    () => () => {
+      clearCloseTimer();
+      clearTimeout(unlockTimer.current);
+    },
+    [clearCloseTimer],
+  );
 
   const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
     queryKey: playlistKeys.list,
@@ -73,8 +85,15 @@ export function AddToPlaylistSheet({
       } catch {
         onClose();
       } finally {
-        resolvingRef.current = false;
         setResolving(false);
+        // Release the lock a macrotask later: a same-gesture replay arrives
+        // within this press's microtask flush, so it stays blocked; a genuine
+        // later re-tap runs after and proceeds. clearTimeout on a stale/absent
+        // id is a no-op, so no branch is needed to cancel a prior release.
+        clearTimeout(unlockTimer.current);
+        unlockTimer.current = setTimeout(() => {
+          resolvingRef.current = false;
+        }, 0);
       }
     },
     [onClose, resolveTrackIds],
