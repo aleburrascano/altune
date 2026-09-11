@@ -136,10 +136,6 @@ func (c *Config) HasDiscogs() bool {
 	return c.DiscogsToken != ""
 }
 
-func (c *Config) HasOperatorConsole() bool {
-	return c.OperatorUserID != ""
-}
-
 func (c *Config) HasAlertPush() bool {
 	return c.AlertNtfyURL != ""
 }
