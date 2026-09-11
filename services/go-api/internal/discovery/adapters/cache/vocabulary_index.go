@@ -11,14 +11,14 @@ import (
 )
 
 func (s *RedisVocabularyStore) Add(ctx context.Context, entry domain.VocabularyEntry) error {
-	if s.client == nil {
+	if s.disabled() {
 		return nil
 	}
 	return s.indexEntry(ctx, entry)
 }
 
 func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.VocabularyEntry) error {
-	if s.client == nil || len(entries) == 0 {
+	if s.disabled() || len(entries) == 0 {
 		return nil
 	}
 	pipe := s.client.Pipeline()
@@ -71,7 +71,7 @@ func addEntryToPipeline(
 }
 
 func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
-	if s.client == nil || maxEntries <= 0 {
+	if s.disabled() || maxEntries <= 0 {
 		return nil
 	}
 	count, err := s.client.ZCard(ctx, vocabTermsKey).Result()

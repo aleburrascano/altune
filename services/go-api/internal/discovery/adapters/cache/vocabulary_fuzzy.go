@@ -14,7 +14,7 @@ func (s *RedisVocabularyStore) FindClosest(
 	query string,
 	limit int,
 ) ([]domain.VocabularyEntry, error) {
-	if s.client == nil {
+	if s.disabled() {
 		return nil, nil
 	}
 	return s.fuzzySearch(ctx, query, limit)
