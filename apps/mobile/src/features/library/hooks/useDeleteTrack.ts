@@ -5,6 +5,7 @@ import type { TrackId } from '@shared/api-client/ids';
 import { deleteTrack } from '@shared/api-client/tracks';
 import { removeTrackFromCaches } from '@shared/events/trackCachePatch';
 import { removeTrackStatus } from '@shared/acquisition/trackStatusStore';
+import { RETRY_TAIL } from '@shared/lib/describeError';
 
 export function useDeleteTrack() {
   const queryClient = useQueryClient();
@@ -15,7 +16,7 @@ export function useDeleteTrack() {
       removeTrackStatus(trackId);
     },
     onError: () => {
-      Alert.alert('Delete failed', 'Could not remove the track. Please try again.');
+      Alert.alert('Delete failed', `Could not remove the track. ${RETRY_TAIL}`);
     },
   });
 }
@@ -42,7 +43,7 @@ export function useDeleteTracks() {
       if (deleted < requested) {
         Alert.alert(
           'Delete failed',
-          `${requested - deleted} of ${requested} tracks could not be removed. Please try again.`,
+          `${requested - deleted} of ${requested} tracks could not be removed. ${RETRY_TAIL}`,
         );
       }
     },

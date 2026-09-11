@@ -53,6 +53,42 @@ func TestLibraryLensService_GroupsOwnedTracks(t *testing.T) {
 	}
 }
 
+func TestLibraryLensService_ClampsLimit(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+
+	cases := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"zero defaults to 50", 0, 50},
+		{"negative defaults to 50", -5, 50},
+		{"in range passes through", 1, 1},
+		{"over cap clamps to 2000", 9000, 2000},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			repo := catalogtest.NewTrackRepo()
+			svc := NewLibraryLensService(repo)
+
+			if _, err := svc.Albums(ctx, userId, domain.LibraryQuery{Limit: c.in}); err != nil {
+				t.Fatalf("Albums: %v", err)
+			}
+			if repo.LastAlbumsQuery.Limit != c.want {
+				t.Errorf("albums limit = %d, want %d", repo.LastAlbumsQuery.Limit, c.want)
+			}
+
+			if _, err := svc.Artists(ctx, userId, domain.LibraryQuery{Limit: c.in}); err != nil {
+				t.Fatalf("Artists: %v", err)
+			}
+			if repo.LastArtistsQuery.Limit != c.want {
+				t.Errorf("artists limit = %d, want %d", repo.LastArtistsQuery.Limit, c.want)
+			}
+		})
+	}
+}
+
 func svcAlbums(ctx context.Context, repo *catalogtest.TrackRepo, userId shared.UserId) ([]domain.AlbumGroup, error) {
 	return NewLibraryLensService(repo).Albums(ctx, userId, domain.LibraryQuery{})
 }

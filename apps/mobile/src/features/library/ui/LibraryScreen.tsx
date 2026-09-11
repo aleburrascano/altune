@@ -4,8 +4,8 @@ import { Alert, StyleSheet, View } from 'react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
+import { describeError } from '@shared/lib/describeError';
 import { countLabel } from '@shared/lib/format';
-import { isNetworkError } from '@shared/lib/isNetworkError';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
@@ -193,15 +193,14 @@ export function LibraryScreen(): ReactElement {
   }
 
   if (view === 'error') {
+    const { title, body } = describeError(active.error);
     return (
       <Screen>
         <LibraryHeader />
         <View testID="library-error" style={styles.center}>
-          <Text variant="title">Couldn&apos;t load your library</Text>
+          <Text variant="title">{title}</Text>
           <Text variant="label" tone="secondary" style={styles.centerSub}>
-            {isNetworkError(active.error)
-              ? 'You appear to be offline. Your library is safe — reconnect and try again.'
-              : 'Something went wrong on our end. Try again in a moment.'}
+            {body}
           </Text>
           <Button testID="library-retry" label="Retry" onPress={active.onRetry} />
         </View>

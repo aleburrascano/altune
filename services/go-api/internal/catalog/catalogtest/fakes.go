@@ -19,6 +19,9 @@ type TrackRepo struct {
 	ErrOnList   error
 	ErrOnUpdate error
 	ErrOnDelete error
+
+	LastAlbumsQuery  domain.LibraryQuery
+	LastArtistsQuery domain.LibraryQuery
 }
 
 func NewTrackRepo() *TrackRepo {
@@ -88,7 +91,8 @@ func (r *TrackRepo) ListFilteredForUser(ctx context.Context, userId shared.UserI
 	return matched, len(matched), nil
 }
 
-func (r *TrackRepo) ListAlbumsForUser(_ context.Context, userId shared.UserId, _ domain.LibraryQuery) ([]domain.AlbumGroup, error) {
+func (r *TrackRepo) ListAlbumsForUser(_ context.Context, userId shared.UserId, query domain.LibraryQuery) ([]domain.AlbumGroup, error) {
+	r.LastAlbumsQuery = query
 	if r.ErrOnList != nil {
 		return nil, r.ErrOnList
 	}
@@ -121,7 +125,8 @@ func (r *TrackRepo) ListAlbumsForUser(_ context.Context, userId shared.UserId, _
 	return out, nil
 }
 
-func (r *TrackRepo) ListArtistsForUser(_ context.Context, userId shared.UserId, _ domain.LibraryQuery) ([]domain.ArtistGroup, error) {
+func (r *TrackRepo) ListArtistsForUser(_ context.Context, userId shared.UserId, query domain.LibraryQuery) ([]domain.ArtistGroup, error) {
+	r.LastArtistsQuery = query
 	if r.ErrOnList != nil {
 		return nil, r.ErrOnList
 	}
