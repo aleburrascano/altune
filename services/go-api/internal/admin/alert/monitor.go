@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"altune/go-api/internal/shared/runloop"
 )
 
 type Severity int
@@ -35,9 +37,8 @@ type Monitor struct {
 	interval   time.Duration
 	logger     *slog.Logger
 
-	cancel context.CancelFunc
-	done   chan struct{}
 	firing map[string]bool
+	runloop.Background
 }
 
 func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Condition) *Monitor {
@@ -51,14 +52,10 @@ func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Co
 }
 
 func (m *Monitor) Start(ctx context.Context) {
-	loopCtx, cancel := context.WithCancel(ctx)
-	m.cancel = cancel
-	m.done = make(chan struct{})
-	go m.loop(loopCtx)
+	m.Spawn(ctx, m.loop)
 }
 
 func (m *Monitor) loop(ctx context.Context) {
-	defer close(m.done)
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 	for {
@@ -96,16 +93,5 @@ func (m *Monitor) evaluate(ctx context.Context) {
 		if err := m.notifier.Notify(ctx, *fired); err != nil {
 			m.logger.ErrorContext(ctx, "alert.notify_failed", "key", c.Key, "error", err)
 		}
-	}
-}
-
-func (m *Monitor) Shutdown(ctx context.Context) {
-	if m.cancel == nil {
-		return
-	}
-	m.cancel()
-	select {
-	case <-m.done:
-	case <-ctx.Done():
 	}
 }

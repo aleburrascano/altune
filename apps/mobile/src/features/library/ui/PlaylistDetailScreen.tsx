@@ -12,6 +12,7 @@ import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
@@ -223,7 +224,7 @@ export function PlaylistDetailScreen(): ReactElement {
     const ids = selection.ids;
     Alert.alert(
       'Remove from Playlist',
-      `Remove ${ids.length} ${ids.length === 1 ? 'track' : 'tracks'} from ${pl.name}?`,
+      `Remove ${ids.length} ${countLabel(ids.length, 'track')} from ${pl.name}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -384,7 +385,7 @@ export function PlaylistDetailScreen(): ReactElement {
 
       <AddToPlaylistSheet
         visible={addToPlaylistVisible}
-        label={`${selection.count} ${selection.count === 1 ? 'track' : 'tracks'}`}
+        label={`${selection.count} ${countLabel(selection.count, 'track')}`}
         resolveTrackIds={() => Promise.resolve(selection.ids)}
         onClose={() => {
           setAddToPlaylistVisible(false);
