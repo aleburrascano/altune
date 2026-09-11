@@ -6,11 +6,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-type AlbumValidator interface {
-	ValidateArtistAlbums(ctx context.Context, artistName string, albums []domain.SearchResult) (*AlbumValidationResult, error)
-	ResolveArtistIdentity(ctx context.Context, artistName string) (*ArtistIdentity, error)
-}
-
 type ArtistIdentityResolver interface {
 	ResolveArtistIdentity(ctx context.Context, artistName string) (*ArtistIdentity, error)
 }
