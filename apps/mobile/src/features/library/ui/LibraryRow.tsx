@@ -12,7 +12,7 @@ import { Row, Text, spacing, useTheme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import type { TrackResponse } from '../../../shared/api-client/types';
+import type { TrackResponse } from '@shared/api-client/types';
 
 type LibraryRowProps = {
   track: TrackResponse;
