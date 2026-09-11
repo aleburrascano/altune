@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -146,28 +145,12 @@ func (a *SpotifyAdapter) doPathfinderContent(ctx context.Context, sess *spotifyS
 	if err != nil {
 		return 0, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.pathfinderURL, bytes.NewReader(payload))
+	status, raw, err := postBytesCapped(ctx, a.client, a.pathfinderURL, bytes.NewReader(payload), providerBodyCap, spotifyPathfinderHeaders(sess)...)
 	if err != nil {
-		return 0, err
+		return status, err
 	}
-	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+sess.accessToken)
-	req.Header.Set("client-token", sess.clientToken)
-	req.Header.Set("app-platform", "WebPlayer")
-	req.Header.Set("User-Agent", spotifyUserAgent)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, providerBodyCap))
-	if err != nil {
-		return resp.StatusCode, err
+	if status != http.StatusOK {
+		return status, fmt.Errorf("http status %d", status)
 	}
 	var envelope struct {
 		Errors []struct {
@@ -175,12 +158,12 @@ func (a *SpotifyAdapter) doPathfinderContent(ctx context.Context, sess *spotifyS
 		} `json:"errors"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err == nil && len(envelope.Errors) > 0 {
-		return resp.StatusCode, fmt.Errorf("spotify graphql error: %s", envelope.Errors[0].Message)
+		return status, fmt.Errorf("spotify graphql error: %s", envelope.Errors[0].Message)
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
-		return resp.StatusCode, fmt.Errorf("decode %s response: %w", operationName, err)
+		return status, fmt.Errorf("decode %s response: %w", operationName, err)
 	}
-	return resp.StatusCode, nil
+	return status, nil
 }
 
 type spotifyPFRequest struct {
