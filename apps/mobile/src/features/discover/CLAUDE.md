@@ -57,5 +57,11 @@ Load-bearing testIDs (AC#20): `discover-loading`, `discover-empty-no-query`, `di
 ### Test files
 
 - [__tests__/slice-invariants.test.ts](__tests__/slice-invariants.test.ts) — greps the slice's `.ts`/`.tsx` sources for the banned noun (`song`/`songs`, case- and case-style-insensitive), the guard that would have caught the `kindLabel` violation.
+- [__tests__/state.test.ts](__tests__/state.test.ts) — `_viewForState` five-state truth table, `kindLabel` singular/plural table, `resultKey` source-aware fallbacks.
+- [__tests__/impressions.test.ts](__tests__/impressions.test.ts) — `buildImpressionRows` position/provider/signature projection.
+- [__tests__/tap.test.ts](__tests__/tap.test.ts) — `stashHandoffForDetail` route + stashed handoff seam.
+- [__tests__/search-state.test.ts](__tests__/search-state.test.ts) — preserved-search module round-trip and defaults.
+- [__tests__/useDebouncedSearch.test.ts](__tests__/useDebouncedSearch.test.ts) — the debounce/explicit-submit state machine, its timing window and cancellation.
+- [__tests__/useImpressionLogger.test.ts](__tests__/useImpressionLogger.test.ts) — the once-per-`search_id` `results_shown` replay guard and its payload.
 
 <!-- AUTO-MAINTAINED:END -->

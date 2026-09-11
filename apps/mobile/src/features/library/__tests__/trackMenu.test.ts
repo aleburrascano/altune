@@ -1,3 +1,4 @@
+import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 
@@ -5,7 +6,7 @@ import { buildTrackMenuItems } from '../ui/trackMenu';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return {
-    id: 'track-1',
+    id: asTrackId('track-1'),
     title: 'Aerodynamic',
     artist: 'Daft Punk',
     album: 'Discovery',
@@ -107,7 +108,7 @@ describe('buildTrackMenuItems — exact composition, so a withheld arm adds noth
 describe('buildTrackMenuItems — pressing an item performs its action on the exact track', () => {
   it('Play Next enqueues this track as the next playback track', () => {
     const opts = makeOpts();
-    buildTrackMenuItems(makeTrack({ id: 'track-9', acquisition_status: 'ready' }), opts)
+    buildTrackMenuItems(makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }), opts)
       .find((i) => i.label === 'Play Next')!
       .onPress();
     expect(opts.queue.playNext).toHaveBeenCalledWith(
@@ -117,7 +118,7 @@ describe('buildTrackMenuItems — pressing an item performs its action on the ex
 
   it('Add to Queue appends this track as a playback track', () => {
     const opts = makeOpts();
-    buildTrackMenuItems(makeTrack({ id: 'track-9', acquisition_status: 'ready' }), opts)
+    buildTrackMenuItems(makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }), opts)
       .find((i) => i.label === 'Add to Queue')!
       .onPress();
     expect(opts.queue.addToQueue).toHaveBeenCalledWith(
@@ -127,7 +128,7 @@ describe('buildTrackMenuItems — pressing an item performs its action on the ex
 
   it('Cancel download unpins the in-flight track', () => {
     setStore({ 'track-9': { trackId: 'track-9', status: 'downloading' } });
-    buildTrackMenuItems(makeTrack({ id: 'track-9', acquisition_status: 'ready' }), makeOpts())
+    buildTrackMenuItems(makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }), makeOpts())
       .find((i) => i.label === 'Cancel download')!
       .onPress();
     expect(unpin).toHaveBeenCalledWith('track-9');
@@ -162,13 +163,13 @@ describe('buildTrackMenuItems — optional actions', () => {
 describe('buildTrackMenuItems — the offline item reads live pinned status for a ready track', () => {
   function offlineLabel(entry: PinnedEntry | undefined): string {
     setStore(entry ? { 'track-1': entry } : {});
-    const items = buildTrackMenuItems(makeTrack({ id: 'track-1', acquisition_status: 'ready' }), makeOpts());
+    const items = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1'), acquisition_status: 'ready' }), makeOpts());
     return items.find((i) => ['Download', 'Remove download', 'Cancel download', 'Retry download'].includes(i.label))!.label;
   }
 
   it('offers Download and pins when the track has no pinned entry', () => {
     setStore({});
-    const item = buildTrackMenuItems(makeTrack({ id: 'track-1' }), makeOpts()).find((i) => i.label === 'Download')!;
+    const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find((i) => i.label === 'Download')!;
     item.onPress();
     expect(pin).toHaveBeenCalledWith('track-1');
     expect(unpin).not.toHaveBeenCalled();
@@ -176,7 +177,7 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
 
   it('offers Remove download and unpins when the track is already downloaded', () => {
     setStore({ 'track-1': { trackId: 'track-1', status: 'ready' } });
-    const item = buildTrackMenuItems(makeTrack({ id: 'track-1' }), makeOpts()).find(
+    const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find(
       (i) => i.label === 'Remove download',
     )!;
     item.onPress();
@@ -194,7 +195,7 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
 
   it('retries a failed download by pinning again, not unpinning', () => {
     setStore({ 'track-1': { trackId: 'track-1', status: 'failed' } });
-    const item = buildTrackMenuItems(makeTrack({ id: 'track-1' }), makeOpts()).find(
+    const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find(
       (i) => i.label === 'Retry download',
     )!;
     item.onPress();
