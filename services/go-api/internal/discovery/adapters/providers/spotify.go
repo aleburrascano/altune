@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -98,34 +97,14 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 		return nil, 0, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.pathfinderURL, bytes.NewReader(payload))
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+sess.accessToken)
-	req.Header.Set("client-token", sess.clientToken)
-	req.Header.Set("app-platform", "WebPlayer")
-	req.Header.Set("User-Agent", spotifyUserAgent)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
-	}
-
 	var body spotifySearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("decode search response: %w", err)
+	status, err := postJSON(ctx, a.client, a.pathfinderURL, payload, &body, spotifyPathfinderHeaders(sess)...)
+	if err != nil {
+		return nil, status, err
 	}
 
 	if len(body.Errors) > 0 {
-		return nil, resp.StatusCode, fmt.Errorf("spotify graphql error: %s", body.Errors[0].Message)
+		return nil, status, fmt.Errorf("spotify graphql error: %s", body.Errors[0].Message)
 	}
 
 	sv2 := body.Data.SearchV2
@@ -145,7 +124,18 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 			results = append(results, r)
 		}
 	}
-	return results, resp.StatusCode, nil
+	return results, status, nil
+}
+
+func spotifyPathfinderHeaders(sess *spotifySession) []reqOption {
+	return []reqOption{
+		withHeader("Content-Type", "application/json;charset=UTF-8"),
+		withHeader("Accept", "application/json"),
+		withHeader("Authorization", "Bearer "+sess.accessToken),
+		withHeader("client-token", sess.clientToken),
+		withHeader("app-platform", "WebPlayer"),
+		withHeader("User-Agent", spotifyUserAgent),
+	}
 }
 
 type spotifySearchRequest struct {
