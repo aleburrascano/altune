@@ -43,6 +43,24 @@ const rulesWrittenForTheWebAndWrongForReactNative = {
   },
 };
 
+// SDK 57's eslint-config-expo bundles eslint-plugin-react-hooks v6, whose React
+// Compiler ruleset (refs / purity / set-state-in-effect) is brand new and did
+// NOT gate before this upgrade. It misfires on idiomatic RN gesture/Animated
+// code — e.g. reading a ref's `.current` inside a PanResponder callback reads as
+// a render-time ref access, and `purity` fires on pure helpers called from event
+// handlers. Adopting the React Compiler ruleset (and enabling the compiler) is
+// its own effort; keep these visible as warnings during the mechanical SDK bump
+// rather than silencing them or contorting untestable animation code. The
+// historical hook gates stay errors: rules-of-hooks (from expo config) and
+// exhaustive-deps (set above).
+const reactCompilerRulesDeferredToTheirOwnTicket = {
+  rules: {
+    'react-hooks/refs': 'warn',
+    'react-hooks/purity': 'warn',
+    'react-hooks/set-state-in-effect': 'warn',
+  },
+};
+
 const relaxationsForJestModuleMockingAndInlineMockComponents = {
   files: TEST_FILES,
   rules: {
@@ -78,6 +96,7 @@ module.exports = [
     },
   },
   rulesWrittenForTheWebAndWrongForReactNative,
+  reactCompilerRulesDeferredToTheirOwnTicket,
   relaxationsForJestModuleMockingAndInlineMockComponents,
   relaxationForNativeModulesExpoGoDoesNotBundle,
   {

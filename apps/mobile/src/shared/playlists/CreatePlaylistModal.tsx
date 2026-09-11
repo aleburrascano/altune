@@ -86,7 +86,7 @@ export function CreatePlaylistModal({
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   centered: {
     flex: 1,

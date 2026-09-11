@@ -1,4 +1,4 @@
-import type { Router } from 'expo-router';
+import type { ImperativeRouter } from 'expo-router';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
@@ -8,7 +8,7 @@ type VerifyOtpArg = Parameters<typeof supabase.auth.verifyOtp>[0];
 
 export async function completeAuthIntent(
   intent: AuthLinkIntent,
-  router: Pick<Router, 'replace'>,
+  router: Pick<ImperativeRouter, 'replace'>,
 ): Promise<void> {
   if (intent.kind === 'ignored') {
     return;

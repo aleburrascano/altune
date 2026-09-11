@@ -5,12 +5,12 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import * as NavigationBar from 'expo-navigation-bar';
+import { NavigationBar } from 'expo-navigation-bar';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { AppState, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -72,23 +72,6 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  useEffect(() => {
-    if (Platform.OS !== 'android') {
-      return;
-    }
-    const applyNavBar = (): void => {
-      void NavigationBar.setBackgroundColorAsync(activeTheme.color.canvas);
-      void NavigationBar.setButtonStyleAsync(scheme === 'dark' ? 'light' : 'dark');
-    };
-    applyNavBar();
-    const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active') {
-        applyNavBar();
-      }
-    });
-    return () => sub.remove();
-  }, [activeTheme, scheme]);
-
   if (!fontsLoaded && !fontError) {
     return null;
   }
@@ -99,6 +82,9 @@ export default function RootLayout() {
         <ThemeProvider>
           <SafeAreaProvider>
             <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+            {Platform.OS === 'android' && (
+              <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
+            )}
             <AuthGate>
               <ServerEventsBridge />
               <AuthDeepLinkBridge />
