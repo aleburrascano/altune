@@ -26,9 +26,9 @@ func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
 	return deduped
 }
 
-func sortAlbumsByReleaseDateDesc(results []domain.SearchResult) {
-	sort.SliceStable(results, func(i, j int) bool {
-		ki, kj := albumReleaseSortKey(results[i]), albumReleaseSortKey(results[j])
+func sortByReleaseDateDesc[T any](items []T, key func(T) string) {
+	sort.SliceStable(items, func(i, j int) bool {
+		ki, kj := key(items[i]), key(items[j])
 		if ki == "" || kj == "" {
 			return ki != "" && kj == ""
 		}

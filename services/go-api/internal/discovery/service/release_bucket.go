@@ -2,15 +2,15 @@ package service
 
 func NormalizeRecordType(m MergedRelease) string {
 	if m.Result.TrackCount == 1 {
-		return "single"
+		return string(RecordTypeSingle)
 	}
-	switch stringExtra(m.Result.Extras, "record_type") {
-	case "single":
-		return "single"
-	case "ep":
-		return "ep"
+	switch ParseRecordType(stringExtra(m.Result.Extras, "record_type")) {
+	case RecordTypeSingle:
+		return string(RecordTypeSingle)
+	case RecordTypeEP:
+		return string(RecordTypeEP)
 	default:
-		return "album"
+		return string(RecordTypeAlbum)
 	}
 }
 

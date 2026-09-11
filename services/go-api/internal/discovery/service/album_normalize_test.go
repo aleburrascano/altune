@@ -76,7 +76,7 @@ func TestSortAlbumsByReleaseDateDesc(t *testing.T) {
 			album("Newest", "2022-01-07", 0),
 			album("Middle", "2020-03-20", 0),
 		}
-		sortAlbumsByReleaseDateDesc(in)
+		sortByReleaseDateDesc(in, albumReleaseSortKey)
 		want := []string{"Newest", "Middle", "Older", "NoDate"}
 		if got := albumTitles(in); !equalStrings(got, want) {
 			t.Errorf("expected %v, got %v", want, got)
@@ -89,7 +89,7 @@ func TestSortAlbumsByReleaseDateDesc(t *testing.T) {
 			album("B", "2020-01-01", 0),
 			album("C", "2020-01-01", 0),
 		}
-		sortAlbumsByReleaseDateDesc(in)
+		sortByReleaseDateDesc(in, albumReleaseSortKey)
 		want := []string{"A", "B", "C"}
 		if got := albumTitles(in); !equalStrings(got, want) {
 			t.Errorf("expected stable %v, got %v", want, got)
