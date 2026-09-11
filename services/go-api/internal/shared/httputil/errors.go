@@ -82,13 +82,6 @@ func NotFound(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusNotFound, message)
 }
 
-func Unauthorized(w http.ResponseWriter, message string) {
-	if message == "" {
-		message = "unauthorized"
-	}
-	WriteError(w, http.StatusUnauthorized, message)
-}
-
 func BadRequest(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusBadRequest, message)
 }

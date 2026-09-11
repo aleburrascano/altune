@@ -1,4 +1,5 @@
 import { audioStreamUrl } from '@shared/api-client/audio';
+import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
@@ -6,7 +7,7 @@ import { toNativeTrack } from '../nativeTrack';
 
 function libraryTrack(overrides: Partial<PlaybackTrack> = {}): PlaybackTrack {
   return {
-    source: { kind: 'library', trackId: 'trk-1' },
+    source: { kind: 'library', trackId: asTrackId('trk-1') },
     title: 'A Title',
     artist: 'An Artist',
     artworkUrl: null,
@@ -73,7 +74,7 @@ describe('toNativeTrack — url resolution', () => {
   });
 
   it('resolves a library track without a stream url through the audio endpoint', () => {
-    const track = libraryTrack({ source: { kind: 'library', trackId: 'trk-42' } });
+    const track = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-42') } });
 
     const native = toNativeTrack(track);
 
