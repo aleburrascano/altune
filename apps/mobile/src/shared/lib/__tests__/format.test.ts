@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import { formatDuration } from '../format';
+import { countLabel, formatDuration } from '../format';
 
 describe('formatDuration — boundaries the minutes/seconds arithmetic turns on', () => {
   it.each<[number, string]>([
@@ -49,6 +49,25 @@ describe('law: formatDuration over any finite input, negative included', () => {
         },
       ),
     );
+  });
+});
+
+describe('countLabel — the count decides singular vs plural, one is the only singular', () => {
+  it('returns the singular form only for a count of exactly one', () => {
+    expect(countLabel(1, 'track')).toBe('track');
+  });
+
+  it.each<[number]>([[0], [2], [11]])('returns the plural form for %i', (n) => {
+    expect(countLabel(n, 'track')).toBe('tracks');
+  });
+
+  it('defaults the plural to the singular with an appended "s"', () => {
+    expect(countLabel(3, 'result')).toBe('results');
+  });
+
+  it('uses an explicit plural override when one is given', () => {
+    expect(countLabel(2, 'result', 'matches')).toBe('matches');
+    expect(countLabel(1, 'result', 'matches')).toBe('result');
   });
 });
 
