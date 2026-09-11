@@ -83,16 +83,7 @@ describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and neve
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
     fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
 
-    // DIAG-248 (temporary): the reject path times out on CI but not locally.
-    // Settle, then assert the exact counts so CI prints Received:{...} instead
-    // of a bare 5s timeout — tells us whether onClose is 0 or 2 on the runner.
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 800));
-    });
-    expect({
-      onClose: onClose.mock.calls.length,
-      resolve: resolveTrackIds.mock.calls.length,
-    }).toEqual({ onClose: 1, resolve: 1 });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
   });
 });
