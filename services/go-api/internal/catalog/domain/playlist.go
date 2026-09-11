@@ -124,10 +124,15 @@ func (p *Playlist) Reorder(trackIds []TrackId) error {
 	for _, t := range p.Tracks {
 		existing[t.TrackId] = true
 	}
+	seen := make(map[TrackId]bool)
 	for _, id := range trackIds {
 		if !existing[id] {
 			return &ValidationError{Message: "unknown track in reorder list"}
 		}
+		if seen[id] {
+			return &ValidationError{Message: "duplicate track in reorder list"}
+		}
+		seen[id] = true
 	}
 
 	newTracks := make([]PlaylistTrack, len(trackIds))
