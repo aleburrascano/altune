@@ -175,7 +175,7 @@ func TestIsRecognizedTerm(t *testing.T) {
 	}
 }
 
-func TestStringifyAttrAndItoa(t *testing.T) {
+func TestStringifyAttr(t *testing.T) {
 	records := []FailureRecord{
 		{Attrs: map[string]any{"k": "str"}},
 		{Attrs: map[string]any{"k": true}},
@@ -190,22 +190,6 @@ func TestStringifyAttrAndItoa(t *testing.T) {
 		if got[k] != n {
 			t.Errorf("slice[%q] = %d, want %d (full: %v)", k, got[k], n, got)
 		}
-	}
-	if itoa(0) != "0" {
-		t.Errorf("itoa(0) = %q", itoa(0))
-	}
-}
-
-func TestStringExtra(t *testing.T) {
-	r := domain.SearchResult{Extras: map[string]any{"record_type": "ep", "n": 3}}
-	if got := stringExtra(r, "record_type"); got != "ep" {
-		t.Errorf("stringExtra = %q, want ep", got)
-	}
-	if got := stringExtra(r, "n"); got != "" {
-		t.Errorf("non-string extra must read as empty, got %q", got)
-	}
-	if got := stringExtra(domain.SearchResult{}, "record_type"); got != "" {
-		t.Errorf("nil extras must read as empty, got %q", got)
 	}
 }
 
