@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'expo-router';
 import { Keyboard } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -92,9 +92,9 @@ export function useDiscoverLogic(): DiscoverLogic {
     }
   }, [searchData, queryClient]);
 
-  const prevQueryRef = useRef(search.committedQuery);
-  if (prevQueryRef.current !== search.committedQuery) {
-    prevQueryRef.current = search.committedQuery;
+  const [prevQuery, setPrevQuery] = useState(search.committedQuery);
+  if (prevQuery !== search.committedQuery) {
+    setPrevQuery(search.committedQuery);
     setFilter('all');
   }
 

@@ -65,7 +65,6 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     void ensurePlayerSetup();
   }, []);
 
-  const frozenPositionMs = useRef(0);
   const livePositionMs = progress.position * 1000;
   const resumePositionMs = useQueueStore((s) => s.resumePositionMs);
   const displayPositionMs = livePositionMs > 0 ? livePositionMs : resumePositionMs;
@@ -74,8 +73,19 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
       useQueueStore.getState().setResumePosition(0);
     }
   }, [livePositionMs, resumePositionMs]);
-  if (isForeground) frozenPositionMs.current = displayPositionMs;
-  const positionMs = isForeground ? displayPositionMs : frozenPositionMs.current;
+  // Freeze the displayed position while backgrounded (iOS background-CPU watchdog):
+  // track the live value in a ref that updates after commit, then snapshot it into
+  // state on the foreground -> background transition so `positionMs` — and the
+  // memoised `state` derived from it — stays identity-stable off-screen.
+  const liveDisplayRef = useRef(displayPositionMs);
+  useEffect(() => {
+    liveDisplayRef.current = displayPositionMs;
+  });
+  const [frozenPositionMs, setFrozenPositionMs] = useState(0);
+  useEffect(() => {
+    if (!isForeground) setFrozenPositionMs(liveDisplayRef.current);
+  }, [isForeground]);
+  const positionMs = isForeground ? displayPositionMs : frozenPositionMs;
   const rawDurationMs = progress.duration * 1000;
 
   const trackDurationMs =
@@ -91,7 +101,9 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const isEnded = tpState === State.Ended;
 
   const isPlayingRef = useRef(isPlaying);
-  isPlayingRef.current = isPlaying;
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  });
 
   const state: PlaybackState = useMemo(
     () =>

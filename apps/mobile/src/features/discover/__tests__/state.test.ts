@@ -123,7 +123,7 @@ describe('_viewForState maps hook state to the five-state union', () => {
 });
 
 describe('kindLabel renders the user-facing kind label', () => {
-  const cases: Array<[DiscoveryKind, string, string]> = [
+  const cases: [DiscoveryKind, string, string][] = [
     ['artist', 'Artist', 'Artists'],
     ['album', 'Album', 'Albums'],
     ['track', 'Track', 'Tracks'],

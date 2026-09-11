@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Event, useTrackPlayerEvents } from 'react-native-track-player';
 
 import { useQueueStore } from '@shared/playback/queueStore';
@@ -16,24 +16,25 @@ export function usePlaybackSignals(args: {
 }): void {
   const recordEvent = useRecordEvent();
   const recordRef = useRef(recordEvent);
-  recordRef.current = recordEvent;
+  useEffect(() => {
+    recordRef.current = recordEvent;
+  });
   const queueSource = useQueueStore((s) => s.source);
   const queueSourceRef = useRef(queueSource);
-  queueSourceRef.current = queueSource;
+  useEffect(() => {
+    queueSourceRef.current = queueSource;
+  });
 
-  const emit = (
-    type: 'play' | 'skip' | 'completed',
-    track: PlaybackTrack,
-    dwellMs?: number,
-  ): void => {
-    recordRef.current.mutate({
-      type,
-      search_id: track.searchId,
-      payload: buildTrackPayload(track, queueSourceRef.current, dwellMs),
-    });
-  };
-  const emitRef = useRef(emit);
-  emitRef.current = emit;
+  const emit = useCallback(
+    (type: 'play' | 'skip' | 'completed', track: PlaybackTrack, dwellMs?: number): void => {
+      recordRef.current.mutate({
+        type,
+        search_id: track.searchId,
+        payload: buildTrackPayload(track, queueSourceRef.current, dwellMs),
+      });
+    },
+    [],
+  );
 
   const { track, positionMs, durationMs } = args;
   const playRef = useRef<{ key: string | null; emitted: boolean }>({ key: null, emitted: false });
@@ -46,9 +47,9 @@ export function usePlaybackSignals(args: {
     if (!track) return;
     if (!ps.emitted && hasCrossedListenThreshold(positionMs, durationMs)) {
       ps.emitted = true;
-      emitRef.current('play', track);
+      emit('play', track);
     }
-  }, [track, positionMs, durationMs]);
+  }, [track, positionMs, durationMs, emit]);
 
   const handledKeyRef = useRef<string | null>(null);
   useTrackPlayerEvents([Event.PlaybackActiveTrackChanged, Event.PlaybackQueueEnded], (event) => {
@@ -68,14 +69,14 @@ export function usePlaybackSignals(args: {
             : 0;
       const completed = durMs > 0 && dwellMs >= durMs - COMPLETION_EPSILON_MS;
       handledKeyRef.current = trackKey(outgoing);
-      emitRef.current(completed ? 'completed' : 'skip', outgoing, dwellMs);
+      emit(completed ? 'completed' : 'skip', outgoing, dwellMs);
     } else {
       const trackIdx = s.playOrder[event.track];
       const ended = trackIdx != null ? s.tracks[trackIdx] : undefined;
       if (!ended) return;
       if (handledKeyRef.current === trackKey(ended)) return;
       const dwellMs = Math.round((event.position ?? 0) * 1000) || undefined;
-      emitRef.current('completed', ended, dwellMs);
+      emit('completed', ended, dwellMs);
     }
   });
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type AccessibilityActionEvent,
   Animated,
+  type GestureResponderHandlers,
   type LayoutChangeEvent,
   PanResponder,
   StyleSheet,
@@ -34,15 +35,15 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
   const layoutRef = useRef({ pageX: 0, width: 0 });
 
   const durationRef = useRef(durationMs);
-  durationRef.current = durationMs;
   const onSeekRef = useRef(onSeek);
-  onSeekRef.current = onSeek;
   const positionRef = useRef(positionMs);
-  positionRef.current = positionMs;
+  useEffect(() => {
+    durationRef.current = durationMs;
+    onSeekRef.current = onSeek;
+    positionRef.current = positionMs;
+  });
 
-  const progressRef = useRef<Animated.Value | null>(null);
-  if (progressRef.current === null) progressRef.current = new Animated.Value(0);
-  const progress = progressRef.current;
+  const [progress] = useState(() => new Animated.Value(0));
   const isDraggingRef = useRef(false);
   const isHoldingSeek = useRef(false);
   const seekHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,14 +59,18 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
     }
   }, [positionMs, durationMs, progress]);
 
-  const ratioFromPageX = (pageX: number): number => {
+  const ratioFromPageX = useCallback((pageX: number): number => {
     const x = pageX - layoutRef.current.pageX;
     return Math.max(0, Math.min(1, x / (layoutRef.current.width || 1)));
-  };
+  }, []);
 
-  const panResponderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
-  if (panResponderRef.current === null) {
-    panResponderRef.current = PanResponder.create({
+  // Build the PanResponder in an effect (not during render): its callbacks read
+  // durationRef/positionRef/onSeekRef, and constructing it during render would
+  // count as reading those refs at render time. panHandlers live in state so the
+  // View can spread them; they settle on mount, before any touch can arrive.
+  const [panHandlers, setPanHandlers] = useState<GestureResponderHandlers>({});
+  useEffect(() => {
+    const responder = PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
@@ -118,8 +123,14 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
         }
       },
     });
-  }
-  const panResponder = panResponderRef.current;
+    setPanHandlers(responder.panHandlers);
+    return () => {
+      if (seekHoldTimer.current) {
+        clearTimeout(seekHoldTimer.current);
+        seekHoldTimer.current = null;
+      }
+    };
+  }, [ratioFromPageX, progress]);
 
   const remeasure = useCallback(() => {
     trackRef.current?.measureInWindow((x, _y, width) => {
@@ -166,7 +177,7 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
         }}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={onAccessibilityAction}
-        {...panResponder.panHandlers}
+        {...panHandlers}
       >
         <View style={[styles.trackBg, { backgroundColor: theme.color.border }]} />
         <Animated.View
