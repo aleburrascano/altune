@@ -45,7 +45,7 @@ export function Dialog({ visible, onClose, testID, children }: DialogProps): Rea
 }
 
 const styles = StyleSheet.create({
-  backdrop: StyleSheet.absoluteFillObject,
+  backdrop: StyleSheet.absoluteFill,
   centering: { flex: 1, justifyContent: 'center' },
   scroll: { flexGrow: 0 },
   scrollContent: { padding: spacing.xl },
