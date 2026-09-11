@@ -73,37 +73,34 @@ afterEach(() => {
 
 describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and never reaches the add endpoint (:57-70)', () => {
   it('a resolveTrackIds rejection, from a Track that failed to save, closes the sheet without ever calling the batch-add endpoint', async () => {
-    // Fake timers, not a real-timer flush. The catch (-> close -> onClose) runs a
-    // microtask after resolveTrackIds() rejects, but under React 19.2 (Expo 57)
-    // that continuation rides the concurrent scheduler: with real timers its
-    // settle is nondeterministic across environments — green locally, red on CI —
-    // so mockRejectedValue+setTimeout, a bounded macrotask poll, and a controlled
-    // deferred all flaked. advanceTimersByTimeAsync(0) inside act drives the
-    // scheduler deterministically and drains the microtask that runs the catch,
-    // exactly like the addMut.isPending and 700ms-dwell tests below.
-    jest.useFakeTimers();
-    try {
-      __http.reply('GET /v1/playlists', {
-        status: 200,
-        json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
-      });
-      const resolveTrackIds = jest.fn().mockRejectedValue(new Error('save failed'));
-      const { onClose } = renderSheet({ resolveTrackIds });
+    // Pin real timers first. This file's fake-timer tests restore in a finally,
+    // but jest can run an earlier suite that leaked fake timers into this worker;
+    // as the first test here, we inherit that state and it starves both waitFor
+    // and any real-timer flush — the single failure this test hit on CI, green
+    // wherever the worker ordering differed. Pinning real timers neutralises it.
+    jest.useRealTimers();
+    __http.reply('GET /v1/playlists', {
+      status: 200,
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
+    });
+    const resolveTrackIds = jest.fn().mockRejectedValue(new Error('save failed'));
+    const { onClose } = renderSheet({ resolveTrackIds });
 
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(0);
-      });
-      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(0);
-      });
+    await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
+    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
 
-      expect(resolveTrackIds).toHaveBeenCalledTimes(1);
-      expect(onClose).toHaveBeenCalledTimes(1);
-      expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
-    } finally {
-      jest.useRealTimers();
+    // The rejection settles through microtasks: await resolveTrackIds() throws ->
+    // catch -> close() (-> onClose) -> finally setResolving(false). Flush those
+    // microtasks rather than wrapping in act(...), which under React 19.2 (Expo
+    // 57) never settles on a rejected in-flight resolve. These assertions read
+    // mock counters, not rendered output, so a microtask drain is deterministic.
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
     }
+
+    expect(resolveTrackIds).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
   });
 });
 
