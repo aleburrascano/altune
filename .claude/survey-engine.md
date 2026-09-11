@@ -21,6 +21,14 @@ Each sub-agent must:
 - Prefer earned tickets over makework — stop at earned findings, don't chase a module to zero.
 
 ## 3. Emit
+
+First capture the survey commit and repo once: `sha=$(git rev-parse HEAD)`, `repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)`.
+
+**Every evidence location is a SHA-pinned permalink**, so the ticket *shows* the code instead of pointing at a path to go hunt:
+- Convert each `path:Lstart[-Lend]` to `https://github.com/$repo/blob/$sha/path#Lstart[-Lend]`.
+- Put the primary evidence link(s) **on their own line** in the Smell/Defect block — GitHub renders the actual code snippet inline. Secondary `path:line` mentions in prose can stay inline links or plain text.
+- Pin to `$sha`, never `main` — the evidence must show the code as it was when surveyed, not a line number that drifts.
+
 Per surviving finding, `gh issue create` with: the skill's title prefix, `<ticket-type>` + the matching `area:*` / `platform:*` from `.github/labels.yml` (add `ready` **only** when the band is `now`), and the skill's Done-when body.
 Then report the created tickets **and** the aggregated SOUND / rejected list, so the run is auditable.
 
