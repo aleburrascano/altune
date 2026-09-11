@@ -29,12 +29,7 @@ type DiversityReport struct {
 	Losses               []FailureRecord `json:"losses"`
 }
 
-func (r DiversityReport) CostRate() float64 {
-	if r.Evaluated == 0 {
-		return 0
-	}
-	return float64(r.LostToReshape) / float64(r.Evaluated)
-}
+func (r DiversityReport) CostRate() float64 { return rate(r.LostToReshape, r.Evaluated) }
 
 func (r DiversityReport) ConcentrationDrop() float64 {
 	return r.ConcentrationWithout - r.ConcentrationWith

@@ -47,8 +47,8 @@ func validateContentParams(w http.ResponseWriter, r *http.Request) (string, stri
 	return provider, externalID, true
 }
 
-func clampLimit(r *http.Request, def, max int) int {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+func clampLimit(r *http.Request, param string, def, max int) int {
+	limit, _ := strconv.Atoi(r.URL.Query().Get(param))
 	if limit <= 0 {
 		return def
 	}
@@ -69,7 +69,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	limit := clampLimit(r, 50, 100)
+	limit := clampLimit(r, "limit", 50, 100)
 	albumTitle := strings.TrimSpace(r.URL.Query().Get("title"))
 	albumArtist := strings.TrimSpace(r.URL.Query().Get("artist"))
 
@@ -112,7 +112,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	limit := clampLimit(r, 5, 50)
+	limit := clampLimit(r, "limit", 5, 50)
 	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
 	pn, parseErr := domain.ParseProviderName(provider)
@@ -146,7 +146,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	limit := clampLimit(r, 50, 100)
+	limit := clampLimit(r, "limit", 50, 100)
 	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
 	pn, parseErr := domain.ParseProviderName(provider)
@@ -180,7 +180,7 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	limit := clampLimit(r, 20, 50)
+	limit := clampLimit(r, "limit", 20, 50)
 
 	pn, parseErr := domain.ParseProviderName(provider)
 	if parseErr != nil {
@@ -215,8 +215,8 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 		return
 	}
 	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
-	tracksLimit := clampNamedLimit(r, "tracks_limit", 5, 50)
-	albumsLimit := clampNamedLimit(r, "albums_limit", 100, 200)
+	tracksLimit := clampLimit(r, "tracks_limit", 5, 50)
+	albumsLimit := clampLimit(r, "albums_limit", 100, 200)
 
 	pn, parseErr := domain.ParseProviderName(provider)
 	if parseErr != nil {
@@ -266,15 +266,4 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 		h.stampOwnership(r.Context(), userId, dto.TopTracks.Items)
 	}
 	httputil.WriteJSON(w, http.StatusOK, dto)
-}
-
-func clampNamedLimit(r *http.Request, param string, def, max int) int {
-	limit, _ := strconv.Atoi(r.URL.Query().Get(param))
-	if limit <= 0 {
-		return def
-	}
-	if limit > max {
-		return max
-	}
-	return limit
 }

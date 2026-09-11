@@ -13,10 +13,6 @@ type SearchProvider interface {
 	SupportedKinds() map[domain.ResultKind]bool
 }
 
-type StructuredSearcher interface {
-	SearchStructured(ctx context.Context, artist, track string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
-}
-
 type QueryCache interface {
 	Get(ctx context.Context, provider domain.ProviderName, kindsCSV, queryHash string) ([]domain.SearchResult, time.Time, bool, error)
 	Set(ctx context.Context, provider domain.ProviderName, kindsCSV, queryHash string, results []domain.SearchResult) error

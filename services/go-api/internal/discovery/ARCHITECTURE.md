@@ -516,7 +516,7 @@ can. The capability seams (all in `ports/`):
 
 | Port | Purpose |
 |---|---|
-| `SearchProvider` / `StructuredSearcher` | search fan-out |
+| `SearchProvider` | search fan-out |
 | `ArtistContentProvider` | detail discography + top-tracks by id |
 | `AlbumContentProvider` | album tracklists |
 | `ArtworkResolver` + `IdentityArtworkResolver` + `SourcedArtworkResolver` + `TaggingArtworkResolver` | the artwork chain (chain-member vs service-facing) |
@@ -525,7 +525,7 @@ can. The capability seams (all in `ports/`):
 | `ArtistIDResolver` | name→id (SoundCloud fallback only) |
 | `RelatedTracksProvider` | "related tracks" (SoundCloud) |
 | `ChartProvider` | Last.fm charts |
-| `AlbumValidator` / `ArtistIdentityResolver` / `RelationshipQuerier` | MB identity + consensus |
+| `ArtistIdentityResolver` / `RelationshipQuerier` | MB identity + consensus |
 
 Provider participation and *how each is keyed* (by id = identity-safe; by name =
 contamination-prone):

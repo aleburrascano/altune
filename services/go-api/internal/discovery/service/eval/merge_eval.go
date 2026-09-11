@@ -32,26 +32,11 @@ type MergeReport struct {
 	Results             []MergeResult `json:"results"`
 }
 
-func (r MergeReport) UnderMergeRate() float64 {
-	if r.ResultsSeen == 0 {
-		return 0
-	}
-	return float64(r.UnderMergeIncidents) / float64(r.ResultsSeen)
-}
+func (r MergeReport) UnderMergeRate() float64 { return rate(r.UnderMergeIncidents, r.ResultsSeen) }
 
-func (r MergeReport) OverMergeRate() float64 {
-	if r.DistinctSeen == 0 {
-		return 0
-	}
-	return float64(r.OverMerged) / float64(r.DistinctSeen)
-}
+func (r MergeReport) OverMergeRate() float64 { return rate(r.OverMerged, r.DistinctSeen) }
 
-func (r MergeReport) CleanMergeRate() float64 {
-	if r.Evaluated == 0 {
-		return 0
-	}
-	return float64(r.CleanQueries) / float64(r.Evaluated)
-}
+func (r MergeReport) CleanMergeRate() float64 { return rate(r.CleanQueries, r.Evaluated) }
 
 func RunMergeEval(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency int, progress func(done, total int)) MergeReport {
 	results := make([]MergeResult, len(entities))
