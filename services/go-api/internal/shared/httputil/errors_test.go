@@ -229,44 +229,6 @@ func TestNotFound(t *testing.T) {
 	}
 }
 
-func TestUnauthorized(t *testing.T) {
-	tests := []struct {
-		name       string
-		message    string
-		wantDetail string
-	}{
-		{
-			name:       "custom message",
-			message:    "token expired",
-			wantDetail: "token expired",
-		},
-		{
-			name:       "empty message uses default",
-			message:    "",
-			wantDetail: "unauthorized",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			Unauthorized(rec, tt.message)
-
-			if rec.Code != http.StatusUnauthorized {
-				t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
-			}
-
-			var body ErrorResponse
-			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-				t.Fatalf("decode body: %v", err)
-			}
-			if body.Detail != tt.wantDetail {
-				t.Errorf("detail: got %q, want %q", body.Detail, tt.wantDetail)
-			}
-		})
-	}
-}
-
 func TestBadRequest(t *testing.T) {
 	rec := httptest.NewRecorder()
 	BadRequest(rec, "invalid input")

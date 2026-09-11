@@ -1,3 +1,4 @@
+import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
 import type { PlaybackTrack, QueueSource } from '@shared/playback/types';
 
 import {
@@ -9,7 +10,7 @@ import {
 } from '../signals';
 
 const libraryTrack: PlaybackTrack = {
-  source: { kind: 'library', trackId: 'trk-1' },
+  source: { kind: 'library', trackId: asTrackId('trk-1') },
   title: 'A Title',
   artist: 'An Artist',
   artworkUrl: null,
@@ -65,7 +66,7 @@ describe('trackKey — the telemetry identity of a track', () => {
 });
 
 describe('buildTrackPayload — the telemetry payload for a track event', () => {
-  const playlistSource: QueueSource = { kind: 'playlist', playlistId: 'pl-1', name: 'Mix' };
+  const playlistSource: QueueSource = { kind: 'playlist', playlistId: asPlaylistId('pl-1'), name: 'Mix' };
 
   it('carries the library track id and the queue surface', () => {
     const payload = buildTrackPayload(libraryTrack, playlistSource);
