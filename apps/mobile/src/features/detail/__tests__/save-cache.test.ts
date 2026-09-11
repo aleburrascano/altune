@@ -1,3 +1,4 @@
+import { asTrackId } from '@shared/api-client/ids';
 import type {
   CreateTrackRequest,
   ListTracksResponse,
@@ -34,7 +35,7 @@ function result(overrides: ResultOverrides = {}): DiscoveryResult {
 
 function trackResponse(id: string): TrackResponse {
   return {
-    id,
+    id: asTrackId(id),
     title: 'Song',
     artist: 'Artist',
     album: null,
