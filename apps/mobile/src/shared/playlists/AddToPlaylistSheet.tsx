@@ -47,6 +47,11 @@ export function AddToPlaylistSheet({
   // the gesture; an empty or rejected resolve keeps it engaged (there is nothing
   // to add anywhere), which drops the replay. A fresh open clears it.
   const dispatchedRef = useRef(false);
+  // The sheet closes exactly once per opening. React 19.2 (Expo 57) can re-run
+  // the rejected-resolve continuation (or re-dispatch the press), which used to
+  // fire onClose twice; route every close through this idempotent guard so a
+  // repeat is dropped until the sheet is reopened.
+  const closedRef = useRef(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearCloseTimer = useCallback(() => {
     if (closeTimer.current) {
@@ -54,9 +59,17 @@ export function AddToPlaylistSheet({
       closeTimer.current = null;
     }
   }, []);
+  const close = useCallback(() => {
+    if (closedRef.current) return;
+    closedRef.current = true;
+    onClose();
+  }, [onClose]);
   useEffect(() => clearCloseTimer, [clearCloseTimer]);
   useEffect(() => {
-    if (!visible) dispatchedRef.current = false;
+    if (!visible) {
+      dispatchedRef.current = false;
+      closedRef.current = false;
+    }
   }, [visible]);
 
   const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
@@ -84,12 +97,12 @@ export function AddToPlaylistSheet({
           run(trackIds);
         }
       } catch {
-        onClose();
+        close();
       } finally {
         setResolving(false);
       }
     },
-    [onClose, resolveTrackIds],
+    [close, resolveTrackIds],
   );
 
   const addToPlaylist = useCallback(
@@ -104,14 +117,14 @@ export function AddToPlaylistSheet({
               closeTimer.current = setTimeout(() => {
                 closeTimer.current = null;
                 setAddedTo(null);
-                onClose();
+                close();
               }, 700);
             },
           },
         ),
       );
     },
-    [addMut, clearCloseTimer, onClose, withTrackIds],
+    [addMut, clearCloseTimer, close, withTrackIds],
   );
 
   const createAndAdd = (name: string): void => {
@@ -121,7 +134,7 @@ export function AddToPlaylistSheet({
         {
           onSuccess: () => {
             setCreateVisible(false);
-            onClose();
+            close();
           },
         },
       ),
@@ -171,7 +184,7 @@ export function AddToPlaylistSheet({
   const handleClose = () => {
     clearCloseTimer();
     setAddedTo(null);
-    onClose();
+    close();
   };
 
   return (

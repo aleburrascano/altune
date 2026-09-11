@@ -133,6 +133,21 @@ describe('AddToPlaylistSheet(): single-flight — one gesture, one resolve (:59-
     expect(onClose).not.toHaveBeenCalled();
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
   });
+
+  it('closes exactly once even if the close path fires twice', async () => {
+    __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
+    const { onClose } = renderSheet();
+
+    const closeButton = () =>
+      within(screen.getByTestId('add-to-playlist-sheet')).getByRole('button', { name: 'Close' });
+    await waitFor(() => closeButton());
+
+    // A re-run rejected continuation / re-dispatched close must not call onClose
+    // twice; the idempotent guard drops the repeat.
+    fireEvent.press(closeButton());
+    fireEvent.press(closeButton());
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('AddToPlaylistSheet(): functional — picking a playlist adds exactly the ids resolveTrackIds produced', () => {
