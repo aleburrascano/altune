@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"altune/go-api/internal/shared/runloop"
 )
 
 const (
@@ -19,8 +21,7 @@ type Feed struct {
 	subs    map[int]chan TapEvent
 	nextSub int
 
-	cancel context.CancelFunc
-	done   chan struct{}
+	runloop.Background
 }
 
 func NewFeed() *Feed {
@@ -36,17 +37,13 @@ func (f *Feed) Start(ctx context.Context, tap *Tap) {
 		slog.Error("admin.event_feed_unavailable", "error", err)
 		return
 	}
-	loopCtx, cancel := context.WithCancel(ctx)
-	f.cancel = func() {
-		cancel()
-		cancelTap()
-	}
-	f.done = make(chan struct{})
-	go f.loop(loopCtx, ch)
+	f.Spawn(ctx, func(loopCtx context.Context) {
+		defer cancelTap()
+		f.loop(loopCtx, ch)
+	})
 }
 
 func (f *Feed) loop(ctx context.Context, ch <-chan TapEvent) {
-	defer close(f.done)
 	for {
 		select {
 		case <-ctx.Done():
@@ -110,16 +107,5 @@ func (f *Feed) Subscribe() (<-chan TapEvent, func()) {
 			delete(f.subs, id)
 			close(c)
 		}
-	}
-}
-
-func (f *Feed) Shutdown(ctx context.Context) {
-	if f.cancel == nil {
-		return
-	}
-	f.cancel()
-	select {
-	case <-f.done:
-	case <-ctx.Done():
 	}
 }
