@@ -95,24 +95,10 @@ func (a *DeezerLyricsAdapter) postLyrics(ctx context.Context, jwt, trackID strin
 		return nil, 0, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, deezerPipeURL, bytes.NewReader(payload))
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+jwt)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, deezerLyricsMaxBody))
-	if err != nil {
-		return nil, resp.StatusCode, err
-	}
-	return body, resp.StatusCode, nil
+	status, body, err := postBytesCapped(ctx, a.client, deezerPipeURL, bytes.NewReader(payload), deezerLyricsMaxBody,
+		withHeader("Content-Type", "application/json"),
+		withHeader("Authorization", "Bearer "+jwt))
+	return body, status, err
 }
 
 func parseSynchronizedLyrics(body []byte) (domain.DeezerLyrics, error) {
