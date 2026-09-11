@@ -203,17 +203,20 @@ func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, user
 	}
 	defer tx.Rollback(ctx)
 
+	deleted, ref, err := deleteTrackRow(ctx, tx, id, userId)
+	if err != nil {
+		return false, nil, err
+	}
+	if !deleted {
+		return false, nil, nil
+	}
+
 	affectedPlaylists, err := removeTrackFromPlaylists(ctx, tx, id)
 	if err != nil {
 		return false, nil, err
 	}
 
 	if err := renumberPlaylists(ctx, tx, affectedPlaylists); err != nil {
-		return false, nil, err
-	}
-
-	deleted, ref, err := deleteTrackRow(ctx, tx, id, userId)
-	if err != nil {
 		return false, nil, err
 	}
 
