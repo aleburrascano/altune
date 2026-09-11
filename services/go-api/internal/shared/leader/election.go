@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"altune/go-api/internal/shared/runloop"
 )
 
 const defaultInterval = 10 * time.Second
@@ -19,10 +21,9 @@ type Election struct {
 	mu   sync.RWMutex
 	conn *pgxpool.Conn
 
-	won    chan struct{}
-	once   sync.Once
-	cancel context.CancelFunc
-	done   chan struct{}
+	won  chan struct{}
+	once sync.Once
+	runloop.Background
 }
 
 func NewElection(pool *pgxpool.Pool, key int64) *Election {
@@ -50,14 +51,10 @@ func (e *Election) Await(ctx context.Context) bool {
 }
 
 func (e *Election) Start(ctx context.Context) {
-	loopCtx, cancel := context.WithCancel(ctx)
-	e.cancel = cancel
-	e.done = make(chan struct{})
-	go e.loop(loopCtx)
+	e.Spawn(ctx, e.loop)
 }
 
 func (e *Election) loop(ctx context.Context) {
-	defer close(e.done)
 	e.tick(ctx)
 	ticker := time.NewTicker(e.interval)
 	defer ticker.Stop()
@@ -121,13 +118,6 @@ func (e *Election) release(ctx context.Context) {
 }
 
 func (e *Election) Shutdown(ctx context.Context) {
-	if e.cancel == nil {
-		return
-	}
-	e.cancel()
-	select {
-	case <-e.done:
-	case <-ctx.Done():
-	}
+	e.Background.Shutdown(ctx)
 	e.release(ctx)
 }
