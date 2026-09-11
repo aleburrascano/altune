@@ -1,4 +1,4 @@
-import type { Router } from 'expo-router';
+import type { ImperativeRouter } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
@@ -20,7 +20,7 @@ export function featuringRouteFor(detailRoute: DetailRoute): FeaturingRoute {
 }
 
 export function openDetail(
-  router: Router,
+  router: ImperativeRouter,
   detailRoute: DetailRoute,
   result: DiscoveryResult,
 ): void {
