@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"altune/go-api/internal/shared/runloop"
 )
 
 const defaultInterval = 6 * time.Hour
@@ -36,8 +38,7 @@ type Meter struct {
 	lastErr string
 	running bool
 
-	cancel context.CancelFunc
-	done   chan struct{}
+	runloop.Background
 }
 
 func New(enabled bool, interval time.Duration, runner Runner) *Meter {
@@ -51,14 +52,10 @@ func (m *Meter) Start(ctx context.Context) {
 	if !m.enabled || m.runner == nil {
 		return
 	}
-	loopCtx, cancel := context.WithCancel(ctx)
-	m.cancel = cancel
-	m.done = make(chan struct{})
-	go m.loop(loopCtx)
+	m.Spawn(ctx, m.loop)
 }
 
 func (m *Meter) loop(ctx context.Context) {
-	defer close(m.done)
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 	m.runOnce(ctx)
@@ -148,15 +145,4 @@ func (m *Meter) Status() Status {
 		st.Queries = m.last.Queries
 	}
 	return st
-}
-
-func (m *Meter) Shutdown(ctx context.Context) {
-	if m.cancel == nil {
-		return
-	}
-	m.cancel()
-	select {
-	case <-m.done:
-	case <-ctx.Done():
-	}
 }

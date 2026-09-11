@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Play, Plus, Shuffle } from 'lucide-react-native';
 
+import { countLabel } from '@shared/lib/format';
 import { Text, spacing, useTheme } from '@shared/ui';
 import { fontFamily } from '@shared/ui/theme/tokens';
 
@@ -47,7 +48,7 @@ export function PlaylistHero({
 }: PlaylistHeroProps): ReactElement {
   const theme = useTheme();
   const duration = formatTotalDuration(playlist.total_duration_seconds);
-  const meta = `${playlist.track_count} ${playlist.track_count === 1 ? 'track' : 'tracks'}${duration ? ` · ${duration}` : ''}`;
+  const meta = `${playlist.track_count} ${countLabel(playlist.track_count, 'track')}${duration ? ` · ${duration}` : ''}`;
 
   return (
     <View style={styles.wrapper}>
