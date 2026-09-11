@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -342,6 +343,29 @@ func TestPlaylist_Reorder(t *testing.T) {
 		}
 		if err.Error() != "unknown track in reorder list" {
 			t.Errorf("error = %q, want %q", err.Error(), "unknown track in reorder list")
+		}
+	})
+
+	t.Run("duplicate track returns validation error", func(t *testing.T) {
+		pl := newTestPlaylist(t)
+		trackA := NewTrackId()
+		trackB := NewTrackId()
+		for _, id := range []TrackId{trackA, trackB} {
+			if err := pl.AddTrack(id); err != nil {
+				t.Fatalf("AddTrack setup failed: %v", err)
+			}
+		}
+
+		err := pl.Reorder([]TrackId{trackA, trackA})
+		if err == nil {
+			t.Fatal("expected error for duplicate track, got nil")
+		}
+		var validationErr *ValidationError
+		if !errors.As(err, &validationErr) {
+			t.Fatalf("expected *ValidationError, got %T", err)
+		}
+		if len(pl.Tracks) != 2 {
+			t.Fatalf("expected tracks unchanged (2), got %d", len(pl.Tracks))
 		}
 	})
 }

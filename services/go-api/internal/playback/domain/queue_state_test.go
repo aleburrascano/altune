@@ -137,6 +137,39 @@ func TestNewQueueState_BoundsQueueLength(t *testing.T) {
 	}
 }
 
+func TestNewQueueState_RejectsNulBytes(t *testing.T) {
+	tests := []struct {
+		name  string
+		input QueueStateInput
+	}{
+		{
+			name:  "nul in trackIds",
+			input: QueueStateInput{UserId: testUser(), TrackIds: []string{"a\x00b"}, CurrentIdx: 0},
+		},
+		{
+			name:  "nul in naturalOrder",
+			input: QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, NaturalOrder: []string{"x\x00y"}},
+		},
+		{
+			name:  "nul in sourceId",
+			input: QueueStateInput{UserId: testUser(), SourceId: "playlist:pid:na\x00me"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewQueueState(tt.input)
+			if err == nil {
+				t.Fatal("expected NUL byte in string element to be rejected")
+			}
+			var validationErr *ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("error = %T, want *ValidationError", err)
+			}
+		})
+	}
+}
+
 func TestRepeatMode_RoundTrip(t *testing.T) {
 	for _, rm := range []RepeatMode{RepeatOff, RepeatAll, RepeatOne} {
 		parsed, err := ParseRepeatMode(rm.String())
