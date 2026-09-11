@@ -76,6 +76,41 @@ function distinctFeatureConsumers(moduleName: string, files: FeatureFile[]): Set
   return features;
 }
 
+// Sibling slice modules that import `moduleName` (via `./x` or `@shared/lib/x`).
+function siblingImporters(moduleName: string): Set<string> {
+  const specifierPattern = new RegExp(`(?:@shared/lib/|\\./)${moduleName}(?=['"/])`);
+  const importers = new Set<string>();
+  for (const other of sliceModuleNames()) {
+    if (other === moduleName) continue;
+    if (specifierPattern.test(readSliceFile(other))) importers.add(other);
+  }
+  return importers;
+}
+
+// The rule wants a module here to serve 2+ features, but a module can serve them
+// *through* a sibling slice module (`describeError` composes `isNetworkError`, and
+// discover/library consume the former). Credit a module with every feature that
+// reaches it directly or transitively via a sibling importer.
+function effectiveFeatureConsumers(moduleName: string, files: FeatureFile[]): Set<string> {
+  const attributed = new Set<string>([moduleName]);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const target of [...attributed]) {
+      for (const importer of siblingImporters(target)) {
+        if (!attributed.has(importer)) {
+          attributed.add(importer);
+          changed = true;
+        }
+      }
+    }
+  }
+  const consumers = new Set<string>();
+  for (const module of attributed) {
+    for (const feature of distinctFeatureConsumers(module, files)) consumers.add(feature);
+  }
+  return consumers;
+}
+
 function words(source: string): string[] {
   return source
     .split(/[^a-zA-Z0-9]+|(?<=[a-z0-9])(?=[A-Z])/)
@@ -119,7 +154,7 @@ describe('shared/lib rule 2 — extraction requires 2+ distinct feature consumer
   const featureFiles = readFeatureFiles();
 
   it.each(sliceModuleNames())('%s is imported by at least two distinct features', (moduleName) => {
-    const consumers = [...distinctFeatureConsumers(moduleName, featureFiles)].sort();
+    const consumers = [...effectiveFeatureConsumers(moduleName, featureFiles)].sort();
     if (consumers.length < 2) {
       throw new Error(
         `@shared/lib/${moduleName} has ${consumers.length} distinct feature consumer(s): ` +

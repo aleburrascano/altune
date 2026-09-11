@@ -4,8 +4,8 @@ import { Search } from 'lucide-react-native';
 
 import { Button, Chip, Skeleton, Text, radius, spacing, useTheme } from '@shared/ui';
 
+import { describeError } from '@shared/lib/describeError';
 import { countLabel } from '@shared/lib/format';
-import { isNetworkError } from '@shared/lib/isNetworkError';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from './BlendedSection';
 import { FilteredResults } from './FilteredResults';
@@ -110,15 +110,12 @@ export function DiscoverBody({
   }
 
   if (view === 'full-error') {
+    const { title, body } = describeError(searchError);
     return (
       <View testID="discover-full-error" style={styles.center}>
-        <Text variant="title">
-          {isNetworkError(searchError) ? 'No connection' : 'Search failed'}
-        </Text>
+        <Text variant="title">{title}</Text>
         <Text variant="label" tone="secondary" style={styles.centerSub}>
-          {isNetworkError(searchError)
-            ? 'Check your connection and try again.'
-            : 'Something went wrong on our end. Try again.'}
+          {body}
         </Text>
         <Button testID="discover-retry" label="Retry" onPress={onRetry} />
       </View>

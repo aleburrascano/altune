@@ -10,7 +10,8 @@ Layout:
 - `track-to-discovery.ts` — `trackToDiscoveryResult`, adapting a saved `TrackResponse` into the discovery wire shape.
 - `async-view.ts` — `asyncView`, the shared *loading > error > empty > ready* precedence.
 - `format.ts` — `formatDuration` (m:ss). `isNetworkError.ts` — the transport-failure classifier.
-- `__tests__/` — `query-keys.test.ts`, `detail-handoff.test.ts`, `featured.test.ts`, `featuredContract.test.ts`, `track-to-discovery.test.ts`, `async-view.test.ts`, `format.test.ts`, `isNetworkError.test.ts`, `slice-invariants.test.ts`.
+- `describeError.ts` — `describeError`, the one mapper from an unknown error to user-facing `{title, body}` (network vs 5xx vs generic), plus `RETRY_TAIL`, the shared "Please try again." mutation-alert tail. Detects a 5xx by the `status` field structurally, never a runtime `@shared/api-client` import.
+- `__tests__/` — `query-keys.test.ts`, `detail-handoff.test.ts`, `featured.test.ts`, `featuredContract.test.ts`, `track-to-discovery.test.ts`, `async-view.test.ts`, `format.test.ts`, `isNetworkError.test.ts`, `describeError.test.ts`, `slice-invariants.test.ts`.
 
 Dependencies: type-only imports from `@shared/api-client/{types,discovery}`. Nothing else — no React, no I/O, no feature imports.
 
