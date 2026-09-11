@@ -1,3 +1,4 @@
+import { asTrackId } from '@shared/api-client/ids';
 import type { AcquisitionStatus } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { canPlay } from '@shared/playback/canPlay';
@@ -91,7 +92,7 @@ describe('toPlaybackQueue', () => {
   it('maps an owned track to a library source carrying its track id', () => {
     const result = trackResult({ extras: ownedExtras('ready') });
     const [entry] = toPlaybackQueue(
-      [{ owned: { trackId: 'track-a', acquisitionStatus: 'ready' }, result }],
+      [{ owned: { trackId: asTrackId('track-a'), acquisitionStatus: 'ready' }, result }],
       null,
       null,
     );
@@ -102,7 +103,7 @@ describe('toPlaybackQueue', () => {
   it('prefers the result subtitle over the fallback artist', () => {
     const result = trackResult({ subtitle: 'Real Artist' });
     const [entry] = toPlaybackQueue(
-      [{ owned: { trackId: 't', acquisitionStatus: 'ready' }, result }],
+      [{ owned: { trackId: asTrackId('t'), acquisitionStatus: 'ready' }, result }],
       'Fallback Artist',
       null,
     );
@@ -113,7 +114,7 @@ describe('toPlaybackQueue', () => {
   it('falls back to the fallback artist when the subtitle is absent', () => {
     const result = trackResult({ subtitle: null });
     const [entry] = toPlaybackQueue(
-      [{ owned: { trackId: 't', acquisitionStatus: 'ready' }, result }],
+      [{ owned: { trackId: asTrackId('t'), acquisitionStatus: 'ready' }, result }],
       'Fallback Artist',
       null,
     );
@@ -124,7 +125,7 @@ describe('toPlaybackQueue', () => {
   it('falls back to an empty artist when both subtitle and fallback are absent', () => {
     const result = trackResult({ subtitle: null });
     const [entry] = toPlaybackQueue(
-      [{ owned: { trackId: 't', acquisitionStatus: 'ready' }, result }],
+      [{ owned: { trackId: asTrackId('t'), acquisitionStatus: 'ready' }, result }],
       null,
       null,
     );
@@ -135,7 +136,7 @@ describe('toPlaybackQueue', () => {
   it('falls back to the fallback artwork when the result has none', () => {
     const result = trackResult({ image_url: null });
     const [entry] = toPlaybackQueue(
-      [{ owned: { trackId: 't', acquisitionStatus: 'ready' }, result }],
+      [{ owned: { trackId: asTrackId('t'), acquisitionStatus: 'ready' }, result }],
       null,
       'https://cdn/fallback.jpg',
     );
@@ -146,7 +147,7 @@ describe('toPlaybackQueue', () => {
   it('carries the result artwork over the fallback when present', () => {
     const result = trackResult({ image_url: 'https://cdn/own.jpg' });
     const [entry] = toPlaybackQueue(
-      [{ owned: { trackId: 't', acquisitionStatus: 'ready' }, result }],
+      [{ owned: { trackId: asTrackId('t'), acquisitionStatus: 'ready' }, result }],
       null,
       'https://cdn/fallback.jpg',
     );
@@ -160,8 +161,8 @@ describe('toPlaybackQueue', () => {
 
     const [a, b] = toPlaybackQueue(
       [
-        { owned: { trackId: 'a', acquisitionStatus: 'ready' }, result: withDuration },
-        { owned: { trackId: 'b', acquisitionStatus: 'ready' }, result: withoutDuration },
+        { owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' }, result: withDuration },
+        { owned: { trackId: asTrackId('b'), acquisitionStatus: 'ready' }, result: withoutDuration },
       ],
       null,
       null,
@@ -183,8 +184,8 @@ describe('playButtonState', () => {
   it('labels with the playable count while some tracks are still unowned', () => {
     const split = {
       playable: [
-        { owned: { trackId: 'a', acquisitionStatus: 'ready' as const }, result: trackResult() },
-        { owned: { trackId: 'b', acquisitionStatus: 'ready' as const }, result: trackResult() },
+        { owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' as const }, result: trackResult() },
+        { owned: { trackId: asTrackId('b'), acquisitionStatus: 'ready' as const }, result: trackResult() },
       ],
       unownedCount: 1,
       acquiringCount: 0,
@@ -196,7 +197,7 @@ describe('playButtonState', () => {
   it('labels with the playable count while some tracks are still acquiring', () => {
     const split = {
       playable: [
-        { owned: { trackId: 'a', acquisitionStatus: 'ready' as const }, result: trackResult() },
+        { owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' as const }, result: trackResult() },
       ],
       unownedCount: 0,
       acquiringCount: 2,
@@ -208,7 +209,7 @@ describe('playButtonState', () => {
   it('uses the bare Play label when every track is playable', () => {
     const split = {
       playable: [
-        { owned: { trackId: 'a', acquisitionStatus: 'ready' as const }, result: trackResult() },
+        { owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' as const }, result: trackResult() },
       ],
       unownedCount: 0,
       acquiringCount: 0,

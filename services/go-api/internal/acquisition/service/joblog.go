@@ -75,7 +75,7 @@ func (l *jobLog) complete(trackID, state, reason string) {
 	switch state {
 	case JobSucceeded:
 		l.succeeded.Add(1)
-	case "failed":
+	case JobFailed:
 		l.failed.Add(1)
 	}
 

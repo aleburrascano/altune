@@ -1,5 +1,6 @@
 import TrackPlayer from 'react-native-track-player';
 
+import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
@@ -19,7 +20,7 @@ const player = TrackPlayer as unknown as {
 
 function libraryTrack(trackId: string): PlaybackTrack {
   return {
-    source: { kind: 'library', trackId },
+    source: { kind: 'library', trackId: asTrackId(trackId) },
     title: `Track ${trackId}`,
     artist: 'An Artist',
     artworkUrl: null,
