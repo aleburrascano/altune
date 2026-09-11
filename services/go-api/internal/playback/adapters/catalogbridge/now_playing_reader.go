@@ -3,11 +3,14 @@ package catalogbridge
 import (
 	"context"
 	"fmt"
+	"time"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
 )
+
+var nowPlayingLookupTimeout = 3 * time.Second
 
 var _ ports.NowPlayingReader = (*NowPlayingReader)(nil)
 
@@ -36,6 +39,9 @@ func (r *NowPlayingReader) Lookup(
 	if err != nil {
 		return trackAbsent()
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, nowPlayingLookupTimeout)
+	defer cancel()
 
 	track, err := r.tracks.GetByID(ctx, id, userId)
 	if err != nil {

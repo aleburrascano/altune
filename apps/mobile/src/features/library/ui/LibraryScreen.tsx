@@ -4,6 +4,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
+import { countLabel } from '@shared/lib/format';
 import { isNetworkError } from '@shared/lib/isNetworkError';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
@@ -134,7 +135,7 @@ export function LibraryScreen(): ReactElement {
     const ids = selection.ids;
     Alert.alert(
       'Remove from Library',
-      `Remove ${ids.length} ${ids.length === 1 ? 'track' : 'tracks'} from your library?`,
+      `Remove ${ids.length} ${countLabel(ids.length, 'track')} from your library?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -169,7 +170,7 @@ export function LibraryScreen(): ReactElement {
   const active = buildActiveView();
 
   useAnnounceChange(
-    search.hasQuery ? `${active.count} ${active.count === 1 ? 'result' : 'results'}` : '',
+    search.hasQuery ? `${active.count} ${countLabel(active.count, 'result')}` : '',
   );
 
   const view = _viewForState({
@@ -286,7 +287,7 @@ export function LibraryScreen(): ReactElement {
       />
       <AddToPlaylistSheet
         visible={bulkPlaylistVisible}
-        label={`${selection.count} ${selection.count === 1 ? 'track' : 'tracks'}`}
+        label={`${selection.count} ${countLabel(selection.count, 'track')}`}
         resolveTrackIds={() => Promise.resolve(selection.ids)}
         onClose={() => {
           setBulkPlaylistVisible(false);
