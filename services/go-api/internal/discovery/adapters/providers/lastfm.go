@@ -78,116 +78,123 @@ func lastfmQueryParam(kind domain.ResultKind) string {
 	}
 }
 
-func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.SearchResult {
-	var results []domain.SearchResult
+type lastfmImage struct {
+	Text string `json:"#text"`
+	Size string `json:"size"`
+}
 
-	switch kind {
-	case domain.ResultKindTrack:
-		var resp struct {
-			Results struct {
-				TrackMatches struct {
-					Track []struct {
-						Name      string `json:"name"`
-						Artist    string `json:"artist"`
-						MBID      string `json:"mbid"`
-						URL       string `json:"url"`
-						Listeners string `json:"listeners"`
-						Image     []struct {
-							Text string `json:"#text"`
-							Size string `json:"size"`
-						} `json:"image"`
-					} `json:"track"`
-				} `json:"trackmatches"`
-			} `json:"results"`
-		}
-		if json.Unmarshal(raw, &resp) == nil {
-			for _, t := range resp.Results.TrackMatches.Track {
-				imageURL := ""
-				for _, img := range t.Image {
-					if img.Size == "extralarge" {
-						imageURL = img.Text
-					}
-				}
-				extras := make(map[string]any)
-				if t.Listeners != "" {
-					extras["listeners"] = t.Listeners
-				}
-				r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist, imageURL,
-					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
-					extras)
-				r.MBID = t.MBID
-				results = append(results, r)
-			}
-		}
-	case domain.ResultKindAlbum:
-		var resp struct {
-			Results struct {
-				AlbumMatches struct {
-					Album []struct {
-						Name   string `json:"name"`
-						Artist string `json:"artist"`
-						MBID   string `json:"mbid"`
-						URL    string `json:"url"`
-						Image  []struct {
-							Text string `json:"#text"`
-							Size string `json:"size"`
-						} `json:"image"`
-					} `json:"album"`
-				} `json:"albummatches"`
-			} `json:"results"`
-		}
-		if json.Unmarshal(raw, &resp) == nil {
-			for _, a := range resp.Results.AlbumMatches.Album {
-				imageURL := ""
-				for _, img := range a.Image {
-					if img.Size == "extralarge" {
-						imageURL = img.Text
-					}
-				}
-				r := domain.NewProviderResult(domain.ResultKindAlbum, a.Name, a.Artist, imageURL,
-					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
-					nil)
-				results = append(results, r)
-			}
-		}
-	case domain.ResultKindArtist:
-		var resp struct {
-			Results struct {
-				ArtistMatches struct {
-					Artist []struct {
-						Name      string `json:"name"`
-						MBID      string `json:"mbid"`
-						URL       string `json:"url"`
-						Listeners string `json:"listeners"`
-						Image     []struct {
-							Text string `json:"#text"`
-							Size string `json:"size"`
-						} `json:"image"`
-					} `json:"artist"`
-				} `json:"artistmatches"`
-			} `json:"results"`
-		}
-		if json.Unmarshal(raw, &resp) == nil {
-			for _, a := range resp.Results.ArtistMatches.Artist {
-				imageURL := ""
-				for _, img := range a.Image {
-					if img.Size == "extralarge" {
-						imageURL = img.Text
-					}
-				}
-				extras := make(map[string]any)
-				if a.Listeners != "" {
-					extras["listeners"] = a.Listeners
-				}
-				r := domain.NewProviderResult(domain.ResultKindArtist, a.Name, "", imageURL,
-					domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
-					extras)
-				r.MBID = a.MBID
-				results = append(results, r)
-			}
+func lastfmExtraLargeImage(images []lastfmImage) string {
+	imageURL := ""
+	for _, img := range images {
+		if img.Size == "extralarge" {
+			imageURL = img.Text
 		}
 	}
+	return imageURL
+}
 
+func parseLastFmResponse(raw json.RawMessage, kind domain.ResultKind) []domain.SearchResult {
+	switch kind {
+	case domain.ResultKindTrack:
+		return parseLastFmTracks(raw)
+	case domain.ResultKindAlbum:
+		return parseLastFmAlbums(raw)
+	case domain.ResultKindArtist:
+		return parseLastFmArtists(raw)
+	default:
+		return nil
+	}
+}
+
+func parseLastFmTracks(raw json.RawMessage) []domain.SearchResult {
+	var resp struct {
+		Results struct {
+			TrackMatches struct {
+				Track []struct {
+					Name      string        `json:"name"`
+					Artist    string        `json:"artist"`
+					MBID      string        `json:"mbid"`
+					URL       string        `json:"url"`
+					Listeners string        `json:"listeners"`
+					Image     []lastfmImage `json:"image"`
+				} `json:"track"`
+			} `json:"trackmatches"`
+		} `json:"results"`
+	}
+	if json.Unmarshal(raw, &resp) != nil {
+		return nil
+	}
+	var results []domain.SearchResult
+	for _, t := range resp.Results.TrackMatches.Track {
+		extras := make(map[string]any)
+		if t.Listeners != "" {
+			extras["listeners"] = t.Listeners
+		}
+		r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist, lastfmExtraLargeImage(t.Image),
+			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
+			extras)
+		r.MBID = t.MBID
+		results = append(results, r)
+	}
+	return results
+}
+
+func parseLastFmAlbums(raw json.RawMessage) []domain.SearchResult {
+	var resp struct {
+		Results struct {
+			AlbumMatches struct {
+				Album []struct {
+					Name   string        `json:"name"`
+					Artist string        `json:"artist"`
+					MBID   string        `json:"mbid"`
+					URL    string        `json:"url"`
+					Image  []lastfmImage `json:"image"`
+				} `json:"album"`
+			} `json:"albummatches"`
+		} `json:"results"`
+	}
+	if json.Unmarshal(raw, &resp) != nil {
+		return nil
+	}
+	var results []domain.SearchResult
+	for _, a := range resp.Results.AlbumMatches.Album {
+		r := domain.NewProviderResult(domain.ResultKindAlbum, a.Name, a.Artist, lastfmExtraLargeImage(a.Image),
+			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
+			nil)
+		results = append(results, r)
+	}
+	return results
+}
+
+func parseLastFmArtists(raw json.RawMessage) []domain.SearchResult {
+	var resp struct {
+		Results struct {
+			ArtistMatches struct {
+				Artist []struct {
+					Name      string        `json:"name"`
+					MBID      string        `json:"mbid"`
+					URL       string        `json:"url"`
+					Listeners string        `json:"listeners"`
+					Image     []lastfmImage `json:"image"`
+				} `json:"artist"`
+			} `json:"artistmatches"`
+		} `json:"results"`
+	}
+	if json.Unmarshal(raw, &resp) != nil {
+		return nil
+	}
+	var results []domain.SearchResult
+	for _, a := range resp.Results.ArtistMatches.Artist {
+		extras := make(map[string]any)
+		if a.Listeners != "" {
+			extras["listeners"] = a.Listeners
+		}
+		r := domain.NewProviderResult(domain.ResultKindArtist, a.Name, "", lastfmExtraLargeImage(a.Image),
+			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},
+			extras)
+		r.MBID = a.MBID
+		results = append(results, r)
+	}
 	return results
 }
 
@@ -228,10 +235,7 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 				Artist    struct {
 					Name string `json:"name"`
 				} `json:"artist"`
-				Image []struct {
-					Text string `json:"#text"`
-					Size string `json:"size"`
-				} `json:"image"`
+				Image []lastfmImage `json:"image"`
 			} `json:"track"`
 		} `json:"toptracks"`
 	}
@@ -241,12 +245,6 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 
 	results := make([]domain.SearchResult, 0, len(body.TopTracks.Track))
 	for _, t := range body.TopTracks.Track {
-		imageURL := ""
-		for _, img := range t.Image {
-			if img.Size == "extralarge" {
-				imageURL = img.Text
-			}
-		}
 		extras := make(map[string]any)
 		if t.PlayCount != "" {
 			extras["playcount"] = parseListeners(t.PlayCount)
@@ -254,7 +252,7 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 		if t.Listeners != "" {
 			extras["listeners"] = parseListeners(t.Listeners)
 		}
-		results = append(results, domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist.Name, imageURL,
+		results = append(results, domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist.Name, lastfmExtraLargeImage(t.Image),
 			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
 			extras))
 	}
@@ -277,10 +275,7 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 				Artist    struct {
 					Name string `json:"name"`
 				} `json:"artist"`
-				Image []struct {
-					Text string `json:"#text"`
-					Size string `json:"size"`
-				} `json:"image"`
+				Image []lastfmImage `json:"image"`
 			} `json:"album"`
 		} `json:"topalbums"`
 	}
@@ -293,17 +288,11 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 		if al.Name == "(null)" || al.Name == "" {
 			continue
 		}
-		imageURL := ""
-		for _, img := range al.Image {
-			if img.Size == "extralarge" {
-				imageURL = img.Text
-			}
-		}
 		extras := make(map[string]any)
 		if al.PlayCount > 0 {
 			extras["playcount"] = int64(al.PlayCount)
 		}
-		r := domain.NewProviderResult(domain.ResultKindAlbum, al.Name, al.Artist.Name, imageURL,
+		r := domain.NewProviderResult(domain.ResultKindAlbum, al.Name, al.Artist.Name, lastfmExtraLargeImage(al.Image),
 			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(al.URL), URL: al.URL},
 			extras)
 		r.MBID = al.MBID
