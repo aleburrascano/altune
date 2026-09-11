@@ -1,6 +1,5 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-// @ts-expect-error no type declarations shipped for react-test-renderer here
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { useServerEvents } from '../useServerEvents';
