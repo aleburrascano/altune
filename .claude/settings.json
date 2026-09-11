@@ -1,16 +1,11 @@
 {
-  "permissions": {
-    "allow": [
-      "mcp__codegraph__*"
-    ]
-  },
   "hooks": {
-    "UserPromptSubmit": [
+    "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "codegraph prompt-hook"
+            "command": "echo 'Prefer the graft skill for code-location questions (where is X handled, who calls X, blast radius, map the repo). It queries a prebuilt local graph and returns exact file:line, faster than reading files by hand. Run graft ask/map/callers/grep from the repo root.'"
           }
         ]
       }
