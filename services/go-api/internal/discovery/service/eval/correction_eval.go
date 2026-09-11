@@ -45,19 +45,9 @@ type CorrectionReport struct {
 	Corruptions  []FailureRecord `json:"corruptions"`
 }
 
-func (r CorrectionReport) RecallRate() float64 {
-	if r.TyposTested == 0 {
-		return 0
-	}
-	return float64(r.Recovered) / float64(r.TyposTested)
-}
+func (r CorrectionReport) RecallRate() float64 { return rate(r.Recovered, r.TyposTested) }
 
-func (r CorrectionReport) PrecisionRate() float64 {
-	if r.Terms == 0 {
-		return 0
-	}
-	return float64(r.Terms-r.Corrupted) / float64(r.Terms)
-}
+func (r CorrectionReport) PrecisionRate() float64 { return rate(r.Terms-r.Corrupted, r.Terms) }
 
 func RunCorrectionEval(ctx context.Context, terms []string, c Corrector, typosPerTerm int) CorrectionReport {
 	if typosPerTerm < 1 {

@@ -6,7 +6,7 @@ Layout:
 
 - `domain/` — `SearchResult`, the enrichment value objects, telemetry events, `FeaturedArtist`, identity read-models, `favorite.go` (the `Favorite` value object and its key derivation).
 - `ports/` — provider, artwork, cache, identity-store and catalog-ownership interfaces.
-- `service/` — `search.go` (the `Service` orchestrator), `merge.go` / `rank.go` / `diversity.go` (the Merge→Rank→reshape core), `enrich/` (detail-open enrichers), `eval/` (offline harness cores, including `library_corpus.go`'s frozen-corpus load/save and `parallel.go`'s `runParallel[T]` — the shared fan-out spine the five `Run*Eval` modes drive with their own worker closures).
+- `service/` — `search.go` (the `Service` orchestrator), `merge.go` / `rank.go` / `diversity.go` (the Merge→Rank→reshape core), `enrich/` (detail-open enrichers), `eval/` (offline harness cores, including `library_corpus.go`'s frozen-corpus load/save and `parallel.go`'s `runParallel[T]` — the shared fan-out spine the five `Run*Eval` modes drive with their own worker closures), and `album_normalize.go` (the pure album-slice helpers — dedup, release-date sort, year-fill — split out of `get_artist_content.go`'s fetch orchestration).
 - `adapters/` — `providers/` (one file per provider), `cache/`, `persistence/`, `handler/`, `catalogbridge/` (the read-only seam onto catalog for ownership stamping and track-number fill).
 
 ## Rules
