@@ -2,6 +2,7 @@ package eval
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -28,7 +29,7 @@ func TokenCount(s string) int {
 }
 
 func ScriptClass(raw string) string {
-	var latin, other, symbol, letters int
+	var latin, other, letters int
 	for _, r := range raw {
 		switch {
 		case unicode.IsSpace(r) || unicode.IsDigit(r) || unicode.IsPunct(r):
@@ -39,8 +40,6 @@ func ScriptClass(raw string) string {
 			} else {
 				other++
 			}
-		default:
-			symbol++
 		}
 	}
 	switch {
@@ -121,7 +120,7 @@ func TopBuckets(slice map[string]int, n int) []string {
 	}
 	out := make([]string, 0, len(pairs))
 	for _, p := range pairs {
-		out = append(out, p.k+"="+itoa(p.v))
+		out = append(out, p.k+"="+strconv.Itoa(p.v))
 	}
 	return out
 }
@@ -136,32 +135,10 @@ func stringifyAttr(v any) string {
 		}
 		return "false"
 	case int:
-		return itoa(t)
+		return strconv.Itoa(t)
 	default:
 		return "?"
 	}
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	buf := [20]byte{}
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }
 
 func QueryAttrs(query string) map[string]any {
