@@ -16,7 +16,7 @@ func (s *RedisVocabularyStore) SuggestByPrefix(
 	prefix string,
 	limit int,
 ) ([]domain.VocabularyEntry, error) {
-	if s.client == nil {
+	if s.disabled() {
 		return nil, nil
 	}
 	return s.prefixSearch(ctx, prefix, limit)

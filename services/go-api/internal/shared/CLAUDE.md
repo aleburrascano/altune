@@ -14,6 +14,7 @@ Layout:
 - `textnorm/` — `NormalizeForMatch`, `TokenSortRatio`, `LevenshteinDistance`.
 - `phonetics/` — `DoubleMetaphone`, `MetaphoneKey`.
 - `leader/` — `Election`, the Postgres advisory lock electing one instance to run background loops (`election_test.go`, skipped without `DATABASE_URL`).
+- `runloop/` — `Background`, the embeddable `cancel`/`done` lifecycle helper (`Spawn(ctx, loop)` + `Shutdown(ctx)`) shared by the admin background components and `leader.Election`. Each embedder keeps only its own start guard.
 
 ## Rules
 

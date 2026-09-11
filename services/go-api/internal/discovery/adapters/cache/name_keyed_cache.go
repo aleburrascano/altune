@@ -3,7 +3,6 @@ package cache
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -19,8 +18,6 @@ var (
 	_ ports.LyricsCache           = (*RedisNameKeyedCache[domain.DeezerLyrics])(nil)
 )
 
-const negValue = "1"
-
 const (
 	nameKeyedPositiveTTL = 30 * 24 * time.Hour
 	nameKeyedNegativeTTL = 24 * time.Hour
@@ -28,7 +25,7 @@ const (
 )
 
 type RedisNameKeyedCache[T any] struct {
-	client    *goredis.Client
+	redisJSON
 	posPrefix string
 	negPrefix string
 	posTTL    time.Duration
@@ -37,33 +34,25 @@ type RedisNameKeyedCache[T any] struct {
 }
 
 func (c *RedisNameKeyedCache[T]) Get(ctx context.Context, nameKey string) (T, bool, error) {
-	if c.client == nil {
+	if c.disabled() {
 		return c.empty(), false, nil
 	}
-	val, err := c.client.Get(ctx, hashKey(c.posPrefix, nameKey)).Result()
-	if err != nil {
-		return c.empty(), false, nil
-	}
-	var v T
-	if err := json.Unmarshal([]byte(val), &v); err != nil {
+	v, ok := getJSON[T](ctx, c.redisJSON, hashKey(c.posPrefix, nameKey))
+	if !ok {
 		return c.empty(), false, nil
 	}
 	return v, true, nil
 }
 
 func (c *RedisNameKeyedCache[T]) Set(ctx context.Context, nameKey string, v T) error {
-	if c.client == nil {
+	if c.disabled() {
 		return nil
 	}
-	blob, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	return c.client.Set(ctx, hashKey(c.posPrefix, nameKey), blob, c.posTTL).Err()
+	return c.setJSON(ctx, hashKey(c.posPrefix, nameKey), v, c.posTTL)
 }
 
 func (c *RedisNameKeyedCache[T]) GetNegative(ctx context.Context, nameKey string) (bool, error) {
-	if c.client == nil {
+	if c.disabled() {
 		return false, nil
 	}
 	_, err := c.client.Get(ctx, hashKey(c.negPrefix, nameKey)).Result()
@@ -71,10 +60,10 @@ func (c *RedisNameKeyedCache[T]) GetNegative(ctx context.Context, nameKey string
 }
 
 func (c *RedisNameKeyedCache[T]) SetNegative(ctx context.Context, nameKey string) error {
-	if c.client == nil {
+	if c.disabled() {
 		return nil
 	}
-	return c.client.Set(ctx, hashKey(c.negPrefix, nameKey), negValue, c.negTTL).Err()
+	return c.client.Set(ctx, hashKey(c.negPrefix, nameKey), redisNegSentinel, c.negTTL).Err()
 }
 
 func hashKey(prefix, nameKey string) string {
@@ -84,7 +73,7 @@ func hashKey(prefix, nameKey string) string {
 
 func NewRedisNameKeyedCache[T any](client *goredis.Client, posPrefix, negPrefix string, posTTL, negTTL time.Duration, empty func() T) *RedisNameKeyedCache[T] {
 	return &RedisNameKeyedCache[T]{
-		client:    client,
+		redisJSON: redisJSON{client: client},
 		posPrefix: posPrefix,
 		negPrefix: negPrefix,
 		posTTL:    posTTL,
@@ -95,7 +84,7 @@ func NewRedisNameKeyedCache[T any](client *goredis.Client, posPrefix, negPrefix 
 
 func NewRedisDeezerEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[domain.DeezerEnrichment] {
 	return &RedisNameKeyedCache[domain.DeezerEnrichment]{
-		client:    client,
+		redisJSON: redisJSON{client: client},
 		posPrefix: "discovery:dzenrich:v1:",
 		negPrefix: "discovery:dzenrich:neg:v1:",
 		posTTL:    nameKeyedPositiveTTL,
@@ -106,7 +95,7 @@ func NewRedisDeezerEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[
 
 func NewRedisLastFmEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[domain.LastFmEnrichment] {
 	return &RedisNameKeyedCache[domain.LastFmEnrichment]{
-		client:    client,
+		redisJSON: redisJSON{client: client},
 		posPrefix: "discovery:lfmenrich:v1:",
 		negPrefix: "discovery:lfmenrich:neg:v1:",
 		posTTL:    nameKeyedPositiveTTL,
@@ -117,7 +106,7 @@ func NewRedisLastFmEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[
 
 func NewRedisDeezerLyricsCache(client *goredis.Client) *RedisNameKeyedCache[domain.DeezerLyrics] {
 	return &RedisNameKeyedCache[domain.DeezerLyrics]{
-		client:    client,
+		redisJSON: redisJSON{client: client},
 		posPrefix: "discovery:dzlyrics:v1:",
 		negPrefix: "discovery:dzlyrics:neg:v1:",
 		posTTL:    lyricsPositiveTTL,

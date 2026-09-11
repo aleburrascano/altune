@@ -17,12 +17,12 @@ var _ ports.IdentityStore = (*RedisIdentityStore)(nil)
 const identityTTL = 30 * 24 * time.Hour
 
 type RedisIdentityStore struct {
-	inner  ports.IdentityStore
-	client *goredis.Client
+	inner ports.IdentityStore
+	redisJSON
 }
 
 func NewRedisIdentityStore(inner ports.IdentityStore, client *goredis.Client) *RedisIdentityStore {
-	return &RedisIdentityStore{inner: inner, client: client}
+	return &RedisIdentityStore{inner: inner, redisJSON: redisJSON{client: client}}
 }
 
 type identityEntry struct {
@@ -39,7 +39,7 @@ func (s *RedisIdentityStore) PersistBridges(
 	if err := s.inner.PersistBridges(ctx, kind, mbid, xref); err != nil {
 		return err
 	}
-	if s.client == nil || mbid == "" {
+	if s.disabled() || mbid == "" {
 		return nil
 	}
 	blob, err := json.Marshal(identityEntry{MBID: mbid, Xref: xref})
@@ -64,7 +64,7 @@ func (s *RedisIdentityStore) Invalidate(
 	provider, externalID string,
 ) error {
 	err := s.inner.Invalidate(ctx, kind, provider, externalID)
-	if s.client != nil && provider != "" && externalID != "" {
+	if !s.disabled() && provider != "" && externalID != "" {
 		if delErr := s.client.Del(ctx, identityKey(kind, provider, externalID)).Err(); delErr != nil {
 			slog.DebugContext(ctx, "identity.cache_invalidate_failed",
 				"kind", kind.String(), "provider", provider, "error", delErr)
@@ -82,12 +82,9 @@ func (s *RedisIdentityStore) LookupByProviderID(
 		return "", nil, false
 	}
 	key := identityKey(kind, provider, externalID)
-	if s.client != nil {
-		if val, err := s.client.Get(ctx, key).Result(); err == nil {
-			var e identityEntry
-			if json.Unmarshal([]byte(val), &e) == nil && e.MBID != "" {
-				return e.MBID, e.Xref, true
-			}
+	if !s.disabled() {
+		if e, ok := getJSON[identityEntry](ctx, s.redisJSON, key); ok && e.MBID != "" {
+			return e.MBID, e.Xref, true
 		}
 	}
 
@@ -95,10 +92,8 @@ func (s *RedisIdentityStore) LookupByProviderID(
 	if !ok {
 		return "", nil, false
 	}
-	if s.client != nil {
-		if blob, err := json.Marshal(identityEntry{MBID: mbid, Xref: xref}); err == nil {
-			_ = s.client.Set(ctx, key, blob, identityTTL).Err()
-		}
+	if !s.disabled() {
+		_ = s.setJSON(ctx, key, identityEntry{MBID: mbid, Xref: xref}, identityTTL)
 	}
 	return mbid, xref, true
 }

@@ -24,7 +24,7 @@ type NormalizeFunc func(string) string
 type MetaphoneFunc func(string) string
 
 type RedisVocabularyStore struct {
-	client    *goredis.Client
+	redisJSON
 	normalize NormalizeFunc
 	metaphone MetaphoneFunc
 }
@@ -35,7 +35,7 @@ func NewVocabularyStore(
 	opts ...VocabStoreOption,
 ) *RedisVocabularyStore {
 	s := &RedisVocabularyStore{
-		client:    client,
+		redisJSON: redisJSON{client: client},
 		normalize: normalize,
 	}
 	for _, opt := range opts {

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
+import { countLabel } from '@shared/lib/format';
 import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
@@ -183,7 +184,7 @@ export function AddTracksToPlaylistModal({
               >
                 {selection.count === 0
                   ? 'Select tracks'
-                  : `Add ${selection.count} ${selection.count === 1 ? 'track' : 'tracks'}`}
+                  : `Add ${selection.count} ${countLabel(selection.count, 'track')}`}
               </Text>
             )}
           </Pressable>

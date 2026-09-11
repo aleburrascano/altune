@@ -2,6 +2,7 @@ import { useCallback, type ReactElement } from 'react';
 import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import type { PlaylistResponse } from '@shared/api-client/types';
+import { countLabel } from '@shared/lib/format';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
 import { cellSize, coverColumns } from './gridColumns';
@@ -84,7 +85,7 @@ export function PlaylistsGrid({
             {playlist.name}
           </Text>
           <Text variant="caption" tone="secondary" numberOfLines={1}>
-            {playlist.track_count} {playlist.track_count === 1 ? 'track' : 'tracks'}
+            {playlist.track_count} {countLabel(playlist.track_count, 'track')}
           </Text>
         </Pressable>
       );

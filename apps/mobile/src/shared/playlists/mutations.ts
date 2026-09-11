@@ -10,6 +10,7 @@ import {
 } from '@shared/api-client/playlists';
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/types';
+import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
 
 type AddTracksVariables = { playlistId: PlaylistId; trackIds: TrackId[] };
@@ -96,9 +97,7 @@ export function useAddTracksToPlaylist() {
       }
       Alert.alert(
         'Add failed',
-        trackIds.length === 1
-          ? 'Could not add the track to the playlist. Please try again.'
-          : 'Could not add the tracks to the playlist. Please try again.',
+        `Could not add the ${countLabel(trackIds.length, 'track')} to the playlist. Please try again.`,
       );
     },
     onSettled: (_data, _error, { playlistId }) =>
@@ -174,9 +173,7 @@ export function useRemoveTracksFromPlaylist(playlistId: PlaylistId) {
       }
       Alert.alert(
         'Remove failed',
-        trackIds.length === 1
-          ? 'Could not remove the track. Please try again.'
-          : 'Could not remove the tracks. Please try again.',
+        `Could not remove the ${countLabel(trackIds.length, 'track')}. Please try again.`,
       );
     },
     onSettled: () =>

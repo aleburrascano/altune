@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"altune/go-api/internal/shared"
@@ -86,6 +87,15 @@ func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error)
 	if err := lengthWithinBound("naturalOrder", len(naturalOrder)); err != nil {
 		return nil, err
 	}
+	if err := elementsStorable("trackIds", trackIds); err != nil {
+		return nil, err
+	}
+	if err := elementsStorable("naturalOrder", naturalOrder); err != nil {
+		return nil, err
+	}
+	if err := stringStorable("sourceId", in.SourceId); err != nil {
+		return nil, err
+	}
 	currentIdx, err := indexWithinQueue(in.CurrentIdx, len(trackIds))
 	if err != nil {
 		return nil, err
@@ -108,6 +118,22 @@ func emptyIfNil(trackIds []string) []string {
 		return []string{}
 	}
 	return trackIds
+}
+
+func elementsStorable(field string, values []string) error {
+	for _, value := range values {
+		if err := stringStorable(field, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func stringStorable(field, value string) error {
+	if strings.IndexByte(value, 0) >= 0 {
+		return &ValidationError{Message: fmt.Sprintf("%s contains a NUL byte, which cannot be stored", field)}
+	}
+	return nil
 }
 
 func lengthWithinBound(field string, length int) error {
