@@ -75,19 +75,9 @@ type EvalReport struct {
 	Results           []EvalResult   `json:"results"`
 }
 
-func (r EvalReport) Top1Rate() float64 {
-	if r.Evaluated == 0 {
-		return 0
-	}
-	return float64(r.Top1Passed) / float64(r.Evaluated)
-}
+func (r EvalReport) Top1Rate() float64 { return rate(r.Top1Passed, r.Evaluated) }
 
-func (r EvalReport) TopKRate() float64 {
-	if r.Evaluated == 0 {
-		return 0
-	}
-	return float64(r.TopKPassed) / float64(r.Evaluated)
-}
+func (r EvalReport) TopKRate() float64 { return rate(r.TopKPassed, r.Evaluated) }
 
 type QueryMode int
 
