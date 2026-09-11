@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,8 +33,37 @@ type errRow struct {
 
 func (r errRow) Scan(_ ...any) error { return r.err }
 
+type capturingQuerier struct {
+	sql string
+}
+
+func (c *capturingQuerier) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+	c.sql = sql
+	return pgconn.CommandTag{}, nil
+}
+
+func (c *capturingQuerier) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
+	c.sql = sql
+	return errRow{err: nil}
+}
+
 func testUser() shared.UserId {
 	return shared.NewUserId(uuid.New())
+}
+
+func TestUpsert_GuardsAgainstStaleClobber(t *testing.T) {
+	q := &capturingQuerier{}
+	repo := &PgxQueueStateRepository{pool: q}
+
+	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser())); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	normalized := strings.Join(strings.Fields(q.sql), " ")
+	want := "WHERE playback_queue_state.updated_at <= EXCLUDED.updated_at"
+	if !strings.Contains(normalized, want) {
+		t.Fatalf("Upsert SQL lacks the ordering guard %q; an older snapshot can still clobber a newer one.\nSQL: %s", want, normalized)
+	}
 }
 
 func withShortTimeout(t *testing.T) {

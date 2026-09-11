@@ -10,6 +10,7 @@ import {
 } from '@shared/api-client/playlists';
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/types';
+import { RETRY_TAIL } from '@shared/lib/describeError';
 import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
 
@@ -26,7 +27,7 @@ export function useCreatePlaylist() {
   return useMutation({
     mutationFn: (name: string) => createPlaylist({ name }),
     onError: () => {
-      Alert.alert('Error', 'Could not create the playlist. Please try again.');
+      Alert.alert('Error', `Could not create the playlist. ${RETRY_TAIL}`);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: playlistKeys.list }),
   });
@@ -59,7 +60,7 @@ export function useCreatePlaylistWithTracks() {
       }
     },
     onError: () => {
-      Alert.alert('Error', 'Could not create the playlist. Please try again.');
+      Alert.alert('Error', `Could not create the playlist. ${RETRY_TAIL}`);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: playlistKeys.list }),
   });
@@ -97,7 +98,7 @@ export function useAddTracksToPlaylist() {
       }
       Alert.alert(
         'Add failed',
-        `Could not add the ${countLabel(trackIds.length, 'track')} to the playlist. Please try again.`,
+        `Could not add the ${countLabel(trackIds.length, 'track')} to the playlist. ${RETRY_TAIL}`,
       );
     },
     onSettled: (_data, _error, { playlistId }) =>
@@ -124,7 +125,7 @@ export function useRenamePlaylist(playlistId: PlaylistId) {
       if (context?.previous) {
         queryClient.setQueryData(playlistKeys.detail(playlistId), context.previous);
       }
-      Alert.alert('Rename failed', 'Could not rename the playlist. Please try again.');
+      Alert.alert('Rename failed', `Could not rename the playlist. ${RETRY_TAIL}`);
     },
     onSettled: () =>
       Promise.all([
@@ -143,7 +144,7 @@ export function useDeletePlaylist(playlistId: PlaylistId) {
       void queryClient.invalidateQueries({ queryKey: playlistKeys.detail(playlistId) });
     },
     onError: () => {
-      Alert.alert('Delete failed', 'Could not delete the playlist. Please try again.');
+      Alert.alert('Delete failed', `Could not delete the playlist. ${RETRY_TAIL}`);
     },
   });
 }
@@ -173,7 +174,7 @@ export function useRemoveTracksFromPlaylist(playlistId: PlaylistId) {
       }
       Alert.alert(
         'Remove failed',
-        `Could not remove the ${countLabel(trackIds.length, 'track')}. Please try again.`,
+        `Could not remove the ${countLabel(trackIds.length, 'track')}. ${RETRY_TAIL}`,
       );
     },
     onSettled: () =>
