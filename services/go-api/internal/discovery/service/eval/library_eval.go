@@ -129,10 +129,6 @@ func RunLibraryEvalMode(ctx context.Context, entities []LibraryEntity, searcher 
 	return report
 }
 
-func evalOne(ctx context.Context, entity LibraryEntity, searcher Searcher, k int) EvalResult {
-	return evalOneQuery(ctx, entity.Artist+" "+entity.Title, entity, searcher, k)
-}
-
 func evalOneQuery(ctx context.Context, query string, entity LibraryEntity, searcher Searcher, k int) EvalResult {
 	if strings.TrimSpace(entity.Artist) == "" {
 		return EvalResult{Entity: entity, Outcome: EvalSkipped, MatchPosition: -1}
