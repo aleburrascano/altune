@@ -83,11 +83,15 @@ describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and neve
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
     fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
     // React 19.2: act()/waitFor hang trying to stabilize a *rejected* in-flight
-    // resolve (verified on CI: the counts are already correct — onClose 1,
-    // resolve 1, post 0 — but act never settles). These assertions read mock
-    // counters, not rendered output, so let the catch (-> onClose) run via a raw
-    // macrotask flush, then assert synchronously.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // resolve (verified on CI: the counts settle correctly — onClose 1, resolve
+    // 1, post 0 — but act never returns). These assertions read mock counters,
+    // not rendered output, so drain macrotasks until the catch (-> onClose) has
+    // run. Bounded and condition-gated: exits the instant onClose fires (usually
+    // 1-2 ticks) and still fails fast on a real regression rather than hanging.
+    // A single fixed tick was flaky on CI when the rejection needed more.
+    for (let i = 0; i < 50 && onClose.mock.calls.length === 0; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
