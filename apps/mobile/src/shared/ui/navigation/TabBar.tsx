@@ -1,4 +1,4 @@
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { Compass, Library as LibraryIcon, Settings } from 'lucide-react-native';
 import type { ComponentType } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';

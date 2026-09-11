@@ -4,12 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"sort"
-	"strconv"
 	"sync"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type GetArtistContentService struct {
@@ -158,63 +156,6 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 	sortAlbumsByReleaseDateDesc(results)
 
 	return okContentResponse(providerName, results, limit), nil
-}
-
-func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {
-	seen := make(map[string]int)
-	var deduped []domain.SearchResult
-
-	for _, r := range results {
-		normTitle := textnorm.NormalizeForMatch(r.Title) + "|" + textnorm.NormalizeForMatch(r.Subtitle)
-		if idx, ok := seen[normTitle]; ok {
-			if r.TrackCount > deduped[idx].TrackCount {
-				deduped[idx] = r
-			}
-			continue
-		}
-		seen[normTitle] = len(deduped)
-		deduped = append(deduped, r)
-	}
-	return deduped
-}
-
-func sortAlbumsByReleaseDateDesc(results []domain.SearchResult) {
-	sort.SliceStable(results, func(i, j int) bool {
-		ki, kj := albumReleaseSortKey(results[i]), albumReleaseSortKey(results[j])
-		if ki == "" || kj == "" {
-			return ki != "" && kj == ""
-		}
-		return ki > kj
-	})
-}
-
-func albumReleaseSortKey(r domain.SearchResult) string {
-	if r.ReleaseDate != "" {
-		return r.ReleaseDate
-	}
-	if r.Year > 0 {
-		return strconv.Itoa(r.Year)
-	}
-	return ""
-}
-
-func normalizeAlbumYears(results []domain.SearchResult) {
-	for i := range results {
-		if results[i].Year != 0 || len(results[i].ReleaseDate) < 4 {
-			continue
-		}
-		if y := parseYear(results[i].ReleaseDate[:4]); y > 0 {
-			results[i].Year = y
-		}
-	}
-}
-
-func parseYear(s string) int {
-	y, err := strconv.Atoi(s)
-	if err != nil || y <= 0 {
-		return 0
-	}
-	return y
 }
 
 var providerFanOutPriority = []domain.ProviderName{

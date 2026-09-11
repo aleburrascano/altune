@@ -82,8 +82,14 @@ describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and neve
 
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
     fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    // React 19.2: act()/waitFor hang trying to stabilize a *rejected* in-flight
+    // resolve (verified on CI: the counts are already correct — onClose 1,
+    // resolve 1, post 0 — but act never settles). These assertions read mock
+    // counters, not rendered output, so let the catch (-> onClose) run via a raw
+    // macrotask flush, then assert synchronously.
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
   });
 });
@@ -98,14 +104,63 @@ describe("AddToPlaylistSheet(): withTrackIds's trackIds.length > 0 guard (:62)",
     const { onClose } = renderSheet({ resolveTrackIds });
 
     await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
-    fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    // React 19.2: settle the empty-resolve continuation inside act so busy
+    // clears deterministically instead of racing a floating promise.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    });
 
-    await waitFor(() => expect(resolveTrackIds).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull());
+    expect(resolveTrackIds).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull();
 
     expect(onClose).not.toHaveBeenCalled();
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
     expect(screen.getByTestId('add-to-playlist-sheet').props.visible).toBe(true);
+  });
+});
+
+describe('AddToPlaylistSheet(): single-flight — one gesture, one resolve (:59-72)', () => {
+  it('drops a replayed press after an empty resolve, even once the row re-enables', async () => {
+    __http.reply('GET /v1/playlists', {
+      status: 200,
+      json: { items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })], total: 1 },
+    });
+    // Empty resolve → no mutation keeps the row disabled, so busy clears the
+    // instant the resolve settles: the case the SDK-57 double dispatch bit.
+    const resolveTrackIds = jest.fn().mockResolvedValue([]);
+    const { onClose } = renderSheet({ resolveTrackIds });
+
+    await waitFor(() => screen.getByTestId('add-to-playlist-p1'));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    });
+
+    expect(resolveTrackIds).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('add-to-playlist-busy')).toBeNull();
+
+    // The row is enabled again, but the single-flight lock must still swallow a
+    // replayed press so resolveTrackIds does not run a second time.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
+    });
+    expect(resolveTrackIds).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
+  });
+
+  it('closes exactly once even if the close path fires twice', async () => {
+    __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
+    const { onClose } = renderSheet();
+
+    const closeButton = () =>
+      within(screen.getByTestId('add-to-playlist-sheet')).getByRole('button', { name: 'Close' });
+    await waitFor(() => closeButton());
+
+    // A re-run rejected continuation / re-dispatched close must not call onClose
+    // twice; the idempotent guard drops the repeat.
+    fireEvent.press(closeButton());
+    fireEvent.press(closeButton());
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 
