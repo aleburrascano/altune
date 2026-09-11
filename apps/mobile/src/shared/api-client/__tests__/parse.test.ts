@@ -14,6 +14,7 @@ import {
   parseListArtistsResponse,
   parseListTracksResponse,
   parseTrackResponse,
+  tryParseTrackResponse,
 } from '../parse';
 
 describe('primitive narrowers return the value or throw a ContractError', () => {
@@ -136,6 +137,32 @@ describe('parseTrackResponse', () => {
     expect(() => parseTrackResponse({ ...fullTrack(), acquisition_status: 'weird' })).toThrow(
       ContractError,
     );
+  });
+});
+
+describe('tryParseTrackResponse — the lenient SSE sibling of parseTrackResponse', () => {
+  it('parses a valid payload identically to the strict parser, including optional fields', () => {
+    const wire = {
+      ...fullTrack(),
+      failure_message: 'download failed',
+      featured_artists: [{ name: 'Thom Yorke', mbid: 'mb-1', deezer_id: 9 }],
+    };
+    expect(tryParseTrackResponse(wire)).toEqual(parseTrackResponse(wire));
+  });
+
+  it('returns null instead of throwing when a required field is missing or the wrong type', () => {
+    expect(tryParseTrackResponse({ ...fullTrack(), artist: 42 })).toBeNull();
+    expect(tryParseTrackResponse({ ...fullTrack(), acquisition_status: 'weird' })).toBeNull();
+    expect(tryParseTrackResponse({ ...fullTrack(), title: undefined })).toBeNull();
+    expect(tryParseTrackResponse(null)).toBeNull();
+    expect(tryParseTrackResponse([])).toBeNull();
+  });
+
+  it('coerces an off-type nullable field to null rather than rejecting the whole track', () => {
+    const track = tryParseTrackResponse({ ...fullTrack(), duration_seconds: '210', year: '2020' });
+    expect(track).not.toBeNull();
+    expect(track!.duration_seconds).toBeNull();
+    expect(track!.year).toBeNull();
   });
 });
 

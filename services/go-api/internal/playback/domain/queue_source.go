@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 )
@@ -22,10 +23,18 @@ func (s QueueSource) IsZero() bool {
 	return s.Kind == ""
 }
 
+func (s QueueSource) hasKnownKind() bool {
+	switch s.Kind {
+	case SourceKindLibrary, SourceKindPlaylist, SourceKindSearch:
+		return true
+	}
+	return false
+}
+
 func (s QueueSource) Format() string {
 	switch s.Kind {
 	case SourceKindPlaylist:
-		return SourceKindPlaylist + ":" + s.PlaylistId + ":" + url.QueryEscape(s.Name)
+		return SourceKindPlaylist + ":" + url.QueryEscape(s.PlaylistId) + ":" + url.QueryEscape(s.Name)
 	case SourceKindSearch:
 		if s.Query == "" {
 			return SourceKindSearch
@@ -42,15 +51,27 @@ func ParseQueueSource(sourceId string) QueueSource {
 		return QueueSource{}
 	}
 	if rest, found := strings.CutPrefix(sourceId, SourceKindPlaylist+":"); found {
-		playlistId, name, hasName := strings.Cut(rest, ":")
+		rawId, rawName, hasName := strings.Cut(rest, ":")
+		playlistId, ok := unescape(rawId)
+		if !ok {
+			return QueueSource{}
+		}
 		source := QueueSource{Kind: SourceKindPlaylist, PlaylistId: playlistId}
 		if hasName {
-			source.Name = unescapeOrEmpty(name)
+			name, ok := unescape(rawName)
+			if !ok {
+				return QueueSource{}
+			}
+			source.Name = name
 		}
 		return source
 	}
 	if rest, found := strings.CutPrefix(sourceId, SourceKindSearch+":"); found {
-		return QueueSource{Kind: SourceKindSearch, Query: unescapeOrEmpty(rest)}
+		query, ok := unescape(rest)
+		if !ok {
+			return QueueSource{}
+		}
+		return QueueSource{Kind: SourceKindSearch, Query: query}
 	}
 	switch sourceId {
 	case SourceKindLibrary:
@@ -61,10 +82,24 @@ func ParseQueueSource(sourceId string) QueueSource {
 	return QueueSource{}
 }
 
-func unescapeOrEmpty(value string) string {
+func PackSourceId(source QueueSource, fallback string) (string, error) {
+	if source.IsZero() {
+		return fallback, nil
+	}
+	if !source.hasKnownKind() {
+		return "", &ValidationError{Message: fmt.Sprintf("unknown queue source kind: %q", source.Kind)}
+	}
+	formatted := source.Format()
+	if formatted == "" {
+		return fallback, nil
+	}
+	return formatted, nil
+}
+
+func unescape(value string) (string, bool) {
 	decoded, err := url.QueryUnescape(value)
 	if err != nil {
-		return ""
+		return "", false
 	}
-	return decoded
+	return decoded, true
 }

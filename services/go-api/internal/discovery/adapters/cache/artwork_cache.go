@@ -2,7 +2,6 @@ package cache
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -41,33 +40,27 @@ func negativeTTL(kind domain.ResultKind) time.Duration {
 }
 
 type RedisArtworkCache struct {
-	client *goredis.Client
+	redisJSON
 }
 
 func NewRedisArtworkCache(client *goredis.Client) *RedisArtworkCache {
-	return &RedisArtworkCache{client: client}
+	return &RedisArtworkCache{redisJSON{client: client}}
 }
 
 func (c *RedisArtworkCache) Get(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, string, bool, error) {
-	if c.client == nil {
+	if c.disabled() {
 		return "", "", false, nil
 	}
 
-	key := artworkCacheKey(kind, title, subtitle, mbid)
-	val, err := c.client.Get(ctx, key).Result()
-	if err != nil {
-		return "", "", false, nil
-	}
-
-	var entry artworkEntry
-	if err := json.Unmarshal([]byte(val), &entry); err != nil {
+	entry, ok := c.read(ctx, artworkCacheKey(kind, title, subtitle, mbid))
+	if !ok {
 		return "", "", false, nil
 	}
 	return entry.URL, entry.Source, true, nil
 }
 
 func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid, url, source string, confidence ports.ArtworkConfidence) error {
-	if c.client == nil {
+	if c.disabled() {
 		return nil
 	}
 
@@ -77,24 +70,12 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 		return nil
 	}
 
-	payload, err := json.Marshal(artworkEntry{URL: url, Source: source, Confidence: int(confidence)})
-	if err != nil {
-		return err
-	}
-
-	return c.client.Set(ctx, key, payload, artworkTTL(kind, url, confidence)).Err()
+	entry := artworkEntry{URL: url, Source: source, Confidence: int(confidence)}
+	return c.setJSON(ctx, key, entry, artworkTTL(kind, url, confidence))
 }
 
 func (c *RedisArtworkCache) read(ctx context.Context, key string) (artworkEntry, bool) {
-	val, err := c.client.Get(ctx, key).Result()
-	if err != nil {
-		return artworkEntry{}, false
-	}
-	var entry artworkEntry
-	if json.Unmarshal([]byte(val), &entry) != nil {
-		return artworkEntry{}, false
-	}
-	return entry, true
+	return getJSON[artworkEntry](ctx, c.redisJSON, key)
 }
 
 func artworkTTL(kind domain.ResultKind, url string, confidence ports.ArtworkConfidence) time.Duration {

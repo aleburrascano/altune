@@ -4,59 +4,20 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/database"
 )
 
 const truncatedAudioThresholdSecs = 45.0
 
 func RunReconcileTruncated(cfg *config.Config, execute bool) {
-	if cfg.DatabaseURL == "" {
-		fmt.Println("ERROR: DATABASE_URL not set")
-		os.Exit(1)
-	}
-
 	ctx := context.Background()
-	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
-	if err != nil {
-		fmt.Printf("ERROR: database connection failed: %v\n", err)
-		os.Exit(1)
-	}
+	pool := mustOpenPool(ctx, cfg)
 	defer pool.Close()
 
-	audioStore := buildAudioStoreForCLI(cfg)
-	if audioStore == nil {
-		fmt.Println("ERROR: no audio store configured (need MUSIC_DIR or OCI_S3_* env vars)")
-		os.Exit(1)
-	}
+	audioStore := mustAudioStore(cfg)
 
-	rows, err := pool.Query(ctx,
-		`SELECT id, user_id, title, artist, audio_ref
-		FROM tracks
-		WHERE duration_seconds IS NULL
-		  AND audio_ref IS NOT NULL
-		  AND acquisition_status = 'ready'
-		ORDER BY added_at DESC`)
-	if err != nil {
-		fmt.Printf("ERROR: query failed: %v\n", err)
-		os.Exit(1)
-	}
-	defer rows.Close()
-
-	type trackRow struct {
-		id, userId, title, artist, audioRef string
-	}
-	var tracks []trackRow
-	for rows.Next() {
-		var t trackRow
-		if err := rows.Scan(&t.id, &t.userId, &t.title, &t.artist, &t.audioRef); err != nil {
-			fmt.Printf("ERROR: scan failed: %v\n", err)
-			os.Exit(1)
-		}
-		tracks = append(tracks, t)
-	}
+	tracks := loadReadyTracks(ctx, pool, " AND duration_seconds IS NULL", " ORDER BY added_at DESC")
 
 	fmt.Printf("\nFound %d ready tracks with missing duration...\n\n", len(tracks))
 	if len(tracks) == 0 {
@@ -67,9 +28,9 @@ func RunReconcileTruncated(cfg *config.Config, execute bool) {
 	reacquired, backfilled, skipped, errored := 0, 0, 0, 0
 
 	for i, t := range tracks {
-		duration, err := probeDuration(ctx, audioStore, t.audioRef)
+		duration, err := probeDuration(ctx, audioStore, t.AudioRef)
 		if err != nil {
-			fmt.Printf("  [%d/%d] SKIP: %s — %s  (probe error: %v)\n", i+1, len(tracks), t.title, t.artist, err)
+			fmt.Printf("  [%d/%d] SKIP: %s — %s  (probe error: %v)\n", i+1, len(tracks), t.Title, t.Artist, err)
 			skipped++
 			continue
 		}
@@ -79,26 +40,22 @@ func RunReconcileTruncated(cfg *config.Config, execute bool) {
 		if truncated {
 			action = "RE-ACQUIRE (truncated)"
 		}
-		fmt.Printf("  [%d/%d] %.1fs  %s — %s  → %s\n", i+1, len(tracks), duration, t.title, t.artist, action)
+		fmt.Printf("  [%d/%d] %.1fs  %s — %s  → %s\n", i+1, len(tracks), duration, t.Title, t.Artist, action)
 
 		if !execute {
 			continue
 		}
 
 		if truncated {
-			_, err = pool.Exec(ctx,
-				`UPDATE tracks SET acquisition_status = 'failed',
-					failure_reason = 'Only a short preview was downloaded — retry to re-acquire',
-					audio_ref = NULL
-				WHERE id = $1 AND user_id = $2`,
-				t.id, t.userId)
+			err = markTrackFailed(ctx, pool, t.Id, t.UserId,
+				"Only a short preview was downloaded — retry to re-acquire")
 			if err == nil {
 				reacquired++
 			}
 		} else {
 			_, err = pool.Exec(ctx,
 				`UPDATE tracks SET duration_seconds = $3 WHERE id = $1 AND user_id = $2`,
-				t.id, t.userId, duration)
+				t.Id.UUID(), t.UserId.UUID(), duration)
 			if err == nil {
 				backfilled++
 			}
@@ -109,8 +66,7 @@ func RunReconcileTruncated(cfg *config.Config, execute bool) {
 		}
 	}
 
-	fmt.Printf("\n%s\n", "==================================================")
-	fmt.Println("Reconcile truncated complete:")
+	printSummary("Reconcile truncated complete:")
 	fmt.Printf("  Total candidates:  %d\n", len(tracks))
 	fmt.Printf("  Probe skipped:     %d\n", skipped)
 	if execute {
@@ -118,7 +74,7 @@ func RunReconcileTruncated(cfg *config.Config, execute bool) {
 		fmt.Printf("  Backfilled:        %d  (duration written in place)\n", backfilled)
 		fmt.Printf("  Errors:            %d\n", errored)
 	} else {
-		fmt.Println("\n  Run with --execute to apply changes.")
+		printDryRunHint()
 	}
 	fmt.Println()
 

@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import { getPlaylists } from '@shared/api-client/playlists';
 import type { PlaylistResponse } from '@shared/api-client/types';
+import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { Text, spacing, useTheme } from '@shared/ui';
 
@@ -150,7 +151,7 @@ export function AddToPlaylistSheet({
         onPress={() => addToPlaylist(item.id)}
         disabled={busy}
         accessibilityRole="button"
-        accessibilityLabel={`Add to ${item.name}, ${item.track_count} ${item.track_count === 1 ? 'track' : 'tracks'}`}
+        accessibilityLabel={`Add to ${item.name}, ${item.track_count} ${countLabel(item.track_count, 'track')}`}
         accessibilityState={{ disabled: busy }}
         style={({ pressed }) => [
           styles.playlistRow,
@@ -168,7 +169,7 @@ export function AddToPlaylistSheet({
             {item.name}
           </Text>
           <Text variant="caption" tone="secondary">
-            {item.track_count} {item.track_count === 1 ? 'track' : 'tracks'}
+            {item.track_count} {countLabel(item.track_count, 'track')}
           </Text>
         </View>
         {addedTo === item.id ? (

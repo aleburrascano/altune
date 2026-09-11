@@ -5,6 +5,7 @@ import { Search } from 'lucide-react-native';
 import { Button, Chip, Skeleton, Text, radius, spacing, useTheme } from '@shared/ui';
 
 import { describeError } from '@shared/lib/describeError';
+import { countLabel } from '@shared/lib/format';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from './BlendedSection';
 import { FilteredResults } from './FilteredResults';
@@ -35,7 +36,7 @@ export function _searchAnnouncement(view: DiscoverView, resultCount: number): st
   if (view === 'zero-results') return 'No matches';
   if (view === 'full-error') return 'Search failed';
   if (view === 'results') {
-    return `${resultCount} ${resultCount === 1 ? 'result' : 'results'}`;
+    return `${resultCount} ${countLabel(resultCount, 'result')}`;
   }
   return '';
 }
