@@ -336,9 +336,7 @@ func (a *App) wireCatalog(
 		searcher := ytdlp.NewYtDlpAudioSearcher(
 			a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
 		ytDlpOK = searcher.Available()
-		audioSources = append(audioSources, ytmusic.NewSource(searcher))
-		audioSources = append(audioSources, a.buildStreamripSources()...)
-		audioSources = append(audioSources, ytdlp.NewSource(searcher))
+		audioSources = a.audioSourcesFor(searcher)
 	}
 
 	var scheduler catalogPorts.AcquisitionScheduler
@@ -419,6 +417,26 @@ func (a *App) wireCatalog(
 		retryH:            retryH,
 		reacquireH:        reacquireH,
 	}, nil
+}
+
+// audioSourcesFor assembles the enabled acquisition sources. ytmusic and yt-dlp
+// are gated by YTMUSIC_ENABLED / YTDLP_ENABLED (both default enabled) so either
+// can be pulled at startup without a deploy, mirroring streamrip's per-service
+// opt-in. The passed searcher is shared between the ytmusic and yt-dlp sources.
+func (a *App) audioSourcesFor(searcher *ytdlp.YtDlpAudioSearcher) []acqPorts.AudioSource {
+	var sources []acqPorts.AudioSource
+	if a.cfg.YtMusicEnabled {
+		sources = append(sources, ytmusic.NewSource(searcher))
+	} else {
+		slog.Info("acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
+	}
+	sources = append(sources, a.buildStreamripSources()...)
+	if a.cfg.YtDLPEnabled {
+		sources = append(sources, ytdlp.NewSource(searcher))
+	} else {
+		slog.Info("acquisition: yt-dlp source disabled via YTDLP_ENABLED")
+	}
+	return sources
 }
 
 func (a *App) buildStreamripSources() []acqPorts.AudioSource {
