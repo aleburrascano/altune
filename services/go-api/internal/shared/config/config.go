@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
 
@@ -87,6 +88,29 @@ func (c *Config) validate() error {
 		if !strings.Contains(c.MusicBrainzUserAgent, "@") && !strings.Contains(strings.ToLower(c.MusicBrainzUserAgent), "http") {
 			return fmt.Errorf("MUSICBRAINZ_USER_AGENT must contain a contact form URL or email")
 		}
+	}
+	if err := c.validateOperator(); err != nil {
+		return err
+	}
+	return c.validateAlertPush()
+}
+
+func (c *Config) validateOperator() error {
+	if c.OperatorUserID == "" {
+		return fmt.Errorf("OPERATOR_USER_ID must be set (operator-only routes reject every user without it)")
+	}
+	if _, err := uuid.Parse(c.OperatorUserID); err != nil {
+		return fmt.Errorf("OPERATOR_USER_ID must be a valid UUID, got %q", c.OperatorUserID)
+	}
+	return nil
+}
+
+func (c *Config) validateAlertPush() error {
+	if c.AlertNtfyURL == "" {
+		return nil
+	}
+	if u, err := url.Parse(c.AlertNtfyURL); err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("ALERT_NTFY_URL must be a valid URL, got %q", c.AlertNtfyURL)
 	}
 	return nil
 }
