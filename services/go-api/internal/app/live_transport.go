@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"strings"
@@ -28,6 +29,9 @@ type liveTransport struct {
 	limiters map[string]*rate.Limiter
 	// sleep is a test seam; when nil a real timer is used.
 	sleep func(context.Context, time.Duration) error
+	// randFloat returns a value in [0.0,1.0) and is a test seam for jitter.
+	// When nil the concurrency-safe global source is used.
+	randFloat func() float64
 }
 
 func NewLiveTransport() http.RoundTripper {
@@ -60,7 +64,7 @@ func (t *liveTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 				return nil, err
 			}
 			req.Body = body
-			if err := t.wait(req.Context(), retryDelay(attempt, retryAfter)); err != nil {
+			if err := t.wait(req.Context(), t.retryDelay(attempt, retryAfter)); err != nil {
 				return nil, err
 			}
 		}
@@ -109,15 +113,46 @@ func rewindBody(req *http.Request) (io.ReadCloser, error) {
 // cannot wedge the client.
 const liveMaxRetryAfter = 30 * time.Second
 
-func retryDelay(attempt int, retryAfter time.Duration) time.Duration {
+func (t *liveTransport) retryDelay(attempt int, retryAfter time.Duration) time.Duration {
 	if retryAfter > 0 {
 		return retryAfter
 	}
-	return fixedBackoff(attempt)
+	return t.fixedBackoff(attempt)
 }
 
-func fixedBackoff(attempt int) time.Duration {
-	return time.Duration(attempt) * 250 * time.Millisecond
+// liveBackoffBase is the per-attempt step of the deterministic backoff.
+const liveBackoffBase = 250 * time.Millisecond
+
+// liveBackoffJitter is the fraction of the base delay randomly added or
+// subtracted so concurrent callers to the same rate-limited host spread out
+// their retries instead of resynchronizing in lockstep.
+const liveBackoffJitter = 0.2
+
+// liveMaxBackoff caps the jittered backoff so a stacked delay can never exceed
+// a documented upper bound.
+const liveMaxBackoff = liveMaxAttempts * liveBackoffBase
+
+// fixedBackoff returns attempt*liveBackoffBase spread by +/-liveBackoffJitter of
+// that base. The jitter desynchronizes concurrent retries; the result is
+// clamped to [0, liveMaxBackoff].
+func (t *liveTransport) fixedBackoff(attempt int) time.Duration {
+	base := time.Duration(attempt) * liveBackoffBase
+	if base <= 0 {
+		return 0
+	}
+	next := rand.Float64
+	if t.randFloat != nil {
+		next = t.randFloat
+	}
+	delta := (next()*2 - 1) * liveBackoffJitter * float64(base)
+	d := base + time.Duration(delta)
+	if d < 0 {
+		d = 0
+	}
+	if d > liveMaxBackoff {
+		d = liveMaxBackoff
+	}
+	return d
 }
 
 // parseRetryAfter reads a Retry-After value in either supported form —
