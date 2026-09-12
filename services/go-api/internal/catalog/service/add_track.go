@@ -123,6 +123,32 @@ func validateAddTrackInput(input AddTrackInput) error {
 	if input.Year != nil && !plausibleYear(*input.Year) {
 		return domain.NewValidationError("year is implausible")
 	}
+	if err := validateAddTrackText(input); err != nil {
+		return err
+	}
+	if input.SourceURL != nil {
+		if err := domain.ValidateSourceURL(*input.SourceURL); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAddTrackText(input AddTrackInput) error {
+	fields := []struct {
+		value *string
+		name  string
+	}{
+		{input.ArtworkURL, "artwork_url"},
+		{input.Genre, "genre"},
+		{input.AlbumArtist, "album_artist"},
+		{input.ISRC, "isrc"},
+	}
+	for _, f := range fields {
+		if err := domain.ValidateOptionalTrackText(f.value, f.name); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

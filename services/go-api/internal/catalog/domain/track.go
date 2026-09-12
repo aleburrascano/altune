@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -127,6 +128,43 @@ func validateTrackText(value, field string) error {
 	}
 	if len(value) > maxTrackTextLength {
 		return NewValidationError("track " + field + " exceeds 300 characters")
+	}
+	return nil
+}
+
+// ValidateOptionalTrackText applies the same length cap used for title/artist to
+// an optional free-form field. A nil pointer means the field is absent and is
+// left untouched; a present value must not exceed maxTrackTextLength.
+func ValidateOptionalTrackText(value *string, field string) error {
+	if value == nil {
+		return nil
+	}
+	if len(*value) > maxTrackTextLength {
+		return NewValidationError("track " + field + " exceeds 300 characters")
+	}
+	return nil
+}
+
+// ValidateSourceURL rejects an acquisition source URL that is oversized or not a
+// well-formed http(s) URL, before it is handed to the acquisition scheduler. An
+// empty value is allowed: it signals that no source was supplied.
+func ValidateSourceURL(raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	if len(raw) > maxTrackTextLength {
+		return NewValidationError("track source_url exceeds 300 characters")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return NewValidationError("track source_url is malformed")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return NewValidationError("track source_url must be an http or https URL")
+	}
+	if parsed.Host == "" {
+		return NewValidationError("track source_url must include a host")
 	}
 	return nil
 }
