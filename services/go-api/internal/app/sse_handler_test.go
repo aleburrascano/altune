@@ -4,8 +4,10 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/logging"
 	"bufio"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -140,6 +142,70 @@ func TestSSEHandler_MalformedLastEventIDEmitsResync(t *testing.T) {
 
 	br := bufio.NewReader(resp.Body)
 	readUntil(t, br, func(l string) bool { return l == "event: resync" })
+}
+
+// waitForLog polls the ring buffer until a record with the given message is
+// captured, so an assertion does not race the handler goroutine that logs it.
+func waitForLog(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, r := range ring.Snapshot() {
+			if r.Message == msg {
+				return r
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %q log line", msg)
+	return logging.CapturedRecord{}
+}
+
+// TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID is the regression
+// guard for #372: the connect and disconnect log lines must carry the request's
+// correlation ID so a client-reported ID can be grepped server-side. Both calls
+// use the *Context slog variant with the request context, so the correlation
+// handler stamps corr_id automatically like RequestLogger.
+func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
+	prev := slog.Default()
+	defer slog.SetDefault(prev)
+	ring := logging.Setup("debug", false)
+
+	const corrID = "corr-sse-1234"
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	h := newSSEHandler(bus)
+	h.heartbeat = 50 * time.Millisecond
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := logging.WithCorrelationID(auth.ContextWithUserID(r.Context(), uid), corrID)
+		h.ServeHTTP(w, r.WithContext(ctx))
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
+
+	// Cancelling the client request cancels the server's request context, which
+	// ends the stream and triggers the sse.disconnected log line.
+	cancel()
+	resp.Body.Close()
+
+	if got := waitForLog(t, ring, "sse.connected").Attrs["corr_id"]; got != corrID {
+		t.Errorf("sse.connected corr_id = %q, want %q", got, corrID)
+	}
+	if got := waitForLog(t, ring, "sse.disconnected").Attrs["corr_id"]; got != corrID {
+		t.Errorf("sse.disconnected corr_id = %q, want %q", got, corrID)
+	}
 }
 
 func TestReplayGapped(t *testing.T) {
