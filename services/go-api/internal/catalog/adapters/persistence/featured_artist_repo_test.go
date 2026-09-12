@@ -1,14 +1,40 @@
 package persistence
 
 import (
-	"context"
-	"testing"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"strings"
+	"testing"
 
 	"github.com/google/uuid"
 )
+
+// TestBuildFeaturingQuery_CapsResultSet is the regression guard for #423: the
+// featuring query must carry a LIMIT bound so a match against tens of thousands
+// of rows returns a bounded result instead of the full set. Runs without a DB,
+// so it executes in CI (the integration tests below skip when DATABASE_URL is
+// unset). On the pre-fix code the SQL had no LIMIT clause and this fails.
+func TestBuildFeaturingQuery_CapsResultSet(t *testing.T) {
+	sql, args := buildFeaturingQuery(uuid.New(), "identity-key")
+
+	if !strings.Contains(sql, "LIMIT $3") {
+		t.Fatalf("featuring query has no LIMIT clause, result set is unbounded:\n%s", sql)
+	}
+	if len(args) != 3 {
+		t.Fatalf("args = %d, want 3 (user, identity, limit)", len(args))
+	}
+	limit, ok := args[2].(int)
+	if !ok {
+		t.Fatalf("limit arg type = %T, want int", args[2])
+	}
+	if limit != featuringResultCap {
+		t.Errorf("limit arg = %d, want featuringResultCap %d", limit, featuringResultCap)
+	}
+	if featuringResultCap != 2000 {
+		t.Errorf("featuringResultCap = %d, want 2000 to match the module's clampLibraryLimit cap", featuringResultCap)
+	}
+}
 
 func TestPgxTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 	pool := testPool(t)

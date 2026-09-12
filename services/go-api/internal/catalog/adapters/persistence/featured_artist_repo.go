@@ -1,11 +1,10 @@
 package persistence
 
 import (
-	"context"
-	"fmt"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -138,20 +137,33 @@ func (r *PgxFeaturedArtistRepository) ReplaceFeaturedArtists(
 	return tx.Commit(ctx)
 }
 
+// featuringResultCap bounds ListTracksFeaturing the same way clampLibraryLimit
+// (cap 2000) bounds every other list path in this module. Without it a featured
+// artist (or name) matching tens of thousands of tracks materializes the entire
+// result set in memory and serializes it in one response.
+const featuringResultCap = 2000
+
+// buildFeaturingQuery returns the SQL and args for ListTracksFeaturing with the
+// result set bounded by featuringResultCap. Extracted so the cap is testable
+// without a live database.
+func buildFeaturingQuery(userID uuid.UUID, identityKey string) (string, []any) {
+	sql := `SELECT ` + trackColumnsPrefixed + `
+		FROM tracks t
+		JOIN track_featured_artists tfa ON tfa.track_id = t.id
+		JOIN featured_artists fa ON fa.id = tfa.featured_artist_id
+		WHERE t.user_id = $1 AND fa.identity_key = $2
+		ORDER BY t.added_at DESC, t.id DESC
+		LIMIT $3`
+	return sql, []any{userID, identityKey, featuringResultCap}
+}
+
 func (r *PgxFeaturedArtistRepository) ListTracksFeaturing(
 	ctx context.Context,
 	userId shared.UserId,
 	fa domain.FeaturedArtist,
 ) ([]*domain.Track, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT `+trackColumnsPrefixed+`
-		FROM tracks t
-		JOIN track_featured_artists tfa ON tfa.track_id = t.id
-		JOIN featured_artists fa ON fa.id = tfa.featured_artist_id
-		WHERE t.user_id = $1 AND fa.identity_key = $2
-		ORDER BY t.added_at DESC, t.id DESC`,
-		userId.UUID(), fa.IdentityKey(),
-	)
+	sql, args := buildFeaturingQuery(userId.UUID(), fa.IdentityKey())
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list tracks featuring: %w", err)
 	}
