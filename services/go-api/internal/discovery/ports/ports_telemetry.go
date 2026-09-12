@@ -66,11 +66,20 @@ type MetricsRollupStore interface {
 	MetricsHistory(ctx context.Context, metric string, days int) ([]MetricPoint, error)
 }
 
-type VocabularyStore interface {
-	Add(ctx context.Context, entry domain.VocabularyEntry) error
-	BulkAdd(ctx context.Context, entries []domain.VocabularyEntry) error
+type VocabularyReader interface {
 	SuggestByPrefix(ctx context.Context, prefix string, limit int) ([]domain.VocabularyEntry, error)
 	FindClosest(ctx context.Context, query string, limit int) ([]domain.VocabularyEntry, error)
+}
+
+type VocabularyWriter interface {
+	Add(ctx context.Context, entry domain.VocabularyEntry) error
+	BulkAdd(ctx context.Context, entries []domain.VocabularyEntry) error
+	Trim(ctx context.Context, maxEntries int) error
+}
+
+type VocabularyStore interface {
+	VocabularyReader
+	VocabularyWriter
 }
 
 type ChartProvider interface {

@@ -11,6 +11,10 @@ import (
 
 const providerBodyCap = 2 << 20
 
+func isAuthStatus(status int) bool {
+	return status == http.StatusUnauthorized || status == http.StatusForbidden
+}
+
 type reqOption func(*http.Request)
 
 func withHeader(key, value string) reqOption {

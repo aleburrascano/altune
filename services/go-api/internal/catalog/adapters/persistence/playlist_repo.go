@@ -130,8 +130,7 @@ func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.Pla
 	}
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT pt.track_id, pt.position,
-			`+trackColumnsPrefixed+`
+		`SELECT `+trackColumnsPrefixed+`
 		FROM playlist_tracks pt
 		JOIN tracks t ON t.id = pt.track_id
 		WHERE pt.playlist_id = $1
@@ -143,30 +142,20 @@ func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.Pla
 	}
 	defer rows.Close()
 
-	var tracks []*domain.Track
+	tracks, err := collectTracks(rows)
+	if err != nil {
+		return playlist, nil, err
+	}
+
 	var playlistTracks []domain.PlaylistTrack
-	for rows.Next() {
-		var trackId uuid.UUID
-		var position int
-		trackDest, buildTrack := trackScanDest()
-		dest := append([]any{&trackId, &position}, trackDest...)
-		if err := rows.Scan(dest...); err != nil {
-			return playlist, nil, err
-		}
-
-		track, err := buildTrack()
-		if err != nil {
-			return playlist, nil, err
-		}
-
-		tracks = append(tracks, track)
+	for i, track := range tracks {
 		playlistTracks = append(playlistTracks, domain.PlaylistTrack{
-			TrackId:  domain.TrackIdFromUUID(trackId),
-			Position: position,
+			TrackId:  track.ID,
+			Position: i,
 		})
 	}
 	playlist.Tracks = playlistTracks
-	return playlist, tracks, rows.Err()
+	return playlist, tracks, nil
 }
 
 func (r *PgxPlaylistRepository) Delete(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (bool, error) {

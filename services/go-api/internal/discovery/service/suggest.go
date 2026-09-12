@@ -10,10 +10,10 @@ import (
 )
 
 type SuggestService struct {
-	vocab ports.VocabularyStore
+	vocab ports.VocabularyReader
 }
 
-func NewSuggestService(vocab ports.VocabularyStore) *SuggestService {
+func NewSuggestService(vocab ports.VocabularyReader) *SuggestService {
 	return &SuggestService{vocab: vocab}
 }
 
