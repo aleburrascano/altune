@@ -33,12 +33,9 @@ func NewRetryHandler(
 
 func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Request) {
 	acquisitionCommand{
-		trackRepo:     h.trackRepo,
-		admission:     h.admission,
-		ineligibleErr: service.ErrRetryNotFailed,
-		ineligibleMsg: "track is not in failed state",
-		cooldownMsg:   "retry cooldown active, try again later",
-		logMsg:        "retry acquisition: get track failed",
+		trackRepo: h.trackRepo,
+		admission: h.admission,
+		logMsg:    "retry acquisition: get track failed",
 		schedule: func(userId shared.UserId, trackId domain.TrackId) {
 			h.scheduler.Schedule(userId, trackId, "")
 		},
