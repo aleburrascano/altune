@@ -1,12 +1,11 @@
 package service
 
 import (
-	"context"
-	"testing"
-
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"testing"
 )
 
 func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
@@ -14,13 +13,10 @@ func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
 
 	_, err := svc.Artists(context.Background(), testUserId(), domain.LibraryQuery{Sort: domain.SortYear})
 
-	var validation *domain.ValidationError
 	if err == nil {
 		t.Fatal("expected a validation error for sort=year on artists")
 	}
-	if !asValidation(err, &validation) {
-		t.Fatalf("error = %v, want *domain.ValidationError", err)
-	}
+	validation := shared.AssertValidationError(t, err)
 	if validation.HTTPStatus() != 400 {
 		t.Errorf("status = %d, want 400", validation.HTTPStatus())
 	}
@@ -91,12 +87,4 @@ func TestLibraryLensService_ClampsLimit(t *testing.T) {
 
 func svcAlbums(ctx context.Context, repo *catalogtest.TrackRepo, userId shared.UserId) ([]domain.AlbumGroup, error) {
 	return NewLibraryLensService(repo).Albums(ctx, userId, domain.LibraryQuery{})
-}
-
-func asValidation(err error, target **domain.ValidationError) bool {
-	v, ok := err.(*domain.ValidationError)
-	if ok {
-		*target = v
-	}
-	return ok
 }
