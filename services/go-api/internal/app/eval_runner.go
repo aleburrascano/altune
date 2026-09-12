@@ -3,15 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"altune/go-api/internal/admin/evalmeter"
 	domain "altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
-
-	"github.com/google/uuid"
 )
 
 var evalSmokeChecks = []struct{ query, expect string }{
@@ -34,15 +31,17 @@ func (a *App) buildEvalRunner() evalmeter.Runner {
 	}
 	evalSvc := BuildSearchServiceWithTransport(a.cfg, a.pool, a.redisClient, nil, nil, nil, true)
 
-	evalUser, err := shared.ParseUserId(a.cfg.OperatorUserID)
-	if err != nil {
-		slog.Warn("eval runner: invalid OperatorUserID, using random", "error", err)
-		evalUser = shared.NewUserId(uuid.New())
-	}
-
 	return func(ctx context.Context) (evalmeter.Result, error) {
-		return runSmokeEval(ctx, evalSvc, evalUser)
+		return runSmokeEval(ctx, evalSvc, evalUserId())
 	}
+}
+
+// evalUserId is the identity the smoke eval runs under. It is the synthetic
+// system account, never the real operator: the eval exercises the real per-user
+// code paths, so running it as a real account would read and persist that
+// user's favorites and behavioral signal.
+func evalUserId() shared.UserId {
+	return shared.SystemUserId()
 }
 
 func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user shared.UserId) (evalmeter.Result, error) {

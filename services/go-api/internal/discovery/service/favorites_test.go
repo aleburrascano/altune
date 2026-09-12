@@ -14,6 +14,7 @@ type fakeFavoritesRepo struct {
 	err       error
 	added     []domain.Favorite
 	removed   []string
+	listCalls int
 }
 
 func (f *fakeFavoritesRepo) Add(_ context.Context, _ shared.UserId, fav domain.Favorite) error {
@@ -27,6 +28,7 @@ func (f *fakeFavoritesRepo) Remove(_ context.Context, _ shared.UserId, kind doma
 }
 
 func (f *fakeFavoritesRepo) ListForUser(_ context.Context, _ shared.UserId) ([]domain.Favorite, error) {
+	f.listCalls++
 	return f.favorites, f.err
 }
 
