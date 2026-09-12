@@ -41,7 +41,7 @@ func (h *AdminHandler) WithReRunner(r ReRunner) *AdminHandler {
 
 func (h *AdminHandler) serveReRun(w http.ResponseWriter, r *http.Request) {
 	if h.reRunner == nil {
-		httputil.WriteError(w, http.StatusServiceUnavailable, "re-run inspector not configured")
+		httputil.HandleServiceError(w, r, errReRunUnavailable)
 		return
 	}
 	body, ok := decodeQuery(w, r)
@@ -50,7 +50,7 @@ func (h *AdminHandler) serveReRun(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.reRunner.ReRun(r.Context(), body.Query, body.Kinds)
 	if err != nil {
-		httputil.WriteError(w, http.StatusBadGateway, err.Error())
+		httputil.HandleServiceError(w, r, upstreamError("admin.rerun_failed", err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)

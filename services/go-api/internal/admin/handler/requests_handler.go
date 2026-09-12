@@ -19,12 +19,12 @@ func (h *AdminHandler) serveRequests(w http.ResponseWriter, _ *http.Request) {
 
 func (h *AdminHandler) serveRequestDetail(w http.ResponseWriter, r *http.Request) {
 	if h.requests == nil {
-		httputil.WriteError(w, http.StatusNotFound, "request not found")
+		httputil.HandleServiceError(w, r, errRequestNotFound)
 		return
 	}
 	rec, ok := h.requests.Get(chi.URLParam(r, "corrID"))
 	if !ok {
-		httputil.WriteError(w, http.StatusNotFound, "request not found")
+		httputil.HandleServiceError(w, r, errRequestNotFound)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, rec)
