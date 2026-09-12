@@ -1,16 +1,16 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"net/http"
 )
 
 type replaceScheduler interface {
-	ScheduleReplace(userId shared.UserId, trackId domain.TrackId)
+	ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId)
 }
 
 type ReacquireHandler struct {
@@ -32,8 +32,8 @@ func (h *ReacquireHandler) HandleReacquire(w http.ResponseWriter, r *http.Reques
 		trackRepo: h.trackRepo,
 		admission: h.admission,
 		logMsg:    "reacquire: get track failed",
-		schedule: func(userId shared.UserId, trackId domain.TrackId) {
-			h.scheduler.ScheduleReplace(userId, trackId)
+		schedule: func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
+			h.scheduler.ScheduleReplace(ctx, userId, trackId)
 		},
 	}.serve(w, r)
 }

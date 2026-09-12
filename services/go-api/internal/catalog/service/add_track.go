@@ -113,7 +113,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 		}
 		slog.InfoContext(ctx, "acquisition.scheduled",
 			"track_id", track.ID.String())
-		s.scheduler.Schedule(userId, track.ID, sourceURL)
+		s.scheduler.Schedule(ctx, userId, track.ID, sourceURL)
 	}
 
 	return &AddTrackOutput{Track: track, Created: created}, nil

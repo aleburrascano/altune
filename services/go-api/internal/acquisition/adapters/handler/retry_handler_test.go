@@ -1,16 +1,16 @@
 package handler
 
 import (
+	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/shared"
 	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/auth"
 	catdomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -81,7 +81,7 @@ type retryFakeScheduler struct {
 	scheduled []catdomain.TrackId
 }
 
-func (s *retryFakeScheduler) Schedule(_ shared.UserId, trackId catdomain.TrackId, _ string) {
+func (s *retryFakeScheduler) Schedule(_ context.Context, _ shared.UserId, trackId catdomain.TrackId, _ string) {
 	s.scheduled = append(s.scheduled, trackId)
 }
 

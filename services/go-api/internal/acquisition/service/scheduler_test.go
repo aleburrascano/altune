@@ -1,15 +1,15 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	acqports "altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -142,7 +142,7 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	trackId := domain.NewTrackId()
 
-	scheduler.Schedule(userId, trackId, "")
+	scheduler.Schedule(context.Background(), userId, trackId, "")
 
 	wg.Wait()
 	if len(sem) != 0 {
@@ -168,7 +168,7 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 
 	for i := 0; i < numSchedules; i++ {
 		trackId := domain.NewTrackId()
-		scheduler.Schedule(userId, trackId, "")
+		scheduler.Schedule(context.Background(), userId, trackId, "")
 	}
 
 	wg.Wait()

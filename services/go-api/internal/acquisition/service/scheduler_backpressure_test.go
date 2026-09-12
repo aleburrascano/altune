@@ -47,7 +47,7 @@ func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	const burst = 60
 	for i := 0; i < burst; i++ {
-		scheduler.Schedule(userId, domain.NewTrackId(), "")
+		scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), "")
 	}
 
 	// Ensure a worker is actually in-flight so the semaphore is saturated.
@@ -79,7 +79,7 @@ func TestBackgroundScheduler_ReportsQueueFull(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	const burst = 50
 	for i := 0; i < burst; i++ {
-		scheduler.Schedule(userId, domain.NewTrackId(), "")
+		scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), "")
 	}
 
 	<-repo.started

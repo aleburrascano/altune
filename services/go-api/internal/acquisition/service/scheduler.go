@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"runtime/debug"
@@ -110,28 +111,29 @@ func WithVerificationStatus(v AcquisitionVerification) func(*BackgroundAcquisiti
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) ScheduleReplace(userId shared.UserId, trackId domain.TrackId) {
-	s.schedule(userId, trackId, "", true)
+func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
+	s.schedule(ctx, userId, trackId, "", true)
 }
 
-func (s *BackgroundAcquisitionScheduler) Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string) {
-	s.schedule(userId, trackId, sourceURL, false)
+func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) {
+	s.schedule(ctx, userId, trackId, sourceURL, false)
 }
 
 func (s *BackgroundAcquisitionScheduler) schedule(
+	ctx context.Context,
 	userId shared.UserId,
 	trackId domain.TrackId,
 	sourceURL string,
 	replace bool,
 ) {
 	if s.closed.Load() {
-		slog.Warn("schedule_after_shutdown", "track_id", trackId.String())
+		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
 		return
 	}
 
 	key := trackId.String()
 	if _, loaded := s.inflight.LoadOrStore(key, struct{}{}); loaded {
-		slog.Info("schedule_skip_inflight", "track_id", key)
+		slog.InfoContext(ctx, "schedule_skip_inflight", "track_id", key)
 		return
 	}
 
@@ -143,12 +145,18 @@ func (s *BackgroundAcquisitionScheduler) schedule(
 	default:
 		s.inflight.Delete(key)
 		s.rejected.Add(1)
-		slog.Warn("acquisition.queue_full",
+		slog.WarnContext(ctx, "acquisition.queue_full",
 			"track_id", key, "queue_depth", cap(s.admit))
 		return
 	}
 
-	slog.Info("acquisition.scheduling", "track_id", key, "user_id", userId.String())
+	// Carry the originating request's correlation ID onto the job context so the
+	// slog.*Context calls throughout the acquisition pipeline trace end-to-end.
+	// The job outlives the request, so we derive a fresh context from s.baseCtx
+	// (for shutdown cancellation) and only transplant the corr_id value.
+	corrID := logging.CorrelationIDFromContext(ctx)
+
+	slog.InfoContext(ctx, "acquisition.scheduling", "track_id", key, "user_id", userId.String())
 	s.inflightCount.Add(1)
 	s.log.register(key, sourceURL)
 	s.wg.Add(1)
@@ -157,10 +165,14 @@ func (s *BackgroundAcquisitionScheduler) schedule(
 		defer func() { <-s.admit }()
 		defer s.inflight.Delete(key)
 		defer s.inflightCount.Add(-1)
+		jobCtx := s.baseCtx
+		if corrID != "" {
+			jobCtx = logging.WithCorrelationID(jobCtx, corrID)
+		}
 		defer func() {
 			if r := recover(); r != nil {
 				s.log.complete(key, JobFailed, "panic")
-				slog.Error("acquisition_panic",
+				slog.ErrorContext(jobCtx, "acquisition_panic",
 					"track_id", key,
 					"panic", r,
 					"stack", string(debug.Stack()),
@@ -173,12 +185,12 @@ func (s *BackgroundAcquisitionScheduler) schedule(
 			defer func() { <-s.sem }()
 		case <-s.baseCtx.Done():
 			s.log.complete(key, JobCancelled, "")
-			slog.Info("acquisition.cancelled_before_start", "track_id", key)
+			slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
 			return
 		}
 
 		s.log.markRunning(key)
-		jobCtx := withJobReporter(s.baseCtx, schedulerJobReporter{
+		jobCtx = withJobReporter(jobCtx, schedulerJobReporter{
 			log: s.log, events: s.events, trackID: key, userId: userId,
 		})
 		run := s.svc.Execute
@@ -187,7 +199,7 @@ func (s *BackgroundAcquisitionScheduler) schedule(
 		}
 		if err := run(jobCtx, userId, trackId); err != nil {
 			s.log.complete(key, JobFailed, err.Error())
-			slog.Error("background acquisition failed",
+			slog.ErrorContext(jobCtx, "background acquisition failed",
 				"track_id", key, "error", err)
 			return
 		}
