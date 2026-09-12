@@ -1,15 +1,14 @@
 package providers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/ytdlp"
 )
 
 func (a *SoundCloudAdapter) SearchTimeout() time.Duration { return 5 * time.Second }
@@ -33,19 +32,16 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 		return nil, nil
 	}
 
-	cmd := exec.CommandContext(ctx, "yt-dlp",
+	args := []string{
 		"--dump-json",
 		"--flat-playlist",
 		"--no-download",
 		fmt.Sprintf("scsearch5:%s", query),
-	)
+	}
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		detail := strings.TrimSpace(stderr.String())
+	lines, stderr, err := ytdlp.DumpJSON(ctx, args)
+	if err != nil {
+		detail := strings.TrimSpace(stderr)
 		if detail != "" {
 			return nil, fmt.Errorf("yt-dlp soundcloud search: %w: %s", err, detail)
 		}
@@ -53,12 +49,7 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 	}
 
 	var results []domain.SearchResult
-	for _, line := range strings.Split(stdout.String(), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
+	for _, line := range lines {
 		var entry struct {
 			Title         string  `json:"title"`
 			Uploader      string  `json:"uploader"`
@@ -68,7 +59,7 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 			Thumbnail     string  `json:"thumbnail"`
 			PlaybackCount int64   `json:"playback_count"`
 		}
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		if err := json.Unmarshal(line, &entry); err != nil {
 			continue
 		}
 

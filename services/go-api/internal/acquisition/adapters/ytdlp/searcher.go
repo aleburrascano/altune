@@ -9,10 +9,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
+	sharedytdlp "altune/go-api/internal/shared/ytdlp"
 )
 
 type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error)
@@ -79,24 +79,15 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 	}
 	args = s.prependAuthFlags(args)
 
-	cmd := exec.CommandContext(searchCtx, "yt-dlp", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, stderr.String())
+	lines, stderr, err := sharedytdlp.DumpJSON(searchCtx, args)
+	if err != nil {
+		return nil, fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, stderr)
 	}
 
 	var candidates []ports.AudioCandidate
-	for _, line := range strings.Split(stdout.String(), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
+	for _, line := range lines {
 		var entry ytDlpEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		if err := json.Unmarshal(line, &entry); err != nil {
 			continue
 		}
 
