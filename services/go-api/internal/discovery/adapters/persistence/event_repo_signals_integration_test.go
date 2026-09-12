@@ -4,6 +4,7 @@ package persistence
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -150,6 +151,54 @@ func TestPgxEventStore_ZeroResultQueries(t *testing.T) {
 		if _, present := got[q]; present {
 			t.Errorf("%q counted as zero-result, want excluded", q)
 		}
+	}
+}
+
+func TestPgxEventStore_ZeroResultTotal(t *testing.T) {
+	pool := testPool(t)
+	store := NewPgxEventStore(pool)
+	ctx := context.Background()
+	userId := newEventTestUser(t, store)
+
+	suffix := uuid.New().String()[:8]
+	since := time.Now().UTC().Add(-time.Minute)
+
+	search := func(queryNorm string, payload map[string]any) {
+		appendOrFatal(t, store, domain.InteractionEvent{
+			UserId: userId, Type: domain.EventTypeSearchPerformed,
+			QueryNorm: queryNorm, Payload: payload,
+		})
+	}
+
+	// 1100 distinct zero-result queries, beyond the 1000 top-N cap. Each counts
+	// once: the true total is 1100, but the capped list sums to only 1000.
+	const distinct = 1100
+	for i := range distinct {
+		search(fmt.Sprintf("qa total %s %d", suffix, i), map[string]any{"zero_result": true})
+	}
+	// Noise that must not be counted: poisoned, absent, and false zero_result.
+	search("qa total poison "+suffix, map[string]any{"zero_result": "yes"})
+	search("qa total absent "+suffix, map[string]any{})
+	search("qa total false "+suffix, map[string]any{"zero_result": false})
+
+	total, err := store.ZeroResultTotal(ctx, since)
+	if err != nil {
+		t.Fatalf("ZeroResultTotal: %v", err)
+	}
+	if total != distinct {
+		t.Errorf("ZeroResultTotal = %d, want %d (unbounded count, no top-N cap, noise excluded)", total, distinct)
+	}
+
+	capped, err := store.ZeroResultQueries(ctx, since, 1000)
+	if err != nil {
+		t.Fatalf("ZeroResultQueries: %v", err)
+	}
+	cappedSum := 0
+	for _, qc := range capped {
+		cappedSum += qc.Count
+	}
+	if cappedSum >= total {
+		t.Errorf("capped sum %d >= true total %d; cap should have dropped rows", cappedSum, total)
 	}
 }
 
