@@ -1,4 +1,5 @@
 import { apiFetch } from './index';
+import { withQuery } from './queryString';
 
 import type { DiscoveryKind, DiscoveryProviderStatus, DiscoveryResult } from './discovery';
 
@@ -8,11 +9,6 @@ export type ContentFetchResponse = {
   status: DiscoveryProviderStatus;
   latency_ms: number;
 };
-
-function _contentUrl(basePath: string, limit?: number): string {
-  if (limit === undefined) return basePath;
-  return `${basePath}?limit=${limit}`;
-}
 
 export async function getAlbumTracks(
   provider: string,
@@ -27,9 +23,8 @@ export async function getAlbumTracks(
   if (albumTitle) params.set('title', albumTitle);
   if (albumArtist) params.set('artist', albumArtist);
   if (mbExternalId) params.set('mbid', mbExternalId);
-  const qs = params.toString();
-  const url = `/v1/discovery/albums/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/tracks${qs ? `?${qs}` : ''}`;
-  return apiFetch<ContentFetchResponse>(url);
+  const path = `/v1/discovery/albums/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/tracks`;
+  return apiFetch<ContentFetchResponse>(withQuery(path, params));
 }
 
 export async function getArtistTopTracks(
@@ -41,9 +36,8 @@ export async function getArtistTopTracks(
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
   if (artistName) params.set('name', artistName);
-  const qs = params.toString();
-  const url = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/top-tracks${qs ? `?${qs}` : ''}`;
-  return apiFetch<ContentFetchResponse>(url);
+  const path = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/top-tracks`;
+  return apiFetch<ContentFetchResponse>(withQuery(path, params));
 }
 
 export async function getArtistAlbums(
@@ -55,9 +49,8 @@ export async function getArtistAlbums(
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
   if (artistName) params.set('name', artistName);
-  const qs = params.toString();
-  const url = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/albums${qs ? `?${qs}` : ''}`;
-  return apiFetch<ContentFetchResponse>(url);
+  const path = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/albums`;
+  return apiFetch<ContentFetchResponse>(withQuery(path, params));
 }
 
 export async function getRelatedTracks(
@@ -65,12 +58,10 @@ export async function getRelatedTracks(
   externalId: string,
   limit?: number,
 ): Promise<ContentFetchResponse> {
-  return apiFetch<ContentFetchResponse>(
-    _contentUrl(
-      `/v1/discovery/tracks/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/related`,
-      limit,
-    ),
-  );
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  const path = `/v1/discovery/tracks/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/related`;
+  return apiFetch<ContentFetchResponse>(withQuery(path, params));
 }
 
 export type EnrichmentResponse = {
@@ -96,7 +87,7 @@ export async function getEnrichment(params: {
   if (params.title) qs.set('title', params.title);
   if (params.subtitle) qs.set('subtitle', params.subtitle);
   if (params.mbid) qs.set('mbid', params.mbid);
-  return apiFetch<EnrichmentResponse>(`/v1/discovery/enrichment?${qs.toString()}`);
+  return apiFetch<EnrichmentResponse>(withQuery('/v1/discovery/enrichment', qs));
 }
 
 export type LastFmEnrichmentResponse = {
@@ -111,10 +102,14 @@ export type LastFmEnrichmentResponse = {
   album: string;
 };
 
-function kindTitleQs(kind: DiscoveryKind, title: string, subtitle?: string | null): string {
+function kindTitleQs(
+  kind: DiscoveryKind,
+  title: string,
+  subtitle?: string | null,
+): URLSearchParams {
   const qs = new URLSearchParams({ kind, title });
   if (subtitle) qs.set('subtitle', subtitle);
-  return qs.toString();
+  return qs;
 }
 
 export async function getLastFmEnrichment(params: {
@@ -123,7 +118,10 @@ export async function getLastFmEnrichment(params: {
   subtitle?: string | null | undefined;
 }): Promise<LastFmEnrichmentResponse> {
   return apiFetch<LastFmEnrichmentResponse>(
-    `/v1/discovery/enrichment/lastfm?${kindTitleQs(params.kind, params.title, params.subtitle)}`,
+    withQuery(
+      '/v1/discovery/enrichment/lastfm',
+      kindTitleQs(params.kind, params.title, params.subtitle),
+    ),
   );
 }
 
@@ -145,7 +143,10 @@ export async function getDeezerEnrichment(params: {
   subtitle?: string | null | undefined;
 }): Promise<DeezerEnrichmentResponse> {
   return apiFetch<DeezerEnrichmentResponse>(
-    `/v1/discovery/enrichment/deezer?${kindTitleQs(params.kind, params.title, params.subtitle)}`,
+    withQuery(
+      '/v1/discovery/enrichment/deezer',
+      kindTitleQs(params.kind, params.title, params.subtitle),
+    ),
   );
 }
 
@@ -163,7 +164,6 @@ export async function getArtistContent(
   if (opts.artistName) params.set('name', opts.artistName);
   if (opts.tracksLimit !== undefined) params.set('tracks_limit', String(opts.tracksLimit));
   if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
-  const qs = params.toString();
-  const url = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/content${qs ? `?${qs}` : ''}`;
-  return apiFetch<ArtistContentResponse>(url);
+  const path = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/content`;
+  return apiFetch<ArtistContentResponse>(withQuery(path, params));
 }

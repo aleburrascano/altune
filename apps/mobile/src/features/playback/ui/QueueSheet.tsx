@@ -1,12 +1,5 @@
 import { useCallback, useState, type ReactElement } from 'react';
-import {
-  Alert,
-  FlatList,
-  type ListRenderItemInfo,
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { FlatList, type ListRenderItemInfo, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown, EllipsisVertical, Play } from 'lucide-react-native';
@@ -18,6 +11,7 @@ import { withFeaturing } from '@shared/lib/featured';
 import type { FeaturedArtist } from '@shared/api-client/types';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
+import { confirmDestructive } from '@shared/ui/confirmDestructive';
 import { ActionSheet, type ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
@@ -96,14 +90,12 @@ export function QueueSheet(): ReactElement {
   }
 
   const handleClear = () => {
-    Alert.alert('Clear Queue', 'Remove all upcoming tracks?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: clearUpcoming,
-      },
-    ]);
+    confirmDestructive({
+      title: 'Clear Queue',
+      message: 'Remove all upcoming tracks?',
+      confirmLabel: 'Clear',
+      onConfirm: clearUpcoming,
+    });
   };
 
   const menuOptions = (item: QueueItem): ActionSheetOption[] => {

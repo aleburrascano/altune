@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
@@ -9,6 +9,7 @@ import { countLabel } from '@shared/lib/format';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
+import { confirmDestructive } from '@shared/ui/confirmDestructive';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
@@ -80,10 +81,12 @@ export function LibraryScreen(): ReactElement {
   });
 
   const confirmRemoveTrack = (track: TrackResponse): void => {
-    Alert.alert('Remove from Library', `Remove "${track.title}" from your library?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => deleteMutation.mutate(track.id) },
-    ]);
+    confirmDestructive({
+      title: 'Remove from Library',
+      message: `Remove "${track.title}" from your library?`,
+      confirmLabel: 'Remove',
+      onConfirm: () => deleteMutation.mutate(track.id),
+    });
   };
 
   const trackMenuItems = (track: TrackResponse) =>
@@ -97,21 +100,15 @@ export function LibraryScreen(): ReactElement {
 
   const confirmDeleteSelected = (): void => {
     const ids = selection.ids;
-    Alert.alert(
-      'Remove from Library',
-      `Remove ${ids.length} ${countLabel(ids.length, 'track')} from your library?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            deleteManyMutation.mutate(ids);
-            selection.clear();
-          },
-        },
-      ],
-    );
+    confirmDestructive({
+      title: 'Remove from Library',
+      message: `Remove ${ids.length} ${countLabel(ids.length, 'track')} from your library?`,
+      confirmLabel: 'Remove',
+      onConfirm: () => {
+        deleteManyMutation.mutate(ids);
+        selection.clear();
+      },
+    });
   };
 
   const selectionActions = buildSelectionActions(
