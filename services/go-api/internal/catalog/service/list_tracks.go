@@ -1,12 +1,11 @@
 package service
 
 import (
-	"context"
-	"fmt"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"fmt"
 )
 
 type ListTracksOutput struct {
@@ -25,12 +24,7 @@ func NewListTracksService(trackRepo ports.TrackRepository) *ListTracksService {
 }
 
 func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, query domain.LibraryQuery) (*ListTracksOutput, error) {
-	if query.Limit <= 0 {
-		query.Limit = 50
-	}
-	if query.Limit > 2000 {
-		query.Limit = 2000
-	}
+	query = clampLibraryLimit(query)
 
 	tracks, total, err := s.trackRepo.ListFilteredForUser(ctx, userId, query)
 	if err != nil {
