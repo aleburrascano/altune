@@ -9,6 +9,7 @@ func TestLoad_MinimalValid(t *testing.T) {
 	setEnv(t, map[string]string{
 		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+		"SUPABASE_ANON_KEY":     "anon-key",
 	})
 
 	cfg, err := Load()
@@ -65,10 +66,41 @@ func TestLoad_SupabaseProjectURLMissingOrMalformed(t *testing.T) {
 	}
 }
 
+func TestLoad_MissingAnonKey(t *testing.T) {
+	tests := []struct {
+		name    string
+		anonKey string
+	}{
+		{name: "missing", anonKey: ""},
+		{name: "blank", anonKey: "   "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := map[string]string{
+				"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+				"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+			}
+			if tt.anonKey != "" {
+				env["SUPABASE_ANON_KEY"] = tt.anonKey
+			}
+			setEnv(t, env)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error for missing/blank SUPABASE_ANON_KEY")
+			}
+			if !searchString(err.Error(), "SUPABASE_ANON_KEY") {
+				t.Errorf("expected error to name SUPABASE_ANON_KEY, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestLoad_MusicBrainzUAWithoutContact(t *testing.T) {
 	setEnv(t, map[string]string{
 		"SUPABASE_PROJECT_URL":   "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL":  "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+		"SUPABASE_ANON_KEY":      "anon-key",
 		"MUSICBRAINZ_USER_AGENT": "altune/0.1",
 	})
 
@@ -82,6 +114,7 @@ func TestLoad_MusicBrainzUAWithEmail(t *testing.T) {
 	setEnv(t, map[string]string{
 		"SUPABASE_PROJECT_URL":   "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL":  "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+		"SUPABASE_ANON_KEY":      "anon-key",
 		"MUSICBRAINZ_USER_AGENT": "altune/0.1 ( mailto:dev@altune.test )",
 	})
 
@@ -148,7 +181,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 	envKeys := []string{
 		"ENV", "LOG_LEVEL", "HOST", "PORT", "CORS_ORIGINS",
 		"DATABASE_URL", "SUPABASE_PROJECT_URL", "SUPABASE_JWT_AUD",
-		"SUPABASE_JWT_JWKS_URL", "REDIS_URL",
+		"SUPABASE_JWT_JWKS_URL", "SUPABASE_ANON_KEY", "REDIS_URL",
 		"MUSICBRAINZ_USER_AGENT", "LASTFM_API_KEY", "FANARTTV_API_KEY",
 		"GENIUS_ACCESS_TOKEN", "OCI_S3_ENDPOINT", "OCI_S3_ACCESS_KEY",
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
