@@ -193,6 +193,12 @@ func (r *PgxTrackRepository) FailStalePending(ctx context.Context, cutoff time.T
 	return int(tag.RowsAffected()), nil
 }
 
+// Delete removes the track row. Playlist-membership cleanup is owned by the
+// playlist_tracks -> tracks foreign key (ON DELETE CASCADE, migration 001): the
+// track delete atomically evicts the track from every playlist that references
+// it, so this repository does not touch playlist_tracks or its positions
+// directly. That cascade is the only observable cross-aggregate side effect,
+// and it runs inside this transaction, preserving the delete's atomicity.
 func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -208,45 +214,10 @@ func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, user
 		return false, nil, nil
 	}
 
-	affectedPlaylists, err := removeTrackFromPlaylists(ctx, tx, id)
-	if err != nil {
-		return false, nil, err
-	}
-
-	if err := renumberPlaylists(ctx, tx, affectedPlaylists); err != nil {
-		return false, nil, err
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return false, nil, err
 	}
 	return deleted, ref, nil
-}
-
-func removeTrackFromPlaylists(ctx context.Context, tx pgx.Tx, id domain.TrackId) ([]uuid.UUID, error) {
-	rows, err := tx.Query(ctx,
-		`SELECT DISTINCT playlist_id FROM playlist_tracks WHERE track_id = $1`, id.UUID())
-	if err != nil {
-		return nil, err
-	}
-	playlistIds, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := tx.Exec(ctx, `DELETE FROM playlist_tracks WHERE track_id = $1`, id.UUID()); err != nil {
-		return nil, err
-	}
-	return playlistIds, nil
-}
-
-func renumberPlaylists(ctx context.Context, tx pgx.Tx, playlistIds []uuid.UUID) error {
-	for _, playlistId := range playlistIds {
-		if err := renumberPlaylistPositions(ctx, tx, playlistId); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func deleteTrackRow(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId shared.UserId) (bool, *string, error) {

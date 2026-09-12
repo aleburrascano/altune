@@ -295,6 +295,121 @@ func TestPgxTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
 	}
 }
 
+// rawPlaylistPositions reads the stored playlist_tracks.position values for a
+// playlist ordered by track_id, bypassing GetWithTracks (which reassigns
+// contiguous indices and would therefore mask a renumbering bug).
+func rawPlaylistPositions(t *testing.T, pool *pgxpool.Pool, playlistId domain.PlaylistId) map[uuid.UUID]int {
+	t.Helper()
+	rows, err := pool.Query(context.Background(),
+		`SELECT track_id, position FROM playlist_tracks WHERE playlist_id = $1`,
+		playlistId.UUID())
+	if err != nil {
+		t.Fatalf("rawPlaylistPositions query: %v", err)
+	}
+	defer rows.Close()
+
+	positions := map[uuid.UUID]int{}
+	for rows.Next() {
+		var (
+			trackId uuid.UUID
+			pos     int
+		)
+		if err := rows.Scan(&trackId, &pos); err != nil {
+			t.Fatalf("rawPlaylistPositions scan: %v", err)
+		}
+		positions[trackId] = pos
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rawPlaylistPositions rows: %v", err)
+	}
+	return positions
+}
+
+// TestPgxTrackRepo_Delete_EvictsFromAllPlaylists pins the cross-aggregate side
+// effect of a track delete: the track is removed from every playlist that
+// references it, while every other membership row is left untouched. Eviction
+// is owned by the playlist_tracks -> tracks ON DELETE CASCADE (migration 001),
+// so the track repository does not renumber surviving positions; this test
+// deliberately asserts the surviving rows keep their original positions to lock
+// the behavior the refactor preserves.
+func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
+	pool := testPool(t)
+	trackRepo := NewPgxTrackRepository(pool)
+	playlistRepo := NewPgxPlaylistRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	trackA := newTestTrackForDB(t, userId)
+	trackB := newTestTrackForDB(t, userId) // the track to delete
+	trackC := newTestTrackForDB(t, userId)
+	for _, tr := range []*domain.Track{trackA, trackB, trackC} {
+		cleanupTrack(t, pool, tr.ID, userId)
+		if _, _, err := trackRepo.Add(ctx, tr); err != nil {
+			t.Fatalf("Add track: %v", err)
+		}
+	}
+
+	// P1: A(0), B(1), C(2) — deleting B cascades B out, leaving A(0), C(2).
+	p1 := newTestPlaylistForDB(t, userId)
+	cleanupPlaylist(t, pool, p1.ID, userId)
+	if err := playlistRepo.Create(ctx, p1); err != nil {
+		t.Fatalf("Create p1: %v", err)
+	}
+	for _, tr := range []*domain.Track{trackA, trackB, trackC} {
+		if err := playlistRepo.AddTrack(ctx, p1.ID, tr.ID, 0); err != nil {
+			t.Fatalf("AddTrack p1: %v", err)
+		}
+	}
+
+	// P2: B(0), C(1) — deleting B cascades B out, leaving C(1).
+	p2 := newTestPlaylistForDB(t, userId)
+	cleanupPlaylist(t, pool, p2.ID, userId)
+	if err := playlistRepo.Create(ctx, p2); err != nil {
+		t.Fatalf("Create p2: %v", err)
+	}
+	for _, tr := range []*domain.Track{trackB, trackC} {
+		if err := playlistRepo.AddTrack(ctx, p2.ID, tr.ID, 0); err != nil {
+			t.Fatalf("AddTrack p2: %v", err)
+		}
+	}
+
+	deleted, _, err := trackRepo.Delete(ctx, trackB.ID, userId)
+	if err != nil {
+		t.Fatalf("Delete(trackB) error = %v", err)
+	}
+	if !deleted {
+		t.Fatal("Delete(trackB) deleted = false, want true")
+	}
+
+	p1Pos := rawPlaylistPositions(t, pool, p1.ID)
+	// trackA and trackC keep their original positions (0 and 2): the cascade
+	// evicts trackB but does not renumber the survivors.
+	wantP1 := map[uuid.UUID]int{trackA.ID.UUID(): 0, trackC.ID.UUID(): 2}
+	if _, present := p1Pos[trackB.ID.UUID()]; present {
+		t.Error("trackB still present in p1 after delete")
+	}
+	for id, want := range wantP1 {
+		if got, ok := p1Pos[id]; !ok || got != want {
+			t.Errorf("p1 position for %v = %d (present=%v), want %d", id, got, ok, want)
+		}
+	}
+	if len(p1Pos) != 2 {
+		t.Errorf("p1 membership count = %d, want 2", len(p1Pos))
+	}
+
+	p2Pos := rawPlaylistPositions(t, pool, p2.ID)
+	if _, present := p2Pos[trackB.ID.UUID()]; present {
+		t.Error("trackB still present in p2 after delete")
+	}
+	// trackC keeps its original position (1): the cascade leaves a gap at 0.
+	if got, ok := p2Pos[trackC.ID.UUID()]; !ok || got != 1 {
+		t.Errorf("p2 position for trackC = %d (present=%v), want 1", got, ok)
+	}
+	if len(p2Pos) != 1 {
+		t.Errorf("p2 membership count = %d, want 1", len(p2Pos))
+	}
+}
+
 func TestPgxTrackRepo_GetByID_NotFound(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
