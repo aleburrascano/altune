@@ -95,6 +95,17 @@ func (r *PgxQueueStateRepository) GetForUser(
 	return hydrate(userId, row)
 }
 
+func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shared.UserId) error {
+	ctx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
+	defer cancel()
+
+	_, err := r.pool.Exec(ctx,
+		`DELETE FROM playback_queue_state WHERE user_id = $1`,
+		userId.UUID(),
+	)
+	return err
+}
+
 type scannedRow struct {
 	trackIds     []string
 	currentIdx   int

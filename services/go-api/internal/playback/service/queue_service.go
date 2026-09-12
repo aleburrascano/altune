@@ -88,6 +88,16 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 	return view, nil
 }
 
+// Forget erases the user's persisted queue state. This is the erasure
+// entrypoint for account-deletion / right-to-be-forgotten flows: the stored
+// queue holds PII (full track list, natural order, and a free-text search
+// source_id). Identities are owned out-of-band (Supabase), so no in-repo
+// account-deletion sweep calls this yet; wiring it into that sweep is the
+// remaining piece (see issue #243 / PR).
+func (s *QueueService) Forget(ctx context.Context, userId shared.UserId) error {
+	return s.repo.DeleteForUser(ctx, userId)
+}
+
 func currentTrackId(state *domain.QueueState) (string, bool) {
 	if state.CurrentIdx < 0 || state.CurrentIdx >= len(state.TrackIds) {
 		return "", false

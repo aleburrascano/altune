@@ -40,6 +40,46 @@ func stateAt(userId shared.UserId, positionMs int64, at time.Time) *domain.Queue
 	}
 }
 
+func TestDeleteForUser_ErasesPersistedRow(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxQueueStateRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(),
+			`DELETE FROM playback_queue_state WHERE user_id = $1`, userId.UUID())
+	})
+
+	if err := repo.Upsert(ctx, stateAt(userId, 42000, time.Now().UTC())); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if got, err := repo.GetForUser(ctx, userId); err != nil || got == nil {
+		t.Fatalf("precondition: state must exist before deletion (got=%v err=%v)", got, err)
+	}
+
+	if err := repo.DeleteForUser(ctx, userId); err != nil {
+		t.Fatalf("DeleteForUser: %v", err)
+	}
+
+	got, err := repo.GetForUser(ctx, userId)
+	if err != nil {
+		t.Fatalf("GetForUser after delete: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("row survived DeleteForUser: %+v", got)
+	}
+}
+
+func TestDeleteForUser_MissingRowIsNotAnError(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxQueueStateRepository(pool)
+
+	if err := repo.DeleteForUser(context.Background(), shared.NewUserId(uuid.New())); err != nil {
+		t.Fatalf("deleting a user with no stored state must be a no-op, got: %v", err)
+	}
+}
+
 func TestUpsert_OlderSnapshotDoesNotClobberNewer(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxQueueStateRepository(pool)

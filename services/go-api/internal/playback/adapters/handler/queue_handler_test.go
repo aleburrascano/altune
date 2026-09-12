@@ -29,6 +29,11 @@ func (r *recordingRepo) GetForUser(_ context.Context, _ shared.UserId) (*domain.
 	return r.saved, nil
 }
 
+func (r *recordingRepo) DeleteForUser(_ context.Context, _ shared.UserId) error {
+	r.saved = nil
+	return nil
+}
+
 type nilNowPlaying struct{}
 
 func (nilNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*ports.NowPlayingTrack, error) {
