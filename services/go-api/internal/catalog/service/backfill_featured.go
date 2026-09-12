@@ -24,6 +24,7 @@ func NewBackfillFeaturedService(
 type BackfillFeaturedResult struct {
 	Scanned int `json:"scanned"`
 	Updated int `json:"updated"`
+	Failed  int `json:"failed"`
 }
 
 const backfillPageSize = 200
@@ -43,6 +44,7 @@ func (s *BackfillFeaturedService) Execute(ctx context.Context, userId shared.Use
 			res.Scanned++
 			feats, err := s.resolver.Resolve(ctx, t.Artist, t.Title)
 			if err != nil {
+				res.Failed++
 				slog.WarnContext(ctx, "featured backfill resolve failed",
 					"track_id", t.ID.String(), "error", err)
 				continue
@@ -51,7 +53,8 @@ func (s *BackfillFeaturedService) Execute(ctx context.Context, userId shared.Use
 				continue
 			}
 			if err := s.trackRepo.ReplaceFeaturedArtists(ctx, t.ID, userId, feats); err != nil {
-				return nil, fmt.Errorf("replace featured for %s: %w", t.ID.String(), err)
+				res.Failed++
+				return res, fmt.Errorf("replace featured for %s: %w", t.ID.String(), err)
 			}
 			res.Updated++
 		}
@@ -61,6 +64,6 @@ func (s *BackfillFeaturedService) Execute(ctx context.Context, userId shared.Use
 		}
 	}
 	slog.InfoContext(ctx, "featured backfill complete",
-		"user_id", userId.String(), "scanned", res.Scanned, "updated", res.Updated)
+		"user_id", userId.String(), "scanned", res.Scanned, "updated", res.Updated, "failed", res.Failed)
 	return res, nil
 }
