@@ -264,6 +264,34 @@ type SearchResult struct {
 	Extras        map[string]any
 }
 
+// PutExtra sets key to value on the result's own Extras map, lazily
+// initialising it when nil. It mutates in place, so use it only on a result
+// this code owns and is free to change.
+func (r *SearchResult) PutExtra(key string, value any) {
+	if r.Extras == nil {
+		r.Extras = map[string]any{}
+	}
+	r.Extras[key] = value
+}
+
+// WithExtra returns a copy of the result with key set to value on a freshly
+// copied Extras map, never mutating the receiver's map. It is the single home
+// of the "never mutate the cached list" invariant: use it whenever the result
+// may be shared (e.g. a cached or ranked list) rather than owned outright.
+func (r SearchResult) WithExtra(key string, value any) SearchResult {
+	r.Extras = copyExtras(r.Extras)
+	r.Extras[key] = value
+	return r
+}
+
+func copyExtras(src map[string]any) map[string]any {
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
 type CollapsedArtistSummary struct {
 	Title    string         `json:"title"`
 	Subtitle string         `json:"subtitle"`

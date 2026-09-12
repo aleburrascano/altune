@@ -115,10 +115,7 @@ func (s *Service) fillArtworkOne(ctx context.Context, result domain.SearchResult
 }
 
 func setArtworkPath(r *domain.SearchResult, path string) {
-	if r.Extras == nil {
-		r.Extras = map[string]any{}
-	}
-	r.Extras["artwork_path"] = path
+	r.PutExtra("artwork_path", path)
 }
 
 func artworkPathFor(resolved string, confidence ports.ArtworkConfidence, fromDurable bool) string {
