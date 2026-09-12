@@ -1,15 +1,16 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/service"
+	"altune/go-api/internal/shared/httputil"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
 
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/service"
-	"altune/go-api/internal/shared/httputil"
+	"github.com/go-chi/chi/v5"
 )
 
 const maxAudioURLBatch = 200
@@ -20,6 +21,14 @@ type AudioURLHandler struct {
 
 func NewAudioURLHandler(svc *service.AudioURLService) *AudioURLHandler {
 	return &AudioURLHandler{svc: svc}
+}
+
+// Routes registers the audio-url endpoint on r. It registers directly onto the
+// shared router rather than returning a mountable chi.Router: mounting /audio-urls
+// would add a trailing-slash variant and change the route table, so this keeps
+// the path byte-identical to its previous hand-wiring.
+func (h *AudioURLHandler) Routes(r chi.Router) {
+	r.Post("/audio-urls", h.HandleResolve)
 }
 
 type resolveAudioURLsRequest struct {

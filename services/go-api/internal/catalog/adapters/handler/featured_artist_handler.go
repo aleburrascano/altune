@@ -32,7 +32,11 @@ func NewFeaturedArtistHandler(
 	}
 }
 
-func (h *FeaturedArtistHandler) addRoutes(r chi.Router) {
+// Routes registers the featured-artist endpoints on r. Like StreamHandler and
+// AudioURLHandler it registers directly onto a shared router; here the router is
+// TrackHandler's, because these paths are deliberately composed into the /tracks
+// surface rather than mounted under a prefix of their own.
+func (h *FeaturedArtistHandler) Routes(r chi.Router) {
 	r.Get("/featuring", h.handleListFeaturing)
 	r.Post("/featured-backfill", h.handleBackfillFeatured)
 }

@@ -22,6 +22,15 @@ func NewStreamHandler(svc *service.StreamTrackService) *StreamHandler {
 	return &StreamHandler{svc: svc}
 }
 
+// Routes registers the stream endpoints on r. These paths interleave with the
+// /tracks tree, so the handler registers directly onto the shared router rather
+// than returning a mountable chi.Router like LibraryHandler/PlaylistHandler/
+// TrackHandler. Keeps the paths byte-identical to their previous hand-wiring.
+func (h *StreamHandler) Routes(r chi.Router) {
+	r.Get("/tracks/{trackId}/audio", h.HandleStreamAudio)
+	r.Post("/tracks/{trackId}/audio/recover", h.HandleRecover)
+}
+
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	userId, ok := auth.RequireUserID(w, r)

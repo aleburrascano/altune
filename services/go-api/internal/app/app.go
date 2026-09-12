@@ -393,9 +393,8 @@ func (a *App) mountRoutes(
 		r.Route("/tracks", func(r chi.Router) {
 			r.Mount("/", cat.trackHandler.Routes())
 		})
-		r.Get("/tracks/{trackId}/audio", cat.streamHandler.HandleStreamAudio)
-		r.Post("/tracks/{trackId}/audio/recover", cat.streamHandler.HandleRecover)
-		r.Post("/audio-urls", cat.audioURLHandler.HandleResolve)
+		cat.streamHandler.Routes(r)
+		cat.audioURLHandler.Routes(r)
 		if cat.reacquireH != nil {
 			r.Post("/tracks/{trackId}/reacquire", cat.reacquireH.HandleReacquire)
 		}
