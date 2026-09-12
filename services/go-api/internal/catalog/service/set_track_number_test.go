@@ -1,11 +1,12 @@
 package service
 
 import (
-	"context"
-	"testing"
-
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
+	"context"
+	"strings"
+	"testing"
 )
 
 func TestSetTrackNumberService(t *testing.T) {
@@ -15,6 +16,19 @@ func TestSetTrackNumberService(t *testing.T) {
 		svc := NewSetTrackNumberService(catalogtest.NewTrackRepo())
 		if _, err := svc.Execute(context.Background(), userId, domain.NewTrackId(), 0); err == nil {
 			t.Fatal("expected an error for a zero track number")
+		}
+	})
+
+	t.Run("rejects an out-of-range number", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		svc := NewSetTrackNumberService(repo)
+		_, err := svc.Execute(context.Background(), userId, domain.NewTrackId(), 3000000000)
+		if err == nil {
+			t.Fatal("expected a validation error for an out-of-range track number")
+		}
+		shared.AssertValidationError(t, err)
+		if !strings.Contains(err.Error(), "track_number") {
+			t.Fatalf("error = %q, want it to mention %q", err.Error(), "track_number")
 		}
 	})
 
