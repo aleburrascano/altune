@@ -16,11 +16,15 @@ const resolveLimit = 10
 
 var _ acqports.RecordingResolver = (*RecordingResolver)(nil)
 
-type RecordingResolver struct {
-	search *discoveryservice.Service
+type recordingSearcher interface {
+	Execute(ctx context.Context, userId shared.UserId, query *discoverydomain.SearchQuery, saveHistory bool) (*discoveryservice.SearchOutput, error)
 }
 
-func NewRecordingResolver(search *discoveryservice.Service) *RecordingResolver {
+type RecordingResolver struct {
+	search recordingSearcher
+}
+
+func NewRecordingResolver(search recordingSearcher) *RecordingResolver {
 	return &RecordingResolver{search: search}
 }
 
