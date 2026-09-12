@@ -584,6 +584,11 @@ func (a *App) wireAdmin(
 		WithAcquisition(acqReader).
 		WithEvalMeter(a.evalMeter).
 		WithRequestStore(requestStore).
+		// reRun, inspectSearch and reRunDetail are one seam: three sibling
+		// admin search-debug features that replay the same discovery pipeline
+		// for the admin UI. They are wired here as the ReRunner, SearchInspector
+		// and DetailReRunner func types and otherwise share no prefix, so this
+		// registration block is their index — touch them together.
 		WithReRunner(func(ctx context.Context, query string, kinds []string) (requeststore.ReRunResult, error) {
 			return reRun(ctx, a.cfg, defaultLiveTransport, searchSvc.BehavioralScoresSnapshot, query, kinds)
 		}).

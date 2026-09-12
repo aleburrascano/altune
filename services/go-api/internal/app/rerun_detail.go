@@ -49,8 +49,8 @@ func reRunDetail(
 		Resolved:   detailEntity(entity, byProvider),
 		AlbumSeeds: projectSeeds(albumSeeds),
 		TrackSeeds: projectSeeds(trackSeeds),
-		Albums:     projectDetailItems(mergeAlbumsLikeClient(albumSeeds)),
-		TopTracks:  projectDetailItems(mergeTracksLikeClient(trackSeeds)),
+		Albums:     projectDetailItems(mergeAlbumSeeds(albumSeeds)),
+		TopTracks:  projectDetailItems(mergeTrackSeeds(trackSeeds)),
 		TookMs:     time.Since(start).Milliseconds(),
 	}, nil
 }

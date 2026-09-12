@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func mergeAlbumsLikeClient(seeds []rawSeed) []domain.SearchResult {
+func mergeAlbumSeeds(seeds []rawSeed) []domain.SearchResult {
 	seen := map[string]int{}
 	var out []domain.SearchResult
 	for _, s := range okSeedItems(seeds) {
@@ -24,7 +24,7 @@ func mergeAlbumsLikeClient(seeds []rawSeed) []domain.SearchResult {
 	return out
 }
 
-func mergeTracksLikeClient(seeds []rawSeed) []domain.SearchResult {
+func mergeTrackSeeds(seeds []rawSeed) []domain.SearchResult {
 	seen := map[string]bool{}
 	var out []domain.SearchResult
 	for _, t := range okSeedItems(seeds) {

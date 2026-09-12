@@ -11,7 +11,7 @@ import (
 const inspectionSearchLimit = 30
 
 func inspectSearch(ctx context.Context, svc *discoveryService.Service, query string, kinds []string) ([]requeststore.ResultRow, error) {
-	kindSet, err := parseRerunKinds(kinds)
+	kindSet, err := parseSearchKinds(kinds)
 	if err != nil {
 		return nil, err
 	}

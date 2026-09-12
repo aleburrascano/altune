@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -27,7 +26,7 @@ func reRun(
 	query string,
 	kinds []string,
 ) (requeststore.ReRunResult, error) {
-	kindSet, err := parseRerunKinds(kinds)
+	kindSet, err := parseSearchKinds(kinds)
 	if err != nil {
 		return requeststore.ReRunResult{}, err
 	}
@@ -137,28 +136,6 @@ func projectEntities(entities []discoveryService.Entity) []requeststore.ResultRo
 		results = append(results, e.Result)
 	}
 	return requeststore.ProjectResults(results)
-}
-
-func parseRerunKinds(kinds []string) (map[domain.ResultKind]bool, error) {
-	out := map[domain.ResultKind]bool{}
-	var invalid []string
-	for _, k := range kinds {
-		rk, err := domain.ParseResultKind(k)
-		if err != nil {
-			invalid = append(invalid, k)
-			continue
-		}
-		out[rk] = true
-	}
-	if len(invalid) > 0 {
-		return nil, fmt.Errorf("invalid kinds: %s", strings.Join(invalid, ", "))
-	}
-	if len(out) == 0 {
-		out[domain.ResultKindTrack] = true
-		out[domain.ResultKindAlbum] = true
-		out[domain.ResultKindArtist] = true
-	}
-	return out, nil
 }
 
 func sortedKindNames(kinds map[domain.ResultKind]bool) []string {
