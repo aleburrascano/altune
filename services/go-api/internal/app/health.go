@@ -16,6 +16,12 @@ type authHealthChecker interface {
 	CheckHealth(ctx context.Context) error
 }
 
+// dbHealthChecker probes database reachability and returns the live
+// HealthStatus, so the handler can surface the real error rather than a
+// placeholder. It is a seam: production wires it to database.CheckHealth over
+// the pool, and tests inject a stub.
+type dbHealthChecker func(ctx context.Context) database.HealthStatus
+
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if a.dependencyHealth(r.Context()).Healthy() {
 		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -28,13 +34,13 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 	detail := adminHandler.DependencyDetail{CheckedAt: time.Now().UTC()}
 
 	dbStatus := "ok"
-	if a.pool == nil {
+	if a.dbHealth == nil {
 		dbStatus = "not_configured"
 	} else {
 		start := time.Now()
-		if !database.CheckHealth(ctx, a.pool).OK {
+		if status := a.dbHealth(ctx); !status.OK {
 			dbStatus = "down"
-			detail.DBError = "health check failed"
+			detail.DBError = status.Err.Error()
 		}
 		detail.DBLatencyMs = time.Since(start).Milliseconds()
 	}

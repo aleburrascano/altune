@@ -79,6 +79,7 @@ import (
 type App struct {
 	cfg            *config.Config
 	pool           *pgxpool.Pool
+	dbHealth       dbHealthChecker
 	redisClient    *goredis.Client
 	authVerifier   authHealthChecker
 	server         *http.Server
@@ -186,6 +187,9 @@ func (a *App) setup(ctx context.Context) error {
 	a.pool, err = database.NewPool(ctx, a.cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("database: %w", err)
+	}
+	a.dbHealth = func(ctx context.Context) database.HealthStatus {
+		return database.CheckHealth(ctx, a.pool)
 	}
 
 	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL)
