@@ -11,4 +11,11 @@ var (
 	// file is present, or its existence could not be verified). The client
 	// should retry rather than treat the track as genuinely gone.
 	ErrAudioTemporarilyUnavailable = &domain.CodedError{Msg: "audio temporarily unavailable", Status: 503, Code: "catalog.audio_temporarily_unavailable"}
+	// ErrAudioOrphaned signals a partial track deletion: the track row was
+	// removed from the database, but its audio object could not be deleted from
+	// storage, so a user's personal audio file is left behind as an orphan. It
+	// is surfaced (not swallowed as success) so the caller knows the deletion was
+	// incomplete; the orphan is counted via the OrphanedDelete metric and emitted
+	// on a marked log line (event=catalog.orphaned_audio) for reconciliation.
+	ErrAudioOrphaned = &domain.CodedError{Msg: "track deleted but audio file orphaned", Status: 500, Code: "catalog.audio_orphaned"}
 )

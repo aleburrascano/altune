@@ -18,13 +18,19 @@ func TestDeleteTrackService_OrphanedDeleteMetric(t *testing.T) {
 	metrics := &catalogtest.Metrics{}
 	svc := NewDeleteTrackService(repo, store, WithDeleteTrackMetrics(metrics))
 
-	// The track row is deleted even though its audio object is orphaned, so the
-	// call succeeds while the orphaned-delete counter must flag the degradation.
-	if err := svc.Execute(ctx, userId, track.ID); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// The track row is deleted but its audio object is orphaned. This is a
+	// partial deletion: it must NOT be reported as success. The error is surfaced
+	// as ErrAudioOrphaned and the orphaned-delete counter flags the orphan for
+	// reconciliation.
+	err := svc.Execute(ctx, userId, track.ID)
+	if err == nil {
+		t.Fatal("expected ErrAudioOrphaned, got nil (orphan silently swallowed as success)")
+	}
+	if !errors.Is(err, ErrAudioOrphaned) {
+		t.Fatalf("error = %v, want ErrAudioOrphaned", err)
 	}
 	if metrics.OrphanedDeletes != 1 {
-		t.Errorf("orphaned-delete metric = %d, want 1 so operators can alert on silent orphaning", metrics.OrphanedDeletes)
+		t.Errorf("orphaned-delete metric = %d, want 1 so operators can alert on orphaning", metrics.OrphanedDeletes)
 	}
 }
 
