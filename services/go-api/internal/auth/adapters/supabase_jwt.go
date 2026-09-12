@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -15,6 +16,13 @@ import (
 )
 
 const acceptableSkew = 5 * time.Second
+
+// jwksFetchTimeout bounds every HTTP call to the JWKS endpoint: both the
+// startup fetch and the httprc refresh-worker's request use it, so a slow or
+// hung endpoint can neither block startup nor permanently exhaust the shared
+// fetch-worker pool. It is a var only so tests can shorten it; production code
+// never reassigns it.
+var jwksFetchTimeout = 10 * time.Second
 
 type SupabaseJWTVerifier struct {
 	cache    *jwk.Cache
@@ -26,11 +34,19 @@ type SupabaseJWTVerifier struct {
 func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string) (*SupabaseJWTVerifier, error) {
 	cache := jwk.NewCache(ctx)
 
-	if err := cache.Register(jwksURL); err != nil {
+	// Give the cache's fetch worker an HTTP client with a bounded timeout. The
+	// worker performs the actual HTTP call with a non-context client, so only
+	// the client's own Timeout can stop one stuck fetch from blocking a worker
+	// forever (the pool has just 3 workers shared across all callers).
+	httpClient := &http.Client{Timeout: jwksFetchTimeout}
+	if err := cache.Register(jwksURL, jwk.WithHTTPClient(httpClient)); err != nil {
 		return nil, fmt.Errorf("register JWKS URL: %w", err)
 	}
 
-	if _, err := cache.Refresh(ctx, jwksURL); err != nil {
+	// Bound the startup fetch so app.Run cannot hang forever on a hung endpoint.
+	refreshCtx, cancel := context.WithTimeout(ctx, jwksFetchTimeout)
+	defer cancel()
+	if _, err := cache.Refresh(refreshCtx, jwksURL); err != nil {
 		slog.Warn("initial JWKS fetch failed, will retry on first request", "error", err)
 	}
 

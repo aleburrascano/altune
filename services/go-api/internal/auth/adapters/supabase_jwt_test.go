@@ -300,6 +300,64 @@ func TestSupabaseJWTVerifier_MissingExp(t *testing.T) {
 	}
 }
 
+func TestSupabaseJWTVerifier_SlowJWKSEndpointDoesNotHang(t *testing.T) {
+	// A JWKS endpoint that blocks until the test ends, simulating a slow or
+	// hung Supabase endpoint. Without a bounded HTTP client the shared fetch
+	// worker would block here forever and exhaust the pool for the process.
+	blockForever := make(chan struct{})
+
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		<-blockForever
+	}))
+	// Cleanup is LIFO: unblock the handler first so server.Close can return.
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(blockForever) })
+
+	// Shorten the bound so the regression test stays fast; restore afterwards.
+	origTimeout := jwksFetchTimeout
+	jwksFetchTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { jwksFetchTimeout = origTimeout })
+
+	const bound = 5 * time.Second
+
+	// Startup must not hang on a hung endpoint: it warns and proceeds.
+	startupDone := make(chan *SupabaseJWTVerifier, 1)
+	go func() {
+		v, err := NewSupabaseJWTVerifier(context.Background(), server.URL, "https://test-project.supabase.co", "authenticated")
+		if err != nil {
+			t.Errorf("NewSupabaseJWTVerifier returned error: %v", err)
+		}
+		startupDone <- v
+	}()
+
+	var verifier *SupabaseJWTVerifier
+	select {
+	case verifier = <-startupDone:
+	case <-time.After(bound):
+		t.Fatalf("NewSupabaseJWTVerifier hung on a slow JWKS endpoint (no return within %s)", bound)
+	}
+	if verifier == nil {
+		t.Fatal("verifier was nil")
+	}
+
+	// A request-time fetch must also return within the bound rather than
+	// blocking on the stuck fetch worker.
+	verifyDone := make(chan error, 1)
+	go func() {
+		_, err := verifier.Verify(context.Background(), "any-token")
+		verifyDone <- err
+	}()
+
+	select {
+	case err := <-verifyDone:
+		if err == nil {
+			t.Fatal("expected an error from a hung JWKS endpoint, got nil")
+		}
+	case <-time.After(bound):
+		t.Fatalf("Verify hung on a slow JWKS endpoint (no return within %s)", bound)
+	}
+}
+
 func TestSupabaseJWTVerifier_MissingSub(t *testing.T) {
 	f := newTestJWTFixture(t)
 	verifier := f.newVerifier(t)
