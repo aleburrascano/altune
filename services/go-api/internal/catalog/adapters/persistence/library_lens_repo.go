@@ -182,21 +182,8 @@ func (r *PgxLibraryLensRepository) ListFilteredForUser(
 	}
 	defer rows.Close()
 
-	var tracks []*domain.Track
-	total := 0
-	for rows.Next() {
-		dest, build := trackScanDest()
-		dest = append(dest, &total)
-		if err := rows.Scan(dest...); err != nil {
-			return nil, 0, err
-		}
-		t, err := build()
-		if err != nil {
-			return nil, 0, err
-		}
-		tracks = append(tracks, t)
-	}
-	if err := rows.Err(); err != nil {
+	tracks, total, err := collectTracksWithTotal(rows)
+	if err != nil {
 		return nil, 0, err
 	}
 	if err := loadFeaturedForTracks(ctx, r.pool, tracks); err != nil {
