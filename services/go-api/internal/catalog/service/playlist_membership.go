@@ -1,26 +1,25 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"log/slog"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 )
 
 const MaxPlaylistBatchSize = 500
 
 type PlaylistMembershipService struct {
-	playlistRepo ports.PlaylistRepository
+	playlistRepo ports.PlaylistMembershipRepository
 	trackRepo    ports.TrackRepository
 	events       events.Publisher
 }
 
-func NewPlaylistMembershipService(playlistRepo ports.PlaylistRepository, trackRepo ports.TrackRepository, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
+func NewPlaylistMembershipService(playlistRepo ports.PlaylistMembershipRepository, trackRepo ports.TrackRepository, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
 	s := &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: events.NoopPublisher()}
 	for _, opt := range opts {
 		opt(s)

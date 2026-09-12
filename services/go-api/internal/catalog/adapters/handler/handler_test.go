@@ -1,6 +1,11 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/catalog/service"
+	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,12 +13,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/catalog/catalogtest"
 	catdomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/catalog/service"
-	"altune/go-api/internal/shared"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -91,7 +91,7 @@ func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.
 	setTrackNumberSvc := service.NewSetTrackNumberService(trackRepo)
 
 	getStatusSvc := service.NewGetTrackStatusService(trackRepo)
-	backfillSvc := service.NewBackfillFeaturedService(trackRepo, ports.NoopFeaturedArtistResolver())
+	backfillSvc := service.NewBackfillFeaturedService(trackRepo, trackRepo, ports.NoopFeaturedArtistResolver())
 	listFeaturingSvc := service.NewListFeaturingService(trackRepo)
 	featuredH := NewFeaturedArtistHandler(backfillSvc, listFeaturingSvc)
 	h := NewTrackHandler(addSvc, listSvc, getStatusSvc, deleteSvc, setTrackNumberSvc, featuredH)

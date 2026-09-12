@@ -15,7 +15,10 @@ import (
 
 const playlistTrackCountSubquery = `(SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id = p.id)`
 
-var _ ports.PlaylistRepository = (*PgxPlaylistRepository)(nil)
+var (
+	_ ports.PlaylistLifecycleRepository  = (*PgxPlaylistRepository)(nil)
+	_ ports.PlaylistMembershipRepository = (*PgxPlaylistRepository)(nil)
+)
 
 type PgxPlaylistRepository struct {
 	pool pgxPool

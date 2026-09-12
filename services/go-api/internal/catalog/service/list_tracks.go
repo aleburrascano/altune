@@ -16,11 +16,11 @@ type ListTracksOutput struct {
 }
 
 type ListTracksService struct {
-	trackRepo ports.TrackRepository
+	lensRepo ports.LibraryLensRepository
 }
 
-func NewListTracksService(trackRepo ports.TrackRepository) *ListTracksService {
-	return &ListTracksService{trackRepo: trackRepo}
+func NewListTracksService(lensRepo ports.LibraryLensRepository) *ListTracksService {
+	return &ListTracksService{lensRepo: lensRepo}
 }
 
 func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, query domain.LibraryQuery) (*ListTracksOutput, error) {
@@ -29,7 +29,7 @@ func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, q
 	}
 	query = clampLibraryLimit(query)
 
-	tracks, total, err := s.trackRepo.ListFilteredForUser(ctx, userId, query)
+	tracks, total, err := s.lensRepo.ListFilteredForUser(ctx, userId, query)
 	if err != nil {
 		return nil, fmt.Errorf("list tracks: %w", err)
 	}

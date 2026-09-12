@@ -1183,7 +1183,7 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 }
 
 type featuringErrLister struct {
-	ports.TrackRepository
+	ports.FeaturedArtistRepository
 	err error
 }
 

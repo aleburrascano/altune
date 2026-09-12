@@ -46,7 +46,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		resolver := fakeResolver{byTitle: map[string][]domain.FeaturedArtist{
 			"Track A": {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
 		}}
-		svc := NewBackfillFeaturedService(repo, resolver)
+		svc := NewBackfillFeaturedService(repo, repo, resolver)
 
 		res, err := svc.Execute(ctx, userId)
 		if err != nil {
@@ -68,7 +68,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("per-track resolver error is skipped, not fatal", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "X"))
-		svc := NewBackfillFeaturedService(repo, fakeResolver{err: errors.New("provider down")})
+		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{err: errors.New("provider down")})
 		res, err := svc.Execute(ctx, userId)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
@@ -81,7 +81,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("resolver error is counted as failed", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "X"))
-		svc := NewBackfillFeaturedService(repo, fakeResolver{err: errors.New("provider down")})
+		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{err: errors.New("provider down")})
 		res, err := svc.Execute(ctx, userId)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
@@ -110,7 +110,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 			"Track 2": {{Name: "Guest 2", MBID: "m2", Role: domain.RoleFeatured}},
 			"Track 3": {{Name: "Guest 3", MBID: "m3", Role: domain.RoleFeatured}},
 		}}
-		svc := NewBackfillFeaturedService(repo, resolver)
+		svc := NewBackfillFeaturedService(repo, repo, resolver)
 
 		res, err := svc.Execute(ctx, userId)
 		if err != nil {
@@ -140,7 +140,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		// Always returns a full page and never signals exhaustion, so only the
 		// page cap can stop the loop (an unbounded library would otherwise spin).
 		repo := &unboundedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), page: page}
-		svc := NewBackfillFeaturedService(repo, fakeResolver{})
+		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
 
 		res, err := svc.Execute(ctx, userId)
 		if err != nil {
@@ -163,7 +163,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		}
 		repo.Seed(t1)
 		repo.Seed(t2)
-		svc := NewBackfillFeaturedService(repo, fakeResolver{})
+		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
 
 		res, err := svc.Execute(cctx, userId)
 		if !errors.Is(err, context.Canceled) {
