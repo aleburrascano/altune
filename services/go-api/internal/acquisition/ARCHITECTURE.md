@@ -168,7 +168,11 @@ independent catalogue), `best_effort` (neither — the unidentified tail).
 ports/       AudioProber, AudioTagger, AudioWriter, TrackRepository,
              AudioCandidate, TrackTags, DedupeCandidatesByURL
 service/     pipeline.go  — Step, StepError, RunPipeline, rollback, AcquisitionContext, TrackRef
-             acquire.go   — Execute, reconcileForReacquire, CoreSteps, failureReason, CleanupTemp
+             acquire.go   — Execute/execute orchestration + notification wiring
+             reacquire.go — reacquirePolicy (reconcile, revertToPending)
+             buildsteps.go — buildSteps, CoreSteps
+             failure_reason.go — failureReason, reasonForStep
+             cleanup.go   — CleanupTemp
              step_*.go    — the six steps
              matching.go  — identityScore, metadataRank, featureMatch, rankCandidates
              scheduler.go — BackgroundAcquisitionScheduler, schedulerJobReporter, Status, Shutdown
