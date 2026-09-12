@@ -28,7 +28,7 @@ func (a *App) buildReRunner(svc *discoveryService.Service) *reRunner {
 
 func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (adminHandler.ReRunResult, error) {
 	kindSet := parseRerunKinds(kinds)
-	rec := requeststore.NewExchangeRecorder(defaultLiveTransport, rerunBodyCap)
+	rec := requeststore.NewRerunRecorder(defaultLiveTransport, rerunBodyCap)
 	provs := BuildDiscoveryProviders(rr.cfg, rec)
 
 	cleaned := discoveryService.CleanQuery(query)
