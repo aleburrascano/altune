@@ -29,12 +29,9 @@ func NewReacquireHandler(trackRepo ports.TrackRepository, scheduler replaceSched
 
 func (h *ReacquireHandler) HandleReacquire(w http.ResponseWriter, r *http.Request) {
 	acquisitionCommand{
-		trackRepo:     h.trackRepo,
-		admission:     h.admission,
-		ineligibleErr: service.ErrReacquireNotReady,
-		ineligibleMsg: "track has no audio to replace",
-		cooldownMsg:   "reacquire cooldown active, try again later",
-		logMsg:        "reacquire: get track failed",
+		trackRepo: h.trackRepo,
+		admission: h.admission,
+		logMsg:    "reacquire: get track failed",
 		schedule: func(userId shared.UserId, trackId domain.TrackId) {
 			h.scheduler.ScheduleReplace(userId, trackId)
 		},

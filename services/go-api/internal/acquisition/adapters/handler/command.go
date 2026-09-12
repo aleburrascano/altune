@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
@@ -20,13 +18,10 @@ type trackAdmission interface {
 }
 
 type acquisitionCommand struct {
-	trackRepo     ports.TrackRepository
-	admission     trackAdmission
-	ineligibleErr error
-	ineligibleMsg string
-	cooldownMsg   string
-	logMsg        string
-	schedule      func(userId shared.UserId, trackId domain.TrackId)
+	trackRepo ports.TrackRepository
+	admission trackAdmission
+	logMsg    string
+	schedule  func(userId shared.UserId, trackId domain.TrackId)
 }
 
 func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
@@ -52,14 +47,8 @@ func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch err := c.admission.Admit(track); {
-	case errors.Is(err, c.ineligibleErr):
-		httputil.Conflict(w, c.ineligibleMsg)
-		return
-	case errors.Is(err, service.ErrCooldownActive):
-		httputil.WriteJSON(w, http.StatusTooManyRequests, map[string]string{
-			"error": c.cooldownMsg,
-		})
+	if err := c.admission.Admit(track); err != nil {
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 

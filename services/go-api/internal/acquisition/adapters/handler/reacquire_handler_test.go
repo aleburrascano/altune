@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -140,6 +141,34 @@ func TestHandleReacquire_Cooldown(t *testing.T) {
 
 	if len(scheduler.replaced) != 1 {
 		t.Errorf("expected exactly one scheduled replace, got %d", len(scheduler.replaced))
+	}
+}
+
+func TestHandleReacquire_CooldownUsesStandardErrorEnvelope(t *testing.T) {
+	repo := newRetryFakeTrackRepo()
+	scheduler := &reacquireFakeScheduler{}
+	track := makeStreamableReacquireTrack(reacquireTestUserId, "Ready Song", "Artist", "Album", "audio/ready.opus")
+	repo.seed(track)
+	router := buildReacquireRouter(repo, scheduler)
+	path := "/tracks/" + track.ID.UUID().String() + "/reacquire"
+
+	retryAssertStatus(t, retryServe(t, router, http.MethodPost, path), http.StatusAccepted)
+
+	rec := retryServe(t, router, http.MethodPost, path)
+	retryAssertStatus(t, rec, http.StatusTooManyRequests)
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v (raw: %s)", err, rec.Body.String())
+	}
+	if _, legacy := body["error"]; legacy {
+		t.Errorf("429 body uses legacy {\"error\":...} envelope, want standard {\"detail\",\"code\"}: %s", rec.Body.String())
+	}
+	if detail, _ := body["detail"].(string); detail == "" {
+		t.Errorf("429 body missing \"detail\", want standard envelope: %s", rec.Body.String())
+	}
+	if code, _ := body["code"].(string); code == "" {
+		t.Errorf("429 body missing \"code\", want standard envelope: %s", rec.Body.String())
 	}
 }
 
