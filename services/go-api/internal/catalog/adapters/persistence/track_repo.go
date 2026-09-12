@@ -31,7 +31,7 @@ func prefixColumns(columns, prefix string) string {
 }
 
 type PgxTrackRepository struct {
-	pool *pgxpool.Pool
+	pool pgxPool
 }
 
 func NewPgxTrackRepository(pool *pgxpool.Pool) *PgxTrackRepository {
@@ -39,6 +39,9 @@ func NewPgxTrackRepository(pool *pgxpool.Pool) *PgxTrackRepository {
 }
 
 func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, false, err
@@ -84,6 +87,9 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 }
 
 func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	row := r.pool.QueryRow(ctx,
 		`SELECT `+trackColumns+`
 		FROM tracks WHERE id = $1 AND user_id = $2`,
@@ -93,6 +99,9 @@ func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, use
 }
 
 func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+trackColumns+`, COUNT(*) OVER () AS total
 		FROM tracks WHERE user_id = $1
@@ -124,6 +133,9 @@ func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId
 		uuids[i] = id.UUID()
 	}
 
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+trackColumns+`
 		FROM tracks WHERE user_id = $1 AND id = ANY($2)`,
@@ -138,6 +150,9 @@ func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId
 }
 
 func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) error {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE tracks SET
 			title=$3, artist=$4, album=$5, duration_seconds=$6,
@@ -163,6 +178,9 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) er
 }
 
 func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (bool, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE tracks SET track_number=$3
 		 WHERE id=$1 AND user_id=$2 AND track_number IS NULL`,
@@ -179,6 +197,9 @@ func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.Track
 // lost to a process that died mid-flight; moving them to failed lets the retry path
 // reclaim them instead of leaving them stuck at pending forever.
 func (r *PgxTrackRepository) FailStalePending(ctx context.Context, cutoff time.Time, reason string) (int, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE tracks
 		 SET acquisition_status='failed', failure_reason=$2, acquisition_started_at=NULL
@@ -200,6 +221,9 @@ func (r *PgxTrackRepository) FailStalePending(ctx context.Context, cutoff time.T
 // directly. That cascade is the only observable cross-aggregate side effect,
 // and it runs inside this transaction, preserving the delete's atomicity.
 func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return false, nil, err
@@ -236,6 +260,9 @@ func deleteTrackRow(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId sh
 }
 
 func (r *PgxTrackRepository) GetByDedupKey(ctx context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	row := r.pool.QueryRow(ctx,
 		`SELECT `+trackColumns+`
 		FROM tracks WHERE user_id = $1 AND dedup_key = $2`,
@@ -260,6 +287,9 @@ func (r *PgxTrackRepository) ListOwnedTrackRefs(
 	ctx context.Context,
 	userId shared.UserId,
 ) ([]domain.OwnedTrackRef, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, title, artist, acquisition_status, track_number
 		FROM tracks WHERE user_id = $1
