@@ -1,4 +1,4 @@
-package adapters
+package providers
 
 import (
 	"altune/go-api/internal/auth"
