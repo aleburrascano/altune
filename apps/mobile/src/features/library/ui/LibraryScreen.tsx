@@ -11,11 +11,9 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
-import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { useActiveLibraryView } from '../hooks/useActiveLibraryView';
 import { useDeleteTrack, useDeleteTracks } from '../hooks/useDeleteTrack';
@@ -23,17 +21,13 @@ import { useLibraryIsEmpty } from '../hooks/useLibraryHome';
 import { useLibrarySearch } from '../hooks/useLibrarySearch';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
+import { useTrackSelection } from '../hooks/useTrackSelection';
 import { _viewForState } from '../state';
-import { useSelection } from '../useSelection';
 import { LibraryChips, type LibraryChip } from './LibraryChips';
-import { SelectionBar } from './SelectionBar';
-import { buildSelectionActions } from './selectionActions';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryNoResults } from './LibraryNoResults';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import { SortControl } from './SortControl';
-import { useReacquireTrack } from '../hooks/useReacquireTrack';
-import { buildTrackMenuItems } from './trackMenu';
+import { TrackSelectionOverlay } from './TrackSelectionOverlay';
 import { type SortKey } from './sort';
 import { useLibraryNavigation } from './useLibraryNavigation';
 
@@ -53,32 +47,14 @@ export function LibraryScreen(): ReactElement {
   const deleteMutation = useDeleteTrack();
   const deleteManyMutation = useDeleteTracks();
   const retryMutation = useRetryAcquisition();
-  const reacquireMutation = useReacquireTrack();
   const playback = usePlayback();
   const queue = useQueuePlayback();
-  const selection = useSelection();
-  const pinnedEntries = usePinnedStore((s) => s.entries);
-  const pinMany = usePinnedStore((s) => s.pinMany);
-  const unpin = usePinnedStore((s) => s.unpin);
 
   const [chip, setChip] = useState<LibraryChip>('playlists');
   const [sortByChip, setSortByChip] = useState<Record<LibraryChip, SortKey>>(DEFAULT_SORTS);
-  const [action, setAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [bulkPlaylistVisible, setBulkPlaylistVisible] = useState(false);
 
   const libraryIsEmpty = useLibraryIsEmpty();
-
-  const { active, tracks, playlists } = useActiveLibraryView(chip, sortByChip, search.query, {
-    pl,
-    router,
-    navigation,
-    selection,
-    queue,
-    playback,
-    retryMutation,
-    onTrackMore: (track, anchor) => setAction({ track, anchor }),
-  });
 
   const confirmRemoveTrack = (track: TrackResponse): void => {
     confirmDestructive({
@@ -89,40 +65,39 @@ export function LibraryScreen(): ReactElement {
     });
   };
 
-  const trackMenuItems = (track: TrackResponse) =>
-    buildTrackMenuItems(track, {
-      onReacquire: () => reacquireMutation.mutate(track.id),
-      queue,
-      onViewDetails: () => navigation.navigateToTrack(track),
-      onAddToPlaylist: () => pl.setAddToPlaylistTrack(track),
-      danger: { label: 'Remove from Library', onPress: () => confirmRemoveTrack(track) },
-    });
-
-  const confirmDeleteSelected = (): void => {
-    const ids = selection.ids;
-    confirmDestructive({
-      title: 'Remove from Library',
-      message: `Remove ${ids.length} ${countLabel(ids.length, 'track')} from your library?`,
-      confirmLabel: 'Remove',
-      onConfirm: () => {
-        deleteManyMutation.mutate(ids);
-        selection.clear();
-      },
-    });
-  };
-
-  const selectionActions = buildSelectionActions(
-    tracks.filter((t) => selection.has(t.id)),
-    {
-      pinnedEntries,
-      pinMany,
-      unpin,
-      queue,
-      onAddToPlaylist: () => setBulkPlaylistVisible(true),
-      onDone: selection.clear,
-      danger: { label: 'Remove', onPress: confirmDeleteSelected },
+  const trackSelection = useTrackSelection({
+    queue,
+    onViewDetails: navigation.navigateToTrack,
+    onAddTrackToPlaylist: (track) => pl.setAddToPlaylistTrack(track),
+    trackDanger: (track) => ({
+      label: 'Remove from Library',
+      onPress: () => confirmRemoveTrack(track),
+    }),
+    selectionDanger: {
+      label: 'Remove',
+      onRemove: (ids, clear) =>
+        confirmDestructive({
+          title: 'Remove from Library',
+          message: `Remove ${ids.length} ${countLabel(ids.length, 'track')} from your library?`,
+          confirmLabel: 'Remove',
+          onConfirm: () => {
+            deleteManyMutation.mutate(ids);
+            clear();
+          },
+        }),
     },
-  );
+  });
+
+  const { active, tracks, playlists } = useActiveLibraryView(chip, sortByChip, search.query, {
+    pl,
+    router,
+    navigation,
+    selection: trackSelection.selection,
+    queue,
+    playback,
+    retryMutation,
+    onTrackMore: trackSelection.onTrackMore,
+  });
 
   const sortKey = sortByChip[chip];
   const setSort = (key: SortKey): void => setSortByChip((prev) => ({ ...prev, [chip]: key }));
@@ -212,20 +187,6 @@ export function LibraryScreen(): ReactElement {
         )}
       </View>
 
-      {selection.active && chip === 'tracks' ? (
-        <SelectionBar
-          count={selection.count}
-          allSelected={selection.count === tracks.length}
-          onSelectAll={() =>
-            selection.count === tracks.length
-              ? selection.clear()
-              : selection.selectAll(tracks.map((t) => t.id))
-          }
-          onCancel={selection.clear}
-          actions={selectionActions}
-        />
-      ) : null}
-
       <CreatePlaylistModal
         visible={pl.createModalVisible}
         onClose={() => pl.setCreateModalVisible(false)}
@@ -242,20 +203,11 @@ export function LibraryScreen(): ReactElement {
         resolveTrackIds={() => Promise.resolve([pl.addToPlaylistTrack?.id ?? asTrackId('')])}
         onClose={() => pl.setAddToPlaylistTrack(null)}
       />
-      <AddToPlaylistSheet
-        visible={bulkPlaylistVisible}
-        label={`${selection.count} ${countLabel(selection.count, 'track')}`}
-        resolveTrackIds={() => Promise.resolve(selection.ids)}
-        onClose={() => {
-          setBulkPlaylistVisible(false);
-          selection.clear();
-        }}
-      />
-      <ContextMenu
-        visible={action != null}
-        anchor={action?.anchor}
-        items={action != null ? trackMenuItems(action.track) : []}
-        onClose={() => setAction(null)}
+
+      <TrackSelectionOverlay
+        controller={trackSelection}
+        tracks={tracks}
+        barVisible={trackSelection.selection.active && chip === 'tracks'}
       />
     </Screen>
   );
