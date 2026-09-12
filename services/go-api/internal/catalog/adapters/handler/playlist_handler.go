@@ -86,12 +86,7 @@ type ListPlaylistsResponse struct {
 }
 
 type PlaylistDetailResponse struct {
-	ID                   uuid.UUID       `json:"id"`
-	Name                 string          `json:"name"`
-	TrackCount           int             `json:"track_count"`
-	PreviewArtworkURLs   []string        `json:"preview_artwork_urls"`
-	CreatedAt            time.Time       `json:"created_at"`
-	UpdatedAt            time.Time       `json:"updated_at"`
+	PlaylistResponse
 	TotalDurationSeconds float64         `json:"total_duration_seconds"`
 	Tracks               []TrackResponse `json:"tracks"`
 }
@@ -176,12 +171,7 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	artworkURLs := domain.PreviewArtworkURLs(tracks)
 
 	httputil.WriteJSON(w, http.StatusOK, PlaylistDetailResponse{
-		ID:                   playlist.ID.UUID(),
-		Name:                 playlist.Name,
-		TrackCount:           len(tracks),
-		PreviewArtworkURLs:   artworkURLs,
-		CreatedAt:            playlist.CreatedAt,
-		UpdatedAt:            playlist.UpdatedAt,
+		PlaylistResponse:     playlistToResponse(playlist, len(tracks), artworkURLs),
 		TotalDurationSeconds: domain.TotalDurationSeconds(tracks),
 		Tracks:               trackResponses,
 	})
