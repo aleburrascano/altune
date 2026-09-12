@@ -26,6 +26,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -221,8 +222,12 @@ func (a *App) setup(ctx context.Context) error {
 	a.startBackgroundWhenLeader(ctx)
 
 	a.server = &http.Server{
-		Addr:              fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
-		Handler:           r,
+		Addr:    fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
+		Handler: r,
+		// Tie every request context to the app lifecycle context so that
+		// server.Shutdown cancels long-lived streaming handlers (SSE) instead
+		// of blocking on them until the shutdown timeout elapses.
+		BaseContext:       func(net.Listener) context.Context { return ctx },
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
@@ -425,7 +430,7 @@ func (a *App) mountRoutes(
 		if feedbackH != nil {
 			r.Mount("/feedback", feedbackH.Routes())
 		}
-		r.Handle("/events", &sseHandler{bus: a.eventBus})
+		r.Handle("/events", newSSEHandler(a.eventBus))
 	})
 
 	return r
