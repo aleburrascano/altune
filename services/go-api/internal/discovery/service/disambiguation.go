@@ -57,15 +57,13 @@ func (s *Service) applyArtistDisambiguation(ctx context.Context, results []domai
 			continue
 		}
 
-		extras := copyExtras(r.Extras)
 		if entry.identity.Disambiguation != "" {
 			results[i].Subtitle = entry.identity.Disambiguation
-			extras["disambiguation"] = entry.identity.Disambiguation
+			results[i] = results[i].WithExtra("disambiguation", entry.identity.Disambiguation)
 		}
 		if entry.identity.MBID != "" && results[i].MBID == "" {
 			results[i].MBID = entry.identity.MBID
 		}
-		results[i].Extras = extras
 	}
 	return results
 }

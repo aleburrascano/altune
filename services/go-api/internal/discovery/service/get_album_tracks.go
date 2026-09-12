@@ -59,10 +59,7 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 			if err != nil || len(feats) == 0 {
 				return nil
 			}
-			if results[i].Extras == nil {
-				results[i].Extras = map[string]any{}
-			}
-			results[i].Extras["featured_artists"] = domain.FeaturedArtistsToExtras(feats)
+			results[i].PutExtra("featured_artists", domain.FeaturedArtistsToExtras(feats))
 			return nil
 		})
 	}
@@ -125,10 +122,7 @@ func (s *GetAlbumTracksService) mergeMusicBrainzFeaturing(ctx context.Context, m
 		if !found {
 			continue
 		}
-		if items[i].Extras == nil {
-			items[i].Extras = map[string]any{}
-		}
-		items[i].Extras["featured_artists"] = feats
+		items[i].PutExtra("featured_artists", feats)
 	}
 }
 

@@ -86,23 +86,21 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		collapsedList := make([]domain.CollapsedArtistSummary, len(g.otherIdxs))
 		for j, idx := range g.otherIdxs {
 			other := results[idx]
-			otherExtras := copyExtras(other.Extras)
 			if other.MBID != "" {
-				otherExtras["mbid"] = other.MBID
+				other = other.WithExtra("mbid", other.MBID)
+			} else {
+				other.Extras = copyExtras(other.Extras)
 			}
 			collapsedList[j] = domain.CollapsedArtistSummary{
 				Title:    other.Title,
 				Subtitle: other.Subtitle,
 				ImageURL: other.ImageURL,
 				Sources:  other.Sources,
-				Extras:   otherExtras,
+				Extras:   other.Extras,
 			}
 			remove[idx] = true
 		}
-		primary := &results[g.primaryIdx]
-		extras := copyExtras(primary.Extras)
-		extras["collapsed_artists"] = collapsedList
-		primary.Extras = extras
+		results[g.primaryIdx] = results[g.primaryIdx].WithExtra("collapsed_artists", collapsedList)
 	}
 
 	if len(remove) == 0 {
