@@ -157,15 +157,8 @@ func (r *PgxFeaturedArtistRepository) ListTracksFeaturing(
 	}
 	defer rows.Close()
 
-	var tracks []*domain.Track
-	for rows.Next() {
-		t, err := scanTrackFromRows(rows)
-		if err != nil {
-			return nil, err
-		}
-		tracks = append(tracks, t)
-	}
-	if err := rows.Err(); err != nil {
+	tracks, err := collectTracks(rows)
+	if err != nil {
 		return nil, err
 	}
 	if err := loadFeaturedForTracks(ctx, r.pool, tracks); err != nil {

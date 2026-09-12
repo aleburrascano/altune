@@ -85,27 +85,6 @@ type App struct {
 	backgroundStarts []func(context.Context)
 }
 
-const backgroundLockKey int64 = 8_246_113_907_441_002
-
-func (a *App) whenLeader(start func(context.Context)) {
-	a.backgroundStarts = append(a.backgroundStarts, start)
-}
-
-func (a *App) startBackgroundWhenLeader(ctx context.Context) {
-	a.election = leader.NewElection(a.pool, backgroundLockKey)
-	a.election.Start(ctx)
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		if !a.election.Await(ctx) {
-			return
-		}
-		for _, start := range a.backgroundStarts {
-			start(ctx)
-		}
-	}()
-}
-
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 	return &App{
 		cfg:     cfg,
@@ -187,19 +166,6 @@ func (a *App) shutdownComponent(timeout time.Duration, fn func(context.Context))
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	fn(ctx)
-}
-
-func (a *App) drainBackground(timeout time.Duration) {
-	done := make(chan struct{})
-	go func() {
-		a.wg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(timeout):
-		slog.Warn("background task drain timed out")
-	}
 }
 
 func (a *App) setup(ctx context.Context) error {
@@ -486,44 +452,6 @@ func (a *App) wireAdmin(
 	})
 }
 
-func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
-	if a.dependencyHealth(r.Context()).Healthy() {
-		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-		return
-	}
-	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "degraded"})
-}
-
-func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealth {
-	detail := adminHandler.DependencyDetail{CheckedAt: time.Now().UTC()}
-
-	dbStatus := "ok"
-	if a.pool == nil {
-		dbStatus = "not_configured"
-	} else {
-		start := time.Now()
-		if !database.CheckHealth(ctx, a.pool).OK {
-			dbStatus = "down"
-			detail.DBError = "health check failed"
-		}
-		detail.DBLatencyMs = time.Since(start).Milliseconds()
-	}
-
-	redisStatus := "ok"
-	if a.redisClient == nil {
-		redisStatus = "not_configured"
-	} else {
-		start := time.Now()
-		if err := a.redisClient.Ping(ctx).Err(); err != nil {
-			redisStatus = "down"
-			detail.RedisError = err.Error()
-		}
-		detail.RedisLatencyMs = time.Since(start).Milliseconds()
-	}
-
-	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus, Detail: detail}
-}
-
 func (a *App) startAlertMonitor(ctx context.Context) {
 	var notifier adminAlert.AlertNotifier = adminAlert.NopNotifier{}
 	if a.cfg.HasAlertPush() {
@@ -702,28 +630,6 @@ func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.Metri
 		}
 	})
 	slog.Info("discovery metrics rollup started")
-}
-
-func (a *App) startTicker(ctx context.Context, interval time.Duration, fn func()) {
-	a.whenLeader(func(ctx context.Context) { a.runTicker(ctx, interval, fn) })
-}
-
-func (a *App) runTicker(ctx context.Context, interval time.Duration, fn func()) {
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		fn()
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				fn()
-			}
-		}
-	}()
 }
 
 func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) {
