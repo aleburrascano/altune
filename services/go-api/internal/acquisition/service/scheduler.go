@@ -16,10 +16,11 @@ type AcquisitionVerification struct {
 	Ffprobe bool
 	Ffmpeg  bool
 	Fpcalc  bool
+	YtDlp   bool
 }
 
 func (v AcquisitionVerification) FullyArmed() bool {
-	return v.Ffprobe && v.Ffmpeg && v.Fpcalc
+	return v.Ffprobe && v.Ffmpeg && v.Fpcalc && v.YtDlp
 }
 
 type AcquisitionStatus struct {
@@ -104,7 +105,7 @@ func WithVerificationStatus(v AcquisitionVerification) func(*BackgroundAcquisiti
 		s.verification = v
 		if !v.FullyArmed() {
 			slog.Warn("acquisition.verification_degraded",
-				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc)
+				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp)
 			return
 		}
 		slog.Info("acquisition.verification_armed")
