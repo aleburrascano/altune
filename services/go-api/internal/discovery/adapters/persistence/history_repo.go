@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -86,8 +87,7 @@ func (r *PgxSearchHistoryRepository) ListDistinctRecent(ctx context.Context, use
 	}
 	defer rows.Close()
 
-	var entries []*domain.SearchHistoryEntry
-	for rows.Next() {
+	return collectRows(rows, func(rows pgx.Rows) (*domain.SearchHistoryEntry, error) {
 		var (
 			id        uuid.UUID
 			uid       uuid.UUID
@@ -99,17 +99,13 @@ func (r *PgxSearchHistoryRepository) ListDistinctRecent(ctx context.Context, use
 		if err := rows.Scan(&id, &uid, &query, &queryNorm, &execAt, &clickSig); err != nil {
 			return nil, fmt.Errorf("scan search history: %w", err)
 		}
-		entries = append(entries, &domain.SearchHistoryEntry{
+		return &domain.SearchHistoryEntry{
 			ID:                     id,
 			UserId:                 shared.NewUserId(uid),
 			Query:                  query,
 			QueryNorm:              queryNorm,
 			ExecutedAt:             execAt,
 			ResultClickedSignature: clickSig,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate search history: %w", err)
-	}
-	return entries, nil
+		}, nil
+	})
 }

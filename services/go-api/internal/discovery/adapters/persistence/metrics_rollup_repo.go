@@ -7,6 +7,7 @@ import (
 
 	"altune/go-api/internal/discovery/ports"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -92,13 +93,11 @@ func (r *PgxMetricsRollup) MetricsHistory(ctx context.Context, metric string, da
 	}
 	defer rows.Close()
 
-	points := []ports.MetricPoint{}
-	for rows.Next() {
+	return collectRows(rows, func(rows pgx.Rows) (ports.MetricPoint, error) {
 		var p ports.MetricPoint
 		if err := rows.Scan(&p.AsOf, &p.Value); err != nil {
-			return nil, fmt.Errorf("scan metric point: %w", err)
+			return p, fmt.Errorf("scan metric point: %w", err)
 		}
-		points = append(points, p)
-	}
-	return points, rows.Err()
+		return p, nil
+	})
 }

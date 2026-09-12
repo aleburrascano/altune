@@ -99,16 +99,7 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 		canonical, other = other, canonical
 	}
 
-	seen := make(map[string]bool, len(canonical.Sources)+len(other.Sources))
-	sources := make([]domain.SourceRef, 0, len(canonical.Sources)+len(other.Sources))
-	for _, s := range append(append([]domain.SourceRef{}, canonical.Sources...), other.Sources...) {
-		key := s.Provider.String() + ":" + s.ExternalID
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		sources = append(sources, s)
-	}
+	sources := unionSources(canonical.Sources, other.Sources)
 
 	extras := make(map[string]any, len(canonical.Extras)+len(other.Extras))
 	for k, v := range other.Extras {
@@ -181,11 +172,6 @@ func firstNonZero[T int | int64](a, b T) T {
 	return b
 }
 
-type providerID struct {
-	provider domain.ProviderName
-	id       string
-}
-
 func bridgeMatch(e, c domain.SearchResult) bool {
 	if len(e.Xref) == 0 && len(c.Xref) == 0 {
 		return false
@@ -202,11 +188,11 @@ func bridgeMatch(e, c domain.SearchResult) bool {
 	return false
 }
 
-func identityClaims(r domain.SearchResult) map[providerID]bool {
-	claims := make(map[providerID]bool, len(r.Sources)+1)
+func identityClaims(r domain.SearchResult) map[string]bool {
+	claims := make(map[string]bool, len(r.Sources)+1)
 	for _, s := range r.Sources {
 		if s.ExternalID != "" {
-			claims[providerID{s.Provider, s.ExternalID}] = true
+			claims[sourceKey(s.Provider, s.ExternalID)] = true
 		}
 	}
 	for name, id := range r.Xref {
@@ -214,7 +200,7 @@ func identityClaims(r domain.SearchResult) map[providerID]bool {
 			continue
 		}
 		if p, err := domain.ParseProviderName(name); err == nil {
-			claims[providerID{p, id}] = true
+			claims[sourceKey(p, id)] = true
 		}
 	}
 	return claims

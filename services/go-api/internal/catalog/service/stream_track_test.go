@@ -55,7 +55,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 			},
 			wantErr:       ErrAudioNotAvailable,
 			wantStatus:    ptrStatus(domain.AcquisitionReady),
-			wantScheduled: true,
+			wantScheduled: false,
 		},
 		{
 			name: "exists check error does not mark failed",
@@ -67,7 +67,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 			},
 			wantErr:       ErrAudioNotAvailable,
 			wantStatus:    ptrStatus(domain.AcquisitionReady),
-			wantScheduled: true,
+			wantScheduled: false,
 		},
 		{
 			name: "pending track is not streamable",

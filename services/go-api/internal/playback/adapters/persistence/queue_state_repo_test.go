@@ -3,6 +3,9 @@ package persistence
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +15,7 @@ import (
 
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/httputil"
 )
 
 type blockingQuerier struct{}
@@ -32,8 +36,101 @@ type errRow struct {
 
 func (r errRow) Scan(_ ...any) error { return r.err }
 
+type capturingQuerier struct {
+	sql string
+}
+
+func (c *capturingQuerier) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
+	c.sql = sql
+	return pgconn.CommandTag{}, nil
+}
+
+func (c *capturingQuerier) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
+	c.sql = sql
+	return errRow{err: nil}
+}
+
 func testUser() shared.UserId {
 	return shared.NewUserId(uuid.New())
+}
+
+type corruptRow struct {
+	trackIds   []string
+	repeatMode string
+}
+
+func (r corruptRow) Scan(dest ...any) error {
+	*(dest[0].(*[]string)) = r.trackIds
+	*(dest[4].(*string)) = r.repeatMode
+	return nil
+}
+
+type rowQuerier struct {
+	row pgx.Row
+}
+
+func (rowQuerier) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+
+func (q rowQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
+	return q.row
+}
+
+func assertServerFault(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected an error for a corrupt stored row, got nil")
+	}
+	var se httputil.StatusError
+	if errors.As(err, &se) {
+		t.Fatalf("corrupt stored state surfaced as HTTP %d (%v); a server-side data fault must map to 500, not a client error", se.HTTPStatus(), err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
+	httputil.HandleServiceError(rec, req, err)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("HandleServiceError wrote %d for a corrupt stored row, want 500", rec.Code)
+	}
+}
+
+func TestGetForUser_CorruptStoredRepeatMode_MapsToServerFault(t *testing.T) {
+	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "sideways"}}}
+
+	_, err := repo.GetForUser(context.Background(), testUser())
+	assertServerFault(t, err)
+}
+
+func TestGetForUser_StoredQueueExceedsMax_MapsToServerFault(t *testing.T) {
+	oversized := make([]string, domain.MaxQueueLength+1)
+	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "off", trackIds: oversized}}}
+
+	_, err := repo.GetForUser(context.Background(), testUser())
+	assertServerFault(t, err)
+}
+
+func TestSavePathValidationStaysClientFault(t *testing.T) {
+	_, err := domain.NewQueueState(domain.QueueStateInput{PositionMs: -1})
+
+	var se httputil.StatusError
+	if !errors.As(err, &se) || se.HTTPStatus() != http.StatusBadRequest {
+		t.Fatalf("client-input validation must stay a 400 StatusError, got %v", err)
+	}
+}
+
+func TestUpsert_GuardsAgainstStaleClobber(t *testing.T) {
+	q := &capturingQuerier{}
+	repo := &PgxQueueStateRepository{pool: q}
+
+	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser())); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	normalized := strings.Join(strings.Fields(q.sql), " ")
+	want := "WHERE playback_queue_state.updated_at <= EXCLUDED.updated_at"
+	if !strings.Contains(normalized, want) {
+		t.Fatalf("Upsert SQL lacks the ordering guard %q; an older snapshot can still clobber a newer one.\nSQL: %s", want, normalized)
+	}
 }
 
 func withShortTimeout(t *testing.T) {

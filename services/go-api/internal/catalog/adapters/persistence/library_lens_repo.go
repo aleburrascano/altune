@@ -49,6 +49,19 @@ func likePattern(search string) string {
 	return "%" + escaped + "%"
 }
 
+func limitOffsetClause(query domain.LibraryQuery, args *[]any) string {
+	clause := ""
+	if query.Limit > 0 {
+		*args = append(*args, query.Limit)
+		clause += ` LIMIT $` + strconv.Itoa(len(*args))
+	}
+	if query.Offset > 0 {
+		*args = append(*args, query.Offset)
+		clause += ` OFFSET $` + strconv.Itoa(len(*args))
+	}
+	return clause
+}
+
 func albumOrderBy(sort domain.LibrarySort) string {
 	switch sort {
 	case domain.SortAlphabetical:
@@ -79,6 +92,7 @@ func (r *PgxLibraryLensRepository) ListAlbumsForUser(
 		args = append(args, likePattern(query.Search))
 	}
 	sql += ` GROUP BY ` + albumGroupKey + albumOrderBy(query.Sort)
+	sql += limitOffsetClause(query, &args)
 
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
@@ -111,6 +125,7 @@ func (r *PgxLibraryLensRepository) ListArtistsForUser(
 		args = append(args, likePattern(query.Search))
 	}
 	sql += ` GROUP BY ` + artistGroupKey + artistOrderBy(query.Sort)
+	sql += limitOffsetClause(query, &args)
 
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
@@ -167,21 +182,8 @@ func (r *PgxLibraryLensRepository) ListFilteredForUser(
 	}
 	defer rows.Close()
 
-	var tracks []*domain.Track
-	total := 0
-	for rows.Next() {
-		dest, build := trackScanDest()
-		dest = append(dest, &total)
-		if err := rows.Scan(dest...); err != nil {
-			return nil, 0, err
-		}
-		t, err := build()
-		if err != nil {
-			return nil, 0, err
-		}
-		tracks = append(tracks, t)
-	}
-	if err := rows.Err(); err != nil {
+	tracks, total, err := collectTracksWithTotal(rows)
+	if err != nil {
 		return nil, 0, err
 	}
 	if err := loadFeaturedForTracks(ctx, r.pool, tracks); err != nil {

@@ -122,10 +122,10 @@ func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId s
 				recErr = fmt.Errorf("persist recovery: %w", err)
 			}
 		}
+		slog.InfoContext(ctx, "stream.reacquire_scheduled",
+			"track_id", track.ID.String())
+		s.scheduler.Schedule(userId, track.ID, "")
 	}
 
-	slog.InfoContext(ctx, "stream.reacquire_scheduled",
-		"track_id", track.ID.String())
-	s.scheduler.Schedule(userId, track.ID, "")
 	return recErr
 }
