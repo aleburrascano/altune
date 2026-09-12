@@ -84,14 +84,18 @@ func (m *Monitor) evaluate(ctx context.Context) {
 		if wasFiring {
 			continue
 		}
-		m.firing[c.Key] = true
 
 		if fired.Severity != SeveritySignal {
 			m.logger.InfoContext(ctx, "alert.condition_firing", "key", c.Key, "severity", int(fired.Severity))
+			m.firing[c.Key] = true
 			continue
 		}
 		if err := m.notifier.Notify(ctx, *fired); err != nil {
+			// Do not mark firing: a failed push must re-arm so the next
+			// tick retries instead of permanently silencing this key.
 			m.logger.ErrorContext(ctx, "alert.notify_failed", "key", c.Key, "error", err)
+			continue
 		}
+		m.firing[c.Key] = true
 	}
 }

@@ -18,6 +18,19 @@ func (s *stubNotifier) Notify(_ context.Context, a Alert) error {
 	return s.err
 }
 
+type flakyNotifier struct {
+	calls     int
+	failCalls int
+}
+
+func (f *flakyNotifier) Notify(context.Context, Alert) error {
+	f.calls++
+	if f.calls <= f.failCalls {
+		return errors.New("transient push failure")
+	}
+	return nil
+}
+
 func newTestMonitor(n AlertNotifier, conds ...Condition) *Monitor {
 	m := NewMonitor(n, 0, conds...)
 	return m
@@ -90,6 +103,20 @@ func TestMonitor_NotifierFailureDoesNotPanic(t *testing.T) {
 
 	if n.calls != 1 {
 		t.Fatalf("notify calls = %d, want 1", n.calls)
+	}
+}
+
+func TestMonitor_RetriesAfterFailedNotify(t *testing.T) {
+	firing := true
+	// Fails on the first push, succeeds thereafter (transient outage).
+	n := &flakyNotifier{failCalls: 1}
+	m := newTestMonitor(n, signalCond("dep", &firing))
+
+	m.evaluate(context.Background()) // fires, notify fails
+	m.evaluate(context.Background()) // still firing, must re-attempt
+
+	if n.calls != 2 {
+		t.Fatalf("notify calls = %d, want 2 (failed push must re-arm, not permanently silence)", n.calls)
 	}
 }
 
