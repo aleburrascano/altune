@@ -203,6 +203,7 @@ func (a *App) setup(ctx context.Context) error {
 	a.wireAdmin(ctx, r, verifier, tap, disc.requestStore, disc.searchSvc, disc.artistSvc)
 
 	a.startAlertMonitor(ctx)
+	a.startStalePendingReconcile(ctx, cat.trackRepo)
 	a.startBackgroundWhenLeader(ctx)
 
 	a.server = &http.Server{
@@ -452,6 +453,22 @@ func (a *App) wireAdmin(
 			adminH.RegisterData(gr)
 		})
 	})
+}
+
+const stalePendingReconcileInterval = 10 * time.Minute
+
+// startStalePendingReconcile sweeps tracks orphaned at pending by an acquisition
+// job that died mid-flight, transitioning them to failed so the retry path can
+// reclaim them. The ticker runs once on leader acquisition (startup recovery) and
+// then on an interval (ongoing sweep).
+func (a *App) startStalePendingReconcile(ctx context.Context, repo catalogPorts.StalePendingFailer) {
+	svc := catalogService.NewReconcileStalePendingService(repo)
+	a.startTicker(ctx, stalePendingReconcileInterval, func() {
+		if _, err := svc.Execute(ctx); err != nil {
+			slog.WarnContext(ctx, "stale pending reconcile failed", "error", err)
+		}
+	})
+	slog.Info("stale pending reconcile started", "interval", stalePendingReconcileInterval.String())
 }
 
 func (a *App) startAlertMonitor(ctx context.Context) {
