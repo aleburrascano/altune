@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -15,8 +16,9 @@ import (
 )
 
 type AdminHandler struct {
-	probe   HealthProbe
-	logRing *logging.RingBuffer
+	probe        HealthProbe
+	probeTimeout time.Duration
+	logRing      *logging.RingBuffer
 
 	eventFeed       *eventtap.Feed
 	providerHealth  *providerhealth.Store
@@ -33,7 +35,7 @@ type AdminHandler struct {
 }
 
 func New(probe HealthProbe, logRing *logging.RingBuffer) *AdminHandler {
-	return &AdminHandler{probe: probe, logRing: logRing}
+	return &AdminHandler{probe: probe, probeTimeout: defaultProbeTimeout, logRing: logRing}
 }
 
 func (h *AdminHandler) WithEventFeed(f *eventtap.Feed) *AdminHandler {

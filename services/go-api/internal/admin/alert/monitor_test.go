@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 type stubNotifier struct {
@@ -143,6 +144,45 @@ func TestMonitor_NtfyURLNotLoggedOnNotifyFailure(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), topic) {
 		t.Fatalf("ntfy topic leaked into the captured log line: %q", buf.String())
+	}
+}
+
+// TestMonitor_BlockingConditionDoesNotFreezeTicker reproduces the per-call
+// timeout defect: a condition whose Eval only returns when its context is
+// cancelled (a stuck, context-aware dependency) must not hang evaluate, and
+// the conditions after it must still run on the same tick.
+func TestMonitor_BlockingConditionDoesNotFreezeTicker(t *testing.T) {
+	secondRan := false
+	blocked := Condition{
+		Key: "stuck",
+		Eval: func(ctx context.Context) *Alert {
+			<-ctx.Done()
+			return nil
+		},
+	}
+	second := Condition{
+		Key: "next",
+		Eval: func(context.Context) *Alert {
+			secondRan = true
+			return nil
+		},
+	}
+	m := newTestMonitor(&stubNotifier{}, blocked, second)
+	m.evalTimeout = 20 * time.Millisecond
+
+	done := make(chan struct{})
+	go func() {
+		m.evaluate(context.Background())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("evaluate hung on a blocking condition; the monitor ticker is frozen")
+	}
+	if !secondRan {
+		t.Fatal("condition after the blocking one never ran")
 	}
 }
 
