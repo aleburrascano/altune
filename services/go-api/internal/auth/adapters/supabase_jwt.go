@@ -35,7 +35,7 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 		slog.Warn("initial JWKS fetch failed, will retry on first request", "error", err)
 	}
 
-	issuer := projectURL + "/auth/v1"
+	issuer := strings.TrimRight(projectURL, "/") + "/auth/v1"
 
 	return &SupabaseJWTVerifier{
 		cache:    cache,

@@ -101,6 +101,7 @@ func (c *Config) validateSupabase() error {
 	if u, err := url.Parse(c.SupabaseProjectURL); err != nil || u.Scheme == "" || u.Host == "" {
 		return fmt.Errorf("SUPABASE_PROJECT_URL must be a valid URL, got %q", c.SupabaseProjectURL)
 	}
+	c.SupabaseProjectURL = strings.TrimRight(c.SupabaseProjectURL, "/")
 	return nil
 }
 

@@ -273,3 +273,32 @@ func TestSupabaseJWTVerifier_MissingSub(t *testing.T) {
 		t.Errorf("reason: got %q, want %q", tokenErr.Reason, auth.ReasonClaimInvalidSUB)
 	}
 }
+
+func TestSupabaseJWTVerifier_TrailingSlashProjectURL(t *testing.T) {
+	f := newTestJWTFixture(t)
+
+	// Create verifier with trailing slash in projectURL (issue #409)
+	trailingSlashURL := f.projectURL + "/"
+	verifier, err := NewSupabaseJWTVerifier(context.Background(), f.jwksServer.URL, trailingSlashURL, f.audience)
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+
+	userId := uuid.New().String()
+	token := f.signToken(t, map[string]interface{}{
+		"sub": userId,
+		"iss": f.issuer, // canonical issuer: "https://test-project.supabase.co/auth/v1"
+		"aud": f.audience,
+		"exp": time.Now().Add(1 * time.Hour),
+		"iat": time.Now().Add(-1 * time.Minute),
+	})
+
+	got, err := verifier.Verify(context.Background(), token)
+	if err != nil {
+		t.Fatalf("expected verification to succeed with trailing-slash project URL, got: %v", err)
+	}
+	if got.String() != userId {
+		t.Errorf("userId: got %q, want %q", got.String(), userId)
+	}
+}
+

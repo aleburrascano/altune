@@ -142,6 +142,21 @@ func searchString(s, sub string) bool {
 	return false
 }
 
+func TestLoad_SupabaseProjectURLTrailingSlashTrimmed(t *testing.T) {
+	setEnv(t, map[string]string{
+		"SUPABASE_PROJECT_URL":  "https://example.supabase.co/",
+		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.SupabaseProjectURL != "https://example.supabase.co" {
+		t.Errorf("expected trimmed project URL %q, got %q", "https://example.supabase.co", cfg.SupabaseProjectURL)
+	}
+}
+
 func setEnv(t *testing.T, vars map[string]string) {
 	t.Helper()
 
