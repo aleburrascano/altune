@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"altune/go-api/internal/admin/requeststore"
-	"altune/go-api/internal/shared/httputil"
 )
 
 type ReRunResult struct {
@@ -40,18 +39,8 @@ func (h *AdminHandler) WithReRunner(r ReRunner) *AdminHandler {
 }
 
 func (h *AdminHandler) serveReRun(w http.ResponseWriter, r *http.Request) {
-	if h.reRunner == nil {
-		httputil.HandleServiceError(w, r, errReRunUnavailable)
-		return
-	}
-	body, ok := decodeQuery(w, r)
-	if !ok {
-		return
-	}
-	result, err := h.reRunner.ReRun(r.Context(), body.Query, body.Kinds)
-	if err != nil {
-		httputil.HandleServiceError(w, r, upstreamError("admin.rerun_failed", err))
-		return
-	}
-	httputil.WriteJSON(w, http.StatusOK, result)
+	h.serveQueryAction(w, r, h.reRunner != nil, errReRunUnavailable, "admin.rerun_failed",
+		func(ctx context.Context, body queryRequest) (any, error) {
+			return h.reRunner.ReRun(ctx, body.Query, body.Kinds)
+		})
 }

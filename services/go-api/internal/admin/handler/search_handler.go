@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"altune/go-api/internal/admin/requeststore"
-	"altune/go-api/internal/shared/httputil"
 )
 
 type SearchInspector interface {
@@ -23,18 +22,12 @@ type testSearchResponse struct {
 }
 
 func (h *AdminHandler) serveTestSearch(w http.ResponseWriter, r *http.Request) {
-	if h.searchInspector == nil {
-		httputil.HandleServiceError(w, r, errSearchUnavailable)
-		return
-	}
-	body, ok := decodeQuery(w, r)
-	if !ok {
-		return
-	}
-	results, err := h.searchInspector.InspectSearch(r.Context(), body.Query, body.Kinds)
-	if err != nil {
-		httputil.HandleServiceError(w, r, upstreamError("admin.test_search_failed", err))
-		return
-	}
-	httputil.WriteJSON(w, http.StatusOK, testSearchResponse{Query: body.Query, Results: results})
+	h.serveQueryAction(w, r, h.searchInspector != nil, errSearchUnavailable, "admin.test_search_failed",
+		func(ctx context.Context, body queryRequest) (any, error) {
+			results, err := h.searchInspector.InspectSearch(ctx, body.Query, body.Kinds)
+			if err != nil {
+				return nil, err
+			}
+			return testSearchResponse{Query: body.Query, Results: results}, nil
+		})
 }
