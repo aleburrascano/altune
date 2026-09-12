@@ -4,7 +4,8 @@ Single chip-filtered Library screen. Opens to Playlists; a persistent search + c
 
 Layout:
 
-- `ui/LibraryScreen.tsx` — orchestrator; owns `chip`, per-chip `sortByChip`, search, the track action sheet, selection mode, and the loading/error/empty branches.
+- `ui/LibraryScreen.tsx` — orchestrator; owns `chip`, per-chip `sortByChip`, search, the track action sheet, selection mode, and the loading/error/empty branches. It is layout: the per-chip view assembly lives in `hooks/useActiveLibraryView.tsx`.
+- `hooks/useActiveLibraryView.tsx` — `useActiveLibraryView(chip, sortByChip, query, deps)` runs the per-chip data queries and the switch that assembles the active chip's `ActiveView` (content + count/noun/sort options + load/error state); returns `{ active, tracks, playlists }`.
 - `ui/LibraryChips.tsx`, `ui/SortControl.tsx`, `ui/LibraryNoResults.tsx`.
 - `ui/PlaylistsGrid.tsx`, `ui/TracksList.tsx`, `ui/AlbumsGrid.tsx`, `ui/ArtistsGrid.tsx`, `ui/LibraryRow.tsx`.
 - `ui/PlaylistDetailScreen.tsx` / `ui/PlaylistHero.tsx` — route `/library/playlist/[id]`. `ui/AddTracksToPlaylistModal.tsx` — the library picker that fills a playlist in bulk.
