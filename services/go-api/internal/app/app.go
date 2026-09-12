@@ -831,42 +831,6 @@ func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
 	return enrichers
 }
 
-func buildDiscoveryProviders(cf clientFactory, cfg *config.Config, mb *providers.MusicBrainzAdapter) []discoveryPorts.SearchProvider {
-	var providerList []discoveryPorts.SearchProvider
-
-	deezerClient := cf.discovery()
-	providerList = append(providerList, providers.NewDeezerAdapter(deezerClient))
-
-	appleMusicClient := cf.discovery()
-	providerList = append(providerList, providers.NewAppleMusicAdapter(appleMusicClient))
-
-	if mb != nil {
-		providerList = append(providerList, mb)
-	}
-
-	if cfg.HasLastFM() {
-		lfmClient := cf.discovery()
-		providerList = append(providerList, providers.NewLastFmAdapter(lfmClient, cfg.LastFMAPIKey))
-	}
-
-	soundcloudClient := cf.discovery()
-	providerList = append(providerList, providers.NewSoundCloudAPIAdapter(
-		soundcloudClient,
-		providers.NewSoundCloudAdapter(),
-	))
-
-	providerList = append(providerList, providers.NewYouTubeMusicAdapter(cf.roundTripper()))
-
-	amazonClient := cf.discovery()
-	providerList = append(providerList, providers.NewAmazonMusicAdapter(amazonClient))
-
-	spotifyClient := cf.discovery()
-	providerList = append(providerList, providers.NewSpotifyAdapter(spotifyClient))
-
-	slog.Info("discovery providers configured", "count", len(providerList))
-	return providerList
-}
-
 func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.BehavioralLabelStore) {
 	if a.cfg.BehavioralCorpusPath == "" {
 		return
