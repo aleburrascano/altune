@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sort"
 	"sync"
 	"time"
@@ -21,15 +22,23 @@ const rerunBodyCap = 64 * 1024
 type reRunner struct {
 	cfg              *config.Config
 	behavioralScores func() map[string]float64
+	transport        http.RoundTripper
 }
 
 func (a *App) buildReRunner(svc *discoveryService.Service) *reRunner {
-	return &reRunner{cfg: a.cfg, behavioralScores: svc.BehavioralScoresSnapshot}
+	return &reRunner{
+		cfg:              a.cfg,
+		behavioralScores: svc.BehavioralScoresSnapshot,
+		transport:        defaultLiveTransport,
+	}
 }
 
 func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (adminHandler.ReRunResult, error) {
 	kindSet := parseRerunKinds(kinds)
-	rec := requeststore.NewRerunRecorder(defaultLiveTransport, rerunBodyCap)
+	if _, err := domain.NewSearchQuery(query, kindSet, inspectionSearchLimit); err != nil {
+		return adminHandler.ReRunResult{}, err
+	}
+	rec := requeststore.NewRerunRecorder(rr.transport, rerunBodyCap)
 	provs := BuildDiscoveryProviders(rr.cfg, rec)
 
 	cleaned := discoveryService.CleanQuery(query)
