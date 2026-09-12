@@ -78,6 +78,29 @@ func TestMeter_RunnerTimeoutSurfacesAsFailure(t *testing.T) {
 	}
 }
 
+// TestMeter_PausedTickSkipsRun reproduces the runtime kill-switch gap: a paused
+// meter must skip its scheduled run without a restart, and run again once
+// resumed.
+func TestMeter_PausedTickSkipsRun(t *testing.T) {
+	calls := 0
+	m := New(true, 0, func(context.Context) (Result, error) {
+		calls++
+		return Result{Score: 0.9, Baseline: 0.8}, nil
+	})
+
+	m.Pause()
+	m.tick(context.Background())
+	if calls != 0 {
+		t.Fatalf("runner calls = %d, want 0 while paused", calls)
+	}
+
+	m.Resume()
+	m.tick(context.Background())
+	if calls != 1 {
+		t.Fatalf("runner calls = %d, want 1 after resume", calls)
+	}
+}
+
 func TestMeter_SkipIfRunning(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})

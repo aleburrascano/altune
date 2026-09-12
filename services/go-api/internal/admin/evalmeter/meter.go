@@ -63,15 +63,24 @@ func (m *Meter) Start(ctx context.Context) {
 func (m *Meter) loop(ctx context.Context) {
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
-	m.runOnce(ctx)
+	m.tick(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.runOnce(ctx)
+			m.tick(ctx)
 		}
 	}
+}
+
+// tick honors the runtime kill switch: a paused meter skips its scheduled run
+// and runs again on the next tick after Resume.
+func (m *Meter) tick(ctx context.Context) {
+	if m.Paused() {
+		return
+	}
+	m.runOnce(ctx)
 }
 
 func (m *Meter) runOnce(ctx context.Context) {
