@@ -123,7 +123,7 @@ func fanOutRerun(
 			errMsg := ""
 			if err != nil {
 				status = domain.ProviderStatusError
-				errMsg = err.Error()
+				errMsg = requeststore.RedactSecrets(err.Error())
 			}
 			traces[i] = requeststore.ProviderTrace{
 				Provider:    p.Name().String(),

@@ -28,12 +28,12 @@ func (r *RerunRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := r.base.RoundTrip(req)
 	ex := Exchange{
 		Method:    req.Method,
-		URL:       req.URL.String(),
+		URL:       RedactSecrets(req.URL.String()),
 		LatencyMs: time.Since(start).Milliseconds(),
 		At:        start.UTC(),
 	}
 	if err != nil {
-		ex.Err = err.Error()
+		ex.Err = RedactSecrets(err.Error())
 		r.add(ex)
 		return resp, err
 	}

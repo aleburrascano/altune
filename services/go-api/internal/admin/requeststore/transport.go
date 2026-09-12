@@ -30,10 +30,10 @@ func (t *correlatedTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	start := time.Now()
 	resp, err := t.base.RoundTrip(req)
 	latency := time.Since(start).Milliseconds()
-	ex := Exchange{Method: req.Method, URL: req.URL.String(), LatencyMs: latency, At: start.UTC()}
+	ex := Exchange{Method: req.Method, URL: RedactSecrets(req.URL.String()), LatencyMs: latency, At: start.UTC()}
 
 	if err != nil {
-		ex.Err = err.Error()
+		ex.Err = RedactSecrets(err.Error())
 		t.store.recordExchange(corrID, ex)
 		return resp, err
 	}
