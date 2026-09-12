@@ -266,6 +266,9 @@ func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, tr
 			case existsErr != nil:
 				slog.WarnContext(ctx, "acquire_exists_check_failed",
 					"track_id", track.ID.String(), "audio_ref", *track.AudioRef, "error", existsErr)
+				// A transient exists-check error is not evidence the file is gone;
+				// bail out rather than clearing a still-good AudioRef via revert.
+				return false, fmt.Errorf("reconcile exists check: %w", existsErr)
 			case exists:
 				slog.InfoContext(ctx, "acquire_skip_already_ready", "track_id", track.ID.String())
 				return false, nil
