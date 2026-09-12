@@ -186,6 +186,27 @@ func TestMonitor_BlockingConditionDoesNotFreezeTicker(t *testing.T) {
 	}
 }
 
+// TestMonitor_PausedTickSkipsEvaluation reproduces the runtime kill-switch gap:
+// a paused monitor must skip its per-tick work without a restart, and resume
+// evaluating once un-paused.
+func TestMonitor_PausedTickSkipsEvaluation(t *testing.T) {
+	firing := true
+	n := &stubNotifier{}
+	m := newTestMonitor(n, signalCond("dep", &firing))
+
+	m.Pause()
+	m.tick(context.Background())
+	if n.calls != 0 {
+		t.Fatalf("notify calls = %d, want 0 while paused", n.calls)
+	}
+
+	m.Resume()
+	m.tick(context.Background())
+	if n.calls != 1 {
+		t.Fatalf("notify calls = %d, want 1 after resume", n.calls)
+	}
+}
+
 func TestNopNotifier(t *testing.T) {
 	if err := (NopNotifier{}).Notify(context.Background(), Alert{}); err != nil {
 		t.Fatalf("NopNotifier.Notify returned %v, want nil", err)

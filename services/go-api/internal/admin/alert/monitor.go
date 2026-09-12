@@ -69,9 +69,18 @@ func (m *Monitor) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.evaluate(ctx)
+			m.tick(ctx)
 		}
 	}
+}
+
+// tick honors the runtime kill switch: a paused monitor skips evaluation
+// entirely and resumes on the next tick after Resume.
+func (m *Monitor) tick(ctx context.Context) {
+	if m.Paused() {
+		return
+	}
+	m.evaluate(ctx)
 }
 
 func (m *Monitor) evaluate(ctx context.Context) {
