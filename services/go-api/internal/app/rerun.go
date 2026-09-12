@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -92,6 +93,17 @@ func fanOutRerun(
 		go func(i int, p discoveryPorts.SearchProvider) {
 			defer wg.Done()
 			start := time.Now()
+			defer func() {
+				if r := recover(); r != nil {
+					perProvider[i] = nil
+					traces[i] = requeststore.ProviderTrace{
+						Provider:  p.Name().String(),
+						Status:    domain.ProviderStatusError.String(),
+						LatencyMs: time.Since(start).Milliseconds(),
+						Err:       fmt.Sprintf("panic: %v", r),
+					}
+				}
+			}()
 			results, err := p.Search(ctx, query, kinds)
 			perProvider[i] = results
 			status := domain.ProviderStatusOK
