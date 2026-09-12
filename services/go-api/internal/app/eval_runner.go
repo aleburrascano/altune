@@ -5,11 +5,33 @@ import (
 	"fmt"
 	"strings"
 
-	"altune/go-api/internal/admin/evalmeter"
 	domain "altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
 )
+
+// EvalQueryResult is the app-owned outcome of a single smoke-eval query. The
+// wiring boundary (app.go) maps it to admin/evalmeter's wire DTO, so this
+// package's scoring logic no longer depends on that presentation type.
+type EvalQueryResult struct {
+	Query    string
+	Expect   string
+	Passed   bool
+	Position int
+}
+
+// EvalResult is the app-owned smoke-eval scorecard. app.go maps it to
+// admin/evalmeter.Result at the boundary; the JSON shape lives with the meter.
+type EvalResult struct {
+	Score     float64
+	Baseline  float64
+	Regressed bool
+	Queries   []EvalQueryResult
+}
+
+// EvalRunner runs one smoke eval and returns the app-owned result. app.go
+// adapts it to admin/evalmeter.Runner when wiring the meter.
+type EvalRunner func(ctx context.Context) (EvalResult, error)
 
 var evalSmokeChecks = []struct{ query, expect string }{
 	{"Bohemian Rhapsody", "bohemian rhapsody"},
@@ -25,13 +47,13 @@ const (
 	evalLimit    = 10
 )
 
-func (a *App) buildEvalRunner() evalmeter.Runner {
+func (a *App) buildEvalRunner() EvalRunner {
 	if !a.cfg.EvalMeterEnabled {
 		return nil
 	}
 	evalSvc := BuildSearchServiceWithTransport(a.cfg, a.pool, a.redisClient, nil, nil, nil, true)
 
-	return func(ctx context.Context) (evalmeter.Result, error) {
+	return func(ctx context.Context) (EvalResult, error) {
 		return runSmokeEval(ctx, evalSvc, evalUserId())
 	}
 }
@@ -44,7 +66,7 @@ func evalUserId() shared.UserId {
 	return shared.SystemUserId()
 }
 
-func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user shared.UserId) (evalmeter.Result, error) {
+func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user shared.UserId) (EvalResult, error) {
 	kinds := map[domain.ResultKind]bool{
 		domain.ResultKindTrack:  true,
 		domain.ResultKindAlbum:  true,
@@ -52,22 +74,22 @@ func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user share
 	}
 
 	passed := 0
-	queries := make([]evalmeter.QueryResult, 0, len(evalSmokeChecks))
+	queries := make([]EvalQueryResult, 0, len(evalSmokeChecks))
 	for _, check := range evalSmokeChecks {
 		query, err := domain.NewSearchQuery(check.query, kinds, evalLimit)
 		if err != nil {
-			return evalmeter.Result{}, fmt.Errorf("eval query %q: %w", check.query, err)
+			return EvalResult{}, fmt.Errorf("eval query %q: %w", check.query, err)
 		}
 		out, err := svc.Execute(ctx, user, query, false)
 		if err != nil {
-			return evalmeter.Result{}, fmt.Errorf("eval search %q: %w", check.query, err)
+			return EvalResult{}, fmt.Errorf("eval search %q: %w", check.query, err)
 		}
 		pos := matchPosition(out.Results, check.expect)
 		ok := pos >= 0 && pos < evalTopK
 		if ok {
 			passed++
 		}
-		queries = append(queries, evalmeter.QueryResult{
+		queries = append(queries, EvalQueryResult{
 			Query:    check.query,
 			Expect:   check.expect,
 			Passed:   ok,
@@ -76,7 +98,7 @@ func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user share
 	}
 
 	score := float64(passed) / float64(len(evalSmokeChecks))
-	return evalmeter.Result{
+	return EvalResult{
 		Score:     score,
 		Baseline:  evalBaseline,
 		Regressed: score < evalBaseline,
