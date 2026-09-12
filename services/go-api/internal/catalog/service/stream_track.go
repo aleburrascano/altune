@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared"
 )
 
 type StreamOutput struct {
@@ -78,11 +77,17 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 		s.metrics.StreamRecoveryTriggered()
 		slog.WarnContext(ctx, "stream.audio_missing",
 			"track_id", trackId.String(), "error", err)
-		if recErr := s.recoverMissingAudio(ctx, userId, track); recErr != nil {
+		confirmedMissing, recErr := s.recoverMissingAudio(ctx, userId, track)
+		if recErr != nil {
 			slog.ErrorContext(ctx, "stream.recover_failed",
 				"track_id", trackId.String(), "error", recErr)
 		}
-		return nil, ErrAudioNotAvailable
+		// Only a confirmed absence is genuinely "not available"; a transient
+		// stream failure over a present (or unverifiable) file is retryable.
+		if confirmedMissing {
+			return nil, ErrAudioNotAvailable
+		}
+		return nil, ErrAudioTemporarilyUnavailable
 	}
 
 	slog.InfoContext(ctx, "stream.opened",
@@ -113,9 +118,14 @@ func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId shared
 	return s.reconcileMissingAudio(ctx, userId, track, false, nil)
 }
 
-func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId shared.UserId, track *domain.Track) error {
-	exists, err := s.audioStore.Exists(ctx, *track.AudioRef)
-	return s.reconcileMissingAudio(ctx, userId, track, exists, err)
+// recoverMissingAudio reconciles a failed stream against storage and reports
+// whether the file was confirmed absent. confirmedMissing is true only when the
+// existence check succeeded and the file is genuinely gone; a failed existence
+// check or a present file both leave it false (the stream failure is transient).
+func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId shared.UserId, track *domain.Track) (confirmedMissing bool, err error) {
+	exists, existsErr := s.audioStore.Exists(ctx, *track.AudioRef)
+	recErr := s.reconcileMissingAudio(ctx, userId, track, exists, existsErr)
+	return existsErr == nil && !exists, recErr
 }
 
 func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId shared.UserId, track *domain.Track, exists bool, err error) error {
