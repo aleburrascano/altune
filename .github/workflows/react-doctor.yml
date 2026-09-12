@@ -50,3 +50,38 @@ jobs:
         with:
           directory: apps/mobile
           blocking: warning
+
+      # react-doctor is ADVISORY (the real gate is test-mobile.yml). But it posts
+      # inline REVIEW comments, and `main` requires conversation resolution — so a
+      # single advisory warning would silently block merge until a human resolved
+      # the bot's thread. Auto-resolve react-doctor's OWN threads (matched by its
+      # `react-doctor` marker) to keep it advisory. Human review threads, and any
+      # other bot's, are left untouched — conversation resolution still gates them.
+      - name: keep react-doctor advisory (resolve its own threads)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ids=$(gh api graphql \
+            -f owner='${{ github.repository_owner }}' \
+            -f name='${{ github.event.repository.name }}' \
+            -F number=${{ github.event.pull_request.number }} \
+            -f query='query($owner:String!,$name:String!,$number:Int!){
+              repository(owner:$owner,name:$name){
+                pullRequest(number:$number){
+                  reviewThreads(first:100){ nodes{
+                    id isResolved
+                    comments(first:1){ nodes{ author{ login } body } }
+                  } }
+                } } }' \
+            --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+                  | select(.isResolved == false)
+                  | select(.comments.nodes[0].author.login == "github-actions")
+                  | select(.comments.nodes[0].body | contains("react-doctor"))
+                  | .id')
+          for id in $ids; do
+            echo "resolving react-doctor thread $id"
+            gh api graphql -f id="$id" \
+              -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread{ isResolved } } }' >/dev/null
+          done
+          echo "react-doctor threads resolved (advisory)"
