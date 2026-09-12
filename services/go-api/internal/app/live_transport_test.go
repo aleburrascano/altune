@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -187,15 +188,47 @@ func TestLiveTransport_FallsBackWithoutRetryAfter(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := &fakeRT{steps: []fakeStep{{status: 429, header: h}, {status: 200}}}
 			var delays []time.Duration
-			resp, err := recordDelays(f, &delays).RoundTrip(getReq(t))
+			lt := recordDelays(f, &delays)
+			lt.randFloat = func() float64 { return 0.5 } // midpoint: no jitter offset
+			resp, err := lt.RoundTrip(getReq(t))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			defer resp.Body.Close()
-			if len(delays) != 1 || delays[0] != fixedBackoff(1) {
-				t.Errorf("delays = %v, want the fixed backoff %v", delays, fixedBackoff(1))
+			base := time.Duration(1) * liveBackoffBase
+			if len(delays) != 1 || delays[0] != base {
+				t.Errorf("delays = %v, want the fixed backoff base %v", delays, base)
 			}
 		})
+	}
+}
+
+// TestLiveTransport_FixedBackoffHasJitter is the regression for the lockstep
+// bug: repeated backoffs at the same attempt must not all be identical, yet
+// every draw must stay within the +/-liveBackoffJitter bound and never exceed
+// the documented max.
+func TestLiveTransport_FixedBackoffHasJitter(t *testing.T) {
+	lt := newLiveOver(&fakeRT{steps: []fakeStep{{status: 200}}})
+	lt.randFloat = rand.New(rand.NewPCG(1, 2)).Float64 // seeded: deterministic yet varied
+
+	const attempt = 1
+	base := time.Duration(attempt) * liveBackoffBase
+	spread := time.Duration(liveBackoffJitter * float64(base))
+	lo, hi := base-spread, base+spread
+
+	seen := make(map[time.Duration]struct{})
+	for i := 0; i < 50; i++ {
+		d := lt.fixedBackoff(attempt)
+		if d < lo || d > hi {
+			t.Fatalf("backoff %v outside bound [%v,%v]", d, lo, hi)
+		}
+		if d > liveMaxBackoff {
+			t.Fatalf("backoff %v exceeds documented max %v", d, liveMaxBackoff)
+		}
+		seen[d] = struct{}{}
+	}
+	if len(seen) < 2 {
+		t.Fatalf("backoff never varied across 50 calls (no jitter); saw %v", seen)
 	}
 }
 
