@@ -96,6 +96,27 @@ func TestSSEHandler_ReplayGapEmitsResync(t *testing.T) {
 	readUntil(t, br, func(l string) bool { return l == "event: resync" })
 }
 
+func TestSSEHandler_MarshalFailureEmitsResync(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+
+	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
+
+	// A channel cannot be JSON-marshalled: without a resync signal this event
+	// vanishes silently and the client never learns it missed state.
+	bus.Publish(uid, "unmarshalable", map[string]any{"bad": make(chan int)})
+	readUntil(t, br, func(l string) bool { return l == "event: resync" })
+}
+
 func TestReplayGapped(t *testing.T) {
 	tests := []struct {
 		name     string
