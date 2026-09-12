@@ -112,6 +112,18 @@ func (s *Store) evictForBytes() {
 	for s.totalBytes > s.maxTotal && len(s.order) > 1 {
 		s.dropOldest()
 	}
+	if s.totalBytes > s.maxTotal && len(s.order) == 1 {
+		s.trimOldestExchanges(s.byID[s.order[0]])
+	}
+}
+
+func (s *Store) trimOldestExchanges(rec *RequestRecord) {
+	for rec != nil && rec.bytes > s.maxTotal && len(rec.Exchanges) > 0 {
+		dropped := rec.Exchanges[0]
+		rec.Exchanges = rec.Exchanges[1:]
+		rec.bytes -= len(dropped.RespBody)
+		s.totalBytes -= len(dropped.RespBody)
+	}
 }
 
 func (s *Store) dropOldest() {

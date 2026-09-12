@@ -50,6 +50,27 @@ func TestEviction_ByTotalBytes(t *testing.T) {
 	}
 }
 
+func TestEviction_SingleRecordCannotExceedBudget(t *testing.T) {
+	s := New()
+	s.maxTotal = 20
+	// A reused correlation ID fans out to many provider exchanges, all
+	// appended to the SAME record. s.order never grows, so count-based
+	// eviction never fires and the record must not pin memory above cap.
+	for range 50 {
+		s.recordExchange("c1", ex("aaaaa")) // 5 bytes each -> 250 unbounded
+	}
+	if s.totalBytes > s.maxTotal {
+		t.Fatalf("totalBytes=%d exceeds maxTotal=%d", s.totalBytes, s.maxTotal)
+	}
+	rec := s.byID["c1"]
+	if rec == nil {
+		t.Fatal("c1 should still be tracked")
+	}
+	if rec.bytes > s.maxTotal {
+		t.Fatalf("record bytes=%d exceeds maxTotal=%d", rec.bytes, s.maxTotal)
+	}
+}
+
 func TestSnapshot_NewestFirst_AndCopied(t *testing.T) {
 	s := New()
 	s.recordExchange("c1", ex("a"))
