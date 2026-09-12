@@ -31,7 +31,7 @@ func Setup(logLevel string, development bool) *RingBuffer {
 	}
 
 	ring := NewRingBuffer(logRingCapacity)
-	slog.SetDefault(slog.New(newRingHandler(base, ring)))
+	slog.SetDefault(slog.New(newCorrelationHandler(newRingHandler(base, ring))))
 	return ring
 }
 

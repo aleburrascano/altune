@@ -1,6 +1,7 @@
 package httputil
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -10,10 +11,6 @@ import (
 
 	"github.com/google/uuid"
 )
-
-type ctxKey string
-
-const correlationIDKey ctxKey = "correlation_id"
 
 const (
 	correlationHeader   = "X-Correlation-ID"
@@ -26,7 +23,7 @@ func CorrelationID(next http.Handler) http.Handler {
 		if id == "" {
 			id = uuid.New().String()[:8]
 		}
-		ctx := context.WithValue(r.Context(), correlationIDKey, id)
+		ctx := logging.WithCorrelationID(r.Context(), id)
 		w.Header().Set(correlationHeader, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -50,12 +47,11 @@ func isWellFormedCorrelationID(id string) bool {
 }
 
 func GetCorrelationID(ctx context.Context) string {
-	id, _ := ctx.Value(correlationIDKey).(string)
-	return id
+	return logging.CorrelationIDFromContext(ctx)
 }
 
 func WithCorrelationID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, correlationIDKey, id)
+	return logging.WithCorrelationID(ctx, id)
 }
 
 func RequestLogger(next http.Handler) http.Handler {
@@ -63,10 +59,7 @@ func RequestLogger(next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 
-		corrID := GetCorrelationID(r.Context())
-
 		slog.InfoContext(r.Context(), "request.start",
-			"corr_id", corrID,
 			"method", r.Method,
 			"path", r.URL.Path,
 			"remote", r.RemoteAddr,
@@ -82,7 +75,6 @@ func RequestLogger(next http.Handler) http.Handler {
 			}
 
 			slog.Log(r.Context(), level, "request.complete",
-				"corr_id", corrID,
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", sw.status,
@@ -99,9 +91,7 @@ func Recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				corrID := GetCorrelationID(r.Context())
 				slog.ErrorContext(r.Context(), "panic.recovered",
-					"corr_id", corrID,
 					"error", fmt.Sprint(rec),
 					"method", r.Method,
 					"path", r.URL.Path,
