@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type ExchangeRecorder struct {
+type RerunRecorder struct {
 	base    http.RoundTripper
 	bodyCap int
 
@@ -16,14 +16,14 @@ type ExchangeRecorder struct {
 	exchanges []Exchange
 }
 
-func NewExchangeRecorder(base http.RoundTripper, bodyCap int) *ExchangeRecorder {
+func NewRerunRecorder(base http.RoundTripper, bodyCap int) *RerunRecorder {
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	return &ExchangeRecorder{base: base, bodyCap: bodyCap, exchanges: []Exchange{}}
+	return &RerunRecorder{base: base, bodyCap: bodyCap, exchanges: []Exchange{}}
 }
 
-func (r *ExchangeRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
+func (r *RerunRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	start := time.Now()
 	resp, err := r.base.RoundTrip(req)
 	ex := Exchange{
@@ -52,13 +52,13 @@ func (r *ExchangeRecorder) RoundTrip(req *http.Request) (*http.Response, error) 
 	return resp, nil
 }
 
-func (r *ExchangeRecorder) add(ex Exchange) {
+func (r *RerunRecorder) add(ex Exchange) {
 	r.mu.Lock()
 	r.exchanges = append(r.exchanges, ex)
 	r.mu.Unlock()
 }
 
-func (r *ExchangeRecorder) Exchanges() []Exchange {
+func (r *RerunRecorder) Exchanges() []Exchange {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make([]Exchange, len(r.exchanges))

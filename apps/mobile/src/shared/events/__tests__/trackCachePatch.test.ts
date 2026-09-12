@@ -71,6 +71,13 @@ function newClient(): QueryClient {
   return new QueryClient();
 }
 
+// Registers a query in the cache without ever populating it — the state a screen
+// is in between mounting a query and its first fetch resolving (state.data is
+// undefined). An SSE cache patch can land in exactly this window.
+function registerUnfetchedQuery(client: QueryClient, queryKey: readonly unknown[]): void {
+  client.getQueryCache().build(client, { queryKey });
+}
+
 function seedTracksPrefix(client: QueryClient, pages: ListTracksResponse[]): void {
   client.setQueryData(libraryKeys.tracks('q', 'sort'), makeInfinite(pages));
 }
@@ -121,6 +128,16 @@ describe('getTrackFromCaches', () => {
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [target]));
 
     expect(getTrackFromCaches(client, 'playlist-only')).toEqual(target);
+  });
+
+  it('skips a family whose query is registered but not yet fetched (data undefined)', () => {
+    const client = newClient();
+    registerUnfetchedQuery(client, libraryKeys.tracks('q', 'sort'));
+    registerUnfetchedQuery(client, libraryKeys.lookup('q'));
+    registerUnfetchedQuery(client, libraryKeys.featuring('identity'));
+    registerUnfetchedQuery(client, playlistKeys.detail('p1'));
+
+    expect(getTrackFromCaches(client, 'anything')).toBeUndefined();
   });
 
   it('returns undefined for an id absent from every populated family', () => {
@@ -197,6 +214,14 @@ describe('upsertTrackInCaches', () => {
       libraryKeys.tracks('q', 'sort'),
     )!;
     expect(result.pages).toEqual([]);
+  });
+
+  it('is a safe no-op when the paged query is registered but not yet fetched (data undefined)', () => {
+    const client = newClient();
+    registerUnfetchedQuery(client, libraryKeys.tracks('q', 'sort'));
+
+    expect(() => upsertTrackInCaches(client, makeTrack({ id: asTrackId('new') }))).not.toThrow();
+    expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toBeUndefined();
   });
 
   it('does not propagate to the lookup, featuring, or playlist detail caches', () => {
@@ -502,6 +527,21 @@ describe('patchTrackInCaches', () => {
     );
 
     expect(afterSecond).toEqual(afterFirst);
+  });
+
+  it('leaves an unfetched (data-undefined) query untouched across every shape', () => {
+    const client = newClient();
+    registerUnfetchedQuery(client, libraryKeys.tracks('q', 'sort'));
+    registerUnfetchedQuery(client, libraryKeys.lookup('q'));
+    registerUnfetchedQuery(client, libraryKeys.featuring('identity'));
+    registerUnfetchedQuery(client, playlistKeys.detail('p1'));
+
+    expect(() => patchTrackInCaches(client, 'target', { acquisition_status: 'ready' })).not.toThrow();
+
+    expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toBeUndefined();
+    expect(client.getQueryData(libraryKeys.lookup('q'))).toBeUndefined();
+    expect(client.getQueryData(libraryKeys.featuring('identity'))).toBeUndefined();
+    expect(client.getQueryData(playlistKeys.detail('p1'))).toBeUndefined();
   });
 
   it('property: replaying an arbitrary patch never changes the outcome of the first application', () => {
