@@ -56,6 +56,43 @@ func TestMergeAlbumsLikeClient_ordersNewestFirst(t *testing.T) {
 	}
 }
 
+func TestSortReleasesByDateDesc_yearOnlyNotForcedOlderThanSameYearFullDate(t *testing.T) {
+	yearOnly := albumResult("YearOnly", 0, "discogs")
+	yearOnly.Year = 2015
+	fullDate := albumResult("FullDate", 0, "deezer")
+	fullDate.ReleaseDate = "2015-06-01"
+
+	// Year-only first: a bare year and a same-year full date are contemporaneous,
+	// so the stable sort must not demote the year-only item below its same-year peer.
+	items := []domain.SearchResult{yearOnly, fullDate}
+	sortReleasesByDateDesc(items)
+	if items[0].Title != "YearOnly" || items[1].Title != "FullDate" {
+		t.Errorf("want YearOnly, FullDate (contemporaneous tie keeps input order); got %s, %s",
+			items[0].Title, items[1].Title)
+	}
+
+	// Full date first: the tie must also preserve that order, not flip it.
+	items = []domain.SearchResult{fullDate, yearOnly}
+	sortReleasesByDateDesc(items)
+	if items[0].Title != "FullDate" || items[1].Title != "YearOnly" {
+		t.Errorf("want FullDate, YearOnly (contemporaneous tie keeps input order); got %s, %s",
+			items[0].Title, items[1].Title)
+	}
+}
+
+func TestSortReleasesByDateDesc_distinctYearsStillOrderNewestFirst(t *testing.T) {
+	older := albumResult("OlderYear", 0, "discogs")
+	older.Year = 2014
+	newer := albumResult("NewerFullDate", 0, "deezer")
+	newer.ReleaseDate = "2016-03-01"
+
+	items := []domain.SearchResult{older, newer}
+	sortReleasesByDateDesc(items)
+	if items[0].Title != "NewerFullDate" || items[1].Title != "OlderYear" {
+		t.Errorf("want NewerFullDate, OlderYear; got %s, %s", items[0].Title, items[1].Title)
+	}
+}
+
 func TestMergeTracksLikeClient_dedupesByTitleFirstWinsAndCapsAtFive(t *testing.T) {
 	first := []domain.SearchResult{{Title: "A"}, {Title: "B"}}
 	second := []domain.SearchResult{{Title: "b"}, {Title: "C"}, {Title: "D"}, {Title: "E"}, {Title: "F"}}
