@@ -151,7 +151,7 @@ func (a *App) startDiscoveryBackgroundJobs(
 	}
 	a.startCorpusRefresh(ctx, eventStore)
 	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
-	a.startVocabularyRefresh(vocabStore)
+	a.startVocabularyRefresh(ctx, vocabStore)
 }
 
 func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {

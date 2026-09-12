@@ -97,6 +97,9 @@ type App struct {
 
 	election         electionController
 	backgroundStarts []backgroundJob
+
+	jobsMu sync.Mutex
+	jobs   map[string]*jobControl
 }
 
 // electionController is the leader-election surface the app depends on: winning
@@ -663,10 +666,12 @@ const stalePendingReconcileInterval = 10 * time.Minute
 // then on an interval (ongoing sweep).
 func (a *App) startStalePendingReconcile(ctx context.Context, repo catalogPorts.StalePendingFailer) {
 	svc := catalogService.NewReconcileStalePendingService(repo)
-	a.startTicker(ctx, "stale pending reconcile", stalePendingReconcileInterval, func() {
+	a.startTicker(ctx, "stale pending reconcile", stalePendingReconcileInterval, func() error {
 		if _, err := svc.Execute(ctx); err != nil {
 			slog.WarnContext(ctx, "stale pending reconcile failed", "error", err)
+			return err
 		}
+		return nil
 	})
 	slog.Info("stale pending reconcile started", "interval", stalePendingReconcileInterval.String())
 }
@@ -868,30 +873,37 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 	}
 	builder := eval.NewCorpusBuilder(store)
 	const lookback = 30 * 24 * time.Hour
-	a.startTicker(ctx, "behavioral corpus refresh", 24*time.Hour, func() {
+	a.startTicker(ctx, "behavioral corpus refresh", 24*time.Hour, func() error {
 		since := time.Now().UTC().Add(-lookback)
 		if err := builder.Materialize(ctx, since, since.Format("2006-01-02"), a.cfg.BehavioralCorpusPath); err != nil {
 			slog.WarnContext(ctx, "behavioral corpus materialize failed", "error", err)
-			return
+			return err
 		}
 		slog.InfoContext(ctx, "behavioral corpus materialized", "path", a.cfg.BehavioralCorpusPath)
+		return nil
 	})
 	slog.Info("behavioral corpus refresh started", "path", a.cfg.BehavioralCorpusPath)
 }
 
 func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.MetricsRollupStore) {
-	a.startTicker(ctx, "discovery metrics rollup", 6*time.Hour, func() {
+	a.startTicker(ctx, "discovery metrics rollup", 6*time.Hour, func() error {
 		now := time.Now().UTC()
+		var firstErr error
 		for _, day := range []time.Time{now, now.Add(-24 * time.Hour)} {
 			if err := store.RollupDay(ctx, day); err != nil {
-				slog.WarnContext(ctx, "discovery metrics rollup failed", "error", err)
+				slog.WarnContext(ctx, "discovery metrics rollup failed",
+					"day", day.Format("2006-01-02"), "error", err)
+				if firstErr == nil {
+					firstErr = err
+				}
 			}
 		}
+		return firstErr
 	})
 	slog.Info("discovery metrics rollup started")
 }
 
-func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) {
+func (a *App) startVocabularyRefresh(ctx context.Context, vocabStore discoveryPorts.VocabularyStore) {
 	if vocabStore == nil {
 		return
 	}
@@ -899,13 +911,21 @@ func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) 
 	if len(charts) == 0 {
 		return
 	}
+	const vocabRefreshInterval = 6 * time.Hour
 	a.vocabRefresh = discoveryService.NewVocabularyRefreshService(
-		charts, vocabStore, 6*time.Hour, 50,
+		charts, vocabStore, vocabRefreshInterval, 50,
 	)
-	a.whenLeader("vocabulary refresh", func(context.Context) {
-		a.vocabRefresh.Start()
-		slog.Info("vocabulary refresh started")
+	// Driven through the shared ticker rather than the service's own loop so it
+	// picks up the kill switch, the per-job health signal and the per-tick
+	// leadership re-check that the other background jobs already have.
+	a.startTicker(ctx, "vocabulary refresh", vocabRefreshInterval, func() error {
+		if err := a.vocabRefresh.RunOnce(ctx); err != nil {
+			slog.WarnContext(ctx, "vocabulary refresh failed", "error", err)
+			return err
+		}
+		return nil
 	})
+	slog.Info("vocabulary refresh started")
 }
 
 func (a *App) buildChartProviders() []discoveryPorts.ChartProvider {
