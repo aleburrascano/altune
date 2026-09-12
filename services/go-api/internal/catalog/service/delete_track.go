@@ -1,14 +1,13 @@
 package service
 
 import (
-	"context"
-	"fmt"
-	"log/slog"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	"context"
+	"fmt"
+	"log/slog"
 )
 
 type DeleteTrackService struct {
@@ -58,11 +57,18 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, 
 	if audioRef != nil {
 		if err := s.audioStore.Delete(ctx, *audioRef); err != nil {
 			s.metrics.OrphanedDelete()
+			// Marked log line so orphans are discoverable/reconcilable by querying
+			// event=catalog.orphaned_audio rather than being lost in noise.
 			slog.ErrorContext(ctx, "orphaned audio file after track delete",
+				"event", "catalog.orphaned_audio",
 				"track_id", trackId.String(),
 				"audio_ref", *audioRef,
 				"error", err,
 			)
+			// Surface the partial deletion: the track row is gone but the audio
+			// file is not, so the caller must not be told the delete fully
+			// succeeded.
+			return fmt.Errorf("%w: %w", ErrAudioOrphaned, err)
 		}
 	}
 

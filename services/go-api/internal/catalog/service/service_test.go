@@ -1,16 +1,15 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"reflect"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -685,7 +684,6 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{first.ID, second.ID})
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -713,7 +711,6 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{fresh.ID})
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -738,7 +735,6 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{existing.ID, fresh.ID})
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -759,7 +755,6 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{track.ID, track.ID})
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -776,7 +771,6 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{owned.ID, domain.NewTrackId()})
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -797,7 +791,6 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{domain.NewTrackId()})
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -934,7 +927,6 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []domain.TrackId{first, third})
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -974,7 +966,6 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []domain.TrackId{member, domain.NewTrackId()})
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -991,7 +982,6 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []domain.TrackId{domain.NewTrackId()})
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1217,7 +1207,6 @@ func TestListFeaturingService_Execute(t *testing.T) {
 		svc := NewListFeaturingService(repo)
 
 		got, err := svc.Execute(ctx, userId, sza)
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1236,7 +1225,6 @@ func TestListFeaturingService_Execute(t *testing.T) {
 		svc := NewListFeaturingService(repo)
 
 		got, err := svc.Execute(ctx, userId, sza)
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1253,7 +1241,6 @@ func TestListFeaturingService_Execute(t *testing.T) {
 		svc := NewListFeaturingService(repo)
 
 		got, err := svc.Execute(ctx, userId, sza)
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1271,7 +1258,6 @@ func TestListFeaturingService_Execute(t *testing.T) {
 
 		query, _ := domain.NewFeaturedArtist("Solana", "mbid-1", 0)
 		got, err := svc.Execute(ctx, userId, query)
-
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1303,6 +1289,7 @@ func TestSentinelErrorCodes(t *testing.T) {
 		{ErrTrackNotFound, "catalog.track_not_found"},
 		{ErrPlaylistNotFound, "catalog.playlist_not_found"},
 		{ErrAudioNotAvailable, "catalog.audio_not_available"},
+		{ErrAudioOrphaned, "catalog.audio_orphaned"},
 	}
 	for _, c := range cases {
 		if got := c.err.ErrorCode(); got != c.want {
