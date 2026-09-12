@@ -70,38 +70,79 @@ func (l *connLimiter) release(key string) {
 }
 
 func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserID(w, r)
+	// Phase 1: authenticate, reserve a connection slot and subscribe.
+	userId, rc, ch, cancel, ok := h.setup(w, r)
 	if !ok {
 		return
 	}
+	defer h.releaseSlot(userId)
+	defer cancel()
+
+	// Phase 2: replay any events the client missed since its Last-Event-ID.
+	lastReplayedID, ok := h.replayHistory(rc, w, r, userId)
+	if !ok {
+		return
+	}
+
+	// Phase 3: serve the live stream with heartbeats.
+	h.serveLive(r, rc, w, ch, userId, lastReplayedID)
+}
+
+// setup authenticates the request, verifies streaming support, reserves a
+// connection slot, writes the SSE headers and subscribes to the user's event
+// channel. On success the caller owns the returned cancel func and must release
+// the connection slot. Subscribe happens BEFORE any replay so an event
+// published during replay lands on the live channel instead of the gap between
+// snapshot and subscribe (#371); the overlap is deduped by ID in stream via
+// lastReplayedID.
+func (h *sseHandler) setup(
+	w http.ResponseWriter,
+	r *http.Request,
+) (shared.UserId, *http.ResponseController, <-chan events.Event, func(), bool) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return shared.UserId{}, nil, nil, nil, false
+	}
 	if _, ok := w.(http.Flusher); !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
-		return
+		return shared.UserId{}, nil, nil, nil, false
 	}
 	if !h.acquireSlot(w, userId) {
-		return
+		return shared.UserId{}, nil, nil, nil, false
 	}
-	defer h.releaseSlot(userId)
 
 	setSSEHeaders(w)
 	rc := http.NewResponseController(w)
-
-	// Subscribe BEFORE replaying so an event published during replay lands on the
-	// live channel instead of the gap between snapshot and subscribe (#371). The
-	// overlap (events in both the snapshot and the channel) is deduped by ID in
-	// stream via lastReplayedID.
 	ch, cancel := h.bus.Subscribe(userId)
-	defer cancel()
+	return userId, rc, ch, cancel, true
+}
 
-	var lastReplayedID uint64
-	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" {
-		replayedThrough, err := h.resume(rc, w, userId, lastID)
-		if err != nil {
-			return
-		}
-		lastReplayedID = replayedThrough
+// replayHistory replays events after the client's Last-Event-ID, returning the
+// highest event ID delivered so the live stream can dedup the replay/subscribe
+// overlap. The bool is false when the connection should be abandoned (a write
+// failed mid-replay).
+func (h *sseHandler) replayHistory(rc *http.ResponseController, w http.ResponseWriter, r *http.Request, userId shared.UserId) (uint64, bool) {
+	lastID := r.Header.Get("Last-Event-ID")
+	if lastID == "" {
+		return 0, true
 	}
+	replayedThrough, err := h.resume(rc, w, userId, lastID)
+	if err != nil {
+		return 0, false
+	}
+	return replayedThrough, true
+}
 
+// serveLive acknowledges the connection and then pumps the live event stream
+// and heartbeats until the client disconnects or a write fails.
+func (h *sseHandler) serveLive(
+	r *http.Request,
+	rc *http.ResponseController,
+	w http.ResponseWriter,
+	ch <-chan events.Event,
+	userId shared.UserId,
+	lastReplayedID uint64,
+) {
 	if err := h.writeFrame(rc, w, ":ok\n\n"); err != nil {
 		return
 	}
