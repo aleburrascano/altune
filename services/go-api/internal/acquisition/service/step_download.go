@@ -48,42 +48,65 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) erro
 			break
 		}
 		attempts++
-		candidate := ac.Ranked[i]
 
 		tmpDir, err := os.MkdirTemp("", "altune-acquire-*")
 		if err != nil {
 			return fmt.Errorf("create temp dir: %w", err)
 		}
 
-		filePath, err := s.fetcher.Fetch(ctx, candidate, tmpDir)
+		selected, err := s.tryCandidate(ctx, ac, ac.Ranked[i], tmpDir)
+		if selected {
+			return nil
+		}
 		if err != nil {
-			os.RemoveAll(tmpDir)
 			lastErr = err
-			slog.WarnContext(ctx, "acquisition.candidate_download_failed",
-				"url", candidate.URL, "source", candidate.Source, "error", err)
-			continue
 		}
-
-		verified, rejection := s.verify(ctx, ac, candidate, filePath)
-		if rejection != nil {
-			os.RemoveAll(tmpDir)
-			lastErr = rejection
-			continue
-		}
-
-		selected := candidate
-		ac.Selected = &selected
-		ac.TempPath = filePath
-		ac.DurationVerified = verified.duration
-		ac.IdentityVerified = verified.identity
-		ac.ProbedDuration = verified.probed
-		return nil
 	}
 
 	if lastErr != nil {
 		return fmt.Errorf("no candidate produced acceptable audio: %w", lastErr)
 	}
 	return fmt.Errorf("no candidate produced acceptable audio")
+}
+
+// tryCandidate downloads and verifies one candidate into tmpDir. The temp dir
+// is removed on every exit path — failure, rejection, or a panic in fetch or
+// verify — except when the candidate is accepted, where it holds the audio file
+// at ac.TempPath. Deferring the cleanup is what keeps a panicking step from
+// leaking an altune-acquire-* dir: ac.TempPath is unset here, so neither the
+// pipeline's rollback nor acquire.go's CleanupTemp could otherwise find it.
+func (s *DownloadStep) tryCandidate(
+	ctx context.Context,
+	ac *AcquisitionContext,
+	candidate ports.AudioCandidate,
+	tmpDir string,
+) (selected bool, err error) {
+	defer func() {
+		if !selected {
+			os.RemoveAll(tmpDir)
+		}
+	}()
+
+	filePath, err := s.fetcher.Fetch(ctx, candidate, tmpDir)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
+			"url", candidate.URL, "source", candidate.Source, "error", err)
+		return false, err
+	}
+
+	verified, rejection := s.verify(ctx, ac, candidate, filePath)
+	if rejection != nil {
+		return false, rejection
+	}
+
+	sel := candidate
+	ac.Selected = &sel
+	ac.TempPath = filePath
+	ac.DurationVerified = verified.duration
+	ac.IdentityVerified = verified.identity
+	ac.ProbedDuration = verified.probed
+	selected = true
+	return true, nil
 }
 
 type verificationResult struct {

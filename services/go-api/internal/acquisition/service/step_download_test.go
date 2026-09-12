@@ -107,3 +107,47 @@ func TestDownloadStep_Rollback_RemovesTempFile(t *testing.T) {
 		t.Error("temp file should be removed after rollback")
 	}
 }
+
+// panicProber explodes the moment verification touches the downloaded file,
+// standing in for any probe/identify dependency that panics mid-pipeline.
+type panicProber struct{}
+
+func (panicProber) ProbeDuration(context.Context, string) (float64, error) {
+	panic("prober exploded")
+}
+
+func (panicProber) ValidateDecodable(context.Context, string) error { return nil }
+
+// TestDownloadStep_PanicDuringVerify_CleansTempDir reproduces the leak that
+// survives #340: the per-candidate temp dir is created, the fetch succeeds, then
+// verify panics. ac.TempPath is only set on the success path, so neither the
+// pipeline's recover -> Rollback nor acquire.go's CleanupTemp can find this dir.
+// Without deferred cleanup at the MkdirTemp site the altune-acquire-* dir leaks.
+func TestDownloadStep_PanicDuringVerify_CleansTempDir(t *testing.T) {
+	searcher := &fileWritingSearcher{writeFile: true}
+	step := NewDownloadStep(searcher, WithDownloadProber(panicProber{}))
+	ac := &AcquisitionContext{
+		Track:  TrackRef{Title: "X", Artist: "Y", Duration: 226},
+		Ranked: []ports.AudioCandidate{{URL: "https://example.com/x", Duration: 226}},
+	}
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected verify to panic")
+			}
+		}()
+		_ = step.Execute(context.Background(), ac)
+	}()
+
+	if searcher.gotDir == "" {
+		t.Fatal("expected a temp dir to have been created before the panic")
+	}
+	if _, err := os.Stat(searcher.gotDir); !os.IsNotExist(err) {
+		os.RemoveAll(searcher.gotDir)
+		t.Errorf("temp dir %q leaked after a panic during verify", searcher.gotDir)
+	}
+	if ac.TempPath != "" {
+		t.Errorf("TempPath must stay empty when verify panics, got %q", ac.TempPath)
+	}
+}
