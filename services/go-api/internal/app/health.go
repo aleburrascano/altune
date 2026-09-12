@@ -22,6 +22,12 @@ type authHealthChecker interface {
 // the pool, and tests inject a stub.
 type dbHealthChecker func(ctx context.Context) database.HealthStatus
 
+// defaultDependencyProbeTimeout bounds each individual DB/Redis/auth call made
+// by dependencyHealth. The plain, unauthenticated /health route passes the bare
+// request context (no deadline), so without this a stalled dependency would
+// hang the probe — and the endpoint — indefinitely.
+const defaultDependencyProbeTimeout = 2 * time.Second
+
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if a.dependencyHealth(r.Context()).Healthy() {
 		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -32,13 +38,15 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealth {
 	detail := adminHandler.DependencyDetail{CheckedAt: time.Now().UTC()}
+	timeout := a.probeTimeout()
 
 	dbStatus := "ok"
 	if a.dbHealth == nil {
 		dbStatus = "not_configured"
 	} else {
 		start := time.Now()
-		if status := a.dbHealth(ctx); !status.OK {
+		status := a.probeDB(ctx, timeout)
+		if !status.OK {
 			dbStatus = "down"
 			detail.DBError = status.Err.Error()
 		}
@@ -50,7 +58,9 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 		redisStatus = "not_configured"
 	} else {
 		start := time.Now()
-		if err := a.redisClient.Ping(ctx).Err(); err != nil {
+		if err := probe(ctx, timeout, func(c context.Context) error {
+			return a.redisClient.Ping(c).Err()
+		}); err != nil {
 			redisStatus = "down"
 			detail.RedisError = err.Error()
 		}
@@ -62,7 +72,7 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 		authStatus = "not_configured"
 	} else {
 		start := time.Now()
-		if err := a.authVerifier.CheckHealth(ctx); err != nil {
+		if err := probe(ctx, timeout, a.authVerifier.CheckHealth); err != nil {
 			authStatus = "down"
 			detail.AuthError = err.Error()
 		}
@@ -70,4 +80,28 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 	}
 
 	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus, Auth: authStatus, Detail: detail}
+}
+
+// probeTimeout is the per-dependency bound, falling back to the package default
+// when unset.
+func (a *App) probeTimeout() time.Duration {
+	if a.depProbeTimeout > 0 {
+		return a.depProbeTimeout
+	}
+	return defaultDependencyProbeTimeout
+}
+
+// probeDB runs the DB health check under a bounded context derived from ctx.
+func (a *App) probeDB(ctx context.Context, timeout time.Duration) database.HealthStatus {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return a.dbHealth(ctx)
+}
+
+// probe runs an error-returning dependency check under a bounded context
+// derived from ctx, so a stalled call cannot hang the health probe.
+func probe(ctx context.Context, timeout time.Duration, check func(context.Context) error) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return check(ctx)
 }

@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
+
+	adminHandler "altune/go-api/internal/admin/handler"
 )
 
 type stubAuthChecker struct {
@@ -32,6 +35,36 @@ func TestDependencyHealth_ReportsRealDBError(t *testing.T) {
 	}
 	if health.Healthy() {
 		t.Error("expected dependency health to be unhealthy when db is down")
+	}
+}
+
+func TestDependencyHealth_HangingDBRespectsTimeout(t *testing.T) {
+	// Regression for #375: the plain /health route feeds dependencyHealth the
+	// bare request context, which has no deadline. A stalled DB call (outage,
+	// wedged pool) would otherwise hang the probe — and the endpoint — forever.
+	// dependencyHealth must bound each dependency call itself so a hang is
+	// reported as "down" within the probe timeout rather than blocking.
+	a := &App{
+		depProbeTimeout: 50 * time.Millisecond,
+		dbHealth: func(ctx context.Context) database.HealthStatus {
+			<-ctx.Done() // never returns unless the probe bounds the context
+			return database.HealthStatus{OK: false, Err: ctx.Err()}
+		},
+	}
+
+	done := make(chan adminHandler.DependencyHealth, 1)
+	go func() { done <- a.dependencyHealth(context.Background()) }()
+
+	select {
+	case health := <-done:
+		if health.DB != "down" {
+			t.Errorf("db status: got %q, want %q", health.DB, "down")
+		}
+		if health.Healthy() {
+			t.Error("expected dependency health to be unhealthy when db probe times out")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("dependencyHealth did not return within bound: DB probe is unbounded")
 	}
 }
 
