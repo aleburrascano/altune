@@ -9,10 +9,10 @@ import (
 )
 
 type ListSearchHistoryService struct {
-	historyRepo ports.SearchHistoryRepository
+	historyRepo ports.HistoryReader
 }
 
-func NewListSearchHistoryService(historyRepo ports.SearchHistoryRepository) *ListSearchHistoryService {
+func NewListSearchHistoryService(historyRepo ports.HistoryReader) *ListSearchHistoryService {
 	return &ListSearchHistoryService{historyRepo: historyRepo}
 }
 

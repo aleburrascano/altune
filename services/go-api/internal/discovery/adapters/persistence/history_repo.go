@@ -14,7 +14,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var _ ports.SearchHistoryRepository = (*PgxSearchHistoryRepository)(nil)
+var (
+	_ ports.HistoryWriter = (*PgxSearchHistoryRepository)(nil)
+	_ ports.HistoryReader = (*PgxSearchHistoryRepository)(nil)
+	_ ports.HistoryEraser = (*PgxSearchHistoryRepository)(nil)
+)
 
 type PgxSearchHistoryRepository struct {
 	pool *pgxpool.Pool
