@@ -1,22 +1,72 @@
 package app
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
-
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/shared/events"
 )
 
-const defaultHeartbeatInterval = 25 * time.Second
+const (
+	defaultHeartbeatInterval = 25 * time.Second
+	defaultSSEWriteTimeout   = 10 * time.Second
+	defaultMaxConnsPerUser   = 8
+)
 
 type sseHandler struct {
-	bus       events.Subscriber
-	heartbeat time.Duration
+	bus          events.Subscriber
+	heartbeat    time.Duration
+	writeTimeout time.Duration
+	limiter      *connLimiter
+}
+
+func newSSEHandler(bus events.Subscriber) *sseHandler {
+	return &sseHandler{
+		bus:          bus,
+		heartbeat:    defaultHeartbeatInterval,
+		writeTimeout: defaultSSEWriteTimeout,
+		limiter:      newConnLimiter(defaultMaxConnsPerUser),
+	}
+}
+
+// connLimiter caps the number of concurrent streams a single user may hold open.
+type connLimiter struct {
+	mu    sync.Mutex
+	max   int
+	count map[string]int
+}
+
+func newConnLimiter(limit int) *connLimiter {
+	return &connLimiter{max: limit, count: make(map[string]int)}
+}
+
+func (l *connLimiter) acquire(key string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.max > 0 && l.count[key] >= l.max {
+		return false
+	}
+	l.count[key]++
+	return true
+}
+
+func (l *connLimiter) release(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.count[key] <= 1 {
+		delete(l.count, key)
+		return
+	}
+	l.count[key]--
 }
 
 func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -24,27 +74,22 @@ func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
+	if _, ok := w.(http.Flusher); !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
 		return
 	}
+	if !h.acquireSlot(w, userId) {
+		return
+	}
+	defer h.releaseSlot(userId)
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
+	setSSEHeaders(w)
+	rc := http.NewResponseController(w)
 
 	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" {
 		if id, err := strconv.ParseUint(lastID, 10, 64); err == nil {
-			replayed := h.bus.Replay(userId, id)
-			if replayGapped(replayed, id) {
-				fmt.Fprint(w, "event: resync\ndata: {}\n\n")
-			} else {
-				for _, evt := range replayed {
-					writeSSEEvent(w, evt)
-				}
+			if err := h.replay(rc, w, userId, id); err != nil {
+				return
 			}
 		}
 	}
@@ -52,11 +97,39 @@ func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ch, cancel := h.bus.Subscribe(userId)
 	defer cancel()
 
-	fmt.Fprint(w, ":ok\n\n")
-	flusher.Flush()
-
+	if err := h.writeFrame(rc, w, ":ok\n\n"); err != nil {
+		return
+	}
 	slog.InfoContext(r.Context(), "sse.connected", "user_id", userId.String())
 
+	h.stream(r.Context(), rc, w, ch, userId)
+}
+
+func (h *sseHandler) acquireSlot(w http.ResponseWriter, userId shared.UserId) bool {
+	if h.limiter == nil {
+		return true
+	}
+	if h.limiter.acquire(userId.String()) {
+		return true
+	}
+	slog.Warn("sse.connection_limit", "user_id", userId.String())
+	http.Error(w, "too many event streams", http.StatusTooManyRequests)
+	return false
+}
+
+func (h *sseHandler) releaseSlot(userId shared.UserId) {
+	if h.limiter != nil {
+		h.limiter.release(userId.String())
+	}
+}
+
+func (h *sseHandler) stream(
+	ctx context.Context,
+	rc *http.ResponseController,
+	w http.ResponseWriter,
+	ch <-chan events.Event,
+	userId shared.UserId,
+) {
 	interval := h.heartbeat
 	if interval <= 0 {
 		interval = defaultHeartbeatInterval
@@ -64,20 +137,64 @@ func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	heartbeat := time.NewTicker(interval)
 	defer heartbeat.Stop()
 
-	ctx := r.Context()
 	for {
 		select {
 		case <-ctx.Done():
-			slog.InfoContext(r.Context(), "sse.disconnected", "user_id", userId.String())
+			slog.InfoContext(ctx, "sse.disconnected", "user_id", userId.String())
 			return
 		case evt := <-ch:
-			writeSSEEvent(w, evt)
-			flusher.Flush()
+			if err := h.writeEvent(rc, w, evt); err != nil {
+				return
+			}
 		case <-heartbeat.C:
-			fmt.Fprint(w, ":ping\n\n")
-			flusher.Flush()
+			if err := h.writeFrame(rc, w, ":ping\n\n"); err != nil {
+				return
+			}
 		}
 	}
+}
+
+func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) error {
+	replayed := h.bus.Replay(userId, afterID)
+	if replayGapped(replayed, afterID) {
+		return h.writeFrame(rc, w, "event: resync\ndata: {}\n\n")
+	}
+	for _, evt := range replayed {
+		if err := h.writeEvent(rc, w, evt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeFrame sets a per-write deadline so a client that has stopped reading
+// cannot block the handler goroutine on Write/Flush forever, then flushes.
+func (h *sseHandler) writeFrame(rc *http.ResponseController, w http.ResponseWriter, frame string) error {
+	if h.writeTimeout > 0 {
+		if err := rc.SetWriteDeadline(time.Now().Add(h.writeTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			return err
+		}
+	}
+	if _, err := io.WriteString(w, frame); err != nil {
+		return err
+	}
+	return rc.Flush()
+}
+
+func (h *sseHandler) writeEvent(rc *http.ResponseController, w http.ResponseWriter, evt events.Event) error {
+	data, err := json.Marshal(evt.Payload)
+	if err != nil {
+		slog.Warn("sse.marshal_failed", "event_type", evt.Type, "error", err)
+		return nil
+	}
+	return h.writeFrame(rc, w, fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", evt.ID, evt.Type, data))
+}
+
+func setSSEHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 }
 
 func replayGapped(replayed []events.Event, afterID uint64) bool {
@@ -85,13 +202,4 @@ func replayGapped(replayed []events.Event, afterID uint64) bool {
 		return false
 	}
 	return replayed[0].ID > afterID+1
-}
-
-func writeSSEEvent(w http.ResponseWriter, evt events.Event) {
-	data, err := json.Marshal(evt.Payload)
-	if err != nil {
-		slog.Warn("sse.marshal_failed", "event_type", evt.Type, "error", err)
-		return
-	}
-	fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", evt.ID, evt.Type, data)
 }

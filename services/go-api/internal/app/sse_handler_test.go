@@ -1,6 +1,9 @@
 package app
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 	"bufio"
 	"context"
 	"net/http"
@@ -10,15 +13,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/events"
 )
 
 func newTestSSEServer(t *testing.T, bus *events.InProcessBus, uid shared.UserId, heartbeat time.Duration) *httptest.Server {
 	t.Helper()
-	h := &sseHandler{bus: bus, heartbeat: heartbeat}
+	h := newSSEHandler(bus)
+	h.heartbeat = heartbeat
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(auth.ContextWithUserID(r.Context(), uid))
 		h.ServeHTTP(w, r)
