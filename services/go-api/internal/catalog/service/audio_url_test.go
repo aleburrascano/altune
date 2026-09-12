@@ -120,10 +120,11 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		}
 	})
 
-	t.Run("presign failure skips only that track", func(t *testing.T) {
+	t.Run("presign failure skips only that track and increments the failure metric", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		ready := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore(), err: errors.New("boom")})
+		metrics := &catalogtest.Metrics{}
+		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore(), err: errors.New("boom")}, WithAudioURLMetrics(metrics))
 
 		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
 		if err != nil {
@@ -131,6 +132,9 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		}
 		if len(out) != 0 {
 			t.Fatalf("expected the failed track skipped, got %d", len(out))
+		}
+		if metrics.PresignFailures != 1 {
+			t.Errorf("presign failure metric = %d, want 1 so operators can dashboard the failure rate", metrics.PresignFailures)
 		}
 	})
 }

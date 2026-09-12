@@ -21,6 +21,7 @@ type StreamTrackService struct {
 	trackRepo  ports.TrackRepository
 	audioStore ports.AudioStore
 	scheduler  ports.AcquisitionScheduler
+	metrics    ports.AudioStoreMetrics
 }
 
 func NewStreamTrackService(
@@ -32,6 +33,7 @@ func NewStreamTrackService(
 		trackRepo:  trackRepo,
 		audioStore: audioStore,
 		scheduler:  ports.NoopAcquisitionScheduler(),
+		metrics:    ports.NoopAudioStoreMetrics(),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -43,6 +45,14 @@ func WithStreamScheduler(scheduler ports.AcquisitionScheduler) func(*StreamTrack
 	return func(s *StreamTrackService) {
 		if scheduler != nil {
 			s.scheduler = scheduler
+		}
+	}
+}
+
+func WithStreamMetrics(m ports.AudioStoreMetrics) func(*StreamTrackService) {
+	return func(s *StreamTrackService) {
+		if m != nil {
+			s.metrics = m
 		}
 	}
 }
@@ -65,6 +75,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 	storageStart := time.Now()
 	reader, size, err := s.audioStore.Stream(ctx, *track.AudioRef)
 	if err != nil {
+		s.metrics.StreamRecoveryTriggered()
 		slog.WarnContext(ctx, "stream.audio_missing",
 			"track_id", trackId.String(), "error", err)
 		if recErr := s.recoverMissingAudio(ctx, userId, track); recErr != nil {

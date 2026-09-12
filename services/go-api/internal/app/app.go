@@ -31,6 +31,7 @@ import (
 	authAdapters "altune/go-api/internal/auth/adapters"
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	catalogHandler "altune/go-api/internal/catalog/adapters/handler"
+	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
 	"altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/adapters/storage"
 	catalogPorts "altune/go-api/internal/catalog/ports"
@@ -286,7 +287,8 @@ func (a *App) wireCatalog(
 		catalogService.WithAcquisitionScheduler(scheduler),
 	)
 	listTracksSvc := catalogService.NewListTracksService(catalogTrackRepo)
-	deleteTrackSvc := catalogService.NewDeleteTrackService(catalogTrackRepo, audioStore, catalogService.WithDeleteTrackEvents(tap))
+	audioStoreMetrics := catalogMetrics.NewExpvarAudioStoreMetrics()
+	deleteTrackSvc := catalogService.NewDeleteTrackService(catalogTrackRepo, audioStore, catalogService.WithDeleteTrackEvents(tap), catalogService.WithDeleteTrackMetrics(audioStoreMetrics))
 	setTrackNumberSvc := catalogService.NewSetTrackNumberService(catalogTrackRepo)
 	playlistLifecycleSvc := catalogService.NewPlaylistLifecycleService(playlistRepo, catalogService.WithPlaylistLifecycleEvents(tap))
 	playlistMembershipSvc := catalogService.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, catalogService.WithPlaylistMembershipEvents(tap))
@@ -298,9 +300,9 @@ func (a *App) wireCatalog(
 	featuredArtistHandler := catalogHandler.NewFeaturedArtistHandler(backfillFeaturedSvc, listFeaturingSvc)
 	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, getTrackStatusSvc, deleteTrackSvc, setTrackNumberSvc, featuredArtistHandler)
 	playlistHandler := catalogHandler.NewPlaylistHandler(playlistLifecycleSvc, playlistMembershipSvc)
-	streamTrackSvc := catalogService.NewStreamTrackService(catalogTrackRepo, audioStore, catalogService.WithStreamScheduler(scheduler))
+	streamTrackSvc := catalogService.NewStreamTrackService(catalogTrackRepo, audioStore, catalogService.WithStreamScheduler(scheduler), catalogService.WithStreamMetrics(audioStoreMetrics))
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
-	audioURLSvc := catalogService.NewAudioURLService(catalogTrackRepo, audioStore)
+	audioURLSvc := catalogService.NewAudioURLService(catalogTrackRepo, audioStore, catalogService.WithAudioURLMetrics(audioStoreMetrics))
 	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc)
 
 	var retryH *acqHandler.RetryHandler
