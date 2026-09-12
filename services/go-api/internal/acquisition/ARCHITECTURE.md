@@ -165,7 +165,7 @@ independent catalogue), `best_effort` (neither — the unidentified tail).
 ## 3. Layering & structure
 
 ```
-ports/       AudioSearcher, AudioProber, AudioTagger, AudioWriter, TrackRepository,
+ports/       AudioProber, AudioTagger, AudioWriter, TrackRepository,
              AudioCandidate, TrackTags, DedupeCandidatesByURL
 service/     pipeline.go  — Step, StepError, RunPipeline, rollback, AcquisitionContext, TrackRef
              acquire.go   — Execute, reconcileForReacquire, CoreSteps, failureReason, CleanupTemp
@@ -373,7 +373,7 @@ audio is offset passes.
 
 `searchEngines` is a two-element slice. yt-dlp's built-in search prefixes are thin
 beyond `ytsearch`/`scsearch`, so widening means a search step *outside* yt-dlp that
-hands it URLs — which the `AudioSearcher` port already accommodates, since `Search`
+hands it URLs — which `YtDlpAudioSearcher` already accommodates, since `Search`
 and `Download` are separate methods. Bandcamp and Audiomack are the obvious
 additions for exactly the underground long tail where Topic channels don't exist and
 §7.4 bites hardest.
