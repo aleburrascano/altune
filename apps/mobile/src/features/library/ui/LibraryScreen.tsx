@@ -6,51 +6,34 @@ import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import { describeError } from '@shared/lib/describeError';
 import { countLabel } from '@shared/lib/format';
-import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
-import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
+import { useActiveLibraryView } from '../hooks/useActiveLibraryView';
 import { useDeleteTrack, useDeleteTracks } from '../hooks/useDeleteTrack';
-import {
-  useLibraryAlbums,
-  useLibraryArtists,
-  useLibraryIsEmpty,
-  useLibraryTracks,
-} from '../hooks/useLibraryHome';
+import { useLibraryIsEmpty } from '../hooks/useLibraryHome';
 import { useLibrarySearch } from '../hooks/useLibrarySearch';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { _viewForState } from '../state';
 import { useSelection } from '../useSelection';
-import { AlbumsGrid } from './AlbumsGrid';
-import { ArtistsGrid } from './ArtistsGrid';
 import { LibraryChips, type LibraryChip } from './LibraryChips';
 import { SelectionBar } from './SelectionBar';
 import { buildSelectionActions } from './selectionActions';
 import { LibraryHeader } from './LibraryHeader';
 import { LibraryNoResults } from './LibraryNoResults';
-import { PlaylistsGrid } from './PlaylistsGrid';
-import type { ListRefresh } from './refresh';
+import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import { SortControl } from './SortControl';
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { buildTrackMenuItems } from './trackMenu';
-import { TracksList } from './TracksList';
-import {
-  ALBUM_SORT_OPTIONS,
-  ARTIST_SORT_OPTIONS,
-  PLAYLIST_SORT_OPTIONS,
-  TRACK_SORT_OPTIONS,
-  type SortKey,
-} from './sort';
+import { type SortKey } from './sort';
 import { useLibraryNavigation } from './useLibraryNavigation';
 
 const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {
@@ -60,33 +43,12 @@ const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {
   artists: 'az',
 };
 
-type ActiveView = {
-  content: ReactElement;
-  count: number;
-  noun: string;
-  options: { key: SortKey; label: string }[];
-  isLoading: boolean;
-  error: Error | null;
-  onRetry: () => void;
-};
-
-function sortPlaylistsByKey<T extends { name: string; created_at: string }>(
-  playlists: T[],
-  key: SortKey,
-): T[] {
-  const sorted = [...playlists];
-  if (key === 'az') {
-    return sorted.sort((a, b) => a.name.localeCompare(b.name));
-  }
-  return sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
-}
-
 export function LibraryScreen(): ReactElement {
   const router = useRouter();
   const theme = useTheme();
   const pl = usePlaylistActions();
   const search = useLibrarySearch();
-  const { navigateToTrack, navigateToAlbum, navigateToArtist } = useLibraryNavigation(router);
+  const navigation = useLibraryNavigation(router);
   const deleteMutation = useDeleteTrack();
   const deleteManyMutation = useDeleteTracks();
   const retryMutation = useRetryAcquisition();
@@ -104,10 +66,18 @@ export function LibraryScreen(): ReactElement {
   const [searchFocused, setSearchFocused] = useState(false);
   const [bulkPlaylistVisible, setBulkPlaylistVisible] = useState(false);
 
-  const tracksState = useLibraryTracks(search.query, sortByChip.tracks, chip === 'tracks');
-  const albumsState = useLibraryAlbums(search.query, sortByChip.albums, chip === 'albums');
-  const artistsState = useLibraryArtists(search.query, sortByChip.artists, chip === 'artists');
   const libraryIsEmpty = useLibraryIsEmpty();
+
+  const { active, tracks, playlists } = useActiveLibraryView(chip, sortByChip, search.query, {
+    pl,
+    router,
+    navigation,
+    selection,
+    queue,
+    playback,
+    retryMutation,
+    onTrackMore: (track, anchor) => setAction({ track, anchor }),
+  });
 
   const confirmRemoveTrack = (track: TrackResponse): void => {
     Alert.alert('Remove from Library', `Remove "${track.title}" from your library?`, [
@@ -120,16 +90,10 @@ export function LibraryScreen(): ReactElement {
     buildTrackMenuItems(track, {
       onReacquire: () => reacquireMutation.mutate(track.id),
       queue,
-      onViewDetails: () => navigateToTrack(track),
+      onViewDetails: () => navigation.navigateToTrack(track),
       onAddToPlaylist: () => pl.setAddToPlaylistTrack(track),
       danger: { label: 'Remove from Library', onPress: () => confirmRemoveTrack(track) },
     });
-
-  const playWholeLibraryFrom = async (track: TrackResponse): Promise<void> => {
-    const all = await tracksState.loadAll();
-    const { playable, startIndex } = buildPlayableQueue(all, track.id);
-    queue.playFromList(playable, startIndex, { kind: 'library' });
-  };
 
   const confirmDeleteSelected = (): void => {
     const ids = selection.ids;
@@ -151,7 +115,7 @@ export function LibraryScreen(): ReactElement {
   };
 
   const selectionActions = buildSelectionActions(
-    tracksState.tracks.filter((t) => selection.has(t.id)),
+    tracks.filter((t) => selection.has(t.id)),
     {
       pinnedEntries,
       pinMany,
@@ -165,9 +129,6 @@ export function LibraryScreen(): ReactElement {
 
   const sortKey = sortByChip[chip];
   const setSort = (key: SortKey): void => setSortByChip((prev) => ({ ...prev, [chip]: key }));
-
-  const playlists = sortPlaylistsByKey(pl.playlists, sortByChip.playlists);
-  const active = buildActiveView();
 
   useAnnounceChange(
     search.hasQuery ? `${active.count} ${countLabel(active.count, 'result')}` : '',
@@ -257,11 +218,11 @@ export function LibraryScreen(): ReactElement {
       {selection.active && chip === 'tracks' ? (
         <SelectionBar
           count={selection.count}
-          allSelected={selection.count === tracksState.tracks.length}
+          allSelected={selection.count === tracks.length}
           onSelectAll={() =>
-            selection.count === tracksState.tracks.length
+            selection.count === tracks.length
               ? selection.clear()
-              : selection.selectAll(tracksState.tracks.map((t) => t.id))
+              : selection.selectAll(tracks.map((t) => t.id))
           }
           onCancel={selection.clear}
           actions={selectionActions}
@@ -301,107 +262,6 @@ export function LibraryScreen(): ReactElement {
       />
     </Screen>
   );
-
-  function buildActiveView(): ActiveView {
-    switch (chip) {
-      case 'playlists': {
-        const refresh: ListRefresh = {
-          refreshing: pl.isRefetchingPlaylists,
-          onRefresh: pl.refetchPlaylists,
-        };
-        return {
-          count: playlists.length,
-          noun: 'playlist',
-          options: PLAYLIST_SORT_OPTIONS,
-          isLoading: false,
-          error: null,
-          onRetry: pl.refetchPlaylists,
-          content: (
-            <PlaylistsGrid
-              playlists={playlists}
-              refresh={refresh}
-              onPlaylistPress={(playlist) => router.push(`/library/playlist/${playlist.id}`)}
-              onCreatePress={() => pl.setCreateModalVisible(true)}
-            />
-          ),
-        };
-      }
-      case 'tracks': {
-        const refresh: ListRefresh = {
-          refreshing: tracksState.isRefetching,
-          onRefresh: tracksState.refetch,
-        };
-        return {
-          count: tracksState.tracks.length === 0 ? 0 : tracksState.total,
-          noun: 'track',
-          options: TRACK_SORT_OPTIONS,
-          isLoading: tracksState.isLoading,
-          error: tracksState.error,
-          onRetry: tracksState.refetch,
-          content: (
-            <TracksList
-              tracks={tracksState.tracks}
-              emptyLabel={'No tracks yet'}
-              refresh={refresh}
-              onEndReached={tracksState.onEndReached}
-              isFetchingNextPage={tracksState.isFetchingNextPage}
-              onPlay={(track) => void playWholeLibraryFrom(track)}
-              onPress={navigateToTrack}
-              onMore={(track, anchor) => setAction({ track, anchor })}
-              onRetry={(track) => retryMutation.mutate(track.id)}
-              retryingTrackId={retryMutation.isPending ? retryMutation.variables : undefined}
-              isPlaying={(id) => isCurrentlyPlaying(playback, { kind: 'library', trackId: id })}
-              selection={selection}
-            />
-          ),
-        };
-      }
-      case 'albums': {
-        const refresh: ListRefresh = {
-          refreshing: albumsState.isRefetching,
-          onRefresh: albumsState.refetch,
-        };
-        return {
-          count: albumsState.albums.length,
-          noun: 'album',
-          options: ALBUM_SORT_OPTIONS,
-          isLoading: albumsState.isLoading,
-          error: albumsState.error,
-          onRetry: albumsState.refetch,
-          content: (
-            <AlbumsGrid
-              albums={albumsState.albums}
-              emptyLabel={'No albums yet'}
-              refresh={refresh}
-              onAlbumPress={navigateToAlbum}
-            />
-          ),
-        };
-      }
-      case 'artists': {
-        const refresh: ListRefresh = {
-          refreshing: artistsState.isRefetching,
-          onRefresh: artistsState.refetch,
-        };
-        return {
-          count: artistsState.artists.length,
-          noun: 'artist',
-          options: ARTIST_SORT_OPTIONS,
-          isLoading: artistsState.isLoading,
-          error: artistsState.error,
-          onRetry: artistsState.refetch,
-          content: (
-            <ArtistsGrid
-              artists={artistsState.artists}
-              emptyLabel={'No artists yet'}
-              refresh={refresh}
-              onArtistPress={navigateToArtist}
-            />
-          ),
-        };
-      }
-    }
-  }
 }
 
 const styles = StyleSheet.create({
