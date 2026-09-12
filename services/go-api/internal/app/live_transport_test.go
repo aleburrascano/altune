@@ -232,6 +232,35 @@ func TestLiveTransport_FixedBackoffHasJitter(t *testing.T) {
 	}
 }
 
+// TestLiveTransport_LimitsMissingProviderHosts is the regression for #382: the
+// provider hosts that were previously unthrottled must each receive a limiter.
+func TestLiveTransport_LimitsMissingProviderHosts(t *testing.T) {
+	lt := newLiveOver(&fakeRT{steps: []fakeStep{{status: 200}}})
+	hosts := []string{
+		"api.deezer.com",             // Deezer search/content/artwork/consensus
+		"api-v2.soundcloud.com",      // SoundCloud API
+		"na.web.skill.music.a2z.com", // Amazon Music search
+		"api-partner.spotify.com",    // Spotify API
+	}
+	for _, h := range hosts {
+		if lt.limiter(h) == nil {
+			t.Errorf("expected a rate limiter for provider host %q", h)
+		}
+	}
+}
+
+// TestBaseTransport_CapsConnsPerHost is the regression for the unbounded
+// concurrency half of #382: the shared base transport must cap per-host conns.
+func TestBaseTransport_CapsConnsPerHost(t *testing.T) {
+	tr, ok := baseTransport().(*http.Transport)
+	if !ok {
+		t.Fatalf("baseTransport = %T, want *http.Transport", baseTransport())
+	}
+	if tr.MaxConnsPerHost != liveMaxConnsPerHost {
+		t.Errorf("MaxConnsPerHost = %d, want %d", tr.MaxConnsPerHost, liveMaxConnsPerHost)
+	}
+}
+
 func TestLiveTransport_LimiterPerHost(t *testing.T) {
 	lt := newLiveOver(&fakeRT{steps: []fakeStep{{status: 200}}})
 	if lt.limiter("musicbrainz.org") == nil {
