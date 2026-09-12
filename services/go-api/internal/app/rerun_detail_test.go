@@ -1,10 +1,24 @@
 package app
 
 import (
+	"context"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
 )
+
+// TestReRunDetail_malformedQuerySurfacesValidationError reproduces the gap: an
+// empty query fails domain.NewSearchQuery, but resolveTopArtist used to swallow
+// that error into (empty, false), so ReRunDetail returned the same empty result
+// and nil error as a legitimate "no artist found". The validation failure must
+// surface as a distinct error so callers can tell a bad query from no match.
+func TestReRunDetail_malformedQuerySurfacesValidationError(t *testing.T) {
+	dr := &detailReRunner{}
+	_, err := dr.ReRunDetail(context.Background(), "")
+	if err == nil {
+		t.Fatal("want a validation error for a malformed query, got nil (indistinguishable from no artist found)")
+	}
+}
 
 func albumResult(title string, tracks int, sources ...string) domain.SearchResult {
 	refs := make([]domain.SourceRef, len(sources))
