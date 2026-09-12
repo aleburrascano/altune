@@ -29,6 +29,11 @@ func (r *inMemoryQueueRepo) GetForUser(_ context.Context, userId shared.UserId) 
 	return r.states[userId.UUID()], nil
 }
 
+func (r *inMemoryQueueRepo) DeleteForUser(_ context.Context, userId shared.UserId) error {
+	delete(r.states, userId.UUID())
+	return nil
+}
+
 func testUser() shared.UserId {
 	return shared.NewUserId(uuid.New())
 }
@@ -215,6 +220,43 @@ func TestQueueService_Resume_ReturnsEmptyWhenNoneStored(t *testing.T) {
 	}
 	if len(state.TrackIds) != 0 || state.RepeatMode != domain.RepeatOff {
 		t.Errorf("expected empty snapshot, got %+v", state)
+	}
+}
+
+func TestQueueService_Forget_ErasesPersistedState(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	svc := NewQueueService(repo, &fakeNowPlaying{})
+	user := testUser()
+
+	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
+		TrackIds:   []string{"a", "b"},
+		CurrentIdx: 1,
+		RepeatMode: "off",
+		SourceId:   "search:mac demarco", // free-text PII in source_id
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if stored, _ := repo.GetForUser(context.Background(), user); stored == nil {
+		t.Fatal("precondition: state must be persisted before erasure")
+	}
+
+	if err := svc.Forget(context.Background(), user); err != nil {
+		t.Fatalf("Forget: %v", err)
+	}
+
+	stored, err := repo.GetForUser(context.Background(), user)
+	if err != nil {
+		t.Fatalf("GetForUser after Forget: %v", err)
+	}
+	if stored != nil {
+		t.Fatalf("queue state (incl. free-text search source_id) survived erasure: %+v", stored)
+	}
+}
+
+func TestQueueService_Forget_IsIdempotentForUnknownUser(t *testing.T) {
+	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
+	if err := svc.Forget(context.Background(), testUser()); err != nil {
+		t.Fatalf("erasing a user with no stored state must not error: %v", err)
 	}
 }
 
