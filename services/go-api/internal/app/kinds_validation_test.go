@@ -30,7 +30,7 @@ func TestReRun_rejectsInvalidKindInsteadOfSilentDefault(t *testing.T) {
 
 // TestInspectSearch_rejectsInvalidKindInsteadOfSilentDefault mirrors the ReRun
 // case for the search-inspection entry point, which routes through the same
-// parseRerunKinds helper.
+// parseSearchKinds helper.
 func TestInspectSearch_rejectsInvalidKindInsteadOfSilentDefault(t *testing.T) {
 	svc := inspectorForProvider(outageProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{}})
 
