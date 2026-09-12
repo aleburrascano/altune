@@ -163,13 +163,16 @@ func (i *Identifier) AcoustIDsFor(ctx context.Context, mbid string) ([]string, e
 		return nil, nil
 	}
 
-	endpoint := fmt.Sprintf("%s?client=%s&mbid=%s&format=json",
-		i.clusterEndpoint, url.QueryEscape(i.apiKey), url.QueryEscape(mbid))
+	form := url.Values{}
+	form.Set("client", i.apiKey)
+	form.Set("mbid", mbid)
+	form.Set("format", "json")
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, i.clusterEndpoint, bytes.NewBufferString(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("build acoustid cluster request: %w", err)
 	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := i.client.Do(req)
 	if err != nil {
