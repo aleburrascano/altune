@@ -20,7 +20,10 @@ func (a *App) buildSearchInspector(svc *discoveryService.Service) adminHandler.S
 }
 
 func (si *searchInspector) InspectSearch(ctx context.Context, query string, kinds []string) ([]requeststore.ResultRow, error) {
-	kindSet := parseRerunKinds(kinds)
+	kindSet, err := parseRerunKinds(kinds)
+	if err != nil {
+		return nil, err
+	}
 	sq, err := domain.NewSearchQuery(query, kindSet, inspectionSearchLimit)
 	if err != nil {
 		return nil, err
