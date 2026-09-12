@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -61,9 +60,9 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 }
 
 func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shared.UserId, error) {
-	keySet, err := v.cache.Get(ctx, v.jwksURL)
+	keySet, err := v.fetchKeySet(ctx)
 	if err != nil {
-		return shared.UserId{}, fmt.Errorf("fetch JWKS: %w", err)
+		return shared.UserId{}, err
 	}
 
 	token, err := jwt.Parse(
@@ -75,13 +74,30 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 		jwt.WithAcceptableSkew(acceptableSkew),
 	)
 	if err != nil {
-		reason := classifyJWTError(err)
 		return shared.UserId{}, &auth.InvalidTokenError{
-			Reason: reason,
+			Reason: classifyJWTError(err),
 			Detail: err.Error(),
 		}
 	}
 
+	return extractUserID(token)
+}
+
+// fetchKeySet retrieves the JWKS key set from the refresh-worker-backed cache.
+// Extracted from Verify's former inline v.cache.Get call so key-set retrieval is
+// a single-purpose step, separate from structural validation and claim mapping.
+func (v *SupabaseJWTVerifier) fetchKeySet(ctx context.Context) (jwk.Set, error) {
+	keySet, err := v.cache.Get(ctx, v.jwksURL)
+	if err != nil {
+		return nil, fmt.Errorf("fetch JWKS: %w", err)
+	}
+	return keySet, nil
+}
+
+// extractUserID maps a validated token's claims onto a shared.UserId. Extracted
+// from Verify's former inline exp/sub presence checks and ParseUserId call so
+// claim mapping changes for its own reason, independent of key retrieval.
+func extractUserID(token jwt.Token) (shared.UserId, error) {
 	if _, ok := token.Get(jwt.ExpirationKey); !ok {
 		return shared.UserId{}, &auth.InvalidTokenError{
 			Reason: auth.ReasonClaimMissingEXP,
@@ -106,25 +122,4 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 	}
 
 	return userId, nil
-}
-
-func classifyJWTError(err error) auth.TokenRejectReason {
-	switch {
-	case errors.Is(err, jwt.ErrTokenExpired()):
-		return auth.ReasonExpired
-	case errors.Is(err, jwt.ErrInvalidIssuer()):
-		return auth.ReasonClaimInvalidISS
-	case errors.Is(err, jwt.ErrInvalidAudience()):
-		return auth.ReasonClaimInvalidAUD
-	case hasUntypedSignatureFailure(err):
-		return auth.ReasonSignatureInvalid
-	default:
-		return auth.ReasonMalformed
-	}
-}
-
-func hasUntypedSignatureFailure(err error) bool {
-	msg := err.Error()
-	return strings.Contains(msg, "failed to find key") ||
-		strings.Contains(msg, "could not verify message")
 }
