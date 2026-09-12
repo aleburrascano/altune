@@ -134,7 +134,7 @@ func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.Pla
 		FROM playlist_tracks pt
 		JOIN tracks t ON t.id = pt.track_id
 		WHERE pt.playlist_id = $1
-		ORDER BY pt.position ASC`,
+		ORDER BY pt.position ASC, pt.track_id ASC`,
 		id.UUID(),
 	)
 	if err != nil {
@@ -177,12 +177,38 @@ func (r *PgxPlaylistRepository) Update(ctx context.Context, playlist *domain.Pla
 	return err
 }
 
-func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId, position int) error {
-	_, err := r.pool.Exec(ctx,
-		`INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES ($1, $2, $3)`,
-		playlistId.UUID(), trackId.UUID(), position,
-	)
-	return err
+// withPlaylistLock runs fn inside a transaction that first takes a row lock on
+// the playlist, serializing concurrent membership writes against the same
+// playlist so position assignment reads a committed snapshot, never a stale one.
+func (r *PgxPlaylistRepository) withPlaylistLock(ctx context.Context, playlistId uuid.UUID, fn func(pgx.Tx) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM playlists WHERE id = $1 FOR UPDATE`, playlistId); err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// AddTrack appends the track at the authoritative max(position)+1 computed under
+// a playlist lock. The caller-supplied position is advisory only: deriving the
+// slot inside the locked transaction is what closes the concurrent-add race, so
+// two simultaneous appends can never both land on the same position.
+func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId, _ int) error {
+	return r.withPlaylistLock(ctx, playlistId.UUID(), func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx,
+			`INSERT INTO playlist_tracks (playlist_id, track_id, position)
+			VALUES ($1, $2, COALESCE((SELECT MAX(position) + 1 FROM playlist_tracks WHERE playlist_id = $1), 0))`,
+			playlistId.UUID(), trackId.UUID(),
+		)
+		return err
+	})
 }
 
 // execBatch runs n queued statements inside a single transaction: begin,
@@ -214,15 +240,32 @@ func execBatch(ctx context.Context, pool *pgxpool.Pool, queue func(*pgx.Batch), 
 	return tx.Commit(ctx)
 }
 
+// AddTracks appends the given tracks in order, each at the authoritative
+// max(position)+1 computed under a playlist lock. Like AddTrack, the positions
+// carried on the input are advisory: a single set-based insert assigns the run
+// of slots atomically from the locked snapshot, so a concurrent add cannot wedge
+// a duplicate position between them.
 func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
-	return execBatch(ctx, r.pool, func(batch *pgx.Batch) {
-		for _, t := range tracks {
-			batch.Queue(
-				`INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES ($1, $2, $3)`,
-				playlistId.UUID(), t.TrackId.UUID(), t.Position,
-			)
-		}
-	}, len(tracks))
+	if len(tracks) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(tracks))
+	for i, t := range tracks {
+		ids[i] = t.TrackId.UUID()
+	}
+	return r.withPlaylistLock(ctx, playlistId.UUID(), func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx,
+			`INSERT INTO playlist_tracks (playlist_id, track_id, position)
+			SELECT $1, t.track_id, base.max_pos + t.ord
+			FROM unnest($2::uuid[]) WITH ORDINALITY AS t(track_id, ord)
+			CROSS JOIN (
+				SELECT COALESCE(MAX(position), -1) AS max_pos
+				FROM playlist_tracks WHERE playlist_id = $1
+			) base`,
+			playlistId.UUID(), ids,
+		)
+		return err
+	})
 }
 
 func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId) error {
