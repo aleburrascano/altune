@@ -167,6 +167,7 @@ independent catalogue), `best_effort` (neither — the unidentified tail).
 ```
 ports/       AudioProber, AudioTagger, AudioWriter, TrackRepository,
              AudioCandidate, TrackTags, DedupeCandidatesByURL
+             status.go    — AcquisitionStatus, JobRecord, AcquisitionVerification
 service/     pipeline.go  — Step, StepError, RunPipeline, rollback, AcquisitionContext, TrackRef
              acquire.go   — Execute/execute orchestration + notification wiring
              reacquire.go — reacquirePolicy (reconcile, revertToPending)
@@ -176,7 +177,7 @@ service/     pipeline.go  — Step, StepError, RunPipeline, rollback, Acquisitio
              step_*.go    — the six steps
              matching.go  — identityScore, metadataRank, featureMatch, rankCandidates
              scheduler.go — BackgroundAcquisitionScheduler, schedulerJobReporter, Status, Shutdown
-             joblog.go    — JobRecord, the recent ring, counters
+             joblog.go    — jobLog: the recent ring, counters (records are ports.JobRecord)
              job_telemetry.go — the jobReporter context seam
              retry_admission.go — RetryAdmission
 adapters/

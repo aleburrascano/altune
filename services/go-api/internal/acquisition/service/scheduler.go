@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
@@ -11,27 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 )
-
-type AcquisitionVerification struct {
-	Ffprobe bool
-	Ffmpeg  bool
-	Fpcalc  bool
-	YtDlp   bool
-}
-
-func (v AcquisitionVerification) FullyArmed() bool {
-	return v.Ffprobe && v.Ffmpeg && v.Fpcalc && v.YtDlp
-}
-
-type AcquisitionStatus struct {
-	InFlight     int
-	Succeeded    uint64
-	Failed       uint64
-	Rejected     uint64
-	Verification AcquisitionVerification
-	ActiveJobs   []JobRecord
-	Recent       []JobRecord
-}
 
 // defaultQueueDepthFactor bounds total outstanding acquisition jobs (in-flight
 // + pending) at this multiple of the worker concurrency. A burst of Schedule
@@ -55,7 +35,7 @@ type BackgroundAcquisitionScheduler struct {
 	inflightCount atomic.Int64
 	rejected      atomic.Uint64
 
-	verification AcquisitionVerification
+	verification ports.AcquisitionVerification
 	log          *jobLog
 }
 
@@ -100,7 +80,7 @@ func WithQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.queueDepth = depth }
 }
 
-func WithVerificationStatus(v AcquisitionVerification) func(*BackgroundAcquisitionScheduler) {
+func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) {
 		s.verification = v
 		if !v.FullyArmed() {
@@ -216,11 +196,11 @@ type schedulerJobReporter struct {
 }
 
 func (r schedulerJobReporter) meta(title, artist, album string) {
-	r.log.update(r.trackID, func(j *JobRecord) { j.Title, j.Artist, j.Album = title, artist, album })
+	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Title, j.Artist, j.Album = title, artist, album })
 }
 
 func (r schedulerJobReporter) stage(name string) {
-	r.log.update(r.trackID, func(j *JobRecord) { j.Stage = name })
+	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stage = name })
 	if r.events != nil {
 		r.events.Publish(r.userId, "track_acquisition_progress", map[string]any{
 			"track_id": r.trackID,
@@ -230,21 +210,21 @@ func (r schedulerJobReporter) stage(name string) {
 }
 
 func (r schedulerJobReporter) provenance(value string) {
-	r.log.update(r.trackID, func(j *JobRecord) { j.Provenance = value })
+	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Provenance = value })
 }
 
 func (r schedulerJobReporter) source(url string) {
-	r.log.update(r.trackID, func(j *JobRecord) {
+	r.log.update(r.trackID, func(j *ports.JobRecord) {
 		if j.ResolvedSource == "" {
 			j.ResolvedSource = url
 		}
 	})
 }
 
-func (s *BackgroundAcquisitionScheduler) Status() AcquisitionStatus {
+func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 	jobs, recent := s.log.snapshot()
 	succeeded, failed := s.log.counts()
-	return AcquisitionStatus{
+	return ports.AcquisitionStatus{
 		InFlight:     int(s.inflightCount.Load()),
 		Succeeded:    succeeded,
 		Failed:       failed,

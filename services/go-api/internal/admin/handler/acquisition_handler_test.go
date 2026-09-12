@@ -8,14 +8,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	acqService "altune/go-api/internal/acquisition/service"
+	acqPorts "altune/go-api/internal/acquisition/ports"
 )
 
 type fakeAcquisitionReader struct {
-	status acqService.AcquisitionStatus
+	status acqPorts.AcquisitionStatus
 }
 
-func (f fakeAcquisitionReader) Status() acqService.AcquisitionStatus {
+func (f fakeAcquisitionReader) Status() acqPorts.AcquisitionStatus {
 	return f.status
 }
 
@@ -39,12 +39,12 @@ func serveAcquisitionBody(t *testing.T, h *AdminHandler) string {
 
 func TestAcquisitionEndpoint_WireJSON_Populated(t *testing.T) {
 	scheduledAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
-	reader := fakeAcquisitionReader{status: acqService.AcquisitionStatus{
+	reader := fakeAcquisitionReader{status: acqPorts.AcquisitionStatus{
 		InFlight:     2,
 		Succeeded:    10,
 		Failed:       3,
-		Verification: acqService.AcquisitionVerification{Ffprobe: true, Ffmpeg: false, Fpcalc: true, YtDlp: true},
-		ActiveJobs: []acqService.JobRecord{{
+		Verification: acqPorts.AcquisitionVerification{Ffprobe: true, Ffmpeg: false, Fpcalc: true, YtDlp: true},
+		ActiveJobs: []acqPorts.JobRecord{{
 			TrackID:        "trk-1",
 			Title:          "Title One",
 			Artist:         "Artist One",
@@ -58,7 +58,7 @@ func TestAcquisitionEndpoint_WireJSON_Populated(t *testing.T) {
 			Reason:         "some reason",
 			Provenance:     "corroborated",
 		}},
-		Recent: []acqService.JobRecord{{
+		Recent: []acqPorts.JobRecord{{
 			TrackID:     "trk-2",
 			State:       "succeeded",
 			ScheduledAt: scheduledAt,

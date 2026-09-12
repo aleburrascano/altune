@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"time"
 
-	acqService "altune/go-api/internal/acquisition/service"
+	acqPorts "altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/httputil"
 )
 
 type AcquisitionStatusReader interface {
-	Status() acqService.AcquisitionStatus
+	Status() acqPorts.AcquisitionStatus
 }
 
 type acquisitionVerificationDTO struct {
@@ -43,7 +43,7 @@ type acquisitionStatusDTO struct {
 	Recent       []jobRecordDTO             `json:"recent"`
 }
 
-func newAcquisitionStatusDTO(s acqService.AcquisitionStatus) acquisitionStatusDTO {
+func newAcquisitionStatusDTO(s acqPorts.AcquisitionStatus) acquisitionStatusDTO {
 	return acquisitionStatusDTO{
 		InFlight:  s.InFlight,
 		Succeeded: s.Succeeded,
@@ -59,7 +59,7 @@ func newAcquisitionStatusDTO(s acqService.AcquisitionStatus) acquisitionStatusDT
 	}
 }
 
-func newJobRecordDTOs(jobs []acqService.JobRecord) []jobRecordDTO {
+func newJobRecordDTOs(jobs []acqPorts.JobRecord) []jobRecordDTO {
 	out := make([]jobRecordDTO, len(jobs))
 	for i, j := range jobs {
 		out[i] = jobRecordDTO{
@@ -82,9 +82,9 @@ func newJobRecordDTOs(jobs []acqService.JobRecord) []jobRecordDTO {
 
 func (h *AdminHandler) serveAcquisition(w http.ResponseWriter, _ *http.Request) {
 	if h.acquisition == nil {
-		httputil.WriteJSON(w, http.StatusOK, newAcquisitionStatusDTO(acqService.AcquisitionStatus{
-			ActiveJobs: []acqService.JobRecord{},
-			Recent:     []acqService.JobRecord{},
+		httputil.WriteJSON(w, http.StatusOK, newAcquisitionStatusDTO(acqPorts.AcquisitionStatus{
+			ActiveJobs: []acqPorts.JobRecord{},
+			Recent:     []acqPorts.JobRecord{},
 		}))
 		return
 	}
