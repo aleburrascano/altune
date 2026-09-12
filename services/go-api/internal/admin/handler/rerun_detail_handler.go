@@ -41,9 +41,7 @@ type DetailItemRow struct {
 	Sources    []string `json:"sources"`
 }
 
-type DetailReRunner interface {
-	ReRunDetail(ctx context.Context, query string) (requeststore.DetailReRunResult, error)
-}
+type DetailReRunner func(ctx context.Context, query string) (requeststore.DetailReRunResult, error)
 
 func (h *AdminHandler) WithDetailReRunner(r DetailReRunner) *AdminHandler {
 	h.detailReRunner = r
@@ -53,7 +51,7 @@ func (h *AdminHandler) WithDetailReRunner(r DetailReRunner) *AdminHandler {
 func (h *AdminHandler) serveReRunDetail(w http.ResponseWriter, r *http.Request) {
 	h.serveQueryAction(w, r, h.detailReRunner != nil, errDetailUnavailable, "admin.rerun_detail_failed",
 		func(ctx context.Context, body queryRequest) (any, error) {
-			res, err := h.detailReRunner.ReRunDetail(ctx, body.Query)
+			res, err := h.detailReRunner(ctx, body.Query)
 			if err != nil {
 				return nil, err
 			}

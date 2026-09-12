@@ -10,15 +10,7 @@ import (
 
 const inspectionSearchLimit = 30
 
-type searchInspector struct {
-	svc *discoveryService.Service
-}
-
-func (a *App) buildSearchInspector(svc *discoveryService.Service) *searchInspector {
-	return &searchInspector{svc: svc}
-}
-
-func (si *searchInspector) InspectSearch(ctx context.Context, query string, kinds []string) ([]requeststore.ResultRow, error) {
+func inspectSearch(ctx context.Context, svc *discoveryService.Service, query string, kinds []string) ([]requeststore.ResultRow, error) {
 	kindSet, err := parseRerunKinds(kinds)
 	if err != nil {
 		return nil, err
@@ -27,7 +19,7 @@ func (si *searchInspector) InspectSearch(ctx context.Context, query string, kind
 	if err != nil {
 		return nil, err
 	}
-	results, statuses := si.svc.InspectSearchWithStatuses(ctx, sq)
+	results, statuses := svc.InspectSearchWithStatuses(ctx, sq)
 	if discoveryService.AllProvidersFailed(statuses) {
 		return nil, discoveryService.ErrAllProvidersFailed
 	}

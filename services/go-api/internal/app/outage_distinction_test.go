@@ -29,14 +29,8 @@ func (p outageProvider) SupportedKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{domain.ResultKindArtist: true}
 }
 
-func inspectorForProvider(p ports.SearchProvider) *searchInspector {
-	svc := discoveryService.NewService([]ports.SearchProvider{p}, discoveryService.NewCircuitBreaker())
-	return &searchInspector{svc: svc}
-}
-
-func detailReRunnerForProvider(p ports.SearchProvider) *detailReRunner {
-	svc := discoveryService.NewService([]ports.SearchProvider{p}, discoveryService.NewCircuitBreaker())
-	return &detailReRunner{searchSvc: svc}
+func inspectorForProvider(p ports.SearchProvider) *discoveryService.Service {
+	return discoveryService.NewService([]ports.SearchProvider{p}, discoveryService.NewCircuitBreaker())
 }
 
 // TestInspectSearch_outageIsDistinguishableFromEmpty pins the reported gap: a
@@ -45,10 +39,10 @@ func detailReRunnerForProvider(p ports.SearchProvider) *detailReRunner {
 // reporting the same empty, nil-error shape for both.
 func TestInspectSearch_outageIsDistinguishableFromEmpty(t *testing.T) {
 	down := inspectorForProvider(outageProvider{name: domain.ProviderDeezer, err: errors.New("provider unreachable")})
-	outageRows, outageErr := down.InspectSearch(context.Background(), "kendrick", nil)
+	outageRows, outageErr := inspectSearch(context.Background(), down, "kendrick", nil)
 
 	empty := inspectorForProvider(outageProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{}})
-	emptyRows, emptyErr := empty.InspectSearch(context.Background(), "kendrick", nil)
+	emptyRows, emptyErr := inspectSearch(context.Background(), empty, "kendrick", nil)
 
 	if len(outageRows) != 0 || len(emptyRows) != 0 {
 		t.Fatalf("want both shapes empty, got outage=%d empty=%d rows", len(outageRows), len(emptyRows))
@@ -65,11 +59,11 @@ func TestInspectSearch_outageIsDistinguishableFromEmpty(t *testing.T) {
 // ReRunDetail's artist-resolution step, which otherwise returns (empty, false,
 // nil) for both an outage and a genuine no-match.
 func TestResolveTopArtist_outageIsDistinguishableFromEmpty(t *testing.T) {
-	down := detailReRunnerForProvider(outageProvider{name: domain.ProviderDeezer, err: errors.New("provider unreachable")})
-	_, outageOK, outageErr := down.resolveTopArtist(context.Background(), "kendrick")
+	down := inspectorForProvider(outageProvider{name: domain.ProviderDeezer, err: errors.New("provider unreachable")})
+	_, outageOK, outageErr := resolveTopArtist(context.Background(), down, "kendrick")
 
-	empty := detailReRunnerForProvider(outageProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{}})
-	_, emptyOK, emptyErr := empty.resolveTopArtist(context.Background(), "kendrick")
+	empty := inspectorForProvider(outageProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{}})
+	_, emptyOK, emptyErr := resolveTopArtist(context.Background(), empty, "kendrick")
 
 	if outageOK || emptyOK {
 		t.Fatalf("want no artist resolved in either case, got outage=%v empty=%v", outageOK, emptyOK)

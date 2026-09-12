@@ -15,13 +15,8 @@ import (
 // fan out as if no filter was given.
 func TestReRun_rejectsInvalidKindInsteadOfSilentDefault(t *testing.T) {
 	ct := &countingTransport{}
-	rr := &reRunner{
-		cfg:              &config.Config{},
-		behavioralScores: func() map[string]float64 { return nil },
-		transport:        ct,
-	}
 
-	_, err := rr.ReRun(context.Background(), "kendrick", []string{"bogus"})
+	_, err := reRun(context.Background(), &config.Config{}, ct, func() map[string]float64 { return nil }, "kendrick", []string{"bogus"})
 	if err == nil {
 		t.Fatal("want typed invalid-kinds error for unparseable kind, got nil (filter silently dropped)")
 	}
@@ -37,9 +32,9 @@ func TestReRun_rejectsInvalidKindInsteadOfSilentDefault(t *testing.T) {
 // case for the search-inspection entry point, which routes through the same
 // parseRerunKinds helper.
 func TestInspectSearch_rejectsInvalidKindInsteadOfSilentDefault(t *testing.T) {
-	si := inspectorForProvider(outageProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{}})
+	svc := inspectorForProvider(outageProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{}})
 
-	_, err := si.InspectSearch(context.Background(), "kendrick", []string{"bogus"})
+	_, err := inspectSearch(context.Background(), svc, "kendrick", []string{"bogus"})
 	if err == nil {
 		t.Fatal("want typed invalid-kinds error for unparseable kind, got nil (filter silently dropped)")
 	}

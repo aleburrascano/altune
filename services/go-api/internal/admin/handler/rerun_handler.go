@@ -29,9 +29,7 @@ type ScoredRow struct {
 	Demoted     bool    `json:"demoted"`
 }
 
-type ReRunner interface {
-	ReRun(ctx context.Context, query string, kinds []string) (requeststore.ReRunResult, error)
-}
+type ReRunner func(ctx context.Context, query string, kinds []string) (requeststore.ReRunResult, error)
 
 func (h *AdminHandler) WithReRunner(r ReRunner) *AdminHandler {
 	h.reRunner = r
@@ -41,7 +39,7 @@ func (h *AdminHandler) WithReRunner(r ReRunner) *AdminHandler {
 func (h *AdminHandler) serveReRun(w http.ResponseWriter, r *http.Request) {
 	h.serveQueryAction(w, r, h.reRunner != nil, errReRunUnavailable, "admin.rerun_failed",
 		func(ctx context.Context, body queryRequest) (any, error) {
-			res, err := h.reRunner.ReRun(ctx, body.Query, body.Kinds)
+			res, err := h.reRunner(ctx, body.Query, body.Kinds)
 			if err != nil {
 				return nil, err
 			}
