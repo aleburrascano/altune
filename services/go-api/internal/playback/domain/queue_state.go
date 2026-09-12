@@ -10,13 +10,15 @@ import (
 
 const MaxQueueLength = 10000
 
-type ValidationError struct {
-	Message string
-}
+// ValidationError aliases the shared type so this package keeps one name for
+// its 400s while the implementation lives in internal/shared.
+type ValidationError = shared.ValidationError
 
-func (e *ValidationError) Error() string     { return e.Message }
-func (e *ValidationError) HTTPStatus() int   { return 400 }
-func (e *ValidationError) ErrorCode() string { return "playback.validation_error" }
+// NewValidationError builds a playback validation error
+// ("playback.validation_error").
+func NewValidationError(msg string) *ValidationError {
+	return shared.NewValidationError("playback", msg)
+}
 
 type RepeatMode int
 
@@ -48,7 +50,7 @@ func ParseRepeatMode(s string) (RepeatMode, error) {
 	case "one":
 		return RepeatOne, nil
 	default:
-		return RepeatOff, &ValidationError{Message: fmt.Sprintf("unknown repeat mode: %q", s)}
+		return RepeatOff, NewValidationError(fmt.Sprintf("unknown repeat mode: %q", s))
 	}
 }
 
@@ -77,7 +79,7 @@ type QueueStateInput struct {
 
 func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error) {
 	if in.PositionMs < 0 {
-		return nil, &ValidationError{Message: fmt.Sprintf("positionMs must be non-negative, got %d", in.PositionMs)}
+		return nil, NewValidationError(fmt.Sprintf("positionMs must be non-negative, got %d", in.PositionMs))
 	}
 	trackIds := emptyIfNil(in.TrackIds)
 	naturalOrder := emptyIfNil(in.NaturalOrder)
@@ -131,14 +133,14 @@ func elementsStorable(field string, values []string) error {
 
 func stringStorable(field, value string) error {
 	if strings.IndexByte(value, 0) >= 0 {
-		return &ValidationError{Message: fmt.Sprintf("%s contains a NUL byte, which cannot be stored", field)}
+		return NewValidationError(fmt.Sprintf("%s contains a NUL byte, which cannot be stored", field))
 	}
 	return nil
 }
 
 func lengthWithinBound(field string, length int) error {
 	if length > MaxQueueLength {
-		return &ValidationError{Message: fmt.Sprintf("%s length %d exceeds maximum %d", field, length, MaxQueueLength)}
+		return NewValidationError(fmt.Sprintf("%s length %d exceeds maximum %d", field, length, MaxQueueLength))
 	}
 	return nil
 }
@@ -148,7 +150,7 @@ func indexWithinQueue(currentIdx, queueLen int) (int, error) {
 		return 0, nil
 	}
 	if currentIdx < 0 || currentIdx >= queueLen {
-		return 0, &ValidationError{Message: fmt.Sprintf("currentIdx %d out of range [0, %d)", currentIdx, queueLen)}
+		return 0, NewValidationError(fmt.Sprintf("currentIdx %d out of range [0, %d)", currentIdx, queueLen))
 	}
 	return currentIdx, nil
 }

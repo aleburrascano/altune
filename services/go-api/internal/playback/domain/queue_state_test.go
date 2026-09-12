@@ -183,7 +183,7 @@ func TestRepeatMode_RoundTrip(t *testing.T) {
 }
 
 func TestPlaybackValidationErrorCode(t *testing.T) {
-	if got := (&ValidationError{Message: "x"}).ErrorCode(); got != "playback.validation_error" {
+	if got := NewValidationError("x").ErrorCode(); got != "playback.validation_error" {
 		t.Errorf("code: got %q, want %q", got, "playback.validation_error")
 	}
 }

@@ -123,10 +123,10 @@ func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error)
 
 func validateTrackText(value, field string) error {
 	if value == "" {
-		return &ValidationError{Message: "track " + field + " required"}
+		return NewValidationError("track " + field + " required")
 	}
 	if len(value) > maxTrackTextLength {
-		return &ValidationError{Message: "track " + field + " exceeds 300 characters"}
+		return NewValidationError("track " + field + " exceeds 300 characters")
 	}
 	return nil
 }

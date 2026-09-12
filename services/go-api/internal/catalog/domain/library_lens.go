@@ -32,7 +32,7 @@ func ParseLibrarySort(s string) (LibrarySort, error) {
 	case "year":
 		return SortYear, nil
 	}
-	return SortRecent, &ValidationError{Message: "unknown sort: " + s}
+	return SortRecent, NewValidationError("unknown sort: " + s)
 }
 
 type LibraryQuery struct {

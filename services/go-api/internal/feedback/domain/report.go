@@ -9,13 +9,15 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-type ValidationError struct {
-	Message string
-}
+// ValidationError aliases the shared type so this package keeps one name for
+// its 400s while the implementation lives in internal/shared.
+type ValidationError = shared.ValidationError
 
-func (e *ValidationError) Error() string     { return e.Message }
-func (e *ValidationError) HTTPStatus() int   { return 400 }
-func (e *ValidationError) ErrorCode() string { return "feedback.validation_error" }
+// NewValidationError builds a feedback validation error
+// ("feedback.validation_error").
+func NewValidationError(msg string) *ValidationError {
+	return shared.NewValidationError("feedback", msg)
+}
 
 type Kind int
 
@@ -56,7 +58,7 @@ func ParseKind(s string) (Kind, error) {
 	case "confusing":
 		return KindConfusing, nil
 	default:
-		return KindBug, &ValidationError{Message: fmt.Sprintf("unknown kind: %q", s)}
+		return KindBug, NewValidationError(fmt.Sprintf("unknown kind: %q", s))
 	}
 }
 
@@ -109,7 +111,7 @@ func NewReport(reporter shared.UserId, kind Kind, message string, diag Diagnosti
 		return nil, err
 	}
 	if reporter.IsZero() {
-		return nil, &ValidationError{Message: "report needs a reporter"}
+		return nil, NewValidationError("report needs a reporter")
 	}
 	return &Report{
 		Reporter:    reporter,
@@ -123,10 +125,10 @@ func NewReport(reporter shared.UserId, kind Kind, message string, diag Diagnosti
 func validateMessage(message string) error {
 	count := utf8.RuneCountInString(message)
 	if count < MinMessageRunes {
-		return &ValidationError{Message: fmt.Sprintf("describe it in at least %d characters", MinMessageRunes)}
+		return NewValidationError(fmt.Sprintf("describe it in at least %d characters", MinMessageRunes))
 	}
 	if count > MaxMessageRunes {
-		return &ValidationError{Message: fmt.Sprintf("keep it under %d characters", MaxMessageRunes)}
+		return NewValidationError(fmt.Sprintf("keep it under %d characters", MaxMessageRunes))
 	}
 	return nil
 }
