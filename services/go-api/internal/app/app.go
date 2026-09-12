@@ -150,44 +150,7 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	slog.Info("waiting for background tasks")
-	outcomes := []shutdownOutcome{
-		a.shutdownComponent("alert monitor", 5*time.Second, func(ctx context.Context) {
-			if a.alertMonitor != nil {
-				a.alertMonitor.Shutdown(ctx)
-			}
-		}),
-		a.shutdownComponent("event feed", 5*time.Second, func(ctx context.Context) {
-			if a.eventFeed != nil {
-				a.eventFeed.Shutdown(ctx)
-			}
-		}),
-		a.shutdownComponent("eval meter", 5*time.Second, func(ctx context.Context) {
-			if a.evalMeter != nil {
-				a.evalMeter.Shutdown(ctx)
-			}
-		}),
-		a.shutdownComponent("vocabulary refresh", 10*time.Second, func(ctx context.Context) {
-			if a.vocabRefresh != nil {
-				a.vocabRefresh.Shutdown(ctx)
-			}
-		}),
-		a.shutdownComponent("acquisition scheduler", 30*time.Second, func(ctx context.Context) {
-			if a.scheduler != nil {
-				a.scheduler.Shutdown(ctx)
-			}
-		}),
-		// Drain the leader-gated background jobs BEFORE releasing the election
-		// lock. Releasing first would let the next instance win leadership and
-		// start its own copies while these are still mid-flight (e.g. the corpus
-		// refresh's blocking Materialize), running the same leader-only job twice.
-		a.drainBackground(30 * time.Second),
-		a.shutdownComponent("leader election", 5*time.Second, func(ctx context.Context) {
-			if a.election != nil {
-				a.election.Shutdown(ctx)
-			}
-		}),
-		a.drainSearchBackground(30 * time.Second),
-	}
+	outcomes := a.runShutdownSequence()
 
 	if unstopped := unfinishedShutdowns(outcomes); len(unstopped) > 0 {
 		// These components blew past their shutdown budget and are presumed
@@ -244,6 +207,72 @@ func (a *App) shutdownComponent(name string, timeout time.Duration, fn func(cont
 			"component", name, "timeout", timeout.String())
 		return shutdownOutcome{name: name, completed: false}
 	}
+}
+
+// componentShutdown is one row of the ordered shutdown table: a named component
+// with its own timeout budget and a nil-checked shutdown. Collapsing the
+// previously copy-pasted blocks into a table means a newly added shutdownable
+// field is a single row that cannot skip the nil-check or the bounded,
+// outcome-reporting shutdownComponent path.
+type componentShutdown struct {
+	name     string
+	timeout  time.Duration
+	shutdown func(context.Context)
+}
+
+// runShutdownSequence shuts every component down in strict order and collects
+// each outcome. Components run through the bounded shutdownComponent path; the
+// two drains wait on wait-groups rather than a nilable component, so they stay
+// explicit steps. The background drain MUST run before the leader-election lock
+// is released: releasing first would let the next instance win leadership and
+// start its own copies while these are still mid-flight (e.g. the corpus
+// refresh's blocking Materialize), running the same leader-only job twice.
+func (a *App) runShutdownSequence() []shutdownOutcome {
+	component := func(c componentShutdown) func() shutdownOutcome {
+		return func() shutdownOutcome {
+			return a.shutdownComponent(c.name, c.timeout, c.shutdown)
+		}
+	}
+	steps := []func() shutdownOutcome{
+		component(componentShutdown{"alert monitor", 5 * time.Second, func(ctx context.Context) {
+			if a.alertMonitor != nil {
+				a.alertMonitor.Shutdown(ctx)
+			}
+		}}),
+		component(componentShutdown{"event feed", 5 * time.Second, func(ctx context.Context) {
+			if a.eventFeed != nil {
+				a.eventFeed.Shutdown(ctx)
+			}
+		}}),
+		component(componentShutdown{"eval meter", 5 * time.Second, func(ctx context.Context) {
+			if a.evalMeter != nil {
+				a.evalMeter.Shutdown(ctx)
+			}
+		}}),
+		component(componentShutdown{"vocabulary refresh", 10 * time.Second, func(ctx context.Context) {
+			if a.vocabRefresh != nil {
+				a.vocabRefresh.Shutdown(ctx)
+			}
+		}}),
+		component(componentShutdown{"acquisition scheduler", 30 * time.Second, func(ctx context.Context) {
+			if a.scheduler != nil {
+				a.scheduler.Shutdown(ctx)
+			}
+		}}),
+		func() shutdownOutcome { return a.drainBackground(30 * time.Second) },
+		component(componentShutdown{"leader election", 5 * time.Second, func(ctx context.Context) {
+			if a.election != nil {
+				a.election.Shutdown(ctx)
+			}
+		}}),
+		func() shutdownOutcome { return a.drainSearchBackground(30 * time.Second) },
+	}
+
+	outcomes := make([]shutdownOutcome, 0, len(steps))
+	for _, step := range steps {
+		outcomes = append(outcomes, step())
+	}
+	return outcomes
 }
 
 func (a *App) setup(ctx context.Context) error {
