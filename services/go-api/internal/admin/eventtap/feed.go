@@ -3,7 +3,6 @@ package eventtap
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 
 	"altune/go-api/internal/shared/runloop"
@@ -16,18 +15,16 @@ const (
 )
 
 type Feed struct {
-	mu      sync.Mutex
-	recent  map[string][]time.Time
-	subs    map[int]chan TapEvent
-	nextSub int
+	rates       *rateWindow
+	broadcaster *broadcaster
 
 	runloop.Background
 }
 
 func NewFeed() *Feed {
 	return &Feed{
-		recent: make(map[string][]time.Time),
-		subs:   make(map[int]chan TapEvent),
+		rates:       newRateWindow(),
+		broadcaster: newBroadcaster(),
 	}
 }
 
@@ -58,54 +55,14 @@ func (f *Feed) loop(ctx context.Context, ch <-chan TapEvent) {
 }
 
 func (f *Feed) record(evt TapEvent) {
-	f.mu.Lock()
-	times := append(f.recent[evt.Type], evt.Timestamp)
-	if len(times) > perTypeCap {
-		times = times[len(times)-perTypeCap:]
-	}
-	f.recent[evt.Type] = times
-	for _, ch := range f.subs {
-		select {
-		case ch <- evt:
-		default:
-		}
-	}
-	f.mu.Unlock()
+	f.rates.append(evt.Type, evt.Timestamp)
+	f.broadcaster.broadcast(evt)
 }
 
 func (f *Feed) Rates() map[string]int {
-	cutoff := time.Now().UTC().Add(-feedRateWindow)
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	out := make(map[string]int, len(f.recent))
-	for typ, times := range f.recent {
-		kept := times[:0]
-		for _, t := range times {
-			if t.After(cutoff) {
-				kept = append(kept, t)
-			}
-		}
-		f.recent[typ] = kept
-		if len(kept) > 0 {
-			out[typ] = len(kept)
-		}
-	}
-	return out
+	return f.rates.countsSince(time.Now().UTC().Add(-feedRateWindow))
 }
 
 func (f *Feed) Subscribe() (<-chan TapEvent, func()) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	id := f.nextSub
-	f.nextSub++
-	ch := make(chan TapEvent, feedSubSize)
-	f.subs[id] = ch
-	return ch, func() {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		if c, ok := f.subs[id]; ok {
-			delete(f.subs, id)
-			close(c)
-		}
-	}
+	return f.broadcaster.subscribe()
 }
