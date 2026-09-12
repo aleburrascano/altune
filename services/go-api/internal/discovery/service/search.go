@@ -19,11 +19,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const defaultProviderTimeout = 1500 * time.Millisecond
-
 const historyRingSize = 100
-
-const identityPersistTimeout = 30 * time.Second
 
 type rankingExperiments struct {
 	tailDemotion bool
@@ -331,145 +327,6 @@ func (s *Service) mergeRankEnrich(
 	return ranked
 }
 
-func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.SearchResult) {
-	if s.identityBridge == nil {
-		return
-	}
-	type learnedBridge struct {
-		kind domain.ResultKind
-		mbid string
-		ids  map[string]string
-	}
-	var learned []learnedBridge
-
-	for gi := range perProvider {
-		for ri := range perProvider[gi] {
-			r := &perProvider[gi][ri]
-			if r.MBID == "" {
-				continue
-			}
-			ids, ok := s.identityBridge.ExternalIDs(ctx, r.Kind, r.MBID)
-			if !ok {
-				continue
-			}
-			r.Xref = ids
-			slog.DebugContext(ctx, "merge.identity_bridge_stamped",
-				"kind", r.Kind.String(), "mbid", r.MBID, "ids", len(ids))
-			if s.identityStore != nil {
-				learned = append(learned, learnedBridge{kind: r.Kind, mbid: r.MBID, ids: ids})
-			}
-		}
-	}
-
-	if len(learned) == 0 {
-		return
-	}
-	s.launchBackground(ctx, "identity.persist_bridges", func(bgCtx context.Context) {
-		bgCtx, cancel := context.WithTimeout(bgCtx, identityPersistTimeout)
-		defer cancel()
-		for _, b := range learned {
-			ids := b.ids
-			if s.identityVerifier != nil {
-				var ok bool
-				ids, ok = s.identityVerifier.VerifyXref(bgCtx, b.kind, b.mbid, b.ids)
-				if !ok {
-					continue
-				}
-			}
-			if err := s.identityStore.PersistBridges(bgCtx, b.kind, b.mbid, ids); err != nil {
-				slog.WarnContext(bgCtx, "identity.persist_failed",
-					"kind", b.kind.String(), "mbid", b.mbid, "error", err)
-				s.identityVerifier.Forget(b.mbid)
-			}
-		}
-	})
-}
-
-func (s *Service) fanOut(
-	ctx context.Context,
-	searchQuery string,
-	kinds map[domain.ResultKind]bool,
-) ([][]domain.SearchResult, []domain.ProviderSearchResponse) {
-	results := make([][]domain.SearchResult, len(s.providers))
-	statuses := make([]domain.ProviderSearchResponse, len(s.providers))
-	var wg sync.WaitGroup
-
-	for i, provider := range s.providers {
-		if !s.circuitBreaker.AllowRequest(provider.Name()) {
-			statuses[i] = domain.ProviderSearchResponse{
-				Provider: provider.Name(),
-				Status:   domain.ProviderStatusCircuitOpen,
-			}
-			continue
-		}
-
-		wg.Add(1)
-		go func(i int, p ports.SearchProvider) {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					s.circuitBreaker.RecordFailure(p.Name())
-					statuses[i] = domain.ProviderSearchResponse{
-						Provider: p.Name(),
-						Status:   domain.ProviderStatusError,
-					}
-					slog.ErrorContext(ctx, "search.v2.provider_panic",
-						"provider", p.Name().String(), "panic", r)
-				}
-			}()
-
-			timeout := defaultProviderTimeout
-			if tp, ok := p.(interface{ SearchTimeout() time.Duration }); ok {
-				timeout = tp.SearchTimeout()
-			}
-			provCtx, cancel := context.WithTimeout(ctx, timeout)
-			defer cancel()
-
-			start := time.Now()
-			res, err := p.Search(provCtx, searchQuery, kinds)
-			latencyMs := time.Since(start).Milliseconds()
-
-			if err != nil {
-				if ctx.Err() == nil {
-					s.circuitBreaker.RecordFailure(p.Name())
-				}
-				status := domain.ProviderStatusError
-				if provCtx.Err() != nil {
-					status = domain.ProviderStatusTimeout
-				}
-				statuses[i] = domain.ProviderSearchResponse{
-					Provider:  p.Name(),
-					Status:    status,
-					LatencyMs: latencyMs,
-				}
-				slog.WarnContext(ctx, "search.v2.provider_failed",
-					"provider", p.Name().String(), "status", status.String(), "error", err)
-				return
-			}
-
-			s.circuitBreaker.RecordSuccess(p.Name())
-			results[i] = res
-			statuses[i] = domain.ProviderSearchResponse{
-				Provider:    p.Name(),
-				Results:     res,
-				Status:      domain.ProviderStatusOK,
-				LatencyMs:   latencyMs,
-				ResultCount: len(res),
-			}
-		}(i, provider)
-	}
-
-	wg.Wait()
-
-	perProvider := make([][]domain.SearchResult, 0, len(s.providers))
-	for _, r := range results {
-		if len(r) > 0 {
-			perProvider = append(perProvider, r)
-		}
-	}
-	return perProvider, statuses
-}
-
 func (s *Service) persistHistory(
 	ctx context.Context,
 	userId shared.UserId,
@@ -529,13 +386,4 @@ func resultCacheKey(queryNorm string, kinds map[domain.ResultKind]bool) string {
 	}
 	sort.Strings(ks)
 	return queryNorm + "|" + strings.Join(ks, ",")
-}
-
-func anyProviderFailed(statuses []domain.ProviderSearchResponse) bool {
-	for _, st := range statuses {
-		if st.Status != domain.ProviderStatusOK {
-			return true
-		}
-	}
-	return false
 }
