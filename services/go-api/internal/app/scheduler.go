@@ -99,7 +99,9 @@ func (a *App) runTicker(ctx context.Context, name string, interval time.Duration
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		guard(name, fn)
+		if a.stillLeader() {
+			guard(name, fn)
+		}
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -107,8 +109,21 @@ func (a *App) runTicker(ctx context.Context, name string, interval time.Duration
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				guard(name, fn)
+				// Re-check leadership every tick: a blue-green deploy can hand
+				// the lock to another instance after this job first started, and
+				// a job that kept firing would duplicate the new leader's work.
+				if a.stillLeader() {
+					guard(name, fn)
+				}
 			}
 		}
 	}()
+}
+
+// stillLeader reports whether this instance currently holds leadership. With no
+// election configured (unit tests of the ticker mechanics, single-process
+// setups) it returns true so the job runs unconditionally, matching the
+// pre-election behaviour.
+func (a *App) stillLeader() bool {
+	return a.election == nil || a.election.IsLeader()
 }

@@ -21,7 +21,6 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/leader"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
@@ -96,8 +95,19 @@ type App struct {
 	providerHealth  *providerhealth.Store
 	evalMeter       *evalmeter.Meter
 
-	election         *leader.Election
+	election         electionController
 	backgroundStarts []backgroundJob
+}
+
+// electionController is the leader-election surface the app depends on: winning
+// leadership, checking whether it still holds the lock, and releasing it on
+// shutdown. *leader.Election satisfies it in production; tests substitute a
+// fake to simulate a leadership handoff without a live Postgres advisory lock.
+type electionController interface {
+	Start(context.Context)
+	Await(context.Context) bool
+	IsLeader() bool
+	Shutdown(context.Context)
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
@@ -166,12 +176,16 @@ func (a *App) Run(ctx context.Context) error {
 				a.scheduler.Shutdown(ctx)
 			}
 		}),
+		// Drain the leader-gated background jobs BEFORE releasing the election
+		// lock. Releasing first would let the next instance win leadership and
+		// start its own copies while these are still mid-flight (e.g. the corpus
+		// refresh's blocking Materialize), running the same leader-only job twice.
+		a.drainBackground(30 * time.Second),
 		a.shutdownComponent("leader election", 5*time.Second, func(ctx context.Context) {
 			if a.election != nil {
 				a.election.Shutdown(ctx)
 			}
 		}),
-		a.drainBackground(30 * time.Second),
 		a.drainSearchBackground(30 * time.Second),
 	}
 
