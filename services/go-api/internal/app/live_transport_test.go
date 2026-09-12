@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/time/rate"
 )
@@ -19,6 +20,7 @@ type fakeRT struct {
 type fakeStep struct {
 	status int
 	err    error
+	header http.Header
 }
 
 func (f *fakeRT) RoundTrip(_ *http.Request) (*http.Response, error) {
@@ -31,7 +33,16 @@ func (f *fakeRT) RoundTrip(_ *http.Request) (*http.Response, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
-	return &http.Response{StatusCode: s.status, Body: io.NopCloser(strings.NewReader("body"))}, nil
+	return &http.Response{StatusCode: s.status, Header: s.header, Body: io.NopCloser(strings.NewReader("body"))}, nil
+}
+
+func recordDelays(base http.RoundTripper, rec *[]time.Duration) *liveTransport {
+	lt := newLiveOver(base)
+	lt.sleep = func(_ context.Context, d time.Duration) error {
+		*rec = append(*rec, d)
+		return nil
+	}
+	return lt
 }
 
 func newLiveOver(base http.RoundTripper) *liveTransport {
@@ -105,6 +116,86 @@ func TestLiveTransport_NoRetryOnContextDeadline(t *testing.T) {
 	}
 	if f.calls != 1 {
 		t.Errorf("calls = %d, want 1 (budget gone — no further attempts)", f.calls)
+	}
+}
+
+// TestLiveTransport_HonorsRetryAfterSeconds is the repro: a 429 carrying a
+// delta-seconds Retry-After must wait that value, not the fixed backoff.
+func TestLiveTransport_HonorsRetryAfterSeconds(t *testing.T) {
+	h := http.Header{"Retry-After": []string{"2"}}
+	f := &fakeRT{steps: []fakeStep{{status: 429, header: h}, {status: 200}}}
+	var delays []time.Duration
+	resp, err := recordDelays(f, &delays).RoundTrip(getReq(t))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	if len(delays) != 1 {
+		t.Fatalf("delays = %v, want exactly one wait", delays)
+	}
+	if delays[0] != 2*time.Second {
+		t.Errorf("delay = %v, want 2s from Retry-After (not the fixed backoff)", delays[0])
+	}
+}
+
+// TestLiveTransport_HonorsRetryAfterHTTPDate covers the HTTP-date format.
+func TestLiveTransport_HonorsRetryAfterHTTPDate(t *testing.T) {
+	when := time.Now().Add(5 * time.Second).UTC().Format(http.TimeFormat)
+	h := http.Header{"Retry-After": []string{when}}
+	f := &fakeRT{steps: []fakeStep{{status: 503, header: h}, {status: 200}}}
+	var delays []time.Duration
+	resp, err := recordDelays(f, &delays).RoundTrip(getReq(t))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+	if len(delays) != 1 {
+		t.Fatalf("delays = %v, want exactly one wait", delays)
+	}
+	if delays[0] < 3*time.Second || delays[0] > 6*time.Second {
+		t.Errorf("delay = %v, want roughly 5s from the HTTP-date Retry-After", delays[0])
+	}
+}
+
+// TestLiveTransport_CapsRetryAfter ensures a huge value is clamped.
+func TestLiveTransport_CapsRetryAfter(t *testing.T) {
+	h := http.Header{"Retry-After": []string{"100000"}}
+	f := &fakeRT{steps: []fakeStep{{status: 429, header: h}, {status: 200}}}
+	var delays []time.Duration
+	resp, err := recordDelays(f, &delays).RoundTrip(getReq(t))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defer resp.Body.Close()
+	if len(delays) != 1 || delays[0] != liveMaxRetryAfter {
+		t.Errorf("delays = %v, want a single wait capped at %v", delays, liveMaxRetryAfter)
+	}
+}
+
+// TestLiveTransport_FallsBackWithoutRetryAfter keeps the fixed backoff when the
+// header is absent or unparseable.
+func TestLiveTransport_FallsBackWithoutRetryAfter(t *testing.T) {
+	cases := map[string]http.Header{
+		"absent":   nil,
+		"garbage":  {"Retry-After": []string{"soon"}},
+		"negative": {"Retry-After": []string{"-5"}},
+	}
+	for name, h := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := &fakeRT{steps: []fakeStep{{status: 429, header: h}, {status: 200}}}
+			var delays []time.Duration
+			resp, err := recordDelays(f, &delays).RoundTrip(getReq(t))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			defer resp.Body.Close()
+			if len(delays) != 1 || delays[0] != fixedBackoff(1) {
+				t.Errorf("delays = %v, want the fixed backoff %v", delays, fixedBackoff(1))
+			}
+		})
 	}
 }
 
