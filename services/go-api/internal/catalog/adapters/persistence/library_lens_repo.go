@@ -1,28 +1,29 @@
 package persistence
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PgxLibraryLensRepository struct {
-	pool *pgxpool.Pool
+	pool pgxPool
 }
 
 func NewPgxLibraryLensRepository(pool *pgxpool.Pool) *PgxLibraryLensRepository {
 	return &PgxLibraryLensRepository{pool: pool}
 }
 
-const albumGroupKey = `lower(t.album) || '|||' || lower(coalesce(t.album_artist, t.artist))`
-const artistGroupKey = `lower(t.artist)`
+const (
+	albumGroupKey  = `lower(t.album) || '|||' || lower(coalesce(t.album_artist, t.artist))`
+	artistGroupKey = `lower(t.artist)`
+)
 
 const albumSelect = `
 	SELECT ` + albumGroupKey + ` AS group_key,
@@ -85,6 +86,9 @@ func (r *PgxLibraryLensRepository) ListAlbumsForUser(
 	userId shared.UserId,
 	query domain.LibraryQuery,
 ) ([]domain.AlbumGroup, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	sql := albumSelect
 	args := []any{userId.UUID()}
 	if query.Search != "" {
@@ -118,6 +122,9 @@ func (r *PgxLibraryLensRepository) ListArtistsForUser(
 	userId shared.UserId,
 	query domain.LibraryQuery,
 ) ([]domain.ArtistGroup, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	sql := artistSelect
 	args := []any{userId.UUID()}
 	if query.Search != "" {
@@ -162,6 +169,9 @@ func (r *PgxLibraryLensRepository) ListFilteredForUser(
 	userId shared.UserId,
 	query domain.LibraryQuery,
 ) ([]*domain.Track, int, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	var args []any
 	placeholder := func(v any) string {
 		args = append(args, v)

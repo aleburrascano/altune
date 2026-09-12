@@ -16,7 +16,7 @@ type querier interface {
 }
 
 type PgxFeaturedArtistRepository struct {
-	pool *pgxpool.Pool
+	pool pgxPool
 }
 
 func NewPgxFeaturedArtistRepository(pool *pgxpool.Pool) *PgxFeaturedArtistRepository {
@@ -110,6 +110,9 @@ func (r *PgxFeaturedArtistRepository) ReplaceFeaturedArtists(
 	userId shared.UserId,
 	feats []domain.FeaturedArtist,
 ) error {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -162,6 +165,9 @@ func (r *PgxFeaturedArtistRepository) ListTracksFeaturing(
 	userId shared.UserId,
 	fa domain.FeaturedArtist,
 ) ([]*domain.Track, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	sql, args := buildFeaturingQuery(userId.UUID(), fa.IdentityKey())
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {

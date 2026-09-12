@@ -18,7 +18,7 @@ const playlistTrackCountSubquery = `(SELECT COUNT(*) FROM playlist_tracks pt WHE
 var _ ports.PlaylistRepository = (*PgxPlaylistRepository)(nil)
 
 type PgxPlaylistRepository struct {
-	pool *pgxpool.Pool
+	pool pgxPool
 }
 
 func NewPgxPlaylistRepository(pool *pgxpool.Pool) *PgxPlaylistRepository {
@@ -26,6 +26,9 @@ func NewPgxPlaylistRepository(pool *pgxpool.Pool) *PgxPlaylistRepository {
 }
 
 func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Playlist) error {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO playlists (id, user_id, name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)`,
 		playlist.ID.UUID(), playlist.UserId.UUID(), playlist.Name, playlist.CreatedAt, playlist.UpdatedAt,
@@ -34,6 +37,9 @@ func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Pla
 }
 
 func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]domain.PlaylistWithSummary, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	rows, err := r.pool.Query(ctx,
 		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
 			`+playlistTrackCountSubquery+` AS track_count,
@@ -91,6 +97,9 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 }
 
 func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	row := r.pool.QueryRow(ctx,
 		`SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
 			`+playlistTrackCountSubquery+` AS track_count
@@ -129,6 +138,9 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 var maxPlaylistTracks = 2000
 
 func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	playlist, _, err := r.GetByID(ctx, id, userId)
 	if err != nil || playlist == nil {
 		return nil, nil, err
@@ -165,6 +177,9 @@ func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.Pla
 }
 
 func (r *PgxPlaylistRepository) Delete(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (bool, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	tag, err := r.pool.Exec(ctx,
 		`DELETE FROM playlists WHERE id = $1 AND user_id = $2`,
 		id.UUID(), userId.UUID(),
@@ -176,6 +191,9 @@ func (r *PgxPlaylistRepository) Delete(ctx context.Context, id domain.PlaylistId
 }
 
 func (r *PgxPlaylistRepository) Update(ctx context.Context, playlist *domain.Playlist) error {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	_, err := r.pool.Exec(ctx,
 		`UPDATE playlists SET name = $3, updated_at = $4 WHERE id = $1 AND user_id = $2`,
 		playlist.ID.UUID(), playlist.UserId.UUID(), playlist.Name, playlist.UpdatedAt,
@@ -207,6 +225,9 @@ func (r *PgxPlaylistRepository) withPlaylistLock(ctx context.Context, playlistId
 // slot inside the locked transaction is what closes the concurrent-add race, so
 // two simultaneous appends can never both land on the same position.
 func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId, _ int) error {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	return r.withPlaylistLock(ctx, playlistId.UUID(), func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
 			`INSERT INTO playlist_tracks (playlist_id, track_id, position)
@@ -220,7 +241,7 @@ func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, playlistId domain.
 // execBatch runs n queued statements inside a single transaction: begin,
 // send the batch, drain (checking each queued statement's result), commit.
 // An empty batch (n == 0) is a no-op and opens no transaction.
-func execBatch(ctx context.Context, pool *pgxpool.Pool, queue func(*pgx.Batch), n int) error {
+func execBatch(ctx context.Context, pool pgxPool, queue func(*pgx.Batch), n int) error {
 	if n == 0 {
 		return nil
 	}
@@ -259,6 +280,10 @@ func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, playlistId domain
 	for i, t := range tracks {
 		ids[i] = t.TrackId.UUID()
 	}
+
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	return r.withPlaylistLock(ctx, playlistId.UUID(), func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
 			`INSERT INTO playlist_tracks (playlist_id, track_id, position)
@@ -275,6 +300,9 @@ func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, playlistId domain
 }
 
 func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId) error {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -305,6 +333,9 @@ func (r *PgxPlaylistRepository) RemoveTracks(ctx context.Context, playlistId dom
 	for i, id := range trackIds {
 		uuids[i] = id.UUID()
 	}
+
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -341,6 +372,9 @@ func renumberPlaylistPositions(ctx context.Context, tx pgx.Tx, playlistId uuid.U
 }
 
 func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
 	return execBatch(ctx, r.pool, func(batch *pgx.Batch) {
 		for _, t := range tracks {
 			batch.Queue(

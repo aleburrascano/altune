@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"altune/go-api/internal/catalog/ports"
 	"context"
 	"fmt"
 	"net"
@@ -8,8 +9,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/catalog/ports"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -20,6 +19,20 @@ var (
 	_ ports.AudioURLSigner = (*ObjectStorageAudioStore)(nil)
 	_ ports.AudioLister    = (*ObjectStorageAudioStore)(nil)
 )
+
+// storageOpTimeout bounds a single control-plane object-storage round-trip
+// (stat, list, delete) — operations whose duration does not depend on payload
+// size. Derived from the caller's context so a shorter caller deadline still
+// wins, it caps the worst case so a wedged S3 endpoint cannot block the handler
+// goroutine indefinitely. Thirty seconds mirrors the transport's existing
+// ResponseHeaderTimeout; it is a deliberate default, not a tuned one (#426).
+//
+// The two bulk-transfer operations are deliberately NOT wrapped: Stream is the
+// long-lived audio-streaming path (a fixed deadline would truncate a legitimate
+// long playback), and Store uploads an arbitrarily large file. Both instead
+// inherit the caller's own request budget plus the transport-level dial, TLS and
+// response-header timeouts configured in NewObjectStorageAudioStore.
+const storageOpTimeout = 30 * time.Second
 
 type ObjectStorageAudioStore struct {
 	client *minio.Client
@@ -59,6 +72,9 @@ func NewObjectStorageAudioStore(endpoint, accessKey, secretKey, bucket, region s
 }
 
 func (s *ObjectStorageAudioStore) Exists(ctx context.Context, audioRef string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, storageOpTimeout)
+	defer cancel()
+
 	_, err := s.client.StatObject(ctx, s.bucket, audioRef, minio.StatObjectOptions{})
 	if err != nil {
 		resp := minio.ToErrorResponse(err)
@@ -71,6 +87,9 @@ func (s *ObjectStorageAudioStore) Exists(ctx context.Context, audioRef string) (
 }
 
 func (s *ObjectStorageAudioStore) List(ctx context.Context, prefix string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, storageOpTimeout)
+	defer cancel()
+
 	var refs []string
 	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
 		Prefix:    prefix,
@@ -129,5 +148,8 @@ func (s *ObjectStorageAudioStore) PresignGet(ctx context.Context, audioRef strin
 }
 
 func (s *ObjectStorageAudioStore) Delete(ctx context.Context, audioRef string) error {
+	ctx, cancel := context.WithTimeout(ctx, storageOpTimeout)
+	defer cancel()
+
 	return s.client.RemoveObject(ctx, s.bucket, audioRef, minio.RemoveObjectOptions{})
 }
