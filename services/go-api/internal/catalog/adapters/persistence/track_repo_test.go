@@ -1,13 +1,12 @@
 package persistence
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"os"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -308,5 +307,34 @@ func TestPgxTrackRepo_GetByID_NotFound(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("GetByID() for missing track returned non-nil: %v", got.ID)
+	}
+}
+
+func TestPgxTrackRepo_ListOwnedTrackRefs_BoundedByLimit(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	prev := maxOwnedTrackRefs
+	maxOwnedTrackRefs = 3
+	t.Cleanup(func() { maxOwnedTrackRefs = prev })
+
+	const inserted = 5
+	for i := 0; i < inserted; i++ {
+		track := newTestTrackForDB(t, userId)
+		cleanupTrack(t, pool, track.ID, userId)
+		if _, _, err := repo.Add(ctx, track); err != nil {
+			t.Fatalf("Add track %d: %v", i, err)
+		}
+	}
+
+	refs, err := repo.ListOwnedTrackRefs(ctx, userId)
+	if err != nil {
+		t.Fatalf("ListOwnedTrackRefs() error = %v", err)
+	}
+	if len(refs) != maxOwnedTrackRefs {
+		t.Fatalf("len(refs) = %d, want %d (bounded by limit, %d inserted)",
+			len(refs), maxOwnedTrackRefs, inserted)
 	}
 }
