@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestMeter_DisabledState(t *testing.T) {
@@ -48,6 +49,32 @@ func TestMeter_ErrorState(t *testing.T) {
 	m.runOnce(context.Background())
 	if st := m.Status(); st.State != "error" || st.Error == "" {
 		t.Fatalf("status = %+v, want error state", st)
+	}
+}
+
+// TestMeter_RunnerTimeoutSurfacesAsFailure checks that a runner which only
+// returns once its context is cancelled (a hung dependency) cannot stall the
+// scheduler forever: runOnce returns under the bound and surfaces an error.
+func TestMeter_RunnerTimeoutSurfacesAsFailure(t *testing.T) {
+	m := New(true, 0, func(ctx context.Context) (Result, error) {
+		<-ctx.Done()
+		return Result{}, ctx.Err()
+	})
+	m.runTimeout = 20 * time.Millisecond
+
+	done := make(chan struct{})
+	go func() {
+		m.runOnce(context.Background())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runOnce hung on a blocking runner; the scheduler is stalled")
+	}
+	if st := m.Status(); st.State != StateError {
+		t.Fatalf("state = %q, want error after a runner timeout", st.State)
 	}
 }
 

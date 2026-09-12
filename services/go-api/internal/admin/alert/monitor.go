@@ -31,11 +31,16 @@ type Condition struct {
 	Eval func(ctx context.Context) *Alert
 }
 
+// defaultEvalTimeout bounds a single condition evaluation so one stuck
+// condition cannot freeze the monitor ticker forever.
+const defaultEvalTimeout = 10 * time.Second
+
 type Monitor struct {
-	notifier   AlertNotifier
-	conditions []Condition
-	interval   time.Duration
-	logger     *slog.Logger
+	notifier    AlertNotifier
+	conditions  []Condition
+	interval    time.Duration
+	evalTimeout time.Duration
+	logger      *slog.Logger
 
 	firing map[string]bool
 	runloop.Background
@@ -43,11 +48,12 @@ type Monitor struct {
 
 func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Condition) *Monitor {
 	return &Monitor{
-		notifier:   notifier,
-		conditions: conditions,
-		interval:   interval,
-		logger:     slog.Default(),
-		firing:     make(map[string]bool),
+		notifier:    notifier,
+		conditions:  conditions,
+		interval:    interval,
+		evalTimeout: defaultEvalTimeout,
+		logger:      slog.Default(),
+		firing:      make(map[string]bool),
 	}
 }
 
@@ -70,7 +76,7 @@ func (m *Monitor) loop(ctx context.Context) {
 
 func (m *Monitor) evaluate(ctx context.Context) {
 	for _, c := range m.conditions {
-		fired := c.Eval(ctx)
+		fired := m.runCondition(ctx, c)
 		wasFiring := m.firing[c.Key]
 
 		if fired == nil {
@@ -98,4 +104,13 @@ func (m *Monitor) evaluate(ctx context.Context) {
 		}
 		m.firing[c.Key] = true
 	}
+}
+
+// runCondition evaluates one condition under a bounded timeout derived from the
+// caller's context, so a blocking condition surfaces as a deadline rather than
+// hanging the whole ticker.
+func (m *Monitor) runCondition(ctx context.Context, c Condition) *Alert {
+	evalCtx, cancel := context.WithTimeout(ctx, m.evalTimeout)
+	defer cancel()
+	return c.Eval(evalCtx)
 }

@@ -11,6 +11,10 @@ import (
 
 const defaultInterval = 6 * time.Hour
 
+// defaultRunTimeout bounds a single runner invocation so a hanging runner
+// cannot permanently stall the scheduler (claimRunSlotIfIdle stays true).
+const defaultRunTimeout = 5 * time.Minute
+
 type QueryResult struct {
 	Query    string `json:"query"`
 	Expect   string `json:"expect"`
@@ -28,9 +32,10 @@ type Result struct {
 type Runner func(ctx context.Context) (Result, error)
 
 type Meter struct {
-	enabled  bool
-	interval time.Duration
-	runner   Runner
+	enabled    bool
+	interval   time.Duration
+	runTimeout time.Duration
+	runner     Runner
 
 	mu      sync.Mutex
 	last    *Result
@@ -45,7 +50,7 @@ func New(enabled bool, interval time.Duration, runner Runner) *Meter {
 	if interval <= 0 {
 		interval = defaultInterval
 	}
-	return &Meter{enabled: enabled, interval: interval, runner: runner}
+	return &Meter{enabled: enabled, interval: interval, runTimeout: defaultRunTimeout, runner: runner}
 }
 
 func (m *Meter) Start(ctx context.Context) {
@@ -74,7 +79,9 @@ func (m *Meter) runOnce(ctx context.Context) {
 		return
 	}
 
-	res, err := m.runner(ctx)
+	runCtx, cancel := context.WithTimeout(ctx, m.runTimeout)
+	res, err := m.runner(runCtx)
+	cancel()
 
 	m.mu.Lock()
 	m.running = false

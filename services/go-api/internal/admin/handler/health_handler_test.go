@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -55,5 +56,37 @@ func TestAdminHealthEndpoint(t *testing.T) {
 	}
 	if got.DB != "ok" || got.Redis != "down" {
 		t.Errorf("tile data = %+v, want db ok / redis down", got)
+	}
+}
+
+// TestAdminHealth_StuckProbeDoesNotHangRequest checks that a probe which only
+// returns once its context is cancelled (a stalled DB/Redis) cannot park an
+// /admin/health request forever: the bounded timeout lets it return.
+func TestAdminHealth_StuckProbeDoesNotHangRequest(t *testing.T) {
+	probe := func(ctx context.Context) DependencyHealth {
+		<-ctx.Done()
+		return DependencyHealth{DB: "down", Redis: "down"}
+	}
+	h := New(probe, nil)
+	h.probeTimeout = 20 * time.Millisecond
+
+	r := chi.NewRouter()
+	h.RegisterData(r)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		r.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("health request hung on a stuck probe")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 }

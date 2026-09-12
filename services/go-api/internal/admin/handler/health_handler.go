@@ -37,14 +37,31 @@ func (d DependencyHealth) Healthy() bool {
 
 const statusDown = "down"
 
+// defaultProbeTimeout bounds the dependency probe so a stalled DB/Redis cannot
+// park an /admin/health request forever.
+const defaultProbeTimeout = 5 * time.Second
+
 type HealthProbe func(ctx context.Context) DependencyHealth
 
 func (h *AdminHandler) serveHealth(w http.ResponseWriter, r *http.Request) {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	httputil.WriteJSON(w, http.StatusOK, healthResponse{
-		DependencyHealth: h.probe(r.Context()),
+		DependencyHealth: h.runProbe(r.Context()),
 		Goroutines:       runtime.NumGoroutine(),
 		HeapMB:           ms.HeapAlloc / (1024 * 1024),
 	})
+}
+
+// runProbe invokes the injected probe under a bounded timeout derived from the
+// request context, so a stuck dependency surfaces as a deadline instead of
+// hanging the request.
+func (h *AdminHandler) runProbe(ctx context.Context) DependencyHealth {
+	timeout := h.probeTimeout
+	if timeout <= 0 {
+		timeout = defaultProbeTimeout
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return h.probe(probeCtx)
 }
