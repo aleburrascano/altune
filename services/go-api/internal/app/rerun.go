@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,7 +35,10 @@ func (a *App) buildReRunner(svc *discoveryService.Service) *reRunner {
 }
 
 func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (adminHandler.ReRunResult, error) {
-	kindSet := parseRerunKinds(kinds)
+	kindSet, err := parseRerunKinds(kinds)
+	if err != nil {
+		return adminHandler.ReRunResult{}, err
+	}
 	if _, err := domain.NewSearchQuery(query, kindSet, inspectionSearchLimit); err != nil {
 		return adminHandler.ReRunResult{}, err
 	}
@@ -143,19 +147,26 @@ func projectEntities(entities []discoveryService.Entity) []requeststore.ResultRo
 	return requeststore.ProjectResults(results)
 }
 
-func parseRerunKinds(kinds []string) map[domain.ResultKind]bool {
+func parseRerunKinds(kinds []string) (map[domain.ResultKind]bool, error) {
 	out := map[domain.ResultKind]bool{}
+	var invalid []string
 	for _, k := range kinds {
-		if rk, err := domain.ParseResultKind(k); err == nil {
-			out[rk] = true
+		rk, err := domain.ParseResultKind(k)
+		if err != nil {
+			invalid = append(invalid, k)
+			continue
 		}
+		out[rk] = true
+	}
+	if len(invalid) > 0 {
+		return nil, fmt.Errorf("invalid kinds: %s", strings.Join(invalid, ", "))
 	}
 	if len(out) == 0 {
 		out[domain.ResultKindTrack] = true
 		out[domain.ResultKindAlbum] = true
 		out[domain.ResultKindArtist] = true
 	}
-	return out
+	return out, nil
 }
 
 func sortedKindNames(kinds map[domain.ResultKind]bool) []string {
