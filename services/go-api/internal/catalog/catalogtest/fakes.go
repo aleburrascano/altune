@@ -434,6 +434,20 @@ func (s *AudioStore) Seed(audioRef string, data []byte) {
 	s.Files[audioRef] = data
 }
 
+// Metrics is a recording ports.AudioStoreMetrics for asserting that
+// degradation counters increment on failure paths.
+type Metrics struct {
+	PresignFailures  int
+	OrphanedDeletes  int
+	StreamRecoveries int
+}
+
+var _ ports.AudioStoreMetrics = (*Metrics)(nil)
+
+func (m *Metrics) PresignFailed()           { m.PresignFailures++ }
+func (m *Metrics) OrphanedDelete()          { m.OrphanedDeletes++ }
+func (m *Metrics) StreamRecoveryTriggered() { m.StreamRecoveries++ }
+
 type Scheduler struct {
 	TrackIds   []domain.TrackId
 	SourceURLs []string

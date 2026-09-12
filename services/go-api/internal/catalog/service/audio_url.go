@@ -24,11 +24,24 @@ type AudioURLService struct {
 	trackRepo ports.TrackRepository
 	signer    ports.AudioURLSigner
 	ttl       time.Duration
+	metrics   ports.AudioStoreMetrics
 }
 
-func NewAudioURLService(trackRepo ports.TrackRepository, store ports.AudioStore) *AudioURLService {
+func NewAudioURLService(trackRepo ports.TrackRepository, store ports.AudioStore, opts ...func(*AudioURLService)) *AudioURLService {
 	signer, _ := store.(ports.AudioURLSigner)
-	return &AudioURLService{trackRepo: trackRepo, signer: signer, ttl: audioURLTTL}
+	s := &AudioURLService{trackRepo: trackRepo, signer: signer, ttl: audioURLTTL, metrics: ports.NoopAudioStoreMetrics()}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func WithAudioURLMetrics(m ports.AudioStoreMetrics) func(*AudioURLService) {
+	return func(s *AudioURLService) {
+		if m != nil {
+			s.metrics = m
+		}
+	}
 }
 
 func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, trackIds []domain.TrackId) ([]ResolvedAudioURL, error) {
@@ -58,6 +71,7 @@ func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, tra
 
 		url, err := s.signer.PresignGet(ctx, *track.AudioRef, s.ttl)
 		if err != nil {
+			s.metrics.PresignFailed()
 			slog.WarnContext(ctx, "audio_url.presign_failed", "track_id", id.String(), "error", err)
 			continue
 		}
