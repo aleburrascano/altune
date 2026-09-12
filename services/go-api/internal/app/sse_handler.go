@@ -86,21 +86,28 @@ func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	setSSEHeaders(w)
 	rc := http.NewResponseController(w)
 
-	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" {
-		if err := h.resume(rc, w, userId, lastID); err != nil {
-			return
-		}
-	}
-
+	// Subscribe BEFORE replaying so an event published during replay lands on the
+	// live channel instead of the gap between snapshot and subscribe (#371). The
+	// overlap (events in both the snapshot and the channel) is deduped by ID in
+	// stream via lastReplayedID.
 	ch, cancel := h.bus.Subscribe(userId)
 	defer cancel()
+
+	var lastReplayedID uint64
+	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" {
+		replayedThrough, err := h.resume(rc, w, userId, lastID)
+		if err != nil {
+			return
+		}
+		lastReplayedID = replayedThrough
+	}
 
 	if err := h.writeFrame(rc, w, ":ok\n\n"); err != nil {
 		return
 	}
 	slog.InfoContext(r.Context(), "sse.connected", "user_id", userId.String())
 
-	h.stream(r.Context(), rc, w, ch, userId)
+	h.stream(r.Context(), rc, w, ch, userId, lastReplayedID)
 }
 
 func (h *sseHandler) acquireSlot(w http.ResponseWriter, userId shared.UserId) bool {
@@ -127,6 +134,7 @@ func (h *sseHandler) stream(
 	w http.ResponseWriter,
 	ch <-chan events.Event,
 	userId shared.UserId,
+	lastReplayedID uint64,
 ) {
 	interval := h.heartbeat
 	if interval <= 0 {
@@ -141,6 +149,9 @@ func (h *sseHandler) stream(
 			slog.InfoContext(ctx, "sse.disconnected", "user_id", userId.String())
 			return
 		case evt := <-ch:
+			if evt.ID <= lastReplayedID {
+				continue // already delivered by replay; dedup the overlap window
+			}
 			if err := h.writeEvent(rc, w, evt); err != nil {
 				return
 			}
@@ -152,28 +163,32 @@ func (h *sseHandler) stream(
 	}
 }
 
-// resume replays events after the client's Last-Event-ID. A malformed id cannot
-// be parsed, so it signals resync rather than silently dropping to a live-only
-// stream, mirroring the ring-buffer-gap case in replay.
-func (h *sseHandler) resume(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, lastID string) error {
+// resume replays events after the client's Last-Event-ID and returns the
+// highest event ID it delivered, so stream can dedup the replay/subscribe
+// overlap. A malformed id cannot be parsed, so it signals resync rather than
+// silently dropping to a live-only stream, mirroring the ring-buffer-gap case
+// in replay.
+func (h *sseHandler) resume(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, lastID string) (uint64, error) {
 	id, err := strconv.ParseUint(lastID, 10, 64)
 	if err != nil {
-		return h.writeResync(rc, w)
+		return 0, h.writeResync(rc, w)
 	}
 	return h.replay(rc, w, userId, id)
 }
 
-func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) error {
+func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) (uint64, error) {
 	replayed := h.bus.Replay(userId, afterID)
 	if replayGapped(replayed, afterID) {
-		return h.writeResync(rc, w)
+		return afterID, h.writeResync(rc, w)
 	}
+	lastReplayedID := afterID
 	for _, evt := range replayed {
 		if err := h.writeEvent(rc, w, evt); err != nil {
-			return err
+			return lastReplayedID, err
 		}
+		lastReplayedID = evt.ID
 	}
-	return nil
+	return lastReplayedID, nil
 }
 
 // writeFrame sets a per-write deadline so a client that has stopped reading

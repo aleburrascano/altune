@@ -10,7 +10,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -226,6 +228,136 @@ func TestReplayGapped(t *testing.T) {
 			}
 		})
 	}
+}
+
+// busWithGapPublish wraps a real bus and publishes one event the instant a
+// replay snapshot is taken, landing it squarely in the replay/subscribe window.
+// A handler that replays THEN subscribes delivers it to neither and drops it
+// silently (#371); a subscribe-first handler catches it on the live channel.
+type busWithGapPublish struct {
+	*events.InProcessBus
+	uid  shared.UserId
+	once sync.Once
+}
+
+func (b *busWithGapPublish) Replay(userId shared.UserId, afterID uint64) []events.Event {
+	snapshot := b.InProcessBus.Replay(userId, afterID)
+	b.once.Do(func() {
+		b.Publish(b.uid, "gap", map[string]any{"in": "window"})
+	})
+	return snapshot
+}
+
+// busWithDupPublish publishes one event at subscribe time, so it lands in BOTH
+// the live channel and the subsequent replay snapshot. The handler must emit it
+// exactly once, deduping by event ID, not twice.
+type busWithDupPublish struct {
+	*events.InProcessBus
+	uid  shared.UserId
+	once sync.Once
+}
+
+func (b *busWithDupPublish) Subscribe(userId shared.UserId) (<-chan events.Event, func()) {
+	ch, cancel := b.InProcessBus.Subscribe(userId)
+	b.once.Do(func() {
+		b.Publish(b.uid, "dup", map[string]any{"seen": "once"})
+	})
+	return ch, cancel
+}
+
+func lastEventIDFor(t *testing.T, bus *events.InProcessBus, uid shared.UserId) string {
+	t.Helper()
+	ch, cancel := bus.Subscribe(uid)
+	defer cancel()
+	bus.Publish(uid, "seed", map[string]any{"k": "v"})
+	return strconv.FormatUint((<-ch).ID, 10)
+}
+
+func serveSSE(t *testing.T, h *sseHandler, uid shared.UserId) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(auth.ContextWithUserID(r.Context(), uid))
+		h.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// TestSSEHandler_EventInReplaySubscribeGapIsDelivered is the regression guard
+// for #371: an event published between the replay snapshot and the live
+// subscribe must still reach the client exactly once, never silently dropped.
+func TestSSEHandler_EventInReplaySubscribeGapIsDelivered(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	lastID := lastEventIDFor(t, real, uid)
+
+	h := newSSEHandler(&busWithGapPublish{InProcessBus: real, uid: uid})
+	h.heartbeat = 50 * time.Millisecond
+	srv := serveSSE(t, h, uid)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", lastID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == "event: gap" })
+}
+
+// TestSSEHandler_ReplayLiveOverlapDedupesByID proves the subscribe-first fix
+// does not double-deliver: an event present in both the replay snapshot and the
+// live channel is written once, deduped by event ID.
+func TestSSEHandler_ReplayLiveOverlapDedupesByID(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	lastID := lastEventIDFor(t, real, uid)
+
+	h := newSSEHandler(&busWithDupPublish{InProcessBus: real, uid: uid})
+	h.heartbeat = 50 * time.Millisecond
+	srv := serveSSE(t, h, uid)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", lastID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// The subscriber is registered before the first byte is flushed, so by the
+	// time Do returns this sentinel lands on the live channel behind the overlap.
+	real.Publish(uid, "after", map[string]any{"k": "v"})
+
+	br := bufio.NewReader(resp.Body)
+	dupCount := 0
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			t.Fatalf("reading stream: %v", err)
+		}
+		switch strings.TrimRight(line, "\n") {
+		case "event: dup":
+			dupCount++
+		case "event: after":
+			if dupCount != 1 {
+				t.Fatalf("overlapping event delivered %d times, want exactly 1", dupCount)
+			}
+			return
+		}
+	}
+	t.Fatal("timed out waiting for sentinel event")
 }
 
 func TestSSEHandler_EmitsHeartbeat(t *testing.T) {
