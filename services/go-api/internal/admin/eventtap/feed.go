@@ -22,8 +22,12 @@ type Feed struct {
 }
 
 func NewFeed() *Feed {
+	return newFeedWithClock(time.Now, time.Since)
+}
+
+func newFeedWithClock(now func() time.Time, since func(time.Time) time.Duration) *Feed {
 	return &Feed{
-		rates:       newRateWindow(),
+		rates:       newRateWindow(now, since),
 		broadcaster: newBroadcaster(),
 	}
 }
@@ -55,12 +59,12 @@ func (f *Feed) loop(ctx context.Context, ch <-chan TapEvent) {
 }
 
 func (f *Feed) record(evt TapEvent) {
-	f.rates.append(evt.Type, evt.Timestamp)
+	f.rates.append(evt.Type)
 	f.broadcaster.broadcast(evt)
 }
 
 func (f *Feed) Rates() map[string]int {
-	return f.rates.countsSince(time.Now().UTC().Add(-feedRateWindow))
+	return f.rates.counts()
 }
 
 func (f *Feed) Subscribe() (<-chan TapEvent, func()) {
