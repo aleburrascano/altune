@@ -1,8 +1,12 @@
 package alert
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -117,6 +121,28 @@ func TestMonitor_RetriesAfterFailedNotify(t *testing.T) {
 
 	if n.calls != 2 {
 		t.Fatalf("notify calls = %d, want 2 (failed push must re-arm, not permanently silence)", n.calls)
+	}
+}
+
+func TestMonitor_NtfyURLNotLoggedOnNotifyFailure(t *testing.T) {
+	const topic = "super-secret-topic"
+	notifier := &NtfyNotifier{
+		url:    "https://ntfy.example.com/" + topic,
+		client: &http.Client{Transport: failingTransport{err: errors.New("dial tcp: connection refused")}},
+	}
+	firing := true
+	m := newTestMonitor(notifier, signalCond("dep", &firing))
+
+	var buf bytes.Buffer
+	m.logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	m.evaluate(context.Background())
+
+	if !strings.Contains(buf.String(), "alert.notify_failed") {
+		t.Fatalf("expected a logged notify failure, got: %q", buf.String())
+	}
+	if strings.Contains(buf.String(), topic) {
+		t.Fatalf("ntfy topic leaked into the captured log line: %q", buf.String())
 	}
 }
 
