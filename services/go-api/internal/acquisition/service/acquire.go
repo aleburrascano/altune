@@ -119,12 +119,14 @@ func (s *AcquireTrackAudioService) execute(
 	}
 
 	ac := &AcquisitionContext{Track: buildTrackRef(track)}
+	// Guard temp cleanup with defer so a panic anywhere in the pipeline (or in
+	// acquire.go itself) still removes the downloaded temp dir on the way out.
+	defer CleanupTemp(ctx, ac)
 	if replace {
 		configureReplaceExclusion(ctx, ac, track, trackId)
 	}
 	s.resolveIdentity(ctx, ac)
 	err = RunPipeline(ctx, s.buildSteps(userId, trackId), ac)
-	CleanupTemp(ctx, ac)
 
 	if err != nil {
 		return s.reportAcquisitionFailure(ctx, userId, trackId, replace, err)
