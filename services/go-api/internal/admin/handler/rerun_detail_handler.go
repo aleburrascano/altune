@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"altune/go-api/internal/shared/httputil"
@@ -51,18 +50,13 @@ func (h *AdminHandler) WithDetailReRunner(r DetailReRunner) *AdminHandler {
 	return h
 }
 
-type detailReRunRequest struct {
-	Query string `json:"query"`
-}
-
 func (h *AdminHandler) serveReRunDetail(w http.ResponseWriter, r *http.Request) {
 	if h.detailReRunner == nil {
 		httputil.WriteError(w, http.StatusServiceUnavailable, "detail re-run inspector not configured")
 		return
 	}
-	var body detailReRunRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Query == "" {
-		httputil.WriteError(w, http.StatusBadRequest, "query is required")
+	body, ok := decodeQuery(w, r)
+	if !ok {
 		return
 	}
 	result, err := h.detailReRunner.ReRunDetail(r.Context(), body.Query)

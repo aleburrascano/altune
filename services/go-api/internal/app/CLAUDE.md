@@ -4,7 +4,9 @@ The only place adapters are chosen and wired into ports. Also home to the shared
 
 Layout:
 
-- `app.go` — `setup` and the `wire*` stages, shutdown, health, alerts.
+- `app.go` — `setup` and the `wire*` stages, shutdown orchestration, alert/loop bodies.
+- `scheduler.go` — leader-gated background machinery: `whenLeader`, `startBackgroundWhenLeader`, `startTicker`/`runTicker`, `drainBackground`.
+- `health.go` — the `/health` probe and `dependencyHealth` dependency roll-up.
 - `discovery_wiring.go` / `search_wiring.go` — the discovery context's construction.
 - `http_client.go` / `live_transport.go` — provider HTTP client and transport policy.
 - `eval_runner.go` — the eval meter's isolated runner.

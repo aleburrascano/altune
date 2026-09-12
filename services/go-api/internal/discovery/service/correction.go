@@ -13,10 +13,10 @@ import (
 const correctionCandidates = 5
 
 type CorrectionService struct {
-	vocab ports.VocabularyStore
+	vocab ports.VocabularyReader
 }
 
-func NewCorrectionService(vocab ports.VocabularyStore) *CorrectionService {
+func NewCorrectionService(vocab ports.VocabularyReader) *CorrectionService {
 	return &CorrectionService{vocab: vocab}
 }
 
