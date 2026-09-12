@@ -249,6 +249,31 @@ func TestSupabaseJWTVerifier_JWKSUnavailable(t *testing.T) {
 	}
 }
 
+func TestSupabaseJWTVerifier_MissingExp(t *testing.T) {
+	f := newTestJWTFixture(t)
+	verifier := f.newVerifier(t)
+
+	token := f.signToken(t, map[string]interface{}{
+		"sub": uuid.New().String(),
+		"iss": f.issuer,
+		"aud": f.audience,
+		"iat": time.Now().Add(-1 * time.Minute),
+	})
+
+	_, err := verifier.Verify(context.Background(), token)
+	if err == nil {
+		t.Fatal("expected error for token missing exp claim, got nil")
+	}
+
+	var tokenErr *auth.InvalidTokenError
+	if !errors.As(err, &tokenErr) {
+		t.Fatalf("expected InvalidTokenError, got %T: %v", err, err)
+	}
+	if tokenErr.Reason != auth.ReasonClaimMissingEXP {
+		t.Errorf("reason: got %q, want %q", tokenErr.Reason, auth.ReasonClaimMissingEXP)
+	}
+}
+
 func TestSupabaseJWTVerifier_MissingSub(t *testing.T) {
 	f := newTestJWTFixture(t)
 	verifier := f.newVerifier(t)
