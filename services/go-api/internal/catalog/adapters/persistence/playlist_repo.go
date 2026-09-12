@@ -1,13 +1,12 @@
 package persistence
 
 import (
-	"context"
-	"errors"
-	"time"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -123,6 +122,12 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 	return playlist, domain.PlaylistSummary{TrackCount: trackCount}, nil
 }
 
+// maxPlaylistTracks bounds the rows returned by GetWithTracks, matching the
+// catalog module's 2000-row read cap (see service.clampLibraryLimit). The only
+// other cap, MaxPlaylistBatchSize, limits a single batch-add, not total size.
+// It is a var so tests can exercise the bound without inserting the full cap.
+var maxPlaylistTracks = 2000
+
 func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {
 	playlist, _, err := r.GetByID(ctx, id, userId)
 	if err != nil || playlist == nil {
@@ -134,8 +139,9 @@ func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.Pla
 		FROM playlist_tracks pt
 		JOIN tracks t ON t.id = pt.track_id
 		WHERE pt.playlist_id = $1
-		ORDER BY pt.position ASC, pt.track_id ASC`,
-		id.UUID(),
+		ORDER BY pt.position ASC, pt.track_id ASC
+		LIMIT $2`,
+		id.UUID(), maxPlaylistTracks,
 	)
 	if err != nil {
 		return playlist, nil, err

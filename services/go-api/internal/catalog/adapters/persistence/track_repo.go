@@ -1,14 +1,13 @@
 package persistence
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -262,13 +261,21 @@ func (r *PgxTrackRepository) GetByDedupKey(ctx context.Context, userId shared.Us
 	return track, nil
 }
 
+// maxOwnedTrackRefs bounds the rows returned by ListOwnedTrackRefs, matching
+// the catalog module's 2000-row read cap (see service.clampLibraryLimit). It is
+// a var so tests can exercise the bound without inserting the full cap.
+var maxOwnedTrackRefs = 2000
+
 func (r *PgxTrackRepository) ListOwnedTrackRefs(
 	ctx context.Context,
 	userId shared.UserId,
 ) ([]domain.OwnedTrackRef, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, title, artist, acquisition_status, track_number FROM tracks WHERE user_id = $1`,
-		userId.UUID(),
+		`SELECT id, title, artist, acquisition_status, track_number
+		FROM tracks WHERE user_id = $1
+		ORDER BY id
+		LIMIT $2`,
+		userId.UUID(), maxOwnedTrackRefs,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("list owned track refs: %w", err)

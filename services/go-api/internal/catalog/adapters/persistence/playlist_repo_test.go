@@ -1,12 +1,11 @@
 package persistence
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -263,5 +262,44 @@ func TestPgxPlaylistRepo_GetByID_NotFound(t *testing.T) {
 	}
 	if got != nil {
 		t.Errorf("GetByID() for missing playlist returned non-nil: %v", got.ID)
+	}
+}
+
+func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
+	pool := testPool(t)
+	playlistRepo := NewPgxPlaylistRepository(pool)
+	trackRepo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	prev := maxPlaylistTracks
+	maxPlaylistTracks = 3
+	t.Cleanup(func() { maxPlaylistTracks = prev })
+
+	pl := newTestPlaylistForDB(t, userId)
+	cleanupPlaylist(t, pool, pl.ID, userId)
+	if err := playlistRepo.Create(ctx, pl); err != nil {
+		t.Fatalf("Create playlist: %v", err)
+	}
+
+	const inserted = 5
+	for i := 0; i < inserted; i++ {
+		track := newTestTrackForDB(t, userId)
+		cleanupTrack(t, pool, track.ID, userId)
+		if _, _, err := trackRepo.Add(ctx, track); err != nil {
+			t.Fatalf("Add track %d: %v", i, err)
+		}
+		if err := playlistRepo.AddTrack(ctx, pl.ID, track.ID, i); err != nil {
+			t.Fatalf("AddTrack %d: %v", i, err)
+		}
+	}
+
+	_, gotTracks, err := playlistRepo.GetWithTracks(ctx, pl.ID, userId)
+	if err != nil {
+		t.Fatalf("GetWithTracks() error = %v", err)
+	}
+	if len(gotTracks) != maxPlaylistTracks {
+		t.Fatalf("len(tracks) = %d, want %d (bounded by limit, %d inserted)",
+			len(gotTracks), maxPlaylistTracks, inserted)
 	}
 }
