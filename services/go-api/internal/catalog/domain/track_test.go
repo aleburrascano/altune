@@ -1,10 +1,9 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -304,6 +303,60 @@ func TestNewTrack_StoresTrimmedTitleAndArtist(t *testing.T) {
 	}
 	if want := computeDedupKey("Track Title", "Artist Name", "Album Name"); track.DedupKey != want {
 		t.Errorf("DedupKey = %q, want %q", track.DedupKey, want)
+	}
+}
+
+// TestNewTrack_CanonicalizesAlbumAndArtistForGrouping reproduces issue #432:
+// two tracks whose album/artist differ only by stray whitespace or Unicode form
+// must be stored with identical album/artist so the library-lens grouping (which
+// applies SQL lower()) coalesces them into one group instead of fragmenting,
+// matching dedup's notion of equivalence.
+func TestNewTrack_CanonicalizesAlbumAndArtistForGrouping(t *testing.T) {
+	t.Parallel()
+	userId := shared.NewUserId(uuid.New())
+
+	// NFC vs NFKD "Beyoncé": precomposed é vs e + combining acute accent. NFKC
+	// folds both to the same form; a raw store would split them into two groups.
+	clean, err := NewTrack(userId, "Halo", "Beyoncé", "I Am... Sasha Fierce")
+	if err != nil {
+		t.Fatalf("NewTrack(clean): %v", err)
+	}
+	variant, err := NewTrack(userId, "Other Song", "  Beyoncé  ", "  I Am...   Sasha Fierce  ")
+	if err != nil {
+		t.Fatalf("NewTrack(variant): %v", err)
+	}
+
+	if clean.Artist != variant.Artist {
+		t.Errorf("artist not coalesced: clean %q vs variant %q", clean.Artist, variant.Artist)
+	}
+	if clean.Album != variant.Album {
+		t.Errorf("album not coalesced: clean %q vs variant %q", clean.Album, variant.Album)
+	}
+	// Display form is preserved: case and punctuation survive canonicalization.
+	if clean.Album != "I Am... Sasha Fierce" {
+		t.Errorf("album display mangled: %q", clean.Album)
+	}
+}
+
+// TestSetAlbumArtist_Canonicalizes covers the album_artist write path used by
+// AddTrackService: whitespace/Unicode variants canonicalize to one value and an
+// all-whitespace value clears the field.
+func TestSetAlbumArtist_Canonicalizes(t *testing.T) {
+	t.Parallel()
+	userId := shared.NewUserId(uuid.New())
+	track, err := NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
+
+	track.SetAlbumArtist("  Various   Artists  ")
+	if track.AlbumArtist == nil || *track.AlbumArtist != "Various Artists" {
+		t.Errorf("SetAlbumArtist = %v, want canonical %q", track.AlbumArtist, "Various Artists")
+	}
+
+	track.SetAlbumArtist("   ")
+	if track.AlbumArtist != nil {
+		t.Errorf("blank album_artist should clear the field, got %v", track.AlbumArtist)
 	}
 }
 

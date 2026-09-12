@@ -1,12 +1,11 @@
 package persistence
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -324,6 +323,57 @@ func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 	}
 	if len(byAlbum) != 1 || byAlbum[0].Album != "Blue Skies" {
 		t.Fatalf("case-insensitive album search got %v, want [Blue Skies]", albumsOf(byAlbum))
+	}
+}
+
+// TestPgxTrackRepo_LibraryGrouping_CoalescesCanonicalVariants reproduces issue
+// #432: two tracks whose album/artist differ only by stray whitespace or Unicode
+// form (NFC vs NFKD) must land in ONE album group and ONE artist group, matching
+// dedup's notion of equivalence, rather than fragmenting into separate groups.
+func TestPgxTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxCatalogTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
+
+	base := time.Now().UTC().Truncate(time.Second)
+	// Distinct titles -> distinct dedup keys -> two stored rows. The album and
+	// artist differ only by leading/internal whitespace and Unicode form
+	// (precomposed é vs e + combining acute). A raw store would split each into
+	// two groups; canonicalization at write time must coalesce them.
+	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+		title: "Halo", artist: "Beyoncé", album: "I Am... Sasha Fierce",
+		addedAt: base.Add(-2 * time.Hour),
+	})
+	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+		title: "Single Ladies", artist: "  Beyoncé  ", album: "  I Am...   Sasha Fierce  ",
+		addedAt: base.Add(-1 * time.Hour),
+	})
+
+	albums, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent})
+	if err != nil {
+		t.Fatalf("ListAlbumsForUser: %v", err)
+	}
+	if len(albums) != 1 {
+		t.Fatalf("album groups = %d %v, want 1 (variants must coalesce)", len(albums), albumsOf(albums))
+	}
+	if albums[0].TrackCount != 2 {
+		t.Errorf("album track_count = %d, want 2", albums[0].TrackCount)
+	}
+
+	artists, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent})
+	if err != nil {
+		t.Fatalf("ListArtistsForUser: %v", err)
+	}
+	if len(artists) != 1 {
+		t.Fatalf("artist groups = %d %v, want 1 (variants must coalesce)", len(artists), artistsOf(artists))
+	}
+	if artists[0].TrackCount != 2 {
+		t.Errorf("artist track_count = %d, want 2", artists[0].TrackCount)
 	}
 }
 
