@@ -50,6 +50,8 @@ type Config struct {
 	AcoustIDAPIKey         string   `env:"ACOUSTID_API_KEY"`
 	StreamripBin           string   `env:"STREAMRIP_BIN"`
 	StreamripServices      []string `env:"STREAMRIP_SERVICES" envSeparator:","`
+	YtMusicEnabled         bool     `env:"YTMUSIC_ENABLED" envDefault:"true"`
+	YtDLPEnabled           bool     `env:"YTDLP_ENABLED" envDefault:"true"`
 
 	GitHubIssueRepo  string `env:"GITHUB_ISSUE_REPO"`
 	GitHubIssueToken string `env:"GITHUB_ISSUE_TOKEN"`
