@@ -91,3 +91,32 @@ func TestGet_Miss(t *testing.T) {
 		t.Error("Get on an unknown id should miss")
 	}
 }
+
+func TestRetention_ExpiredRecordPurgedFromReadPath(t *testing.T) {
+	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	s := newWithClock(func() time.Time { return clock })
+	s.recordExchange("c1", Exchange{Method: "GET", URL: "u", Status: 200, RespBody: "secret-query", At: clock})
+
+	// Age the record past the retention window without any byte/count pressure.
+	clock = clock.Add(retentionWindow + time.Minute)
+
+	if _, ok := s.Get("c1"); ok {
+		t.Error("record older than the retention window must not be readable via Get")
+	}
+	if snap := s.Snapshot(); len(snap) != 0 {
+		t.Errorf("expired record must not appear in Snapshot, got %d records", len(snap))
+	}
+}
+
+func TestRetention_FreshRecordRetained(t *testing.T) {
+	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	s := newWithClock(func() time.Time { return clock })
+	s.recordExchange("c1", Exchange{Method: "GET", URL: "u", Status: 200, RespBody: "a", At: clock})
+
+	// Still comfortably inside the window.
+	clock = clock.Add(retentionWindow - time.Minute)
+
+	if _, ok := s.Get("c1"); !ok {
+		t.Error("record within the retention window must remain readable")
+	}
+}
