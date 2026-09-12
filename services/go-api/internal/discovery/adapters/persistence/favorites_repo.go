@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -58,8 +59,7 @@ func (r *PgxFavoritesRepository) ListForUser(ctx context.Context, userId shared.
 	}
 	defer rows.Close()
 
-	favorites := []domain.Favorite{}
-	for rows.Next() {
+	return collectRows(rows, func(rows pgx.Rows) (domain.Favorite, error) {
 		var (
 			kind      string
 			key       string
@@ -69,23 +69,19 @@ func (r *PgxFavoritesRepository) ListForUser(ctx context.Context, userId shared.
 			createdAt time.Time
 		)
 		if err := rows.Scan(&kind, &key, &title, &subtitle, &imageURL, &createdAt); err != nil {
-			return nil, fmt.Errorf("scan favorite: %w", err)
+			return domain.Favorite{}, fmt.Errorf("scan favorite: %w", err)
 		}
 		parsed, err := domain.ParseResultKind(kind)
 		if err != nil {
-			continue
+			return domain.Favorite{}, errSkipRow
 		}
-		favorites = append(favorites, domain.Favorite{
+		return domain.Favorite{
 			Kind:      parsed,
 			Key:       key,
 			Title:     title,
 			Subtitle:  subtitle,
 			ImageURL:  imageURL,
 			CreatedAt: createdAt,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate favorites: %w", err)
-	}
-	return favorites, nil
+		}, nil
+	})
 }

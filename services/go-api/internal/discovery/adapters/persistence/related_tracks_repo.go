@@ -55,13 +55,11 @@ func (r *PgxRelationshipQuerier) FindRelatedByArtist(ctx context.Context, artist
 }
 
 func scanRelatedMatches(rows pgx.Rows) ([]ports.RelatedTrackMatch, error) {
-	var matches []ports.RelatedTrackMatch
-	for rows.Next() {
+	return collectRows(rows, func(rows pgx.Rows) (ports.RelatedTrackMatch, error) {
 		var m ports.RelatedTrackMatch
 		if err := rows.Scan(&m.Title, &m.Artist, &m.Album, &m.ArtworkURL); err != nil {
-			return nil, err
+			return m, err
 		}
-		matches = append(matches, m)
-	}
-	return matches, rows.Err()
+		return m, nil
+	})
 }
