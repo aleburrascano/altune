@@ -77,23 +77,13 @@ func (r *PgxQueueStateRepository) GetForUser(
 	ctx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
 	defer cancel()
 
-	var (
-		trackIds     []string
-		currentIdx   int
-		positionMs   int64
-		shuffled     bool
-		repeatMode   string
-		sourceId     string
-		naturalOrder []string
-		updatedAt    time.Time
-	)
-
+	var row scannedRow
 	err := r.pool.QueryRow(ctx,
 		`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at
 		 FROM playback_queue_state
 		 WHERE user_id = $1`,
 		userId.UUID(),
-	).Scan(&trackIds, &currentIdx, &positionMs, &shuffled, &repeatMode, &sourceId, &naturalOrder, &updatedAt)
+	).Scan(&row.trackIds, &row.currentIdx, &row.positionMs, &row.shuffled, &row.repeatMode, &row.sourceId, &row.naturalOrder, &row.updatedAt)
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -102,21 +92,36 @@ func (r *PgxQueueStateRepository) GetForUser(
 		return nil, err
 	}
 
-	rm, err := domain.ParseRepeatMode(repeatMode)
+	return hydrate(userId, row)
+}
+
+type scannedRow struct {
+	trackIds     []string
+	currentIdx   int
+	positionMs   int64
+	shuffled     bool
+	repeatMode   string
+	sourceId     string
+	naturalOrder []string
+	updatedAt    time.Time
+}
+
+func hydrate(userId shared.UserId, row scannedRow) (*domain.QueueState, error) {
+	rm, err := domain.ParseRepeatMode(row.repeatMode)
 	if err != nil {
 		return nil, &corruptStoredStateError{cause: err}
 	}
 
 	state, err := domain.RehydrateQueueState(domain.QueueStateInput{
 		UserId:       userId,
-		TrackIds:     trackIds,
-		CurrentIdx:   currentIdx,
-		PositionMs:   positionMs,
-		Shuffled:     shuffled,
+		TrackIds:     row.trackIds,
+		CurrentIdx:   row.currentIdx,
+		PositionMs:   row.positionMs,
+		Shuffled:     row.shuffled,
 		RepeatMode:   rm,
-		SourceId:     sourceId,
-		NaturalOrder: naturalOrder,
-	}, updatedAt)
+		SourceId:     row.sourceId,
+		NaturalOrder: row.naturalOrder,
+	}, row.updatedAt)
 	if err != nil {
 		return nil, &corruptStoredStateError{cause: err}
 	}
