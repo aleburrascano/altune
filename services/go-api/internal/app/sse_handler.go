@@ -87,10 +87,8 @@ func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rc := http.NewResponseController(w)
 
 	if lastID := r.Header.Get("Last-Event-ID"); lastID != "" {
-		if id, err := strconv.ParseUint(lastID, 10, 64); err == nil {
-			if err := h.replay(rc, w, userId, id); err != nil {
-				return
-			}
+		if err := h.resume(rc, w, userId, lastID); err != nil {
+			return
 		}
 	}
 
@@ -152,6 +150,17 @@ func (h *sseHandler) stream(
 			}
 		}
 	}
+}
+
+// resume replays events after the client's Last-Event-ID. A malformed id cannot
+// be parsed, so it signals resync rather than silently dropping to a live-only
+// stream, mirroring the ring-buffer-gap case in replay.
+func (h *sseHandler) resume(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, lastID string) error {
+	id, err := strconv.ParseUint(lastID, 10, 64)
+	if err != nil {
+		return h.writeResync(rc, w)
+	}
+	return h.replay(rc, w, userId, id)
 }
 
 func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) error {
