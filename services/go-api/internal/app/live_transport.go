@@ -21,6 +21,12 @@ var providerRateLimits = map[string]rate.Limit{
 	"ws.audioscrobbler.com": 5,
 	"music.youtube.com":     2,
 	"api.discogs.com":       1,
+	// Hosts below were previously unthrottled; values are conservative
+	// starting points for ops to tune, not provider-published limits.
+	"api.deezer.com":             5, // reused across search/content/artwork/consensus
+	"api-v2.soundcloud.com":      3,
+	"na.web.skill.music.a2z.com": 2, // Amazon Music search
+	"api-partner.spotify.com":    3,
 }
 
 type liveTransport struct {
@@ -35,7 +41,7 @@ type liveTransport struct {
 }
 
 func NewLiveTransport() http.RoundTripper {
-	return &liveTransport{base: http.DefaultTransport, limiters: map[string]*rate.Limiter{}}
+	return &liveTransport{base: baseTransport(), limiters: map[string]*rate.Limiter{}}
 }
 
 func (t *liveTransport) limiter(host string) *rate.Limiter {
