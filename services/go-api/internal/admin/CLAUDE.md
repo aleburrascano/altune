@@ -7,7 +7,7 @@ Layout:
 - `handler/` — transport only; `AdminHandler`, `OperatorOnly`, the per-panel endpoints, `sse.go`. `acquisition_handler_test.go` pins the acquisition panel's exact wire JSON.
 - `alert/` — `Monitor`, `Condition`, `NopNotifier` / `NtfyNotifier`.
 - `evalmeter/` — `Meter`, the background eval ticker.
-- `eventtap/` — `Tap` (the `events.Publisher` decorator) and `Feed`.
+- `eventtap/` — `Tap` (the `events.Publisher` decorator) and `Feed`, whose two concerns are split into `rateWindow` (per-type rolling counts; prune lives on the `append` write path so `countsSince` is a pure read) and `broadcaster` (SSE subscriber fan-out).
 - `providerhealth/` — rolling per-provider outcome window.
 - `requeststore/` — correlation-keyed drill-down store, recording transport, trace projections.
 - `ui/` — the embedded console page.
