@@ -87,7 +87,9 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	track.Year = input.Year
 	track.Genre = input.Genre
 	track.TrackNumber = input.TrackNumber
-	track.AlbumArtist = input.AlbumArtist
+	if input.AlbumArtist != nil {
+		track.SetAlbumArtist(*input.AlbumArtist)
+	}
 	track.ISRC = input.ISRC
 	track.FeaturedArtists = input.FeaturedArtists
 

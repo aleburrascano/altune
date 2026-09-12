@@ -1,13 +1,12 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -112,7 +111,7 @@ func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error)
 	if err := validateTrackText(title, "title"); err != nil {
 		return nil, err
 	}
-	artist = strings.TrimSpace(artist)
+	artist = canonicalizeField(artist)
 	if err := validateTrackText(artist, "artist"); err != nil {
 		return nil, err
 	}
@@ -179,7 +178,8 @@ func ValidateSourceURL(raw string) error {
 }
 
 func resolveAlbum(album, title string) string {
-	if strings.TrimSpace(album) == "" {
+	album = canonicalizeField(album)
+	if album == "" {
 		return title
 	}
 	return album
@@ -188,6 +188,19 @@ func resolveAlbum(album, title string) string {
 func (t *Track) SetAlbum(album string) {
 	t.Album = resolveAlbum(album, t.Title)
 	t.DedupKey = computeDedupKey(t.Title, t.Artist, t.Album)
+}
+
+// SetAlbumArtist stores the album-artist in the same canonical form as album and
+// artist so the library-lens grouping coalesces values that differ only by stray
+// whitespace or Unicode form. A value that is empty after canonicalization clears
+// the field (it falls back to the track artist in the grouping query).
+func (t *Track) SetAlbumArtist(albumArtist string) {
+	canonical := canonicalizeField(albumArtist)
+	if canonical == "" {
+		t.AlbumArtist = nil
+		return
+	}
+	t.AlbumArtist = &canonical
 }
 
 type AcquisitionProvenance string
