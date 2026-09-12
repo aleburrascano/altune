@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	domain "altune/go-api/internal/discovery/domain"
@@ -22,11 +23,29 @@ type EvalQueryResult struct {
 
 // EvalResult is the app-owned smoke-eval scorecard. app.go maps it to
 // admin/evalmeter.Result at the boundary; the JSON shape lives with the meter.
+//
+// Errored counts queries that failed to construct or search. Such a query is
+// scored as a failed check (it cannot match), but the count is surfaced
+// separately so a transient partial outage ("N queries errored") is
+// distinguishable from every query genuinely failing to rank well.
 type EvalResult struct {
 	Score     float64
 	Baseline  float64
 	Regressed bool
+	Errored   int
 	Queries   []EvalQueryResult
+}
+
+// evalSearcher is the narrow slice of the discovery service the smoke eval
+// needs. Depending on the behaviour rather than the concrete *Service keeps the
+// scoring loop unit-testable with an error-injecting fake.
+type evalSearcher interface {
+	Execute(
+		ctx context.Context,
+		userId shared.UserId,
+		query *domain.SearchQuery,
+		saveHistory bool,
+	) (*discoveryService.SearchOutput, error)
 }
 
 // EvalRunner runs one smoke eval and returns the app-owned result. app.go
@@ -66,35 +85,27 @@ func evalUserId() shared.UserId {
 	return shared.SystemUserId()
 }
 
-func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user shared.UserId) (EvalResult, error) {
+func runSmokeEval(ctx context.Context, svc evalSearcher, user shared.UserId) (EvalResult, error) {
 	kinds := map[domain.ResultKind]bool{
 		domain.ResultKindTrack:  true,
 		domain.ResultKindAlbum:  true,
 		domain.ResultKindArtist: true,
 	}
 
-	passed := 0
+	passed, errored := 0, 0
 	queries := make([]EvalQueryResult, 0, len(evalSmokeChecks))
 	for _, check := range evalSmokeChecks {
-		query, err := domain.NewSearchQuery(check.query, kinds, evalLimit)
+		res, err := evalQuery(ctx, svc, user, check.query, check.expect, kinds)
 		if err != nil {
-			return EvalResult{}, fmt.Errorf("eval query %q: %w", check.query, err)
-		}
-		out, err := svc.Execute(ctx, user, query, false)
-		if err != nil {
-			return EvalResult{}, fmt.Errorf("eval search %q: %w", check.query, err)
-		}
-		pos := matchPosition(out.Results, check.expect)
-		ok := pos >= 0 && pos < evalTopK
-		if ok {
+			// A per-query failure is scored as a failed check and the eval
+			// continues, so one transient error no longer discards the rest.
+			errored++
+			slog.WarnContext(ctx, "eval.smoke.query_errored", "query", check.query, "error", err)
+			res = EvalQueryResult{Query: check.query, Expect: check.expect, Position: -1}
+		} else if res.Passed {
 			passed++
 		}
-		queries = append(queries, EvalQueryResult{
-			Query:    check.query,
-			Expect:   check.expect,
-			Passed:   ok,
-			Position: pos,
-		})
+		queries = append(queries, res)
 	}
 
 	score := float64(passed) / float64(len(evalSmokeChecks))
@@ -102,8 +113,31 @@ func runSmokeEval(ctx context.Context, svc *discoveryService.Service, user share
 		Score:     score,
 		Baseline:  evalBaseline,
 		Regressed: score < evalBaseline,
+		Errored:   errored,
 		Queries:   queries,
 	}, nil
+}
+
+// evalQuery runs a single smoke-eval check. Construction and search failures are
+// returned as errors for the caller to classify; a clean run yields the scored
+// per-query result.
+func evalQuery(
+	ctx context.Context,
+	svc evalSearcher,
+	user shared.UserId,
+	q, expect string,
+	kinds map[domain.ResultKind]bool,
+) (EvalQueryResult, error) {
+	query, err := domain.NewSearchQuery(q, kinds, evalLimit)
+	if err != nil {
+		return EvalQueryResult{}, fmt.Errorf("eval query %q: %w", q, err)
+	}
+	out, err := svc.Execute(ctx, user, query, false)
+	if err != nil {
+		return EvalQueryResult{}, fmt.Errorf("eval search %q: %w", q, err)
+	}
+	pos := matchPosition(out.Results, expect)
+	return EvalQueryResult{Query: q, Expect: expect, Passed: pos >= 0 && pos < evalTopK, Position: pos}, nil
 }
 
 func matchPosition(results []domain.SearchResult, expect string) int {
