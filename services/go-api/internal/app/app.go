@@ -507,7 +507,7 @@ func (a *App) wireAdmin(
 		acqReader = a.scheduler
 	}
 
-	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.buildEvalRunner())
+	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.adminEvalRunner())
 	a.whenLeader("eval meter", a.evalMeter.Start)
 	adminH := adminHandler.New(a.adminHealthProbe, a.logRing).
 		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).
@@ -529,6 +529,38 @@ func (a *App) wireAdmin(
 			adminH.RegisterData(gr)
 		})
 	})
+}
+
+// adminEvalRunner adapts the app-owned EvalRunner into admin/evalmeter's
+// Runner at the wiring boundary, mapping the app-owned result to the meter's
+// wire DTO so eval_runner.go no longer depends on admin/evalmeter. A nil app
+// runner (meter disabled) stays nil so the meter treats it as unset.
+func (a *App) adminEvalRunner() evalmeter.Runner {
+	run := a.buildEvalRunner()
+	if run == nil {
+		return nil
+	}
+	return func(ctx context.Context) (evalmeter.Result, error) {
+		res, err := run(ctx)
+		if err != nil {
+			return evalmeter.Result{}, err
+		}
+		queries := make([]evalmeter.QueryResult, len(res.Queries))
+		for i, q := range res.Queries {
+			queries[i] = evalmeter.QueryResult{
+				Query:    q.Query,
+				Expect:   q.Expect,
+				Passed:   q.Passed,
+				Position: q.Position,
+			}
+		}
+		return evalmeter.Result{
+			Score:     res.Score,
+			Baseline:  res.Baseline,
+			Regressed: res.Regressed,
+			Queries:   queries,
+		}, nil
+	}
 }
 
 // adminHealthProbe adapts the app-owned DependencyHealth into the admin
