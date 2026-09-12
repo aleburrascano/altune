@@ -166,7 +166,7 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		a.pool,
 		a.redisClient,
 		eventStore,
-		requeststore.NewTransport(defaultLiveTransport, requestStore),
+		requeststore.NewCorrelatedTransport(defaultLiveTransport, requestStore),
 		vocabStore,
 		false,
 	)

@@ -9,19 +9,19 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
-type recordingTransport struct {
+type correlatedTransport struct {
 	base  http.RoundTripper
 	store *Store
 }
 
-func NewTransport(base http.RoundTripper, store *Store) http.RoundTripper {
+func NewCorrelatedTransport(base http.RoundTripper, store *Store) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	return &recordingTransport{base: base, store: store}
+	return &correlatedTransport{base: base, store: store}
 }
 
-func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *correlatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	corrID := httputil.GetCorrelationID(req.Context())
 	if corrID == "" || t.store == nil {
 		return t.base.RoundTrip(req)
