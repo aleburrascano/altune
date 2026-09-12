@@ -1,4 +1,8 @@
-# Backend test gate. Runs on PRs and pushes that touch the Go API.
+# Backend test gate. Reachable two ways: called by the PR gate (pr-gate.yml) on
+# PRs/merge-queue that touch the Go API, and directly on pushes to main (health
+# tracking). It deliberately has NO `pull_request` trigger of its own — that ran
+# a second, unprefixed copy on every PR that shared this workflow's concurrency
+# group with the gate-called copy and cancelled it, stalling the required check.
 #
 # Two parallel jobs: `static` (vet + depguard, fast, fails in seconds) and
 # `test` (the slow race detector + gates). They run at once, so a lint break
@@ -10,19 +14,15 @@
 name: Test backend
 
 on:
-  pull_request:
-    paths:
-      - 'services/go-api/**'
-      - '.github/workflows/test-backend.yml'
   push:
     branches: [main]
     paths:
       - 'services/go-api/**'
       - '.github/workflows/test-backend.yml'
-  # Callable, so deploy-backend.yml can make this a prerequisite rather than a
-  # parallel race. A reusable workflow runs against the caller's ref, so the
-  # deploy gate tests exactly the commit it is about to ship. That the record of
-  # a green main stays independent of the deploy workflow is deliberate.
+  # Callable, so the PR gate (and deploy-backend.yml) can make this a prerequisite
+  # rather than a parallel race. A reusable workflow runs against the caller's
+  # ref, so the deploy gate tests exactly the commit it is about to ship. That the
+  # record of a green main stays independent of the deploy workflow is deliberate.
   workflow_call:
 
 jobs:
