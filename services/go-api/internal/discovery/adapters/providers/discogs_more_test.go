@@ -111,13 +111,13 @@ func TestDiscogsAdapter_rateLimit_spacesConsecutiveCalls(t *testing.T) {
 	a := NewDiscogsAdapter(http.DefaultClient, "tok", "ua")
 
 	start := time.Now()
-	a.rateLimit()
+	_ = a.limiter.wait(context.Background())
 	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
 		t.Errorf("first call blocked %v, want immediate", elapsed)
 	}
 
 	start = time.Now()
-	a.rateLimit()
+	_ = a.limiter.wait(context.Background())
 	if elapsed := time.Since(start); elapsed < 700*time.Millisecond {
 		t.Errorf("second call blocked only %v, want ~1s spacing", elapsed)
 	}

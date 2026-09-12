@@ -17,13 +17,13 @@ func TestMusicBrainzAdapter_rateLimit_reservesDistinctSlots(t *testing.T) {
 	cancel()
 
 	start := time.Now()
-	a.rateLimit(ctx)
-	a.rateLimit(ctx)
-	a.rateLimit(ctx)
+	_ = a.limiter.wait(ctx)
+	_ = a.limiter.wait(ctx)
+	_ = a.limiter.wait(ctx)
 
-	a.mu.Lock()
-	last := a.lastReq
-	a.mu.Unlock()
+	a.limiter.mu.Lock()
+	last := a.limiter.lastReq
+	a.limiter.mu.Unlock()
 
 	if got := last.Sub(start); got < 1900*time.Millisecond || got > 3*time.Second {
 		t.Errorf("lastReq advanced by %v, want ~2s (three callers spaced 1s apart)", got)
@@ -35,14 +35,14 @@ func TestMusicBrainzAdapter_rateLimit_reservesDistinctSlots(t *testing.T) {
 
 func TestMusicBrainzAdapter_rateLimit_ctxCancelAbortsWait(t *testing.T) {
 	a := NewMusicBrainzAdapter(http.DefaultClient, "test")
-	a.mu.Lock()
-	a.lastReq = time.Now()
-	a.mu.Unlock()
+	a.limiter.mu.Lock()
+	a.limiter.lastReq = time.Now()
+	a.limiter.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	start := time.Now()
-	a.rateLimit(ctx)
+	_ = a.limiter.wait(ctx)
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Errorf("rateLimit blocked %v after ctx cancel, want prompt return", elapsed)
 	}

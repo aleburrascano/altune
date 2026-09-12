@@ -7,35 +7,41 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-type fakeSearchHistoryRepository struct {
-	insertFn       func(ctx context.Context, entry *domain.SearchHistoryEntry) error
-	trimToNFn      func(ctx context.Context, userId shared.UserId, n int) error
-	listDistinctFn func(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error)
-	deleteAllFn    func(ctx context.Context, userId shared.UserId) error
+type fakeHistoryWriter struct {
+	insertFn  func(ctx context.Context, entry *domain.SearchHistoryEntry) error
+	trimToNFn func(ctx context.Context, userId shared.UserId, n int) error
 }
 
-func (f *fakeSearchHistoryRepository) Insert(ctx context.Context, entry *domain.SearchHistoryEntry) error {
+func (f *fakeHistoryWriter) Insert(ctx context.Context, entry *domain.SearchHistoryEntry) error {
 	if f.insertFn != nil {
 		return f.insertFn(ctx, entry)
 	}
 	return nil
 }
 
-func (f *fakeSearchHistoryRepository) TrimToN(ctx context.Context, userId shared.UserId, n int) error {
+func (f *fakeHistoryWriter) TrimToN(ctx context.Context, userId shared.UserId, n int) error {
 	if f.trimToNFn != nil {
 		return f.trimToNFn(ctx, userId, n)
 	}
 	return nil
 }
 
-func (f *fakeSearchHistoryRepository) ListDistinctRecent(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
+type fakeHistoryReader struct {
+	listDistinctFn func(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error)
+}
+
+func (f *fakeHistoryReader) ListDistinctRecent(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
 	if f.listDistinctFn != nil {
 		return f.listDistinctFn(ctx, userId, limit)
 	}
 	return nil, nil
 }
 
-func (f *fakeSearchHistoryRepository) DeleteAllForUser(ctx context.Context, userId shared.UserId) error {
+type fakeHistoryEraser struct {
+	deleteAllFn func(ctx context.Context, userId shared.UserId) error
+}
+
+func (f *fakeHistoryEraser) DeleteAllForUser(ctx context.Context, userId shared.UserId) error {
 	if f.deleteAllFn != nil {
 		return f.deleteAllFn(ctx, userId)
 	}

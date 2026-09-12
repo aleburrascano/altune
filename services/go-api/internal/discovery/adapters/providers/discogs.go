@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
@@ -21,21 +20,15 @@ type DiscogsAdapter struct {
 	client    *http.Client
 	token     string
 	userAgent string
-	mu        sync.Mutex
-	lastReq   time.Time
+	limiter   *minIntervalLimiter
 }
 
 func NewDiscogsAdapter(client *http.Client, token, userAgent string) *DiscogsAdapter {
-	return &DiscogsAdapter{client: client, token: token, userAgent: userAgent}
-}
-
-func (a *DiscogsAdapter) rateLimit() {
-	a.mu.Lock()
-	since := time.Since(a.lastReq)
-	a.lastReq = time.Now()
-	a.mu.Unlock()
-	if since < time.Second {
-		time.Sleep(time.Second - since)
+	return &DiscogsAdapter{
+		client:    client,
+		token:     token,
+		userAgent: userAgent,
+		limiter:   newMinIntervalLimiter(time.Second),
 	}
 }
 
@@ -249,7 +242,9 @@ func (a *DiscogsAdapter) fetchArtistReleases(ctx context.Context, artistID, perP
 }
 
 func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, error) {
-	a.rateLimit()
+	if err := a.limiter.wait(ctx); err != nil {
+		return nil, err
+	}
 	status, body, err := getBytes(ctx, a.client, rawURL,
 		withHeader("Authorization", "Discogs token="+a.token),
 		withHeader("User-Agent", a.userAgent))
