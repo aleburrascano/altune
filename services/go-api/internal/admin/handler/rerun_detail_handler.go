@@ -28,6 +28,7 @@ type DetailSeedGroup struct {
 	Provider   string          `json:"provider"`
 	ExternalID string          `json:"external_id"`
 	Status     string          `json:"status"`
+	Error      string          `json:"error,omitempty"`
 	Items      []DetailItemRow `json:"items"`
 }
 

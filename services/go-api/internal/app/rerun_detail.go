@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,6 +38,7 @@ type rawSeed struct {
 	provider   string
 	externalID string
 	status     string
+	err        string
 	items      []domain.SearchResult
 }
 
@@ -112,26 +114,42 @@ func (dr *detailReRunner) trackFanOut(ctx context.Context, byProvider map[string
 func (dr *detailReRunner) fetchAlbums(ctx context.Context, provider, id, name string) rawSeed {
 	pn, err := domain.ParseProviderName(provider)
 	if err != nil {
-		return rawSeed{provider: provider, externalID: id, status: "error"}
+		return logSeedError(ctx, seedFrom(provider, id, nil, err))
 	}
 	resp, err := dr.artistSvc.GetAlbums(ctx, pn, id, name, 100)
-	return seedFrom(provider, id, resp, err)
+	return logSeedError(ctx, seedFrom(provider, id, resp, err))
 }
 
 func (dr *detailReRunner) fetchTopTracks(ctx context.Context, provider, id, name string) rawSeed {
 	pn, err := domain.ParseProviderName(provider)
 	if err != nil {
-		return rawSeed{provider: provider, externalID: id, status: "error"}
+		return logSeedError(ctx, seedFrom(provider, id, nil, err))
 	}
 	resp, err := dr.artistSvc.GetTopTracks(ctx, pn, id, name, 5)
-	return seedFrom(provider, id, resp, err)
+	return logSeedError(ctx, seedFrom(provider, id, resp, err))
 }
 
 func seedFrom(provider, id string, resp *discoveryService.ContentFetchResponse, err error) rawSeed {
 	if err != nil || resp == nil {
-		return rawSeed{provider: provider, externalID: id, status: "error"}
+		msg := "empty provider response"
+		if err != nil {
+			msg = err.Error()
+		}
+		return rawSeed{provider: provider, externalID: id, status: "error", err: msg}
 	}
 	return rawSeed{provider: provider, externalID: id, status: resp.Status.String(), items: resp.Items}
+}
+
+// logSeedError surfaces a failed seed fetch at the call site instead of
+// dropping it. It mirrors fanOutRerun, which captures the same class of error
+// into ProviderTrace.Err, so ReRunDetail's operator diagnostic can explain why
+// a provider contributed nothing.
+func logSeedError(ctx context.Context, seed rawSeed) rawSeed {
+	if seed.err != "" {
+		slog.WarnContext(ctx, "rerun_detail.seed_fetch_failed",
+			"provider", seed.provider, "external_id", seed.externalID, "error", seed.err)
+	}
+	return seed
 }
 
 func mergeAlbumsLikeClient(seeds []rawSeed) []domain.SearchResult {
@@ -264,6 +282,7 @@ func projectSeeds(seeds []rawSeed) []adminHandler.DetailSeedGroup {
 			Provider:   s.provider,
 			ExternalID: s.externalID,
 			Status:     s.status,
+			Error:      s.err,
 			Items:      projectDetailItems(s.items),
 		})
 	}
