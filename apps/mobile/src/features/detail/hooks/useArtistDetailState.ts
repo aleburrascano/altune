@@ -3,19 +3,16 @@ import { useRouter } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
-import { trackExtras } from '../extras-accessors';
 import { openDetail, type DetailRoute } from '../navigation';
-import { ownedFromExtras } from './useOwnedTrack';
-import { saveControlState, type SaveControlState } from '../save-control-state';
-import { playButtonState, splitOwned, toPlaybackQueue, type OwnedSplit } from '../owned-playback';
-import { toCreateTrackRequest } from '../save-cache';
+import { type SaveControlState } from '../save-control-state';
+import { type OwnedSplit } from '../owned-playback';
 import { useArtistContent } from './useArtistContent';
 import { useArtistDiscovery } from './useArtistDiscovery';
 import { useLibraryAlbumsForArtist } from './useLibraryAlbumsForArtist';
 import { useLibraryTracksForArtist } from './useLibraryTracks';
 import { useSaveTrack } from './useSaveTrack';
+import { useOwnedPlayback } from './useOwnedPlayback';
 
 export type ArtistDetailState = {
   hasSources: boolean;
@@ -48,7 +45,6 @@ export function useArtistDetailState(
 ): ArtistDetailState {
   const router = useRouter();
   const save = useSaveTrack();
-  const queue = useQueuePlayback();
   const hasSources = !isFromLibrary && result.sources.length > 0;
 
   const localTracks = useLibraryTracksForArtist(result.title);
@@ -101,26 +97,19 @@ export function useArtistDetailState(
     openDetail(router, detailRoute, { ...album, subtitle: album.subtitle ?? result.title });
   };
 
-  const onQuickSave = (track: DiscoveryResult): void => {
-    save.mutate(
-      toCreateTrackRequest({
+  const { owned, playButton, onPlayOwned, saveStateFor, onQuickSave } = useOwnedPlayback(
+    topTracks,
+    {
+      title: result.title,
+      image: result.image_url,
+      enrich: (track) => ({
         ...track,
         subtitle: track.subtitle ?? result.title,
         image_url: track.image_url ?? result.image_url,
       }),
-    );
-  };
-
-  const saveStateFor = (track: DiscoveryResult): SaveControlState =>
-    saveControlState(ownedFromExtras(trackExtras(track.extras)));
-
-  const owned = splitOwned(topTracks);
-
-  const onPlayOwned = (): void => {
-    const playable = toPlaybackQueue(owned.playable, result.title, result.image_url);
-    if (playable.length === 0) return;
-    queue.playFromList(playable, 0, { kind: 'library' });
-  };
+    },
+    save,
+  );
 
   return {
     hasSources,
@@ -142,7 +131,7 @@ export function useArtistDetailState(
     onQuickSave,
     saveStateFor,
     owned,
-    playButton: playButtonState(owned),
+    playButton,
     onPlayOwned,
   };
 }
