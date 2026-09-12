@@ -113,7 +113,7 @@ function extractTsTypeLines(source: string, typeName: string): Map<string, strin
     lines.set(k, v);
   const before = statement.slice(0, braceStart);
   for (const m of before.matchAll(/[A-Za-z_]\w*/g)) {
-    for (const [k, v] of extractTsTypeLines(source, m[0]!)) lines.set(k, v);
+    for (const [k, v] of extractTsTypeLines(source, m[0])) lines.set(k, v);
   }
   return lines;
 }

@@ -55,7 +55,7 @@ function makeSession(userId: string, overrides: Partial<Session> = {}): Session 
     token_type: 'bearer',
     user: { id: userId } as unknown as Session['user'],
     ...overrides,
-  } as Session;
+  };
 }
 
 function makeWrapper(queryClient: QueryClient) {

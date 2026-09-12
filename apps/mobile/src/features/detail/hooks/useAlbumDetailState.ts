@@ -146,7 +146,9 @@ export function useAlbumDetailState(
     moreTracks,
     discoveryLoading: discovery.isLoading,
     discoveryError: discovery.isError,
-    discoveryRefetch: discovery.refetch,
+    discoveryRefetch: () => {
+      void discovery.refetch();
+    },
     saveAllTapped,
     savePending: save.isPending,
     onTrackPress,

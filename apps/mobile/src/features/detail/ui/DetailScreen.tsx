@@ -70,7 +70,7 @@ export function DetailScreen(): ReactElement {
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.replace(`/${tabRoot}` as '/discover' | '/library');
+        router.replace(`/${tabRoot}`);
       }
     },
   };

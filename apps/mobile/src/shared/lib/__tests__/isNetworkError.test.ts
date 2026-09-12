@@ -10,7 +10,7 @@ describe('isNetworkError — each regex alternate, independently', () => {
     ['invalid credentials', false],
     ['', false],
   ])('Error(%j) -> %s', (message, expected) => {
-    expect(isNetworkError(new Error(message as string))).toBe(expected);
+    expect(isNetworkError(new Error(message))).toBe(expected);
   });
 
   it('matches regardless of case, for every alternate', () => {

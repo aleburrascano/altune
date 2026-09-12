@@ -50,20 +50,22 @@ export async function playbackService() {
   TrackPlayer.addEventListener(Event.RemoteNext, () => {
     void withNativeQueue(() => TrackPlayer.skipToNext()).catch(() => {});
   });
-  TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
-    const { position } = await TrackPlayer.getProgress();
-    if (position > RESTART_THRESHOLD_SECONDS) {
-      await TrackPlayer.seekTo(0);
-      return;
-    }
-    await withNativeQueue(() => TrackPlayer.skipToPrevious()).catch(() => {});
+  TrackPlayer.addEventListener(Event.RemotePrevious, () => {
+    void (async () => {
+      const { position } = await TrackPlayer.getProgress();
+      if (position > RESTART_THRESHOLD_SECONDS) {
+        await TrackPlayer.seekTo(0);
+        return;
+      }
+      await withNativeQueue(() => TrackPlayer.skipToPrevious()).catch(() => {});
+    })();
   });
   TrackPlayer.addEventListener(Event.RemoteSeek, (data) => {
     void TrackPlayer.seekTo(data.position);
   });
 
-  TrackPlayer.addEventListener(Event.PlaybackError, async (data) => {
-    await handlePlaybackError(data.message);
+  TrackPlayer.addEventListener(Event.PlaybackError, (data) => {
+    void handlePlaybackError(data.message);
   });
 
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data) => {

@@ -142,9 +142,7 @@ describe('DownloadsBar', () => {
     const stop = jest.fn();
     const loopSpy = jest
       .spyOn(Animated, 'loop')
-      .mockReturnValue({ start: jest.fn(), stop, reset: jest.fn() } as unknown as ReturnType<
-        typeof Animated.loop
-      >);
+      .mockReturnValue({ start: jest.fn(), stop, reset: jest.fn() });
 
     const items = [entry({ trackId: 'a', phase: 'downloading' })];
     const { unmount } = render(<DownloadsBar items={items} onPress={jest.fn()} />);

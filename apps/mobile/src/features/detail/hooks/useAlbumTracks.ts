@@ -41,6 +41,8 @@ export function useAlbumTracks({
     tracks: data?.items ?? [],
     isLoading,
     isError: isError || data?.status === 'error',
-    refetch,
+    refetch: () => {
+      void refetch();
+    },
   };
 }

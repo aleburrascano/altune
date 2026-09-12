@@ -45,13 +45,13 @@ function ScreenErrorFallback({
 }
 
 export class ScreenBoundary extends Component<ScreenBoundaryProps, ScreenBoundaryState> {
-  state: ScreenBoundaryState = { error: null, componentStack: null };
+  override state: ScreenBoundaryState = { error: null, componentStack: null };
 
   static getDerivedStateFromError(error: Error): Partial<ScreenBoundaryState> {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('[ScreenBoundary] render error', error, info.componentStack);
     this.setState({ componentStack: info.componentStack ?? null });
   }
@@ -60,7 +60,7 @@ export class ScreenBoundary extends Component<ScreenBoundaryProps, ScreenBoundar
     this.setState({ error: null, componentStack: null });
   };
 
-  render(): ReactNode {
+  override render(): ReactNode {
     if (this.state.error !== null) {
       return (
         <ScreenErrorFallback

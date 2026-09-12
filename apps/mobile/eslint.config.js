@@ -1,6 +1,41 @@
 const expoConfig = require('eslint-config-expo/flat');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const tsParser = require('@typescript-eslint/parser');
+// Typed (type-aware) linting. These rules use the TypeScript type-checker, so
+// they catch what plain lint cannot: promises that are never awaited, promises
+// passed where a sync value is expected, and other type-level footguns.
+//
+// This is a CURATED slice of typescript-eslint's strict-type-checked, not the
+// whole thing: the full set flags ~2300 pre-existing issues, ~1400 of them
+// no-unsafe-* from `any` crossing untyped boundaries — a real but separate
+// typing project. The rules enabled here are the high-signal bug-catchers whose
+// backlog was small enough to fix outright, so the gate stays meaningful and
+// blocking rather than a wall of warnings. Grow this list as the codebase is
+// hardened. `projectService` finds the nearest tsconfig per file automatically.
+// Scoped to production src, not tests: type-aware linting needs each file in the
+// tsconfig project (a stray test file errors otherwise), and an un-awaited
+// promise in a test fails the test loudly anyway — production is where a floating
+// promise silently drops work. require-await is deliberately absent: it fights
+// async methods that exist only to satisfy a Promise-returning interface.
+const typedLinting = [
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['**/__tests__/**'],
+    plugins: { '@typescript-eslint': tsPlugin },
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { projectService: true, tsconfigRootDir: __dirname },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/await-thenable': 'error',
+      '@typescript-eslint/no-misused-spread': 'error',
+      '@typescript-eslint/use-unknown-in-catch-callback-variable': 'error',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+    },
+  },
+];
 
 const FEATURES = ['auth', 'detail', 'discover', 'library', 'playback', 'settings'];
 
@@ -75,6 +110,7 @@ const relaxationForNativeModulesExpoGoDoesNotBundle = {
 
 module.exports = [
   ...expoConfig,
+  ...typedLinting,
   typeScriptPluginRegisteredDirectlyRatherThanViaExpoConfig,
   {
     files: ['src/**/*.{ts,tsx}'],

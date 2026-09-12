@@ -4,8 +4,6 @@ import { supabase } from '@shared/auth/supabaseClient';
 
 import type { AuthLinkIntent } from './parseAuthLink';
 
-type VerifyOtpArg = Parameters<typeof supabase.auth.verifyOtp>[0];
-
 export async function completeAuthIntent(
   intent: AuthLinkIntent,
   router: Pick<ImperativeRouter, 'replace'>,
@@ -20,7 +18,7 @@ export async function completeAuthIntent(
       await supabase.auth.verifyOtp({
         type: params.type,
         token_hash: params.token_hash,
-      } as VerifyOtpArg);
+      });
     } else if (params.access_token && params.refresh_token) {
       await supabase.auth.setSession({
         access_token: params.access_token,

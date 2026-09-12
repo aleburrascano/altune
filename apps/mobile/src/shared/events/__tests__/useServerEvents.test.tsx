@@ -66,16 +66,14 @@ jest.mock('../sse-client', () => {
       this.getToken = getToken;
       this.onEvent = onEvent;
       this.onError = onError;
-      instances.push(this as unknown as MockSSEClientInstance);
+      instances.push(this);
     }
   }
 
   return { SSEClient: MockSSEClient, __instances: instances };
 });
 
-const { __instances: instances } = jest.requireMock('../sse-client') as {
-  __instances: MockSSEClientInstance[];
-};
+const { __instances: instances } = jest.requireMock('../sse-client');
 
 function instanceAt(index: number): MockSSEClientInstance {
   const instance = instances[index];
@@ -85,7 +83,7 @@ function instanceAt(index: number): MockSSEClientInstance {
 
 const { __listeners: appStateListeners } = jest.requireMock(
   'react-native/Libraries/AppState/AppState',
-) as { __listeners: AppStateChangeHandler[] };
+);
 
 function emitAppStateChange(state: string): void {
   [...appStateListeners].forEach((handler) => handler(state));
