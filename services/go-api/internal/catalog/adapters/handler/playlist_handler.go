@@ -91,6 +91,14 @@ type PlaylistDetailResponse struct {
 	Tracks               []TrackResponse `json:"tracks"`
 }
 
+func trackIdsFromUUIDs(ids []uuid.UUID) []domain.TrackId {
+	trackIds := make([]domain.TrackId, len(ids))
+	for i, id := range ids {
+		trackIds[i] = domain.TrackIdFromUUID(id)
+	}
+	return trackIds
+}
+
 func playlistToResponse(p *domain.Playlist, trackCount int, artworkURLs []string) PlaylistResponse {
 	if artworkURLs == nil {
 		artworkURLs = []string{}
@@ -269,10 +277,7 @@ func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	trackIds := make([]domain.TrackId, len(req.TrackIDs))
-	for i, id := range req.TrackIDs {
-		trackIds[i] = domain.TrackIdFromUUID(id)
-	}
+	trackIds := trackIdsFromUUIDs(req.TrackIDs)
 
 	added, err := h.membership.AddTracks(r.Context(), userId, playlistId, trackIds)
 	if err != nil {
@@ -331,10 +336,7 @@ func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	trackIds := make([]domain.TrackId, len(req.TrackIDs))
-	for i, id := range req.TrackIDs {
-		trackIds[i] = domain.TrackIdFromUUID(id)
-	}
+	trackIds := trackIdsFromUUIDs(req.TrackIDs)
 
 	removed, err := h.membership.RemoveTracks(r.Context(), userId, playlistId, trackIds)
 	if err != nil {
@@ -362,10 +364,7 @@ func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	trackIds := make([]domain.TrackId, len(req.TrackIDs))
-	for i, id := range req.TrackIDs {
-		trackIds[i] = domain.TrackIdFromUUID(id)
-	}
+	trackIds := trackIdsFromUUIDs(req.TrackIDs)
 
 	if err := h.membership.Reorder(r.Context(), userId, playlistId, trackIds); err != nil {
 		httputil.HandleServiceError(w, r, err)
