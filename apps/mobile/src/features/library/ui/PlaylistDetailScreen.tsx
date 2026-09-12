@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
-import { Alert, FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,6 +15,7 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
+import { confirmDestructive } from '@shared/ui/confirmDestructive';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
@@ -94,23 +95,21 @@ export function PlaylistDetailScreen(): ReactElement {
     });
 
   const handleDelete = () => {
-    Alert.alert('Delete Playlist', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () =>
-          deleteMut.mutate(undefined, {
-            onSuccess: () => {
-              if (router.canGoBack()) {
-                router.back();
-              } else {
-                router.replace('/library');
-              }
-            },
-          }),
-      },
-    ]);
+    confirmDestructive({
+      title: 'Delete Playlist',
+      message: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      onConfirm: () =>
+        deleteMut.mutate(undefined, {
+          onSuccess: () => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/library');
+            }
+          },
+        }),
+    });
   };
 
   const startEditing = () => {
@@ -222,21 +221,15 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const confirmRemoveSelected = () => {
     const ids = selection.ids;
-    Alert.alert(
-      'Remove from Playlist',
-      `Remove ${ids.length} ${countLabel(ids.length, 'track')} from ${pl.name}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            removeMut.mutate(ids);
-            selection.clear();
-          },
-        },
-      ],
-    );
+    confirmDestructive({
+      title: 'Remove from Playlist',
+      message: `Remove ${ids.length} ${countLabel(ids.length, 'track')} from ${pl.name}?`,
+      confirmLabel: 'Remove',
+      onConfirm: () => {
+        removeMut.mutate(ids);
+        selection.clear();
+      },
+    });
   };
 
   const selectionActions = buildSelectionActions(

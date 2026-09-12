@@ -2,6 +2,7 @@ import { apiFetch } from './index';
 import type { TrackId } from './ids';
 import type { LibrarySort } from './library';
 import { parseListTracksResponse, parseTrackResponse } from './parse';
+import { withQuery } from './queryString';
 import type {
   CreateTrackRequest,
   FeaturedArtist,
@@ -21,7 +22,7 @@ export async function getTracks(params: {
   });
   if (params.q) qs.set('q', params.q);
   if (params.sort) qs.set('sort', params.sort);
-  return parseListTracksResponse(await apiFetch<unknown>(`/v1/tracks?${qs.toString()}`));
+  return parseListTracksResponse(await apiFetch<unknown>(withQuery('/v1/tracks', qs)));
 }
 
 const MAX_PAGE = 2000;
@@ -69,7 +70,7 @@ export async function listTracksFeaturing(fa: FeaturedArtist): Promise<ListTrack
   if (fa.mbid) qs.set('mbid', fa.mbid);
   if (fa.deezer_id != null) qs.set('deezer_id', String(fa.deezer_id));
   if (fa.name) qs.set('name', fa.name);
-  return parseListTracksResponse(await apiFetch<unknown>(`/v1/tracks/featuring?${qs.toString()}`));
+  return parseListTracksResponse(await apiFetch<unknown>(withQuery('/v1/tracks/featuring', qs)));
 }
 
 export type BackfillFeaturedResult = { scanned: number; updated: number };

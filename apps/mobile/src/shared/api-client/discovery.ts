@@ -1,6 +1,7 @@
 import type { FavoriteKey } from './ids';
 import { apiFetch } from './index';
 import { parseDiscoverySearchResponse } from './parse';
+import { withQuery } from './queryString';
 
 export type DiscoveryKind = 'artist' | 'album' | 'track';
 export type DiscoveryConfidence = 'high' | 'medium' | 'low';
@@ -106,7 +107,7 @@ export async function searchDiscovery(
     qs.set('save_history', 'false');
   }
   const body = await apiFetch<unknown>(
-    `/v1/discovery/search?${qs.toString()}`,
+    withQuery('/v1/discovery/search', qs),
     signal ? { signal } : undefined,
   );
   return parseDiscoverySearchResponse(body);
@@ -120,7 +121,7 @@ export async function suggestDiscovery(params: {
   if (params.limit !== undefined) {
     qs.set('limit', String(params.limit));
   }
-  return apiFetch<DiscoverySuggestResponse>(`/v1/discovery/suggest?${qs.toString()}`);
+  return apiFetch<DiscoverySuggestResponse>(withQuery('/v1/discovery/suggest', qs));
 }
 
 export async function listSearchHistory(params?: {
@@ -130,10 +131,7 @@ export async function listSearchHistory(params?: {
   if (params?.limit !== undefined) {
     qs.set('limit', String(params.limit));
   }
-  const query = qs.toString();
-  return apiFetch<DiscoverySearchHistoryResponse>(
-    `/v1/discovery/search-history${query ? `?${query}` : ''}`,
-  );
+  return apiFetch<DiscoverySearchHistoryResponse>(withQuery('/v1/discovery/search-history', qs));
 }
 
 export async function clearSearchHistory(): Promise<void> {

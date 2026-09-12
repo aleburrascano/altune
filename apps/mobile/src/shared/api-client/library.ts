@@ -1,5 +1,6 @@
 import { apiFetch } from './index';
 import { parseListAlbumsResponse, parseListArtistsResponse } from './parse';
+import { withQuery } from './queryString';
 
 export type LibrarySort = 'recent' | 'az' | 'year';
 
@@ -36,22 +37,21 @@ export type ListArtistsResponse = {
   total: number;
 };
 
-function libraryQueryString(query: LibraryQuery): string {
-  const qs = new URLSearchParams();
-  if (query.q) qs.set('q', query.q);
-  if (query.sort) qs.set('sort', query.sort);
-  const encoded = qs.toString();
-  return encoded ? `?${encoded}` : '';
+function libraryParams(query: LibraryQuery): URLSearchParams {
+  const params = new URLSearchParams();
+  if (query.q) params.set('q', query.q);
+  if (query.sort) params.set('sort', query.sort);
+  return params;
 }
 
 export async function getLibraryAlbums(query: LibraryQuery = {}): Promise<ListAlbumsResponse> {
   return parseListAlbumsResponse(
-    await apiFetch<unknown>(`/v1/library/albums${libraryQueryString(query)}`),
+    await apiFetch<unknown>(withQuery('/v1/library/albums', libraryParams(query))),
   );
 }
 
 export async function getLibraryArtists(query: LibraryQuery = {}): Promise<ListArtistsResponse> {
   return parseListArtistsResponse(
-    await apiFetch<unknown>(`/v1/library/artists${libraryQueryString(query)}`),
+    await apiFetch<unknown>(withQuery('/v1/library/artists', libraryParams(query))),
   );
 }

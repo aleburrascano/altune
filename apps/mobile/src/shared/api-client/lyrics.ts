@@ -1,4 +1,5 @@
 import { apiFetch } from './index';
+import { withQuery } from './queryString';
 
 export type SyncedLine = {
   timecode: string;
@@ -22,7 +23,7 @@ export async function getLyrics(params: {
   if (params.subtitle != null && params.subtitle.length > 0) {
     qs.set('subtitle', params.subtitle);
   }
-  const response = await apiFetch<LyricsResponse>(`/v1/discovery/lyrics?${qs.toString()}`);
+  const response = await apiFetch<LyricsResponse>(withQuery('/v1/discovery/lyrics', qs));
   return {
     ...response,
     synced_lines: response.synced_lines ?? [],

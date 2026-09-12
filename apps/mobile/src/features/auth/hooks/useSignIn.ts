@@ -1,8 +1,6 @@
-import { useState } from 'react';
-
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { isNetworkError } from '@shared/lib/isNetworkError';
+import { useAsyncAuthAction } from './useAsyncAuthAction';
 
 export type SignInResult =
   | { kind: 'idle' }
@@ -11,21 +9,12 @@ export type SignInResult =
   | { kind: 'error'; reason: 'invalid_credentials' | 'network' | 'unknown' };
 
 export function useSignIn() {
-  const [state, setState] = useState<SignInResult>({ kind: 'idle' });
-
-  async function signIn(email: string, password: string): Promise<void> {
-    setState({ kind: 'pending' });
-    try {
+  const { state, run } = useAsyncAuthAction<SignInResult, [string, string]>(
+    async (email, password) => {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        setState({ kind: 'error', reason: 'invalid_credentials' });
-        return;
-      }
-      setState({ kind: 'ok' });
-    } catch (err) {
-      setState({ kind: 'error', reason: isNetworkError(err) ? 'network' : 'unknown' });
-    }
-  }
+      return error ? { kind: 'error', reason: 'invalid_credentials' } : { kind: 'ok' };
+    },
+  );
 
-  return { state, signIn };
+  return { state, signIn: run };
 }

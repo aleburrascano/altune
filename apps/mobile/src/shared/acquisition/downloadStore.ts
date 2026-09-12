@@ -63,67 +63,46 @@ function mergeMeta(prev: DownloadEntry | undefined, meta: DownloadMeta | undefin
   };
 }
 
+function makeEntry(
+  trackId: string,
+  phase: DownloadPhase,
+  prev: DownloadEntry | undefined,
+  meta?: DownloadMeta,
+): DownloadEntry {
+  const merged = mergeMeta(prev, meta);
+  return {
+    trackId,
+    phase,
+    title: merged.title ?? null,
+    artist: merged.artist ?? null,
+    artworkUrl: merged.artworkUrl ?? null,
+  };
+}
+
 export const useDownloadStore = create<DownloadState>((set, get) => ({
   entries: {},
 
   start: (trackId, meta) => {
     clearTimers(trackId);
-    set((s) => {
-      const merged = mergeMeta(s.entries[trackId], meta);
-      return {
-        entries: {
-          ...s.entries,
-          [trackId]: {
-            trackId,
-            phase: 'finding',
-            title: merged.title ?? null,
-            artist: merged.artist ?? null,
-            artworkUrl: merged.artworkUrl ?? null,
-          },
-        },
-      };
-    });
+    set((s) => ({
+      entries: { ...s.entries, [trackId]: makeEntry(trackId, 'finding', s.entries[trackId], meta) },
+    }));
   },
 
   progress: (trackId, phase, meta) => {
     const cur = get().entries[trackId];
     if (cur && (cur.phase === 'done' || cur.phase === 'failed')) return;
     if (cur && PHASE_RANK[phase] < PHASE_RANK[cur.phase]) return;
-    set((s) => {
-      const merged = mergeMeta(s.entries[trackId], meta);
-      return {
-        entries: {
-          ...s.entries,
-          [trackId]: {
-            trackId,
-            phase,
-            title: merged.title ?? null,
-            artist: merged.artist ?? null,
-            artworkUrl: merged.artworkUrl ?? null,
-          },
-        },
-      };
-    });
+    set((s) => ({
+      entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, s.entries[trackId], meta) },
+    }));
   },
 
   complete: (trackId) => {
     clearTimers(trackId);
-    set((s) => {
-      const cur = s.entries[trackId];
-      const merged = mergeMeta(cur, undefined);
-      return {
-        entries: {
-          ...s.entries,
-          [trackId]: {
-            trackId,
-            phase: 'finishing',
-            title: merged.title ?? null,
-            artist: merged.artist ?? null,
-            artworkUrl: merged.artworkUrl ?? null,
-          },
-        },
-      };
-    });
+    set((s) => ({
+      entries: { ...s.entries, [trackId]: makeEntry(trackId, 'finishing', s.entries[trackId]) },
+    }));
     schedule(trackId, () => set((s) => setPhaseIfPresent(s, trackId, 'done')), FINISHING_DWELL_MS);
     schedule(trackId, () => get().remove(trackId), FINISHING_DWELL_MS + DONE_HOLD_MS);
   },
@@ -159,18 +138,7 @@ function setPhaseIfPresent(
 ): Partial<DownloadState> {
   const cur = s.entries[trackId];
   if (!cur && !create) return s;
-  return {
-    entries: {
-      ...s.entries,
-      [trackId]: {
-        trackId,
-        phase,
-        title: cur?.title ?? null,
-        artist: cur?.artist ?? null,
-        artworkUrl: cur?.artworkUrl ?? null,
-      },
-    },
-  };
+  return { entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, cur) } };
 }
 
 export function startDownload(trackId: string, meta?: DownloadMeta): void {
