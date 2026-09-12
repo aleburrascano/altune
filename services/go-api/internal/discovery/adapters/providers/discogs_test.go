@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 )
@@ -15,6 +16,7 @@ func newTestDiscogsAdapter(server *httptest.Server) *DiscogsAdapter {
 		client:    server.Client(),
 		token:     "test-token",
 		userAgent: "altune-test/1.0",
+		limiter:   newMinIntervalLimiter(time.Second),
 	}
 }
 
