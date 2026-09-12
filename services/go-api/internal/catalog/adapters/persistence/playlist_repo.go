@@ -185,26 +185,25 @@ func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, playlistId domain.
 	return err
 }
 
-func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
-	if len(tracks) == 0 {
+// execBatch runs n queued statements inside a single transaction: begin,
+// send the batch, drain (checking each queued statement's result), commit.
+// An empty batch (n == 0) is a no-op and opens no transaction.
+func execBatch(ctx context.Context, pool *pgxpool.Pool, queue func(*pgx.Batch), n int) error {
+	if n == 0 {
 		return nil
 	}
 
-	tx, err := r.pool.Begin(ctx)
+	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 
 	batch := &pgx.Batch{}
-	for _, t := range tracks {
-		batch.Queue(
-			`INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES ($1, $2, $3)`,
-			playlistId.UUID(), t.TrackId.UUID(), t.Position,
-		)
-	}
+	queue(batch)
+
 	br := tx.SendBatch(ctx, batch)
-	for range tracks {
+	for i := 0; i < n; i++ {
 		if _, err := br.Exec(); err != nil {
 			br.Close()
 			return err
@@ -213,6 +212,17 @@ func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, playlistId domain
 	br.Close()
 
 	return tx.Commit(ctx)
+}
+
+func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
+	return execBatch(ctx, r.pool, func(batch *pgx.Batch) {
+		for _, t := range tracks {
+			batch.Queue(
+				`INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES ($1, $2, $3)`,
+				playlistId.UUID(), t.TrackId.UUID(), t.Position,
+			)
+		}
+	}, len(tracks))
 }
 
 func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId) error {
@@ -282,27 +292,12 @@ func renumberPlaylistPositions(ctx context.Context, tx pgx.Tx, playlistId uuid.U
 }
 
 func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	batch := &pgx.Batch{}
-	for _, t := range tracks {
-		batch.Queue(
-			`UPDATE playlist_tracks SET position = $3 WHERE playlist_id = $1 AND track_id = $2`,
-			playlistId.UUID(), t.TrackId.UUID(), t.Position,
-		)
-	}
-	br := tx.SendBatch(ctx, batch)
-	for range tracks {
-		if _, err := br.Exec(); err != nil {
-			br.Close()
-			return err
+	return execBatch(ctx, r.pool, func(batch *pgx.Batch) {
+		for _, t := range tracks {
+			batch.Queue(
+				`UPDATE playlist_tracks SET position = $3 WHERE playlist_id = $1 AND track_id = $2`,
+				playlistId.UUID(), t.TrackId.UUID(), t.Position,
+			)
 		}
-	}
-	br.Close()
-
-	return tx.Commit(ctx)
+	}, len(tracks))
 }
