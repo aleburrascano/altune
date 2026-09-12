@@ -31,7 +31,7 @@ func reqWithCorr(id string) *http.Request {
 
 func TestTransport_PassthroughWithoutCorrID(t *testing.T) {
 	s := New()
-	rt := NewTransport(fakeRT{resp: respWith("hi")}, s)
+	rt := NewCorrelatedTransport(fakeRT{resp: respWith("hi")}, s)
 
 	resp, err := rt.RoundTrip(reqWithCorr(""))
 	if err != nil {
@@ -46,7 +46,7 @@ func TestTransport_PassthroughWithoutCorrID(t *testing.T) {
 
 func TestTransport_RecordsAndDeliversFullBody(t *testing.T) {
 	s := New()
-	rt := NewTransport(fakeRT{resp: respWith("full-body-bytes")}, s)
+	rt := NewCorrelatedTransport(fakeRT{resp: respWith("full-body-bytes")}, s)
 
 	resp, _ := rt.RoundTrip(reqWithCorr("c1"))
 	got, _ := io.ReadAll(resp.Body)
@@ -70,7 +70,7 @@ func TestTransport_RecordsAndDeliversFullBody(t *testing.T) {
 func TestTransport_CapsBodyAndFlagsTruncated(t *testing.T) {
 	s := New()
 	s.maxBody = 4
-	rt := NewTransport(fakeRT{resp: respWith("0123456789")}, s)
+	rt := NewCorrelatedTransport(fakeRT{resp: respWith("0123456789")}, s)
 
 	resp, _ := rt.RoundTrip(reqWithCorr("c1"))
 	got, _ := io.ReadAll(resp.Body)
@@ -87,7 +87,7 @@ func TestTransport_CapsBodyAndFlagsTruncated(t *testing.T) {
 
 func TestTransport_RecordsTransportError(t *testing.T) {
 	s := New()
-	rt := NewTransport(fakeRT{err: errors.New("dial timeout")}, s)
+	rt := NewCorrelatedTransport(fakeRT{err: errors.New("dial timeout")}, s)
 
 	if _, err := rt.RoundTrip(reqWithCorr("c1")); err == nil {
 		t.Fatal("expected error to propagate")
