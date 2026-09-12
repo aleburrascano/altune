@@ -1,14 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/shared"
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
 )
 
 func TestAddTrackService_ValidatesRanges(t *testing.T) {
@@ -65,10 +63,7 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected a validation error, got nil (out=%+v)", out)
 			}
-			var ve *domain.ValidationError
-			if !errors.As(err, &ve) {
-				t.Fatalf("error = %T (%v), want *domain.ValidationError", err, err)
-			}
+			shared.AssertValidationError(t, err)
 			if !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %q, want it to mention %q", err.Error(), tt.wantErr)
 			}
@@ -147,10 +142,7 @@ func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected a validation error, got nil (out=%+v)", out)
 			}
-			var ve *domain.ValidationError
-			if !errors.As(err, &ve) {
-				t.Fatalf("error = %T (%v), want *domain.ValidationError", err, err)
-			}
+			shared.AssertValidationError(t, err)
 			if !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %q, want it to mention %q", err.Error(), tt.wantErr)
 			}
