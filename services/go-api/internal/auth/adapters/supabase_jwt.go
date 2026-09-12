@@ -67,6 +67,13 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 		}
 	}
 
+	if _, ok := token.Get(jwt.ExpirationKey); !ok {
+		return shared.UserId{}, &auth.InvalidTokenError{
+			Reason: auth.ReasonClaimMissingEXP,
+			Detail: "missing exp claim",
+		}
+	}
+
 	sub := token.Subject()
 	if sub == "" {
 		return shared.UserId{}, &auth.InvalidTokenError{
