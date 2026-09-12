@@ -21,7 +21,7 @@ func (s *GetArtistContentService) v2Albums(ctx context.Context, identity Resolve
 		stampRecordType(&r, NormalizeRecordType(kept[i]))
 		out = append(out, r)
 	}
-	sortAlbumsByReleaseDateDesc(out)
+	sortByReleaseDateDesc(out, albumReleaseSortKey)
 	return out
 }
 

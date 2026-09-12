@@ -211,6 +211,77 @@ func TestPgxTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 	}
 }
 
+func TestPgxTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxCatalogTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
+
+	base := time.Now().UTC().Truncate(time.Second)
+	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+		title: "l1", artist: "Ann", album: "Album One", addedAt: base.Add(-3 * time.Hour),
+	})
+	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+		title: "l2", artist: "Ben", album: "Album Two", addedAt: base.Add(-2 * time.Hour),
+	})
+	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+		title: "l3", artist: "Cal", album: "Album Three", addedAt: base.Add(-1 * time.Hour),
+	})
+
+	got, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: 1})
+	if err != nil {
+		t.Fatalf("ListAlbumsForUser(Limit:1): %v", err)
+	}
+	if len(got) > 1 {
+		t.Fatalf("Limit:1 returned %d albums, want <= 1", len(got))
+	}
+	if len(got) == 1 && got[0].Album != "Album Three" {
+		t.Errorf("Limit:1 sort=recent = %q, want Album Three", got[0].Album)
+	}
+
+	page2, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: 1, Offset: 1})
+	if err != nil {
+		t.Fatalf("ListAlbumsForUser(Limit:1,Offset:1): %v", err)
+	}
+	if len(page2) == 1 && page2[0].Album != "Album Two" {
+		t.Errorf("Limit:1 Offset:1 sort=recent = %q, want Album Two", page2[0].Album)
+	}
+}
+
+func TestPgxTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxCatalogTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
+
+	base := time.Now().UTC().Truncate(time.Second)
+	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+		title: "r1", artist: "Ann", album: "a1", addedAt: base.Add(-3 * time.Hour),
+	})
+	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+		title: "r2", artist: "Ben", album: "a2", addedAt: base.Add(-2 * time.Hour),
+	})
+	seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+		title: "r3", artist: "Cal", album: "a3", addedAt: base.Add(-1 * time.Hour),
+	})
+
+	got, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: 1})
+	if err != nil {
+		t.Fatalf("ListArtistsForUser(Limit:1): %v", err)
+	}
+	if len(got) > 1 {
+		t.Fatalf("Limit:1 returned %d artists, want <= 1", len(got))
+	}
+}
+
 func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxCatalogTrackRepository(pool)

@@ -47,7 +47,8 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		   repeat_mode = EXCLUDED.repeat_mode,
 		   source_id = EXCLUDED.source_id,
 		   natural_order = EXCLUDED.natural_order,
-		   updated_at = EXCLUDED.updated_at`,
+		   updated_at = EXCLUDED.updated_at
+		 WHERE playback_queue_state.updated_at <= EXCLUDED.updated_at`,
 		state.UserId.UUID(),
 		state.TrackIds,
 		state.CurrentIdx,

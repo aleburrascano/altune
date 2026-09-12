@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"log/slog"
-	"sort"
 	"sync"
 	"time"
 
@@ -139,7 +138,7 @@ func (s *ConsensusService) BuildConsensus(
 	}
 
 	results, mbErred := s.applyMBAuthority(ctx, artistName, results)
-	sortChronological(results)
+	sortByReleaseDateDesc(results, consensusAlbumSortKey)
 
 	if len(results) > 0 && ctx.Err() == nil && !mbErred {
 		_ = s.cache.Set(ctx, cacheKey, results)
@@ -148,14 +147,8 @@ func (s *ConsensusService) BuildConsensus(
 	return results
 }
 
-func sortChronological(results []ConsensusAlbum) {
-	sort.SliceStable(results, func(i, j int) bool {
-		ki, kj := albumReleaseSortKey(results[i].Album), albumReleaseSortKey(results[j].Album)
-		if ki == "" || kj == "" {
-			return ki != "" && kj == ""
-		}
-		return ki > kj
-	})
+func consensusAlbumSortKey(a ConsensusAlbum) string {
+	return albumReleaseSortKey(a.Album)
 }
 
 func (s *ConsensusService) NameGroups(ctx context.Context, artistName string) [][]domain.SearchResult {
