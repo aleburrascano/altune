@@ -89,6 +89,9 @@ func (c *Config) validate() error {
 			return fmt.Errorf("MUSICBRAINZ_USER_AGENT must contain a contact form URL or email")
 		}
 	}
+	if c.AcquisitionConcurrency < 1 {
+		return fmt.Errorf("ACQUISITION_CONCURRENCY must be >= 1, got %d", c.AcquisitionConcurrency)
+	}
 	if err := c.validateOperator(); err != nil {
 		return err
 	}

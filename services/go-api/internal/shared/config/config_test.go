@@ -256,6 +256,52 @@ func TestLoad_AlertNtfyURLValid(t *testing.T) {
 	}
 }
 
+func TestLoad_AcquisitionConcurrencyNotPositive(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "zero", value: "0"},
+		{name: "negative", value: "-1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, map[string]string{
+				"SUPABASE_PROJECT_URL":    "https://example.supabase.co",
+				"SUPABASE_JWT_JWKS_URL":   "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+				"SUPABASE_ANON_KEY":       "anon-key",
+				"OPERATOR_USER_ID":        validOperatorID,
+				"ACQUISITION_CONCURRENCY": tt.value,
+			})
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error for non-positive ACQUISITION_CONCURRENCY")
+			}
+			if !searchString(err.Error(), "ACQUISITION_CONCURRENCY") {
+				t.Errorf("expected error to name ACQUISITION_CONCURRENCY, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_AcquisitionConcurrencyDefaultValid(t *testing.T) {
+	setEnv(t, map[string]string{
+		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+		"SUPABASE_ANON_KEY":     "anon-key",
+		"OPERATOR_USER_ID":      validOperatorID,
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with default ACQUISITION_CONCURRENCY: %v", err)
+	}
+	if cfg.AcquisitionConcurrency != 5 {
+		t.Errorf("expected default acquisition_concurrency=5, got %d", cfg.AcquisitionConcurrency)
+	}
+}
+
 func TestConfig_LogValue_RedactsSecrets(t *testing.T) {
 	cfg := &Config{
 		Env:            "production",
@@ -315,7 +361,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"GENIUS_ACCESS_TOKEN", "OCI_S3_ENDPOINT", "OCI_S3_ACCESS_KEY",
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
-		"OPERATOR_USER_ID", "ALERT_NTFY_URL",
+		"OPERATOR_USER_ID", "ALERT_NTFY_URL", "ACQUISITION_CONCURRENCY",
 	}
 	for _, k := range envKeys {
 		os.Unsetenv(k)
