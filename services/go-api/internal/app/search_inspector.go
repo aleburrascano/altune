@@ -25,5 +25,9 @@ func (si *searchInspector) InspectSearch(ctx context.Context, query string, kind
 	if err != nil {
 		return nil, err
 	}
-	return requeststore.ProjectResults(si.svc.InspectSearch(ctx, sq)), nil
+	results, statuses := si.svc.InspectSearchWithStatuses(ctx, sq)
+	if discoveryService.AllProvidersFailed(statuses) {
+		return nil, discoveryService.ErrAllProvidersFailed
+	}
+	return requeststore.ProjectResults(results), nil
 }
