@@ -44,6 +44,30 @@ func (a *App) drainBackground(timeout time.Duration) shutdownOutcome {
 	}
 }
 
+// drainSearchBackground waits for the discovery search service's own detached
+// background work (identity-bridge persistence, telemetry emit, vocab ingest,
+// all on context.WithoutCancel) to finish before cleanup() closes the DB pool
+// and Redis client out from under it. It is bounded so a wedged task cannot
+// stall the shutdown sequence, and reports its outcome like every other
+// component.
+func (a *App) drainSearchBackground(timeout time.Duration) shutdownOutcome {
+	if a.searchSvc == nil {
+		return shutdownOutcome{name: "discovery search", completed: true}
+	}
+	done := make(chan struct{})
+	go func() {
+		a.searchSvc.WaitForBackground()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return shutdownOutcome{name: "discovery search", completed: true}
+	case <-time.After(timeout):
+		slog.Warn("discovery search background drain timed out", "timeout", timeout.String())
+		return shutdownOutcome{name: "discovery search", completed: false}
+	}
+}
+
 func (a *App) startTicker(ctx context.Context, interval time.Duration, fn func()) {
 	a.whenLeader(func(ctx context.Context) { a.runTicker(ctx, interval, fn) })
 }
