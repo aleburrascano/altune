@@ -1,12 +1,12 @@
 package app
 
 import (
-	adminHandler "altune/go-api/internal/admin/handler"
+	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/discovery/domain"
 )
 
-func detailEntity(entity domain.SearchResult, byProvider map[string]string) *adminHandler.DetailEntity {
-	return &adminHandler.DetailEntity{
+func detailEntity(entity domain.SearchResult, byProvider map[string]string) *requeststore.DetailEntity {
+	return &requeststore.DetailEntity{
 		Title:    entity.Title,
 		Subtitle: entity.Subtitle,
 		MBID:     entity.MBID,
@@ -25,10 +25,10 @@ func seedIDsByProvider(sources []domain.SourceRef) map[string]string {
 	return m
 }
 
-func projectSeeds(seeds []rawSeed) []adminHandler.DetailSeedGroup {
-	out := make([]adminHandler.DetailSeedGroup, 0, len(seeds))
+func projectSeeds(seeds []rawSeed) []requeststore.DetailSeedGroup {
+	out := make([]requeststore.DetailSeedGroup, 0, len(seeds))
 	for _, s := range seeds {
-		out = append(out, adminHandler.DetailSeedGroup{
+		out = append(out, requeststore.DetailSeedGroup{
 			Provider:   s.provider,
 			ExternalID: s.externalID,
 			Status:     s.status,
@@ -39,10 +39,10 @@ func projectSeeds(seeds []rawSeed) []adminHandler.DetailSeedGroup {
 	return out
 }
 
-func projectDetailItems(items []domain.SearchResult) []adminHandler.DetailItemRow {
-	out := make([]adminHandler.DetailItemRow, 0, len(items))
+func projectDetailItems(items []domain.SearchResult) []requeststore.DetailItemRow {
+	out := make([]requeststore.DetailItemRow, 0, len(items))
 	for _, it := range items {
-		out = append(out, adminHandler.DetailItemRow{
+		out = append(out, requeststore.DetailItemRow{
 			Title:      it.Title,
 			Subtitle:   it.Subtitle,
 			Year:       it.Year,

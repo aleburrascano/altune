@@ -15,8 +15,8 @@ import (
 
 type erroringReRunner struct{}
 
-func (erroringReRunner) ReRun(context.Context, string, []string) (ReRunResult, error) {
-	return ReRunResult{}, errors.New("upstream exploded")
+func (erroringReRunner) ReRun(context.Context, string, []string) (requeststore.ReRunResult, error) {
+	return requeststore.ReRunResult{}, errors.New("upstream exploded")
 }
 
 type erroringSearchInspector struct{}
@@ -27,8 +27,8 @@ func (erroringSearchInspector) InspectSearch(context.Context, string, []string) 
 
 type erroringDetailReRunner struct{}
 
-func (erroringDetailReRunner) ReRunDetail(context.Context, string) (DetailReRunResult, error) {
-	return DetailReRunResult{}, errors.New("upstream exploded")
+func (erroringDetailReRunner) ReRunDetail(context.Context, string) (requeststore.DetailReRunResult, error) {
+	return requeststore.DetailReRunResult{}, errors.New("upstream exploded")
 }
 
 func adminErrorBody(t *testing.T, h *AdminHandler, method, path, body string) (int, string) {

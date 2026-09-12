@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	adminHandler "altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
@@ -34,13 +33,13 @@ func (a *App) buildReRunner(svc *discoveryService.Service) *reRunner {
 	}
 }
 
-func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (adminHandler.ReRunResult, error) {
+func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (requeststore.ReRunResult, error) {
 	kindSet, err := parseRerunKinds(kinds)
 	if err != nil {
-		return adminHandler.ReRunResult{}, err
+		return requeststore.ReRunResult{}, err
 	}
 	if _, err := domain.NewSearchQuery(query, kindSet, inspectionSearchLimit); err != nil {
-		return adminHandler.ReRunResult{}, err
+		return requeststore.ReRunResult{}, err
 	}
 	rec := requeststore.NewRerunRecorder(rr.transport, rerunBodyCap)
 	provs := BuildDiscoveryProviders(rr.cfg, rec)
@@ -62,7 +61,7 @@ func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (ad
 	}
 	final := discoveryService.Reshape(ranked)
 
-	return adminHandler.ReRunResult{
+	return requeststore.ReRunResult{
 		Query:     query,
 		Kinds:     sortedKindNames(kindSet),
 		Providers: providerTraces,
@@ -74,11 +73,11 @@ func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (ad
 	}, nil
 }
 
-func projectScored(explained []discoveryService.ScoredResult) []adminHandler.ScoredRow {
-	out := make([]adminHandler.ScoredRow, len(explained))
+func projectScored(explained []discoveryService.ScoredResult) []requeststore.ScoredRow {
+	out := make([]requeststore.ScoredRow, len(explained))
 	for i, s := range explained {
 		rows := requeststore.ProjectResults([]domain.SearchResult{s.Result})
-		out[i] = adminHandler.ScoredRow{
+		out[i] = requeststore.ScoredRow{
 			ResultRow:   rows[0],
 			Relevance:   s.Relevance,
 			Prominence:  s.Prominence,
