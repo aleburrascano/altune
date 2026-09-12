@@ -57,7 +57,7 @@ func TestRunTicker_LeaderHandoff_OldLeaderStopsRunning(t *testing.T) {
 	newApp := &App{election: newE}
 
 	var oldRuns, newRuns atomic.Int32
-	oldApp.runTicker(ctx, "metrics rollup", tick, func() { oldRuns.Add(1) })
+	oldApp.runTicker(ctx, "metrics rollup", tick, func() error { oldRuns.Add(1); return nil })
 
 	// The old instance is the sole leader: it must be running the job.
 	waitForAtLeast(t, &oldRuns, 3)
@@ -66,7 +66,7 @@ func TestRunTicker_LeaderHandoff_OldLeaderStopsRunning(t *testing.T) {
 	// and starts its own copy of the same job.
 	oldE.leader.Store(false)
 	newE.leader.Store(true)
-	newApp.runTicker(ctx, "metrics rollup", tick, func() { newRuns.Add(1) })
+	newApp.runTicker(ctx, "metrics rollup", tick, func() error { newRuns.Add(1); return nil })
 
 	// Let any in-flight tick on the old instance drain.
 	time.Sleep(30 * tick)

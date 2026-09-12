@@ -28,12 +28,13 @@ func TestRunTicker_RecoversFromPanickingJob(t *testing.T) {
 	var calls atomic.Int32
 	ran := make(chan struct{}, 8)
 	a := &App{}
-	a.runTicker(ctx, "explode", time.Millisecond, func() {
+	a.runTicker(ctx, "explode", time.Millisecond, func() error {
 		n := calls.Add(1)
 		ran <- struct{}{}
 		if n == 1 {
 			panic("boom")
 		}
+		return nil
 	})
 
 	<-ran // first (immediate) invocation panics; without recover() this kills the process
@@ -46,6 +47,12 @@ func TestRunTicker_RecoversFromPanickingJob(t *testing.T) {
 	}
 	if !strings.Contains(logged, "boom") {
 		t.Errorf("panic log did not include the panic value, got: %q", logged)
+	}
+
+	// A contained panic must still register as a failed run in the health signal
+	// rather than vanishing silently.
+	if failures := a.job("explode").failures.Load(); failures == 0 {
+		t.Error("a recovered panic did not count toward the job's failure signal")
 	}
 }
 
