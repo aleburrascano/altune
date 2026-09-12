@@ -120,19 +120,11 @@ func (a *SpotifyAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderNa
 }
 
 func (a *SpotifyAdapter) pathfinderContent(ctx context.Context, operationName, hash string, vars map[string]any, out any) error {
-	sess, err := a.resolver.get(ctx)
-	if err != nil {
-		return fmt.Errorf("resolve spotify session: %w", err)
-	}
-	status, err := a.doPathfinderContent(ctx, sess, operationName, hash, vars, out)
-	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate(sess)
-		sess, err = a.resolver.get(ctx)
-		if err != nil {
-			return fmt.Errorf("re-resolve spotify session: %w", err)
-		}
-		_, err = a.doPathfinderContent(ctx, sess, operationName, hash, vars, out)
-	}
+	_, err := withAuthRetry(ctx, a.resolver.cachedResolver,
+		func(ctx context.Context, sess *spotifySession) (struct{}, int, error) {
+			status, err := a.doPathfinderContent(ctx, sess, operationName, hash, vars, out)
+			return struct{}{}, status, err
+		})
 	return err
 }
 

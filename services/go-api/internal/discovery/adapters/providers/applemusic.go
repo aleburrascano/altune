@@ -56,21 +56,10 @@ func (a *AppleMusicAdapter) Search(ctx context.Context, query string, kinds map[
 		return nil, nil
 	}
 
-	token, err := a.resolver.get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("resolve apple music token: %w", err)
-	}
-
-	results, status, err := a.doSearch(ctx, token, query, types)
-	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate(token)
-		token, err = a.resolver.get(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("re-resolve apple music token: %w", err)
-		}
-		results, _, err = a.doSearch(ctx, token, query, types)
-	}
-	return results, err
+	return withAuthRetry(ctx, a.resolver.cachedResolver,
+		func(ctx context.Context, token string) ([]domain.SearchResult, int, error) {
+			return a.doSearch(ctx, token, query, types)
+		})
 }
 
 func appleMusicTypesParam(kinds map[domain.ResultKind]bool) string {
@@ -127,19 +116,10 @@ func (a *AppleMusicAdapter) doSearch(ctx context.Context, token, query, types st
 }
 
 func (a *AppleMusicAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	token, err := a.resolver.get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("resolve apple music token: %w", err)
-	}
-	songs, status, err := a.fetchAlbumTracks(ctx, token, externalID)
-	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate(token)
-		token, err = a.resolver.get(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("re-resolve apple music token: %w", err)
-		}
-		songs, _, err = a.fetchAlbumTracks(ctx, token, externalID)
-	}
+	songs, err := withAuthRetry(ctx, a.resolver.cachedResolver,
+		func(ctx context.Context, token string) ([]appleMusicSong, int, error) {
+			return a.fetchAlbumTracks(ctx, token, externalID)
+		})
 	if err != nil {
 		return nil, err
 	}

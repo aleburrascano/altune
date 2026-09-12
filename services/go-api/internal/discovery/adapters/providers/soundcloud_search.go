@@ -57,20 +57,10 @@ func (a *SoundCloudAPIAdapter) Search(ctx context.Context, query string, kinds m
 }
 
 func (a *SoundCloudAPIAdapter) searchTracks(ctx context.Context, query string) ([]domain.SearchResult, error) {
-	id, err := a.resolver.get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("resolve client_id: %w", err)
-	}
-
-	results, status, err := a.doSearch(ctx, id, query)
-	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate(id)
-		id, err = a.resolver.get(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("re-resolve client_id: %w", err)
-		}
-		results, _, err = a.doSearch(ctx, id, query)
-	}
+	results, err := withAuthRetry(ctx, a.resolver.cachedResolver,
+		func(ctx context.Context, id string) ([]domain.SearchResult, int, error) {
+			return a.doSearch(ctx, id, query)
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -264,21 +254,10 @@ func (a *SoundCloudAPIAdapter) searchArtworkTracks(ctx context.Context, query st
 }
 
 func (a *SoundCloudAPIAdapter) ResolvePermalink(ctx context.Context, permalink string) (*domain.SearchResult, error) {
-	id, err := a.resolver.get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("resolve client_id: %w", err)
-	}
-
-	result, status, err := a.doResolve(ctx, id, permalink)
-	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate(id)
-		id, err = a.resolver.get(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("re-resolve client_id: %w", err)
-		}
-		result, _, err = a.doResolve(ctx, id, permalink)
-	}
-	return result, err
+	return withAuthRetry(ctx, a.resolver.cachedResolver,
+		func(ctx context.Context, id string) (*domain.SearchResult, int, error) {
+			return a.doResolve(ctx, id, permalink)
+		})
 }
 
 func (a *SoundCloudAPIAdapter) doResolve(ctx context.Context, clientID, permalink string) (*domain.SearchResult, int, error) {

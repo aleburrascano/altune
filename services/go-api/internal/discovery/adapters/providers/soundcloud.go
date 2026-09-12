@@ -53,19 +53,11 @@ func (a *SoundCloudAPIAdapter) SupportedKinds() map[domain.ResultKind]bool {
 func (a *SoundCloudAPIAdapter) SearchTimeout() time.Duration { return scSearchTimeout }
 
 func (a *SoundCloudAPIAdapter) resolveAndFetch(ctx context.Context, fetch func(clientID string) (int, error)) error {
-	id, err := a.resolver.get(ctx)
-	if err != nil {
-		return fmt.Errorf("resolve client_id: %w", err)
-	}
-	status, err := fetch(id)
-	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate(id)
-		id, err = a.resolver.get(ctx)
-		if err != nil {
-			return fmt.Errorf("re-resolve client_id: %w", err)
-		}
-		_, err = fetch(id)
-	}
+	_, err := withAuthRetry(ctx, a.resolver.cachedResolver,
+		func(_ context.Context, id string) (struct{}, int, error) {
+			status, ferr := fetch(id)
+			return struct{}{}, status, ferr
+		})
 	return err
 }
 
