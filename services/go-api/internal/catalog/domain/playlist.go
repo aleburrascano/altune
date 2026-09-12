@@ -117,7 +117,7 @@ func (p *Playlist) RemoveTrack(trackId TrackId) bool {
 
 func (p *Playlist) Reorder(trackIds []TrackId) error {
 	if len(trackIds) != len(p.Tracks) {
-		return &ValidationError{Message: "track list length mismatch"}
+		return NewValidationError("track list length mismatch")
 	}
 
 	existing := make(map[TrackId]bool)
@@ -127,10 +127,10 @@ func (p *Playlist) Reorder(trackIds []TrackId) error {
 	seen := make(map[TrackId]bool)
 	for _, id := range trackIds {
 		if !existing[id] {
-			return &ValidationError{Message: "unknown track in reorder list"}
+			return NewValidationError("unknown track in reorder list")
 		}
 		if seen[id] {
-			return &ValidationError{Message: "duplicate track in reorder list"}
+			return NewValidationError("duplicate track in reorder list")
 		}
 		seen[id] = true
 	}
@@ -146,10 +146,10 @@ func (p *Playlist) Reorder(trackIds []TrackId) error {
 
 func validatePlaylistName(name string) error {
 	if name == "" {
-		return &ValidationError{Message: "playlist name required"}
+		return NewValidationError("playlist name required")
 	}
 	if len(name) > 100 {
-		return &ValidationError{Message: "playlist name exceeds 100 characters"}
+		return NewValidationError("playlist name exceeds 100 characters")
 	}
 	return nil
 }

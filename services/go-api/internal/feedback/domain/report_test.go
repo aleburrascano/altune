@@ -96,7 +96,7 @@ func TestReportTitle_UsesFirstLineOnly(t *testing.T) {
 }
 
 func TestFeedbackValidationErrorCode(t *testing.T) {
-	if got := (&ValidationError{Message: "x"}).ErrorCode(); got != "feedback.validation_error" {
+	if got := NewValidationError("x").ErrorCode(); got != "feedback.validation_error" {
 		t.Errorf("code: got %q, want %q", got, "feedback.validation_error")
 	}
 }

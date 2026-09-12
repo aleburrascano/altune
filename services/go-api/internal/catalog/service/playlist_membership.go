@@ -91,7 +91,7 @@ func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId shared.
 
 func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) (int, error) {
 	if len(trackIds) > MaxPlaylistBatchSize {
-		return 0, &domain.ValidationError{Message: "too many tracks in one request"}
+		return 0, domain.NewValidationError("too many tracks in one request")
 	}
 
 	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "add tracks to playlist")
@@ -162,7 +162,7 @@ func (s *PlaylistMembershipService) RemoveTrack(ctx context.Context, userId shar
 
 func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) (int, error) {
 	if len(trackIds) > MaxPlaylistBatchSize {
-		return 0, &domain.ValidationError{Message: "too many tracks in one request"}
+		return 0, domain.NewValidationError("too many tracks in one request")
 	}
 
 	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "remove tracks from playlist")

@@ -87,7 +87,7 @@ func PackSourceId(source QueueSource, fallback string) (string, error) {
 		return fallback, nil
 	}
 	if !source.hasKnownKind() {
-		return "", &ValidationError{Message: fmt.Sprintf("unknown queue source kind: %q", source.Kind)}
+		return "", NewValidationError(fmt.Sprintf("unknown queue source kind: %q", source.Kind))
 	}
 	formatted := source.Format()
 	if formatted == "" {

@@ -46,7 +46,7 @@ func (s *LibraryLensService) Artists(
 	query domain.LibraryQuery,
 ) ([]domain.ArtistGroup, error) {
 	if query.Sort == domain.SortYear {
-		return nil, &domain.ValidationError{Message: "artists cannot be sorted by year"}
+		return nil, domain.NewValidationError("artists cannot be sorted by year")
 	}
 	query = clampLibraryLimit(query)
 	artists, err := s.trackRepo.ListArtistsForUser(ctx, userId, query)

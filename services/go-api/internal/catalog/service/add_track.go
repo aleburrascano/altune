@@ -115,13 +115,13 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 
 func validateAddTrackInput(input AddTrackInput) error {
 	if input.TrackNumber != nil && *input.TrackNumber <= 0 {
-		return &domain.ValidationError{Message: "track_number must be positive"}
+		return domain.NewValidationError("track_number must be positive")
 	}
 	if input.DurationSeconds != nil && *input.DurationSeconds < 0 {
-		return &domain.ValidationError{Message: "duration_seconds must not be negative"}
+		return domain.NewValidationError("duration_seconds must not be negative")
 	}
 	if input.Year != nil && !plausibleYear(*input.Year) {
-		return &domain.ValidationError{Message: "year is implausible"}
+		return domain.NewValidationError("year is implausible")
 	}
 	return nil
 }
