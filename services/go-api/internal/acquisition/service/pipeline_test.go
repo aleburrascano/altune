@@ -10,6 +10,7 @@ import (
 type mockStep struct {
 	name         string
 	executeErr   error
+	executePanic any
 	rollbackErr  error
 	executed     bool
 	rolledBack   bool
@@ -26,6 +27,9 @@ func (s *mockStep) Execute(_ context.Context, _ *AcquisitionContext) error {
 	s.executed = true
 	if s.executionLog != nil {
 		*s.executionLog = append(*s.executionLog, "execute:"+s.name)
+	}
+	if s.executePanic != nil {
+		panic(s.executePanic)
 	}
 	return s.executeErr
 }
@@ -221,5 +225,61 @@ func TestRunPipeline_SecondStepFails_OnlyFirstRolledBack(t *testing.T) {
 	}
 	if s3.rolledBack {
 		t.Error("step 3 should NOT have been rolled back (never executed)")
+	}
+}
+
+// TestRunPipeline_StepPanic_RollsBackAndReturnsStepError reproduces the defect
+// where a panic mid-pipeline skipped rollback and propagated out, leaving the
+// track stranded at Pending. RunPipeline must recover the panic, roll back the
+// completed steps in reverse, and return it as a *StepError so acquire.go's
+// normal failure path can mark the track Failed.
+func TestRunPipeline_StepPanic_RollsBackAndReturnsStepError(t *testing.T) {
+	var log []string
+	s1 := newMockStep("search", &log)
+	s2 := newMockStep("select", &log)
+	s3 := newMockStep("download", &log)
+	s3.executePanic = "boom: nil map write"
+
+	steps := []Step{s1, s2, s3}
+	ac := &AcquisitionContext{}
+
+	err := RunPipeline(context.Background(), steps, ac)
+
+	if err == nil {
+		t.Fatal("expected a returned error from a panicking step, got nil (panic propagated instead)")
+	}
+
+	var stepErr *StepError
+	if !errors.As(err, &stepErr) {
+		t.Fatalf("error = %T (%v), want *StepError", err, err)
+	}
+	if stepErr.Step != "download" {
+		t.Errorf("StepError.Step = %q, want %q", stepErr.Step, "download")
+	}
+
+	if !s1.rolledBack {
+		t.Error("step 1 (search) should have been rolled back after the panic")
+	}
+	if !s2.rolledBack {
+		t.Error("step 2 (select) should have been rolled back after the panic")
+	}
+	if s3.rolledBack {
+		t.Error("step 3 (download) should NOT have been rolled back (it panicked mid-execute, never completed)")
+	}
+
+	wantLog := []string{
+		"execute:search",
+		"execute:select",
+		"execute:download",
+		"rollback:select",
+		"rollback:search",
+	}
+	if len(log) != len(wantLog) {
+		t.Fatalf("execution log = %v, want %v", log, wantLog)
+	}
+	for i, entry := range wantLog {
+		if log[i] != entry {
+			t.Errorf("execution log[%d] = %q, want %q\nfull log: %v", i, log[i], entry, log)
+		}
 	}
 }

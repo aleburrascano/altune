@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
@@ -24,27 +25,48 @@ type StepError struct {
 func (e *StepError) Error() string { return fmt.Sprintf("step %s: %v", e.Step, e.Err) }
 func (e *StepError) Unwrap() error { return e.Err }
 
-func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) error {
+func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) (err error) {
 	var completed []Step
+	var current Step
 	reporter := jobReporterFrom(ctx)
 
-	for _, step := range steps {
-		if err := ctx.Err(); err != nil {
+	// A panic in any step must not skip rollback or propagate past this use
+	// case: scheduler.go's recover is a last resort that bypasses acquire.go's
+	// "mark track Failed" path, stranding the track at Pending forever. Mirror
+	// registry.go's per-goroutine recover here — convert the panic into a
+	// *StepError and roll back the completed steps so the normal failure path
+	// runs.
+	defer func() {
+		if rec := recover(); rec != nil {
+			step := "pipeline"
+			if current != nil {
+				step = current.Name()
+			}
+			slog.ErrorContext(ctx, "pipeline step panicked",
+				"step", step, "track_id", ac.Track.ID, "panic", rec, "stack", string(debug.Stack()))
 			rollback(ctx, completed, ac)
-			return fmt.Errorf("pipeline cancelled: %w", err)
+			err = &StepError{Step: step, Err: fmt.Errorf("panic: %v", rec)}
+		}
+	}()
+
+	for _, step := range steps {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			rollback(ctx, completed, ac)
+			return fmt.Errorf("pipeline cancelled: %w", ctxErr)
 		}
 
+		current = step
 		reporter.stage(step.Name())
 		if ac.Selected != nil {
 			reporter.source(ac.Selected.URL)
 		}
 		slog.InfoContext(ctx, "pipeline step starting", "step", step.Name(), "track_id", ac.Track.ID)
 
-		if err := step.Execute(ctx, ac); err != nil {
+		if execErr := step.Execute(ctx, ac); execErr != nil {
 			slog.ErrorContext(ctx, "pipeline step failed",
-				"step", step.Name(), "track_id", ac.Track.ID, "error", err)
+				"step", step.Name(), "track_id", ac.Track.ID, "error", execErr)
 			rollback(ctx, completed, ac)
-			return &StepError{Step: step.Name(), Err: err}
+			return &StepError{Step: step.Name(), Err: execErr}
 		}
 
 		completed = append(completed, step)
