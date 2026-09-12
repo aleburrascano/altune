@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/textnorm"
 )
 
 type StoreStep struct {
@@ -65,20 +66,44 @@ func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error 
 	return nil
 }
 
+// BuildAudioRef builds the canonical storage path for a freshly acquired track.
+// Metadata segments are canonicalized (NFKC, case-fold, diacritic-strip) so the
+// same artist in different case/Unicode form resolves to one physical folder.
 func BuildAudioRef(track TrackRef, tempPath string) string {
-	artist := sanitizePathComponent(track.Artist)
+	return buildAudioRef(track, tempPath, normalizePathComponent)
+}
+
+// BuildLegacyAudioRef reproduces the pre-normalization layout (case-preserving,
+// reserved-char-stripped only). cmd/backfillaudio uses it to locate objects that
+// were stored before BuildAudioRef began normalizing; migrating those objects to
+// the canonical layout is a separate data-migration task.
+func BuildLegacyAudioRef(track TrackRef, tempPath string) string {
+	return buildAudioRef(track, tempPath, sanitizePathComponent)
+}
+
+func buildAudioRef(track TrackRef, tempPath string, segment func(string) string) string {
+	artist := segment(track.Artist)
 	album := track.Album
 	if album == "" {
 		album = "Unknown Album"
 	}
-	album = sanitizePathComponent(album)
-	title := sanitizePathComponent(track.Title)
+	album = segment(album)
+	title := segment(track.Title)
 
 	ext := filepath.Ext(tempPath)
 	if ext == "" {
 		ext = ".mp3"
 	}
 	return strings.Join([]string{track.UserID, artist, album, title + ext}, "/")
+}
+
+// normalizePathComponent canonicalizes a metadata field into a stable path
+// segment. It applies the same normalization used for matching (NFKC,
+// case-fold, diacritic-strip) so that textually-equivalent-but-differently-
+// cased/composed values map to one physical folder, then strips any
+// filesystem-reserved characters that remain.
+func normalizePathComponent(s string) string {
+	return sanitizePathComponent(textnorm.NormalizeForMatch(s))
 }
 
 func sanitizePathComponent(s string) string {

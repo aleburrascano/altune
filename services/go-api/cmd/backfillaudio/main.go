@@ -24,16 +24,16 @@ import (
 var extensions = []string{".mp3", ".m4a", ".opus", ".ogg"}
 
 type options struct {
-	album string
-	user  string
+	album  string
+	user   string
 	apply  bool
 	list   bool
 	verify bool
 }
 
 type candidate struct {
-	trackID domain.TrackId
-	userID  shared.UserId
+	trackID   domain.TrackId
+	userID    shared.UserId
 	title     string
 	artist    string
 	album     string
@@ -237,10 +237,10 @@ func candidateRefs(c candidate) []string {
 
 	refs := make([]string, 0, 2*len(extensions))
 	for _, ext := range extensions {
-		refs = append(refs, acquisitionService.BuildAudioRef(owned, "audio"+ext))
+		refs = append(refs, acquisitionService.BuildLegacyAudioRef(owned, "audio"+ext))
 	}
 	for _, ext := range extensions {
-		refs = append(refs, strings.TrimPrefix(acquisitionService.BuildAudioRef(flat, "audio"+ext), "/"))
+		refs = append(refs, strings.TrimPrefix(acquisitionService.BuildLegacyAudioRef(flat, "audio"+ext), "/"))
 	}
 	return refs
 }

@@ -1,11 +1,10 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/ports"
-
 	"strings"
 	"testing"
 
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -200,31 +199,31 @@ func TestAcqStage_BuildAudioRef(t *testing.T) {
 			name:     "basic",
 			track:    TrackRef{UserID: "user-1", Artist: "The Weeknd", Album: "After Hours", Title: "Blinding Lights"},
 			tempPath: "/tmp/acquire/Blinding Lights.mp3",
-			want:     "user-1/The Weeknd/After Hours/Blinding Lights.mp3",
+			want:     "user-1/the weeknd/after hours/blinding lights.mp3",
 		},
 		{
 			name:     "empty album uses unknown",
 			track:    TrackRef{UserID: "user-1", Artist: "Drake", Album: "", Title: "God's Plan"},
 			tempPath: "/tmp/acquire/God's Plan.mp3",
-			want:     "user-1/Drake/Unknown Album/God's Plan.mp3",
+			want:     "user-1/drake/unknown album/gods plan.mp3",
 		},
 		{
-			name:     "special chars stripped",
+			name:     "special chars stripped and normalized",
 			track:    TrackRef{UserID: "user-1", Artist: "AC/DC", Album: "Back in Black", Title: "Thunderstruck"},
 			tempPath: "/tmp/acquire/Thunderstruck.mp3",
-			want:     "user-1/ACDC/Back in Black/Thunderstruck.mp3",
+			want:     "user-1/ac dc/back in black/thunderstruck.mp3",
 		},
 		{
 			name:     "extension follows downloaded file",
 			track:    TrackRef{UserID: "user-1", Artist: "Drake", Album: "Views", Title: "One Dance"},
 			tempPath: "/tmp/acquire/One Dance.m4a",
-			want:     "user-1/Drake/Views/One Dance.m4a",
+			want:     "user-1/drake/views/one dance.m4a",
 		},
 		{
 			name:     "no extension falls back to mp3",
 			track:    TrackRef{UserID: "user-1", Artist: "Drake", Album: "Views", Title: "One Dance"},
 			tempPath: "",
-			want:     "user-1/Drake/Views/One Dance.mp3",
+			want:     "user-1/drake/views/one dance.mp3",
 		},
 	}
 
