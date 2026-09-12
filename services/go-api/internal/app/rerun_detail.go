@@ -1,12 +1,12 @@
 package app
 
 import (
+	"altune/go-api/internal/admin/requeststore"
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"log/slog"
 	"time"
 
-	adminHandler "altune/go-api/internal/admin/handler"
-	"altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
 )
 
@@ -38,20 +38,20 @@ type rawSeed struct {
 	items      []domain.SearchResult
 }
 
-func (dr *detailReRunner) ReRunDetail(ctx context.Context, query string) (adminHandler.DetailReRunResult, error) {
+func (dr *detailReRunner) ReRunDetail(ctx context.Context, query string) (requeststore.DetailReRunResult, error) {
 	start := time.Now()
 	entity, ok, err := dr.resolveTopArtist(ctx, query)
 	if err != nil {
-		return adminHandler.DetailReRunResult{}, err
+		return requeststore.DetailReRunResult{}, err
 	}
 	if !ok {
-		return adminHandler.DetailReRunResult{Query: query, TookMs: time.Since(start).Milliseconds()}, nil
+		return requeststore.DetailReRunResult{Query: query, TookMs: time.Since(start).Milliseconds()}, nil
 	}
 
 	byProvider := seedIDsByProvider(entity.Sources)
 	albumSeeds, trackSeeds := dr.fanOutSeeds(ctx, byProvider, entity)
 
-	return adminHandler.DetailReRunResult{
+	return requeststore.DetailReRunResult{
 		Query:      query,
 		Resolved:   detailEntity(entity, byProvider),
 		AlbumSeeds: projectSeeds(albumSeeds),
