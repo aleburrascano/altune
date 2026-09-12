@@ -42,7 +42,10 @@ type rawSeed struct {
 
 func (dr *detailReRunner) ReRunDetail(ctx context.Context, query string) (adminHandler.DetailReRunResult, error) {
 	start := time.Now()
-	entity, ok := dr.resolveTopArtist(ctx, query)
+	entity, ok, err := dr.resolveTopArtist(ctx, query)
+	if err != nil {
+		return adminHandler.DetailReRunResult{}, err
+	}
 	if !ok {
 		return adminHandler.DetailReRunResult{Query: query, TookMs: time.Since(start).Milliseconds()}, nil
 	}
@@ -69,17 +72,17 @@ func (dr *detailReRunner) fanOutSeeds(ctx context.Context, byProvider map[string
 	return albumSeeds, trackSeeds
 }
 
-func (dr *detailReRunner) resolveTopArtist(ctx context.Context, query string) (domain.SearchResult, bool) {
+func (dr *detailReRunner) resolveTopArtist(ctx context.Context, query string) (domain.SearchResult, bool, error) {
 	sq, err := domain.NewSearchQuery(query, map[domain.ResultKind]bool{domain.ResultKindArtist: true}, detailRerunSearchLimit)
 	if err != nil {
-		return domain.SearchResult{}, false
+		return domain.SearchResult{}, false, err
 	}
 	for _, r := range dr.searchSvc.InspectSearch(ctx, sq) {
 		if r.Kind == domain.ResultKindArtist {
-			return r, true
+			return r, true, nil
 		}
 	}
-	return domain.SearchResult{}, false
+	return domain.SearchResult{}, false, nil
 }
 
 func (dr *detailReRunner) albumFanOut(ctx context.Context, byProvider map[string]string, name string) []rawSeed {
