@@ -41,6 +41,9 @@ do_vuln() {
 }
 
 do_nilaway() {
+  # The count is platform-specific (build-tagged files differ per GOOS), so the
+  # ceiling in nilaway-baseline.txt is the CI Linux/amd64 number. On Windows the
+  # local count is lower, so this passes locally; CI is the authoritative gate.
   echo "== nilaway ceiling ratchet =="
   have nilaway || go install "go.uber.org/nilaway/cmd/nilaway@${NILAWAY_VERSION}"
   local base count

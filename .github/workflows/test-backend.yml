@@ -73,6 +73,8 @@ jobs:
       # the mobile react-doctor warning ceiling: findings may not exceed the count
       # in nilaway-baseline.txt. Lower that number when you fix one; never raise
       # it to go green. nilaway is not a golangci-lint linter, hence a own step.
+      # The baseline is the Linux/amd64 count — nilaway analyses build-tagged files
+      # per GOOS, so this runner is the source of truth (local Windows counts less).
       - name: nilaway ceiling
         run: |
           go install go.uber.org/nilaway/cmd/nilaway@571480214735
