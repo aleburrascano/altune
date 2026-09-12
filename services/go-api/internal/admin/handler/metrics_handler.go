@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
@@ -11,11 +10,7 @@ import (
 
 const defaultMetricsHistoryDays = 30
 
-type MetricsHistoryReader interface {
-	MetricsHistory(ctx context.Context, metric string, days int) ([]ports.MetricPoint, error)
-}
-
-func (h *AdminHandler) WithMetricsHistory(m MetricsHistoryReader) *AdminHandler {
+func (h *AdminHandler) WithMetricsHistory(m ports.MetricsRollupStore) *AdminHandler {
 	h.metricsHistory = m
 	return h
 }
