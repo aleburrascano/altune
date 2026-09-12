@@ -36,6 +36,34 @@ func TestLoad_MissingJWKSURL(t *testing.T) {
 	}
 }
 
+func TestLoad_SupabaseJWKSURLMalformed(t *testing.T) {
+	tests := []struct {
+		name    string
+		jwksURL string
+	}{
+		{name: "no scheme", jwksURL: "example.supabase.co/jwks"},
+		{name: "no host", jwksURL: "https://"},
+		{name: "bare path", jwksURL: "/auth/v1/.well-known/jwks.json"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, map[string]string{
+				"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+				"SUPABASE_JWT_JWKS_URL": tt.jwksURL,
+				"SUPABASE_ANON_KEY":     "anon-key",
+			})
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error for malformed SUPABASE_JWT_JWKS_URL")
+			}
+			if !searchString(err.Error(), "SUPABASE_JWT_JWKS_URL") {
+				t.Errorf("expected error to name SUPABASE_JWT_JWKS_URL, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestLoad_SupabaseProjectURLMissingOrMalformed(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -1,6 +1,28 @@
 package app
 
 import (
+	"altune/go-api/internal/acquisition/adapters/chromaprint"
+	"altune/go-api/internal/acquisition/adapters/id3"
+	"altune/go-api/internal/acquisition/adapters/streamrip"
+	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/acquisition/adapters/ytmusic"
+	"altune/go-api/internal/admin/evalmeter"
+	"altune/go-api/internal/admin/eventtap"
+	"altune/go-api/internal/admin/providerhealth"
+	"altune/go-api/internal/admin/requeststore"
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/catalog/adapters/discoverybridge"
+	"altune/go-api/internal/catalog/adapters/persistence"
+	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/service/eval"
+	"altune/go-api/internal/playback/adapters/catalogbridge"
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/leader"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
@@ -12,52 +34,39 @@ import (
 	"syscall"
 	"time"
 
-	"altune/go-api/internal/acquisition/adapters/chromaprint"
 	acqDiscoveryBridge "altune/go-api/internal/acquisition/adapters/discoverybridge"
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
-	"altune/go-api/internal/acquisition/adapters/id3"
-	"altune/go-api/internal/acquisition/adapters/streamrip"
-	"altune/go-api/internal/acquisition/adapters/ytdlp"
-	"altune/go-api/internal/acquisition/adapters/ytmusic"
+
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
 	adminAlert "altune/go-api/internal/admin/alert"
-	"altune/go-api/internal/admin/evalmeter"
-	"altune/go-api/internal/admin/eventtap"
+
 	adminHandler "altune/go-api/internal/admin/handler"
-	"altune/go-api/internal/admin/providerhealth"
-	"altune/go-api/internal/admin/requeststore"
-	"altune/go-api/internal/auth"
+
 	authAdapters "altune/go-api/internal/auth/adapters"
-	"altune/go-api/internal/catalog/adapters/discoverybridge"
+
 	catalogHandler "altune/go-api/internal/catalog/adapters/handler"
 	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
-	"altune/go-api/internal/catalog/adapters/persistence"
-	"altune/go-api/internal/catalog/adapters/storage"
+
 	catalogPorts "altune/go-api/internal/catalog/ports"
 	catalogService "altune/go-api/internal/catalog/service"
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-	"altune/go-api/internal/discovery/adapters/providers"
+
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
-	"altune/go-api/internal/discovery/service/eval"
+
 	feedbackGithub "altune/go-api/internal/feedback/adapters/github"
 	feedbackHandler "altune/go-api/internal/feedback/adapters/handler"
 	feedbackService "altune/go-api/internal/feedback/service"
-	"altune/go-api/internal/playback/adapters/catalogbridge"
+
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	playbackPersistence "altune/go-api/internal/playback/adapters/persistence"
 	playbackService "altune/go-api/internal/playback/service"
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/database"
-	"altune/go-api/internal/shared/events"
-	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/leader"
-	"altune/go-api/internal/shared/logging"
+
 	sharedRedis "altune/go-api/internal/shared/redis"
 
 	"github.com/go-chi/chi/v5"
@@ -70,6 +79,7 @@ type App struct {
 	cfg            *config.Config
 	pool           *pgxpool.Pool
 	redisClient    *goredis.Client
+	authVerifier   authHealthChecker
 	server         *http.Server
 	wg             sync.WaitGroup
 	sem            chan struct{}
@@ -188,6 +198,7 @@ func (a *App) setup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("auth: %w", err)
 	}
+	a.authVerifier = verifier
 
 	a.eventBus = events.NewInProcessBus()
 	tap := eventtap.New(a.eventBus)
