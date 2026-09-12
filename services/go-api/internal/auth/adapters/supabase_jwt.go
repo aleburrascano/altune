@@ -1,15 +1,14 @@
 package adapters
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/shared"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -35,7 +34,7 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 		slog.Warn("initial JWKS fetch failed, will retry on first request", "error", err)
 	}
 
-	issuer := projectURL + "/auth/v1"
+	issuer := strings.TrimRight(projectURL, "/") + "/auth/v1"
 
 	return &SupabaseJWTVerifier{
 		cache:    cache,

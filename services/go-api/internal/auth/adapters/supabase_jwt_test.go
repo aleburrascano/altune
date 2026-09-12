@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"altune/go-api/internal/auth"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -10,8 +11,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/auth"
 
 	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -117,6 +116,33 @@ func TestSupabaseJWTVerifier_ValidToken(t *testing.T) {
 	userID, err := verifier.Verify(context.Background(), token)
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
+	}
+	if userID.String() != sub {
+		t.Errorf("userId: got %q, want %q", userID.String(), sub)
+	}
+}
+
+func TestSupabaseJWTVerifier_ProjectURLTrailingSlash(t *testing.T) {
+	f := newTestJWTFixture(t)
+
+	ctx := context.Background()
+	verifier, err := NewSupabaseJWTVerifier(ctx, f.jwksServer.URL, f.projectURL+"/", f.audience)
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+
+	sub := uuid.New().String()
+	token := f.signToken(t, map[string]interface{}{
+		"sub": sub,
+		"iss": f.issuer,
+		"aud": f.audience,
+		"exp": time.Now().Add(1 * time.Hour),
+		"iat": time.Now().Add(-1 * time.Minute),
+	})
+
+	userID, err := verifier.Verify(ctx, token)
+	if err != nil {
+		t.Fatalf("Verify with trailing-slash project URL: %v", err)
 	}
 	if userID.String() != sub {
 		t.Errorf("userId: got %q, want %q", userID.String(), sub)
