@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"altune/go-api/internal/admin/requeststore"
@@ -40,19 +39,13 @@ func (h *AdminHandler) WithReRunner(r ReRunner) *AdminHandler {
 	return h
 }
 
-type reRunRequest struct {
-	Query string   `json:"query"`
-	Kinds []string `json:"kinds"`
-}
-
 func (h *AdminHandler) serveReRun(w http.ResponseWriter, r *http.Request) {
 	if h.reRunner == nil {
 		httputil.WriteError(w, http.StatusServiceUnavailable, "re-run inspector not configured")
 		return
 	}
-	var body reRunRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Query == "" {
-		httputil.WriteError(w, http.StatusBadRequest, "query is required")
+	body, ok := decodeQuery(w, r)
+	if !ok {
 		return
 	}
 	result, err := h.reRunner.ReRun(r.Context(), body.Query, body.Kinds)
