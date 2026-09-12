@@ -44,7 +44,6 @@ func TestSearchStep_Execute(t *testing.T) {
 	}
 
 	err := step.Execute(context.Background(), ac)
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -130,7 +129,6 @@ func TestSearchStep_Execute_DeduplicatesByURL(t *testing.T) {
 	}
 
 	err := step.Execute(context.Background(), ac)
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -167,7 +165,6 @@ func TestSelectStep_Execute(t *testing.T) {
 	}
 
 	err := step.Execute(context.Background(), ac)
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -240,14 +237,13 @@ func TestStoreStep_Execute(t *testing.T) {
 	}
 
 	err := step.Execute(context.Background(), ac)
-
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if ac.AudioRef == "" {
 		t.Fatal("expected ac.AudioRef to be set, got empty string")
 	}
-	wantRef := "user-123/Artist Name/Album Name/Song Title.mp3"
+	wantRef := "user-123/artist name/album name/song title.mp3"
 	if ac.AudioRef != wantRef {
 		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, wantRef)
 	}
@@ -319,7 +315,6 @@ func TestStoreStep_Rollback_DeletesStoredAudio(t *testing.T) {
 	}
 
 	err := step.Rollback(context.Background(), ac)
-
 	if err != nil {
 		t.Fatalf("expected no error on rollback, got %v", err)
 	}
@@ -417,7 +412,6 @@ func TestUpdateTrackStep_Rollback_RevertsToPending(t *testing.T) {
 	ac := &AcquisitionContext{}
 
 	err := step.Rollback(context.Background(), ac)
-
 	if err != nil {
 		t.Fatalf("expected no error on rollback, got %v", err)
 	}
@@ -448,7 +442,7 @@ func TestBuildAudioRef(t *testing.T) {
 				Album:  "After Hours",
 				Title:  "Blinding Lights",
 			},
-			want: "uid/The Weeknd/After Hours/Blinding Lights.mp3",
+			want: "uid/the weeknd/after hours/blinding lights.mp3",
 		},
 		{
 			name: "empty album defaults to Unknown Album",
@@ -458,17 +452,17 @@ func TestBuildAudioRef(t *testing.T) {
 				Album:  "",
 				Title:  "Song",
 			},
-			want: "uid/Artist/Unknown Album/Song.mp3",
+			want: "uid/artist/unknown album/song.mp3",
 		},
 		{
-			name: "forbidden chars stripped",
+			name: "forbidden chars stripped and case/unicode normalized",
 			track: TrackRef{
 				UserID: "uid",
 				Artist: "AC/DC",
 				Album:  `The "Best" Album`,
 				Title:  "Song: Title?",
 			},
-			want: "uid/ACDC/The Best Album/Song Title.mp3",
+			want: "uid/ac dc/the best album/song title.mp3",
 		},
 	}
 
