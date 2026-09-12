@@ -88,6 +88,7 @@ type App struct {
 	sem             chan struct{}
 	scheduler       *acqService.BackgroundAcquisitionScheduler
 	vocabRefresh    *discoveryService.VocabularyRefreshService
+	searchSvc       *discoveryService.Service
 	eventBus        *events.InProcessBus
 	alertMonitor    *adminAlert.Monitor
 	logRing         *logging.RingBuffer
@@ -171,6 +172,7 @@ func (a *App) Run(ctx context.Context) error {
 			}
 		}),
 		a.drainBackground(30 * time.Second),
+		a.drainSearchBackground(30 * time.Second),
 	}
 
 	if unstopped := unfinishedShutdowns(outcomes); len(unstopped) > 0 {

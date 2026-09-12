@@ -2,9 +2,8 @@ package app
 
 import (
 	"context"
-	"time"
-
 	"log/slog"
+	"time"
 
 	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/admin/requeststore"
@@ -170,6 +169,11 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		vocabStore,
 		false,
 	)
+	// The search service owns detached background work (identity-bridge
+	// persistence, telemetry emit, vocab ingest) on context.WithoutCancel, so it
+	// outlives request cancellation. Hold the reference so Run()'s shutdown can
+	// drain it via WaitForBackground() before cleanup() closes the pool/Redis.
+	a.searchSvc = searchSvc
 
 	if a.cfg.BehavioralRankingEnabled {
 		a.whenLeader(func(ctx context.Context) {
