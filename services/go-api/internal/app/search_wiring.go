@@ -38,13 +38,7 @@ func BuildSearchServiceWithTransport(
 ) *discoveryService.Service {
 	cf := clientFactory{transport: transport}
 
-	var sharedMB *providers.MusicBrainzAdapter
-	if cfg.HasMusicBrainz() {
-		sharedMB = providers.NewMusicBrainzAdapter(
-			cf.discovery(),
-			cfg.MusicBrainzUserAgent,
-		)
-	}
+	sharedMB := buildMusicBrainzAdapter(cf, cfg)
 
 	searchProviders := buildDiscoveryProviders(cf, cfg, sharedMB)
 	circuitBreaker := discoveryService.NewCircuitBreaker()
@@ -181,10 +175,7 @@ func eventSearchOptions(cfg *config.Config, eventStore discoveryPorts.EventStore
 
 func BuildDiscoveryProviders(cfg *config.Config, transport http.RoundTripper) []discoveryPorts.SearchProvider {
 	cf := clientFactory{transport: transport}
-	var mb *providers.MusicBrainzAdapter
-	if cfg.HasMusicBrainz() {
-		mb = providers.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
-	}
+	mb := buildMusicBrainzAdapter(cf, cfg)
 	return buildDiscoveryProviders(cf, cfg, mb)
 }
 
@@ -201,8 +192,7 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 			},
 		})
 	}
-	if cfg.HasMusicBrainz() {
-		mb := providers.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
+	if mb := buildMusicBrainzAdapter(cf, cfg); mb != nil {
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 			Name: "musicbrainz",
 			Fetcher: func(ctx context.Context, artistName string) ([]domain.SearchResult, error) {
@@ -270,6 +260,16 @@ func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []
 		})
 	}
 	return results
+}
+
+// buildMusicBrainzAdapter constructs the shared MusicBrainz adapter from the
+// given client factory, returning nil when MusicBrainz is not configured. It is
+// the single construction site for the adapter across the app wiring.
+func buildMusicBrainzAdapter(cf clientFactory, cfg *config.Config) *providers.MusicBrainzAdapter {
+	if !cfg.HasMusicBrainz() {
+		return nil
+	}
+	return providers.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
 }
 
 func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {

@@ -155,13 +155,7 @@ func (a *App) startDiscoveryBackgroundJobs(
 }
 
 func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
-	var sharedMB *providers.MusicBrainzAdapter
-	if a.cfg.HasMusicBrainz() {
-		sharedMB = providers.NewMusicBrainzAdapter(
-			newDiscoveryClient(),
-			a.cfg.MusicBrainzUserAgent,
-		)
-	}
+	sharedMB := buildMusicBrainzAdapter(clientFactory{}, a.cfg)
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
 

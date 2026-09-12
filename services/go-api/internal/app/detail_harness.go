@@ -42,8 +42,7 @@ func BuildArtistContentService(
 	opts := []discoveryService.ArtistContentOption{
 		discoveryService.WithContentIdentityStore(store),
 	}
-	if cfg.HasMusicBrainz() {
-		mb := providers.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
+	if mb := buildMusicBrainzAdapter(cf, cfg); mb != nil {
 		opts = append(opts, discoveryService.WithMBAnchor(mb))
 	}
 	return discoveryService.NewGetArtistContentService(artistProviders, opts...)
