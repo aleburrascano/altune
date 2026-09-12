@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"altune/go-api/internal/admin/requeststore"
@@ -18,11 +17,6 @@ func (h *AdminHandler) WithSearchInspector(s SearchInspector) *AdminHandler {
 	return h
 }
 
-type testSearchRequest struct {
-	Query string   `json:"query"`
-	Kinds []string `json:"kinds"`
-}
-
 type testSearchResponse struct {
 	Query   string                   `json:"query"`
 	Results []requeststore.ResultRow `json:"results"`
@@ -33,9 +27,8 @@ func (h *AdminHandler) serveTestSearch(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusServiceUnavailable, "test search not configured")
 		return
 	}
-	var body testSearchRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Query == "" {
-		httputil.WriteError(w, http.StatusBadRequest, "query is required")
+	body, ok := decodeQuery(w, r)
+	if !ok {
 		return
 	}
 	results, err := h.searchInspector.InspectSearch(r.Context(), body.Query, body.Kinds)
