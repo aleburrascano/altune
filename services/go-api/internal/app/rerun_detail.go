@@ -14,6 +14,12 @@ import (
 
 const detailRerunSearchLimit = 20
 
+// detailReRunBudget caps the total wall time of the sequential provider
+// fan-out. Without it, six back-to-back no-timeout provider calls (each bounded
+// only by its own 10-15s HTTP client, up to 3 retries) can compound into a
+// multi-minute stuck admin request. It is a var so tests can shrink it.
+var detailReRunBudget = 30 * time.Second
+
 type detailReRunner struct {
 	searchSvc *discoveryService.Service
 	artistSvc *discoveryService.GetArtistContentService
@@ -41,8 +47,7 @@ func (dr *detailReRunner) ReRunDetail(ctx context.Context, query string) (adminH
 	}
 
 	byProvider := seedIDsByProvider(entity.Sources)
-	albumSeeds := dr.albumFanOut(ctx, byProvider, entity.Title)
-	trackSeeds := dr.trackFanOut(ctx, byProvider, entity.MBID, entity.Title)
+	albumSeeds, trackSeeds := dr.fanOutSeeds(ctx, byProvider, entity)
 
 	return adminHandler.DetailReRunResult{
 		Query:      query,
@@ -53,6 +58,14 @@ func (dr *detailReRunner) ReRunDetail(ctx context.Context, query string) (adminH
 		TopTracks:  projectDetailItems(mergeTracksLikeClient(trackSeeds)),
 		TookMs:     time.Since(start).Milliseconds(),
 	}, nil
+}
+
+func (dr *detailReRunner) fanOutSeeds(ctx context.Context, byProvider map[string]string, entity domain.SearchResult) (albumSeeds, trackSeeds []rawSeed) {
+	ctx, cancel := context.WithTimeout(ctx, detailReRunBudget)
+	defer cancel()
+	albumSeeds = dr.albumFanOut(ctx, byProvider, entity.Title)
+	trackSeeds = dr.trackFanOut(ctx, byProvider, entity.MBID, entity.Title)
+	return albumSeeds, trackSeeds
 }
 
 func (dr *detailReRunner) resolveTopArtist(ctx context.Context, query string) (domain.SearchResult, bool) {
