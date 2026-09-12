@@ -13,6 +13,10 @@ const (
 	defaultMaxRequests  = 100
 	defaultMaxBodyBytes = 64 * 1024
 	defaultMaxTotalByte = 96 * 1024 * 1024
+	// retentionWindow bounds how long a trace stays readable. Records hold a
+	// user's search query, user id and raw provider bodies, so they are purged
+	// once older than this, independent of the byte/count eviction budgets.
+	retentionWindow = 30 * time.Minute
 )
 
 type Store struct {
@@ -23,14 +27,23 @@ type Store struct {
 	maxRequests int
 	maxBody     int
 	maxTotal    int
+	retention   time.Duration
+	// now stamps the retention cutoff; injectable so tests can step the clock.
+	now func() time.Time
 }
 
 func New() *Store {
+	return newWithClock(time.Now)
+}
+
+func newWithClock(now func() time.Time) *Store {
 	return &Store{
 		byID:        make(map[string]*RequestRecord),
 		maxRequests: defaultMaxRequests,
 		maxBody:     defaultMaxBodyBytes,
 		maxTotal:    defaultMaxTotalByte,
+		retention:   retentionWindow,
+		now:         now,
 	}
 }
 
@@ -98,8 +111,22 @@ func (s *Store) getOrCreateLocked(corrID string, started time.Time) *RequestReco
 	rec = &RequestRecord{CorrID: corrID, StartedAt: started, Exchanges: []Exchange{}}
 	s.byID[corrID] = rec
 	s.order = append(s.order, corrID)
+	s.evictExpired()
 	s.evictOverflow()
 	return rec
+}
+
+// evictExpired purges records older than the retention window. s.order is
+// oldest-first, so dropping from the front stops at the first live record.
+func (s *Store) evictExpired() {
+	cutoff := s.now().Add(-s.retention)
+	for len(s.order) > 0 {
+		rec := s.byID[s.order[0]]
+		if rec != nil && !rec.StartedAt.Before(cutoff) {
+			return
+		}
+		s.dropOldest()
+	}
 }
 
 func (s *Store) evictOverflow() {
@@ -138,6 +165,7 @@ func (s *Store) dropOldest() {
 func (s *Store) Snapshot() []RequestRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.evictExpired()
 
 	out := make([]RequestRecord, 0, len(s.order))
 	for i := len(s.order) - 1; i >= 0; i-- {
@@ -151,6 +179,7 @@ func (s *Store) Snapshot() []RequestRecord {
 func (s *Store) Get(corrID string) (RequestRecord, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.evictExpired()
 	rec, ok := s.byID[corrID]
 	if !ok {
 		return RequestRecord{}, false
