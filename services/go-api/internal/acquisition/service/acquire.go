@@ -1,19 +1,14 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
-
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
 )
 
 type AcquireTrackAudioService struct {
@@ -127,7 +122,6 @@ func (s *AcquireTrackAudioService) execute(
 	}
 	s.resolveIdentity(ctx, ac)
 	err = RunPipeline(ctx, s.buildSteps(userId, trackId), ac)
-
 	if err != nil {
 		return s.reportAcquisitionFailure(ctx, userId, trackId, replace, err)
 	}
@@ -178,33 +172,6 @@ func (s *AcquireTrackAudioService) reportAcquisitionFailure(ctx context.Context,
 		})
 	}
 	return err
-}
-
-func failureReason(err error) string {
-	var stepErr *StepError
-	if errors.As(err, &stepErr) {
-		if reason, ok := reasonForStep(stepErr.Step); ok {
-			return reason
-		}
-		return "audio acquisition failed"
-	}
-	if strings.HasPrefix(err.Error(), "pipeline cancelled") {
-		return "audio acquisition cancelled"
-	}
-	return "audio acquisition failed"
-}
-
-func reasonForStep(step string) (string, bool) {
-	switch step {
-	case "search", "select":
-		return "no matching audio found", true
-	case "download":
-		return "audio download failed", true
-	case "store":
-		return "audio storage failed", true
-	default:
-		return "", false
-	}
 }
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
@@ -258,66 +225,7 @@ func (s *AcquireTrackAudioService) resolveExpectedCluster(ctx context.Context, a
 }
 
 func (s *AcquireTrackAudioService) reconcileForReacquire(ctx context.Context, track *domain.Track) (proceed bool, err error) {
-	switch track.AcquisitionStatus {
-	case domain.AcquisitionReady:
-		if track.AudioRef != nil {
-			exists, existsErr := s.audioStore.Exists(ctx, *track.AudioRef)
-			switch {
-			case existsErr != nil:
-				slog.WarnContext(ctx, "acquire_exists_check_failed",
-					"track_id", track.ID.String(), "audio_ref", *track.AudioRef, "error", existsErr)
-				// A transient exists-check error is not evidence the file is gone;
-				// bail out rather than clearing a still-good AudioRef via revert.
-				return false, fmt.Errorf("reconcile exists check: %w", existsErr)
-			case exists:
-				slog.InfoContext(ctx, "acquire_skip_already_ready", "track_id", track.ID.String())
-				return false, nil
-			default:
-				slog.InfoContext(ctx, "acquire_reacquire_missing_file",
-					"track_id", track.ID.String(), "audio_ref", *track.AudioRef)
-			}
-		}
-		if err := s.revertToPending(ctx, track); err != nil {
-			return false, err
-		}
-	case domain.AcquisitionFailed:
-		slog.InfoContext(ctx, "acquire_retrying_failed", "track_id", track.ID.String())
-		if err := s.revertToPending(ctx, track); err != nil {
-			return false, err
-		}
-	}
-	return true, nil
-}
-
-func (s *AcquireTrackAudioService) revertToPending(ctx context.Context, track *domain.Track) error {
-	track.RevertToPending()
-	if err := s.trackRepo.Update(ctx, track); err != nil {
-		return fmt.Errorf("revert to pending: %w", err)
-	}
-	return nil
-}
-
-func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId) []Step {
-	return append(
-		CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier),
-		NewUpdateTrackStep(s.trackRepo, userId, trackId),
-	)
-}
-
-func CoreSteps(
-	sources *SourceRegistry,
-	tagger ports.AudioTagger,
-	store ports.AudioWriter,
-	prober ports.AudioProber,
-	identifier ports.AudioIdentifier,
-) []Step {
-	return []Step{
-		NewSearchStep(sources),
-		NewSelectStep(),
-		NewDownloadStep(sources, WithDownloadProber(prober), WithDownloadIdentifier(identifier)),
-		NewTagStep(tagger),
-		NewStoreStep(store, WithStoreProber(prober)),
-	}
+	return reacquirePolicy{trackRepo: s.trackRepo, audioStore: s.audioStore}.reconcile(ctx, track)
 }
 
 func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userId shared.UserId, trackId domain.TrackId, audioRef string) {
@@ -382,15 +290,5 @@ func buildTrackRef(track *domain.Track) TrackRef {
 		TrackNumber: deref(track.TrackNumber),
 		AlbumArtist: deref(track.AlbumArtist),
 		Genre:       deref(track.Genre),
-	}
-}
-
-func CleanupTemp(ctx context.Context, ac *AcquisitionContext) {
-	if ac.TempPath == "" {
-		return
-	}
-	parent := filepath.Dir(ac.TempPath)
-	if err := os.RemoveAll(parent); err != nil {
-		slog.WarnContext(ctx, "temp_cleanup_failed", "path", parent, "error", err)
 	}
 }
