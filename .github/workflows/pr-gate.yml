@@ -4,27 +4,47 @@
 # forever. This gate always runs on every PR to main, calls only the reusable
 # suites whose paths changed, and ends in one `gate` job that is the branch's
 # sole required status check.
+#
+# It also runs on `merge_group`, so the same single `gate` context satisfies
+# GitHub's merge queue. In the queue we run BOTH suites (the batched commit can
+# touch either side), skipping the path filter — correctness over a few saved
+# minutes on the rare queue build.
+#
+# The reusable suites (test-backend, test-mobile) are ONLY reachable through this
+# gate on a PR — their own `pull_request` triggers were removed so they no longer
+# run a second, unprefixed copy that shares a concurrency group with the called
+# copy and cancels it mid-run (the "gate never finalizes" stall).
 
 name: PR gate
 
 on:
   pull_request:
     branches: [main]
+  merge_group:
 
 concurrency:
-  group: pr-gate-${{ github.event.pull_request.number }}
+  group: pr-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      mobile: ${{ steps.filter.outputs.mobile }}
+      backend: ${{ steps.filter.outputs.backend || steps.all.outputs.backend }}
+      mobile: ${{ steps.filter.outputs.mobile || steps.all.outputs.mobile }}
     steps:
+      # In the merge queue there is no PR base to diff against, and the batched
+      # commit may touch either side — so select both suites and skip the filter.
+      - id: all
+        if: ${{ github.event_name == 'merge_group' }}
+        run: |
+          echo "backend=true" >> "$GITHUB_OUTPUT"
+          echo "mobile=true" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request' }}
       - uses: dorny/paths-filter@v3
         id: filter
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           filters: |
             backend:

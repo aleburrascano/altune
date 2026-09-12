@@ -3,19 +3,19 @@ import { useRouter } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
-import { playButtonState, splitOwned, toPlaybackQueue, type OwnedSplit } from '../owned-playback';
+import { type OwnedSplit } from '../owned-playback';
 
 import { openDetail, type DetailRoute } from '../navigation';
 import { useAlbumDiscovery } from './useAlbumDiscovery';
 import { useAlbumTracks } from './useAlbumTracks';
 import { useLibraryTracksForAlbum } from './useLibraryTracks';
 import { useSaveTrack } from './useSaveTrack';
+import { useOwnedPlayback } from './useOwnedPlayback';
 import { toCreateTrackRequest } from '../save-cache';
 import { trackExtras } from '../extras-accessors';
 import { ownedFromExtras } from './useOwnedTrack';
-import { saveControlState, type SaveControlState } from '../save-control-state';
+import { type SaveControlState } from '../save-control-state';
 
 function _enrichAlbumTrack(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult {
   return {
@@ -69,7 +69,6 @@ export function useAlbumDetailState(
 ): AlbumDetailState {
   const router = useRouter();
   const save = useSaveTrack();
-  const queue = useQueuePlayback();
 
   const source = !isFromLibrary ? result.sources[0] : undefined;
   const deezerSource = !isFromLibrary
@@ -116,10 +115,6 @@ export function useAlbumDetailState(
     openDetail(router, detailRoute, _enrichAlbumTrack(track, result));
   };
 
-  const onQuickSave = (track: DiscoveryResult): void => {
-    save.mutate(toCreateTrackRequest(_enrichAlbumTrack(track, result)));
-  };
-
   const onSaveAll = (): void => {
     setSaveAllTapped(true);
     const allTracks = hasSources ? tracks : [...tracks, ...moreTracks];
@@ -130,16 +125,15 @@ export function useAlbumDetailState(
     }
   };
 
-  const saveStateFor = (track: DiscoveryResult): SaveControlState =>
-    saveControlState(ownedFromExtras(trackExtras(track.extras)));
-
-  const owned = splitOwned(tracks);
-
-  const onPlayOwned = (): void => {
-    const playable = toPlaybackQueue(owned.playable, result.subtitle, result.image_url);
-    if (playable.length === 0) return;
-    queue.playFromList(playable, 0, { kind: 'library' });
-  };
+  const { owned, playButton, onPlayOwned, saveStateFor, onQuickSave } = useOwnedPlayback(
+    tracks,
+    {
+      title: result.subtitle,
+      image: result.image_url,
+      enrich: (track) => _enrichAlbumTrack(track, result),
+    },
+    save,
+  );
 
   return {
     tracks,
@@ -160,7 +154,7 @@ export function useAlbumDetailState(
     onSaveAll,
     saveStateFor,
     owned,
-    playButton: playButtonState(owned),
+    playButton,
     onPlayOwned,
   };
 }
