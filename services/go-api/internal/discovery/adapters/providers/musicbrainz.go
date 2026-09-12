@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -21,8 +20,7 @@ import (
 type MusicBrainzAdapter struct {
 	client    *http.Client
 	userAgent string
-	mu        sync.Mutex
-	lastReq   time.Time
+	limiter   *minIntervalLimiter
 
 	identityMemo *mbMemo[*ports.ArtistIdentity]
 	releaseMemo  *mbMemo[[]mbReleaseGroup]
@@ -33,28 +31,9 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAd
 	return &MusicBrainzAdapter{
 		client:       client,
 		userAgent:    userAgent,
+		limiter:      newMinIntervalLimiter(time.Second),
 		identityMemo: newMBMemo[*ports.ArtistIdentity](mbMemoTTL),
 		releaseMemo:  newMBMemo[[]mbReleaseGroup](mbMemoTTL),
-	}
-}
-
-func (a *MusicBrainzAdapter) rateLimit(ctx context.Context) {
-	a.mu.Lock()
-	next := a.lastReq.Add(time.Second)
-	if now := time.Now(); next.Before(now) {
-		next = now
-	}
-	a.lastReq = next
-	wait := time.Until(next)
-	a.mu.Unlock()
-	if wait <= 0 {
-		return
-	}
-	timer := time.NewTimer(wait)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-	case <-ctx.Done():
 	}
 }
 
@@ -120,7 +99,9 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		u += "&inc=isrcs"
 	}
 
-	a.rateLimit(ctx)
+	if err := a.limiter.wait(ctx); err != nil {
+		return nil, err
+	}
 	status, rawBody, err := getBytes(ctx, a.client, u,
 		withHeader("User-Agent", a.userAgent),
 		withHeader("Accept", "application/json"))
@@ -400,7 +381,9 @@ func (a *MusicBrainzAdapter) fetchArtistMatches(ctx context.Context, name string
 }
 
 func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) error {
-	a.rateLimit(ctx)
+	if err := a.limiter.wait(ctx); err != nil {
+		return err
+	}
 	return getJSON(ctx, a.client, u, out,
 		withHeader("User-Agent", a.userAgent),
 		withHeader("Accept", "application/json"))
