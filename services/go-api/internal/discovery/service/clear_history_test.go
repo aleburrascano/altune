@@ -15,14 +15,14 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		repo       *fakeSearchHistoryRepository
+		repo       *fakeHistoryEraser
 		nilRepo    bool
 		wantErr    bool
 		wantCalled bool
 	}{
 		{
 			name: "happy path deletes for user",
-			repo: &fakeSearchHistoryRepository{
+			repo: &fakeHistoryEraser{
 				deleteAllFn: func(_ context.Context, gotUser shared.UserId) error {
 					if gotUser != userID {
 						t.Errorf("expected user %v, got %v", userID, gotUser)
@@ -40,7 +40,7 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 		},
 		{
 			name: "repo error propagates",
-			repo: &fakeSearchHistoryRepository{
+			repo: &fakeHistoryEraser{
 				deleteAllFn: func(_ context.Context, _ shared.UserId) error {
 					return errors.New("db unavailable")
 				},
