@@ -11,7 +11,7 @@ import (
 )
 
 // authHealthChecker reports whether the auth subsystem can obtain its JWKS key
-// set. *authAdapters.SupabaseJWTVerifier satisfies it.
+// set. *authProviders.SupabaseJWTVerifier satisfies it.
 type authHealthChecker interface {
 	CheckHealth(ctx context.Context) error
 }

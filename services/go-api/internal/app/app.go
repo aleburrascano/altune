@@ -43,7 +43,7 @@ import (
 
 	adminHandler "altune/go-api/internal/admin/handler"
 
-	authAdapters "altune/go-api/internal/auth/adapters"
+	authProviders "altune/go-api/internal/auth/adapters/providers"
 
 	catalogHandler "altune/go-api/internal/catalog/adapters/handler"
 	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
@@ -189,7 +189,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL)
 
-	verifier, err := authAdapters.NewSupabaseJWTVerifier(
+	verifier, err := authProviders.NewSupabaseJWTVerifier(
 		ctx,
 		a.cfg.SupabaseJWTJWKSURL,
 		a.cfg.SupabaseProjectURL,
