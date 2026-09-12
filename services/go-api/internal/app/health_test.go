@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/shared/database"
 	"context"
 	"errors"
 	"testing"
@@ -11,6 +12,53 @@ type stubAuthChecker struct {
 }
 
 func (s stubAuthChecker) CheckHealth(context.Context) error { return s.err }
+
+func TestDependencyHealth_ReportsRealDBError(t *testing.T) {
+	// Regression for #398: a failing DB check must surface the live error
+	// (pool exhaustion, auth, TLS, ...) the same way the Redis branch does,
+	// not a fixed placeholder that leaves the operator blind.
+	wantErr := "connection refused: pool exhausted"
+	a := &App{dbHealth: func(context.Context) database.HealthStatus {
+		return database.HealthStatus{OK: false, Err: errors.New(wantErr)}
+	}}
+
+	health := a.dependencyHealth(context.Background())
+
+	if health.DB != "down" {
+		t.Errorf("db status: got %q, want %q", health.DB, "down")
+	}
+	if health.Detail.DBError != wantErr {
+		t.Errorf("db error: got %q, want real error %q", health.Detail.DBError, wantErr)
+	}
+	if health.Healthy() {
+		t.Error("expected dependency health to be unhealthy when db is down")
+	}
+}
+
+func TestDependencyHealth_HealthyDB(t *testing.T) {
+	a := &App{dbHealth: func(context.Context) database.HealthStatus {
+		return database.HealthStatus{OK: true}
+	}}
+
+	health := a.dependencyHealth(context.Background())
+
+	if health.DB != "ok" {
+		t.Errorf("db status: got %q, want %q", health.DB, "ok")
+	}
+	if health.Detail.DBError != "" {
+		t.Errorf("db error: got %q, want empty", health.Detail.DBError)
+	}
+}
+
+func TestDependencyHealth_DBNotConfigured(t *testing.T) {
+	a := &App{}
+
+	health := a.dependencyHealth(context.Background())
+
+	if health.DB != "not_configured" {
+		t.Errorf("db status: got %q, want %q", health.DB, "not_configured")
+	}
+}
 
 func TestDependencyHealth_ReflectsAuthDegradation(t *testing.T) {
 	// pool and redisClient are nil, so DB and Redis report "not_configured"
