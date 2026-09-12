@@ -1,22 +1,21 @@
 package service
 
 import (
-	"context"
-	"fmt"
-	"log/slog"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	"context"
+	"fmt"
+	"log/slog"
 )
 
 type PlaylistLifecycleService struct {
-	playlistRepo ports.PlaylistRepository
+	playlistRepo ports.PlaylistLifecycleRepository
 	events       events.Publisher
 }
 
-func NewPlaylistLifecycleService(playlistRepo ports.PlaylistRepository, opts ...func(*PlaylistLifecycleService)) *PlaylistLifecycleService {
+func NewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, opts ...func(*PlaylistLifecycleService)) *PlaylistLifecycleService {
 	s := &PlaylistLifecycleService{playlistRepo: playlistRepo, events: events.NoopPublisher()}
 	for _, opt := range opts {
 		opt(s)

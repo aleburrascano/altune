@@ -1,20 +1,19 @@
 package service
 
 import (
-	"context"
-	"fmt"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"fmt"
 )
 
 type LibraryLensService struct {
-	trackRepo ports.TrackRepository
+	lensRepo ports.LibraryLensRepository
 }
 
-func NewLibraryLensService(trackRepo ports.TrackRepository) *LibraryLensService {
-	return &LibraryLensService{trackRepo: trackRepo}
+func NewLibraryLensService(lensRepo ports.LibraryLensRepository) *LibraryLensService {
+	return &LibraryLensService{lensRepo: lensRepo}
 }
 
 func clampLibraryLimit(query domain.LibraryQuery) domain.LibraryQuery {
@@ -33,7 +32,7 @@ func (s *LibraryLensService) Albums(
 	query domain.LibraryQuery,
 ) ([]domain.AlbumGroup, error) {
 	query = clampLibraryLimit(query)
-	albums, err := s.trackRepo.ListAlbumsForUser(ctx, userId, query)
+	albums, err := s.lensRepo.ListAlbumsForUser(ctx, userId, query)
 	if err != nil {
 		return nil, fmt.Errorf("library albums: %w", err)
 	}
@@ -49,7 +48,7 @@ func (s *LibraryLensService) Artists(
 		return nil, domain.NewValidationError("artists cannot be sorted by year")
 	}
 	query = clampLibraryLimit(query)
-	artists, err := s.trackRepo.ListArtistsForUser(ctx, userId, query)
+	artists, err := s.lensRepo.ListArtistsForUser(ctx, userId, query)
 	if err != nil {
 		return nil, fmt.Errorf("library artists: %w", err)
 	}

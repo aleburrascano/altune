@@ -10,15 +10,17 @@ import (
 )
 
 type BackfillFeaturedService struct {
-	trackRepo ports.TrackRepository
-	resolver  ports.FeaturedArtistResolver
+	trackRepo    ports.TrackRepository
+	featuredRepo ports.FeaturedArtistRepository
+	resolver     ports.FeaturedArtistResolver
 }
 
 func NewBackfillFeaturedService(
 	trackRepo ports.TrackRepository,
+	featuredRepo ports.FeaturedArtistRepository,
 	resolver ports.FeaturedArtistResolver,
 ) *BackfillFeaturedService {
-	return &BackfillFeaturedService{trackRepo: trackRepo, resolver: resolver}
+	return &BackfillFeaturedService{trackRepo: trackRepo, featuredRepo: featuredRepo, resolver: resolver}
 }
 
 type BackfillFeaturedResult struct {
@@ -86,7 +88,7 @@ func (s *BackfillFeaturedService) backfillTrack(
 	if len(feats) == 0 {
 		return
 	}
-	if err := s.trackRepo.ReplaceFeaturedArtists(ctx, t.ID, userId, feats); err != nil {
+	if err := s.featuredRepo.ReplaceFeaturedArtists(ctx, t.ID, userId, feats); err != nil {
 		res.Failed++
 		slog.WarnContext(ctx, "featured backfill persist failed",
 			"track_id", t.ID.String(), "error", err)

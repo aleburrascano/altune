@@ -1,15 +1,14 @@
 package catalogtest
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
 	"io"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared"
 )
 
 type TrackRepo struct {
@@ -26,7 +25,12 @@ type TrackRepo struct {
 	LastArtistsQuery domain.LibraryQuery
 }
 
-var _ ports.StalePendingFailer = (*TrackRepo)(nil)
+var (
+	_ ports.TrackRepository          = (*TrackRepo)(nil)
+	_ ports.LibraryLensRepository    = (*TrackRepo)(nil)
+	_ ports.FeaturedArtistRepository = (*TrackRepo)(nil)
+	_ ports.StalePendingFailer       = (*TrackRepo)(nil)
+)
 
 func NewTrackRepo() *TrackRepo {
 	return &TrackRepo{Tracks: make(map[string]*domain.Track)}
@@ -283,7 +287,10 @@ type PlaylistRepo struct {
 	Removed []domain.TrackId
 }
 
-var _ ports.PlaylistRepository = (*PlaylistRepo)(nil)
+var (
+	_ ports.PlaylistLifecycleRepository  = (*PlaylistRepo)(nil)
+	_ ports.PlaylistMembershipRepository = (*PlaylistRepo)(nil)
+)
 
 func NewPlaylistRepo() *PlaylistRepo {
 	return &PlaylistRepo{

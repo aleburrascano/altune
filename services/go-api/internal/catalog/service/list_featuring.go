@@ -1,20 +1,19 @@
 package service
 
 import (
-	"context"
-	"fmt"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"fmt"
 )
 
 type ListFeaturingService struct {
-	trackRepo ports.TrackRepository
+	featuredRepo ports.FeaturedArtistRepository
 }
 
-func NewListFeaturingService(trackRepo ports.TrackRepository) *ListFeaturingService {
-	return &ListFeaturingService{trackRepo: trackRepo}
+func NewListFeaturingService(featuredRepo ports.FeaturedArtistRepository) *ListFeaturingService {
+	return &ListFeaturingService{featuredRepo: featuredRepo}
 }
 
 func (s *ListFeaturingService) Execute(
@@ -22,7 +21,7 @@ func (s *ListFeaturingService) Execute(
 	userId shared.UserId,
 	fa domain.FeaturedArtist,
 ) ([]*domain.Track, error) {
-	tracks, err := s.trackRepo.ListTracksFeaturing(ctx, userId, fa)
+	tracks, err := s.featuredRepo.ListTracksFeaturing(ctx, userId, fa)
 	if err != nil {
 		return nil, fmt.Errorf("list featuring: %w", err)
 	}

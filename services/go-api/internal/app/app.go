@@ -311,7 +311,7 @@ func (a *App) wireCatalog(
 	playlistLifecycleSvc := catalogService.NewPlaylistLifecycleService(playlistRepo, catalogService.WithPlaylistLifecycleEvents(tap))
 	playlistMembershipSvc := catalogService.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, catalogService.WithPlaylistMembershipEvents(tap))
 
-	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(catalogTrackRepo, featuredBridge)
+	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge)
 	listFeaturingSvc := catalogService.NewListFeaturingService(catalogTrackRepo)
 
 	getTrackStatusSvc := catalogService.NewGetTrackStatusService(catalogTrackRepo)
