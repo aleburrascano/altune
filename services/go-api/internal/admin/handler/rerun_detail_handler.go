@@ -52,7 +52,7 @@ func (h *AdminHandler) WithDetailReRunner(r DetailReRunner) *AdminHandler {
 
 func (h *AdminHandler) serveReRunDetail(w http.ResponseWriter, r *http.Request) {
 	if h.detailReRunner == nil {
-		httputil.WriteError(w, http.StatusServiceUnavailable, "detail re-run inspector not configured")
+		httputil.HandleServiceError(w, r, errDetailUnavailable)
 		return
 	}
 	body, ok := decodeQuery(w, r)
@@ -61,7 +61,7 @@ func (h *AdminHandler) serveReRunDetail(w http.ResponseWriter, r *http.Request) 
 	}
 	result, err := h.detailReRunner.ReRunDetail(r.Context(), body.Query)
 	if err != nil {
-		httputil.WriteError(w, http.StatusBadGateway, err.Error())
+		httputil.HandleServiceError(w, r, upstreamError("admin.rerun_detail_failed", err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)

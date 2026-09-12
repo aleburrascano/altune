@@ -24,7 +24,7 @@ type testSearchResponse struct {
 
 func (h *AdminHandler) serveTestSearch(w http.ResponseWriter, r *http.Request) {
 	if h.searchInspector == nil {
-		httputil.WriteError(w, http.StatusServiceUnavailable, "test search not configured")
+		httputil.HandleServiceError(w, r, errSearchUnavailable)
 		return
 	}
 	body, ok := decodeQuery(w, r)
@@ -33,7 +33,7 @@ func (h *AdminHandler) serveTestSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	results, err := h.searchInspector.InspectSearch(r.Context(), body.Query, body.Kinds)
 	if err != nil {
-		httputil.WriteError(w, http.StatusBadGateway, err.Error())
+		httputil.HandleServiceError(w, r, upstreamError("admin.test_search_failed", err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, testSearchResponse{Query: body.Query, Results: results})
