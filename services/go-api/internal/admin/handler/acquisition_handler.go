@@ -69,7 +69,7 @@ func newJobRecordDTOs(jobs []acqService.JobRecord) []jobRecordDTO {
 			ResolvedSource: j.ResolvedSource,
 			State:          j.State,
 			Stage:          j.Stage,
-			ScheduledAt:    j.ScheduledAt,
+			ScheduledAt:    j.ScheduledAt.UTC(),
 			ElapsedMs:      j.ElapsedMs,
 			Reason:         j.Reason,
 			Provenance:     j.Provenance,

@@ -38,10 +38,20 @@ type jobLog struct {
 	recent    []JobRecord
 	succeeded atomic.Uint64
 	failed    atomic.Uint64
+	// now stamps ScheduledAt with a monotonic-bearing instant; since measures
+	// elapsed from it. Both are monotonic-safe (immune to wall-clock jumps) in
+	// production and injectable so tests can simulate clock steps. UTC is
+	// applied only at the serialization edge, never to the instant used here.
+	now   func() time.Time
+	since func(time.Time) time.Duration
 }
 
 func newJobLog() *jobLog {
-	return &jobLog{jobs: make(map[string]*JobRecord)}
+	return newJobLogWithClock(time.Now, time.Since)
+}
+
+func newJobLogWithClock(now func() time.Time, since func(time.Time) time.Duration) *jobLog {
+	return &jobLog{jobs: make(map[string]*JobRecord), now: now, since: since}
 }
 
 func (l *jobLog) register(trackID, sourceURL string) {
@@ -50,7 +60,7 @@ func (l *jobLog) register(trackID, sourceURL string) {
 		TrackID:     trackID,
 		SourceURL:   sourceURL,
 		State:       JobQueued,
-		ScheduledAt: time.Now().UTC(),
+		ScheduledAt: l.now(),
 	}
 	l.mu.Unlock()
 }
@@ -83,12 +93,12 @@ func (l *jobLog) complete(trackID, state, reason string) {
 	defer l.mu.Unlock()
 	j := l.jobs[trackID]
 	if j == nil {
-		j = &JobRecord{TrackID: trackID, ScheduledAt: time.Now().UTC()}
+		j = &JobRecord{TrackID: trackID, ScheduledAt: l.now()}
 	}
 	delete(l.jobs, trackID)
 	j.State = state
 	j.Reason = reason
-	j.ElapsedMs = time.Since(j.ScheduledAt).Milliseconds()
+	j.ElapsedMs = l.since(j.ScheduledAt).Milliseconds()
 	l.recent = append(l.recent, *j)
 	if len(l.recent) > recentJobCap {
 		l.recent = l.recent[len(l.recent)-recentJobCap:]
@@ -100,13 +110,11 @@ func (l *jobLog) counts() (succeeded, failed uint64) {
 }
 
 func (l *jobLog) snapshot() (jobs []JobRecord, recent []JobRecord) {
-	now := time.Now().UTC()
-
 	l.mu.Lock()
 	jobs = make([]JobRecord, 0, len(l.jobs))
 	for _, j := range l.jobs {
 		jr := *j
-		jr.ElapsedMs = now.Sub(j.ScheduledAt).Milliseconds()
+		jr.ElapsedMs = l.since(j.ScheduledAt).Milliseconds()
 		jobs = append(jobs, jr)
 	}
 	recent = make([]JobRecord, len(l.recent))
