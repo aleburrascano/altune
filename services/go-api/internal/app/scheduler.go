@@ -29,7 +29,7 @@ func (a *App) startBackgroundWhenLeader(ctx context.Context) {
 	}()
 }
 
-func (a *App) drainBackground(timeout time.Duration) {
+func (a *App) drainBackground(timeout time.Duration) shutdownOutcome {
 	done := make(chan struct{})
 	go func() {
 		a.wg.Wait()
@@ -37,8 +37,10 @@ func (a *App) drainBackground(timeout time.Duration) {
 	}()
 	select {
 	case <-done:
+		return shutdownOutcome{name: "background tasks", completed: true}
 	case <-time.After(timeout):
-		slog.Warn("background task drain timed out")
+		slog.Warn("background task drain timed out", "timeout", timeout.String())
+		return shutdownOutcome{name: "background tasks", completed: false}
 	}
 }
 
