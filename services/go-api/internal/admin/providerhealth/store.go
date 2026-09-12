@@ -10,6 +10,9 @@ import (
 const (
 	window         = 5 * time.Minute
 	perProviderCap = 2048
+
+	statusOK          = "ok"
+	statusRateLimited = "rate_limited"
 )
 
 type sample struct {
@@ -62,46 +65,51 @@ func (s *Store) Snapshot() []ProviderSnapshot {
 	out := make([]ProviderSnapshot, 0, len(s.samples))
 	for provider, xs := range s.samples {
 		kept := xs[:0]
-		counts := make(map[string]int)
-		var latencySum int64
-		latencies := make([]int64, 0, len(xs))
 		for _, x := range xs {
 			if x.at.After(cutoff) {
 				kept = append(kept, x)
-				counts[x.status]++
-				latencySum += x.latencyMs
-				latencies = append(latencies, x.latencyMs)
 			}
 		}
 		s.samples[provider] = kept
-
-		var avg int64
-		if len(kept) > 0 {
-			avg = latencySum / int64(len(kept))
-		}
-		var errs int
-		for status, n := range counts {
-			if status != "ok" {
-				errs += n
-			}
-		}
-		var errorRate float64
-		if len(kept) > 0 {
-			errorRate = float64(errs) / float64(len(kept))
-		}
-		out = append(out, ProviderSnapshot{
-			Provider:        provider,
-			CurrentStatus:   s.last[provider],
-			CountsPerStatus: counts,
-			TotalCalls:      len(kept),
-			AvgLatencyMs:    avg,
-			P95LatencyMs:    percentile(latencies, 0.95),
-			ErrorRate:       errorRate,
-			RateLimited:     counts["rate_limited"],
-		})
+		out = append(out, summarize(provider, s.last[provider], kept))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Provider < out[j].Provider })
 	return out
+}
+
+func summarize(provider, current string, kept []sample) ProviderSnapshot {
+	counts := make(map[string]int)
+	var latencySum int64
+	latencies := make([]int64, 0, len(kept))
+	for _, x := range kept {
+		counts[x.status]++
+		latencySum += x.latencyMs
+		latencies = append(latencies, x.latencyMs)
+	}
+	var avg int64
+	if len(kept) > 0 {
+		avg = latencySum / int64(len(kept))
+	}
+	var errs int
+	for status, n := range counts {
+		if status != statusOK {
+			errs += n
+		}
+	}
+	var errorRate float64
+	if len(kept) > 0 {
+		errorRate = float64(errs) / float64(len(kept))
+	}
+	return ProviderSnapshot{
+		Provider:        provider,
+		CurrentStatus:   current,
+		CountsPerStatus: counts,
+		TotalCalls:      len(kept),
+		AvgLatencyMs:    avg,
+		P95LatencyMs:    percentile(latencies, 0.95),
+		ErrorRate:       errorRate,
+		RateLimited:     counts[statusRateLimited],
+	}
 }
 
 func percentile(latencies []int64, p float64) int64 {
