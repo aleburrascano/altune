@@ -85,7 +85,7 @@ func (s *Service) liftFavorites(
 	userId shared.UserId,
 	ranked []domain.SearchResult,
 ) []domain.SearchResult {
-	if s.favoritesRepo == nil || len(ranked) < 2 {
+	if s.favoritesRepo == nil || userId.IsSystem() || len(ranked) < 2 {
 		return ranked
 	}
 	favorites, err := s.favoritesRepo.ListForUser(ctx, userId)

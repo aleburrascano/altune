@@ -6,6 +6,22 @@ type UserId struct {
 	value uuid.UUID
 }
 
+// systemUserUUID is the synthetic identity used by internal background jobs
+// (e.g. the smoke-eval runner). It is not a real account: work performed under
+// it must never read or write any real user's personalization data.
+var systemUserUUID = uuid.MustParse("00000000-0000-0000-0000-00000000e7a1")
+
+// SystemUserId returns the synthetic system identity. Use it for internal jobs
+// that run the real per-user code paths but must not touch a real user's signal.
+func SystemUserId() UserId {
+	return UserId{value: systemUserUUID}
+}
+
+// IsSystem reports whether this is the synthetic system identity.
+func (u UserId) IsSystem() bool {
+	return u.value == systemUserUUID
+}
+
 func NewUserId(id uuid.UUID) UserId {
 	return UserId{value: id}
 }

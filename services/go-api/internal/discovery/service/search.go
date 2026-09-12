@@ -334,7 +334,7 @@ func (s *Service) persistHistory(
 	queryNorm string,
 	saveHistory bool,
 ) {
-	if !saveHistory || s.historyRepo == nil {
+	if !saveHistory || userId.IsSystem() || s.historyRepo == nil {
 		return
 	}
 	entry := &domain.SearchHistoryEntry{

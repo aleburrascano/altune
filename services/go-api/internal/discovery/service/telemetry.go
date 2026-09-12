@@ -16,7 +16,7 @@ const (
 )
 
 func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult, explored bool) {
-	if s.eventStore == nil {
+	if s.eventStore == nil || userId.IsSystem() {
 		return
 	}
 
