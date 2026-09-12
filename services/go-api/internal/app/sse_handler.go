@@ -157,7 +157,7 @@ func (h *sseHandler) stream(
 func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) error {
 	replayed := h.bus.Replay(userId, afterID)
 	if replayGapped(replayed, afterID) {
-		return h.writeFrame(rc, w, "event: resync\ndata: {}\n\n")
+		return h.writeResync(rc, w)
 	}
 	for _, evt := range replayed {
 		if err := h.writeEvent(rc, w, evt); err != nil {
@@ -184,10 +184,18 @@ func (h *sseHandler) writeFrame(rc *http.ResponseController, w http.ResponseWrit
 func (h *sseHandler) writeEvent(rc *http.ResponseController, w http.ResponseWriter, evt events.Event) error {
 	data, err := json.Marshal(evt.Payload)
 	if err != nil {
+		// The event exists but cannot be serialized: signal a resync rather than
+		// dropping it silently, which would leave the client permanently unaware.
 		slog.Warn("sse.marshal_failed", "event_type", evt.Type, "error", err)
-		return nil
+		return h.writeResync(rc, w)
 	}
 	return h.writeFrame(rc, w, fmt.Sprintf("id: %d\nevent: %s\ndata: %s\n\n", evt.ID, evt.Type, data))
+}
+
+// writeResync tells the client its view may be stale and it should refetch,
+// the same signal replay emits when the ring buffer has gapped.
+func (h *sseHandler) writeResync(rc *http.ResponseController, w http.ResponseWriter) error {
+	return h.writeFrame(rc, w, "event: resync\ndata: {}\n\n")
 }
 
 func setSSEHeaders(w http.ResponseWriter) {
