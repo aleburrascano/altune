@@ -11,7 +11,7 @@ import (
 
 func (h *AdminHandler) serveRequests(w http.ResponseWriter, _ *http.Request) {
 	if h.requests == nil {
-		httputil.WriteJSON(w, http.StatusOK, []requeststore.Record{})
+		httputil.WriteJSON(w, http.StatusOK, []requeststore.RequestRecord{})
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, h.requests.Snapshot())

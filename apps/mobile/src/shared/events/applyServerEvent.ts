@@ -27,6 +27,7 @@ import {
   reorderPlaylistCache,
 } from './playlistCachePatch';
 import {
+  TRACK_CACHE_FAMILIES,
   getTrackFromCaches,
   patchTrackInCaches,
   removeTrackFromCaches,
@@ -37,15 +38,17 @@ import { isServerEventType, recordUnhandledEvent, type ServerEventType } from '.
 
 type Handler = (queryClient: QueryClient, event: ServerEvent) => void;
 
+// The Track-bearing entries come from the one TRACK_CACHE_FAMILIES declaration;
+// albums/artists/summary/list are the non-Track library families resync also drops.
 const RESYNC_KEYS: readonly (readonly string[])[] = [
-  libraryKeys.tracksPrefix,
-  libraryKeys.lookupPrefix,
+  TRACK_CACHE_FAMILIES.pagedLibrary.prefix,
+  TRACK_CACHE_FAMILIES.lookup.prefix,
   libraryKeys.albumsPrefix,
   libraryKeys.artistsPrefix,
   libraryKeys.summary,
-  libraryKeys.featuringPrefix,
+  TRACK_CACHE_FAMILIES.featuring.prefix,
   playlistKeys.list,
-  playlistKeys.details,
+  TRACK_CACHE_FAMILIES.playlistDetails.prefix,
 ];
 
 function asString(value: unknown): string | null {
