@@ -14,7 +14,7 @@ import (
 
 type VocabularyRefreshService struct {
 	charts   []ports.ChartProvider
-	vocab    ports.VocabularyStore
+	vocab    ports.VocabularyWriter
 	interval time.Duration
 	limit    int
 
@@ -26,7 +26,7 @@ type VocabularyRefreshService struct {
 
 func NewVocabularyRefreshService(
 	charts []ports.ChartProvider,
-	vocab ports.VocabularyStore,
+	vocab ports.VocabularyWriter,
 	interval time.Duration,
 	limit int,
 ) *VocabularyRefreshService {
@@ -55,13 +55,7 @@ func (s *VocabularyRefreshService) RunOnce(ctx context.Context) error {
 }
 
 func (s *VocabularyRefreshService) trim(ctx context.Context) {
-	t, ok := s.vocab.(interface {
-		Trim(ctx context.Context, maxEntries int) error
-	})
-	if !ok {
-		return
-	}
-	if err := t.Trim(ctx, maxVocabEntries); err != nil {
+	if err := s.vocab.Trim(ctx, maxVocabEntries); err != nil {
 		slog.Warn("vocabulary trim failed", "error", err)
 	}
 }
