@@ -81,15 +81,7 @@ func (a *App) wireDiscoveryContent(
 		discoveryDomain.ProviderSpotify:    spotifyContent,
 		discoveryDomain.ProviderSoundCloud: soundcloudContent,
 	}
-	artistProviders := map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider{
-		discoveryDomain.ProviderDeezer:     deezerContent,
-		discoveryDomain.ProviderAppleMusic: appleMusicContent,
-		discoveryDomain.ProviderSpotify:    spotifyContent,
-		discoveryDomain.ProviderSoundCloud: soundcloudContent,
-	}
-	if a.cfg.HasLastFM() {
-		artistProviders[discoveryDomain.ProviderLastFM] = providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
-	}
+	artistProviders := buildArtistContentProviders(clientFactory{}, a.cfg)
 
 	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{
 		"soundcloud": soundcloudContent,

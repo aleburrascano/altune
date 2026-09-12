@@ -110,11 +110,14 @@ func contentSearchOptions(
 		opts = append(opts, discoveryService.WithIdentityStore(identityStore))
 	}
 	if cfg.IdentityVerifyOnPersist && sharedMB != nil {
-		verifyProviders := map[domain.ProviderName]discoveryPorts.ArtistContentProvider{
-			domain.ProviderDeezer:     deezerContent,
-			domain.ProviderSpotify:    providers.NewSpotifyAdapter(cf.discovery()),
-			domain.ProviderAppleMusic: providers.NewAppleMusicAdapter(cf.discovery()),
-		}
+		// Identity verification intentionally runs on a narrower set than the
+		// canonical artist-content map: Deezer + Spotify + Apple Music only.
+		// Build the shared map, then drop SoundCloud and Last.fm so this set is
+		// preserved exactly. Whether the verifier SHOULD include them is a
+		// behavior question tracked separately (see PR), not decided here.
+		verifyProviders := buildArtistContentProviders(cf, cfg)
+		delete(verifyProviders, domain.ProviderSoundCloud)
+		delete(verifyProviders, domain.ProviderLastFM)
 		opts = append(opts, discoveryService.WithIdentityVerifier(
 			discoveryService.NewIdentityVerifier(sharedMB, verifyProviders),
 		))
