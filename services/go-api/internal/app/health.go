@@ -1,14 +1,20 @@
 package app
 
 import (
+	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"net/http"
 	"time"
 
 	adminHandler "altune/go-api/internal/admin/handler"
-	"altune/go-api/internal/shared/database"
-	"altune/go-api/internal/shared/httputil"
 )
+
+// authHealthChecker reports whether the auth subsystem can obtain its JWKS key
+// set. *authAdapters.SupabaseJWTVerifier satisfies it.
+type authHealthChecker interface {
+	CheckHealth(ctx context.Context) error
+}
 
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if a.dependencyHealth(r.Context()).Healthy() {
@@ -45,5 +51,17 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 		detail.RedisLatencyMs = time.Since(start).Milliseconds()
 	}
 
-	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus, Detail: detail}
+	authStatus := "ok"
+	if a.authVerifier == nil {
+		authStatus = "not_configured"
+	} else {
+		start := time.Now()
+		if err := a.authVerifier.CheckHealth(ctx); err != nil {
+			authStatus = "down"
+			detail.AuthError = err.Error()
+		}
+		detail.AuthLatencyMs = time.Since(start).Milliseconds()
+	}
+
+	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus, Auth: authStatus, Detail: detail}
 }

@@ -95,6 +95,9 @@ func (c *Config) validateSupabase() error {
 	if c.SupabaseJWTJWKSURL == "" {
 		return fmt.Errorf("SUPABASE_JWT_JWKS_URL must be set (HS256 mode is not supported)")
 	}
+	if u, err := url.Parse(c.SupabaseJWTJWKSURL); err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("SUPABASE_JWT_JWKS_URL must be a valid URL, got %q", c.SupabaseJWTJWKSURL)
+	}
 	if c.SupabaseProjectURL == "" {
 		return fmt.Errorf("SUPABASE_PROJECT_URL must be set (the JWT issuer is derived from it)")
 	}

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -28,6 +29,13 @@ type SupabaseJWTVerifier struct {
 	jwksURL  string
 	issuer   string
 	audience string
+
+	// primed flips to true once a JWKS fetch has succeeded. Until then,
+	// fetchKeySet forces a refresh on every call: the httprc cache marks the URL
+	// as "already fetched" after the first attempt regardless of outcome, so a
+	// plain Get would otherwise wait for the ~15-minute background refresh window
+	// rather than retrying on the next request as documented.
+	primed atomic.Bool
 }
 
 func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string) (*SupabaseJWTVerifier, error) {
@@ -42,21 +50,25 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 		return nil, fmt.Errorf("register JWKS URL: %w", err)
 	}
 
+	issuer := strings.TrimRight(projectURL, "/") + "/auth/v1"
+
+	v := &SupabaseJWTVerifier{
+		cache:    cache,
+		jwksURL:  jwksURL,
+		issuer:   issuer,
+		audience: audience,
+	}
+
 	// Bound the startup fetch so app.Run cannot hang forever on a hung endpoint.
 	refreshCtx, cancel := context.WithTimeout(ctx, jwksFetchTimeout)
 	defer cancel()
 	if _, err := cache.Refresh(refreshCtx, jwksURL); err != nil {
 		slog.Warn("initial JWKS fetch failed, will retry on first request", "error", err)
+	} else {
+		v.primed.Store(true)
 	}
 
-	issuer := strings.TrimRight(projectURL, "/") + "/auth/v1"
-
-	return &SupabaseJWTVerifier{
-		cache:    cache,
-		jwksURL:  jwksURL,
-		issuer:   issuer,
-		audience: audience,
-	}, nil
+	return v, nil
 }
 
 func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shared.UserId, error) {
@@ -87,11 +99,31 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 // Extracted from Verify's former inline v.cache.Get call so key-set retrieval is
 // a single-purpose step, separate from structural validation and claim mapping.
 func (v *SupabaseJWTVerifier) fetchKeySet(ctx context.Context) (jwk.Set, error) {
+	// When no JWKS fetch has ever succeeded, force a refresh so a transient
+	// startup failure recovers on this request instead of waiting for the
+	// background refresh window. Refresh uses the registered bounded HTTP
+	// client, so a hung endpoint still cannot block past jwksFetchTimeout.
+	if !v.primed.Load() {
+		if _, err := v.cache.Refresh(ctx, v.jwksURL); err != nil {
+			return nil, fmt.Errorf("fetch JWKS: %w", err)
+		}
+		v.primed.Store(true)
+	}
+
 	keySet, err := v.cache.Get(ctx, v.jwksURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch JWKS: %w", err)
 	}
 	return keySet, nil
+}
+
+// CheckHealth reports whether the auth subsystem can obtain its JWKS key set. It
+// runs through the same path incoming requests use, so a typo'd or unreachable
+// JWKS URL surfaces as a degraded dependency, and a transient startup failure is
+// re-attempted here too. Returns nil when the key set is available.
+func (v *SupabaseJWTVerifier) CheckHealth(ctx context.Context) error {
+	_, err := v.fetchKeySet(ctx)
+	return err
 }
 
 // extractUserID maps a validated token's claims onto a shared.UserId. Extracted

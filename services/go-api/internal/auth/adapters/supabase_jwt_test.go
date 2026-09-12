@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -338,6 +339,98 @@ func TestSupabaseJWTVerifier_SlowJWKSEndpointDoesNotHang(t *testing.T) {
 		}
 	case <-time.After(bound):
 		t.Fatalf("Verify hung on a slow JWKS endpoint (no return within %s)", bound)
+	}
+}
+
+// newTogglingJWKSFixture builds a JWKS fixture whose endpoint starts unhealthy
+// (HTTP 500) and only serves keys once healthy is flipped true. It returns the
+// fixture, the server URL, and the toggle so tests can simulate a transient
+// startup failure followed by recovery.
+func newTogglingJWKSFixture(t *testing.T) (*testJWTFixture, string, *atomic.Bool) {
+	t.Helper()
+
+	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	keyID := "test-key-1"
+	keySet := jwk.NewSet()
+	_ = keySet.AddKey(signingJWK(t, privKey.PublicKey, keyID))
+
+	var healthy atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if !healthy.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(keySet)
+	}))
+	t.Cleanup(server.Close)
+
+	projectURL := "https://test-project.supabase.co"
+	f := &testJWTFixture{
+		privateKey: privKey,
+		jwksServer: server,
+		projectURL: projectURL,
+		audience:   "authenticated",
+		issuer:     projectURL + "/auth/v1",
+		keyID:      keyID,
+	}
+	return f, server.URL, &healthy
+}
+
+func TestSupabaseJWTVerifier_TransientStartupFailureRecoversOnNextRequest(t *testing.T) {
+	f, jwksURL, healthy := newTogglingJWKSFixture(t)
+
+	ctx := context.Background()
+	// The endpoint is unhealthy at startup: the initial fetch fails, yet the
+	// constructor still returns a usable verifier.
+	verifier, err := NewSupabaseJWTVerifier(ctx, jwksURL, f.projectURL, f.audience)
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+
+	// The endpoint recovers before the next request arrives.
+	healthy.Store(true)
+
+	sub := uuid.New().String()
+	token := f.signToken(t, map[string]interface{}{
+		"sub": sub,
+		"iss": f.issuer,
+		"aud": f.audience,
+		"exp": time.Now().Add(1 * time.Hour),
+		"iat": time.Now().Add(-1 * time.Minute),
+	})
+
+	// The retry must happen on this request, not after the background window.
+	userID, err := verifier.Verify(ctx, token)
+	if err != nil {
+		t.Fatalf("Verify after endpoint recovery: %v (retry on next request did not happen)", err)
+	}
+	if userID.String() != sub {
+		t.Errorf("userId: got %q, want %q", userID.String(), sub)
+	}
+}
+
+func TestSupabaseJWTVerifier_CheckHealth(t *testing.T) {
+	f, jwksURL, healthy := newTogglingJWKSFixture(t)
+
+	ctx := context.Background()
+	verifier, err := NewSupabaseJWTVerifier(ctx, jwksURL, f.projectURL, f.audience)
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+
+	// JWKS is unreachable at startup: health must report the degradation.
+	if err := verifier.CheckHealth(ctx); err == nil {
+		t.Fatal("expected CheckHealth to report degraded auth while JWKS is down")
+	}
+
+	// Once the endpoint recovers, health clears on the next probe.
+	healthy.Store(true)
+	if err := verifier.CheckHealth(ctx); err != nil {
+		t.Fatalf("expected healthy auth after endpoint recovery, got: %v", err)
 	}
 }
 

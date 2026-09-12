@@ -16,9 +16,11 @@ func TestDependencyHealth_Healthy(t *testing.T) {
 		dep  DependencyHealth
 		want bool
 	}{
-		{"all up", DependencyHealth{DB: "ok", Redis: "ok"}, true},
+		{"all up", DependencyHealth{DB: "ok", Redis: "ok", Auth: "ok"}, true},
 		{"redis down", DependencyHealth{DB: "ok", Redis: "down"}, false},
 		{"db down", DependencyHealth{DB: "down", Redis: "ok"}, false},
+		{"auth down", DependencyHealth{DB: "ok", Redis: "ok", Auth: "down"}, false},
+		{"auth not configured is still ready", DependencyHealth{DB: "ok", Redis: "ok", Auth: "not_configured"}, true},
 		{"redis not configured is still ready", DependencyHealth{DB: "ok", Redis: "not_configured"}, true},
 		{"both not configured is ready", DependencyHealth{DB: "not_configured", Redis: "not_configured"}, true},
 	}
