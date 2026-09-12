@@ -1,12 +1,11 @@
 package service
 
 import (
-	"context"
-	"fmt"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"fmt"
 )
 
 type SetTrackNumberService struct {
@@ -25,6 +24,9 @@ func (s *SetTrackNumberService) Execute(
 ) (updated bool, err error) {
 	if trackNumber <= 0 {
 		return false, domain.NewValidationError("track_number must be positive")
+	}
+	if trackNumber > maxTrackNumber {
+		return false, domain.NewValidationError("track_number exceeds maximum (int4)")
 	}
 	updated, err = s.trackRepo.SetTrackNumber(ctx, trackId, userId, trackNumber)
 	if err != nil {

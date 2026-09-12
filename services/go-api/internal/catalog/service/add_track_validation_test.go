@@ -16,6 +16,7 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 	negDuration := -100.0
 	zeroTrackNumber := 0
 	negTrackNumber := -3
+	hugeTrackNumber := 3000000000
 	farFutureYear := time.Now().UTC().Year() + 50
 	ancientYear := 1000
 
@@ -37,6 +38,11 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 		{
 			name:    "negative track number is rejected",
 			mutate:  func(in *AddTrackInput) { in.TrackNumber = &negTrackNumber },
+			wantErr: "track_number",
+		},
+		{
+			name:    "out-of-range track number is rejected",
+			mutate:  func(in *AddTrackInput) { in.TrackNumber = &hugeTrackNumber },
 			wantErr: "track_number",
 		},
 		{

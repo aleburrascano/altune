@@ -1,18 +1,22 @@
 package service
 
 import (
-	"context"
-	"encoding/json"
-	"log/slog"
-	"time"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	"context"
+	"encoding/json"
+	"log/slog"
+	"time"
 )
 
 const minPlausibleYear = 1860
+
+// maxTrackNumber is the int4 ceiling of the track_number column (see
+// migrations/001_baseline.sql). Values above it cannot encode into Postgres and
+// would otherwise surface as an opaque 500 instead of a validation error.
+const maxTrackNumber = 2147483647
 
 type AddTrackInput struct {
 	Title           string
@@ -116,6 +120,9 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 func validateAddTrackInput(input AddTrackInput) error {
 	if input.TrackNumber != nil && *input.TrackNumber <= 0 {
 		return domain.NewValidationError("track_number must be positive")
+	}
+	if input.TrackNumber != nil && *input.TrackNumber > maxTrackNumber {
+		return domain.NewValidationError("track_number exceeds maximum (int4)")
 	}
 	if input.DurationSeconds != nil && *input.DurationSeconds < 0 {
 		return domain.NewValidationError("duration_seconds must not be negative")
