@@ -14,7 +14,7 @@ import (
 func TestPersistHistory_SavesEntryAndTrimsToRing(t *testing.T) {
 	var inserted *domain.SearchHistoryEntry
 	var trimmedTo int
-	repo := &fakeSearchHistoryRepository{
+	repo := &fakeHistoryWriter{
 		insertFn: func(_ context.Context, e *domain.SearchHistoryEntry) error {
 			inserted = e
 			return nil
@@ -43,7 +43,7 @@ func TestPersistHistory_SavesEntryAndTrimsToRing(t *testing.T) {
 }
 
 func TestPersistHistory_SkippedWhenNotRequested(t *testing.T) {
-	repo := &fakeSearchHistoryRepository{
+	repo := &fakeHistoryWriter{
 		insertFn: func(context.Context, *domain.SearchHistoryEntry) error {
 			t.Error("saveHistory=false must not insert")
 			return nil
@@ -56,7 +56,7 @@ func TestPersistHistory_SkippedWhenNotRequested(t *testing.T) {
 
 func TestPersistHistory_InsertFailureToleratedAndSkipsTrim(t *testing.T) {
 	trimCalled := false
-	repo := &fakeSearchHistoryRepository{
+	repo := &fakeHistoryWriter{
 		insertFn: func(context.Context, *domain.SearchHistoryEntry) error {
 			return errors.New("db down")
 		},
@@ -81,7 +81,7 @@ func TestPersistHistory_InsertFailureToleratedAndSkipsTrim(t *testing.T) {
 }
 
 func TestPersistHistory_TrimFailureTolerated(t *testing.T) {
-	repo := &fakeSearchHistoryRepository{
+	repo := &fakeHistoryWriter{
 		trimToNFn: func(context.Context, shared.UserId, int) error {
 			return errors.New("trim broke")
 		},
@@ -278,7 +278,7 @@ func TestWithExploration_NonPositiveRateIgnored(t *testing.T) {
 }
 
 func TestOptions_WireTheirDependencies(t *testing.T) {
-	repo := &fakeSearchHistoryRepository{}
+	repo := &fakeHistoryWriter{}
 	frs := NewFindRelatedService(nil, nil, nil)
 	validator := &fakeMB{}
 	svc := NewService(nil, NewCircuitBreaker(),

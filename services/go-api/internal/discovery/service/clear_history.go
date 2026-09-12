@@ -9,10 +9,10 @@ import (
 )
 
 type ClearSearchHistoryService struct {
-	historyRepo ports.SearchHistoryRepository
+	historyRepo ports.HistoryEraser
 }
 
-func NewClearSearchHistoryService(historyRepo ports.SearchHistoryRepository) *ClearSearchHistoryService {
+func NewClearSearchHistoryService(historyRepo ports.HistoryEraser) *ClearSearchHistoryService {
 	return &ClearSearchHistoryService{historyRepo: historyRepo}
 }
 

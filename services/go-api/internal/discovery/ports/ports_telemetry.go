@@ -8,10 +8,16 @@ import (
 	"altune/go-api/internal/shared"
 )
 
-type SearchHistoryRepository interface {
+type HistoryWriter interface {
 	Insert(ctx context.Context, entry *domain.SearchHistoryEntry) error
 	TrimToN(ctx context.Context, userId shared.UserId, n int) error
+}
+
+type HistoryReader interface {
 	ListDistinctRecent(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error)
+}
+
+type HistoryEraser interface {
 	DeleteAllForUser(ctx context.Context, userId shared.UserId) error
 }
 

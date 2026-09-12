@@ -40,7 +40,7 @@ type rankingExperiments struct {
 type Service struct {
 	providers        []ports.SearchProvider
 	circuitBreaker   *CircuitBreaker
-	historyRepo      ports.SearchHistoryRepository
+	historyRepo      ports.HistoryWriter
 	vocabStore       ports.VocabularyStore
 	eventStore       ports.EventStore
 	artworkResolver  ports.TaggingArtworkResolver
@@ -102,7 +102,7 @@ func pageOf(ranked []domain.SearchResult, offset, limit int) []domain.SearchResu
 
 type Option func(*Service)
 
-func WithHistoryRepository(r ports.SearchHistoryRepository) Option {
+func WithHistoryRepository(r ports.HistoryWriter) Option {
 	return func(s *Service) { s.historyRepo = r }
 }
 

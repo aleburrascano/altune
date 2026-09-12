@@ -34,7 +34,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		repo      *fakeSearchHistoryRepository
+		repo      *fakeHistoryReader
 		nilRepo   bool
 		limit     int
 		wantCount int
@@ -42,7 +42,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 	}{
 		{
 			name: "happy path returns entries",
-			repo: &fakeSearchHistoryRepository{
+			repo: &fakeHistoryReader{
 				listDistinctFn: func(_ context.Context, _ shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
 					if limit != 5 {
 						t.Errorf("expected limit 5, got %d", limit)
@@ -56,7 +56,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 		},
 		{
 			name: "zero limit defaults to 10",
-			repo: &fakeSearchHistoryRepository{
+			repo: &fakeHistoryReader{
 				listDistinctFn: func(_ context.Context, _ shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
 					if limit != 10 {
 						t.Errorf("expected default limit 10, got %d", limit)
@@ -70,7 +70,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 		},
 		{
 			name: "negative limit defaults to 10",
-			repo: &fakeSearchHistoryRepository{
+			repo: &fakeHistoryReader{
 				listDistinctFn: func(_ context.Context, _ shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
 					if limit != 10 {
 						t.Errorf("expected default limit 10 for negative input, got %d", limit)
@@ -91,7 +91,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 		},
 		{
 			name: "repo error propagates",
-			repo: &fakeSearchHistoryRepository{
+			repo: &fakeHistoryReader{
 				listDistinctFn: func(_ context.Context, _ shared.UserId, _ int) ([]*domain.SearchHistoryEntry, error) {
 					return nil, errors.New("db unavailable")
 				},
