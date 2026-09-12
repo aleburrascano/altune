@@ -6,8 +6,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	adminHandler "altune/go-api/internal/admin/handler"
 )
 
 type stubAuthChecker struct {
@@ -52,7 +50,7 @@ func TestDependencyHealth_HangingDBRespectsTimeout(t *testing.T) {
 		},
 	}
 
-	done := make(chan adminHandler.DependencyHealth, 1)
+	done := make(chan DependencyHealth, 1)
 	go func() { done <- a.dependencyHealth(context.Background()) }()
 
 	select {

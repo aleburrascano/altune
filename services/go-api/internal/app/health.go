@@ -6,9 +6,35 @@ import (
 	"context"
 	"net/http"
 	"time"
-
-	adminHandler "altune/go-api/internal/admin/handler"
 )
+
+// DependencyHealth is the app-owned snapshot of subsystem reachability. The
+// admin handler maps it to its own presentation DTO at its boundary, so this
+// package no longer depends on admin/handler to report health.
+type DependencyHealth struct {
+	DB     string
+	Redis  string
+	Auth   string
+	Detail DependencyDetail
+}
+
+// DependencyDetail carries per-dependency latency and error information
+// gathered during a health probe.
+type DependencyDetail struct {
+	DBLatencyMs    int64
+	DBError        string
+	RedisLatencyMs int64
+	RedisError     string
+	AuthLatencyMs  int64
+	AuthError      string
+	CheckedAt      time.Time
+}
+
+// Healthy reports readiness: a dependency that is "down" fails the check, while
+// "not_configured" is treated as ready.
+func (d DependencyHealth) Healthy() bool {
+	return d.DB != "down" && d.Redis != "down" && d.Auth != "down"
+}
 
 // authHealthChecker reports whether the auth subsystem can obtain its JWKS key
 // set. *authProviders.SupabaseJWTVerifier satisfies it.
@@ -36,8 +62,8 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "degraded"})
 }
 
-func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealth {
-	detail := adminHandler.DependencyDetail{CheckedAt: time.Now().UTC()}
+func (a *App) dependencyHealth(ctx context.Context) DependencyHealth {
+	detail := DependencyDetail{CheckedAt: time.Now().UTC()}
 	timeout := a.probeTimeout()
 
 	dbStatus := "ok"
@@ -79,7 +105,7 @@ func (a *App) dependencyHealth(ctx context.Context) adminHandler.DependencyHealt
 		detail.AuthLatencyMs = time.Since(start).Milliseconds()
 	}
 
-	return adminHandler.DependencyHealth{DB: dbStatus, Redis: redisStatus, Auth: authStatus, Detail: detail}
+	return DependencyHealth{DB: dbStatus, Redis: redisStatus, Auth: authStatus, Detail: detail}
 }
 
 // probeTimeout is the per-dependency bound, falling back to the package default
