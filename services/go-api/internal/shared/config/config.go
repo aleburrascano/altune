@@ -101,6 +101,9 @@ func (c *Config) validateSupabase() error {
 	if u, err := url.Parse(c.SupabaseProjectURL); err != nil || u.Scheme == "" || u.Host == "" {
 		return fmt.Errorf("SUPABASE_PROJECT_URL must be a valid URL, got %q", c.SupabaseProjectURL)
 	}
+	if strings.TrimSpace(c.SupabaseAnonKey) == "" {
+		return fmt.Errorf("SUPABASE_ANON_KEY must be set (the admin console needs it to construct its Supabase client)")
+	}
 	return nil
 }
 
