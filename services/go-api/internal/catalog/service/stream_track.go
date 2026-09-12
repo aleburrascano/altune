@@ -145,7 +145,7 @@ func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId s
 		}
 		slog.InfoContext(ctx, "stream.reacquire_scheduled",
 			"track_id", track.ID.String())
-		s.scheduler.Schedule(userId, track.ID, "")
+		s.scheduler.Schedule(ctx, userId, track.ID, "")
 	}
 
 	return recErr

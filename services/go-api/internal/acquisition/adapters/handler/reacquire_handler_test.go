@@ -1,16 +1,16 @@
 package handler
 
 import (
+	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/shared"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/auth"
 	catdomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -29,7 +29,7 @@ type reacquireFakeScheduler struct {
 	replaced []catdomain.TrackId
 }
 
-func (s *reacquireFakeScheduler) ScheduleReplace(_ shared.UserId, trackId catdomain.TrackId) {
+func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ shared.UserId, trackId catdomain.TrackId) {
 	s.replaced = append(s.replaced, trackId)
 }
 

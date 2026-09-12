@@ -1,16 +1,16 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"net/http"
 )
 
 type acquisitionScheduler interface {
-	Schedule(userId shared.UserId, trackId domain.TrackId, sourceURL string)
+	Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string)
 }
 
 type RetryHandler struct {
@@ -36,8 +36,8 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 		trackRepo: h.trackRepo,
 		admission: h.admission,
 		logMsg:    "retry acquisition: get track failed",
-		schedule: func(userId shared.UserId, trackId domain.TrackId) {
-			h.scheduler.Schedule(userId, trackId, "")
+		schedule: func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
+			h.scheduler.Schedule(ctx, userId, trackId, "")
 		},
 	}.serve(w, r)
 }

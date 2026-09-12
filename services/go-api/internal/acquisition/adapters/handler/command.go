@@ -1,14 +1,14 @@
 package handler
 
 import (
-	"log/slog"
-	"net/http"
-
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	"context"
+	"log/slog"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -21,7 +21,7 @@ type acquisitionCommand struct {
 	trackRepo ports.TrackRepository
 	admission trackAdmission
 	logMsg    string
-	schedule  func(userId shared.UserId, trackId domain.TrackId)
+	schedule  func(ctx context.Context, userId shared.UserId, trackId domain.TrackId)
 }
 
 func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +52,7 @@ func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c.schedule(userId, trackId)
+	c.schedule(r.Context(), userId, trackId)
 
 	w.WriteHeader(http.StatusAccepted)
 }

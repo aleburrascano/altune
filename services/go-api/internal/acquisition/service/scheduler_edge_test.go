@@ -1,13 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -37,9 +36,9 @@ func TestBackgroundScheduler_Schedule_DedupsInflight(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	trackId := domain.NewTrackId()
 
-	scheduler.Schedule(userId, trackId, "")
+	scheduler.Schedule(context.Background(), userId, trackId, "")
 	<-repo.started
-	scheduler.Schedule(userId, trackId, "")
+	scheduler.Schedule(context.Background(), userId, trackId, "")
 	close(repo.release)
 	wg.Wait()
 
@@ -68,7 +67,7 @@ func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
 	cancel()
 	scheduler.Shutdown(ctx)
 
-	scheduler.Schedule(shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
+	scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
 	wg.Wait()
 
 	if got := repo.calls.Load(); got != 0 {
@@ -90,6 +89,6 @@ func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
 	sem := make(chan struct{}, 1)
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
 
-	scheduler.Schedule(shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
+	scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
 	wg.Wait()
 }
