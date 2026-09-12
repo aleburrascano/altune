@@ -16,7 +16,7 @@ import (
 
 const trackColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
-	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version`
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at`
 
 var trackColumnsPrefixed = prefixColumns(trackColumns, "t.")
 
@@ -51,8 +51,8 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 			id, user_id, title, artist, album, duration_seconds,
 			added_at, artwork_url, acquisition_status, dedup_key,
 			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url,
-			rejected_source_keys, audio_version
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+			rejected_source_keys, audio_version, acquisition_started_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
 		ON CONFLICT (user_id, dedup_key) DO NOTHING
 		RETURNING id`,
 		track.ID.UUID(), track.UserId.UUID(),
@@ -60,7 +60,7 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 		track.AddedAt, track.ArtworkURL, track.AcquisitionStatus.String(), track.DedupKey,
 		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
 		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
-		track.RejectedSourceKeys, track.AudioVersion,
+		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt,
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -144,14 +144,14 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) er
 			artwork_url=$7, acquisition_status=$8, dedup_key=$9,
 			year=$10, genre=$11, track_number=$12, album_artist=$13,
 			isrc=$14, audio_ref=$15, failure_reason=$16, acquisition_provenance=$17, audio_source_url=$18,
-			rejected_source_keys=$19, audio_version=$20
+			rejected_source_keys=$19, audio_version=$20, acquisition_started_at=$21
 		WHERE id = $1 AND user_id = $2`,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.Title, track.Artist, track.Album, track.DurationSeconds,
 		track.ArtworkURL, track.AcquisitionStatus.String(), track.DedupKey,
 		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
 		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
-		track.RejectedSourceKeys, track.AudioVersion,
+		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt,
 	)
 	if err != nil {
 		return err
@@ -172,6 +172,25 @@ func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.Track
 		return false, fmt.Errorf("set track number for %s: %w", id.String(), err)
 	}
 	return tag.RowsAffected() > 0, nil
+}
+
+// FailStalePending transitions every pending track whose in-flight marker predates
+// cutoff to failed, clearing the marker. These are tracks whose acquisition job was
+// lost to a process that died mid-flight; moving them to failed lets the retry path
+// reclaim them instead of leaving them stuck at pending forever.
+func (r *PgxTrackRepository) FailStalePending(ctx context.Context, cutoff time.Time, reason string) (int, error) {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE tracks
+		 SET acquisition_status='failed', failure_reason=$2, acquisition_started_at=NULL
+		 WHERE acquisition_status='pending'
+		   AND acquisition_started_at IS NOT NULL
+		   AND acquisition_started_at < $1`,
+		cutoff, reason,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("fail stale pending acquisitions: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error) {
@@ -319,13 +338,14 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 		sourceURL     *string
 		rejectedKeys  []string
 		audioVersion  *string
+		startedAt     *time.Time
 	)
 
 	dest = []any{
 		&id, &userId, &title, &artist, &album, &durSecs,
 		&addedAt, &artworkURL, &acqStatus, &dedupKey,
 		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason, &provenance, &sourceURL,
-		&rejectedKeys, &audioVersion,
+		&rejectedKeys, &audioVersion, &startedAt,
 	}
 
 	build = func() (*domain.Track, error) {
@@ -366,6 +386,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 			AcquisitionProvenance: provenance,
 			AudioSourceURL:        sourceURL,
 			RejectedSourceKeys:    rejectedKeys,
+			AcquisitionStartedAt:  startedAt,
 		}, nil
 	}
 	return dest, build

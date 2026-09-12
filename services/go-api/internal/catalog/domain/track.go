@@ -94,6 +94,13 @@ type Track struct {
 	AcquisitionProvenance *string
 	AudioSourceURL        *string
 	RejectedSourceKeys    []string
+
+	// AcquisitionStartedAt is the durable "in-flight since T" marker. It is set
+	// while an acquisition is believed to be running (status pending) and cleared
+	// once the track reaches a terminal state (ready or failed). A pending track
+	// whose marker is older than the grace window is presumed orphaned by a
+	// process that died mid-flight, and is swept to failed so retry can pick it up.
+	AcquisitionStartedAt *time.Time
 }
 
 const maxRejectedSourceKeys = 25
@@ -110,15 +117,17 @@ func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error)
 		return nil, err
 	}
 	resolved := resolveAlbum(album, title)
+	now := time.Now().UTC()
 	return &Track{
-		ID:                NewTrackId(),
-		UserId:            userId,
-		Title:             title,
-		Artist:            artist,
-		Album:             resolved,
-		AddedAt:           time.Now().UTC(),
-		AcquisitionStatus: AcquisitionPending,
-		DedupKey:          computeDedupKey(title, artist, resolved),
+		ID:                   NewTrackId(),
+		UserId:               userId,
+		Title:                title,
+		Artist:               artist,
+		Album:                resolved,
+		AddedAt:              now,
+		AcquisitionStatus:    AcquisitionPending,
+		AcquisitionStartedAt: &now,
+		DedupKey:             computeDedupKey(title, artist, resolved),
 	}, nil
 }
 
@@ -205,6 +214,7 @@ func (t *Track) MarkReady(audioRef string) error {
 	t.AudioRef = &audioRef
 	t.AudioVersion = uuid.NewString()
 	t.FailureReason = nil
+	t.AcquisitionStartedAt = nil
 	return nil
 }
 
@@ -251,23 +261,32 @@ func (t *Track) MarkFailed(reason string) error {
 	t.AcquisitionStatus = AcquisitionFailed
 	t.FailureReason = &reason
 	t.AudioRef = nil
+	t.AcquisitionStartedAt = nil
 	return nil
 }
 
 func (t *Track) RevertToPending() {
+	now := time.Now().UTC()
 	t.AcquisitionStatus = AcquisitionPending
 	t.AudioRef = nil
 	t.FailureReason = nil
+	t.AcquisitionStartedAt = &now
 }
 
 func (t *Track) IsStreamable() bool {
 	return t.AcquisitionStatus == AcquisitionReady && t.AudioRef != nil
 }
 
+// ReasonAcquisitionInterrupted marks a track whose acquisition job was lost
+// before completing (the process died mid-flight) and was swept from a stale
+// pending state to failed so the existing retry path can reclaim it.
+const ReasonAcquisitionInterrupted = "acquisition_interrupted"
+
 var failureMessages = map[string]string{
-	"no_match_found":  "Couldn't find this track",
-	"download_failed": "Download failed",
-	"ytdlp_error":     "Download error",
+	"no_match_found":             "Couldn't find this track",
+	"download_failed":            "Download failed",
+	"ytdlp_error":                "Download error",
+	ReasonAcquisitionInterrupted: "Acquisition was interrupted",
 }
 
 func FailureMessage(reason *string) string {

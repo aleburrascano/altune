@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"strings"
+	"time"
 
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
@@ -14,15 +15,18 @@ import (
 type TrackRepo struct {
 	Tracks map[string]*domain.Track
 
-	ErrOnAdd    error
-	ErrOnGetBy  error
-	ErrOnList   error
-	ErrOnUpdate error
-	ErrOnDelete error
+	ErrOnAdd       error
+	ErrOnGetBy     error
+	ErrOnList      error
+	ErrOnUpdate    error
+	ErrOnDelete    error
+	ErrOnFailStale error
 
 	LastAlbumsQuery  domain.LibraryQuery
 	LastArtistsQuery domain.LibraryQuery
 }
+
+var _ ports.StalePendingFailer = (*TrackRepo)(nil)
 
 func NewTrackRepo() *TrackRepo {
 	return &TrackRepo{Tracks: make(map[string]*domain.Track)}
@@ -233,6 +237,26 @@ func (r *TrackRepo) ListTracksFeaturing(_ context.Context, userId shared.UserId,
 		}
 	}
 	return out, nil
+}
+
+func (r *TrackRepo) FailStalePending(_ context.Context, cutoff time.Time, reason string) (int, error) {
+	if r.ErrOnFailStale != nil {
+		return 0, r.ErrOnFailStale
+	}
+	n := 0
+	for _, t := range r.Tracks {
+		if t.AcquisitionStatus != domain.AcquisitionPending {
+			continue
+		}
+		if t.AcquisitionStartedAt == nil || !t.AcquisitionStartedAt.Before(cutoff) {
+			continue
+		}
+		if err := t.MarkFailed(reason); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }
 
 func (r *TrackRepo) Seed(track *domain.Track) {
