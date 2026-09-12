@@ -120,7 +120,7 @@ func queryTokenRarity(q string, eligible []Entity) map[string]float64 {
 	}
 	df := make(map[string]int, len(qTokens))
 	for _, e := range eligible {
-		hay := tokenSet(textnorm.NormalizeForMatch(e.Result.Subtitle + " " + e.Result.Title))
+		hay := tokenSet(entityHaystack(e.Result))
 		for t := range qTokens {
 			if hay[t] {
 				df[t]++
@@ -141,7 +141,7 @@ func sharesQueryWord(r domain.SearchResult, queryNorm string) bool {
 	if len(qTokens) == 0 {
 		return true
 	}
-	hay := tokenSet(textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title))
+	hay := tokenSet(entityHaystack(r))
 	for w := range qTokens {
 		if hay[w] {
 			return true
@@ -179,6 +179,12 @@ func rrfScore(bestRank map[domain.ProviderName]int) float64 {
 		s += 1.0 / float64(rrfK+rank)
 	}
 	return s
+}
+
+// entityHaystack builds the normalized match haystack for a result, combining
+// its subtitle and title. Pure: no side effects, deterministic.
+func entityHaystack(r domain.SearchResult) string {
+	return textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title)
 }
 
 func tokenSet(s string) map[string]bool {

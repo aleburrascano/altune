@@ -12,7 +12,7 @@ func idfWeightedCoverage(r domain.SearchResult, q string, rarity map[string]floa
 	if len(qTokens) == 0 {
 		return 0
 	}
-	fullText := strings.Fields(textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title))
+	fullText := strings.Fields(entityHaystack(r))
 	if len(fullText) == 0 {
 		return 0
 	}
@@ -39,7 +39,7 @@ func symmetricSimilarity(r domain.SearchResult, q string) float64 {
 	}
 	best := textnorm.TokenSortRatio(q, textnorm.NormalizeForMatch(r.Title))
 	if r.Subtitle != "" {
-		combined := textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title)
+		combined := entityHaystack(r)
 		if s := textnorm.TokenSortRatio(q, combined); s > best {
 			best = s
 		}
