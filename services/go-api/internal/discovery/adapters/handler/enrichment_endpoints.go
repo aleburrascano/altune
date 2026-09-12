@@ -23,6 +23,28 @@ func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, 
 	return kind, true
 }
 
+func withEnricher(
+	w http.ResponseWriter,
+	r *http.Request,
+	available bool,
+	empty func() any,
+	call func() (any, error),
+	logMsg string,
+	logArgs ...any,
+) {
+	if !available {
+		httputil.WriteJSON(w, http.StatusOK, empty())
+		return
+	}
+	result, err := call()
+	if err != nil {
+		slog.ErrorContext(r.Context(), logMsg, append([]any{"error", err}, logArgs...)...)
+		httputil.InternalError(w)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, result)
+}
+
 func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Request) {
 	kind, ok := parseKindParam(w, r)
 	if !ok {
@@ -36,20 +58,16 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if h.enrichSvc == nil {
-		httputil.WriteJSON(w, http.StatusOK, enrichmentToDTO(domain.EmptyEnrichment()))
-		return
-	}
-
-	e, err := h.enrichSvc.Execute(r.Context(), kind, title, subtitle, mbid)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "enrichment failed",
-			"error", err, "kind", kind.String(), "title", title)
-		httputil.InternalError(w)
-		return
-	}
-
-	httputil.WriteJSON(w, http.StatusOK, enrichmentToDTO(e))
+	withEnricher(w, r, h.enrichSvc != nil,
+		func() any { return enrichmentToDTO(domain.EmptyEnrichment()) },
+		func() (any, error) {
+			e, err := h.enrichSvc.Execute(r.Context(), kind, title, subtitle, mbid)
+			if err != nil {
+				return nil, err
+			}
+			return enrichmentToDTO(e), nil
+		},
+		"enrichment failed", "kind", kind.String(), "title", title)
 }
 
 type EnrichmentResponseDTO struct {
@@ -111,20 +129,16 @@ func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http
 		return
 	}
 
-	if h.enrichers.LastFm == nil {
-		httputil.WriteJSON(w, http.StatusOK, lastfmEnrichmentToDTO(domain.EmptyLastFmEnrichment()))
-		return
-	}
-
-	e, err := h.enrichers.LastFm.Execute(r.Context(), kind, title, subtitle)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "lastfm enrichment failed",
-			"error", err, "kind", kind.String(), "title", title)
-		httputil.InternalError(w)
-		return
-	}
-
-	httputil.WriteJSON(w, http.StatusOK, lastfmEnrichmentToDTO(e))
+	withEnricher(w, r, h.enrichers.LastFm != nil,
+		func() any { return lastfmEnrichmentToDTO(domain.EmptyLastFmEnrichment()) },
+		func() (any, error) {
+			e, err := h.enrichers.LastFm.Execute(r.Context(), kind, title, subtitle)
+			if err != nil {
+				return nil, err
+			}
+			return lastfmEnrichmentToDTO(e), nil
+		},
+		"lastfm enrichment failed", "kind", kind.String(), "title", title)
 }
 
 type LastFmEnrichmentResponseDTO struct {
@@ -165,20 +179,16 @@ func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http
 		return
 	}
 
-	if h.enrichers.Deezer == nil {
-		httputil.WriteJSON(w, http.StatusOK, deezerEnrichmentToDTO(domain.EmptyDeezerEnrichment()))
-		return
-	}
-
-	e, err := h.enrichers.Deezer.Execute(r.Context(), kind, title, subtitle)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "deezer enrichment failed",
-			"error", err, "kind", kind.String(), "title", title)
-		httputil.InternalError(w)
-		return
-	}
-
-	httputil.WriteJSON(w, http.StatusOK, deezerEnrichmentToDTO(e))
+	withEnricher(w, r, h.enrichers.Deezer != nil,
+		func() any { return deezerEnrichmentToDTO(domain.EmptyDeezerEnrichment()) },
+		func() (any, error) {
+			e, err := h.enrichers.Deezer.Execute(r.Context(), kind, title, subtitle)
+			if err != nil {
+				return nil, err
+			}
+			return deezerEnrichmentToDTO(e), nil
+		},
+		"deezer enrichment failed", "kind", kind.String(), "title", title)
 }
 
 type DeezerEnrichmentResponseDTO struct {
@@ -215,19 +225,16 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if h.enrichers.Lyrics == nil {
-		httputil.WriteJSON(w, http.StatusOK, lyricsToDTO(domain.EmptyDeezerLyrics()))
-		return
-	}
-
-	l, err := h.enrichers.Lyrics.Execute(r.Context(), title, subtitle)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "lyrics fetch failed", "error", err, "title", title)
-		httputil.InternalError(w)
-		return
-	}
-
-	httputil.WriteJSON(w, http.StatusOK, lyricsToDTO(l))
+	withEnricher(w, r, h.enrichers.Lyrics != nil,
+		func() any { return lyricsToDTO(domain.EmptyDeezerLyrics()) },
+		func() (any, error) {
+			l, err := h.enrichers.Lyrics.Execute(r.Context(), title, subtitle)
+			if err != nil {
+				return nil, err
+			}
+			return lyricsToDTO(l), nil
+		},
+		"lyrics fetch failed", "title", title)
 }
 
 type LyricsResponseDTO struct {
