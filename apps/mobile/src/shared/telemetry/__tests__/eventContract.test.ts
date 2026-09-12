@@ -192,7 +192,9 @@ describe('client-submittable subset: every DiscoveryEventType the mobile client 
 describe('envelope field names: every field the mobile client sends is one search_endpoints.go decodes', () => {
   it('DiscoveryEvent field names are a subset of DiscoveryEventRequest json tags', () => {
     const goFields = deriveGoEnvelopeFieldNames(
-      readGoFile('internal/discovery/adapters/handler/search_endpoints.go'),
+      // DiscoveryEventRequest was extracted from search_endpoints.go into
+      // search_dto.go; the endpoint still decodes into it.
+      readGoFile('internal/discovery/adapters/handler/search_dto.go'),
     );
     const mobileFields = deriveMobileEnvelopeFieldNames(fs.readFileSync(RECORD_EVENT_TS, 'utf8'));
 
@@ -205,7 +207,7 @@ describe('envelope field names: every field the mobile client sends is one searc
 
   it('the outbox envelope (event_id, client_occurred_at) also names fields Go decodes', () => {
     const goFields = deriveGoEnvelopeFieldNames(
-      readGoFile('internal/discovery/adapters/handler/search_endpoints.go'),
+      readGoFile('internal/discovery/adapters/handler/search_dto.go'),
     );
     const outboxSource = fs.readFileSync(OUTBOX_TS, 'utf8');
 
