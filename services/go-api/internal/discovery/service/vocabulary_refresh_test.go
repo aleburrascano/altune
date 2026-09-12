@@ -27,6 +27,14 @@ type fakeVocabularyStore struct {
 	addFn             func(entry domain.VocabularyEntry) error
 	suggestCalls      int
 	findClosestCalls  int
+	trimCalls         int
+	trimmedTo         int
+}
+
+func (f *fakeVocabularyStore) Trim(_ context.Context, maxEntries int) error {
+	f.trimCalls++
+	f.trimmedTo = maxEntries
+	return nil
 }
 
 func (f *fakeVocabularyStore) Add(_ context.Context, entry domain.VocabularyEntry) error {

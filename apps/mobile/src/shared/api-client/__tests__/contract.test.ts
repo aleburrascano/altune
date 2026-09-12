@@ -56,8 +56,15 @@ function extractGoStruct(source: string, structName: string): string {
   return source.slice(bodyStart, end);
 }
 
-function deriveGoFields(structBody: string): Map<string, GoField> {
+const EMBEDDED_STRUCT_LINE = /^\s*([A-Z]\w*)\s*$/gm;
+
+function deriveGoFields(source: string, structBody: string): Map<string, GoField> {
   const fields = new Map<string, GoField>();
+  for (const m of structBody.matchAll(EMBEDDED_STRUCT_LINE)) {
+    for (const [k, v] of deriveGoFields(source, extractGoStruct(source, m[1]!))) {
+      fields.set(k, v);
+    }
+  }
   for (const m of structBody.matchAll(STRUCT_FIELD_LINE)) {
     fields.set(m[2]!, { goType: m[1]!, omitempty: m[3] === ',omitempty' });
   }
@@ -388,7 +395,7 @@ describe('TrackResponse (types.ts) <-> service.TrackDTO (aliased TrackResponse i
     goPath('internal', 'catalog', 'service', 'track_dto.go'),
     'utf8',
   );
-  const goFields = deriveGoFields(extractGoStruct(trackDtoSource, 'TrackDTO'));
+  const goFields = deriveGoFields(trackDtoSource, extractGoStruct(trackDtoSource, 'TrackDTO'));
   const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
   const tsLines = extractTsTypeLines(typesSource, 'TrackResponse');
 
@@ -413,7 +420,10 @@ describe('ListTracksResponse (types.ts) <-> ListTracksResponse (track_handler.go
       goPath('internal', 'catalog', 'adapters', 'handler', 'track_handler.go'),
       'utf8',
     );
-    const goFields = deriveGoFields(extractGoStruct(trackHandlerSource, 'ListTracksResponse'));
+    const goFields = deriveGoFields(
+      trackHandlerSource,
+      extractGoStruct(trackHandlerSource, 'ListTracksResponse'),
+    );
     const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
     const tsLines = extractTsTypeLines(typesSource, 'ListTracksResponse');
 
@@ -429,7 +439,10 @@ describe('CreateTrackRequest (types.ts) <-> CreateTrackRequest (track_handler.go
       goPath('internal', 'catalog', 'adapters', 'handler', 'track_handler.go'),
       'utf8',
     );
-    const goFields = deriveGoFields(extractGoStruct(trackHandlerSource, 'CreateTrackRequest'));
+    const goFields = deriveGoFields(
+      trackHandlerSource,
+      extractGoStruct(trackHandlerSource, 'CreateTrackRequest'),
+    );
     const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
     const tsLines = extractTsTypeLines(typesSource, 'CreateTrackRequest');
 
@@ -444,7 +457,10 @@ describe('CreateTrackRequest (types.ts) <-> CreateTrackRequest (track_handler.go
       goPath('internal', 'catalog', 'adapters', 'handler', 'track_handler.go'),
       'utf8',
     );
-    const goFields = deriveGoFields(extractGoStruct(trackHandlerSource, 'CreateTrackRequest'));
+    const goFields = deriveGoFields(
+      trackHandlerSource,
+      extractGoStruct(trackHandlerSource, 'CreateTrackRequest'),
+    );
     const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
     const tsLines = extractTsTypeLines(typesSource, 'CreateTrackRequest');
 
@@ -474,7 +490,10 @@ describe('Playlist DTOs (playlist_handler.go) <-> types.ts', () => {
     'RemoveTracksFromPlaylistResponse',
     'ReorderTracksRequest',
   ])('%s has the same field set on both sides', (name) => {
-    const goFields = deriveGoFields(extractGoStruct(playlistHandlerSource, name));
+    const goFields = deriveGoFields(
+      playlistHandlerSource,
+      extractGoStruct(playlistHandlerSource, name),
+    );
     const tsLines = extractTsTypeLines(typesSource, name);
 
     expect(goFields.size).toBeGreaterThan(0);
@@ -496,7 +515,10 @@ describe('Library lens DTOs (library_handler.go) <-> library.ts', () => {
     ['ListAlbumsResponse', 'ListAlbumsResponse'],
     ['ListArtistsResponse', 'ListArtistsResponse'],
   ])('%s (Go) has the same field set as %s (TS)', (goName, tsName) => {
-    const goFields = deriveGoFields(extractGoStruct(libraryHandlerSource, goName));
+    const goFields = deriveGoFields(
+      libraryHandlerSource,
+      extractGoStruct(libraryHandlerSource, goName),
+    );
     const tsLines = extractTsTypeLines(librarySource, tsName);
 
     expect(goFields.size).toBeGreaterThan(0);
@@ -511,7 +533,10 @@ describe('audioURLDTO (audio_url_handler.go) <-> ResolvedAudioUrl (audio.ts) —
       goPath('internal', 'catalog', 'adapters', 'handler', 'audio_url_handler.go'),
       'utf8',
     );
-    const goFields = deriveGoFields(extractGoStruct(audioUrlHandlerSource, 'audioURLDTO'));
+    const goFields = deriveGoFields(
+      audioUrlHandlerSource,
+      extractGoStruct(audioUrlHandlerSource, 'audioURLDTO'),
+    );
     const audioSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'audio.ts'), 'utf8');
     const tsLines = extractTsInterfaceLines(audioSource, 'ResolvedAudioUrl');
 
@@ -535,7 +560,10 @@ describe('queue-state pair (queue_handler.go) <-> QueueStateResponse / SaveQueue
   const playbackSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'playback.ts'), 'utf8');
 
   it('QueueStateResponse (TS) fields are a subset of queueStateResponse (Go), dropping only the documented source_id carryover field', () => {
-    const goFields = deriveGoFields(extractGoStruct(queueHandlerSource, 'queueStateResponse'));
+    const goFields = deriveGoFields(
+      queueHandlerSource,
+      extractGoStruct(queueHandlerSource, 'queueStateResponse'),
+    );
     const tsLines = extractTsInterfaceLines(playbackSource, 'QueueStateResponse');
 
     expect(goFields.size).toBeGreaterThan(0);
@@ -550,7 +578,10 @@ describe('queue-state pair (queue_handler.go) <-> QueueStateResponse / SaveQueue
   });
 
   it('every omitempty Go field on queueStateResponse is optional or nullable on the TS side', () => {
-    const goFields = deriveGoFields(extractGoStruct(queueHandlerSource, 'queueStateResponse'));
+    const goFields = deriveGoFields(
+      queueHandlerSource,
+      extractGoStruct(queueHandlerSource, 'queueStateResponse'),
+    );
     const tsLines = extractTsInterfaceLines(playbackSource, 'QueueStateResponse');
 
     const omitemptyFields = [...goFields.entries()].filter(([, f]) => f.omitempty).map(([k]) => k);
@@ -561,7 +592,10 @@ describe('queue-state pair (queue_handler.go) <-> QueueStateResponse / SaveQueue
   });
 
   it('SaveQueueStateRequest (TS) fields are a subset of saveQueueRequest (Go), dropping only the documented source_id carryover field', () => {
-    const goFields = deriveGoFields(extractGoStruct(queueHandlerSource, 'saveQueueRequest'));
+    const goFields = deriveGoFields(
+      queueHandlerSource,
+      extractGoStruct(queueHandlerSource, 'saveQueueRequest'),
+    );
     const tsLines = extractTsInterfaceLines(playbackSource, 'SaveQueueStateRequest');
 
     expect(goFields.size).toBeGreaterThan(0);
