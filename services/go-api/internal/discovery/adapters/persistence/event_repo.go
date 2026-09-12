@@ -161,15 +161,13 @@ func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time
 	}
 	defer rows.Close()
 
-	signals := []ports.BehavioralSignal{}
-	for rows.Next() {
+	return collectRows(rows, func(rows pgx.Rows) (ports.BehavioralSignal, error) {
 		var sig ports.BehavioralSignal
 		if err := rows.Scan(&sig.ResultSignature, &sig.Score); err != nil {
-			return nil, fmt.Errorf("scan satisfaction signal: %w", err)
+			return sig, fmt.Errorf("scan satisfaction signal: %w", err)
 		}
-		signals = append(signals, sig)
-	}
-	return signals, rows.Err()
+		return sig, nil
+	})
 }
 
 func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) ([]ports.BehavioralLabel, error) {
@@ -195,22 +193,20 @@ func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) (
 	}
 	defer rows.Close()
 
-	labels := []ports.BehavioralLabel{}
-	for rows.Next() {
+	return collectRows(rows, func(rows pgx.Rows) (ports.BehavioralLabel, error) {
 		var (
 			lbl         ports.BehavioralLabel
 			hasNegative int
 		)
 		if err := rows.Scan(&lbl.QueryNorm, &lbl.ResultSignature, &lbl.Title, &lbl.Subtitle, &hasNegative); err != nil {
-			return nil, fmt.Errorf("scan behavioral label: %w", err)
+			return lbl, fmt.Errorf("scan behavioral label: %w", err)
 		}
 		lbl.Polarity = 1
 		if hasNegative == 1 {
 			lbl.Polarity = -1
 		}
-		labels = append(labels, lbl)
-	}
-	return labels, rows.Err()
+		return lbl, nil
+	})
 }
 
 func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
@@ -246,13 +242,11 @@ func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, 
 }
 
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {
-	counts := []ports.QueryCount{}
-	for rows.Next() {
+	return collectRows(rows, func(rows pgx.Rows) (ports.QueryCount, error) {
 		var qc ports.QueryCount
 		if err := rows.Scan(&qc.QueryNorm, &qc.Count); err != nil {
-			return nil, fmt.Errorf("scan query count: %w", err)
+			return qc, fmt.Errorf("scan query count: %w", err)
 		}
-		counts = append(counts, qc)
-	}
-	return counts, rows.Err()
+		return qc, nil
+	})
 }
