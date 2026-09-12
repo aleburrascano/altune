@@ -1,13 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/catalog/domain"
 	"context"
 	"errors"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
 )
 
 func TestStreamTrackService_Execute(t *testing.T) {
@@ -46,26 +45,26 @@ func TestStreamTrackService_Execute(t *testing.T) {
 			wantScheduled: true,
 		},
 		{
-			name: "transient stream error over present file stays ready",
+			name: "transient stream error over present file is retryable, not missing",
 			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
 				track := seedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/here.opus")
 				store.Seed("audio/here.opus", []byte("data"))
 				store.ErrOnStream = errors.New("transient")
 				return track.ID
 			},
-			wantErr:       ErrAudioNotAvailable,
+			wantErr:       ErrAudioTemporarilyUnavailable,
 			wantStatus:    ptrStatus(domain.AcquisitionReady),
 			wantScheduled: false,
 		},
 		{
-			name: "exists check error does not mark failed",
+			name: "exists check error is retryable and does not mark failed",
 			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
 				track := seedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/err.opus")
 				store.ErrOnStream = errors.New("stream fail")
 				store.ErrOnExists = errors.New("s3 down")
 				return track.ID
 			},
-			wantErr:       ErrAudioNotAvailable,
+			wantErr:       ErrAudioTemporarilyUnavailable,
 			wantStatus:    ptrStatus(domain.AcquisitionReady),
 			wantScheduled: false,
 		},
