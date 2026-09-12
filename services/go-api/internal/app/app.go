@@ -77,22 +77,23 @@ import (
 )
 
 type App struct {
-	cfg            *config.Config
-	pool           *pgxpool.Pool
-	dbHealth       dbHealthChecker
-	redisClient    *goredis.Client
-	authVerifier   authHealthChecker
-	server         *http.Server
-	wg             sync.WaitGroup
-	sem            chan struct{}
-	scheduler      *acqService.BackgroundAcquisitionScheduler
-	vocabRefresh   *discoveryService.VocabularyRefreshService
-	eventBus       *events.InProcessBus
-	alertMonitor   *adminAlert.Monitor
-	logRing        *logging.RingBuffer
-	eventFeed      *eventtap.Feed
-	providerHealth *providerhealth.Store
-	evalMeter      *evalmeter.Meter
+	cfg             *config.Config
+	pool            *pgxpool.Pool
+	dbHealth        dbHealthChecker
+	depProbeTimeout time.Duration
+	redisClient     *goredis.Client
+	authVerifier    authHealthChecker
+	server          *http.Server
+	wg              sync.WaitGroup
+	sem             chan struct{}
+	scheduler       *acqService.BackgroundAcquisitionScheduler
+	vocabRefresh    *discoveryService.VocabularyRefreshService
+	eventBus        *events.InProcessBus
+	alertMonitor    *adminAlert.Monitor
+	logRing         *logging.RingBuffer
+	eventFeed       *eventtap.Feed
+	providerHealth  *providerhealth.Store
+	evalMeter       *evalmeter.Meter
 
 	election         *leader.Election
 	backgroundStarts []func(context.Context)
