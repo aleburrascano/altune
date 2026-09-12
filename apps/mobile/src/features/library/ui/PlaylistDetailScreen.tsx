@@ -19,10 +19,7 @@ import { confirmDestructive } from '@shared/ui/confirmDestructive';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
-import type { TrackResponse } from '@shared/api-client/types';
 import {
-  AddToPlaylistSheet,
   useAddTracksToPlaylist,
   useDeletePlaylist,
   useRemoveTracksFromPlaylist,
@@ -30,14 +27,11 @@ import {
 } from '@shared/playlists';
 
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
-import { useSelection } from '../useSelection';
+import { useTrackSelection } from '../hooks/useTrackSelection';
 import { AddTracksToPlaylistModal } from './AddTracksToPlaylistModal';
 import { LibraryRow } from './LibraryRow';
 import { PlaylistHero } from './PlaylistHero';
-import { SelectionBar } from './SelectionBar';
-import { buildSelectionActions } from './selectionActions';
-import { useReacquireTrack } from '../hooks/useReacquireTrack';
-import { buildTrackMenuItems } from './trackMenu';
+import { TrackSelectionOverlay } from './TrackSelectionOverlay';
 import { useLibraryNavigation } from './useLibraryNavigation';
 
 export function PlaylistDetailScreen(): ReactElement {
@@ -49,7 +43,6 @@ export function PlaylistDetailScreen(): ReactElement {
   const [editName, setEditName] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
   const [addTracksVisible, setAddTracksVisible] = useState(false);
-  const [addToPlaylistVisible, setAddToPlaylistVisible] = useState(false);
 
   const {
     data: playlistData,
@@ -75,24 +68,33 @@ export function PlaylistDetailScreen(): ReactElement {
   const pinMany = usePinnedStore((s) => s.pinMany);
   const unpin = usePinnedStore((s) => s.unpin);
   const retryMut = useRetryAcquisition();
-  const reacquireMutation = useReacquireTrack();
   const retryingTrackId = retryMut.isPending ? retryMut.variables : undefined;
   const { navigateToTrack } = useLibraryNavigation(router);
   const playback = usePlayback();
   const queue = useQueuePlayback();
-  const selection = useSelection();
-  const [trackAction, setTrackAction] = useState<{
-    track: TrackResponse;
-    anchor: MenuAnchor;
-  } | null>(null);
 
-  const trackMenuItems = (track: TrackResponse) =>
-    buildTrackMenuItems(track, {
-      onReacquire: () => reacquireMutation.mutate(track.id),
-      queue,
-      onViewDetails: () => navigateToTrack(track),
-      danger: { label: 'Remove from Playlist', onPress: () => removeMut.mutate([track.id]) },
-    });
+  const trackSelection = useTrackSelection({
+    queue,
+    onViewDetails: navigateToTrack,
+    trackDanger: (track) => ({
+      label: 'Remove from Playlist',
+      onPress: () => removeMut.mutate([track.id]),
+    }),
+    selectionDanger: {
+      label: 'Remove',
+      onRemove: (ids, clear) =>
+        confirmDestructive({
+          title: 'Remove from Playlist',
+          message: `Remove ${ids.length} ${countLabel(ids.length, 'track')} from ${playlistData?.name ?? ''}?`,
+          confirmLabel: 'Remove',
+          onConfirm: () => {
+            removeMut.mutate(ids);
+            clear();
+          },
+        }),
+    },
+  });
+  const { selection } = trackSelection;
 
   const handleDelete = () => {
     confirmDestructive({
@@ -219,32 +221,6 @@ export function PlaylistDetailScreen(): ReactElement {
             onPress: () => pinMany(downloadableIds),
           };
 
-  const confirmRemoveSelected = () => {
-    const ids = selection.ids;
-    confirmDestructive({
-      title: 'Remove from Playlist',
-      message: `Remove ${ids.length} ${countLabel(ids.length, 'track')} from ${pl.name}?`,
-      confirmLabel: 'Remove',
-      onConfirm: () => {
-        removeMut.mutate(ids);
-        selection.clear();
-      },
-    });
-  };
-
-  const selectionActions = buildSelectionActions(
-    pl.tracks.filter((t) => selection.has(t.id)),
-    {
-      pinnedEntries,
-      pinMany,
-      unpin,
-      queue,
-      onAddToPlaylist: () => setAddToPlaylistVisible(true),
-      onDone: selection.clear,
-      danger: { label: 'Remove', onPress: confirmRemoveSelected },
-    },
-  );
-
   return (
     <Screen padded={false}>
       <LinearGradient
@@ -313,7 +289,7 @@ export function PlaylistDetailScreen(): ReactElement {
                   }
                 : {})}
               onPress={() => navigateToTrack(item)}
-              onMore={(anchor) => setTrackAction({ track: item, anchor })}
+              onMore={(anchor) => trackSelection.onTrackMore(item, anchor)}
               onLongPress={() => selection.begin(item.id)}
               {...(selection.active
                 ? {
@@ -341,27 +317,6 @@ export function PlaylistDetailScreen(): ReactElement {
         }
       />
 
-      {selection.active ? (
-        <SelectionBar
-          count={selection.count}
-          allSelected={selection.count === pl.tracks.length}
-          onSelectAll={() =>
-            selection.count === pl.tracks.length
-              ? selection.clear()
-              : selection.selectAll(pl.tracks.map((t) => t.id))
-          }
-          onCancel={selection.clear}
-          actions={selectionActions}
-        />
-      ) : null}
-
-      <ContextMenu
-        visible={trackAction != null}
-        anchor={trackAction?.anchor}
-        items={trackAction != null ? trackMenuItems(trackAction.track) : []}
-        onClose={() => setTrackAction(null)}
-      />
-
       <AddTracksToPlaylistModal
         visible={addTracksVisible}
         playlistName={pl.name}
@@ -376,14 +331,10 @@ export function PlaylistDetailScreen(): ReactElement {
         onClose={() => setAddTracksVisible(false)}
       />
 
-      <AddToPlaylistSheet
-        visible={addToPlaylistVisible}
-        label={`${selection.count} ${countLabel(selection.count, 'track')}`}
-        resolveTrackIds={() => Promise.resolve(selection.ids)}
-        onClose={() => {
-          setAddToPlaylistVisible(false);
-          selection.clear();
-        }}
+      <TrackSelectionOverlay
+        controller={trackSelection}
+        tracks={pl.tracks}
+        barVisible={selection.active}
       />
     </Screen>
   );
