@@ -105,6 +105,28 @@ func (r *PgxEventStore) ZeroResultQueries(ctx context.Context, since time.Time, 
 	return scanQueryCounts(rows)
 }
 
+// ZeroResultTotal counts every zero-result search in the window, unbounded by
+// the top-N cap of ZeroResultQueries. The list is truncated at a LIMIT for
+// display; this true total is what threshold comparisons must use so a window
+// spanning more than that many distinct normalized queries is not undercounted.
+func (r *PgxEventStore) ZeroResultTotal(ctx context.Context, since time.Time) (int, error) {
+	var total int
+	err := r.pool.QueryRow(ctx,
+		`SELECT COUNT(*)
+		FROM discovery_events
+		WHERE event_type = $1
+			AND occurred_at >= $2
+			AND query_norm IS NOT NULL
+			AND CASE WHEN jsonb_typeof(payload->'zero_result') = 'boolean'
+				THEN (payload->>'zero_result')::boolean ELSE false END`,
+		domain.EventTypeSearchPerformed.String(), since,
+	).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("count zero-result events: %w", err)
+	}
+	return total, nil
+}
+
 func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT e.query_norm, COUNT(*) AS cnt
