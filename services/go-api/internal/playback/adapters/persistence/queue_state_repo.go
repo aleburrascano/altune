@@ -19,6 +19,14 @@ var _ ports.QueueStateRepository = (*PgxQueueStateRepository)(nil)
 
 var queueStateOpTimeout = 3 * time.Second
 
+type corruptStoredStateError struct {
+	cause error
+}
+
+func (e *corruptStoredStateError) Error() string {
+	return fmt.Sprintf("corrupt stored queue state: %v", e.cause)
+}
+
 type querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
@@ -96,7 +104,7 @@ func (r *PgxQueueStateRepository) GetForUser(
 
 	rm, err := domain.ParseRepeatMode(repeatMode)
 	if err != nil {
-		return nil, fmt.Errorf("parse repeat mode: %w", err)
+		return nil, &corruptStoredStateError{cause: err}
 	}
 
 	state, err := domain.RehydrateQueueState(domain.QueueStateInput{
@@ -110,7 +118,7 @@ func (r *PgxQueueStateRepository) GetForUser(
 		NaturalOrder: naturalOrder,
 	}, updatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("rehydrate queue state: %w", err)
+		return nil, &corruptStoredStateError{cause: err}
 	}
 	return state, nil
 }

@@ -78,4 +78,79 @@ func TestBackfillFeaturedService(t *testing.T) {
 			t.Fatalf("result = %+v", res)
 		}
 	})
+
+	t.Run("resolver error is counted as failed", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		repo.Seed(newTrackFeat(t, userId, "X"))
+		svc := NewBackfillFeaturedService(repo, fakeResolver{err: errors.New("provider down")})
+		res, err := svc.Execute(ctx, userId)
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		if res.Failed != 1 {
+			t.Fatalf("result = %+v, want failed 1", res)
+		}
+	})
+
+	t.Run("repo error preserves partial progress", func(t *testing.T) {
+		t1 := newTrackFeat(t, userId, "Track 1")
+		t2 := newTrackFeat(t, userId, "Track 2")
+		t3 := newTrackFeat(t, userId, "Track 3")
+		repo := &orderedTrackRepo{
+			TrackRepo:      catalogtest.NewTrackRepo(),
+			order:          []*domain.Track{t1, t2, t3},
+			failReplaceID:  t2.ID,
+			failReplaceErr: errors.New("db down"),
+		}
+		repo.Seed(t1)
+		repo.Seed(t2)
+		repo.Seed(t3)
+
+		resolver := fakeResolver{byTitle: map[string][]domain.FeaturedArtist{
+			"Track 1": {{Name: "Guest 1", MBID: "m1", Role: domain.RoleFeatured}},
+			"Track 2": {{Name: "Guest 2", MBID: "m2", Role: domain.RoleFeatured}},
+			"Track 3": {{Name: "Guest 3", MBID: "m3", Role: domain.RoleFeatured}},
+		}}
+		svc := NewBackfillFeaturedService(repo, resolver)
+
+		res, err := svc.Execute(ctx, userId)
+		if err == nil {
+			t.Fatalf("expected error from repo, got nil")
+		}
+		if res == nil {
+			t.Fatalf("expected partial result alongside error, got nil")
+		}
+		if res.Updated != 1 {
+			t.Fatalf("result = %+v, want updated 1 (first item persisted before the failure)", res)
+		}
+		if res.Failed != 1 {
+			t.Fatalf("result = %+v, want failed 1", res)
+		}
+	})
+}
+
+type orderedTrackRepo struct {
+	*catalogtest.TrackRepo
+	order          []*domain.Track
+	failReplaceID  domain.TrackId
+	failReplaceErr error
+}
+
+func (r *orderedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
+	total := len(r.order)
+	if offset >= total {
+		return nil, total, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return r.order[offset:end], total, nil
+}
+
+func (r *orderedTrackRepo) ReplaceFeaturedArtists(ctx context.Context, id domain.TrackId, userId shared.UserId, feats []domain.FeaturedArtist) error {
+	if r.failReplaceErr != nil && id == r.failReplaceID {
+		return r.failReplaceErr
+	}
+	return r.TrackRepo.ReplaceFeaturedArtists(ctx, id, userId, feats)
 }
