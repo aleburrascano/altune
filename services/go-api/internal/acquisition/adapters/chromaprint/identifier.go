@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"strconv"
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/execcmd"
 )
 
 const (
@@ -77,20 +77,13 @@ func (i *Identifier) Identify(ctx context.Context, filePath string) (ports.Recor
 }
 
 func (i *Identifier) fingerprintFile(ctx context.Context, filePath string) (fingerprint, error) {
-	fpCtx, cancel := context.WithTimeout(ctx, fingerprintTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(fpCtx, i.fpcalc, "-json", filePath)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fingerprint{}, fmt.Errorf("fpcalc: %w (stderr: %s)", err, stderr.String())
+	stdout, stderr, err := execcmd.RunWithTimeout(ctx, fingerprintTimeout, i.fpcalc, "-json", filePath)
+	if err != nil {
+		return fingerprint{}, fmt.Errorf("fpcalc: %w (stderr: %s)", err, stderr)
 	}
 
 	var fp fingerprint
-	if err := json.Unmarshal(stdout.Bytes(), &fp); err != nil {
+	if err := json.Unmarshal([]byte(stdout), &fp); err != nil {
 		return fingerprint{}, fmt.Errorf("parse fpcalc output: %w", err)
 	}
 	return fp, nil

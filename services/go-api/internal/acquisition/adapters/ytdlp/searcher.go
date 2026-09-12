@@ -1,17 +1,16 @@
 package ytdlp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/execcmd"
 	sharedytdlp "altune/go-api/internal/shared/ytdlp"
 )
 
@@ -105,9 +104,6 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 }
 
 func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir string) (string, error) {
-	downloadCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-
 	outTemplate := filepath.Join(outDir, "%(title)s.%(ext)s")
 	args := []string{
 		"-f", "bestaudio",
@@ -125,13 +121,9 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 	}
 	args = s.prependAuthFlags(args)
 
-	cmd := exec.CommandContext(downloadCtx, "yt-dlp", args...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr.String())
+	_, stderr, err := execcmd.RunWithTimeout(ctx, 5*time.Minute, "yt-dlp", args...)
+	if err != nil {
+		return "", fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr)
 	}
 
 	matches, err := filepath.Glob(filepath.Join(outDir, "*.mp3"))

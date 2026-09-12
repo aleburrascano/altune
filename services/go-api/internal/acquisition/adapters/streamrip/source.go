@@ -1,17 +1,16 @@
 package streamrip
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/execcmd"
 )
 
 const (
@@ -95,16 +94,9 @@ func (s *Source) trackURL(source ports.RecordingSource) string {
 }
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
-	fetchCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(fetchCtx, s.bin, "--folder", outDir, "--no-db", "url", candidate.URL)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr.String()))
+	_, stderr, err := execcmd.RunWithTimeout(ctx, fetchTimeout, s.bin, "--folder", outDir, "--no-db", "url", candidate.URL)
+	if err != nil {
+		return "", fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr))
 	}
 
 	return largestAudioFile(outDir)
