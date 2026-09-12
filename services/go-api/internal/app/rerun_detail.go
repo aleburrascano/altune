@@ -18,18 +18,6 @@ const detailRerunSearchLimit = 20
 // multi-minute stuck admin request. It is a var so tests can shrink it.
 var detailReRunBudget = 30 * time.Second
 
-type detailReRunner struct {
-	searchSvc *discoveryService.Service
-	artistSvc *discoveryService.GetArtistContentService
-}
-
-func (a *App) buildDetailReRunner(
-	searchSvc *discoveryService.Service,
-	artistSvc *discoveryService.GetArtistContentService,
-) *detailReRunner {
-	return &detailReRunner{searchSvc: searchSvc, artistSvc: artistSvc}
-}
-
 type rawSeed struct {
 	provider   string
 	externalID string
@@ -38,9 +26,14 @@ type rawSeed struct {
 	items      []domain.SearchResult
 }
 
-func (dr *detailReRunner) ReRunDetail(ctx context.Context, query string) (requeststore.DetailReRunResult, error) {
+func reRunDetail(
+	ctx context.Context,
+	searchSvc *discoveryService.Service,
+	artistSvc *discoveryService.GetArtistContentService,
+	query string,
+) (requeststore.DetailReRunResult, error) {
 	start := time.Now()
-	entity, ok, err := dr.resolveTopArtist(ctx, query)
+	entity, ok, err := resolveTopArtist(ctx, searchSvc, query)
 	if err != nil {
 		return requeststore.DetailReRunResult{}, err
 	}
@@ -49,7 +42,7 @@ func (dr *detailReRunner) ReRunDetail(ctx context.Context, query string) (reques
 	}
 
 	byProvider := seedIDsByProvider(entity.Sources)
-	albumSeeds, trackSeeds := dr.fanOutSeeds(ctx, byProvider, entity)
+	albumSeeds, trackSeeds := fanOutSeeds(ctx, artistSvc, byProvider, entity)
 
 	return requeststore.DetailReRunResult{
 		Query:      query,
@@ -62,20 +55,20 @@ func (dr *detailReRunner) ReRunDetail(ctx context.Context, query string) (reques
 	}, nil
 }
 
-func (dr *detailReRunner) fanOutSeeds(ctx context.Context, byProvider map[string]string, entity domain.SearchResult) (albumSeeds, trackSeeds []rawSeed) {
+func fanOutSeeds(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, byProvider map[string]string, entity domain.SearchResult) (albumSeeds, trackSeeds []rawSeed) {
 	ctx, cancel := context.WithTimeout(ctx, detailReRunBudget)
 	defer cancel()
-	albumSeeds = dr.albumFanOut(ctx, byProvider, entity.Title)
-	trackSeeds = dr.trackFanOut(ctx, byProvider, entity.MBID, entity.Title)
+	albumSeeds = albumFanOut(ctx, artistSvc, byProvider, entity.Title)
+	trackSeeds = trackFanOut(ctx, artistSvc, byProvider, entity.MBID, entity.Title)
 	return albumSeeds, trackSeeds
 }
 
-func (dr *detailReRunner) resolveTopArtist(ctx context.Context, query string) (domain.SearchResult, bool, error) {
+func resolveTopArtist(ctx context.Context, searchSvc *discoveryService.Service, query string) (domain.SearchResult, bool, error) {
 	sq, err := domain.NewSearchQuery(query, map[domain.ResultKind]bool{domain.ResultKindArtist: true}, detailRerunSearchLimit)
 	if err != nil {
 		return domain.SearchResult{}, false, err
 	}
-	results, statuses := dr.searchSvc.InspectSearchWithStatuses(ctx, sq)
+	results, statuses := searchSvc.InspectSearchWithStatuses(ctx, sq)
 	for _, r := range results {
 		if r.Kind == domain.ResultKindArtist {
 			return r, true, nil
@@ -87,45 +80,45 @@ func (dr *detailReRunner) resolveTopArtist(ctx context.Context, query string) (d
 	return domain.SearchResult{}, false, nil
 }
 
-func (dr *detailReRunner) albumFanOut(ctx context.Context, byProvider map[string]string, name string) []rawSeed {
+func albumFanOut(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, byProvider map[string]string, name string) []rawSeed {
 	var seeds []rawSeed
 	for _, provider := range []string{"deezer", "soundcloud", "itunes"} {
 		if id, ok := byProvider[provider]; ok {
-			seeds = append(seeds, dr.fetchAlbums(ctx, provider, id, name))
+			seeds = append(seeds, fetchAlbums(ctx, artistSvc, provider, id, name))
 		}
 	}
 	return seeds
 }
 
-func (dr *detailReRunner) trackFanOut(ctx context.Context, byProvider map[string]string, mbid, name string) []rawSeed {
+func trackFanOut(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, byProvider map[string]string, mbid, name string) []rawSeed {
 	var seeds []rawSeed
 	if id, ok := byProvider["deezer"]; ok {
-		seeds = append(seeds, dr.fetchTopTracks(ctx, "deezer", id, name))
+		seeds = append(seeds, fetchTopTracks(ctx, artistSvc, "deezer", id, name))
 	}
 	if id, ok := byProvider["soundcloud"]; ok {
-		seeds = append(seeds, dr.fetchTopTracks(ctx, "soundcloud", id, ""))
+		seeds = append(seeds, fetchTopTracks(ctx, artistSvc, "soundcloud", id, ""))
 	}
 	if mbid != "" {
-		seeds = append(seeds, dr.fetchTopTracks(ctx, "lastfm", mbid, ""))
+		seeds = append(seeds, fetchTopTracks(ctx, artistSvc, "lastfm", mbid, ""))
 	}
 	return seeds
 }
 
-func (dr *detailReRunner) fetchAlbums(ctx context.Context, provider, id, name string) rawSeed {
+func fetchAlbums(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, provider, id, name string) rawSeed {
 	pn, err := domain.ParseProviderName(provider)
 	if err != nil {
 		return logSeedError(ctx, seedFrom(provider, id, nil, err))
 	}
-	resp, err := dr.artistSvc.GetAlbums(ctx, pn, id, name, 100)
+	resp, err := artistSvc.GetAlbums(ctx, pn, id, name, 100)
 	return logSeedError(ctx, seedFrom(provider, id, resp, err))
 }
 
-func (dr *detailReRunner) fetchTopTracks(ctx context.Context, provider, id, name string) rawSeed {
+func fetchTopTracks(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, provider, id, name string) rawSeed {
 	pn, err := domain.ParseProviderName(provider)
 	if err != nil {
 		return logSeedError(ctx, seedFrom(provider, id, nil, err))
 	}
-	resp, err := dr.artistSvc.GetTopTracks(ctx, pn, id, name, 5)
+	resp, err := artistSvc.GetTopTracks(ctx, pn, id, name, 5)
 	return logSeedError(ctx, seedFrom(provider, id, resp, err))
 }
 

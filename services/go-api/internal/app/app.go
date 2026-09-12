@@ -552,9 +552,15 @@ func (a *App) wireAdmin(
 		WithAcquisition(acqReader).
 		WithEvalMeter(a.evalMeter).
 		WithRequestStore(requestStore).
-		WithReRunner(a.buildReRunner(searchSvc)).
-		WithSearchInspector(a.buildSearchInspector(searchSvc)).
-		WithDetailReRunner(a.buildDetailReRunner(searchSvc, artistSvc)).
+		WithReRunner(func(ctx context.Context, query string, kinds []string) (requeststore.ReRunResult, error) {
+			return reRun(ctx, a.cfg, defaultLiveTransport, searchSvc.BehavioralScoresSnapshot, query, kinds)
+		}).
+		WithSearchInspector(func(ctx context.Context, query string, kinds []string) ([]requeststore.ResultRow, error) {
+			return inspectSearch(ctx, searchSvc, query, kinds)
+		}).
+		WithDetailReRunner(func(ctx context.Context, query string) (requeststore.DetailReRunResult, error) {
+			return reRunDetail(ctx, searchSvc, artistSvc, query)
+		}).
 		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool))
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Get("/", adminH.ServeIndex)

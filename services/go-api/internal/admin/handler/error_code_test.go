@@ -13,21 +13,15 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type erroringReRunner struct{}
-
-func (erroringReRunner) ReRun(context.Context, string, []string) (requeststore.ReRunResult, error) {
+func erroringReRun(context.Context, string, []string) (requeststore.ReRunResult, error) {
 	return requeststore.ReRunResult{}, errors.New("upstream exploded")
 }
 
-type erroringSearchInspector struct{}
-
-func (erroringSearchInspector) InspectSearch(context.Context, string, []string) ([]requeststore.ResultRow, error) {
+func erroringInspect(context.Context, string, []string) ([]requeststore.ResultRow, error) {
 	return nil, errors.New("upstream exploded")
 }
 
-type erroringDetailReRunner struct{}
-
-func (erroringDetailReRunner) ReRunDetail(context.Context, string) (requeststore.DetailReRunResult, error) {
+func erroringDetail(context.Context, string) (requeststore.DetailReRunResult, error) {
 	return requeststore.DetailReRunResult{}, errors.New("upstream exploded")
 }
 
@@ -60,11 +54,11 @@ func TestAdminErrorResponses_CarryStableCode(t *testing.T) {
 		wantStatus int
 	}{
 		{"rerun unavailable", New(nil, nil), http.MethodPost, "/rerun", validQuery, http.StatusServiceUnavailable},
-		{"rerun upstream", New(nil, nil).WithReRunner(erroringReRunner{}), http.MethodPost, "/rerun", validQuery, http.StatusBadGateway},
+		{"rerun upstream", New(nil, nil).WithReRunner(erroringReRun), http.MethodPost, "/rerun", validQuery, http.StatusBadGateway},
 		{"search unavailable", New(nil, nil), http.MethodPost, "/search", validQuery, http.StatusServiceUnavailable},
-		{"search upstream", New(nil, nil).WithSearchInspector(erroringSearchInspector{}), http.MethodPost, "/search", validQuery, http.StatusBadGateway},
+		{"search upstream", New(nil, nil).WithSearchInspector(erroringInspect), http.MethodPost, "/search", validQuery, http.StatusBadGateway},
 		{"rerun-detail unavailable", New(nil, nil), http.MethodPost, "/rerun-detail", validQuery, http.StatusServiceUnavailable},
-		{"rerun-detail upstream", New(nil, nil).WithDetailReRunner(erroringDetailReRunner{}), http.MethodPost, "/rerun-detail", validQuery, http.StatusBadGateway},
+		{"rerun-detail upstream", New(nil, nil).WithDetailReRunner(erroringDetail), http.MethodPost, "/rerun-detail", validQuery, http.StatusBadGateway},
 		{"request not found", New(nil, nil), http.MethodGet, "/requests/missing", "", http.StatusNotFound},
 	}
 

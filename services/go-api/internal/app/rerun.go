@@ -19,21 +19,14 @@ import (
 
 const rerunBodyCap = 64 * 1024
 
-type reRunner struct {
-	cfg              *config.Config
-	behavioralScores func() map[string]float64
-	transport        http.RoundTripper
-}
-
-func (a *App) buildReRunner(svc *discoveryService.Service) *reRunner {
-	return &reRunner{
-		cfg:              a.cfg,
-		behavioralScores: svc.BehavioralScoresSnapshot,
-		transport:        defaultLiveTransport,
-	}
-}
-
-func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (requeststore.ReRunResult, error) {
+func reRun(
+	ctx context.Context,
+	cfg *config.Config,
+	transport http.RoundTripper,
+	behavioralScores func() map[string]float64,
+	query string,
+	kinds []string,
+) (requeststore.ReRunResult, error) {
 	kindSet, err := parseRerunKinds(kinds)
 	if err != nil {
 		return requeststore.ReRunResult{}, err
@@ -41,8 +34,8 @@ func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (re
 	if _, err := domain.NewSearchQuery(query, kindSet, inspectionSearchLimit); err != nil {
 		return requeststore.ReRunResult{}, err
 	}
-	rec := requeststore.NewRerunRecorder(rr.transport, rerunBodyCap)
-	provs := BuildDiscoveryProviders(rr.cfg, rec)
+	rec := requeststore.NewRerunRecorder(transport, rerunBodyCap)
+	provs := BuildDiscoveryProviders(cfg, rec)
 
 	cleaned := discoveryService.CleanQuery(query)
 	queryNorm := textnorm.NormalizeForMatch(cleaned)
@@ -51,9 +44,9 @@ func (rr *reRunner) ReRun(ctx context.Context, query string, kinds []string) (re
 	perProvider, providerTraces := fanOutRerun(ctx, provs, cleaned, kindSet)
 	merged := discoveryService.Merge(perProvider)
 	explained := discoveryService.RankExplain(merged, queryNorm, discoveryService.RankOptions{
-		TailDemotion:        rr.cfg.TailDemotionEnabled,
-		CrossKindProminence: rr.cfg.CrossKindProminenceEnabled,
-		Behavioral:          rr.behavioralScores(),
+		TailDemotion:        cfg.TailDemotionEnabled,
+		CrossKindProminence: cfg.CrossKindProminenceEnabled,
+		Behavioral:          behavioralScores(),
 	})
 	ranked := make([]domain.SearchResult, len(explained))
 	for i, s := range explained {

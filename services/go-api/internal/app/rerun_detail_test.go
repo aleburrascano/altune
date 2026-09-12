@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
+	discoveryService "altune/go-api/internal/discovery/service"
 )
 
 // TestReRunDetail_malformedQuerySurfacesValidationError reproduces the gap: an
@@ -13,8 +14,9 @@ import (
 // and nil error as a legitimate "no artist found". The validation failure must
 // surface as a distinct error so callers can tell a bad query from no match.
 func TestReRunDetail_malformedQuerySurfacesValidationError(t *testing.T) {
-	dr := &detailReRunner{}
-	_, err := dr.ReRunDetail(context.Background(), "")
+	searchSvc := discoveryService.NewService(nil, discoveryService.NewCircuitBreaker())
+	artistSvc := discoveryService.NewGetArtistContentService(nil)
+	_, err := reRunDetail(context.Background(), searchSvc, artistSvc, "")
 	if err == nil {
 		t.Fatal("want a validation error for a malformed query, got nil (indistinguishable from no artist found)")
 	}

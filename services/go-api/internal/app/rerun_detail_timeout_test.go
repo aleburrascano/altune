@@ -25,14 +25,14 @@ func (hangingProvider) GetArtistTopTracks(ctx context.Context, _ domain.Provider
 	return nil, ctx.Err()
 }
 
-func slowDetailReRunner() *detailReRunner {
+func slowArtistSvc() *discoveryService.GetArtistContentService {
 	provs := map[domain.ProviderName]discoveryPorts.ArtistContentProvider{
 		domain.ProviderDeezer:     hangingProvider{},
 		domain.ProviderSoundCloud: hangingProvider{},
 		domain.ProviderITunes:     hangingProvider{},
 		domain.ProviderLastFM:     hangingProvider{},
 	}
-	return &detailReRunner{artistSvc: discoveryService.NewGetArtistContentService(provs)}
+	return discoveryService.NewGetArtistContentService(provs)
 }
 
 // TestFanOutSeeds_boundsTotalWallTimeWithSlowProviders reproduces the defect:
@@ -45,7 +45,7 @@ func TestFanOutSeeds_boundsTotalWallTimeWithSlowProviders(t *testing.T) {
 	detailReRunBudget = 100 * time.Millisecond
 	t.Cleanup(func() { detailReRunBudget = prev })
 
-	dr := slowDetailReRunner()
+	artistSvc := slowArtistSvc()
 	byProvider := map[string]string{"deezer": "d", "soundcloud": "s", "itunes": "i"}
 	entity := domain.SearchResult{Title: "Artist", MBID: "mbid-1"}
 
@@ -53,7 +53,7 @@ func TestFanOutSeeds_boundsTotalWallTimeWithSlowProviders(t *testing.T) {
 	go func() {
 		// context.Background carries no deadline: the only bound is the one the
 		// fan-out imposes on itself.
-		dr.fanOutSeeds(context.Background(), byProvider, entity)
+		fanOutSeeds(context.Background(), artistSvc, byProvider, entity)
 		close(done)
 	}()
 

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	discoveryService "altune/go-api/internal/discovery/service"
 )
 
 // TestFetchAlbums_surfacesProviderFetchError reproduces the gap: when a seed
@@ -20,8 +22,8 @@ func TestFetchAlbums_surfacesProviderFetchError(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	dr := &detailReRunner{}
-	seed := dr.fetchAlbums(context.Background(), "totally-unknown-provider", "abc123", "Artist")
+	artistSvc := discoveryService.NewGetArtistContentService(nil)
+	seed := fetchAlbums(context.Background(), artistSvc, "totally-unknown-provider", "abc123", "Artist")
 
 	if seed.status != "error" {
 		t.Fatalf("want error status for a failed fetch, got %q", seed.status)

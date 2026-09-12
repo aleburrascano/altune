@@ -25,13 +25,8 @@ func (c *countingTransport) RoundTrip(*http.Request) (*http.Response, error) {
 
 func TestReRun_rejectsEmptyQueryWithoutFanningOut(t *testing.T) {
 	ct := &countingTransport{}
-	rr := &reRunner{
-		cfg:              &config.Config{},
-		behavioralScores: func() map[string]float64 { return nil },
-		transport:        ct,
-	}
 
-	_, err := rr.ReRun(context.Background(), "", nil)
+	_, err := reRun(context.Background(), &config.Config{}, ct, func() map[string]float64 { return nil }, "", nil)
 	if err == nil {
 		t.Fatal("want validation error for empty query, got nil")
 	}
