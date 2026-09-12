@@ -117,6 +117,31 @@ func TestSSEHandler_MarshalFailureEmitsResync(t *testing.T) {
 	readUntil(t, br, func(l string) bool { return l == "event: resync" })
 }
 
+func TestSSEHandler_MalformedLastEventIDEmitsResync(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	bus.Publish(uid, "seed", map[string]any{"k": "v"})
+
+	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A non-numeric Last-Event-ID cannot be parsed: without a resync signal the
+	// client silently resumes live-only, believing its replay is intact.
+	req.Header.Set("Last-Event-ID", "not-a-number")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == "event: resync" })
+}
+
 func TestReplayGapped(t *testing.T) {
 	tests := []struct {
 		name     string
