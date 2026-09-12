@@ -345,7 +345,7 @@ func (a *App) wireCatalog(
 	if len(audioSources) > 0 && audioStore != nil {
 		audioProber := ytdlp.NewFfprobeProber(a.cfg.FFmpegLocation)
 		ffprobeOK, ffmpegOK := audioProber.Available()
-		verification := acqService.AcquisitionVerification{
+		verification := acqPorts.AcquisitionVerification{
 			Ffprobe: ffprobeOK, Ffmpeg: ffmpegOK, YtDlp: ytDlpOK,
 		}
 

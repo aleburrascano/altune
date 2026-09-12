@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -17,25 +18,10 @@ const (
 	JobCancelled = "cancelled"
 )
 
-type JobRecord struct {
-	TrackID        string
-	Title          string
-	Artist         string
-	Album          string
-	SourceURL      string
-	ResolvedSource string
-	State          string
-	Stage          string
-	ScheduledAt    time.Time
-	ElapsedMs      int64
-	Reason         string
-	Provenance     string
-}
-
 type jobLog struct {
 	mu        sync.Mutex
-	jobs      map[string]*JobRecord
-	recent    []JobRecord
+	jobs      map[string]*ports.JobRecord
+	recent    []ports.JobRecord
 	succeeded atomic.Uint64
 	failed    atomic.Uint64
 	// now stamps ScheduledAt with a monotonic-bearing instant; since measures
@@ -51,12 +37,12 @@ func newJobLog() *jobLog {
 }
 
 func newJobLogWithClock(now func() time.Time, since func(time.Time) time.Duration) *jobLog {
-	return &jobLog{jobs: make(map[string]*JobRecord), now: now, since: since}
+	return &jobLog{jobs: make(map[string]*ports.JobRecord), now: now, since: since}
 }
 
 func (l *jobLog) register(trackID, sourceURL string) {
 	l.mu.Lock()
-	l.jobs[trackID] = &JobRecord{
+	l.jobs[trackID] = &ports.JobRecord{
 		TrackID:     trackID,
 		SourceURL:   sourceURL,
 		State:       JobQueued,
@@ -73,7 +59,7 @@ func (l *jobLog) markRunning(trackID string) {
 	l.mu.Unlock()
 }
 
-func (l *jobLog) update(trackID string, fn func(*JobRecord)) {
+func (l *jobLog) update(trackID string, fn func(*ports.JobRecord)) {
 	l.mu.Lock()
 	if j := l.jobs[trackID]; j != nil {
 		fn(j)
@@ -93,7 +79,7 @@ func (l *jobLog) complete(trackID, state, reason string) {
 	defer l.mu.Unlock()
 	j := l.jobs[trackID]
 	if j == nil {
-		j = &JobRecord{TrackID: trackID, ScheduledAt: l.now()}
+		j = &ports.JobRecord{TrackID: trackID, ScheduledAt: l.now()}
 	}
 	delete(l.jobs, trackID)
 	j.State = state
@@ -109,15 +95,15 @@ func (l *jobLog) counts() (succeeded, failed uint64) {
 	return l.succeeded.Load(), l.failed.Load()
 }
 
-func (l *jobLog) snapshot() (jobs []JobRecord, recent []JobRecord) {
+func (l *jobLog) snapshot() (jobs, recent []ports.JobRecord) {
 	l.mu.Lock()
-	jobs = make([]JobRecord, 0, len(l.jobs))
+	jobs = make([]ports.JobRecord, 0, len(l.jobs))
 	for _, j := range l.jobs {
 		jr := *j
 		jr.ElapsedMs = l.since(j.ScheduledAt).Milliseconds()
 		jobs = append(jobs, jr)
 	}
-	recent = make([]JobRecord, len(l.recent))
+	recent = make([]ports.JobRecord, len(l.recent))
 	for i, j := range l.recent {
 		recent[len(l.recent)-1-i] = j
 	}

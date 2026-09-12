@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared"
 )
 
@@ -27,7 +28,7 @@ func (p *recordingProgressPublisher) Publish(_ shared.UserId, eventType string, 
 
 func TestSchedulerJobReporter_PublishesProgressOnStage(t *testing.T) {
 	pub := &recordingProgressPublisher{}
-	log := &jobLog{jobs: map[string]*JobRecord{"t1": {TrackID: "t1"}}}
+	log := &jobLog{jobs: map[string]*ports.JobRecord{"t1": {TrackID: "t1"}}}
 	r := schedulerJobReporter{log: log, events: pub, trackID: "t1", userId: shared.NewUserId(uuid.New())}
 
 	r.stage("download")
@@ -45,7 +46,7 @@ func TestSchedulerJobReporter_PublishesProgressOnStage(t *testing.T) {
 }
 
 func TestSchedulerJobReporter_NoPublishWhenEventsNil(t *testing.T) {
-	log := &jobLog{jobs: map[string]*JobRecord{"t1": {TrackID: "t1"}}}
+	log := &jobLog{jobs: map[string]*ports.JobRecord{"t1": {TrackID: "t1"}}}
 	r := schedulerJobReporter{log: log, trackID: "t1", userId: shared.NewUserId(uuid.New())}
 
 	r.stage("search")
