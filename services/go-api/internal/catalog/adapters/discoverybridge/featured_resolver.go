@@ -5,16 +5,20 @@ import (
 
 	catalogdomain "altune/go-api/internal/catalog/domain"
 	catalogports "altune/go-api/internal/catalog/ports"
-	discoveryservice "altune/go-api/internal/discovery/service"
+	discoverydomain "altune/go-api/internal/discovery/domain"
 )
 
 var _ catalogports.FeaturedArtistResolver = (*FeaturedResolver)(nil)
 
-type FeaturedResolver struct {
-	inner *discoveryservice.FeaturedArtistResolver
+type featuredArtistResolver interface {
+	Resolve(ctx context.Context, artist, title string) ([]discoverydomain.FeaturedArtist, error)
 }
 
-func NewFeaturedResolver(inner *discoveryservice.FeaturedArtistResolver) *FeaturedResolver {
+type FeaturedResolver struct {
+	inner featuredArtistResolver
+}
+
+func NewFeaturedResolver(inner featuredArtistResolver) *FeaturedResolver {
 	return &FeaturedResolver{inner: inner}
 }
 
