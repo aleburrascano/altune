@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/catalog/catalogtest"
 )
 
 func TestDeleteTrackService_OrphanedDeleteMetric(t *testing.T) {

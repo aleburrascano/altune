@@ -5,9 +5,8 @@
 package metrics
 
 import (
-	"expvar"
-
 	"altune/go-api/internal/catalog/ports"
+	"expvar"
 )
 
 // Published expvar variable names for the audio-store degradation counters.
