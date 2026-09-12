@@ -1,6 +1,6 @@
 module altune/go-api
 
-go 1.26.0
+go 1.26.6
 
 require (
 	github.com/bogem/id3v2/v2 v2.1.4
@@ -14,8 +14,8 @@ require (
 	github.com/minio/minio-go/v7 v7.0.87
 	github.com/redis/go-redis/v9 v9.7.3
 	go.uber.org/goleak v1.3.0
-	golang.org/x/sync v0.21.0
-	golang.org/x/text v0.38.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/text v0.42.0
 	golang.org/x/time v0.16.0
 )
 
@@ -40,7 +40,7 @@ require (
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 )

@@ -77,3 +77,48 @@ linters:
               desc: internal/shared never imports feature packages
             - pkg: altune/go-api/internal/playback
               desc: internal/shared never imports feature packages
+
+        # Inward layer direction within a feature (structure audit F1, second
+        # axis): the application layer orchestrates the domain through ports and
+        # must never reach into an adapter. Verified clean today; kept blocking.
+        layer-service-inward:
+          files:
+            - "**/internal/*/service/**"
+          deny:
+            - pkg: altune/go-api/internal/catalog/adapters
+              desc: service is driven by ports, it never imports adapters
+            - pkg: altune/go-api/internal/discovery/adapters
+              desc: service is driven by ports, it never imports adapters
+            - pkg: altune/go-api/internal/playback/adapters
+              desc: service is driven by ports, it never imports adapters
+            - pkg: altune/go-api/internal/feedback/adapters
+              desc: service is driven by ports, it never imports adapters
+            - pkg: altune/go-api/internal/acquisition/adapters
+              desc: service is driven by ports, it never imports adapters
+
+        # Ports declare interfaces in terms of the domain only: no service, no
+        # adapters. This keeps the port surface a pure contract.
+        layer-ports-inward:
+          files:
+            - "**/internal/*/ports/**"
+          deny:
+            - pkg: altune/go-api/internal/catalog/service
+              desc: ports are pure contracts, they never import the service
+            - pkg: altune/go-api/internal/discovery/service
+              desc: ports are pure contracts, they never import the service
+            - pkg: altune/go-api/internal/playback/service
+              desc: ports are pure contracts, they never import the service
+            - pkg: altune/go-api/internal/feedback/service
+              desc: ports are pure contracts, they never import the service
+            - pkg: altune/go-api/internal/acquisition/service
+              desc: ports are pure contracts, they never import the service
+            - pkg: altune/go-api/internal/catalog/adapters
+              desc: ports are pure contracts, they never import adapters
+            - pkg: altune/go-api/internal/discovery/adapters
+              desc: ports are pure contracts, they never import adapters
+            - pkg: altune/go-api/internal/playback/adapters
+              desc: ports are pure contracts, they never import adapters
+            - pkg: altune/go-api/internal/feedback/adapters
+              desc: ports are pure contracts, they never import adapters
+            - pkg: altune/go-api/internal/acquisition/adapters
+              desc: ports are pure contracts, they never import adapters

@@ -39,13 +39,50 @@ jobs:
           cache-dependency-path: services/go-api/go.sum
       - name: go vet
         run: go vet ./...
-      # Import direction (structure audit F1): domain purity + shared never
-      # imports features. Rules live in services/go-api/.golangci.yml.
+      # Import direction (structure audit F1): domain purity + feature isolation +
+      # shared-bottom + inward layer direction (service-/->adapters, ports pure).
+      # Rules live in services/go-api/.golangci.yml. Blocking on all code.
       - name: import direction (depguard)
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           working-directory: services/go-api
+      # Strict guardrail set (errcheck, staticcheck, unused, gocritic, errorlint,
+      # bodyclose, complexity, dupl) — the linters that catch AI-written slop.
+      # only-new-issues: the existing backlog does not block, a NEW violation a PR
+      # introduces does. Mirrors the mobile side's ratchets. PR-only: the base is
+      # already green, so there is no diff to gate on push/merge_group.
+      - name: strict linters (new code only)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+          working-directory: services/go-api
+          args: --config .golangci.strict.yml
+          only-new-issues: true
+      # Known-CVE scan against the Go vuln DB. Reports only vulnerabilities the
+      # code actually reaches (call-graph analysis), so false positives are rare.
+      # Blocking: a reachable CVE should stop the merge. If a new advisory lands
+      # against a dependency, bump it (see the crypto/tls + x/net bumps that
+      # cleared the initial 8 findings).
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      # Nil-panic inference (Uber nilaway) as a ceiling ratchet, the same shape as
+      # the mobile react-doctor warning ceiling: findings may not exceed the count
+      # in nilaway-baseline.txt. Lower that number when you fix one; never raise
+      # it to go green. nilaway is not a golangci-lint linter, hence a own step.
+      - name: nilaway ceiling
+        run: |
+          go install go.uber.org/nilaway/cmd/nilaway@571480214735
+          BASE=$(tr -dc '0-9' < nilaway-baseline.txt)
+          COUNT=$(nilaway ./... 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c 'Potential nil panic detected' || true)
+          echo "nilaway findings: ${COUNT} (ceiling ${BASE})"
+          if [ "$COUNT" -gt "$BASE" ]; then
+            echo "::error::nilaway findings rose from ${BASE} to ${COUNT} — a new nil-dereference risk was introduced"
+            exit 1
+          fi
 
   test:
     runs-on: ubuntu-latest
