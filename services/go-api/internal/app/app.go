@@ -139,47 +139,95 @@ func (a *App) Run(ctx context.Context) error {
 	}
 
 	slog.Info("waiting for background tasks")
-	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
-		if a.alertMonitor != nil {
-			a.alertMonitor.Shutdown(ctx)
-		}
-	})
-	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
-		if a.eventFeed != nil {
-			a.eventFeed.Shutdown(ctx)
-		}
-	})
-	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
-		if a.evalMeter != nil {
-			a.evalMeter.Shutdown(ctx)
-		}
-	})
-	a.shutdownComponent(10*time.Second, func(ctx context.Context) {
-		if a.vocabRefresh != nil {
-			a.vocabRefresh.Shutdown(ctx)
-		}
-	})
-	a.shutdownComponent(30*time.Second, func(ctx context.Context) {
-		if a.scheduler != nil {
-			a.scheduler.Shutdown(ctx)
-		}
-	})
-	a.shutdownComponent(5*time.Second, func(ctx context.Context) {
-		if a.election != nil {
-			a.election.Shutdown(ctx)
-		}
-	})
-	a.drainBackground(30 * time.Second)
+	outcomes := []shutdownOutcome{
+		a.shutdownComponent("alert monitor", 5*time.Second, func(ctx context.Context) {
+			if a.alertMonitor != nil {
+				a.alertMonitor.Shutdown(ctx)
+			}
+		}),
+		a.shutdownComponent("event feed", 5*time.Second, func(ctx context.Context) {
+			if a.eventFeed != nil {
+				a.eventFeed.Shutdown(ctx)
+			}
+		}),
+		a.shutdownComponent("eval meter", 5*time.Second, func(ctx context.Context) {
+			if a.evalMeter != nil {
+				a.evalMeter.Shutdown(ctx)
+			}
+		}),
+		a.shutdownComponent("vocabulary refresh", 10*time.Second, func(ctx context.Context) {
+			if a.vocabRefresh != nil {
+				a.vocabRefresh.Shutdown(ctx)
+			}
+		}),
+		a.shutdownComponent("acquisition scheduler", 30*time.Second, func(ctx context.Context) {
+			if a.scheduler != nil {
+				a.scheduler.Shutdown(ctx)
+			}
+		}),
+		a.shutdownComponent("leader election", 5*time.Second, func(ctx context.Context) {
+			if a.election != nil {
+				a.election.Shutdown(ctx)
+			}
+		}),
+		a.drainBackground(30 * time.Second),
+	}
+
+	if unstopped := unfinishedShutdowns(outcomes); len(unstopped) > 0 {
+		// These components blew past their shutdown budget and are presumed
+		// still running. cleanup() is about to close the DB pool and Redis
+		// client out from under them, so name them loudly first.
+		slog.Warn("closing DB/Redis while components are still shutting down",
+			"components", strings.Join(unstopped, ", "))
+	}
 
 	a.cleanup()
 	slog.Info("shutdown complete")
 	return nil
 }
 
-func (a *App) shutdownComponent(timeout time.Duration, fn func(context.Context)) {
+// shutdownOutcome records whether one component's bounded shutdown finished
+// within its budget. A component that timed out is presumed still running when
+// cleanup() closes the DB pool and Redis client, so the distinction must be
+// surfaced rather than swallowed.
+type shutdownOutcome struct {
+	name      string
+	completed bool
+}
+
+// unfinishedShutdowns returns the names of components that did not complete
+// shutdown within their budget, in declaration order.
+func unfinishedShutdowns(outcomes []shutdownOutcome) []string {
+	var names []string
+	for _, o := range outcomes {
+		if !o.completed {
+			names = append(names, o.name)
+		}
+	}
+	return names
+}
+
+// shutdownComponent runs fn with a bounded context and reports whether it
+// returned before the budget elapsed. fn runs on its own goroutine so a
+// component that ignores the deadline cannot wedge the whole shutdown sequence;
+// a timeout is surfaced as an outcome (and logged) instead of silently falling
+// through to cleanup().
+func (a *App) shutdownComponent(name string, timeout time.Duration, fn func(context.Context)) shutdownOutcome {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	fn(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn(ctx)
+	}()
+	select {
+	case <-done:
+		return shutdownOutcome{name: name, completed: true}
+	case <-ctx.Done():
+		slog.Warn("component shutdown exceeded its budget",
+			"component", name, "timeout", timeout.String())
+		return shutdownOutcome{name: name, completed: false}
+	}
 }
 
 func (a *App) setup(ctx context.Context) error {
