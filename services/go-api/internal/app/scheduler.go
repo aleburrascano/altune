@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log/slog"
+	"runtime/debug"
 	"time"
 
 	"altune/go-api/internal/shared/leader"
@@ -10,8 +11,30 @@ import (
 
 const backgroundLockKey int64 = 8_246_113_907_441_002
 
-func (a *App) whenLeader(start func(context.Context)) {
-	a.backgroundStarts = append(a.backgroundStarts, start)
+// backgroundJob pairs a leader-acquired background task with a name so a panic
+// it raises can be logged against the job that caused it.
+type backgroundJob struct {
+	name  string
+	start func(context.Context)
+}
+
+// guard runs a scheduled job and recovers from any panic it raises, logging the
+// failure (named) and returning so the caller can continue. Scheduled jobs run
+// in their own goroutines outside any HTTP request, so the httputil.Recoverer
+// that protects request handlers cannot catch them; without this an unrecovered
+// panic in one job would terminate the whole process and take down live traffic.
+func guard(job string, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("background job panicked; recovered",
+				"job", job, "panic", r, "stack", string(debug.Stack()))
+		}
+	}()
+	fn()
+}
+
+func (a *App) whenLeader(name string, start func(context.Context)) {
+	a.backgroundStarts = append(a.backgroundStarts, backgroundJob{name: name, start: start})
 }
 
 func (a *App) startBackgroundWhenLeader(ctx context.Context) {
@@ -23,8 +46,8 @@ func (a *App) startBackgroundWhenLeader(ctx context.Context) {
 		if !a.election.Await(ctx) {
 			return
 		}
-		for _, start := range a.backgroundStarts {
-			start(ctx)
+		for _, job := range a.backgroundStarts {
+			guard(job.name, func() { job.start(ctx) })
 		}
 	}()
 }
@@ -68,15 +91,15 @@ func (a *App) drainSearchBackground(timeout time.Duration) shutdownOutcome {
 	}
 }
 
-func (a *App) startTicker(ctx context.Context, interval time.Duration, fn func()) {
-	a.whenLeader(func(ctx context.Context) { a.runTicker(ctx, interval, fn) })
+func (a *App) startTicker(ctx context.Context, name string, interval time.Duration, fn func()) {
+	a.whenLeader(name, func(ctx context.Context) { a.runTicker(ctx, name, interval, fn) })
 }
 
-func (a *App) runTicker(ctx context.Context, interval time.Duration, fn func()) {
+func (a *App) runTicker(ctx context.Context, name string, interval time.Duration, fn func()) {
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		fn()
+		guard(name, fn)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -84,7 +107,7 @@ func (a *App) runTicker(ctx context.Context, interval time.Duration, fn func()) 
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				fn()
+				guard(name, fn)
 			}
 		}
 	}()

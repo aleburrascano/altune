@@ -97,7 +97,7 @@ type App struct {
 	evalMeter       *evalmeter.Meter
 
 	election         *leader.Election
-	backgroundStarts []func(context.Context)
+	backgroundStarts []backgroundJob
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
@@ -508,7 +508,7 @@ func (a *App) wireAdmin(
 	}
 
 	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.buildEvalRunner())
-	a.whenLeader(a.evalMeter.Start)
+	a.whenLeader("eval meter", a.evalMeter.Start)
 	adminH := adminHandler.New(a.dependencyHealth, a.logRing).
 		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).
 		WithEventFeed(a.eventFeed).
@@ -539,7 +539,7 @@ const stalePendingReconcileInterval = 10 * time.Minute
 // then on an interval (ongoing sweep).
 func (a *App) startStalePendingReconcile(ctx context.Context, repo catalogPorts.StalePendingFailer) {
 	svc := catalogService.NewReconcileStalePendingService(repo)
-	a.startTicker(ctx, stalePendingReconcileInterval, func() {
+	a.startTicker(ctx, "stale pending reconcile", stalePendingReconcileInterval, func() {
 		if _, err := svc.Execute(ctx); err != nil {
 			slog.WarnContext(ctx, "stale pending reconcile failed", "error", err)
 		}
@@ -583,7 +583,7 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 	}
 
 	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...)
-	a.whenLeader(a.alertMonitor.Start)
+	a.whenLeader("alert monitor", a.alertMonitor.Start)
 }
 
 // coverageEvents is the slice of the discovery event query the coverage-gap
@@ -744,7 +744,7 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 	}
 	builder := eval.NewCorpusBuilder(store)
 	const lookback = 30 * 24 * time.Hour
-	a.startTicker(ctx, 24*time.Hour, func() {
+	a.startTicker(ctx, "behavioral corpus refresh", 24*time.Hour, func() {
 		since := time.Now().UTC().Add(-lookback)
 		if err := builder.Materialize(ctx, since, since.Format("2006-01-02"), a.cfg.BehavioralCorpusPath); err != nil {
 			slog.WarnContext(ctx, "behavioral corpus materialize failed", "error", err)
@@ -756,7 +756,7 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 }
 
 func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.MetricsRollupStore) {
-	a.startTicker(ctx, 6*time.Hour, func() {
+	a.startTicker(ctx, "discovery metrics rollup", 6*time.Hour, func() {
 		now := time.Now().UTC()
 		for _, day := range []time.Time{now, now.Add(-24 * time.Hour)} {
 			if err := store.RollupDay(ctx, day); err != nil {
@@ -778,7 +778,7 @@ func (a *App) startVocabularyRefresh(vocabStore discoveryPorts.VocabularyStore) 
 	a.vocabRefresh = discoveryService.NewVocabularyRefreshService(
 		charts, vocabStore, 6*time.Hour, 50,
 	)
-	a.whenLeader(func(context.Context) {
+	a.whenLeader("vocabulary refresh", func(context.Context) {
 		a.vocabRefresh.Start()
 		slog.Info("vocabulary refresh started")
 	})
