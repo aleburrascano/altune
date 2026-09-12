@@ -10,6 +10,7 @@
     "strictBindCallApply": true,
     "strictPropertyInitialization": true,
     "noImplicitReturns": true,
+    "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

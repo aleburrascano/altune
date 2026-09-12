@@ -560,12 +560,12 @@ describe('patchTrackInCaches', () => {
             ]),
           ]);
 
-          patchTrackInCaches(client, 'target', patch as Partial<TrackResponse>);
+          patchTrackInCaches(client, 'target', patch);
           const once = client.getQueryData<InfiniteData<ListTracksResponse>>(
             libraryKeys.tracks('q', 'sort'),
           );
 
-          patchTrackInCaches(client, 'target', patch as Partial<TrackResponse>);
+          patchTrackInCaches(client, 'target', patch);
           const twice = client.getQueryData<InfiniteData<ListTracksResponse>>(
             libraryKeys.tracks('q', 'sort'),
           );

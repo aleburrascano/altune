@@ -105,7 +105,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     query: search.committedQuery,
     isLoading: isSearching,
     data: searchData,
-    error: searchError as Error | null,
+    error: searchError,
   });
 
   const onHistoryTap = (item: SearchHistoryItem): void => {

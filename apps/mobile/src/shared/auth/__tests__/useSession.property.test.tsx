@@ -41,7 +41,7 @@ function makeSession(userId: string): Session {
     expires_in: 3600,
     token_type: 'bearer',
     user: { id: userId } as unknown as Session['user'],
-  } as Session;
+  };
 }
 
 function makeWrapper(queryClient: QueryClient) {

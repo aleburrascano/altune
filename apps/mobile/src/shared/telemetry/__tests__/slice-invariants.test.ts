@@ -56,7 +56,7 @@ function scanEnqueueCriticalCallSites(files: string[]): CallSite[] {
     const source = fs.readFileSync(file, 'utf8');
     if (!/from\s+['"]@shared\/telemetry\/outbox['"]/.test(source)) continue;
     for (const m of source.matchAll(/\benqueueCritical\(/g)) {
-      const parenIndex = m.index! + m[0].length - 1;
+      const parenIndex = m.index + m[0].length - 1;
       const arg = extractParenArg(source, parenIndex);
       const types = [...arg.matchAll(/type:\s*'([a-zA-Z_]+)'/g)].map((x) => x[1]!);
       if (types.length === 0) {
@@ -82,7 +82,7 @@ function scanFireAndForgetCallSites(files: string[]): CallSite[] {
     const source = fs.readFileSync(file, 'utf8');
     if (!/from\s+['"]@shared\/telemetry\/useRecordEvent['"]/.test(source)) continue;
     for (const m of source.matchAll(/\.mutate\(/g)) {
-      const parenIndex = m.index! + m[0].length - 1;
+      const parenIndex = m.index + m[0].length - 1;
       const arg = extractParenArg(source, parenIndex);
       if (!/\btype\b/.test(arg)) continue;
 
@@ -93,7 +93,7 @@ function scanFireAndForgetCallSites(files: string[]): CallSite[] {
       }
 
       if (/\{\s*type\s*[,}]/.test(arg)) {
-        const shorthandTypes = resolveShorthandTypeLiterals(source, m.index!);
+        const shorthandTypes = resolveShorthandTypeLiterals(source, m.index);
         if (shorthandTypes.length === 0) {
           throw new Error(`.mutate call in ${file} passes a shorthand 'type' this scanner cannot resolve`);
         }

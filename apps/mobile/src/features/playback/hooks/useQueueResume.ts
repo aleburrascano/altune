@@ -201,7 +201,9 @@ export function useQueueResume() {
   }, []);
 
   useEffect(() => {
-    saveTimerRef.current = setInterval(save, SAVE_INTERVAL_MS);
+    saveTimerRef.current = setInterval(() => {
+      void save();
+    }, SAVE_INTERVAL_MS);
     return () => {
       if (saveTimerRef.current) clearInterval(saveTimerRef.current);
     };
@@ -209,7 +211,7 @@ export function useQueueResume() {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background' || state === 'inactive') save();
+      if (state === 'background' || state === 'inactive') void save();
     });
     return () => sub.remove();
   }, [save]);

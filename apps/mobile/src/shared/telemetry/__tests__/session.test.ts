@@ -1,5 +1,7 @@
 import fc from 'fast-check';
 
+import * as SessionNamespace from '../session';
+
 type AppStateChangeHandler = (state: string) => void;
 
 jest.mock('react-native/Libraries/AppState/AppState', () => {
@@ -16,8 +18,6 @@ jest.mock('react-native/Libraries/AppState/AppState', () => {
     __listeners: listeners,
   };
 });
-
-import * as SessionNamespace from '../session';
 
 const { advanceSession, makeSessionId, SESSION_INACTIVITY_MS } = SessionNamespace;
 type SessionState = SessionNamespace.SessionState;

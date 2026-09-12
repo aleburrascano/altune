@@ -65,7 +65,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const headers = {
     'ngrok-skip-browser-warning': '1',
     Authorization: await authorization(path),
-    ...(init?.headers ?? {}),
+    // Callers always pass record-shaped headers; the RequestInit type also
+    // permits Headers/[][], neither of which is meaningful to spread here.
+    ...((init?.headers ?? {}) as Record<string, string>),
   };
 
   const deadline = startDeadline(init?.signal ?? undefined, REQUEST_TIMEOUT_MS);

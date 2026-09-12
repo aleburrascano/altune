@@ -50,7 +50,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
     total: pages[0]?.total ?? 0,
     isLoading,
     isRefetching,
-    error: error as Error | null,
+    error: error,
     isFetchingNextPage,
     onEndReached: () => {
       if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
@@ -91,7 +91,7 @@ export function useLibraryAlbums(query: string, sort: LibrarySort, enabled: bool
     albums: data?.items ?? [],
     isLoading,
     isRefetching,
-    error: error as Error | null,
+    error: error,
     refetch: () => {
       void refetch();
     },
@@ -111,7 +111,7 @@ export function useLibraryArtists(query: string, sort: LibrarySort, enabled: boo
     artists: data?.items ?? [],
     isLoading,
     isRefetching,
-    error: error as Error | null,
+    error: error,
     refetch: () => {
       void refetch();
     },

@@ -4,9 +4,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { repairActiveToStreaming } from '../audioPrefetch';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 
-const { __player } = jest.requireMock('react-native-track-player') as {
-  __player: { failNext(method: string, error?: Error): void };
-};
+const { __player } = jest.requireMock('react-native-track-player');
 
 function previewTrack(previewUrl: string): PlaybackTrack {
   return {
