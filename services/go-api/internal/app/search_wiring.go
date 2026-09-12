@@ -48,10 +48,27 @@ func BuildSearchServiceWithTransport(
 
 	searchProviders := buildDiscoveryProviders(cf, cfg, sharedMB)
 	circuitBreaker := discoveryService.NewCircuitBreaker()
-	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(pool)
 
+	opts := baseSearchOptions(cfg, pool, rankingOnly)
+	if !rankingOnly {
+		opts = append(opts, contentSearchOptions(cf, cfg, pool, redisClient, sharedMB)...)
+	}
+	opts = append(opts, cacheSearchOptions(redisClient, rankingOnly)...)
+	opts = append(opts, vocabularySearchOptions(redisClient, vocabStore)...)
+	opts = append(opts, eventSearchOptions(cfg, eventStore)...)
+	if sharedMB != nil {
+		opts = append(opts, discoveryService.WithAlbumValidator(sharedMB))
+	}
+
+	return discoveryService.NewService(searchProviders, circuitBreaker, opts...)
+}
+
+// baseSearchOptions wires the ranking concerns present on every call site:
+// history persistence plus the independently-toggleable tail-demotion,
+// cross-kind-prominence and exploration ranking tweaks.
+func baseSearchOptions(cfg *config.Config, pool *pgxpool.Pool, rankingOnly bool) []discoveryService.Option {
 	opts := []discoveryService.Option{
-		discoveryService.WithHistoryRepository(historyRepo),
+		discoveryService.WithHistoryRepository(discoveryPersistence.NewPgxSearchHistoryRepository(pool)),
 	}
 	if cfg.TailDemotionEnabled {
 		opts = append(opts, discoveryService.WithTailDemotion())
@@ -62,70 +79,101 @@ func BuildSearchServiceWithTransport(
 	if cfg.ExplorationEnabled && !rankingOnly {
 		opts = append(opts, discoveryService.WithExploration(cfg.ExplorationRate))
 	}
-	if !rankingOnly {
-		deezerContent := providers.NewDeezerAdapter(cf.discovery())
-		relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
-		findRelatedSvc := discoveryService.NewFindRelatedService(relationshipQuerier, deezerContent, deezerContent)
-		opts = append(opts,
-			discoveryService.WithArtworkResolver(buildArtworkChain(cf, cfg)),
-			discoveryService.WithFindRelatedService(findRelatedSvc),
-		)
-		if pool != nil {
-			opts = append(opts, discoveryService.WithFavorites(
-				discoveryPersistence.NewPgxFavoritesRepository(pool),
-			))
-			identityStore := discoveryCacheAdapters.NewRedisIdentityStore(
-				discoveryPersistence.NewPgxIdentityStore(pool),
-				redisClient,
-			)
-			opts = append(opts, discoveryService.WithIdentityStore(identityStore))
-		}
-		if cfg.IdentityVerifyOnPersist && sharedMB != nil {
-			verifyProviders := map[domain.ProviderName]discoveryPorts.ArtistContentProvider{
-				domain.ProviderDeezer:     deezerContent,
-				domain.ProviderSpotify:    providers.NewSpotifyAdapter(cf.discovery()),
-				domain.ProviderAppleMusic: providers.NewAppleMusicAdapter(cf.discovery()),
-			}
-			opts = append(opts, discoveryService.WithIdentityVerifier(
-				discoveryService.NewIdentityVerifier(sharedMB, verifyProviders),
-			))
-		}
+	return opts
+}
+
+// contentSearchOptions wires the content-serving concerns skipped in
+// ranking-only mode: artwork resolution, related lookups, favorites, the
+// identity store and (when configured) identity verification on persist.
+func contentSearchOptions(
+	cf clientFactory,
+	cfg *config.Config,
+	pool *pgxpool.Pool,
+	redisClient *goredis.Client,
+	sharedMB *providers.MusicBrainzAdapter,
+) []discoveryService.Option {
+	deezerContent := providers.NewDeezerAdapter(cf.discovery())
+	relationshipQuerier := discoveryPersistence.NewPgxRelationshipQuerier(pool)
+	findRelatedSvc := discoveryService.NewFindRelatedService(relationshipQuerier, deezerContent, deezerContent)
+	opts := []discoveryService.Option{
+		discoveryService.WithArtworkResolver(buildArtworkChain(cf, cfg)),
+		discoveryService.WithFindRelatedService(findRelatedSvc),
 	}
-	if redisClient != nil {
-		if !rankingOnly {
-			opts = append(opts, discoveryService.WithResultCache(
-				discoveryCacheAdapters.NewRedisResultCache(redisClient),
-			))
-		}
-		opts = append(opts, discoveryService.WithArtworkCache(
-			discoveryCacheAdapters.NewRedisArtworkCache(redisClient),
+	if pool != nil {
+		opts = append(opts, discoveryService.WithFavorites(
+			discoveryPersistence.NewPgxFavoritesRepository(pool),
 		))
-		enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(redisClient)
-		opts = append(opts, discoveryService.WithIdentityBridge(enrichmentCache))
-		opts = append(opts, discoveryService.WithMBIDIndex(enrichmentCache))
+		identityStore := discoveryCacheAdapters.NewRedisIdentityStore(
+			discoveryPersistence.NewPgxIdentityStore(pool),
+			redisClient,
+		)
+		opts = append(opts, discoveryService.WithIdentityStore(identityStore))
 	}
+	if cfg.IdentityVerifyOnPersist && sharedMB != nil {
+		verifyProviders := map[domain.ProviderName]discoveryPorts.ArtistContentProvider{
+			domain.ProviderDeezer:     deezerContent,
+			domain.ProviderSpotify:    providers.NewSpotifyAdapter(cf.discovery()),
+			domain.ProviderAppleMusic: providers.NewAppleMusicAdapter(cf.discovery()),
+		}
+		opts = append(opts, discoveryService.WithIdentityVerifier(
+			discoveryService.NewIdentityVerifier(sharedMB, verifyProviders),
+		))
+	}
+	return opts
+}
+
+// cacheSearchOptions wires the Redis-backed caches. The result cache is
+// content-only; artwork cache, identity bridge and MBID index apply even in
+// ranking-only mode.
+func cacheSearchOptions(redisClient *goredis.Client, rankingOnly bool) []discoveryService.Option {
+	if redisClient == nil {
+		return nil
+	}
+	var opts []discoveryService.Option
+	if !rankingOnly {
+		opts = append(opts, discoveryService.WithResultCache(
+			discoveryCacheAdapters.NewRedisResultCache(redisClient),
+		))
+	}
+	opts = append(opts, discoveryService.WithArtworkCache(
+		discoveryCacheAdapters.NewRedisArtworkCache(redisClient),
+	))
+	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(redisClient)
+	opts = append(opts,
+		discoveryService.WithIdentityBridge(enrichmentCache),
+		discoveryService.WithMBIDIndex(enrichmentCache),
+	)
+	return opts
+}
+
+// vocabularySearchOptions wires the vocabulary store, falling back to a
+// Redis-backed store when the caller does not supply one.
+func vocabularySearchOptions(redisClient *goredis.Client, vocabStore discoveryPorts.VocabularyStore) []discoveryService.Option {
 	vs := vocabStore
 	if vs == nil {
 		vs = BuildVocabularyStore(redisClient)
 	}
-	if vs != nil {
-		opts = append(opts, discoveryService.WithVocabularyStore(vs))
+	if vs == nil {
+		return nil
 	}
-	if eventStore != nil {
-		opts = append(opts, discoveryService.WithEventStore(eventStore))
-		if cfg.BehavioralRankingEnabled {
-			if store, ok := eventStore.(discoveryPorts.BehavioralSignalStore); ok {
-				opts = append(opts, discoveryService.WithBehavioralRanking(
-					discoveryService.NewSatisfactionConsumer(store),
-				))
-			}
+	return []discoveryService.Option{discoveryService.WithVocabularyStore(vs)}
+}
+
+// eventSearchOptions wires the event store and, when behavioral ranking is
+// enabled and the store supports it, the satisfaction-signal consumer.
+func eventSearchOptions(cfg *config.Config, eventStore discoveryPorts.EventStore) []discoveryService.Option {
+	if eventStore == nil {
+		return nil
+	}
+	opts := []discoveryService.Option{discoveryService.WithEventStore(eventStore)}
+	if cfg.BehavioralRankingEnabled {
+		if store, ok := eventStore.(discoveryPorts.BehavioralSignalStore); ok {
+			opts = append(opts, discoveryService.WithBehavioralRanking(
+				discoveryService.NewSatisfactionConsumer(store),
+			))
 		}
 	}
-	if sharedMB != nil {
-		opts = append(opts, discoveryService.WithAlbumValidator(sharedMB))
-	}
-
-	return discoveryService.NewService(searchProviders, circuitBreaker, opts...)
+	return opts
 }
 
 func BuildDiscoveryProviders(cfg *config.Config, transport http.RoundTripper) []discoveryPorts.SearchProvider {
@@ -172,18 +220,7 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 				if err != nil {
 					return nil, err
 				}
-				results := make([]domain.SearchResult, 0, len(releases))
-				for _, r := range releases {
-					results = append(results, domain.SearchResult{
-						Kind:  domain.ResultKindAlbum,
-						Title: r.Title,
-						Extras: map[string]any{
-							"year":        r.Year,
-							"record_type": r.Type,
-						},
-					})
-				}
-				return results, nil
+				return discogsReleasesToSearchResults(releases), nil
 			},
 		})
 	}
@@ -213,6 +250,23 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 	})
 
 	return consensusProviders
+}
+
+// discogsReleasesToSearchResults maps Discogs artist releases onto album
+// SearchResults, carrying the year and record type through as extras.
+func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []domain.SearchResult {
+	results := make([]domain.SearchResult, 0, len(releases))
+	for _, r := range releases {
+		results = append(results, domain.SearchResult{
+			Kind:  domain.ResultKindAlbum,
+			Title: r.Title,
+			Extras: map[string]any{
+				"year":        r.Year,
+				"record_type": r.Type,
+			},
+		})
+	}
+	return results
 }
 
 func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {

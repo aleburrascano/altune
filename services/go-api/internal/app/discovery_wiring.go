@@ -140,6 +140,28 @@ func (a *App) wireDiscoveryEnrichment(sharedMB *providers.MusicBrainzAdapter) *d
 	)
 }
 
+// startDiscoveryBackgroundJobs schedules the detached background work that the
+// discovery object graph depends on: behavioral-ranking refresh (leader only),
+// corpus refresh, metrics rollup and vocabulary refresh. It is kept separate
+// from wireDiscovery's object-graph construction so the wiring stays free of
+// side effects.
+func (a *App) startDiscoveryBackgroundJobs(
+	ctx context.Context,
+	searchSvc *discoveryService.Service,
+	eventStore *discoveryPersistence.PgxEventStore,
+	vocabStore discoveryPorts.VocabularyStore,
+) {
+	if a.cfg.BehavioralRankingEnabled {
+		a.whenLeader("behavioral ranking refresh", func(ctx context.Context) {
+			searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
+			slog.Info("behavioral ranking refresh started")
+		})
+	}
+	a.startCorpusRefresh(ctx, eventStore)
+	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
+	a.startVocabularyRefresh(vocabStore)
+}
+
 func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	var sharedMB *providers.MusicBrainzAdapter
 	if a.cfg.HasMusicBrainz() {
@@ -175,17 +197,6 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	// drain it via WaitForBackground() before cleanup() closes the pool/Redis.
 	a.searchSvc = searchSvc
 
-	if a.cfg.BehavioralRankingEnabled {
-		a.whenLeader("behavioral ranking refresh", func(ctx context.Context) {
-			searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
-			slog.Info("behavioral ranking refresh started")
-		})
-	}
-
-	a.startCorpusRefresh(ctx, eventStore)
-
-	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
-
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 	favoritesSvc := discoveryService.NewFavoritesService(
 		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
@@ -210,7 +221,7 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	discoveryH.WithProviderHealth(a.providerHealth)
 	discoveryH.WithRequestTrace(requestStore)
 
-	a.startVocabularyRefresh(vocabStore)
+	a.startDiscoveryBackgroundJobs(ctx, searchSvc, eventStore, vocabStore)
 
 	return discoveryWiring{
 		handler:        discoveryH,
