@@ -36,13 +36,32 @@ func WithPlaylistMembershipEvents(pub events.Publisher) func(*PlaylistMembership
 	}
 }
 
-func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
+// loadPlaylist fetches a playlist with its tracks, wrapping any repository error
+// with op and translating a missing playlist into ErrPlaylistNotFound.
+func (s *PlaylistMembershipService) loadPlaylist(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId, op string) (*domain.Playlist, error) {
 	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
 	if err != nil {
-		return fmt.Errorf("add track to playlist: %w", err)
+		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 	if playlist == nil {
-		return ErrPlaylistNotFound
+		return nil, ErrPlaylistNotFound
+	}
+	return playlist, nil
+}
+
+// trackIdStrings renders a slice of track ids as their string representations.
+func trackIdStrings(ids []domain.TrackId) []string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = id.String()
+	}
+	return out
+}
+
+func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
+	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "add track to playlist")
+	if err != nil {
+		return err
 	}
 
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
@@ -75,12 +94,9 @@ func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared
 		return 0, &domain.ValidationError{Message: "too many tracks in one request"}
 	}
 
-	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
+	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "add tracks to playlist")
 	if err != nil {
-		return 0, fmt.Errorf("add tracks to playlist: %w", err)
-	}
-	if playlist == nil {
-		return 0, ErrPlaylistNotFound
+		return 0, err
 	}
 
 	tracks, err := s.trackRepo.ListByIDs(ctx, userId, trackIds)
@@ -111,26 +127,23 @@ func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared
 		return 0, fmt.Errorf("add tracks to playlist: %w", err)
 	}
 
-	addedIds := make([]string, len(added))
+	addedIds := make([]domain.TrackId, len(added))
 	for i, pt := range added {
-		addedIds[i] = pt.TrackId.String()
+		addedIds[i] = pt.TrackId
 	}
 	slog.InfoContext(ctx, "tracks added to playlist",
 		"playlist_id", playlistId.String(), "added", len(added), "requested", len(trackIds))
 	s.events.Publish(userId, "tracks_added_to_playlist", map[string]any{
 		"playlist_id": playlistId.String(),
-		"track_ids":   addedIds,
+		"track_ids":   trackIdStrings(addedIds),
 	})
 	return len(added), nil
 }
 
 func (s *PlaylistMembershipService) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
-	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
+	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "remove track from playlist")
 	if err != nil {
-		return fmt.Errorf("remove track from playlist: %w", err)
-	}
-	if playlist == nil {
-		return ErrPlaylistNotFound
+		return err
 	}
 
 	if !playlist.RemoveTrack(trackId) {
@@ -152,12 +165,9 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 		return 0, &domain.ValidationError{Message: "too many tracks in one request"}
 	}
 
-	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
+	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "remove tracks from playlist")
 	if err != nil {
-		return 0, fmt.Errorf("remove tracks from playlist: %w", err)
-	}
-	if playlist == nil {
-		return 0, ErrPlaylistNotFound
+		return 0, err
 	}
 
 	var removed []domain.TrackId
@@ -174,24 +184,17 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 		return 0, fmt.Errorf("remove tracks from playlist: %w", err)
 	}
 
-	removedIds := make([]string, len(removed))
-	for i, id := range removed {
-		removedIds[i] = id.String()
-	}
 	s.events.Publish(userId, "tracks_removed_from_playlist", map[string]any{
 		"playlist_id": playlistId.String(),
-		"track_ids":   removedIds,
+		"track_ids":   trackIdStrings(removed),
 	})
 	return len(removed), nil
 }
 
 func (s *PlaylistMembershipService) Reorder(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
-	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
+	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "reorder playlist")
 	if err != nil {
-		return fmt.Errorf("reorder playlist: %w", err)
-	}
-	if playlist == nil {
-		return ErrPlaylistNotFound
+		return err
 	}
 
 	if err := playlist.Reorder(trackIds); err != nil {
@@ -201,13 +204,9 @@ func (s *PlaylistMembershipService) Reorder(ctx context.Context, userId shared.U
 	if err := s.playlistRepo.ReorderTracks(ctx, playlistId, playlist.Tracks); err != nil {
 		return fmt.Errorf("reorder playlist: %w", err)
 	}
-	ids := make([]string, len(playlist.Tracks))
-	for i, pt := range playlist.Tracks {
-		ids[i] = pt.TrackId.String()
-	}
 	s.events.Publish(userId, "playlist_reordered", map[string]any{
 		"playlist_id": playlistId.String(),
-		"track_ids":   ids,
+		"track_ids":   trackIdStrings(trackIds),
 	})
 	return nil
 }
