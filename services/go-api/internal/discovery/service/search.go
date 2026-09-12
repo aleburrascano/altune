@@ -365,14 +365,26 @@ func (s *Service) RankVariantsForEval(
 }
 
 func (s *Service) InspectSearch(ctx context.Context, query *domain.SearchQuery) []domain.SearchResult {
+	results, _ := s.InspectSearchWithStatuses(ctx, query)
+	return results
+}
+
+// InspectSearchWithStatuses runs the inspection fan-out and returns the ranked
+// results alongside each provider's status. The statuses let callers tell a
+// genuine zero-result query apart from a total upstream outage, which both
+// collapse to an empty result set otherwise.
+func (s *Service) InspectSearchWithStatuses(
+	ctx context.Context,
+	query *domain.SearchQuery,
+) ([]domain.SearchResult, []domain.ProviderSearchResponse) {
 	searchQuery := CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
-	perProvider, _ := s.fanOut(ctx, searchQuery, query.Kinds)
+	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
 	ranked := s.mergeRankEnrich(ctx, perProvider, queryNorm)
 	if query.Limit > 0 && len(ranked) > query.Limit {
 		ranked = ranked[:query.Limit]
 	}
-	return ranked
+	return ranked, statuses
 }
 
 func (s *Service) WaitForBackground() {

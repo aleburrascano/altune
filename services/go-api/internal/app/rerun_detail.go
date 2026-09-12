@@ -79,10 +79,14 @@ func (dr *detailReRunner) resolveTopArtist(ctx context.Context, query string) (d
 	if err != nil {
 		return domain.SearchResult{}, false, err
 	}
-	for _, r := range dr.searchSvc.InspectSearch(ctx, sq) {
+	results, statuses := dr.searchSvc.InspectSearchWithStatuses(ctx, sq)
+	for _, r := range results {
 		if r.Kind == domain.ResultKindArtist {
 			return r, true, nil
 		}
+	}
+	if discoveryService.AllProvidersFailed(statuses) {
+		return domain.SearchResult{}, false, discoveryService.ErrAllProvidersFailed
 	}
 	return domain.SearchResult{}, false, nil
 }
