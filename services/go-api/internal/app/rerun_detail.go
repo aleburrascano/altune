@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	adminHandler "altune/go-api/internal/admin/handler"
@@ -198,12 +199,29 @@ func unionSourceRefs(a, b []domain.SourceRef) []domain.SourceRef {
 
 func sortReleasesByDateDesc(items []domain.SearchResult) {
 	sort.SliceStable(items, func(i, j int) bool {
-		ki, kj := releaseSortKey(items[i]), releaseSortKey(items[j])
-		if ki == "" || kj == "" {
-			return ki != "" && kj == ""
-		}
-		return ki > kj
+		return releaseKeyNewer(releaseSortKey(items[i]), releaseSortKey(items[j]))
 	})
+}
+
+// releaseKeyNewer reports whether key ki sorts newer-first than kj. Keys are
+// either a full ISO date or a bare year; it normalizes them to the same
+// precision first, so a year-only value ties with a same-year full date
+// instead of always sorting older than it.
+func releaseKeyNewer(ki, kj string) bool {
+	if ki == "" || kj == "" {
+		return ki != "" && kj == ""
+	}
+	if len(ki) != len(kj) && releaseYear(ki) == releaseYear(kj) {
+		return false
+	}
+	return ki > kj
+}
+
+func releaseYear(key string) string {
+	if i := strings.IndexByte(key, '-'); i > 0 {
+		return key[:i]
+	}
+	return key
 }
 
 func releaseSortKey(r domain.SearchResult) string {
