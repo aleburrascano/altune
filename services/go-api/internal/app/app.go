@@ -509,7 +509,7 @@ func (a *App) wireAdmin(
 
 	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.buildEvalRunner())
 	a.whenLeader("eval meter", a.evalMeter.Start)
-	adminH := adminHandler.New(a.dependencyHealth, a.logRing).
+	adminH := adminHandler.New(a.adminHealthProbe, a.logRing).
 		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).
 		WithEventFeed(a.eventFeed).
 		WithProviderHealth(a.providerHealth).
@@ -529,6 +529,27 @@ func (a *App) wireAdmin(
 			adminH.RegisterData(gr)
 		})
 	})
+}
+
+// adminHealthProbe adapts the app-owned DependencyHealth into the admin
+// handler's presentation DTO at the wiring boundary, keeping health.go free of
+// any dependency on admin/handler.
+func (a *App) adminHealthProbe(ctx context.Context) adminHandler.DependencyHealth {
+	h := a.dependencyHealth(ctx)
+	return adminHandler.DependencyHealth{
+		DB:    h.DB,
+		Redis: h.Redis,
+		Auth:  h.Auth,
+		Detail: adminHandler.DependencyDetail{
+			DBLatencyMs:    h.Detail.DBLatencyMs,
+			DBError:        h.Detail.DBError,
+			RedisLatencyMs: h.Detail.RedisLatencyMs,
+			RedisError:     h.Detail.RedisError,
+			AuthLatencyMs:  h.Detail.AuthLatencyMs,
+			AuthError:      h.Detail.AuthError,
+			CheckedAt:      h.Detail.CheckedAt,
+		},
+	}
 }
 
 const stalePendingReconcileInterval = 10 * time.Minute
