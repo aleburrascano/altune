@@ -36,13 +36,7 @@ func newTestJWTFixture(t *testing.T) *testJWTFixture {
 	}
 
 	keyID := "test-key-1"
-	pubJWK, err := jwk.FromRaw(privKey.PublicKey)
-	if err != nil {
-		t.Fatalf("create JWK from public key: %v", err)
-	}
-	_ = pubJWK.Set(jwk.KeyIDKey, keyID)
-	_ = pubJWK.Set(jwk.AlgorithmKey, jwa.RS256)
-	_ = pubJWK.Set(jwk.KeyUsageKey, "sig")
+	pubJWK := signingJWK(t, privKey.PublicKey, keyID)
 
 	keySet := jwk.NewSet()
 	_ = keySet.AddKey(pubJWK)
@@ -76,12 +70,7 @@ func (f *testJWTFixture) signToken(t *testing.T, claims map[string]interface{}) 
 		}
 	}
 
-	privJWK, err := jwk.FromRaw(f.privateKey)
-	if err != nil {
-		t.Fatalf("create private JWK: %v", err)
-	}
-	_ = privJWK.Set(jwk.KeyIDKey, f.keyID)
-	_ = privJWK.Set(jwk.AlgorithmKey, jwa.RS256)
+	privJWK := signingJWK(t, f.privateKey, f.keyID)
 
 	signed, err := jwt.Sign(builder, jwt.WithKey(jwa.RS256, privJWK))
 	if err != nil {
@@ -98,6 +87,34 @@ func (f *testJWTFixture) newVerifier(t *testing.T) *SupabaseJWTVerifier {
 		t.Fatalf("create verifier: %v", err)
 	}
 	return verifier
+}
+
+// signingJWK builds a JWK from a raw RSA key (public or private), tagging it
+// with the key id, RS256 algorithm, and "sig" use so JWKS-published and
+// signing keys share one consistent setup.
+func signingJWK(t *testing.T, raw any, kid string) jwk.Key {
+	t.Helper()
+	key, err := jwk.FromRaw(raw)
+	if err != nil {
+		t.Fatalf("create JWK: %v", err)
+	}
+	_ = key.Set(jwk.KeyIDKey, kid)
+	_ = key.Set(jwk.AlgorithmKey, jwa.RS256)
+	_ = key.Set(jwk.KeyUsageKey, "sig")
+	return key
+}
+
+// assertInvalidTokenReason asserts err unwraps to an *auth.InvalidTokenError
+// carrying the wanted reject reason.
+func assertInvalidTokenReason(t *testing.T, err error, want auth.TokenRejectReason) {
+	t.Helper()
+	var tokenErr *auth.InvalidTokenError
+	if !errors.As(err, &tokenErr) {
+		t.Fatalf("expected InvalidTokenError, got %T: %v", err, err)
+	}
+	if tokenErr.Reason != want {
+		t.Errorf("reason: got %q, want %q", tokenErr.Reason, want)
+	}
 }
 
 func TestSupabaseJWTVerifier_ValidToken(t *testing.T) {
@@ -166,13 +183,7 @@ func TestSupabaseJWTVerifier_ExpiredToken(t *testing.T) {
 		t.Fatal("expected error for expired token, got nil")
 	}
 
-	var tokenErr *auth.InvalidTokenError
-	if !errors.As(err, &tokenErr) {
-		t.Fatalf("expected InvalidTokenError, got %T: %v", err, err)
-	}
-	if tokenErr.Reason != auth.ReasonExpired {
-		t.Errorf("reason: got %q, want %q (classifyJWTError may not match jwx v2 error format)", tokenErr.Reason, auth.ReasonExpired)
-	}
+	assertInvalidTokenReason(t, err, auth.ReasonExpired)
 }
 
 func TestSupabaseJWTVerifier_InvalidSignature(t *testing.T) {
@@ -184,12 +195,7 @@ func TestSupabaseJWTVerifier_InvalidSignature(t *testing.T) {
 		t.Fatalf("generate wrong key: %v", err)
 	}
 
-	wrongJWK, err := jwk.FromRaw(wrongKey)
-	if err != nil {
-		t.Fatalf("create wrong JWK: %v", err)
-	}
-	_ = wrongJWK.Set(jwk.KeyIDKey, f.keyID)
-	_ = wrongJWK.Set(jwk.AlgorithmKey, jwa.RS256)
+	wrongJWK := signingJWK(t, wrongKey, f.keyID)
 
 	builder := jwt.New()
 	_ = builder.Set("sub", uuid.New().String())
@@ -207,13 +213,7 @@ func TestSupabaseJWTVerifier_InvalidSignature(t *testing.T) {
 		t.Fatal("expected error for wrong-key signature, got nil")
 	}
 
-	var tokenErr *auth.InvalidTokenError
-	if !errors.As(err, &tokenErr) {
-		t.Fatalf("expected InvalidTokenError, got %T: %v", err, err)
-	}
-	if tokenErr.Reason != auth.ReasonSignatureInvalid {
-		t.Errorf("reason: got %q, want %q", tokenErr.Reason, auth.ReasonSignatureInvalid)
-	}
+	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
 }
 
 func TestSupabaseJWTVerifier_UnknownKeyID(t *testing.T) {
@@ -224,12 +224,7 @@ func TestSupabaseJWTVerifier_UnknownKeyID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate stray key: %v", err)
 	}
-	strayJWK, err := jwk.FromRaw(strayKey)
-	if err != nil {
-		t.Fatalf("create stray JWK: %v", err)
-	}
-	_ = strayJWK.Set(jwk.KeyIDKey, "not-in-jwks")
-	_ = strayJWK.Set(jwk.AlgorithmKey, jwa.RS256)
+	strayJWK := signingJWK(t, strayKey, "not-in-jwks")
 
 	builder := jwt.New()
 	_ = builder.Set("sub", uuid.New().String())
@@ -247,13 +242,7 @@ func TestSupabaseJWTVerifier_UnknownKeyID(t *testing.T) {
 		t.Fatal("expected error for unknown key id, got nil")
 	}
 
-	var tokenErr *auth.InvalidTokenError
-	if !errors.As(err, &tokenErr) {
-		t.Fatalf("expected InvalidTokenError, got %T: %v", err, err)
-	}
-	if tokenErr.Reason != auth.ReasonSignatureInvalid {
-		t.Errorf("reason: got %q, want %q (jwx may have reworded 'failed to find key')", tokenErr.Reason, auth.ReasonSignatureInvalid)
-	}
+	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
 }
 
 func TestSupabaseJWTVerifier_JWKSUnavailable(t *testing.T) {
@@ -291,13 +280,7 @@ func TestSupabaseJWTVerifier_MissingExp(t *testing.T) {
 		t.Fatal("expected error for token missing exp claim, got nil")
 	}
 
-	var tokenErr *auth.InvalidTokenError
-	if !errors.As(err, &tokenErr) {
-		t.Fatalf("expected InvalidTokenError, got %T: %v", err, err)
-	}
-	if tokenErr.Reason != auth.ReasonClaimMissingEXP {
-		t.Errorf("reason: got %q, want %q", tokenErr.Reason, auth.ReasonClaimMissingEXP)
-	}
+	assertInvalidTokenReason(t, err, auth.ReasonClaimMissingEXP)
 }
 
 func TestSupabaseJWTVerifier_SlowJWKSEndpointDoesNotHang(t *testing.T) {
@@ -374,11 +357,5 @@ func TestSupabaseJWTVerifier_MissingSub(t *testing.T) {
 		t.Fatal("expected error for missing sub claim, got nil")
 	}
 
-	var tokenErr *auth.InvalidTokenError
-	if !errors.As(err, &tokenErr) {
-		t.Fatalf("expected InvalidTokenError, got %T: %v", err, err)
-	}
-	if tokenErr.Reason != auth.ReasonClaimInvalidSUB {
-		t.Errorf("reason: got %q, want %q", tokenErr.Reason, auth.ReasonClaimInvalidSUB)
-	}
+	assertInvalidTokenReason(t, err, auth.ReasonClaimInvalidSUB)
 }
