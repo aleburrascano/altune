@@ -1,13 +1,12 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"testing"
-
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"errors"
+	"testing"
 
 	"github.com/google/uuid"
 )
@@ -92,7 +91,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		}
 	})
 
-	t.Run("repo error preserves partial progress", func(t *testing.T) {
+	t.Run("per-track persistence error is isolated, not fatal", func(t *testing.T) {
 		t1 := newTrackFeat(t, userId, "Track 1")
 		t2 := newTrackFeat(t, userId, "Track 2")
 		t3 := newTrackFeat(t, userId, "Track 3")
@@ -114,19 +113,75 @@ func TestBackfillFeaturedService(t *testing.T) {
 		svc := NewBackfillFeaturedService(repo, resolver)
 
 		res, err := svc.Execute(ctx, userId)
-		if err == nil {
-			t.Fatalf("expected error from repo, got nil")
+		if err != nil {
+			t.Fatalf("a single persistence failure must not abort the job, got %v", err)
 		}
-		if res == nil {
-			t.Fatalf("expected partial result alongside error, got nil")
+		if res.Scanned != 3 {
+			t.Fatalf("result = %+v, want scanned 3 (all tracks visited)", res)
 		}
-		if res.Updated != 1 {
-			t.Fatalf("result = %+v, want updated 1 (first item persisted before the failure)", res)
+		if res.Updated != 2 {
+			t.Fatalf("result = %+v, want updated 2 (t1 and t3 persisted around t2's failure)", res)
 		}
 		if res.Failed != 1 {
-			t.Fatalf("result = %+v, want failed 1", res)
+			t.Fatalf("result = %+v, want failed 1 (only t2)", res)
+		}
+		// t3 follows the failing t2 in the loop: it must still be persisted,
+		// proving the failure is isolated like the resolver-failure path.
+		if len(t3.FeaturedArtists) != 1 || t3.FeaturedArtists[0].Name != "Guest 3" {
+			t.Errorf("t3 featured = %+v, want it persisted after t2's failure", t3.FeaturedArtists)
 		}
 	})
+
+	t.Run("oversized library is bounded by the page cap", func(t *testing.T) {
+		page := make([]*domain.Track, backfillPageSize)
+		for i := range page {
+			page[i] = newTrackFeat(t, userId, "Untagged")
+		}
+		// Always returns a full page and never signals exhaustion, so only the
+		// page cap can stop the loop (an unbounded library would otherwise spin).
+		repo := &unboundedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), page: page}
+		svc := NewBackfillFeaturedService(repo, fakeResolver{})
+
+		res, err := svc.Execute(ctx, userId)
+		if err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+		if want := backfillMaxPages * backfillPageSize; res.Scanned != want {
+			t.Fatalf("result = %+v, want scanned %d (capped at %d pages)", res, want, backfillMaxPages)
+		}
+	})
+
+	t.Run("context cancellation stops the loop between pages", func(t *testing.T) {
+		cctx, cancel := context.WithCancel(ctx)
+		t1 := newTrackFeat(t, userId, "Track 1")
+		t2 := newTrackFeat(t, userId, "Track 2")
+		repo := &orderedTrackRepo{
+			TrackRepo: catalogtest.NewTrackRepo(),
+			order:     []*domain.Track{t1, t2},
+			onList:    func() { cancel() }, // cancel after the first page is fetched
+			pageSize:  1,
+		}
+		repo.Seed(t1)
+		repo.Seed(t2)
+		svc := NewBackfillFeaturedService(repo, fakeResolver{})
+
+		res, err := svc.Execute(cctx, userId)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("want context.Canceled, got %v", err)
+		}
+		if res == nil || res.Scanned != 1 {
+			t.Fatalf("result = %+v, want scanned 1 (stopped before the second page)", res)
+		}
+	})
+}
+
+type unboundedTrackRepo struct {
+	*catalogtest.TrackRepo
+	page []*domain.Track
+}
+
+func (r *unboundedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, _, _ int) ([]*domain.Track, int, error) {
+	return r.page, 1 << 30, nil
 }
 
 type orderedTrackRepo struct {
@@ -134,6 +189,8 @@ type orderedTrackRepo struct {
 	order          []*domain.Track
 	failReplaceID  domain.TrackId
 	failReplaceErr error
+	onList         func() // invoked after each page is fetched
+	pageSize       int    // overrides the caller's limit to force multiple pages
 }
 
 func (r *orderedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
@@ -141,11 +198,18 @@ func (r *orderedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit
 	if offset >= total {
 		return nil, total, nil
 	}
+	if r.pageSize > 0 {
+		limit = r.pageSize
+	}
 	end := offset + limit
 	if end > total {
 		end = total
 	}
-	return r.order[offset:end], total, nil
+	page := r.order[offset:end]
+	if r.onList != nil {
+		r.onList()
+	}
+	return page, total, nil
 }
 
 func (r *orderedTrackRepo) ReplaceFeaturedArtists(ctx context.Context, id domain.TrackId, userId shared.UserId, feats []domain.FeaturedArtist) error {
