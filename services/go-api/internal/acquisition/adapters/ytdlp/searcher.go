@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
 	sharedytdlp "altune/go-api/internal/shared/ytdlp"
 )
@@ -22,6 +23,7 @@ type YtDlpAudioSearcher struct {
 	ffmpegLocation string
 	cookieFile     string
 	jsRuntime      string
+	binary         string
 	runSearch      searchRunner
 }
 
@@ -30,9 +32,18 @@ func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpA
 		ffmpegLocation: ffmpegLocation,
 		cookieFile:     cookieFile,
 		jsRuntime:      jsRuntime,
+		binary:         "yt-dlp",
 	}
 	s.runSearch = s.runYtDlpSearch
 	return s
+}
+
+// Available reports whether the yt-dlp binary is runnable, mirroring the
+// ffprobe/ffmpeg (prober) and fpcalc (identifier) availability probes. Surfacing
+// this at wiring time turns a missing yt-dlp into a startup verification warning
+// rather than a generic error deep in a background acquisition goroutine.
+func (s *YtDlpAudioSearcher) Available() bool {
+	return binpath.Runnable(s.binary)
 }
 
 func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.AudioCandidate, error) {

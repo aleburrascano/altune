@@ -16,6 +16,7 @@ type acquisitionVerificationDTO struct {
 	Ffprobe bool `json:"ffprobe"`
 	Ffmpeg  bool `json:"ffmpeg"`
 	Fpcalc  bool `json:"fpcalc"`
+	YtDlp   bool `json:"yt_dlp"`
 }
 
 type jobRecordDTO struct {
@@ -51,6 +52,7 @@ func newAcquisitionStatusDTO(s acqService.AcquisitionStatus) acquisitionStatusDT
 			Ffprobe: s.Verification.Ffprobe,
 			Ffmpeg:  s.Verification.Ffmpeg,
 			Fpcalc:  s.Verification.Fpcalc,
+			YtDlp:   s.Verification.YtDlp,
 		},
 		ActiveJobs: newJobRecordDTOs(s.ActiveJobs),
 		Recent:     newJobRecordDTOs(s.Recent),

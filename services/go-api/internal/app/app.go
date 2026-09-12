@@ -331,9 +331,11 @@ func (a *App) wireCatalog(
 	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
 
 	var audioSources []acqPorts.AudioSource
+	ytDlpOK := false
 	if audioStore != nil {
 		searcher := ytdlp.NewYtDlpAudioSearcher(
 			a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
+		ytDlpOK = searcher.Available()
 		audioSources = append(audioSources, ytmusic.NewSource(searcher))
 		audioSources = append(audioSources, a.buildStreamripSources()...)
 		audioSources = append(audioSources, ytdlp.NewSource(searcher))
@@ -343,7 +345,9 @@ func (a *App) wireCatalog(
 	if len(audioSources) > 0 && audioStore != nil {
 		audioProber := ytdlp.NewFfprobeProber(a.cfg.FFmpegLocation)
 		ffprobeOK, ffmpegOK := audioProber.Available()
-		verification := acqService.AcquisitionVerification{Ffprobe: ffprobeOK, Ffmpeg: ffmpegOK}
+		verification := acqService.AcquisitionVerification{
+			Ffprobe: ffprobeOK, Ffmpeg: ffmpegOK, YtDlp: ytDlpOK,
+		}
 
 		acquireOpts := []func(*acqService.AcquireTrackAudioService){
 			acqService.WithAcquireEvents(tap),
