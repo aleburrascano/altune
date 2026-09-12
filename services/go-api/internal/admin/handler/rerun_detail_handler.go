@@ -3,8 +3,6 @@ package handler
 import (
 	"context"
 	"net/http"
-
-	"altune/go-api/internal/shared/httputil"
 )
 
 type DetailReRunResult struct {
@@ -52,18 +50,8 @@ func (h *AdminHandler) WithDetailReRunner(r DetailReRunner) *AdminHandler {
 }
 
 func (h *AdminHandler) serveReRunDetail(w http.ResponseWriter, r *http.Request) {
-	if h.detailReRunner == nil {
-		httputil.HandleServiceError(w, r, errDetailUnavailable)
-		return
-	}
-	body, ok := decodeQuery(w, r)
-	if !ok {
-		return
-	}
-	result, err := h.detailReRunner.ReRunDetail(r.Context(), body.Query)
-	if err != nil {
-		httputil.HandleServiceError(w, r, upstreamError("admin.rerun_detail_failed", err))
-		return
-	}
-	httputil.WriteJSON(w, http.StatusOK, result)
+	h.serveQueryAction(w, r, h.detailReRunner != nil, errDetailUnavailable, "admin.rerun_detail_failed",
+		func(ctx context.Context, body queryRequest) (any, error) {
+			return h.detailReRunner.ReRunDetail(ctx, body.Query)
+		})
 }
