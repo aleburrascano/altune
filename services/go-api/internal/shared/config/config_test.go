@@ -5,11 +5,14 @@ import (
 	"testing"
 )
 
+const validOperatorID = "11111111-1111-1111-1111-111111111111"
+
 func TestLoad_MinimalValid(t *testing.T) {
 	setEnv(t, map[string]string{
 		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
 		"SUPABASE_ANON_KEY":     "anon-key",
+		"OPERATOR_USER_ID":      validOperatorID,
 	})
 
 	cfg, err := Load()
@@ -143,6 +146,7 @@ func TestLoad_MusicBrainzUAWithEmail(t *testing.T) {
 		"SUPABASE_PROJECT_URL":   "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL":  "https://example.supabase.co/auth/v1/.well-known/jwks.json",
 		"SUPABASE_ANON_KEY":      "anon-key",
+		"OPERATOR_USER_ID":       validOperatorID,
 		"MUSICBRAINZ_USER_AGENT": "altune/0.1 ( mailto:dev@altune.test )",
 	})
 
@@ -152,6 +156,103 @@ func TestLoad_MusicBrainzUAWithEmail(t *testing.T) {
 	}
 	if !cfg.HasMusicBrainz() {
 		t.Error("expected HasMusicBrainz=true")
+	}
+}
+
+func TestLoad_OperatorUserIDMissingOrMalformed(t *testing.T) {
+	tests := []struct {
+		name       string
+		operatorID string
+	}{
+		{name: "missing", operatorID: ""},
+		{name: "not a uuid", operatorID: "not-a-uuid"},
+		{name: "truncated uuid", operatorID: "11111111-1111-1111-1111"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := map[string]string{
+				"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+				"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+				"SUPABASE_ANON_KEY":     "anon-key",
+			}
+			if tt.operatorID != "" {
+				env["OPERATOR_USER_ID"] = tt.operatorID
+			}
+			setEnv(t, env)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error for missing/malformed OPERATOR_USER_ID")
+			}
+			if !searchString(err.Error(), "OPERATOR_USER_ID") {
+				t.Errorf("expected error to name OPERATOR_USER_ID, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_AlertNtfyURLMalformed(t *testing.T) {
+	tests := []struct {
+		name    string
+		ntfyURL string
+	}{
+		{name: "no scheme", ntfyURL: "ntfy.sh/altune-alerts"},
+		{name: "no host", ntfyURL: "https://"},
+		{name: "bare path", ntfyURL: "/altune-alerts"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, map[string]string{
+				"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+				"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+				"SUPABASE_ANON_KEY":     "anon-key",
+				"OPERATOR_USER_ID":      validOperatorID,
+				"ALERT_NTFY_URL":        tt.ntfyURL,
+			})
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error for malformed ALERT_NTFY_URL")
+			}
+			if !searchString(err.Error(), "ALERT_NTFY_URL") {
+				t.Errorf("expected error to name ALERT_NTFY_URL, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_AlertNtfyURLOptionalWhenUnset(t *testing.T) {
+	setEnv(t, map[string]string{
+		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+		"SUPABASE_ANON_KEY":     "anon-key",
+		"OPERATOR_USER_ID":      validOperatorID,
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error when ALERT_NTFY_URL unset: %v", err)
+	}
+	if cfg.HasAlertPush() {
+		t.Error("expected HasAlertPush=false when ALERT_NTFY_URL unset")
+	}
+}
+
+func TestLoad_AlertNtfyURLValid(t *testing.T) {
+	setEnv(t, map[string]string{
+		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+		"SUPABASE_ANON_KEY":     "anon-key",
+		"OPERATOR_USER_ID":      validOperatorID,
+		"ALERT_NTFY_URL":        "https://ntfy.sh/altune-alerts",
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error for valid ALERT_NTFY_URL: %v", err)
+	}
+	if !cfg.HasAlertPush() {
+		t.Error("expected HasAlertPush=true for valid ALERT_NTFY_URL")
 	}
 }
 
@@ -214,6 +315,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"GENIUS_ACCESS_TOKEN", "OCI_S3_ENDPOINT", "OCI_S3_ACCESS_KEY",
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
+		"OPERATOR_USER_ID", "ALERT_NTFY_URL",
 	}
 	for _, k := range envKeys {
 		os.Unsetenv(k)
