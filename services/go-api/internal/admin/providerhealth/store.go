@@ -25,17 +25,28 @@ type Store struct {
 	mu      sync.Mutex
 	samples map[string][]sample
 	last    map[string]string
+	// now stamps samples with a monotonic-bearing instant; since measures
+	// elapsed from it. Both are monotonic-safe (immune to wall-clock jumps)
+	// in production and injectable so tests can simulate clock steps.
+	now   func() time.Time
+	since func(time.Time) time.Duration
 }
 
 func NewStore() *Store {
+	return newStoreWithClock(time.Now, time.Since)
+}
+
+func newStoreWithClock(now func() time.Time, since func(time.Time) time.Duration) *Store {
 	return &Store{
 		samples: make(map[string][]sample),
 		last:    make(map[string]string),
+		now:     now,
+		since:   since,
 	}
 }
 
 func (s *Store) Record(provider, status string, latencyMs int64) {
-	now := time.Now().UTC()
+	now := s.now()
 	s.mu.Lock()
 	xs := append(s.samples[provider], sample{status: status, latencyMs: latencyMs, at: now})
 	if len(xs) > perProviderCap {
@@ -58,7 +69,6 @@ type ProviderSnapshot struct {
 }
 
 func (s *Store) Snapshot() []ProviderSnapshot {
-	cutoff := time.Now().UTC().Add(-window)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -66,7 +76,7 @@ func (s *Store) Snapshot() []ProviderSnapshot {
 	for provider, xs := range s.samples {
 		kept := xs[:0]
 		for _, x := range xs {
-			if x.at.After(cutoff) {
+			if s.since(x.at) < window {
 				kept = append(kept, x)
 			}
 		}
