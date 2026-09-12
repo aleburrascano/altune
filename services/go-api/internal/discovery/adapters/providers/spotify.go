@@ -47,20 +47,10 @@ func (a *SpotifyAdapter) SupportedKinds() map[domain.ResultKind]bool {
 func (a *SpotifyAdapter) SearchTimeout() time.Duration { return spotifySearchTimeout }
 
 func (a *SpotifyAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	sess, err := a.resolver.get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("resolve spotify session: %w", err)
-	}
-
-	results, status, err := a.doSearch(ctx, sess, query)
-	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate(sess)
-		sess, err = a.resolver.get(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("re-resolve spotify session: %w", err)
-		}
-		results, _, err = a.doSearch(ctx, sess, query)
-	}
+	results, err := withAuthRetry(ctx, a.resolver.cachedResolver,
+		func(ctx context.Context, sess *spotifySession) ([]domain.SearchResult, int, error) {
+			return a.doSearch(ctx, sess, query)
+		})
 	if err != nil {
 		return nil, err
 	}

@@ -39,19 +39,11 @@ func (a *AppleMusicAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Pro
 }
 
 func (a *AppleMusicAdapter) fetchCatalog(ctx context.Context, u string, out any) error {
-	token, err := a.resolver.get(ctx)
-	if err != nil {
-		return fmt.Errorf("resolve apple music token: %w", err)
-	}
-	status, err := a.doCatalogGet(ctx, token, u, out)
-	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate(token)
-		token, err = a.resolver.get(ctx)
-		if err != nil {
-			return fmt.Errorf("re-resolve apple music token: %w", err)
-		}
-		_, err = a.doCatalogGet(ctx, token, u, out)
-	}
+	_, err := withAuthRetry(ctx, a.resolver.cachedResolver,
+		func(ctx context.Context, token string) (struct{}, int, error) {
+			status, err := a.doCatalogGet(ctx, token, u, out)
+			return struct{}{}, status, err
+		})
 	return err
 }
 

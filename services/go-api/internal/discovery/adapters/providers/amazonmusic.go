@@ -49,20 +49,10 @@ func (a *AmazonMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
 func (a *AmazonMusicAdapter) SearchTimeout() time.Duration { return amzSearchTimeout }
 
 func (a *AmazonMusicAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	sess, err := a.resolver.get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("resolve amazon music session: %w", err)
-	}
-
-	items, status, err := a.doSearch(ctx, sess, query)
-	if err != nil && isAuthStatus(status) {
-		a.resolver.invalidate(sess)
-		sess, err = a.resolver.get(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("re-resolve amazon music session: %w", err)
-		}
-		items, _, err = a.doSearch(ctx, sess, query)
-	}
+	items, err := withAuthRetry(ctx, a.resolver.cachedResolver,
+		func(ctx context.Context, sess *amazonMusicSession) ([]domain.SearchResult, int, error) {
+			return a.doSearch(ctx, sess, query)
+		})
 	if err != nil {
 		return nil, err
 	}

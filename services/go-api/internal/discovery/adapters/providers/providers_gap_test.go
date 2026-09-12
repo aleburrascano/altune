@@ -205,7 +205,9 @@ func TestSoundCloudAPIAdapter_authRetryReResolveFailureSurfaces(t *testing.T) {
 	a.resolver.siteURL = srv.URL
 
 	_, err := a.searchArtists(context.Background(), "che")
-	if err == nil || !strings.Contains(err.Error(), "re-resolve client_id") {
+	// The seeded client_id makes the first resolve succeed, so a resolve failure here can
+	// only come from the post-invalidate re-resolve; withAuthRetry surfaces it verbatim.
+	if err == nil || !strings.Contains(err.Error(), "soundcloud home") {
 		t.Fatalf("err = %v, want the re-resolve failure surfaced", err)
 	}
 }

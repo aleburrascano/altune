@@ -75,4 +75,32 @@ func (r *cachedResolver[T]) invalidate(failed T) {
 	r.mu.Unlock()
 }
 
+// withAuthRetry runs do with a credential resolved from r, retrying exactly once on an
+// auth-status failure. It is the single owner of the invalidate-reget-retry-once policy:
+// the read-side complement to cachedResolver.invalidate. On the first call that fails with
+// an auth status it invalidates the spent credential, re-resolves a fresh one, and calls do
+// a second time; any other failure (or a re-resolve failure) is returned as-is without retry.
+func withAuthRetry[T comparable, R any](
+	ctx context.Context,
+	r *cachedResolver[T],
+	do func(context.Context, T) (R, int, error),
+) (R, error) {
+	cred, err := r.get(ctx)
+	if err != nil {
+		var zero R
+		return zero, err
+	}
+	res, status, err := do(ctx, cred)
+	if err != nil && isAuthStatus(status) {
+		r.invalidate(cred)
+		cred, err = r.get(ctx)
+		if err != nil {
+			var zero R
+			return zero, err
+		}
+		res, _, err = do(ctx, cred)
+	}
+	return res, err
+}
+
 func nonEmpty(s string) bool { return s != "" }
