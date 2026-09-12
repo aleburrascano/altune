@@ -204,7 +204,10 @@ func (a *App) setup(ctx context.Context) error {
 	tap := eventtap.New(a.eventBus)
 
 	disc := a.wireDiscovery(ctx)
-	cat := a.wireCatalog(tap, disc.featuredBridge, disc.searchSvc)
+	cat, err := a.wireCatalog(tap, disc.featuredBridge, disc.searchSvc)
+	if err != nil {
+		return fmt.Errorf("catalog: %w", err)
+	}
 	queueHandler := a.wirePlayback(cat.trackRepo)
 	disc.handler.
 		WithOwnership(discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo)).
@@ -244,8 +247,11 @@ func (a *App) wireCatalog(
 	tap *eventtap.Tap,
 	featuredBridge *discoverybridge.FeaturedResolver,
 	searchSvc *discoveryService.Service,
-) catalogWiring {
-	audioStore := a.buildAudioStore()
+) (catalogWiring, error) {
+	audioStore, err := a.buildAudioStore()
+	if err != nil {
+		return catalogWiring{}, err
+	}
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
 	catalogTrackRepo := persistence.NewPgxCatalogTrackRepository(a.pool)
 	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
@@ -334,7 +340,7 @@ func (a *App) wireCatalog(
 		audioURLHandler:   audioURLHandler,
 		retryH:            retryH,
 		reacquireH:        reacquireH,
-	}
+	}, nil
 }
 
 func (a *App) buildStreamripSources() []acqPorts.AudioSource {
@@ -546,7 +552,7 @@ func buildCoverageCondition(pool *pgxpool.Pool, threshold int) adminAlert.Condit
 	}
 }
 
-func (a *App) buildAudioStore() catalogPorts.AudioStore {
+func (a *App) buildAudioStore() (catalogPorts.AudioStore, error) {
 	if a.cfg.HasOCIS3() {
 		store, err := storage.NewObjectStorageAudioStore(
 			a.cfg.OCIS3Endpoint,
@@ -555,21 +561,50 @@ func (a *App) buildAudioStore() catalogPorts.AudioStore {
 			a.cfg.OCIS3Bucket,
 			a.cfg.OCIS3Region,
 		)
-		if err != nil {
-			slog.Warn("OCI S3 store failed to initialize, falling back", "error", err)
-		} else {
+		if err == nil {
 			slog.Info("audio store: OCI Object Storage")
-			return store
+			return store, nil
 		}
+		if a.cfg.MusicDir == "" {
+			return nil, fmt.Errorf("audio store: OCI S3 is configured but failed to initialize and no MUSIC_DIR fallback is set: %w", err)
+		}
+		slog.Warn("OCI S3 store failed to initialize, falling back to filesystem", "error", err)
 	}
 
 	if a.cfg.MusicDir != "" {
 		slog.Info("audio store: filesystem", "dir", a.cfg.MusicDir)
-		return storage.NewFilesystemAudioStore(a.cfg.MusicDir)
+		return storage.NewFilesystemAudioStore(a.cfg.MusicDir), nil
 	}
 
-	slog.Warn("no audio store configured")
-	return nil
+	return nil, missingAudioStoreError(a.cfg)
+}
+
+// missingAudioStoreError names the configuration that would have wired a live
+// audio store, so a misconfiguration fails at startup instead of panicking on
+// the first stream or delete with a nil store.
+func missingAudioStoreError(cfg *config.Config) error {
+	var missing []string
+	if cfg.OCIS3Endpoint == "" {
+		missing = append(missing, "OCI_S3_ENDPOINT")
+	}
+	if cfg.OCIS3AccessKey == "" {
+		missing = append(missing, "OCI_S3_ACCESS_KEY")
+	}
+	if cfg.OCIS3SecretKey == "" {
+		missing = append(missing, "OCI_S3_SECRET_KEY")
+	}
+	if cfg.OCIS3Bucket == "" {
+		missing = append(missing, "OCI_S3_BUCKET")
+	}
+	if len(missing) > 0 && len(missing) < 4 {
+		return fmt.Errorf(
+			"audio store: incomplete OCI S3 configuration, missing %s (set these for object storage, or set MUSIC_DIR for a filesystem store)",
+			strings.Join(missing, ", "),
+		)
+	}
+	return fmt.Errorf(
+		"audio store: no backend configured; set MUSIC_DIR for a filesystem store, or all of OCI_S3_ENDPOINT, OCI_S3_ACCESS_KEY, OCI_S3_SECRET_KEY, OCI_S3_BUCKET for object storage",
+	)
 }
 
 func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
