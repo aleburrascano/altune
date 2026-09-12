@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/admin/ui"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/logging"
 )
 
@@ -25,7 +26,7 @@ type AdminHandler struct {
 	reRunner        ReRunner
 	searchInspector SearchInspector
 	detailReRunner  DetailReRunner
-	metricsHistory  MetricsHistoryReader
+	metricsHistory  ports.MetricsRollupStore
 
 	supabaseURL     string
 	supabaseAnonKey string
