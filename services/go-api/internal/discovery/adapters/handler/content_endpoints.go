@@ -72,144 +72,123 @@ func writeContentFetchError(w http.ResponseWriter, provider string) {
 	})
 }
 
-func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
+func withProvider(
+	w http.ResponseWriter,
+	r *http.Request,
+	available bool,
+	degrade func(provider string),
+	call func(pn domain.ProviderName, provider, externalID string),
+) {
 	provider, externalID, ok := validateContentParams(w, r)
 	if !ok {
 		return
 	}
-	limit := clampLimit(r, "limit", 50, 100)
-	albumTitle := strings.TrimSpace(r.URL.Query().Get("title"))
-	albumArtist := strings.TrimSpace(r.URL.Query().Get("artist"))
-
 	pn, parseErr := domain.ParseProviderName(provider)
 	if parseErr != nil {
 		httputil.BadRequest(w, "unknown provider")
 		return
 	}
-
-	if h.albumSvc == nil {
-		writeContentFetchError(w, provider)
+	if !available {
+		degrade(provider)
 		return
 	}
+	call(pn, provider, externalID)
+}
 
-	resp, err := h.albumSvc.ExecuteRequest(r.Context(), service.AlbumTracksRequest{
-		Provider:     pn,
-		ExternalID:   externalID,
-		Title:        albumTitle,
-		Artist:       albumArtist,
-		MBExternalID: strings.TrimSpace(r.URL.Query().Get("mbid")),
-		Limit:        limit,
-	})
-	if err != nil {
-		slog.ErrorContext(r.Context(), "get album tracks failed",
-			"error", err, "provider", provider, "external_id", externalID)
-		httputil.InternalError(w)
-		return
-	}
+func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
+	withProvider(w, r, h.albumSvc != nil,
+		func(provider string) { writeContentFetchError(w, provider) },
+		func(pn domain.ProviderName, provider, externalID string) {
+			limit := clampLimit(r, "limit", 50, 100)
+			albumTitle := strings.TrimSpace(r.URL.Query().Get("title"))
+			albumArtist := strings.TrimSpace(r.URL.Query().Get("artist"))
 
-	dto := contentFetchToDTO(resp)
-	if userId, hasUser := auth.UserIDFromContext(r.Context()); hasUser {
-		h.stampOwnership(r.Context(), userId, dto.Items)
-		h.fillAlbumTrackNumbers(r.Context(), userId, dto.Items)
-	}
-	httputil.WriteJSON(w, http.StatusOK, dto)
+			resp, err := h.albumSvc.ExecuteRequest(r.Context(), service.AlbumTracksRequest{
+				Provider:     pn,
+				ExternalID:   externalID,
+				Title:        albumTitle,
+				Artist:       albumArtist,
+				MBExternalID: strings.TrimSpace(r.URL.Query().Get("mbid")),
+				Limit:        limit,
+			})
+			if err != nil {
+				slog.ErrorContext(r.Context(), "get album tracks failed",
+					"error", err, "provider", provider, "external_id", externalID)
+				httputil.InternalError(w)
+				return
+			}
+
+			dto := contentFetchToDTO(resp)
+			if userId, hasUser := auth.UserIDFromContext(r.Context()); hasUser {
+				h.stampOwnership(r.Context(), userId, dto.Items)
+				h.fillAlbumTrackNumbers(r.Context(), userId, dto.Items)
+			}
+			httputil.WriteJSON(w, http.StatusOK, dto)
+		})
 }
 
 func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.Request) {
-	provider, externalID, ok := validateContentParams(w, r)
-	if !ok {
-		return
-	}
-	limit := clampLimit(r, "limit", 5, 50)
-	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
+	withProvider(w, r, h.artistSvc != nil,
+		func(provider string) { writeContentFetchError(w, provider) },
+		func(pn domain.ProviderName, provider, externalID string) {
+			limit := clampLimit(r, "limit", 5, 50)
+			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
-	pn, parseErr := domain.ParseProviderName(provider)
-	if parseErr != nil {
-		httputil.BadRequest(w, "unknown provider")
-		return
-	}
+			resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, limit)
+			if err != nil {
+				slog.ErrorContext(r.Context(), "get artist top tracks failed",
+					"error", err, "provider", provider, "external_id", externalID)
+				httputil.InternalError(w)
+				return
+			}
 
-	if h.artistSvc == nil {
-		writeContentFetchError(w, provider)
-		return
-	}
+			if h.searchTrace != nil {
+				h.searchTrace.RecordContentFetch(r.Context(), "top_tracks", provider, "", resp.Status.String(), resp.Items)
+			}
 
-	resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, limit)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "get artist top tracks failed",
-			"error", err, "provider", provider, "external_id", externalID)
-		httputil.InternalError(w)
-		return
-	}
-
-	if h.searchTrace != nil {
-		h.searchTrace.RecordContentFetch(r.Context(), "top_tracks", provider, "", resp.Status.String(), resp.Items)
-	}
-
-	h.writeContentFetch(w, r, resp)
+			h.writeContentFetch(w, r, resp)
+		})
 }
 
 func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Request) {
-	provider, externalID, ok := validateContentParams(w, r)
-	if !ok {
-		return
-	}
-	limit := clampLimit(r, "limit", 50, 100)
-	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
+	withProvider(w, r, h.artistSvc != nil,
+		func(provider string) { writeContentFetchError(w, provider) },
+		func(pn domain.ProviderName, provider, externalID string) {
+			limit := clampLimit(r, "limit", 50, 100)
+			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
-	pn, parseErr := domain.ParseProviderName(provider)
-	if parseErr != nil {
-		httputil.BadRequest(w, "unknown provider")
-		return
-	}
+			resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, limit)
+			if err != nil {
+				slog.ErrorContext(r.Context(), "get artist albums failed",
+					"error", err, "provider", provider, "external_id", externalID)
+				httputil.InternalError(w)
+				return
+			}
 
-	if h.artistSvc == nil {
-		writeContentFetchError(w, provider)
-		return
-	}
+			if h.searchTrace != nil {
+				h.searchTrace.RecordContentFetch(r.Context(), "albums", provider, artistName, resp.Status.String(), resp.Items)
+			}
 
-	resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, limit)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "get artist albums failed",
-			"error", err, "provider", provider, "external_id", externalID)
-		httputil.InternalError(w)
-		return
-	}
-
-	if h.searchTrace != nil {
-		h.searchTrace.RecordContentFetch(r.Context(), "albums", provider, artistName, resp.Status.String(), resp.Items)
-	}
-
-	h.writeContentFetch(w, r, resp)
+			h.writeContentFetch(w, r, resp)
+		})
 }
 
 func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Request) {
-	provider, externalID, ok := validateContentParams(w, r)
-	if !ok {
-		return
-	}
-	limit := clampLimit(r, "limit", 20, 50)
+	withProvider(w, r, h.relatedSvc != nil,
+		func(provider string) { writeContentFetchError(w, provider) },
+		func(pn domain.ProviderName, provider, externalID string) {
+			limit := clampLimit(r, "limit", 20, 50)
 
-	pn, parseErr := domain.ParseProviderName(provider)
-	if parseErr != nil {
-		httputil.BadRequest(w, "unknown provider")
-		return
-	}
+			resp, err := h.relatedSvc.Execute(r.Context(), pn, externalID, limit)
+			if err != nil {
+				slog.ErrorContext(r.Context(), "get related tracks failed",
+					"error", err, "provider", provider, "external_id", externalID)
+				httputil.InternalError(w)
+				return
+			}
 
-	if h.relatedSvc == nil {
-		writeContentFetchError(w, provider)
-		return
-	}
-
-	resp, err := h.relatedSvc.Execute(r.Context(), pn, externalID, limit)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "get related tracks failed",
-			"error", err, "provider", provider, "external_id", externalID)
-		httputil.InternalError(w)
-		return
-	}
-
-	h.writeContentFetch(w, r, resp)
+			h.writeContentFetch(w, r, resp)
+		})
 }
 
 type ArtistContentResponseDTO struct {
@@ -218,60 +197,52 @@ type ArtistContentResponseDTO struct {
 }
 
 func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Request) {
-	provider, externalID, ok := validateContentParams(w, r)
-	if !ok {
-		return
-	}
-	artistName := strings.TrimSpace(r.URL.Query().Get("name"))
-	tracksLimit := clampLimit(r, "tracks_limit", 5, 50)
-	albumsLimit := clampLimit(r, "albums_limit", 100, 200)
+	withProvider(w, r, h.artistSvc != nil,
+		func(provider string) {
+			httputil.WriteJSON(w, http.StatusOK, ArtistContentResponseDTO{
+				TopTracks: ContentFetchResponseDTO{Provider: provider, Status: "error", Items: []SearchResultDTO{}},
+				Albums:    ContentFetchResponseDTO{Provider: provider, Status: "error", Items: []SearchResultDTO{}},
+			})
+		},
+		func(pn domain.ProviderName, provider, externalID string) {
+			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
+			tracksLimit := clampLimit(r, "tracks_limit", 5, 50)
+			albumsLimit := clampLimit(r, "albums_limit", 100, 200)
 
-	pn, parseErr := domain.ParseProviderName(provider)
-	if parseErr != nil {
-		httputil.BadRequest(w, "unknown provider")
-		return
-	}
-	if h.artistSvc == nil {
-		httputil.WriteJSON(w, http.StatusOK, ArtistContentResponseDTO{
-			TopTracks: ContentFetchResponseDTO{Provider: provider, Status: "error", Items: []SearchResultDTO{}},
-			Albums:    ContentFetchResponseDTO{Provider: provider, Status: "error", Items: []SearchResultDTO{}},
+			var tracksResp, albumsResp *service.ContentFetchResponse
+			var tracksErr, albumsErr error
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				tracksResp, tracksErr = h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, tracksLimit)
+			}()
+			go func() {
+				defer wg.Done()
+				albumsResp, albumsErr = h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, albumsLimit)
+			}()
+			wg.Wait()
+
+			if tracksErr != nil || albumsErr != nil {
+				slog.ErrorContext(r.Context(), "artist content failed",
+					"tracks_error", tracksErr, "albums_error", albumsErr,
+					"provider", provider, "external_id", externalID)
+				httputil.InternalError(w)
+				return
+			}
+
+			if h.searchTrace != nil {
+				h.searchTrace.RecordContentFetch(r.Context(), "top_tracks", provider, artistName, tracksResp.Status.String(), tracksResp.Items)
+				h.searchTrace.RecordContentFetch(r.Context(), "albums", provider, artistName, albumsResp.Status.String(), albumsResp.Items)
+			}
+
+			dto := ArtistContentResponseDTO{
+				TopTracks: contentFetchToDTO(tracksResp),
+				Albums:    contentFetchToDTO(albumsResp),
+			}
+			if userId, hasUser := auth.UserIDFromContext(r.Context()); hasUser {
+				h.stampOwnership(r.Context(), userId, dto.TopTracks.Items)
+			}
+			httputil.WriteJSON(w, http.StatusOK, dto)
 		})
-		return
-	}
-
-	var tracksResp, albumsResp *service.ContentFetchResponse
-	var tracksErr, albumsErr error
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		tracksResp, tracksErr = h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, tracksLimit)
-	}()
-	go func() {
-		defer wg.Done()
-		albumsResp, albumsErr = h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, albumsLimit)
-	}()
-	wg.Wait()
-
-	if tracksErr != nil || albumsErr != nil {
-		slog.ErrorContext(r.Context(), "artist content failed",
-			"tracks_error", tracksErr, "albums_error", albumsErr,
-			"provider", provider, "external_id", externalID)
-		httputil.InternalError(w)
-		return
-	}
-
-	if h.searchTrace != nil {
-		h.searchTrace.RecordContentFetch(r.Context(), "top_tracks", provider, artistName, tracksResp.Status.String(), tracksResp.Items)
-		h.searchTrace.RecordContentFetch(r.Context(), "albums", provider, artistName, albumsResp.Status.String(), albumsResp.Items)
-	}
-
-	dto := ArtistContentResponseDTO{
-		TopTracks: contentFetchToDTO(tracksResp),
-		Albums:    contentFetchToDTO(albumsResp),
-	}
-	if userId, hasUser := auth.UserIDFromContext(r.Context()); hasUser {
-		h.stampOwnership(r.Context(), userId, dto.TopTracks.Items)
-	}
-	httputil.WriteJSON(w, http.StatusOK, dto)
 }
