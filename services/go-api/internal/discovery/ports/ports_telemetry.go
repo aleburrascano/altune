@@ -39,11 +39,6 @@ type BehavioralSignalStore interface {
 	SatisfactionSignals(ctx context.Context, since time.Time) ([]BehavioralSignal, error)
 }
 
-type EventConsumer interface {
-	Name() string
-	Signals(ctx context.Context, since time.Time) ([]BehavioralSignal, error)
-}
-
 type BehavioralLabel struct {
 	QueryNorm       string
 	ResultSignature string

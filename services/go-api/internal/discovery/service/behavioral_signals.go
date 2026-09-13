@@ -24,8 +24,6 @@ func (c *SatisfactionConsumer) Signals(ctx context.Context, since time.Time) ([]
 	return c.store.SatisfactionSignals(ctx, since)
 }
 
-var _ ports.EventConsumer = (*SatisfactionConsumer)(nil)
-
 func (s *Service) RefreshBehavioralScores(ctx context.Context) error {
 	if s.behavioralConsumer == nil {
 		return nil

@@ -677,11 +677,16 @@ by `PgxEventStore`, which satisfies four ports (`EventStore`, `EventQuery`,
 every event to its search; `result_signature` joins across searches.
 
 `SatisfactionSignals` nets +1 per play/completed and −1 per short-dwell skip
-(< 20s), grouped by signature. `SatisfactionConsumer` (an `EventConsumer` Strategy)
-turns that into a score map that `RefreshBehavioralScores` recomputes off the
-request path and atomically swaps in; the search path only reads the published
-snapshot, gated behind the behavioral flag. **Behavioral ranking is currently a
-dark signal** — a new signal is a new `EventConsumer`, never a pipeline rewrite.
+(< 20s), grouped by signature. `SatisfactionConsumer` turns that into a score map
+that `RefreshBehavioralScores` recomputes off the request path and atomically swaps
+in; the search path only reads the published snapshot, gated behind the behavioral
+flag. **Behavioral ranking is currently a dark signal**, and today there is exactly
+one consumer: `Service` calls the concrete `SatisfactionConsumer` directly rather
+than through a Strategy interface — no `EventConsumer` port stands between them,
+since a single-implementer interface bought only indirection. A genuine second
+signal is where the pluggable seam (a consumer interface plus a registry on
+`Service`, replacing the single `behavioralConsumer` field) earns its keep; add it
+then, driven by that real second implementer, not before.
 
 **Popularity is deliberately inert.** `SearchResult.Popularity` is never populated
 by providers: a naive revival (Deezer track rank / artist-album fan count) was
