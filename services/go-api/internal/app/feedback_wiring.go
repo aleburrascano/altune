@@ -10,6 +10,10 @@ import (
 )
 
 func (a *App) wireFeedback() *feedbackHandler.FeedbackHandler {
+	if !a.cfg.FeedbackEnabled {
+		slog.Info("feedback: disabled via FEEDBACK_ENABLED, in-app reports disabled")
+		return nil
+	}
 	if !a.cfg.HasIssueTracker() {
 		slog.Info("feedback: issue tracker not configured, in-app reports disabled")
 		return nil
