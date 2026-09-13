@@ -309,6 +309,14 @@ func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []
 	return results
 }
 
+// BuildArtworkChain exposes the production artwork resolver chain to out-of-band
+// tools (e.g. cmd/backfillartwork) so they re-resolve covers through the exact
+// same corrected chain the live search path uses. It is a thin wrapper over the
+// internal wiring; the resolution logic itself lives in the discovery adapters.
+func BuildArtworkChain(cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
+	return buildArtworkChain(clientFactory{}, cfg)
+}
+
 func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
 	var artworkResolvers []discoveryPorts.ArtworkResolver
 	artworkResolvers = append(artworkResolvers,
