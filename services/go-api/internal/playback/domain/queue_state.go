@@ -78,30 +78,12 @@ type QueueStateInput struct {
 }
 
 func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error) {
-	if in.PositionMs < 0 {
-		return nil, NewValidationError(fmt.Sprintf("positionMs must be non-negative, got %d", in.PositionMs))
-	}
 	trackIds := emptyIfNil(in.TrackIds)
 	naturalOrder := emptyIfNil(in.NaturalOrder)
-	if err := lengthWithinBound("trackIds", len(trackIds)); err != nil {
+	if err := checkQueueInvariants(in.PositionMs, trackIds, naturalOrder, in.SourceId, in.CurrentIdx); err != nil {
 		return nil, err
 	}
-	if err := lengthWithinBound("naturalOrder", len(naturalOrder)); err != nil {
-		return nil, err
-	}
-	if err := elementsStorable("trackIds", trackIds); err != nil {
-		return nil, err
-	}
-	if err := elementsStorable("naturalOrder", naturalOrder); err != nil {
-		return nil, err
-	}
-	if err := stringStorable("sourceId", in.SourceId); err != nil {
-		return nil, err
-	}
-	currentIdx, err := indexWithinQueue(in.CurrentIdx, len(trackIds))
-	if err != nil {
-		return nil, err
-	}
+	currentIdx, _ := indexWithinQueue(in.CurrentIdx, len(trackIds))
 	return &QueueState{
 		UserId:       in.UserId,
 		TrackIds:     trackIds,
@@ -113,6 +95,39 @@ func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error)
 		NaturalOrder: naturalOrder,
 		UpdatedAt:    updatedAt,
 	}, nil
+}
+
+// Validate re-checks the invariants the constructors enforce. QueueState is an
+// exported field bag, so a bare struct literal or a post-construction mutation
+// can hold state NewQueueState would have rejected. The persistence boundary
+// calls this so such a bypass can never reach a stored row.
+func (q *QueueState) Validate() error {
+	return checkQueueInvariants(q.PositionMs, q.TrackIds, q.NaturalOrder, q.SourceId, q.CurrentIdx)
+}
+
+func checkQueueInvariants(positionMs int64, trackIds, naturalOrder []string, sourceId string, currentIdx int) error {
+	if positionMs < 0 {
+		return NewValidationError(fmt.Sprintf("positionMs must be non-negative, got %d", positionMs))
+	}
+	if err := lengthWithinBound("trackIds", len(trackIds)); err != nil {
+		return err
+	}
+	if err := lengthWithinBound("naturalOrder", len(naturalOrder)); err != nil {
+		return err
+	}
+	if err := elementsStorable("trackIds", trackIds); err != nil {
+		return err
+	}
+	if err := elementsStorable("naturalOrder", naturalOrder); err != nil {
+		return err
+	}
+	if err := stringStorable("sourceId", sourceId); err != nil {
+		return err
+	}
+	if _, err := indexWithinQueue(currentIdx, len(trackIds)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func emptyIfNil(trackIds []string) []string {
