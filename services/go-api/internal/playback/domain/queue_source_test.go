@@ -22,7 +22,7 @@ func TestQueueSource_RoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ParseQueueSource(tt.source.Format())
+			got := ParseQueueSource(tt.source.String())
 
 			if got != tt.source {
 				t.Errorf("round trip = %+v, want %+v", got, tt.source)
@@ -43,9 +43,9 @@ func TestParseQueueSource_Unknown(t *testing.T) {
 	}
 }
 
-func TestQueueSource_FormatZero(t *testing.T) {
-	if got := (QueueSource{}).Format(); got != "" {
-		t.Errorf("Format() = %q, want empty", got)
+func TestQueueSource_StringZero(t *testing.T) {
+	if got := (QueueSource{}).String(); got != "" {
+		t.Errorf("String() = %q, want empty", got)
 	}
 }
 
@@ -63,8 +63,8 @@ func TestParseQueueSource_MalformedPlaylistYieldsZero(t *testing.T) {
 	}
 }
 
-func TestPackSourceId_UnknownKindIsValidationError(t *testing.T) {
-	_, err := PackSourceId(QueueSource{Kind: "album", PlaylistId: "xyz"}, "album:xyz")
+func TestFormatQueueSource_UnknownKindIsValidationError(t *testing.T) {
+	_, err := FormatQueueSource(QueueSource{Kind: "album", PlaylistId: "xyz"}, "album:xyz")
 	if err == nil {
 		t.Fatal("expected an unknown non-empty kind to be rejected, got nil error")
 	}
@@ -74,22 +74,22 @@ func TestPackSourceId_UnknownKindIsValidationError(t *testing.T) {
 	}
 }
 
-func TestPackSourceId_KnownKindFormats(t *testing.T) {
-	got, err := PackSourceId(QueueSource{Kind: SourceKindLibrary}, "")
+func TestFormatQueueSource_KnownKindFormats(t *testing.T) {
+	got, err := FormatQueueSource(QueueSource{Kind: SourceKindLibrary}, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got != "library" {
-		t.Errorf("PackSourceId(library) = %q, want %q", got, "library")
+		t.Errorf("FormatQueueSource(library) = %q, want %q", got, "library")
 	}
 }
 
-func TestPackSourceId_ZeroSourceFallsBackToSourceId(t *testing.T) {
-	got, err := PackSourceId(QueueSource{}, "search:legacy")
+func TestFormatQueueSource_ZeroSourceFallsBackToSourceId(t *testing.T) {
+	got, err := FormatQueueSource(QueueSource{}, "search:legacy")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got != "search:legacy" {
-		t.Errorf("PackSourceId(zero) = %q, want fallback %q", got, "search:legacy")
+		t.Errorf("FormatQueueSource(zero) = %q, want fallback %q", got, "search:legacy")
 	}
 }

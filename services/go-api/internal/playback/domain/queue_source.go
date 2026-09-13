@@ -31,7 +31,7 @@ func (s QueueSource) hasKnownKind() bool {
 	return false
 }
 
-func (s QueueSource) Format() string {
+func (s QueueSource) String() string {
 	switch s.Kind {
 	case SourceKindPlaylist:
 		return SourceKindPlaylist + ":" + url.QueryEscape(s.PlaylistId) + ":" + url.QueryEscape(s.Name)
@@ -82,14 +82,14 @@ func ParseQueueSource(sourceId string) QueueSource {
 	return QueueSource{}
 }
 
-func PackSourceId(source QueueSource, fallback string) (string, error) {
+func FormatQueueSource(source QueueSource, fallback string) (string, error) {
 	if source.IsZero() {
 		return fallback, nil
 	}
 	if !source.hasKnownKind() {
 		return "", NewValidationError(fmt.Sprintf("unknown queue source kind: %q", source.Kind))
 	}
-	formatted := source.Format()
+	formatted := source.String()
 	if formatted == "" {
 		return fallback, nil
 	}
