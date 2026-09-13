@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -279,5 +280,52 @@ func TestQueueService_Resume_ReturnsStored(t *testing.T) {
 	}
 	if state.CurrentIdx != 1 || state.RepeatMode != domain.RepeatOne {
 		t.Errorf("resumed state mismatch: %+v", state)
+	}
+}
+
+type failingQueueRepo struct {
+	inMemoryQueueRepo
+	err error
+}
+
+func (r *failingQueueRepo) GetForUser(_ context.Context, _ shared.UserId) (*domain.QueueState, error) {
+	return nil, r.err
+}
+
+func corruptStoredRow() error {
+	return fmt.Errorf("corrupt stored queue state: invalid repeat mode %q: %w", "sideways", ports.ErrCorruptStoredState)
+}
+
+func TestQueueService_Resume_CorruptStoredRowFallsBackToEmpty(t *testing.T) {
+	svc := NewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{})
+	user := testUser()
+
+	state, err := svc.Resume(context.Background(), user)
+	if err != nil {
+		t.Fatalf("corrupt stored row must degrade to an empty queue, got error: %v", err)
+	}
+	if state == nil || len(state.TrackIds) != 0 || state.UserId != user {
+		t.Errorf("expected empty queue state for the user, got %+v", state)
+	}
+}
+
+func TestQueueService_ResumeView_CorruptStoredRowFallsBackToEmpty(t *testing.T) {
+	svc := NewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{})
+
+	view, err := svc.ResumeView(context.Background(), testUser())
+	if err != nil {
+		t.Fatalf("corrupt stored row must not 500 the resume endpoint: %v", err)
+	}
+	if len(view.State.TrackIds) != 0 || view.CurrentTrack != nil {
+		t.Errorf("expected an empty resume view, got %+v", view)
+	}
+}
+
+func TestQueueService_Resume_InfrastructureErrorStillFails(t *testing.T) {
+	dbDown := errors.New("connection refused")
+	svc := NewQueueService(&failingQueueRepo{err: dbDown}, &fakeNowPlaying{})
+
+	if _, err := svc.Resume(context.Background(), testUser()); !errors.Is(err, dbDown) {
+		t.Fatalf("non-corruption repo errors must still propagate, got %v", err)
 	}
 }

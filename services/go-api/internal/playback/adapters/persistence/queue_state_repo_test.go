@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 )
@@ -81,6 +82,9 @@ func assertServerFault(t *testing.T, err error) {
 	t.Helper()
 	if err == nil {
 		t.Fatal("expected an error for a corrupt stored row, got nil")
+	}
+	if !errors.Is(err, ports.ErrCorruptStoredState) {
+		t.Fatalf("corrupt stored row must satisfy ports.ErrCorruptStoredState so the service can degrade, got %v", err)
 	}
 	var se httputil.StatusError
 	if errors.As(err, &se) {
