@@ -10,7 +10,7 @@ WebBrowser.maybeCompleteAuthSession();
 
 export const OAUTH_REDIRECT_URL = 'altune://auth/callback';
 
-export type OAuthProvider = 'apple' | 'google';
+export type OAuthProvider = 'google';
 
 export type OAuthResult =
   | { kind: 'idle' }
