@@ -1,17 +1,49 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"testing"
-	"time"
-
 	"altune/go-api/internal/feedback/domain"
 	"altune/go-api/internal/feedback/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"errors"
+	"log/slog"
+	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+// capturingHandler records the attributes of each slog record so tests can
+// assert on what the failure path logs.
+type capturingHandler struct {
+	records []map[string]string
+}
+
+func (h *capturingHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *capturingHandler) Handle(_ context.Context, r slog.Record) error {
+	attrs := map[string]string{"msg": r.Message}
+	r.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.String()
+		return true
+	})
+	h.records = append(h.records, attrs)
+	return nil
+}
+
+func (h *capturingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *capturingHandler) WithGroup(string) slog.Handler      { return h }
+
+// captureLogs swaps the default slog logger for a capturing one for the
+// duration of the test and returns the handler holding the records.
+func captureLogs(t *testing.T) *capturingHandler {
+	t.Helper()
+	h := &capturingHandler{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return h
+}
 
 type recordingTracker struct {
 	reports []*domain.Report
@@ -222,6 +254,34 @@ func TestSubmitReport_CountsTrackerFailure(t *testing.T) {
 	}
 	if metrics.trackerFailures != 1 {
 		t.Fatalf("tracker failures = %d, want 1", metrics.trackerFailures)
+	}
+}
+
+func TestSubmitReport_LogsReportContextOnTrackerFailure(t *testing.T) {
+	logs := captureLogs(t)
+	tracker := &recordingTracker{err: errors.New("github is down")}
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
+	user := newUser()
+
+	if _, err := svc.Execute(context.Background(), user, validInput()); err == nil {
+		t.Fatal("expected the tracker failure to surface")
+	}
+
+	var rec map[string]string
+	for _, r := range logs.records {
+		if r["msg"] == "feedback.create_failed" {
+			rec = r
+			break
+		}
+	}
+	if rec == nil {
+		t.Fatal("failure path logged no feedback.create_failed record")
+	}
+	if rec["kind"] != "bug" {
+		t.Errorf("logged kind = %q, want %q", rec["kind"], "bug")
+	}
+	if rec["user_id"] != user.String() {
+		t.Errorf("logged user_id = %q, want %q", rec["user_id"], user.String())
 	}
 }
 

@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/feedback/domain"
+	"altune/go-api/internal/feedback/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/feedback/domain"
-	"altune/go-api/internal/feedback/ports"
-	"altune/go-api/internal/shared"
 )
 
 type SubmitReportInput struct {
@@ -70,6 +69,11 @@ func (s *SubmitReportService) create(ctx context.Context, report *domain.Report)
 	ref, err := s.tracker.Create(ctx, report)
 	if err != nil {
 		s.metrics.TrackerCreateFailed()
+		slog.ErrorContext(ctx, "feedback.create_failed",
+			"kind", report.Kind.String(),
+			"user_id", report.Reporter.String(),
+			"error", err.Error(),
+		)
 		return ports.IssueRef{}, fmt.Errorf("create issue: %w", err)
 	}
 	slog.InfoContext(ctx, "feedback.submitted",
