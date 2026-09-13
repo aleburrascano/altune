@@ -3,89 +3,9 @@ package logging
 import (
 	"context"
 	"log/slog"
-	"sync"
-	"time"
 )
 
-const logRingCapacity = 1000
-
-const subscriberChanSize = 64
-
 const ringCaptureFloor = slog.LevelDebug
-
-type CapturedRecord struct {
-	Time    time.Time         `json:"time"`
-	Level   string            `json:"level"`
-	Message string            `json:"msg"`
-	Attrs   map[string]string `json:"attrs,omitempty"`
-}
-
-type RingBuffer struct {
-	mu      sync.Mutex
-	buf     []CapturedRecord
-	head    int
-	count   int
-	subs    map[int]chan CapturedRecord
-	nextSub int
-}
-
-func NewRingBuffer(capacity int) *RingBuffer {
-	if capacity < 1 {
-		capacity = 1
-	}
-	return &RingBuffer{
-		buf:  make([]CapturedRecord, capacity),
-		subs: make(map[int]chan CapturedRecord),
-	}
-}
-
-func (rb *RingBuffer) append(rec CapturedRecord) {
-	rb.mu.Lock()
-	rb.buf[rb.head] = rec
-	rb.head = (rb.head + 1) % len(rb.buf)
-	if rb.count < len(rb.buf) {
-		rb.count++
-	}
-	rb.fanOutDroppingWhenSubscriberIsFull(rec)
-	rb.mu.Unlock()
-}
-
-func (rb *RingBuffer) fanOutDroppingWhenSubscriberIsFull(rec CapturedRecord) {
-	for _, ch := range rb.subs {
-		select {
-		case ch <- rec:
-		default:
-		}
-	}
-}
-
-func (rb *RingBuffer) Snapshot() []CapturedRecord {
-	rb.mu.Lock()
-	defer rb.mu.Unlock()
-	out := make([]CapturedRecord, 0, rb.count)
-	start := (rb.head - rb.count + len(rb.buf)) % len(rb.buf)
-	for i := 0; i < rb.count; i++ {
-		out = append(out, rb.buf[(start+i)%len(rb.buf)])
-	}
-	return out
-}
-
-func (rb *RingBuffer) Subscribe() (<-chan CapturedRecord, func()) {
-	rb.mu.Lock()
-	defer rb.mu.Unlock()
-	id := rb.nextSub
-	rb.nextSub++
-	ch := make(chan CapturedRecord, subscriberChanSize)
-	rb.subs[id] = ch
-	return ch, func() {
-		rb.mu.Lock()
-		defer rb.mu.Unlock()
-		if c, ok := rb.subs[id]; ok {
-			delete(rb.subs, id)
-			close(c)
-		}
-	}
-}
 
 type ringHandler struct {
 	inner slog.Handler
@@ -115,44 +35,6 @@ func (h *ringHandler) Handle(ctx context.Context, r slog.Record) error {
 	return nil
 }
 
-var sensitiveLogKeys = map[string]struct{}{
-	"query": {},
-}
-
-func withoutSensitiveAttrs(r slog.Record) slog.Record {
-	present := false
-	r.Attrs(func(a slog.Attr) bool {
-		if _, ok := sensitiveLogKeys[a.Key]; ok {
-			present = true
-			return false
-		}
-		return true
-	})
-	if !present {
-		return r
-	}
-	clean := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
-	r.Attrs(func(a slog.Attr) bool {
-		if _, ok := sensitiveLogKeys[a.Key]; !ok {
-			clean.AddAttrs(a)
-		}
-		return true
-	})
-	return clean
-}
-
-func (h *ringHandler) flattenedAttrs(r slog.Record) map[string]string {
-	attrs := make(map[string]string, r.NumAttrs()+len(h.attrs))
-	for _, a := range h.attrs {
-		flattenAttr(attrs, "", a)
-	}
-	r.Attrs(func(a slog.Attr) bool {
-		flattenAttr(attrs, "", a)
-		return true
-	})
-	return attrs
-}
-
 func (h *ringHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	return &ringHandler{
 		inner: h.inner.WithAttrs(attrs),
@@ -167,19 +49,4 @@ func (h *ringHandler) WithGroup(name string) slog.Handler {
 		ring:  h.ring,
 		attrs: h.attrs,
 	}
-}
-
-func flattenAttr(dst map[string]string, prefix string, a slog.Attr) {
-	val := a.Value.Resolve()
-	key := a.Key
-	if prefix != "" {
-		key = prefix + "." + key
-	}
-	if val.Kind() == slog.KindGroup {
-		for _, ga := range val.Group() {
-			flattenAttr(dst, key, ga)
-		}
-		return
-	}
-	dst[key] = val.String()
 }
