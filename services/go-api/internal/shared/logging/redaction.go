@@ -8,11 +8,11 @@ import (
 
 // sensitiveKeyMarkers is the vocabulary of secret-bearing log attr keys the
 // codebase actually uses: every Config secret field (tokens, API keys, access
-// and secret keys, the Supabase anon key) plus the raw "query" text captured at
-// the search boundary. A key is redacted when its lower-cased form contains any
-// of these markers. Markers are deliberately specific compounds (e.g.
-// "api_key", not bare "key") so genuine non-secret identifiers such as
-// dedup_key or idempotency_key are left intact.
+// and secret keys) plus the raw "query" text captured at the search boundary.
+// A key is redacted when its lower-cased form contains any of these markers.
+// Markers are deliberately specific compounds (e.g. "api_key", not bare "key")
+// so genuine non-secret identifiers such as dedup_key or idempotency_key are
+// left intact.
 var sensitiveKeyMarkers = []string{
 	"query",
 	"secret",
