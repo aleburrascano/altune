@@ -3,6 +3,7 @@ import type { ImperativeRouter } from 'expo-router';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import type { AuthLinkIntent, AuthLinkParams } from './parseAuthLink';
+import { markRecoveryUnlocked } from './recoveryUnlock';
 
 // A single OAuth redirect (`altune://auth/callback`) is delivered to two
 // independent listeners — useOAuth's in-app browser result and the global
@@ -99,8 +100,11 @@ export async function completeAuthIntent(
   if (intent.kind === 'recovery' || intent.kind === 'confirm') {
     const result = await verifyRecoveryOrConfirm(params);
     // Only surface the recovery screen once the link is confirmed good, so a
-    // failed verification cannot strand the user on a dead reset form.
+    // failed verification cannot strand the user on a dead reset form. Unlocking
+    // here — and only here — is what lets AuthGate render the password form; a
+    // bare deep link never reaches this point (see #656).
     if (result.kind === 'success' && intent.kind === 'recovery') {
+      markRecoveryUnlocked();
       router.replace('/reset-password');
     }
     return result;
