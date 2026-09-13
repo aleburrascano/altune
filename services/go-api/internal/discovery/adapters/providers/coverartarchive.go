@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"altune/go-api/internal/discovery/domain"
 )
@@ -25,7 +26,7 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 		return "", nil
 	}
 
-	u := fmt.Sprintf("https://coverartarchive.org/release-group/%s/front-1200", mbid)
+	u := fmt.Sprintf("https://coverartarchive.org/release-group/%s/front-1200", url.PathEscape(mbid))
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", u, nil)
 	if err != nil {
