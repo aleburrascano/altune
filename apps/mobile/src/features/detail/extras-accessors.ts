@@ -67,7 +67,7 @@ export function albumExtras(extras: Record<string, unknown>): AlbumExtrasResult 
   const recordType = extras['record_type'];
 
   return {
-    releaseDate: typeof releaseDate === 'string' ? releaseDate : null,
+    releaseDate: typeof releaseDate === 'string' && releaseDate.length > 0 ? releaseDate : null,
     year: typeof year === 'number' ? String(year) : typeof year === 'string' ? year : null,
     trackCount: typeof trackCount === 'number' ? trackCount : null,
     recordType: typeof recordType === 'string' ? recordType : null,

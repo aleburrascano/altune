@@ -149,6 +149,15 @@ describe('albumExtras', () => {
     expect(ae.recordType).toBe('album');
   });
 
+  it('rejects an empty release date string as null', () => {
+    expect(albumExtras({ release_date: '', year: 1994 })).toEqual({
+      releaseDate: null,
+      year: '1994',
+      trackCount: null,
+      recordType: null,
+    });
+  });
+
   it('nulls every field for an empty map', () => {
     expect(albumExtras({})).toEqual({
       releaseDate: null,
