@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/ports"
-	"altune/go-api/internal/shared"
 )
 
 type SaveQueueStateInput struct {
@@ -98,11 +97,11 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 }
 
 // Forget erases the user's persisted queue state. This is the erasure
-// entrypoint for account-deletion / right-to-be-forgotten flows: the stored
-// queue holds PII (full track list, natural order, and a free-text search
-// source_id). Identities are owned out-of-band (Supabase), so no in-repo
-// account-deletion sweep calls this yet; wiring it into that sweep is the
-// remaining piece (see issue #243 / PR).
+// entrypoint for right-to-be-forgotten flows: the stored queue holds PII
+// (full track list, natural order, and a free-text search source_id). It is
+// reachable via the authenticated self-service DELETE /queue-state route.
+// Identities are owned out-of-band (Supabase), so no in-repo account-deletion
+// sweep calls this yet; wiring it into such a sweep is a follow-up.
 func (s *QueueService) Forget(ctx context.Context, userId shared.UserId) error {
 	return s.repo.DeleteForUser(ctx, userId)
 }
