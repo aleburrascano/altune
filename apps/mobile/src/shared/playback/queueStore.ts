@@ -22,6 +22,7 @@ interface QueueActions {
     startIndex: number,
     source: QueueSource | null,
   ) => void;
+  loadShuffled: (tracks: readonly PlaybackTrack[], source: QueueSource | null) => void;
   restoreQueue: (
     tracks: readonly PlaybackTrack[],
     playOrder: readonly number[],
@@ -157,6 +158,22 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
       appended: [],
       currentIndex: order.length === 0 ? -1 : startIndex,
       shuffled: false,
+      source,
+      resumePositionMs: 0,
+      generation: get().generation + 1,
+    });
+  },
+
+  loadShuffled: (tracks, source) => {
+    const order = identityOrder(tracks.length);
+    fisherYates(order);
+    set({
+      tracks,
+      playOrder: order,
+      upNext: [],
+      appended: [],
+      currentIndex: tracks.length === 0 ? -1 : 0,
+      shuffled: true,
       source,
       resumePositionMs: 0,
       generation: get().generation + 1,

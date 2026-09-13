@@ -1,9 +1,10 @@
 import type { ReactElement } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Shuffle } from 'lucide-react-native';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import { Text, spacing } from '@shared/ui';
+import { Text, spacing, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import type { Selection } from '../useSelection';
@@ -22,8 +23,30 @@ type TracksListProps = {
   isPlaying: (trackId: TrackId) => boolean;
   onEndReached?: () => void;
   isFetchingNextPage?: boolean;
+  onShuffleAll?: () => void;
   selection?: Selection;
 };
+
+function ShuffleAllButton({ onPress }: { onPress: () => void }): ReactElement {
+  const theme = useTheme();
+  return (
+    <Pressable
+      testID="library-shuffle-all"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.shuffleAll,
+        { backgroundColor: theme.color.surface1, borderColor: theme.color.border },
+        pressed ? styles.pressed : null,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="Shuffle whole library"
+      accessibilityHint="Plays every track in your library in random order"
+    >
+      <Shuffle size={16} color={theme.color.textPrimary} />
+      <Text variant="label">Shuffle all</Text>
+    </Pressable>
+  );
+}
 
 export function TracksList({
   tracks,
@@ -37,6 +60,7 @@ export function TracksList({
   isPlaying,
   onEndReached,
   isFetchingNextPage,
+  onShuffleAll,
   selection,
 }: TracksListProps): ReactElement {
   return (
@@ -49,6 +73,11 @@ export function TracksList({
       refreshing={refresh.refreshing}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.5}
+      ListHeaderComponent={
+        onShuffleAll != null && tracks.length > 0 ? (
+          <ShuffleAllButton onPress={onShuffleAll} />
+        ) : null
+      }
       ListFooterComponent={
         isFetchingNextPage === true ? (
           <View style={styles.footer}>
@@ -95,4 +124,15 @@ const styles = StyleSheet.create({
   emptyList: { flexGrow: 1 },
   empty: { flex: 1, alignItems: 'center', paddingTop: spacing['3xl'] },
   footer: { alignItems: 'center', paddingVertical: spacing.lg },
+  shuffleAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  pressed: { opacity: 0.7 },
 });

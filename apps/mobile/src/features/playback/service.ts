@@ -8,6 +8,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
 import { recoverAudio } from '@shared/api-client/audio';
 import { evictCached, prefetchNext, repairActiveToStreaming, wasSwappedToLocal } from './audioPrefetch';
+import { refreshUpcomingPresign } from './loadNativeTrack';
 import { withNativeQueue } from './nativeQueueLock';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
 import { reportPlaybackError } from './playbackErrorStore';
@@ -89,6 +90,8 @@ export async function playbackService() {
     if (!shouldApplyActiveIndex(data.index)) return;
     const key = typeof data.track?.id === 'string' ? data.track.id : undefined;
     useQueueStore.getState().syncCurrentIndex(data.index, key);
-    void prefetchNext(useQueueStore.getState().currentIndex);
+    const idx = useQueueStore.getState().currentIndex;
+    void prefetchNext(idx);
+    void refreshUpcomingPresign(idx);
   });
 }
