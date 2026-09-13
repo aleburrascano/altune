@@ -1,10 +1,9 @@
 package github
 
 import (
+	"altune/go-api/internal/feedback/domain"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/feedback/domain"
 )
 
 // hostileMessage mentions accounts, embeds an image and a link, tries to break
