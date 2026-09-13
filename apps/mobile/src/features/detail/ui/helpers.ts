@@ -3,7 +3,17 @@ import { StyleSheet } from 'react-native';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { spacing } from '@shared/ui/theme/tokens';
 
-import { albumExtras } from '../extras-accessors';
+import { extractFeaturedFromText } from '../extras';
+import { albumExtras, trackExtras } from '../extras-accessors';
+
+export function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
+  const base = track.subtitle ?? '';
+  const names = trackExtras(track.extras).featuredArtists.map((f) => f.name);
+  if (names.length > 0) return `${base}, ${names.join(', ')}`;
+  const parsed = extractFeaturedFromText(track.title, track.subtitle);
+  if (parsed) return `${base}, ${parsed}`;
+  return base;
+}
 
 export function _albumYear(album: DiscoveryResult): string | null {
   const ae = albumExtras(album.extras);
