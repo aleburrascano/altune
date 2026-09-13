@@ -1,6 +1,7 @@
 package requeststore
 
 import (
+	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"io"
 	"net/http"
@@ -28,12 +29,12 @@ func (r *RerunRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := r.base.RoundTrip(req)
 	ex := Exchange{
 		Method:    req.Method,
-		URL:       RedactSecrets(req.URL.String()),
+		URL:       redact.Secrets(req.URL.String()),
 		LatencyMs: time.Since(start).Milliseconds(),
 		At:        start.UTC(),
 	}
 	if err != nil {
-		ex.Err = RedactSecrets(err.Error())
+		ex.Err = redact.Secrets(err.Error())
 		r.add(ex)
 		return resp, err
 	}

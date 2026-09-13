@@ -1,6 +1,7 @@
 package httptrace
 
 import (
+	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"io"
 	"net/http"
@@ -33,7 +34,9 @@ func NewRecorder(base http.RoundTripper) *Recorder {
 }
 
 func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
-	ex := Exchange{Method: req.Method, URL: req.URL.String()}
+	// Exchanges are written to fixture files on disk, so secrets in the URL or
+	// error text are masked before they are stored.
+	ex := Exchange{Method: req.Method, URL: redact.Secrets(req.URL.String())}
 
 	if req.Body != nil {
 		reqBytes, _ := io.ReadAll(req.Body)
@@ -47,7 +50,7 @@ func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	ex.Duration = time.Since(start)
 
 	if err != nil {
-		ex.Err = err.Error()
+		ex.Err = redact.Secrets(err.Error())
 		r.record(ex)
 		return resp, err
 	}
@@ -58,7 +61,7 @@ func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	ex.Status = resp.StatusCode
 	ex.RespBody = string(respBytes)
 	if readErr != nil {
-		ex.Err = readErr.Error()
+		ex.Err = redact.Secrets(readErr.Error())
 	}
 	r.record(ex)
 	return resp, nil

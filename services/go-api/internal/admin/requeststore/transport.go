@@ -1,12 +1,12 @@
 package requeststore
 
 import (
+	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"io"
 	"net/http"
 	"time"
-
-	"altune/go-api/internal/shared/httputil"
 )
 
 type correlatedTransport struct {
@@ -30,10 +30,10 @@ func (t *correlatedTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	start := time.Now()
 	resp, err := t.base.RoundTrip(req)
 	latency := time.Since(start).Milliseconds()
-	ex := Exchange{Method: req.Method, URL: RedactSecrets(req.URL.String()), LatencyMs: latency, At: start.UTC()}
+	ex := Exchange{Method: req.Method, URL: redact.Secrets(req.URL.String()), LatencyMs: latency, At: start.UTC()}
 
 	if err != nil {
-		ex.Err = RedactSecrets(err.Error())
+		ex.Err = redact.Secrets(err.Error())
 		t.store.recordExchange(corrID, ex)
 		return resp, err
 	}
