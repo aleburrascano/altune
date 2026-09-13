@@ -124,27 +124,35 @@ func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string
 }
 
 func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {
-	var all []mbReleaseGroup
-	for page := 0; page < mbMaxReleaseGroupPages; page++ {
-		u := fmt.Sprintf(
-			"https://musicbrainz.org/ws/2/release-group?artist=%s&type=album%%7Cep%%7Csingle&fmt=json&limit=100&offset=%d",
-			url.QueryEscape(mbid), page*100)
+	fetched := 0
+	degraded := false
+	all, err := fetchPaged(mbMaxReleaseGroupPages,
+		func(page int) ([]mbReleaseGroup, bool, error) {
+			u := fmt.Sprintf(
+				"https://musicbrainz.org/ws/2/release-group?artist=%s&type=album%%7Cep%%7Csingle&fmt=json&limit=100&offset=%d",
+				url.QueryEscape(mbid), page*100)
 
-		var body mbReleaseGroupResponse
-		if err := a.getJSON(ctx, u, &body); err != nil {
-			if page > 0 {
-				slog.DebugContext(ctx, "mb.release_groups_page_failed",
-					"mbid", mbid, "page", page, "error", err)
-				return all, nil
+			var body mbReleaseGroupResponse
+			if err := a.getJSON(ctx, u, &body); err != nil {
+				return nil, false, err
 			}
-			return nil, err
-		}
-		all = append(all, body.ReleaseGroups...)
-		if len(body.ReleaseGroups) == 0 || len(all) >= body.ReleaseGroupCount {
-			break
-		}
+			fetched += len(body.ReleaseGroups)
+			more := len(body.ReleaseGroups) != 0 && fetched < body.ReleaseGroupCount
+			return body.ReleaseGroups, more, nil
+		},
+		func(page int, err error) {
+			degraded = true
+			slog.DebugContext(ctx, "mb.release_groups_page_failed",
+				"mbid", mbid, "page", page, "error", err)
+		})
+	if err != nil {
+		return nil, err
 	}
-	a.releaseMemo.put(mbid, all)
+	// Memoize only a complete discography; a partial set from the later-page
+	// degrade path must not be cached and reused.
+	if !degraded {
+		a.releaseMemo.put(mbid, all)
+	}
 	return all, nil
 }
 
