@@ -81,19 +81,19 @@ export function AlbumDetailBody({
               <Pressable
                 testID="detail-save-all"
                 onPress={album.onSaveAll}
-                disabled={album.saveAllTapped}
+                disabled={album.savingAll}
                 accessibilityRole="button"
                 accessibilityLabel={`Save ${album.owned.unownedCount} tracks to your library`}
-                accessibilityState={{ disabled: album.saveAllTapped }}
+                accessibilityState={{ disabled: album.savingAll }}
                 style={({ pressed }) => [
                   styles.savePill,
                   { borderColor: theme.color.border, backgroundColor: theme.color.surface1 },
-                  pressed && !album.saveAllTapped ? styles.pressed : null,
+                  pressed && !album.savingAll ? styles.pressed : null,
                 ]}
               >
                 <Plus size={18} color={theme.color.accent} />
                 <Text variant="label">
-                  {album.saveAllTapped ? 'Saving…' : `Save ${album.owned.unownedCount}`}
+                  {album.savingAll ? 'Saving…' : `Save ${album.owned.unownedCount}`}
                 </Text>
               </Pressable>
             ) : null
@@ -194,9 +194,10 @@ export function AlbumDetailBody({
                   ))}
                   <Button
                     testID="detail-save-all-more"
-                    label="Save all"
+                    label={album.savingAll ? 'Saving…' : 'Save all'}
                     variant="secondary"
                     onPress={album.onSaveAll}
+                    disabled={album.savingAll}
                     style={styles.moreSaveAll}
                   />
                 </>
