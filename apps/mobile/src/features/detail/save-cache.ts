@@ -1,9 +1,5 @@
 import { asTrackId } from '@shared/api-client/ids';
-import type {
-  CreateTrackRequest,
-  ListTracksResponse,
-  TrackResponse,
-} from '@shared/api-client/types';
+import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { trackExtras } from './extras-accessors';
@@ -46,29 +42,4 @@ export function optimisticTrack(body: CreateTrackRequest, addedAt: string): Trac
     audio_ref: null,
     ...(body.featured_artists ? { featured_artists: body.featured_artists } : {}),
   };
-}
-
-export function insertOptimisticTrackHome(
-  data: ListTracksResponse | undefined,
-  track: TrackResponse,
-): ListTracksResponse | undefined {
-  if (data === undefined) return data;
-  if (data.items.some((t) => t.id === track.id)) return data;
-  return { ...data, items: [track, ...data.items], total: data.total + 1 };
-}
-
-export function replaceOptimisticTrackHome(
-  data: ListTracksResponse | undefined,
-  optimisticId: string,
-  real: TrackResponse,
-): ListTracksResponse | undefined {
-  if (data === undefined) return data;
-  const replaced = data.items.map((t) => (t.id === optimisticId ? real : t));
-  const items = dedupById(replaced);
-  return { ...data, items, total: Math.max(0, data.total - (replaced.length - items.length)) };
-}
-
-function dedupById<T extends { id: string }>(items: T[]): T[] {
-  const seen = new Set<string>();
-  return items.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
 }

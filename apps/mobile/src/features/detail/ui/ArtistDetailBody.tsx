@@ -110,7 +110,7 @@ export function ArtistDetailBody({
         {hasAbout ? (
           <View testID="detail-artist-about">
             <Section label="About">
-              <LastFmEnrichmentSection kind="artist" enrichment={lastfm} />
+              <LastFmEnrichmentSection enrichment={lastfm} />
             </Section>
           </View>
         ) : null}
