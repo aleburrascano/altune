@@ -1,13 +1,12 @@
 package httputil
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/shared/logging"
 )
 
 func TestRequestLogger_DoesNotPanic(t *testing.T) {
@@ -76,7 +75,6 @@ func TestStatusWriter_DefaultStatus200(t *testing.T) {
 	sw := &statusWriter{ResponseWriter: rec, status: 200}
 
 	n, err := sw.Write([]byte("hello"))
-
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

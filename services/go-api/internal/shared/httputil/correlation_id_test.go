@@ -1,12 +1,11 @@
 package httputil
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"altune/go-api/internal/shared/logging"
 )
 
 func TestCorrelationID_SetsHeader(t *testing.T) {
