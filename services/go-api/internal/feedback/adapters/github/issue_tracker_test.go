@@ -3,9 +3,11 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"altune/go-api/internal/feedback/domain"
@@ -139,5 +141,47 @@ func TestCreate_FailsWhenResponseCarriesNoIssueNumber(t *testing.T) {
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 	if _, err := tracker.Create(context.Background(), report); err == nil {
 		t.Fatal("expected a missing issue number to fail")
+	}
+}
+
+func TestCreate_RejectsAnOversizedCreatedBody(t *testing.T) {
+	padding := strings.Repeat("x", maxIssueBody+1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"number":7,"html_url":"u","body":"` + padding + `"}`))
+	}))
+	defer server.Close()
+
+	tracker := NewIssueTracker("o/r", "tok").WithBaseURL(server.URL)
+	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
+	if _, err := tracker.Create(context.Background(), report); err == nil {
+		t.Fatal("expected a created body past the read cap to fail, not be decoded unbounded")
+	}
+}
+
+func TestCreate_DrainsErrorBodySoTheConnectionIsReused(t *testing.T) {
+	var conns atomic.Int32
+	errorBody := strings.Repeat("e", 4*maxErrorBody)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(errorBody))
+	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			conns.Add(1)
+		}
+	}
+	server.Start()
+	defer server.Close()
+
+	tracker := NewIssueTracker("o/r", "tok").WithBaseURL(server.URL)
+	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
+	for range 3 {
+		if _, err := tracker.Create(context.Background(), report); err == nil {
+			t.Fatal("expected a 502 failure")
+		}
+	}
+	if got := conns.Load(); got != 1 {
+		t.Fatalf("opened %d connections for 3 failed requests, want 1 reused", got)
 	}
 }
