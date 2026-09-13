@@ -8,12 +8,7 @@ import (
 const validOperatorID = "11111111-1111-1111-1111-111111111111"
 
 func TestLoad_MinimalValid(t *testing.T) {
-	setEnv(t, map[string]string{
-		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "anon-key",
-		"OPERATOR_USER_ID":      validOperatorID,
-	})
+	setEnv(t, validConfigEnv(nil))
 
 	cfg, err := Load()
 	if err != nil {
@@ -50,11 +45,9 @@ func TestLoad_SupabaseJWKSURLMalformed(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			setEnv(t, map[string]string{
-				"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+			setEnv(t, validConfigEnv(map[string]string{
 				"SUPABASE_JWT_JWKS_URL": tt.jwksURL,
-				"SUPABASE_ANON_KEY":     "anon-key",
-			})
+			}))
 
 			_, err := Load()
 			if err == nil {
@@ -78,13 +71,9 @@ func TestLoad_SupabaseProjectURLMissingOrMalformed(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env := map[string]string{
-				"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-			}
-			if tt.projectURL != "" {
-				env["SUPABASE_PROJECT_URL"] = tt.projectURL
-			}
-			setEnv(t, env)
+			setEnv(t, validConfigEnv(map[string]string{
+				"SUPABASE_PROJECT_URL": tt.projectURL,
+			}))
 
 			_, err := Load()
 			if err == nil {
@@ -107,14 +96,9 @@ func TestLoad_MissingAnonKey(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env := map[string]string{
-				"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-				"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-			}
-			if tt.anonKey != "" {
-				env["SUPABASE_ANON_KEY"] = tt.anonKey
-			}
-			setEnv(t, env)
+			setEnv(t, validConfigEnv(map[string]string{
+				"SUPABASE_ANON_KEY": tt.anonKey,
+			}))
 
 			_, err := Load()
 			if err == nil {
@@ -128,12 +112,9 @@ func TestLoad_MissingAnonKey(t *testing.T) {
 }
 
 func TestLoad_SupabaseAnonKeyTrimmed(t *testing.T) {
-	setEnv(t, map[string]string{
-		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "  anon-key\t\n",
-		"OPERATOR_USER_ID":      validOperatorID,
-	})
+	setEnv(t, validConfigEnv(map[string]string{
+		"SUPABASE_ANON_KEY": "  anon-key\t\n",
+	}))
 
 	cfg, err := Load()
 	if err != nil {
@@ -145,13 +126,9 @@ func TestLoad_SupabaseAnonKeyTrimmed(t *testing.T) {
 }
 
 func TestLoad_CORSOriginsTrimmed(t *testing.T) {
-	setEnv(t, map[string]string{
-		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "anon-key",
-		"OPERATOR_USER_ID":      validOperatorID,
-		"CORS_ORIGINS":          "http://a, http://b ",
-	})
+	setEnv(t, validConfigEnv(map[string]string{
+		"CORS_ORIGINS": "http://a, http://b ",
+	}))
 
 	cfg, err := Load()
 	if err != nil {
@@ -169,12 +146,9 @@ func TestLoad_CORSOriginsTrimmed(t *testing.T) {
 }
 
 func TestLoad_MusicBrainzUAWithoutContact(t *testing.T) {
-	setEnv(t, map[string]string{
-		"SUPABASE_PROJECT_URL":   "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL":  "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":      "anon-key",
+	setEnv(t, validConfigEnv(map[string]string{
 		"MUSICBRAINZ_USER_AGENT": "altune/0.1",
-	})
+	}))
 
 	_, err := Load()
 	if err == nil {
@@ -183,13 +157,9 @@ func TestLoad_MusicBrainzUAWithoutContact(t *testing.T) {
 }
 
 func TestLoad_MusicBrainzUAWithEmail(t *testing.T) {
-	setEnv(t, map[string]string{
-		"SUPABASE_PROJECT_URL":   "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL":  "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":      "anon-key",
-		"OPERATOR_USER_ID":       validOperatorID,
+	setEnv(t, validConfigEnv(map[string]string{
 		"MUSICBRAINZ_USER_AGENT": "altune/0.1 ( mailto:dev@altune.test )",
-	})
+	}))
 
 	cfg, err := Load()
 	if err != nil {
@@ -211,15 +181,9 @@ func TestLoad_OperatorUserIDMissingOrMalformed(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env := map[string]string{
-				"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-				"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-				"SUPABASE_ANON_KEY":     "anon-key",
-			}
-			if tt.operatorID != "" {
-				env["OPERATOR_USER_ID"] = tt.operatorID
-			}
-			setEnv(t, env)
+			setEnv(t, validConfigEnv(map[string]string{
+				"OPERATOR_USER_ID": tt.operatorID,
+			}))
 
 			_, err := Load()
 			if err == nil {
@@ -243,13 +207,9 @@ func TestLoad_AlertNtfyURLMalformed(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			setEnv(t, map[string]string{
-				"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-				"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-				"SUPABASE_ANON_KEY":     "anon-key",
-				"OPERATOR_USER_ID":      validOperatorID,
-				"ALERT_NTFY_URL":        tt.ntfyURL,
-			})
+			setEnv(t, validConfigEnv(map[string]string{
+				"ALERT_NTFY_URL": tt.ntfyURL,
+			}))
 
 			_, err := Load()
 			if err == nil {
@@ -263,12 +223,7 @@ func TestLoad_AlertNtfyURLMalformed(t *testing.T) {
 }
 
 func TestLoad_AlertNtfyURLOptionalWhenUnset(t *testing.T) {
-	setEnv(t, map[string]string{
-		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "anon-key",
-		"OPERATOR_USER_ID":      validOperatorID,
-	})
+	setEnv(t, validConfigEnv(nil))
 
 	cfg, err := Load()
 	if err != nil {
@@ -280,13 +235,9 @@ func TestLoad_AlertNtfyURLOptionalWhenUnset(t *testing.T) {
 }
 
 func TestLoad_AlertNtfyURLValid(t *testing.T) {
-	setEnv(t, map[string]string{
-		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "anon-key",
-		"OPERATOR_USER_ID":      validOperatorID,
-		"ALERT_NTFY_URL":        "https://ntfy.sh/altune-alerts",
-	})
+	setEnv(t, validConfigEnv(map[string]string{
+		"ALERT_NTFY_URL": "https://ntfy.sh/altune-alerts",
+	}))
 
 	cfg, err := Load()
 	if err != nil {
@@ -307,13 +258,9 @@ func TestLoad_AcquisitionConcurrencyNotPositive(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			setEnv(t, map[string]string{
-				"SUPABASE_PROJECT_URL":    "https://example.supabase.co",
-				"SUPABASE_JWT_JWKS_URL":   "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-				"SUPABASE_ANON_KEY":       "anon-key",
-				"OPERATOR_USER_ID":        validOperatorID,
+			setEnv(t, validConfigEnv(map[string]string{
 				"ACQUISITION_CONCURRENCY": tt.value,
-			})
+			}))
 
 			_, err := Load()
 			if err == nil {
@@ -327,12 +274,7 @@ func TestLoad_AcquisitionConcurrencyNotPositive(t *testing.T) {
 }
 
 func TestLoad_AcquisitionConcurrencyDefaultValid(t *testing.T) {
-	setEnv(t, map[string]string{
-		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "anon-key",
-		"OPERATOR_USER_ID":      validOperatorID,
-	})
+	setEnv(t, validConfigEnv(nil))
 
 	cfg, err := Load()
 	if err != nil {
@@ -411,4 +353,25 @@ func setEnv(t *testing.T, vars map[string]string) {
 	for k, v := range vars {
 		t.Setenv(k, v)
 	}
+}
+
+// validConfigEnv returns the canonical set of env vars that Load() currently
+// requires, with per-test overrides layered on top. This is the single place a
+// newly required env var needs adding. An override whose value is the empty
+// string removes that key, letting a test exercise a missing required var.
+func validConfigEnv(overrides map[string]string) map[string]string {
+	env := map[string]string{
+		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+		"SUPABASE_ANON_KEY":     "anon-key",
+		"OPERATOR_USER_ID":      validOperatorID,
+	}
+	for k, v := range overrides {
+		if v == "" {
+			delete(env, k)
+			continue
+		}
+		env[k] = v
+	}
+	return env
 }
