@@ -13,21 +13,20 @@ import (
 	discoveryService "altune/go-api/internal/discovery/service"
 )
 
-// gatedConsumer is a behavioral-signal consumer whose first Signals call blocks
-// until released, so a Service's own detached background work can be held
-// in-flight while the shutdown drain is exercised.
-type gatedConsumer struct {
+// gatedStore is a behavioral-signal store whose first SatisfactionSignals call
+// blocks until released, so a Service's own detached background work (driven by
+// the satisfaction consumer) can be held in-flight while the shutdown drain is
+// exercised.
+type gatedStore struct {
 	entered chan struct{}
 	release chan struct{}
 	once    sync.Once
 }
 
-func (c *gatedConsumer) Name() string { return "gated" }
-
-func (c *gatedConsumer) Signals(ctx context.Context, _ time.Time) ([]discoveryPorts.BehavioralSignal, error) {
-	c.once.Do(func() { close(c.entered) })
+func (s *gatedStore) SatisfactionSignals(ctx context.Context, _ time.Time) ([]discoveryPorts.BehavioralSignal, error) {
+	s.once.Do(func() { close(s.entered) })
 	select {
-	case <-c.release:
+	case <-s.release:
 	case <-ctx.Done():
 	}
 	return nil, nil
@@ -40,13 +39,13 @@ func (c *gatedConsumer) Signals(ctx context.Context, _ time.Time) ([]discoveryPo
 // drained it — so cleanup() closed the DB pool and Redis client while that work
 // was still in flight. The drain must wait for that work before cleanup().
 func TestDrainSearchBackground_WaitsForInFlightWork(t *testing.T) {
-	consumer := &gatedConsumer{entered: make(chan struct{}), release: make(chan struct{})}
+	store := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
 	svc := discoveryService.NewService(nil, discoveryService.NewCircuitBreaker(),
-		discoveryService.WithBehavioralRanking(consumer))
+		discoveryService.WithBehavioralRanking(discoveryService.NewSatisfactionConsumer(store)))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	svc.StartBehavioralRefresh(ctx, time.Hour)
-	<-consumer.entered // the service now has real background work in flight
+	<-store.entered // the service now has real background work in flight
 
 	a := &App{searchSvc: svc}
 
@@ -58,8 +57,8 @@ func TestDrainSearchBackground_WaitsForInFlightWork(t *testing.T) {
 		t.Errorf("outcome name: got %q, want %q", inFlight.name, "discovery search")
 	}
 
-	close(consumer.release) // let the blocked refresh finish
-	cancel()                // stop the ticker loop so the goroutine exits
+	close(store.release) // let the blocked refresh finish
+	cancel()             // stop the ticker loop so the goroutine exits
 
 	drained := a.drainSearchBackground(2 * time.Second)
 	if !drained.completed {

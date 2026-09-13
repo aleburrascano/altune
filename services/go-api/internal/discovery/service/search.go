@@ -27,7 +27,7 @@ type rankingExperiments struct {
 	crossKindProminence bool
 
 	behavioralRanking  bool
-	behavioralConsumer ports.EventConsumer
+	behavioralConsumer *SatisfactionConsumer
 	behavioralScores   atomic.Pointer[map[string]float64]
 
 	explorationRate float64
@@ -158,7 +158,7 @@ func WithCrossKindProminence() Option {
 	return func(s *Service) { s.crossKindProminence = true }
 }
 
-func WithBehavioralRanking(consumer ports.EventConsumer) Option {
+func WithBehavioralRanking(consumer *SatisfactionConsumer) Option {
 	return func(s *Service) {
 		s.behavioralRanking = true
 		s.behavioralConsumer = consumer
