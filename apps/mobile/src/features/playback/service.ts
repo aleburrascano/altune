@@ -1,4 +1,4 @@
-import TrackPlayer, { Event } from 'react-native-track-player';
+import TrackPlayer, { Event, type RemoteDuckEvent } from 'react-native-track-player';
 
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
@@ -38,8 +38,24 @@ async function handlePlaybackError(message: string): Promise<void> {
   await recoverAudio(failed.source.trackId).catch(() => {});
 }
 
+// Mirror an audio interruption (e.g. a phone call) onto the player. Pause when it
+// begins, resume when it ends. iOS 18's native auto-resume after a call is
+// unreliable even with autoHandleInterruptions, so this play() acts as the resume;
+// both calls are idempotent, so they reinforce rather than fight one another. A
+// permanent focus loss means another app took over — stay paused.
+function handleRemoteDuck(data: RemoteDuckEvent): void {
+  if (data.permanent) return;
+  if (data.paused) {
+    void TrackPlayer.pause();
+    return;
+  }
+  void TrackPlayer.play();
+}
+
 export async function playbackService() {
   registerAudioCacheInvalidator(evictCached);
+
+  TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck);
 
   TrackPlayer.addEventListener(Event.RemotePause, () => {
     void TrackPlayer.pause();
