@@ -55,11 +55,7 @@ func (a *YouTubeMusicAdapter) Name() domain.ProviderName { return domain.Provide
 func (a *YouTubeMusicAdapter) SearchTimeout() time.Duration { return 3 * time.Second }
 
 func (a *YouTubeMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
-	return map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
-	}
+	return allSearchKinds()
 }
 
 func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {

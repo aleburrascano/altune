@@ -40,11 +40,7 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAd
 func (a *MusicBrainzAdapter) Name() domain.ProviderName { return domain.ProviderMusicBrainz }
 
 func (a *MusicBrainzAdapter) SupportedKinds() map[domain.ResultKind]bool {
-	return map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
-	}
+	return allSearchKinds()
 }
 
 func (a *MusicBrainzAdapter) SearchTimeout() time.Duration {
