@@ -164,11 +164,22 @@ describe('trackIdentityKey', () => {
   });
 
   it.each<[string, string, string, string]>([
-    ['normal title and artist', 'Song Title', 'The Artist', 'song title the artist'],
-    ['leading/trailing whitespace', '  Song Title  ', '  The Artist  ', 'song title the artist'],
-    ['differing case', 'SONG TITLE', 'the artist', 'song title the artist'],
-  ])('%s normalizes with a space separator', (_label, title, artist, expected) => {
+    ['normal title and artist', 'Song Title', 'The Artist', '10:song title:the artist'],
+    ['leading/trailing whitespace', '  Song Title  ', '  The Artist  ', '10:song title:the artist'],
+    ['differing case', 'SONG TITLE', 'the artist', '10:song title:the artist'],
+  ])('%s normalizes with a length-prefixed key', (_label, title, artist, expected) => {
     expect(trackIdentityKey(title, artist)).toBe(expected);
+  });
+
+  it('does not collide when distinct (title, artist) pairs share a space-joined string', () => {
+    // Both pairs canonicalize to "encore jay z interlude" under a plain-space
+    // join, but they are different tracks and must not share a key.
+    const a = trackIdentityKey('Encore', 'Jay Z Interlude');
+    const b = trackIdentityKey('Encore Jay Z', 'Interlude');
+
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    expect(a).not.toBe(b);
   });
 });
 

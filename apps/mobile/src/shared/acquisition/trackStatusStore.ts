@@ -45,7 +45,11 @@ export function trackIdentityKey(title: string, artist: string): string | null {
   const t = title.trim().toLowerCase();
   const a = artist.trim().toLowerCase();
   if (t.length === 0 || a.length === 0) return null;
-  return `${t} ${a}`;
+  // Length-prefix the title so the (title, artist) split is unambiguous: a
+  // plain-space join lets distinct pairs like ("Encore", "Jay Z Interlude") and
+  // ("Encore Jay Z", "Interlude") collide onto one key. The leading title length
+  // pins the boundary regardless of the characters either field contains.
+  return `${t.length}:${t}:${a}`;
 }
 
 export function linkTrackIdentity(identity: string | null, trackId: string): void {
