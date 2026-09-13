@@ -30,6 +30,23 @@ func TestParseKind_RejectsUnknown(t *testing.T) {
 	}
 }
 
+func TestParseKind_BoundsEchoedValue(t *testing.T) {
+	_, err := ParseKind(strings.Repeat("x", 10000))
+	if err == nil {
+		t.Fatal("expected an oversized kind to be rejected")
+	}
+	if len(err.Error()) > 128 {
+		t.Fatalf("error is %d bytes, want the oversized kind truncated", len(err.Error()))
+	}
+}
+
+func TestParseKind_EchoesShortUnknownValue(t *testing.T) {
+	_, err := ParseKind("rant")
+	if err == nil || !strings.Contains(err.Error(), `unknown kind: "rant"`) {
+		t.Fatalf("err = %v, want the short value echoed", err)
+	}
+}
+
 func TestNewReport_RejectsTooShortMessage(t *testing.T) {
 	if _, err := NewReport(reporter(), KindBug, "broken", Diagnostics{}); err == nil {
 		t.Fatal("expected a too-short message to be rejected")

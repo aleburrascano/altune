@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"altune/go-api/internal/auth"
@@ -129,6 +130,17 @@ func TestSubmitReport_Returns400OnUnknownKind(t *testing.T) {
 	rec := post(t, router(&stubTracker{}), body)
 
 	assertStatus(t, rec, http.StatusBadRequest)
+}
+
+func TestSubmitReport_DoesNotEchoOversizedKind(t *testing.T) {
+	body := validBody()
+	body["kind"] = strings.Repeat("\x01", 10000)
+	rec := post(t, router(&stubTracker{}), body)
+
+	assertStatus(t, rec, http.StatusBadRequest)
+	if rec.Body.Len() > 512 {
+		t.Fatalf("400 body is %d bytes, want the oversized kind not echoed back", rec.Body.Len())
+	}
 }
 
 func TestSubmitReport_AcceptsBackToBackReports(t *testing.T) {
