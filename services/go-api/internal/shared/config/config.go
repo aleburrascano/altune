@@ -85,10 +85,20 @@ func Load() (*Config, error) {
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	cfg.normalize()
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 	return cfg, nil
+}
+
+// normalize canonicalizes whitespace-sensitive fields once, at load time, so
+// stray padding from the environment never silently breaks matching later.
+func (c *Config) normalize() {
+	c.SupabaseAnonKey = strings.TrimSpace(c.SupabaseAnonKey)
+	for i, origin := range c.CORSOrigins {
+		c.CORSOrigins[i] = strings.TrimSpace(origin)
+	}
 }
 
 func (c *Config) validate() error {
