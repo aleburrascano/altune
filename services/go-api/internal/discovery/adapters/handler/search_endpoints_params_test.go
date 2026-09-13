@@ -596,3 +596,30 @@ func TestSearchStatusCode(t *testing.T) {
 		}
 	}
 }
+
+func TestHandleSearchHistory_LimitClamping(t *testing.T) {
+	cases := []struct {
+		name      string
+		query     string
+		wantLimit int
+	}{
+		{"absent limit uses default 10", "", 10},
+		{"explicit limit passes through", "?limit=7", 7},
+		{"limit at cap passes through", "?limit=100", 100},
+		{"huge limit clamps to cap 100", "?limit=1000000000", 100},
+		{"non-positive limit falls back to default", "?limit=-5", 10},
+		{"non-numeric limit falls back to default", "?limit=abc", 10},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			historyRepo := &fakeSearchHistoryRepo{}
+			router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
+
+			rec := discServe(t, router, http.MethodGet, "/discovery/search-history"+c.query, nil)
+			discAssertStatus(t, rec, http.StatusOK)
+			if historyRepo.lastLimit != c.wantLimit {
+				t.Errorf("repo limit = %d, want %d", historyRepo.lastLimit, c.wantLimit)
+			}
+		})
+	}
+}

@@ -132,7 +132,7 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	limit := clampLimit(r, "limit", 10, 100)
 
 	entries, err := h.historySvc.Execute(r.Context(), userId, limit)
 	if err != nil {

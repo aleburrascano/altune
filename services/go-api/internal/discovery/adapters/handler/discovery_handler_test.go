@@ -53,8 +53,9 @@ func (p *fakeSearchProvider) SupportedKinds() map[discdomain.ResultKind]bool {
 }
 
 type fakeSearchHistoryRepo struct {
-	entries []*discdomain.SearchHistoryEntry
-	err     error
+	entries   []*discdomain.SearchHistoryEntry
+	err       error
+	lastLimit int
 }
 
 func (r *fakeSearchHistoryRepo) Insert(_ context.Context, entry *discdomain.SearchHistoryEntry) error {
@@ -70,6 +71,7 @@ func (r *fakeSearchHistoryRepo) TrimToN(_ context.Context, _ shared.UserId, _ in
 }
 
 func (r *fakeSearchHistoryRepo) ListDistinctRecent(_ context.Context, _ shared.UserId, limit int) ([]*discdomain.SearchHistoryEntry, error) {
+	r.lastLimit = limit
 	if r.err != nil {
 		return nil, r.err
 	}
