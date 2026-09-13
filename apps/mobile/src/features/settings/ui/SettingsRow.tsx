@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { IconBadge, Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
 
-export type SettingsRowTone = 'neutral' | 'accent' | 'danger' | 'success' | 'warning';
+type SettingsRowTone = 'neutral' | 'accent' | 'danger' | 'success' | 'warning';
 
 type SettingsRowProps = {
   icon: LucideIcon;
