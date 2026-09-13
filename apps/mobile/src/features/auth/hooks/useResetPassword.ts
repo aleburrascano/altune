@@ -1,5 +1,7 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
+import type { AuthErrorReason } from '../lib/errorCopy';
+
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
 export const RECOVERY_REDIRECT_URL = 'altune://auth/recovery';
@@ -8,7 +10,7 @@ export type ResetRequestResult =
   | { kind: 'idle' }
   | { kind: 'pending' }
   | { kind: 'sent' }
-  | { kind: 'error'; reason: 'network' | 'unknown' };
+  | { kind: 'error'; reason: Extract<AuthErrorReason, 'network' | 'unknown'> };
 
 export function useResetPassword() {
   const { state, run } = useAsyncAuthAction<ResetRequestResult, [string]>(async (email) => {
