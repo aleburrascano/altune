@@ -12,17 +12,23 @@ import (
 
 // buildArtistContentProviders builds the canonical artist-content-provider map
 // and is the single source of truth for it: Deezer, Apple Music, Spotify and
-// SoundCloud, plus Last.fm when configured. Callers that need a narrower set
-// must derive it explicitly from this result.
+// SoundCloud (each behind its kill switch), plus Last.fm when configured.
+// Callers that need a narrower set must derive it explicitly from this result.
 func buildArtistContentProviders(
 	cf clientFactory,
 	cfg *config.Config,
 ) map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider {
 	artistProviders := map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider{
-		discoveryDomain.ProviderDeezer:     providers.NewDeezerAdapter(cf.discovery()),
-		discoveryDomain.ProviderAppleMusic: providers.NewAppleMusicAdapter(cf.discovery()),
-		discoveryDomain.ProviderSpotify:    providers.NewSpotifyAdapter(cf.discovery()),
-		discoveryDomain.ProviderSoundCloud: providers.NewSoundCloudAPIAdapter(cf.discovery(), nil),
+		discoveryDomain.ProviderDeezer: providers.NewDeezerAdapter(cf.discovery()),
+	}
+	if cfg.HasAppleMusic() {
+		artistProviders[discoveryDomain.ProviderAppleMusic] = providers.NewAppleMusicAdapter(cf.discovery())
+	}
+	if cfg.HasSpotify() {
+		artistProviders[discoveryDomain.ProviderSpotify] = providers.NewSpotifyAdapter(cf.discovery())
+	}
+	if cfg.HasSoundCloud() {
+		artistProviders[discoveryDomain.ProviderSoundCloud] = providers.NewSoundCloudAPIAdapter(cf.discovery(), nil)
 	}
 	if cfg.HasLastFM() {
 		artistProviders[discoveryDomain.ProviderLastFM] = providers.NewLastFmAdapter(cf.discovery(), cfg.LastFMAPIKey)

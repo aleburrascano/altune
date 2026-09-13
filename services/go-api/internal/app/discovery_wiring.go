@@ -78,22 +78,24 @@ func (a *App) wireDiscoveryContent(
 	deezerContentClient := newDiscoveryClient()
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
 	itunesContent := providers.NewITunesAdapter(newDiscoveryClient())
-	appleMusicContent := providers.NewAppleMusicAdapter(newDiscoveryClient())
-	spotifyContent := providers.NewSpotifyAdapter(newDiscoveryClient())
-	soundcloudContent := providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil)
 
 	albumProviders := map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider{
-		discoveryDomain.ProviderDeezer:     deezerContent,
-		discoveryDomain.ProviderITunes:     itunesContent,
-		discoveryDomain.ProviderAppleMusic: appleMusicContent,
-		discoveryDomain.ProviderSpotify:    spotifyContent,
-		discoveryDomain.ProviderSoundCloud: soundcloudContent,
+		discoveryDomain.ProviderDeezer: deezerContent,
+		discoveryDomain.ProviderITunes: itunesContent,
+	}
+	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{}
+	if a.cfg.HasAppleMusic() {
+		albumProviders[discoveryDomain.ProviderAppleMusic] = providers.NewAppleMusicAdapter(newDiscoveryClient())
+	}
+	if a.cfg.HasSpotify() {
+		albumProviders[discoveryDomain.ProviderSpotify] = providers.NewSpotifyAdapter(newDiscoveryClient())
+	}
+	if a.cfg.HasSoundCloud() {
+		soundcloudContent := providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil)
+		albumProviders[discoveryDomain.ProviderSoundCloud] = soundcloudContent
+		relatedProviders["soundcloud"] = soundcloudContent
 	}
 	artistProviders := buildArtistContentProviders(clientFactory{}, a.cfg)
-
-	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{
-		"soundcloud": soundcloudContent,
-	}
 	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
 
 	albumSvc := discoveryService.NewGetAlbumTracksService(
@@ -273,21 +275,25 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 		},
 	})
 
-	ytmusic := providers.NewYouTubeMusicAdapter(cf.roundTripper())
-	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-		Name: "ytmusic",
-		Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-			return ytmusic.GetArtistAlbums(ctx, discoveryDomain.ProviderYouTube, artistName)
-		},
-	})
+	if cfg.HasYouTubeMusic() {
+		ytmusic := providers.NewYouTubeMusicAdapter(cf.roundTripper())
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+			Name: "ytmusic",
+			Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
+				return ytmusic.GetArtistAlbums(ctx, discoveryDomain.ProviderYouTube, artistName)
+			},
+		})
+	}
 
-	sc := providers.NewSoundCloudAPIAdapter(cf.discovery(), nil)
-	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-		Name: "soundcloud",
-		Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
-			return sc.Search(ctx, artistName, map[discoveryDomain.ResultKind]bool{discoveryDomain.ResultKindAlbum: true})
-		},
-	})
+	if cfg.HasSoundCloud() {
+		sc := providers.NewSoundCloudAPIAdapter(cf.discovery(), nil)
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
+			Name: "soundcloud",
+			Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
+				return sc.Search(ctx, artistName, map[discoveryDomain.ResultKind]bool{discoveryDomain.ResultKindAlbum: true})
+			},
+		})
+	}
 
 	return consensusProviders
 }
@@ -319,9 +325,10 @@ func BuildArtworkChain(cfg *config.Config) discoveryPorts.TaggingArtworkResolver
 
 func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
 	var artworkResolvers []discoveryPorts.ArtworkResolver
-	artworkResolvers = append(artworkResolvers,
-		providers.NewCoverArtArchiveResolver(cf.discovery()),
-		providers.NewSpotifyArtworkResolver(cf.discovery()))
+	artworkResolvers = append(artworkResolvers, providers.NewCoverArtArchiveResolver(cf.discovery()))
+	if cfg.HasSpotify() {
+		artworkResolvers = append(artworkResolvers, providers.NewSpotifyArtworkResolver(cf.discovery()))
+	}
 	if cfg.HasDiscogs() {
 		artworkResolvers = append(artworkResolvers,
 			providers.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent))
@@ -338,9 +345,13 @@ func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.Tagg
 		providers.NewTheAudioDBAdapter(cf.discovery()),
 		providers.NewDeezerAdapter(cf.discovery()),
 		providers.NewITunesAdapter(cf.discovery()),
-		providers.NewYouTubeMusicArtworkResolver(cf.roundTripper()),
-		providers.NewSoundCloudAPIAdapter(cf.discovery(), nil),
 	)
+	if cfg.HasYouTubeMusic() {
+		artworkResolvers = append(artworkResolvers, providers.NewYouTubeMusicArtworkResolver(cf.roundTripper()))
+	}
+	if cfg.HasSoundCloud() {
+		artworkResolvers = append(artworkResolvers, providers.NewSoundCloudAPIAdapter(cf.discovery(), nil))
+	}
 	return providers.NewChainedArtworkResolver(artworkResolvers...)
 }
 

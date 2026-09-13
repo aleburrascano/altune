@@ -53,6 +53,15 @@ type Config struct {
 	YtMusicEnabled         bool     `env:"YTMUSIC_ENABLED" envDefault:"true"`
 	YtDLPEnabled           bool     `env:"YTDLP_ENABLED" envDefault:"true"`
 
+	// Kill switches for the reverse-engineered provider adapters (scraped
+	// tokens / private endpoints). Default enabled; set to false to pull a
+	// provider out of every discovery wiring site at startup without a code
+	// change. YTMUSIC_ENABLED above also gates the ytmusic discovery adapter.
+	SpotifyEnabled     bool `env:"SPOTIFY_ENABLED" envDefault:"true"`
+	SoundCloudEnabled  bool `env:"SOUNDCLOUD_ENABLED" envDefault:"true"`
+	AppleMusicEnabled  bool `env:"APPLEMUSIC_ENABLED" envDefault:"true"`
+	AmazonMusicEnabled bool `env:"AMAZONMUSIC_ENABLED" envDefault:"true"`
+
 	GitHubIssueRepo  string `env:"GITHUB_ISSUE_REPO"`
 	GitHubIssueToken string `env:"GITHUB_ISSUE_TOKEN"`
 
@@ -175,6 +184,32 @@ func (c *Config) HasAlertPush() bool {
 	return c.AlertNtfyURL != ""
 }
 
+// HasSpotify reports whether the scraped-token Spotify adapters are enabled.
+func (c *Config) HasSpotify() bool {
+	return c.SpotifyEnabled
+}
+
+// HasSoundCloud reports whether the scraped-client-id SoundCloud adapters are enabled.
+func (c *Config) HasSoundCloud() bool {
+	return c.SoundCloudEnabled
+}
+
+// HasAppleMusic reports whether the scraped-token Apple Music adapter is enabled.
+func (c *Config) HasAppleMusic() bool {
+	return c.AppleMusicEnabled
+}
+
+// HasAmazonMusic reports whether the mimicked-session Amazon Music adapter is enabled.
+func (c *Config) HasAmazonMusic() bool {
+	return c.AmazonMusicEnabled
+}
+
+// HasYouTubeMusic reports whether the YTMusic adapters (discovery and
+// acquisition) are enabled.
+func (c *Config) HasYouTubeMusic() bool {
+	return c.YtMusicEnabled
+}
+
 func (c *Config) HasIssueTracker() bool {
 	return c.GitHubIssueRepo != "" && c.GitHubIssueToken != ""
 }
@@ -193,5 +228,10 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_genius", c.HasGenius()),
 		slog.Bool("has_discogs", c.HasDiscogs()),
 		slog.Bool("has_issue_tracker", c.HasIssueTracker()),
+		slog.Bool("has_spotify", c.HasSpotify()),
+		slog.Bool("has_soundcloud", c.HasSoundCloud()),
+		slog.Bool("has_applemusic", c.HasAppleMusic()),
+		slog.Bool("has_amazonmusic", c.HasAmazonMusic()),
+		slog.Bool("has_ytmusic", c.HasYouTubeMusic()),
 	)
 }

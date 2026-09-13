@@ -183,8 +183,9 @@ func buildSearchProviderList(cf clientFactory, cfg *config.Config, mb *providers
 	deezerClient := cf.discovery()
 	providerList = append(providerList, providers.NewDeezerAdapter(deezerClient))
 
-	appleMusicClient := cf.discovery()
-	providerList = append(providerList, providers.NewAppleMusicAdapter(appleMusicClient))
+	if cfg.HasAppleMusic() {
+		providerList = append(providerList, providers.NewAppleMusicAdapter(cf.discovery()))
+	}
 
 	if mb != nil {
 		providerList = append(providerList, mb)
@@ -195,23 +196,29 @@ func buildSearchProviderList(cf clientFactory, cfg *config.Config, mb *providers
 		providerList = append(providerList, providers.NewLastFmAdapter(lfmClient, cfg.LastFMAPIKey))
 	}
 
-	soundcloudClient := cf.discovery()
-	providerList = append(providerList,
-		providers.NewSoundCloudAPIAdapter(
-			soundcloudClient,
-			providers.NewSoundCloudAdapter(),
-		),
-		providers.NewYouTubeMusicAdapter(cf.roundTripper()),
-	)
-
-	amazonClient := cf.discovery()
-	providerList = append(providerList, providers.NewAmazonMusicAdapter(amazonClient))
-
-	spotifyClient := cf.discovery()
-	providerList = append(providerList, providers.NewSpotifyAdapter(spotifyClient))
+	providerList = append(providerList, buildScrapedSearchProviders(cf, cfg)...)
 
 	slog.Info("discovery providers configured", "count", len(providerList))
 	return providerList
+}
+
+// buildScrapedSearchProviders builds the search adapters that depend on
+// reverse-engineered credentials, each skipped when its kill switch is off.
+func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discoveryPorts.SearchProvider {
+	var list []discoveryPorts.SearchProvider
+	if cfg.HasSoundCloud() {
+		list = append(list, providers.NewSoundCloudAPIAdapter(cf.discovery(), providers.NewSoundCloudAdapter()))
+	}
+	if cfg.HasYouTubeMusic() {
+		list = append(list, providers.NewYouTubeMusicAdapter(cf.roundTripper()))
+	}
+	if cfg.HasAmazonMusic() {
+		list = append(list, providers.NewAmazonMusicAdapter(cf.discovery()))
+	}
+	if cfg.HasSpotify() {
+		list = append(list, providers.NewSpotifyAdapter(cf.discovery()))
+	}
+	return list
 }
 
 // buildMusicBrainzAdapter constructs the shared MusicBrainz adapter from the
