@@ -1,15 +1,15 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type fakeRelationshipQuerier struct {
@@ -18,11 +18,11 @@ type fakeRelationshipQuerier struct {
 	err           error
 }
 
-func (f *fakeRelationshipQuerier) FindRelatedByAlbum(_ context.Context, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
+func (f *fakeRelationshipQuerier) FindRelatedByAlbum(_ context.Context, _ shared.UserId, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
 	return f.albumResults, f.err
 }
 
-func (f *fakeRelationshipQuerier) FindRelatedByArtist(_ context.Context, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
+func (f *fakeRelationshipQuerier) FindRelatedByArtist(_ context.Context, _ shared.UserId, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
 	return f.artistResults, f.err
 }
 
@@ -50,7 +50,7 @@ func (f *fakeArtistProvider) GetArtistAlbums(_ context.Context, _ domain.Provide
 
 func TestFindRelated_NilServiceReturnsNil(t *testing.T) {
 	var svc *FindRelatedService
-	got := svc.Execute(context.Background(), []domain.SearchResult{
+	got := svc.Execute(context.Background(), newUser(), []domain.SearchResult{
 		trackResult(domain.ProviderDeezer, "1", "Song", "Artist", nil),
 	})
 	if got != nil {
@@ -60,7 +60,7 @@ func TestFindRelated_NilServiceReturnsNil(t *testing.T) {
 
 func TestFindRelated_NoOrganicResultsReturnsNil(t *testing.T) {
 	svc := NewFindRelatedService(nil, nil, nil)
-	got := svc.Execute(context.Background(), nil)
+	got := svc.Execute(context.Background(), newUser(), nil)
 	if got != nil {
 		t.Errorf("expected nil for empty organic, got %d groups", len(got))
 	}
@@ -84,7 +84,7 @@ func TestFindRelated_TrackWithAlbumTriggersLibraryLookup(t *testing.T) {
 		}(),
 	}
 
-	got := svc.Execute(context.Background(), organic)
+	got := svc.Execute(context.Background(), newUser(), organic)
 
 	if len(got) == 0 {
 		t.Fatal("expected at least 1 related group")
@@ -119,7 +119,7 @@ func TestFindRelated_TrackWithDeezerAlbumIDTriggersAlbumTracks(t *testing.T) {
 	mainTrack.DeezerAlbumID = "12345"
 	organic := []domain.SearchResult{mainTrack}
 
-	got := svc.Execute(context.Background(), organic)
+	got := svc.Execute(context.Background(), newUser(), organic)
 
 	found := false
 	for _, g := range got {
@@ -148,7 +148,7 @@ func TestFindRelated_ArtistTriggersArtistAlbums(t *testing.T) {
 		artistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
 	}
 
-	got := svc.Execute(context.Background(), organic)
+	got := svc.Execute(context.Background(), newUser(), organic)
 
 	found := false
 	for _, g := range got {
@@ -177,7 +177,7 @@ func TestFindRelated_DedupAgainstOrganic(t *testing.T) {
 	mainTrack.DeezerAlbumID = "12345"
 	organic := []domain.SearchResult{mainTrack}
 
-	got := svc.Execute(context.Background(), organic)
+	got := svc.Execute(context.Background(), newUser(), organic)
 
 	for _, g := range got {
 		for _, item := range g.Items {
@@ -208,7 +208,7 @@ func TestFindRelated_ProviderCallCap(t *testing.T) {
 		organic = append(organic, r)
 	}
 
-	svc.Execute(context.Background(), organic)
+	svc.Execute(context.Background(), newUser(), organic)
 
 	if got := callCount.Load(); got > int64(maxProviderLookups) {
 		t.Errorf("expected at most %d provider calls, got %d", maxProviderLookups, got)
@@ -241,6 +241,6 @@ func TestFindRelated_TimeoutReturnsPartialResults(t *testing.T) {
 	slowTrack.DeezerAlbumID = "123"
 	organic := []domain.SearchResult{slowTrack}
 
-	got := svc.Execute(ctx, organic)
+	got := svc.Execute(ctx, newUser(), organic)
 	_ = got
 }

@@ -251,7 +251,7 @@ func (s *Service) Execute(
 
 	var related []domain.RelatedGroup
 	if s.findRelatedSvc != nil && len(ranked) > 0 {
-		related = s.findRelatedSvc.Execute(ctx, ranked)
+		related = s.findRelatedSvc.Execute(ctx, userId, ranked)
 	}
 
 	total := len(ranked)
