@@ -1,4 +1,4 @@
-import TrackPlayer, { Event } from 'react-native-track-player';
+import TrackPlayer, { Event, type RemoteDuckEvent } from 'react-native-track-player';
 
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
@@ -38,10 +38,43 @@ async function handlePlaybackError(message: string): Promise<void> {
   await recoverAudio(failed.source.trackId).catch(() => {});
 }
 
+// Whether playback was playing when the current audio interruption (a phone
+// call, Siri, another app's audio) began. Null when no interruption is open.
+let playingBeforeInterruption: boolean | null = null;
+
+// RemoteDuck payloads (RNTP v4): iOS sends {paused: true} when an interruption
+// begins, {paused: false} when it ends and the system allows resuming, and
+// {paused: true, permanent: true} when it ends without permission to resume.
+// Android maps audio focus onto the same shape. `permanent` is omitted, not
+// false, on the non-permanent payloads.
+//
+// autoHandleInterruptions already calls play() natively on an allowed resume,
+// but that alone has left music paused after calls on iOS, so this resumes
+// explicitly. play() is idempotent, so the two never fight. playWhenReady is
+// the snapshot: it holds the user's intent and a system interruption does not
+// clear it, so a track the user had paused stays paused.
+async function handleRemoteDuck({ paused, permanent }: RemoteDuckEvent): Promise<void> {
+  if (permanent === true) {
+    playingBeforeInterruption = null;
+    return;
+  }
+  if (paused) {
+    if (playingBeforeInterruption === null) {
+      playingBeforeInterruption = await TrackPlayer.getPlayWhenReady().catch(() => false);
+    }
+    return;
+  }
+  const shouldResume = playingBeforeInterruption === true;
+  playingBeforeInterruption = null;
+  if (shouldResume) await TrackPlayer.play().catch(() => {});
+}
+
 export async function playbackService() {
+  playingBeforeInterruption = null;
   registerAudioCacheInvalidator(evictCached);
 
   TrackPlayer.addEventListener(Event.RemotePause, () => {
+    playingBeforeInterruption = null;
     void TrackPlayer.pause();
   });
   TrackPlayer.addEventListener(Event.RemotePlay, () => {
@@ -62,6 +95,10 @@ export async function playbackService() {
   });
   TrackPlayer.addEventListener(Event.RemoteSeek, (data) => {
     void TrackPlayer.seekTo(data.position);
+  });
+
+  TrackPlayer.addEventListener(Event.RemoteDuck, (data) => {
+    void handleRemoteDuck(data);
   });
 
   TrackPlayer.addEventListener(Event.PlaybackError, (data) => {
