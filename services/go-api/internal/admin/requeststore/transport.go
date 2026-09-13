@@ -80,7 +80,7 @@ func (c *capturingBody) Read(p []byte) (int, error) {
 func (c *capturingBody) Close() error {
 	if !c.done {
 		c.done = true
-		c.ex.RespBody = c.buf.String()
+		c.ex.RespBody = RedactBody(c.buf.String())
 		c.ex.Truncated = c.trunc
 		c.store.recordExchange(c.corrID, c.ex)
 	}

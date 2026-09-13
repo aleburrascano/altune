@@ -42,12 +42,12 @@ func (r *RerunRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
 	_ = resp.Body.Close()
 	resp.Body = io.NopCloser(bytes.NewReader(body))
 	ex.Status = resp.StatusCode
+	captured := body
 	if len(body) > r.bodyCap {
-		ex.RespBody = string(body[:r.bodyCap])
+		captured = body[:r.bodyCap]
 		ex.Truncated = true
-	} else {
-		ex.RespBody = string(body)
 	}
+	ex.RespBody = RedactBody(string(captured))
 	r.add(ex)
 	return resp, nil
 }
