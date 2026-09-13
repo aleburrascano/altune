@@ -1,12 +1,11 @@
 package service
 
 import (
-	"context"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"testing"
 )
 
 // These tests guard issue #568: every goroutine the discovery module spawns

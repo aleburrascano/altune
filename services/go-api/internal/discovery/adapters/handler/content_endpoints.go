@@ -198,15 +198,17 @@ type ArtistContentResponseDTO struct {
 	Albums    ContentFetchResponseDTO `json:"albums"`
 }
 
-// recoverAsError contains a panic in one of handleArtistContent's fetch
-// goroutines, logging it and turning it into that fetch's error so the request
-// fails on its own instead of the panic terminating the process. It must be
-// deferred directly by the goroutine.
-func recoverAsError(ctx context.Context, event string, errp *error) {
-	if rec := recover(); rec != nil {
-		slog.ErrorContext(ctx, event, "panic", rec)
-		*errp = fmt.Errorf("recovered panic: %v", rec)
-	}
+// runRecovered runs one of handleArtistContent's fetches inside its goroutine,
+// containing a panic by logging it and returning it as that fetch's error, so
+// the request fails on its own instead of the panic terminating the process.
+func runRecovered(ctx context.Context, event string, fetch func() error) (err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.ErrorContext(ctx, event, "panic", rec)
+			err = fmt.Errorf("recovered panic: %v", rec)
+		}
+	}()
+	return fetch()
 }
 
 func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Request) {
@@ -228,13 +230,19 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 			wg.Add(2)
 			go func() {
 				defer wg.Done()
-				defer recoverAsError(r.Context(), "artist_content.top_tracks_panic", &tracksErr)
-				tracksResp, tracksErr = h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, tracksLimit)
+				tracksErr = runRecovered(r.Context(), "artist_content.top_tracks_panic", func() error {
+					var err error
+					tracksResp, err = h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, tracksLimit)
+					return err
+				})
 			}()
 			go func() {
 				defer wg.Done()
-				defer recoverAsError(r.Context(), "artist_content.albums_panic", &albumsErr)
-				albumsResp, albumsErr = h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, albumsLimit)
+				albumsErr = runRecovered(r.Context(), "artist_content.albums_panic", func() error {
+					var err error
+					albumsResp, err = h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, albumsLimit)
+					return err
+				})
 			}()
 			wg.Wait()
 

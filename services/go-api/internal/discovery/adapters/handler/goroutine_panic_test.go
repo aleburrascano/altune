@@ -1,14 +1,14 @@
 package handler
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"net/http"
 	"testing"
 	"time"
 
 	discdomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
 )
 
 // These tests guard issue #568: a panic inside a goroutine the handler spawns
