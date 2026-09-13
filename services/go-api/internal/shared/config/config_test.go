@@ -127,6 +127,47 @@ func TestLoad_MissingAnonKey(t *testing.T) {
 	}
 }
 
+func TestLoad_SupabaseAnonKeyTrimmed(t *testing.T) {
+	setEnv(t, map[string]string{
+		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+		"SUPABASE_ANON_KEY":     "  anon-key\t\n",
+		"OPERATOR_USER_ID":      validOperatorID,
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.SupabaseAnonKey != "anon-key" {
+		t.Errorf("expected SUPABASE_ANON_KEY trimmed to %q, got %q", "anon-key", cfg.SupabaseAnonKey)
+	}
+}
+
+func TestLoad_CORSOriginsTrimmed(t *testing.T) {
+	setEnv(t, map[string]string{
+		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
+		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
+		"SUPABASE_ANON_KEY":     "anon-key",
+		"OPERATOR_USER_ID":      validOperatorID,
+		"CORS_ORIGINS":          "http://a, http://b ",
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"http://a", "http://b"}
+	if len(cfg.CORSOrigins) != len(want) {
+		t.Fatalf("expected %d origins, got %d: %#v", len(want), len(cfg.CORSOrigins), cfg.CORSOrigins)
+	}
+	for i, w := range want {
+		if cfg.CORSOrigins[i] != w {
+			t.Errorf("origin %d: expected %q, got %q", i, w, cfg.CORSOrigins[i])
+		}
+	}
+}
+
 func TestLoad_MusicBrainzUAWithoutContact(t *testing.T) {
 	setEnv(t, map[string]string{
 		"SUPABASE_PROJECT_URL":   "https://example.supabase.co",
