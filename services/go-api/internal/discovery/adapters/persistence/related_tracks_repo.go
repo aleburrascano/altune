@@ -1,11 +1,10 @@
 package persistence
 
 import (
-	"context"
-	"fmt"
-
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"

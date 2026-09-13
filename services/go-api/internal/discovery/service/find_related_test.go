@@ -1,16 +1,15 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type fakeRelationshipQuerier struct {
