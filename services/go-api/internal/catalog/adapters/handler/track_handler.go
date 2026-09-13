@@ -3,6 +3,7 @@ package handler
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
@@ -152,6 +153,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	input := service.AddTrackInput{
+		IdempotencyKey:  idempotencyKey(r),
 		Title:           req.Title,
 		Artist:          req.Artist,
 		Album:           album,
@@ -190,6 +192,18 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	httputil.WriteJSON(w, status, service.TrackToDTO(result.Track))
+}
+
+// idempotencyKey reads the optional client-supplied Idempotency-Key header. An
+// absent or blank header yields nil, meaning the create falls back to
+// content-based dedup; a present key collapses concurrent creates and retries of
+// the same logical save onto a single row.
+func idempotencyKey(r *http.Request) *string {
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key == "" {
+		return nil
+	}
+	return &key
 }
 
 type TrackStatusResponse struct {
