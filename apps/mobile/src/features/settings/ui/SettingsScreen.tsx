@@ -13,7 +13,7 @@ import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { DangerZoneCard } from './DangerZoneCard';
 import { FeedbackCard } from './FeedbackCard';
-import { ReportIssueDialog } from './ReportIssueDialog';
+import { ReportIssueModal } from './ReportIssueModal';
 import { SettingsCard } from './SettingsCard';
 import { SettingsRow } from './SettingsRow';
 import { ThemeSegment } from './ThemeSegment';
@@ -115,11 +115,7 @@ export function SettingsScreen(): ReactElement {
         </View>
       </ScrollView>
 
-      <ReportIssueDialog
-        visible={reporting}
-        onClose={() => setReporting(false)}
-        screen="settings"
-      />
+      <ReportIssueModal visible={reporting} onClose={() => setReporting(false)} screen="settings" />
     </Screen>
   );
 }

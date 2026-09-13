@@ -11,7 +11,7 @@ export interface ConfirmDestructiveOptions {
  * The two-button destructive-confirm dialog: a `cancel` button plus a
  * `destructive` confirm running `onConfirm`. One home for the `Alert.alert`
  * skeleton the library and queue screens otherwise rebuild inline.
- * Settings keeps its own in-app `ConfirmDialog` and does not route through here.
+ * Settings keeps its own in-app `ConfirmModal` and does not route through here.
  */
 export function confirmDestructive({
   title,
