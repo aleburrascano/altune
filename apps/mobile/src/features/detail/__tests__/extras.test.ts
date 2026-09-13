@@ -73,4 +73,10 @@ describe('resolveFeatured', () => {
 
     expect(result).toEqual([featured('Textual')]);
   });
+
+  it('drops blank names produced by a doubled feat. separator', () => {
+    const result = resolveFeatured({}, undefined, 'Song (feat. A, , B)', null);
+
+    expect(result).toEqual([featured('A'), featured('B')]);
+  });
 });

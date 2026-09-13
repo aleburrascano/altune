@@ -27,9 +27,12 @@ export function resolveFeatured(
   if (deezerFeatured && deezerFeatured.length > 0) {
     return deezerFeatured;
   }
-  return (extractFeaturedFromText(title, subtitle)?.split(', ') ?? []).map((name) => ({
-    name,
-    mbid: null,
-    deezer_id: null,
-  }));
+  const names = extractFeaturedFromText(title, subtitle)?.split(', ') ?? [];
+  const out: FeaturedArtist[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    if (name.length === 0) continue;
+    out.push({ name, mbid: null, deezer_id: null });
+  }
+  return out;
 }
