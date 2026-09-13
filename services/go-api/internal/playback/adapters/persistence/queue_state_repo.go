@@ -1,6 +1,9 @@
 package persistence
 
 import (
+	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"fmt"
@@ -9,10 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/ports"
-	"altune/go-api/internal/shared"
 )
 
 var _ ports.QueueStateRepository = (*PgxQueueStateRepository)(nil)
@@ -41,11 +40,37 @@ type querier interface {
 }
 
 type PgxQueueStateRepository struct {
-	pool querier
+	pool    querier
+	metrics ports.PlaybackMetrics
 }
 
-func NewPgxQueueStateRepository(pool *pgxpool.Pool) *PgxQueueStateRepository {
-	return &PgxQueueStateRepository{pool: pool}
+func NewPgxQueueStateRepository(pool *pgxpool.Pool, opts ...func(*PgxQueueStateRepository)) *PgxQueueStateRepository {
+	r := &PgxQueueStateRepository{pool: pool, metrics: ports.NoopPlaybackMetrics()}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+// WithQueueStateMetrics injects the degradation-counter sink. Left as a
+// functional option so the adapter stays constructible without a metrics
+// backend (defaulting to a no-op).
+func WithQueueStateMetrics(m ports.PlaybackMetrics) func(*PgxQueueStateRepository) {
+	return func(r *PgxQueueStateRepository) {
+		if m != nil {
+			r.metrics = m
+		}
+	}
+}
+
+// recordTimeout counts an op that blew its per-op deadline. It attributes the
+// timeout only when the parent context is still live: a caller-side cancel is
+// the client leaving, not the database being slow, and must not inflate the
+// health signal.
+func (r *PgxQueueStateRepository) recordTimeout(parent context.Context, err error) {
+	if errors.Is(err, context.DeadlineExceeded) && parent.Err() == nil {
+		r.metrics.QueueStateOpTimedOut()
+	}
 }
 
 func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.QueueState) error {
@@ -56,10 +81,10 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
+	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
 	defer cancel()
 
-	tag, err := r.pool.Exec(ctx,
+	tag, err := r.pool.Exec(opCtx,
 		`INSERT INTO playback_queue_state (user_id, track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (user_id) DO UPDATE SET
@@ -83,6 +108,7 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		state.UpdatedAt,
 	)
 	if err != nil {
+		r.recordTimeout(ctx, err)
 		return err
 	}
 	// Zero rows means the ON CONFLICT ... WHERE guard rejected the update: the
@@ -97,11 +123,11 @@ func (r *PgxQueueStateRepository) GetForUser(
 	ctx context.Context,
 	userId shared.UserId,
 ) (*domain.QueueState, error) {
-	ctx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
+	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
 	defer cancel()
 
 	var row scannedRow
-	err := r.pool.QueryRow(ctx,
+	err := r.pool.QueryRow(opCtx,
 		`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at
 		 FROM playback_queue_state
 		 WHERE user_id = $1`,
@@ -112,20 +138,28 @@ func (r *PgxQueueStateRepository) GetForUser(
 		return nil, nil
 	}
 	if err != nil {
+		r.recordTimeout(ctx, err)
 		return nil, err
 	}
 
-	return hydrate(userId, row)
+	state, err := hydrate(userId, row)
+	if errors.Is(err, ports.ErrCorruptStoredState) {
+		r.metrics.CorruptStoredState()
+	}
+	return state, err
 }
 
 func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shared.UserId) error {
-	ctx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
+	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
 	defer cancel()
 
-	_, err := r.pool.Exec(ctx,
+	_, err := r.pool.Exec(opCtx,
 		`DELETE FROM playback_queue_state WHERE user_id = $1`,
 		userId.UUID(),
 	)
+	if err != nil {
+		r.recordTimeout(ctx, err)
+	}
 	return err
 }
 

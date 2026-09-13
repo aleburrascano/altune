@@ -1,6 +1,10 @@
 package persistence
 
 import (
+	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
 	"net/http"
@@ -12,11 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/ports"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/httputil"
 )
 
 type blockingQuerier struct{}
@@ -98,8 +97,91 @@ func assertServerFault(t *testing.T, err error) {
 	}
 }
 
+// recordingMetrics is a ports.PlaybackMetrics double that counts each
+// degradation signal, so a test can assert a counter fired on a failure path.
+type recordingMetrics struct {
+	enrichmentFailed         int
+	corruptStoredState       int
+	queueStateOpTimedOut     int
+	nowPlayingLookupTimedOut int
+}
+
+func (m *recordingMetrics) EnrichmentFailed()         { m.enrichmentFailed++ }
+func (m *recordingMetrics) CorruptStoredState()       { m.corruptStoredState++ }
+func (m *recordingMetrics) QueueStateOpTimedOut()     { m.queueStateOpTimedOut++ }
+func (m *recordingMetrics) NowPlayingLookupTimedOut() { m.nowPlayingLookupTimedOut++ }
+
+// TestGetForUser_CorruptRow_IncrementsMetric reproduces the missing health
+// signal: a corrupt stored row degrades to a server fault but, before this
+// change, incremented no counter — only a log line.
+func TestGetForUser_CorruptRow_IncrementsMetric(t *testing.T) {
+	m := &recordingMetrics{}
+	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "sideways"}}, metrics: m}
+
+	if _, err := repo.GetForUser(context.Background(), testUser()); err == nil {
+		t.Fatal("precondition: a corrupt stored row must still return an error")
+	}
+	if m.corruptStoredState != 1 {
+		t.Fatalf("CorruptStoredState counter = %d, want 1 after a corrupt row", m.corruptStoredState)
+	}
+}
+
+// TestGetForUser_HealthyRow_RecordsNoCorruption guards against counting a
+// clean read as corruption.
+func TestGetForUser_HealthyRow_RecordsNoCorruption(t *testing.T) {
+	m := &recordingMetrics{}
+	repo := &PgxQueueStateRepository{pool: newFakeStore(), metrics: m}
+	user := testUser()
+
+	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(user)); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := repo.GetForUser(context.Background(), user); err != nil {
+		t.Fatalf("GetForUser: %v", err)
+	}
+	if m.corruptStoredState != 0 {
+		t.Fatalf("CorruptStoredState counter = %d, want 0 for a healthy row", m.corruptStoredState)
+	}
+}
+
+// TestGetForUser_Timeout_IncrementsMetric reproduces the missing health signal
+// for a DB op that blows its per-op deadline.
+func TestGetForUser_Timeout_IncrementsMetric(t *testing.T) {
+	withShortTimeout(t)
+	m := &recordingMetrics{}
+	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: m}
+
+	err := runWithGuard(t, func() error {
+		_, err := repo.GetForUser(context.Background(), testUser())
+		return err
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
+	}
+	if m.queueStateOpTimedOut != 1 {
+		t.Fatalf("QueueStateOpTimedOut counter = %d, want 1 after an op timeout", m.queueStateOpTimedOut)
+	}
+}
+
+// TestDeleteForUser_ClientCancel_RecordsNoTimeout proves a caller-side cancel
+// is not misattributed to the database being slow.
+func TestDeleteForUser_ClientCancel_RecordsNoTimeout(t *testing.T) {
+	m := &recordingMetrics{}
+	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: m}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // client is already gone
+
+	if err := repo.DeleteForUser(ctx, testUser()); err == nil {
+		t.Fatal("precondition: a canceled context must surface an error")
+	}
+	if m.queueStateOpTimedOut != 0 {
+		t.Fatalf("QueueStateOpTimedOut counter = %d, want 0 for a client cancel", m.queueStateOpTimedOut)
+	}
+}
+
 func TestGetForUser_CorruptStoredRepeatMode_MapsToServerFault(t *testing.T) {
-	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "sideways"}}}
+	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "sideways"}}, metrics: ports.NoopPlaybackMetrics()}
 
 	_, err := repo.GetForUser(context.Background(), testUser())
 	assertServerFault(t, err)
@@ -107,7 +189,7 @@ func TestGetForUser_CorruptStoredRepeatMode_MapsToServerFault(t *testing.T) {
 
 func TestGetForUser_StoredQueueExceedsMax_MapsToServerFault(t *testing.T) {
 	oversized := make([]string, domain.MaxQueueLength+1)
-	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "off", trackIds: oversized}}}
+	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "off", trackIds: oversized}}, metrics: ports.NoopPlaybackMetrics()}
 
 	_, err := repo.GetForUser(context.Background(), testUser())
 	assertServerFault(t, err)
@@ -330,7 +412,7 @@ func TestDeleteForUser_IsScopedToUser(t *testing.T) {
 
 func TestDeleteForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	withShortTimeout(t)
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}}
+	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopPlaybackMetrics()}
 
 	err := runWithGuard(t, func() error {
 		return repo.DeleteForUser(context.Background(), testUser())
@@ -362,7 +444,7 @@ func runWithGuard(t *testing.T, call func() error) error {
 
 func TestUpsert_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	withShortTimeout(t)
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}}
+	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopPlaybackMetrics()}
 
 	err := runWithGuard(t, func() error {
 		return repo.Upsert(context.Background(), domain.EmptyQueueState(testUser()))
@@ -374,7 +456,7 @@ func TestUpsert_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 
 func TestGetForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	withShortTimeout(t)
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}}
+	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopPlaybackMetrics()}
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.GetForUser(context.Background(), testUser())

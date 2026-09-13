@@ -1,13 +1,13 @@
 package catalogbridge
 
 import (
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"testing"
 	"time"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -26,6 +26,85 @@ func (b *blockingTrackReader) GetByID(ctx context.Context, _ catalogDomain.Track
 
 func testUser() shared.UserId {
 	return shared.NewUserId(uuid.New())
+}
+
+// failingTrackReader returns a plain (non-timeout) dependency error, standing
+// in for catalog rejecting the lookup rather than stalling.
+type failingTrackReader struct{}
+
+func (failingTrackReader) GetByID(_ context.Context, _ catalogDomain.TrackId, _ shared.UserId) (*catalogDomain.Track, error) {
+	return nil, errors.New("catalog unavailable")
+}
+
+// recordingMetrics is a ports.PlaybackMetrics double that counts each
+// degradation signal, so a test can assert a counter fired on a failure path.
+type recordingMetrics struct {
+	enrichmentFailed         int
+	corruptStoredState       int
+	queueStateOpTimedOut     int
+	nowPlayingLookupTimedOut int
+}
+
+func (m *recordingMetrics) EnrichmentFailed()         { m.enrichmentFailed++ }
+func (m *recordingMetrics) CorruptStoredState()       { m.corruptStoredState++ }
+func (m *recordingMetrics) QueueStateOpTimedOut()     { m.queueStateOpTimedOut++ }
+func (m *recordingMetrics) NowPlayingLookupTimedOut() { m.nowPlayingLookupTimedOut++ }
+
+// TestLookup_EnrichmentFailure_IncrementsMetric reproduces the missing health
+// signal: a failed enrichment lookup degraded the resume but, before this
+// change, incremented no counter — only a log line.
+func TestLookup_EnrichmentFailure_IncrementsMetric(t *testing.T) {
+	m := &recordingMetrics{}
+	reader := NewNowPlayingReader(failingTrackReader{}, WithNowPlayingMetrics(m))
+
+	if _, err := reader.Lookup(context.Background(), testUser(), uuid.New().String()); err == nil {
+		t.Fatal("precondition: a failing catalog lookup must surface an error")
+	}
+	if m.enrichmentFailed != 1 {
+		t.Fatalf("EnrichmentFailed counter = %d, want 1 after a failed lookup", m.enrichmentFailed)
+	}
+	if m.nowPlayingLookupTimedOut != 0 {
+		t.Fatalf("NowPlayingLookupTimedOut = %d, want 0 for a non-timeout failure", m.nowPlayingLookupTimedOut)
+	}
+}
+
+// TestLookup_Timeout_IncrementsBothMetrics proves a per-call timeout counts as
+// both an enrichment failure and, more specifically, a lookup timeout.
+func TestLookup_Timeout_IncrementsBothMetrics(t *testing.T) {
+	prev := nowPlayingLookupTimeout
+	nowPlayingLookupTimeout = 50 * time.Millisecond
+	defer func() { nowPlayingLookupTimeout = prev }()
+
+	m := &recordingMetrics{}
+	reader := NewNowPlayingReader(&blockingTrackReader{}, WithNowPlayingMetrics(m))
+
+	if _, err := reader.Lookup(context.Background(), testUser(), uuid.New().String()); err == nil {
+		t.Fatal("precondition: a stalled catalog lookup must time out with an error")
+	}
+	if m.enrichmentFailed != 1 {
+		t.Fatalf("EnrichmentFailed counter = %d, want 1 after a lookup timeout", m.enrichmentFailed)
+	}
+	if m.nowPlayingLookupTimedOut != 1 {
+		t.Fatalf("NowPlayingLookupTimedOut counter = %d, want 1 after a lookup timeout", m.nowPlayingLookupTimedOut)
+	}
+}
+
+// TestLookup_ClientCancellation_RecordsNoMetric guards against a disconnecting
+// client inflating the catalog-health signal.
+func TestLookup_ClientCancellation_RecordsNoMetric(t *testing.T) {
+	m := &recordingMetrics{}
+	reader := NewNowPlayingReader(&blockingTrackReader{}, WithNowPlayingMetrics(m))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // client is already gone
+
+	if _, err := reader.Lookup(ctx, testUser(), uuid.New().String()); err == nil {
+		t.Fatal("precondition: a canceled context must surface an error")
+	}
+	if m.enrichmentFailed != 0 || m.nowPlayingLookupTimedOut != 0 {
+		t.Fatalf("client cancel recorded metrics (enrichmentFailed=%d, lookupTimedOut=%d); want 0/0",
+			m.enrichmentFailed, m.nowPlayingLookupTimedOut)
+	}
 }
 
 func TestLookup_DerivesDeadlineWhenDependencyBlocks(t *testing.T) {
