@@ -4,8 +4,10 @@ import { Search } from 'lucide-react-native';
 
 import { Button, Chip, Skeleton, Text, radius, spacing, useTheme } from '@shared/ui';
 
+import type { AsyncView } from '@shared/lib/async-view';
 import { describeError } from '@shared/lib/describeError';
 import { countLabel } from '@shared/lib/format';
+import { AsyncSection } from '@shared/ui/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from './BlendedSection';
 import { FilteredResults } from './FilteredResults';
@@ -93,95 +95,7 @@ export function DiscoverBody({
 
   useAnnounceChange(_searchAnnouncement(view, searchData?.results.length ?? 0));
 
-  if (view === 'loading') {
-    return (
-      <View testID="discover-loading" style={styles.list}>
-        {SKELETON_ROWS.map((i) => (
-          <View key={i} style={styles.skeletonRow}>
-            <Skeleton width={56} height={56} radius={radius.md} />
-            <View style={styles.skeletonText}>
-              <Skeleton width="70%" height={14} />
-              <Skeleton width="40%" height={12} />
-            </View>
-          </View>
-        ))}
-      </View>
-    );
-  }
-
-  if (view === 'full-error') {
-    const { title, body } = describeError(searchError);
-    return (
-      <View testID="discover-full-error" style={styles.center}>
-        <Text variant="title">{title}</Text>
-        <Text variant="label" tone="secondary" style={styles.centerSub}>
-          {body}
-        </Text>
-        <Button testID="discover-retry" label="Retry" onPress={onRetry} />
-      </View>
-    );
-  }
-
-  if (view === 'zero-results') {
-    return (
-      <View testID="discover-zero-results" style={styles.zeroResults}>
-        <FilterChips active={filter} onSelect={onFilterChange} />
-        <View style={styles.center}>
-          <Text variant="title">No matches</Text>
-          <Text variant="label" tone="secondary" style={styles.centerSub}>
-            Check spelling or try fewer words.
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  if (view === 'empty-no-query') {
-    return (
-      <View testID="discover-empty-no-query" style={styles.list}>
-        {historyItems.length === 0 ? (
-          <View style={styles.emptyCenter}>
-            <Search size={32} color={theme.color.textTertiary} />
-            <Text variant="body" tone="secondary" style={styles.emptyText}>
-              Search music to get started.
-            </Text>
-          </View>
-        ) : (
-          <>
-            <View style={styles.historyHeader}>
-              <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
-                RECENT SEARCHES
-              </Text>
-              {onClearHistory != null ? (
-                <Pressable
-                  onPress={onClearHistory}
-                  accessibilityRole="button"
-                  accessibilityLabel="Clear search history"
-                  hitSlop={8}
-                  style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
-                >
-                  <Text variant="caption" tone="accent">
-                    Clear
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-            <View style={styles.chipCloud}>
-              {historyItems.map((item, index) => (
-                <Chip
-                  key={item.query_norm}
-                  testID={`discover-history-row-${index}`}
-                  label={item.query.length > 40 ? `${item.query.slice(0, 40)}…` : item.query}
-                  onPress={() => onHistoryTap(item)}
-                />
-              ))}
-            </View>
-          </>
-        )}
-      </View>
-    );
-  }
-
+  const { title, body } = describeError(searchError);
   const results = searchData?.results ?? [];
   const common: ResultsCommonProps = {
     onResultTap,
@@ -194,20 +108,111 @@ export function DiscoverBody({
     originalQuery,
     onSearchOriginal,
   };
+
+  const section: AsyncView =
+    view === 'loading'
+      ? 'loading'
+      : view === 'full-error'
+        ? 'error'
+        : view === 'empty-no-query'
+          ? 'empty'
+          : 'ready';
+
   return (
-    <View testID="discover-results" style={styles.results}>
-      <FilterChips active={filter} onSelect={onFilterChange} />
-      {filter === 'all' ? (
-        <BlendedSection
-          sections={searchData?.sections ?? []}
-          topResult={searchData?.top_result}
-          onSeeAll={onFilterChange}
-          common={common}
-        />
-      ) : (
-        <FilteredResults kind={filter} results={results} common={common} />
+    <AsyncSection
+      view={section}
+      skeleton={() => (
+        <View testID="discover-loading" style={styles.list}>
+          {SKELETON_ROWS.map((i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <Skeleton width={56} height={56} radius={radius.md} />
+              <View style={styles.skeletonText}>
+                <Skeleton width="70%" height={14} />
+                <Skeleton width="40%" height={12} />
+              </View>
+            </View>
+          ))}
+        </View>
       )}
-    </View>
+      error={() => (
+        <View testID="discover-full-error" style={styles.center}>
+          <Text variant="title">{title}</Text>
+          <Text variant="label" tone="secondary" style={styles.centerSub}>
+            {body}
+          </Text>
+          <Button testID="discover-retry" label="Retry" onPress={onRetry} />
+        </View>
+      )}
+      empty={() => (
+        <View testID="discover-empty-no-query" style={styles.list}>
+          {historyItems.length === 0 ? (
+            <View style={styles.emptyCenter}>
+              <Search size={32} color={theme.color.textTertiary} />
+              <Text variant="body" tone="secondary" style={styles.emptyText}>
+                Search music to get started.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.historyHeader}>
+                <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
+                  RECENT SEARCHES
+                </Text>
+                {onClearHistory != null ? (
+                  <Pressable
+                    onPress={onClearHistory}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear search history"
+                    hitSlop={8}
+                    style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
+                  >
+                    <Text variant="caption" tone="accent">
+                      Clear
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <View style={styles.chipCloud}>
+                {historyItems.map((item, index) => (
+                  <Chip
+                    key={item.query_norm}
+                    testID={`discover-history-row-${index}`}
+                    label={item.query.length > 40 ? `${item.query.slice(0, 40)}…` : item.query}
+                    onPress={() => onHistoryTap(item)}
+                  />
+                ))}
+              </View>
+            </>
+          )}
+        </View>
+      )}
+    >
+      {view === 'zero-results' ? (
+        <View testID="discover-zero-results" style={styles.zeroResults}>
+          <FilterChips active={filter} onSelect={onFilterChange} />
+          <View style={styles.center}>
+            <Text variant="title">No matches</Text>
+            <Text variant="label" tone="secondary" style={styles.centerSub}>
+              Check spelling or try fewer words.
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <View testID="discover-results" style={styles.results}>
+          <FilterChips active={filter} onSelect={onFilterChange} />
+          {filter === 'all' ? (
+            <BlendedSection
+              sections={searchData?.sections ?? []}
+              topResult={searchData?.top_result}
+              onSeeAll={onFilterChange}
+              common={common}
+            />
+          ) : (
+            <FilteredResults kind={filter} results={results} common={common} />
+          )}
+        </View>
+      )}
+    </AsyncSection>
   );
 }
 

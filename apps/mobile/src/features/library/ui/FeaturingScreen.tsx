@@ -7,11 +7,13 @@ import { searchDiscovery } from '@shared/api-client/discovery';
 import type { FeaturedArtist, TrackResponse } from '@shared/api-client/types';
 import { setDetailHandoff } from '@shared/lib/detail-handoff';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
+import { asyncView } from '@shared/lib/async-view';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
+import { AsyncSection } from '@shared/ui/AsyncSection';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
@@ -105,35 +107,40 @@ export function FeaturingScreen(): ReactElement {
         </View>
       </View>
 
-      {isLoading ? (
-        <View style={styles.list}>
-          <Skeleton height={56} />
-          <Skeleton height={56} />
-          <Skeleton height={56} />
-        </View>
-      ) : isError ? (
-        <View style={styles.centered}>
-          <Text variant="body" tone="secondary">
-            Couldn't load tracks.
-          </Text>
-          <Text variant="label" tone="accent" onPress={() => void refetch()} style={styles.retry}>
-            Retry
-          </Text>
-        </View>
-      ) : tracks.length === 0 ? (
-        <View style={styles.centered}>
-          <Text variant="body" tone="secondary" style={styles.emptyText}>
-            Nothing in your library featuring {fa.name} yet.
-          </Text>
-          <Button
-            testID="featuring-explore"
-            label={exploring ? 'Searching…' : `Search for ${fa.name}`}
-            variant="ghost"
-            loading={exploring}
-            onPress={() => void exploreArtist()}
-          />
-        </View>
-      ) : (
+      <AsyncSection
+        view={asyncView({ isLoading, isError, isEmpty: tracks.length === 0 })}
+        skeleton={() => (
+          <View style={styles.list}>
+            <Skeleton height={56} />
+            <Skeleton height={56} />
+            <Skeleton height={56} />
+          </View>
+        )}
+        error={() => (
+          <View style={styles.centered}>
+            <Text variant="body" tone="secondary">
+              Couldn't load tracks.
+            </Text>
+            <Text variant="label" tone="accent" onPress={() => void refetch()} style={styles.retry}>
+              Retry
+            </Text>
+          </View>
+        )}
+        empty={() => (
+          <View style={styles.centered}>
+            <Text variant="body" tone="secondary" style={styles.emptyText}>
+              Nothing in your library featuring {fa.name} yet.
+            </Text>
+            <Button
+              testID="featuring-explore"
+              label={exploring ? 'Searching…' : `Search for ${fa.name}`}
+              variant="ghost"
+              loading={exploring}
+              onPress={() => void exploreArtist()}
+            />
+          </View>
+        )}
+      >
         <TracksList
           tracks={tracks}
           emptyLabel=""
@@ -148,7 +155,7 @@ export function FeaturingScreen(): ReactElement {
           retryingTrackId={retryingTrackId}
           isPlaying={(id) => isCurrentlyPlaying(playback, { kind: 'library', trackId: id })}
         />
-      )}
+      </AsyncSection>
 
       <ContextMenu
         visible={action != null}
