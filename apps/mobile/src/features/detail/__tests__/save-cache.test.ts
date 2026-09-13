@@ -99,6 +99,10 @@ describe('toCreateTrackRequest', () => {
     expect(toCreateTrackRequest(result({ extras: {} })).duration_seconds).toBeNull();
   });
 
+  it('persists a negative sentinel duration as null rather than -1', () => {
+    expect(toCreateTrackRequest(result({ extras: { duration: -1 } })).duration_seconds).toBeNull();
+  });
+
   it('falls back to an empty artist for a null subtitle', () => {
     expect(toCreateTrackRequest(result({ subtitle: null })).artist).toBe('');
   });
