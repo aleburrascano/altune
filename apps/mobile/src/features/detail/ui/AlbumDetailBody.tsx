@@ -1,7 +1,7 @@
 import { type ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { ChevronDown, ChevronRight, Play, Plus } from 'lucide-react-native';
+import { Play, Plus } from 'lucide-react-native';
 
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
@@ -11,27 +11,18 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { asyncView } from '@shared/lib/async-view';
 import { AsyncSection } from '@shared/ui/AsyncSection';
 
-import { extractFeaturedFromText } from '../extras';
 import { trackExtras } from '../extras-accessors';
 import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
 import type { DetailRoute } from '../navigation';
 
-import { _albumYear, formatRuntime, sharedStyles } from './helpers';
+import { _albumYear, _trackSubtitleWithFeaturing, formatRuntime, sharedStyles } from './helpers';
+import { AlbumMoreTracks } from './AlbumMoreTracks';
 import { AlbumTrackRow } from './AlbumTrackRow';
 import { DetailActions } from './DetailActions';
 import { DetailFacts, type DetailFact } from './DetailFacts';
 import { DetailScaffold, type DetailChrome } from './DetailScaffold';
 import { TrackRowsSkeleton } from './DetailSkeleton';
 import { Section } from './Section';
-
-function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
-  const base = track.subtitle ?? '';
-  const names = trackExtras(track.extras).featuredArtists.map((f) => f.name);
-  if (names.length > 0) return `${base}, ${names.join(', ')}`;
-  const parsed = extractFeaturedFromText(track.title, track.subtitle);
-  if (parsed) return `${base}, ${parsed}`;
-  return base;
-}
 
 export function AlbumDetailBody({
   chrome,
@@ -158,51 +149,18 @@ export function AlbumDetailBody({
             ))}
           </Section>
 
-          {!album.hasSources && album.moreTracks.length > 0 ? (
-            <View style={styles.moreSection}>
-              <Pressable
-                testID="detail-more-from-album"
-                onPress={() => album.setMoreExpanded((prev) => !prev)}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  album.moreExpanded ? 'Collapse more tracks' : 'Show more from this album'
-                }
-                style={({ pressed }) => [styles.moreHeader, pressed ? styles.pressed : null]}
-              >
-                <Text variant="label" tone="accent">
-                  More from this album
-                </Text>
-                {album.moreExpanded ? (
-                  <ChevronDown size={18} color={theme.color.accent} />
-                ) : (
-                  <ChevronRight size={18} color={theme.color.accent} />
-                )}
-              </Pressable>
-
-              {album.moreExpanded ? (
-                <>
-                  {album.moreTracks.map((track, index) => (
-                    <AlbumTrackRow
-                      key={track.sources[0]?.external_id ?? `more-${index}`}
-                      track={track}
-                      index={album.tracks.length + index}
-                      subtitle={_trackSubtitleWithFeaturing(track)}
-                      saveState={album.saveStateFor(track)}
-                      onPress={() => album.onTrackPress(track)}
-                      onQuickSave={() => album.onQuickSave(track)}
-                    />
-                  ))}
-                  <Button
-                    testID="detail-save-all-more"
-                    label={album.savingAll ? 'Saving…' : 'Save all'}
-                    variant="secondary"
-                    onPress={album.onSaveAll}
-                    disabled={album.savingAll}
-                    style={styles.moreSaveAll}
-                  />
-                </>
-              ) : null}
-            </View>
+          {!album.hasSources ? (
+            <AlbumMoreTracks
+              tracks={album.moreTracks}
+              baseIndex={album.tracks.length}
+              expanded={album.moreExpanded}
+              onToggle={() => album.setMoreExpanded((prev) => !prev)}
+              savingAll={album.savingAll}
+              onSaveAll={album.onSaveAll}
+              saveStateFor={album.saveStateFor}
+              onTrackPress={album.onTrackPress}
+              onQuickSave={album.onQuickSave}
+            />
           ) : null}
         </View>
       </AsyncSection>
@@ -221,15 +179,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.full,
     flexShrink: 0,
-  },
-  moreSaveAll: { marginTop: spacing.lg },
-  moreSection: { marginTop: spacing.xl },
-  moreHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-    minHeight: minInteractiveHeight,
   },
   pressed: { opacity: 0.6 },
 });
