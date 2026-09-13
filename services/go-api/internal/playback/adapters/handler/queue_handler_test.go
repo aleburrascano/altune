@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -80,6 +81,28 @@ func TestHandleSave_KnownSourcePersists(t *testing.T) {
 	}
 	if got := domain.ParseQueueSource(repo.saved.SourceId); got.PlaylistId != "a:b" || got.Name != "x" {
 		t.Errorf("stored source_id lost data: %q -> %+v", repo.saved.SourceId, got)
+	}
+}
+
+type staleRepo struct {
+	recordingRepo
+}
+
+func (r *staleRepo) Upsert(_ context.Context, _ *domain.QueueState) error {
+	return fmt.Errorf("upsert: %w", domain.ErrStaleQueueWrite)
+}
+
+func TestHandleSave_RejectedStaleWriteIsConflictNot204(t *testing.T) {
+	h := newHandler(&staleRepo{})
+	rec := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rec, savePut(`{"track_ids":[],"repeat_mode":"off","source_id":"library"}`))
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("a save the stale-write guard rejected must be a 409, got status %d body %q", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"code":"playback.stale_queue_write"`) {
+		t.Errorf("expected the stale-write error code in the body, got %q", rec.Body.String())
 	}
 }
 
