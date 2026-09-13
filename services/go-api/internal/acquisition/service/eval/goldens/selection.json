@@ -237,6 +237,24 @@
         { "title": "Circles", "url": "yt:dead", "channel": "Post Malone - Topic", "categories": ["Music"], "duration": 215, "view_count": 30000000, "download_fails": true },
         { "title": "Circles", "url": "yt:alive", "channel": "Post Malone - Topic", "categories": ["Music"], "duration": 215, "view_count": 20000000, "correct": true }
       ]
+    },
+    {
+      "id": "issue31-noisy-title-on-artist-channel",
+      "class": "OK",
+      "note": "issue #31, Cutting Crew's 'I've Been in Love Before': the only upload on the artist's own Topic channel pads its title with remaster/quality/year noise (not in brackets, so normalization keeps it) and scores far below the 60 identity gate. Provenance already resembles the track — the artist channel names it — so the fuzzy title score must not silently drop it",
+      "track": { "title": "I've Been in Love Before", "artist": "Cutting Crew", "duration": 253, "authoritative_duration": 253 },
+      "candidates": [
+        { "title": "I've Been In Love Before HQ Stereo Remaster Full Length Version 1986 Special", "url": "yt:cuttingcrew-master", "channel": "Cutting Crew - Topic", "categories": ["Music"], "duration": 253, "actual_duration": 253, "view_count": 1200000, "correct": true }
+      ]
+    },
+    {
+      "id": "issue31-noisy-title-vs-namesake-topic",
+      "class": "F7",
+      "note": "issue #31 guard: rescuing artist-channel candidates from the identity gate must not rescue a different artist's Topic upload; the wrong-artist candidate stays gated and nothing is stored",
+      "track": { "title": "I've Been in Love Before", "artist": "Cutting Crew", "duration": 253, "authoritative_duration": 253 },
+      "candidates": [
+        { "title": "Ive Been In Love Before Cover Tribute Full Length Karaoke Instrumental Take", "url": "yt:someoneelse", "channel": "Some Other Band - Topic", "categories": ["Music"], "duration": 253, "actual_duration": 253, "view_count": 5000 }
+      ]
     }
   ]
 }

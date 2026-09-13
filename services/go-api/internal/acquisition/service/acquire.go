@@ -123,7 +123,7 @@ func (s *AcquireTrackAudioService) execute(
 	s.resolveIdentity(ctx, ac)
 	err = RunPipeline(ctx, s.buildSteps(userId, trackId), ac)
 	if err != nil {
-		return s.reportAcquisitionFailure(ctx, userId, trackId, replace, err)
+		return s.reportAcquisitionFailure(ctx, userId, trackId, replace, err, ac)
 	}
 
 	jobReporterFrom(ctx).provenance(string(ac.Provenance()))
@@ -147,7 +147,7 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 	}
 }
 
-func (s *AcquireTrackAudioService) reportAcquisitionFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, replace bool, err error) error {
+func (s *AcquireTrackAudioService) reportAcquisitionFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, replace bool, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
@@ -155,6 +155,11 @@ func (s *AcquireTrackAudioService) reportAcquisitionFailure(ctx context.Context,
 		"error", err,
 	)
 	reason := failureReason(err)
+	if summary := summarizeRejections(ac.Rejections); summary != "" {
+		reason = reason + ": " + summary
+		slog.InfoContext(ctx, "acquisition.rejection_summary",
+			"track_id", trackId.String(), "summary", summary)
+	}
 	if replace {
 		if s.events != nil {
 			s.events.Publish(userId, "track_replace_failed", map[string]any{

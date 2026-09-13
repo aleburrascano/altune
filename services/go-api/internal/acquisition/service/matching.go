@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math"
 	"regexp"
@@ -219,12 +220,20 @@ func lessOther(a, b candidateEntry) bool {
 }
 
 func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate) []ports.AudioCandidate {
+	ranked, _ := rankAndCollect(ctx, track, candidates)
+	return ranked
+}
+
+// rankAndCollect ranks the candidates and, alongside the ordered list, returns
+// the per-candidate rejections produced by the identity gate so the caller can
+// persist why nothing was selectable.
+func rankAndCollect(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate) ([]ports.AudioCandidate, []CandidateRejection) {
 	if len(candidates) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	maxViews := maxViewCount(candidates)
-	resolved, topic, other := classifyCandidates(ctx, track, candidates, maxViews)
+	resolved, topic, other, rejected := classifyCandidates(ctx, track, candidates, maxViews)
 
 	sort.SliceStable(resolved, func(i, j int) bool {
 		return lessResolved(resolved[i], resolved[j])
@@ -242,7 +251,7 @@ func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.Audi
 			ranked = append(ranked, e.candidate)
 		}
 	}
-	return ranked
+	return ranked, rejected
 }
 
 func maxViewCount(candidates []ports.AudioCandidate) int64 {
@@ -276,7 +285,7 @@ func classifyCandidates(
 	track TrackRef,
 	candidates []ports.AudioCandidate,
 	maxViews int64,
-) (resolved, topic, other []candidateEntry) {
+) (resolved, topic, other []candidateEntry, rejected []CandidateRejection) {
 
 	for _, c := range candidates {
 		ident := identityScore(track.Title, track.Artist, c.Title)
@@ -301,7 +310,19 @@ func classifyCandidates(
 			resolved = append(resolved, entry)
 			continue
 		}
-		if ident < identityMin {
+		// The identity gate exists to drop candidates that do not resemble the
+		// track. A candidate whose channel names the track's artist (its Topic
+		// or official channel) has already established that resemblance through
+		// provenance, so a title padded with remaster/quality/year noise must
+		// not be silently discarded on the fuzzy title score alone.
+		if ident < identityMin && !artMatch {
+			rejected = append(rejected, CandidateRejection{
+				URL:    c.URL,
+				Title:  c.Title,
+				Source: c.Source,
+				Stage:  "identity",
+				Reason: fmt.Sprintf("identity %.0f below threshold %.0f", ident, identityMin),
+			})
 			continue
 		}
 		if isTopicChannel(c.Channel) {
@@ -311,5 +332,5 @@ func classifyCandidates(
 		}
 	}
 
-	return resolved, topic, other
+	return resolved, topic, other, rejected
 }
