@@ -19,11 +19,6 @@ type FavoriteDTO struct {
 	ImageURL string `json:"image_url,omitempty"`
 }
 
-type FavoritesResponse struct {
-	Items []FavoriteDTO `json:"items"`
-	Total int           `json:"total"`
-}
-
 type FavoriteRequest struct {
 	Kind     string `json:"kind"`
 	Title    string `json:"title"`
@@ -44,18 +39,17 @@ func (h *DiscoveryHandler) handleListFavorites(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	items := make([]FavoriteDTO, len(favorites))
-	for i, f := range favorites {
-		items[i] = FavoriteDTO{
+	items := httputil.MapSlice(favorites, func(f domain.Favorite) FavoriteDTO {
+		return FavoriteDTO{
 			Kind:     f.Kind.String(),
 			Key:      f.Key,
 			Title:    f.Title,
 			Subtitle: f.Subtitle,
 			ImageURL: f.ImageURL,
 		}
-	}
+	})
 
-	httputil.WriteJSON(w, http.StatusOK, FavoritesResponse{Items: items, Total: len(items)})
+	httputil.WriteJSON(w, http.StatusOK, httputil.NewList(items))
 }
 
 func (h *DiscoveryHandler) handleAddFavorite(w http.ResponseWriter, r *http.Request) {

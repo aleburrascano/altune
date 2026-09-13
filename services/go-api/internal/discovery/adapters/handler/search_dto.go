@@ -72,11 +72,6 @@ type SearchHistoryItemDTO struct {
 	ExecutedAt string `json:"executed_at"`
 }
 
-type DiscoverySearchHistoryResponse struct {
-	Items []SearchHistoryItemDTO `json:"items"`
-	Total int                    `json:"total"`
-}
-
 type DiscoveryEventRequest struct {
 	Type             string         `json:"type"`
 	QueryNorm        string         `json:"query_norm"`

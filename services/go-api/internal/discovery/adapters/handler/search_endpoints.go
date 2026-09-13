@@ -141,19 +141,15 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	items := make([]SearchHistoryItemDTO, len(entries))
-	for i, e := range entries {
-		items[i] = SearchHistoryItemDTO{
+	items := httputil.MapSlice(entries, func(e *domain.SearchHistoryEntry) SearchHistoryItemDTO {
+		return SearchHistoryItemDTO{
 			Query:      e.Query,
 			QueryNorm:  e.QueryNorm,
 			ExecutedAt: e.ExecutedAt.UTC().Format("2006-01-02T15:04:05.000Z"),
 		}
-	}
-
-	httputil.WriteJSON(w, http.StatusOK, DiscoverySearchHistoryResponse{
-		Items: items,
-		Total: len(items),
 	})
+
+	httputil.WriteJSON(w, http.StatusOK, httputil.NewList(items))
 }
 
 func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *http.Request) {

@@ -334,7 +334,7 @@ func TestHandleSearchHistory_UTCTimestampFormat(t *testing.T) {
 	rec := discServe(t, router, http.MethodGet, "/discovery/search-history?limit=10", nil)
 	discAssertStatus(t, rec, http.StatusOK)
 
-	var resp DiscoverySearchHistoryResponse
+	var resp httputil.List[SearchHistoryItemDTO]
 	discDecodeJSON(t, rec, &resp)
 	if len(resp.Items) != 1 {
 		t.Fatalf("len(Items) = %d, want 1", len(resp.Items))
