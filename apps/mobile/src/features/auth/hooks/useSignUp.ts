@@ -1,6 +1,11 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
 import type { AuthErrorReason } from '../lib/errorCopy';
+import {
+  isAlreadyRegisteredError,
+  isTransportAuthError,
+  isWeakPasswordError,
+} from '../lib/supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
@@ -24,7 +29,18 @@ export function useSignUp() {
         password,
         options: { emailRedirectTo: CONFIRM_REDIRECT_URL },
       });
-      if (error) return { kind: 'error', reason: 'unknown' };
+      if (error) {
+        if (isTransportAuthError(error)) return { kind: 'error', reason: 'network' };
+        if (isWeakPasswordError(error)) return { kind: 'error', reason: 'weak_password' };
+        if (isAlreadyRegisteredError(error)) return { kind: 'error', reason: 'already_registered' };
+        return { kind: 'error', reason: 'unknown' };
+      }
+      // With email confirmation on, Supabase hides account enumeration by
+      // resolving without an error but returning a user whose `identities` is
+      // empty when the email is already registered — the only signal we get.
+      if (data?.user && data.user.identities?.length === 0) {
+        return { kind: 'error', reason: 'already_registered' };
+      }
       return data?.session ? { kind: 'ok' } : { kind: 'awaiting-confirmation' };
     },
   );
