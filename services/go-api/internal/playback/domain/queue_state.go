@@ -1,14 +1,21 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"fmt"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/shared"
 )
 
 const MaxQueueLength = 10000
+
+// MaxQueueStringBytes bounds every stored queue string: each trackIds and
+// naturalOrder element and the encoded sourceId. Track identifiers are short,
+// and an encoded sourceId only ever wraps a bounded search query
+// (discovery.MaxSearchQueryRunes) or a playlist id/name, so 4 KiB sits far
+// above any legitimate value while rejecting the ~1 MB strings that the HTTP
+// body-size limit alone would otherwise let reach the domain.
+const MaxQueueStringBytes = 4096
 
 // ValidationError aliases the shared type so this package keeps one name for
 // its 400s while the implementation lives in internal/shared.
@@ -147,6 +154,9 @@ func elementsStorable(field string, values []string) error {
 }
 
 func stringStorable(field, value string) error {
+	if len(value) > MaxQueueStringBytes {
+		return NewValidationError(fmt.Sprintf("%s length %d bytes exceeds maximum %d", field, len(value), MaxQueueStringBytes))
+	}
 	if strings.IndexByte(value, 0) >= 0 {
 		return NewValidationError(fmt.Sprintf("%s contains a NUL byte, which cannot be stored", field))
 	}
