@@ -8,6 +8,8 @@ import { Text } from '@shared/ui/primitives/Text';
 import { minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import { asyncView } from '@shared/lib/async-view';
+import { AsyncSection } from '@shared/ui/AsyncSection';
 
 import { extractFeaturedFromText } from '../extras';
 import { trackExtras } from '../extras-accessors';
@@ -104,106 +106,105 @@ export function AlbumDetailBody({
   );
 
   function renderTracks(): ReactElement {
-    if (album.isLoading) {
-      return (
-        <Section label="Tracks">
-          <TrackRowsSkeleton testID="detail-tracklist-loading" />
-        </Section>
-      );
-    }
-
-    if (album.isError) {
-      return (
-        <Section label="Tracks">
-          <View testID="detail-tracklist-error" style={styles.placeholder}>
-            <Text variant="body" tone="danger">
-              Couldn&apos;t load tracks.
-            </Text>
-            <Button
-              testID="detail-tracklist-retry"
-              label="Retry"
-              onPress={() => album.refetch()}
-              style={sharedStyles.retryButton}
-            />
-          </View>
-        </Section>
-      );
-    }
-
-    if (album.tracks.length === 0 && !album.moreExpanded) {
-      return (
-        <Section label="Tracks">
-          <View testID="detail-tracklist-empty" style={styles.placeholder}>
-            <Text variant="body" tone="tertiary">
-              No tracks found.
-            </Text>
-          </View>
-        </Section>
-      );
-    }
-
     return (
-      <View testID="detail-tracklist">
-        <Section label="Tracks">
-          {album.tracks.map((track, index) => (
-            <AlbumTrackRow
-              key={track.sources[0]?.external_id ?? `local-${index}`}
-              track={track}
-              index={index}
-              subtitle={_trackSubtitleWithFeaturing(track)}
-              saveState={album.saveStateFor(track)}
-              onPress={() => album.onTrackPress(track)}
-              onQuickSave={() => album.onQuickSave(track)}
-            />
-          ))}
-        </Section>
-
-        {!album.hasSources && album.moreTracks.length > 0 ? (
-          <View style={styles.moreSection}>
-            <Pressable
-              testID="detail-more-from-album"
-              onPress={() => album.setMoreExpanded((prev) => !prev)}
-              accessibilityRole="button"
-              accessibilityLabel={
-                album.moreExpanded ? 'Collapse more tracks' : 'Show more from this album'
-              }
-              style={({ pressed }) => [styles.moreHeader, pressed ? styles.pressed : null]}
-            >
-              <Text variant="label" tone="accent">
-                More from this album
+      <AsyncSection
+        view={asyncView({
+          isLoading: album.isLoading,
+          isError: album.isError,
+          isEmpty: album.tracks.length === 0 && !album.moreExpanded,
+        })}
+        skeleton={() => (
+          <Section label="Tracks">
+            <TrackRowsSkeleton testID="detail-tracklist-loading" />
+          </Section>
+        )}
+        error={() => (
+          <Section label="Tracks">
+            <View testID="detail-tracklist-error" style={styles.placeholder}>
+              <Text variant="body" tone="danger">
+                Couldn&apos;t load tracks.
               </Text>
-              {album.moreExpanded ? (
-                <ChevronDown size={18} color={theme.color.accent} />
-              ) : (
-                <ChevronRight size={18} color={theme.color.accent} />
-              )}
-            </Pressable>
+              <Button
+                testID="detail-tracklist-retry"
+                label="Retry"
+                onPress={() => album.refetch()}
+                style={sharedStyles.retryButton}
+              />
+            </View>
+          </Section>
+        )}
+        empty={() => (
+          <Section label="Tracks">
+            <View testID="detail-tracklist-empty" style={styles.placeholder}>
+              <Text variant="body" tone="tertiary">
+                No tracks found.
+              </Text>
+            </View>
+          </Section>
+        )}
+      >
+        <View testID="detail-tracklist">
+          <Section label="Tracks">
+            {album.tracks.map((track, index) => (
+              <AlbumTrackRow
+                key={track.sources[0]?.external_id ?? `local-${index}`}
+                track={track}
+                index={index}
+                subtitle={_trackSubtitleWithFeaturing(track)}
+                saveState={album.saveStateFor(track)}
+                onPress={() => album.onTrackPress(track)}
+                onQuickSave={() => album.onQuickSave(track)}
+              />
+            ))}
+          </Section>
 
-            {album.moreExpanded ? (
-              <>
-                {album.moreTracks.map((track, index) => (
-                  <AlbumTrackRow
-                    key={track.sources[0]?.external_id ?? `more-${index}`}
-                    track={track}
-                    index={album.tracks.length + index}
-                    subtitle={_trackSubtitleWithFeaturing(track)}
-                    saveState={album.saveStateFor(track)}
-                    onPress={() => album.onTrackPress(track)}
-                    onQuickSave={() => album.onQuickSave(track)}
+          {!album.hasSources && album.moreTracks.length > 0 ? (
+            <View style={styles.moreSection}>
+              <Pressable
+                testID="detail-more-from-album"
+                onPress={() => album.setMoreExpanded((prev) => !prev)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  album.moreExpanded ? 'Collapse more tracks' : 'Show more from this album'
+                }
+                style={({ pressed }) => [styles.moreHeader, pressed ? styles.pressed : null]}
+              >
+                <Text variant="label" tone="accent">
+                  More from this album
+                </Text>
+                {album.moreExpanded ? (
+                  <ChevronDown size={18} color={theme.color.accent} />
+                ) : (
+                  <ChevronRight size={18} color={theme.color.accent} />
+                )}
+              </Pressable>
+
+              {album.moreExpanded ? (
+                <>
+                  {album.moreTracks.map((track, index) => (
+                    <AlbumTrackRow
+                      key={track.sources[0]?.external_id ?? `more-${index}`}
+                      track={track}
+                      index={album.tracks.length + index}
+                      subtitle={_trackSubtitleWithFeaturing(track)}
+                      saveState={album.saveStateFor(track)}
+                      onPress={() => album.onTrackPress(track)}
+                      onQuickSave={() => album.onQuickSave(track)}
+                    />
+                  ))}
+                  <Button
+                    testID="detail-save-all-more"
+                    label="Save all"
+                    variant="secondary"
+                    onPress={album.onSaveAll}
+                    style={styles.moreSaveAll}
                   />
-                ))}
-                <Button
-                  testID="detail-save-all-more"
-                  label="Save all"
-                  variant="secondary"
-                  onPress={album.onSaveAll}
-                  style={styles.moreSaveAll}
-                />
-              </>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
+                </>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      </AsyncSection>
     );
   }
 }
