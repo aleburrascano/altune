@@ -74,3 +74,50 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 		t.Fatalf("later bus first id = %d, want > earlier bus first id %d", id2, id1)
 	}
 }
+
+type subscription struct {
+	ch     <-chan Event
+	cancel func()
+}
+
+func subscribeDuringEviction(bus *InProcessBus, user shared.UserId, out chan subscription) func(string) {
+	return func(key string) {
+		if key != user.String() {
+			return
+		}
+		go func() {
+			ch, cancel := bus.Subscribe(user)
+			out <- subscription{ch, cancel}
+		}()
+		select {
+		case sub := <-out:
+			out <- sub
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+func TestEvictIdleUsers_ConcurrentSubscribeIsNotOrphaned(t *testing.T) {
+	current := time.Unix(0, 0).UTC()
+	bus := newBusWithClock(func() time.Time { return current })
+	idle := shared.NewUserId(uuid.New())
+	bus.Publish(idle, "e", nil)
+	current = current.Add(userIdleTTL + time.Minute)
+
+	subscribed := make(chan subscription, 1)
+	bus.beforeEvictDelete = subscribeDuringEviction(bus, idle, subscribed)
+	bus.Publish(shared.NewUserId(uuid.New()), "trigger", nil)
+	sub := <-subscribed
+	defer sub.cancel()
+
+	bus.Publish(idle, "after", nil)
+
+	select {
+	case evt := <-sub.ch:
+		if evt.Type != "after" {
+			t.Fatalf("subscriber got event %q, want %q", evt.Type, "after")
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("subscriber registered during eviction was orphaned: no event delivered")
+	}
+}
