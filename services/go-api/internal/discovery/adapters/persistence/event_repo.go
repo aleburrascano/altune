@@ -158,25 +158,41 @@ const shortDwellThresholdMs = 20000
 
 const perUserSignalCap = 3
 
+// shownResultWindow bounds how long after a search a shown result may still
+// earn a satisfaction signal from the user it was shown to.
+const shownResultWindow = 24 * time.Hour
+
+// SatisfactionSignals aggregates play/skip/completed events into a global
+// per-signature score. A result_signature is computable offline, so an event
+// only counts when the same user was shown that signature by a server-emitted
+// search_performed event within shownResultWindow before it (#573).
 func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time) ([]ports.BehavioralSignal, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT sig, SUM(user_score)::float8 AS score
 		FROM (
-			SELECT payload->>'result_signature' AS sig,
-				user_id,
-				LEAST(COUNT(*) FILTER (WHERE event_type IN ('play', 'completed')), $3)
-				- LEAST(COUNT(*) FILTER (WHERE event_type = 'skip'
-					AND CASE WHEN jsonb_typeof(payload->'dwell_ms') = 'number'
-						THEN (payload->>'dwell_ms')::numeric < $2 ELSE false END), $3) AS user_score
-			FROM discovery_events
-			WHERE occurred_at >= $1
-				AND event_type IN ('play', 'skip', 'completed')
-				AND COALESCE(payload->>'result_signature', '') <> ''
-			GROUP BY sig, user_id
+			SELECT ev.payload->>'result_signature' AS sig,
+				ev.user_id,
+				LEAST(COUNT(*) FILTER (WHERE ev.event_type IN ('play', 'completed')), $3)
+				- LEAST(COUNT(*) FILTER (WHERE ev.event_type = 'skip'
+					AND CASE WHEN jsonb_typeof(ev.payload->'dwell_ms') = 'number'
+						THEN (ev.payload->>'dwell_ms')::numeric < $2 ELSE false END), $3) AS user_score
+			FROM discovery_events ev
+			WHERE ev.occurred_at >= $1
+				AND ev.event_type IN ('play', 'skip', 'completed')
+				AND COALESCE(ev.payload->>'result_signature', '') <> ''
+				AND EXISTS (
+					SELECT 1 FROM discovery_events sp
+					WHERE sp.user_id = ev.user_id
+						AND sp.event_type = 'search_performed'
+						AND sp.occurred_at <= ev.occurred_at + interval '1 minute'
+						AND sp.occurred_at >= ev.occurred_at - ($4 * interval '1 second')
+						AND sp.payload->'shown_signatures' @> jsonb_build_array(ev.payload->>'result_signature')
+				)
+			GROUP BY sig, ev.user_id
 		) per_user
 		GROUP BY sig
 		HAVING SUM(user_score) <> 0`,
-		since, shortDwellThresholdMs, perUserSignalCap,
+		since, shortDwellThresholdMs, perUserSignalCap, int64(shownResultWindow/time.Second),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query satisfaction signals: %w", err)

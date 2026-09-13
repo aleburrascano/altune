@@ -15,7 +15,11 @@ const (
 	emitTimeout       = 3 * time.Second
 )
 
-func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult, explored bool) {
+// shownSignaturesCap bounds the per-search proof-of-display list so a huge
+// slate cannot bloat the event row.
+const shownSignaturesCap = 200
+
+func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult, shownSigs []string, explored bool) {
 	if s.eventStore == nil || userId.IsSystem() {
 		return
 	}
@@ -25,6 +29,7 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 		"zero_result":      len(shown) == 0,
 		"tail_noise_top5":  TailNoiseInTopK(shown, 5),
 		"pipeline_version": pipelineVersionV2,
+		"shown_signatures": shownSigs,
 	}
 	if explored {
 		payload["exploration"] = true
@@ -50,6 +55,41 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 			slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed", "error", err)
 		}
 	})
+}
+
+// shownSignatures lists, deduplicated and capped, the result_signature of
+// every result a search response can surface to the client: the whole ranked
+// slate (later pages are served from it but never re-emit search_performed)
+// and the related groups. SatisfactionSignals trusts only these (#573).
+func shownSignatures(slate []domain.SearchResult, related []domain.RelatedGroup) []string {
+	sigs := make([]string, 0, len(slate))
+	seen := make(map[string]bool, len(slate))
+	add := func(r domain.SearchResult) {
+		sig := signatureOf(r)
+		if seen[sig] || len(sigs) >= shownSignaturesCap {
+			return
+		}
+		seen[sig] = true
+		sigs = append(sigs, sig)
+	}
+	for _, r := range slate {
+		add(r)
+	}
+	for _, g := range related {
+		for _, r := range g.Items {
+			add(r)
+		}
+	}
+	return sigs
+}
+
+// signatureOf mirrors the handler DTO: a stamped signature wins, otherwise it
+// is derived, so the recorded value equals what the client receives.
+func signatureOf(r domain.SearchResult) string {
+	if r.Signature != "" {
+		return r.Signature
+	}
+	return domain.ResultSignature(r)
 }
 
 func buildShownTop(results []domain.SearchResult) []map[string]any {

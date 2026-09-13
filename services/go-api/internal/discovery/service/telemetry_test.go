@@ -91,3 +91,55 @@ func TestService_NoEventStoreNoEmit(t *testing.T) {
 	runSearch(t, svc, "humble")
 	svc.WaitForBackground()
 }
+
+// #573: the aggregation only trusts signatures the server proves it showed,
+// so search_performed must carry every signature the response can surface —
+// including results beyond the first page, which later pages never re-emit.
+func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
+	store := &fakeEventStore{}
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{
+		deezerTrack("Humble", "Kendrick Lamar", 80),
+		deezerTrack("Humble Pie", "Other Artist", 60),
+		deezerTrack("Humble Beginnings", "Third Artist", 40),
+	}}
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store))
+	q, err := domain.NewSearchQuery("humble", map[domain.ResultKind]bool{domain.ResultKindTrack: true}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := svc.Execute(context.Background(), newUser(), q, false)
+	svc.WaitForBackground()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	events := store.snapshot()
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	shown, ok := events[0].Payload["shown_signatures"].([]string)
+	if !ok {
+		t.Fatalf("shown_signatures = %T, want []string", events[0].Payload["shown_signatures"])
+	}
+	if len(out.Results) != 1 || len(shown) != out.Total {
+		t.Errorf("len(shown_signatures) = %d, page = %d, want %d (the whole slate, not just the page)", len(shown), len(out.Results), out.Total)
+	}
+	set := map[string]bool{}
+	for _, s := range shown {
+		set[s] = true
+	}
+	surfaced := append([]domain.SearchResult(nil), out.Results...)
+	for _, sec := range out.Slate.Sections {
+		surfaced = append(surfaced, sec.Items...)
+	}
+	for _, r := range surfaced {
+		sig := r.Signature
+		if sig == "" {
+			sig = domain.ResultSignature(r)
+		}
+		if !set[sig] {
+			t.Errorf("surfaced result %q signature %q missing from shown_signatures %v", r.Title, sig, shown)
+		}
+	}
+}
